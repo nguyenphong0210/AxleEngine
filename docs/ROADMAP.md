@@ -1,4 +1,4 @@
-Latest user steering (2026-11-07): implement all P41-01..11, then perform one consolidated final review. This supersedes intermediate review checkpoints; package verification and native acceptance gates remain required.
+Latest user steering (2026-11-07): for future released scopes, Gemini implements; Codex performs one consolidated final review and owns repairs, including substantial redesign. Follow the [shared workflow](agents/WORKING_PROTOCOL.md#default-implementation-and-final-review-workflow). Required verification gates remain unchanged; no next phase is activated.
 
 # Architecture Optimization Roadmap
 
@@ -12,11 +12,12 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Current assignment: Codex OPT-04, P41-01..P41-11.** The user reassigned
+**Latest completed assignment: Codex OPT-04, P41-01..P41-11.** The user reassigned
 implementation from Gemini to Codex on 2026-11-07; [current handoff](agents/handoffs/OPT_04_CODEX.md).
 One separate-context Codex reviewer checks the full phase after P41-11; significant
 fixes are rechecked before final acceptance. Intermediate P41-03/P41-06 review
-stops are superseded. Gemini feedback is supplementary and has not been received.
+stops are superseded. Gemini subsequently supplied a supplementary architecture
+review in the exchange; its stated checks remain reviewer-reported evidence.
 The recommended model is GPT-6 Astra; the client model selection is user-controlled.
 P41-01..11 are complete. Full Debug/Release phase verification, the consolidated
 fresh-context review and correction rechecks passed; see the

@@ -1,5 +1,12 @@
 # Gemini autonomous architecture execution plan
 
+Workflow update, 2026-11-07: the [shared default workflow](../WORKING_PROTOCOL.md#default-implementation-and-final-review-workflow)
+governs future releases: Gemini implements, then Codex performs one consolidated
+review and owns repairs at the released scope's final boundary. Historical review
+checkpoint suggestions below do not add intermediate independent reviews. OPT-02/03
+and OPT-04 are already accepted; this historical proposal does not activate any
+remaining phase or authorize replaying completed work.
+
 Prepared by Codex on 2026-11-05, from `5a44a60`. This is an operating plan for the
 existing [sequential roadmap](../../ROADMAP.md), not a replacement technical design.
 **Prepared, not activated:** creating this file does not expand the currently released

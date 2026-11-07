@@ -51,6 +51,43 @@ The other files here are this project's conventions, not a product guarantee.
   handoffs. The implementer supplies progress/delivery messages; the reviewer
   supplies findings/verification. Roles may change when the user assigns them.
 
+## Default implementation and final review workflow
+
+User decision, 2026-11-07: for future released work, Gemini implements and Codex
+performs the consolidated final review and necessary repairs. The user accepts
+substantial rewrites or replacement of an unsuitable design. This workflow reduces
+Codex implementation tokens; it does not reduce the acceptance standard. A later
+explicit user assignment can override these default roles.
+
+1. **Release:** record the concrete package/phase range, base commit, technical
+   requirements and final review boundary in the task card. This default workflow
+   does not activate another package or the historical OPT-02..10 proposal.
+2. **Gemini implements:** complete the released scope with relevant package
+   self-checks, repairs, coherent commits and actual verification. Supply a concise
+   handoff with base/head commits, affected design/callers, exact test evidence and
+   open gates. Label this implemented/self-verified, pending Codex review.
+3. **Codex reviews and fixes:** at the end of the released scope, inspect the full
+   diff, actual architecture/callers, dependencies, failure paths and lifetime
+   rules. Own the necessary corrections through verification. Codex may rewrite
+   code across modules or replace an unsuitable design within that scope without
+   requesting routine approval or returning each fix to Gemini. Preserve user
+   requirements, supported behavior and unrelated work; update affected design
+   references and explain material changes. Do not limit necessary correctness
+   fixes or architectural repairs merely to preserve the implementer's diff.
+4. **Verify the corrected result:** rebuild and run the required gates against
+   the final source. Have a separate-context reviewer recheck significant Codex
+   corrections before acceptance. Keep that recheck focused on the corrections
+   and affected callers; reuse the reviewer if further repairs need rechecking.
+5. **Close:** record delivery, review findings, correction commits, actual
+   verification and acceptance separately, then stop at the released boundary.
+
+Use one consolidated Codex review at the recorded final boundary, with necessary
+correction rechecks. Do not add routine intermediate independent reviews unless
+the user requests them; package self-verification and required native gates remain
+mandatory. Freeze Gemini source edits during Codex review/repair in the shared
+checkout. These roles do not authorize vendor upgrades, later features, pushes or
+automatic invocation of another session. Missing required checks remain NOT RUN.
+
 ## Explicitly delegated multi-package runs
 
 A user may explicitly activate a concrete package/phase range and delegate

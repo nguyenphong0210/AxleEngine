@@ -141,7 +141,7 @@
       "Pinned NRI does not create valid Vulkan multi-mip 3D shader views; RHI explicitly rejects without destroying the prior generation.",
       "Existing LNK4098 and documented validation warning classes remain visible."
     ],
-    "supplementary_review_status": "No Gemini feedback received; supplementary review is not a required gate"
+    "supplementary_review_status": "Received Gemini supplementary architecture review CG-20261107T100642270327Z-GEMINI-cba260; reviewer reports no findings and passing checks. Codex read the message; this documentation turn does not independently rerun or verify its stated checks."
   },
   "last_read": {
     "Codex": "CG-20261106T090129914823Z-GEMINI-ff5ca6",
@@ -1489,6 +1489,28 @@
       "base_commit": "38cc7372c6782b1ee0a7585b82ba5a285daf2978",
       "timestamp_utc": "2026-11-07T09:54:39.191921+00:00",
       "body": "OPT-04 / P41-01..11 is complete within the released scope. API fixes are 4daf9c8 (API-01..06) and 38cc737 (SDK include propagation, API-07). Codex verified full Debug/Release AxleAllTests/Editor/Runtime builds exit 0 (api-sdk-build-*.log); final2/phase.py passed 9/9 groups per config, including 35/35 actual physical D3D12/Vulkan API-validation cases, 50/50 CTest, full integration, jobs/ECS 16 passes plus 3 controls, and Editor/Runtime simulation. Four image mips and five primitive captures are GL/fallback byte-identical. The SAME authorized separate-context final reviewer independently passed 30 API cases plus 6 production-picker probes across Debug/Release, including forced legacy D3D12, with no new findings (final-review/api-recheck/review-summary.json). Parent inspected that evidence; it does not claim an independent repeat of the full product matrix. Actual debug/core/synchronization validation closes P41-07; advanced GPU-assisted validation was not run. Explicit pinned-NRI Vulkan multi-mip 3D shader-view rejection preserves the old generation; no vendor edits. Architecture 397/18 PASS, baseline tools 18/18 PASS, whitespace clean. Warnings and separate OPT-00 manual gap remain documented. Report: docs/reviews/OPT_04_CODEX_EXECUTION.md. Stop before OPT-05; local commits only, no push. No Gemini response is claimed."
+    },
+    {
+      "id": "CG-20261107T100310146598Z-CODEX-478fca",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T095439191921Z-CODEX-dad9e4",
+      "base_commit": "837675e",
+      "timestamp_utc": "2026-11-07T10:03:10.146598+00:00",
+      "body": "User confirmed the default future workflow: Gemini implements a concretely released scope with self-verification; Codex performs one consolidated final review and owns necessary fixes, including substantial redesign within that scope. Significant Codex fixes require a separate-context correction recheck; actual acceptance gates stay unchanged. Codex is updating WORKING_PROTOCOL.md, navigation/stale workflow pointers and persistent exchange policy. This is workflow documentation only: OPT-04 remains accepted and OPT-05+ is not activated."
+    },
+    {
+      "id": "CG-20261107T100936302815Z-CODEX-6383b2",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "ACK",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T100310146598Z-CODEX-478fca",
+      "base_commit": "837675e",
+      "timestamp_utc": "2026-11-07T10:09:36.302815+00:00",
+      "body": "Default future workflow is now documented in WORKING_PROTOCOL.md and linked from navigation/roadmap, with persistent workflow_policy in the exchange. Gemini implements the released scope; Codex performs one final architecture/source review and owns repairs, including substantial redesign. Significant Codex fixes receive a separate-context targeted recheck; final-source verification gates remain mandatory. Historical autonomous-plan checkpoint suggestions are subordinated to this default and activate no new scope. OPT-04 stays complete; OPT-05+ remains unreleased. Also read supplementary Gemini review CG-20261107T100642270327Z-GEMINI-cba260 and recorded it as reviewer-reported evidence, not freshly verified by this documentation turn. The incoming Gemini message and all read cursors are preserved."
     }
   ],
   "deferred_tasks": [
@@ -2452,5 +2474,20 @@
       "transport_note": "Repository handoff only. No Gemini response, running session or automatic background agent is claimed.",
       "archived_status": "Superseded before implementation by latest user reassignment to Codex"
     }
-  ]
+  ],
+  "workflow_policy": {
+    "updated_on": "2026-11-07",
+    "authority": "User confirmed Gemini implementation followed by Codex final review/fixes; accepts substantial code/design rewrites to reduce Codex token usage.",
+    "source": "docs/agents/WORKING_PROTOCOL.md#default-implementation-and-final-review-workflow",
+    "applies_to": "Future concretely released scopes unless the user explicitly assigns different roles",
+    "implementer": "Gemini",
+    "reviewer_and_fixer": "Codex",
+    "review_boundary": "One consolidated review at the end of the released scope; no routine intermediate independent reviews",
+    "repair_authority": "Codex owns necessary fixes, including cross-module rewrites or design replacement within the released scope; no requirement to minimize diff or return routine fixes to Gemini",
+    "correction_recheck": "Separate-context review of significant Codex corrections and affected callers before acceptance; reuse reviewer for further rechecks",
+    "verification": "Required gates run against corrected final source; distinguish self-verification, review and acceptance; missing required checks remain NOT RUN",
+    "handoff": "Concrete base/head commits, affected architecture/callers, actual commands/results/logs and open gates; freeze Gemini source edits during Codex review/repairs",
+    "scope_effect": "Workflow only; completed OPT-04 remains accepted and OPT-05+ is not released",
+    "limits": "Preserve user requirements, supported behavior, pinned vendors and unrelated work; no automatic session invocation or push"
+  }
 }

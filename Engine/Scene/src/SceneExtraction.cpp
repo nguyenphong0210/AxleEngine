@@ -5,10 +5,25 @@
 #include <Axle/MeshResourceResolver.hpp>
 #include <Axle/SceneRenderBridge.hpp>
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/ImageSource.hpp>
+#include <Axle/ImageTextureCache.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace Axle {
+
+    static void ResolveParticleMaterial(RenderParticleData& batch) {
+        batch.Config.Collision.WorldRaycast=nullptr;
+        batch.Material=ParticleMaterialAdapter::Resolve(batch.Config,batch.Resources,[](const auto& path) {
+            auto material=std::make_shared<Material>();
+            return material->Load(FileSystem::ResolveAssetPath(path),false)?material:nullptr;
+        });
+        if(batch.Resources.MaterialPath.empty()) {
+            if(batch.Texture&&batch.Resources.UseTexture)batch.Material.UseTexture=true;
+            if(batch.Normal&&batch.Resources.UseNormalMap)batch.Material.UseNormalMap=true;
+        }
+        batch.MaterialResolved=true;
+    }
 
     bool ResolveRenderWorldResources(RenderWorld& world) {
         if (!world.ErrorMessage.empty()) return false;
@@ -23,6 +38,27 @@ namespace Axle {
             if (!ResolveMeshResources(candidate)) { world.ErrorMessage = "Cannot resolve mesh: " + instance.MeshURI; return false; }
             instance.GLMesh = candidate.VAO; instance.NativeMesh = candidate.RHIMeshAsset;
             if(instance.NativeMesh)instance.NativeView=instance.NativeMesh->CaptureView();
+        }
+        for(auto& immutable:world.Particles) {
+            auto batch=std::make_shared<RenderParticleData>(*immutable);
+            if(!batch->MaterialResolved)ResolveParticleMaterial(*batch);
+            const auto& material=batch->Material;
+            batch->Config.BlendMode=material.BlendMode;batch->Config.LightingEnabled=material.LightingEnabled;
+            batch->Config.WrapLighting=material.WrapLighting;batch->Config.ScatteringFactor=material.ScatteringFactor;
+            batch->Config.NormalMapStrength=material.NormalMapStrength;
+            batch->Config.Collision.WorldRaycast=nullptr;
+            if(!RHI::RHIDevice::Get().IsNativeReady()) {
+                auto load=[](const std::string& path,bool srgb) {
+                    TextureSpecification specification;specification.FlipVertically=false;specification.sRGB=srgb;
+                    ImageDecodeOptions options;options.SRGB=srgb;
+                    return ImageTextureCache::GetGL(LoadImageSource(path,options),specification);
+                };
+                if(!material.UseTexture)batch->Texture.reset();
+                else if(!material.TexturePath.empty())batch->Texture=load(material.TexturePath,true);
+                if(!material.UseNormalMap)batch->Normal.reset();
+                else if(!material.NormalMapPath.empty())batch->Normal=load(material.NormalMapPath,false);
+            }
+            immutable=std::move(batch);
         }
         return true;
     }
@@ -234,7 +270,7 @@ namespace Axle {
         auto appendSystem = [&](const std::shared_ptr<ParticleSystem>& system) {
             if (!system || !system->GetActiveParticleCount()) return;
             auto batch = std::make_shared<RenderParticleData>();
-            batch->Pool = system->GetPool(); batch->Config = system->GetConfig();
+            batch->Pool = system->GetPool(); batch->Config = system->GetConfig();batch->Config.Collision.WorldRaycast=nullptr;
             world.Particles.push_back(std::move(batch));
         };
         for (auto entity : registry.view<TransformComponent, ParticleEmitterComponent>()) {
@@ -247,7 +283,7 @@ namespace Axle {
             for (const auto& stack : emitter.EmitterStacks) {
                 if (!stack.Visible || !stack.Enabled || !stack.System || !stack.System->GetActiveParticleCount()) continue;
                 auto batch = std::make_shared<RenderParticleData>();
-                batch->Pool = stack.System->GetPool(); batch->Config = stack.Config;
+                batch->Pool = stack.System->GetPool(); batch->Config = stack.Config;batch->Config.Collision.WorldRaycast=nullptr;
                 batch->Resources = stack.GetDefinition().Resources;
                 if (batch->Resources.MaterialPath.empty()) batch->Resources.MaterialPath = stack.Config.MaterialPath;
                 batch->Texture = stack.Texture ? stack.Texture : emitter.Texture;
@@ -262,6 +298,12 @@ namespace Axle {
             if (!vfx.Enabled || !vfx.RuntimeVFX) continue;
             appendSystem(vfx.RuntimeVFX->GetFootstepSystem());
             appendSystem(vfx.RuntimeVFX->GetLandingShockwaveSystem());
+        }
+
+        // CPU asset values are frozen after all registry walks; no texture/GPU
+        // creation occurs here. GPU publication remains in the shared resolver.
+        for(auto& immutable:world.Particles) {
+            auto batch=std::make_shared<RenderParticleData>(*immutable);ResolveParticleMaterial(*batch);immutable=std::move(batch);
         }
 
         world.SceneRevision = scene.GetTransformRevision();

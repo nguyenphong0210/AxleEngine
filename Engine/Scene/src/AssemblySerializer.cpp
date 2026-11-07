@@ -1,5 +1,6 @@
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/AssemblySerializer.hpp>
+#include <Axle/MaterialComponentCodec.hpp>
 #include <Axle/SkeletalMeshImporter.hpp>
 #include <Axle/Skeleton.hpp>
 #include <Axle/Components.hpp>
@@ -188,34 +189,7 @@ namespace Axle {
 
             // MaterialComponent
             if (entity.HasComponent<MaterialComponent>()) {
-                auto& mat = entity.GetComponent<MaterialComponent>();
-                fout << "    MaterialComponent:\n";
-                if (mat.HasAsset()) {
-                    fout << "      MaterialHandle: " << (uint64_t)mat.MaterialHandle << "\n";
-                    if (!mat.MaterialAsset->GetFilePath().empty()) {
-                        fout << "      AssetPath: " << mat.MaterialAsset->GetFilePath().string() << "\n";
-                    }
-                }
-                fout << "      AlbedoPath: " << mat.AlbedoPath << "\n";
-                fout << "      UseAlbedoMap: " << (mat.UseAlbedoMap ? "true" : "false") << "\n";
-                fout << "      AlbedoColor: [ " << mat.AlbedoColor.r << " , " << mat.AlbedoColor.g << " , " << mat.AlbedoColor.b << " , " << mat.AlbedoColor.a << " ]\n";
-                fout << "      NormalPath: " << mat.NormalPath << "\n";
-                fout << "      UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
-                fout << "      NormalStrength: " << mat.NormalStrength << "\n";
-                fout << "      RoughnessPath: " << mat.RoughnessPath << "\n";
-                fout << "      UseRoughnessMap: " << (mat.UseRoughnessMap ? "true" : "false") << "\n";
-                fout << "      Roughness: " << mat.Roughness << "\n";
-                fout << "      MetallicPath: " << mat.MetallicPath << "\n";
-                fout << "      UseMetallicMap: " << (mat.UseMetallicMap ? "true" : "false") << "\n";
-                fout << "      Metallic: " << mat.Metallic << "\n";
-                fout << "      EmissionColor: [ " << mat.EmissionColor.r << " , " << mat.EmissionColor.g << " , " << mat.EmissionColor.b << " ]\n";
-                fout << "      EmissionIntensity: " << mat.EmissionIntensity << "\n";
-                fout << "      UVScale: [ " << mat.UVScale.x << " , " << mat.UVScale.y << " ]\n";
-                fout << "      UVOffset: [ " << mat.UVOffset.x << " , " << mat.UVOffset.y << " ]\n";
-                fout << "      SurfaceType: " << SurfaceTypeToString(mat.SurfaceType) << "\n";
-                fout << "      CullMode: " << CullModeToString(mat.CullMode) << "\n";
-                fout << "      AlphaCutoff: " << mat.AlphaCutoff << "\n";
-                fout << "      DepthWrite: " << (mat.DepthWrite ? "true" : "false") << "\n";
+                WriteMaterialComponent(fout,entity.GetComponent<MaterialComponent>());
             }
 
             // NativeScriptComponent
@@ -574,68 +548,7 @@ namespace Axle {
                     break;
                 }
                 case AsmSection::Material: {
-                    if (trimmed.rfind("MaterialHandle:", 0) == 0) {
-                        current.Material.MaterialHandle = std::stoull(Trim(trimmed.substr(15)));
-                        if (current.Material.MaterialHandle != 0) {
-                            current.Material.MaterialAsset = MaterialCache::GetMaterial(current.Material.MaterialHandle);
-                        }
-                    } else if (trimmed.rfind("AssetPath:", 0) == 0) {
-                        std::string path = Trim(trimmed.substr(10));
-                        if (!path.empty() && !current.Material.MaterialAsset) {
-                            current.Material.MaterialAsset = MaterialCache::GetMaterial(path);
-                            if (current.Material.MaterialAsset) current.Material.MaterialHandle = current.Material.MaterialAsset->GetHandle();
-                        }
-                    } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
-                        current.Material.AlbedoPath = Trim(trimmed.substr(11));
-                    } else if (trimmed.rfind("UseAlbedoMap:", 0) == 0) {
-                        current.Material.UseAlbedoMap = (Trim(trimmed.substr(13)) == "true");
-                    } else if (trimmed.rfind("AlbedoColor:", 0) == 0) {
-                        float r = 1, g = 1, b = 1, a = 1;
-                        sscanf(trimmed.c_str(), "AlbedoColor: [ %f , %f , %f , %f ]", &r, &g, &b, &a);
-                        current.Material.AlbedoColor = glm::vec4(r, g, b, a);
-                    } else if (trimmed.rfind("NormalPath:", 0) == 0) {
-                        current.Material.NormalPath = Trim(trimmed.substr(11));
-                    } else if (trimmed.rfind("UseNormalMap:", 0) == 0) {
-                        current.Material.UseNormalMap = (Trim(trimmed.substr(13)) == "true");
-                    } else if (trimmed.rfind("NormalStrength:", 0) == 0) {
-                        current.Material.NormalStrength = std::stof(Trim(trimmed.substr(15)));
-                    } else if (trimmed.rfind("RoughnessPath:", 0) == 0) {
-                        current.Material.RoughnessPath = Trim(trimmed.substr(14));
-                    } else if (trimmed.rfind("UseRoughnessMap:", 0) == 0) {
-                        current.Material.UseRoughnessMap = (Trim(trimmed.substr(16)) == "true");
-                    } else if (trimmed.rfind("Roughness:", 0) == 0) {
-                        current.Material.Roughness = std::stof(Trim(trimmed.substr(10)));
-                    } else if (trimmed.rfind("MetallicPath:", 0) == 0) {
-                        current.Material.MetallicPath = Trim(trimmed.substr(13));
-                    } else if (trimmed.rfind("UseMetallicMap:", 0) == 0) {
-                        current.Material.UseMetallicMap = (Trim(trimmed.substr(15)) == "true");
-                    } else if (trimmed.rfind("Metallic:", 0) == 0) {
-                        current.Material.Metallic = std::stof(Trim(trimmed.substr(9)));
-                    } else if (trimmed.rfind("EmissionColor:", 0) == 0) {
-                        float r = 0, g = 0, b = 0;
-                        sscanf(trimmed.c_str(), "EmissionColor: [ %f , %f , %f ]", &r, &g, &b);
-                        current.Material.EmissionColor = glm::vec3(r, g, b);
-                    } else if (trimmed.rfind("EmissionIntensity:", 0) == 0) {
-                        current.Material.EmissionIntensity = std::stof(Trim(trimmed.substr(18)));
-                    } else if (trimmed.rfind("UVScale:", 0) == 0 || trimmed.rfind("UVTiling:", 0) == 0) {
-                        float x = 1, y = 1;
-                        const char* fmt = (trimmed.rfind("UVTiling:", 0) == 0) ? "UVTiling: [ %f , %f ]" : "UVScale: [ %f , %f ]";
-                        sscanf(trimmed.c_str(), fmt, &x, &y);
-                        current.Material.UVScale = glm::vec2(x, y);
-                    } else if (trimmed.rfind("UVOffset:", 0) == 0) {
-                        float x = 0, y = 0;
-                        sscanf(trimmed.c_str(), "UVOffset: [ %f , %f ]", &x, &y);
-                        current.Material.UVOffset = glm::vec2(x, y);
-                    } else if (trimmed.rfind("SurfaceType:", 0) == 0) {
-                        current.Material.SurfaceType = StringToSurfaceType(Trim(trimmed.substr(12)));
-                    } else if (trimmed.rfind("CullMode:", 0) == 0) {
-                        current.Material.CullMode = StringToCullMode(Trim(trimmed.substr(9)));
-                    } else if (trimmed.rfind("AlphaCutoff:", 0) == 0) {
-                        try { current.Material.AlphaCutoff = std::clamp(std::stof(Trim(trimmed.substr(12))), 0.0f, 1.0f); } catch (...) {}
-                    } else if (trimmed.rfind("DepthWrite:", 0) == 0) {
-                        std::string val = Trim(trimmed.substr(11));
-                        current.Material.DepthWrite = (val == "true" || val == "1");
-                    }
+                    ReadMaterialComponentLine(current.Material,trimmed);
                     break;
                 }
                 case AsmSection::NativeScript: {
@@ -1268,34 +1181,7 @@ namespace Axle {
 
 
             if (node.HasMaterial) {
-                const auto& mat = node.Material;
-                out << "    MaterialComponent:\n";
-                if (mat.HasAsset()) {
-                    out << "      MaterialHandle: " << (uint64_t)mat.MaterialHandle << "\n";
-                    if (mat.MaterialAsset && !mat.MaterialAsset->GetFilePath().empty()) {
-                        out << "      AssetPath: " << mat.MaterialAsset->GetFilePath().string() << "\n";
-                    }
-                }
-                out << "      AlbedoPath: " << mat.AlbedoPath << "\n";
-                out << "      UseAlbedoMap: " << (mat.UseAlbedoMap ? "true" : "false") << "\n";
-                out << "      AlbedoColor: [ " << mat.AlbedoColor.r << " , " << mat.AlbedoColor.g << " , " << mat.AlbedoColor.b << " , " << mat.AlbedoColor.a << " ]\n";
-                out << "      NormalPath: " << mat.NormalPath << "\n";
-                out << "      UseNormalMap: " << (mat.UseNormalMap ? "true" : "false") << "\n";
-                out << "      NormalStrength: " << mat.NormalStrength << "\n";
-                out << "      RoughnessPath: " << mat.RoughnessPath << "\n";
-                out << "      UseRoughnessMap: " << (mat.UseRoughnessMap ? "true" : "false") << "\n";
-                out << "      Roughness: " << mat.Roughness << "\n";
-                out << "      MetallicPath: " << mat.MetallicPath << "\n";
-                out << "      UseMetallicMap: " << (mat.UseMetallicMap ? "true" : "false") << "\n";
-                out << "      Metallic: " << mat.Metallic << "\n";
-                out << "      EmissionColor: [ " << mat.EmissionColor.r << " , " << mat.EmissionColor.g << " , " << mat.EmissionColor.b << " ]\n";
-                out << "      EmissionIntensity: " << mat.EmissionIntensity << "\n";
-                out << "      UVScale: [ " << mat.UVScale.x << " , " << mat.UVScale.y << " ]\n";
-                out << "      UVOffset: [ " << mat.UVOffset.x << " , " << mat.UVOffset.y << " ]\n";
-                out << "      SurfaceType: " << SurfaceTypeToString(mat.SurfaceType) << "\n";
-                out << "      CullMode: " << CullModeToString(mat.CullMode) << "\n";
-                out << "      AlphaCutoff: " << mat.AlphaCutoff << "\n";
-                out << "      DepthWrite: " << (mat.DepthWrite ? "true" : "false") << "\n";
+                WriteMaterialComponent(out,node.Material);
             }
 
         if (node.HasSkeletalMesh) {

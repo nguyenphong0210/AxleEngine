@@ -13,6 +13,9 @@ void main(){
  float range=max(.5*dot(vec2(4)/max(vSize,vec2(1)),vec2(1)/max(fwidth(vUV),vec2(.0001))),1);outputColor=vColor*vec4(1,1,1,clamp(sd*range+.5,0,1));}
  else {vec2 p=(vUV-.5)*vSize;float r=min(vSize.x,vSize.y)*.5;float thickness=max(vRadius,1);
  float alpha=clamp(.5-(abs(length(p)-(r-.5*thickness))-.5*thickness),0,1);float angle=atan(p.y,p.x);
- float span=mod(vAngle.y-vAngle.x+6.2831853,6.2831853);float a=mod(angle-vAngle.x+6.2831853,6.2831853);
- outputColor=(a<=vBorderWidth?vColor:vBorder)*vec4(1,1,1,a<=span?alpha:0);}
+ const float twoPi=6.28318530718;
+ float span=mod(mod(vAngle.y-vAngle.x,twoPi)+twoPi,twoPi);if(span<=.001)span=twoPi;
+ float a=mod(mod(angle-vAngle.x,twoPi)+twoPi,twoPi);
+ float activeSpan=clamp(vBorderWidth-vAngle.x,0,span);
+ outputColor=(activeSpan>0&&a<=activeSpan?vColor:vBorder)*vec4(1,1,1,a<=span?alpha:0);}
 }

@@ -58,6 +58,7 @@ namespace Axle {
         void ShutdownRHI();
         void InitRHI(class ImGuiLayer* imguiLayer);
         RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
+        std::shared_ptr<Framebuffer> GetGLFramebuffer() const { return m_Framebuffer; }
         bool HasRHIViewport() const { return m_RHIViewport != nullptr && m_RHIViewport->IsValid(); }
 
         bool IsOpen() const { return m_IsOpen; }

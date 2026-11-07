@@ -1,4 +1,5 @@
 #include <Axle/ParticleRenderer.hpp>
+#include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/FileSystem.hpp>
@@ -31,6 +32,9 @@ namespace Axle {
     }
 
     void ParticleRenderer::Shutdown() {
+        if(m_SceneDepthCopy&&Window::HasActiveContext())glDeleteTextures(1,&m_SceneDepthCopy);
+        m_SceneDepthCopy=0;m_DepthWidth=m_DepthHeight=0;m_DepthFormat=0;
+        m_SceneFBO.reset();
         m_Shader.reset();
         m_VAO.reset();
         m_QuadVBO.reset();
@@ -200,6 +204,11 @@ namespace Axle {
 
                 uniform sampler2D u_ParticleTexture;
                 uniform int u_HasTexture;
+                uniform vec4 u_MaterialTint;
+                uniform vec4 u_MaterialEmission;
+                uniform vec4 u_UVTransform;
+                uniform int u_IsCutout;
+                uniform float u_AlphaCutoff;
                 uniform int u_SubFrameBlendingEnabled;
 
                 uniform sampler2D u_ParticleNormalMap;
@@ -242,9 +251,9 @@ namespace Axle {
                 void main() {
                     vec4 texColor = vec4(1.0);
                     if (u_HasTexture == 1) {
-                        vec4 colA = texture(u_ParticleTexture, v_TexCoord);
+                        vec4 colA = texture(u_ParticleTexture, v_TexCoord*u_UVTransform.xy+u_UVTransform.zw);
                         if (u_SubFrameBlendingEnabled == 1 && v_SubFrameBlend > 0.0) {
-                            vec4 colB = texture(u_ParticleTexture, v_TexCoordNext);
+                            vec4 colB = texture(u_ParticleTexture, v_TexCoordNext*u_UVTransform.xy+u_UVTransform.zw);
                             texColor = mix(colA, colB, v_SubFrameBlend);
                         } else {
                             texColor = colA;
@@ -259,7 +268,8 @@ namespace Axle {
                         texColor = vec4(1.0, 1.0, 1.0, alphaMask);
                     }
 
-                    vec4 finalColor = v_Color * texColor;
+                    vec4 finalColor = v_Color * texColor * u_MaterialTint;
+                    if(u_IsCutout==1&&finalColor.a<u_AlphaCutoff)discard;
                     if (finalColor.a <= 0.001) {
                         discard;
                     }
@@ -267,7 +277,7 @@ namespace Axle {
                     if (u_LightingEnabled == 1 && v_LightingFlag > 0.5) {
                         vec3 N = normalize(v_Normal);
                         if (u_HasNormalMap == 1) {
-                            vec3 normalTex = texture(u_ParticleNormalMap, v_TexCoord).xyz * 2.0 - 1.0;
+                            vec3 normalTex = texture(u_ParticleNormalMap, v_TexCoord*u_UVTransform.xy+u_UVTransform.zw).xyz * 2.0 - 1.0;
                             N = normalize(mix(N, normalTex, clamp(u_NormalMapStrength, 0.0, 1.0)));
                         }
 
@@ -297,6 +307,7 @@ namespace Axle {
                         finalColor.rgb *= totalLight;
                     }
 
+                    finalColor.rgb+=u_MaterialEmission.rgb*u_MaterialEmission.w;
                     float camDist = -v_ViewPos.z;
                     if (u_NearFadeEnabled == 1) {
                         float nearFade = smoothstep(u_NearFadeStart, u_NearFadeEnd, camDist);
@@ -355,6 +366,24 @@ namespace Axle {
             m_ScreenSize = glm::vec2(static_cast<float>(m_SceneFBO->GetWidth()), static_cast<float>(m_SceneFBO->GetHeight()));
         }
 
+        // Freeze opaque depth before any particle writes. The sampled image
+        // must never be attached to the active draw framebuffer.
+        if(m_SceneFBO) {
+            const auto source=m_SceneFBO->GetDepthAttachmentRendererID();
+            const auto width=m_SceneFBO->GetWidth(),height=m_SceneFBO->GetHeight();
+            GLint format=0;glGetTextureLevelParameteriv(source,0,GL_TEXTURE_INTERNAL_FORMAT,&format);
+            if(!m_SceneDepthCopy||m_DepthWidth!=width||m_DepthHeight!=height||m_DepthFormat!=format) {
+                if(m_SceneDepthCopy)glDeleteTextures(1,&m_SceneDepthCopy);
+                glCreateTextures(GL_TEXTURE_2D,1,&m_SceneDepthCopy);
+                glTextureStorage2D(m_SceneDepthCopy,1,format,width,height);
+                glTextureParameteri(m_SceneDepthCopy,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+                glTextureParameteri(m_SceneDepthCopy,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+                glTextureParameteri(m_SceneDepthCopy,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+                glTextureParameteri(m_SceneDepthCopy,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+                m_DepthWidth=width;m_DepthHeight=height;m_DepthFormat=format;
+            }
+            glCopyImageSubData(source,GL_TEXTURE_2D,0,0,0,0,m_SceneDepthCopy,GL_TEXTURE_2D,0,0,0,0,width,height,1);
+        }
         m_Shader->Bind();
         m_Shader->SetMat4("u_View", m_ViewMatrix);
         m_Shader->SetMat4("u_Projection", m_ProjectionMatrix);
@@ -411,13 +440,21 @@ namespace Axle {
                                  const ParticleEmitterConfig& config,
                                  const std::shared_ptr<Texture2D>& texture,
                                  const std::shared_ptr<Texture2D>& normalMap,
-                                 float softnessDistance) {
+                                 float softnessDistance,
+                                 const glm::vec3& emitterPosition,const glm::quat& emitterRotation,const glm::vec3& emitterScale,
+                                 const EffectiveParticleRenderSettings* material) {
         uint32_t activeCount = pool.GetActiveCount();
         if (activeCount == 0 || !m_Shader || !m_VAO) {
             return;
         }
 
         ApplyBlendMode(config.BlendMode);
+        RenderCommand::SetDepthMask(material?material->DepthWrite:config.BlendMode==ParticleBlendMode::Cutout);
+        m_Shader->SetFloat4("u_MaterialTint",material?material->BaseColor:glm::vec4(1));
+        m_Shader->SetFloat4("u_MaterialEmission",material?glm::vec4(material->EmissiveColor,material->EmissiveIntensity):glm::vec4(0));
+        m_Shader->SetFloat4("u_UVTransform",material?glm::vec4(material->UVScale,material->UVOffset):glm::vec4(1,1,0,0));
+        m_Shader->SetFloat("u_AlphaCutoff",material?material->AlphaCutoff:0.5f);
+        m_Shader->SetInt("u_IsCutout",config.BlendMode==ParticleBlendMode::Cutout?1:0);
 
         // 1. Texture Binding (Slot 0: Base / Flipbook, Slot 1: Normal Map)
         if (texture) {
@@ -439,9 +476,9 @@ namespace Axle {
 
         // 2. Soft Particles depth buffer setup (Slot 2)
         float effSoftDist = (softnessDistance > 0.0f) ? softnessDistance : config.SoftnessDistance;
-        if (m_SceneFBO && glad_glBindTexture && glad_glActiveTexture) {
+        if (m_SceneFBO && m_SceneDepthCopy && effSoftDist>0.0f && glad_glBindTexture && glad_glActiveTexture) {
             glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_2D, m_SceneFBO->GetDepthAttachmentRendererID());
+            glBindTexture(GL_TEXTURE_2D, m_SceneDepthCopy);
             m_Shader->SetInt("u_SceneDepthBuffer", 2);
             m_Shader->SetInt("u_SoftParticlesEnabled", 1);
             m_Shader->SetFloat("u_SoftnessDistance", effSoftDist);
@@ -481,38 +518,16 @@ namespace Axle {
         m_Shader->SetFloat("u_FarFadeStart", config.FarFadeStart);
         m_Shader->SetFloat("u_FarFadeEnd", config.FarFadeEnd);
 
-        // 6. Compact instance data packing
-        uint32_t toRender = std::min(activeCount, MAX_PARTICLES_PER_BATCH);
-        if (m_InstanceStagingBuffer.size() < toRender) {
-            m_InstanceStagingBuffer.resize(toRender);
+        PerspectiveCamera camera;
+        camera.SetViewMatrix(m_ViewMatrix,m_CameraPos);
+        std::vector<ParticleDrawPacket> packets;
+        ParticleRenderPlanner::BuildDrawPackets(pool,config,camera,emitterPosition,emitterRotation,packets,MAX_PARTICLES_PER_BATCH,emitterScale);
+        for(const auto& packet:packets) {
+            m_InstanceVBO->SetData(packet.Instances.data(),static_cast<u32>(packet.Instances.size()*sizeof(ParticleInstanceVertex)));
+            RenderCommand::DrawIndexedInstanced(m_VAO,packet.InstanceCount);
+            ++m_DrawCallCount;m_RenderedParticleCount+=packet.InstanceCount;
         }
 
-        const auto& positions = pool.GetPositions();
-        const auto& sizes = pool.GetSizes();
-        const auto& colors = pool.GetColors();
-        const auto& rotations = pool.GetRotations();
-        const auto& velocities = pool.GetVelocities();
-        const auto& uvs = pool.GetUVOffsetScales();
-        const auto& subFrames = pool.GetUVSubFrames();
-        int orientation = static_cast<int>(config.Orientation);
-
-        for (uint32_t i = 0; i < toRender; ++i) {
-            m_InstanceStagingBuffer[i].Position = positions[i];
-            m_InstanceStagingBuffer[i].Size = sizes[i];
-            m_InstanceStagingBuffer[i].Color = colors[i];
-            m_InstanceStagingBuffer[i].Rotation = rotations[i];
-            m_InstanceStagingBuffer[i].Orientation = orientation;
-            m_InstanceStagingBuffer[i].Velocity = velocities[i];
-            m_InstanceStagingBuffer[i].UVOffsetScale = uvs[i];
-            m_InstanceStagingBuffer[i].UVSubFrame = subFrames[i];
-        }
-
-        // 7. Upload instance buffer & dispatch GPU draw call
-        m_InstanceVBO->SetData(m_InstanceStagingBuffer.data(), static_cast<u32>(toRender * sizeof(ParticleInstanceVertex)));
-        RenderCommand::DrawIndexedInstanced(m_VAO, toRender);
-
-        m_DrawCallCount++;
-        m_RenderedParticleCount += toRender;
     }
 
 }

@@ -8,6 +8,10 @@
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
+#include <Axle/MaterialComponentCodec.hpp>
+#include <Axle/AssemblySerializer.hpp>
+#include <Axle/RenderParticleData.hpp>
+#include <sstream>
 #include <iostream>
 #include <vector>
 
@@ -562,10 +566,64 @@ namespace Axle::RenderTests {
         return true;
     }
 
+
+    static bool Test_AuthoredMaterialRoundTrips() {
+        const auto root=std::filesystem::absolute("build/agent-runs/OPT-05/material-codec");
+        std::filesystem::create_directories(root);
+        MaterialComponent m;
+        m.AlbedoPath="missing/albedo.png";m.NormalPath="missing/normal.png";m.RoughnessPath="missing/rough.png";
+        m.MetallicPath="missing/metal.png";m.AOPath="missing/ao.png";m.EmissivePath="missing/emission.png";m.ORMPath="missing/orm.png";
+        m.ClearcoatPath="missing/coat.png";m.AnisotropyFlowPath="missing/flow.png";m.DetailNormalPath="missing/detail.png";m.DetailMaskPath="missing/mask.png";
+        m.UseAlbedoMap=m.UseNormalMap=m.UseRoughnessMap=m.UseMetallicMap=m.UseAOMap=m.UseEmissiveMap=m.UseORMMap=true;
+        m.UseClearcoatMap=m.UseAnisotropyFlowMap=m.UseDetailNormalMap=m.UseDetailMaskMap=true;
+        m.AlbedoColor={0.3f,0.4f,0.7f,0.8f};m.EmissionColor={0.2f,0.5f,0.9f};m.EmissionIntensity=2.5f;
+        m.TextureMode=TextureMode::PackedORM;m.EnableSpecularHighlights=m.EnableEnvironmentReflections=false;
+        m.Roughness=0.27f;m.Metallic=0.63f;m.NormalStrength=0.4f;m.AOStrength=0.7f;
+        m.DetailNormalStrength=0.37f;m.DetailUVScale={3,4};m.DetailUVOffset={0.2f,0.3f};
+        m.RefractionEnabled=true;m.RefractionStrength=0.23f;m.RefractionIOR=1.7f;m.RefractionThickness=0.35f;m.RefractionTint={0.7f,0.8f,0.9f};
+        m.ClearcoatStrength=0.8f;m.ClearcoatRoughness=0.2f;m.AnisotropyStrength=0.6f;m.AnisotropyRotation=0.4f;
+        m.RenderQueue=3123;m.UVScale={2,3};m.UVOffset={0.1f,0.2f};m.SurfaceType=SurfaceType::Transparent;m.CullMode=CullMode::None;m.DepthWrite=false;m.AlphaCutoff=0.32f;
+        m.UseCustomShader=true;m.CustomShaderPath="missing/custom.hlsl";m.CustomShaderGeneration=99;m.CustomShaderDiagnostic="not authored";
+        for(auto type:{ShaderPropertyType::Float,ShaderPropertyType::Float2,ShaderPropertyType::Float3,ShaderPropertyType::Float4,ShaderPropertyType::Color,ShaderPropertyType::Int,ShaderPropertyType::Bool,ShaderPropertyType::Texture2D}) {
+            ShaderPropertyInstance p;p.Desc.Name="Property"+std::to_string(static_cast<int>(type));p.Desc.Type=type;
+            p.FloatVal=0.75f;p.Vec4Val={0.1f,0.2f,0.3f,0.4f};p.IntVal=42;p.BoolVal=true;p.TexturePath="missing/property.png";m.CustomProperties.push_back(p);
+        }
+        auto canonical=[](const MaterialComponent& material){std::ostringstream out;WriteMaterialComponent(out,material);return out.str();};
+        const auto expected=canonical(m);
+        RENDER_CHECK(expected.find("not authored")==std::string::npos&&expected.find("CustomShaderGeneration")==std::string::npos,"material persistence excludes renderer feedback");
+        AssemblyData assembly;assembly.IsValid=true;assembly.RootNode.HasMaterial=true;assembly.RootNode.Material=m;
+        const auto path=root/"advanced.axle";
+        RENDER_CHECK(AssemblySerializer::SaveAssemblyData(path,assembly),"save full inline assembly material");
+        auto loaded=AssemblySerializer::LoadAssemblyData(path);
+        RENDER_CHECK(loaded.IsValid&&canonical(loaded.RootNode.Material)==expected,"Assembly Editor save/reopen retains every authored material field");
+        Scene source;auto entity=source.CreateEntity("Advanced inline material");entity.AddComponent<MaterialComponent>()=m;
+        RENDER_CHECK(AssemblySerializer::Serialize(path,entity),"serialize actual scene entity assembly");
+        loaded=AssemblySerializer::LoadAssemblyData(path);
+        RENDER_CHECK(loaded.IsValid&&canonical(loaded.RootNode.Material)==expected,"entity assembly writer uses complete material schema");
+        Scene target;auto spawned=AssemblySerializer::Deserialize(path,&target);
+        RENDER_CHECK(spawned&&spawned.HasComponent<MaterialComponent>()&&canonical(spawned.GetComponent<MaterialComponent>())==expected,"assembly instantiation retains advanced inline material");
+        Scene roundTrip;SceneSerializer writer(&source),reader(&roundTrip);
+        RENDER_CHECK(reader.DeserializeFromString(writer.SerializeToString()),"Scene uses shared authored material schema");
+        auto view=roundTrip.GetRegistry().view<MaterialComponent>();
+        RENDER_CHECK(view.size()==1&&canonical(view.get<MaterialComponent>(*view.begin()))==expected,"Scene and Assembly material round trips agree");
+        return true;
+    }
+    static bool Test_ParticleSnapshotHasNoCallbacks() {
+        Scene scene;auto entity=scene.CreateEntity("Owned particle snapshot");auto& emitter=entity.AddComponent<ParticleEmitterComponent>();emitter.EmitterStacks.clear();
+        ParticleEmitterStack stack("Callback source",ParticleEmitterConfig::CreateNeutral());
+        stack.Config.Collision.WorldRaycast=[](const glm::vec3&,const glm::vec3&,float,glm::vec3&,glm::vec3&){return false;};
+        stack.System->GetPool().Spawn(ParticleSpawnData{});emitter.EmitterStacks.push_back(std::move(stack));
+        auto world=ExtractRenderWorld(scene);
+        RENDER_CHECK(world.Particles.size()==1&&!world.Particles[0]->Config.Collision.WorldRaycast,"render snapshot never retains live physics callback");
+        RENDER_CHECK(bool(emitter.EmitterStacks[0].Config.Collision.WorldRaycast),"extraction preserves simulation callback");return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
     std::cout << "  [RenderService] Running RenderService & ViewRequest unit tests...\n";
+    if (!Axle::RenderTests::Test_AuthoredMaterialRoundTrips()) return false;
+    if (!Axle::RenderTests::Test_ParticleSnapshotHasNoCallbacks()) return false;
     if (!Axle::RenderTests::Test_ViewRequestDefaults()) return false;
     if (!Axle::RenderTests::Test_ViewRequestCustomization()) return false;
     if (!Axle::RenderTests::Test_RenderResultContract()) return false;

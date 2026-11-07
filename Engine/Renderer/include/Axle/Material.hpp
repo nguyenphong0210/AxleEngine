@@ -275,7 +275,8 @@ namespace Axle {
 
         // Serialization
         bool Save(const std::filesystem::path& filepath) const;
-        bool Load(const std::filesystem::path& filepath);
+        // Metadata-only loading preserves extraction without GPU allocation.
+        bool Load(const std::filesystem::path& filepath, bool resolveTextures = true);
 
         // Factory
         static std::shared_ptr<Material> Create(const std::string& name = "Material", UUID handle = 0);

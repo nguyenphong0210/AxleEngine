@@ -636,6 +636,7 @@ namespace Axle {
             ParticleEmitterStack renderStack(stack.GetDefinition());
             renderStack.Visible = stack.Visible;
             renderStack.System = stack.System;
+            renderStack.Texture=stack.Texture;renderStack.NormalMap=stack.NormalMap;
             component.EmitterStacks.push_back(std::move(renderStack));
         }
         component.SyncPrimary();

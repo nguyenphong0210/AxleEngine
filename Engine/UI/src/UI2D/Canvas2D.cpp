@@ -58,8 +58,8 @@ namespace Axle {
         clips.reserve(m_QuadClips.size());
         for (const auto& clip : m_QuadClips) clips.emplace_back(clip.X,clip.Y,clip.Width,clip.Height);
         const auto draws = m_Renderer->Submit({m_ViewportSize,m_Vertices,m_Indices,m_Images,clips},target);
-        if (!draws) return false;
-        m_Stats.DrawCalls = draws; return true;
+        if (!draws.Success) return false;
+        m_Stats.DrawCalls = draws.DrawCalls; return true;
     }
     uint32_t Canvas2D::RegisterImage(const ImageSourceData& image) {
         if (!image.Image) return 0;
@@ -120,7 +120,7 @@ namespace Axle {
         float valueClamped = std::clamp(valueNormalized, 0.0f, 1.0f);
 
         const float TWO_PI = glm::two_pi<float>();
-        float totalSpan = std::fmod(endRad - startRad + TWO_PI * 2.0f, TWO_PI);
+        float totalSpan = std::fmod(std::fmod(endRad - startRad, TWO_PI) + TWO_PI, TWO_PI);
         if (totalSpan <= 0.0001f) totalSpan = TWO_PI;
         float activeRad = startRad + totalSpan * valueClamped;
 

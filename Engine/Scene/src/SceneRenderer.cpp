@@ -583,9 +583,7 @@ namespace Axle {
         if (!Window::HasActiveContext() || !m_Shader) return;
 
         // 1. Lighting setup from extracted RenderWorld
-        if (world.DirectionalLight.has_value()) {
-            m_LightDir = world.DirectionalLight->Direction;
-        }
+        const glm::vec3 lightDirection=world.DirectionalLight?world.DirectionalLight->Direction:glm::vec3(0.45f,1.0f,0.65f);
         bool castShadows = settings.EnableShadows && world.DirectionalLight.has_value() && world.DirectionalLight->CastsShadows;
 
         // 2. Cascaded Shadow Map Pass
@@ -595,7 +593,7 @@ namespace Axle {
                 m_ShadowMap->Resize(targetRes, targetRes);
             }
 
-            m_ShadowMap->CalculateCascades(camera, m_LightDir, world.DirectionalLight->MaxShadowDistance, world.DirectionalLight->CascadeSplitLambda);
+            m_ShadowMap->CalculateCascades(camera, lightDirection, world.DirectionalLight->MaxShadowDistance, world.DirectionalLight->CascadeSplitLambda);
             const auto& cascadeMatrices = m_ShadowMap->GetCascadeMatrices();
 
             m_ShadowShader->Bind();
@@ -662,7 +660,7 @@ namespace Axle {
             m_Shader->SetFloat("u_LightIntensity", dl.Intensity);
             m_Shader->SetFloat("u_AmbientIntensity", dl.AmbientIntensity);
         } else {
-            m_Shader->SetFloat3("u_LightDir", m_LightDir);
+            m_Shader->SetFloat3("u_LightDir", lightDirection);
             m_Shader->SetFloat3("u_LightColor", glm::vec3(1.0f));
             m_Shader->SetFloat("u_LightIntensity", 1.0f);
             m_Shader->SetFloat("u_AmbientIntensity", 0.28f);
@@ -789,7 +787,7 @@ namespace Axle {
             if (!shader) return;
             shader->Bind(); shader->SetMat4("u_LightSpaceMatrix", lightMatrix);
             shader->SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix()); shader->SetMat4("u_View", camera.GetViewMatrix());
-            shader->SetFloat3("u_LightDir", m_LightDir); shader->SetFloat3("u_CameraPos", camera.GetPosition());
+            shader->SetFloat3("u_LightDir", lightDirection); shader->SetFloat3("u_CameraPos", camera.GetPosition());
             shader->SetInt("u_ShadowsEnabled", castShadows); shader->SetInt("u_ShadowMap", 1);
             if (!cascadeMatrices.empty()) shader->SetMat4Array("u_CascadeLightSpaceMatrices", cascadeMatrices.data(), static_cast<u32>(cascadeMatrices.size()));
             if (!splitDists.empty()) shader->SetFloatArray("u_CascadeSplitDistances", splitDists.data(), static_cast<u32>(splitDists.size()));
@@ -824,7 +822,8 @@ namespace Axle {
         if (settings.EnableParticles && m_ParticleRenderer && !world.Particles.empty()) {
             m_ParticleRenderer->Begin(camera, targetFBO, camera.GetNearClip(), camera.GetFarClip());
             for (const auto& batch : world.Particles)
-                m_ParticleRenderer->Render(batch->Pool, batch->Config, batch->Texture, batch->Normal, batch->Config.SoftnessDistance);
+                m_ParticleRenderer->Render(batch->Pool,batch->Config,batch->Texture,batch->Normal,batch->Config.SoftnessDistance,
+                    batch->Position,batch->Rotation,batch->Scale,batch->MaterialResolved?&batch->Material:nullptr);
             m_ParticleRenderer->End();
         }
 

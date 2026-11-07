@@ -240,3 +240,46 @@ queued GL image just as production panels do. Failed logs are retained.
 
 These are corrective self-checks. Final Debug/Release builds and complete gates,
 followed by the separate-context correction recheck, still block acceptance.
+
+## Separate-context correction findings (checkpoint 8 in progress)
+
+An independent read-only correction review of the candidate through e2f6ee2
+found five remaining defects. These are actual source findings, not acceptance:
+
+| ID | Severity | Trigger and correction |
+| --- | --- | --- |
+| OPT05-FR-01 | P2 | Canvas full-circle/partial arcs used inconsistent modulo and active endpoint conventions. Normalize CPU/GL/HLSL spans and compare relative active spans; physical probes cover 0/50/100 percent full and partial arcs. |
+| OPT05-FR-02 | P1 | GL VFX snapshots lost path-only textures/materials and local transforms. Freeze effective material values with metadata-only loading, strip live physics callbacks, resolve images outside extraction and share CPU packet transforms with native rendering. The recheck additionally identified attached-depth feedback; GL now snapshots opaque depth into a detached generation and disables soft sampling for zero softness. |
+| OPT05-FR-03 | P1 | Both Assembly writers/parser dropped advanced inline material properties. Scene and Assembly now share one complete authored MaterialComponent codec, including typed shader values and excluding transient feedback. |
+| OPT05-FR-04 | P2 | Fully clipped Canvas batches produced zero draws and were incorrectly treated as submission failure. Separate successful submission from draw count; keep GPU failures unsuccessful. |
+| OPT05-FR-05 | P2 | A no-light GL view inherited a preceding private view's directional light. Resolve the fallback direction per request. |
+
+The first arc-only Debug focused matrix passed all nine CPU/native/GL cases
+(fr01-focused-debug-results.json). The complete repairs and new regressions are
+being built and remain unaccepted pending actual results and reviewer recheck.
+
+Checkpoint 8 corrected-source self-checks: full Debug AxleAllTests/AxleEditor/
+AxleRuntime build passed (opt05-review-repairs2-debug.log); final fixture-only
+rebuild passed (opt05-particle-owner-debug.log). Nine focused CPU/service/Canvas
+cases passed (review-repairs-debug-results.json). Nine panel/physics/surface
+cases passed; the three new particle cases passed after fixture corrections
+(particles-owner3-results.json), with native API/synchronization validation and
+zero detected API errors. They verify textured/material multi-emitter pixels,
+local transforms, texture toggles, zero texture allocation during GL extraction,
+opaque-depth intersection fading, actual VFX panel output and source isolation.
+CPU regressions cover all authored material fields and all eight shader property
+types across Scene, both Assembly writers/reload and entity instantiation, plus
+snapshot callback removal. Fully offscreen clipped Canvas succeeds with zero
+actual draws and unchanged destination pixels on all three backends.
+
+The separate-context reviewer inspected the five corrections and affected callers,
+identified and rechecked metadata-load side effects, depth feedback and texture
+completeness, and reported no remaining P1/P2 finding. Its evidence is source
+inspection and diff checking only; the physical results above were run by the
+implementing Codex context. Full Debug/Release gates remain pending.
+
+Preserved failed intermediate logs include the test's initial raw-pointer versus
+shared-target compile error, a material fixture authored outside its active asset
+root, and a probe constructing two GL render services/Jolt debug renderers. The
+final fixture uses the production shared owner and a scoped real asset root;
+production assertions were not suppressed.

@@ -207,6 +207,10 @@ static void EmitCanvas(Canvas2D& canvas) {
     ImageSourceData source; source.SourceKey=source.RequestKey="canvas-blue";source.Revision=1;source.Image=image;
     canvas.DrawSprite({64,8,24,24},canvas.RegisterImage(source));
     canvas.DrawTextString("AX",std::make_shared<UIFont>(),{8,60,100,32},32,{1,1,1,1});
+    for(int level=0;level<3;++level) {
+        canvas.DrawRadialArc({96,float(4+level*32),24,24},0,360,level*0.5f,4,{0,1,0,1},{1,0,0,1});
+        canvas.DrawRadialArc({72,float(36+level*32),24,24},90,270,level*0.5f,4,{0,1,0,1},{1,0,0,1});
+    }
     canvas.EndCanvas();
 }
 static bool CheckCanvas(const std::vector<uint8_t>& pixels, bool flip) {
@@ -219,6 +223,15 @@ static bool CheckCanvas(const std::vector<uint8_t>& pixels, bool flip) {
     RENDER_CHECK(pixels[sprite+2]>245 && pixels[sprite]<8,"authored sprite texture sampled by GPU");
     size_t white=0;for(unsigned y=60;y<110;++y)for(unsigned x=8;x<70;++x){auto p=at(x,y);if(pixels[p]>150&&pixels[p+1]>150&&pixels[p+2]>150)++white;}
     RENDER_CHECK(white>30 && white<900,"font atlas produces glyph strokes and transparent background, not solid quads");
+    auto redAt=[&](unsigned x,unsigned y){const auto p=at(x,y);return pixels[p]>220&&pixels[p+1]<8;};
+    auto greenAt=[&](unsigned x,unsigned y){const auto p=at(x,y);return pixels[p+1]>220&&pixels[p]<8;};
+    RENDER_CHECK(redAt(115,23),"zero-value full circle keeps a visible track");
+    RENDER_CHECK(greenAt(108,58)&&redAt(108,38),"half-value full circle splits fill and track");
+    RENDER_CHECK(greenAt(108,70),"full-value full circle fills the complete ring");
+    RENDER_CHECK(redAt(74,48)&&greenAt(77,87)&&redAt(77,73)&&greenAt(74,112),
+        "nonzero-start arcs preserve relative zero/half/full fill extents");
+    const auto outsideArc=at(94,112);
+    RENDER_CHECK(pixels[outsideArc]<8&&pixels[outsideArc+1]<8&&pixels[outsideArc+2]<8,"partial arcs stay transparent outside their span");
     return true;
 }
 static bool NativeCanvas(RHIType backend) {
@@ -239,6 +252,11 @@ static bool NativeCanvas(RHIType backend) {
         Canvas2D canvas;EmitCanvas(canvas);
         RENDER_CHECK(canvas.GetStats().DrawCalls==0&&canvas.Submit(&target)&&canvas.GetStats().DrawCalls>=4,"only actual Canvas submission reports draws");
         RENDER_CHECK(CheckCanvas(ReadTexture(target),false),"native Canvas text/sprite/clip/blend output");
+        const auto beforeClip=ReadTexture(target);
+        Canvas2D clipped;clipped.Init();clipped.BeginCanvas({128,128});
+        clipped.PushClipRect({200,200,20,20});clipped.DrawRect({200,200,20,20},UIStyle{});clipped.EndCanvas();
+        RENDER_CHECK(clipped.Submit(&target)&&clipped.GetStats().DrawCalls==0&&ReadTexture(target)==beforeClip,
+            "fully clipped native Canvas succeeds without draws or pixel changes");clipped.Shutdown();
         RHIPresentationContext presenter;RENDER_CHECK(presenter.Init(window.GetNativeWindow()),"ImGui-free presentation owner");
         for(unsigned i=0;i<7;++i) {
             const auto result=presenter.RenderFrame(i<3?160:173,i<3?128:131,false,{}, {},target.GetNative());
@@ -268,6 +286,11 @@ static bool GLCanvas() {
         "GL Canvas restores caller bindings, blending, write masks and tests, including lazy image initialization");
     std::vector<uint8_t> pixels(128*128*4);glReadPixels(0,0,128,128,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
     RENDER_CHECK(CheckCanvas(pixels,true),"GL Canvas glyph/sprite/clip/blend readback");canvas.Shutdown();
+    Canvas2D clipped;clipped.Init();clipped.BeginCanvas({128,128});
+    clipped.PushClipRect({200,200,20,20});clipped.DrawRect({200,200,20,20},UIStyle{});clipped.EndCanvas();
+    RENDER_CHECK(clipped.Submit()&&clipped.GetStats().DrawCalls==0,"fully clipped GL Canvas succeeds with zero draws");
+    std::vector<uint8_t> afterClip(pixels.size());glReadPixels(0,0,128,128,GL_RGBA,GL_UNSIGNED_BYTE,afterClip.data());
+    RENDER_CHECK(afterClip==pixels,"clipped GL Canvas leaves destination untouched");clipped.Shutdown();
     glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glDisable(GL_STENCIL_TEST);glDisable(GL_FRAMEBUFFER_SRGB);
     glDeleteBuffers(1,&priorBuffer);glDeleteTextures(1,&priorTexture);
     target->Unbind();target.reset();return glGetError()==GL_NO_ERROR;

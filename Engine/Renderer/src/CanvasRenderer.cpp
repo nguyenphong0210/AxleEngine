@@ -65,42 +65,43 @@ namespace Axle {
         const float x1=std::clamp(rect.x+rect.z,0.0f,float(width)), y1=std::clamp(rect.y+rect.w,0.0f,float(height));
         return {x0,y0,std::max(0.0f,x1-x0),std::max(0.0f,y1-y0)};
     }
-    uint32_t CanvasRenderer::Submit(const CanvasDrawData& canvas, RHITexture* target) {
+    CanvasSubmission CanvasRenderer::Submit(const CanvasDrawData& canvas, RHITexture* target) {
         const auto extent=canvas.Extent;
-        if (extent.x<=0 || extent.y<=0 || extent.x>65535 || extent.y>65535 || !std::isfinite(extent.x) || !std::isfinite(extent.y)) return 0;
+        if (extent.x<=0 || extent.y<=0 || extent.x>65535 || extent.y>65535 || !std::isfinite(extent.x) || !std::isfinite(extent.y)) return {};
         const auto width=static_cast<uint32_t>(extent.x), height=static_cast<uint32_t>(extent.y);
         const auto& vertices=canvas.Vertices; const auto& indices=canvas.Indices;
         const auto quads=canvas.Clips.size();
-        if (!quads || indices.size()!=quads*6 || vertices.size()!=quads*4) return 0;
+        if(indices.size()!=quads*6||vertices.size()!=quads*4)return {};
+        if(!quads)return {true,0};
         auto& device=RHIDevice::Get();
         if (device.IsNativeReady()) {
-            if (!device.CanSubmit() || !target || !target->IsValid() || !target->GetRTV() || target->GetWidth()!=width || target->GetHeight()!=height) return 0;
+            if (!device.CanSubmit() || !target || !target->IsValid() || !target->GetRTV() || target->GetWidth()!=width || target->GetHeight()!=height) return {};
             if (!m_Storage || m_Storage->Epoch!=device.GetEpoch()) {
-                auto candidate=std::make_unique<Storage>(); if(!candidate->InitNative())return 0; m_Storage=std::move(candidate);
+                auto candidate=std::make_unique<Storage>(); if(!candidate->InitNative())return {}; m_Storage=std::move(candidate);
             }
             auto& state=*m_Storage;
-            if (!state.Frame.Begin()) return 0;
+            if (!state.Frame.Begin()) return {};
             bool submitted=false;
             auto cleanup=std::unique_ptr<Storage,std::function<void(Storage*)>>(&state,[&](auto*){if(!submitted)state.Frame.Abandon();});
             if (!state.Vertices.Init(RHIBufferDesc::Vertex(vertices.size()*sizeof(CanvasVertex),RHIMemoryLocation::HostUpload,"Canvas vertices"),vertices.data()) ||
-                !state.Indices.Init(RHIBufferDesc::Index(indices.size()*4,RHIMemoryLocation::HostUpload,"Canvas indices"),indices.data())) return 0;
+                !state.Indices.Init(RHIBufferDesc::Index(indices.size()*4,RHIMemoryLocation::HostUpload,"Canvas indices"),indices.data())) return {};
             RHIDescriptorPoolDesc pool; pool.MaxDescriptorSets=static_cast<uint32_t>(quads); pool.MaxTextures=static_cast<uint32_t>(quads); pool.MaxSamplers=0;
-            if (!state.Descriptors.Init(pool)) return 0;
+            if (!state.Descriptors.Init(pool)) return {};
             state.Images.clear(); state.Images.push_back(RHIMaterial::GetDefaultWhiteTexture());
-            for (const auto& source:canvas.Images) { auto image=ImageTextureCache::GetNative(source); if(!image)return 0; state.Images.push_back(std::move(image)); }
+            for (const auto& source:canvas.Images) { auto image=ImageTextureCache::GetNative(source); if(!image)return {}; state.Images.push_back(std::move(image)); }
             std::vector<nri::DescriptorSet*> sets;
             for(size_t q=0;q<quads;++q) {
                 const auto index=vertices[q*4].TextureIndex;
-                if(index>=state.Images.size() || !state.Images[index])return 0;
+                if(index>=state.Images.size() || !state.Images[index])return {};
                 auto* set=state.Descriptors.AllocateDescriptorSet(state.Layout,0);
-                if(!set || !state.Descriptors.UpdateTextureRange(set,0,0,{state.Images[index]->GetSRV()}))return 0;
+                if(!set || !state.Descriptors.UpdateTextureRange(set,0,0,{state.Images[index]->GetSRV()}))return {};
                 sets.push_back(set);
             }
             auto& commands=*state.Frame.GetCommands();
             for(const auto& image:state.Images)commands.TransitionTexture(image->GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::ShaderResource);
             commands.TransitionTexture(target->GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::ColorAttachment);
             auto constants=glm::vec4(width,height,0.0f,0);
-            auto uniform=state.Frame.WriteUniform(&constants,sizeof(constants)); if(!uniform.Descriptor)return 0;
+            auto uniform=state.Frame.WriteUniform(&constants,sizeof(constants)); if(!uniform.Descriptor)return {};
             RHIGraphicsPipelineDesc pipeline; pipeline.Layout=&state.Layout; pipeline.Shaders={state.VS,state.PS};
             pipeline.Rasterizer.CullMode=nri::CullMode::NONE; pipeline.DepthStencil.DepthTestEnable=false; pipeline.DepthStencil.DepthWriteEnable=false;
             pipeline.DepthStencil.DepthStencilFormat=nri::Format::UNKNOWN;
@@ -111,7 +112,7 @@ namespace Axle {
                 {"TEXCOORD",1,4,48,nri::Format::RG32_SFLOAT,0},{"RADIUS",0,5,56,nri::Format::R32_SFLOAT,0},
                 {"BORDER",0,6,60,nri::Format::R32_SFLOAT,0},{"ANGLERANGE",0,7,64,nri::Format::RG32_SFLOAT,0},
                 {"TEXINDEX",0,8,72,nri::Format::R32_UINT,0},{"PRIMTYPE",0,9,76,nri::Format::R32_UINT,0}};
-            auto* native=RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(pipeline); if(!native)return 0;
+            auto* native=RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(pipeline); if(!native)return {};
             commands.SetPipelineLayout(nri::BindPoint::GRAPHICS,state.Layout); commands.SetPipeline(native);
             state.Descriptors.Bind(commands.GetNative()); commands.SetRootDescriptor(0,uniform.Descriptor);
             commands.SetVertexBuffer(0,state.Vertices,0,sizeof(CanvasVertex)); commands.SetIndexBuffer(state.Indices,0,nri::IndexType::UINT32);
@@ -126,10 +127,10 @@ namespace Axle {
                 commands.DrawIndexed(6,1,static_cast<uint32_t>(q*6),0,0); ++draws;
             }
             commands.EndRendering(); commands.TransitionTexture(target->GetNative(),RHIResourceLayout::ColorAttachment,RHIResourceLayout::ShaderResource);
-            if(!state.Frame.End() || !state.Frame.Submit())return 0;
-            submitted=true; return draws;
+            if(!state.Frame.End() || !state.Frame.Submit())return {};
+            submitted=true; return {true,draws};
         }
-        if (!Window::HasActiveContext() || target) return 0;
+        if (!Window::HasActiveContext() || target) return {};
         struct RestoreGL {
             GLint VAO=0, Program=0, ArrayBuffer=0, ActiveTexture=0, Texture0=0, ActiveTexture2D=0, Sampler0=0;
             GLint Viewport[4]{}, Scissor[4]{}, SrcRGB=0,DstRGB=0,SrcAlpha=0,DstAlpha=0,EqRGB=0,EqAlpha=0;
@@ -164,14 +165,14 @@ namespace Axle {
         if (!m_Storage || m_Storage->Context!=context) {
             auto candidate=std::make_unique<Storage>(); candidate->Context=context;
             candidate->GLShader=std::make_unique<Shader>(CanvasShaders::Vertex,CanvasShaders::Fragment);
-            if(!candidate->GLShader->GetRendererID())return 0;
+            if(!candidate->GLShader->GetRendererID())return {};
             glCreateVertexArrays(1,&candidate->VAO); glCreateBuffers(1,&candidate->VBO); glCreateBuffers(1,&candidate->IBO);
             m_Storage=std::move(candidate);
         }
         auto& state=*m_Storage;
         std::vector<std::shared_ptr<Texture2D>> images{Texture2D::GetWhiteTexture()};
         TextureSpecification specification; specification.FlipVertically=false; specification.GenerateMipmaps=false;
-        for(const auto& source:canvas.Images){auto image=ImageTextureCache::GetGL(source,specification);if(!image)return 0;images.push_back(std::move(image));}
+        for(const auto& source:canvas.Images){auto image=ImageTextureCache::GetGL(source,specification);if(!image)return {};images.push_back(std::move(image));}
         glBindVertexArray(state.VAO); glBindBuffer(GL_ARRAY_BUFFER,state.VBO); glBufferData(GL_ARRAY_BUFFER,vertices.size()*sizeof(CanvasVertex),vertices.data(),GL_STREAM_DRAW);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,state.IBO); glBufferData(GL_ELEMENT_ARRAY_BUFFER,indices.size()*4,indices.data(),GL_STREAM_DRAW);
         const GLint sizes[]={2,2,4,4,2,1,1,2,1,1}; const size_t offsets[]={0,8,16,32,48,56,60,64,72,76};
@@ -187,6 +188,6 @@ namespace Axle {
             const auto index=vertices[q*4].TextureIndex;if(index>=images.size())continue;images[index]->Bind(0);
             glScissor(static_cast<int>(clip.X),static_cast<int>(height-clip.Y-clip.Height),static_cast<int>(clip.Width),static_cast<int>(clip.Height));
             glDrawElements(GL_TRIANGLES,6,GL_UNSIGNED_INT,reinterpret_cast<void*>(q*6*sizeof(uint32_t)));++draws;}
-        return draws;
+        return {true,draws};
     }
 }

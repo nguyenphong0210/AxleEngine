@@ -15,6 +15,11 @@ in float v_LightingFlag;
 // Texture Atlas & Flipbook
 uniform sampler2D u_ParticleTexture;
 uniform int u_HasTexture;
+                uniform vec4 u_MaterialTint;
+                uniform vec4 u_MaterialEmission;
+                uniform vec4 u_UVTransform;
+                uniform int u_IsCutout;
+                uniform float u_AlphaCutoff;
 uniform int u_SubFrameBlendingEnabled;
 
 // Normal Mapping & Volumetric Lighting
@@ -62,9 +67,9 @@ void main() {
     // 1. Texture Sampling & Flipbook Sub-Frame Interpolation
     vec4 texColor = vec4(1.0);
     if (u_HasTexture == 1) {
-        vec4 colA = texture(u_ParticleTexture, v_TexCoord);
+        vec4 colA = texture(u_ParticleTexture, v_TexCoord*u_UVTransform.xy+u_UVTransform.zw);
         if (u_SubFrameBlendingEnabled == 1 && v_SubFrameBlend > 0.0) {
-            vec4 colB = texture(u_ParticleTexture, v_TexCoordNext);
+            vec4 colB = texture(u_ParticleTexture, v_TexCoordNext*u_UVTransform.xy+u_UVTransform.zw);
             texColor = mix(colA, colB, v_SubFrameBlend);
         } else {
             texColor = colA;
@@ -80,7 +85,8 @@ void main() {
         texColor = vec4(1.0, 1.0, 1.0, alphaMask);
     }
 
-    vec4 finalColor = v_Color * texColor;
+    vec4 finalColor = v_Color * texColor * u_MaterialTint;
+                    if(u_IsCutout==1&&finalColor.a<u_AlphaCutoff)discard;
     if (finalColor.a <= 0.001) {
         discard;
     }
@@ -89,7 +95,7 @@ void main() {
     if (u_LightingEnabled == 1 && v_LightingFlag > 0.5) {
         vec3 N = normalize(v_Normal);
         if (u_HasNormalMap == 1) {
-            vec3 normalTex = texture(u_ParticleNormalMap, v_TexCoord).xyz * 2.0 - 1.0;
+            vec3 normalTex = texture(u_ParticleNormalMap, v_TexCoord*u_UVTransform.xy+u_UVTransform.zw).xyz * 2.0 - 1.0;
             N = normalize(mix(N, normalTex, clamp(u_NormalMapStrength, 0.0, 1.0)));
         }
 
@@ -123,7 +129,8 @@ void main() {
     }
 
     // 3. Camera Near-Plane Fade
-    float camDist = -v_ViewPos.z;
+    finalColor.rgb+=u_MaterialEmission.rgb*u_MaterialEmission.w;
+                    float camDist = -v_ViewPos.z;
     if (u_NearFadeEnabled == 1) {
         float nearFade = smoothstep(u_NearFadeStart, u_NearFadeEnd, camDist);
         finalColor.a *= nearFade;

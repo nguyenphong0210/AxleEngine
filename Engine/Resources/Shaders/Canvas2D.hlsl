@@ -134,13 +134,15 @@ float4 PSMain(PSInput input) : SV_Target {
         float activeRad = input.BorderWidth; // Active Angle (rad)
 
         const float TWO_PI = 6.28318530718;
-        float relAngle = fmod(angleRad - startRad + TWO_PI * 2.0, TWO_PI);
-        float totalSpan = fmod(endRad - startRad + TWO_PI * 2.0, TWO_PI);
+        float relAngle = fmod(fmod(angleRad - startRad, TWO_PI) + TWO_PI, TWO_PI);
+        float totalSpan = fmod(fmod(endRad - startRad, TWO_PI) + TWO_PI, TWO_PI);
         if (totalSpan <= 0.001) totalSpan = TWO_PI;
-        float activeSpan = fmod(activeRad - startRad + TWO_PI * 2.0, TWO_PI);
+        // CPU emission keeps the absolute active endpoint. Subtraction retains
+        // the distinction between zero fill and a complete 2*pi turn.
+        float activeSpan = clamp(activeRad - startRad, 0.0, totalSpan);
 
         float4 arcColor = float4(0.0, 0.0, 0.0, 0.0);
-        if (relAngle <= activeSpan) {
+        if (activeSpan > 0.0 && relAngle <= activeSpan) {
             arcColor = input.Color;
         } else if (relAngle <= totalSpan) {
             arcColor = input.BorderColor;

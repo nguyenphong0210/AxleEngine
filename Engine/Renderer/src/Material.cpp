@@ -596,7 +596,14 @@ namespace Axle {
         return persist();
     }
 
-    bool Material::Load(const std::filesystem::path& filepath) {
+    bool Material::Load(const std::filesystem::path& filepath, bool resolveTextures) {
+        auto loadAlbedoPath=[&](const std::string& path){if(resolveTextures)SetAlbedoPath(path);else m_AlbedoPath=path;};
+        auto loadNormalPath=[&](const std::string& path){if(resolveTextures)SetNormalPath(path);else m_NormalPath=path;};
+        auto loadRoughnessPath=[&](const std::string& path){if(resolveTextures)SetRoughnessPath(path);else m_RoughnessPath=path;};
+        auto loadMetallicPath=[&](const std::string& path){if(resolveTextures)SetMetallicPath(path);else m_MetallicPath=path;};
+        auto loadAOPath=[&](const std::string& path){if(resolveTextures)SetAOPath(path);else m_AOPath=path;};
+        auto loadEmissivePath=[&](const std::string& path){if(resolveTextures)SetEmissivePath(path);else m_EmissivePath=path;};
+        auto loadORMPath=[&](const std::string& path){if(resolveTextures)SetORMPath(path);else m_ORMPath=path;};
         std::string content = FileSystem::ReadTextFile(filepath);
         if (content.empty() && !FileSystem::Exists(filepath)) {
             AXLE_ERROR("Material::Load: Could not read file '{0}'", filepath.string());
@@ -671,17 +678,17 @@ namespace Axle {
                 } else if (trimmed.rfind("roughnessMap:", 0) == 0) {
                     std::string value = Trim(trimmed.substr(13));
                     if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
-                    SetRoughnessPath(value);
+                    loadRoughnessPath(value);
                     m_UseRoughnessMap = !value.empty();
                 } else if (trimmed.rfind("metallicMap:", 0) == 0) {
                     std::string value = Trim(trimmed.substr(12));
                     if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
-                    SetMetallicPath(value);
+                    loadMetallicPath(value);
                     m_UseMetallicMap = !value.empty();
                 } else if (trimmed.rfind("emissiveMap:", 0) == 0) {
                     std::string value = Trim(trimmed.substr(12));
                     if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size()-2);
-                    SetEmissivePath(value);
+                    loadEmissivePath(value);
                     m_UseEmissiveMap = !value.empty();
                 } else if (trimmed.rfind("albedoColor:", 0) == 0) {
                     std::string val = Trim(trimmed.substr(12));
@@ -718,12 +725,12 @@ namespace Axle {
                 } else if (trimmed.rfind("ormMap:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(7));
                     if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
-                    if (!p.empty()) { SetORMPath(p); m_UseORMMap = true; }
+                    if (!p.empty()) { loadORMPath(p); m_UseORMMap = true; }
                     else ClearORMTexture();
                 } else if (trimmed.rfind("albedoMap:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(10));
                     if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
-                    if (!p.empty()) { SetAlbedoPath(p); m_UseAlbedoMap = true; }
+                    if (!p.empty()) { loadAlbedoPath(p); m_UseAlbedoMap = true; }
                     else ClearAlbedoTexture();
                 } else if (trimmed.rfind("metallic:", 0) == 0) {
                     try { SetMetallic(std::stof(Trim(trimmed.substr(9)))); } catch (...) {}
@@ -732,7 +739,7 @@ namespace Axle {
                 } else if (trimmed.rfind("normalMap:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(10));
                     if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
-                    if (!p.empty()) { SetNormalPath(p); m_UseNormalMap = true; }
+                    if (!p.empty()) { loadNormalPath(p); m_UseNormalMap = true; }
                     else ClearNormalTexture();
                 } else if (trimmed.rfind("clearcoatMap:", 0) == 0) {
                     auto value=Trim(trimmed.substr(13));
@@ -797,7 +804,7 @@ namespace Axle {
                     size_t colon = trimmed.find(':');
                     std::string p = Trim(trimmed.substr(colon + 1));
                     if (p.size() >= 2 && p.front() == '"' && p.back() == '"') p = p.substr(1, p.size() - 2);
-                    if (!p.empty()) { SetAOPath(p); m_UseAOMap = true; }
+                    if (!p.empty()) { loadAOPath(p); m_UseAOMap = true; }
                     else ClearAOTexture();
                 } else if (trimmed.rfind("occlusionStrength:", 0) == 0 || trimmed.rfind("ao:", 0) == 0) {
                     size_t colon = trimmed.find(':');
@@ -859,12 +866,12 @@ namespace Axle {
                 } else if (trimmed.rfind("TextureMode:", 0) == 0) {
                 m_TextureMode = StringToTextureMode(Trim(trimmed.substr(12)));
             } else if (trimmed.rfind("ORMPath:", 0) == 0) {
-                SetORMPath(Trim(trimmed.substr(8)));
+                loadORMPath(Trim(trimmed.substr(8)));
             } else if (trimmed.rfind("UseORMMap:", 0) == 0) {
                 m_UseORMMap = (Trim(trimmed.substr(10)) == "true");
             } else if (trimmed.rfind("AlbedoPath:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(11));
-                    if (!p.empty()) SetAlbedoPath(p);
+                    if (!p.empty()) loadAlbedoPath(p);
                     else ClearAlbedoTexture();
                 } else if (trimmed.rfind("UseAlbedoMap:", 0) == 0) {
                     m_UseAlbedoMap = (Trim(trimmed.substr(13)) == "true");
@@ -874,7 +881,7 @@ namespace Axle {
                     m_AlbedoColor = glm::vec4(r, g, b, a);
                 } else if (trimmed.rfind("NormalPath:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(11));
-                    if (!p.empty()) SetNormalPath(p);
+                    if (!p.empty()) loadNormalPath(p);
                     else ClearNormalTexture();
                 } else if (trimmed.rfind("UseNormalMap:", 0) == 0) {
                     m_UseNormalMap = (Trim(trimmed.substr(13)) == "true");
@@ -890,7 +897,7 @@ namespace Axle {
                     m_NormalStrength = std::stof(Trim(trimmed.substr(15)));
                 } else if (trimmed.rfind("RoughnessPath:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(14));
-                    if (!p.empty()) SetRoughnessPath(p);
+                    if (!p.empty()) loadRoughnessPath(p);
                     else ClearRoughnessTexture();
                 } else if (trimmed.rfind("UseRoughnessMap:", 0) == 0) {
                     m_UseRoughnessMap = (Trim(trimmed.substr(16)) == "true");
@@ -898,7 +905,7 @@ namespace Axle {
                     m_Roughness = std::stof(Trim(trimmed.substr(10)));
                 } else if (trimmed.rfind("MetallicPath:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(13));
-                    if (!p.empty()) SetMetallicPath(p);
+                    if (!p.empty()) loadMetallicPath(p);
                     else ClearMetallicTexture();
                 } else if (trimmed.rfind("UseMetallicMap:", 0) == 0) {
                     m_UseMetallicMap = (Trim(trimmed.substr(15)) == "true");
@@ -906,7 +913,7 @@ namespace Axle {
                     m_Metallic = std::stof(Trim(trimmed.substr(9)));
                 } else if (trimmed.rfind("AOPath:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(7));
-                    if (!p.empty()) SetAOPath(p);
+                    if (!p.empty()) loadAOPath(p);
                     else ClearAOTexture();
                 } else if (trimmed.rfind("UseAOMap:", 0) == 0) {
                     m_UseAOMap = (Trim(trimmed.substr(9)) == "true");
@@ -914,7 +921,7 @@ namespace Axle {
                     m_AOStrength = std::stof(Trim(trimmed.substr(3)));
                 } else if (trimmed.rfind("EmissivePath:", 0) == 0) {
                     std::string p = Trim(trimmed.substr(13));
-                    if (!p.empty()) SetEmissivePath(p);
+                    if (!p.empty()) loadEmissivePath(p);
                     else ClearEmissiveTexture();
                 } else if (trimmed.rfind("UseEmissiveMap:", 0) == 0) {
                     m_UseEmissiveMap = (Trim(trimmed.substr(15)) == "true");

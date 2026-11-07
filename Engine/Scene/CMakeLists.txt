@@ -13,6 +13,7 @@ add_library(AxleScene STATIC
     src/AnimationSceneBinding.cpp
     src/SceneSerializer.cpp
     src/AssemblySerializer.cpp
+    src/MaterialComponentCodec.cpp
     src/ScriptRegistry.cpp
     src/ScriptHotReloadManager.cpp
     src/ScriptCompiler.cpp

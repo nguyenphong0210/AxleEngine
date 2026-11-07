@@ -9,6 +9,7 @@
 #include <Axle/ParticlePool.hpp>
 #include <Axle/ParticleEmitter.hpp>
 #include <Axle/ParticleSystem.hpp>
+#include <Axle/ParticleMaterialAdapter.hpp>
 #include <memory>
 #include <vector>
 
@@ -75,7 +76,11 @@ namespace Axle {
                     const ParticleEmitterConfig& config,
                     const std::shared_ptr<Texture2D>& texture = nullptr,
                     const std::shared_ptr<Texture2D>& normalMap = nullptr,
-                    float softnessDistance = 0.5f);
+                      float softnessDistance = 0.5f,
+                      const glm::vec3& emitterPosition = glm::vec3(0),
+                      const glm::quat& emitterRotation = glm::quat(1,0,0,0),
+                      const glm::vec3& emitterScale = glm::vec3(1),
+                      const EffectiveParticleRenderSettings* material = nullptr);
 
         void Render(const ParticlePool& pool,
                     const ParticleEmitterConfig& config,
@@ -120,6 +125,8 @@ namespace Axle {
         glm::vec3 m_CameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
         std::shared_ptr<Framebuffer> m_SceneFBO;
+        uint32_t m_SceneDepthCopy=0, m_DepthWidth=0, m_DepthHeight=0;
+        int m_DepthFormat=0;
         float m_CameraNear = 0.1f;
         float m_CameraFar = 1000.0f;
         glm::vec2 m_ScreenSize = glm::vec2(1280.0f, 720.0f);

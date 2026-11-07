@@ -1782,8 +1782,7 @@ namespace Axle {
             m_ParticleRenderer->Begin(Commands(), camera, sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
             m_ParticleRenderer->SetSceneDepth(particleDepth, width, height);
             for (const auto& batch : world.Particles) {
-                auto effective = ParticleMaterialAdapter::Resolve(batch->Config, batch->Resources,
-                    [](const auto& path) { return MaterialCache::GetMaterial(FileSystem::ResolveAssetPath(path)); });
+                auto effective=batch->MaterialResolved?batch->Material:ParticleMaterialAdapter::Resolve(batch->Config,batch->Resources);
                 auto texture = effective.UseTexture ? m_MaterialTextures.Get(effective.TexturePath, true) : nullptr;
                 auto normal = effective.UseNormalMap ? m_MaterialTextures.Get(effective.NormalMapPath, false) : nullptr;
                 auto config = batch->Config;

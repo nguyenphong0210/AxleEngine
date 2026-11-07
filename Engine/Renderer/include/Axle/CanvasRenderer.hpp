@@ -26,11 +26,15 @@ namespace Axle {
         std::span<const ImageSourceData> Images;
         std::span<const glm::vec4> Clips; // x, y, width, height in physical pixels.
     };
+    struct CanvasSubmission {
+        bool Success = false;
+        uint32_t DrawCalls = 0;
+    };
     class CanvasRenderer {
     public:
         CanvasRenderer();
         ~CanvasRenderer();
-        uint32_t Submit(const CanvasDrawData& batch, RHI::RHITexture* target);
+        CanvasSubmission Submit(const CanvasDrawData& batch, RHI::RHITexture* target);
     private:
         struct Storage;
         std::unique_ptr<Storage> m_Storage;

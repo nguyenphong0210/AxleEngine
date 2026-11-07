@@ -297,3 +297,46 @@ Scope:
 - `python scripts/check_architecture.py --root .`: PASS (405 files / 18 CMake files)
 - `python scripts/test_baseline_tools.py`: 18/18 PASS
 - `git diff --check`: PASS
+
+---
+
+## Package P41-20: Material/Shader/Color/Capability Contract
+
+- **Status:** Implemented and self-verified in Debug and Release.
+- **Scope & Contract:** `docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md` lines 316-325
+
+### Implementation Summary
+1. **Consolidated Render Contracts (`Engine/Renderer/include/Axle/RenderContracts.hpp`, `Engine/Renderer/src/RenderContracts.cpp`):**
+   - **Canonical Vertex Layout:** Consolidated static 64-byte PBR vertex stream (`RHIVertex3D`: Position, Normal, Tangent with handedness w, TexCoord, Color) and skinned 96-byte stream (`RHISkinnedVertex3D`). Added `GetCanonicalVertexInputDesc()` and `VerifyVertexLayout()` checking expected offsets, formats, and stride.
+   - **Constant Buffer Layouts & Packing:** Consolidated frame constants (register b0, space0, 256B CBV aligned), object root constants (128B push constants), light constants (b2, space0), material constants (`RHIMaterialConstants`, b3, space0, 256B), and tone mapping constants (b0, space0, 256B). Verified byte packing matching HLSL layouts.
+   - **Texture Slot Table & Color Spaces:** Consolidated table of 10 standard slots (Albedo, Normal, Roughness, Metallic, AO, Emissive, Clearcoat, AnisotropyFlow, DetailNormal, DetailMask) declaring exact semantic roles, formats, and color space contracts (`IsSRGBSlot`: true for Albedo and Emissive, false for Normal, Roughness, Metallic, AO, Clearcoat, Anisotropy, Detail).
+2. **Color Space & Tone Mapping Ownership:**
+   - Formalized engine color pipeline: Lighting and radiance accumulation evaluate strictly in Linear HDR space.
+   - Tone mapping (filmic ACES/Reinhard) and sRGB transfer are exclusively owned by the post-processing tone mapping pass (`ToneMapping.hlsl` / `RenderToneMapping`), never ad-hoc within surface materials.
+   - Provided canonical conversion utilities (`LinearToSRGB`, `SRGBToLinear` for floats, vec3, and vec4).
+3. **Clip & Depth Conventions:**
+   - Right-handed coordinate system ($+X$ right, $+Y$ up, $-Z$ into screen).
+   - Depth range: $[0.0, 1.0]$ for Modern RHI (D3D12/Vulkan), $[-1.0, 1.0]$ for OpenGL.
+   - Default depth test compare op: `LESS`. Counter-clockwise (CCW) front face winding with back-face culling by default.
+4. **Surface Modes & Blending:**
+   - Standardized pipeline state generation for all four surface models:
+     - `SurfaceType::Opaque`: DepthWrite = true, Blend = false, Cull = Back.
+     - `SurfaceType::Cutout`: DepthWrite = true, Blend = false, Alpha cutoff in shader.
+     - `SurfaceType::Transparent`: DepthWrite = false, Blend = true (`SRC_ALPHA` / `ONE_MINUS_SRC_ALPHA`), Cull = Back/None.
+     - `SurfaceType::Additive`: DepthWrite = false, Blend = true (`SRC_ALPHA` / `ONE`), Cull = Back/None.
+5. **Non-Destructive Capability & Fallback Reporting:**
+   - Separated physical hardware limits (`nri::DeviceDesc`, ray tracing tiers) from software renderer capabilities (`RendererCapabilities`).
+   - Added `ValidateMaterialCompatibility()`: When OpenGL compatibility backend encounters advanced features (custom HLSL shaders, refraction copies), it generates explicit diagnostics in `AdvancedFeatureDiagnostic`, but strictly preserves all authored `Material` properties without mutating or resetting them.
+   - Preserved `CustomProgramCache` last-good generations (`CustomReadyGeneration`) on recompilation or syntax errors.
+6. **Dedicated Unit Verification (`Tests/rendering/Test_RenderContractsUnit.cpp`):**
+   - Added `Test_RenderContractsSpecifications()` verifying vertex input descriptions, constant buffer packing, all 10 texture slot color spaces, linear/sRGB conversions, depth/clip ranges, surface blend states, and non-destructive OpenGL fallback.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleRenderer AxleRenderUnitTests`: exit 0
+- `cmake --build build --config Release --target AxleRenderer AxleRenderUnitTests`: exit 0
+- `build/Tests/Debug/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `build/Tests/Release/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `ctest --test-dir build -C Release -R "RenderUnitTests|MaterialUnitTests"`: 2/2 passed, exit 0
+- `python scripts/check_architecture.py --root .`: PASS (407 files / 18 CMake files)
+- `python scripts/test_baseline_tools.py`: 18/18 PASS
+- `git diff --check`: PASS

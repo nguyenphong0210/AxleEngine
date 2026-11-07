@@ -22,6 +22,7 @@ add_library(AxleRenderer STATIC
     src/RHIECSStreamer.cpp
     src/MaterialCache.cpp
     src/RenderCapabilities.cpp
+    src/RenderContracts.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

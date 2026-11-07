@@ -4,6 +4,8 @@
 #include <Axle/RHI/RHIVertexLayout.hpp>
 #include <Axle/RHI/RHIBarrier.hpp>
 #include <Axle/RHI/RHISampler.hpp>
+#include <Axle/RenderContracts.hpp>
+#include <Axle/Material.hpp>
 
 namespace Axle::RenderTests {
 
@@ -172,6 +174,117 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_RenderContractsSpecifications() {
+        // 1. Vertex Layout Contract
+        auto vtxDesc = VertexLayoutContract::GetCanonicalVertexInputDesc();
+        RENDER_CHECK(VertexLayoutContract::VerifyVertexLayout(vtxDesc), "Canonical vertex layout matches 64B PBR layout");
+        RENDER_CHECK(VertexLayoutContract::StaticVertexStride == 64, "Static vertex stride must be 64 bytes");
+        RENDER_CHECK(VertexLayoutContract::SkinnedVertexStride == 96, "Skinned vertex stride must be 96 bytes");
+        RENDER_CHECK(VertexLayoutContract::PositionOffset == 0, "Position offset is 0");
+        RENDER_CHECK(VertexLayoutContract::NormalOffset == 12, "Normal offset is 12");
+        RENDER_CHECK(VertexLayoutContract::TangentOffset == 24, "Tangent offset is 24");
+        RENDER_CHECK(VertexLayoutContract::TexCoordOffset == 40, "TexCoord offset is 40");
+        RENDER_CHECK(VertexLayoutContract::ColorOffset == 48, "Color offset is 48");
+
+        // 2. Constant Buffer Contracts
+        RENDER_CHECK(ConstantBufferContract::VerifyMaterialConstantPacking(), "RHIMaterialConstants packing verified");
+        RENDER_CHECK(ConstantBufferContract::FrameConstantsSize == 256, "Frame constants 256 bytes CBV aligned");
+        RENDER_CHECK(ConstantBufferContract::ObjectRootConstantsSize == 128, "Object root constants 128 bytes");
+        RENDER_CHECK(ConstantBufferContract::ToneMappingConstantsSize == 256, "Tone mapping constants 256 bytes");
+
+        // 3. Texture Slot Contracts
+        RENDER_CHECK(TextureSlotContract::SlotCount == 10, "10 standard texture slots");
+        RENDER_CHECK(TextureSlotContract::IsSRGBSlot(RHI::RHITextureSlot::Albedo), "Albedo slot is sRGB");
+        RENDER_CHECK(TextureSlotContract::IsSRGBSlot(RHI::RHITextureSlot::Emissive), "Emissive slot is sRGB");
+        RENDER_CHECK(!TextureSlotContract::IsSRGBSlot(RHI::RHITextureSlot::Normal), "Normal slot is linear");
+        RENDER_CHECK(!TextureSlotContract::IsSRGBSlot(RHI::RHITextureSlot::Roughness), "Roughness slot is linear");
+        RENDER_CHECK(!TextureSlotContract::IsSRGBSlot(RHI::RHITextureSlot::Metallic), "Metallic slot is linear");
+        RENDER_CHECK(!TextureSlotContract::IsSRGBSlot(RHI::RHITextureSlot::AO), "AO slot is linear");
+        RENDER_CHECK(!TextureSlotContract::IsSRGBSlot(RHI::RHITextureSlot::Clearcoat), "Clearcoat slot is linear");
+        RENDER_CHECK(!TextureSlotContract::IsSRGBSlot(RHI::RHITextureSlot::AnisotropyFlow), "AnisotropyFlow slot is linear");
+        RENDER_CHECK(!TextureSlotContract::IsSRGBSlot(RHI::RHITextureSlot::DetailNormal), "DetailNormal slot is linear");
+        RENDER_CHECK(!TextureSlotContract::IsSRGBSlot(RHI::RHITextureSlot::DetailMask), "DetailMask slot is linear");
+
+        // 4. Color Space & Tone Mapping Ownership Contracts
+        float linearVal = 0.18f; // Standard 18% gray
+        float srgbVal = ColorSpaceContract::LinearToSRGB(linearVal);
+        RENDER_CHECK(Near(srgbVal, 0.4613f, 0.01f), "18% linear gray converts to ~0.46 sRGB");
+        float roundTrip = ColorSpaceContract::SRGBToLinear(srgbVal);
+        RENDER_CHECK(Near(roundTrip, linearVal, 0.001f), "sRGB round-trip recovers linear value");
+
+        glm::vec4 linearRGBA(0.5f, 0.25f, 0.125f, 0.8f);
+        glm::vec4 srgbRGBA = ColorSpaceContract::LinearToSRGB(linearRGBA);
+        RENDER_CHECK(Near(srgbRGBA.a, 0.8f, 0.0001f), "Alpha channel remains untouched during sRGB conversion");
+        glm::vec4 recoveredRGBA = ColorSpaceContract::SRGBToLinear(srgbRGBA);
+        RENDER_CHECK(Near(recoveredRGBA.r, linearRGBA.r, 0.001f), "Red channel round trip");
+        RENDER_CHECK(Near(recoveredRGBA.g, linearRGBA.g, 0.001f), "Green channel round trip");
+        RENDER_CHECK(Near(recoveredRGBA.b, linearRGBA.b, 0.001f), "Blue channel round trip");
+        RENDER_CHECK(Near(recoveredRGBA.a, linearRGBA.a, 0.0001f), "Alpha channel round trip");
+
+        // 5. Depth and Clip Contracts
+        float d3dNear = 0.0f, d3dFar = 0.0f;
+        DepthClipContract::GetDepthRange(RendererBackendType::ModernRHI_D3D12, d3dNear, d3dFar);
+        RENDER_CHECK(Near(d3dNear, 0.0f, 0.001f) && Near(d3dFar, 1.0f, 0.001f), "D3D12 depth range [0, 1]");
+
+        float glNear = 0.0f, glFar = 0.0f;
+        DepthClipContract::GetDepthRange(RendererBackendType::OpenGL_Compatibility, glNear, glFar);
+        RENDER_CHECK(Near(glNear, -1.0f, 0.001f) && Near(glFar, 1.0f, 0.001f), "OpenGL legacy depth range [-1, 1]");
+
+        RENDER_CHECK(DepthClipContract::GetDefaultDepthCompareOp() == nri::CompareOp::LESS, "Default depth compare op is LESS");
+        RENDER_CHECK(DepthClipContract::IsRightHanded, "Right-handed coordinate system");
+
+        // 6. Surface Blend Contracts
+        auto opaqueBlend = SurfaceBlendContract::GetBlendAttachmentDesc(SurfaceType::Opaque);
+        RENDER_CHECK(!opaqueBlend.BlendEnabled, "Opaque blend disabled");
+        auto opaqueDS = SurfaceBlendContract::GetDepthStencilDesc(SurfaceType::Opaque);
+        RENDER_CHECK(opaqueDS.DepthWriteEnable && opaqueDS.DepthTestEnable, "Opaque writes depth");
+
+        auto cutoutBlend = SurfaceBlendContract::GetBlendAttachmentDesc(SurfaceType::Cutout);
+        RENDER_CHECK(!cutoutBlend.BlendEnabled, "Cutout blend disabled");
+        auto cutoutDS = SurfaceBlendContract::GetDepthStencilDesc(SurfaceType::Cutout);
+        RENDER_CHECK(cutoutDS.DepthWriteEnable && cutoutDS.DepthTestEnable, "Cutout writes depth");
+
+        auto transBlend = SurfaceBlendContract::GetBlendAttachmentDesc(SurfaceType::Transparent);
+        RENDER_CHECK(transBlend.BlendEnabled, "Transparent blend enabled");
+        RENDER_CHECK(transBlend.SrcColor == nri::BlendFactor::SRC_ALPHA && transBlend.DstColor == nri::BlendFactor::ONE_MINUS_SRC_ALPHA, "Alpha blend factors");
+        auto transDS = SurfaceBlendContract::GetDepthStencilDesc(SurfaceType::Transparent);
+        RENDER_CHECK(!transDS.DepthWriteEnable && transDS.DepthTestEnable, "Transparent does not write depth");
+
+        auto addBlend = SurfaceBlendContract::GetBlendAttachmentDesc(SurfaceType::Additive);
+        RENDER_CHECK(addBlend.BlendEnabled, "Additive blend enabled");
+        RENDER_CHECK(addBlend.SrcColor == nri::BlendFactor::SRC_ALPHA && addBlend.DstColor == nri::BlendFactor::ONE, "Additive blend factors");
+        auto addDS = SurfaceBlendContract::GetDepthStencilDesc(SurfaceType::Additive);
+        RENDER_CHECK(!addDS.DepthWriteEnable && addDS.DepthTestEnable, "Additive does not write depth");
+
+        auto backRaster = SurfaceBlendContract::GetRasterizerDesc(CullMode::Back, false);
+        RENDER_CHECK(backRaster.CullMode == nri::CullMode::BACK && backRaster.FillMode == nri::FillMode::SOLID, "Back cull solid");
+        auto wireRaster = SurfaceBlendContract::GetRasterizerDesc(CullMode::None, true);
+        RENDER_CHECK(wireRaster.CullMode == nri::CullMode::NONE && wireRaster.FillMode == nri::FillMode::WIREFRAME, "None cull wireframe");
+
+        // 7. Capability & Fallback Non-Destructive Reporting Contract
+        Material mat("TestAuthoredMaterial");
+        mat.SetAlbedoColor(glm::vec4(0.9f, 0.1f, 0.1f, 1.0f));
+        mat.SetUseCustomShader(true);
+        mat.SetCustomShaderPath("shaders/SpecialCarPaint.hlsl");
+
+        std::string diag;
+        bool glCompat = CapabilityContract::ValidateMaterialCompatibility(RendererBackendType::OpenGL_Compatibility, mat, diag);
+        RENDER_CHECK(!glCompat, "Custom HLSL reported incompatible under OpenGL");
+        RENDER_CHECK(!diag.empty() && diag.find("Custom HLSL shaders are not supported") != std::string::npos, "Explicit GL diagnostic generated");
+        // CRITICAL CONTRACT: Authored material properties must NOT be mutated or reset!
+        RENDER_CHECK(mat.GetUseCustomShader(), "Authored UseCustomShader preserved under GL");
+        RENDER_CHECK(mat.GetCustomShaderPath() == "shaders/SpecialCarPaint.hlsl", "Authored shader path preserved under GL");
+        RENDER_CHECK(Near(mat.GetAlbedoColor().r, 0.9f, 0.001f), "Authored albedo color preserved under GL");
+
+        // Under D3D12/Vulkan, compatibility succeeds
+        diag.clear();
+        bool d3dCompat = CapabilityContract::ValidateMaterialCompatibility(RendererBackendType::ModernRHI_D3D12, mat, diag);
+        RENDER_CHECK(d3dCompat, "Custom HLSL compatible under D3D12");
+        RENDER_CHECK(diag.empty(), "No diagnostic for supported D3D12");
+
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderContractsUnitTests() {
@@ -181,6 +294,7 @@ bool RunRenderContractsUnitTests() {
     if (!Axle::RenderTests::Test_MikkTSpaceTangentsGeneration()) return false;
     if (!Axle::RenderTests::Test_RHIBarrierContracts()) return false;
     if (!Axle::RenderTests::Test_RHISamplerContracts()) return false;
+    if (!Axle::RenderTests::Test_RenderContractsSpecifications()) return false;
     std::cout << "  [RenderContracts] All contracts unit tests passed.\n";
     return true;
 }

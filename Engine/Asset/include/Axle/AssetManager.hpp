@@ -2,6 +2,7 @@
 #include <Axle/Types.hpp>
 #include <Axle/UUID.hpp>
 #include <Axle/AssetMetadata.hpp>
+#include <Axle/BuiltinMesh.hpp>
 #include <filesystem>
 #include <unordered_map>
 #include <vector>
@@ -10,14 +11,6 @@
 #include <string>
 
 namespace Axle {
-
-    namespace BuiltinAssets {
-        inline constexpr uint64_t CubeUUID     = 0xBA5E0001ULL;
-        inline constexpr uint64_t SphereUUID   = 0xBA5E0002ULL;
-        inline constexpr uint64_t CylinderUUID = 0xBA5E0003ULL;
-        inline constexpr uint64_t ConeUUID     = 0xBA5E0004ULL;
-        inline constexpr uint64_t PlaneUUID    = 0xBA5E0005ULL;
-    }
 
     class AssetManager {
     public:

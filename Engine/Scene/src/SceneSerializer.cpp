@@ -113,13 +113,7 @@ namespace Axle {
                 auto& mc = entity.GetComponent<MeshInstance3D>();
                 std::string assetPath = mc.AssetPath;
 
-                if (assetPath.empty() && mc.VAO) {
-                    if (m_Context.CubeMesh && mc.VAO == m_Context.CubeMesh) assetPath = "builtin://cube";
-                    else if (m_Context.SphereMesh && mc.VAO == m_Context.SphereMesh) assetPath = "builtin://sphere";
-                    else if (m_Context.CylinderMesh && mc.VAO == m_Context.CylinderMesh) assetPath = "builtin://cylinder";
-                    else if (m_Context.ConeMesh && mc.VAO == m_Context.ConeMesh) assetPath = "builtin://cone";
-                    else if (m_Context.PlaneMesh && mc.VAO == m_Context.PlaneMesh) assetPath = "builtin://plane";
-                }
+                if (assetPath.empty()) assetPath = IdentifyBuiltinMesh(mc.VAO, m_Context);
 
                 ss << "    MeshInstance3D:\n";
                 ss << "      AssetPath: " << assetPath << "\n";
@@ -802,23 +796,6 @@ namespace Axle {
                         auto& mc = currentEntity.GetComponent<MeshInstance3D>();
                         if (trimmed.rfind("AssetPath:", 0) == 0) {
                             mc.AssetPath = Trim(trimmed.substr(10));
-                            if (mc.AssetPath == "builtin://cube") mc.VAO = m_Context.CubeMesh;
-                            else if (mc.AssetPath == "builtin://sphere") mc.VAO = m_Context.SphereMesh;
-                            else if (mc.AssetPath == "builtin://cylinder") mc.VAO = m_Context.CylinderMesh;
-                            else if (mc.AssetPath == "builtin://cone") mc.VAO = m_Context.ConeMesh;
-                            else if (mc.AssetPath == "builtin://plane") mc.VAO = m_Context.PlaneMesh;
-                            else if (!mc.AssetPath.empty()) {
-                                auto fullPath = FileSystem::ResolveAssetPath(mc.AssetPath);
-                                if (FileSystem::Exists(fullPath)) {
-                                    auto loaded = AssetSerializer::LoadMesh(fullPath);
-                                    if (loaded.Success) {
-                                        mc.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
-                                    }
-                                }
-                            }
-                            if (!mc.AssetPath.empty()) {
-                                mc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(mc.AssetPath);
-                            }
                         } else if (trimmed.rfind("PatternMode:", 0) == 0) {
                             mc.PatternMode = std::stoi(Trim(trimmed.substr(12)));
                         } else if (trimmed.rfind("TileScale:", 0) == 0) {
@@ -1670,39 +1647,9 @@ namespace Axle {
 
         flushCustomSection();
 
-        // 1. Resolve MeshInstance3D meshes if VAO is null
+        // An unresolved identity stays unresolved; names cannot recover it.
         auto meshView = m_Scene->GetRegistry().view<MeshInstance3D>();
-        for (auto entityID : meshView) {
-            auto& mc = meshView.get<MeshInstance3D>(entityID);
-            if (!mc.VAO) {
-                if (mc.AssetPath == "builtin://cube" || mc.AssetPath.empty()) {
-                    mc.VAO = m_Context.CubeMesh;
-                    if (mc.AssetPath.empty()) mc.AssetPath = "builtin://cube";
-                } else if (mc.AssetPath == "builtin://sphere") {
-                    mc.VAO = m_Context.SphereMesh;
-                } else if (mc.AssetPath == "builtin://cylinder") {
-                    mc.VAO = m_Context.CylinderMesh;
-                } else if (mc.AssetPath == "builtin://cone") {
-                    mc.VAO = m_Context.ConeMesh;
-                } else if (mc.AssetPath == "builtin://plane") {
-                    mc.VAO = m_Context.PlaneMesh;
-                } else {
-                    auto fullPath = FileSystem::ResolveAssetPath(mc.AssetPath);
-                    if (FileSystem::Exists(fullPath)) {
-                        auto loaded = AssetSerializer::LoadMesh(fullPath);
-                        if (loaded.Success) {
-                            mc.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
-                        }
-                    }
-                    if (!mc.VAO) {
-                        mc.VAO = m_Context.CubeMesh;
-                    }
-                }
-            }
-            if (!mc.RHIMeshAsset && !mc.AssetPath.empty()) {
-                mc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(mc.AssetPath);
-            }
-        }
+        for (auto entityID : meshView) ResolveMeshResources(meshView.get<MeshInstance3D>(entityID), &m_Context);
 
         // Resolve animator-only entities too; all resource reads go through FileSystem/VFS.
         auto& animationRegistry = m_Scene->GetRegistry();

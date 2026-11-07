@@ -1,4 +1,5 @@
 #include <Axle/RHIObjectPicker.hpp>
+#include <Axle/MeshResourceResolver.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Log.hpp>
@@ -269,18 +270,10 @@ namespace Axle {
                 const auto& mc = meshView.get<MeshInstance3D>(entityID);
 
                 std::shared_ptr<RHI::RHIMesh> mesh = mc.RHIMeshAsset;
-                if (!mesh) {
-                    if (!mc.AssetPath.empty()) {
-                        mesh = RHIMeshRegistry::Get().GetOrCreateMesh(mc.AssetPath);
-                    } else {
-                        Entity ent(entityID, scene.get());
-                        std::string name = ent.GetName();
-                        if (name.find("Sphere") != std::string::npos) mesh = RHIMeshRegistry::Get().GetSphere();
-                        else if (name.find("Plane") != std::string::npos || name.find("Ground") != std::string::npos || name.find("Floor") != std::string::npos) mesh = RHIMeshRegistry::Get().GetPlane();
-                        else if (name.find("Cylinder") != std::string::npos) mesh = RHIMeshRegistry::Get().GetCylinder();
-                        else if (name.find("Cone") != std::string::npos) mesh = RHIMeshRegistry::Get().GetCone();
-                        else mesh = RHIMeshRegistry::Get().GetCube();
-                    }
+                if (!mesh || !mesh->IsValid()) {
+                    auto& resolved = const_cast<MeshInstance3D&>(mc);
+                    ResolveMeshResources(resolved);
+                    mesh = resolved.RHIMeshAsset;
                 }
 
                 if (mesh && mesh->IsValid()) {
@@ -309,16 +302,13 @@ namespace Axle {
         m_CommandBuffer.TransitionTexture(m_DepthTexture->GetNative(),
             RHI::RHIResourceLayout::DepthStencilWrite, RHI::RHIResourceLayout::DepthStencilRead);
 
-        m_CommandBuffer.End();
+        m_HasRendered = false;
+        if (!m_CommandBuffer.End()) return;
         auto* queue = m_Device ? m_Device->GetGraphicsQueue() : nullptr;
-        m_CommandBuffer.Submit(queue);
-
-        if (m_Device && queue) {
-            m_Device->GetNRICore().QueueWaitIdle(queue);
-        }
+        if (!m_CommandBuffer.Submit(queue) || !m_Device || !m_Device->WaitIdle()) return;
 
         // Reset command allocator to recycle memory
-        m_CommandBuffer.Reset();
+        if (!m_CommandBuffer.Reset()) return;
 
         m_HasRendered = true;
     }

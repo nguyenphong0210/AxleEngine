@@ -1,4 +1,5 @@
 #include <Axle/RHISceneRenderer.hpp>
+#include <Axle/MeshResourceResolver.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/RHIPhysicsDebugRenderer.hpp>
 #include <Axle/RHIObjectPicker.hpp>
@@ -1448,29 +1449,10 @@ namespace Axle {
 
                 // Determine GPU mesh to render
                 std::shared_ptr<RHIMesh> mesh = mc.RHIMeshAsset;
-                if (!mesh) {
-                    if (!mc.AssetPath.empty()) {
-                        mesh = RHIMeshRegistry::Get().GetOrCreateMesh(mc.AssetPath);
-                    }
-                    if (!mesh) {
-                        // Check if entity has standard primitive name or fallback to Cube
-                        Entity ent(entityID, scene.get());
-                        std::string name = ent.GetName();
-                        if (name.find("Sphere") != std::string::npos) {
-                            mesh = RHIMeshRegistry::Get().GetSphere();
-                        } else if (name.find("Plane") != std::string::npos || name.find("Ground") != std::string::npos || name.find("Floor") != std::string::npos) {
-                            mesh = RHIMeshRegistry::Get().GetPlane();
-                        } else if (name.find("Cylinder") != std::string::npos) {
-                            mesh = RHIMeshRegistry::Get().GetCylinder();
-                        } else if (name.find("Cone") != std::string::npos) {
-                            mesh = RHIMeshRegistry::Get().GetCone();
-                        } else {
-                            mesh = RHIMeshRegistry::Get().GetCube();
-                        }
-                    }
-                    if (mesh) {
-                        const_cast<MeshInstance3D&>(mc).RHIMeshAsset = mesh;
-                    }
+                if (!mesh || !mesh->IsValid()) {
+                    auto& resolved = const_cast<MeshInstance3D&>(mc);
+                    ResolveMeshResources(resolved);
+                    mesh = resolved.RHIMeshAsset;
                 }
 
                 if (mesh && mesh->IsValid()) {

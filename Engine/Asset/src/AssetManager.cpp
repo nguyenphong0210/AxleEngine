@@ -43,11 +43,8 @@ namespace Axle {
         std::string BuiltinName(const std::filesystem::path& path) {
             auto name = path.generic_string();
             std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c); });
-            if (name.rfind("builtin:", 0) != 0) return {};
-            name.erase(0, 8);
-            while (!name.empty() && name.front() == '/') name.erase(name.begin());
-            if (name == "cube" || name == "sphere" || name == "cylinder" || name == "cone" || name == "plane") return name;
-            return {};
+            const auto id = ParseBuiltinMesh(name);
+            return id ? std::string(GetBuiltinMeshDefinition(*id)->Name) : std::string{};
         }
         std::string PathKey(const std::filesystem::path& path) {
             auto key = path.lexically_normal().generic_string();

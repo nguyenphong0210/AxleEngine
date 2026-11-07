@@ -210,11 +210,46 @@ failed/stale attempts are not final evidence. API validation remains NOT RUN on
 this host; embedded NRI validation is enabled for the native package fixtures.
 P41-03 is self-verified; consolidated final review remains pending.
 
+## P41-04 - Canonical primitive identity
+
+All five authoring factories always create MeshInstance3D and assign an explicit
+builtin URI, including CPU-only sessions. A Core-only builtin definition and the
+shared Scene resolver serve native and GL paths. Scene/assembly persistence and
+copies preserve the identity; renderer and picker no longer guess geometry from
+entity names or replace missing references with a cube. A scene without an authored
+mesh component/reference cannot be reconstructed safely from its name.
+
+Canonical geometry follows existing GL authoring dimensions: unit cube/plane,
+sphere radius 1, cylinder/cone radius 1 and height 2. The former modern builtin
+sphere/cylinder/cone dimensions now agree with that contract. Names, transforms,
+checker colors and existing static/dynamic Jolt defaults remain unchanged. Cache
+shutdown releases shared ownership without invalidating a scene's live mesh.
+Picker submission/drain failures are consumed before publishing readable results.
+
+AxlePrimitiveTests exercises the actual authoring API, real Jolt bodies, all five
+rename/duplicate/copy/save/reopen paths, assembly save/load/instantiate, native
+production scene/picking pixels and GL pixels. Both Debug/Release passed policy,
+physical D3D12, physical Vulkan, explicit GL and automatic GL fallback (all exits
+0). All five explicit/fallback GL images are byte-identical. Focused CTest passed
+1/1 in each configuration. Runner: run04.py <Config>; logs and results:
+p41-04-{debug,release}-{policy,dx12,vulkan,gl,fallback}.log and results JSON.
+
+Both configurations built AxlePrimitiveTests, AxleEditor and AxleRuntime (exit 0)
+before the final pure-header relocation to Core. After relocation the primitive
+target/dependencies rebuilt and all modes above reran. Final build evidence:
+p41-04-verified-build-debug.log (exit 0) and p41-04-core-build-release.log (exit 0).
+The initial Debug relocation build produced the executable but PowerShell treated
+CMake's stderr diagnostic as a shell error; the direct-subprocess rerun returned
+0. Architecture AF-04 and git diff --check passed; pinned NRI remains clean.
+Embedded NRI validation was active; graphics API validation remains NOT RUN.
+P41-04 is implemented/self-verified; the consolidated final review is pending.
+
 ## Remaining work
 
-P41-04..11 are not implemented. Next: canonical primitive identities and actual
-creation/persistence/clone/pixel checks. Continue in
-dependency order, then perform the consolidated final review requested by the user.
+P41-05..11 remain. P41-05 resource-service/identity test files have been prepared
+but are not wired into the build or verified yet. Next: integrate device epoch and
+generation ownership throughout native wrappers and migration caches, then continue
+in dependency order and perform the requested consolidated final review.
 
 Full phase builds, CTest, integration, jobs/ECS, final native product simulation, GPU
 readbacks and final window/lifetime checks remain open. API-validation prerequisites

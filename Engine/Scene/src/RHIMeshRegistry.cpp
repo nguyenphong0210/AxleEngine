@@ -1,4 +1,5 @@
 #include <Axle/RHIMeshRegistry.hpp>
+#include <Axle/BuiltinMesh.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/FileSystem.hpp>
@@ -26,16 +27,16 @@ namespace Axle {
 
         // Generate built-in primitive meshes with high-fidelity curvature (Godot & Unity parity)
         m_Cube = RHIMesh::CreateCube(1.0f);
-        m_Sphere = RHIMesh::CreateSphere(0.5f, 64, 96);
-        m_Cylinder = RHIMesh::CreateCylinder(0.5f, 1.0f, 64);
-        m_Cone = RHIMesh::CreateCone(0.5f, 1.0f, 64);
-        m_Plane = RHIMesh::CreatePlane(1.0f, 1.0f, 16, 16);
+        m_Sphere = RHIMesh::CreateSphere(BuiltinMeshes[1].Radius, BuiltinMeshes[1].Stacks, BuiltinMeshes[1].Segments);
+        m_Cylinder = RHIMesh::CreateCylinder(BuiltinMeshes[2].Radius, BuiltinMeshes[2].Height, BuiltinMeshes[2].Segments);
+        m_Cone = RHIMesh::CreateCone(BuiltinMeshes[3].Radius, BuiltinMeshes[3].Height, BuiltinMeshes[3].Segments);
+        m_Plane = RHIMesh::CreatePlane(BuiltinMeshes[4].Size, BuiltinMeshes[4].Size, 1, 1);
 
-        if (m_Cube) m_MeshCache["Cube"] = m_Cube;
-        if (m_Sphere) m_MeshCache["Sphere"] = m_Sphere;
-        if (m_Cylinder) m_MeshCache["Cylinder"] = m_Cylinder;
-        if (m_Cone) m_MeshCache["Cone"] = m_Cone;
-        if (m_Plane) m_MeshCache["Plane"] = m_Plane;
+        if (m_Cube) m_MeshCache["builtin://cube"] = m_Cube;
+        if (m_Sphere) m_MeshCache["builtin://sphere"] = m_Sphere;
+        if (m_Cylinder) m_MeshCache["builtin://cylinder"] = m_Cylinder;
+        if (m_Cone) m_MeshCache["builtin://cone"] = m_Cone;
+        if (m_Plane) m_MeshCache["builtin://plane"] = m_Plane;
 
         if (!m_Cube || !m_Sphere || !m_Cylinder || !m_Cone || !m_Plane) {
             Shutdown();
@@ -47,11 +48,11 @@ namespace Axle {
 
     void RHIMeshRegistry::Shutdown() {
         Clear();
-        if (m_Cube) { m_Cube->Shutdown(); m_Cube.reset(); }
-        if (m_Sphere) { m_Sphere->Shutdown(); m_Sphere.reset(); }
-        if (m_Cylinder) { m_Cylinder->Shutdown(); m_Cylinder.reset(); }
-        if (m_Cone) { m_Cone->Shutdown(); m_Cone.reset(); }
-        if (m_Plane) { m_Plane->Shutdown(); m_Plane.reset(); }
+        m_Cube.reset();
+        m_Sphere.reset();
+        m_Cylinder.reset();
+        m_Cone.reset();
+        m_Plane.reset();
         m_Initialized = false;
     }
 
@@ -113,27 +114,27 @@ namespace Axle {
         }
 
         // Built-in standard primitive aliases
-        if (assetPath == "builtin://plane" || assetPath == "Plane") {
+        if (ParseBuiltinMesh(assetPath) == BuiltinMeshId::Plane) {
             auto plane = GetPlane();
             if (plane) m_MeshCache[assetPath] = plane;
             return plane;
         }
-        if (assetPath == "builtin://cube" || assetPath == "Cube") {
+        if (ParseBuiltinMesh(assetPath) == BuiltinMeshId::Cube) {
             auto cube = GetCube();
             if (cube) m_MeshCache[assetPath] = cube;
             return cube;
         }
-        if (assetPath == "builtin://sphere" || assetPath == "Sphere") {
+        if (ParseBuiltinMesh(assetPath) == BuiltinMeshId::Sphere) {
             auto sphere = GetSphere();
             if (sphere) m_MeshCache[assetPath] = sphere;
             return sphere;
         }
-        if (assetPath == "builtin://cylinder" || assetPath == "Cylinder") {
+        if (ParseBuiltinMesh(assetPath) == BuiltinMeshId::Cylinder) {
             auto cyl = GetCylinder();
             if (cyl) m_MeshCache[assetPath] = cyl;
             return cyl;
         }
-        if (assetPath == "builtin://cone" || assetPath == "Cone") {
+        if (ParseBuiltinMesh(assetPath) == BuiltinMeshId::Cone) {
             auto cone = GetCone();
             if (cone) m_MeshCache[assetPath] = cone;
             return cone;
@@ -198,11 +199,6 @@ namespace Axle {
     }
 
     void RHIMeshRegistry::Clear() {
-        for (auto& [key, mesh] : m_MeshCache) {
-            if (mesh) {
-                mesh->Shutdown();
-            }
-        }
         m_MeshCache.clear();
     }
 

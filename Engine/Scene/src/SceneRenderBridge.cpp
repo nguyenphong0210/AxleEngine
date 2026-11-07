@@ -1,4 +1,5 @@
 #include <Axle/SceneRenderBridge.hpp>
+#include <Axle/MeshResourceResolver.hpp>
 #include <Axle/SceneData.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
@@ -201,6 +202,7 @@ namespace Axle {
         auto renderView = registry.view<MeshInstance3D, TransformComponent>();
         for (auto entity : renderView) {
             auto& mesh = registry.get<MeshInstance3D>(entity);
+            if (!mesh.VAO) ResolveMeshResources(mesh);
             if (mesh.VAO) {
                 glm::mat4 worldTransform = scene.GetWorldTransform(entity);
                 shader.SetMat4("u_Transform", worldTransform);
@@ -230,6 +232,7 @@ namespace Axle {
         auto renderView = registry.view<MeshInstance3D, TransformComponent>();
         for (auto entity : renderView) {
             auto& mesh = registry.get<MeshInstance3D>(entity);
+            if (!mesh.VAO) ResolveMeshResources(mesh);
             if (mesh.VAO) {
                 glm::mat4 worldTransform = scene.GetWorldTransform(entity);
                 shadowShader.SetMat4("u_Transform", worldTransform);

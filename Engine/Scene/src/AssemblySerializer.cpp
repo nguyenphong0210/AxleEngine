@@ -125,13 +125,7 @@ namespace Axle {
             if (entity.HasComponent<MeshInstance3D>()) {
                 auto& mc = entity.GetComponent<MeshInstance3D>();
                 std::string assetPath = mc.AssetPath;
-                if (assetPath.empty() && mc.VAO && context) {
-                    if (context->CubeMesh && mc.VAO == context->CubeMesh) assetPath = "builtin://cube";
-                    else if (context->SphereMesh && mc.VAO == context->SphereMesh) assetPath = "builtin://sphere";
-                    else if (context->CylinderMesh && mc.VAO == context->CylinderMesh) assetPath = "builtin://cylinder";
-                    else if (context->ConeMesh && mc.VAO == context->ConeMesh) assetPath = "builtin://cone";
-                    else if (context->PlaneMesh && mc.VAO == context->PlaneMesh) assetPath = "builtin://plane";
-                }
+                if (assetPath.empty() && context) assetPath = IdentifyBuiltinMesh(mc.VAO, *context);
 
                 fout << "    MeshInstance3D:\n";
                 fout << "      AssetPath: " << assetPath << "\n";
@@ -906,27 +900,9 @@ namespace Axle {
 
             // MeshInstance3D
             if (raw.HasMesh) {
-                std::shared_ptr<VertexArray> vao = nullptr;
-                std::string path = raw.MeshAssetPath;
-
-                if (path == "builtin://cube" && context) vao = context->CubeMesh;
-                else if (path == "builtin://sphere" && context) vao = context->SphereMesh;
-                else if (path == "builtin://cylinder" && context) vao = context->CylinderMesh;
-                else if (path == "builtin://cone" && context) vao = context->ConeMesh;
-                else if (path == "builtin://plane" && context) vao = context->PlaneMesh;
-                else if (!path.empty()) {
-                    auto resolved = FileSystem::ResolveAssetPath(path);
-                    if (FileSystem::Exists(resolved)) {
-                        auto loaded = AssetSerializer::LoadMesh(resolved);
-                        if (loaded.Success) vao = CreateVertexArrayFromMeshSource(loaded.SourceData);
-                    }
-                }
-
-                if (!vao && context) {
-                    vao = context->CubeMesh;
-                }
-
-                entity.AddComponent<MeshInstance3D>(vao, path, raw.MeshPattern, raw.MeshTileScale, raw.MeshColor1, raw.MeshColor2);
+                auto& mesh = entity.AddComponent<MeshInstance3D>(std::shared_ptr<VertexArray>{}, raw.MeshAssetPath,
+                    raw.MeshPattern, raw.MeshTileScale, raw.MeshColor1, raw.MeshColor2);
+                ResolveMeshResources(mesh, context);
             }
 
             // CollisionShape3D
@@ -1206,7 +1182,8 @@ namespace Axle {
             node.Tag = raw.Tag;
             node.Transform = raw.Transform;
             node.HasMesh = raw.HasMesh;
-            node.Mesh = MeshInstance3D(context ? context->CubeMesh : nullptr, raw.MeshAssetPath, raw.MeshPattern, raw.MeshTileScale, raw.MeshColor1, raw.MeshColor2);
+            node.Mesh = MeshInstance3D(std::shared_ptr<VertexArray>{}, raw.MeshAssetPath, raw.MeshPattern, raw.MeshTileScale, raw.MeshColor1, raw.MeshColor2);
+            if (node.HasMesh) ResolveMeshResources(node.Mesh, context);
             node.HasCollisionShape = raw.HasCollisionShape;
             node.CollisionShape = raw.CollisionShape;
             node.HasRigidBody = raw.HasRigidBody;

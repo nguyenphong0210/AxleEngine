@@ -1,4 +1,5 @@
 #include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/MeshResourceResolver.hpp>
 #include <Axle/UIPalettePanel.hpp>
 #include <Axle/AssetPreviewPanel.hpp>
 #include <Axle/Components.hpp>
@@ -197,13 +198,10 @@ namespace Axle {
                 std::string name = isDynamic ? "Dynamic Box" : "Cube";
                 entity = m_Scene->CreateEntity(name);
                 entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
-                if (m_CubeMesh) {
-                    entity.AddComponent<MeshInstance3D>(
-                        m_CubeMesh, 1, 4.0f,
-                        defaultPrimaryColor,
-                        defaultSecondaryColor
-                    );
-                }
+                auto& mesh = entity.AddComponent<MeshInstance3D>(m_CubeMesh, 1, 4.0f,
+                    defaultPrimaryColor, defaultSecondaryColor);
+                mesh.AssetPath = GetBuiltinMeshDefinition(BuiltinMeshId::Cube)->URI;
+                ResolveMeshResources(mesh);
                 if (isDynamic) {
                     entity.AddComponent<CollisionShape3D>(CollisionShapeType::Box, glm::vec3(0.5f));
                     if (m_PhysicsScene) {
@@ -221,13 +219,10 @@ namespace Axle {
                 std::string name = isDynamic ? "Dynamic Sphere" : "Sphere";
                 entity = m_Scene->CreateEntity(name);
                 entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
-                if (m_SphereMesh) {
-                    entity.AddComponent<MeshInstance3D>(
-                        m_SphereMesh, 2, 4.0f,
-                        defaultPrimaryColor,
-                        defaultSecondaryColor
-                    );
-                }
+                auto& mesh = entity.AddComponent<MeshInstance3D>(m_SphereMesh, 2, 4.0f,
+                    defaultPrimaryColor, defaultSecondaryColor);
+                mesh.AssetPath = GetBuiltinMeshDefinition(BuiltinMeshId::Sphere)->URI;
+                ResolveMeshResources(mesh);
                 if (isDynamic) {
                     entity.AddComponent<CollisionShape3D>(CollisionShapeType::Sphere, 0.5f);
                     if (m_PhysicsScene) {
@@ -245,13 +240,10 @@ namespace Axle {
                 std::string name = isDynamic ? "Dynamic Cylinder" : "Cylinder";
                 entity = m_Scene->CreateEntity(name);
                 entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
-                if (m_CylinderMesh) {
-                    entity.AddComponent<MeshInstance3D>(
-                        m_CylinderMesh, 1, 4.0f,
-                        defaultPrimaryColor,
-                        defaultSecondaryColor
-                    );
-                }
+                auto& mesh = entity.AddComponent<MeshInstance3D>(m_CylinderMesh, 1, 4.0f,
+                    defaultPrimaryColor, defaultSecondaryColor);
+                mesh.AssetPath = GetBuiltinMeshDefinition(BuiltinMeshId::Cylinder)->URI;
+                ResolveMeshResources(mesh);
                 if (isDynamic) {
                     entity.AddComponent<CollisionShape3D>(CollisionShapeType::Cylinder, 0.5f, 0.5f);
                     if (m_PhysicsScene) {
@@ -270,13 +262,10 @@ namespace Axle {
                 std::string name = isDynamic ? "Dynamic Cone" : "Cone";
                 entity = m_Scene->CreateEntity(name);
                 entity.AddComponent<TransformComponent>(position, glm::vec3(1.0f, 1.0f, 1.0f));
-                if (m_ConeMesh) {
-                    entity.AddComponent<MeshInstance3D>(
-                        m_ConeMesh, 1, 4.0f,
-                        defaultPrimaryColor,
-                        defaultSecondaryColor
-                    );
-                }
+                auto& mesh = entity.AddComponent<MeshInstance3D>(m_ConeMesh, 1, 4.0f,
+                    defaultPrimaryColor, defaultSecondaryColor);
+                mesh.AssetPath = GetBuiltinMeshDefinition(BuiltinMeshId::Cone)->URI;
+                ResolveMeshResources(mesh);
                 if (isDynamic) {
                     entity.AddComponent<CollisionShape3D>(CollisionShapeType::Cone, 0.5f, 0.5f);
                     if (m_PhysicsScene) {
@@ -300,7 +289,7 @@ namespace Axle {
                     glm::vec4(0.20f, 0.22f, 0.25f, 1.0f)
                 );
                 mc.AssetPath = "builtin://plane";
-                mc.RHIMeshAsset = RHIMeshRegistry::Get().GetPlane();
+                ResolveMeshResources(mc);
                 break;
             }
             default:

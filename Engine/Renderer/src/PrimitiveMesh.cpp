@@ -8,8 +8,29 @@
 #include <string>
 #include <algorithm>
 #include <glm/glm.hpp>
+#include <glad/glad.h>
 
 namespace Axle {
+    bool PrimitiveMesh::HasContext() {
+        return glad_glGetString && glGetString(GL_VERSION) != nullptr;
+    }
+
+    std::shared_ptr<VertexArray> PrimitiveMesh::CreateBuiltin(BuiltinMeshId id) {
+        const auto* definition = GetBuiltinMeshDefinition(id);
+        if (!definition || !HasContext()) return nullptr;
+        static_assert(BuiltinMeshes[0].Size == 1 && BuiltinMeshes[1].Radius == 1 &&
+            BuiltinMeshes[2].Radius == 1 && BuiltinMeshes[2].Height == 2 &&
+            BuiltinMeshes[3].Radius == 1 && BuiltinMeshes[3].Height == 2 && BuiltinMeshes[4].Size == 1,
+            "GL unit factories and canonical builtin geometry must agree");
+        switch (id) {
+            case BuiltinMeshId::Cube: return CreateCube();
+            case BuiltinMeshId::Sphere: return CreateSphere(definition->Stacks, definition->Segments);
+            case BuiltinMeshId::Cylinder: return CreateCylinder(definition->Segments);
+            case BuiltinMeshId::Cone: return CreateCone(definition->Segments);
+            case BuiltinMeshId::Plane: return CreatePlane();
+            default: return nullptr;
+        }
+    }
 
     namespace {
         constexpr f32 PI = 3.14159265358979323846f;

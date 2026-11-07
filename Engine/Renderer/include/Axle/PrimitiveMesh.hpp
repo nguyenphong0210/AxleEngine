@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/BuiltinMesh.hpp>
 #include <Axle/VertexArray.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -14,6 +15,8 @@ namespace Axle {
 
     class PrimitiveMesh {
     public:
+        static bool HasContext();
+        static std::shared_ptr<VertexArray> CreateBuiltin(BuiltinMeshId id);
         // Unit cube: size 1.0 x 1.0 x 1.0 (from -0.5 to +0.5)
         static std::shared_ptr<VertexArray> CreateCube();
 

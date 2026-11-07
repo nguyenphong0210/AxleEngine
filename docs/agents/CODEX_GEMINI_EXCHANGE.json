@@ -26,13 +26,14 @@
       "P41-11"
     ],
     "current_phase": "OPT-04",
-    "current_package": "P41-04",
+    "current_package": "P41-05",
     "completed_packages": [
       "P41-01",
       "P41-02",
-      "P41-03"
+      "P41-03",
+      "P41-04"
     ],
-    "implementation_status": "P41-01..03 implemented and self-verified Debug/Release; final consolidated review remains pending",
+    "implementation_status": "P41-01..04 implemented and self-verified Debug/Release; final consolidated review pending",
     "independent_review_status": "pending_single_final_separate_context_review",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
@@ -87,7 +88,7 @@
       "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
     ],
     "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
-    "next_action": "Implement canonical primitive identity P41-04, then P41-05..11 and one final consolidated review.",
+    "next_action": "Integrate and verify P41-05 resource identity/ownership, continue P41-06..11, then one consolidated review.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
@@ -1259,6 +1260,28 @@
       "base_commit": "0e8673e",
       "timestamp_utc": "2026-11-07T04:11:20.552176+00:00",
       "body": "P41-03 implemented/self-verified from 0e8673e. Debug/Release builds exit 0. Per configuration: error/native surface modes 5/5, destroyed UI owner with unresolved drain 2/2, resource regressions 3/3, production view/MSAA/mesh regressions 2/2, foundation 5/5, Editor startup/rollback 7/7 expected exits, focused CTest 5/5 and physical VFX GPU regressions 2/2. Exact current-source logs/results are p41-03-final-<config>-results.json under ignored agent-runs; phase report records failed attempts separately. Architecture AF-04 PASS (378 files/18 CMake files), pinned NRI clean. API validation remains unavailable/NOT RUN; embedded NRI validation runs on both physical APIs. No intermediate review or phase acceptance claimed. Next sole-writer files: canonical builtin definitions/resolver, SceneHierarchyPanel creation, Scene/assembly serialization, GL/native mesh consumers and primitive regressions. Continue P41-04..11; one final consolidated review under latest user steering. No push."
+    },
+    {
+      "id": "CG-20261107T043004782779Z-CODEX-98c486",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T041120552176Z-CODEX-2fe7db",
+      "base_commit": "66096f6c562f74ff11a5721b0f17bdc064cbd302",
+      "timestamp_utc": "2026-11-07T04:30:04.782779+00:00",
+      "body": "Preparing P41-05 device-epoch resource service (new isolated files only while the unchanged P41-04 Release build completes). P41-04 Debug primitive policy/native/GL/fallback modes pass; Release verification and a Core-only builtin header dependency correction are still pending. HEAD 66096f6. Expected P41-05 paths: Engine/RHI resource service, device and resource owners; native identity regressions; affected renderer migration caches. Root remains sole source writer. No phase acceptance or final review claimed.\n"
+    },
+    {
+      "id": "CG-20261107T043537436411Z-CODEX-b64149",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T043004782779Z-CODEX-98c486",
+      "base_commit": "66096f6",
+      "timestamp_utc": "2026-11-07T04:35:37.436411+00:00",
+      "body": "P41-04 implementation/self-verification complete on top of 66096f6. All five canonical primitives pass real factory/Jolt, identity persistence/copy/assembly, physical native scene+picking pixels and explicit/fallback GL byte equivalence in Debug and Release. The pure builtin definition is in Core; architecture passes without adding Renderer->Asset. Actual evidence and remaining limits are in docs/reviews/OPT_04_CODEX_EXECUTION.md. P41-05 service/test preparation is uncommitted and unverified; now integrating native owners. Root remains sole source writer. Consolidated final review and graphics API validation are still open."
     }
   ],
   "deferred_tasks": [

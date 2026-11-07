@@ -3,6 +3,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/VertexArray.hpp>
+#include <Axle/MeshResourceResolver.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -13,12 +14,7 @@
 
 namespace Axle {
 
-    struct SceneSerializerContext {
-        std::shared_ptr<VertexArray> CubeMesh;
-        std::shared_ptr<VertexArray> SphereMesh;
-        std::shared_ptr<VertexArray> CylinderMesh;
-        std::shared_ptr<VertexArray> ConeMesh;
-        std::shared_ptr<VertexArray> PlaneMesh;
+    struct SceneSerializerContext : BuiltinMeshResources {
         std::function<void(Entity, const std::string&)> ScriptBinder;
         std::function<void(Entity, std::ostream&)> CustomEntitySerializer;
         std::function<bool(Entity, const std::string&, const std::vector<std::string>&)> CustomSectionDeserializer;

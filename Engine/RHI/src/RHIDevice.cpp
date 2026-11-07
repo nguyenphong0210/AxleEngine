@@ -554,18 +554,33 @@ namespace Axle::RHI {
     nri::Result RHIDevice::UploadData(const nri::TextureUploadDesc* textures, uint32_t textureNum,
         const nri::BufferUploadDesc* buffers, uint32_t bufferNum) {
         if (!CanCreateResources() || (textureNum && !textures) || (bufferNum && !buffers)) return nri::Result::INVALID_ARGUMENT;
+        RHIRecordingLease uses;
         for (uint32_t i = 0; i < textureNum; ++i) {
             auto lease = m_Resources.AcquireNative(textures[i].texture);
             if (!lease.IsLive() || m_Resources.IsInUse(lease) || !m_Resources.GetTextureState(lease.GetHandle())) return nri::Result::INVALID_ARGUMENT;
+            if (!m_Resources.AppendPin(uses, lease)) return nri::Result::INVALID_ARGUMENT;
         }
         for (uint32_t i = 0; i < bufferNum; ++i) {
             auto lease = m_Resources.AcquireNative(buffers[i].buffer);
             if (!lease.IsLive() || m_Resources.IsInUse(lease) || !m_Resources.GetBufferState(lease.GetHandle())) return nri::Result::INVALID_ARGUMENT;
+            if (!m_Resources.AppendPin(uses, lease)) return nri::Result::INVALID_ARGUMENT;
         }
+        // Reserve before the helper can submit: ambiguous failure must retain pins
+        // without allocating after native work may have reached the queue.
+        m_AmbiguousSubmissions.reserve(m_AmbiguousSubmissions.size() + 1);
+        bool nativeCalled = false;
         const auto result = ScopedRHIFault::Invoke("UploadData", [&] {
+            nativeCalled = true;
             return m_NRI.Helper.UploadData(*m_GraphicsQueue, textures, textureNum, buffers, bufferNum);
         });
-        if (result != nri::Result::SUCCESS) return result;
+        if (result != nri::Result::SUCCESS) {
+            if (nativeCalled) {
+                m_AmbiguousSubmissions.push_back(std::move(uses));
+                ObserveResult(result, "QueueSubmit", "UploadData helper failure");
+            }
+            return result;
+        }
+        uses.Reset();
         for (uint32_t i = 0; i < textureNum; ++i)
             if (!m_Resources.SetTextureState(m_Resources.AcquireNative(textures[i].texture), textures[i].after,
                 0, nri::REMAINING, 0, nri::REMAINING, textures[i].planes)) return nri::Result::FAILURE;

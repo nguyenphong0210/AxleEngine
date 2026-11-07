@@ -2,12 +2,12 @@ Latest user steering (2026-11-07): implement all P41-01..11, then perform one co
 
 # Codex implementation and review handoff: OPT-04 / P41-01..P41-11
 
-User scope, 2026-11-07: **Codex implements OPT-04**, with a separate-context
-Codex review at P41-03, P41-06 and P41-11. Gemini provides supplementary review.
+User scope, 2026-11-07: **Codex implements OPT-04**, then performs one
+consolidated separate-context Codex review after P41-11. Gemini may provide supplementary review.
 This supersedes the previous Gemini implementation assignment. Work in roadmap
 order from **P41-01 through P41-11**, completing each package's implementation,
-self-review, repairs, native/CPU verification and coherent local commit. Stop at
-each review checkpoint before dependent production work, and stop after OPT-04.
+self-checks, repairs, native/CPU verification and coherent local commits. Complete
+the final review and corrections, then stop after OPT-04.
 OPT-05 is outside the assignment.
 
 The user prioritizes output quality. GPT-6 Astra is the recommended model for the
@@ -37,14 +37,14 @@ Post STATUS as **Codex** before source edits. Only update the Codex cursor and
 messages. Do not invent Gemini replies or launch a source-writing task alongside
 another source writer. Latest user instructions supersede older scope metadata.
 
-## Review checkpoints
+## Final review
 
-At **P41-03**, review backend readiness, fallback, transactional creation and
-error/device-loss handling before starting P41-04. At **P41-06**, review resource
-identity, epoch/generation protection and recording/submission retirement before
-starting P41-07. At **P41-11**, review the full phase and dependent product callers.
+After **P41-11**, review the full phase and dependent product callers, including
+backend readiness, fallback, transactional creation, error/device-loss handling,
+resource identity, epoch/generation protection and recording/submission retirement.
+The latest user instruction supersedes the former P41-03/P41-06 review stops.
 
-The user authorizes a separate-context Codex reviewer at these checkpoints. Keep
+The user authorizes one separate-context Codex reviewer at this final checkpoint. Keep
 that reviewer separate from the implementation conversation: provide the relevant
 contracts, exact base/head diff, actual source, acceptance criteria and test/log
 locations. It must inspect callers and failure/rollback/teardown paths itself.

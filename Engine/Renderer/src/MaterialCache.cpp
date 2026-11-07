@@ -115,41 +115,23 @@ namespace Axle {
     std::shared_ptr<Texture2D> MaterialCache::GetTexture(const std::filesystem::path& path) {
         if (path.empty()) return nullptr;
         std::lock_guard lock(s_CacheMutex);
-
+        const auto resolved = ResolvePath(path);
+        const auto key = std::to_string(FileSystem::GetSourceGeneration()) + ":" + NormalizePathKey(resolved);
+        const auto prior = s_TextureCacheByPath.find(key);
         UUID identity = 0;
-        if (s_PathUUIDResolver) {
+        if (path.extension() == ".axleasset" && s_PathUUIDResolver) {
             identity = s_PathUUIDResolver(path);
-            if (identity == 0) {
-                std::string key = NormalizePathKey(path);
-                s_TextureCacheByPath.erase(key);
-                return nullptr;
-            }
+            if (identity == 0) { s_TextureCacheByPath.erase(key); return nullptr; }
         }
-
-        auto resolved = ResolvePath(path);
-        if (!FileSystem::Exists(resolved)) {
-            AXLE_WARN("MaterialCache::GetTexture: file not found: {0}", resolved.string());
-            return nullptr;
-        }
-
-        std::string key = NormalizePathKey(path);
-        auto it = s_TextureCacheByPath.find(key);
-        if (it != s_TextureCacheByPath.end()) return it->second;
-
         auto texture = Texture2D::Create(resolved.string());
-        if (texture) {
+        if (texture && texture->IsLoaded()) {
             s_TextureCacheByPath[key] = texture;
-            std::string resolvedKey = NormalizePathKey(resolved);
-            if (resolvedKey != key) s_TextureCacheByPath[resolvedKey] = texture;
-
             uint64_t id = 0;
-            if (FileSystem::ReadFileIdentity(resolved, id) && id != 0) {
-                s_TextureCacheByUUID[UUID(id)] = texture;
-            } else if (identity != 0) {
-                s_TextureCacheByUUID[identity] = texture;
-            }
+            if (FileSystem::ReadFileIdentity(resolved, id) && id) identity = UUID(id);
+            if (identity != 0) s_TextureCacheByUUID[identity] = texture;
+            return texture;
         }
-        return texture;
+        return prior != s_TextureCacheByPath.end() && prior->second && prior->second->IsLoaded() ? prior->second : nullptr;
     }
 
     std::shared_ptr<Texture2D> MaterialCache::GetTexture(UUID uuid) {
@@ -161,14 +143,12 @@ namespace Axle {
             return nullptr;
         }
 
-        auto it = s_TextureCacheByUUID.find(uuid);
-        if (it != s_TextureCacheByUUID.end()) return it->second;
-
         if (s_UUIDPathResolver) {
             auto path = s_UUIDPathResolver(uuid);
             if (!path.empty()) return GetTexture(path);
         }
-        return nullptr;
+        auto cached = s_TextureCacheByUUID.find(uuid);
+        return cached != s_TextureCacheByUUID.end() && cached->second && cached->second->IsLoaded() ? cached->second : nullptr;
     }
 
     void MaterialCache::ClearTextureCache() {

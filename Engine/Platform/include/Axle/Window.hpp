@@ -69,6 +69,8 @@ namespace Axle {
 
         static bool IsGLFWInitialized();
         static bool HasActiveContext();
+        static uint64_t GetContextGeneration();
+        static void BeforeContextClose(uint64_t generation, std::function<void()> callback);
 
         // Event callbacks
         void SetWindowResizeCallback(std::function<void(const WindowResizeEvent&)> callback) { m_Data.OnWindowResize = callback; }

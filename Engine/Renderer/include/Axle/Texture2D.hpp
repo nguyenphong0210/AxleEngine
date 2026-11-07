@@ -52,11 +52,11 @@ namespace Axle {
         void Bind(u32 slot = 0) const;
         void Unbind(u32 slot = 0) const;
 
-        u32 GetRendererID() const { return m_RendererID; }
+        u32 GetRendererID() const;
         u32 GetWidth() const { return m_Width; }
         u32 GetHeight() const { return m_Height; }
         const std::string& GetPath() const { return m_FilePath; }
-        bool IsLoaded() const { return m_IsLoaded; }
+        bool IsLoaded() const { return m_IsLoaded && GetRendererID() != 0; }
         const TextureSpecification& GetSpecification() const { return m_Specification; }
 
         static std::shared_ptr<Texture2D> Create(const std::string& filepath, const TextureSpecification& spec = {});
@@ -70,12 +70,14 @@ namespace Axle {
         static std::shared_ptr<Texture2D> GetDefaultRoughnessTexture();  // (128, 128, 128, 255) for 0.5 Roughness
 
     private:
+        friend class ImageTextureCache;
         void Invalidate(const void* initialData);
 
     private:
         std::string m_FilePath;
         TextureSpecification m_Specification;
         u32 m_RendererID = 0;
+        uint64_t m_ContextGeneration = 0;
         u32 m_Width = 0;
         u32 m_Height = 0;
         bool m_IsLoaded = false;

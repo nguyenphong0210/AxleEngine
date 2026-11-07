@@ -4,7 +4,8 @@
 #include <Axle/Log.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include <stb_image.h>
+#include <Axle/DecodedImage.hpp>
+#include <Axle/ImageTextureCache.hpp>
 #include <filesystem>
 
 namespace Axle {
@@ -52,53 +53,18 @@ namespace Axle {
     Texture2D::Texture2D(const std::string& filepath, const TextureSpecification& spec)
         : m_FilePath(filepath), m_Specification(spec) {
         
-        auto buffer = FileSystem::ReadBinaryFile(filepath);
-        if (buffer.empty()) {
-            AXLE_CORE_ERROR("Texture2D: File does not exist or empty at '{0}'. Creating fallback texture.", filepath);
-            m_Specification.Width = 1;
-            m_Specification.Height = 1;
+        ImageDecodeOptions options; options.FlipVertically = spec.FlipVertically;
+        options.SRGB = spec.sRGB; options.GenerateMips = spec.GenerateMipmaps;
+        const auto source = ImageTextureCache::Resolve(filepath, options);
+        if (!source.Image) {
+            m_Specification.Width = m_Specification.Height = 1; m_Width = m_Height = 1;
             m_Specification.Format = ImageFormat::RGBA8;
-            u32 fallbackMagenta = 0xFFFF00FF; // Magenta color for missing texture
-            Invalidate(&fallbackMagenta);
-            return;
+            const u32 magenta = 0xFFFF00FF; Invalidate(&magenta); return;
         }
-
-        stbi_set_flip_vertically_on_load_thread(spec.FlipVertically ? 1 : 0);
-
-        int width = 0, height = 0, channels = 0;
-        stbi_uc* data = stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 0);
-
-        if (!data) {
-            AXLE_CORE_ERROR("Texture2D: Failed to decode image from '{0}' - {1}", filepath, stbi_failure_reason());
-            m_Specification.Width = 1;
-            m_Specification.Height = 1;
-            m_Specification.Format = ImageFormat::RGBA8;
-            u32 fallbackMagenta = 0xFFFF00FF;
-            Invalidate(&fallbackMagenta);
-            return;
-        }
-
-        m_Width = static_cast<u32>(width);
-        m_Height = static_cast<u32>(height);
-        m_Specification.Width = m_Width;
-        m_Specification.Height = m_Height;
-
-        if (channels == 4) {
-            m_Specification.Format = ImageFormat::RGBA8;
-        } else if (channels == 3) {
-            m_Specification.Format = ImageFormat::RGB8;
-        } else if (channels == 2) {
-            m_Specification.Format = ImageFormat::RG8;
-        } else if (channels == 1) {
-            m_Specification.Format = ImageFormat::R8;
-        }
-
-        Invalidate(data);
-        stbi_image_free(data);
-        m_IsLoaded = true;
-
-        AXLE_CORE_TRACE("Texture2D: Successfully loaded '{0}' ({1}x{2}, {3} channels, ID: {4})",
-            std::filesystem::path(filepath).filename().string(), m_Width, m_Height, channels, m_RendererID);
+        const auto& mip = source.Image->Mips.front();
+        m_Width = m_Specification.Width = mip.Width; m_Height = m_Specification.Height = mip.Height;
+        m_Specification.Format = source.Image->HDR ? ImageFormat::RGBA32F : ImageFormat::RGBA8;
+        Invalidate(mip.Pixels.data()); m_IsLoaded = GetRendererID() != 0;
     }
 
     Texture2D::Texture2D(const TextureSpecification& spec, const void* data)
@@ -111,10 +77,15 @@ namespace Axle {
         : m_RendererID(rendererID), m_Width(width), m_Height(height), m_IsLoaded(true) {
         m_Specification.Width = width;
         m_Specification.Height = height;
+        m_ContextGeneration = Window::GetContextGeneration();
+    }
+
+    u32 Texture2D::GetRendererID() const {
+        return Window::HasActiveContext() && m_ContextGeneration == Window::GetContextGeneration() ? m_RendererID : 0;
     }
 
     Texture2D::~Texture2D() {
-        if (m_RendererID && Window::HasActiveContext()) {
+        if (GetRendererID()) {
             glDeleteTextures(1, &m_RendererID);
             m_RendererID = 0;
         }
@@ -126,11 +97,12 @@ namespace Axle {
             return;
         }
 
-        if (m_RendererID) {
+        if (GetRendererID()) {
             glDeleteTextures(1, &m_RendererID);
             m_RendererID = 0;
         }
 
+        m_ContextGeneration = Window::GetContextGeneration();
         m_InternalFormat = ImageFormatToGLInternal(m_Specification.Format, m_Specification.sRGB);
         m_DataFormat = ImageFormatToGLData(m_Specification.Format);
 
@@ -167,7 +139,7 @@ namespace Axle {
     }
 
     void Texture2D::SetData(const void* data, u32 size) {
-        if (!Window::HasActiveContext() || !m_RendererID || !data) return;
+        if (!GetRendererID() || !data) return;
 
         glBindTexture(GL_TEXTURE_2D, m_RendererID);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -193,7 +165,7 @@ namespace Axle {
     }
 
     void Texture2D::Bind(u32 slot) const {
-        if (!Window::HasActiveContext() || m_RendererID == 0) return;
+        if (!GetRendererID()) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_2D, m_RendererID);
     }
@@ -205,7 +177,10 @@ namespace Axle {
     }
 
     std::shared_ptr<Texture2D> Texture2D::Create(const std::string& filepath, const TextureSpecification& spec) {
-        return std::make_shared<Texture2D>(filepath, spec);
+        ImageDecodeOptions options; options.FlipVertically = spec.FlipVertically; options.SRGB = spec.sRGB; options.GenerateMips = spec.GenerateMipmaps;
+        auto source = ImageTextureCache::Resolve(filepath, options);
+        auto texture = ImageTextureCache::GetGL(source, spec);
+        return texture ? texture : std::make_shared<Texture2D>(filepath, spec);
     }
 
     std::shared_ptr<Texture2D> Texture2D::Create(const TextureSpecification& spec, const void* data) {
@@ -218,7 +193,7 @@ namespace Axle {
 
     std::shared_ptr<Texture2D> Texture2D::GetWhiteTexture() {
         static std::shared_ptr<Texture2D> s_WhiteTexture;
-        if (!s_WhiteTexture) {
+        if (!s_WhiteTexture || !s_WhiteTexture->IsLoaded()) {
             TextureSpecification spec;
             spec.Width = 1;
             spec.Height = 1;
@@ -232,7 +207,7 @@ namespace Axle {
 
     std::shared_ptr<Texture2D> Texture2D::GetFlatNormalTexture() {
         static std::shared_ptr<Texture2D> s_FlatNormalTexture;
-        if (!s_FlatNormalTexture) {
+        if (!s_FlatNormalTexture || !s_FlatNormalTexture->IsLoaded()) {
             TextureSpecification spec;
             spec.Width = 1;
             spec.Height = 1;
@@ -247,7 +222,7 @@ namespace Axle {
 
     std::shared_ptr<Texture2D> Texture2D::GetBlackTexture() {
         static std::shared_ptr<Texture2D> s_BlackTexture;
-        if (!s_BlackTexture) {
+        if (!s_BlackTexture || !s_BlackTexture->IsLoaded()) {
             TextureSpecification spec;
             spec.Width = 1;
             spec.Height = 1;
@@ -261,7 +236,7 @@ namespace Axle {
 
     std::shared_ptr<Texture2D> Texture2D::GetDefaultRoughnessTexture() {
         static std::shared_ptr<Texture2D> s_RoughnessTexture;
-        if (!s_RoughnessTexture) {
+        if (!s_RoughnessTexture || !s_RoughnessTexture->IsLoaded()) {
             TextureSpecification spec;
             spec.Width = 1;
             spec.Height = 1;

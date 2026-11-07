@@ -1600,31 +1600,16 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
     assert(nativeDevice != nullptr);
     assert(queue != nullptr);
 
-    // Create a GPU committed render target texture for transition testing
-    nri::TextureDesc texDesc = {};
-    texDesc.type = nri::TextureType::TEXTURE_2D;
-    texDesc.format = nri::Format::RGBA8_UNORM;
-    texDesc.width = 512;
-    texDesc.height = 512;
-    texDesc.depth = 1;
-    texDesc.mipNum = 1;
-    texDesc.layerNum = 1;
-    texDesc.sampleNum = 1;
-    texDesc.usage = nri::TextureUsageBits::COLOR_ATTACHMENT | nri::TextureUsageBits::SHADER_RESOURCE;
-
-    nri::Texture* gpuTexture = nullptr;
-    nri::Result res = core.CreateCommittedTexture(*nativeDevice, nri::MemoryLocation::DEVICE, 1.0f, texDesc, gpuTexture);
-    assert(res == nri::Result::SUCCESS && gpuTexture != nullptr);
-
-    // Create a GPU committed vertex/storage buffer for transition testing
-    nri::BufferDesc bufDesc = {};
-    bufDesc.size = 4096;
-    bufDesc.structureStride = 0;
-    bufDesc.usage = nri::BufferUsageBits::VERTEX | nri::BufferUsageBits::SHADER_RESOURCE_STORAGE;
-
-    nri::Buffer* gpuBuffer = nullptr;
-    res = core.CreateCommittedBuffer(*nativeDevice, nri::MemoryLocation::DEVICE, 1.0f, bufDesc, gpuBuffer);
-    assert(res == nri::Result::SUCCESS && gpuBuffer != nullptr);
+    // Managed generations declare ownership and initial queue state before recording.
+    RHITexture ownedTexture;
+    assert(ownedTexture.Init(RHITextureDesc::RenderTarget2D(512, 512)));
+    auto* gpuTexture = ownedTexture.GetNative();
+    RHIBuffer ownedBuffer;
+    auto bufferDesc = RHIBufferDesc::Vertex(4096);
+    bufferDesc.Usage |= RHIBufferUsage::ShaderResourceStorage;
+    assert(ownedBuffer.Init(bufferDesc));
+    auto* gpuBuffer = ownedBuffer.GetNative();
+    nri::Result res;
 
     // Create a synchronization fence to wait for GPU completion
     nri::Fence* testFence = nullptr;
@@ -1663,7 +1648,7 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
     assert(submitOk);
 
     // Wait on CPU for GPU queue completion
-    core.Wait(*testFence, signalVal);
+    assert(rhiDevice.WaitIdle());
     assert(core.GetFenceValue(*testFence) >= signalVal);
     std::cout << "  -> PASS: Native GPU Command Buffer recorded & executed explicit pipeline barriers (NVIDIA RTX 3070 D3D12/Vulkan)." << std::endl;
 
@@ -1710,12 +1695,14 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
         // 1. Transition to ColorAttachment
         bool t1Ok = frameCmd.TransitionTexture(scTracker, backbuffer, RHIResourceLayout::ColorAttachment);
         assert(t1Ok);
-        assert(scTracker.GetTextureState(backbuffer) == RHIResourceLayout::ColorAttachment);
+        const auto imageHandle = rhiDevice.GetResources().AcquireNative(backbuffer).GetHandle();
+        assert(rhiDevice.GetResources().GetTextureState(imageHandle)->layout == nri::Layout::UNDEFINED);
 
         // 2. Transition to Present
         bool t2Ok = frameCmd.TransitionTexture(scTracker, backbuffer, RHIResourceLayout::Present);
         assert(t2Ok);
-        assert(scTracker.GetTextureState(backbuffer) == RHIResourceLayout::Present);
+        // Recorded barriers stay private until successful submission.
+        assert(rhiDevice.GetResources().GetTextureState(imageHandle)->layout == nri::Layout::UNDEFINED);
 
         bool fcmdEndOk = frameCmd.End();
         assert(fcmdEndOk);
@@ -1724,6 +1711,7 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
         const nri::CommandBuffer* nativeCmd = frameCmd.GetNative();
         bool presOk = swapChain.PresentFrame(&nativeCmd, 1);
         assert(presOk);
+        assert(rhiDevice.GetResources().GetTextureState(imageHandle)->layout == nri::Layout::PRESENT);
         std::cout << "  -> PASS: SwapChain BackBuffer transitioned (Undefined -> ColorAttachment -> Present) and presented cleanly." << std::endl;
 
         frameCmd.Shutdown();
@@ -1733,8 +1721,8 @@ bool RunTest_Step52_Phase32_Step4_ExplicitBarrierManagement() {
 
     // Cleanup resources
     cmdBuf.Shutdown();
-    core.DestroyTexture(gpuTexture);
-    core.DestroyBuffer(gpuBuffer);
+    ownedTexture.Shutdown();
+    ownedBuffer.Shutdown();
     core.DestroyFence(testFence);
 
     if (!deviceWasInit) {
@@ -2065,27 +2053,19 @@ bool RunTest_Step54_Phase32_Step5_Part2_DynamicStagingStreamer() {
 
     // Submit command list and wait for GPU idle
     assert(cmdBuffer.Submit(queue));
-    assert(core.QueueWaitIdle(queue) == nri::Result::SUCCESS);
+    assert(rhiDevice.WaitIdle());
     std::cout << "  -> PASS: Asynchronous staging upload for VRAM vertex buffer recorded, submitted, and completed." << std::endl;
     cmdBuffer.Shutdown();
     vramBuffer.Shutdown();
 
     // [54.6] Asynchronous Texture Subresource Streaming (Mipmaps)
     std::cout << "\n[54.6] Testing Asynchronous Texture Subresource Streaming (Mipmap Upload)..." << std::endl;
-    nri::TextureDesc texDesc = {};
-    texDesc.type = nri::TextureType::TEXTURE_2D;
-    texDesc.usage = nri::TextureUsageBits::SHADER_RESOURCE;
-    texDesc.format = nri::Format::RGBA8_UNORM;
-    texDesc.width = 16;
-    texDesc.height = 16;
-    texDesc.depth = 1;
-    texDesc.mipNum = 1;
-    texDesc.layerNum = 1;
-    texDesc.sampleNum = 1;
-
-    nri::Texture* testTexture = nullptr;
-    nri::Result texRes = core.CreateCommittedTexture(*nativeDevice, nri::MemoryLocation::DEVICE, 0.0f, texDesc, testTexture);
-    assert(texRes == nri::Result::SUCCESS && testTexture != nullptr);
+    RHITexture streamedTexture;
+    RHITextureDesc textureDesc;
+    textureDesc.Width = textureDesc.Height = 16;
+    textureDesc.Usage = RHITextureUsage::ShaderResource;
+    assert(streamedTexture.Init(textureDesc));
+    auto* testTexture = streamedTexture.GetNative();
 
     // 16x16 RGBA8 test texture pixels (1024 bytes)
     std::vector<uint32_t> texels(16 * 16, 0xFF00FFFF); // Magenta
@@ -2116,11 +2096,11 @@ bool RunTest_Step54_Phase32_Step5_Part2_DynamicStagingStreamer() {
 
     assert(texCmdBuffer.End());
     assert(texCmdBuffer.Submit(queue));
-    assert(core.QueueWaitIdle(queue) == nri::Result::SUCCESS);
+    assert(rhiDevice.WaitIdle());
     std::cout << "  -> PASS: 16x16 Texture subresource streamed, converted, and uploaded into GPU VRAM." << std::endl;
 
     texCmdBuffer.Shutdown();
-    core.DestroyTexture(testTexture);
+    streamedTexture.Shutdown();
 
     // [54.7] Multi-Frame Ring Buffer Progression & EndFrame
     std::cout << "\n[54.7] Testing Multi-Frame Ring Buffer Progression & EndFrame..." << std::endl;
@@ -2357,7 +2337,7 @@ bool RunTest_Step55_Phase32_Step5_Part3_ECSStreamingAndIndirectDraw() {
 
     // Submit and wait for GPU completion
     assert(cmdBuffer.Submit(queue));
-    assert(core.QueueWaitIdle(queue) == nri::Result::SUCCESS);
+    assert(rhiDevice.WaitIdle());
     std::cout << "  -> PASS: 4 GPU Indirect Draw calls (total 578 instances) recorded, submitted, and executed." << std::endl;
     cmdBuffer.Shutdown();
     pipelineLayout.Shutdown();
@@ -2524,7 +2504,7 @@ bool RunTest_Step61_Phase32_Step6_Part1_MultiBackendImGuiCore() {
 
     assert(cmdBuffer.End());
     assert(cmdBuffer.Submit(queue));
-    assert(core.QueueWaitIdle(queue) == nri::Result::SUCCESS);
+    assert(rhiDevice.WaitIdle());
     cmdBuffer.Shutdown();
     std::cout << "  -> PASS: ImGui draw calls dispatched and executed on NVIDIA GeForce RTX 3070 without GPU error." << std::endl;
 
@@ -2652,9 +2632,16 @@ bool RunTest_Step62_Phase32_Step6_Part2_ViewportDescriptorBinding() {
     assert(viewport.GetDepthTexture()->GetWidth() == 800);
     assert(viewport.GetImTextureID() != 0);
 
-    // Slot should be recycled, descriptor count remains bounded!
+    // Atomic replacement allocates the candidate before retiring the old slot.
     uint32_t descCountAfterResize = imguiLayer.GetAllocatedDescriptorCount();
-    assert(descCountAfterResize == descCountBeforeResize);
+    assert(descCountAfterResize == descCountBeforeResize + 1);
+    assert(viewport.GetImTextureID() != oldTexID);
+    assert(rhiDevice.WaitIdle());
+    assert(viewport.Resize(640, 480));
+    assert(imguiLayer.GetAllocatedDescriptorCount() == descCountAfterResize);
+    assert(rhiDevice.WaitIdle());
+    assert(viewport.Resize(800, 600));
+    assert(imguiLayer.GetAllocatedDescriptorCount() == descCountAfterResize);
     std::cout << "  -> PASS: Dynamic resize 1920x1080 -> 800x600 successful. Old ID: 0x" << std::hex << oldTexID
               << ", New ID: 0x" << viewport.GetImTextureID() << std::dec << ", Heap descriptors: " << descCountAfterResize << std::endl;
 
@@ -2706,7 +2693,7 @@ bool RunTest_Step62_Phase32_Step6_Part2_ViewportDescriptorBinding() {
 
     assert(cmd.End());
     assert(cmd.Submit(queue));
-    assert(rhiDevice.GetNRICore().QueueWaitIdle(queue) == nri::Result::SUCCESS);
+    assert(rhiDevice.WaitIdle());
     cmd.Shutdown();
     std::cout << "  -> PASS: Offscreen clear pass executed and sampled inside ImGui Viewport window." << std::endl;
 
@@ -2723,14 +2710,16 @@ bool RunTest_Step62_Phase32_Step6_Part2_ViewportDescriptorBinding() {
         assert(extViewport.GetWidth() == 256);
         assert(extViewport.GetHeight() == 256);
         assert(extViewport.GetImTextureID() != 0);
-        assert(extViewport.GetColorTexture() == &externalTex);
+        assert(extViewport.GetColorTexture()->GetHandle() == externalTex.GetHandle());
 
         // Move semantics test
         Axle::RHIViewportDescriptor movedViewport = std::move(extViewport);
         assert(!extViewport.IsValid());
         assert(movedViewport.IsValid());
         assert(movedViewport.GetWidth() == 256);
-        assert(movedViewport.GetColorTexture() == &externalTex);
+        assert(movedViewport.GetColorTexture()->GetHandle() == externalTex.GetHandle());
+        externalTex.Shutdown();
+        assert(movedViewport.GetColorTexture()->IsValid());
 
         movedViewport.Shutdown();
         assert(!movedViewport.IsValid());
@@ -3083,7 +3072,7 @@ bool RunTest_Step64_Phase32_Step7_HeadlessRHIDeviceInitialization() {
         assert(cmdBuffer.Submit());
 
         // Wait for idle on CPU WARP
-        rhiDevice.GetNRICore().QueueWaitIdle(rhiDevice.GetGraphicsQueue());
+        assert(rhiDevice.WaitIdle());
         std::cout << "  -> Successfully recorded, submitted, and completed headless command list on WARP." << std::endl;
 
         cmdBuffer.Shutdown();
@@ -3174,266 +3163,73 @@ bool RunTest_Step64_Phase32_Step7_HeadlessRHIDeviceInitialization() {
 // (Worker threads via enkiTS recording into command buffers concurrently)
 // =============================================================================
 bool RunTest_Step65_Phase32_Step7_MultithreadedCommandRecording() {
-    std::cout << "\n========================================================" << std::endl;
-    std::cout << " [STEP 65 TEST] MULTITHREADED COMMAND RECORDING VERIFY  " << std::endl;
-    std::cout << " (Worker Threads via enkiTS Recording into Concurrently)" << std::endl;
-    std::cout << "========================================================" << std::endl;
-
+    std::cout << "\n[STEP 65] Parallel CPU preparation and owner-thread GPU recording\n";
     using namespace Axle::RHI;
-
-    // [65.1] Job System & Headless Direct3D 12 Device Initialization
-    std::cout << "\n[65.1] Initializing Axle JobSystem (enkiTS) & Headless RHI Device..." << std::endl;
-    if (!Axle::JobSystem::IsInitialized()) {
-        Axle::JobSystem::Init();
-    }
-    assert(Axle::JobSystem::IsInitialized());
-    uint32_t workerThreadCount = Axle::JobSystem::GetWorkerThreadCount();
-    std::cout << "  -> JobSystem Initialized with " << workerThreadCount << " worker threads." << std::endl;
-    assert(workerThreadCount >= 1);
-
-    auto& rhiDevice = RHIDevice::Get();
-    rhiDevice.Shutdown();
-
-    RHIDeviceDesc d3d12Desc;
-    d3d12Desc.PreferredBackend = RHIType::Direct3D12;
-    d3d12Desc.Headless = true;
-    d3d12Desc.AllowFallback = true;
-    bool initD3D12Ok = rhiDevice.Init(d3d12Desc);
-    assert(initD3D12Ok);
-    assert(rhiDevice.IsInitialized());
-    assert(rhiDevice.GetNRIDevice() != nullptr);
-    assert(rhiDevice.GetGraphicsQueue() != nullptr);
-    std::cout << "  -> Initialized Headless RHI Device: " << rhiDevice.GetCapabilities().AdapterName 
-              << " (" << RHITypeToString(rhiDevice.GetBackend()) << ")" << std::endl;
-
-    nri::Queue* graphicsQueue = rhiDevice.GetGraphicsQueue();
-    const auto& core = rhiDevice.GetNRICore();
-
-    // [65.2] Allocate Dedicated Command Allocators & Worker Command Buffers
-    const uint32_t workerCount = 8;
-    std::cout << "\n[65.2] Allocating " << workerCount << " Worker Command Buffers with Dedicated Allocators..." << std::endl;
-
-    std::vector<std::unique_ptr<RHICommandBuffer>> workerCmds;
-    workerCmds.reserve(workerCount);
-
-    std::unordered_set<nri::CommandAllocator*> uniqueAllocators;
-
-    for (uint32_t i = 0; i < workerCount; ++i) {
-        auto cb = std::make_unique<RHICommandBuffer>();
-        bool initOk = cb->Init(graphicsQueue);
-        assert(initOk);
-        assert(cb->IsValid());
-        assert(cb->GetCommandAllocator() != nullptr);
-        uniqueAllocators.insert(cb->GetCommandAllocator());
-        workerCmds.push_back(std::move(cb));
-    }
-
-    std::cout << "  -> Created " << workerCmds.size() << " command buffers." << std::endl;
-    std::cout << "  -> Unique Command Allocator Pointers: " << uniqueAllocators.size() << " / " << workerCount << std::endl;
-    assert(uniqueAllocators.size() == workerCount);
-    std::cout << "  -> PASS: Verified 100% thread-isolated dedicated allocators for all worker command buffers." << std::endl;
-
-    // [65.3] Create Test Resources for Worker Command Recording
-    std::cout << "\n[65.3] Creating Test Buffers & Textures for Concurrent Recording..." << std::endl;
-    std::vector<RHIBuffer> workerBuffers(workerCount);
-    std::vector<RHITexture> workerTextures(workerCount);
-
-    for (uint32_t i = 0; i < workerCount; ++i) {
-        RHIBufferDesc bDesc = RHIBufferDesc::Structured(256, 16, true, RHIMemoryLocation::Device, "WorkerTestBuffer_" + std::to_string(i));
-        assert(workerBuffers[i].Init(bDesc));
-        assert(workerBuffers[i].IsValid());
-
-        RHITextureDesc tDesc;
-        tDesc.Width = 256;
-        tDesc.Height = 256;
-        tDesc.Format = RHITextureFormat::RGBA8_UNORM;
-        tDesc.Usage = RHITextureUsage::ColorAttachment | RHITextureUsage::ShaderResource;
-        tDesc.DebugName = "WorkerTestTexture_" + std::to_string(i);
-        assert(workerTextures[i].Init(tDesc));
-        assert(workerTextures[i].IsValid());
-    }
-    std::cout << "  -> Created " << workerCount << " independent GPU buffers and textures." << std::endl;
-
-    // [65.4] Concurrent Multithreaded Command Recording via enkiTS ParallelFor
-    std::cout << "\n[65.4] Executing Concurrent Command Recording via enkiTS ParallelFor..." << std::endl;
-    std::atomic<uint32_t> completedWorkers{0};
-    std::vector<uint32_t> executingThreads(workerCount, 0);
-
-    auto recordStartTime = std::chrono::high_resolution_clock::now();
-
-    Axle::JobSystem::ParallelFor(workerCount, [&](uint32_t i, uint32_t threadNum) {
-        executingThreads[i] = threadNum;
-
-        auto* cb = workerCmds[i].get();
-        bool beginOk = cb->Begin();
-        assert(beginOk);
-        assert(cb->IsRecording());
-
-        // Viewport and Scissor setup
-        nri::Viewport vp = { static_cast<float>(i * 128), 0.0f, 128.0f, 128.0f, 0.0f, 1.0f };
-        cb->SetViewport(vp);
-        nri::Rect scissor = { static_cast<int16_t>(i * 128), 0, 128, 128 };
-        cb->SetScissor(scissor);
-
-        // Multiple Resource Barriers recorded concurrently
-        cb->TransitionBuffer(workerBuffers[i].GetNative(),
-                             RHIAccess::None, RHIAccess::ShaderResourceRead,
-                             RHIPipelineStage::AllCommands, RHIPipelineStage::VertexShader);
-
-        cb->TransitionTexture(workerTextures[i].GetNative(),
-                              RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
-
-        cb->TransitionBuffer(workerBuffers[i].GetNative(),
-                             RHIAccess::ShaderResourceRead, RHIAccess::ShaderResourceStorage,
-                             RHIPipelineStage::VertexShader, RHIPipelineStage::ComputeShader);
-
-        cb->TransitionTexture(workerTextures[i].GetNative(),
-                              RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
-
-        bool endOk = cb->End();
-        assert(endOk);
-        assert(!cb->IsRecording());
-
-        completedWorkers.fetch_add(1, std::memory_order_relaxed);
-    });
-
-    auto recordDuration = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::high_resolution_clock::now() - recordStartTime
-    ).count();
-
-    assert(completedWorkers.load() == workerCount);
-    std::cout << "  -> Recorded " << workerCount << " command buffers concurrently in " << recordDuration << " us." << std::endl;
-    for (uint32_t i = 0; i < workerCount; ++i) {
-        std::cout << "     Worker [" << i << "] recorded on enkiTS thread #" << executingThreads[i] << std::endl;
-    }
-    std::cout << "  -> PASS: Zero race conditions during concurrent worker command recording." << std::endl;
-
-    // [65.5] Atomic Batch Queue Submission (RHICommandBuffer::SubmitBatch)
-    std::cout << "\n[65.5] Testing Atomic Batch Submission of Recorded Command Buffers..." << std::endl;
-    std::vector<RHICommandBuffer*> batch;
-    batch.reserve(workerCount);
-    for (auto& cb : workerCmds) {
-        batch.push_back(cb.get());
-    }
-
-    bool submitOk = RHICommandBuffer::SubmitBatch(batch, graphicsQueue);
-    assert(submitOk);
-
-    // Wait for queue execution completion
-    core.QueueWaitIdle(graphicsQueue);
-    std::cout << "  -> Successfully submitted " << batch.size() << " command buffers in atomic batch and completed GPU execution." << std::endl;
-    std::cout << "  -> PASS: Atomic batch queue submission verified." << std::endl;
-
-    // [65.6] Multi-Frame Recycling Stress Test (10 frames)
-    std::cout << "\n[65.6] Running Multi-Frame Concurrent Recording & Recycling Stress Test (10 frames)..." << std::endl;
-    for (uint32_t frame = 0; frame < 10; ++frame) {
-        // Reset thread-local command allocators
-        for (auto& cb : workerCmds) {
-            bool resetOk = cb->Reset();
-            assert(resetOk);
+    if (!Axle::JobSystem::IsInitialized()) Axle::JobSystem::Init();
+    assert(Axle::JobSystem::GetWorkerThreadCount() >= 1);
+    auto& device = RHIDevice::Get();
+    assert(device.Shutdown());
+    constexpr uint32_t count = 8;
+    for (const auto backend : {RHIType::Direct3D12, RHIType::Vulkan}) {
+        RHIDeviceDesc desc;
+        desc.PreferredBackend = backend; desc.Headless = true; desc.AllowFallback = false;
+        assert(device.Init(desc));
+        assert(device.GetBackend() == backend && !device.IsSoftwareAdapter());
+        std::vector<std::unique_ptr<RHICommandBuffer>> commands;
+        std::vector<RHIBuffer> buffers(count);
+        std::vector<RHITexture> textures(count);
+        std::unordered_set<nri::CommandAllocator*> allocators;
+        std::vector<RHICommandBuffer*> batch;
+        for (uint32_t i = 0; i < count; ++i) {
+            auto command = std::make_unique<RHICommandBuffer>();
+            assert(command->Init(device.GetGraphicsQueue()));
+            assert(command->IsValid() && command->GetCommandAllocator());
+            allocators.insert(command->GetCommandAllocator());
+            batch.push_back(command.get()); commands.push_back(std::move(command));
+            assert(buffers[i].Init(RHIBufferDesc::Structured(256, 16, true)));
+            assert(textures[i].Init(RHITextureDesc::RenderTarget2D(256, 256)));
         }
-
-        // Concurrently record next frame commands across enkiTS workers
-        Axle::JobSystem::ParallelFor(workerCount, [&](uint32_t i, uint32_t threadNum) {
-            (void)threadNum;
-            auto* cb = workerCmds[i].get();
-            assert(cb->Begin());
-
-            nri::Viewport vp = { static_cast<float>(frame * 10), static_cast<float>(i * 50), 200.0f, 200.0f, 0.0f, 1.0f };
-            cb->SetViewport(vp);
-            nri::Rect sc = { 0, 0, 500, 500 };
-            cb->SetScissor(sc);
-
-            cb->TransitionBuffer(workerBuffers[i].GetNative(),
-                                 RHIAccess::ShaderResourceStorage, RHIAccess::ShaderResourceRead,
-                                 RHIPipelineStage::ComputeShader, RHIPipelineStage::VertexShader);
-
-            cb->TransitionTexture(workerTextures[i].GetNative(),
-                                  RHIResourceLayout::ShaderResource, RHIResourceLayout::ColorAttachment);
-
-            cb->TransitionBuffer(workerBuffers[i].GetNative(),
-                                 RHIAccess::ShaderResourceRead, RHIAccess::ShaderResourceStorage,
-                                 RHIPipelineStage::VertexShader, RHIPipelineStage::ComputeShader);
-
-            cb->TransitionTexture(workerTextures[i].GetNative(),
-                                  RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
-
-            assert(cb->End());
-        });
-
-        assert(RHICommandBuffer::SubmitBatch(batch, graphicsQueue));
-        core.QueueWaitIdle(graphicsQueue);
-    }
-    std::cout << "  -> PASS: 10 frames of concurrent worker re-recording, recycling, and batch submission verified with 0 stalls or leaks." << std::endl;
-
-    // Teardown D3D12 test resources
-    for (auto& b : workerBuffers) b.Shutdown();
-    for (auto& t : workerTextures) t.Shutdown();
-    workerCmds.clear();
-    rhiDevice.Shutdown();
-
-    // [65.7] Multi-Backend Verification: Vulkan Concurrent Command Recording (if Vulkan available)
-    std::cout << "\n[65.7] Testing Vulkan Concurrent Command Recording with enkiTS..." << std::endl;
-    {
-        RHIDeviceDesc vkDesc;
-        vkDesc.PreferredBackend = RHIType::Vulkan;
-        vkDesc.Headless = true;
-        vkDesc.AllowFallback = false;
-
-        if (rhiDevice.Init(vkDesc)) {
-            std::cout << "  -> Initialized Headless Vulkan Device: " << rhiDevice.GetCapabilities().AdapterName << std::endl;
-            nri::Queue* vkQueue = rhiDevice.GetGraphicsQueue();
-            const auto& vkCore = rhiDevice.GetNRICore();
-
-            std::vector<std::unique_ptr<RHICommandBuffer>> vkWCmds;
-            vkWCmds.reserve(workerCount);
-            std::unordered_set<nri::CommandAllocator*> vkAllocators;
-
-            for (uint32_t i = 0; i < workerCount; ++i) {
-                auto cb = std::make_unique<RHICommandBuffer>();
-                assert(cb->Init(vkQueue));
-                assert(cb->IsValid());
-                assert(cb->GetCommandAllocator() != nullptr);
-                vkAllocators.insert(cb->GetCommandAllocator());
-                vkWCmds.push_back(std::move(cb));
-            }
-            assert(vkAllocators.size() == workerCount);
-            std::cout << "  -> Created " << workerCount << " Vulkan command buffers with unique VkCommandPool allocators." << std::endl;
-
-            std::vector<RHIBuffer> vkBuffers(workerCount);
-            for (uint32_t i = 0; i < workerCount; ++i) {
-                RHIBufferDesc bDesc = RHIBufferDesc::Structured(256, 16, true, RHIMemoryLocation::Device, "VK_WorkerBuf_" + std::to_string(i));
-                assert(vkBuffers[i].Init(bDesc));
-            }
-
-            // Concurrent Vulkan recording
-            Axle::JobSystem::ParallelFor(workerCount, [&](uint32_t i, uint32_t) {
-                auto* cb = vkWCmds[i].get();
-                assert(cb->Begin());
-                nri::Viewport vp = { static_cast<float>(i * 64), 0.0f, 64.0f, 64.0f, 0.0f, 1.0f };
-                cb->SetViewport(vp);
-                cb->TransitionBuffer(vkBuffers[i].GetNative(),
-                                     RHIAccess::None, RHIAccess::ShaderResourceRead,
-                                     RHIPipelineStage::AllCommands, RHIPipelineStage::VertexShader);
-                assert(cb->End());
+        assert(allocators.size() == count);
+        // GPU generations and state publication belong to the render owner.
+        // Workers prepare immutable CPU requests, and cannot begin a GPU recording.
+        bool rejected = false;
+        std::thread worker([&] { rejected = !commands.front()->Begin(); });
+        worker.join();
+        assert(rejected && !commands.front()->IsRecording());
+        struct Request { nri::Viewport Viewport{}; nri::Rect Scissor{}; uint32_t Frame = UINT32_MAX; };
+        std::vector<Request> requests(count);
+        for (uint32_t frame = 0; frame < 11; ++frame) {
+            std::atomic<uint32_t> prepared{0};
+            Axle::JobSystem::ParallelFor(count, [&](uint32_t i, uint32_t) {
+                requests[i] = {{static_cast<float>(i * 32), static_cast<float>(frame), 128, 128, 0, 1},
+                               {0, 0, 128, 128}, frame};
+                prepared.fetch_add(1, std::memory_order_relaxed);
             });
-
-            std::vector<RHICommandBuffer*> vkBatch;
-            for (auto& cb : vkWCmds) vkBatch.push_back(cb.get());
-            assert(RHICommandBuffer::SubmitBatch(vkBatch, vkQueue));
-            vkCore.QueueWaitIdle(vkQueue);
-
-            std::cout << "  -> PASS: Vulkan multithreaded command recording & batch submission verified." << std::endl;
-
-            for (auto& b : vkBuffers) b.Shutdown();
-            vkWCmds.clear();
-            rhiDevice.Shutdown();
-        } else {
-            std::cout << "  -> Vulkan runtime not available on this platform, skipping Vulkan concurrency pass." << std::endl;
+            assert(prepared.load() == count);
+            for (uint32_t i = 0; i < count; ++i) {
+                assert(requests[i].Frame == frame && requests[i].Viewport.x == static_cast<float>(i * 32));
+                auto& command = *commands[i];
+                if (frame) assert(command.Reset());
+                assert(command.Begin());
+                command.SetViewport(requests[i].Viewport); command.SetScissor(requests[i].Scissor);
+                command.TransitionBuffer(buffers[i].GetNative(),
+                    frame ? RHIAccess::ShaderResourceStorage : RHIAccess::None, RHIAccess::ShaderResourceRead,
+                    RHIPipelineStage::AllCommands, RHIPipelineStage::VertexShader);
+                command.TransitionTexture(textures[i].GetNative(),
+                    frame ? RHIResourceLayout::ShaderResource : RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+                command.TransitionBuffer(buffers[i].GetNative(), RHIAccess::ShaderResourceRead, RHIAccess::ShaderResourceStorage,
+                    RHIPipelineStage::VertexShader, RHIPipelineStage::ComputeShader);
+                command.TransitionTexture(textures[i].GetNative(), RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
+                assert(command.End());
+            }
+            assert(RHICommandBuffer::SubmitBatch(batch, device.GetGraphicsQueue()));
+            assert(device.WaitIdle());
         }
+        commands.clear(); buffers.clear(); textures.clear();
+        assert(device.Shutdown());
+        std::cout << "  -> PASS: " << RHITypeToString(backend)
+                  << " CPU workers, rejected off-owner recording, eight allocators and eleven submitted/recycled batches.\n";
     }
-
-    std::cout << "\n>>> STEP 65 PASSED: Phase 32 Step 7 Multithreaded Command Recording (enkiTS) 100% verified! <<<\n" << std::endl;
     return true;
 }
 
@@ -3568,7 +3364,7 @@ bool RunTest_Step66_Phase32_Step7_ValidationBarrierStateMachinePSOCacheSwapchain
         assert(cmdEndOk);
         bool cmdSubmitOk = cmd.Submit();
         assert(cmdSubmitOk);
-        rhiDevice.GetNRICore().QueueWaitIdle(rhiDevice.GetGraphicsQueue());
+        assert(rhiDevice.WaitIdle());
         cmd.Shutdown();
 
         testTex.Shutdown();

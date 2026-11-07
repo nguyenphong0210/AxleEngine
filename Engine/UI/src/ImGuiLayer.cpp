@@ -4,6 +4,8 @@
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIPresentationContext.hpp>
+#include <Axle/ImageSource.hpp>
+#include <Axle/ImageTextureCache.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
@@ -295,6 +297,7 @@ namespace Axle {
     }
 
     void ImGuiLayer::Init(GLFWwindow* window) {
+        ImageTextureCache::SetSourceResolver(LoadImageSource);
         if (m_Initialized) return;
 
         m_Window = window;

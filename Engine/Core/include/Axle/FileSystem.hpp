@@ -19,6 +19,7 @@ namespace Axle {
         // Configure or query asset directory root
         static void SetAssetDirectory(const std::filesystem::path& path);
         static const std::filesystem::path& GetAssetDirectory();
+        static uint64_t GetSourceGeneration();
 
         // Resolve a relative asset path (e.g. "shaders/Checkerboard.vert") to an existing filesystem path
         static std::filesystem::path ResolveAssetPath(const std::filesystem::path& relativePath);

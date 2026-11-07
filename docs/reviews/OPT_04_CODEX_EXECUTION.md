@@ -511,12 +511,90 @@ cases exit 0. Native mains enforce zero NRI errors through teardown. Architectur
 whitespace and clean pinned NRI checks passed. API validation and the final
 separate-context review remain open.
 
-## Remaining work
+## P41-11 ? CPU image sources and shared render-owned uploads
 
-P41-11 remains: shared CPU decoding, render-owned uploads and GPU cache identity/
-last-good behavior. Then run full phase gates and one consolidated final review.
+Implemented and self-verified with available host prerequisites. Context-free RGBA8/float decoding and
+canonical mip generation now live in Core; Asset resolves optional descriptors
+without GPU types. Source identity includes asset/VFS namespace generation,
+canonical path, content revision and interpretation/import policy. CPU reload
+failure retains the last good image, including unchanged-timestamp edits.
+Renderer owns bounded shared native/GL caches keyed by source policy and actual
+device/context epoch, publishes complete uploaded candidates and keeps retained
+old generations valid. Device/context close callbacks retire cache ownership.
 
-Full phase builds, CTest, integration, jobs/ECS, final native product simulation, GPU
-readbacks and final window/lifetime checks remain open. API-validation prerequisites
-must be available before claiming dependent P41-07 acceptance. The pre-existing
-OPT-00 manual/full-product gap remains separate.
+Scene material textures, UI inspector/thumbnail/icon consumers and Runtime GL
+resolve the shared CPU source and central GPU cache. Explicit GL and fallback use
+the same mip bytes, color policy and HDR data. Mesh decoding already satisfies
+the CPU Asset boundary and remains unchanged. Cubemap CPU decoding uses the same
+source resolver; GL fallback resources reject stale context names.
+
+AxleImageSourceTests covers raw/descriptor forms, sRGB/linear, canonical mips,
+HDR float bytes, bad descriptor/source reload, role changes, rename/delete,
+restored timestamps, duplicate consumers, non-default roots and mounted VFS.
+Physical native readbacks exercise failed replacement creation/upload, retained
+old pixels and reopened device epochs; real GL readbacks cover context recreation.
+Final Debug/Release runs of images11.py passed all five modes. These are
+implementer-run checks; separate-context review is still pending.
+
+## Final phase self-verification
+
+All commands below returned exit 0 in both Debug and Release unless an expected
+negative control is explicitly noted. Generated evidence is under
+`build/agent-runs/OPT-04/`; no source vendor revision was changed.
+
+- `cmake --build build --config <config> --target AxleAllTests AxleEditor AxleRuntime --parallel 4`
+  with `CL=/MP4`: final-source phase-upload-retention-build-*.log; earlier full
+  builds and fixture-only rebuilds are retained. Script DLL ABI 4 was rebuilt normally.
+- `ctest --test-dir build -C <config> --output-on-failure`: **50/50** each,
+  phase-<config>-ctest.log. Final-source repeats are phase-final-<config>-ctest.log.
+  The new image CPU policy case is included.
+- Full default `build/Tests/<config>/AxleTests.exe`: **PASS**, final logs
+  phase-final-<config>-integration.log (also passed before the upload-capacity
+  hardening in phase-integration-adapt7-<config>.log). Earlier failing attempts are retained.
+- Typed jobs/ECS harness: **16 PASS, 3 verified probes, 0 unexpected failures**
+  each; phase-<config>-jobs.json and matching log. Actual commands/workspaces
+  are in phase-<config>-results.json.
+- `scripts/run_simulation_product_probe.py` with the rebuilt Editor/Runtime:
+  **PASS**, phase-<config>-simulation.json. Real product traces agree at
+  30/60/144 Hz, with 60 fixed ticks/held-input observations per partition.
+- **54 focused rendering/policy/product cases per configuration** from
+  phasegates.py: image sources (5), view/lifetime/VFX/foundation (15), resource/
+  identity/errors (11), state (3), retirement (3), frames (2), presentation (2),
+  base view/primitive native (4), Editor startup/rollback (7), primitive GL/
+  fallback (2). Strict startup rejection expects exit 1; other cases expect 0.
+  The phase manifests retain the initial integration failure; the later final
+  integration logs above supersede that row only. All other rows passed.
+- Physical focused native mains enforce zero embedded NRI validation errors
+  through teardown. Real window tests include resize, iconify/restore, VSync,
+  acquire/present failure, UI-owner loss and final CPU-frame completion.
+- Five primitive images and four canonical image mip levels are byte-identical
+  between explicit GL and automatic fallback in each configuration; pixels05.py
+  and phase-image-equivalence.txt. HDR readbacks preserve CPU float bytes.
+- `python scripts/check_architecture.py --root . --closed-package AF-04`:
+  **PASS**, 397 files / 18 CMake files. `python scripts/test_baseline_tools.py`:
+  **18/18 PASS**. `git diff --check`: PASS. Pinned NRI remains clean at the
+  revision recorded above.
+
+Full integration exposed fixtures relying on superseded contracts. They now use
+managed resource generations and checked completion, inspect submitted state
+instead of mutating a CPU scratch tracker, verify bounded transactional descriptor
+replacement and compare external generation handles rather than wrapper addresses.
+The concurrency fixture now prepares CPU requests with enkiTS, proves off-owner
+GPU recording is rejected, then records/submits/recycles eight independent
+allocators for eleven batches on both physical backends. This does not claim
+parallel GPU recording support. Missing-mesh name guessing had hidden wrong model
+paths: real staged model paths and explicit non-null checks preserve the original
+six-entity PBR threshold, including when preceding tests change the asset root.
+
+Upload failure retention reserves its quarantine storage before invoking the native
+helper, so an ambiguous native failure can keep pins without another allocation.
+After this final hardening, full Debug/Release builds, all five image-source modes
+and default integration passed again; CTest passed again at 50/50 in both configurations.
+
+## Remaining acceptance gates
+
+One consolidated separate-context final review and any corrections/rechecks remain.
+No final reviewer has run yet. Actual graphics API validation is **NOT RUN** for
+the host-prerequisite reasons above; dependent acceptance remains open even though
+embedded NRI checks pass. The pre-existing OPT-00 manual/full-product gap remains
+separate. OPT-05 has not started and nothing has been pushed.

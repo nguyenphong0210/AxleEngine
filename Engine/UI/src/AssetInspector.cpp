@@ -18,7 +18,8 @@
 #include <Axle/Application.hpp>
 #include <Axle/ShaderPropertyReflection.hpp>
 #include <Axle/ImGuiLayer.hpp>
-#include <stb_image.h>
+#include <Axle/ImageSource.hpp>
+#include <Axle/ImageTextureCache.hpp>
 #include <Extensions/NRIHelper.h>
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -50,85 +51,29 @@ namespace Axle {
     }
 
     void SceneHierarchyPanel::LoadTexturePreview(const std::filesystem::path& path) {
-        if (m_LoadedTexturePath == path && (m_TexturePreviewImGuiID != 0 || m_LoadedTextureWidth > 0)) {
-            return;
-        }
-
-        ClearTexturePreview();
-        m_LoadedTexturePath = path;
-
-        if (!m_ImGuiLayer) {
-            m_ImGuiLayer = dynamic_cast<ImGuiLayer*>(Application::Get().GetUIContext());
-        }
-
-        std::filesystem::path absPath = FileSystem::ResolveAssetPath(path);
-        auto buffer = FileSystem::ReadBinaryFile(absPath);
-        if (buffer.empty()) {
-            AXLE_CORE_WARN("SceneHierarchyPanel: Failed to read texture file for preview '{0}'", absPath.string());
-            return;
-        }
-
-        int width = 0, height = 0, channels = 0;
-        stbi_set_flip_vertically_on_load_thread(false);
-        stbi_uc* pixels = stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 4);
-        if (!pixels) {
-            AXLE_CORE_WARN("SceneHierarchyPanel: Failed to decode texture '{0}': {1}", absPath.string(), stbi_failure_reason());
-            return;
-        }
-
-        m_LoadedTextureWidth = static_cast<uint32_t>(width);
-        m_LoadedTextureHeight = static_cast<uint32_t>(height);
-        m_LoadedTextureChannels = static_cast<uint32_t>(channels);
-
-        bool isRHI = RHI::RHIDevice::Get().IsNativeReady();
-        if (isRHI) {
-            auto& rhiDevice = RHI::RHIDevice::Get();
-            if (rhiDevice.IsNativeReady()) {
-                m_RHITexturePreview = std::make_shared<RHI::RHITexture>();
-                auto desc = RHI::RHITextureDesc::RenderTarget2D(m_LoadedTextureWidth, m_LoadedTextureHeight, RHI::RHITextureFormat::RGBA8_UNORM, "TexturePreview_" + path.filename().string());
-                desc.Usage = RHI::RHITextureUsage::ShaderResource;
-                if (m_RHITexturePreview->Init(desc)) {
-                    const auto& helper = rhiDevice.GetNRIHelper();
-                    nri::Queue* queue = rhiDevice.GetGraphicsQueue();
-                    nri::Result uploadResult = nri::Result::FAILURE;
-                    if (queue && helper.UploadData) {
-                        nri::TextureSubresourceUploadDesc subres = {};
-                        subres.slices = pixels;
-                        subres.sliceNum = 1;
-                        subres.rowPitch = m_LoadedTextureWidth * 4;
-                        subres.slicePitch = m_LoadedTextureWidth * m_LoadedTextureHeight * 4;
-
-                        nri::TextureUploadDesc upDesc = {};
-                        upDesc.subresources = &subres;
-                        upDesc.texture = m_RHITexturePreview->GetNative();
-                        upDesc.after.access = nri::AccessBits::SHADER_RESOURCE;
-                        upDesc.after.layout = nri::Layout::SHADER_RESOURCE;
-                        upDesc.after.stages = nri::StageBits::ALL;
-                        upDesc.planes = nri::PlaneBits::ALL;
-
-                        uploadResult = rhiDevice.UploadData(&upDesc, 1, nullptr, 0);
-                    }
-
-                    if (uploadResult == nri::Result::SUCCESS) {
-                        uint64_t nativeHandle = m_RHITexturePreview->GetNativeSRVHandle();
-                        if (nativeHandle != 0 && m_TextureRegistrar) {
-                            m_TexturePreviewLease = m_TextureRegistrar(*m_RHITexturePreview);
-                            m_TexturePreviewImGuiID = m_TexturePreviewLease.GetID();
-                        }
-                    } else {
-                        AXLE_CORE_WARN("SceneHierarchyPanel: Texture preview upload failed for '{0}' (result {1})",
-                                       absPath.string(), static_cast<int>(uploadResult));
-                    }
-                }
-            }
+        ImageDecodeOptions options;
+        const auto source = LoadImageSource(path, options);
+        auto failure = [&] { if (m_LoadedTexturePath != path) ClearTexturePreview(); };
+        if (RHI::RHIDevice::Get().IsNativeReady()) {
+            auto texture = ImageTextureCache::GetNative(source);
+            if (!texture) { failure(); return; }
+            if (m_LoadedTexturePath == path && m_RHITexturePreview == texture && m_TexturePreviewLease.IsValid()) return;
+            auto token = m_TextureRegistrar ? m_TextureRegistrar(*texture) : GuiTextureLease{};
+            if (!token.IsValid()) { failure(); return; }
+            ClearTexturePreview(); m_RHITexturePreview = std::move(texture); m_TexturePreviewLease = std::move(token);
+            m_TexturePreviewImGuiID = m_TexturePreviewLease.GetID();
+            m_LoadedTextureWidth = m_RHITexturePreview->GetWidth(); m_LoadedTextureHeight = m_RHITexturePreview->GetHeight();
         } else {
-            m_GLTexturePreview = Texture2D::Create(absPath.string());
-            if (m_GLTexturePreview && m_GLTexturePreview->IsLoaded()) {
-                m_TexturePreviewImGuiID = m_GLTexturePreview->GetRendererID();
-            }
+            TextureSpecification spec; spec.FlipVertically = false; spec.GenerateMipmaps = false;
+            spec.WrapS = spec.WrapT = TextureWrap::ClampToEdge;
+            auto texture = ImageTextureCache::GetGL(source, spec);
+            if (!texture) { failure(); return; }
+            if (m_LoadedTexturePath == path && m_GLTexturePreview == texture && texture->IsLoaded()) return;
+            ClearTexturePreview(); m_GLTexturePreview = std::move(texture);
+            m_TexturePreviewImGuiID = m_GLTexturePreview->GetRendererID();
+            m_LoadedTextureWidth = m_GLTexturePreview->GetWidth(); m_LoadedTextureHeight = m_GLTexturePreview->GetHeight();
         }
-
-        stbi_image_free(pixels);
+        m_LoadedTexturePath = path; m_LoadedTextureChannels = source.Image ? source.Image->SourceChannels : 4;
     }
 
     void SceneHierarchyPanel::DrawAssetProperties(const std::filesystem::path& path) {

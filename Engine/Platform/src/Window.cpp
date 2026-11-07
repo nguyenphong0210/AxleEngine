@@ -2,11 +2,23 @@
 #include <Axle/Input.hpp>
 #include <Axle/Log.hpp>
 #include <GLFW/glfw3.h>
+#include <unordered_map>
 
 namespace Axle {
 
     static u32 s_GLFWWindowCount = 0;
     static bool s_GLFWInitialized = false;
+    static uint64_t s_NextContextGeneration = 1;
+    static std::unordered_map<GLFWwindow*, uint64_t> s_ContextGenerations;
+    static std::unordered_map<uint64_t, std::vector<std::function<void()>>> s_ContextClose;
+    uint64_t Window::GetContextGeneration() {
+        if (!HasActiveContext()) return 0;
+        const auto found = s_ContextGenerations.find(glfwGetCurrentContext());
+        return found != s_ContextGenerations.end() ? found->second : 0;
+    }
+    void Window::BeforeContextClose(uint64_t generation, std::function<void()> callback) {
+        if (generation && callback) s_ContextClose[generation].push_back(std::move(callback));
+    }
 
     static void GLFWErrorCallback(int error, const char* description) {
         AXLE_CORE_ERROR("[GLFW Error] ({0}): {1}", error, description);
@@ -83,6 +95,7 @@ namespace Axle {
 
         if (m_Data.GraphicsBackend == GraphicsAPI::OpenGL) {
             glfwMakeContextCurrent(m_Window);
+            s_ContextGenerations[m_Window] = s_NextContextGeneration++;
             SetVSync(m_Data.VSync);
         }
 
@@ -187,6 +200,16 @@ namespace Axle {
 
     Window::~Window() {
         if (m_Window) {
+            if (auto found = s_ContextGenerations.find(m_Window); found != s_ContextGenerations.end()) {
+                auto* previous = glfwGetCurrentContext(); glfwMakeContextCurrent(m_Window);
+                const auto generation = found->second;
+                auto callbacks = std::move(s_ContextClose[generation]); s_ContextClose.erase(generation);
+                for (auto& callback : callbacks) {
+                    try { callback(); } catch (...) { AXLE_CORE_ERROR("GL context cleanup callback failed"); }
+                }
+                s_ContextGenerations.erase(m_Window);
+                glfwMakeContextCurrent(previous == m_Window ? nullptr : previous);
+            }
             if (Input::GetContext() == m_Window) Input::SetContext(nullptr);
             glfwDestroyWindow(m_Window);
             --s_GLFWWindowCount;

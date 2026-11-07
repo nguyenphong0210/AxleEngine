@@ -33,7 +33,7 @@ namespace Axle {
         void Bind(u32 slot = 0) const;
         void Unbind(u32 slot = 0) const;
 
-        u32 GetRendererID() const { return m_RendererID; }
+        u32 GetRendererID() const;
         u32 GetWidth() const { return m_Spec.Width; }
         u32 GetHeight() const { return m_Spec.Height; }
         u32 GetMipLevels() const { return m_Spec.MipLevels; }
@@ -65,6 +65,7 @@ namespace Axle {
     private:
         CubemapSpecification m_Spec;
         u32 m_RendererID = 0;
+        uint64_t m_ContextGeneration = 0;
         std::string m_FilePath;
     };
 

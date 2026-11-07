@@ -7,7 +7,8 @@
 #include <Axle/Log.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include <stb_image.h>
+#include <Axle/ImageTextureCache.hpp>
+#include <cstring>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 
@@ -28,9 +29,22 @@ namespace Axle {
         // Render Quad VAO helper for BRDF LUT
         GLuint g_QuadVAO = 0;
         GLuint g_QuadVBO = 0;
+        uint64_t g_QuadContext = 0;
 
         void RenderQuad() {
             if (!Window::HasActiveContext()) return;
+            const auto context = Window::GetContextGeneration();
+            if (g_QuadContext != context) {
+                g_QuadVAO = g_QuadVBO = 0;
+                g_QuadContext = context;
+                Window::BeforeContextClose(context, [context] {
+                    if (g_QuadContext != context) return;
+                    glDeleteVertexArrays(1, &g_QuadVAO);
+                    glDeleteBuffers(1, &g_QuadVBO);
+                    g_QuadVAO = g_QuadVBO = 0;
+                    g_QuadContext = 0;
+                });
+            }
             if (g_QuadVAO == 0) {
                 float quadVertices[] = {
                     // positions        // texture Coords
@@ -60,8 +74,11 @@ namespace Axle {
         Invalidate();
     }
 
+    u32 Cubemap::GetRendererID() const {
+        return Window::HasActiveContext() && m_ContextGeneration == Window::GetContextGeneration() ? m_RendererID : 0;
+    }
     Cubemap::~Cubemap() {
-        if (Window::HasActiveContext() && m_RendererID != 0) {
+        if (GetRendererID()) {
             glDeleteTextures(1, &m_RendererID);
             m_RendererID = 0;
         }
@@ -73,11 +90,12 @@ namespace Axle {
             return;
         }
 
-        if (m_RendererID != 0) {
+        if (GetRendererID()) {
             glDeleteTextures(1, &m_RendererID);
             m_RendererID = 0;
         }
 
+        m_ContextGeneration = Window::GetContextGeneration();
         glGenTextures(1, &m_RendererID);
         glBindTexture(GL_TEXTURE_CUBE_MAP, m_RendererID);
 
@@ -105,7 +123,7 @@ namespace Axle {
     }
 
     void Cubemap::Bind(u32 slot) const {
-        if (!Window::HasActiveContext() || m_RendererID == 0) return;
+        if (!GetRendererID()) return;
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_CUBE_MAP, m_RendererID);
     }
@@ -121,22 +139,14 @@ namespace Axle {
     }
 
     std::shared_ptr<Cubemap> Cubemap::CreateFromEquirectangular(const std::string& filepath, u32 resolution) {
-        auto buffer = FileSystem::ReadBinaryFile(filepath);
-        if (buffer.empty()) {
-            AXLE_CORE_ERROR("Cubemap: Failed to read HDR file at '{0}'", filepath);
-            return GetBlackCubemap();
-        }
-
-        stbi_set_flip_vertically_on_load_thread(true);
-        int width = 0, height = 0, channels = 0;
-        float* data = stbi_loadf_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 0);
-        if (!data) {
-            AXLE_CORE_ERROR("Cubemap: Failed to decode HDR image '{0}': {1}", filepath, stbi_failure_reason());
-            return GetBlackCubemap();
-        }
-
-        auto cubemap = CreateFromEquirectangularHDR(data, width, height, resolution);
-        stbi_image_free(data);
+        ImageDecodeOptions options; options.FlipVertically = options.ForceFloat = true;
+        const auto source = ImageTextureCache::Resolve(filepath, options);
+        if (!source.Image) return GetBlackCubemap();
+        const auto& image = source.Image->Mips.front();
+        std::vector<float> rgb(static_cast<size_t>(image.Width) * image.Height * 3);
+        for (size_t i = 0; i < rgb.size() / 3; ++i)
+            std::memcpy(rgb.data() + i * 3, image.Pixels.data() + i * 16, 12);
+        auto cubemap = CreateFromEquirectangularHDR(rgb.data(), image.Width, image.Height, resolution);
         if (cubemap) {
             cubemap->m_FilePath = filepath;
         }
@@ -648,7 +658,7 @@ namespace Axle {
 
     std::shared_ptr<Cubemap> Cubemap::GetBlackCubemap() {
         static std::shared_ptr<Cubemap> s_BlackCubemap;
-        if (!s_BlackCubemap) {
+        if (!s_BlackCubemap || !s_BlackCubemap->GetRendererID()) {
             CubemapSpecification spec;
             spec.Width = 1;
             spec.Height = 1;
@@ -669,7 +679,7 @@ namespace Axle {
 
     std::shared_ptr<Texture2D> Cubemap::GetGlobalBRDFLUT() {
         static std::shared_ptr<Texture2D> s_BRDFLUT;
-        if (!s_BRDFLUT) {
+        if (!s_BRDFLUT || !s_BRDFLUT->IsLoaded()) {
             s_BRDFLUT = CreateBRDFLUT(256);
         }
         return s_BRDFLUT;

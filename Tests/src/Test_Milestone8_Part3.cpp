@@ -1,5 +1,9 @@
 #include "TestCommon.hpp"
 
+static std::string StagedMeshFixturePath(const char* name) {
+    return (std::filesystem::path(AXLE_TEST_WORKSPACE_DIR) / "assets/models" / name).string();
+}
+
 // =============================================================================
 // TEST STEP 67: Phase 33 Step 1 - Core Geometry, Mesh VRAM Sub-Allocation
 // & 3D Scene Geometry Streaming via RHIStreamer
@@ -171,7 +175,7 @@ bool RunTest_Step67_Phase33_Step1_CoreGeometryAndStreamer() {
     bool submitOk = cmd.Submit();
     assert(submitOk);
 
-    rhiDevice.GetNRICore().QueueWaitIdle(rhiDevice.GetGraphicsQueue());
+    assert(rhiDevice.WaitIdle());
     std::cout << "  -> PASS: Successfully recorded and executed copy batches and buffer bindings on GPU queue." << std::endl;
 
     cubeMesh.reset();
@@ -845,13 +849,17 @@ bool RunTest_Step70_Phase33_Step2_MetallicRoughnessPBRPipeline() {
         auto carChassis = scene->CreateEntity("SportsCar_Red");
         carChassis.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.0f, 0.5f, 0.0f);
         auto redMat = Axle::RHI::RHIMaterial::CreateCarPaintRed();
-        carChassis.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Chassis.axlemesh"), redMat);
+        carChassis.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetOrCreateMesh(StagedMeshFixturePath("SportsCar_Chassis.axlemesh")), redMat);
+
+        assert(carChassis.GetComponent<Axle::MeshInstance3D>().RHIMeshAsset != nullptr);
 
         // 3. SportsCar Wheel with TireRubber PBR Material
         auto carWheel = scene->CreateEntity("Wheel_Rubber");
         carWheel.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(1.2f, 0.35f, 1.5f);
         auto rubberMat = Axle::RHI::RHIMaterial::CreateTireRubber();
-        carWheel.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Wheel.axlemesh"), rubberMat);
+        carWheel.AddComponent<Axle::MeshInstance3D>(meshRegistry.GetOrCreateMesh(StagedMeshFixturePath("SportsCar_Wheel.axlemesh")), rubberMat);
+
+        assert(carWheel.GetComponent<Axle::MeshInstance3D>().RHIMeshAsset != nullptr);
 
         // 4. Chrome Sphere
         auto chromeSphere = scene->CreateEntity("Chrome_Sphere");
@@ -1199,14 +1207,14 @@ bool RunTest_Step71_Phase33_Step2_BindlessTexturesAndAnisotropicFiltering() {
         // 2. Chassis with Red CarPaint
         auto carEntity = scene->CreateEntity("SportsCar");
         carEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.0f, 0.5f, 0.0f);
-        auto chassisMesh = meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Chassis.axlemesh");
+        auto chassisMesh = meshRegistry.GetOrCreateMesh(StagedMeshFixturePath("SportsCar_Chassis.axlemesh"));
         auto redMat = Axle::RHI::RHIMaterial::CreateCarPaintRed();
         carEntity.AddComponent<Axle::MeshInstance3D>(chassisMesh, redMat);
 
         // 3. Wheel with Tire Rubber
         auto wheelEntity = scene->CreateEntity("RacingWheel");
         wheelEntity.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.9f, 0.35f, 1.4f);
-        auto wheelMesh = meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Wheel.axlemesh");
+        auto wheelMesh = meshRegistry.GetOrCreateMesh(StagedMeshFixturePath("SportsCar_Wheel.axlemesh"));
         auto tireMat = Axle::RHI::RHIMaterial::CreateTireRubber();
         wheelEntity.AddComponent<Axle::MeshInstance3D>(wheelMesh, tireMat);
 
@@ -1690,14 +1698,14 @@ bool RunTest_Step72_Phase33_Step2_ForwardPlusMultiLightGPUBuffer() {
         {
             auto car = scene->CreateEntity("SportsCar");
             car.GetComponent<Axle::TransformComponent>().Translation = glm::vec3(0.0f, 0.5f, 0.0f);
-            auto chassisMesh = meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Chassis.axlemesh");
+            auto chassisMesh = meshRegistry.GetOrCreateMesh(StagedMeshFixturePath("SportsCar_Chassis.axlemesh"));
             auto carPaintMat = Axle::RHI::RHIMaterial::CreateCarPaintRed();
             car.AddComponent<Axle::MeshInstance3D>(chassisMesh, carPaintMat);
         }
         for (int w = 0; w < 4; ++w) {
             auto wheel = scene->CreateEntity("Wheel_" + std::to_string(w));
             wheel.GetComponent<Axle::TransformComponent>().Translation = glm::vec3((w % 2 == 0 ? -1.0f : 1.0f) * 0.9f, 0.35f, (w < 2 ? 1.3f : -1.3f));
-            auto wheelMesh = meshRegistry.GetOrCreateMesh("Engine/Resources/Models/SportsCar_Wheel.axlemesh");
+            auto wheelMesh = meshRegistry.GetOrCreateMesh(StagedMeshFixturePath("SportsCar_Wheel.axlemesh"));
             auto tireMat = Axle::RHI::RHIMaterial::CreateTireRubber();
             wheel.AddComponent<Axle::MeshInstance3D>(wheelMesh, tireMat);
         }
@@ -2832,7 +2840,7 @@ bool RunTest_Step77_ExposureAndToneMappingPass() {
         assert(cmd.End());
         auto* queue = rhiDevice.GetGraphicsQueue();
         cmd.Submit(queue);
-        rhiDevice.GetNRICore().QueueWaitIdle(queue);
+        assert(rhiDevice.WaitIdle());
 
         std::cout << "  -> ToneMapping pipeline layout & SDR/HDR PSOs initialized." << std::endl;
         std::cout << "  -> Dispatched 4 tone mapping passes (ACES, Reinhard, Uncharted 2, Linear) with full GPU queue sync." << std::endl;
@@ -3118,7 +3126,7 @@ bool RunTest_Step78_AntiAliasingPass() {
         assert(cmd.End());
         auto* queue = rhiDevice.GetGraphicsQueue();
         cmd.Submit(queue);
-        rhiDevice.GetNRICore().QueueWaitIdle(queue);
+        assert(rhiDevice.WaitIdle());
 
         std::cout << "  -> FXAA pipeline layout & SDR/HDR PSOs initialized." << std::endl;
         std::cout << "  -> Dispatched 2 standalone FXAA passes with full GPU queue sync." << std::endl;
@@ -3480,7 +3488,7 @@ bool RunTest_Step79_GPUParticleVFXPass() {
 
         auto* queue = rhiDevice.GetGraphicsQueue();
         cmd.Submit(queue);
-        rhiDevice.GetNRICore().QueueWaitIdle(queue);
+        assert(rhiDevice.WaitIdle());
 
         assert(particleRenderer.GetDrawCallCount() == 1);
         assert(particleRenderer.GetRenderedParticleCount() == 500);
@@ -3855,7 +3863,7 @@ bool RunTest_Step80_RHIPhysicsDebugLinePipeline() {
 
         auto* queue = rhiDevice.GetGraphicsQueue();
         cmd.Submit(queue);
-        rhiDevice.GetNRICore().QueueWaitIdle(queue);
+        assert(rhiDevice.WaitIdle());
 
         assert(debugRenderer.GetDrawCallCount() == 1);
         assert(debugRenderer.GetFlushedVertexCount() > 1000);

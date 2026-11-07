@@ -1,4 +1,6 @@
 #include <Axle/Application.hpp>
+#include <Axle/ImageSource.hpp>
+#include <Axle/ImageTextureCache.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/PhysicsEngine.hpp>
@@ -137,6 +139,7 @@ int main(int argc, char** argv) {
             }
         };
 
+        Axle::ImageTextureCache::SetSourceResolver(Axle::LoadImageSource);
         std::unique_ptr<Axle::Application> app;
         std::shared_ptr<Axle::RuntimeLayer> layer;
         if (!Axle::RHI::RHISwitcher::InitializeProduct(rhiConfig, [&](Axle::GraphicsAPI api) {

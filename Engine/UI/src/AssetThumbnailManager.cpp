@@ -6,7 +6,8 @@
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Extensions/NRIHelper.h>
-#include <stb_image.h>
+#include <Axle/ImageSource.hpp>
+#include <Axle/ImageTextureCache.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/Log.hpp>
@@ -244,12 +245,6 @@ namespace Axle {
         }
 
         std::string key = path.lexically_normal().string();
-        auto it = m_ThumbnailCache.find(key);
-        if (it != m_ThumbnailCache.end()) {
-            auto gui = m_GuiThumbnails.find(key);
-            return gui != m_GuiThumbnails.end() ? gui->second.GetID() : it->second;
-        }
-
         auto ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
@@ -264,81 +259,32 @@ namespace Axle {
             }
         }
 
-        // 1. Textures: Decode and upload to RHI or OpenGL
         if (!imagePath.empty()) {
-            auto buffer = FileSystem::ReadBinaryFile(imagePath);
-            if (buffer.empty()) {
-                m_ThumbnailCache[key] = 0;
-                return 0;
+            const auto source = LoadImageSource(path, {});
+            if (RHI::RHIDevice::Get().IsNativeReady()) {
+                auto texture = ImageTextureCache::GetNative(source);
+                if (!texture) return 0;
+                auto old = m_RHIThumbnails.find(key); auto registration = m_GuiThumbnails.find(key);
+                if (old != m_RHIThumbnails.end() && old->second == texture && registration != m_GuiThumbnails.end() && registration->second.IsValid()) return registration->second.GetID();
+                auto token = m_TextureRegistrar ? m_TextureRegistrar(*texture) : GuiTextureLease{};
+                if (!token.IsValid()) return 0;
+                const auto id = token.GetID();
+                m_ThumbnailDimensions[key] = {texture->GetWidth(), texture->GetHeight()};
+                m_GuiThumbnails[key] = std::move(token); m_RHIThumbnails[key] = std::move(texture); m_ThumbnailCache[key] = id; return id;
             }
-
-            int width = 0, height = 0, channels = 0;
-            stbi_set_flip_vertically_on_load_thread(false);
-            stbi_uc* pixels = stbi_load_from_memory(buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, 4);
-            if (!pixels) {
-                m_ThumbnailCache[key] = 0;
-                return 0;
+            TextureSpecification spec; spec.FlipVertically = false; spec.GenerateMipmaps = false;
+            spec.WrapS = spec.WrapT = TextureWrap::ClampToEdge;
+            auto texture = ImageTextureCache::GetGL(source, spec);
+            if (!texture) return 0;
+            auto previous = m_LoadedTextures.find(key);
+            if (previous != m_LoadedTextures.end() && previous->second != texture) {
+                auto retired = std::move(previous->second);
+                if (m_DeferredRelease) m_DeferredRelease([retired] {});
             }
-
-            m_ThumbnailDimensions[key] = glm::vec2((float)width, (float)height);
-
-            bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
-            if (isRHI) {
-                auto& rhiDevice = RHI::RHIDevice::Get();
-                if (rhiDevice.IsNativeReady()) {
-                    auto rhiTex = std::make_shared<RHI::RHITexture>();
-                    auto desc = RHI::RHITextureDesc::RenderTarget2D((uint32_t)width, (uint32_t)height, RHI::RHITextureFormat::RGBA8_UNORM, "Thumb_" + path.filename().string());
-                    desc.Usage = RHI::RHITextureUsage::ShaderResource;
-                    if (rhiTex->Init(desc)) {
-                        const auto& helper = rhiDevice.GetNRIHelper();
-                        nri::Queue* queue = rhiDevice.GetGraphicsQueue();
-                        if (queue && helper.UploadData) {
-                            nri::TextureSubresourceUploadDesc subres = {};
-                            subres.slices = pixels;
-                            subres.sliceNum = 1;
-                            subres.rowPitch = (uint32_t)width * 4;
-                            subres.slicePitch = (uint32_t)width * (uint32_t)height * 4;
-
-                            nri::TextureUploadDesc upDesc = {};
-                            upDesc.subresources = &subres;
-                            upDesc.texture = rhiTex->GetNative();
-                            upDesc.after.access = nri::AccessBits::SHADER_RESOURCE;
-                            upDesc.after.layout = nri::Layout::SHADER_RESOURCE;
-                            upDesc.after.stages = nri::StageBits::ALL;
-                            upDesc.planes = nri::PlaneBits::ALL;
-
-                            rhiDevice.UploadData(&upDesc, 1, nullptr, 0);
-                        }
-
-                        uint64_t nativeHandle = rhiTex->GetNativeSRVHandle();
-                        if (nativeHandle != 0 && m_ImGuiLayer) {
-                            auto token = m_TextureRegistrar ? m_TextureRegistrar(*rhiTex) : GuiTextureLease{};
-                            uint64_t gpuHandle = token.GetID();
-                            if (gpuHandle != 0) {
-                                m_ThumbnailCache[key] = gpuHandle;
-                                m_GuiThumbnails[key] = std::move(token);
-                                m_RHIThumbnails[key] = rhiTex;
-                                stbi_image_free(pixels);
-                                return gpuHandle;
-                            }
-                        }
-                    }
-                }
-            } else if (Window::HasActiveContext()) {
-                auto tex = Texture2D::Create(imagePath.string());
-                if (tex && tex->IsLoaded()) {
-                    uint64_t texID = tex->GetRendererID();
-                    m_ThumbnailCache[key] = texID;
-                    m_LoadedTextures[key] = tex;
-                    stbi_image_free(pixels);
-                    return texID;
-                }
-            }
-
-            stbi_image_free(pixels);
-            m_ThumbnailCache[key] = 0;
-            return 0;
+            const auto id = texture->GetRendererID(); m_ThumbnailDimensions[key] = {texture->GetWidth(), texture->GetHeight()};
+            m_LoadedTextures[key] = std::move(texture); m_ThumbnailCache[key] = id; return id;
         }
+        if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end()) return it->second;
 
         // 2. Material Assets (.axleasset): High-Fidelity 3D PBR Sphere Thumbnail (Unreal Engine Parity)
         // Renders an offscreen Cook-Torrance PBR material sphere with 2x2 MSAA supersampling and studio lighting
@@ -349,60 +295,21 @@ namespace Axle {
             if (RenderMaterialThumbnail(path, pixels, width, height) && !pixels.empty()) {
                 m_ThumbnailDimensions[key] = glm::vec2((float)width, (float)height);
 
-                bool isRHI = (m_ImGuiLayer && m_ImGuiLayer->GetBackendType() != ImGuiBackendType::OpenGL);
-                if (isRHI) {
-                    auto& rhiDevice = RHI::RHIDevice::Get();
-                    if (rhiDevice.IsNativeReady()) {
-                        auto rhiTex = std::make_shared<RHI::RHITexture>();
-                        auto desc = RHI::RHITextureDesc::RenderTarget2D(width, height, RHI::RHITextureFormat::RGBA8_UNORM, "MatThumb_" + path.filename().string());
-                        desc.Usage = RHI::RHITextureUsage::ShaderResource;
-                        if (rhiTex->Init(desc)) {
-                            const auto& helper = rhiDevice.GetNRIHelper();
-                            nri::Queue* queue = rhiDevice.GetGraphicsQueue();
-                            if (queue && helper.UploadData) {
-                                nri::TextureSubresourceUploadDesc subres = {};
-                                subres.slices = pixels.data();
-                                subres.sliceNum = 1;
-                                subres.rowPitch = width * 4;
-                                subres.slicePitch = width * height * 4;
-
-                                nri::TextureUploadDesc upDesc = {};
-                                upDesc.subresources = &subres;
-                                upDesc.texture = rhiTex->GetNative();
-                                upDesc.after.access = nri::AccessBits::SHADER_RESOURCE;
-                                upDesc.after.layout = nri::Layout::SHADER_RESOURCE;
-                                upDesc.after.stages = nri::StageBits::ALL;
-                                upDesc.planes = nri::PlaneBits::ALL;
-
-                                rhiDevice.UploadData(&upDesc, 1, nullptr, 0);
-                            }
-
-                            uint64_t nativeHandle = rhiTex->GetNativeSRVHandle();
-                            if (nativeHandle != 0 && m_ImGuiLayer) {
-                                auto token = m_TextureRegistrar ? m_TextureRegistrar(*rhiTex) : GuiTextureLease{};
-                            uint64_t gpuHandle = token.GetID();
-                                if (gpuHandle != 0) {
-                                    m_ThumbnailCache[key] = gpuHandle;
-                                m_GuiThumbnails[key] = std::move(token);
-                                    m_RHIThumbnails[key] = rhiTex;
-                                    return gpuHandle;
-                                }
-                            }
-                        }
+                auto image = std::make_shared<DecodedImage>();
+                image->Mips.push_back({width, height, std::move(pixels)});
+                ImageSourceData source; source.SourceKey = "generated-material:" + std::to_string(FileSystem::GetSourceGeneration()) + ":" + path.lexically_normal().generic_string();
+                source.RequestKey = source.SourceKey; source.Revision = ImageContentRevision(image->Mips.front().Pixels); source.Image = image;
+                if (RHI::RHIDevice::Get().IsNativeReady()) {
+                    auto texture = ImageTextureCache::GetNative(source);
+                    auto token = texture && m_TextureRegistrar ? m_TextureRegistrar(*texture) : GuiTextureLease{};
+                    if (token.IsValid()) {
+                        const auto id = token.GetID(); m_GuiThumbnails[key] = std::move(token);
+                        m_RHIThumbnails[key] = std::move(texture); m_ThumbnailCache[key] = id; return id;
                     }
-                } else if (Window::HasActiveContext()) {
-                    GLuint texID = 0;
-                    glGenTextures(1, &texID);
-                    glBindTexture(GL_TEXTURE_2D, texID);
-                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-                    m_ThumbnailCache[key] = (uint64_t)texID;
-                    m_GeneratedTextures.push_back(texID);
-                    return (uint64_t)texID;
+                } else {
+                    TextureSpecification spec; spec.GenerateMipmaps = false; spec.WrapS = spec.WrapT = TextureWrap::ClampToEdge;
+                    auto texture = ImageTextureCache::GetGL(source, spec);
+                    if (texture) { const auto id = texture->GetRendererID(); m_LoadedTextures[key] = std::move(texture); m_ThumbnailCache[key] = id; return id; }
                 }
             }
             m_ThumbnailCache[key] = 0;
@@ -719,16 +626,13 @@ namespace Axle {
         glm::vec3 emission = glm::vec3(mat.EmissionColor) * mat.EmissionIntensity;
 
         int texW = 0, texH = 0, texChannels = 0;
-        stbi_uc* texPixels = nullptr;
-
+        const uint8_t* texPixels = nullptr;
+        ImageSourceData albedoImage;
         if (mat.UseAlbedoMap && !mat.AlbedoPath.empty()) {
-            auto resolvedTexPath = FileSystem::ResolveAssetPath(mat.AlbedoPath);
-            if (std::filesystem::exists(resolvedTexPath)) {
-                auto buf = FileSystem::ReadBinaryFile(resolvedTexPath);
-                if (!buf.empty()) {
-                    stbi_set_flip_vertically_on_load_thread(false);
-                    texPixels = stbi_load_from_memory(buf.data(), (int)buf.size(), &texW, &texH, &texChannels, 4);
-                }
+            albedoImage = LoadImageSource(mat.AlbedoPath, {});
+            if (albedoImage.Image && !albedoImage.Image->HDR) {
+                const auto& mip = albedoImage.Image->Mips.front(); texW = mip.Width; texH = mip.Height; texChannels = albedoImage.Image->SourceChannels;
+                texPixels = mip.Pixels.data();
             }
         }
 
@@ -856,9 +760,6 @@ namespace Axle {
             }
         }
 
-        if (texPixels) {
-            stbi_image_free(texPixels);
-        }
 
         return true;
     }

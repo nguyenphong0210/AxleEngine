@@ -23,6 +23,8 @@ namespace Axle {
 
     static std::filesystem::path s_AssetDirectory;
     static std::unique_ptr<Package> s_MountedPackage = nullptr;
+    static uint64_t s_SourceGeneration = 1;
+    uint64_t FileSystem::GetSourceGeneration() { return s_SourceGeneration; }
 
     static std::string PackageKey(const std::filesystem::path& path) {
         auto relative = path;
@@ -40,6 +42,7 @@ namespace Axle {
         auto pkg = std::make_unique<Package>();
         if (pkg->Open(packagePath)) {
             s_MountedPackage = std::move(pkg);
+            ++s_SourceGeneration;
             return true;
         }
         return false;
@@ -49,6 +52,7 @@ namespace Axle {
         if (s_MountedPackage) {
             s_MountedPackage->Close();
             s_MountedPackage.reset();
+            ++s_SourceGeneration;
         }
     }
 
@@ -61,6 +65,7 @@ namespace Axle {
     }
 
     void FileSystem::SetAssetDirectory(const std::filesystem::path& path) {
+        if (s_AssetDirectory != path) ++s_SourceGeneration;
         s_AssetDirectory = path;
     }
 

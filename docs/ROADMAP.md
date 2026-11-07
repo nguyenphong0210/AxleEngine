@@ -3,7 +3,7 @@ Latest user steering (2026-11-07): implement all P41-01..11, then perform one co
 # Architecture Optimization Roadmap
 
 Updated: **2026-11-07**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **OPT-04 assigned to Codex with separate-context Codex reviews and supplementary Gemini review; OPT-02/03 accepted**.
+Status: **OPT-04 implemented by Codex, final verification/review in progress; OPT-02/03 accepted**.
 
 ## Start here
 
@@ -14,13 +14,13 @@ Use the phase's detailed contract only when it becomes relevant.
 
 **Current assignment: Codex OPT-04, P41-01..P41-11.** The user reassigned
 implementation from Gemini to Codex on 2026-11-07; [current handoff](agents/handoffs/OPT_04_CODEX.md).
-A separate-context Codex reviewer checks P41-03, P41-06 and P41-11; significant
-fixes are rechecked before dependent implementation continues. Gemini supplies
-additional review. These are required future checkpoints, not completed reviews.
+One separate-context Codex reviewer checks the full phase after P41-11; significant
+fixes are rechecked before final acceptance. Intermediate P41-03/P41-06 review
+stops are superseded. Gemini feedback is supplementary and has not been received.
 The recommended model is GPT-6 Astra; the client model selection is user-controlled.
-P41-01 implementation is undergoing current-source verification; see the
-[execution record](reviews/OPT_04_CODEX_EXECUTION.md). Later packages and all
-three required checkpoint reviews remain open.
+P41-01..11 are implemented. Available full phase self-verification has passed; see the
+[execution record](reviews/OPT_04_CODEX_EXECUTION.md). API validation and the final
+separate-context review remain open.
 
 **Accepted prerequisite: OPT-02 and OPT-03, after review and repairs.**
 Codex independently reviewed Gemini's deliveries at `0eeb734`, found and corrected
@@ -207,14 +207,14 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 - [x] **P41-08:** Frame contexts, completion and allocator reuse (self-verified; final review pending).
 - [x] **P41-09:** One presentation owner and UI render bridge (self-verified; final review pending).
 - [x] **P41-10:** View targets and external GUI leases (self-verified; final review pending).
-- [ ] **P41-11:** Asset decoding, upload and shared GPU cache.
+- [x] **P41-11:** Asset decoding, upload and shared GPU cache (self-verified; final review pending).
 
 **Exit:** D3D12/Vulkan use the pinned NRI contract; GL is an explicit compatibility adapter. Creation failure, resize, recorded-but-unsubmitted work and shutdown have relevant current evidence; missing native checks remain NOT RUN.
 
 **Assignment:** Codex implementation with one consolidated separate-context Codex review after P41-11 and supplementary Gemini review; [current handoff](agents/handoffs/OPT_04_CODEX.md). Complete P41-01..11 and stop after the final review gate.
 
 **Evidence:** [Codex execution record](reviews/OPT_04_CODEX_EXECUTION.md).
-P41-01..10 are implemented with available Debug/Release self-verification; P41-11 is next. P41-07 API validation and final phase acceptance remain open.
+P41-01..11 are implemented. Available Debug/Release phase verification passed; P41-07 API validation and the consolidated final review remain open.
 
 ### OPT-05 - Unify rendering across Editor, previews and Runtime
 

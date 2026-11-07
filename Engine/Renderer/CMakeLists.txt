@@ -9,7 +9,7 @@ add_library(AxleRenderer STATIC
     src/Framebuffer.cpp
     src/ShadowMap.cpp
     src/Texture2D.cpp
-    src/stb_image.cpp
+    src/ImageTextureCache.cpp
     src/Skybox.cpp
     src/Material.cpp
     src/ShaderPropertyReflection.cpp

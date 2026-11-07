@@ -2,8 +2,8 @@
   "schema_version": 1,
   "current_task": {
     "id": "OPT-04-CODEX-IMPLEMENTATION",
-    "title": "Codex implements OPT-04 with separate-context review and supplementary Gemini review",
-    "state": "in_progress",
+    "title": "Codex OPT-04 implementation and consolidated review",
+    "state": "complete",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Codex in a separate context",
@@ -26,7 +26,7 @@
       "P41-11"
     ],
     "current_phase": "OPT-04",
-    "current_package": "P41-07",
+    "current_package": "P41-11",
     "completed_packages": [
       "P41-01",
       "P41-02",
@@ -40,8 +40,8 @@
       "P41-10",
       "P41-11"
     ],
-    "implementation_status": "Original P41-01..11 delivery/review complete; newly available API validation exposed API-01..05, repaired with focused Debug/Release checks; full API rerun pending",
-    "independent_review_status": "single_fresh_context_review_and_same_reviewer_correction_recheck_complete",
+    "implementation_status": "P41-01..11 implemented and corrected; full Debug/Release gates and actual API validation passed",
+    "independent_review_status": "single_separate_context_review_and_same_reviewer_correction_rechecks_complete",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
     "prerequisite_evidence": {
@@ -95,7 +95,7 @@
       "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
     ],
     "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
-    "next_action": "Complete actual D3D12/Vulkan API-validation reruns, broader affected gates and same-reviewer recheck of API-01..05. Keep pinned NRI clean; record explicit unsupported Vulkan multi-mip 3D shader views. Stop before OPT-05.",
+    "next_action": "Stop before OPT-05. Await explicit new scope; no push authorized.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
@@ -103,7 +103,7 @@
         "after": "P41-11",
         "before": "OPT-04 acceptance",
         "scope": "Complete P41-01..11 implementation and affected product callers",
-        "status": "source_findings_closed_api_validation_open"
+        "status": "complete_with_verified_corrections_and_native_api_gate"
       }
     ],
     "review_policy": "One final fresh-context Codex review of the full OPT-04 diff, source/callers and actual evidence, with significant corrections rechecked. Intermediate separate-context reviews are superseded by the latest user instruction. Preserve implementation/self-verification/review distinctions and missing native gates.",
@@ -118,10 +118,30 @@
         "https://learn.chatgpt.com/docs/models"
       ]
     },
-    "acceptance_status": "api_validation_in_progress_after_host_installation",
+    "acceptance_status": "accepted_for_released_OPT04_scope",
     "implementation_commit": "e03e03361d1474f5d3eacee29e03e1d69defa2f3",
     "correction_commit": "00eba99e9fb161d411b071076b408fe8e8b2425d",
-    "final_review_evidence": "docs/reviews/OPT_04_CODEX_EXECUTION.md; ignored final-review/targeted-results.json, reproduction-results.json and recheck-results.json"
+    "final_review_evidence": "docs/reviews/OPT_04_CODEX_EXECUTION.md; ignored final-review/targeted-results.json, reproduction-results.json, recheck-results.json and api-recheck/review-summary.json",
+    "api_correction_commits": [
+      "4daf9c813dfde1ea4fce86dd7e2366b1ac3b06ae",
+      "38cc7372c6782b1ee0a7585b82ba5a285daf2978"
+    ],
+    "graphics_api_validation": {
+      "status": "passed",
+      "physical_adapter": "NVIDIA GeForce RTX 3070",
+      "debug_cases": 35,
+      "release_cases": 35,
+      "api_nri_errors": 0,
+      "d3d12": "actual debug layer",
+      "vulkan": "actual core and synchronization layers",
+      "evidence": "build/agent-runs/OPT-04/api-validation/final2",
+      "advanced_gpu_assisted": "NOT RUN; not required by the applicable P41-07 gate"
+    },
+    "known_limitations": [
+      "Pinned NRI does not create valid Vulkan multi-mip 3D shader views; RHI explicitly rejects without destroying the prior generation.",
+      "Existing LNK4098 and documented validation warning classes remain visible."
+    ],
+    "supplementary_review_status": "No Gemini feedback received; supplementary review is not a required gate"
   },
   "last_read": {
     "Codex": "CG-20261106T090129914823Z-GEMINI-ff5ca6",
@@ -1458,6 +1478,17 @@
       "base_commit": "4daf9c8",
       "timestamp_utc": "2026-11-07T09:45:59.588322+00:00",
       "body": "API-01..06 corrections are committed as 4daf9c8. Focused state-policy and physical Step 65 now pass Debug/Release with actual API validation. Full rebuild after SDK installation selects FindVulkan SDK branch and exposes C1083 in Test_Milestone9/10: AxleUI exports AXLE_HAS_VULKAN but keeps SDK include paths private. After active builds stop, Codex will export Vulkan_INCLUDE_DIRS consistently with the existing fallback branch (Engine/UI/CMakeLists.txt), rebuild full targets and run api-validation/final2 gates. Same authorized final reviewer is read-only rechecking new corrections and isolated legacy D3D12 probes; no new fresh review or Gemini reply is claimed."
+    },
+    {
+      "id": "CG-20261107T095439191921Z-CODEX-dad9e4",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T094559588322Z-CODEX-f7adf4",
+      "base_commit": "38cc7372c6782b1ee0a7585b82ba5a285daf2978",
+      "timestamp_utc": "2026-11-07T09:54:39.191921+00:00",
+      "body": "OPT-04 / P41-01..11 is complete within the released scope. API fixes are 4daf9c8 (API-01..06) and 38cc737 (SDK include propagation, API-07). Codex verified full Debug/Release AxleAllTests/Editor/Runtime builds exit 0 (api-sdk-build-*.log); final2/phase.py passed 9/9 groups per config, including 35/35 actual physical D3D12/Vulkan API-validation cases, 50/50 CTest, full integration, jobs/ECS 16 passes plus 3 controls, and Editor/Runtime simulation. Four image mips and five primitive captures are GL/fallback byte-identical. The SAME authorized separate-context final reviewer independently passed 30 API cases plus 6 production-picker probes across Debug/Release, including forced legacy D3D12, with no new findings (final-review/api-recheck/review-summary.json). Parent inspected that evidence; it does not claim an independent repeat of the full product matrix. Actual debug/core/synchronization validation closes P41-07; advanced GPU-assisted validation was not run. Explicit pinned-NRI Vulkan multi-mip 3D shader-view rejection preserves the old generation; no vendor edits. Architecture 397/18 PASS, baseline tools 18/18 PASS, whitespace clean. Warnings and separate OPT-00 manual gap remain documented. Report: docs/reviews/OPT_04_CODEX_EXECUTION.md. Stop before OPT-05; local commits only, no push. No Gemini response is claimed."
     }
   ],
   "deferred_tasks": [

@@ -2,10 +2,12 @@ Latest user steering (2026-11-07): implement all P41-01..11, then perform one co
 
 # OPT-04 Codex execution record
 
-Current checkpoint: the user installed Windows Graphics Tools and Vulkan SDK
-1.4.363.1. Actual API validation is now available without reboot. Its first full
-run exposed additional defects; repairs and API-gate rechecks are in progress.
-Earlier NOT RUN entries below describe the pre-installation checkpoint.
+Current checkpoint: OPT-04 / P41-01..11 implementation, consolidated review and
+correction rechecks are complete. After the user installed Windows Graphics Tools
+and Vulkan SDK 1.4.363.1, actual D3D12 debug-layer and Vulkan core/synchronization
+validation passed on the physical GPU in Debug/Release, closing the P41-07 API
+gate without reboot. Earlier NOT RUN entries describe the pre-installation
+checkpoint. The explicit pinned-NRI 3D-view limitation is recorded below.
 
 Date: 2026-11-07. Starting clean HEAD: `977f68c42755f1cfc0042854dc06dc74fc8cebc8`.
 Scope: P41-01 through P41-11 only. No push or OPT-05 implementation.
@@ -26,14 +28,14 @@ advisory request failed because the reviewer account hit its usage limit.
   CMake cache; normal configuration populated the pinned build dependencies.
 - Generated scripts, logs and JSON results are under ignored
   `build/agent-runs/OPT-04/`.
-- Graphics API validation is **NOT RUN**: the host has no Vulkan Khronos
-  validation layer, and D3D12/DXGI debug prerequisites are unavailable. Vulkan
+- Before user installation, graphics API validation was **NOT RUN**: the host had
+  no Vulkan Khronos layer, and D3D12/DXGI debug prerequisites were unavailable. Vulkan
   layer enumeration was checked directly against the installed loader. An
   initial D3D12 debug request failed in `CreateDXGIFactory2` with `0x887A0001`.
   The Engine now rejects unavailable requested validation instead of accepting
   NRI's silent Vulkan layer filtering. Native operation tests separately enable
-  embedded NRI validation. These tests do not establish API-validation acceptance
-  for P41-07 or close any later gate requiring those layers.
+  embedded NRI validation. That earlier evidence did not establish API-validation
+  acceptance; the post-installation results at the end of this report close it.
 - Builds retain the existing `LNK4098` CRT-library conflict warning. No claim is
   made that this warning has been resolved by OPT-04.
 
@@ -598,14 +600,14 @@ helper, so an ambiguous native failure can keep pins without another allocation.
 After this final hardening, full Debug/Release builds, all five image-source modes
 and default integration passed again; CTest passed again at 50/50 in both configurations.
 
-## Remaining acceptance gate
+## Pre-installation acceptance checkpoint
 
-Implementation, the one consolidated fresh-context review, repairs and the same
-reviewer's correction recheck are complete. Actual graphics API validation is
-**NOT RUN** for the host-prerequisite reasons above; dependent acceptance remains
-open. Embedded NRI validation does not replace this gate. The pre-existing OPT-00
-manual/full-product gap remains separate. OPT-05 has not started and nothing has
-been pushed.
+At that checkpoint, implementation, the consolidated fresh-context review,
+repairs and the same reviewer's first correction recheck were complete. Actual
+graphics API validation was **NOT RUN** for the host-prerequisite reasons above,
+so dependent acceptance stayed open. The post-installation section below records
+the subsequent native verification and closure. The pre-existing OPT-00
+manual/full-product gap remains separate. OPT-05 has not started; nothing is pushed.
 
 ## Consolidated fresh-context review and repairs
 
@@ -657,10 +659,10 @@ probe cases plus 6/6 retirement modes**, all exit 0, on the correction commit.
 It explicitly closed OPT04-FR-01..03 with no additional findings from recheck.
 Exact independent commands/commit/logs: final-review/recheck-results.json. No
 second fresh-context reviewer or Gemini response is claimed. This closes the
-source findings while the actual graphics API-validation acceptance gate stays
-open.
+source findings at the pre-installation checkpoint, while the graphics API gate
+was still open.
 
-## API validation after host installation (in progress)
+## API validation after host installation
 
 User installation completed with RestartNeeded=False. D3D12 debug-interface and
 DXGI debug factory probes now succeed; Vulkan enumerates the Khronos layer and
@@ -704,5 +706,60 @@ configuration passed after repair (api-validation/fix1/<config>/results.json),
 including real color/depth/MSAA pixels, repeated frame buffers, bindless ownership,
 3D texture validation, picking IDs and native view frames. A full 35/35 API rerun
 passed per configuration before API-06 was found by default integration. The
-post-API-06 full rebuild/rerun is recorded separately under api-validation/final2;
-affected broader gates and same-reviewer correction recheck remain pending.
+post-API-06 full rebuild/rerun is recorded separately under api-validation/final2.
+The results and correction recheck below supersede those intermediate checkpoints.
+
+The SAME final reviewer subsequently inspected `c27eeb2..4daf9c8` and the SDK
+build correction `38cc737`, then independently passed 30 isolated API sweep cases
+and 6 production-picker probes across Debug/Release. No new actionable findings
+were reported. Its ignored device-source copy forces NRI's legacy D3D12 option
+for that branch only; production RHI/barrier/resource sources and pinned NRI stay
+unchanged. Logs prove actual API validation with enhanced barriers disabled, as
+well as enhanced D3D12 and Vulkan synchronization validation. Picking probes cover
+repeated/resized IDs, invalid coordinates and failed-submit stale-read rejection.
+Exact projects, commands and results: final-review/api-recheck/review-summary.json.
+This is the original reviewer's targeted correction recheck, not another fresh
+review or an independent repeat of the full product matrix.
+
+Warning 926 in the external-memory fixture comes from intentionally retaining two
+same-offset placed resources without concurrent GPU use; the reviewer confirmed
+no aliasing defect. The native logs also retain the vendor options22 capability
+query warning and minimal-shader unconsumed vertex attributes. API gate results
+mean zero API/NRI validation errors, not warning-free logs. GPU-assisted Vulkan
+validation and D3D12 GPU-based validation were not run; actual D3D12 debug-layer
+and Vulkan core/synchronization checks are the applicable P41-07 evidence.
+
+## Final post-installation verification and acceptance
+
+Correction commits are `4daf9c813dfde1ea4fce86dd7e2366b1ac3b06ae` (API-01..06)
+and `38cc7372c6782b1ee0a7585b82ba5a285daf2978` (API-07). The SAME reviewer's
+36/36 targeted cases passed with no new findings. The parent then completed:
+
+- Full Debug/Release builds of AxleAllTests, AxleEditor and AxleRuntime: exit 0.
+  Exact command wrapper: `python build/agent-runs/OPT-04/build.py <Config>
+  api-sdk-build AxleAllTests AxleEditor AxleRuntime`; api-sdk-build-*.log.
+- `python build/agent-runs/OPT-04/api-validation/final2/phase.py <Config>`:
+  all 9/9 groups passed in each configuration, exit 0. Each group records its
+  exact command/exit in final2/<config>/phase-results.json.
+- Actual API validation: **35/35 cases per configuration**, zero API/NRI errors.
+  Physical D3D12/Vulkan state, retirement, frames, presentation, resources,
+  identities, primitive/image pixels, view base/targets/epoch/errors/leases,
+  error recovery, foundation startup/window rollback and VFX are included.
+  Vulkan runtime confirms synchronization checks; no fallback or software adapter
+  counts as a native pass. Exact commands/logs: final2/<config>/results.json.
+- Full CTest: **50/50 per configuration**; full default integration: exit 0.
+  Jobs/ECS: 16 passes, 3 verified negative controls, zero unexpected failures.
+  Editor/Runtime simulation products passed at 30/60/144 rates through their
+  existing GL scene path; native rendering is separately covered above.
+- Explicit GL/fallback primitive and image modes passed. Four image mip levels
+  and five primitive captures are byte-identical between GL and fallback in each
+  configuration; final2/summarize.py and final2/summary.txt verify actual bytes.
+- Architecture check: PASS, 397 source files / 18 CMake files. Baseline tools:
+  18/18 PASS. Whitespace checks passed; pinned NRI stayed clean at the recorded
+  revision. Existing LNK4098 and the warning classes recorded above remain visible.
+
+The applicable P41-07 graphics API-validation gate and released OPT-04 acceptance
+are closed. Vulkan multi-mip 3D shader views remain explicitly unsupported with
+the pinned vendor; failed replacement preserves the prior generation. Advanced
+GPU-assisted validation was not part of this run. The separate OPT-00 manual
+acceptance gap is unchanged. Stop before OPT-05; no push was performed.

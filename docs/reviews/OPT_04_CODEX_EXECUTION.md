@@ -692,6 +692,11 @@ configuration and reproduced these issues in Debug/Release:
   CPU policy regressions cover both cases; Step 65 now explicitly requests NRI
   and available API validation. Policy and real Step 65 passed in Debug/Release
   (api-validation/read-scope2-results.json).
+- API-07: installing the SDK selected FindVulkan's SDK branch, which exported
+  AXLE_HAS_VULKAN without its header include path. Full Debug/Release rebuilds
+  failed in the existing Vulkan-native integration fixtures (C1083). AxleUI now
+  exports Vulkan_INCLUDE_DIRS consistently with its public capability definition
+  and its existing fallback-header branch. Loader linkage stays private.
 
 The windowed error fixture now requests actual API validation; the VFX fixture
 also explicitly requests and reports it. The eight previously failing cases per

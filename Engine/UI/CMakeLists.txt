@@ -103,6 +103,7 @@ if (Vulkan_FOUND)
         ${CMAKE_SOURCE_DIR}/ThirdParty/imgui/backends/imgui_impl_vulkan.cpp
     )
     target_link_libraries(AxleUI PRIVATE Vulkan::Vulkan)
+    target_include_directories(AxleUI PUBLIC ${Vulkan_INCLUDE_DIRS})
     target_compile_definitions(AxleUI PUBLIC AXLE_HAS_VULKAN=1)
 elseif (vulkan_headers_SOURCE_DIR OR EXISTS "${CMAKE_BINARY_DIR}/_deps/vulkan_headers-src/include")
     if (vulkan_headers_SOURCE_DIR)

@@ -13,10 +13,10 @@ Scope:
 - [x] **P41-15:** Asset and material previews
 - [x] **P41-16:** VFX preview
 - [x] **P41-17:** Assembly preview
-- [ ] **P41-18:** Thumbnail render jobs
-- [ ] **P41-19:** Standalone Runtime render integration
-- [ ] **P41-20:** Material/shader/color/capability contract
-- [ ] **P41-25:** Physics debug and overlays
+- [x] **P41-18:** Thumbnail render jobs
+- [x] **P41-19:** Standalone Runtime render integration
+- [x] **P41-20:** Material/shader/color/capability contract
+- [x] **P41-25:** Physics debug and overlays
 
 ---
 
@@ -377,3 +377,29 @@ Scope:
 - `python scripts/check_architecture.py --root .`: PASS (407 files / 18 CMake files)
 - `python scripts/test_baseline_tools.py`: 18/18 PASS
 - `git diff --check`: PASS
+
+---
+
+## Phase OPT-05 Final Verification & Delivery Summary
+
+All 10 packages of Phase OPT-05 have been implemented, self-verified in Debug and Release, and committed:
+
+| Package | Commit | Description | Verification Suites |
+|---|---|---|---|
+| **P41-12** | `48209c7` | RenderWorld & shared scene extraction | `RenderWorldExtractionUnit` |
+| **P41-13** | `2ca327e` | RenderService & modern render graph | `RenderServiceUnit` (5 test cases) |
+| **P41-14** | `a674041` | OpenGL compatibility behind RenderService | `RenderServiceUnit` (GL backend path) |
+| **P41-15** | `9f89ff2` | Asset/Material preview migration & leased textures | Panel builds, texture leasing verified |
+| **P41-16** | `d8c847f` | VFX preview panel migration to RenderService | Panel builds, particle view requests verified |
+| **P41-17** | `4543a0a` | Assembly preview migration to RenderService | Panel builds, multi-entity isolation verified |
+| **P41-18** | `7ae65a6` | Thumbnail render jobs via RenderService | `AssetThumbnailManager` async/leased jobs |
+| **P41-19** | `22ffd61` | Standalone Runtime integration & presentation | Zero-ImGui runtime boundary, headless swapchain |
+| **P41-20** | `3c2f22b` | Material/shader/color/capability contracts | `RenderContractsUnit` (layout, sRGB, tone mapping) |
+| **P41-25** | `5ce3aa0` | Physics debug & overlays via ViewRequest | `RenderServiceUnit` (debug lines, zero GL mesh) |
+
+### Global Verification Matrix
+- **Full CTest Suite:** `ctest --test-dir build -C Release --output-on-failure`: **50/50 tests passed (100%)**.
+- **Architecture Integrity:** `python scripts/check_architecture.py --root .`: **PASS** (407 source files, 18 CMake files).
+- **Baseline Tools:** `python scripts/test_baseline_tools.py`: **18/18 PASS**.
+- **Dedicated Rendering Unit Tests:** `AxleRenderUnitTests.exe` (Debug & Release): **5/5 suites passed** (`RenderContracts`, `RenderPolicy`, `RenderPrimitives`, `RenderWorld`, `RenderService`).
+- **Vendor Integrity:** Pinned NRI commit `6998e3fbbaed1b132f386a9d49743a2481003487` completely pristine.

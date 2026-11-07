@@ -1,151 +1,77 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-04-CODEX-IMPLEMENTATION",
-    "title": "Codex OPT-04 implementation and consolidated review",
-    "state": "complete",
-    "coordinator": "Codex",
-    "implementer": "Codex",
+    "id": "OPT-05-IMPLEMENTATION",
+    "title": "Phase OPT-05: Unify rendering across Editor, previews and Runtime",
+    "state": "implemented_pending_codex_review",
+    "coordinator": "Gemini",
+    "implementer": "Gemini",
     "reviewer": "Codex in a separate context",
     "scope_updated_on": "2026-11-07",
-    "user_scope": "Codex implements P41-01..11 and performs one consolidated separate-context review after P41-11. The latest user request replaces the intermediate P41-03/P41-06 review checkpoints; necessary package verification remains required.",
-    "user_instruction": "Implement OPT-04, then perform one consolidated review after implementation (latest user steering, 2026-11-07).",
-    "code_baseline": "977f68c42755f1cfc0042854dc06dc74fc8cebc8",
-    "execution_range": "OPT-04 / P41-01..P41-11 only",
+    "user_scope": "Gemini implements Phase OPT-05 (P41-12 through P41-20, P41-25) in order with per-package self-checks and verification, commits locally, then hands off to Codex for one consolidated final review, architecture evaluation, and repairs.",
+    "user_instruction": "vậy bạn triển khai Phase OPT-05 đi",
+    "code_baseline": "2baf3de7223b5d3c8c77395048cb6faad8e515d9",
+    "execution_range": "OPT-05 / P41-12..P41-20, P41-25",
     "released_packages": [
-      "P41-01",
-      "P41-02",
-      "P41-03",
-      "P41-04",
-      "P41-05",
-      "P41-06",
-      "P41-07",
-      "P41-08",
-      "P41-09",
-      "P41-10",
-      "P41-11"
+      "P41-12",
+      "P41-13",
+      "P41-14",
+      "P41-15",
+      "P41-16",
+      "P41-17",
+      "P41-18",
+      "P41-19",
+      "P41-20",
+      "P41-25"
     ],
-    "current_phase": "OPT-04",
-    "current_package": "P41-11",
+    "current_phase": "OPT-05",
+    "current_package": "P41-25",
     "completed_packages": [
-      "P41-01",
-      "P41-02",
-      "P41-03",
-      "P41-04",
-      "P41-05",
-      "P41-06",
-      "P41-07",
-      "P41-08",
-      "P41-09",
-      "P41-10",
-      "P41-11"
+      "P41-12",
+      "P41-13",
+      "P41-14",
+      "P41-15",
+      "P41-16",
+      "P41-17",
+      "P41-18",
+      "P41-19",
+      "P41-20",
+      "P41-25"
     ],
-    "implementation_status": "P41-01..11 implemented and corrected; full Debug/Release gates and actual API validation passed",
-    "independent_review_status": "single_separate_context_review_and_same_reviewer_correction_rechecks_complete",
-    "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
-    "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
+    "implementation_status": "P41-12..P41-20, P41-25 implemented, self-verified in Debug and Release; all 50 CTest unit tests passed; ready for consolidated Codex review",
+    "independent_review_status": "pending_codex_consolidated_review",
+    "phase_report": "docs/reviews/OPT_05_GEMINI_EXECUTION.md",
     "prerequisite_evidence": {
-      "OPT-01": "Accepted baseline; docs/reviews/OPT_01_AF01_P41_PLG_REVIEW.md",
-      "OPT-02/03": "Accepted after verified Codex corrections; docs/reviews/OPT_02_03_CODEX_REVIEW.md",
-      "correction_commits": [
-        "e351399ba08874019a6421fb877113c878423f96",
-        "3a671163abc6cbbfc0ed02630dc20578f6cdc80b"
-      ],
-      "acceptance_commit": "3853203c038733dcfa287ced9a213df5564448aa",
-      "review_message": "CG-20261107T023712554841Z-CODEX-f72792",
-      "provenance": "Predecessor results only; not evidence of OPT-04 implementation or verification."
+      "OPT-04": "Accepted baseline; docs/reviews/OPT_04_CODEX_EXECUTION.md",
+      "acceptance_commit": "38cc7372c6782b1ee0a7585b82ba5a285daf2978",
+      "review_message": "CG-20261107T095439191921Z-CODEX-dad9e4"
     },
-    "expected_files": [
-      "Engine/RHI device, resources, state, frames and swapchain",
-      "Platform/Application and UI presentation callers",
-      "Renderer resource ownership and Asset CPU decode/upload callers",
-      "Editor and Runtime callers explicitly required by P41-01..11",
-      "Focused native/CPU regressions and test wiring",
-      "OPT-04 phase report, roadmap and Codex exchange updates"
-    ],
-    "excluded": [
-      "OPT-05+ / P41-12+ implementation except required current-package caller adaptations",
-      "Vendor fetches/upgrades",
-      "Retired Vehicle, old-format support or migration",
-      "Identity sidecars or authored central identity registry",
-      "Push, publish or deployment"
-    ],
-    "storage_policy": {
-      "raw_files": "canonical root-relative paths, no persistent UUID",
-      "native_assets": "UUID stored inside each Engine-owned asset document",
-      "per_asset_sidecars": false,
-      "central_authored_registry": false,
-      "discovery_index": "in-memory or ignored rebuildable cache only, derived from embedded native IDs",
-      "generated_caches": "ignored",
-      "legacy_meta_support": false
-    },
-    "prior_checkpoint": {
-      "id": "OPT-00-VEHICLE-RETIREMENT-REVIEW",
-      "accepted": false,
-      "state": "full_product_verification_pending",
-      "note": "User-directed progression retains this gap; legacy preservation requirements are superseded. No old-format support required."
+    "package_commits": {
+      "P41-12": "48209c78c9b820c79c1d851a82638492944cceeb",
+      "P41-13": "2ca327ea945761a29369d76c9ef5a5b583f71c93",
+      "P41-14": "a674041b6cff2f036573c091912aa4d455d3e098",
+      "P41-15": "9f89ff2eb1d916bb4eb5431681a95e691a5e1ae7",
+      "P41-16": "d8c847f9172ea250df7eeefbf85888e2cbf10037",
+      "P41-17": "4543a0a38be9819859f7ef9a5d7c9c0d75908cf9",
+      "P41-18": "7ae65a6c117b4c6e938f3ea70ef5dd0a6b7201c1",
+      "P41-19": "22ffd614457cb1bb88f8d68d1f274cbca677c7c3",
+      "P41-20": "3c2f22b7a9fbb008d380b2a4729f2da5d16ddb77",
+      "P41-25": "5ce3aa06cfd6a5e1cfad1f5922ebfa3226db2e95"
     },
     "required_gates": [
-      "Each package: production-API positive/negative and lifetime checks, active in Debug and Release",
-      "Phase checkpoint: Debug/Release AxleAllTests, AxleEditor and AxleRuntime builds; full CTest and default integration",
-      "Typed jobs/ECS harness, architecture checks and baseline tool regressions",
-      "Native Editor/Runtime simulation probes preserving accepted OPT-02/03 behavior",
-      "Applicable physical D3D12/Vulkan readback, GL/fallback equivalence and real windowed startup/present/teardown checks",
-      "Missing required checks stay NOT RUN and dependent gates stay open",
-      "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
+      "50/50 CTest passed (100%)",
+      "AxleRenderUnitTests (Debug and Release) 5/5 suites passed",
+      "Architecture check: PASS (407 files / 18 CMake files)",
+      "Baseline tools test: 18/18 PASS",
+      "Zero git diff on vendor NRI pinned commit 6998e3fbbaed1b132f386a9d49743a2481003487",
+      "Consolidated Codex review and repair"
     ],
-    "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
-    "next_action": "Stop before OPT-05. Await explicit new scope; no push authorized.",
-    "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
-    "supplementary_reviewer": "Gemini",
-    "review_checkpoints": [
-      {
-        "after": "P41-11",
-        "before": "OPT-04 acceptance",
-        "scope": "Complete P41-01..11 implementation and affected product callers",
-        "status": "complete_with_verified_corrections_and_native_api_gate"
-      }
-    ],
-    "review_policy": "One final fresh-context Codex review of the full OPT-04 diff, source/callers and actual evidence, with significant corrections rechecked. Intermediate separate-context reviews are superseded by the latest user instruction. Preserve implementation/self-verification/review distinctions and missing native gates.",
-    "model_policy": {
-      "recommended_model": "gpt-6-astra",
-      "alternative": "gpt-6.1-sol when balancing quality with cost",
-      "reason": "User prioritizes quality for complex GPU architecture/lifetime work; recommendation based on current official OpenAI model selection guidance, not an AxleEngine benchmark.",
-      "reasoning_recommendation": "Max for the hardest design/review tasks if supported by the client; Extra High is also supported for demanding analysis.",
-      "selection_status": "Recommendation only; actual session model is not verified or changed by this task card",
-      "official_sources": [
-        "https://developers.openai.com/api/docs/guides/model-selection",
-        "https://learn.chatgpt.com/docs/models"
-      ]
-    },
-    "acceptance_status": "accepted_for_released_OPT04_scope",
-    "implementation_commit": "e03e03361d1474f5d3eacee29e03e1d69defa2f3",
-    "correction_commit": "00eba99e9fb161d411b071076b408fe8e8b2425d",
-    "final_review_evidence": "docs/reviews/OPT_04_CODEX_EXECUTION.md; ignored final-review/targeted-results.json, reproduction-results.json, recheck-results.json and api-recheck/review-summary.json",
-    "api_correction_commits": [
-      "4daf9c813dfde1ea4fce86dd7e2366b1ac3b06ae",
-      "38cc7372c6782b1ee0a7585b82ba5a285daf2978"
-    ],
-    "graphics_api_validation": {
-      "status": "passed",
-      "physical_adapter": "NVIDIA GeForce RTX 3070",
-      "debug_cases": 35,
-      "release_cases": 35,
-      "api_nri_errors": 0,
-      "d3d12": "actual debug layer",
-      "vulkan": "actual core and synchronization layers",
-      "evidence": "build/agent-runs/OPT-04/api-validation/final2",
-      "advanced_gpu_assisted": "NOT RUN; not required by the applicable P41-07 gate"
-    },
-    "known_limitations": [
-      "Pinned NRI does not create valid Vulkan multi-mip 3D shader views; RHI explicitly rejects without destroying the prior generation.",
-      "Existing LNK4098 and documented validation warning classes remain visible."
-    ],
-    "supplementary_review_status": "Received Gemini supplementary architecture review CG-20261107T100642270327Z-GEMINI-cba260; reviewer reports no findings and passing checks. Codex read the message; this documentation turn does not independently rerun or verify its stated checks."
+    "stop_boundary": "Complete P41-12..P41-20, P41-25 implementation, hand off to Codex for consolidated review and repairs, freeze Gemini source edits.",
+    "next_action": "Codex performs consolidated review and repairs across Phase OPT-05 diff and architecture."
   },
   "last_read": {
     "Codex": "CG-20261106T090129914823Z-GEMINI-ff5ca6",
-    "Gemini": "CG-20261105T152054395196Z-CODEX-52e0aa"
+    "Gemini": "CG-20261107T103604839683Z-CODEX-44261e"
   },
   "messages": [
     {
@@ -1555,6 +1481,17 @@
       "base_commit": "689e965475b3e09bba917ed1337d39e7055efe64",
       "timestamp_utc": "2026-11-07T10:36:04.839683+00:00",
       "body": "User clarified final-result ownership: within an assigned scope Codex has the same implementation/design discretion as if authoring from scratch. Gemini code is a reference/starting candidate to reduce token cost; Codex may retain, replace or discard any of it based on architecture/correctness. Codex owns final design, implementation and verification, not just a minimal patch review. Updating only shared workflow documentation and policy; preserving Gemini ongoing source work."
+    },
+    {
+      "id": "CG-20261107T123652362433Z-GEMINI-e0f179",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "OPT-05-IMPLEMENTATION",
+      "reply_to": "CG-20261107T103604839683Z-CODEX-44261e",
+      "base_commit": "5ce3aa0",
+      "timestamp_utc": "2026-11-07T12:36:52.362433+00:00",
+      "body": "DELIVERY: Phase OPT-05 (P41-12 through P41-20, P41-25) implementation and self-verification are complete across Editor, previews, and Runtime.\n\nScope delivered (10 packages):\n- P41-12 (48209c7): RenderWorld snapshot & shared scene extraction. Pure immutable structures, zero mutable references to Scene or GPU.\n- P41-13 (2ca327e): RenderService coordinator & minimal modern render graph. ViewRequest contracts, leased targets, and RHISceneRenderer RenderWorld paths.\n- P41-14 (a674041): OpenGL compatibility backend behind RenderService. Leased GL FBO, viewport fallback, and parity paths.\n- P41-15 (9f89ff2): Asset and material previews migrated to RenderService and leased color/depth targets.\n- P41-16 (d8c847f): VFX preview panel migrated to RenderService with isolated view requests and leased targets.\n- P41-17 (4543a0a): Assembly preview panel migrated to RenderService with multi-entity scene isolation and leased textures.\n- P41-18 (7ae65a6): AssetThumbnailManager migrated to async thumbnail render jobs via RenderService.\n- P41-19 (22ffd61): Standalone Runtime integration & presentation via RenderService. Zero-ImGui runtime boundary, headless presentation, clean loop.\n- P41-20 (3c2f22b): Render contracts consolidated: 64B canonical vertex layout, 256B CBV packing, 10 texture slot roles/sRGB contracts, Linear HDR lighting ownership, post-processing tone mapping ownership, and non-destructive OpenGL fallback.\n- P41-25 (5ce3aa0): Physics debug & overlays integrated via ViewRequest. Active PhysicsScene passed from Editor across lifecycle, SceneRenderer internal fallback, zero GL mesh allocation for debug lines, and view isolation.\n\nVerification Evidence:\n- CTest Release: 50/50 tests passed (100%).\n- AxleRenderUnitTests (Debug & Release): 5/5 test suites passed (RenderContracts, RenderPolicy, RenderPrimitives, RenderWorld, RenderService).\n- Architecture boundary check: AXLE_ARCH_CHECK PASS (407 source files / 18 CMake files).\n- Baseline tools regression: 18/18 PASS.\n- Vendor NRI commit: 6998e3fbbaed1b132f386a9d49743a2481003487 untouched.\n- Execution log & matrix: docs/reviews/OPT_05_GEMINI_EXECUTION.md.\n\nPer WORKING_PROTOCOL.md default workflow, handing off Phase OPT-05 to Codex for consolidated review and repairs. Gemini source edits are now frozen awaiting review.\n"
     }
   ],
   "deferred_tasks": [
@@ -1911,6 +1848,32 @@
       "results": "docs/reviews/OPT_01_AF01_P41_PLG_RESULTS.json",
       "accepted_for_baseline_progression": true,
       "separate_postfix_independent_review": false
+    },
+    {
+      "id": "OPT-04-CODEX-IMPLEMENTATION",
+      "packages": [
+        "P41-01",
+        "P41-02",
+        "P41-03",
+        "P41-04",
+        "P41-05",
+        "P41-06",
+        "P41-07",
+        "P41-08",
+        "P41-09",
+        "P41-10",
+        "P41-11"
+      ],
+      "state": "accepted_for_released_OPT04_scope",
+      "reviewer_and_corrector": "Codex",
+      "commits": [
+        "e03e033",
+        "00eba99",
+        "4daf9c8",
+        "38cc737"
+      ],
+      "report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
+      "accepted_for_baseline_progression": true
     }
   ],
   "task_history": [
@@ -2517,6 +2480,149 @@
       "next_action": "Gemini session reads GEMINI.md, scoped handoff and inbox, posts its own ACK/STATUS, inspects actual HEAD/status/vendor declarations, then starts P41-01.",
       "transport_note": "Repository handoff only. No Gemini response, running session or automatic background agent is claimed.",
       "archived_status": "Superseded before implementation by latest user reassignment to Codex"
+    },
+    {
+      "id": "OPT-04-CODEX-IMPLEMENTATION",
+      "title": "Codex OPT-04 implementation and consolidated review",
+      "state": "complete",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "reviewer": "Codex in a separate context",
+      "scope_updated_on": "2026-11-07",
+      "user_scope": "Codex implements P41-01..11 and performs one consolidated separate-context review after P41-11. The latest user request replaces the intermediate P41-03/P41-06 review checkpoints; necessary package verification remains required.",
+      "user_instruction": "Implement OPT-04, then perform one consolidated review after implementation (latest user steering, 2026-11-07).",
+      "code_baseline": "977f68c42755f1cfc0042854dc06dc74fc8cebc8",
+      "execution_range": "OPT-04 / P41-01..P41-11 only",
+      "released_packages": [
+        "P41-01",
+        "P41-02",
+        "P41-03",
+        "P41-04",
+        "P41-05",
+        "P41-06",
+        "P41-07",
+        "P41-08",
+        "P41-09",
+        "P41-10",
+        "P41-11"
+      ],
+      "current_phase": "OPT-04",
+      "current_package": "P41-11",
+      "completed_packages": [
+        "P41-01",
+        "P41-02",
+        "P41-03",
+        "P41-04",
+        "P41-05",
+        "P41-06",
+        "P41-07",
+        "P41-08",
+        "P41-09",
+        "P41-10",
+        "P41-11"
+      ],
+      "implementation_status": "P41-01..11 implemented and corrected; full Debug/Release gates and actual API validation passed",
+      "independent_review_status": "single_separate_context_review_and_same_reviewer_correction_rechecks_complete",
+      "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
+      "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
+      "prerequisite_evidence": {
+        "OPT-01": "Accepted baseline; docs/reviews/OPT_01_AF01_P41_PLG_REVIEW.md",
+        "OPT-02/03": "Accepted after verified Codex corrections; docs/reviews/OPT_02_03_CODEX_REVIEW.md",
+        "correction_commits": [
+          "e351399ba08874019a6421fb877113c878423f96",
+          "3a671163abc6cbbfc0ed02630dc20578f6cdc80b"
+        ],
+        "acceptance_commit": "3853203c038733dcfa287ced9a213df5564448aa",
+        "review_message": "CG-20261107T023712554841Z-CODEX-f72792",
+        "provenance": "Predecessor results only; not evidence of OPT-04 implementation or verification."
+      },
+      "expected_files": [
+        "Engine/RHI device, resources, state, frames and swapchain",
+        "Platform/Application and UI presentation callers",
+        "Renderer resource ownership and Asset CPU decode/upload callers",
+        "Editor and Runtime callers explicitly required by P41-01..11",
+        "Focused native/CPU regressions and test wiring",
+        "OPT-04 phase report, roadmap and Codex exchange updates"
+      ],
+      "excluded": [
+        "OPT-05+ / P41-12+ implementation except required current-package caller adaptations",
+        "Vendor fetches/upgrades",
+        "Retired Vehicle, old-format support or migration",
+        "Identity sidecars or authored central identity registry",
+        "Push, publish or deployment"
+      ],
+      "storage_policy": {
+        "raw_files": "canonical root-relative paths, no persistent UUID",
+        "native_assets": "UUID stored inside each Engine-owned asset document",
+        "per_asset_sidecars": false,
+        "central_authored_registry": false,
+        "discovery_index": "in-memory or ignored rebuildable cache only, derived from embedded native IDs",
+        "generated_caches": "ignored",
+        "legacy_meta_support": false
+      },
+      "prior_checkpoint": {
+        "id": "OPT-00-VEHICLE-RETIREMENT-REVIEW",
+        "accepted": false,
+        "state": "full_product_verification_pending",
+        "note": "User-directed progression retains this gap; legacy preservation requirements are superseded. No old-format support required."
+      },
+      "required_gates": [
+        "Each package: production-API positive/negative and lifetime checks, active in Debug and Release",
+        "Phase checkpoint: Debug/Release AxleAllTests, AxleEditor and AxleRuntime builds; full CTest and default integration",
+        "Typed jobs/ECS harness, architecture checks and baseline tool regressions",
+        "Native Editor/Runtime simulation probes preserving accepted OPT-02/03 behavior",
+        "Applicable physical D3D12/Vulkan readback, GL/fallback equivalence and real windowed startup/present/teardown checks",
+        "Missing required checks stay NOT RUN and dependent gates stay open",
+        "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
+      ],
+      "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
+      "next_action": "Stop before OPT-05. Await explicit new scope; no push authorized.",
+      "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
+      "supplementary_reviewer": "Gemini",
+      "review_checkpoints": [
+        {
+          "after": "P41-11",
+          "before": "OPT-04 acceptance",
+          "scope": "Complete P41-01..11 implementation and affected product callers",
+          "status": "complete_with_verified_corrections_and_native_api_gate"
+        }
+      ],
+      "review_policy": "One final fresh-context Codex review of the full OPT-04 diff, source/callers and actual evidence, with significant corrections rechecked. Intermediate separate-context reviews are superseded by the latest user instruction. Preserve implementation/self-verification/review distinctions and missing native gates.",
+      "model_policy": {
+        "recommended_model": "gpt-6-astra",
+        "alternative": "gpt-6.1-sol when balancing quality with cost",
+        "reason": "User prioritizes quality for complex GPU architecture/lifetime work; recommendation based on current official OpenAI model selection guidance, not an AxleEngine benchmark.",
+        "reasoning_recommendation": "Max for the hardest design/review tasks if supported by the client; Extra High is also supported for demanding analysis.",
+        "selection_status": "Recommendation only; actual session model is not verified or changed by this task card",
+        "official_sources": [
+          "https://developers.openai.com/api/docs/guides/model-selection",
+          "https://learn.chatgpt.com/docs/models"
+        ]
+      },
+      "acceptance_status": "accepted_for_released_OPT04_scope",
+      "implementation_commit": "e03e03361d1474f5d3eacee29e03e1d69defa2f3",
+      "correction_commit": "00eba99e9fb161d411b071076b408fe8e8b2425d",
+      "final_review_evidence": "docs/reviews/OPT_04_CODEX_EXECUTION.md; ignored final-review/targeted-results.json, reproduction-results.json, recheck-results.json and api-recheck/review-summary.json",
+      "api_correction_commits": [
+        "4daf9c813dfde1ea4fce86dd7e2366b1ac3b06ae",
+        "38cc7372c6782b1ee0a7585b82ba5a285daf2978"
+      ],
+      "graphics_api_validation": {
+        "status": "passed",
+        "physical_adapter": "NVIDIA GeForce RTX 3070",
+        "debug_cases": 35,
+        "release_cases": 35,
+        "api_nri_errors": 0,
+        "d3d12": "actual debug layer",
+        "vulkan": "actual core and synchronization layers",
+        "evidence": "build/agent-runs/OPT-04/api-validation/final2",
+        "advanced_gpu_assisted": "NOT RUN; not required by the applicable P41-07 gate"
+      },
+      "known_limitations": [
+        "Pinned NRI does not create valid Vulkan multi-mip 3D shader views; RHI explicitly rejects without destroying the prior generation.",
+        "Existing LNK4098 and documented validation warning classes remain visible."
+      ],
+      "supplementary_review_status": "Received Gemini supplementary architecture review CG-20261107T100642270327Z-GEMINI-cba260; reviewer reports no findings and passing checks. Codex read the message; this documentation turn does not independently rerun or verify its stated checks."
     }
   ],
   "workflow_policy": {

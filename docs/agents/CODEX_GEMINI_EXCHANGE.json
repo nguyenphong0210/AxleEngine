@@ -26,7 +26,7 @@
       "P41-11"
     ],
     "current_phase": "OPT-04",
-    "current_package": "P41-10",
+    "current_package": "P41-11",
     "completed_packages": [
       "P41-01",
       "P41-02",
@@ -36,9 +36,10 @@
       "P41-06",
       "P41-07",
       "P41-08",
-      "P41-09"
+      "P41-09",
+      "P41-10"
     ],
-    "implementation_status": "P41-01..09 implemented with available Debug/Release self-verification; API-validation acceptance and final review remain open",
+    "implementation_status": "P41-01..10 implemented with available Debug/Release self-verification; API-validation acceptance and final review remain open",
     "independent_review_status": "pending_single_final_separate_context_review",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
@@ -93,7 +94,7 @@
       "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
     ],
     "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
-    "next_action": "Implement/verify P41-10 complete per-view targets/external ownership, then P41-11 shared image boundary/cache and one final separate-context review.",
+    "next_action": "Implement/verify P41-11 CPU image decoding/shared GPU upload cache, full phase verification, then one final separate-context review and corrections.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
@@ -1342,6 +1343,17 @@
       "base_commit": "4028e7d",
       "timestamp_utc": "2026-11-07T06:43:51.385239+00:00",
       "body": "P41-09 implemented/self-verified on 4028e7d. Application render composition owns the shared NRI surface/swapchain/frame slots; ImGui native backends record only, with both competing UI window loops retired. Vulkan dynamic-rendering UI passes actual red pixels after UI-owner destruction before submit. Final Debug/Release six-target builds passed; 29 cases each cover real no-ImGui and UI-only window presentation, actual minimize/restore, VSync/resize, acquire/present rebuild, rejection/abandon, lifetime/errors/VFX, and strict modern/GL/fallback/rollback Editor startup. Zero NRI errors enforced through teardown. Report: docs/reviews/OPT_04_CODEX_EXECUTION.md. Next sole-writer scope P41-10: RHI per-view target sets and texture-generation snapshot support; scene auxiliary target ownership; UI viewport and required Editor/preview callers; complete-set/GUI/external/multiple-view tests. API validation remains NOT RUN and final review remains after P41-11."
+    },
+    {
+      "id": "CG-20261107T070152524532Z-CODEX-124873",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T064351385239Z-CODEX-5ea0bf",
+      "base_commit": "dbde567",
+      "timestamp_utc": "2026-11-07T07:01:52.524532+00:00",
+      "body": "P41-10 implemented/self-verified on dbde567. Complete per-view primary/MSAA/HDR/FXAA/copy/history generations publish atomically with GUI binding. External views retain exact texture-generation snapshots independently of producer wrappers. Editor/asset/VFX previews pass explicit owners; renderer last-active ownership is weak. Native tests verify all slots, late allocation failure, queued close/rapid replacement, external destruction and two differently sized HDR/MSAA views through one renderer with unchanged physical pixels. The physics debug layout now declares explicit shader stages after the real validation fixture exposed its lazy mask. Four final targets built Debug/Release; 26 cases each passed with zero NRI errors. Report: docs/reviews/OPT_04_CODEX_EXECUTION.md. Next sole-writer scope P41-11: CPU image boundary, image source resolution, shared render-owner GPU cache/upload, material/UI/GL callers and focused raw/descriptor/color/role/reload/VFS/epoch tests. Full phase gates and one final review follow; API validation remains NOT RUN."
     }
   ],
   "deferred_tasks": [

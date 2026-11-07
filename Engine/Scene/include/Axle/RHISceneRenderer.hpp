@@ -1,4 +1,5 @@
 #pragma once
+#include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/Types.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/SceneRenderer.hpp>
@@ -81,7 +82,8 @@ namespace Axle {
                          RHI::RHITexture* colorTarget,
                          RHI::RHITexture* depthTarget = nullptr,
                          const SceneRenderSettings& settings = SceneRenderSettings{},
-                         PhysicsScene* physicsScene = nullptr);
+                         PhysicsScene* physicsScene = nullptr,
+                         std::shared_ptr<RHI::RHIViewTargets> viewTargets = {});
 
         // Render entire 3D scene into specific render targets (Headless tests / custom FBO)
         void RenderScene(const std::shared_ptr<Scene>& scene,
@@ -92,7 +94,8 @@ namespace Axle {
                          nri::Descriptor* depthDSV,
                          uint32_t width, uint32_t height,
                          const SceneRenderSettings& settings = SceneRenderSettings{},
-                         PhysicsScene* physicsScene = nullptr);
+                         PhysicsScene* physicsScene = nullptr,
+                         std::shared_ptr<RHI::RHIViewTargets> viewTargets = {});
 
         // Performance & Telemetry metrics
         uint32_t GetDrawCallCount() const { return m_LastDrawCallCount; }
@@ -164,7 +167,7 @@ namespace Axle {
         nri::Pipeline* GetOrCreateToneMappingPipeline(nri::Format colorFormat);
         RHI::RHIPipelineLayout& GetToneMappingPipelineLayout() { return m_ToneMappingPipelineLayout; }
         RHI::RHIBuffer& GetToneMappingConstantBuffer() { return m_ToneMappingConstantBuffer; }
-        RHI::RHITexture* GetIntermediateHDRTarget() const { return m_IntermediateHDRTarget.get(); }
+        RHI::RHITexture* GetIntermediateHDRTarget() const { return GetActiveTarget(RHI::RHIViewTarget::HDR); }
 
         // Fast Approximate Anti-Aliasing (FXAA 3.11 Quality) Post-Processing Pass
         void RenderFXAA(RHI::RHICommandBuffer& cmd,
@@ -192,9 +195,9 @@ namespace Axle {
         RHI::RHIBuffer& GetFXAAConstantBuffer() { return m_FXAAConstantBuffer; }
 
         // Hardware MSAA & Intermediate AA targets
-        RHI::RHITexture* GetMSAAColorTarget() const { return m_MSAAColorTarget.get(); }
-        RHI::RHITexture* GetMSAADepthTarget() const { return m_MSAADepthTarget.get(); }
-        RHI::RHITexture* GetIntermediateFXAATarget() const { return m_IntermediateFXAATarget.get(); }
+        RHI::RHITexture* GetMSAAColorTarget() const { return GetActiveTarget(RHI::RHIViewTarget::MSAAColor); }
+        RHI::RHITexture* GetMSAADepthTarget() const { return GetActiveTarget(RHI::RHIViewTarget::MSAADepth); }
+        RHI::RHITexture* GetIntermediateFXAATarget() const { return GetActiveTarget(RHI::RHIViewTarget::FXAA); }
         uint8_t GetCurrentMSAASamples() const { return m_CurrentMSAASamples; }
 
         // GPU Instanced Particle VFX Renderer
@@ -294,9 +297,9 @@ namespace Axle {
             bool depthWrite);
 
         MaterialTextureCache m_MaterialTextures;
-        std::unique_ptr<RHI::RHITexture> m_OpaqueSceneColor;
-        std::unique_ptr<RHI::RHITexture> m_OpaqueSceneDepth;
-        std::unique_ptr<RHI::RHITexture> m_ParticleSceneDepth;
+        RHI::RHITexture* m_OpaqueSceneColor = nullptr;
+        RHI::RHITexture* m_OpaqueSceneDepth = nullptr;
+        RHI::RHITexture* m_ParticleSceneDepth = nullptr;
 
 
         std::shared_ptr<RHI::RHITexture> m_IrradianceMap;
@@ -342,13 +345,18 @@ namespace Axle {
         nri::DescriptorSet* m_FXAADescriptorSet = nullptr;
 
         // Intermediate Floating-point HDR Target for 2-pass Scene -> ToneMap execution
-        std::unique_ptr<RHI::RHITexture> m_IntermediateHDRTarget;
-        std::unique_ptr<RHI::RHITexture> m_IntermediateHDRDepthTarget;
+        RHI::RHITexture* m_IntermediateHDRTarget = nullptr;
+        std::weak_ptr<RHI::RHIViewTargets> m_ActiveViewTargets;
+        std::shared_ptr<RHI::RHIViewTargets> m_ImplicitViewTargets;
+        RHI::RHIResourceHandle m_ImplicitViewColor;
+        RHI::RHITexture* GetActiveTarget(RHI::RHIViewTarget slot) const {
+            auto targets = m_ActiveViewTargets.lock(); return targets ? targets->Get(slot) : nullptr;
+        }
 
         // Intermediate FXAA Target and Hardware MSAA Targets
-        std::unique_ptr<RHI::RHITexture> m_IntermediateFXAATarget;
-        std::unique_ptr<RHI::RHITexture> m_MSAAColorTarget;
-        std::unique_ptr<RHI::RHITexture> m_MSAADepthTarget;
+        RHI::RHITexture* m_IntermediateFXAATarget = nullptr;
+        RHI::RHITexture* m_MSAAColorTarget = nullptr;
+        RHI::RHITexture* m_MSAADepthTarget = nullptr;
         uint8_t m_CurrentMSAASamples = 1;
 
         std::unique_ptr<RHIParticleRenderer> m_ParticleRenderer;

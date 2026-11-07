@@ -1,10 +1,12 @@
 #pragma once
 #include <Axle/Types.hpp>
 #include <Axle/RHI/RHITexture.hpp>
+#include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
+#include <optional>
 
 namespace Axle {
 
@@ -15,6 +17,8 @@ namespace Axle {
         bool EnableDepth = true;
         RHI::RHITextureFormat DepthFormat = RHI::RHITextureFormat::D32_FLOAT;
         std::string DebugName = "EditorViewport";
+        uint8_t MSAASamples = 1, HistoryCount = 0;
+        bool IntermediateHDR = false, FXAA = false;
     };
 
     class RHIViewportDescriptor {
@@ -42,6 +46,7 @@ namespace Axle {
         bool SetHDR(bool enableHDR);
         bool SetColorFormat(RHI::RHITextureFormat newFormat);
         bool SetDepthFormat(RHI::RHITextureFormat depthFormat);
+        bool SetRenderOptions(uint8_t samples, bool hdrIntermediate, bool fxaa, std::optional<uint8_t> historyCount = {});
 
         RHI::RHITextureFormat GetColorFormat() const { return m_Desc.ColorFormat; }
         RHI::RHITextureFormat GetDepthFormat() const { return m_Desc.DepthFormat; }
@@ -60,8 +65,9 @@ namespace Axle {
         uint32_t GetHeight() const { return m_Desc.Height; }
         float GetAspectRatio() const { return m_Desc.Height > 0 ? static_cast<float>(m_Desc.Width) / static_cast<float>(m_Desc.Height) : 1.0f; }
 
-        RHI::RHITexture* GetColorTexture() const { return m_ColorTexture; }
-        RHI::RHITexture* GetDepthTexture() const { return m_DepthTexture.get(); }
+        RHI::RHITexture* GetColorTexture() const { return m_Targets ? m_Targets->Get(RHI::RHIViewTarget::Color) : nullptr; }
+        RHI::RHITexture* GetDepthTexture() const { return m_Targets ? m_Targets->Get(RHI::RHIViewTarget::Depth) : nullptr; }
+        std::shared_ptr<RHI::RHIViewTargets> GetTargets() const { return m_Targets; }
         const RHIViewportDesc& GetDesc() const { return m_Desc; }
 
         // Returns backend-specific UV coordinates for ImGui::Image
@@ -81,10 +87,7 @@ namespace Axle {
         GuiTextureRegistrar m_Registrar;
         RHIViewportDesc m_Desc;
 
-        std::unique_ptr<RHI::RHITexture> m_OwnedColorTexture;
-        std::unique_ptr<RHI::RHITexture> m_DepthTexture;
-
-        RHI::RHITexture* m_ColorTexture = nullptr;
+        std::shared_ptr<RHI::RHIViewTargets> m_Targets;
         bool m_OwnsColorTexture = true;
 
         GuiTextureLease m_GuiTexture;

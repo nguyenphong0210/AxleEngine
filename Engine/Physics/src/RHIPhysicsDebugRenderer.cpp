@@ -156,13 +156,13 @@ namespace Axle {
         nri::RootDescriptorDesc rootDesc = {};
         rootDesc.registerIndex = 0;
         rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
-        rootDesc.shaderStages = nri::StageBits::ALL;
+        rootDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
         layoutDesc.rootDescriptors = &rootDesc;
         layoutDesc.rootDescriptorNum = 1;
-        layoutDesc.shaderStages = nri::StageBits::ALL;
+        layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_PipelineLayout.Init(layoutDesc);
     }

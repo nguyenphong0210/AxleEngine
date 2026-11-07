@@ -206,7 +206,7 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 - [x] **P41-07:** Resource state tracking and declared usage (implemented/self-verified; API validation and final review pending).
 - [x] **P41-08:** Frame contexts, completion and allocator reuse (self-verified; final review pending).
 - [x] **P41-09:** One presentation owner and UI render bridge (self-verified; final review pending).
-- [ ] **P41-10:** View targets and external GUI leases.
+- [x] **P41-10:** View targets and external GUI leases (self-verified; final review pending).
 - [ ] **P41-11:** Asset decoding, upload and shared GPU cache.
 
 **Exit:** D3D12/Vulkan use the pinned NRI contract; GL is an explicit compatibility adapter. Creation failure, resize, recorded-but-unsubmitted work and shutdown have relevant current evidence; missing native checks remain NOT RUN.
@@ -214,7 +214,7 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 **Assignment:** Codex implementation with one consolidated separate-context Codex review after P41-11 and supplementary Gemini review; [current handoff](agents/handoffs/OPT_04_CODEX.md). Complete P41-01..11 and stop after the final review gate.
 
 **Evidence:** [Codex execution record](reviews/OPT_04_CODEX_EXECUTION.md).
-P41-01..09 are implemented with available Debug/Release self-verification; P41-10 is next. P41-07 API validation and final phase acceptance remain open.
+P41-01..10 are implemented with available Debug/Release self-verification; P41-11 is next. P41-07 API validation and final phase acceptance remain open.
 
 ### OPT-05 - Unify rendering across Editor, previews and Runtime
 

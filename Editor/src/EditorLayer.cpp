@@ -1640,10 +1640,11 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         }
     } else {
         if (m_RHISceneRenderer && m_RHIViewport && m_RHIViewport->IsValid()) {
+            if (!m_RHIViewport->SetRenderOptions(renderSettings.MSAASamples, renderSettings.EnableToneMapping, renderSettings.EnableFXAA)) return;
             m_RHISceneRenderer->RenderScene(m_Scene, activeCamera,
                                             m_RHIViewport->GetColorTexture(),
                                             m_RHIViewport->GetDepthTexture(),
-                                            renderSettings);
+                                            renderSettings, nullptr, m_RHIViewport->GetTargets());
         }
     }
 }

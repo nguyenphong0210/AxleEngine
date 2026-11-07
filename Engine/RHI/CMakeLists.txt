@@ -13,6 +13,7 @@ add_library(AxleRHI STATIC
     src/RHIBuffer.cpp
     src/RHIStreamer.cpp
     src/RHITexture.cpp
+    src/RHIViewTargets.cpp
     src/RHISwitcher.cpp
     src/RHIMesh.cpp
     src/RHIMaterial.cpp

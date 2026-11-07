@@ -8,36 +8,8 @@ namespace Axle {
         Shutdown();
     }
 
-    RHIViewportDescriptor::RHIViewportDescriptor(RHIViewportDescriptor&& other) noexcept
-        : m_Registrar(std::move(other.m_Registrar))
-        , m_Desc(std::move(other.m_Desc))
-        , m_OwnedColorTexture(std::move(other.m_OwnedColorTexture))
-        , m_DepthTexture(std::move(other.m_DepthTexture))
-        , m_ColorTexture(other.m_ColorTexture)
-        , m_OwnsColorTexture(other.m_OwnsColorTexture)
-        , m_GuiTexture(std::move(other.m_GuiTexture)) {
-        other.m_Registrar = {};
-        other.m_ColorTexture = nullptr;
-        other.m_GuiTexture.Reset();
-    }
-
-    RHIViewportDescriptor& RHIViewportDescriptor::operator=(RHIViewportDescriptor&& other) noexcept {
-        if (this != &other) {
-            Shutdown();
-            m_Registrar = std::move(other.m_Registrar);
-            m_Desc = std::move(other.m_Desc);
-            m_OwnedColorTexture = std::move(other.m_OwnedColorTexture);
-            m_DepthTexture = std::move(other.m_DepthTexture);
-            m_ColorTexture = other.m_ColorTexture;
-            m_OwnsColorTexture = other.m_OwnsColorTexture;
-            m_GuiTexture = std::move(other.m_GuiTexture);
-
-            other.m_Registrar = {};
-            other.m_ColorTexture = nullptr;
-            other.m_GuiTexture.Reset();
-        }
-        return *this;
-    }
+    RHIViewportDescriptor::RHIViewportDescriptor(RHIViewportDescriptor&& other) noexcept = default;
+    RHIViewportDescriptor& RHIViewportDescriptor::operator=(RHIViewportDescriptor&& other) noexcept = default;
 
     bool RHIViewportDescriptor::Init(ImGuiLayer* imguiLayer, const RHIViewportDesc& desc) {
         if (!imguiLayer) return false;
@@ -49,32 +21,12 @@ namespace Axle {
     }
 
     bool RHIViewportDescriptor::Build(const RHIViewportDesc& desc) {
-        m_Desc = desc;
-        m_OwnsColorTexture = true;
-
-        m_OwnedColorTexture = std::make_unique<RHI::RHITexture>();
-        auto colorDesc = RHI::RHITextureDesc::RenderTarget2D(desc.Width, desc.Height, desc.ColorFormat, desc.DebugName + "_Color");
-        if (!m_OwnedColorTexture->Init(colorDesc)) {
-            AXLE_CORE_ERROR("RHIViewportDescriptor::Init: Failed to create color texture!");
-            return false;
-        }
-        m_ColorTexture = m_OwnedColorTexture.get();
-
-        if (desc.EnableDepth) {
-            m_DepthTexture = std::make_unique<RHI::RHITexture>();
-            auto depthDesc = RHI::RHITextureDesc::DepthStencil2D(desc.Width, desc.Height, desc.DepthFormat, desc.DebugName + "_Depth");
-            if (!m_DepthTexture->Init(depthDesc)) {
-                AXLE_CORE_ERROR("RHIViewportDescriptor::Init: Failed to create depth texture!");
-                return false;
-            }
-        }
-
-        if (!RegisterWithImGui()) {
-            AXLE_CORE_ERROR("RHIViewportDescriptor::Init: Failed to register texture with ImGuiLayer!");
-            return false;
-        }
-
-        return true;
+        m_Desc = desc; m_OwnsColorTexture = true;
+        RHI::RHIViewTargetDesc targets; targets.Width = desc.Width; targets.Height = desc.Height;
+        targets.ColorFormat = desc.ColorFormat; targets.DepthFormat = desc.DepthFormat; targets.EnableDepth = desc.EnableDepth;
+        targets.Samples = desc.MSAASamples; targets.HDR = desc.IntermediateHDR; targets.FXAA = desc.FXAA; targets.HistoryCount = desc.HistoryCount;
+        m_Targets = std::make_shared<RHI::RHIViewTargets>();
+        return m_Targets->Configure(targets) && RegisterWithImGui();
     }
 
     bool RHIViewportDescriptor::Recreate(const RHIViewportDesc& desc) {
@@ -103,7 +55,10 @@ namespace Axle {
         }
 
         candidate.m_Registrar = imguiLayer->GetTextureRegistrar();
-        candidate.m_ColorTexture = texture;
+        RHI::RHIViewTargetDesc targets; targets.Width = texture->GetWidth(); targets.Height = texture->GetHeight();
+        targets.ColorFormat = texture->GetFormat(); targets.EnableDepth = false; targets.OwnPrimary = false; targets.RenderAuxiliary = false;
+        candidate.m_Targets = std::make_shared<RHI::RHIViewTargets>();
+        if (!candidate.m_Targets->Configure(targets, texture)) return false;
         candidate.m_OwnsColorTexture = false;
         candidate.m_Desc.Width = texture->GetWidth();
         candidate.m_Desc.Height = texture->GetHeight();
@@ -150,27 +105,22 @@ namespace Axle {
     }
 
     void RHIViewportDescriptor::Shutdown() {
-        UnregisterFromImGui();
-        if (m_OwnsColorTexture) {
-            if (m_OwnedColorTexture) {
-                m_OwnedColorTexture->Shutdown();
-                m_OwnedColorTexture.reset();
-            }
-        }
-        if (m_DepthTexture) {
-            m_DepthTexture->Shutdown();
-            m_DepthTexture.reset();
-        }
-        m_ColorTexture = nullptr;
-        m_Registrar = {};
-        m_GuiTexture.Reset();
-        m_OwnsColorTexture = true;
+        UnregisterFromImGui(); m_Targets.reset(); m_Registrar = {}; m_OwnsColorTexture = true;
+    }
+
+    bool RHIViewportDescriptor::SetRenderOptions(uint8_t samples, bool hdr, bool fxaa, std::optional<uint8_t> requestedHistory) {
+        if (!m_OwnsColorTexture) return false;
+        const auto historyCount = requestedHistory.value_or(m_Desc.HistoryCount);
+        if (m_Desc.MSAASamples == samples && m_Desc.IntermediateHDR == hdr && m_Desc.FXAA == fxaa && m_Desc.HistoryCount == historyCount && IsValid()) return true;
+        auto desc = m_Desc; desc.MSAASamples = samples; desc.IntermediateHDR = hdr; desc.FXAA = fxaa; desc.HistoryCount = historyCount;
+        return Recreate(desc);
     }
 
     bool RHIViewportDescriptor::RegisterWithImGui() {
         if (RHI::ScopedRHIFault::Invoke("RegisterViewportTexture", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS) return false;
-        if (!m_Registrar || !m_ColorTexture || !m_ColorTexture->IsValid()) return false;
-        m_GuiTexture = m_Registrar(*m_ColorTexture);
+        auto* color = GetColorTexture();
+        if (!m_Registrar || !color || !color->IsValid()) return false;
+        m_GuiTexture = m_Registrar(*color);
         return m_GuiTexture.IsValid();
     }
 

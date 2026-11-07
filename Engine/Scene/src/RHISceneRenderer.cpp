@@ -408,9 +408,9 @@ namespace Axle {
         m_FXAADescriptorSet = nullptr;
         m_FXAADescriptorPool.Shutdown();
         m_FXAASampler.Shutdown();
-        m_IntermediateFXAATarget.reset();
-        m_MSAAColorTarget.reset();
-        m_MSAADepthTarget.reset();
+        m_IntermediateFXAATarget = nullptr;
+        m_MSAAColorTarget = nullptr;
+        m_MSAADepthTarget = nullptr;
         m_CurrentMSAASamples = 1;
 
         m_ToneMappingPipelineSDR = nullptr;
@@ -420,8 +420,8 @@ namespace Axle {
         m_ToneMappingDescriptorSet = nullptr;
         m_ToneMappingDescriptorPool.Shutdown();
         m_ToneMappingSampler.Shutdown();
-        m_IntermediateHDRTarget.reset();
-        m_IntermediateHDRDepthTarget.reset();
+        m_IntermediateHDRTarget = nullptr;
+        m_ActiveViewTargets.reset(); m_ImplicitViewTargets.reset(); m_ImplicitViewColor = {};
 
         m_Pipeline = nullptr;
         m_PipelineHDR = nullptr;
@@ -438,9 +438,9 @@ namespace Axle {
         m_CustomDescriptorPool.Shutdown();
         m_CustomSampler.Shutdown();
         m_CustomProgramCache.Clear();
-        m_OpaqueSceneColor.reset();
-        m_OpaqueSceneDepth.reset();
-        m_ParticleSceneDepth.reset();
+        m_OpaqueSceneColor = nullptr;
+        m_OpaqueSceneDepth = nullptr;
+        m_ParticleSceneDepth = nullptr;
         m_MaterialTextures.Clear();
         m_DefaultDescriptorSet = nullptr;
         m_IrradianceMap = nullptr;
@@ -1034,7 +1034,8 @@ namespace Axle {
                                        RHITexture* colorTarget,
                                        RHITexture* depthTarget,
                                        const SceneRenderSettings& settings,
-                                       PhysicsScene* physicsScene)
+                                       PhysicsScene* physicsScene,
+                                       std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
         if (!colorTarget || !colorTarget->IsValid()) return;
 
@@ -1050,7 +1051,7 @@ namespace Axle {
                     depthTarget ? depthTarget->GetDSV() : nullptr,
                     colorTarget->GetWidth(), colorTarget->GetHeight(),
                     settings,
-                    physicsScene);
+                    physicsScene, std::move(viewTargets));
     }
 
     void RHISceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene,
@@ -1061,7 +1062,8 @@ namespace Axle {
                                        nri::Descriptor* depthDSV,
                                        uint32_t width, uint32_t height,
                                        const SceneRenderSettings& settings,
-                                       PhysicsScene* physicsScene)
+                                       PhysicsScene* physicsScene,
+                                       std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
         if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
 
@@ -1228,40 +1230,37 @@ namespace Axle {
         nri::Descriptor* sceneDepthDSV = depthDSV;
         nri::Format sceneTargetFormat = m_CurrentColorFormat;
 
-        // Publish the complete target set only after every required allocation
-        // and view succeeds. Post-processing cannot allocate midway through a pass.
-        using TargetReplacement = std::pair<std::unique_ptr<RHITexture>*, std::unique_ptr<RHITexture>>;
-        std::vector<TargetReplacement> replacements;
-        auto prepareTarget = [&](std::unique_ptr<RHITexture>& target, const RHITextureDesc& desc) {
-            if (target && target->IsValid() && target->GetWidth() == desc.Width && target->GetHeight() == desc.Height &&
-                target->GetFormat() == desc.Format && target->GetDesc().SampleCount == desc.SampleCount) return true;
-            auto candidate = std::make_unique<RHITexture>();
-            if (!candidate->Init(desc)) return false;
-            replacements.emplace_back(&target, std::move(candidate));
-            return true;
-        };
-        auto publishTargets = [&] {
-            for (auto& replacement : replacements) *replacement.first = std::move(replacement.second);
-            replacements.clear();
-        };
-        auto rejectTargets = [&] {
-            if (m_Streamer) m_Streamer->EndFrame();
-        };
-        if (useMSAA) {
-            sceneTargetFormat = useToneMap ? nri::Format::RGBA16_SFLOAT : m_CurrentColorFormat;
-            auto colorDesc = RHITextureDesc::RenderTarget2D(width, height, FromNRIFormat(sceneTargetFormat), "SceneRenderer_MSAAColor");
-            colorDesc.SampleCount = activeSampleCount;
-            auto depthDesc = RHITextureDesc::DepthStencil2D(width, height, FromNRIFormat(m_CurrentDepthFormat), "SceneRenderer_MSAADepth");
-            depthDesc.SampleCount = activeSampleCount;
-            if (!prepareTarget(m_MSAAColorTarget, colorDesc) || !prepareTarget(m_MSAADepthTarget, depthDesc)) { rejectTargets(); return; }
+        auto rejectTargets = [&] { if (m_Streamer) m_Streamer->EndFrame(); };
+        RHIViewTargetDesc targetDesc; targetDesc.Width = width; targetDesc.Height = height;
+        targetDesc.ColorFormat = FromNRIFormat(m_CurrentColorFormat); targetDesc.DepthFormat = FromNRIFormat(m_CurrentDepthFormat);
+        targetDesc.EnableDepth = sceneDepthTexture != nullptr; targetDesc.Samples = activeSampleCount;
+        targetDesc.HDR = useToneMap; targetDesc.FXAA = useFXAA; targetDesc.OwnPrimary = false;
+        if (viewTargets) {
+            auto expected = targetDesc; expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
+            expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
+            if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
+                (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||
+                (viewTargets->Get(RHIViewTarget::Depth) && viewTargets->Get(RHIViewTarget::Depth)->GetNative() != depthTarget)) { rejectTargets(); return; }
+            m_ImplicitViewTargets.reset(); m_ImplicitViewColor = {};
+        } else {
+            const auto identity = m_Device->GetResources().AcquireNative(colorTarget).GetHandle();
+            if (!m_ImplicitViewTargets || !m_ImplicitViewTargets->IsValid() || m_ImplicitViewTargets->GetDesc() != targetDesc || m_ImplicitViewColor != identity) {
+                auto candidate = std::make_shared<RHIViewTargets>();
+                if (!candidate->Configure(targetDesc)) { rejectTargets(); return; }
+                m_ImplicitViewTargets = std::move(candidate); m_ImplicitViewColor = identity;
+            }
+            viewTargets = m_ImplicitViewTargets;
         }
-        if (useToneMap && !prepareTarget(m_IntermediateHDRTarget, RHITextureDesc::RenderTarget2D(width, height, RHITextureFormat::RGBA16_FLOAT, "SceneRenderer_IntermediateHDR"))) { rejectTargets(); return; }
-        if (useFXAA && !prepareTarget(m_IntermediateFXAATarget, RHITextureDesc::RenderTarget2D(width, height, FromNRIFormat(m_CurrentColorFormat), "SceneRenderer_IntermediateFXAA"))) { rejectTargets(); return; }
-        publishTargets();
+        m_ActiveViewTargets = viewTargets;
+        m_MSAAColorTarget = viewTargets->Get(RHIViewTarget::MSAAColor); m_MSAADepthTarget = viewTargets->Get(RHIViewTarget::MSAADepth);
+        m_IntermediateHDRTarget = viewTargets->Get(RHIViewTarget::HDR); m_IntermediateFXAATarget = viewTargets->Get(RHIViewTarget::FXAA);
+        m_OpaqueSceneColor = viewTargets->Get(RHIViewTarget::OpaqueColor); m_OpaqueSceneDepth = viewTargets->Get(RHIViewTarget::OpaqueDepth);
+        m_ParticleSceneDepth = viewTargets->Get(RHIViewTarget::ParticleDepth);
+        if (useMSAA) sceneTargetFormat = useToneMap ? nri::Format::RGBA16_SFLOAT : m_CurrentColorFormat;
         if (useMSAA) {
             m_CurrentMSAASamples = activeSampleCount;
             sceneTargetTexture = m_MSAAColorTarget->GetNative(); sceneTargetRTV = m_MSAAColorTarget->GetRTV();
-            sceneDepthTexture = m_MSAADepthTarget->GetNative(); sceneDepthDSV = m_MSAADepthTarget->GetDSV();
+            sceneDepthTexture = m_MSAADepthTarget ? m_MSAADepthTarget->GetNative() : nullptr; sceneDepthDSV = m_MSAADepthTarget ? m_MSAADepthTarget->GetDSV() : nullptr;
         } else if (useToneMap) {
             sceneTargetTexture = m_IntermediateHDRTarget->GetNative(); sceneTargetRTV = m_IntermediateHDRTarget->GetRTV();
             sceneTargetFormat = nri::Format::RGBA16_SFLOAT;
@@ -1697,19 +1696,12 @@ namespace Axle {
                 return item.SurfaceType==SurfaceType::Transparent && item.Material && item.Material->GetDesc().RefractionEnabled;
             });
             if (needsRefraction && activeSampleCount==1 && sceneDepthTexture && sceneDepthDSV) {
-                bool newColor=!m_OpaqueSceneColor || m_OpaqueSceneColor->GetWidth()!=width || m_OpaqueSceneColor->GetHeight()!=height || m_OpaqueSceneColor->GetFormat()!=FromNRIFormat(sceneTargetFormat);
-                bool newDepth=!m_OpaqueSceneDepth || m_OpaqueSceneDepth->GetWidth()!=width || m_OpaqueSceneDepth->GetHeight()!=height || m_OpaqueSceneDepth->GetFormat()!=FromNRIFormat(m_CurrentDepthFormat);
-                if (!prepareTarget(m_OpaqueSceneColor, RHITextureDesc::RenderTarget2D(width,height,FromNRIFormat(sceneTargetFormat),"OpaqueSceneColor")) ||
-                    !prepareTarget(m_OpaqueSceneDepth, RHITextureDesc::DepthStencil2D(width,height,FromNRIFormat(m_CurrentDepthFormat),"OpaqueSceneDepth"))) {
-                    abandonRecording(); return;
-                }
-                publishTargets();
                 if (m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth->IsValid()) {
                     m_CommandBuffer.EndRendering();
                     m_CommandBuffer.TransitionTexture(sceneTargetTexture,RHIResourceLayout::ColorAttachment,RHIResourceLayout::CopySource);
                     m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::DepthStencilWrite,RHIResourceLayout::CopySource);
-                    m_CommandBuffer.TransitionTexture(m_OpaqueSceneColor->GetNative(),newColor?RHIResourceLayout::Undefined:RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
-                    m_CommandBuffer.TransitionTexture(m_OpaqueSceneDepth->GetNative(),newDepth?RHIResourceLayout::Undefined:RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
+                    m_CommandBuffer.TransitionTexture(m_OpaqueSceneColor->GetNative(),RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
+                    m_CommandBuffer.TransitionTexture(m_OpaqueSceneDepth->GetNative(),RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
                     const auto& core=m_Device->GetNRICore();
                     m_CommandBuffer.CopyTexture(*m_OpaqueSceneColor->GetNative(),nullptr,*sceneTargetTexture,nullptr);
                     m_CommandBuffer.CopyTexture(*m_OpaqueSceneDepth->GetNative(),nullptr,*sceneDepthTexture,nullptr);
@@ -1752,15 +1744,10 @@ namespace Axle {
             bool hasEmitters = !scene->GetRegistry().view<ParticleEmitterComponent>().empty() ||
                 !scene->GetRegistry().view<CharacterVFXComponent>().empty();
             if (hasEmitters && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV) {
-                bool fresh = !m_ParticleSceneDepth || m_ParticleSceneDepth->GetWidth()!=width || m_ParticleSceneDepth->GetHeight()!=height || m_ParticleSceneDepth->GetFormat()!=FromNRIFormat(m_CurrentDepthFormat);
-                if (!prepareTarget(m_ParticleSceneDepth, RHITextureDesc::DepthStencil2D(width,height,FromNRIFormat(m_CurrentDepthFormat),"ParticleSceneDepth"))) {
-                    abandonRecording(); return;
-                }
-                publishTargets();
                 if (m_ParticleSceneDepth->IsValid()) {
                     m_CommandBuffer.EndRendering();
                     m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::DepthStencilWrite,RHIResourceLayout::CopySource);
-                    m_CommandBuffer.TransitionTexture(m_ParticleSceneDepth->GetNative(),fresh?RHIResourceLayout::Undefined:RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
+                    m_CommandBuffer.TransitionTexture(m_ParticleSceneDepth->GetNative(),RHIResourceLayout::ShaderResource,RHIResourceLayout::CopyDest);
                     m_CommandBuffer.CopyTexture(*m_ParticleSceneDepth->GetNative(),nullptr,*sceneDepthTexture,nullptr);
                     m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::CopySource,RHIResourceLayout::DepthStencilWrite);
                     m_CommandBuffer.TransitionTexture(m_ParticleSceneDepth->GetNative(),RHIResourceLayout::CopyDest,RHIResourceLayout::ShaderResource);
@@ -1768,7 +1755,7 @@ namespace Axle {
                     depthAttachment.loadOp=nri::LoadOp::LOAD;
                     renderingDesc.depth=depthAttachment;
                     m_CommandBuffer.BeginRendering(renderingDesc);
-                    particleDepth=m_ParticleSceneDepth.get();
+                    particleDepth=m_ParticleSceneDepth;
                 }
             }
             // MSAA uses depth testing with soft intersections disabled until a compatible depth resolve exists.

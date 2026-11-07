@@ -211,6 +211,15 @@ namespace Axle::RHI {
             static_cast<uint16_t>(desc.MipLevels), static_cast<uint16_t>(desc.ArrayLayers), planes);
     }
 
+    RHITexture RHITexture::RetainGeneration() const {
+        RHITexture snapshot;
+        if (!IsValid()) return snapshot;
+        snapshot.m_Desc = m_Desc; snapshot.m_Lease = m_Lease;
+        snapshot.m_Texture = m_Texture; snapshot.m_Memory = m_Memory;
+        snapshot.m_SRV = m_SRV; snapshot.m_RTV = m_RTV; snapshot.m_DSV = m_DSV;
+        return snapshot;
+    }
+
     void RHITexture::Shutdown() {
         auto& device = RHIDevice::Get();
         if (m_Lease) m_Lease.Reset();

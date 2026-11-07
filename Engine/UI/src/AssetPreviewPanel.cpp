@@ -1155,12 +1155,13 @@ namespace Axle {
         settings.MSAASamples = 4;
         settings.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // Transparent clear for Godot checkerboard
 
+        if (!m_RHIViewport->SetRenderOptions(settings.MSAASamples, settings.EnableToneMapping, settings.EnableFXAA)) return;
         m_RHISceneRenderer->RenderScene(
             m_PreviewScene,
             camera,
             m_RHIViewport->GetColorTexture(),
             m_RHIViewport->GetDepthTexture(),
-            settings
+            settings, nullptr, m_RHIViewport->GetTargets()
         );
     }
 

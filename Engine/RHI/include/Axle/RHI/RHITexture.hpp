@@ -145,6 +145,8 @@ namespace Axle::RHI {
 
         bool Init(const RHITextureDesc& desc);
         void Shutdown();
+        // Keeps this exact generation independently of the original wrapper.
+        RHITexture RetainGeneration() const;
 
         bool IsValid() const { return m_Texture && m_Lease.IsLive(); }
         RHIResourceHandle GetHandle() const { return m_Lease.GetHandle(); }

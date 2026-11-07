@@ -230,7 +230,10 @@ static bool Run(RHIType backend) {
     SceneRenderSettings settings;
     settings.EnableSkybox = settings.EnableShadows = settings.EnableToneMapping = settings.EnableFXAA = false;
     settings.EnableParticles = false; settings.MSAASamples = 1; settings.ClearColor = {0, 0, 0, 1};
-    auto draw = [&] { renderer.RenderScene(scene, camera, view.GetColorTexture(), view.GetDepthTexture(), settings); };
+    auto draw = [&] {
+        if (!view.SetRenderOptions(settings.MSAASamples, settings.EnableToneMapping, settings.EnableFXAA)) return;
+        renderer.RenderScene(scene, camera, view.GetColorTexture(), view.GetDepthTexture(), settings, nullptr, view.GetTargets());
+    };
     draw();
     const auto originalPixels = ReadTexture(*view.GetColorTexture());
     RENDER_CHECK(originalPixels.size() == 64 * 64 * 4 && originalPixels[(32 * 64 + 32) * 4] > 20 && renderer.GetDrawCallCount() > 0, "actual mesh produces non-background pixels");
@@ -284,6 +287,79 @@ static bool Run(RHIType backend) {
     return true;
 }
 
+static bool TargetSets(RHIType backend) {
+    auto& device = RHIDevice::Get();
+    WindowProps props; props.Title = "OPT-04 per-view target ownership"; props.Width = props.Height = 96; props.Maximized = false;
+    props.GraphicsBackend = backend == RHIType::Vulkan ? GraphicsAPI::Vulkan : GraphicsAPI::Direct3D12;
+    Window window(props); ImGuiLayer ui(backend == RHIType::Vulkan ? ImGuiBackendType::Vulkan : ImGuiBackendType::Direct3D12);
+    ui.Init(window.GetNativeWindow()); auto presentation = ui.CreateRenderContext(window);
+    RHIViewportDescriptor first, second, external;
+    RHIViewportDesc desc; desc.Width = desc.Height = 8; desc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
+    RENDER_CHECK(first.Init(&ui, desc) && first.SetRenderOptions(4, true, true, 2), "complete color/depth/MSAA/post-process/history generation");
+    desc.Width = 24; desc.Height = 16;
+    RENDER_CHECK(second.Init(&ui, desc) && second.SetRenderOptions(2, false, true, 1), "independent differently sized preview generation");
+    RHISceneRenderer renderer;
+    RENDER_CHECK(renderer.Init(device), "one renderer consumes independent view generations");
+    auto scene = std::make_shared<Scene>();
+    PerspectiveCamera camera(45, 1, 0.1f, 100);
+    SceneRenderSettings render;
+    render.EnableSkybox = render.EnableShadows = render.EnableStudioLightLobes = render.EnableParticles = false;
+    render.MSAASamples = 2; render.EnableFXAA = true; render.ClearColor = {0.1f, 0.3f, 0.6f, 1};
+    renderer.RenderScene(scene, camera, second.GetColorTexture(), second.GetDepthTexture(), render, nullptr, second.GetTargets());
+    const auto secondPixels = ReadTexture(*second.GetColorTexture());
+    RENDER_CHECK(!secondPixels.empty(), "second view produced actual GPU pixels");
+    render.MSAASamples = 4; render.EnableToneMapping = true; render.ClearColor = {0.6f, 0.2f, 0.1f, 1};
+    renderer.RenderScene(scene, camera, first.GetColorTexture(), first.GetDepthTexture(), render, nullptr, first.GetTargets());
+    RENDER_CHECK(ReadTexture(*second.GetColorTexture()) == secondPixels, "rendering another sized HDR/MSAA view preserves the first preview's pixels");
+    std::vector<RHIResourceHandle> handles;
+    for (unsigned slot = 0; slot < static_cast<unsigned>(RHIViewTarget::Count); ++slot) {
+        auto* texture = first.GetTargets()->Get(static_cast<RHIViewTarget>(slot));
+        RENDER_CHECK(texture && texture->IsValid() && texture->GetWidth() == 8, "all required targets belong to the same view size");
+        handles.push_back(texture->GetHandle());
+    }
+    RENDER_CHECK(second.GetTargets()->Get(RHIViewTarget::MSAAColor)->GetDesc().SampleCount == 2 &&
+        second.GetTargets()->Get(RHIViewTarget::History0)->GetWidth() == 24 && !second.GetTargets()->Get(RHIViewTarget::History1), "views do not share MSAA/history storage");
+    const auto gui = first.GetImTextureID();
+    bool reached = false;
+    {
+        ScopedRHIFault fail([&](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "CreateTexture" && ScopedRHIOperation::Resource() == "ViewTarget_10") { reached = true; return nri::Result::OUT_OF_MEMORY; }
+            return {};
+        });
+        RENDER_CHECK(!first.SetHDR(true) && reached && first.GetImTextureID() == gui && !first.IsHDR(), "late history allocation failure preserves the complete set and GUI binding");
+    }
+    for (unsigned slot = 0; slot < handles.size(); ++slot)
+        RENDER_CHECK(first.GetTargets()->Get(static_cast<RHIViewTarget>(slot))->GetHandle() == handles[slot], "no partial target publication");
+    RENDER_CHECK(!first.Resize(0, 0) && !first.SetRenderOptions(3, true, true, 2) && first.IsValid(), "zero size and unsupported samples preserve last good view");
+    std::vector<uint8_t> red(256), blue(256);
+    for (unsigned i = 0; i < 64; ++i) { red[i * 4] = red[i * 4 + 3] = 255; blue[i * 4 + 2] = blue[i * 4 + 3] = 255; }
+    auto upload = [&](RHITexture& texture, const std::vector<uint8_t>& pixels) {
+        nri::TextureSubresourceUploadDesc sub{pixels.data(), 1, 32, 256};
+        nri::TextureUploadDesc data{}; data.texture = texture.GetNative(); data.subresources = &sub;
+        data.after = {nri::AccessBits::SHADER_RESOURCE, nri::Layout::SHADER_RESOURCE, nri::StageBits::ALL};
+        return device.UploadData(&data, 1, nullptr, 0) == nri::Result::SUCCESS;
+    };
+    RENDER_CHECK(upload(*first.GetColorTexture(), red), "queued view source pixels");
+    auto source = std::make_unique<RHITexture>();
+    RENDER_CHECK(source->Init(RHITextureDesc::RenderTarget2D(8, 8)) && upload(*source, blue) && external.BindExternalTexture(&ui, source.get()), "explicit external generation snapshot");
+    const auto externalHandle = source->GetHandle(); auto* externalNative = source->GetNative();
+    source.reset();
+    RENDER_CHECK(external.GetColorTexture()->IsValid() && external.GetColorTexture()->GetNative() == externalNative && device.WaitIdle(), "external wrapper destruction cannot invalidate the view's retained generation");
+    ui.Begin();
+    ImGui::GetForegroundDrawList()->AddImage(static_cast<ImTextureID>(first.GetImTextureID()), ImVec2(0, 0), ImVec2(48, 48));
+    ImGui::GetForegroundDrawList()->AddImage(static_cast<ImTextureID>(external.GetImTextureID()), ImVec2(48, 0), ImVec2(96, 48));
+    auto* oldColor = first.GetColorTexture()->GetNative(); const auto oldHandle = first.GetColorTexture()->GetHandle();
+    RENDER_CHECK(first.SetHDR(true) && first.SetRenderOptions(2, true, false) && first.GetDesc().HistoryCount == 2 && first.Resize(12, 12), "rapid HDR/MSAA/size changes publish complete candidates and retain history policy");
+    first.Shutdown(); external.Shutdown();
+    RENDER_CHECK(device.WaitIdle() && ReadPinnedImage(oldColor) == red && ReadPinnedImage(externalNative) == blue,
+        "queued images retain original pixels across whole-view replacement/close and external-owner destruction");
+    RENDER_CHECK(second.GetColorTexture()->GetWidth() == 24 && second.GetTargets()->Get(RHIViewTarget::MSAAColor)->GetDesc().SampleCount == 2,
+        "closing another preview cannot resize this view");
+    ui.End(); RENDER_CHECK(presentation->Present(window) && device.WaitIdle(), "shared presentation consumes retained view images");
+    RENDER_CHECK(!device.GetResources().Acquire(oldHandle) && !device.GetResources().Acquire(externalHandle), "completed frame releases both retired view generations");
+    return true;
+}
+
 int main(int argc, char** argv) {
     Axle::RenderTests::ConfigureFailureReporting();
     Log::Init();
@@ -294,7 +370,8 @@ int main(int argc, char** argv) {
     desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(desc.PreferredBackend);
     auto& device = RHIDevice::Get();
     bool ok = device.Init(desc) && device.GetBackend() == desc.PreferredBackend && !device.IsSoftwareAdapter();
-    try { if (ok) ok = argc > 2 && std::string(argv[2]) == "leases" ? GUILeases(desc.PreferredBackend) :
+    try { if (ok) ok = argc > 2 && std::string(argv[2]) == "targets" ? TargetSets(desc.PreferredBackend) :
+        argc > 2 && std::string(argv[2]) == "leases" ? GUILeases(desc.PreferredBackend) :
         argc > 2 && std::string(argv[2]) == "epoch" ? EpochOwnership(desc.PreferredBackend) :
         argc > 2 && std::string(argv[2]) == "errors" ? UIErrors(desc.PreferredBackend) : Run(desc.PreferredBackend); }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; ok = false; }

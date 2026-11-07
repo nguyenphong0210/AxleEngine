@@ -470,11 +470,51 @@ teardown. Architecture, whitespace and clean pinned NRI checks passed.
 Implementation and available self-verification are complete. Actual API
 validation and final consolidated review remain open; no phase acceptance is claimed.
 
+## P41-10 - Transactional per-view target generations
+
+Starting from P41-09 commit `dbde567`. RHIViewTargets owns a complete generation
+of primary color/depth, MSAA color/depth, HDR/FXAA, opaque/particle copies and up
+to two requested history surfaces. All required allocations/views succeed before
+publication. RHIViewportDescriptor publishes that set together with its GUI token;
+resize/format/render-option/registration failures retain the previous set and
+metadata. Zero extents and unsupported samples reject without replacement.
+History allocation is ownership infrastructure, not a new temporal-rendering feature.
+
+External GUI targets now retain an exact RHITexture generation snapshot, including
+its descriptors, without keeping or dereferencing the original wrapper. Rebinding
+is explicit when the external producer publishes another generation. Sample-only
+external views do not allocate render auxiliaries. Scene rendering borrows the
+provided per-view set for the recording and no longer owns global MSAA/post-process/
+copy textures or allocates those targets midway through a pass. Editor, asset
+preview and VFX preview configure/pass their view owner before retrieving target
+pointers. Custom/raw callers retain the explicit borrowed-target adapter with one
+implicit auxiliary view per renderer; independent views pass their own target set.
+The renderer's last-active view reference is weak.
+
+The new native target fixture checks every slot, late history allocation failure,
+zero size/invalid samples, rapid HDR/MSAA/resize/close after queueing images,
+external-wrapper destruction, independent histories and completion retirement.
+One real renderer renders two differently sized/MSAA/HDR views; physical pixels
+of the other view remain unchanged. Original red/blue GPU pixels survive queued
+whole-view replacement/close. Enabling the real physics debug renderer in this
+fixture exposed its lazy ALL stage mask, which pinned NRI validation rejected;
+production layout/root stages now explicitly declare vertex and fragment stages.
+
+Final Debug/Release builds of AxleRHIResourceViewTests, AxleVFXGPUTests,
+AxlePrimitiveTests and AxleEditor passed: p41-10-physics-layout-build-*.log.
+An intermediate Editor Debug COMDAT link error was resolved by recompiling only
+the generated RHISceneRenderer.obj (p41-10-object-rebuild-debug.log); no tracked
+compiler workaround or vendor change was introduced. Each configuration passed
+26 cases: more10.py (15), additional10.py (4) and product10.py (7), with JSON/log
+manifests under build/agent-runs/OPT-04. Strict rejection expects exit 1; all other
+cases exit 0. Native mains enforce zero NRI errors through teardown. Architecture,
+whitespace and clean pinned NRI checks passed. API validation and the final
+separate-context review remain open.
+
 ## Remaining work
 
-P41-10..11 remain: complete per-view target ownership, external generation
-snapshots and shared CPU decode/upload/cache ownership. Continue through P41-11,
-then one consolidated final review.
+P41-11 remains: shared CPU decoding, render-owned uploads and GPU cache identity/
+last-good behavior. Then run full phase gates and one consolidated final review.
 
 Full phase builds, CTest, integration, jobs/ECS, final native product simulation, GPU
 readbacks and final window/lifetime checks remain open. API-validation prerequisites

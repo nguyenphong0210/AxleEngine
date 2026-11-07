@@ -698,8 +698,9 @@ namespace Axle {
         settings.EnableSkybox = false;
         settings.EnableStudioLightLobes = false;
         settings.ClearColor = m_PreviewBackground;
+        if (!m_RHIViewport->SetRenderOptions(settings.MSAASamples, settings.EnableToneMapping, settings.EnableFXAA)) return;
         m_RHISceneRenderer->RenderScene(m_PreviewScene, camera, m_RHIViewport->GetColorTexture(),
-                                        m_RHIViewport->GetDepthTexture(), settings);
+                                        m_RHIViewport->GetDepthTexture(), settings, nullptr, m_RHIViewport->GetTargets());
     }
 
     void VFXEditorPanel::DrawDocumentDialogs() {

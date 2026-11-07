@@ -1,4 +1,5 @@
 #pragma once
+#include <Axle/PhysicsDrawSettings.hpp>
 #include <Axle/Types.hpp>
 #include <Axle/Timestep.hpp>
 #include <Axle/PhysicsLayers.hpp>
@@ -91,14 +92,6 @@ namespace Axle {
         f32 HalfExtent = 100.0f;
         f32 Friction = 0.6f;
         f32 Restitution = 0.0f;
-    };
-
-    struct PhysicsDrawSettings {
-        bool DrawShapes = true;
-        bool DrawWireframe = true;
-        bool DrawBoundingBoxes = false;
-        bool DrawVelocity = false;
-        bool DrawCenterOfMass = false;
     };
 
     class PhysicsDebugRenderer;

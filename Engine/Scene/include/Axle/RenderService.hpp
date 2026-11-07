@@ -8,6 +8,8 @@
 #include <Axle/RenderCapabilities.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <memory>
+#include <thread>
+#include <unordered_map>
 
 namespace Axle {
 
@@ -43,6 +45,11 @@ namespace Axle {
 
     private:
         bool m_Initialized = false;
+        uint64_t m_Epoch = 0;
+        void* m_GLContext = nullptr;
+        std::thread::id m_Owner;
+        std::shared_ptr<int> m_Lifetime = std::make_shared<int>(0);
+        std::unordered_map<std::string, std::shared_ptr<VertexArray>> m_GLMeshes;
         std::unique_ptr<RHISceneRenderer> m_RHIRenderer;
         std::unique_ptr<SceneRenderer> m_GLRenderer;
         std::shared_ptr<RHI::RHIViewTargets> m_DefaultMainTargets;

@@ -1,13 +1,26 @@
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/RenderParticleData.hpp>
 #include <Axle/MeshResourceResolver.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace Axle {
 
+    bool ResolveRenderWorldResources(RenderWorld& world) {
+        if (!world.ErrorMessage.empty()) return false;
+        for (auto& instance : world.Meshes) {
+            MeshInstance3D candidate;
+            candidate.AssetPath = instance.MeshURI; candidate.VAO = instance.GLMesh; candidate.RHIMeshAsset = instance.NativeMesh;
+            if (!ResolveMeshResources(candidate)) { world.ErrorMessage = "Cannot resolve mesh: " + instance.MeshURI; return false; }
+            instance.GLMesh = candidate.VAO; instance.NativeMesh = candidate.RHIMeshAsset;
+        }
+        return true;
+    }
+
     static RenderWorld ExtractInternal(const Scene& scene, const SceneExtractionOptions& options) {
         RenderWorld world;
+        if (!scene.CanMutate()) { world.ErrorMessage = "Extraction requires the scene owner boundary"; return world; }
         const auto& registry = scene.GetRegistry();
 
         // 1. Camera extraction
@@ -53,6 +66,11 @@ namespace Axle {
             rdl.Intensity = dl.Intensity;
             rdl.AmbientIntensity = dl.AmbientIntensity;
             rdl.CastsShadows = dl.CastShadows;
+            rdl.ShadowQuality = dl.ShadowQuality; rdl.ShadowBias = dl.ShadowBias;
+            rdl.ShadowSlopeBias = dl.ShadowSlopeBias; rdl.ShadowNormalBias = dl.ShadowNormalBias;
+            rdl.ShadowFilterRadius = dl.ShadowFilterRadius; rdl.MaxShadowDistance = dl.MaxShadowDistance;
+            rdl.CascadeSplitLambda = dl.CascadeSplitLambda; rdl.Exposure = dl.Exposure;
+            rdl.Gamma = dl.Gamma; rdl.ToneMappingMode = dl.ToneMappingMode;
 
             if (registry.all_of<TransformComponent>(entity)) {
                 glm::mat4 worldMat = scene.GetWorldTransform(entity);
@@ -93,7 +111,7 @@ namespace Axle {
             RenderSpotLight rsl;
             rsl.EntityID = static_cast<uint32_t>(entity);
             rsl.Position = glm::vec3(worldMat[3]);
-            rsl.Direction = glm::normalize(glm::mat3(worldMat) * glm::vec3(0.0f, -1.0f, 0.0f));
+            rsl.Direction = glm::normalize(glm::mat3(worldMat) * glm::vec3(0.0f, 0.0f, -1.0f));
             rsl.Color = sl.Color;
             rsl.Intensity = sl.Intensity;
             rsl.Range = sl.Range;
@@ -111,6 +129,7 @@ namespace Axle {
             world.Skybox.HDRPath = sc.HDRPath;
             world.Skybox.Intensity = sc.Intensity;
             world.Skybox.Exposure = sc.Exposure;
+            world.Skybox.SunSize = sc.SunSize; world.Skybox.SunGlow = sc.SunGlow; world.Skybox.Turbidity = sc.Turbidity;
             world.Skybox.ZenithColor = glm::vec4(sc.ZenithColor, 1.0f);
             world.Skybox.HorizonColor = glm::vec4(sc.HorizonColor, 1.0f);
             world.Skybox.GroundColor = glm::vec4(sc.GroundColor, 1.0f);
@@ -124,11 +143,6 @@ namespace Axle {
         auto meshView = registry.view<TransformComponent, MeshInstance3D>();
         for (auto entity : meshView) {
             const auto& mc = meshView.get<MeshInstance3D>(entity);
-            if (options.ResolveResources && (!mc.VAO || !mc.RHIMeshAsset)) {
-                auto& mutableMc = const_cast<MeshInstance3D&>(mc);
-                ResolveMeshResources(mutableMc);
-            }
-
             RenderMeshInstance rmi;
             rmi.EntityID = static_cast<uint32_t>(entity);
             if (registry.all_of<IDComponent>(entity)) {
@@ -149,16 +163,22 @@ namespace Axle {
 
             // Material properties
             if (registry.all_of<MaterialComponent>(entity)) {
-                const auto& matComp = registry.get<MaterialComponent>(entity);
-                if (options.ResolveResources && !matComp.RHIMaterialAsset) {
-                    auto& mutableMat = const_cast<MaterialComponent&>(matComp);
-                    if (mutableMat.HasAsset() && mutableMat.MaterialAsset) mutableMat.SyncFromAsset();
-                    else mutableMat.SyncToRHI();
-                }
+                // Copy authoring values and caches. Synchronization operates only on
+                // this local candidate; RHIMaterial construction itself is CPU-only.
+                auto matComp = registry.get<MaterialComponent>(entity);
+                matComp.RHIMaterialAsset.reset();
+                if (matComp.HasAsset() && matComp.MaterialAsset) matComp.SyncFromAsset();
+                else matComp.SyncToRHI();
+                matComp.MaterialAsset = std::make_shared<Material>("Render snapshot", matComp.MaterialHandle);
+                matComp.SyncToAsset();
                 rmi.Material.MaterialUUID = matComp.MaterialHandle;
                 rmi.Material.MaterialPath = matComp.AssetPath;
                 rmi.Material.MaterialAsset = matComp.MaterialAsset;
                 rmi.Material.RHIMaterialAsset = matComp.RHIMaterialAsset;
+                rmi.Material.CustomProperties = matComp.CustomProperties;
+                rmi.Material.UVScale = matComp.UVScale; rmi.Material.UVOffset = matComp.UVOffset;
+                rmi.Material.AO = matComp.AOStrength; rmi.Material.AlbedoPath = matComp.AlbedoPath;
+                rmi.Material.UseAlbedoMap = matComp.UseAlbedoMap;
                 rmi.Material.UseCustomShader = matComp.UseCustomShader;
                 rmi.Material.CustomShaderPath = matComp.CustomShaderPath;
                 rmi.Material.AlbedoColor = matComp.AlbedoColor;
@@ -169,7 +189,7 @@ namespace Axle {
                 rmi.Material.TileScale = glm::vec2(mc.TileScale);
                 rmi.Material.PatternMode = mc.PatternMode;
             } else {
-                rmi.Material.RHIMaterialAsset = mc.RHIMaterialAsset;
+                if (mc.RHIMaterialAsset) rmi.Material.RHIMaterialAsset = std::make_shared<RHI::RHIMaterial>(*mc.RHIMaterialAsset);
                 rmi.Material.AlbedoColor = mc.Color1;
                 rmi.Material.SecondaryColor = mc.Color2;
                 rmi.Material.TileScale = glm::vec2(mc.TileScale);
@@ -179,6 +199,50 @@ namespace Axle {
             world.Meshes.push_back(std::move(rmi));
         }
 
+        // Preserve supported GL skinning as immutable pose/geometry references.
+        for (auto entity : registry.view<TransformComponent, SkeletalMeshComponent>()) {
+            const auto& mesh = registry.get<SkeletalMeshComponent>(entity);
+            if (!mesh.Visible || !mesh.Mesh) continue;
+            RenderSkinInstance skin;
+            skin.GLMesh = mesh.Mesh->GetVAO(); skin.WorldTransform = scene.GetWorldTransform(entity);
+            skin.Color = mesh.Color1; skin.CastsShadows = mesh.CastShadows;
+            if (auto* animator = registry.try_get<AnimatorComponent>(entity); animator && animator->AnimatorInstance)
+                skin.BoneMatrices = animator->AnimatorInstance->GetSkinningMatrices();
+            world.Skins.push_back(std::move(skin));
+        }
+        auto appendSystem = [&](const std::shared_ptr<ParticleSystem>& system) {
+            if (!system || !system->GetActiveParticleCount()) return;
+            auto batch = std::make_shared<RenderParticleData>();
+            batch->Pool = system->GetPool(); batch->Config = system->GetConfig();
+            world.Particles.push_back(std::move(batch));
+        };
+        for (auto entity : registry.view<TransformComponent, ParticleEmitterComponent>()) {
+            const auto& emitter = registry.get<ParticleEmitterComponent>(entity);
+            if (!emitter.Visible) continue;
+            const auto owner = scene.GetWorldTransform(entity);
+            glm::vec3 scale(glm::length(glm::vec3(owner[0])), glm::length(glm::vec3(owner[1])), glm::length(glm::vec3(owner[2])));
+            auto axes = glm::mat3(owner);
+            for (int a = 0; a < 3; ++a) axes[a] /= std::max(scale[a], 0.0001f);
+            for (const auto& stack : emitter.EmitterStacks) {
+                if (!stack.Visible || !stack.Enabled || !stack.System || !stack.System->GetActiveParticleCount()) continue;
+                auto batch = std::make_shared<RenderParticleData>();
+                batch->Pool = stack.System->GetPool(); batch->Config = stack.Config;
+                batch->Resources = stack.GetDefinition().Resources;
+                if (batch->Resources.MaterialPath.empty()) batch->Resources.MaterialPath = stack.Config.MaterialPath;
+                batch->Texture = stack.Texture ? stack.Texture : emitter.Texture;
+                batch->Normal = stack.NormalMap ? stack.NormalMap : emitter.NormalMap;
+                const auto transform = stack.GetWorldTransform(glm::vec3(owner[3]), glm::quat_cast(axes), scale);
+                batch->Position = transform.Translation; batch->Rotation = transform.Rotation; batch->Scale = transform.Scale;
+                world.Particles.push_back(std::move(batch));
+            }
+        }
+        for (auto entity : registry.view<CharacterVFXComponent>()) {
+            const auto& vfx = registry.get<CharacterVFXComponent>(entity);
+            if (!vfx.Enabled || !vfx.RuntimeVFX) continue;
+            appendSystem(vfx.RuntimeVFX->GetFootstepSystem());
+            appendSystem(vfx.RuntimeVFX->GetLandingShockwaveSystem());
+        }
+
         world.SceneRevision = scene.GetTransformRevision();
         world.TotalEntities = registry.storage<entt::entity>() ? static_cast<uint32_t>(registry.storage<entt::entity>()->size()) : 0;
 
@@ -186,6 +250,7 @@ namespace Axle {
     }
 
     RenderWorld ExtractRenderWorld(Scene& scene, const SceneExtractionOptions& options) {
+        if (!scene.CanMutate()) { RenderWorld rejected; rejected.ErrorMessage = "Extraction requires the scene owner boundary"; return rejected; }
         scene.UpdateWorldTransforms();
         return ExtractInternal(scene, options);
     }

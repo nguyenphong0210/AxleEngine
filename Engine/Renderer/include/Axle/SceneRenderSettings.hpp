@@ -1,0 +1,30 @@
+#pragma once
+#include <Axle/PhysicsDrawSettings.hpp>
+#include <glm/glm.hpp>
+#include <cstdint>
+
+namespace Axle {
+    struct SceneRenderSettings {
+        bool EnableShadows = true;
+        bool EnableSkybox = true;
+        bool EnableStudioLightLobes = true; // Analytical softboxes in the fallback environment.
+        bool EnableParticles = true;
+        bool EnableToneMapping = false;
+        bool EnableFXAA = false;
+        uint8_t MSAASamples = 1; // 1 (disabled), 2, 4, 8
+        bool Wireframe = false;
+        bool ShowPhysicsDebug = false;
+        PhysicsDrawSettings PhysicsDrawSettings;
+        float PhysicsDepthBias = 0.0001f;
+        float PhysicsAlphaMultiplier = 1.0f;
+        float Exposure = 1.0f;
+        int ToneMappingMode = 0; // 0: ACES Filmic, 1: Reinhard, 2: Uncharted 2, 3: Linear Bypass
+        float Gamma = 2.2f;
+        float WhitePoint = 4.0f; // Configurable white point for Extended Reinhard & Uncharted 2
+        float FXAASubpixQuality = 0.75f;
+        float FXAAEdgeThreshold = 0.166f;
+        float FXAAEdgeThresholdMin = 0.0833f;
+        glm::vec4 ClearColor{ 0.12f, 0.14f, 0.18f, 1.0f }; // Configurable background clear color (Supports transparent clear for editor viewports)
+    };
+
+}

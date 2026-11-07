@@ -177,10 +177,30 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_OwnedSnapshotValues() {
+        Scene scene;
+        auto entity = scene.CreateEntity("Snapshot owner");
+        auto& mesh = entity.AddComponent<MeshInstance3D>(); mesh.AssetPath = "builtin://cube";
+        auto& material = entity.AddComponent<MaterialComponent>(); material.AlbedoColor = {1,0,0,1};
+        auto& emitter = entity.AddComponent<ParticleEmitterComponent>();
+        const auto beforeRHI = material.RHIMaterialAsset;
+        const auto beforeVAO = mesh.VAO;
+        auto snapshot = ExtractRenderWorld(static_cast<const Scene&>(scene));
+        RENDER_CHECK(material.RHIMaterialAsset == beforeRHI && mesh.VAO == beforeVAO && !mesh.RHIMeshAsset,
+            "const extraction never publishes caches or creates GPU resources");
+        RENDER_CHECK(snapshot.Meshes.size() == 1 && snapshot.Meshes[0].Material.MaterialAsset && snapshot.Meshes[0].Material.RHIMaterialAsset,
+            "snapshot owns CPU material values");
+        material.AlbedoColor = {0,1,0,1}; material.SyncToRHI();
+        RENDER_CHECK(snapshot.Meshes[0].Material.RHIMaterialAsset->GetDesc().BaseColor.r == 1 &&
+            snapshot.Meshes[0].Material.MaterialAsset->GetAlbedoColor().r == 1, "later authoring cannot change snapshot material values");
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderWorldExtractionUnitTests() {
     std::cout << "  [RenderWorld] Running RenderWorld extraction unit tests...\n";
+    if (!Axle::RenderTests::Test_OwnedSnapshotValues()) return false;
     if (!Axle::RenderTests::Test_RenderWorldEmptyScene()) return false;
     if (!Axle::RenderTests::Test_RenderWorldMeshAndMaterialExtraction()) return false;
     if (!Axle::RenderTests::Test_RenderWorldNestedTransforms()) return false;

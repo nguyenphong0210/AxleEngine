@@ -7,6 +7,8 @@
 #include <Axle/Texture2D.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/ParticleRenderer.hpp>
+#include <Axle/SceneExtraction.hpp>
+#include <Axle/RenderParticleData.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -551,211 +553,10 @@ namespace Axle {
                                    PhysicsScene* physicsScene,
                                    PhysicsDebugRenderer* physicsDebugRenderer,
                                    const SceneRenderSettings& settings) {
-        if (!scene || !Window::HasActiveContext() || !m_Shader) return;
-
-        // Query active Directional Sun Light if present in scene
-        DirectionalLightComponent activeSunLight;
-        bool hasSunLight = scene->GetPrimaryDirectionalLight(activeSunLight);
-        if (hasSunLight) {
-            m_LightDir = activeSunLight.GetDirection();
-        }
-        bool castShadows = settings.EnableShadows && hasSunLight && activeSunLight.CastShadows;
-
-        // 0. Synchronize physics simulation transforms into TransformComponents & propagate hierarchy
-        scene->SynchronizePhysicsTransforms(physicsScene);
-
-        // ==========================================
-        // PASS 1: SHADOW MAP DEPTH PASS
-        // ==========================================
-        if (castShadows && m_ShadowMap && m_ShadowShader) {
-            uint32_t targetRes = 2048;
-            if (activeSunLight.ShadowQuality == 0) targetRes = 1024;
-            else if (activeSunLight.ShadowQuality == 1) targetRes = 2048;
-            else if (activeSunLight.ShadowQuality == 2) targetRes = 4096;
-
-            if (m_ShadowMap->GetWidth() != targetRes || m_ShadowMap->GetHeight() != targetRes) {
-                m_ShadowMap->Resize(targetRes, targetRes);
-            }
-
-            float maxDist = activeSunLight.MaxShadowDistance > 0.0f ? activeSunLight.MaxShadowDistance : 150.0f;
-            float lambda = activeSunLight.CascadeSplitLambda > 0.0f ? activeSunLight.CascadeSplitLambda : 0.85f;
-
-            m_ShadowMap->CalculateCascades(camera, m_LightDir, maxDist, lambda);
-            const auto& cascadeMatrices = m_ShadowMap->GetCascadeMatrices();
-
-            // Render all 4 cascade depth slices
-            for (uint32_t c = 0; c < cascadeMatrices.size(); ++c) {
-                m_ShadowMap->BindCascade(c);
-                scene->RenderShadowPass(*m_ShadowShader, cascadeMatrices[c]);
-                if (m_SkinningPipeline) {
-                    scene->RenderSkeletalMeshes(*m_SkinningPipeline, camera, cascadeMatrices[c], m_LightDir, true);
-                }
-            }
-            m_ShadowMap->Unbind();
-
-            m_LightSpaceMatrix = m_ShadowMap->GetLightSpaceMatrix(0);
-        }
-
-        // ==========================================
-        // PASS 2: GEOMETRY & PBR LIGHTING PASS
-        // ==========================================
-        u32 renderWidth = m_ViewportWidth;
-        u32 renderHeight = m_ViewportHeight;
-
-        if (targetFBO) {
-            renderWidth = targetFBO->GetSpecification().Width;
-            renderHeight = targetFBO->GetSpecification().Height;
-            targetFBO->Bind();
-        } else {
-            RenderCommand::BindDefaultFramebuffer();
-        }
-
-        RenderCommand::SetViewport(0, 0, renderWidth, renderHeight);
-        RenderCommand::SetClearColor({ 0.10f, 0.12f, 0.15f, 1.0f });
-        RenderCommand::Clear();
-
-        // Bind standard texture sampler slots (0: Albedo, 1: ShadowMap, 2: Normal, 3: Roughness, 4: Metallic)
-        Texture2D::GetWhiteTexture()->Bind(0);
-        if (m_ShadowMap) {
-            m_ShadowMap->BindTexture(1);
-        }
-        Texture2D::GetFlatNormalTexture()->Bind(2);
-        Texture2D::GetDefaultRoughnessTexture()->Bind(3);
-        Texture2D::GetBlackTexture()->Bind(4);
-
-        // Bind IBL Environment maps if HDR Skybox is active (Slots 5: Irradiance, 6: Prefilter, 7: BRDF LUT)
-        SkyboxComponent activeSkybox;
-        bool hasSkybox = scene->GetPrimarySkybox(activeSkybox);
-        bool useIBL = false;
-        if (hasSkybox && activeSkybox.Enabled && activeSkybox.Type == SkyboxType::HDRCubemap && !activeSkybox.HDRPath.empty() && m_Skybox) {
-            if (m_Skybox->GetSpecification().HDRPath != activeSkybox.HDRPath) {
-                m_Skybox->LoadHDR(activeSkybox.HDRPath);
-            }
-            if (m_Skybox->GetIrradianceMap() && m_Skybox->GetPrefilterMap() && m_Skybox->GetBRDFLUT()) {
-                m_Skybox->GetIrradianceMap()->Bind(5);
-                m_Skybox->GetPrefilterMap()->Bind(6);
-                m_Skybox->GetBRDFLUT()->Bind(7);
-                m_Shader->SetInt("u_UseIBL", 1);
-                m_Shader->SetFloat("u_EnvironmentIntensity", activeSkybox.Intensity);
-                useIBL = true;
-            }
-        }
-        if (!useIBL) {
-            m_Shader->SetInt("u_UseIBL", 0);
-        }
-
-        const auto& cascadeMatrices = (castShadows && m_ShadowMap) ? m_ShadowMap->GetCascadeMatrices() : std::vector<glm::mat4>{};
-        const auto& splitDists = (castShadows && m_ShadowMap) ? m_ShadowMap->GetCascadeSplitDistances() : std::vector<float>{};
-
-        // Render all active meshes with PBR lighting & hierarchy transforms
-        scene->RenderGeometryPass(camera, *m_Shader, m_LightSpaceMatrix, m_LightDir, 1, cascadeMatrices, splitDists);
-
-        if (m_SkinningPipeline) {
-            auto skelShader = m_SkinningPipeline->GetShader();
-            if (skelShader) {
-                skelShader->Bind();
-                skelShader->SetMat4("u_View", camera.GetViewMatrix());
-                if (!cascadeMatrices.empty()) {
-                    skelShader->SetMat4Array("u_CascadeLightSpaceMatrices", cascadeMatrices.data(), static_cast<u32>(cascadeMatrices.size()));
-                    skelShader->SetFloatArray("u_CascadeSplitDistances", splitDists.data(), static_cast<u32>(splitDists.size()));
-                }
-                skelShader->SetFloat("u_ShadowBias", activeSunLight.ShadowBias);
-                skelShader->SetFloat("u_ShadowSlopeBias", activeSunLight.ShadowSlopeBias);
-                skelShader->SetFloat("u_ShadowNormalBias", activeSunLight.ShadowNormalBias);
-                skelShader->SetFloat("u_ShadowFilterRadius", activeSunLight.ShadowFilterRadius);
-                skelShader->SetInt("u_ShadowsEnabled", castShadows ? 1 : 0);
-                skelShader->SetInt("u_ShadowMap", 1);
-            }
-            scene->RenderSkeletalMeshes(*m_SkinningPipeline, camera, m_LightSpaceMatrix, m_LightDir, false);
-        }
-
-        // ==========================================
-        // PASS 3: SKYBOX PASS (Atmospheric or HDR Cubemap)
-        // ==========================================
-        if (settings.EnableSkybox && m_Skybox) {
-            if (hasSkybox && activeSkybox.Enabled) {
-                if (activeSkybox.Type == SkyboxType::HDRCubemap) {
-                    m_Skybox->SetMode(SkyboxMode::HDRCubemap);
-                    m_Skybox->SetHDRIntensity(activeSkybox.Intensity);
-                    m_Skybox->SetExposure(activeSkybox.Exposure);
-                    if (m_Skybox->GetSpecification().HDRPath != activeSkybox.HDRPath) {
-                        m_Skybox->LoadHDR(activeSkybox.HDRPath);
-                    }
-                } else {
-                    m_Skybox->SetMode(SkyboxMode::ProceduralAtmospheric);
-                    auto& spec = m_Skybox->GetSpecification();
-                    spec.ZenithColor = activeSkybox.ZenithColor;
-                    spec.HorizonColor = activeSkybox.HorizonColor;
-                    spec.GroundColor = activeSkybox.GroundColor;
-                    spec.SunSize = activeSkybox.SunSize;
-                    spec.SunGlow = activeSkybox.SunGlow;
-                    spec.Turbidity = activeSkybox.Turbidity;
-
-                    if (!activeSkybox.SyncWithSun) {
-                        float radAz = glm::radians(activeSkybox.CustomAzimuth);
-                        float radEl = glm::radians(std::clamp(activeSkybox.CustomElevation, 1.0f, 89.9f));
-                        glm::vec3 customSunDir = glm::normalize(glm::vec3(
-                            std::cos(radEl) * std::sin(radAz),
-                            std::sin(radEl),
-                            std::cos(radEl) * std::cos(radAz)
-                        ));
-                        m_Skybox->SetSunDirection(customSunDir);
-                    }
-
-                    if (hasSunLight && activeSkybox.SyncWithSun) {
-                        m_Skybox->SetSunDirection(activeSunLight.GetDirection());
-                        m_Skybox->SetSunColor(activeSunLight.Color * activeSunLight.Intensity);
-                    } else if (!hasSunLight) {
-                        m_Skybox->SetSunColor(glm::vec3(0.0f));
-                    }
-                }
-
-                if (hasSunLight) {
-                    m_Skybox->SetExposure(activeSunLight.Exposure);
-                    m_Skybox->SetToneMapping(activeSunLight.ToneMappingMode, activeSunLight.Gamma);
-                }
-
-                m_Skybox->Render(camera.GetViewMatrix(), camera.GetProjectionMatrix());
-            }
-        }
-
-        // ==========================================
-        // PASS 4: PARTICLE & VISUAL EFFECTS (VFX) PASS
-        // ==========================================
-        if (m_ParticleRenderer && scene) {
-            scene->RenderParticles(*m_ParticleRenderer, camera, targetFBO);
-        }
-
-        // ==========================================
-        // PASS 5: PHYSICS DEBUG WIREFRAMES (OPTIONAL)
-        // ==========================================
-        PhysicsDebugRenderer* activeDebug = physicsDebugRenderer ? physicsDebugRenderer : m_InternalDebugRenderer.get();
-        if (settings.ShowPhysicsDebug && activeDebug && physicsScene) {
-            activeDebug->Begin(camera.GetPosition());
-            physicsScene->DrawDebug(*activeDebug, settings.PhysicsDrawSettings);
-            activeDebug->End(camera.GetViewProjectionMatrix());
-        }
-
-        // ==========================================
-        // PASS 6: UNBIND & CLEANUP
-        // ==========================================
-        Texture2D::GetWhiteTexture()->Unbind(0);
-        if (m_ShadowMap) {
-            m_ShadowMap->UnbindTexture(1);
-        }
-        Texture2D::GetFlatNormalTexture()->Unbind(2);
-        Texture2D::GetDefaultRoughnessTexture()->Unbind(3);
-        Texture2D::GetBlackTexture()->Unbind(4);
-
-        if (useIBL && m_Skybox) {
-            if (m_Skybox->GetIrradianceMap()) m_Skybox->GetIrradianceMap()->Unbind(5);
-            if (m_Skybox->GetPrefilterMap()) m_Skybox->GetPrefilterMap()->Unbind(6);
-            if (m_Skybox->GetBRDFLUT()) m_Skybox->GetBRDFLUT()->Unbind(7);
-        }
-
-        if (targetFBO) {
-            targetFBO->Unbind();
-        }
+        if (!scene) return;
+        auto world = ExtractRenderWorld(*scene);
+        if (!ResolveRenderWorldResources(world)) return;
+        RenderWorldView(world, camera, targetFBO, physicsScene, physicsDebugRenderer, settings);
     }
 
     void SceneRenderer::RenderWorldView(const RenderWorld& world,
@@ -774,12 +575,12 @@ namespace Axle {
 
         // 2. Cascaded Shadow Map Pass
         if (castShadows && m_ShadowMap && m_ShadowShader) {
-            uint32_t targetRes = 2048;
+            uint32_t targetRes = world.DirectionalLight->ShadowQuality == 0 ? 1024 : world.DirectionalLight->ShadowQuality == 2 ? 4096 : 2048;
             if (m_ShadowMap->GetWidth() != targetRes || m_ShadowMap->GetHeight() != targetRes) {
                 m_ShadowMap->Resize(targetRes, targetRes);
             }
 
-            m_ShadowMap->CalculateCascades(camera, m_LightDir, 150.0f, 0.85f);
+            m_ShadowMap->CalculateCascades(camera, m_LightDir, world.DirectionalLight->MaxShadowDistance, world.DirectionalLight->CascadeSplitLambda);
             const auto& cascadeMatrices = m_ShadowMap->GetCascadeMatrices();
 
             m_ShadowShader->Bind();
@@ -830,12 +631,12 @@ namespace Axle {
 
         if (world.DirectionalLight.has_value()) {
             const auto& dl = *world.DirectionalLight;
-            m_Shader->SetFloat3("u_LightDirection", dl.Direction);
+            m_Shader->SetFloat3("u_LightDir", dl.Direction);
             m_Shader->SetFloat3("u_LightColor", dl.Color);
             m_Shader->SetFloat("u_LightIntensity", dl.Intensity);
             m_Shader->SetFloat("u_AmbientIntensity", dl.AmbientIntensity);
         } else {
-            m_Shader->SetFloat3("u_LightDirection", m_LightDir);
+            m_Shader->SetFloat3("u_LightDir", m_LightDir);
             m_Shader->SetFloat3("u_LightColor", glm::vec3(1.0f));
             m_Shader->SetFloat("u_LightIntensity", 1.0f);
             m_Shader->SetFloat("u_AmbientIntensity", 0.28f);
@@ -849,6 +650,28 @@ namespace Axle {
             m_Shader->SetFloatArray("u_CascadeSplitDistances", splitDists.data(), static_cast<u32>(splitDists.size()));
         }
         m_Shader->SetInt("u_ShadowsEnabled", castShadows ? 1 : 0);
+
+        m_Shader->SetMat4("u_LightSpaceMatrix", m_LightSpaceMatrix);
+        m_Shader->SetInt("u_ShadowMap", 1); m_Shader->SetInt("u_AlbedoMap", 0);
+        m_Shader->SetInt("u_NormalMap", 2); m_Shader->SetInt("u_RoughnessMap", 3); m_Shader->SetInt("u_MetallicMap", 4);
+        m_Shader->SetInt("u_IrradianceMap", 5); m_Shader->SetInt("u_PrefilterMap", 6); m_Shader->SetInt("u_BRDFLUT", 7);
+        const auto sun = world.DirectionalLight.value_or(RenderDirectionalLight{});
+        m_Shader->SetFloat("u_ShadowBias", sun.ShadowBias); m_Shader->SetFloat("u_ShadowSlopeBias", sun.ShadowSlopeBias);
+        m_Shader->SetFloat("u_ShadowNormalBias", sun.ShadowNormalBias); m_Shader->SetFloat("u_ShadowFilterRadius", sun.ShadowFilterRadius);
+        m_Shader->SetFloat("u_Exposure", sun.Exposure); m_Shader->SetFloat("u_Gamma", sun.Gamma);
+        m_Shader->SetInt("u_ToneMappingMode", sun.ToneMappingMode);
+        m_Shader->SetInt("u_UseHemisphereAmbient", world.Skybox.Enabled ? 1 : 0);
+        m_Shader->SetFloat3("u_SkyZenithColor", glm::vec3(world.Skybox.ZenithColor));
+        m_Shader->SetFloat3("u_SkyHorizonColor", glm::vec3(world.Skybox.HorizonColor));
+        m_Shader->SetFloat3("u_SkyGroundColor", glm::vec3(world.Skybox.GroundColor));
+        bool useIBL = false;
+        if (world.Skybox.Enabled && world.Skybox.Type == 1 && !world.Skybox.HDRPath.empty() && m_Skybox) {
+            if (m_Skybox->GetSpecification().HDRPath != world.Skybox.HDRPath) m_Skybox->LoadHDR(world.Skybox.HDRPath);
+            if (m_Skybox->GetIrradianceMap() && m_Skybox->GetPrefilterMap() && m_Skybox->GetBRDFLUT()) {
+                m_Skybox->GetIrradianceMap()->Bind(5); m_Skybox->GetPrefilterMap()->Bind(6); m_Skybox->GetBRDFLUT()->Bind(7); useIBL = true;
+            }
+        }
+        m_Shader->SetInt("u_UseIBL", useIBL); m_Shader->SetFloat("u_EnvironmentIntensity", world.Skybox.Intensity);
 
         // Point lights
         int numPointLights = std::min(static_cast<int>(world.PointLights.size()), 4);
@@ -889,18 +712,16 @@ namespace Axle {
             }
 
             m_Shader->SetMat4("u_Transform", meshInst.WorldTransform);
-            m_Shader->SetFloat4("u_Color1", color1);
-            m_Shader->SetFloat4("u_Color2", meshInst.Material.SecondaryColor);
-            m_Shader->SetFloat("u_TileScale", meshInst.Material.TileScale.x);
-            m_Shader->SetInt("u_PatternMode", meshInst.Material.PatternMode);
-            m_Shader->SetFloat("u_Roughness", meshInst.Material.Roughness);
-            m_Shader->SetFloat("u_Metallic", meshInst.Material.Metallic);
-            m_Shader->SetFloat3("u_EmissionColor", glm::vec3(meshInst.Material.Emission));
-            m_Shader->SetFloat("u_EmissionIntensity", meshInst.Material.Emission > 0.0f ? 1.0f : 0.0f);
-            m_Shader->SetInt("u_UseAlbedoMap", 0);
-            m_Shader->SetInt("u_UseNormalMap", 0);
-            m_Shader->SetInt("u_UseRoughnessMap", 0);
-            m_Shader->SetInt("u_UseMetallicMap", 0);
+            if (meshInst.Material.MaterialAsset) {
+                meshInst.Material.MaterialAsset->Bind(*m_Shader);
+                m_Shader->SetInt("u_PatternMode", 3);
+                m_Shader->SetFloat4("u_Color1", color1);
+                m_Shader->SetFloat4("u_Color2", color1);
+            } else {
+                Material::BindDefault(*m_Shader, color1, meshInst.Material.SecondaryColor);
+                m_Shader->SetFloat("u_TileScale", meshInst.Material.TileScale.x);
+                m_Shader->SetInt("u_PatternMode", meshInst.Material.PatternMode);
+            }
 
             meshInst.GLMesh->Bind();
             RenderCommand::DrawIndexed(meshInst.GLMesh);
@@ -911,13 +732,42 @@ namespace Axle {
             RenderCommand::SetWireframeMode(false);
         }
 
+        auto renderSkins = [&](bool shadow, const glm::mat4& lightMatrix) {
+            if (!m_SkinningPipeline) return;
+            auto shader = shadow ? m_SkinningPipeline->GetShadowShader() : m_SkinningPipeline->GetShader();
+            if (!shader) return;
+            shader->Bind(); shader->SetMat4("u_LightSpaceMatrix", lightMatrix);
+            shader->SetMat4("u_ViewProjection", camera.GetViewProjectionMatrix()); shader->SetMat4("u_View", camera.GetViewMatrix());
+            shader->SetFloat3("u_LightDir", m_LightDir); shader->SetFloat3("u_CameraPos", camera.GetPosition());
+            shader->SetInt("u_ShadowsEnabled", castShadows); shader->SetInt("u_ShadowMap", 1);
+            if (!cascadeMatrices.empty()) shader->SetMat4Array("u_CascadeLightSpaceMatrices", cascadeMatrices.data(), static_cast<u32>(cascadeMatrices.size()));
+            if (!splitDists.empty()) shader->SetFloatArray("u_CascadeSplitDistances", splitDists.data(), static_cast<u32>(splitDists.size()));
+            for (const auto& skin : world.Skins) {
+                if (!skin.GLMesh || (shadow && !skin.CastsShadows)) continue;
+                shader->SetMat4("u_Transform", skin.WorldTransform); shader->SetFloat4("u_Color1", skin.Color);
+                if (skin.BoneMatrices.empty()) m_SkinningPipeline->UploadIdentityPalette(*shader);
+                else m_SkinningPipeline->UploadBonePalette(*shader, skin.BoneMatrices);
+                RenderCommand::DrawIndexed(skin.GLMesh);
+            }
+        };
+        renderSkins(false, m_LightSpaceMatrix);
+        if (settings.EnableParticles && m_ParticleRenderer && !world.Particles.empty()) {
+            m_ParticleRenderer->Begin(camera, targetFBO, camera.GetNearClip(), camera.GetFarClip());
+            for (const auto& batch : world.Particles)
+                m_ParticleRenderer->Render(batch->Pool, batch->Config, batch->Texture, batch->Normal, batch->Config.SoftnessDistance);
+            m_ParticleRenderer->End();
+        }
+
         // 4. Skybox pass
         if (settings.EnableSkybox && m_Skybox && world.Skybox.Enabled) {
-            m_Skybox->SetMode(SkyboxMode::ProceduralAtmospheric);
+            m_Skybox->SetMode(world.Skybox.Type == 1 ? SkyboxMode::HDRCubemap : SkyboxMode::ProceduralAtmospheric);
+            m_Skybox->SetHDRIntensity(world.Skybox.Intensity); m_Skybox->SetExposure(world.Skybox.Exposure);
+            m_Skybox->SetToneMapping(sun.ToneMappingMode, sun.Gamma);
             auto& spec = m_Skybox->GetSpecification();
             spec.ZenithColor = glm::vec3(world.Skybox.ZenithColor);
             spec.HorizonColor = glm::vec3(world.Skybox.HorizonColor);
             spec.GroundColor = glm::vec3(world.Skybox.GroundColor);
+            spec.SunSize = world.Skybox.SunSize; spec.SunGlow = world.Skybox.SunGlow; spec.Turbidity = world.Skybox.Turbidity;
             m_Skybox->SetSunDirection(glm::vec3(world.Skybox.SunDirection));
             m_Skybox->Render(camera.GetViewMatrix(), camera.GetProjectionMatrix());
         }

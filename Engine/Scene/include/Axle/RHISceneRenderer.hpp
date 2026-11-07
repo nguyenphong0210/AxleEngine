@@ -1,4 +1,5 @@
 #pragma once
+#include <Axle/RHI/RHIFrameContext.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/Types.hpp>
 #include <Axle/PerspectiveCamera.hpp>
@@ -127,7 +128,9 @@ namespace Axle {
         RHI::RHIPipelineLayout& GetPipelineLayout() { return m_PipelineLayout; }
         nri::Pipeline* GetPipeline() const { return m_Pipeline; }
         nri::Pipeline* GetHDRPipeline() const { return m_PipelineHDR; }
-        RHI::RHIStreamer* GetStreamer() const { return m_Streamer.get(); }
+        bool WasLastRenderSuccessful() const { return m_LastRenderSucceeded; }
+        RHI::RHICompletionToken GetLastCompletion() const { return m_LastCompletion; }
+        const auto& GetMaterialDiagnostics() const { return m_MaterialDiagnostics; }
         RHI::RHISampler& GetSampler() { return m_AnisoSampler; }
         RHI::RHIDescriptorPool& GetDescriptorPool() { return m_DescriptorPool; }
         nri::DescriptorSet* GetDefaultDescriptorSet() const { return m_DefaultDescriptorSet; }
@@ -385,8 +388,11 @@ namespace Axle {
         std::unique_ptr<RHIPhysicsDebugRenderer> m_PhysicsDebugRenderer;
         std::unique_ptr<RHIObjectPicker> m_ObjectPicker;
 
-        RHI::RHICommandBuffer m_CommandBuffer;
-        std::unique_ptr<RHI::RHIStreamer> m_Streamer;
+        RHI::RHIFrameContext m_Frame;
+        RHI::RHICommandBuffer& Commands() { return *m_Frame.GetCommands(); }
+        bool m_LastRenderSucceeded = false;
+        RHI::RHICompletionToken m_LastCompletion;
+        std::unordered_map<uint32_t, std::string> m_MaterialDiagnostics;
 
         uint32_t m_LastDrawCallCount = 0;
         uint32_t m_LastRenderedEntityCount = 0;

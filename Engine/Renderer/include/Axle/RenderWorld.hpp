@@ -2,6 +2,7 @@
 #include <Axle/Types.hpp>
 #include <Axle/UUID.hpp>
 #include <Axle/BuiltinMesh.hpp>
+#include <Axle/ShaderPropertyReflection.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -13,6 +14,7 @@
 namespace Axle {
     class VertexArray;
     class Material;
+    struct RenderParticleData;
     namespace RHI {
         class RHIMesh;
         class RHIMaterial;
@@ -38,8 +40,8 @@ namespace Axle {
     struct RenderMaterialData {
         UUID MaterialUUID = 0;
         std::string MaterialPath;
-        std::shared_ptr<Material> MaterialAsset;
-        std::shared_ptr<RHI::RHIMaterial> RHIMaterialAsset;
+        std::shared_ptr<const Material> MaterialAsset;
+        std::shared_ptr<const RHI::RHIMaterial> RHIMaterialAsset;
         glm::vec4 AlbedoColor{ 1.0f };
         glm::vec4 SecondaryColor{ 1.0f };
         glm::vec2 TileScale{ 1.0f, 1.0f };
@@ -51,6 +53,12 @@ namespace Axle {
         std::string NormalMapPath;
         std::string MetallicRoughnessMapPath;
         std::string EmissiveMapPath;
+        std::vector<ShaderPropertyInstance> CustomProperties;
+        glm::vec2 UVScale{1};
+        glm::vec2 UVOffset{0};
+        float AO = 1;
+        std::string AlbedoPath;
+        bool UseAlbedoMap = false;
         bool UseCustomShader = false;
         std::string CustomShaderPath;
     };
@@ -76,6 +84,11 @@ namespace Axle {
         float Intensity = 1.0f;
         float AmbientIntensity = 0.28f;
         bool CastsShadows = true;
+        int ShadowQuality = 1;
+        float ShadowBias = 0.0012f, ShadowSlopeBias = 1, ShadowNormalBias = 0, ShadowFilterRadius = 2;
+        float MaxShadowDistance = 150, CascadeSplitLambda = 0.85f;
+        float Exposure = 1, Gamma = 2.2f;
+        int ToneMappingMode = 0;
     };
 
     struct RenderPointLight {
@@ -99,7 +112,8 @@ namespace Axle {
     };
 
     struct RenderSkyboxData {
-        bool Enabled = true;
+        bool Enabled = false;
+        float SunSize = 0.02f, SunGlow = 1, Turbidity = 2;
         int Type = 0; // 0: Atmospheric Procedural, 1: Cubemap / HDRI
         glm::vec4 SunDirection{ 0.45f, 1.0f, 0.65f, 0.0f };
         glm::vec4 SunColor{ 1.0f, 0.98f, 0.92f, 1.0f };
@@ -109,6 +123,14 @@ namespace Axle {
         std::string HDRPath;
         float Intensity = 1.0f;
         float Exposure = 1.0f;
+    };
+
+    struct RenderSkinInstance {
+        std::shared_ptr<VertexArray> GLMesh;
+        glm::mat4 WorldTransform{1};
+        glm::vec4 Color{1};
+        std::vector<glm::mat4> BoneMatrices;
+        bool CastsShadows = true;
     };
 
     // Immutable extracted snapshot of a scene ready for rendering.
@@ -125,6 +147,8 @@ namespace Axle {
 
         void Clear() {
             Meshes.clear();
+            Skins.clear();
+            Particles.clear();
             DirectionalLight.reset();
             AdditionalDirectionalLights.clear();
             PointLights.clear();
@@ -151,6 +175,9 @@ namespace Axle {
     public:
         RenderCamera Camera;
         std::vector<RenderMeshInstance> Meshes;
+        std::vector<RenderSkinInstance> Skins;
+        std::vector<std::shared_ptr<const RenderParticleData>> Particles;
+        std::string ErrorMessage;
         std::optional<RenderDirectionalLight> DirectionalLight;
         std::vector<RenderDirectionalLight> AdditionalDirectionalLights;
         std::vector<RenderPointLight> PointLights;

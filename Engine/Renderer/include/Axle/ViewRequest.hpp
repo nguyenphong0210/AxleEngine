@@ -4,7 +4,7 @@
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
-#include <Axle/SceneRenderer.hpp>
+#include <Axle/SceneRenderSettings.hpp>
 #include <memory>
 #include <string>
 

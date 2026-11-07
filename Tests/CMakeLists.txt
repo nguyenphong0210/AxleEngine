@@ -219,6 +219,10 @@ add_executable(AxleRHIResourceViewTests EXCLUDE_FROM_ALL rendering/RHIResourceVi
 target_include_directories(AxleRHIResourceViewTests PRIVATE rendering)
 target_link_libraries(AxleRHIResourceViewTests PRIVATE Axle::UI Axle::Scene)
 
+add_executable(AxleRenderServiceTests EXCLUDE_FROM_ALL rendering/RenderServiceMain.cpp)
+target_include_directories(AxleRenderServiceTests PRIVATE rendering)
+target_link_libraries(AxleRenderServiceTests PRIVATE Axle::UI Axle::Scene)
+
 add_executable(AxleRHIErrorTests EXCLUDE_FROM_ALL rendering/RHIErrorMain.cpp)
 target_include_directories(AxleRHIErrorTests PRIVATE rendering)
 target_link_libraries(AxleRHIErrorTests PRIVATE Axle::RHI)
@@ -542,7 +546,7 @@ if(WIN32)
         "${CMAKE_COMMAND}" "${CMAKE_CURRENT_BINARY_DIR}/Build Workflow Fixture" "$<CONFIG>")
     set_tests_properties(BuildWorkflowTests PROPERTIES FIXTURES_REQUIRED BuildWorkflow RUN_SERIAL TRUE TIMEOUT 30)
 endif()
-add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests)
+add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests)
 
 foreach(testTarget IN LISTS AXLE_TEST_TARGETS)
     target_include_directories(${testTarget} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")

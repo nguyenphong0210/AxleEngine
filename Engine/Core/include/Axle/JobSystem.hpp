@@ -169,6 +169,11 @@ namespace Axle {
     };
 
     class JobSystem {
+        friend class JobSystemEnkiTS;
+        // The highest enki lane is reserved for isolated physics wrappers.
+        static bool SubmitTaskSet(enki::ITaskSet* taskSet, bool physics);
+        static bool TryAdmitPhysicsTaskSet(enki::ITaskSet* taskSet) { return SubmitTaskSet(taskSet, true); }
+        static void WaitPhysicsTask(const enki::ICompletable* task);
     public:
         // Initialize persistent worker threads matching CPU hardware concurrency.
         // Must be called from the Engine's OS owner thread.
@@ -212,6 +217,7 @@ namespace Axle {
         // Direct access to the underlying enki::TaskScheduler.
         // Returns nullptr and reports an invalid-context diagnostic if called outside a valid scheduler context
         // (Engine's OS owner thread or registered worker thread) or if the scheduler is stopped.
+        // Advanced callers must leave the highest priority lane to physics wrappers.
         static enki::TaskScheduler* GetScheduler();
 
         // Run pinned tasks scheduled for the calling thread (e.g. main thread frame loop).

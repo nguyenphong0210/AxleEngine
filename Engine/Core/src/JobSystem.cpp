@@ -6,6 +6,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <condition_variable>
 
 namespace Axle {
 
@@ -16,13 +17,19 @@ namespace Axle {
         u32 DedicatedWorkerThreads = 0;
 
         std::mutex AdmissionMutex;
+        std::condition_variable AdmissionChanged;
+        u32 Submitting = 0;
 
         std::mutex MainThreadMutex;
         std::vector<QueuedCompletion> MainThreadQueue;
         static constexpr size_t MaxMainThreadQueueCapacity = 16384;
 
         std::mutex ActiveTasksMutex;
-        std::vector<std::shared_ptr<enki::ICompletable>> ActiveTasks;
+        struct OwnedTask {
+            std::shared_ptr<enki::ICompletable> Task;
+            std::shared_ptr<std::atomic<bool>> Submitted;
+        };
+        std::vector<OwnedTask> ActiveTasks;
     };
 
     static std::shared_ptr<JobSystemData> s_Data = nullptr;
@@ -35,6 +42,7 @@ namespace Axle {
         u32 Depth = 0;
     };
     static thread_local ThreadTaskContext t_TaskContext{};
+    static thread_local bool t_PumpingCompletions = false;
 
     static std::shared_ptr<JobSystemData> GetJobSystemData() {
         std::lock_guard<std::mutex> lock(s_LifecycleMutex);
@@ -69,7 +77,7 @@ namespace Axle {
             std::function<void()> TaskFunc;
             std::shared_ptr<std::atomic<bool>> Cancelled;
             std::shared_ptr<JobSystemData> SchedulerData;
-            std::atomic<bool> Started{false};
+            std::atomic<int> ExecutionState{0}; // 0 pending, 1 running, 2 cancelled
 
             AsyncLambdaTask(std::function<void()> f,
                             std::shared_ptr<std::atomic<bool>> cancelled,
@@ -81,15 +89,14 @@ namespace Axle {
 
             void ExecuteRange(enki::TaskSetPartition range, uint32_t threadnum) override {
                 (void)range; (void)threadnum;
-                if (Cancelled && Cancelled->load(std::memory_order_acquire)) {
-                    return;
-                }
-                Started.store(true, std::memory_order_release);
                 Detail::TaskExecutionScope scope;
+                auto function = std::move(TaskFunc);
+                int pending = 0;
+                if (!ExecutionState.compare_exchange_strong(pending, 1, std::memory_order_acq_rel)) return;
                 if (Cancelled && Cancelled->load(std::memory_order_acquire)) {
                     return;
                 }
-                if (TaskFunc) TaskFunc();
+                if (function) function();
             }
         };
     }
@@ -139,9 +146,10 @@ namespace Axle {
         if (!m_Cancelled || !m_Task) return false;
         if (IsComplete()) return false;
         if (auto lambdaTask = dynamic_cast<Detail::AsyncLambdaTask*>(m_Task.get())) {
-            if (lambdaTask->Started.load(std::memory_order_acquire)) {
-                return false;
-            }
+            int pending = 0;
+            if (!lambdaTask->ExecutionState.compare_exchange_strong(pending, 2, std::memory_order_acq_rel)) return false;
+            m_Cancelled->store(true, std::memory_order_release);
+            return true;
         }
         bool expected = false;
         return m_Cancelled->compare_exchange_strong(expected, true, std::memory_order_acq_rel);
@@ -180,6 +188,7 @@ namespace Axle {
     // --- JobSystem Implementation ---
 
     void JobSystem::Init(u32 numThreads) {
+        std::lock_guard<std::mutex> lifeLock(s_LifecycleMutex);
         std::thread::id callerId = std::this_thread::get_id();
         if (s_OwnerThreadId == std::thread::id()) {
             s_OwnerThreadId = callerId;
@@ -188,7 +197,6 @@ namespace Axle {
             return;
         }
 
-        std::lock_guard<std::mutex> lifeLock(s_LifecycleMutex);
         if (s_Data && s_Data->State.load(std::memory_order_acquire) != JobSystemState::Stopped) {
             AXLE_CORE_WARN("JobSystem::Init() called while already initialized (state: {0})!",
                 static_cast<int>(s_Data->State.load()));
@@ -215,8 +223,7 @@ namespace Axle {
     }
 
     void JobSystem::Shutdown() {
-        std::thread::id callerId = std::this_thread::get_id();
-        if (s_OwnerThreadId != std::thread::id() && callerId != s_OwnerThreadId) {
+        if (!IsMainThread()) {
             AXLE_CORE_ERROR("JobSystem::Shutdown() rejected: called from non-owner thread!");
             return;
         }
@@ -240,31 +247,27 @@ namespace Axle {
 
         // 1. Quiescing: reject new application work under admission lock
         {
-            std::lock_guard<std::mutex> lock(data->AdmissionMutex);
+            std::unique_lock<std::mutex> lock(data->AdmissionMutex);
             data->State.store(JobSystemState::Quiescing, std::memory_order_release);
+            data->AdmissionChanged.wait(lock, [&] { return data->Submitting == 0; });
         }
 
         // 2. Draining: wait for all admitted tasks and internal children to complete, shut down enkiTS
         data->State.store(JobSystemState::Draining, std::memory_order_release);
         data->Scheduler.WaitforAllAndShutdown();
 
-        // 3. Clear active tasks and queues
+        // 3. Retire captures outside all scheduler/queue locks. Destructors may post.
+        std::vector<JobSystemData::OwnedTask> retiredTasks;
+        std::vector<QueuedCompletion> retiredCompletions;
+        data->State.store(JobSystemState::Stopped, std::memory_order_release);
         {
             std::lock_guard<std::mutex> lock(data->ActiveTasksMutex);
-            data->ActiveTasks.clear();
+            retiredTasks.swap(data->ActiveTasks);
         }
 
         {
             std::lock_guard<std::mutex> lock(data->MainThreadMutex);
-            data->MainThreadQueue.clear();
-        }
-
-        // 4. Stopped
-        {
-            std::lock_guard<std::mutex> lock(data->AdmissionMutex);
-            data->State.store(JobSystemState::Stopped, std::memory_order_release);
-            data->TotalThreads = 0;
-            data->DedicatedWorkerThreads = 0;
+            retiredCompletions.swap(data->MainThreadQueue);
         }
 
         {
@@ -321,6 +324,7 @@ namespace Axle {
     }
 
     bool JobSystem::IsMainThread() {
+        std::lock_guard<std::mutex> lock(s_LifecycleMutex);
         return (s_OwnerThreadId != std::thread::id()) && (std::this_thread::get_id() == s_OwnerThreadId);
     }
 
@@ -346,7 +350,7 @@ namespace Axle {
     }
 
     void JobSystem::RunPinnedTasks() {
-        if (!IsMainThread()) {
+        if (!IsMainThread() || GetActiveTaskDepth() > 0) {
             ReportInvalidContext("RunPinnedTasks");
             return;
         }
@@ -356,17 +360,17 @@ namespace Axle {
         // Run enkiTS pinned tasks assigned to this thread (thread 0)
         data->Scheduler.RunPinnedTasks();
 
-        // Drain deferred main thread completions for unified pump coverage
-        PumpMainThreadCompletions();
-
         // Periodically clean up completed async task handles
-        std::lock_guard<std::mutex> lock(data->ActiveTasksMutex);
-        if (!data->ActiveTasks.empty()) {
-            auto it = std::remove_if(data->ActiveTasks.begin(), data->ActiveTasks.end(),
-                [](const std::shared_ptr<enki::ICompletable>& task) {
-                    return task->GetIsComplete();
-                });
-            data->ActiveTasks.erase(it, data->ActiveTasks.end());
+        std::vector<JobSystemData::OwnedTask> retired;
+        {
+            std::lock_guard<std::mutex> lock(data->ActiveTasksMutex);
+            auto it = data->ActiveTasks.begin();
+            while (it != data->ActiveTasks.end()) {
+                if (it->Submitted->load(std::memory_order_acquire) && it->Task->GetIsComplete()) {
+                    retired.push_back(std::move(*it));
+                    it = data->ActiveTasks.erase(it);
+                } else ++it;
+            }
         }
     }
 
@@ -387,6 +391,8 @@ namespace Axle {
         const u32 currentEpoch = s_Epoch.load(std::memory_order_relaxed);
         auto cancelledFlag = std::make_shared<std::atomic<bool>>(false);
         auto task = std::make_shared<Detail::AsyncLambdaTask>(std::move(func), cancelledFlag, data);
+        task->m_Priority = enki::TaskPriority(enki::TASK_PRIORITY_NUM - 1);
+        auto submitted = std::make_shared<std::atomic<bool>>(false);
 
         {
             std::lock_guard<std::mutex> lock(data->AdmissionMutex);
@@ -401,9 +407,17 @@ namespace Axle {
 
             {
                 std::lock_guard<std::mutex> taskLock(data->ActiveTasksMutex);
-                data->ActiveTasks.push_back(task);
+                data->ActiveTasks.push_back({task, submitted});
             }
-            data->Scheduler.AddTaskSetToPipe(task.get());
+            ++data->Submitting;
+        }
+        // enki can execute user code here when the pipe is full.
+        data->Scheduler.AddTaskSetToPipe(task.get());
+        submitted->store(true, std::memory_order_release);
+        {
+            std::lock_guard<std::mutex> lock(data->AdmissionMutex);
+            --data->Submitting;
+            data->AdmissionChanged.notify_all();
         }
 
         return JobHandle(task, data, currentEpoch, cancelledFlag);
@@ -471,12 +485,16 @@ namespace Axle {
     }
 
     u32 JobSystem::PumpMainThreadCompletions(u32 maxItems) {
-        if (!IsMainThread()) {
+        if (!IsMainThread() || GetActiveTaskDepth() > 0 || t_PumpingCompletions) {
             ReportInvalidContext("PumpMainThreadCompletions");
             return 0;
         }
         auto data = GetJobSystemData();
         if (!data) return 0;
+        struct PumpScope {
+            PumpScope() { t_PumpingCompletions = true; }
+            ~PumpScope() { t_PumpingCompletions = false; }
+        } pumpScope;
 
         std::vector<QueuedCompletion> toRun;
         {
@@ -525,6 +543,11 @@ namespace Axle {
     }
 
     bool JobSystem::TryAdmitTaskSet(enki::ITaskSet* taskSet) {
+        return SubmitTaskSet(taskSet, false);
+    }
+
+    bool JobSystem::SubmitTaskSet(enki::ITaskSet* taskSet, bool physics) {
+        static_assert(enki::TASK_PRIORITY_NUM >= 2, "Physics wait isolation requires at least two enki priority lanes");
         if (!taskSet) return false;
         if (!IsValidSchedulerContext()) {
             ReportInvalidContext("TryAdmitTaskSet");
@@ -532,20 +555,30 @@ namespace Axle {
         }
         auto data = GetJobSystemData();
         if (!data) return false;
+        taskSet->m_Priority = physics ? enki::TASK_PRIORITY_HIGH : enki::TaskPriority(enki::TASK_PRIORITY_NUM - 1);
 
-        std::lock_guard<std::mutex> lock(data->AdmissionMutex);
-        JobSystemState state = data->State.load(std::memory_order_acquire);
-        if (state == JobSystemState::Running) {
-            data->Scheduler.AddTaskSetToPipe(taskSet);
-            return true;
+        {
+            std::lock_guard<std::mutex> lock(data->AdmissionMutex);
+            JobSystemState state = data->State.load(std::memory_order_acquire);
+            const u32 currentEpoch = s_Epoch.load(std::memory_order_relaxed);
+            bool isChild = (t_TaskContext.Depth > 0 && t_TaskContext.Epoch == currentEpoch);
+            if (state != JobSystemState::Running &&
+                !((state == JobSystemState::Quiescing || state == JobSystemState::Draining) && isChild)) return false;
+            ++data->Submitting;
         }
-        const u32 currentEpoch = s_Epoch.load(std::memory_order_relaxed);
-        bool isChild = (t_TaskContext.Depth > 0 && t_TaskContext.Epoch == currentEpoch);
-        if ((state == JobSystemState::Quiescing || state == JobSystemState::Draining) && isChild) {
-            data->Scheduler.AddTaskSetToPipe(taskSet);
-            return true;
+        data->Scheduler.AddTaskSetToPipe(taskSet);
+        {
+            std::lock_guard<std::mutex> lock(data->AdmissionMutex);
+            --data->Submitting;
+            data->AdmissionChanged.notify_all();
         }
-        return false;
+        return true;
+    }
+
+    void JobSystem::WaitPhysicsTask(const enki::ICompletable* task) {
+        auto data = GetJobSystemData();
+        if (data && IsValidSchedulerContext() && data->State.load(std::memory_order_acquire) != JobSystemState::Stopped)
+            data->Scheduler.WaitforTask(task, enki::TASK_PRIORITY_HIGH);
     }
 
     void JobSystem::ReportInvalidContext(const char* operation) {
@@ -556,6 +589,7 @@ namespace Axle {
     }
 
     void JobSystem::ResetOwnerForTesting() {
+        std::lock_guard<std::mutex> lock(s_LifecycleMutex);
         s_OwnerThreadId = std::this_thread::get_id();
     }
 

@@ -57,33 +57,30 @@ namespace Axle {
         m_CancelRequested.store(true, std::memory_order_release);
 #ifdef _WIN32
         std::lock_guard<std::mutex> lock(m_ProcessMutex);
-        if (m_ProcessHandle) {
-            TerminateProcess((HANDLE)m_ProcessHandle, 1);
-        }
+        if (m_ProcessJobHandle) TerminateJobObject((HANDLE)m_ProcessJobHandle, 1);
 #endif
     }
 
     void ScriptCompiler::WaitForCompletion() {
+        if (std::this_thread::get_id() != m_OwnerThread) {
+            AXLE_ERROR("Compiler join rejected outside the operation owner thread");
+            return;
+        }
         if (m_WorkerThread.joinable()) {
             m_WorkerThread.join();
         }
 
-        // Deliver queued completions immediately if called on the engine main thread
-        if (JobSystem::IsInitialized() && JobSystem::IsMainThread()) {
-            JobSystem::PumpMainThreadCompletions();
-        }
+        PollCompletion();
+    }
 
-        // Flush offline pending callback if JobSystem is not initialized
-        if (!JobSystem::IsInitialized()) {
-            std::function<void()> cb;
-            {
-                std::lock_guard<std::mutex> lock(m_PendingMutex);
-                cb = std::move(m_PendingCallback);
-            }
-            if (cb) {
-                cb();
-            }
+    void ScriptCompiler::PollCompletion() {
+        if (std::this_thread::get_id() != m_OwnerThread || JobSystem::GetActiveTaskDepth() > 0) return;
+        std::function<void()> cb;
+        {
+            std::lock_guard<std::mutex> lock(m_PendingMutex);
+            cb = std::move(m_PendingCallback);
         }
+        if (cb) cb();
     }
 
     CompilationResult ScriptCompiler::GetLastResult() const {
@@ -153,6 +150,7 @@ namespace Axle {
     }
 
     bool ScriptCompiler::CompileAsync(const CompileRequest& request, OnCompleteCallback onComplete) {
+        if (std::this_thread::get_id() != m_OwnerThread) return false;
         if (m_Status.load(std::memory_order_acquire) == CompilerStatus::Compiling) {
             AXLE_WARN("ScriptCompiler: CompileAsync called while a build is already in progress!");
             return false;
@@ -190,22 +188,17 @@ namespace Axle {
             }
 
             if (onComplete) {
-                if (JobSystem::IsInitialized()) {
-                    // Deliver to engine OS owner thread via PostToMainThread with owner token
-                    JobSystem::PostToMainThread(request.Owner, [onComplete, result]() {
-                        if (onComplete) {
-                            onComplete(result);
-                        }
-                    });
-                } else {
-                    // JobSystem not initialized: store in pending callback for caller flush
+                auto delivered = std::make_shared<std::atomic<bool>>(false);
+                auto delivery = [onComplete, result, owner = request.Owner, delivered]() {
+                    if (!delivered->exchange(true, std::memory_order_acq_rel) && owner.IsValid()) onComplete(result);
+                };
+                {
                     std::lock_guard<std::mutex> lock(m_PendingMutex);
-                    m_PendingCallback = [onComplete, result]() {
-                        if (onComplete) {
-                            onComplete(result);
-                        }
-                    };
+                    m_PendingCallback = delivery;
                 }
+                // Keep the same exactly-once result available to owner polling,
+                // including stopped/full-queue rejection and offline compilation.
+                JobSystem::PostToMainThread(request.Owner, std::move(delivery));
             }
         });
 
@@ -221,6 +214,7 @@ namespace Axle {
     }
 
     CompilationResult ScriptCompiler::CompileSync(const CompileRequest& request) {
+        if (std::this_thread::get_id() != m_OwnerThread) return {};
         if (m_Status.load(std::memory_order_acquire) == CompilerStatus::Compiling) {
             WaitForCompletion();
             return GetLastResult();
@@ -296,7 +290,16 @@ namespace Axle {
 
         PROCESS_INFORMATION pi = { 0 };
 
-        std::string cmd = "cmd.exe /c cmake --build build --config " + request.BuildConfig + " --target " + request.Target;
+        const auto validArgument = [](const std::string& value) {
+            return !value.empty() && value.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") == std::string::npos;
+        };
+        if (!validArgument(request.BuildConfig) || !validArgument(request.Target)) {
+            CloseHandle(hReadPipe);
+            CloseHandle(hWritePipe);
+            result.OutputLog = "Invalid compiler configuration or target.";
+            return result;
+        }
+        std::string cmd = "cmake.exe --build build --config " + request.BuildConfig + " --target " + request.Target;
         std::string workingDir = request.WorkspaceDirectory.string();
 
         char cmdBuffer[2048];
@@ -308,7 +311,7 @@ namespace Axle {
             NULL,
             NULL,
             TRUE,
-            CREATE_NO_WINDOW,
+            CREATE_NO_WINDOW | CREATE_SUSPENDED,
             NULL,
             workingDir.empty() ? NULL : workingDir.c_str(),
             &si,
@@ -326,12 +329,27 @@ namespace Axle {
             return result;
         }
 
+        HANDLE processJob = CreateJobObjectW(nullptr, nullptr);
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!processJob || !SetInformationJobObject(processJob, JobObjectExtendedLimitInformation, &limits, sizeof(limits)) ||
+            !AssignProcessToJobObject(processJob, pi.hProcess)) {
+            TerminateProcess(pi.hProcess, 1);
+            if (processJob) CloseHandle(processJob);
+            CloseHandle(hReadPipe);
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            result.OutputLog = "Failed to establish compiler process-tree ownership.";
+            return result;
+        }
         {
             std::lock_guard<std::mutex> lock(m_ProcessMutex);
+            m_ProcessHandle = pi.hProcess;
+            m_ProcessJobHandle = processJob;
             if (m_CancelRequested.load(std::memory_order_acquire)) {
-                TerminateProcess(pi.hProcess, 1);
-            } else {
-                m_ProcessHandle = pi.hProcess;
+                TerminateJobObject(processJob, 1);
+            } else if (ResumeThread(pi.hThread) == static_cast<DWORD>(-1)) {
+                TerminateJobObject(processJob, 1);
             }
         }
 
@@ -340,8 +358,14 @@ namespace Axle {
         DWORD bytesRead = 0;
         std::string lineAccumulator;
 
-        while (!m_CancelRequested.load(std::memory_order_acquire) &&
-               ReadFile(hReadPipe, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && bytesRead > 0) {
+        for (;;) {
+            DWORD available = 0;
+            if (!PeekNamedPipe(hReadPipe, nullptr, 0, nullptr, &available, nullptr)) break;
+            if (available == 0) {
+                if (WaitForSingleObject(pi.hProcess, 20) == WAIT_OBJECT_0) break;
+                continue;
+            }
+            if (!ReadFile(hReadPipe, buffer, std::min<DWORD>(available, sizeof(buffer) - 1), &bytesRead, NULL) || bytesRead == 0) break;
             buffer[bytesRead] = '\0';
             std::string chunk(buffer, bytesRead);
 
@@ -392,9 +416,10 @@ namespace Axle {
         {
             std::lock_guard<std::mutex> lock(m_ProcessMutex);
             m_ProcessHandle = nullptr;
+            m_ProcessJobHandle = nullptr;
+            CloseHandle(processJob);
+            CloseHandle(pi.hProcess);
         }
-
-        CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
 
         auto endTime = std::chrono::high_resolution_clock::now();

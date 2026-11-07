@@ -134,6 +134,8 @@ namespace Axle {
 
         void Cancel();
         void WaitForCompletion();
+        // Owner polling is also the recovery path when the bounded executor rejects a post.
+        void PollCompletion();
 
     private:
         ScriptCompiler();
@@ -163,6 +165,8 @@ namespace Axle {
 
         std::mutex m_ProcessMutex;
         void* m_ProcessHandle = nullptr;
+        void* m_ProcessJobHandle = nullptr;
+        std::thread::id m_OwnerThread = std::this_thread::get_id();
 
         std::mutex m_PendingMutex;
         std::function<void()> m_PendingCallback;

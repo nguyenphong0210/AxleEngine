@@ -15,6 +15,8 @@
 
 #include <thread>
 #include <algorithm>
+#include <exception>
+#include <cmath>
 
 namespace Axle {
 
@@ -44,6 +46,10 @@ namespace Axle {
     }
 
     PhysicsScene::~PhysicsScene() {
+        if (!JobSystem::IsMainThread() || JobSystem::GetActiveTaskDepth() > 0) {
+            AXLE_CORE_ERROR("PhysicsScene destruction requires an owner-thread boundary");
+            std::terminate();
+        }
         if (m_JobSystem) {
             m_JobSystem->Shutdown();
         }
@@ -58,8 +64,12 @@ namespace Axle {
     }
 
     void PhysicsScene::Step(Timestep ts, i32 collisionSteps) {
+        if (!JobSystem::IsMainThread() || JobSystem::GetActiveTaskDepth() > 0) {
+            AXLE_CORE_ERROR("PhysicsScene::Step rejected outside an owner-thread boundary");
+            return;
+        }
         const f32 dt = ts.GetSeconds();
-        if (dt <= 0.0f)
+        if (!std::isfinite(dt) || dt <= 0.0f || collisionSteps <= 0)
             return;
 
         // Jolt physics simulation update

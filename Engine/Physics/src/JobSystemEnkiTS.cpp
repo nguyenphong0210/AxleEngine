@@ -5,6 +5,7 @@
 #include <thread>
 #include <chrono>
 #include <algorithm>
+#include <exception>
 
 namespace Axle {
 
@@ -45,8 +46,9 @@ namespace Axle {
     }
 
     JobSystemEnkiTS::~JobSystemEnkiTS() {
-        if (!Axle::JobSystem::IsMainThread()) {
+        if (!Axle::JobSystem::IsMainThread() || t_InJobScope > 0 || Axle::JobSystem::GetActiveTaskDepth() > 0) {
             AXLE_CORE_ERROR("JobSystemEnkiTS destructor called from non-owner thread or worker task!");
+            std::terminate(); // Returning would free records that executing jobs still own.
         }
         Shutdown();
     }
@@ -59,11 +61,9 @@ namespace Axle {
 
         m_IsShutdown.store(true, std::memory_order_release);
 
-        if (Axle::JobSystem::IsInitialized() && Axle::JobSystem::GetDedicatedWorkerThreadCount() == 0) {
-            Axle::JobSystem::WaitForAll();
+        while (!WaitForLiveTasks(std::chrono::milliseconds(2000))) {
+            AXLE_CORE_ERROR("JobSystemEnkiTS drain is still waiting for live submissions; retaining their storage");
         }
-
-        WaitForLiveTasks(std::chrono::milliseconds(2000));
     }
 
     void JobSystemEnkiTS::Init(JPH::uint inMaxJobs, JPH::uint inMaxBarriers) {
@@ -89,7 +89,7 @@ namespace Axle {
     }
 
     JPH::JobHandle JobSystemEnkiTS::CreateJob(const char* inName, JPH::ColorArg inColor, const JobFunction& inJobFunction, JPH::uint32 inNumDependencies) {
-        if (m_IsShutdown.load(std::memory_order_acquire)) {
+        if (m_IsShutdown.load(std::memory_order_acquire) && t_InJobScope == 0) {
             AXLE_CORE_WARN("JobSystemEnkiTS::CreateJob rejected: bridge is shut down!");
             return JPH::JobHandle();
         }
@@ -102,13 +102,21 @@ namespace Axle {
             inJobFunction();
         };
 
-        JPH::uint32 index;
-        for (;;) {
+        auto index = m_Jobs.ConstructObject(inName, inColor, this, wrappedFunction, inNumDependencies);
+        if (index == AvailableJobs::cInvalidObjectIndex && Axle::JobSystem::IsMainThread() &&
+            Axle::JobSystem::GetActiveTaskDepth() == 0 && t_InJobScope == 0) {
+            // Jolt can finish a barrier by executing its jobs itself while their
+            // enki wrappers are still queued and retain job-slot references.
+            // Drain those physics wrappers before diagnosing genuine capacity
+            // exhaustion. Never steal unrelated work or spin on held handles.
+            if (GetLiveTaskCount() > 0) WaitForLiveTasks();
+            // Even a zero count needs a retry: the last wrapper may have freed
+            // its slot between the failed allocation and the live-count query.
             index = m_Jobs.ConstructObject(inName, inColor, this, wrappedFunction, inNumDependencies);
-            if (index != AvailableJobs::cInvalidObjectIndex)
-                break;
-            JPH_ASSERT(false, "No jobs available in JobSystemEnkiTS!");
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+        if (index == AvailableJobs::cInvalidObjectIndex) {
+            AXLE_CORE_ERROR("JobSystemEnkiTS job capacity exhausted ({0}); submission rejected", m_MaxJobs);
+            return {};
         }
 
         EnkiJob* job = &m_Jobs.Get(index);
@@ -135,10 +143,16 @@ namespace Axle {
             PhysicsTaskRecord* record = AcquireRecord();
             record->m_Job = job;
 
-            if (!Axle::JobSystem::TryAdmitTaskSet(record)) {
+            // With no dedicated worker, run only this physics job. A scheduler
+            // wait here could steal arbitrary Scene/UI work under Jolt locks.
+            const bool synchronous = !Axle::JobSystem::IsInitialized() ||
+                                     Axle::JobSystem::GetDedicatedWorkerThreadCount() == 0;
+            if (synchronous || !Axle::JobSystem::TryAdmitPhysicsTaskSet(record)) {
                 // If admission fails (e.g. Quiescing/Stopped/Queue full), execute synchronously
                 record->ExecuteSynchronous();
                 ReclaimRecordSynchronous(record);
+            } else {
+                record->m_Published.store(true, std::memory_order_release);
             }
         }
     }
@@ -149,10 +163,6 @@ namespace Axle {
 
     void JobSystemEnkiTS::WaitForJobs(Barrier* inBarrier) {
         JobSystemWithBarrier::WaitForJobs(inBarrier);
-
-        if (Axle::JobSystem::IsInitialized() && Axle::JobSystem::GetDedicatedWorkerThreadCount() == 0) {
-            Axle::JobSystem::WaitForAll();
-        }
 
         std::lock_guard<std::mutex> lock(m_PoolMutex);
         DrainPendingReclaim();
@@ -185,6 +195,7 @@ namespace Axle {
         record->m_Owner = this;
         record->m_Job = nullptr;
         record->m_BodyCompleted.store(false, std::memory_order_relaxed);
+        record->m_Published.store(false, std::memory_order_relaxed);
         return record;
     }
 
@@ -194,7 +205,7 @@ namespace Axle {
         auto it = m_PendingReclaim.begin();
         while (it != m_PendingReclaim.end()) {
             PhysicsTaskRecord* record = *it;
-            if (record->GetIsComplete()) {
+            if (record->m_Published.load(std::memory_order_acquire) && record->GetIsComplete()) {
                 record->m_Job = nullptr;
                 record->m_BodyCompleted.store(false, std::memory_order_relaxed);
                 m_FreeRecords.push_back(record);
@@ -230,16 +241,26 @@ namespace Axle {
     }
 
     bool JobSystemEnkiTS::WaitForLiveTasks(std::chrono::milliseconds timeout) {
+        if (!Axle::JobSystem::IsMainThread() || t_InJobScope > 0 || Axle::JobSystem::GetActiveTaskDepth() > 0) return false;
         const auto start = std::chrono::steady_clock::now();
         while (GetLiveTaskCount() > 0) {
             if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start) > timeout) {
                 return false;
             }
-            if (Axle::JobSystem::IsInitialized() && Axle::JobSystem::GetDedicatedWorkerThreadCount() == 0) {
-                Axle::JobSystem::WaitForAll();
-            } else {
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
+            PhysicsTaskRecord* pending = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(m_PoolMutex);
+                for (auto& record : m_AllRecords) {
+                    if (record->m_Published.load(std::memory_order_acquire) && !record->GetIsComplete()) {
+                        pending = record.get();
+                        break;
+                    }
+                }
             }
+            // The reserved high lane contains only physics wrappers. It cannot
+            // steal general work even when every dedicated worker is occupied.
+            if (pending) Axle::JobSystem::WaitPhysicsTask(pending);
+            else std::this_thread::yield();
         }
         return true;
     }

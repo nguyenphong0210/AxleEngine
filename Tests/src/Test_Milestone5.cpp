@@ -86,8 +86,11 @@ bool RunTest_Step22_Phase19_CoreJobSystemEngine() {
 
     workerHandle.Wait();
 
-    // Main thread pumps pinned tasks (if not already executed via work-stealing during Wait)
+    // Waiting and pinned work must not reenter Scene/UI completion callbacks.
+    assert(!mainThreadTaskExecuted.load());
     Axle::JobSystem::RunPinnedTasks();
+    assert(!mainThreadTaskExecuted.load());
+    Axle::JobSystem::PumpMainThreadCompletions();
     assert(mainThreadTaskExecuted.load());
     assert(mainThreadWorkerId.load() == 0);
     std::cout << "  -> PASS: Cross-thread callback safely executed on main thread (Thread 0)!" << std::endl;

@@ -62,6 +62,8 @@ namespace Axle {
     }
 
     Application::~Application() {
+        // Admitted jobs may still use layer-owned scene, GPU or physics resources.
+        JobSystem::WaitForAll();
         AXLE_CORE_INFO("Application::~Application -> [1/6] Clear LayerStack");
         m_LayerStack.Clear();
 

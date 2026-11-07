@@ -36,6 +36,7 @@ namespace Axle {
             JobSystemEnkiTS* m_Owner = nullptr;
             Job* m_Job = nullptr;
             std::atomic<bool> m_BodyCompleted{false};
+            std::atomic<bool> m_Published{false};
         };
 
         explicit JobSystemEnkiTS(JPH::uint inMaxJobs = JPH::cMaxPhysicsJobs, JPH::uint inMaxBarriers = JPH::cMaxPhysicsBarriers);

@@ -130,6 +130,7 @@ int RunThreadIdentityProbe(bool registeredProducer = false) {
 
     const auto callbacksBeforePump = callbackCount.load();
     Axle::JobSystem::RunPinnedTasks();
+    Axle::JobSystem::PumpMainThreadCompletions();
     const auto callbacksAfterPump = callbackCount.load();
     const bool deliveredOnMain = callbackOnMain.load();
     Axle::JobSystem::Shutdown();
@@ -732,8 +733,11 @@ int RunEJ03CompilerHandoffProbe(const std::filesystem::path& workspace) {
               << "project(EJ03CompilerProbe NONE)\n"
               << "add_custom_target(EJ03ValidTarget\n"
               << "    COMMAND \"${CMAKE_COMMAND}\" -E echo \"EJ03TargetExecuted\"\n"
-              << "    VERBATIM)\n";
+              << "    VERBATIM)\n"
+              << "add_custom_target(EJ03SlowTarget COMMAND \"${CMAKE_COMMAND}\" -P \"${CMAKE_SOURCE_DIR}/slow.cmake\" VERBATIM)\n";
     cmakeFile.close();
+    std::ofstream(fixtureDir / "slow.cmake")
+        << "message(\"EJ03_CHILD_READY\")\nexecute_process(COMMAND \"${CMAKE_COMMAND}\" -E sleep 30)\n";
 
     std::string configureCmd = "cmake -S \"" + fixtureDir.string() + "\" -B \"" + (fixtureDir / "build").string() + "\"";
     if (std::system(configureCmd.c_str()) != 0) {
@@ -833,6 +837,35 @@ int RunEJ03CompilerHandoffProbe(const std::filesystem::path& workspace) {
     }
 
     Axle::JobSystem::Shutdown();
+    // A full executor must preserve the result for exactly-once owner polling.
+    Axle::JobSystem::Init(2);
+    while (Axle::JobSystem::PostToMainThread([] {}) == Axle::PostResult::Success) {}
+    int delivered = 0;
+    compiler.CompileAsync([&](const Axle::CompilationResult&) { ++delivered; });
+    compiler.WaitForCompletion();
+    Axle::JobSystem::PumpMainThreadCompletions(0);
+    if (delivered != 1) return 1;
+
+    // Cancel after a real descendant has published readiness, not before spawn.
+    compiler.SetTarget("EJ03SlowTarget");
+    compiler.CompileAsync();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (compiler.GetCurrentOutputLog().find("EJ03_CHILD_READY") == std::string::npos && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::yield();
+    const bool childReady = compiler.GetCurrentOutputLog().find("EJ03_CHILD_READY") != std::string::npos;
+    const auto cancelStart = std::chrono::steady_clock::now();
+    compiler.Cancel();
+    compiler.WaitForCompletion();
+    if (!childReady || !compiler.GetLastResult().Cancelled || std::chrono::steady_clock::now() - cancelStart > std::chrono::seconds(5)) return 1;
+
+    Axle::JobSystem::Shutdown();
+    compiler.SetTarget("EJ03ValidTarget");
+    Axle::OperationOwner offlineOwner;
+    bool staleOfflineCallback = false;
+    compiler.CompileAsync(offlineOwner.GetToken(), [&](const Axle::CompilationResult&) { staleOfflineCallback = true; });
+    offlineOwner.Invalidate();
+    compiler.WaitForCompletion();
+    if (staleOfflineCallback) return 1;
     std::cout << "RESULT ej03-compiler-handoff PASS" << std::endl;
     return 0;
 }
@@ -927,7 +960,7 @@ int RunEJ05PhysicsLifetimeProbe() {
     // Bridge configured with small pool (4 jobs, 2 barriers) to force aggressive slot reuse
     {
         auto bridge = std::make_unique<Axle::JobSystemEnkiTS>(4, 2);
-        constexpr int kTotalJobs = 32;
+        constexpr int kTotalJobs = 256;
         std::atomic<int> completedCount{0};
 
         for (int i = 0; i < kTotalJobs; ++i) {
@@ -935,6 +968,11 @@ int RunEJ05PhysicsLifetimeProbe() {
             auto job = bridge->CreateJob("ConstrainedReuseJob", JPH::Color::sGreen, [&completedCount] {
                 completedCount.fetch_add(1, std::memory_order_relaxed);
             });
+            if (!job.IsValid()) {
+                bridge->DestroyBarrier(barrier);
+                std::cerr << "[EJ05] FAILED: Completed barrier retained job-slot capacity\n";
+                return 1;
+            }
             barrier->AddJob(job);
             // Invalidate handle immediately so JPH job reference is released
             job = {};

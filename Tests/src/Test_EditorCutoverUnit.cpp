@@ -60,6 +60,7 @@ void TestEditorSimulationDriverIntegration() {
 
     // 2. Play Mode: clone ephemeral runtime scene and resume driver
     auto runtimeScene = Scene::Copy(editorScene);
+    runtimeScene->OnRuntimeStart(physicsScene.get());
     driver.Reset();
     driver.Resume();
     EXPECT_FALSE(driver.IsPaused());
@@ -133,6 +134,7 @@ void TestEditorZeroDriftRestoration() {
 
     // Start simulation
     auto runtimeScene = Scene::Copy(editorScene);
+    runtimeScene->OnRuntimeStart(physicsScene.get());
     driver.Reset();
     driver.Resume();
 

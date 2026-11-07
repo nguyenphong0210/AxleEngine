@@ -3,21 +3,6 @@
 
 namespace Axle {
 
-    ComponentCodecRegistry& ComponentCodecRegistry::Get() {
-        static ComponentCodecRegistry s_Instance;
-        return s_Instance;
-    }
-
-    ComponentCodecRegistry::ComponentCodecRegistry() {
-        RegisterBuiltinCodecs();
-    }
-
-    void ComponentCodecRegistry::RegisterCodec(std::unique_ptr<IComponentCodec> codec) {
-        if (codec) {
-            m_Codecs.push_back(std::move(codec));
-        }
-    }
-
     template<typename T>
     static void RegisterSimpleCodec(std::vector<std::unique_ptr<IComponentCodec>>& codecs, std::string_view name) {
         codecs.push_back(std::make_unique<FunctionalComponentCodec<T, void(*)(const ComponentCopyContext&)>>(
@@ -28,10 +13,11 @@ namespace Axle {
         ));
     }
 
-    void ComponentCodecRegistry::RegisterBuiltinCodecs() {
-        // Transform
-        RegisterSimpleCodec<TransformComponent>(m_Codecs, "TransformComponent");
-
+    void RegisterRuntimeComponentCodecs() {
+        static bool registered = false;
+        if (registered) return;
+        registered = true;
+        auto& m_Codecs = ComponentCodecRegistry::Get().GetMutableCodecs();
         // Visual / Rendering
         RegisterSimpleCodec<MeshInstance3D>(m_Codecs, "MeshInstance3D");
         RegisterSimpleCodec<MaterialComponent>(m_Codecs, "MaterialComponent");
@@ -44,14 +30,20 @@ namespace Axle {
 
         // Physics
         RegisterSimpleCodec<CollisionShape3D>(m_Codecs, "CollisionShape3D");
-        RegisterSimpleCodec<RigidBody3D>(m_Codecs, "RigidBody3D");
+        m_Codecs.push_back(std::make_unique<FunctionalComponentCodec<RigidBody3D, void(*)(const ComponentCopyContext&)>>(
+            "RigidBody3D", [](const ComponentCopyContext& ctx) {
+                auto copy = ctx.SrcRegistry.get<RigidBody3D>(ctx.SrcEntity);
+                copy.RuntimeBodyID = {};
+                ctx.DstRegistry.emplace_or_replace<RigidBody3D>(ctx.DstEntity, copy);
+            }));
 
         // Native Script (pure state copy, runtime instance deferred)
         m_Codecs.push_back(std::make_unique<FunctionalComponentCodec<NativeScriptComponent, void(*)(const ComponentCopyContext&)>>(
             "NativeScriptComponent",
             [](const ComponentCopyContext& ctx) {
                 const auto& srcNsc = ctx.SrcRegistry.get<NativeScriptComponent>(ctx.SrcEntity);
-                auto& dstNsc = ctx.DstRegistry.emplace_or_replace<NativeScriptComponent>(ctx.DstEntity, srcNsc.ScriptName);
+                auto& dstNsc = ctx.DstRegistry.emplace_or_replace<NativeScriptComponent>(ctx.DstEntity);
+                dstNsc.ScriptName = srcNsc.ScriptName;
                 dstNsc.FloatFields = srcNsc.FloatFields;
                 dstNsc.IntFields = srcNsc.IntFields;
                 dstNsc.BoolFields = srcNsc.BoolFields;
@@ -135,7 +127,7 @@ namespace Axle {
         RegisterSimpleCodec<UICanvasComponent>(m_Codecs, "UICanvasComponent");
 
         // Passive Extension Storage (unknown/plugin sections preserved across duplication & copy)
-        RegisterSimpleCodec<PassiveExtensionComponent>(m_Codecs, "PassiveExtensionComponent");
+
     }
 
 }

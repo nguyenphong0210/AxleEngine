@@ -72,6 +72,7 @@ namespace Axle {
 
         // Discards all pending edge triggers and held keys (e.g. on pause / resume)
         void Flush();
+        void DiscardEdges();
 
         const SimulationInputSnapshot& GetCurrentSnapshot() const;
         const SimulationInputSnapshot& GetHardwareState() const { return m_CurrentHardwareState; }
@@ -90,6 +91,9 @@ namespace Axle {
         bool m_ContextActive = false;
 
         const InputContext* m_PreviousInputContext = nullptr;
+        SimulationInputAdapter* m_PreviousAdapter = nullptr;
+        bool m_SuppressHardwareEdges = false;
+        float m_PendingScroll = 0.0f;
         InputContext m_TickInputContext;
 
         inline static SimulationInputAdapter* s_ActiveAdapter = nullptr;

@@ -1,9 +1,7 @@
 add_library(AxleScene STATIC
-    src/SceneData.cpp
-    src/ComponentCodec.cpp
     src/Scene.cpp
-    src/Entity.cpp
-    src/SceneCommandBuffer.cpp
+    src/RuntimeEntity.cpp
+    src/RuntimeComponentCodec.cpp
     src/ScenePhysicsBridge.cpp
     src/SceneAudioBridge.cpp
     src/SceneScriptBridge.cpp
@@ -27,7 +25,6 @@ add_library(AxleScene STATIC
     src/SimulationDriver.cpp
 )
 add_library(Axle::Scene ALIAS AxleScene)
-add_library(Axle::SceneData ALIAS AxleScene)
 
 target_include_directories(AxleScene PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -36,6 +33,7 @@ target_include_directories(AxleScene PUBLIC
 
 target_link_libraries(AxleScene
     PUBLIC
+        Axle::SceneData
         Axle::Core
         Axle::RHI
         Axle::Renderer

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <memory>
 #include <vector>
+#include <atomic>
 
 namespace Axle {
 
@@ -11,6 +12,7 @@ namespace Axle {
 
     struct HotReloadResult {
         bool Success = false;
+        bool RequiresSimulationStop = false;
         std::string Message;
         uint32_t ScriptCount = 0;
         double DurationSeconds = 0.0;
@@ -61,6 +63,8 @@ namespace Axle {
         void SyncImGuiContext(void* imguiContext = nullptr);
 
         void SetActiveScene(std::shared_ptr<Scene> scene) { m_ActiveScene = scene; }
+        void RegisterScene(Scene* scene);
+        void UnregisterScene(Scene* scene);
 
     private:
         ScriptHotReloadManager() = default;
@@ -81,6 +85,8 @@ namespace Axle {
         std::filesystem::path m_CurrentRuntimeDllPath;
         std::vector<std::filesystem::path> m_OldRuntimeDlls;
         std::weak_ptr<Scene> m_ActiveScene;
+        std::vector<Scene*> m_Scenes;
+        bool m_Reloading = false;
     };
 
 }

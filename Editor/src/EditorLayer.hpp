@@ -66,6 +66,7 @@ public:
     void OnScenePlay();
     void OnScenePause();
     void OnSceneStop();
+    void VerifySimulationContract();
     Axle::SimulationDriver& GetSimulationDriver() { return m_SimulationDriver; }
     const Axle::SimulationDriver& GetSimulationDriver() const { return m_SimulationDriver; }
     void CompileAndHotReloadAssets(bool forceRebakeAll = false);
@@ -104,6 +105,7 @@ private:
 private:
     std::unique_ptr<Axle::PerspectiveCameraController> m_CameraController;
     std::unique_ptr<Axle::PhysicsScene> m_PhysicsScene;
+    std::unique_ptr<Axle::PhysicsScene> m_EditorPhysicsScene;
     std::unique_ptr<Axle::PhysicsDebugRenderer> m_PhysicsDebugRenderer;
     Axle::PhysicsDrawSettings m_PhysicsDrawSettings;
     bool m_ShowPhysicsDebug = false;

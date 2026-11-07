@@ -131,7 +131,7 @@ namespace Axle {
                             break;
                         }
                     }
-                    delete temp;
+                    ScriptRegistry::Destroy(scriptName, temp);
                 }
             }
         }

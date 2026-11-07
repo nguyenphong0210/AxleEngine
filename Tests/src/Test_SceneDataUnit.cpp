@@ -125,6 +125,8 @@ namespace {
     }
 
     bool TestSceneDataComponentCodecsAndCopy() {
+        // Concrete component providers are explicitly installed by composition.
+        Axle::RegisterRuntimeComponentCodecs();
         std::cout << "[RUN] TestSceneDataComponentCodecsAndCopy..." << std::endl;
 
         auto srcScene = std::make_shared<Axle::SceneData>();

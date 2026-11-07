@@ -8,8 +8,8 @@
 namespace Axle {
 
     enum class ClockOverloadPolicy : uint8_t {
-        Clamp = 0,   // Clamp accumulator to MaxAccumulator
-        Drop = 1     // Drop entire accumulator to zero
+        Clamp = 0,   // Drop excess whole ticks, retaining the fractional remainder
+        Drop = 1     // Discard the overloaded frame's simulation interval
     };
 
     struct SimulationClockDiagnostics {
@@ -17,16 +17,20 @@ namespace Axle {
         uint64_t TotalFrames = 0;
         uint64_t OverloadDrops = 0;
         uint64_t InvalidDtDrops = 0;
-        float TotalSimulationTime = 0.0f;
-        float TotalRealTime = 0.0f;
+        double TotalSimulationTime = 0.0;
+        double TotalRealTime = 0.0;
+        double DroppedSimulationTime = 0.0;
+        double DroppedWallTime = 0.0;
+        uint64_t DroppedTicks = 0;
     };
 
     class SimulationClock {
     public:
-        explicit SimulationClock(float fixedTimestep = 1.0f / 60.0f, float maxAccumulator = 0.2f);
+        explicit SimulationClock(float fixedTimestep = 1.0f / 60.0f, float maxAccumulator = 0.25f);
 
         // Core tick step calculation
         uint32_t Advance(float rawDt);
+        float GetFrameSimulationDelta() const { return m_FrameSimulationDelta; }
 
         // Control APIs
         void Pause();
@@ -64,7 +68,9 @@ namespace Axle {
     private:
         float m_FixedTimestep = 1.0f / 60.0f;
         double m_Accumulator = 0.0;
-        float m_MaxAccumulator = 0.2f; // ~12 ticks at 60Hz
+        float m_MaxAccumulator = 0.25f; // Maximum wall interval admitted per frame
+        static constexpr uint32_t MaxTicksPerFrame = 8;
+        float m_FrameSimulationDelta = 0.0f;
         float m_Speed = 1.0f;
         bool m_IsPaused = false;
         bool m_SingleStepRequested = false;

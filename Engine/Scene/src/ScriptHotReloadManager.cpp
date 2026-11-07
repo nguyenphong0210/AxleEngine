@@ -7,6 +7,9 @@
 #include <Axle/Log.hpp>
 #include <chrono>
 #include <system_error>
+#include <algorithm>
+#include <unordered_set>
+#include <Axle/JobSystem.hpp>
 
 #ifdef _WIN32
     #ifndef NOMINMAX
@@ -71,6 +74,10 @@ namespace Axle {
     }
 
     bool ScriptHotReloadManager::Initialize(const std::filesystem::path& sourceDllPath) {
+        if (!JobSystem::IsMainThread() || JobSystem::GetActiveTaskDepth() > 0 || m_Reloading) {
+            AXLE_ERROR("Script module initialization rejected outside an idle owner-thread boundary");
+            return false;
+        }
         m_SourceDllPath = ResolveSourceDllPath(sourceDllPath);
         AXLE_INFO("ScriptHotReloadManager: Resolved source DLL: '{0}'", m_SourceDllPath.string());
 
@@ -99,6 +106,22 @@ namespace Axle {
     HotReloadResult ScriptHotReloadManager::Reload(std::shared_ptr<Scene> activeScene, bool isRuntimeActive) {
         auto startTime = std::chrono::high_resolution_clock::now();
         HotReloadResult result;
+        if (!JobSystem::IsMainThread() || JobSystem::GetActiveTaskDepth() > 0 || m_Reloading) {
+            result.Message = "Script reload requires an idle owner-thread boundary.";
+            return result;
+        }
+        const auto scenes = m_Scenes;
+        for (auto* scene : scenes) {
+            if (!scene->CanMutate()) {
+                result.Message = "Script reload rejected during scene iteration.";
+                return result;
+            }
+        }
+        struct ReloadScope {
+            bool& Active;
+            explicit ReloadScope(bool& active) : Active(active) { Active = true; }
+            ~ReloadScope() { Active = false; }
+        } reloadScope(m_Reloading);
 
         if (!activeScene && !m_ActiveScene.expired()) {
             activeScene = m_ActiveScene.lock();
@@ -117,7 +140,7 @@ namespace Axle {
         }
 
         // Phase 1: Staging - Create candidate shadow copy and validate handshake before touching active module
-        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        auto ms = std::chrono::steady_clock::now().time_since_epoch().count();
         std::string candidateFilename = "AxleScripts_Runtime_" + std::to_string(ms) + ".dll";
         std::filesystem::path candidatePath = m_SourceDllPath.parent_path() / candidateFilename;
 
@@ -176,11 +199,19 @@ namespace Axle {
             AXLE_ERROR("ScriptHotReloadManager: {0}", result.Message);
             return result;
         }
+        using BuildIdentityFn = uint64_t(*)();
+        auto fnBuildIdentity = reinterpret_cast<BuildIdentityFn>(GetProcAddress(hCandidate, "Axle_GetScriptBuildIdentity"));
+        if (!fnBuildIdentity || fnBuildIdentity() != AXLE_SCRIPT_BUILD_ID) {
+            FreeLibrary(hCandidate);
+            std::filesystem::remove(candidatePath, ec);
+            result.Message = "Candidate script compiler/configuration identity does not match the host.";
+            return result;
+        }
 
         auto fnGetCount = (GetCountFn)GetProcAddress(hCandidate, "Axle_GetScriptCount");
         auto fnInit = (InitFn)GetProcAddress(hCandidate, "Axle_InitializeScripts");
 
-        if (!fnInit) {
+        if (!fnInit || !fnGetCount) {
             FreeLibrary(hCandidate);
             std::filesystem::remove(candidatePath, ec);
             result.Success = false;
@@ -194,18 +225,38 @@ namespace Axle {
         std::vector<std::pair<std::string, ScriptMetadata>> candidateScripts;
         s_CandidateScripts = &candidateScripts;
 
-        fnInit([](const char* name, const ScriptMetadata* meta) {
+        try { fnInit([](const char* name, const ScriptMetadata* meta) {
             if (name && meta && s_CandidateScripts) {
                 s_CandidateScripts->emplace_back(std::string(name), *meta);
             }
-        });
+        }); } catch (...) {
+            s_CandidateScripts = nullptr;
+            candidateScripts.clear();
+            FreeLibrary(hCandidate);
+            std::filesystem::remove(candidatePath, ec);
+            result.Message = "Candidate metadata registration failed; active generation retained.";
+            return result;
+        }
         s_CandidateScripts = nullptr;
 
-        // Phase 2: Enter Scene Reload Barrier & destroy existing script instances safely
-        if (activeScene) {
-            AXLE_INFO("ScriptHotReloadManager: Preserving field states for scene entities...");
-            activeScene->OnPreScriptReload();
+        std::unordered_set<std::string> candidateNames;
+        bool validMetadata = !fnGetCount || fnGetCount() == candidateScripts.size();
+        for (const auto& [name, meta] : candidateScripts) {
+            validMetadata = validMetadata && !name.empty() && name == meta.Name && meta.Factory && meta.Destroyer &&
+                            candidateNames.insert(name).second;
         }
+        if (!validMetadata) {
+            candidateScripts.clear();
+            FreeLibrary(hCandidate);
+            std::filesystem::remove(candidatePath, ec);
+            result.Message = "Candidate script metadata is incomplete, duplicated or inconsistent.";
+            return result;
+        }
+
+        // Phase 2: Enter Scene Reload Barrier & destroy existing script instances safely
+        JobSystem::WaitForAll();
+        for (auto* scene : scenes) scene->OnPreScriptReload();
+        ScriptRegistry::ClearDynamicScripts();
 
         // Phase 3: Unload previous runtime DLL
         if (m_ModuleHandle) {
@@ -226,7 +277,6 @@ namespace Axle {
         m_ModuleGeneration.fetch_add(1, std::memory_order_release);
 
         // Commit candidate metadata to ScriptRegistry
-        ScriptRegistry::ClearDynamicScripts();
         for (const auto& [name, meta] : candidateScripts) {
             ScriptRegistry::RegisterMetadata(name, meta, true);
         }
@@ -235,12 +285,20 @@ namespace Axle {
 
         // Synchronize engine input context to newly committed script DLL
         SyncInputContext();
+        SyncImGuiContext();
 #endif
 
         // Phase 5: Restore Scene entities and re-bind new class instances
-        if (activeScene) {
-            AXLE_INFO("ScriptHotReloadManager: Restoring and re-binding scene entities...");
-            activeScene->OnPostScriptReload(isRuntimeActive);
+        try {
+            for (auto* scene : scenes) {
+                scene->OnPostScriptReload(scene->IsRuntimeActive() || (scene == activeScene.get() && isRuntimeActive));
+            }
+        } catch (const std::exception& error) {
+            for (auto* scene : scenes) scene->StopAfterScriptReloadFailure();
+            result.RequiresSimulationStop = true;
+            result.Message = "Script binding failed after module commit; simulation stopped, module retained: " + std::string(error.what());
+            AXLE_ERROR("ScriptHotReloadManager: {0}", result.Message);
+            return result;
         }
 
         // Phase 6: Clean up previous unlocked shadow copies
@@ -287,9 +345,6 @@ namespace Axle {
         if (fnSetInput) {
             fnSetInput(ctxToSend);
         }
-        if (m_ImGuiContext) {
-            SyncImGuiContext(m_ImGuiContext);
-        }
 #endif
     }
 
@@ -329,12 +384,13 @@ namespace Axle {
     }
 
     void ScriptHotReloadManager::Shutdown() {
-        if (!m_ActiveScene.expired()) {
-            auto scene = m_ActiveScene.lock();
-            if (scene) {
-                scene->OnPreScriptReload();
-            }
+        if (!JobSystem::IsMainThread() || JobSystem::GetActiveTaskDepth() > 0 || m_Reloading) {
+            AXLE_ERROR("Script module shutdown rejected outside an idle owner-thread boundary");
+            return;
         }
+        if (!m_ModuleHandle) return;
+        JobSystem::WaitForAll();
+        for (auto* scene : m_Scenes) scene->OnPreScriptReload();
         m_ModuleGeneration.fetch_add(1, std::memory_order_release);
 #ifdef _WIN32
         if (m_ModuleHandle) {
@@ -351,6 +407,14 @@ namespace Axle {
         }
 #endif
         CleanupOldShadowCopies();
+    }
+
+    void ScriptHotReloadManager::RegisterScene(Scene* scene) {
+        m_Scenes.push_back(scene);
+    }
+
+    void ScriptHotReloadManager::UnregisterScene(Scene* scene) {
+        std::erase(m_Scenes, scene);
     }
 
 }

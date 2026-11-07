@@ -55,10 +55,8 @@ namespace Axle {
             m_Commands.push_back([entity, tupleArgs = std::move(tupleArgs)](SceneData& scene, ExecutionContext& ctx) mutable {
                 if (!ctx.ValidateTarget(scene, entity)) return;
                 std::apply([&scene, entity](auto&&... unpacked) {
-                    scene.GetRegistry().template emplace_or_replace<Component>(
-                        static_cast<entt::entity>(entity),
-                        std::forward<decltype(unpacked)>(unpacked)...
-                    );
+                    auto target = entity;
+                    target.template AddComponent<Component>(std::forward<decltype(unpacked)>(unpacked)...);
                 }, std::move(tupleArgs));
                 ctx.ExecutedCount++;
             });
@@ -72,7 +70,8 @@ namespace Axle {
                 if (!ctx.ValidateTarget(scene, entity)) return;
                 auto handle = static_cast<entt::entity>(entity);
                 if (scene.GetRegistry().template all_of<Component>(handle)) {
-                    scene.GetRegistry().template remove<Component>(handle);
+                    auto target = entity;
+                    target.template RemoveComponent<Component>();
                 }
                 ctx.ExecutedCount++;
             });
@@ -90,7 +89,6 @@ namespace Axle {
         /// Execute all buffered commands against the target scene data.
         /// Enforces scene generation, entity generation, and conflict resolution rules.
         void Execute(SceneData& targetScene);
-        void Execute(Scene& targetScene);
 
         // --- Status & Inspection ---
 

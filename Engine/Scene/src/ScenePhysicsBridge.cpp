@@ -6,60 +6,44 @@
 namespace Axle {
 
     void ScenePhysicsBridge::SynchronizeTransforms(SceneData& scene, PhysicsScene* physicsScene) {
-        if (!physicsScene) return;
-
+        if (!physicsScene || !scene.CanMutate()) return;
         auto& registry = scene.GetRegistry();
-        auto physicsView = registry.view<RigidBody3D, TransformComponent>();
-        for (auto entity : physicsView) {
-            if (registry.all_of<CharacterControllerComponent>(entity)) {
-                continue; // Skip character controller; transform is managed by its controller
-            }
-            const auto& rb = registry.get<RigidBody3D>(entity);
-            if (rb.MotionType == BodyMotionType::Static) {
-                continue; // Static bodies never move; prevents visual mesh drift
-            }
-
-            auto& tc = registry.get<TransformComponent>(entity);
-            if (!rb.RuntimeBodyID.IsInvalid()) {
-                glm::vec3 worldPos = physicsScene->GetBodyPosition(rb.RuntimeBodyID);
-                glm::quat worldRot = physicsScene->GetBodyRotation(rb.RuntimeBodyID);
-
-                // Compensate for collider offset
-                if (registry.all_of<CollisionShape3D>(entity)) {
-                    const auto& cs = registry.get<CollisionShape3D>(entity);
-                    worldPos -= worldRot * cs.Offset;
+        // Validate the forest, then consume body poses from roots to leaves so
+        // a child's local pose uses its parent's current post-step world pose.
+        scene.UpdateWorldTransforms();
+        std::vector<std::pair<entt::entity, glm::mat4>> pending;
+        for (auto entity : registry.view<TransformComponent>()) {
+            const auto* hierarchy = registry.try_get<HierarchyComponent>(entity);
+            if (!hierarchy || hierarchy->Parent == entt::null) pending.emplace_back(entity, glm::mat4(1.0f));
+        }
+        while (!pending.empty()) {
+            auto [entity, parentWorld] = pending.back();
+            pending.pop_back();
+            auto& transform = registry.get<TransformComponent>(entity);
+            const auto* hierarchy = registry.try_get<HierarchyComponent>(entity);
+            const auto inherited = hierarchy ? InheritedParentTransform(parentWorld, *hierarchy) : parentWorld;
+            const auto* body = registry.try_get<RigidBody3D>(entity);
+            if (body && body->MotionType != BodyMotionType::Static && !registry.all_of<CharacterControllerComponent>(entity) &&
+                !body->RuntimeBodyID.IsInvalid() && physicsScene->IsBodyValid(body->RuntimeBodyID)) {
+                auto position = physicsScene->GetBodyPosition(body->RuntimeBodyID);
+                const auto rotation = physicsScene->GetBodyRotation(body->RuntimeBodyID);
+                if (const auto* shape = registry.try_get<CollisionShape3D>(entity)) position -= rotation * shape->Offset;
+                const auto local = glm::inverse(inherited) *
+                    (glm::translate(glm::mat4(1.0f), position) * glm::mat4_cast(rotation));
+                transform.Translation = glm::vec3(local[3]);
+                auto axes = glm::mat3(local);
+                for (int axis = 0; axis < 3; ++axis) {
+                    const auto length = glm::length(axes[axis]);
+                    axes[axis] = length > 1e-6f ? axes[axis] / length : glm::vec3(axis == 0, axis == 1, axis == 2);
                 }
-
-                // Convert world space to local space if entity has a parent
-                if (registry.all_of<HierarchyComponent>(entity)) {
-                    const auto& hc = registry.get<HierarchyComponent>(entity);
-                    if (hc.InheritTransform && hc.Parent != entt::null && registry.valid(hc.Parent) && registry.all_of<TransformComponent>(hc.Parent)) {
-                        glm::mat4 parentWorld = scene.GetWorldTransform(hc.Parent);
-                        glm::mat4 invParent = glm::inverse(parentWorld);
-                        glm::mat4 childWorldMat = glm::translate(glm::mat4(1.0f), worldPos) * glm::mat4_cast(worldRot);
-                        glm::mat4 childLocalMat = invParent * childWorldMat;
-                        tc.Translation = glm::vec3(childLocalMat[3]);
-
-                        glm::vec3 scale(
-                            glm::length(glm::vec3(childLocalMat[0])),
-                            glm::length(glm::vec3(childLocalMat[1])),
-                            glm::length(glm::vec3(childLocalMat[2]))
-                        );
-                        glm::mat3 rotMatrix(1.0f);
-                        if (scale.x > 1e-6f) rotMatrix[0] = glm::vec3(childLocalMat[0]) / scale.x;
-                        if (scale.y > 1e-6f) rotMatrix[1] = glm::vec3(childLocalMat[1]) / scale.y;
-                        if (scale.z > 1e-6f) rotMatrix[2] = glm::vec3(childLocalMat[2]) / scale.z;
-                        tc.Rotation = glm::quat_cast(rotMatrix);
-                        continue;
-                    }
-                }
-
-                tc.Translation = worldPos;
-                tc.Rotation = worldRot;
+                transform.Rotation = glm::normalize(glm::quat_cast(axes));
+            }
+            transform.LocalMatrix = transform.GetTransform();
+            transform.WorldMatrix = inherited * transform.LocalMatrix;
+            if (hierarchy) {
+                for (auto child : hierarchy->Children) pending.emplace_back(child, transform.WorldMatrix);
             }
         }
-
-        // Propagate hierarchy transforms (Root -> Children)
         scene.UpdateWorldTransformsParallel(64);
     }
 
@@ -123,17 +107,27 @@ namespace Axle {
         if (!registry.all_of<RigidBody3D, CollisionShape3D, TransformComponent>(entityID)) return;
 
         auto& rb = registry.get<RigidBody3D>(entityID);
+        if (!rb.RuntimeBodyID.IsInvalid() && physicsScene->IsBodyValid(rb.RuntimeBodyID)) return;
         const auto& shape = registry.get<CollisionShape3D>(entityID);
         const auto& tc = registry.get<TransformComponent>(entityID);
+        const auto world = scene.RecomputeWorldTransform(entityID);
+        auto axes = glm::mat3(world);
+        for (int axis = 0; axis < 3; ++axis) {
+            const auto length = glm::length(axes[axis]);
+            axes[axis] = length > 1e-6f ? axes[axis] / length : glm::vec3(axis == 0, axis == 1, axis == 2);
+        }
+        const auto rotation = glm::normalize(glm::quat_cast(axes));
+        // Authored collider offsets live in the entity's rotated frame.
+        const auto position = glm::vec3(world[3]) + rotation * shape.Offset;
 
         BodyID newBodyID{};
         switch (shape.ShapeType) {
             case CollisionShapeType::Box: {
                 BoxBodyProps bProps;
-                bProps.Position = tc.Translation;
-                bProps.Rotation = tc.Rotation;
+                bProps.Position = position;
+                bProps.Rotation = rotation;
                 bProps.HalfExtent = shape.HalfExtent;
-                bProps.IsDynamic = rb.IsDynamic;
+                bProps.IsDynamic = rb.MotionType != BodyMotionType::Static;
                 bProps.Friction = shape.Friction;
                 bProps.Restitution = shape.Restitution;
                 bProps.Mass = rb.Mass;
@@ -142,9 +136,9 @@ namespace Axle {
             }
             case CollisionShapeType::Sphere: {
                 SphereBodyProps sProps;
-                sProps.Position = tc.Translation;
+                sProps.Position = position;
                 sProps.Radius = shape.Radius;
-                sProps.IsDynamic = rb.IsDynamic;
+                sProps.IsDynamic = rb.MotionType != BodyMotionType::Static;
                 sProps.Friction = shape.Friction;
                 sProps.Restitution = shape.Restitution;
                 sProps.Mass = rb.Mass;
@@ -153,10 +147,10 @@ namespace Axle {
             }
             case CollisionShapeType::Cylinder: {
                 CylinderBodyProps cProps;
-                cProps.Position = tc.Translation;
+                cProps.Position = position;
                 cProps.HalfHeight = shape.HalfHeight;
                 cProps.Radius = shape.Radius;
-                cProps.IsDynamic = rb.IsDynamic;
+                cProps.IsDynamic = rb.MotionType != BodyMotionType::Static;
                 cProps.Friction = shape.Friction;
                 cProps.Restitution = shape.Restitution;
                 cProps.Mass = rb.Mass;
@@ -164,11 +158,19 @@ namespace Axle {
                 break;
             }
             default:
+                if (shape.ShapeType == CollisionShapeType::Plane)
+                    newBodyID = physicsScene->CreatePlane(position, glm::vec3(0, 1, 0), tc.Scale.x * 0.5f, shape.Friction, shape.Restitution);
+                else if (shape.ShapeType == CollisionShapeType::Cone)
+                    newBodyID = physicsScene->CreateCone(position, shape.HalfHeight, shape.Radius, rb.MotionType != BodyMotionType::Static, shape.Friction, shape.Restitution, rb.Mass);
                 break;
         }
 
         if (!newBodyID.IsInvalid()) {
             rb.RuntimeBodyID = newBodyID;
+            physicsScene->SetBodyPositionAndRotation(newBodyID, position, rotation);
+            physicsScene->GetBodyInterface().SetGravityFactor(newBodyID, rb.GravityFactor);
+            if (rb.MotionType == BodyMotionType::Kinematic)
+                physicsScene->GetBodyInterface().SetMotionType(newBodyID, JPH::EMotionType::Kinematic, JPH::EActivation::Activate);
         }
     }
 

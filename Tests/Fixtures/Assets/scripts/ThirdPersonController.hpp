@@ -33,16 +33,11 @@ public:
 
 private:
     float m_JumpTimer = 0.0f;
-    bool m_PrevSpace = false;
 
 public:
     void OnCreate() override {
         AXLE_INFO("ThirdPersonController: Attached to entity '{0}'", GetEntityName());
         ApplyTuning();
-    }
-
-    void OnUpdate(Axle::Timestep ts) override {
-        UpdateController(ts);
     }
 
     void OnFixedUpdate(Axle::Timestep ts) override {
@@ -94,12 +89,10 @@ public:
                                            Axle::Input::IsKeyPressed(Axle::KeyCode::RightShift));
 
             // Jump (Space key)
-            bool spacePressed = Axle::Input::IsKeyPressed(Axle::KeyCode::Space);
-            if (spacePressed && !m_PrevSpace && m_JumpTimer <= 0.0f && ccc.IsGrounded) {
+            if (Axle::Input::IsKeyJustPressed(Axle::KeyCode::Space) && m_JumpTimer <= 0.0f && ccc.IsGrounded) {
                 jumpTriggered = true;
                 m_JumpTimer = JumpCooldown;
             }
-            m_PrevSpace = spacePressed;
         }
 
         // 3. Transform input into camera-relative world direction

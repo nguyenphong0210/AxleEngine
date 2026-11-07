@@ -19,11 +19,13 @@
     "Spline": "Plugins/Spline",
     "Terrain": "Plugins/Terrain",
     "Editor": "Editor",
-    "Runtime": "Runtime"
+    "Runtime": "Runtime",
+    "SceneData": "Engine/SceneData"
   },
   "layers": {
     "Level0_Foundation": [
-      "Core"
+      "Core",
+      "SceneData"
     ],
     "Level1_Hardware_Services": [
       "Platform",
@@ -55,7 +57,6 @@
   "allowed_target_links": {
     "Core": [
       "spdlog::spdlog",
-      "glfw",
       "enkiTS"
     ],
     "Platform": [
@@ -106,6 +107,7 @@
       "Axle::RHI"
     ],
     "Scene": [
+      "Axle::SceneData",
       "Axle::Core",
       "Axle::RHI",
       "Axle::Renderer",
@@ -177,6 +179,9 @@
       "Axle::Terrain",
       "Axle::Animation",
       "Axle::VFX"
+    ],
+    "SceneData": [
+      "Axle::Core"
     ]
   },
   "forbidden_include_rules": [
@@ -198,7 +203,8 @@
         "Spline",
         "Terrain",
         "Editor",
-        "Runtime"
+        "Runtime",
+        "SceneData"
       ],
       "description": "Foundation Core must not have upward dependencies on platform, rendering, physics, scene, UI or applications."
     },
@@ -210,7 +216,8 @@
         "Scene",
         "UI",
         "Editor",
-        "Runtime"
+        "Runtime",
+        "SceneData"
       ],
       "description": "Asset subsystem must not depend on GPU rendering, scene, or UI."
     },
@@ -223,7 +230,8 @@
         "Scene",
         "UI",
         "Editor",
-        "Runtime"
+        "Runtime",
+        "SceneData"
       ],
       "description": "Physics subsystem must not depend directly on rendering, GPU resources, asset DSL, scene, or UI."
     },
@@ -261,6 +269,28 @@
         "Editor"
       ],
       "description": "Standalone player Runtime must never depend on Dear ImGui Editor tooling UI or Editor composition."
+    },
+    {
+      "from": "SceneData",
+      "forbidden_to": [
+        "Platform",
+        "RHI",
+        "Renderer",
+        "Audio",
+        "Asset",
+        "Physics",
+        "Animation",
+        "VFX",
+        "Project",
+        "UI2D",
+        "UI",
+        "Scene",
+        "Spline",
+        "Terrain",
+        "Editor",
+        "Runtime"
+      ],
+      "description": "Generic scene data may depend only on Core; concrete system integration belongs in Scene bridges."
     }
   ],
   "baseline_allowances": [

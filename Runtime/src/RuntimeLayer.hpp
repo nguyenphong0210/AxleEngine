@@ -34,6 +34,7 @@ namespace Axle {
         SimulationDriver& GetSimulationDriver() { return m_SimulationDriver; }
         const SimulationDriver& GetSimulationDriver() const { return m_SimulationDriver; }
         bool IsPaused() const { return m_IsPaused; }
+        void VerifySimulationContract();
 
     private:
         void LoadProjectAndStartScene();

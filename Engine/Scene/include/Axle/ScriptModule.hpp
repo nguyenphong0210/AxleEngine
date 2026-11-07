@@ -17,7 +17,24 @@
 
 namespace Axle {
 
-    constexpr uint32_t AXLE_SCRIPT_ABI_VERSION = 2; // Incremented in EJ-11 for OnFixedUpdate and OnLateUpdate callbacks
+    constexpr uint32_t AXLE_SCRIPT_ABI_VERSION = 4; // Entity lifetimes, SceneData layout and tick input edges
+    constexpr uint64_t AXLE_SCRIPT_BUILD_ID = (uint64_t(AXLE_SCRIPT_ABI_VERSION) << 32)
+#ifdef _MSC_FULL_VER
+        | uint64_t(_MSC_FULL_VER)
+#endif
+#ifdef _DEBUG
+        | (uint64_t(1) << 63)
+#endif
+#ifdef _HAS_EXCEPTIONS
+        | (uint64_t(_HAS_EXCEPTIONS != 0) << 48)
+#endif
+#ifdef _ITERATOR_DEBUG_LEVEL
+        | (uint64_t(_ITERATOR_DEBUG_LEVEL) << 49)
+#endif
+#ifdef _DLL
+        | (uint64_t(1) << 56)
+#endif
+        ;
 
     class ScriptableEntity;
 

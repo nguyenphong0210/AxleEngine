@@ -473,6 +473,7 @@ void EditorLayer::OnDetach() {
     Axle::ScriptCompiler::Get().WaitForCompletion();
     if (m_RuntimeBuildCancel) m_RuntimeBuildCancel->store(true);
     if (m_RuntimeBuildFuture.valid()) m_RuntimeBuildFuture.wait();
+    Axle::JobSystem::WaitForAll();
     AXLE_INFO("EditorLayer::OnDetach -> [1/14] UnlockCursor");
     UnlockCursor();
 
@@ -707,6 +708,11 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
 
 void EditorLayer::OnScenePlay() {
     if (m_SceneState == SceneState::Play) return;
+    if (m_SceneState == SceneState::Pause) {
+        m_SceneState = SceneState::Play;
+        m_SimulationDriver.Resume();
+        return;
+    }
 
     if (m_ConsolePanel.GetClearOnPlay()) {
         m_ConsolePanel.Clear();
@@ -718,6 +724,8 @@ void EditorLayer::OnScenePlay() {
 
     // Deep clone EditorScene into an ephemeral RuntimeScene (Phase 18.2: Safe Scene State)
     m_RuntimeScene = Axle::Scene::Copy(m_EditorScene);
+    m_EditorPhysicsScene = std::move(m_PhysicsScene);
+    m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
     m_Scene = m_RuntimeScene;
 
     // Update panel contexts to point to the active runtime scene
@@ -796,6 +804,7 @@ void EditorLayer::TriggerScriptCompilationAndReload() {
                 AXLE_INFO("Editor: C++ Scripts recompiled and hot-reloaded successfully in {0:.2f}s ({1} script(s) active).",
                     result.DurationSeconds, reloadResult.ScriptCount);
             } else {
+                if (reloadResult.RequiresSimulationStop && m_SceneState == SceneState::Play) OnScenePause();
                 m_ScriptCompileStatusText = "[!] Reload Failed";
                 m_ScriptCompileStatusColor = ImVec4(0.95f, 0.35f, 0.20f, 1.0f);
                 AXLE_ERROR("Editor: Script reload failed: {0}", reloadResult.Message);
@@ -840,6 +849,10 @@ void EditorLayer::OpenScriptsDirectory() {
 }
 
 void EditorLayer::NewScene() {
+    m_CompileOwner.Invalidate();
+    Axle::ScriptCompiler::Get().Cancel();
+    Axle::ScriptCompiler::Get().WaitForCompletion();
+    m_CompileOwner.Reset();
     if (m_SceneState != SceneState::Edit) {
         OnSceneStop();
     }
@@ -847,6 +860,7 @@ void EditorLayer::NewScene() {
     m_InitialDynamicStates.clear();
     m_SimulationDriver.Reset();
 
+    m_Scene->Clear();
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
     if (Axle::Application::Get().GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
         if (!m_PhysicsDebugRenderer) {
@@ -855,7 +869,6 @@ void EditorLayer::NewScene() {
             m_PhysicsDebugRenderer->Clear();
         }
     }
-    m_Scene->Clear();
     m_CurrentScenePath.clear();
 
     m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
@@ -895,10 +908,15 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
         OnSceneStop();
     }
 
+    m_CompileOwner.Invalidate();
+    Axle::ScriptCompiler::Get().Cancel();
+    Axle::ScriptCompiler::Get().WaitForCompletion();
+    m_CompileOwner.Reset();
     m_InitialDynamicStates.clear();
     m_SimulationDriver.Reset();
 
     // 3. Create fresh PhysicsScene and maintain PhysicsDebugRenderer
+    m_Scene->Clear();
     m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
     if (Axle::Application::Get().GetWindow().GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
         if (!m_PhysicsDebugRenderer) {
@@ -1242,9 +1260,11 @@ void EditorLayer::OnSceneStop() {
     m_SimulationDriver.Reset();
 
     if (m_RuntimeScene) {
-        m_RuntimeScene->OnRuntimeStop(m_PhysicsScene.get());
+        m_RuntimeScene->Clear();
         m_RuntimeScene.reset();
     }
+    m_PhysicsScene.reset();
+    m_PhysicsScene = std::move(m_EditorPhysicsScene);
 
     // Restore pristine EditorScene (Phase 18.2: Zero Physics Drift)
     m_Scene = m_EditorScene;
@@ -1304,6 +1324,7 @@ void EditorLayer::ResetSimulation() {
 }
 
 void EditorLayer::OnUpdate(Axle::Timestep ts) {
+    Axle::ScriptCompiler::Get().PollCompletion();
     m_LastDeltaTime = ts.GetSeconds();
 
     // 0. Update Audio Subsystem
@@ -1528,6 +1549,8 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     } else {
         m_F11KeyWasPressed = false;
     }
+
+    if (m_Scene && m_SceneState == SceneState::Edit) m_Scene->UpdateWorldTransforms();
 
     // C++ Native Scripting Runtime Execution & Shared Simulation Driver (EJ-13)
     if (m_SceneState == SceneState::Play || m_SceneState == SceneState::Pause) {
@@ -3898,4 +3921,64 @@ void EditorLayer::RestartEditorWithBackend(const std::string& backendArg) {
 void EditorLayer::OpenUICanvasDesigner(const std::filesystem::path& path) {
     m_UICanvasDesignerPanel.OpenDocument(path);
     m_ShowUICanvasDesigner = true;
+}
+
+// Opt-in native acceptance probe: exercises this product's real update and controls.
+void EditorLayer::VerifySimulationContract() {
+    struct Probe final : Axle::ScriptableEntity {
+        int Frames = 0, Ticks = 0, Late = 0, Held = 0;
+        void OnUpdate(Axle::Timestep) override { ++Frames; }
+        void OnFixedUpdate(Axle::Timestep) override {
+            ++Ticks;
+            const bool held = Axle::Input::IsKeyPressed(Axle::KeyCode::W);
+            Held += held;
+            auto& body = GetComponent<Axle::RigidBody3D>();
+            GetEntity().GetScene()->GetPhysicsScene()->SetLinearVelocity(body.RuntimeBodyID, glm::vec3(held ? 2.0f : 0.0f, 0, 0));
+        }
+        void OnLateUpdate(Axle::Timestep) override { ++Late; }
+    };
+    const auto require = [](bool condition) { if (!condition) throw std::runtime_error("Product simulation contract failed"); };
+    const auto* previousInput = Axle::Input::GetInputContext();
+    Axle::InputContext hardware = *previousInput;
+    struct RestoreInput {
+        const Axle::InputContext* Previous;
+        ~RestoreInput() { Axle::Input::SetInputContext(Previous); Axle::ScriptHotReloadManager::Get().SyncInputContext(); }
+    } restoreInput{previousInput};
+    hardware.IsKeyPressedFn = [](Axle::KeyCode key) { return key == Axle::KeyCode::W; };
+    hardware.IsMouseButtonPressedFn = [](Axle::MouseCode) { return false; };
+    Axle::Input::SetInputContext(&hardware);
+    NewScene();
+    auto actor = m_EditorScene->CreateEntity("SimulationAcceptance");
+    actor.GetComponent<Axle::TransformComponent>().Translation.y = 20.0f;
+    actor.AddComponent<Axle::CollisionShape3D>();
+    actor.AddComponent<Axle::RigidBody3D>().GravityFactor = 0.0f;
+    actor.AddComponent<Axle::NativeScriptComponent>().Bind<Probe>();
+    for (int rate : {30, 60, 144}) {
+        OnScenePlay();
+        auto runtimeActor = m_Scene->GetEntityByUUID(actor.GetUUID());
+        auto* instance = static_cast<Probe*>(runtimeActor.GetComponent<Axle::NativeScriptComponent>().Instance);
+        require(instance != nullptr);
+        for (int frame = 0; frame < rate; ++frame) OnUpdate(1.0f / rate);
+        const float x = runtimeActor.GetWorldTransform()[3].x;
+        require(m_SimulationDriver.GetClock().GetDiagnostics().TotalTicksExecuted == 60);
+        require(instance->Ticks == 60 && instance->Held == 60 && instance->Frames == rate && instance->Late == rate);
+        require(std::abs(x - 2.0f) < 0.01f);
+        OnScenePause();
+        m_StepSingleFrame = true;
+        OnUpdate(0.0f);
+        require(instance->Ticks == 61 && m_SceneState == SceneState::Pause);
+        OnScenePlay(); // Resume must keep the same world and script instance.
+        require(m_Scene->GetEntityByUUID(actor.GetUUID()).GetComponent<Axle::NativeScriptComponent>().Instance == instance);
+        m_SimulationSpeed = 0.0f;
+        const auto framesBeforeZero = instance->Frames;
+        OnUpdate(1.0f);
+        require(instance->Ticks == 61 && instance->Frames == framesBeforeZero);
+        m_SimulationSpeed = 1.0f;
+        AXLE_INFO("PRODUCT_SIM_PASS Editor rate={0} ticks=60 held=60 x={1}", rate, x);
+        OnSceneStop();
+        require(actor.GetComponent<Axle::TransformComponent>().Translation.x == 0.0f);
+        require(m_PhysicsScene->GetNumBodies() == 0);
+    }
+    NewScene();
+    Axle::Input::SetInputContext(previousInput);
 }

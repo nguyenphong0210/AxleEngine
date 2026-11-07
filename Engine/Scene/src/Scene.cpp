@@ -11,17 +11,21 @@
 #include <Axle/AssetManager.hpp>
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/SceneCommandBuffer.hpp>
+#include <Axle/ScriptHotReloadManager.hpp>
 
 namespace Axle {
 
     Scene::Scene()
         : SceneData() {
+        ScriptHotReloadManager::Get().RegisterScene(this);
+        RegisterRuntimeComponentCodecs();
         MaterialCache::SetUUIDPathResolver([](UUID id) { return AssetManager::GetAssetPath(id); });
         MaterialCache::SetPathUUIDResolver([](const std::filesystem::path& p) { return AssetManager::GetAssetUUID(p); });
     }
 
     Scene::~Scene() {
         Clear();
+        ScriptHotReloadManager::Get().UnregisterScene(this);
     }
 
     Entity Scene::InstantiateAssembly(const std::filesystem::path& filepath,
@@ -36,7 +40,7 @@ namespace Axle {
     }
 
     void Scene::DestroyEntity(Entity entity, PhysicsScene* physicsScene) {
-        if (!entity || !m_Registry.valid(entity)) return;
+        if (!CanMutate() || !entity || entity.GetSceneData() != this || !m_Destroying.insert(entity).second) return;
 
         entt::entity entityID = (entt::entity)entity;
         PhysicsScene* pScene = physicsScene ? physicsScene : m_RuntimePhysicsScene;
@@ -45,7 +49,7 @@ namespace Axle {
         if (entity.HasComponent<HierarchyComponent>()) {
             auto childrenCopy = entity.GetComponent<HierarchyComponent>().Children;
             for (auto childID : childrenCopy) {
-                if (m_Registry.valid(childID)) {
+                if (m_Registry.valid(childID) && m_Registry.all_of<HierarchyComponent>(childID) && m_Registry.get<HierarchyComponent>(childID).Parent == entityID) {
                     DestroyEntity(Entity{ childID, this }, pScene);
                 }
             }
@@ -58,7 +62,8 @@ namespace Axle {
         SceneScriptBridge::TeardownEntityScript(*this, entityID);
 
         // 3. Delegate to generic SceneData data destruction
-        SceneData::DestroyEntity(entity);
+        DestroyEntityData(entity);
+        m_Destroying.erase(entityID);
     }
 
     Entity Scene::DuplicateEntity(Entity entity) {
@@ -92,6 +97,11 @@ namespace Axle {
     }
 
     void Scene::Clear() {
+        if (!CanMutate()) return;
+        m_RuntimeActive = false;
+        if (m_RuntimePhysicsScene) {
+            for (auto entity : m_Registry.view<RigidBody3D>()) ScenePhysicsBridge::TeardownEntityPhysics(*this, entity, m_RuntimePhysicsScene);
+        }
         SceneScriptBridge::OnRuntimeStop(*this);
         SceneAudioBridge::OnRuntimeStop(*this);
         SceneCharacterBridge::OnRuntimeStop(*this);
@@ -241,18 +251,28 @@ namespace Axle {
     }
 
     void Scene::OnRuntimeStart(PhysicsScene* physicsScene) {
+        if (!CanMutate()) return;
+        m_SimulationFaulted = false;
+        UpdateWorldTransforms();
+        m_RuntimeActive = true;
         m_RuntimePhysicsScene = physicsScene;
+        if (physicsScene) {
+            for (auto entity : m_Registry.view<RigidBody3D>()) ScenePhysicsBridge::CreateBodyForEntity(*this, entity, physicsScene);
+        }
         SceneScriptBridge::OnRuntimeStart(*this);
         SceneCharacterBridge::OnRuntimeStart(*this, physicsScene);
         SceneAudioBridge::OnRuntimeStart(*this);
+        OnCommandsApplied();
     }
 
     void Scene::ExecuteFrameScriptPhase(Timestep dt) {
+        if (!CanMutate()) return;
         RecordPhase(SimulationPhase::FrameScripts);
         SceneScriptBridge::OnUpdate(*this, dt);
     }
 
     void Scene::ExecuteFixedControlsPhase(Timestep fixedDt, PhysicsScene* physicsScene) {
+        if (!CanMutate()) return;
         RecordPhase(SimulationPhase::FixedControls);
         auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
         GetCommandBuffer().Execute(*this);
@@ -261,6 +281,7 @@ namespace Axle {
     }
 
     void Scene::ExecutePhysicsPhase(Timestep fixedDt, PhysicsScene* physicsScene) {
+        if (!CanMutate()) return;
         RecordPhase(SimulationPhase::Physics);
         auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
         if (ps) {
@@ -269,13 +290,16 @@ namespace Axle {
     }
 
     void Scene::ExecutePostStepSyncPhase(PhysicsScene* physicsScene) {
+        if (!CanMutate()) return;
         RecordPhase(SimulationPhase::PostStepSync);
         auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
         ScenePhysicsBridge::SynchronizeTransforms(*this, ps);
+        UpdateWorldTransformsParallel(64);
         SceneCharacterBridge::OnPostStepSync(*this, ps);
     }
 
     void Scene::ExecuteAnimationVFXPhase(Timestep fixedDt, PhysicsScene* physicsScene) {
+        if (!CanMutate()) return;
         RecordPhase(SimulationPhase::AnimationVFX);
         auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
         SceneCharacterBridge::UpdateAnimationAndVFX(*this, fixedDt, ps);
@@ -283,6 +307,7 @@ namespace Axle {
     }
 
     void Scene::ExecuteLatePresentationPhase(Timestep dt, PhysicsScene* physicsScene) {
+        if (!CanMutate()) return;
         RecordPhase(SimulationPhase::LatePresentation);
         auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
         SceneScriptBridge::OnLateUpdate(*this, dt);
@@ -298,6 +323,7 @@ namespace Axle {
     }
 
     void Scene::StepSimulation(Timestep dt, PhysicsScene* physicsScene) {
+        if (!CanMutate()) return;
         if (physicsScene) m_RuntimePhysicsScene = physicsScene;
         auto* ps = m_RuntimePhysicsScene;
 
@@ -307,6 +333,7 @@ namespace Axle {
     }
 
     void Scene::OnUpdateRuntime(Timestep ts, PhysicsScene* physicsScene) {
+        if (!CanMutate()) return;
         if (physicsScene) m_RuntimePhysicsScene = physicsScene;
         auto* ps = m_RuntimePhysicsScene;
 
@@ -318,6 +345,7 @@ namespace Axle {
     }
 
     void Scene::OnImGuiRender() {
+        SceneData::IterationScope iteration(*this);
         auto scriptView = m_Registry.view<NativeScriptComponent>();
         for (auto entity : scriptView) {
             auto& nsc = scriptView.get<NativeScriptComponent>(entity);
@@ -328,6 +356,8 @@ namespace Axle {
     }
 
     void Scene::OnRuntimeStop(PhysicsScene* /*physicsScene*/) {
+        if (!CanMutate()) return;
+        m_RuntimeActive = false;
         SceneAudioBridge::OnRuntimeStop(*this);
         SceneCharacterBridge::OnRuntimeStop(*this);
         SceneScriptBridge::OnRuntimeStop(*this);
@@ -335,11 +365,36 @@ namespace Axle {
     }
 
     void Scene::OnPreScriptReload() {
+        if (!CanMutate()) return;
+        GetCommandBuffer().Clear();
         SceneScriptBridge::OnPreScriptReload(*this);
+        GetCommandBuffer().Clear();
     }
 
     void Scene::OnPostScriptReload(bool isRuntimeActive) {
+        if (!CanMutate()) return;
         SceneScriptBridge::OnPostScriptReload(*this, isRuntimeActive);
+        m_SimulationFaulted = false;
+    }
+
+    void Scene::BeforeComponentRemove(entt::entity entity, entt::id_type type) {
+        if (type == entt::type_hash<NativeScriptComponent>::value()) SceneScriptBridge::TeardownEntityScript(*this, entity);
+        if (type == entt::type_hash<RigidBody3D>::value() || type == entt::type_hash<CollisionShape3D>::value())
+            ScenePhysicsBridge::TeardownEntityPhysics(*this, entity, m_RuntimePhysicsScene);
+        if (type == entt::type_hash<CharacterControllerComponent>::value() || type == entt::type_hash<ParticleEmitterComponent>::value() || type == entt::type_hash<CharacterVFXComponent>::value())
+            SceneCharacterBridge::TeardownEntityCharacter(*this, entity);
+        if (type == entt::type_hash<AudioSourceComponent>::value()) SceneAudioBridge::TeardownEntityAudio(*this, entity);
+    }
+
+    void Scene::AfterComponentAdd(entt::entity entity, entt::id_type type) {
+        if (m_RuntimePhysicsScene && (type == entt::type_hash<RigidBody3D>::value() || type == entt::type_hash<CollisionShape3D>::value()))
+            m_PendingPhysicsEntities.insert(entity);
+    }
+
+    void Scene::OnCommandsApplied() {
+        auto pending = std::move(m_PendingPhysicsEntities);
+        m_PendingPhysicsEntities.clear();
+        for (auto entity : pending) ScenePhysicsBridge::CreateBodyForEntity(*this, entity, m_RuntimePhysicsScene);
     }
 
 }

@@ -1584,9 +1584,12 @@ bool RunTest_Step40_Phase30_Step5_ECSIntegrationAndThirdPersonGameplayController
         tpc->TargetHeightOffset = 1.5f;
         tpc->SetYawPitch(0.0f, 0.0f); // Level look
 
-        // Simulate 60 frames to let spring-arm interpolate
+        // The migrated camera runs only in late presentation, once per frame.
+        const auto initialCameraPosition = camera.GetComponent<Axle::TransformComponent>().Translation;
+        nsc.Instance->OnUpdate(Axle::Timestep(1.0f / 60.0f));
+        assert(camera.GetComponent<Axle::TransformComponent>().Translation == initialCameraPosition);
         for (int i = 0; i < 60; ++i) {
-            nsc.Instance->OnUpdate(Axle::Timestep(1.0f / 60.0f));
+            nsc.Instance->OnLateUpdate(Axle::Timestep(1.0f / 60.0f));
         }
 
         auto camPos = camera.GetComponent<Axle::TransformComponent>().Translation;

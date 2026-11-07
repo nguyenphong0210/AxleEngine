@@ -24,10 +24,8 @@ extern "C" {
             const auto* inputCtx = static_cast<const Axle::InputContext*>(context);
             if (inputCtx->IsKeyPressedFn != nullptr) {
                 Axle::Input::SetInputContext(inputCtx);
-                AXLE_INFO("AxleScripts.dll: Input context synchronized (delegated via window: {0})", (void*)inputCtx->Window);
             } else {
                 Axle::Input::SetContext(static_cast<GLFWwindow*>(context));
-                AXLE_INFO("AxleScripts.dll: Input context synchronized (window: {0})", context);
             }
         }
     }
@@ -57,6 +55,10 @@ extern "C" {
 
     AXLE_SCRIPT_API uint32_t Axle_GetScriptABIVersion() {
         return Axle::AXLE_SCRIPT_ABI_VERSION;
+    }
+
+    AXLE_SCRIPT_API uint64_t Axle_GetScriptBuildIdentity() {
+        return Axle::AXLE_SCRIPT_BUILD_ID;
     }
 
 }

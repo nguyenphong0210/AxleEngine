@@ -1,3 +1,7 @@
+// Keep test assertions active in Release as well as Debug.
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <Axle/Log.hpp>
 #include <Axle/UUID.hpp>
 #include <Axle/FileSystem.hpp>

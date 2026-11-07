@@ -72,9 +72,10 @@ void TestClockOverloadCap() {
     // Massive 2.0s hitch
     uint32_t ticks = clock.Advance(2.0f);
     EXPECT_EQ(clock.GetDiagnostics().OverloadDrops, 1ull);
-    // 0.2s / (1/60s) = 12 ticks
-    EXPECT_EQ(ticks, 12u);
-    EXPECT_EQ(clock.GetDiagnostics().TotalTicksExecuted, 12ull);
+    // Bounded work: eight ticks, excess whole ticks dropped with a retained remainder.
+    EXPECT_EQ(ticks, 8u);
+    EXPECT_EQ(clock.GetDiagnostics().TotalTicksExecuted, 8ull);
+    EXPECT_EQ(clock.GetDiagnostics().DroppedTicks, 4ull);
 
     // Test Drop policy
     clock.Reset();

@@ -16,7 +16,7 @@ namespace Axle {
         ~SimulationDriver() = default;
 
         // Advances frame: collects inputs, runs fixed ticks, and executes non-fixed phases
-        uint32_t AdvanceFrame(float rawDt, Scene& scene, PhysicsScene* physicsScene);
+        uint32_t AdvanceFrame(float rawDt, Scene& scene, PhysicsScene* physicsScene = nullptr);
 
         // Direct fixed tick execution with active tick input context
         void ExecuteFixedTick(float fixedDt, Scene& scene, PhysicsScene* physicsScene);

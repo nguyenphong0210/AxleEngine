@@ -42,6 +42,11 @@ namespace Axle {
         // Entity destruction with optional PhysicsScene cleanup
         void DestroyEntity(Entity entity, PhysicsScene* physicsScene);
         void DestroyEntity(Entity entity) override;
+        void DestroyEntityWithPhysics(Entity entity, PhysicsScene* physicsScene) override { DestroyEntity(entity, physicsScene); }
+        Scene* GetRuntimeScene() override { return this; }
+        void BeforeComponentRemove(entt::entity entity, entt::id_type type) override;
+        void AfterComponentAdd(entt::entity entity, entt::id_type type) override;
+        void OnCommandsApplied() override;
 
         // Entity duplication with optional PhysicsScene creation
         Entity DuplicateEntity(Entity entity, PhysicsScene* physicsScene);
@@ -119,6 +124,9 @@ namespace Axle {
         }
 
         PhysicsScene* GetPhysicsScene() const { return m_RuntimePhysicsScene; }
+        bool IsRuntimeActive() const { return m_RuntimeActive; }
+        bool IsSimulationFaulted() const { return m_SimulationFaulted; }
+        void StopAfterScriptReloadFailure() { OnRuntimeStop(m_RuntimePhysicsScene); m_SimulationFaulted = true; }
 
         // Script reload hooks (Script Bridge)
         void OnPreScriptReload();
@@ -131,6 +139,9 @@ namespace Axle {
         PhysicsScene* m_RuntimePhysicsScene = nullptr;
         UIDataContext m_UIDataContext;
         bool m_PhaseTracingEnabled = false;
+        bool m_RuntimeActive = false;
+        bool m_SimulationFaulted = false;
+        std::unordered_set<entt::entity> m_PendingPhysicsEntities;
         std::vector<SimulationPhase> m_PhaseTrace;
 
         friend class Entity;

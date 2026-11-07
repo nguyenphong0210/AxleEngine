@@ -1,81 +1,71 @@
 #include <Axle/SimulationClock.hpp>
+#include <limits>
 
 namespace Axle {
 
-    SimulationClock::SimulationClock(float fixedTimestep, float maxAccumulator)
-        : m_FixedTimestep(fixedTimestep > 0.0f ? fixedTimestep : 1.0f / 60.0f),
-          m_MaxAccumulator(maxAccumulator > 0.0f ? maxAccumulator : 0.2f) {
+    SimulationClock::SimulationClock(float fixedTimestep, float maxAccumulator) {
+        SetFixedTimestep(fixedTimestep);
+        SetMaxAccumulator(maxAccumulator);
     }
 
     uint32_t SimulationClock::Advance(float rawDt) {
-        m_Diagnostics.TotalFrames++;
-
-        // 1. Validate raw delta time (reject non-finite and negative dt)
-        if (std::isnan(rawDt) || std::isinf(rawDt) || rawDt < 0.0f) {
-            m_Diagnostics.InvalidDtDrops++;
+        ++m_Diagnostics.TotalFrames;
+        m_FrameSimulationDelta = 0.0f;
+        // A paused step is independent of wall time and speed.
+        if (m_IsPaused && m_SingleStepRequested) {
+            m_SingleStepRequested = false;
+            ++m_Diagnostics.TotalTicksExecuted;
+            m_Diagnostics.TotalSimulationTime += m_FixedTimestep;
+            m_FrameSimulationDelta = m_FixedTimestep;
+            return 1;
+        }
+        if (!std::isfinite(rawDt) || rawDt < 0.0f) {
+            ++m_Diagnostics.InvalidDtDrops;
             return 0;
         }
+        if (m_IsPaused || m_Speed == 0.0f) return 0;
 
-        if (rawDt == 0.0f) {
+        const double admitted = std::min(rawDt, m_MaxAccumulator);
+        m_Diagnostics.TotalRealTime += admitted;
+        m_Diagnostics.DroppedWallTime += rawDt - admitted;
+        const double interval = admitted * static_cast<double>(m_Speed);
+        const double accumulated = m_Accumulator + interval;
+        const double fixed = m_FixedTimestep;
+        // Tolerance reflects the float dt API, not a fixed microsecond offset.
+        // Retain negative debt rather than repeatedly creating time at boundaries.
+        const double tolerance = std::min(fixed * 0.001,
+            std::max(fixed, m_Diagnostics.TotalRealTime) * std::numeric_limits<float>::epsilon());
+        const double scheduled = std::max(0.0, std::floor((accumulated + tolerance) / fixed));
+        const bool overloaded = rawDt > m_MaxAccumulator || scheduled > MaxTicksPerFrame;
+        if (overloaded) ++m_Diagnostics.OverloadDrops;
+        if (overloaded && m_OverloadPolicy == ClockOverloadPolicy::Drop) {
+            m_Diagnostics.DroppedSimulationTime += interval;
+            m_Diagnostics.DroppedTicks += static_cast<uint64_t>(scheduled);
             return 0;
         }
-
-        // 2. Paused handling
-        if (m_IsPaused) {
-            if (m_SingleStepRequested) {
-                m_SingleStepRequested = false;
-                m_Diagnostics.TotalTicksExecuted++;
-                m_Diagnostics.TotalSimulationTime += m_FixedTimestep;
-                return 1;
-            }
-            return 0;
-        }
-
-        // 3. Speed handling (0 speed produces zero ticks)
-        if (m_Speed <= 0.0f) {
-            return 0;
-        }
-
-        float effectiveDt = rawDt * m_Speed;
-        m_Diagnostics.TotalRealTime += rawDt;
-        m_Accumulator += static_cast<double>(effectiveDt);
-
-        // 4. Overload cap to prevent simulation spiral of death
-        if (m_Accumulator > static_cast<double>(m_MaxAccumulator)) {
-            m_Diagnostics.OverloadDrops++;
-            if (m_OverloadPolicy == ClockOverloadPolicy::Clamp) {
-                m_Accumulator = static_cast<double>(m_MaxAccumulator);
-            } else {
-                m_Accumulator = 0.0;
-                return 0;
-            }
-        }
-
-        // 5. Compute whole ticks (with 1e-6 epsilon to avoid float rounding edge drops)
-        double fixedDt = static_cast<double>(m_FixedTimestep);
-        uint32_t ticks = static_cast<uint32_t>((m_Accumulator + 1e-6) / fixedDt);
-        if (ticks > 0) {
-            m_Accumulator -= static_cast<double>(ticks) * fixedDt;
-            if (m_Accumulator < 0.0) m_Accumulator = 0.0;
-
-            m_Diagnostics.TotalTicksExecuted += ticks;
-            m_Diagnostics.TotalSimulationTime += static_cast<float>(ticks) * m_FixedTimestep;
-        }
-
+        const auto ticks = static_cast<uint32_t>(std::min(scheduled, double(MaxTicksPerFrame)));
+        const double dropped = (scheduled - ticks) * fixed;
+        m_Diagnostics.DroppedTicks += static_cast<uint64_t>(scheduled - ticks);
+        m_Diagnostics.DroppedSimulationTime += dropped;
+        m_Accumulator = accumulated - scheduled * fixed;
+        m_FrameSimulationDelta = static_cast<float>(std::max(0.0, interval - dropped));
+        m_Diagnostics.TotalTicksExecuted += ticks;
+        m_Diagnostics.TotalSimulationTime += ticks * fixed;
         return ticks;
     }
 
     void SimulationClock::Pause() {
+        if (m_IsPaused) return;
         m_IsPaused = true;
-        // Clear accumulator on pause to prevent catch-up burst when resuming
-        m_Accumulator = 0.0f;
+        m_Accumulator = 0.0;
         m_SingleStepRequested = false;
     }
 
     void SimulationClock::Resume() {
+        if (!m_IsPaused) return;
         m_IsPaused = false;
         m_SingleStepRequested = false;
-        m_Accumulator = 0.0f;
+        m_Accumulator = 0.0;
     }
 
     void SimulationClock::SetPaused(bool paused) {
@@ -84,42 +74,34 @@ namespace Axle {
     }
 
     void SimulationClock::RequestSingleStep() {
-        m_SingleStepRequested = true;
+        if (m_IsPaused) m_SingleStepRequested = true;
     }
 
     void SimulationClock::Reset() {
-        m_Accumulator = 0.0f;
+        m_Accumulator = 0.0;
+        m_FrameSimulationDelta = 0.0f;
         m_SingleStepRequested = false;
         m_IsPaused = false;
         ResetDiagnostics();
     }
 
     void SimulationClock::SetFixedTimestep(float fixedDt) {
-        if (fixedDt > 0.0f && !std::isnan(fixedDt) && !std::isinf(fixedDt)) {
-            m_FixedTimestep = fixedDt;
-        }
+        if (std::isfinite(fixedDt) && fixedDt >= 1e-6f) m_FixedTimestep = fixedDt;
     }
 
     void SimulationClock::SetSpeed(float speed) {
-        if (!std::isnan(speed) && !std::isinf(speed)) {
-            m_Speed = std::max(0.0f, speed);
-        }
+        if (std::isfinite(speed)) m_Speed = std::clamp(speed, 0.0f, 4.0f);
     }
 
     void SimulationClock::SetMaxAccumulator(float maxAcc) {
-        if (maxAcc > 0.0f && !std::isnan(maxAcc) && !std::isinf(maxAcc)) {
-            m_MaxAccumulator = maxAcc;
-        }
+        if (std::isfinite(maxAcc) && maxAcc > 0.0f) m_MaxAccumulator = std::min(maxAcc, 0.25f);
     }
 
     float SimulationClock::GetInterpolationAlpha() const {
-        if (m_FixedTimestep <= 0.0f) return 0.0f;
-        float alpha = m_Accumulator / m_FixedTimestep;
-        return std::clamp(alpha, 0.0f, 1.0f);
+        return static_cast<float>(std::clamp(m_Accumulator / m_FixedTimestep, 0.0, 1.0));
     }
 
     void SimulationClock::ResetDiagnostics() {
         m_Diagnostics = SimulationClockDiagnostics{};
     }
-
 }

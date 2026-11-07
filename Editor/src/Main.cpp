@@ -129,11 +129,13 @@ int main(int argc, char** argv) {
     bool emptyProject = false;
     bool verifyEmptyStartup = false;
     bool verifyStartup = false;
+    bool verifySimulation = false;
     for (int i = 1; i < argc; ++i) {
         std::string argument = argv[i];
         if (argument == "--empty-project") emptyProject = true;
         else if (argument == "--verify-empty-startup") verifyEmptyStartup = true;
         else if (argument == "--verify-startup") verifyStartup = true;
+        else if (argument == "--verify-simulation") verifySimulation = true;
         else if (argument == "--project" && i + 1 < argc) requestedProject = argv[++i];
         else if (argument.rfind("--project=", 0) == 0) requestedProject = argument.substr(10);
         else {
@@ -176,7 +178,7 @@ int main(int argc, char** argv) {
         }
     }
     const auto startupPath = Axle::ResolveEditorStartupProject(
-        requestedProject, AXLE_EDITOR_DEFAULT_PROJECT, emptyProject || verifyEmptyStartup);
+        requestedProject, AXLE_EDITOR_DEFAULT_PROJECT, emptyProject || verifyEmptyStartup || verifySimulation);
     if (requestedProject.empty() && startupPath.empty() && !emptyProject && !verifyEmptyStartup &&
         std::string(AXLE_EDITOR_DEFAULT_PROJECT).size() != 0)
         AXLE_WARN("Configured development project is unavailable; opening an empty project: {0}", AXLE_EDITOR_DEFAULT_PROJECT);
@@ -294,7 +296,8 @@ int main(int argc, char** argv) {
                 if (verifyEmptyStartup && !requestedProject.empty()) throw std::runtime_error("Empty startup verification requires an untitled project");
                 app->PushLayer(std::make_shared<StartupVerifier>(editorLayer, verifyEmptyStartup));
             }
-            app->Run();
+            if (verifySimulation) editorLayer->VerifySimulationContract();
+            else app->Run();
             AXLE_INFO("Main: Application run loop completed, now destroying app object...");
         }
 

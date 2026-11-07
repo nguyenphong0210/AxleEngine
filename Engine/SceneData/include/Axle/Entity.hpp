@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <stdexcept>
 #include <glm/glm.hpp>
 
 namespace Axle {
@@ -17,19 +18,28 @@ namespace Axle {
     public:
         Entity() = default;
         Entity(entt::entity handle, SceneData* scene)
-            : m_EntityHandle(handle), m_Scene(scene) {}
-        Entity(entt::entity handle, Scene* scene)
-            : m_EntityHandle(handle), m_Scene(reinterpret_cast<SceneData*>(scene)) {}
+            : m_EntityHandle(handle), m_Scene(scene), m_Lifetime(scene ? scene->GetLifetime() : nullptr),
+              m_Epoch(scene ? scene->GetLifetime()->Epoch.load() : 0) {}
+        Entity(entt::entity handle, Scene* scene);
         Entity(const Entity& other) = default;
 
         template<typename T, typename... Args>
-        T& AddComponent(Args&&... args) {
-            return m_Scene->m_Registry.emplace_or_replace<T>(m_EntityHandle, std::forward<Args>(args)...);
+        decltype(auto) AddComponent(Args&&... args) {
+            if (!*this || !m_Scene->CanMutate()) throw std::logic_error("Component mutation requires an owner-thread scene boundary");
+            if (HasComponent<T>()) m_Scene->BeforeComponentRemove(m_EntityHandle, entt::type_hash<T>::value());
+            if constexpr (std::is_void_v<decltype(m_Scene->m_Registry.emplace_or_replace<T>(m_EntityHandle, std::forward<Args>(args)...))>) {
+                m_Scene->m_Registry.emplace_or_replace<T>(m_EntityHandle, std::forward<Args>(args)...);
+                m_Scene->AfterComponentAdd(m_EntityHandle, entt::type_hash<T>::value());
+            } else {
+                auto& component = m_Scene->m_Registry.emplace_or_replace<T>(m_EntityHandle, std::forward<Args>(args)...);
+                m_Scene->AfterComponentAdd(m_EntityHandle, entt::type_hash<T>::value());
+                return component;
+            }
         }
 
         template<typename T, typename... Args>
-        T& AddOrReplaceComponent(Args&&... args) {
-            return m_Scene->m_Registry.emplace_or_replace<T>(m_EntityHandle, std::forward<Args>(args)...);
+        decltype(auto) AddOrReplaceComponent(Args&&... args) {
+            return AddComponent<T>(std::forward<Args>(args)...);
         }
 
         template<typename T>
@@ -50,25 +60,29 @@ namespace Axle {
 
         template<typename T>
         void RemoveComponent() {
-            if (!*this) return;
+            if (!*this || !m_Scene->CanMutate()) return;
+            m_Scene->BeforeComponentRemove(m_EntityHandle, entt::type_hash<T>::value());
             m_Scene->m_Registry.remove<T>(m_EntityHandle);
         }
 
         operator bool() const {
-            return m_EntityHandle != entt::null && m_Scene != nullptr && m_Scene->m_Registry.valid(m_EntityHandle);
+            auto lifetime = m_Lifetime.lock();
+            return lifetime && lifetime->Epoch.load() == m_Epoch && m_EntityHandle != entt::null &&
+                   m_Scene != nullptr && m_Scene->m_Registry.valid(m_EntityHandle);
         }
         operator entt::entity() const { return m_EntityHandle; }
         operator u32() const { return static_cast<u32>(m_EntityHandle); }
 
         bool operator==(const Entity& other) const {
-            return m_EntityHandle == other.m_EntityHandle && m_Scene == other.m_Scene;
+            return m_EntityHandle == other.m_EntityHandle && m_Scene == other.m_Scene && m_Epoch == other.m_Epoch &&
+                   !m_Lifetime.owner_before(other.m_Lifetime) && !other.m_Lifetime.owner_before(m_Lifetime);
         }
 
         bool operator!=(const Entity& other) const {
             return !(*this == other);
         }
 
-        Scene* GetScene() const { return reinterpret_cast<Scene*>(m_Scene); }
+        Scene* GetScene() const { return *this ? m_Scene->GetRuntimeScene() : nullptr; }
         SceneData* GetSceneData() const { return m_Scene; }
 
         void Destroy(class PhysicsScene* physicsScene = nullptr);
@@ -90,6 +104,8 @@ namespace Axle {
     private:
         entt::entity m_EntityHandle{ entt::null };
         SceneData* m_Scene = nullptr;
+        std::weak_ptr<SceneLifetime> m_Lifetime;
+        uint64_t m_Epoch = 0;
     };
 
 }

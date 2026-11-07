@@ -2,7 +2,7 @@
 
 #include <Axle/Types.hpp>
 #include <Axle/JobSystem.hpp>
-#include <Axle/Components.hpp>
+#include <Axle/DataComponents.hpp>
 
 #include <entt/entt.hpp>
 #include <vector>
@@ -50,6 +50,7 @@ namespace Axle {
 
             // Sequential fallback if JobSystem is not initialized or count is smaller than batch grain or single-threaded
             if (!JobSystem::IsInitialized() || estimatedCount < minBatchSize || JobSystem::GetTotalThreadCount() <= 1) {
+                Detail::TaskExecutionScope iterationScope;
                 for (auto entity : view) {
                     InvokeEntity<Components...>(view, entity, func, 0);
                 }
@@ -102,6 +103,7 @@ namespace Axle {
             if (count == 0) return;
 
             if (!JobSystem::IsInitialized() || count < minBatchSize || JobSystem::GetTotalThreadCount() <= 1) {
+                Detail::TaskExecutionScope iterationScope;
                 for (size_t i = 0; i < count; ++i) {
                     InvokeEntity<Components...>(view, validEntities[i], func, 0);
                 }
@@ -154,6 +156,20 @@ namespace Axle {
                             }
                         }
                     }
+                }
+            }
+
+            // Parent is authoritative. Rebuild inverse links before partitioning;
+            // stale/duplicate child lists must never make two jobs write one node.
+            for (auto entityID : view) {
+                if (registry.all_of<HierarchyComponent>(entityID)) registry.get<HierarchyComponent>(entityID).Children.clear();
+            }
+            for (auto entityID : view) {
+                if (!registry.all_of<HierarchyComponent>(entityID)) continue;
+                auto parent = registry.get<HierarchyComponent>(entityID).Parent;
+                if (parent != entt::null) {
+                    if (!registry.all_of<HierarchyComponent>(parent)) registry.emplace<HierarchyComponent>(parent);
+                    registry.get<HierarchyComponent>(parent).Children.push_back(entityID);
                 }
             }
 
@@ -270,49 +286,19 @@ namespace Axle {
         template<typename...>
         struct always_false : std::false_type {};
 
-        // Helper: Recursive transform update down an entity subtree with depth protection
-        static void UpdateEntitySubtree(entt::registry& registry, entt::entity entityID, const glm::mat4& parentWorld, uint32_t depth = 0) {
-            if (depth > 128) {
-                return; // Prevent stack overflow on pathological graph or cycle
-            }
-            if (!registry.valid(entityID) || !registry.all_of<TransformComponent>(entityID)) {
-                return;
-            }
-
-            auto& tc = registry.get<TransformComponent>(entityID);
-            tc.LocalMatrix = tc.GetLocalTransform();
-            tc.WorldMatrix = parentWorld * tc.LocalMatrix;
-
-            if (registry.all_of<HierarchyComponent>(entityID)) {
-                const auto& hc = registry.get<HierarchyComponent>(entityID);
-                auto children = hc.Children; // Copy list to prevent iterator invalidation
-                for (auto child : children) {
-                    if (registry.valid(child)) {
-                        glm::mat4 childParentWorld = tc.WorldMatrix;
-                        if (registry.all_of<HierarchyComponent>(child)) {
-                            const auto& childHc = registry.get<HierarchyComponent>(child);
-                            if (!childHc.InheritTransform) {
-                                childParentWorld = glm::mat4(1.0f);
-                            } else if (!childHc.InheritScale) {
-                                glm::vec3 pPos = glm::vec3(tc.WorldMatrix[3]);
-                                glm::vec3 col0 = glm::vec3(tc.WorldMatrix[0]);
-                                glm::vec3 col1 = glm::vec3(tc.WorldMatrix[1]);
-                                glm::vec3 col2 = glm::vec3(tc.WorldMatrix[2]);
-                                float l0 = glm::length(col0);
-                                float l1 = glm::length(col1);
-                                float l2 = glm::length(col2);
-                                glm::mat3 rot(
-                                    l0 > 1e-5f ? col0 / l0 : glm::vec3(1.0f, 0.0f, 0.0f),
-                                    l1 > 1e-5f ? col1 / l1 : glm::vec3(0.0f, 1.0f, 0.0f),
-                                    l2 > 1e-5f ? col2 / l2 : glm::vec3(0.0f, 0.0f, 1.0f)
-                                );
-                                glm::mat4 rigidParent = glm::mat4(rot);
-                                rigidParent[3] = glm::vec4(pPos, 1.0f);
-                                childParentWorld = rigidParent;
-                            }
-                        }
-                        UpdateEntitySubtree(registry, child, childParentWorld, depth + 1);
-                    }
+        static void UpdateEntitySubtree(entt::registry& registry, entt::entity entityID, const glm::mat4& parentWorld, uint32_t = 0) {
+            std::vector<std::pair<entt::entity, glm::mat4>> pending{{entityID, parentWorld}};
+            while (!pending.empty()) {
+                auto [current, parent] = pending.back();
+                pending.pop_back();
+                if (!registry.valid(current) || !registry.all_of<TransformComponent>(current)) continue;
+                auto& transform = registry.get<TransformComponent>(current);
+                transform.LocalMatrix = transform.GetLocalTransform();
+                transform.WorldMatrix = parent * transform.LocalMatrix;
+                if (!registry.all_of<HierarchyComponent>(current)) continue;
+                for (auto child : registry.get<HierarchyComponent>(current).Children) {
+                    const auto& hierarchy = registry.get<HierarchyComponent>(child);
+                    pending.emplace_back(child, InheritedParentTransform(transform.WorldMatrix, hierarchy));
                 }
             }
         }
@@ -320,23 +306,17 @@ namespace Axle {
         // Helper: Invokes custom lambda with variable signatures based on SFINAE / is_invocable_v
         template<typename... Components, typename View, typename Func>
         static void InvokeEntity(View& view, entt::entity entity, Func&& func, uint32_t threadNum) {
-            using DecayedFunc = std::decay_t<Func>;
-
-            if constexpr (std::is_invocable_v<DecayedFunc, entt::entity, decltype(view.template get<Components>(entity))..., uint32_t>) {
-                func(entity, view.template get<Components>(entity)..., threadNum);
-            } else if constexpr (std::is_invocable_v<DecayedFunc, entt::entity, decltype(view.template get<Components>(entity))...>) {
-                func(entity, view.template get<Components>(entity)...);
-            } else if constexpr (std::is_invocable_v<DecayedFunc, decltype(view.template get<Components>(entity))..., uint32_t>) {
-                func(view.template get<Components>(entity)..., threadNum);
-            } else if constexpr (std::is_invocable_v<DecayedFunc, decltype(view.template get<Components>(entity))...>) {
-                func(view.template get<Components>(entity)...);
-            } else if constexpr (std::is_invocable_v<DecayedFunc, entt::entity, uint32_t>) {
-                func(entity, threadNum);
-            } else if constexpr (std::is_invocable_v<DecayedFunc, entt::entity>) {
-                func(entity);
-            } else {
-                static_assert(always_false<DecayedFunc>::value, "Invalid lambda signature passed to ParallelECS::ForEach!");
-            }
+            // EnTT's tuple API omits empty tags and preserves requested constness.
+            std::apply([&](auto&... components) {
+                using F = std::decay_t<Func>;
+                if constexpr (std::is_invocable_v<F, entt::entity, decltype(components)..., uint32_t>) func(entity, components..., threadNum);
+                else if constexpr (std::is_invocable_v<F, entt::entity, decltype(components)...>) func(entity, components...);
+                else if constexpr (std::is_invocable_v<F, decltype(components)..., uint32_t>) func(components..., threadNum);
+                else if constexpr (std::is_invocable_v<F, decltype(components)...>) func(components...);
+                else if constexpr (std::is_invocable_v<F, entt::entity, uint32_t>) func(entity, threadNum);
+                else if constexpr (std::is_invocable_v<F, entt::entity>) func(entity);
+                else static_assert(always_false<F>::value, "Invalid ParallelECS callback signature");
+            }, view.get(entity));
         }
     };
 

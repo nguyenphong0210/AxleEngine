@@ -17,6 +17,9 @@ namespace Axle {
         void (*SetCursorPositionFn)(f32 x, f32 y) = nullptr;
         bool (*IsViewportHoveredFn)() = nullptr;
         void (*SetViewportHoveredFn)(bool) = nullptr;
+        bool (*IsKeyJustPressedFn)(KeyCode key) = nullptr;
+        bool (*IsKeyJustReleasedFn)(KeyCode key) = nullptr;
+        bool (*IsMouseButtonJustPressedFn)(MouseCode button) = nullptr;
     };
 
     class Input {
@@ -28,6 +31,9 @@ namespace Axle {
 
         static bool IsKeyPressed(KeyCode key);
         static bool IsMouseButtonPressed(MouseCode button);
+        static bool IsKeyJustPressed(KeyCode key);
+        static bool IsKeyJustReleased(KeyCode key);
+        static bool IsMouseButtonJustPressed(MouseCode button);
 
         static std::pair<f32, f32> GetMousePosition();
         static f32 GetMouseX();

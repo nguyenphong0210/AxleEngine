@@ -1,3 +1,7 @@
+// Keep test assertions active in Release as well as Debug.
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <Axle/Scene.hpp>
 #include <Axle/ScenePhase.hpp>
 #include <Axle/SceneScriptBridge.hpp>
@@ -277,7 +281,7 @@ namespace {
         std::cout << "[RUN] TestScriptABIVersionValidationAndRejection..." << std::endl;
 
         // Verify current engine script ABI version
-        assert(Axle::AXLE_SCRIPT_ABI_VERSION == 2);
+        assert(Axle::AXLE_SCRIPT_ABI_VERSION == 4);
 
         // Verify ScriptHotReloadManager rejects candidate modules lacking Axle_GetScriptABIVersion
         // We test this via a temporary invalid DLL stub or candidate module check

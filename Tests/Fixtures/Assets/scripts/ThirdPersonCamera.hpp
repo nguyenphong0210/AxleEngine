@@ -39,10 +39,6 @@ public:
         m_PrevMousePos = glm::vec2(Axle::Input::GetMouseX(), Axle::Input::GetMouseY());
     }
 
-    void OnUpdate(Axle::Timestep ts) override {
-        UpdateCamera(ts);
-    }
-
     void OnLateUpdate(Axle::Timestep ts) override {
         UpdateCamera(ts);
     }

@@ -25,6 +25,7 @@ set(ENKITS_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 # Configure Jolt Physics options to match engine settings
 set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
 set(OVERRIDE_CXX_FLAGS OFF CACHE BOOL "" FORCE)
+set(CPP_EXCEPTIONS_ENABLED ON CACHE BOOL "Keep the STL/exception ABI consistent across engine and script modules" FORCE)
 set(ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
 
@@ -63,6 +64,7 @@ add_subdirectory(Engine/VFX)
 add_subdirectory(Engine/Project)
 add_subdirectory(Engine/UI)
 add_subdirectory(Engine/Physics)
+add_subdirectory(Engine/SceneData)
 add_subdirectory(Engine/Scene)
 
 # Load Engine Plugins

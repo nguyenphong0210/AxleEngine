@@ -94,7 +94,8 @@ int main(int argc, char** argv) {
 #endif
 
     std::filesystem::path projectPath;
-    if (argc > 1) {
+    const bool verifySimulation = argc > 1 && std::string(argv[1]) == "--verify-simulation";
+    if (argc > 1 && !verifySimulation) {
         projectPath = argv[1];
     }
 
@@ -130,8 +131,10 @@ int main(int argc, char** argv) {
 
         auto app = std::make_unique<Axle::Application>(spec);
         app->RegisterService(std::make_shared<PhysicsApplicationService>());
-        app->PushLayer(std::make_shared<Axle::RuntimeLayer>(projectPath));
-        app->Run();
+        auto layer = std::make_shared<Axle::RuntimeLayer>(projectPath);
+        app->PushLayer(layer);
+        if (verifySimulation) layer->VerifySimulationContract();
+        else app->Run();
     } catch (const std::exception& e) {
         AXLE_CRITICAL("Unhandled Runtime Exception: {0}", e.what());
         fprintf(stderr, "[FATAL] Unhandled Runtime Exception: %s\n", e.what());

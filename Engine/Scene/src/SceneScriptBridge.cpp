@@ -4,6 +4,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/ScriptRegistry.hpp>
+#include <Axle/ScriptHotReloadManager.hpp>
 
 namespace Axle {
 
@@ -24,6 +25,8 @@ namespace Axle {
     }
 
     void SceneScriptBridge::OnUpdate(SceneData& scene, Timestep ts) {
+        SceneData::IterationScope iteration(scene);
+        ScriptHotReloadManager::Get().SyncInputContext();
         auto& registry = scene.GetRegistry();
         auto scriptView = registry.view<NativeScriptComponent>();
         for (auto entityID : scriptView) {
@@ -35,6 +38,8 @@ namespace Axle {
     }
 
     void SceneScriptBridge::OnFixedUpdate(SceneData& scene, Timestep ts) {
+        SceneData::IterationScope iteration(scene);
+        ScriptHotReloadManager::Get().SyncInputContext();
         auto& registry = scene.GetRegistry();
         auto scriptView = registry.view<NativeScriptComponent>();
         for (auto entityID : scriptView) {
@@ -46,6 +51,8 @@ namespace Axle {
     }
 
     void SceneScriptBridge::OnLateUpdate(SceneData& scene, Timestep ts) {
+        SceneData::IterationScope iteration(scene);
+        ScriptHotReloadManager::Get().SyncInputContext();
         auto& registry = scene.GetRegistry();
         auto scriptView = registry.view<NativeScriptComponent>();
         for (auto entityID : scriptView) {
@@ -76,6 +83,7 @@ namespace Axle {
             auto& nsc = view.get<NativeScriptComponent>(entityID);
             if (nsc.Instance) {
                 nsc.SyncFieldsFromInstance();
+                nsc.Instance->OnDestroy();
                 if (nsc.DestroyScript) {
                     nsc.DestroyScript(&nsc);
                 } else {

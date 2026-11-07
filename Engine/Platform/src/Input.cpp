@@ -94,6 +94,16 @@ namespace Axle {
         return state == GLFW_PRESS;
     }
 
+    bool Input::IsKeyJustPressed(KeyCode key) {
+        return s_SharedContext && s_SharedContext->IsKeyJustPressedFn && s_SharedContext->IsKeyJustPressedFn(key);
+    }
+    bool Input::IsKeyJustReleased(KeyCode key) {
+        return s_SharedContext && s_SharedContext->IsKeyJustReleasedFn && s_SharedContext->IsKeyJustReleasedFn(key);
+    }
+    bool Input::IsMouseButtonJustPressed(MouseCode button) {
+        return s_SharedContext && s_SharedContext->IsMouseButtonJustPressedFn && s_SharedContext->IsMouseButtonJustPressedFn(button);
+    }
+
     std::pair<f32, f32> Input::GetMousePosition() {
         if (s_SharedContext && s_SharedContext->GetMousePositionFn) {
             return s_SharedContext->GetMousePositionFn();

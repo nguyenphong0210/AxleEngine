@@ -9,11 +9,19 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <atomic>
+#include <thread>
+#include <unordered_set>
 
 namespace Axle {
 
     class Entity;
     class SceneCommandBuffer;
+    class Scene;
+    class PhysicsScene;
+    struct SceneLifetime {
+        std::atomic<uint64_t> Epoch{1};
+    };
 
     class SceneData {
     public:
@@ -26,6 +34,20 @@ namespace Axle {
         virtual void DestroyEntity(Entity entity);
         virtual Entity DuplicateEntity(Entity entity);
         virtual void Clear();
+        virtual void DestroyEntityWithPhysics(Entity entity, PhysicsScene* physicsScene);
+        virtual Scene* GetRuntimeScene() { return nullptr; }
+        virtual bool CanMutate() const;
+        virtual void BeforeComponentRemove(entt::entity, entt::id_type) {}
+        virtual void AfterComponentAdd(entt::entity, entt::id_type) {}
+        virtual void OnCommandsApplied() {}
+        std::shared_ptr<SceneLifetime> GetLifetime() const { return m_Lifetime; }
+        class IterationScope {
+        public:
+            explicit IterationScope(SceneData& scene) : m_Scene(scene) { ++m_Scene.m_IterationDepth; }
+            ~IterationScope() { --m_Scene.m_IterationDepth; }
+        private:
+            SceneData& m_Scene;
+        };
 
         Entity GetEntityByUUID(UUID uuid);
 
@@ -57,12 +79,16 @@ namespace Axle {
         bool HasPassiveSections(Entity entity) const;
 
     protected:
-        void UpdateEntityTransformRecursive(entt::entity entity, const glm::mat4& parentWorld);
+        void DestroyEntityData(Entity entity);
 
         entt::registry m_Registry;
         std::unique_ptr<SceneCommandBuffer> m_CommandBuffer;
         u32 m_SceneGeneration = 1;
         uint64_t m_TransformRevision = 1;
+        std::shared_ptr<SceneLifetime> m_Lifetime = std::make_shared<SceneLifetime>();
+        std::thread::id m_OwnerThread = std::this_thread::get_id();
+        uint32_t m_IterationDepth = 0;
+        std::unordered_set<entt::entity> m_Destroying;
 
         friend class Entity;
     };

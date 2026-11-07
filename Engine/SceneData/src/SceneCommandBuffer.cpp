@@ -1,8 +1,7 @@
 #include <Axle/SceneCommandBuffer.hpp>
 #include <Axle/SceneData.hpp>
-#include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
-#include <Axle/Components.hpp>
+#include <Axle/DataComponents.hpp>
 
 namespace Axle {
 
@@ -34,11 +33,11 @@ namespace Axle {
 
             // Mark handle and all descendant children as destroyed in this batch
             std::function<void(entt::entity)> markDescendants = [&](entt::entity h) {
-                ctx.DestroyedEntities.insert(h);
+                if (!ctx.DestroyedEntities.insert(h).second) return;
                 if (scene.GetRegistry().valid(h) && scene.GetRegistry().template all_of<HierarchyComponent>(h)) {
                     auto children = scene.GetRegistry().template get<HierarchyComponent>(h).Children;
                     for (auto c : children) {
-                        markDescendants(c);
+                        if (scene.GetRegistry().valid(c) && scene.GetRegistry().all_of<HierarchyComponent>(c) && scene.GetRegistry().get<HierarchyComponent>(c).Parent == h) markDescendants(c);
                     }
                 }
             };
@@ -122,6 +121,7 @@ namespace Axle {
     }
 
     void SceneCommandBuffer::Execute(SceneData& targetScene) {
+        if (!targetScene.CanMutate()) return;
         std::vector<CommandFn> toExecute;
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
@@ -137,10 +137,7 @@ namespace Axle {
 
         m_LastExecutedCount = ctx.ExecutedCount;
         m_LastRejectedCount = ctx.RejectedCount;
-    }
-
-    void SceneCommandBuffer::Execute(Scene& targetScene) {
-        Execute(static_cast<SceneData&>(targetScene));
+        targetScene.OnCommandsApplied();
     }
 
     size_t SceneCommandBuffer::GetPendingCount() const {
@@ -149,10 +146,13 @@ namespace Axle {
     }
 
     void SceneCommandBuffer::Clear() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        m_Commands.clear();
-        m_LastExecutedCount = 0;
-        m_LastRejectedCount = 0;
+        std::vector<CommandFn> retired;
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            retired.swap(m_Commands);
+            m_LastExecutedCount = 0;
+            m_LastRejectedCount = 0;
+        }
     }
 
     bool SceneCommandBuffer::ExecutionContext::ValidateTarget(SceneData& scene, Entity entity) {

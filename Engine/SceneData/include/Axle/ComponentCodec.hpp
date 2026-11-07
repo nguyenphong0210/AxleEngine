@@ -62,6 +62,7 @@ namespace Axle {
 
         void RegisterCodec(std::unique_ptr<IComponentCodec> codec);
         const std::vector<std::unique_ptr<IComponentCodec>>& GetCodecs() const { return m_Codecs; }
+        std::vector<std::unique_ptr<IComponentCodec>>& GetMutableCodecs() { return m_Codecs; }
 
         void CopyAllComponents(const ComponentCopyContext& ctx) const {
             for (const auto& codec : m_Codecs) {
@@ -77,5 +78,7 @@ namespace Axle {
 
         std::vector<std::unique_ptr<IComponentCodec>> m_Codecs;
     };
+
+    void RegisterRuntimeComponentCodecs();
 
 }

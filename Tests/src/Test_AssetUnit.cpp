@@ -1,3 +1,7 @@
+// Keep test assertions active in Release as well as Debug.
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <Axle/AssetManager.hpp>
 #include <Axle/AssetMetadataSerializer.hpp>
 #include <Axle/AssetSerializer.hpp>

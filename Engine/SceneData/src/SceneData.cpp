@@ -1,12 +1,12 @@
 #include <Axle/SceneData.hpp>
 #include <Axle/Entity.hpp>
-#include <Axle/Components.hpp>
-#include <Axle/ScriptableEntity.hpp>
+#include <Axle/DataComponents.hpp>
 #include <Axle/ParallelECS.hpp>
 #include <Axle/SceneCommandBuffer.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/matrix_decompose.hpp>
 #include <algorithm>
+#include <Axle/Log.hpp>
 
 namespace Axle {
 
@@ -23,6 +23,7 @@ namespace Axle {
     }
 
     Entity SceneData::CreateEntityWithUUID(UUID uuid, const std::string& name) {
+        if (!CanMutate()) return {};
         Entity entity = { m_Registry.create(), this };
         entity.AddComponent<IDComponent>(uuid);
         entity.AddComponent<TagComponent>(name.empty() ? "Entity" : name);
@@ -32,22 +33,13 @@ namespace Axle {
     }
 
     void SceneData::Clear() {
+        if (!CanMutate()) return;
+        m_Lifetime->Epoch.fetch_add(1);
         if (m_CommandBuffer) {
             m_CommandBuffer->Clear();
         }
         m_SceneGeneration++;
         m_TransformRevision++;
-
-        // Clean up any instantiated native scripts
-        auto scriptView = m_Registry.view<NativeScriptComponent>();
-        for (auto entityID : scriptView) {
-            auto& nsc = scriptView.get<NativeScriptComponent>(entityID);
-            if (nsc.Instance && nsc.DestroyScript) {
-                nsc.Instance->OnDestroy();
-                nsc.DestroyScript(&nsc);
-                nsc.Instance = nullptr;
-            }
-        }
 
         m_Registry.clear();
     }
@@ -63,7 +55,7 @@ namespace Axle {
     }
 
     void SceneData::DestroyEntity(Entity entity) {
-        if (!entity || !m_Registry.valid(entity)) return;
+        if (!CanMutate() || !entity || entity.GetSceneData() != this || !m_Destroying.insert(entity).second) return;
 
         entt::entity entityID = (entt::entity)entity;
 
@@ -71,11 +63,18 @@ namespace Axle {
         if (entity.HasComponent<HierarchyComponent>()) {
             auto childrenCopy = entity.GetComponent<HierarchyComponent>().Children;
             for (auto childID : childrenCopy) {
-                if (m_Registry.valid(childID)) {
+                if (m_Registry.valid(childID) && m_Registry.all_of<HierarchyComponent>(childID) && m_Registry.get<HierarchyComponent>(childID).Parent == entityID) {
                     DestroyEntity(Entity{ childID, this });
                 }
             }
         }
+
+        DestroyEntityData(entity);
+        m_Destroying.erase(entityID);
+    }
+
+    void SceneData::DestroyEntityData(Entity entity) {
+        const auto entityID = static_cast<entt::entity>(entity);
 
         // 2. Unlink from parent's children vector if parent exists
         if (entity.HasComponent<HierarchyComponent>()) {
@@ -91,23 +90,13 @@ namespace Axle {
             }
         }
 
-        // 3. Script lifecycle cleanup
-        if (entity.HasComponent<NativeScriptComponent>()) {
-            auto& nsc = entity.GetComponent<NativeScriptComponent>();
-            if (nsc.Instance && nsc.DestroyScript) {
-                nsc.Instance->OnDestroy();
-                nsc.DestroyScript(&nsc);
-                nsc.Instance = nullptr;
-            }
-        }
-
         m_Registry.destroy(entityID);
         m_SceneGeneration++;
         m_TransformRevision++;
     }
 
     Entity SceneData::DuplicateEntity(Entity entity) {
-        if (!entity || !m_Registry.valid(entity)) return {};
+        if (!CanMutate() || !entity || entity.GetSceneData() != this) return {};
 
         std::string name = "Entity";
         if (entity.HasComponent<TagComponent>()) {
@@ -157,85 +146,38 @@ namespace Axle {
     }
 
     glm::mat4 SceneData::RecomputeWorldTransform(entt::entity entityID) {
-        if (!m_Registry.valid(entityID)) return glm::mat4(1.0f);
-        if (!m_Registry.all_of<TransformComponent>(entityID)) return glm::mat4(1.0f);
-
-        std::vector<entt::entity> chain;
-        entt::entity current = entityID;
-
-        // Traverse upwards towards the root with cycle guard
-        while (current != entt::null && m_Registry.valid(current)) {
-            chain.push_back(current);
-            if (chain.size() > 128) break;
-
-            if (m_Registry.all_of<HierarchyComponent>(current)) {
-                current = m_Registry.get<HierarchyComponent>(current).Parent;
-            } else {
+        if (!CanMutate()) return GetWorldTransform(entityID);
+        // A single-entity query/reparent must not evaluate and enqueue the whole
+        // scene. Publish only its ancestor path; phase boundaries publish the
+        // complete forest after a batch of authored edits.
+        std::vector<entt::entity> path;
+        std::unordered_set<entt::entity> visited;
+        auto current = entityID;
+        while (m_Registry.valid(current) && m_Registry.all_of<TransformComponent>(current)) {
+            path.push_back(current);
+            visited.insert(current);
+            if (!m_Registry.all_of<HierarchyComponent>(current)) break;
+            auto& hierarchy = m_Registry.get<HierarchyComponent>(current);
+            const auto parent = hierarchy.Parent;
+            if (parent == entt::null) break;
+            if (!m_Registry.valid(parent) || !m_Registry.all_of<TransformComponent>(parent) || visited.count(parent)) {
+                hierarchy.Parent = entt::null;
                 break;
             }
+            current = parent;
         }
-
-        // Evaluate transforms downwards from the root
-        glm::mat4 parentWorld = glm::mat4(1.0f);
-        for (int i = (int)chain.size() - 1; i >= 0; --i) {
-            entt::entity e = chain[i];
-            if (!m_Registry.all_of<TransformComponent>(e)) continue;
-
-            auto& tc = m_Registry.get<TransformComponent>(e);
-            tc.LocalMatrix = tc.GetTransform();
-
-            if (i == (int)chain.size() - 1 || !m_Registry.all_of<HierarchyComponent>(e)) {
-                tc.WorldMatrix = tc.LocalMatrix;
-            } else {
-                const auto& hc = m_Registry.get<HierarchyComponent>(e);
-                if (hc.InheritTransform) {
-                    if (hc.InheritScale) {
-                        tc.WorldMatrix = parentWorld * tc.LocalMatrix;
-                    } else {
-                        glm::vec3 parentTrans = glm::vec3(parentWorld[3]);
-                        glm::quat parentRot = glm::quat_cast(parentWorld);
-                        glm::mat4 rigidParent = glm::translate(glm::mat4(1.0f), parentTrans) * glm::mat4_cast(parentRot);
-                        tc.WorldMatrix = rigidParent * tc.LocalMatrix;
-                    }
-                } else {
-                    tc.WorldMatrix = tc.LocalMatrix;
-                }
+        glm::mat4 world(1.0f);
+        for (auto it = path.rbegin(); it != path.rend(); ++it) {
+            if (m_Registry.all_of<HierarchyComponent>(*it)) {
+                world = InheritedParentTransform(world, m_Registry.get<HierarchyComponent>(*it));
             }
-            parentWorld = tc.WorldMatrix;
+            auto& transform = m_Registry.get<TransformComponent>(*it);
+            transform.LocalMatrix = transform.GetLocalTransform();
+            transform.WorldMatrix = world * transform.LocalMatrix;
+            world = transform.WorldMatrix;
         }
-
-        m_TransformRevision++;
-        return m_Registry.get<TransformComponent>(entityID).WorldMatrix;
-    }
-
-    void SceneData::UpdateEntityTransformRecursive(entt::entity entity, const glm::mat4& parentWorld) {
-        if (!m_Registry.valid(entity) || !m_Registry.all_of<TransformComponent>(entity)) return;
-
-        auto& tc = m_Registry.get<TransformComponent>(entity);
-        tc.LocalMatrix = tc.GetTransform();
-
-        if (m_Registry.all_of<HierarchyComponent>(entity)) {
-            const auto& hc = m_Registry.get<HierarchyComponent>(entity);
-            if (hc.InheritTransform) {
-                if (hc.InheritScale) {
-                    tc.WorldMatrix = parentWorld * tc.LocalMatrix;
-                } else {
-                    glm::vec3 parentTrans = glm::vec3(parentWorld[3]);
-                    glm::quat parentRot = glm::quat_cast(parentWorld);
-                    glm::mat4 rigidParent = glm::translate(glm::mat4(1.0f), parentTrans) * glm::mat4_cast(parentRot);
-                    tc.WorldMatrix = rigidParent * tc.LocalMatrix;
-                }
-            } else {
-                tc.WorldMatrix = tc.LocalMatrix;
-            }
-
-            auto childrenCopy = hc.Children;
-            for (auto child : childrenCopy) {
-                UpdateEntityTransformRecursive(child, tc.WorldMatrix);
-            }
-        } else {
-            tc.WorldMatrix = parentWorld * tc.LocalMatrix;
-        }
+        if (!path.empty()) ++m_TransformRevision;
+        return GetWorldTransform(entityID);
     }
 
     void SceneData::UpdateWorldTransforms() {
@@ -243,12 +185,13 @@ namespace Axle {
     }
 
     void SceneData::UpdateWorldTransformsParallel(u32 minBatchSize) {
+        if (!CanMutate()) return;
         ParallelECS::UpdateWorldTransforms(m_Registry, minBatchSize);
         m_TransformRevision++;
     }
 
     void SceneData::SetParent(Entity child, Entity parent, bool keepWorldPosition) {
-        if (!child || !m_Registry.valid(child)) return;
+        if (!CanMutate() || !child || child.GetSceneData() != this) return;
 
         entt::entity childID = (entt::entity)child;
         entt::entity parentID = parent ? (entt::entity)parent : entt::null;
@@ -265,13 +208,12 @@ namespace Axle {
             m_Registry.emplace<HierarchyComponent>(childID);
         }
 
-        auto& childHC = m_Registry.get<HierarchyComponent>(childID);
-
         // Keep World Position Stays: cache current world transform before modifying hierarchy
         glm::mat4 currentWorld = glm::mat4(1.0f);
         if (keepWorldPosition) {
             currentWorld = RecomputeWorldTransform(childID);
         }
+        auto& childHC = m_Registry.get<HierarchyComponent>(childID);
 
         // Unlink from old parent if any
         if (childHC.Parent != entt::null && m_Registry.valid(childHC.Parent)) {
@@ -302,7 +244,7 @@ namespace Axle {
             auto& childTC = m_Registry.get<TransformComponent>(childID);
             if (parentID != entt::null && m_Registry.valid(parentID)) {
                 glm::mat4 parentWorld = RecomputeWorldTransform(parentID);
-                glm::mat4 invParentWorld = glm::inverse(parentWorld);
+                glm::mat4 invParentWorld = glm::inverse(InheritedParentTransform(parentWorld, m_Registry.get<HierarchyComponent>(childID)));
                 glm::mat4 newLocal = invParentWorld * currentWorld;
 
                 glm::vec3 skew;
@@ -316,7 +258,7 @@ namespace Axle {
             childTC.LocalMatrix = childTC.GetTransform();
         }
 
-        m_TransformRevision++;
+        RecomputeWorldTransform(childID);
     }
 
     SceneCommandBuffer& SceneData::GetCommandBuffer() {
@@ -327,6 +269,7 @@ namespace Axle {
     }
 
     void SceneData::ExecuteCommandBuffer() {
+        if (!CanMutate()) return;
         if (m_CommandBuffer) {
             m_CommandBuffer->Execute(*this);
         }
@@ -395,7 +338,7 @@ namespace Axle {
     }
 
     void SceneData::StorePassiveSection(Entity entity, const std::string& sectionName, const std::vector<std::string>& lines) {
-        if (!entity || !m_Registry.valid(entity)) return;
+        if (!CanMutate() || !entity || entity.GetSceneData() != this) return;
 
         auto& pec = entity.HasComponent<PassiveExtensionComponent>()
             ? entity.GetComponent<PassiveExtensionComponent>()
@@ -405,7 +348,7 @@ namespace Axle {
     }
 
     const std::vector<UnknownComponentSection>* SceneData::GetPassiveSections(Entity entity) const {
-        if (!entity || !m_Registry.valid(entity)) return nullptr;
+        if (!entity || entity.GetSceneData() != this) return nullptr;
         if (!m_Registry.all_of<PassiveExtensionComponent>((entt::entity)entity)) return nullptr;
 
         return &m_Registry.get<PassiveExtensionComponent>((entt::entity)entity).Sections;
@@ -416,6 +359,16 @@ namespace Axle {
         if (!m_Registry.all_of<PassiveExtensionComponent>((entt::entity)entity)) return false;
 
         return !m_Registry.get<PassiveExtensionComponent>((entt::entity)entity).Sections.empty();
+    }
+
+    bool SceneData::CanMutate() const {
+        if (std::this_thread::get_id() == m_OwnerThread && JobSystem::GetActiveTaskDepth() == 0 && m_IterationDepth == 0) return true;
+        AXLE_CORE_ERROR("Scene mutation rejected outside an owner-thread boundary; record a scene command instead");
+        return false;
+    }
+
+    void SceneData::DestroyEntityWithPhysics(Entity entity, PhysicsScene*) {
+        DestroyEntity(entity);
     }
 
 }

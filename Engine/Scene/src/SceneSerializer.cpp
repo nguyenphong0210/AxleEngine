@@ -1825,6 +1825,7 @@ namespace Axle {
             if (material.MaterialAsset) material.SyncToAsset();
         }
 
+        m_Scene->UpdateWorldTransforms();
         return true;
     }
 

@@ -1,9 +1,8 @@
 #include <Axle/Entity.hpp>
-#include <Axle/Components.hpp>
+#include <Axle/DataComponents.hpp>
 #include <Axle/SceneData.hpp>
-#include <Axle/Scene.hpp>
-#include <Axle/ScenePhysicsBridge.hpp>
 #include <algorithm>
+#include <unordered_set>
 
 namespace Axle {
 
@@ -38,10 +37,7 @@ namespace Axle {
 
     void Entity::Destroy(PhysicsScene* physicsScene) {
         if (m_Scene && *this) {
-            if (physicsScene) {
-                ScenePhysicsBridge::TeardownEntityPhysics(*m_Scene, m_EntityHandle, physicsScene);
-            }
-            m_Scene->DestroyEntity(*this);
+            m_Scene->DestroyEntityWithPhysics(*this, physicsScene);
             m_EntityHandle = entt::null;
         }
     }
@@ -124,7 +120,8 @@ namespace Axle {
         if (!*this || !potentialParent) return false;
 
         Entity current = GetParent();
-        while (current) {
+        std::unordered_set<entt::entity> visited;
+        while (current && visited.insert(current).second) {
             if (current == potentialParent) return true;
             current = current.GetParent();
         }
@@ -140,19 +137,6 @@ namespace Axle {
     glm::mat4 Entity::RecomputeWorldTransform() {
         if (!*this || !m_Scene) return glm::mat4(1.0f);
         return m_Scene->RecomputeWorldTransform(m_EntityHandle);
-    }
-
-    Entity UICanvasComponent::GetDataSourceEntity(Scene* scene, Entity currentEntity) const {
-        if (DataSourceEntityID == 0) {
-            return currentEntity;
-        }
-        if (scene) {
-            Entity target = scene->GetEntityByUUID(DataSourceEntityID);
-            if (target) {
-                return target;
-            }
-        }
-        return currentEntity;
     }
 
 }

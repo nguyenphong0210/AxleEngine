@@ -6,6 +6,8 @@
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/ScriptableEntity.hpp>
+#include <stdexcept>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/AudioEngine.hpp>
 #include <AxleSpline/SplineComponent.hpp>
@@ -370,6 +372,7 @@ namespace Axle {
     }
 
     void RuntimeLayer::OnDetach() {
+        JobSystem::WaitForAll();
         AXLE_INFO("RuntimeLayer detached - Shutting down Game Player");
         Input::SetCursorMode(CursorMode::Normal);
         m_SimulationDriver.Reset();
@@ -384,4 +387,67 @@ namespace Axle {
         AudioEngine::Shutdown();
     }
 
+}
+
+namespace Axle {
+void RuntimeLayer::VerifySimulationContract() {
+    struct Probe final : Axle::ScriptableEntity {
+        int Frames = 0, Ticks = 0, Late = 0, Held = 0;
+        void OnUpdate(Axle::Timestep) override { ++Frames; }
+        void OnFixedUpdate(Axle::Timestep) override {
+            ++Ticks;
+            const bool held = Axle::Input::IsKeyPressed(Axle::KeyCode::W);
+            Held += held;
+            auto& body = GetComponent<Axle::RigidBody3D>();
+            GetEntity().GetScene()->GetPhysicsScene()->SetLinearVelocity(body.RuntimeBodyID, glm::vec3(held ? 2.0f : 0.0f, 0, 0));
+        }
+        void OnLateUpdate(Axle::Timestep) override { ++Late; }
+    };
+    const auto require = [](bool condition) { if (!condition) throw std::runtime_error("Product simulation contract failed"); };
+    const auto* previousInput = Axle::Input::GetInputContext();
+    Axle::InputContext hardware = *previousInput;
+    struct RestoreInput {
+        const Axle::InputContext* Previous;
+        ~RestoreInput() { Axle::Input::SetInputContext(Previous); Axle::ScriptHotReloadManager::Get().SyncInputContext(); }
+    } restoreInput{previousInput};
+    hardware.IsKeyPressedFn = [](Axle::KeyCode key) { return key == Axle::KeyCode::W; };
+    hardware.IsMouseButtonPressedFn = [](Axle::MouseCode) { return false; };
+    Axle::Input::SetInputContext(&hardware);
+    for (int rate : {30, 60, 144}) {
+        m_Scene->OnRuntimeStop(m_PhysicsScene.get());
+        m_Scene->Clear();
+        m_PhysicsScene = std::make_unique<PhysicsScene>();
+        m_Scene = std::make_shared<Scene>();
+        auto actor = m_Scene->CreateEntity("SimulationAcceptance");
+        actor.GetComponent<TransformComponent>().Translation.y = 20.0f;
+        actor.AddComponent<CollisionShape3D>();
+        actor.AddComponent<RigidBody3D>().GravityFactor = 0.0f;
+        actor.AddComponent<NativeScriptComponent>().Bind<Probe>();
+        m_Scene->OnRuntimeStart(m_PhysicsScene.get());
+        m_SimulationDriver.Reset();
+        m_IsPaused = false;
+        auto* instance = static_cast<Probe*>(actor.GetComponent<NativeScriptComponent>().Instance);
+        require(instance != nullptr);
+        for (int frame = 0; frame < rate; ++frame) OnUpdate(1.0f / rate);
+        const float x = actor.GetWorldTransform()[3].x;
+        require(m_SimulationDriver.GetClock().GetDiagnostics().TotalTicksExecuted == 60);
+        require(instance->Ticks == 60 && instance->Held == 60 && instance->Frames == rate && instance->Late == rate);
+        require(std::abs(x - 2.0f) < 0.01f);
+        m_IsPaused = true;
+        OnUpdate(1.0f);
+        require(instance->Ticks == 60);
+        m_SimulationDriver.RequestSingleStep();
+        OnUpdate(0.0f);
+        require(instance->Ticks == 61 && m_IsPaused);
+        m_IsPaused = false;
+        m_SimulationDriver.SetSpeed(0.0f);
+        const auto framesBeforeZero = instance->Frames;
+        OnUpdate(1.0f);
+        require(instance->Ticks == 61 && instance->Frames == framesBeforeZero);
+        m_SimulationDriver.SetSpeed(1.0f);
+        AXLE_INFO("PRODUCT_SIM_PASS Runtime rate={0} ticks=60 held=60 x={1}", rate, x);
+    }
+    m_Scene->Clear();
+    Axle::Input::SetInputContext(previousInput);
+}
 }

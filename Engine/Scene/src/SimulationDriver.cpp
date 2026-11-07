@@ -1,18 +1,34 @@
 #include <Axle/SimulationDriver.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/PhysicsScene.hpp>
+#include <Axle/ScriptHotReloadManager.hpp>
 
 namespace Axle {
+    namespace {
+        struct RestoreTickInput {
+            SimulationInputAdapter& Input;
+            ~RestoreTickInput() {
+                Input.DeactivateTickContext();
+                ScriptHotReloadManager::Get().SyncInputContext();
+            }
+        };
+    }
 
     SimulationDriver::SimulationDriver(float fixedTimestep)
         : m_Clock(fixedTimestep) {
     }
 
     uint32_t SimulationDriver::AdvanceFrame(float rawDt, Scene& scene, PhysicsScene* physicsScene) {
+        if (!scene.CanMutate()) return 0;
+        RestoreTickInput restore{m_InputAdapter};
+        if (scene.IsSimulationFaulted()) {
+            Pause();
+            return 0;
+        }
         m_InputAdapter.PollHardwareState();
 
         if (m_Clock.IsPaused()) {
-            m_InputAdapter.Flush(); // SIM-05: Paused UI events never replay as game inputs
+            m_InputAdapter.DiscardEdges();
             if (m_Clock.IsSingleStepPending()) {
                 uint32_t ticks = m_Clock.Advance(rawDt);
                 if (ticks > 0) {
@@ -24,18 +40,21 @@ namespace Axle {
                 }
                 return ticks;
             }
+            scene.ExecuteLatePresentationPhase(0.0f, physicsScene);
             return 0;
         }
 
         uint32_t ticks = m_Clock.Advance(rawDt);
-        if (ticks == 0) {
-            scene.ExecuteFrameScriptPhase(rawDt);
-            scene.ExecuteLatePresentationPhase(rawDt, physicsScene);
+        const float frameDt = m_Clock.GetFrameSimulationDelta();
+        if (frameDt <= 0.0f && ticks == 0) {
+            m_InputAdapter.DiscardEdges();
+            scene.ExecuteLatePresentationPhase(0.0f, physicsScene);
             return 0;
         }
 
-        // 1. Frame Scripts Phase (runs once per render frame with rawDt)
-        scene.ExecuteFrameScriptPhase(rawDt);
+        // 1. Frame gameplay uses the admitted, scaled simulation interval.
+        scene.ExecuteCommandBuffer();
+        scene.ExecuteFrameScriptPhase(frameDt);
 
         // 2. Prepare snapshots for all fixed ticks this frame
         m_InputAdapter.PrepareTickSnapshots(ticks);
@@ -49,12 +68,14 @@ namespace Axle {
         m_InputAdapter.DeactivateTickContext();
 
         // 4. Late Presentation Phase (LateUpdate camera, spatial audio sync, HUD telemetry)
-        scene.ExecuteLatePresentationPhase(rawDt, physicsScene);
+        scene.ExecuteLatePresentationPhase(frameDt, physicsScene);
 
         return ticks;
     }
 
     void SimulationDriver::ExecuteFixedTick(float fixedDt, Scene& scene, PhysicsScene* physicsScene) {
+        if (!scene.CanMutate()) return;
+        RestoreTickInput restore{m_InputAdapter};
         m_InputAdapter.PrepareTickSnapshots(1);
         m_InputAdapter.ActivateTickContext(0);
         scene.ExecuteFixedTick(fixedDt, physicsScene);
@@ -62,11 +83,13 @@ namespace Axle {
     }
 
     void SimulationDriver::Pause() {
+        if (m_Clock.IsPaused()) return;
         m_Clock.Pause();
         m_InputAdapter.Flush();
     }
 
     void SimulationDriver::Resume() {
+        if (!m_Clock.IsPaused()) return;
         m_Clock.Resume();
         m_InputAdapter.Flush();
     }

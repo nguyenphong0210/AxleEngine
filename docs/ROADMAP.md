@@ -3,7 +3,7 @@ Latest user steering (2026-11-07): for future released scopes, Gemini implements
 # Architecture Optimization Roadmap
 
 Updated: **2026-11-07**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **OPT-04 accepted after implementation, review and native API validation. OPT-02/03 accepted**.
+Status: **OPT-05 accepted after consolidated review, repairs and final Debug/Release/native validation. OPT-02/03/04 remain accepted**.
 
 ## Start here
 
@@ -12,7 +12,15 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Latest completed assignment: Codex OPT-04, P41-01..P41-11.** The user reassigned
+**Latest completed assignment: OPT-05, P41-12..20 and P41-25.** Gemini delivered
+the initial candidate; Codex owns the corrected design, implementation and final
+verification. Significant corrections received separate-context source rechecks.
+The [acceptance report](reviews/OPT_05_CODEX_REVIEW.md) records source `de97d9b`,
+all repaired findings, complete Debug/Release builds, 50/50 CTest and 35/35 physical
+native API cases per configuration, actual consumer/Runtime pixels and remaining
+explicit later-scope limits. Stop here: OPT-06 is not released.
+
+**Accepted prerequisite: Codex OPT-04, P41-01..P41-11.** The user reassigned
 implementation from Gemini to Codex on 2026-11-07; [current handoff](agents/handoffs/OPT_04_CODEX.md).
 One separate-context Codex reviewer checks the full phase after P41-11; significant
 fixes are rechecked before final acceptance. Intermediate P41-03/P41-06 review
@@ -25,7 +33,7 @@ fresh-context review and correction rechecks passed; see the
 installed, 35/35 actual D3D12/Vulkan API-validation cases and 50/50 CTest passed
 per configuration. The same reviewer independently verified the new corrections
 in 36 targeted cases. The applicable API gate is closed. Vulkan multi-mip 3D
-shader views explicitly reject a pinned-NRI limitation. No OPT-05 work is released.
+shader views explicitly reject a pinned-NRI limitation. OPT-05 was subsequently released and accepted as recorded above.
 
 **Accepted prerequisite: OPT-02 and OPT-03, after review and repairs.**
 Codex independently reviewed Gemini's deliveries at `0eeb734`, found and corrected
@@ -34,7 +42,7 @@ full integration, the 16/0/3 jobs harness and both native products. The
 [review and acceptance report](reviews/OPT_02_03_CODEX_REVIEW.md) records corrections
 `e351399` and `3a67116`, exact commands, evidence and limits. No separate independent
 review of Codex's own fixes is claimed. That acceptance report did not release
-another package; the user's subsequent assignment above releases OPT-04 only.
+another package; the user's later assignments above separately released OPT-04 and OPT-05.
 
 The [OPT-01 combined review](reviews/OPT_01_AF01_P41_PLG_REVIEW.md) remains the prior
 accepted foundation. Identity policy is unchanged: raw external resources use
@@ -232,20 +240,24 @@ accepted within the explicit pinned-NRI 3D-view limitation recorded above.
 
 **Work:** Introduce immutable extraction/RenderWorld and RenderService; migrate material/VFX/assembly/thumbnail consumers, Runtime rendering, actual Canvas GPU submission, capability reporting and generic physics debug.
 
-- [ ] **P41-12:** RenderWorld and shared scene extraction.
-- [ ] **P41-13:** RenderService and minimal modern render graph.
-- [ ] **P41-14:** OpenGL compatibility behind the same service.
-- [ ] **P41-15:** Asset and material previews.
-- [ ] **P41-16:** VFX preview.
-- [ ] **P41-17:** Assembly preview.
-- [ ] **P41-18:** Thumbnail render jobs.
-- [ ] **P41-19:** Standalone Runtime render integration.
-- [ ] **P41-20:** Material/shader/color/capability contract.
-- [ ] **P41-25:** Physics debug and overlays.
+- [x] **P41-12:** RenderWorld and shared scene extraction.
+- [x] **P41-13:** RenderService and minimal modern render graph.
+- [x] **P41-14:** OpenGL compatibility behind the same service.
+- [x] **P41-15:** Asset and material previews.
+- [x] **P41-16:** VFX preview.
+- [x] **P41-17:** Assembly preview.
+- [x] **P41-18:** Thumbnail render jobs.
+- [x] **P41-19:** Standalone Runtime render integration.
+- [x] **P41-20:** Material/shader/color/capability contract.
+- [x] **P41-25:** Physics debug and overlays.
 
 **Exit:** Real consumers use the common service. Runtime UI is physically submitted; counters alone do not qualify. Preserve declared existing capabilities or expose an explicit supported compatibility path. Advanced features stay open in OPT-11.
 
-**Evidence:** Pending; implementation/review is not claimed here.
+**Evidence:** [Codex review, corrections and acceptance](reviews/OPT_05_CODEX_REVIEW.md).
+Final source `de97d9b` passed complete Debug/Release builds, 50/50 CTest, 35/35
+native API cases and actual preview, Canvas, Runtime, physics and product gates
+per configuration. Separate-context source/correction review is complete.
+P41-26 Editor-disabled build closure remains later scope; stop before OPT-06.
 
 ### OPT-06 - Deliver the plugin framework and Plugins window
 

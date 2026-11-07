@@ -19,6 +19,7 @@ explicitly if the running client/session has not loaded it.
 - **OPT-01**: Accepted baseline and verified corrections; see the roadmap evidence.
 - **OPT-02/03**: Accepted after Codex review and verified corrections for EJ-01..EJ-14 and AF-02..AF-04; [acceptance report](../reviews/OPT_02_03_CODEX_REVIEW.md).
 - **OPT-04**: Accepted after implementation, consolidated review, correction rechecks and actual D3D12/Vulkan API validation; [execution record](../reviews/OPT_04_CODEX_EXECUTION.md).
+- **OPT-05**: Accepted after consolidated review, repairs, separate-context source rechecks and final Debug/Release consumer/API/product gates; [acceptance report](../reviews/OPT_05_CODEX_REVIEW.md). Stop before OPT-06.
 - **Default future workflow**: Gemini implements the released scope; Codex performs one consolidated final review and owns repairs, including substantial redesign. Significant Codex corrections receive a separate-context recheck. See the [shared workflow](WORKING_PROTOCOL.md#default-implementation-and-final-review-workflow). No next phase is activated by this decision.
 
 Read **[docs/ROADMAP.md](../ROADMAP.md)** for OPT-00..11 order/progress and the

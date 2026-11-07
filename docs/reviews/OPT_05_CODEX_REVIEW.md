@@ -5,11 +5,13 @@ Gemini baseline: `2baf3de7223b5d3c8c77395048cb6faad8e515d9`.
 Scope: P41-12..20 and P41-25; stop before OPT-06. User authorizes Codex to
 replace unsuitable design/code, including structural file changes. No push.
 
-Status: **IN PROGRESS; NOT ACCEPTED**. Gemini delivery evidence is reported,
-not independently verified by this report. Source defects below are confirmed
-by inspection; native reproductions and final-source evidence will be added.
+Status: **ACCEPTED** for P41-12..20 and P41-25. Final production/test source:
+`de97d9b`, following corrective commits `5f3f7bd`, `2e3a77c`, `c9a6572`,
+`83f28e1`, `3171d7d`, `ed1ec07`, `e2f6ee2` and `2653a46`.
+Gemini's original delivery claims were treated as reported evidence. Codex
+verified the corrected implementation through the actual final gates below.
 
-## Findings
+## Original findings (closed)
 
 - **OPT05-R1 / P1:** Extraction mutates through const_cast, invokes GPU resolution
   during registry iteration and retains mutable material objects. CPU extraction
@@ -40,7 +42,9 @@ Significant Codex corrections receive a separate-context final recheck.
 P41-26 Editor-disabled build closure is explicitly a later package; no claim of
 that closure is made by P41-19 behavior checks. Missing required checks stay NOT RUN.
 
-Current final-source verification: **NOT RUN** (repairs in progress).
+Current final-source verification: **PASS in Debug and Release**; final evidence below.
+The checkpoint sections preserve intermediate progress and failed attempts; the
+final acceptance ledger records the current conclusion.
 
 ## Correction checkpoint 1
 
@@ -241,7 +245,7 @@ queued GL image just as production panels do. Failed logs are retained.
 These are corrective self-checks. Final Debug/Release builds and complete gates,
 followed by the separate-context correction recheck, still block acceptance.
 
-## Separate-context correction findings (checkpoint 8 in progress)
+## Separate-context correction findings (checkpoint 8)
 
 An independent read-only correction review of the candidate through e2f6ee2
 found five remaining defects. These are actual source findings, not acceptance:
@@ -284,7 +288,7 @@ root, and a probe constructing two GL render services/Jolt debug renderers. The
 final fixture uses the production shared owner and a scoped real asset root;
 production assertions were not suppressed.
 
-## Full-gate correction checkpoint 9 (in progress)
+## Full-gate correction checkpoint 9
 
 The first full Debug gate at 2653a46 passed 50/50 CTest, focused 9/9, previews
 12/12, Runtime fixtures/executable/negative cases, jobs/ECS, full default
@@ -323,3 +327,49 @@ A separate-context reviewer rechecked the source repairs, including current
 path/UUID guards and per-view zero line counts, and found no remaining P1/P2
 issue. That reviewer performed source inspection only. The full final-source
 Debug/Release matrix is still required before acceptance.
+
+## Final acceptance
+
+All OPT05-R1..R7 and OPT05-FR-01..08 findings are closed by the correction
+commits and verified behavior above. The consolidated independent source review
+and focused separate-context correction rechecks found no remaining P1/P2 issue.
+Reviewer evidence is source/caller inspection and diff checks. Build, integration,
+physical pixel/API and product results below were executed by the implementing
+Codex context; they are not represented as independently executed by that reviewer.
+
+Final commands (all exit 0), run sequentially per configuration:
+`python build/agent-runs/OPT-05/build.py <Debug|Release> opt05-final9-source AxleAllTests AxleEditor AxleRuntime`
+and `python build/agent-runs/OPT-05/final_gates.py <Debug|Release>`.
+The complete command lists, durations and logs are recorded in
+`build/agent-runs/OPT-05/final/{debug,release}/results.json`.
+
+| Final gate | Debug | Release |
+| --- | --- | --- |
+| Full AxleAllTests / AxleEditor / AxleRuntime build | PASS | PASS |
+| Full CTest | 50/50 | 50/50 |
+| CPU/shared service/Canvas focused cases | 9/9 | 9/9 |
+| Actual panel/physics/surface/VFX consumer cases | 12/12 | 12/12 |
+| Runtime loose/cooked product fixtures, four backend choices | 8/8 | 8/8 |
+| Runtime executable starts/presents plus GL fallback pixel comparisons | 10/10 | 10/10 |
+| Missing startup-scene executable failures | 6/6 expected failures verified | 6/6 expected failures verified |
+| Physical D3D12/Vulkan API gates, including teardown | 35/35 | 35/35 |
+| Explicit material/VFX native gates plus full default integration | 5/5 | 5/5 |
+| Jobs/ECS harness | 16 PASS, 0 defects, 3 controls | 16 PASS, 0 defects, 3 controls |
+| Actual Editor/Runtime simulation product probe | PASS | PASS |
+| AF-04 architecture boundary check | PASS | PASS |
+| Baseline tools | 18/18 | 18/18 |
+
+Native runs use the RTX 3070 with installed graphics API validation and NRI
+validation; Vulkan confirms synchronization validation. Physical result records
+contain no detected API-validation errors, including shutdown. Native Runtime
+executable probes assert eight actual presented frames. Explicit GL and forced
+fallback have byte-identical mesh/Canvas outputs before and after resize.
+The earlier failed full attempt remains under `attempt-2653a46`; no failed
+required gate was waived. NRI stays clean at
+`6998e3fbbaed1b132f386a9d49743a2481003487` (API 190).
+
+Accepted limits: the render graph is sequential with whole-texture usages;
+advanced modern scene features remain explicitly unsupported in capability
+reporting and retain their supported GL path. P41-26 Editor-disabled build
+closure and other later packages remain outside this acceptance. No OPT-06 work
+is released or implemented, and no push was performed.

@@ -461,11 +461,10 @@ assignment from unchecked roadmap rows.
 | Package range | Implementation | Review | Required acceptance |
 | --- | --- | --- | --- |
 | P41-00 | Delivered in OPT-01 | Accepted predecessor | See OPT-01 review |
-| P41-01 | Implemented and self-verified Debug/Release | Final review pending | See OPT-04 execution record; API-validation layers unavailable |
-| P41-02 | Implemented and self-verified Debug/Release | Final review pending | See OPT-04 execution record |
-| P41-03 | Implemented and self-verified Debug/Release | Final review pending | See OPT-04 execution record |
-| P41-04..11 | NOT STARTED | NOT STARTED | NOT RUN |
-| P41-12..29 | NOT STARTED | NOT STARTED | NOT RUN |
+| P41-01..11 | OPT-04 implemented | Accepted, including correction rechecks | Debug/Release + physical API gates; see [OPT-04 record](../reviews/OPT_04_CODEX_EXECUTION.md) |
+| P41-12..20 | OPT-05 implemented and corrected through de97d9b | Accepted after consolidated review and separate-context correction rechecks | Debug/Release full consumer/native/product gates; see [OPT-05 record](../reviews/OPT_05_CODEX_REVIEW.md) |
+| P41-25 | Shared physics debug and overlays implemented | Accepted with OPT-05 | Actual active-scene lifecycle/alpha output on all three backends |
+| P41-21..24, P41-26..29 | NOT STARTED | NOT STARTED | NOT RUN; later scope |
 
-Split this row into per-package rows as implementation starts. Documentation
+Split later ranges into per-package rows when implementation is released. Documentation
 creation and prior Inspector/VFX bug fixes do not complete any package here.

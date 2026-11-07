@@ -7,7 +7,7 @@
 [![miniaudio](https://img.shields.io/badge/Audio-miniaudio-yellow.svg)](https://miniaud.io/)
 [![CMake](https://img.shields.io/badge/CMake-3.22%2B-red.svg)](https://cmake.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)]()
-[![Tests](https://img.shields.io/badge/CTest-39%2F39%20Passing%20(100%25)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/CTest-50%2F50%20Passing%20(100%25)-brightgreen.svg)]()
 
 **AxleEngine** is a modern, modular, high-performance **General-Purpose 3D Game Engine** written in **C++20**. 
 
@@ -108,7 +108,9 @@ Current work follows the **[Architecture Optimization Roadmap](docs/ROADMAP.md)*
 - **OPT-01**: Clean Baseline, Threading, Asset Identity & Model (Delivered).
 - **OPT-02**: Jobs & Worker Integrity, Core Leaf Decoupling (Delivered).
 - **OPT-03**: Core, SceneData, Assets & Shared Simulation (Delivered).
-- **OPT-04**: NRI Device & GPU Lifetime Foundation (Next Phase).
+- **OPT-04**: NRI Device & GPU Lifetime Foundation (Accepted).
+- **OPT-05**: Shared rendering for Editor, previews and Runtime ([accepted after review and corrections](docs/reviews/OPT_05_CODEX_REVIEW.md)).
+- **OPT-06**: Plugin framework (Not released).
 
 ---
 

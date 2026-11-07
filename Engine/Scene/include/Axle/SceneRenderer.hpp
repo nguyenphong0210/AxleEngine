@@ -26,6 +26,7 @@ namespace Axle {
         bool EnableToneMapping = false;
         bool EnableFXAA = false;
         uint8_t MSAASamples = 1; // 1 (disabled), 2, 4, 8
+        bool Wireframe = false;
         bool ShowPhysicsDebug = false;
         PhysicsDrawSettings PhysicsDrawSettings;
         float PhysicsDepthBias = 0.0001f;

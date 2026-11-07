@@ -31,6 +31,7 @@ namespace Axle {
         // Submit non-indexed line draw call
         static void DrawLines(const std::shared_ptr<VertexArray>& vertexArray, u32 vertexCount);
         static void SetLineWidth(f32 width);
+        static void SetWireframeMode(bool enabled);
 
         // Blending controls
         static void SetBlendEnabled(bool enabled);

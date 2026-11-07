@@ -103,6 +103,9 @@ namespace Axle {
             result.DrawCallCount = m_RHIRenderer->GetDrawCallCount();
             result.RenderedEntityCount = m_RHIRenderer->GetRenderedEntityCount();
             result.CompletionToken = RHI::RHICompletionToken{ 1 };
+            if (request.Settings.Wireframe && !GetActiveCapabilities().SupportsWireframeMode) {
+                result.ErrorMessage = "Wireframe mode is not supported on modern RHI backend; rendered solid geometry.";
+            }
             return result;
         }
 
@@ -169,6 +172,9 @@ namespace Axle {
             result.DrawCallCount = m_RHIRenderer->GetDrawCallCount();
             result.RenderedEntityCount = m_RHIRenderer->GetRenderedEntityCount();
             result.CompletionToken = RHI::RHICompletionToken{ 1 };
+            if (request.Settings.Wireframe && !GetActiveCapabilities().SupportsWireframeMode) {
+                result.ErrorMessage = "Wireframe mode is not supported on modern RHI backend; rendered solid geometry.";
+            }
             return result;
         }
 

@@ -12,7 +12,7 @@ Scope:
 - [x] **P41-14:** OpenGL compatibility behind the same service
 - [x] **P41-15:** Asset and material previews
 - [x] **P41-16:** VFX preview
-- [ ] **P41-17:** Assembly preview
+- [x] **P41-17:** Assembly preview
 - [ ] **P41-18:** Thumbnail render jobs
 - [ ] **P41-19:** Standalone Runtime render integration
 - [ ] **P41-20:** Material/shader/color/capability contract
@@ -163,6 +163,42 @@ Scope:
 
 ---
 
+## Package P41-17: Assembly Preview
+
+- **Status:** Implemented and self-verified in Debug and Release.
+- **Scope & Contract:** `docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md` lines 287-295
+
+### Implementation Summary
+1. **Migrated `AssemblyEditorPanel` to RenderService (`Engine/UI/include/Axle/AssemblyEditorPanel.hpp`, `Engine/UI/src/AssemblyEditorPanel.cpp`):**
+   - Replaced GL-only viewport, raw OpenGL calls (`glPolygonMode`, `glDrawElements`), and duplicate shaders (`s_AsmVertSrc`, `s_AsmFragSrc`).
+   - Unified preview rendering via `RenderService::Get().RenderView(world, request)` with `RenderViewKind::AssemblyPreview`.
+   - Private preview scene `m_PreviewScene` dynamically built from the authored assembly hierarchy (`m_AssemblyData.RootNode` and nested children).
+   - Studio lighting rig (primary key light + secondary fill light) and pedestal grid (`builtin://plane` with 3D caro pattern).
+   - Parent-child transform propagation preserved: child parts inherit parent transforms accurately via `Entity::SetParent`.
+   - Leased viewport targets via `RHIViewportDescriptor` on modern RHI and managed `Framebuffer` on OpenGL compatibility mode.
+   - Interactive features preserved: hierarchy navigation, adding child parts, transform editing (translation/rotation/scale), mesh paths / drag-drop from content browser, collision shapes, rigid bodies, turntable auto-orbit, LMB orbit / RMB-MMB pan / zoom, save (`SaveAssembly`), and instantiate into active scene (`InstantiateIntoScene`).
+2. **Wireframe Mode & Selection Highlighting (`Engine/Renderer/include/Axle/RenderCommand.hpp`, `Engine/Renderer/src/RenderCommand.cpp`, `Engine/Scene/src/SceneRenderer.cpp`, `Engine/Scene/src/RHISceneRenderer.cpp`, `Engine/Scene/src/RenderService.cpp`):**
+   - Added `RenderCommand::SetWireframeMode(bool enabled)` OpenGL abstraction without exposing raw GL symbols.
+   - OpenGL renderer executes wireframe rasterization when `request.Settings.Wireframe` is enabled.
+   - Modern RHI reports honest capability diagnostics in `RenderResult::ErrorMessage` when wireframe is requested and renders solid geometry.
+   - Selection highlighting: extracted `RenderMeshInstance::Selected` tints primary color with selection gold on both modern RHI and OpenGL backends.
+3. **Dedicated Unit Verification (`Tests/rendering/Test_RenderServiceUnit.cpp`):**
+   - `Test_AssemblyPreviewExtractionAndIsolation`: Builds a multi-part assembly with parent-child hierarchy, verifies world transform propagation (parent 1.0 + child 2.5 = 3.5), extracts `RenderWorld` with child selected, proves `Selected` flag propagation, validates `ViewRequest` parameters (AssemblyPreview, Wireframe), and verifies zero state leakage into the main scene.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleRenderer AxleUI AxleRenderUnitTests`: exit 0
+- `cmake --build build --config Release --target AxleRenderer AxleUI AxleRenderUnitTests`: exit 0
+- `build/Tests/Debug/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `build/Tests/Release/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `ctest --test-dir build -C Debug -R RenderUnitTests`: 1/1 passed, exit 0
+- `ctest --test-dir build -C Release -R RenderUnitTests`: 1/1 passed, exit 0
+- `python scripts/check_architecture.py --root .`: PASS (405 files / 18 CMake files)
+- `python scripts/test_baseline_tools.py`: 18/18 PASS
+- `git diff --check`: PASS
+
+
+---
+
 ## Package P41-16: VFX Preview
 
 - **Status:** Implemented and self-verified in Debug and Release.
@@ -193,3 +229,37 @@ Scope:
 - `python scripts/test_baseline_tools.py`: 18/18 PASS
 - `git diff --check`: PASS
 
+---
+
+## Package P41-17: Assembly Preview
+
+- **Status:** Implemented and self-verified in Debug and Release.
+- **Scope & Contract:** `docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md` lines 287-295
+
+### Implementation Summary
+1. **Migrated `AssemblyEditorPanel` to RenderService (`Engine/UI/include/Axle/AssemblyEditorPanel.hpp`, `Engine/UI/src/AssemblyEditorPanel.cpp`):**
+   - Replaced GL-only viewport, raw OpenGL calls (`glPolygonMode`, `glDrawElements`), and duplicate shaders (`s_AsmVertSrc`, `s_AsmFragSrc`).
+   - Unified preview rendering via `RenderService::Get().RenderView(world, request)` with `RenderViewKind::AssemblyPreview`.
+   - Private preview scene `m_PreviewScene` dynamically built from the authored assembly hierarchy (`m_AssemblyData.RootNode` and nested children).
+   - Studio lighting rig (primary key light + secondary fill light) and pedestal grid (`builtin://plane` with 3D caro pattern).
+   - Parent-child transform propagation preserved: child parts inherit parent transforms accurately via `Entity::SetParent`.
+   - Leased viewport targets via `RHIViewportDescriptor` on modern RHI and managed `Framebuffer` on OpenGL compatibility mode.
+   - Interactive features preserved: hierarchy navigation, adding child parts, transform editing (translation/rotation/scale), mesh paths / drag-drop from content browser, collision shapes, rigid bodies, turntable auto-orbit, LMB orbit / RMB-MMB pan / zoom, save (`SaveAssembly`), and instantiate into active scene (`InstantiateIntoScene`).
+2. **Wireframe Mode & Selection Highlighting (`Engine/Renderer/include/Axle/RenderCommand.hpp`, `Engine/Renderer/src/RenderCommand.cpp`, `Engine/Scene/src/SceneRenderer.cpp`, `Engine/Scene/src/RHISceneRenderer.cpp`, `Engine/Scene/src/RenderService.cpp`):**
+   - Added `RenderCommand::SetWireframeMode(bool enabled)` OpenGL abstraction without exposing raw GL symbols.
+   - OpenGL renderer executes wireframe rasterization when `request.Settings.Wireframe` is enabled.
+   - Modern RHI reports honest capability diagnostics in `RenderResult::ErrorMessage` when wireframe is requested and renders solid geometry.
+   - Selection highlighting: extracted `RenderMeshInstance::Selected` tints primary color with selection gold on both modern RHI and OpenGL backends.
+3. **Dedicated Unit Verification (`Tests/rendering/Test_RenderServiceUnit.cpp`):**
+   - `Test_AssemblyPreviewExtractionAndIsolation`: Builds a multi-part assembly with parent-child hierarchy, verifies world transform propagation (parent 1.0 + child 2.5 = 3.5), extracts `RenderWorld` with child selected, proves `Selected` flag propagation, validates `ViewRequest` parameters (AssemblyPreview, Wireframe), and verifies zero state leakage into the main scene.
+
+### Verification Evidence
+- `cmake --build build --config Debug --target AxleRenderer AxleUI AxleRenderUnitTests`: exit 0
+- `cmake --build build --config Release --target AxleRenderer AxleUI AxleRenderUnitTests`: exit 0
+- `build/Tests/Debug/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `build/Tests/Release/AxleRenderUnitTests.exe`: exit 0 (all 5 suites passed)
+- `ctest --test-dir build -C Debug -R RenderUnitTests`: 1/1 passed, exit 0
+- `ctest --test-dir build -C Release -R RenderUnitTests`: 1/1 passed, exit 0
+- `python scripts/check_architecture.py --root .`: PASS (405 files / 18 CMake files)
+- `python scripts/test_baseline_tools.py`: 18/18 PASS
+- `git diff --check`: PASS

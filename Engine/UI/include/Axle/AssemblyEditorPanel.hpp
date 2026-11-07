@@ -2,13 +2,17 @@
 #include <Axle/Types.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/Framebuffer.hpp>
-#include <Axle/Shader.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/PhysicsScene.hpp>
+#include <Axle/RenderService.hpp>
+#if defined(AXLE_BUILD_RHI)
+#include <Axle/RHIViewportDescriptor.hpp>
+#endif
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 namespace Axle {
 
@@ -27,9 +31,13 @@ namespace Axle {
         bool IsOpen() const { return m_IsOpen; }
         void SetOpen(bool open) { m_IsOpen = open; }
 
+        // Preview scene and data inspection
+        Scene* GetPreviewScene() const { return m_PreviewScene.get(); }
+        const AssemblyData& GetAssemblyData() const { return m_AssemblyData; }
+        void SyncPreviewScene();
+
     private:
-        void RenderPreview3D(float width, float height);
-        void DrawPedestalGrid(const glm::mat4& viewProj, float radius);
+        void RenderPreview(float width, float height);
         void DrawNodeHierarchy(AssemblyNode& node, int index, int& selectedId, AssemblyNode*& selectedNode);
         void DrawNodeInspector(AssemblyNode* node);
         void SaveAssembly();
@@ -45,15 +53,21 @@ namespace Axle {
         // Selection in hierarchy
         int m_SelectedNodeIndex = 0;
         AssemblyNode* m_SelectedNode = nullptr;
+        std::unordered_map<int, uint32_t> m_NodeIndexToEntityID;
 
         // Scene context for instantiating & asset loading
         Scene* m_Scene = nullptr;
         PhysicsScene* m_PhysicsScene = nullptr;
         const SceneSerializerContext* m_SerializerContext = nullptr;
 
-        // 3D Viewport & Rendering
+        // Private Preview Scene
+        std::unique_ptr<Scene> m_PreviewScene;
+
+        // Viewport & Rendering Targets
+#if defined(AXLE_BUILD_RHI)
+        RHIViewportDescriptor m_RHIViewport;
+#endif
         std::shared_ptr<Framebuffer> m_Framebuffer;
-        std::unique_ptr<Shader> m_Shader;
         u32 m_ViewportWidth = 480;
         u32 m_ViewportHeight = 360;
 
@@ -71,9 +85,10 @@ namespace Axle {
         bool m_ShowCollisionWireframes = true;
         bool m_IsViewportHovered = false;
 
-        // Status Notification
+        // Status & Diagnostic Notification
         std::string m_StatusMessage;
         float m_StatusTimer = 0.0f;
+        std::string m_DiagnosticMessage;
     };
 
 }

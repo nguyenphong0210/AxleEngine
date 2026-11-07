@@ -78,7 +78,7 @@ namespace Axle {
             int patternMode = (int)u_Params.y;
             float tileScale = max(0.01, u_Params.x);
             float4 baseColor = u_ColorPrimary;
-            
+
             if (patternMode == 0) {
                 float2 coord = floor(input.WorldPos.xz * tileScale);
                 float check = glsl_mod(coord.x + coord.y, 2.0);
@@ -124,7 +124,7 @@ namespace Axle {
             float3 H = normalize(L + V);
             float NdotH = max(0.0, dot(N, H));
             float3 specular = float3(0.9, 0.9, 0.9) * pow(NdotH, 32.0) * (1.0 - u_Params.z) * 0.35;
-            
+
             return float4(ambient + diffuse + specular, baseColor.a);
         }
     )";
@@ -2165,6 +2165,9 @@ namespace Axle {
             item.Mesh = mesh;
             item.PushConsts.Model = meshInst.WorldTransform;
             item.PushConsts.ColorPrimary = meshInst.Material.AlbedoColor;
+            if (meshInst.Selected) {
+                item.PushConsts.ColorPrimary = glm::mix(item.PushConsts.ColorPrimary, glm::vec4(1.0f, 0.85f, 0.3f, 1.0f), 0.35f);
+            }
             item.PushConsts.ColorSecondary = meshInst.Material.SecondaryColor;
             item.PushConsts.Params = glm::vec4(meshInst.Material.TileScale.x, meshInst.Material.TileScale.y, static_cast<float>(meshInst.Material.PatternMode), 0.5f);
             item.PushConsts.SunDirAndIntensity = sceneConstants.SunDirection;

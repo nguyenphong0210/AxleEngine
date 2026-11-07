@@ -2,6 +2,8 @@
 #include <Axle/RenderWorld.hpp>
 #include <Axle/ViewRequest.hpp>
 #include <Axle/RenderService.hpp>
+#include <Axle/SceneExtraction.hpp>
+#include <Axle/MeshResourceResolver.hpp>
 #include <iostream>
 #include <vector>
 
@@ -252,6 +254,101 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_AssemblyPreviewExtractionAndIsolation() {
+        Scene mainScene;
+        auto mainEnt = mainScene.CreateEntity("GamePlayer");
+        mainEnt.AddComponent<TransformComponent>();
+
+        // Build private preview scene mirroring AssemblyEditorPanel
+        Scene previewScene;
+
+        // 1. Studio Lights
+        Entity fillLight = previewScene.CreateEntity("FillLight");
+        auto& dlc2 = fillLight.AddComponent<DirectionalLightComponent>();
+        dlc2.Azimuth = 225.0f;
+        dlc2.Elevation = 30.0f;
+        dlc2.Color = glm::vec3(0.85f, 0.90f, 1.0f);
+        dlc2.Intensity = 0.4f;
+        dlc2.CastShadows = false;
+
+        Entity keyLight = previewScene.CreateEntity("KeyLight");
+        auto& dlc1 = keyLight.AddComponent<DirectionalLightComponent>();
+        dlc1.Azimuth = 45.0f;
+        dlc1.Elevation = 50.0f;
+        dlc1.Color = glm::vec3(1.0f);
+        dlc1.Intensity = 1.0f;
+        dlc1.CastShadows = false;
+
+        // 2. Pedestal
+        Entity pedestal = previewScene.CreateEntity("Pedestal");
+        auto& pedTc = pedestal.GetComponent<TransformComponent>();
+        pedTc.Translation = glm::vec3(0.0f, -0.01f, 0.0f);
+        auto& pedMesh = pedestal.AddComponent<MeshInstance3D>();
+        pedMesh.AssetPath = "builtin://plane";
+        ResolveMeshResources(pedMesh);
+
+        // 3. Multi-part Assembly hierarchy
+        Entity rootPart = previewScene.CreateEntity("RobotBase");
+        auto& rootTc = rootPart.GetComponent<TransformComponent>();
+        rootTc.Translation = glm::vec3(0.0f, 1.0f, 0.0f);
+        auto& rootMesh = rootPart.AddComponent<MeshInstance3D>();
+        rootMesh.AssetPath = "builtin://cube";
+        ResolveMeshResources(rootMesh);
+
+        Entity armPart = previewScene.CreateEntity("RobotArm");
+        armPart.SetParent(rootPart, false);
+        auto& armTc = armPart.GetComponent<TransformComponent>();
+        armTc.Translation = glm::vec3(0.0f, 2.5f, 0.0f);
+        auto& armMesh = armPart.AddComponent<MeshInstance3D>();
+        armMesh.AssetPath = "builtin://cylinder";
+        ResolveMeshResources(armMesh);
+
+        previewScene.UpdateWorldTransforms();
+
+        // Verify parent-child world transform propagation
+        glm::mat4 armWorld = previewScene.GetWorldTransform(armPart);
+        RENDER_CHECK(std::abs(armWorld[3][1] - 3.5f) < 1e-4f, "Assembly child world Y translation is 1.0 + 2.5 = 3.5");
+
+        // Extract RenderWorld with armPart selected
+        std::unordered_set<uint32_t> selectedSet;
+        selectedSet.insert(static_cast<uint32_t>((entt::entity)armPart));
+
+        SceneExtractionOptions options;
+        options.SelectedEntities = &selectedSet;
+        options.ResolveResources = true;
+
+        RenderWorld world = ExtractRenderWorld(previewScene, options);
+        RENDER_CHECK(world.Meshes.size() == 3, "Extracted 3 meshes (pedestal + root + child arm)");
+
+        bool foundSelectedArm = false;
+        bool rootNotSelected = false;
+        for (const auto& m : world.Meshes) {
+            if (m.EntityID == static_cast<uint32_t>((entt::entity)armPart)) {
+                if (m.Selected) foundSelectedArm = true;
+            }
+            if (m.EntityID == static_cast<uint32_t>((entt::entity)rootPart)) {
+                if (!m.Selected) rootNotSelected = true;
+            }
+        }
+        RENDER_CHECK(foundSelectedArm, "Assembly child arm mesh marked as Selected");
+        RENDER_CHECK(rootNotSelected, "Assembly root mesh marked as not selected");
+
+        // ViewRequest verification
+        ViewRequest req;
+        req.Kind = RenderViewKind::AssemblyPreview;
+        req.Width = 800;
+        req.Height = 600;
+        req.Settings.Wireframe = true;
+        req.Name = "AssemblyPreviewView";
+
+        RENDER_CHECK(req.Kind == RenderViewKind::AssemblyPreview, "ViewRequest kind is AssemblyPreview");
+        RENDER_CHECK(req.Settings.Wireframe, "Wireframe mode requested");
+
+        // Verify complete main scene isolation
+        RENDER_CHECK(mainScene.GetRegistry().view<MeshInstance3D>().empty(), "Main scene has no preview meshes");
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
@@ -267,6 +364,7 @@ bool RunRenderServiceUnitTests() {
     if (!Axle::RenderTests::Test_PreviewMaterialIsolationAndEdits()) return false;
     if (!Axle::RenderTests::Test_PreviewViewRequestResizeIsolation()) return false;
     if (!Axle::RenderTests::Test_VFXPreviewIsolationAndMultiEmitter()) return false;
+    if (!Axle::RenderTests::Test_AssemblyPreviewExtractionAndIsolation()) return false;
     std::cout << "  [RenderService] All RenderService & ViewRequest unit tests passed.\n";
     return true;
 }

@@ -21,7 +21,7 @@ namespace Axle {
 
     void RenderCommand::SetViewport(u32 x, u32 y, u32 width, u32 height) {
         if (!glad_glViewport) return;
-        glViewport(static_cast<GLint>(x), static_cast<GLint>(y), 
+        glViewport(static_cast<GLint>(x), static_cast<GLint>(y),
                    static_cast<GLsizei>(width), static_cast<GLsizei>(height));
     }
 
@@ -95,6 +95,11 @@ namespace Axle {
     void RenderCommand::SetLineWidth(f32 width) {
         if (!glad_glLineWidth) return;
         glLineWidth(width);
+    }
+
+    void RenderCommand::SetWireframeMode(bool enabled) {
+        if (!glad_glPolygonMode) return;
+        glPolygonMode(GL_FRONT_AND_BACK, enabled ? GL_LINE : GL_FILL);
     }
 
     void RenderCommand::SetBlendEnabled(bool enabled) {

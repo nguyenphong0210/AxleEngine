@@ -21,6 +21,7 @@ namespace Axle {
                 caps.SupportsComputeShaders = true;
                 caps.SupportsAsyncCompute = true;
                 caps.SupportsRayTracing = false;
+                caps.SupportsWireframeMode = false;
                 caps.AdvancedFeatureDiagnostic.clear();
                 break;
 
@@ -38,6 +39,7 @@ namespace Axle {
                 caps.SupportsComputeShaders = true;
                 caps.SupportsAsyncCompute = true;
                 caps.SupportsRayTracing = false;
+                caps.SupportsWireframeMode = false;
                 caps.AdvancedFeatureDiagnostic.clear();
                 break;
 
@@ -55,6 +57,7 @@ namespace Axle {
                 caps.SupportsComputeShaders = false;
                 caps.SupportsAsyncCompute = false;
                 caps.SupportsRayTracing = false;
+                caps.SupportsWireframeMode = true;
                 caps.AdvancedFeatureDiagnostic = "OpenGL Compatibility: Advanced passes (HDR floating-point targets, FXAA post-processing, screen-space refraction copies, custom HLSL shaders) are not supported. Authored scene values are preserved and rendered using standard GL PBR forward shading.";
                 break;
 

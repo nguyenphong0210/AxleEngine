@@ -869,12 +869,21 @@ namespace Axle {
             m_Shader->SetFloat(prefix + "OuterCutOff", std::cos(glm::radians(world.SpotLights[i].OuterAngle)));
         }
 
+        if (settings.Wireframe) {
+            RenderCommand::SetWireframeMode(true);
+        }
+
         // Render extracted meshes
         for (const auto& meshInst : world.Meshes) {
             if (!meshInst.GLMesh) continue;
 
+            glm::vec4 color1 = meshInst.Material.AlbedoColor;
+            if (meshInst.Selected) {
+                color1 = glm::mix(color1, glm::vec4(1.0f, 0.85f, 0.3f, 1.0f), 0.35f);
+            }
+
             m_Shader->SetMat4("u_Transform", meshInst.WorldTransform);
-            m_Shader->SetFloat4("u_Color1", meshInst.Material.AlbedoColor);
+            m_Shader->SetFloat4("u_Color1", color1);
             m_Shader->SetFloat4("u_Color2", meshInst.Material.SecondaryColor);
             m_Shader->SetFloat("u_TileScale", meshInst.Material.TileScale.x);
             m_Shader->SetInt("u_PatternMode", meshInst.Material.PatternMode);
@@ -890,6 +899,10 @@ namespace Axle {
             meshInst.GLMesh->Bind();
             RenderCommand::DrawIndexed(meshInst.GLMesh);
             meshInst.GLMesh->Unbind();
+        }
+
+        if (settings.Wireframe) {
+            RenderCommand::SetWireframeMode(false);
         }
 
         // 4. Skybox pass

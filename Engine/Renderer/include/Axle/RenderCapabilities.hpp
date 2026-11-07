@@ -26,6 +26,7 @@ namespace Axle {
         bool SupportsComputeShaders = false;
         bool SupportsAsyncCompute = false;
         bool SupportsRayTracing = false;
+        bool SupportsWireframeMode = true;
 
         // Diagnostics for unsupported features
         std::string AdvancedFeatureDiagnostic;

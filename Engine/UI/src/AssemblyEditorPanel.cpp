@@ -1,124 +1,36 @@
 #include <Axle/AssemblyEditorPanel.hpp>
-#include <Axle/RenderCommand.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/SceneRenderBridge.hpp>
+#include <Axle/MeshResourceResolver.hpp>
+#include <Axle/SceneExtraction.hpp>
 #include <Axle/Log.hpp>
+#if defined(AXLE_BUILD_RHI)
+#include <Axle/RHI/RHIDevice.hpp>
+#endif
 
 #include <imgui.h>
 #include <imgui_internal.h>
-#include <glad/glad.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
+#include <functional>
+#include <unordered_set>
 
 namespace Axle {
 
-    static const char* s_AsmVertSrc = R"(
-        #version 450 core
-        layout(location = 0) in vec3 a_Position;
-
-        uniform mat4 u_ViewProjection;
-        uniform mat4 u_Transform;
-
-        out vec3 v_WorldPos;
-        out vec3 v_LocalPos;
-
-        void main() {
-            v_LocalPos = a_Position;
-            vec4 worldPos = u_Transform * vec4(a_Position, 1.0);
-            v_WorldPos = worldPos.xyz;
-            gl_Position = u_ViewProjection * worldPos;
-        }
-    )";
-
-    static const char* s_AsmFragSrc = R"(
-        #version 450 core
-        layout(location = 0) out vec4 o_Color;
-
-        in vec3 v_WorldPos;
-        in vec3 v_LocalPos;
-
-        uniform int u_PatternMode;
-        uniform float u_TileScale;
-        uniform vec4 u_Color1;
-        uniform vec4 u_Color2;
-        uniform vec3 u_LightDir;
-        uniform mat4 u_Transform;
-        uniform int u_WireframeMode;
-        uniform int u_IsSelected;
-
-        void main() {
-            if (u_WireframeMode == 1) {
-                o_Color = (u_IsSelected == 1) ? vec4(1.0, 0.75, 0.15, 1.0) : vec4(0.25, 0.88, 1.0, 1.0);
-                return;
-            }
-
-            float pattern = 0.0;
-            vec3 normal = vec3(0.0, 1.0, 0.0);
-            if (u_PatternMode == 0) {
-                vec2 coord = floor(v_WorldPos.xz * u_TileScale);
-                pattern = mod(coord.x + coord.y, 2.0);
-            } else if (u_PatternMode == 1) {
-                vec3 coord = floor((v_LocalPos + vec3(0.5)) * u_TileScale + vec3(0.0001));
-                pattern = mod(coord.x + coord.y + coord.z, 2.0);
-                vec3 dx = dFdx(v_WorldPos);
-                vec3 dy = dFdy(v_WorldPos);
-                normal = normalize(cross(dx, dy));
-                if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
-            } else if (u_PatternMode == 2) {
-                vec3 nLocal = normalize(v_LocalPos);
-                float u = atan(nLocal.z, nLocal.x) / (2.0 * 3.14159265359) + 0.5;
-                float v = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
-                vec2 coord = floor(vec2(u * u_TileScale, v * (u_TileScale * 0.5)));
-                pattern = mod(coord.x + coord.y, 2.0);
-                normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
-            } else {
-                vec3 dx = dFdx(v_WorldPos);
-                vec3 dy = dFdy(v_WorldPos);
-                normal = normalize(cross(dx, dy));
-                if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
-                pattern = 0.0;
-            }
-
-            vec4 baseColor = mix(u_Color1, u_Color2, pattern);
-            if (u_IsSelected == 1) {
-                baseColor = mix(baseColor, vec4(1.0, 0.85, 0.3, 1.0), 0.25);
-            }
-
-            vec3 keyLight = normalize(u_LightDir);
-            vec3 fillLight = normalize(vec3(-0.45, 0.45, -0.65));
-
-            float NdotKey = max(dot(normal, keyLight), 0.0);
-            float NdotFill = max(dot(normal, fillLight), 0.0) * 0.38;
-            float ambient = 0.32;
-            float lighting = ambient + 0.58 * NdotKey + NdotFill;
-
-            vec3 viewDir = normalize(-v_WorldPos);
-            vec3 halfDir = normalize(keyLight + viewDir);
-            float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.25;
-
-            o_Color = vec4(baseColor.rgb * lighting + vec3(spec), baseColor.a);
-        }
-    )";
-
     AssemblyEditorPanel::AssemblyEditorPanel() {
-        if (Window::HasActiveContext()) {
-            FramebufferSpecification spec;
-            spec.Width = m_ViewportWidth;
-            spec.Height = m_ViewportHeight;
-            m_Framebuffer = Framebuffer::Create(spec);
-
-            m_Shader = std::make_unique<Shader>(s_AsmVertSrc, s_AsmFragSrc);
-        }
+        m_PreviewScene = std::make_unique<Scene>();
+        SyncPreviewScene();
     }
 
     void AssemblyEditorPanel::SetSceneContext(Scene* scene, PhysicsScene* physicsScene, const SceneSerializerContext* serializerContext) {
         m_Scene = scene;
         m_PhysicsScene = physicsScene;
         m_SerializerContext = serializerContext;
+        SyncPreviewScene();
     }
 
     void AssemblyEditorPanel::SetAssembly(const std::filesystem::path& filepath) {
@@ -134,6 +46,8 @@ namespace Axle {
         m_Yaw = 40.0f;
         m_Zoom = 1.0f;
         m_PanOffset = glm::vec3(0.0f);
+
+        SyncPreviewScene();
     }
 
     void AssemblyEditorPanel::SaveAssembly() {
@@ -160,95 +74,106 @@ namespace Axle {
         m_StatusTimer = 3.5f;
     }
 
-    static void RenderNodeRecursive(Shader& shader, AssemblyNode& node, const glm::mat4& parentTransform,
-                                   int& currentIndex, int selectedIndex, const SceneSerializerContext* context, bool wireframe) {
-        glm::mat4 localTransform = node.Transform.GetTransform();
-        glm::mat4 worldTransform = parentTransform * localTransform;
+    void AssemblyEditorPanel::SyncPreviewScene() {
+        m_PreviewScene = std::make_unique<Scene>();
+        m_NodeIndexToEntityID.clear();
 
-        bool isSelected = (currentIndex == selectedIndex);
+        // 1. Studio Lighting: Primary Key Light
+        Entity fillLight = m_PreviewScene->CreateEntity("FillLight");
+        auto& dlc2 = fillLight.AddComponent<DirectionalLightComponent>();
+        dlc2.Azimuth = 225.0f;
+        dlc2.Elevation = 30.0f;
+        dlc2.Color = glm::vec3(0.85f, 0.90f, 1.0f);
+        dlc2.Intensity = 0.4f;
+        dlc2.AmbientIntensity = 0.0f;
+        dlc2.CastShadows = false;
 
-        if (node.HasMesh) {
-            std::shared_ptr<VertexArray> vao = node.Mesh.VAO;
-            if (!vao && context) {
-                if (node.Mesh.AssetPath == "builtin://sphere") vao = context->SphereMesh;
-                else if (node.Mesh.AssetPath == "builtin://cylinder") vao = context->CylinderMesh;
-                else if (node.Mesh.AssetPath == "builtin://cone") vao = context->ConeMesh;
-                else if (node.Mesh.AssetPath == "builtin://plane") vao = context->PlaneMesh;
-                else if (!node.Mesh.AssetPath.empty() && node.Mesh.AssetPath != "builtin://cube") {
-                    auto resolved = FileSystem::ResolveAssetPath(node.Mesh.AssetPath);
-                    if (std::filesystem::exists(resolved)) {
-                        auto loaded = AssetSerializer::LoadMesh(resolved);
-                        if (loaded.Success) {
-                            node.Mesh.VAO = CreateVertexArrayFromMeshSource(loaded.SourceData);
-                            vao = node.Mesh.VAO;
-                        }
-                    }
-                }
-                if (!vao) vao = context->CubeMesh;
-            }
+        Entity keyLight = m_PreviewScene->CreateEntity("KeyLight");
+        auto& dlc1 = keyLight.AddComponent<DirectionalLightComponent>();
+        dlc1.Azimuth = 45.0f;
+        dlc1.Elevation = 50.0f;
+        dlc1.Color = glm::vec3(1.0f);
+        dlc1.Intensity = 1.0f;
+        dlc1.AmbientIntensity = 0.32f;
+        dlc1.CastShadows = false;
 
-            if (vao) {
-                shader.SetMat4("u_Transform", worldTransform);
-                shader.SetInt("u_PatternMode", node.Mesh.PatternMode);
-                shader.SetFloat("u_TileScale", node.Mesh.TileScale);
-                shader.SetFloat4("u_Color1", node.Mesh.Color1);
-                shader.SetFloat4("u_Color2", node.Mesh.Color2);
-                shader.SetInt("u_IsSelected", isSelected ? 1 : 0);
+        // 2. Pedestal Grid
+        if (m_ShowPedestal) {
+            Entity pedestal = m_PreviewScene->CreateEntity("Pedestal");
+            auto& tc = pedestal.GetComponent<TransformComponent>();
+            tc.Translation = glm::vec3(0.0f, -0.01f, 0.0f);
+            tc.Scale = glm::vec3(6.0f, 1.0f, 6.0f);
 
-                vao->Bind();
-                if (wireframe) {
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-                    glDrawElements(GL_TRIANGLES, (GLsizei)vao->GetIndexBuffer()->GetCount(), GL_UNSIGNED_INT, nullptr);
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-                } else {
-                    glDrawElements(GL_TRIANGLES, (GLsizei)vao->GetIndexBuffer()->GetCount(), GL_UNSIGNED_INT, nullptr);
-                }
-            }
+            auto& mesh = pedestal.AddComponent<MeshInstance3D>();
+            mesh.AssetPath = "builtin://plane";
+            mesh.PatternMode = 1; // 3D Caro
+            mesh.TileScale = 2.0f;
+            mesh.Color1 = glm::vec4(0.14f, 0.17f, 0.22f, 1.0f);
+            mesh.Color2 = glm::vec4(0.09f, 0.11f, 0.15f, 1.0f);
+            ResolveMeshResources(mesh, m_SerializerContext);
         }
 
-        currentIndex++;
-        for (auto& child : node.Children) {
-            RenderNodeRecursive(shader, child, worldTransform, currentIndex, selectedIndex, context, wireframe);
+        // 3. Recursive Assembly Hierarchy
+        if (m_HasAssembly) {
+            std::function<void(AssemblyNode&, Entity, int)> buildNode = [&](AssemblyNode& node, Entity parent, int index) {
+                Entity ent = m_PreviewScene->CreateEntity(node.Tag.empty() ? "Part" : node.Tag);
+                if (parent) {
+                    ent.SetParent(parent, false);
+                }
+                ent.GetComponent<TransformComponent>() = node.Transform;
+
+                if (node.HasMesh) {
+                    auto& mesh = ent.AddComponent<MeshInstance3D>();
+                    mesh = node.Mesh;
+                    ResolveMeshResources(mesh, m_SerializerContext);
+                    node.Mesh = mesh;
+                }
+
+                if (node.HasMaterial) {
+                    auto& mat = ent.AddComponent<MaterialComponent>();
+                    mat = node.Material;
+                }
+
+                if (node.HasSkeletalMesh) {
+                    auto& skm = ent.AddComponent<SkeletalMeshComponent>();
+                    skm = node.SkeletalMesh;
+                }
+
+                if (node.HasCollisionShape) {
+                    auto& col = ent.AddComponent<CollisionShape3D>();
+                    col = node.CollisionShape;
+                }
+
+                if (node.HasRigidBody) {
+                    auto& rb = ent.AddComponent<RigidBody3D>();
+                    rb = node.RigidBody;
+                }
+
+                m_NodeIndexToEntityID[index] = static_cast<uint32_t>((entt::entity)ent);
+
+                for (size_t i = 0; i < node.Children.size(); ++i) {
+                    int childId = index * 100 + static_cast<int>(i) + 1;
+                    buildNode(node.Children[i], ent, childId);
+                }
+            };
+
+            buildNode(m_AssemblyData.RootNode, Entity{}, 0);
         }
+
+        m_PreviewScene->UpdateWorldTransforms();
     }
 
-    void AssemblyEditorPanel::DrawPedestalGrid(const glm::mat4& viewProj, float radius) {
-        if (!m_ShowPedestal || !m_SerializerContext || !m_SerializerContext->PlaneMesh) return;
+    void AssemblyEditorPanel::RenderPreview(float width, float height) {
+        if (width < 32.0f || height < 32.0f) return;
 
-        m_Shader->Bind();
-        m_Shader->SetMat4("u_ViewProjection", viewProj);
-        glm::mat4 pedModel = glm::scale(glm::mat4(1.0f), glm::vec3(radius, 1.0f, radius));
-        m_Shader->SetMat4("u_Transform", pedModel);
-        m_Shader->SetInt("u_PatternMode", 1);
-        m_Shader->SetFloat("u_TileScale", 2.0f);
-        m_Shader->SetFloat4("u_Color1", glm::vec4(0.14f, 0.17f, 0.22f, 1.0f));
-        m_Shader->SetFloat4("u_Color2", glm::vec4(0.09f, 0.11f, 0.15f, 1.0f));
-        m_Shader->SetInt("u_WireframeMode", 0);
-        m_Shader->SetInt("u_IsSelected", 0);
+        u32 w = static_cast<u32>(width);
+        u32 h = static_cast<u32>(height);
+        m_ViewportWidth = w;
+        m_ViewportHeight = h;
 
-        RenderCommand::DrawIndexed(m_SerializerContext->PlaneMesh);
-    }
-
-    void AssemblyEditorPanel::RenderPreview3D(float width, float height) {
-        if (width < 32 || height < 32) return;
-
-        if (!Window::HasActiveContext() || !m_Framebuffer || !m_Shader) return;
-
-        u32 w = (u32)width;
-        u32 h = (u32)height;
-        if (w != m_ViewportWidth || h != m_ViewportHeight) {
-            m_ViewportWidth = w;
-            m_ViewportHeight = h;
-            m_Framebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
+        if (!m_PreviewScene) {
+            SyncPreviewScene();
         }
-
-        m_Framebuffer->Bind();
-        RenderCommand::SetViewport(0, 0, m_ViewportWidth, m_ViewportHeight);
-        RenderCommand::SetClearColor({ 0.08f, 0.10f, 0.13f, 1.0f });
-        RenderCommand::Clear();
-
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
 
         if (m_TurntableActive) {
             m_Yaw += 30.0f * (1.0f / 60.0f) * m_TurntableSpeed;
@@ -256,9 +181,7 @@ namespace Axle {
         }
 
         float fov = 45.0f;
-        float aspect = (float)m_ViewportWidth / (float)m_ViewportHeight;
-        glm::mat4 proj = glm::perspective(glm::radians(fov), aspect, 0.1f, 100.0f);
-
+        float aspect = static_cast<float>(m_ViewportWidth) / static_cast<float>(m_ViewportHeight);
         float distance = 4.0f * m_Zoom;
         float radYaw = glm::radians(m_Yaw);
         float radPitch = glm::radians(m_Pitch);
@@ -271,22 +194,61 @@ namespace Axle {
 
         glm::vec3 target = m_PanOffset;
         glm::mat4 view = glm::lookAt(eye, target, glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 viewProj = proj * view;
 
-        DrawPedestalGrid(viewProj, 3.0f);
+        PerspectiveCamera cam(fov, aspect, 0.1f, 100.0f);
+        cam.SetViewMatrix(view, eye);
 
-        if (m_HasAssembly) {
-            m_Shader->Bind();
-            m_Shader->SetMat4("u_ViewProjection", viewProj);
-            m_Shader->SetInt("u_WireframeMode", m_WireframeMode ? 1 : 0);
-            m_Shader->SetFloat3("u_LightDir", glm::vec3(0.5f, 0.8f, 0.6f));
+        ViewRequest request;
+        request.Kind = RenderViewKind::AssemblyPreview;
+        request.Width = m_ViewportWidth;
+        request.Height = m_ViewportHeight;
+        request.Camera = cam;
+        request.Settings.Wireframe = m_WireframeMode;
+        request.Settings.ClearColor = glm::vec4(0.08f, 0.10f, 0.13f, 1.0f);
+        request.Settings.EnableShadows = false;
+        request.Settings.EnableSkybox = false;
+        request.Name = "AssemblyPreviewView";
 
-            int traverseIndex = 0;
-            RenderNodeRecursive(*m_Shader, m_AssemblyData.RootNode, glm::mat4(1.0f), traverseIndex,
-                                m_SelectedNodeIndex, m_SerializerContext, m_WireframeMode);
+#if defined(AXLE_BUILD_RHI)
+        if (RHI::RHIDevice::Get().IsNativeReady()) {
+            if (!m_RHIViewport.IsValid() || m_RHIViewport.GetWidth() != m_ViewportWidth || m_RHIViewport.GetHeight() != m_ViewportHeight) {
+                m_RHIViewport.Resize(m_ViewportWidth, m_ViewportHeight);
+            }
+            request.ColorTarget = m_RHIViewport.GetColorTexture();
+            request.DepthTarget = m_RHIViewport.GetDepthTexture();
+            request.ViewTargets = m_RHIViewport.GetViewTargets();
+        } else
+#endif
+        {
+            if (Window::HasActiveContext()) {
+                if (!m_Framebuffer || m_Framebuffer->GetSpecification().Width != m_ViewportWidth || m_Framebuffer->GetSpecification().Height != m_ViewportHeight) {
+                    FramebufferSpecification spec;
+                    spec.Width = m_ViewportWidth;
+                    spec.Height = m_ViewportHeight;
+                    m_Framebuffer = Framebuffer::Create(spec);
+                }
+                request.GLTargetFBO = m_Framebuffer;
+            }
         }
 
-        m_Framebuffer->Unbind();
+        std::unordered_set<uint32_t> selectedEntities;
+        auto it = m_NodeIndexToEntityID.find(m_SelectedNodeIndex);
+        if (it != m_NodeIndexToEntityID.end()) {
+            selectedEntities.insert(it->second);
+        }
+
+        SceneExtractionOptions options;
+        options.SelectedEntities = &selectedEntities;
+        options.ResolveResources = true;
+
+        RenderWorld world = ExtractRenderWorld(*m_PreviewScene, options);
+        RenderResult result = RenderService::Get().RenderView(world, request);
+
+        if (!result.Success || !result.ErrorMessage.empty()) {
+            m_DiagnosticMessage = result.ErrorMessage;
+        } else {
+            m_DiagnosticMessage.clear();
+        }
     }
 
     void AssemblyEditorPanel::DrawNodeHierarchy(AssemblyNode& node, int index, int& selectedId, AssemblyNode*& selectedNode) {
@@ -317,14 +279,14 @@ namespace Axle {
                 newChild.HasCollisionShape = true;
                 node.Children.push_back(newChild);
                 m_IsDirty = true;
+                SyncPreviewScene();
             }
             ImGui::EndPopup();
         }
 
         if (opened && !node.Children.empty()) {
-            static int runningIndex = 0;
             for (size_t i = 0; i < node.Children.size(); ++i) {
-                int childId = index * 100 + (int)i + 1;
+                int childId = index * 100 + static_cast<int>(i) + 1;
                 DrawNodeHierarchy(node.Children[i], childId, selectedId, selectedNode);
             }
             ImGui::TreePop();
@@ -366,6 +328,7 @@ namespace Axle {
         if (ImGui::InputText("##PartName", tagBuf, sizeof(tagBuf))) {
             node->Tag = tagBuf;
             m_IsDirty = true;
+            SyncPreviewScene();
         }
         ImGui::Separator();
 
@@ -376,6 +339,7 @@ namespace Axle {
             if (translation != node->Transform.Translation) {
                 node->Transform.Translation = translation;
                 m_IsDirty = true;
+                SyncPreviewScene();
             }
 
             glm::vec3 eulerAngles = glm::degrees(glm::eulerAngles(node->Transform.Rotation));
@@ -384,6 +348,7 @@ namespace Axle {
             if (eulerAngles != oldEuler) {
                 node->Transform.Rotation = glm::quat(glm::radians(eulerAngles));
                 m_IsDirty = true;
+                SyncPreviewScene();
             }
 
             glm::vec3 scale = node->Transform.Scale;
@@ -391,12 +356,16 @@ namespace Axle {
             if (scale != node->Transform.Scale) {
                 node->Transform.Scale = scale;
                 m_IsDirty = true;
+                SyncPreviewScene();
             }
         }
 
         // 2. MeshInstance3D
         if (ImGui::CollapsingHeader("Mesh Instance 3D", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Checkbox("Enable Mesh", &node->HasMesh);
+            if (ImGui::Checkbox("Enable Mesh", &node->HasMesh)) {
+                m_IsDirty = true;
+                SyncPreviewScene();
+            }
             if (node->HasMesh) {
                 char pathBuf[256];
                 std::strncpy(pathBuf, node->Mesh.AssetPath.c_str(), sizeof(pathBuf) - 1);
@@ -405,7 +374,9 @@ namespace Axle {
                 if (ImGui::InputText("##MeshAssetPath", pathBuf, sizeof(pathBuf))) {
                     node->Mesh.AssetPath = pathBuf;
                     node->Mesh.VAO = nullptr; // force reload
+                    node->Mesh.RHIMeshAsset = nullptr;
                     m_IsDirty = true;
+                    SyncPreviewScene();
                 }
 
                 // Drop target for 3D model from Content Browser
@@ -417,7 +388,9 @@ namespace Axle {
                         if (ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb") {
                             node->Mesh.AssetPath = droppedPath;
                             node->Mesh.VAO = nullptr;
+                            node->Mesh.RHIMeshAsset = nullptr;
                             m_IsDirty = true;
+                            SyncPreviewScene();
                         }
                     }
                     ImGui::EndDragDropTarget();
@@ -428,35 +401,56 @@ namespace Axle {
                 if (ImGui::Combo("Pattern Mode", &currentPat, patterns, 4)) {
                     node->Mesh.PatternMode = currentPat;
                     m_IsDirty = true;
+                    SyncPreviewScene();
                 }
 
                 if (ImGui::SliderFloat("Tile Scale", &node->Mesh.TileScale, 0.2f, 32.0f, "%.1fx")) {
                     m_IsDirty = true;
+                    SyncPreviewScene();
                 }
 
-                if (ImGui::ColorEdit4("Color 1", glm::value_ptr(node->Mesh.Color1))) m_IsDirty = true;
-                if (ImGui::ColorEdit4("Color 2", glm::value_ptr(node->Mesh.Color2))) m_IsDirty = true;
+                if (ImGui::ColorEdit4("Color 1", glm::value_ptr(node->Mesh.Color1))) {
+                    m_IsDirty = true;
+                    SyncPreviewScene();
+                }
+                if (ImGui::ColorEdit4("Color 2", glm::value_ptr(node->Mesh.Color2))) {
+                    m_IsDirty = true;
+                    SyncPreviewScene();
+                }
             }
         }
 
         // 3. CollisionShape3D
         if (ImGui::CollapsingHeader("Collision Shape 3D", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Checkbox("Enable Collider", &node->HasCollisionShape);
+            if (ImGui::Checkbox("Enable Collider", &node->HasCollisionShape)) {
+                m_IsDirty = true;
+                SyncPreviewScene();
+            }
             if (node->HasCollisionShape) {
                 const char* shapeTypes[] = { "Box", "Sphere", "Cylinder", "Cone", "Plane", "Mesh" };
                 int currentShape = (int)node->CollisionShape.ShapeType;
                 if (ImGui::Combo("Shape Type", &currentShape, shapeTypes, 6)) {
                     node->CollisionShape.ShapeType = (CollisionShapeType)currentShape;
                     m_IsDirty = true;
+                    SyncPreviewScene();
                 }
 
                 if (node->CollisionShape.ShapeType == CollisionShapeType::Box || node->CollisionShape.ShapeType == CollisionShapeType::Plane) {
                     DrawVec3("Half Extent", node->CollisionShape.HalfExtent, 0.5f);
                 } else if (node->CollisionShape.ShapeType == CollisionShapeType::Sphere) {
-                    if (ImGui::SliderFloat("Radius", &node->CollisionShape.Radius, 0.05f, 10.0f)) m_IsDirty = true;
+                    if (ImGui::SliderFloat("Radius", &node->CollisionShape.Radius, 0.05f, 10.0f)) {
+                        m_IsDirty = true;
+                        SyncPreviewScene();
+                    }
                 } else if (node->CollisionShape.ShapeType == CollisionShapeType::Cylinder || node->CollisionShape.ShapeType == CollisionShapeType::Cone) {
-                    if (ImGui::SliderFloat("Half Height", &node->CollisionShape.HalfHeight, 0.05f, 10.0f)) m_IsDirty = true;
-                    if (ImGui::SliderFloat("Radius", &node->CollisionShape.Radius, 0.05f, 10.0f)) m_IsDirty = true;
+                    if (ImGui::SliderFloat("Half Height", &node->CollisionShape.HalfHeight, 0.05f, 10.0f)) {
+                        m_IsDirty = true;
+                        SyncPreviewScene();
+                    }
+                    if (ImGui::SliderFloat("Radius", &node->CollisionShape.Radius, 0.05f, 10.0f)) {
+                        m_IsDirty = true;
+                        SyncPreviewScene();
+                    }
                 }
 
                 DrawVec3("Collider Offset", node->CollisionShape.Offset, 0.0f);
@@ -468,7 +462,10 @@ namespace Axle {
 
         // 4. RigidBody3D
         if (ImGui::CollapsingHeader("Rigid Body 3D", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Checkbox("Enable Rigid Body", &node->HasRigidBody);
+            if (ImGui::Checkbox("Enable Rigid Body", &node->HasRigidBody)) {
+                m_IsDirty = true;
+                SyncPreviewScene();
+            }
             if (node->HasRigidBody) {
                 const char* motions[] = { "Static", "Kinematic", "Dynamic" };
                 int curMotion = (int)node->RigidBody.MotionType;
@@ -521,7 +518,9 @@ namespace Axle {
                 }
 
                 if (ImGui::BeginMenu("View")) {
-                    ImGui::MenuItem("Show Pedestal Grid", nullptr, &m_ShowPedestal);
+                    if (ImGui::MenuItem("Show Pedestal Grid", nullptr, &m_ShowPedestal)) {
+                        SyncPreviewScene();
+                    }
                     ImGui::MenuItem("Wireframe Mode", nullptr, &m_WireframeMode);
                     ImGui::MenuItem("Turntable Auto-Orbit", nullptr, &m_TurntableActive);
                     ImGui::EndMenu();
@@ -550,7 +549,6 @@ namespace Axle {
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Assembly Parts");
             ImGui::Separator();
             if (m_HasAssembly) {
-                int runningIndex = 0;
                 DrawNodeHierarchy(m_AssemblyData.RootNode, 0, m_SelectedNodeIndex, m_SelectedNode);
             } else {
                 ImGui::TextDisabled("No Assembly loaded.");
@@ -563,22 +561,41 @@ namespace Axle {
             ImGui::BeginChild("AsmViewportPane", ImVec2(viewportWidth, totalHeight), true);
             {
                 ImVec2 viewSize = ImGui::GetContentRegionAvail();
-                RenderPreview3D(viewSize.x, viewSize.y);
+                RenderPreview(viewSize.x, viewSize.y);
 
-                if (m_Framebuffer) {
+                bool imageDrawn = false;
+#if defined(AXLE_BUILD_RHI)
+                if (RHI::RHIDevice::Get().IsNativeReady() && m_RHIViewport.GetColorSRV()) {
+                    ImGui::Image((ImTextureID)m_RHIViewport.GetColorSRV(), viewSize);
+                    imageDrawn = true;
+                }
+#endif
+                if (!imageDrawn && m_Framebuffer) {
                     ImTextureID texID = (ImTextureID)(intptr_t)m_Framebuffer->GetColorAttachmentRendererID();
                     ImGui::Image(texID, viewSize, ImVec2(0, 1), ImVec2(1, 0));
-                } else {
+                    imageDrawn = true;
+                }
+
+                if (!imageDrawn) {
                     ImVec2 p0 = ImGui::GetCursorScreenPos();
                     ImVec2 p1 = ImVec2(p0.x + viewSize.x, p0.y + viewSize.y);
                     ImDrawList* drawList = ImGui::GetWindowDrawList();
                     drawList->AddRectFilled(p0, p1, IM_COL32(20, 22, 26, 255));
                     drawList->AddRect(p0, p1, IM_COL32(40, 44, 52, 255));
-                    const char* txt = "Assembly preview requires OpenGL context";
+                    const char* txt = "Assembly preview requires an active render backend";
                     ImVec2 txtSize = ImGui::CalcTextSize(txt);
                     ImVec2 txtPos = ImVec2(p0.x + (viewSize.x - txtSize.x) * 0.5f, p0.y + (viewSize.y - txtSize.y) * 0.5f);
                     drawList->AddText(txtPos, IM_COL32(130, 135, 145, 255), txt);
                     ImGui::Dummy(viewSize);
+                }
+
+                // Show diagnostic warning banner if feature not supported (e.g. Wireframe on RHI)
+                if (!m_DiagnosticMessage.empty()) {
+                    ImVec2 badgePos = ImGui::GetItemRectMin();
+                    badgePos.x += 10.0f;
+                    badgePos.y += 10.0f;
+                    ImGui::GetWindowDrawList()->AddRectFilled(badgePos, ImVec2(badgePos.x + 360.0f, badgePos.y + 24.0f), IM_COL32(30, 30, 35, 220), 4.0f);
+                    ImGui::GetWindowDrawList()->AddText(ImVec2(badgePos.x + 8.0f, badgePos.y + 4.0f), IM_COL32(255, 190, 60, 255), m_DiagnosticMessage.c_str());
                 }
 
                 m_IsViewportHovered = ImGui::IsItemHovered();

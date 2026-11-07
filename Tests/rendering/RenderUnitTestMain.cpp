@@ -5,6 +5,7 @@
 bool RunRenderContractsUnitTests();
 bool RunRenderBackendPolicyUnitTests();
 bool RunRenderPrimitiveIdentityUnitTests();
+bool RunRenderWorldExtractionUnitTests();
 
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure") {
@@ -29,6 +30,11 @@ int main(int argc, char** argv) {
 
     if (!RunRenderPrimitiveIdentityUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunRenderPrimitiveIdentityUnitTests FAILED!\n";
+        return 1;
+    }
+
+    if (!RunRenderWorldExtractionUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunRenderWorldExtractionUnitTests FAILED!\n";
         return 1;
     }
 

@@ -268,6 +268,7 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_RenderContractsUnit.cpp
     rendering/Test_RenderBackendPolicyUnit.cpp
     rendering/Test_RenderPrimitiveIdentityUnit.cpp
+    rendering/Test_RenderWorldExtractionUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
 target_link_libraries(AxleRenderUnitTests PRIVATE

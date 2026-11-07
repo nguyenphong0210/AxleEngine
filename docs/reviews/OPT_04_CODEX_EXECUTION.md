@@ -6,8 +6,8 @@ Date: 2026-11-07. Starting clean HEAD: `977f68c42755f1cfc0042854dc06dc74fc8cebc8
 Scope: P41-01 through P41-11 only. No push or OPT-05 implementation.
 
 Implementation and self-verification are separate from the consolidated final
-fresh-context review requested by the user. Its initial pass is complete; three
-findings were reproduced and corrections are awaiting recheck (see below).
+fresh-context review requested by the user. Its full pass and the same reviewer's correction recheck are complete. Three P2
+findings were fixed and independently rechecked (see below).
 Gemini has not supplied supplementary feedback. Two preliminary Codex readers
 provided advisory source audits; these are not checkpoint reviews. A subsequent
 advisory request failed because the reviewer account hit its usage limit.
@@ -34,7 +34,7 @@ advisory request failed because the reviewer account hit its usage limit.
 
 ## P41-01 — backend readiness and startup transaction
 
-Implemented and self-verified. Consolidated separate-context review remains due after P41-11.
+Implemented and self-verified. Consolidated source review and correction recheck are complete; see the final section.
 Local implementation commit: `aba9a3c`.
 
 Device, interfaces and queue remain private candidates until every required
@@ -514,7 +514,8 @@ separate-context review remain open.
 
 ## P41-11 ? CPU image sources and shared render-owned uploads
 
-Implemented and self-verified with available host prerequisites. Context-free RGBA8/float decoding and
+Implemented and self-verified with available host prerequisites. Implementation
+commit: `e03e033`; final review corrections: `00eba99`. Context-free RGBA8/float decoding and
 canonical mip generation now live in Core; Asset resolves optional descriptors
 without GPU types. Source identity includes asset/VFS namespace generation,
 canonical path, content revision and interpretation/import policy. CPU reload
@@ -535,7 +536,7 @@ restored timestamps, duplicate consumers, non-default roots and mounted VFS.
 Physical native readbacks exercise failed replacement creation/upload, retained
 old pixels and reopened device epochs; real GL readbacks cover context recreation.
 Final Debug/Release runs of images11.py passed all five modes. These are
-implementer-run checks; separate-context review is still pending.
+implementer-run checks; independent review/recheck results are recorded below.
 
 ## Final phase self-verification
 
@@ -592,14 +593,14 @@ helper, so an ambiguous native failure can keep pins without another allocation.
 After this final hardening, full Debug/Release builds, all five image-source modes
 and default integration passed again; CTest passed again at 50/50 in both configurations.
 
-## Remaining acceptance gates
+## Remaining acceptance gate
 
-One consolidated separate-context final review and any corrections/rechecks remain.
-The final reviewer completed its first pass; correction recheck is pending.
-Actual graphics API validation is **NOT RUN** for
-the host-prerequisite reasons above; dependent acceptance remains open even though
-embedded NRI checks pass. The pre-existing OPT-00 manual/full-product gap remains
-separate. OPT-05 has not started and nothing has been pushed.
+Implementation, the one consolidated fresh-context review, repairs and the same
+reviewer's correction recheck are complete. Actual graphics API validation is
+**NOT RUN** for the host-prerequisite reasons above; dependent acceptance remains
+open. Embedded NRI validation does not replace this gate. The pre-existing OPT-00
+manual/full-product gap remains separate. OPT-05 has not started and nothing has
+been pushed.
 
 ## Consolidated fresh-context review and repairs
 
@@ -633,4 +634,23 @@ boundary as consistent with the released contracts.
 Tracked regressions are in Tests/rendering/RHIRetirementMain.cpp. Debug/Release
 policy/D3D12/Vulkan modes passed after the repairs (review-fixes-*-retirement-
 results.json); native mains enforce zero embedded NRI errors through teardown.
-Full rebuilds/affected phase gates and the same reviewer's recheck are pending.
+Final correction commit: `00eba99e9fb161d411b071076b408fe8e8b2425d`.
+
+After correction, full Debug/Release AxleAllTests/Editor/Runtime builds passed
+(review-fixes-full-build-*.log). Both configurations passed all 15 gate groups in
+reviewfixedgates.py: 50/50 CTest, full default integration, jobs/ECS, simulation
+products and the 54 focused rendering/policy/product cases. Exact commands/exits
+and logs are in review-fixed-<config>-results.json. The expanded retirement modes
+include all three new regression families with zero embedded NRI errors. Four
+image mip levels and five primitive captures remain GL/fallback byte-identical;
+review-fixed-final-summary.txt records the final comparisons. Architecture checks
+again passed (397 files / 18 CMake files); whitespace and clean pinned NRI checks
+passed.
+
+The SAME final reviewer independently rebuilt its isolated probe and ran **16/16
+probe cases plus 6/6 retirement modes**, all exit 0, on the correction commit.
+It explicitly closed OPT04-FR-01..03 with no additional findings from recheck.
+Exact independent commands/commit/logs: final-review/recheck-results.json. No
+second fresh-context reviewer or Gemini response is claimed. This closes the
+source findings while the actual graphics API-validation acceptance gate stays
+open.

@@ -3,7 +3,7 @@
   "current_task": {
     "id": "OPT-04-CODEX-IMPLEMENTATION",
     "title": "Codex implements OPT-04 with separate-context review and supplementary Gemini review",
-    "state": "in_progress",
+    "state": "delivered_with_open_api_validation_gate",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Codex in a separate context",
@@ -40,8 +40,8 @@
       "P41-10",
       "P41-11"
     ],
-    "implementation_status": "P41-01..11 implemented; available Debug/Release phase self-verification passed; API validation and one consolidated final review remain open",
-    "independent_review_status": "initial_consolidated_pass_complete_three_findings_corrections_pending_recheck",
+    "implementation_status": "P41-01..11 implemented; all three final-review findings fixed in 00eba99; available Debug/Release phase gates passed",
+    "independent_review_status": "single_fresh_context_review_and_same_reviewer_correction_recheck_complete",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
     "prerequisite_evidence": {
@@ -95,7 +95,7 @@
       "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
     ],
     "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
-    "next_action": "Finish correction rebuilds and affected gates; same final reviewer rechecks FR-01..03. Actual API validation remains NOT RUN; stop before OPT-05.",
+    "next_action": "Stop at OPT-04. Actual graphics API validation requires missing host prerequisites; dependent acceptance remains open. OPT-05 is not released.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
@@ -103,7 +103,7 @@
         "after": "P41-11",
         "before": "OPT-04 acceptance",
         "scope": "Complete P41-01..11 implementation and affected product callers",
-        "status": "corrections_in_progress"
+        "status": "source_findings_closed_api_validation_open"
       }
     ],
     "review_policy": "One final fresh-context Codex review of the full OPT-04 diff, source/callers and actual evidence, with significant corrections rechecked. Intermediate separate-context reviews are superseded by the latest user instruction. Preserve implementation/self-verification/review distinctions and missing native gates.",
@@ -117,7 +117,11 @@
         "https://developers.openai.com/api/docs/guides/model-selection",
         "https://learn.chatgpt.com/docs/models"
       ]
-    }
+    },
+    "acceptance_status": "open_missing_actual_graphics_api_validation_prerequisites",
+    "implementation_commit": "e03e03361d1474f5d3eacee29e03e1d69defa2f3",
+    "correction_commit": "00eba99e9fb161d411b071076b408fe8e8b2425d",
+    "final_review_evidence": "docs/reviews/OPT_04_CODEX_EXECUTION.md; ignored final-review/targeted-results.json, reproduction-results.json and recheck-results.json"
   },
   "last_read": {
     "Codex": "CG-20261106T090129914823Z-GEMINI-ff5ca6",
@@ -1377,6 +1381,17 @@
       "base_commit": "e03e033",
       "timestamp_utc": "2026-11-07T08:03:04.872403+00:00",
       "body": "IN_PROGRESS: Consolidated fresh-context reviewer opt04_final_review completed source/caller inspection and native verification on e03e033. Confirmed P2 OPT04-FR-01 bindless CPU slot commits despite rejected pinned descriptor update; FR-02 default textures publish before Init/upload success; FR-03 EndFrame retains abandoned streamer copy batches. Reported independent evidence: 32 passing focused modes and 16 defect probes across Debug/Release D3D12/Vulkan, artifacts final-review/targeted-results.json and reproduction-results.json. Codex will correct RHIBindless.hpp/cpp, RHIDescriptorPool.hpp/cpp, RHIMaterial.cpp, RHIStreamer.cpp and add tracked native regressions in Tests/rendering/RHIRetirementMain.cpp, then rebuild/retest and request recheck from this SAME reviewer. Actual API validation remains NOT RUN. No new review session, vendor edits, push or OPT-05."
+    },
+    {
+      "id": "CG-20261107T081417212081Z-CODEX-26345f",
+      "from": "Codex",
+      "to": "Both",
+      "type": "DELIVERY",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T080304872403Z-CODEX-04477b",
+      "base_commit": "00eba99",
+      "timestamp_utc": "2026-11-07T08:14:17.212081+00:00",
+      "body": "DELIVERY: OPT-04 / P41-01..11 implemented. P41-11 commit e03e03361d1474f5d3eacee29e03e1d69defa2f3; final review repair commit 00eba99e9fb161d411b071076b408fe8e8b2425d. The ONE fresh-context reviewer completed the whole-phase source/caller review, independently ran 32 passing focused modes and reproduced three P2 findings with 16 probes. FR-01 descriptor/CPU bindless publication, FR-02 incomplete default texture caching and FR-03 abandoned streamer batch ownership were fixed with tracked native regressions. The SAME reviewer independently rebuilt/rechecked 16/16 probes plus 6/6 retirement modes, all exit 0, and explicitly closed all three findings with no additional findings. This is actual separate-context Codex review, not independent-model/Gemini acceptance.\n\nFinal correction-source Debug/Release full AxleAllTests/Editor/Runtime builds, 50/50 CTest each, full default integration, jobs/ECS 16 PASS + 3 verified probes each, real simulation product probes, 54 focused rendering/policy/product cases per config, four mip and five primitive GL/fallback byte comparisons passed. Native focused mains enforce zero embedded NRI errors through teardown. Architecture PASS 397 files/18 CMake files, baseline tooling 18/18, whitespace clean, pinned NRI clean at 6998e3fbbaed1b132f386a9d49743a2481003487. Actual commands/exits/logs: build/agent-runs/OPT-04/review-fixed-<config>-results.json; independent recheck: final-review/recheck-results.json.\n\nActual graphics API validation remains NOT RUN (Vulkan Khronos layer and D3D12/DXGI debug prerequisites unavailable). Dependent acceptance remains open; NRI validation is not a substitute. Report: docs/reviews/OPT_04_CODEX_EXECUTION.md. No Gemini feedback invented, no vendor edits, no push, no OPT-05 work. Stopping at the authorized boundary."
     }
   ],
   "deferred_tasks": [

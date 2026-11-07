@@ -3,7 +3,7 @@ Latest user steering (2026-11-07): implement all P41-01..11, then perform one co
 # Architecture Optimization Roadmap
 
 Updated: **2026-11-07**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **OPT-04 implemented by Codex, final verification/review in progress; OPT-02/03 accepted**.
+Status: **OPT-04 implemented and reviewed; API-validation acceptance gate open. OPT-02/03 accepted**.
 
 ## Start here
 
@@ -18,9 +18,11 @@ One separate-context Codex reviewer checks the full phase after P41-11; signific
 fixes are rechecked before final acceptance. Intermediate P41-03/P41-06 review
 stops are superseded. Gemini feedback is supplementary and has not been received.
 The recommended model is GPT-6 Astra; the client model selection is user-controlled.
-P41-01..11 are implemented. Available full phase self-verification has passed; see the
-[execution record](reviews/OPT_04_CODEX_EXECUTION.md). API validation and the final
-separate-context review remain open.
+P41-01..11 are implemented. Available full phase verification, the consolidated
+fresh-context review and correction recheck passed; see the
+[execution record](reviews/OPT_04_CODEX_EXECUTION.md). Three P2 source findings were
+fixed and rechecked. Actual graphics API validation remains NOT RUN; dependent
+acceptance remains open. No OPT-05 work is released.
 
 **Accepted prerequisite: OPT-02 and OPT-03, after review and repairs.**
 Codex independently reviewed Gemini's deliveries at `0eeb734`, found and corrected
@@ -197,24 +199,24 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 
 **Work:** Implement real backend readiness and GL fallback, transactional resource creation, error/device-loss handling, stable primitive/resource identity, recording/submission leases, state tracking, frame completion, presentation, view targets and shared uploads/cache.
 
-- [x] **P41-01:** Backend readiness and fallback equivalence (self-verified; final review pending).
-- [x] **P41-02:** Transactional GPU resource construction (self-verified; final review pending).
-- [x] **P41-03:** Error propagation and device-loss state (self-verified; final review pending).
-- [x] **P41-04:** Primitive creation and canonical mesh identity (self-verified; final review pending).
-- [x] **P41-05:** Resource identity and generation ownership (self-verified; final review pending).
-- [x] **P41-06:** Unified retirement for recorded and submitted work (self-verified; final review pending).
+- [x] **P41-01:** Backend readiness and fallback equivalence (self-verified and source-reviewed; API gate noted below).
+- [x] **P41-02:** Transactional GPU resource construction (self-verified and source-reviewed; API gate noted below).
+- [x] **P41-03:** Error propagation and device-loss state (self-verified and source-reviewed; API gate noted below).
+- [x] **P41-04:** Primitive creation and canonical mesh identity (self-verified and source-reviewed; API gate noted below).
+- [x] **P41-05:** Resource identity and generation ownership (self-verified and source-reviewed; API gate noted below).
+- [x] **P41-06:** Unified retirement for recorded and submitted work (self-verified and source-reviewed; API gate noted below).
 - [x] **P41-07:** Resource state tracking and declared usage (implemented/self-verified; API validation and final review pending).
-- [x] **P41-08:** Frame contexts, completion and allocator reuse (self-verified; final review pending).
-- [x] **P41-09:** One presentation owner and UI render bridge (self-verified; final review pending).
-- [x] **P41-10:** View targets and external GUI leases (self-verified; final review pending).
-- [x] **P41-11:** Asset decoding, upload and shared GPU cache (self-verified; final review pending).
+- [x] **P41-08:** Frame contexts, completion and allocator reuse (self-verified and source-reviewed; API gate noted below).
+- [x] **P41-09:** One presentation owner and UI render bridge (self-verified and source-reviewed; API gate noted below).
+- [x] **P41-10:** View targets and external GUI leases (self-verified and source-reviewed; API gate noted below).
+- [x] **P41-11:** Asset decoding, upload and shared GPU cache (self-verified and source-reviewed; API gate noted below).
 
 **Exit:** D3D12/Vulkan use the pinned NRI contract; GL is an explicit compatibility adapter. Creation failure, resize, recorded-but-unsubmitted work and shutdown have relevant current evidence; missing native checks remain NOT RUN.
 
 **Assignment:** Codex implementation with one consolidated separate-context Codex review after P41-11 and supplementary Gemini review; [current handoff](agents/handoffs/OPT_04_CODEX.md). Complete P41-01..11 and stop after the final review gate.
 
 **Evidence:** [Codex execution record](reviews/OPT_04_CODEX_EXECUTION.md).
-P41-01..11 are implemented. Available Debug/Release phase verification passed; P41-07 API validation and the consolidated final review remain open.
+P41-01..11 are implemented. Available Debug/Release phase verification and consolidated review/recheck passed. All three P2 findings are closed in `00eba99`; actual P41-07 API validation remains NOT RUN, so dependent acceptance stays open.
 
 ### OPT-05 - Unify rendering across Editor, previews and Runtime
 

@@ -1,3 +1,17 @@
+foreach(stage HLSL VERTEX FRAGMENT)
+    if(stage STREQUAL "HLSL")
+        set(ext hlsl)
+    elseif(stage STREQUAL "VERTEX")
+        set(ext vert)
+    else()
+        set(ext frag)
+    endif()
+    set(source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/Canvas2D.${ext}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
+    file(READ "${source}" AXLE_CANVAS_${stage})
+endforeach()
+configure_file(src/CanvasShaderSource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/CanvasShaderSource.hpp" @ONLY)
+
 add_library(AxleRenderer STATIC
     src/RenderCommand.cpp
     src/Shader.cpp
@@ -23,6 +37,7 @@ add_library(AxleRenderer STATIC
     src/MaterialCache.cpp
     src/RenderCapabilities.cpp
     src/RenderContracts.cpp
+    src/CanvasRenderer.cpp
     src/RenderGraph.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
@@ -41,3 +56,5 @@ target_link_libraries(AxleRenderer
     PRIVATE
         glad
 )
+
+target_include_directories(AxleRenderer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")

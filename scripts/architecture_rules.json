@@ -62,7 +62,8 @@
     "Platform": [
       "Axle::Core",
       "glfw",
-      "comdlg32"
+      "comdlg32",
+      "gdi32"
     ],
     "RHI": [
       "Axle::Core",

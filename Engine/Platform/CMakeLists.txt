@@ -3,6 +3,7 @@ add_library(AxlePlatform STATIC
     src/LayerStack.cpp
     src/Window.cpp
     src/Input.cpp
+    src/FontRasterizer.cpp
     src/PlatformUtils.cpp
 )
 add_library(Axle::Platform ALIAS AxlePlatform)
@@ -20,5 +21,5 @@ target_link_libraries(AxlePlatform
 )
 
 if (WIN32)
-    target_link_libraries(AxlePlatform PRIVATE comdlg32)
+    target_link_libraries(AxlePlatform PRIVATE comdlg32 gdi32)
 endif()

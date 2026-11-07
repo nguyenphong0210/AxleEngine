@@ -237,9 +237,23 @@ static bool GLCanvas() {
     WindowProps props;props.Title="OPT05 GL Canvas";props.Width=props.Height=128;props.Maximized=false;props.GraphicsBackend=GraphicsAPI::OpenGL;
     Window window(props);RENDER_CHECK(RenderCommand::Init(reinterpret_cast<GLProcAddressFn>(glfwGetProcAddress)),"GL Canvas context");
     auto target=Framebuffer::Create({128,128,1,false});target->Bind();glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
+    GLuint priorBuffer=0,priorTexture=0;
+    glCreateBuffers(1,&priorBuffer);glBindBuffer(GL_ARRAY_BUFFER,priorBuffer);
+    glCreateTextures(GL_TEXTURE_2D,1,&priorTexture);glActiveTexture(GL_TEXTURE3);glBindTexture(GL_TEXTURE_2D,priorTexture);
+    glBlendEquationSeparate(GL_FUNC_REVERSE_SUBTRACT,GL_FUNC_SUBTRACT);
+    glColorMask(GL_FALSE,GL_TRUE,GL_FALSE,GL_TRUE);glEnable(GL_STENCIL_TEST);glStencilFunc(GL_NEVER,0,0xff);
+    glEnable(GL_FRAMEBUFFER_SRGB);
     Canvas2D canvas;EmitCanvas(canvas);RENDER_CHECK(canvas.Submit()&&canvas.GetStats().DrawCalls>=4,"GL Canvas submits actual geometry");
+    GLint active=0,texture=0,buffer=0,equation=0;GLboolean mask[4]{};
+    glGetIntegerv(GL_ACTIVE_TEXTURE,&active);glGetIntegerv(GL_TEXTURE_BINDING_2D,&texture);
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING,&buffer);glGetIntegerv(GL_BLEND_EQUATION_RGB,&equation);glGetBooleanv(GL_COLOR_WRITEMASK,mask);
+    RENDER_CHECK(active==GL_TEXTURE3&&texture==priorTexture&&buffer==priorBuffer&&equation==GL_FUNC_REVERSE_SUBTRACT&&
+        !mask[0]&&mask[1]&&!mask[2]&&mask[3]&&glIsEnabled(GL_STENCIL_TEST)&&glIsEnabled(GL_FRAMEBUFFER_SRGB),
+        "GL Canvas restores caller bindings, blending, write masks and tests, including lazy image initialization");
     std::vector<uint8_t> pixels(128*128*4);glReadPixels(0,0,128,128,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
     RENDER_CHECK(CheckCanvas(pixels,true),"GL Canvas glyph/sprite/clip/blend readback");canvas.Shutdown();
+    glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glDisable(GL_STENCIL_TEST);glDisable(GL_FRAMEBUFFER_SRGB);
+    glDeleteBuffers(1,&priorBuffer);glDeleteTextures(1,&priorTexture);
     target->Unbind();target.reset();return glGetError()==GL_NO_ERROR;
 }
 int main(int argc, char** argv) {

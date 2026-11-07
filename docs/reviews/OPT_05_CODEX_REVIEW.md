@@ -140,3 +140,21 @@ from Canvas in UI2D; the pending correction moves GPU execution to Renderer and
 native CPU font rasterization to Platform. Release, Runtime product fixtures,
 remaining consumer gates and the independent correction recheck are still pending.
 This checkpoint is not acceptance.
+
+## Correction checkpoint 5
+
+Canvas GPU execution and embedded shaders now belong to Renderer. Its input is
+an owned caller batch of canonical vertices, image sources and pixel clips;
+Renderer has no dependency on UI layout or document types. UI2D keeps layout,
+input, text geometry and submission statistics. Platform owns the Win32 CPU font
+rasterizer and caches the immutable atlas once; GDI is a declared Platform system
+dependency. The architecture gate passes (416 files, 18 CMake files, AF-04 closed).
+
+The GL Canvas adapter now restores caller texture/buffer/program/VAO bindings,
+sampler, blend equations/factors, color mask, viewport/scissor and depth/cull/
+stencil/sRGB enables, including lazy image initialization and early returns.
+A real GL regression seeds conflicting state, verifies actual intended pixels,
+then checks restoration. Debug Editor, Runtime and focused targets build; all
+nine focused CPU/D3D12/Vulkan/GL cases pass with actual native API validation
+(canvas-boundary-focused-debug-results.json). Full final-source gates and the
+Runtime loose/cooked product fixture remain pending. No phase acceptance yet.

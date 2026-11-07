@@ -140,7 +140,7 @@ bool RunTest_Step85_Phase34_Step1_Part1_DecoupledAxleUI2DLibraryAndUITypes() {
 bool RunTest_Step86_Phase34_Step1_Part2_Canvas2DBatchingAndSDFPipeline() {
     std::cout << "\n========================================================" << std::endl;
     std::cout << " [STEP 86 TEST] CANVAS2D BATCHING & PROCEDURAL SDF      " << std::endl;
-    std::cout << " (1 Draw Call, Scissor Clipping, Canvas2D.hlsl DXIL/SPV) " << std::endl;
+    std::cout << " (CPU geometry collection, DPI and clip data) " << std::endl;
     std::cout << "========================================================\n" << std::endl;
 
     using namespace Axle;
@@ -229,7 +229,7 @@ bool RunTest_Step86_Phase34_Step1_Part2_Canvas2DBatchingAndSDFPipeline() {
     canvas.EndCanvas();
     assert(canvas.GetStats().DrawCalls == 0);
     std::cout << "  -> 2.0x DPI scaling accurately multiplies ScreenPos, QuadSize, Radius, Border: PASS" << std::endl;
-    std::cout << "  -> EndCanvas() consolidated 1 draw call: PASS" << std::endl;
+    std::cout << "  -> EndCanvas() collected geometry; no GPU submission claimed: PASS" << std::endl;
 
     // [86.4] Dual-Stage HLSL 2021 Shader Bytecode Compilation (Canvas2D.hlsl)
     std::cout << "\n[86.4] Testing Canvas2D.hlsl Dual-Target Bytecode Compilation..." << std::endl;
@@ -766,7 +766,7 @@ bool RunTest_Step88_Phase34_Step3_DOMTreeAnd2PassLayoutEngine() {
     canvas.EndCanvas();
     assert(canvas.GetStats().DrawCalls == 0);
 
-    std::cout << "  -> Document rendered 8 quads into Canvas2D in a single consolidated draw call: PASS" << std::endl;
+    std::cout << "  -> Document collected 8 quads into Canvas2D without a GPU submission: PASS" << std::endl;
     std::cout << "  -> Hidden node correctly skipped during OnDraw: PASS" << std::endl;
 
     std::cout << "\n>>> STEP 88 PASSED: UI DOM Tree & 2-Pass Layout Engine 100% verified! <<<\n" << std::endl;
@@ -1384,7 +1384,7 @@ bool RunTest_Step91_Phase34_Step6_RacingHUDFullIntegration() {
 
     std::cout << "  -> 1080p, 4K (2.0x DPI), and 720p (0.667x DPI) responsive layouts verified: PASS" << std::endl;
 
-    // [91.4] Hardware Canvas2D Batch Rendering (1 Draw Call, Multi-Quad)
+    // [91.4] Canvas2D CPU geometry collection (Multi-Quad)
     std::cout << "\n[91.4] Testing Hardware Canvas2D Batch Rendering..." << std::endl;
     hudDoc.UpdateLayout(glm::vec2(1920.0f, 1080.0f));
     Canvas2D canvas;

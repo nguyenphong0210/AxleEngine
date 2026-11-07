@@ -41,6 +41,7 @@ namespace Axle {
         switch (type) {
             case UIPrimitiveType::SDF_Rect:      return "SDF_Rect";
             case UIPrimitiveType::Sprite:        return "Sprite";
+            case UIPrimitiveType::BitmapText: return "BitmapText";
             case UIPrimitiveType::MSDF_Text:     return "MSDF_Text";
             case UIPrimitiveType::SDF_RadialArc: return "SDF_RadialArc";
             default:                             return "Unknown";
@@ -50,6 +51,7 @@ namespace Axle {
     UIPrimitiveType StringToUIPrimitiveType(std::string_view str) {
         if (str == "SDF_Rect" || str == "Rect" || str == "Rectangle" || str == "Panel") return UIPrimitiveType::SDF_Rect;
         if (str == "Sprite" || str == "Image") return UIPrimitiveType::Sprite;
+        if (str == "BitmapText") return UIPrimitiveType::BitmapText;
         if (str == "MSDF_Text" || str == "Text" || str == "Label") return UIPrimitiveType::MSDF_Text;
         if (str == "SDF_RadialArc" || str == "RadialArc" || str == "Gauge") return UIPrimitiveType::SDF_RadialArc;
         return UIPrimitiveType::SDF_Rect;

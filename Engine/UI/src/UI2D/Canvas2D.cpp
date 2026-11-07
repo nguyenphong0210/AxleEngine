@@ -1,6 +1,6 @@
 #include <Axle/UI/Canvas2D.hpp>
 #include <Axle/UI/UIFont.hpp>
-#include <Axle/UI/CanvasRenderer.hpp>
+#include <Axle/CanvasRenderer.hpp>
 #include <Axle/ImageTextureCache.hpp>
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
@@ -54,7 +54,10 @@ namespace Axle {
         if (!m_Initialized) return false;
         if (m_Vertices.empty()) return true;
         if (!m_Renderer) m_Renderer = std::make_unique<CanvasRenderer>();
-        const auto draws = m_Renderer->Submit(*this,target);
+        std::vector<glm::vec4> clips;
+        clips.reserve(m_QuadClips.size());
+        for (const auto& clip : m_QuadClips) clips.emplace_back(clip.X,clip.Y,clip.Width,clip.Height);
+        const auto draws = m_Renderer->Submit({m_ViewportSize,m_Vertices,m_Indices,m_Images,clips},target);
         if (!draws) return false;
         m_Stats.DrawCalls = draws; return true;
     }
@@ -166,7 +169,7 @@ namespace Axle {
                              color, glm::vec4(0.0f),
                              0.0f, 0.0f, glm::vec2(0.0f),
                              font->GetAtlas().Image ? RegisterImage(font->GetAtlas()) : font->GetBindlessTextureIndex(),
-                             font->GetAtlas().Image ? static_cast<UIPrimitiveType>(4) : UIPrimitiveType::MSDF_Text);
+                             font->GetAtlas().Image ? UIPrimitiveType::BitmapText : UIPrimitiveType::MSDF_Text);
                 }
             }
 

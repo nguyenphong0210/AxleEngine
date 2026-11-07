@@ -1,37 +1,16 @@
 # ==============================================================================
 # AxleUI2D Static Library (Decoupled In-Game UI Subsystem)
-foreach(stage HLSL VERTEX FRAGMENT)
-    if(stage STREQUAL "HLSL")
-        set(ext hlsl)
-    elseif(stage STREQUAL "VERTEX")
-        set(ext vert)
-    else()
-        set(ext frag)
-    endif()
-    set(source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/Canvas2D.${ext}")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
-    file(READ "${source}" AXLE_CANVAS_${stage})
-endforeach()
-configure_file(src/UI2D/CanvasShaderSource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/CanvasShaderSource.hpp" @ONLY)
-
 # ==============================================================================
 add_library(AxleUI2D STATIC
     src/UI2D/UITypes.cpp
     src/UI2D/RectTransform.cpp
     src/UI2D/Canvas2D.cpp
-    src/UI2D/CanvasRenderer.cpp
     src/UI2D/UIFont.cpp
     src/UI2D/UINode.cpp
     src/UI2D/UIDocument.cpp
     src/UI2D/UIParser.cpp
 )
 add_library(Axle::UI2D ALIAS AxleUI2D)
-target_include_directories(AxleUI2D PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_link_libraries(AxleUI2D PRIVATE glad)
-if(WIN32)
-    target_link_libraries(AxleUI2D PRIVATE gdi32)
-endif()
-
 target_include_directories(AxleUI2D PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/glm>

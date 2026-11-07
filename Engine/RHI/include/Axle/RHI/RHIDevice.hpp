@@ -58,6 +58,7 @@ namespace Axle::RHI {
         static int32_t FindSoftwareAdapterIndex(RHIType backend = RHIType::None);
         static int32_t FindDiscreteAdapterIndex(RHIType backend = RHIType::None);
         static bool IsGraphicsAPIValidationAvailable(RHIType backend);
+        nri::FormatSupportBits GetTextureFormatSupport(nri::Format format) const;
 
         // Access underlying NRI device and interfaces
         nri::Device* GetNRIDevice() const { return m_Device; }

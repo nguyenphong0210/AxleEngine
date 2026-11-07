@@ -1,6 +1,7 @@
 #include <Axle/RHI/RHIStreamer.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 
 namespace Axle::RHI {
 
@@ -111,7 +112,12 @@ namespace Axle::RHI {
         if (!m_Streamer || !m_Device) return 0;
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (!streamerInterface.BeginStreamerCopyBatch) return 0;
-        return streamerInterface.BeginStreamerCopyBatch(*m_Streamer);
+        RHICopyBatch batch = 0;
+        ScopedRHIFault::Invoke("BeginStreamerCopyBatch", [&] {
+            batch = streamerInterface.BeginStreamerCopyBatch(*m_Streamer);
+            return batch ? nri::Result::SUCCESS : nri::Result::FAILURE;
+        });
+        return batch;
     }
 
     RHIStreamedBuffer RHIStreamer::StreamBufferData(const void* data, uint64_t size, uint32_t alignment) {
@@ -128,7 +134,11 @@ namespace Axle::RHI {
         desc.dstBuffer = nullptr;
         desc.dstOffset = 0;
 
-        nri::BufferOffset bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
+        nri::BufferOffset bo{};
+        ScopedRHIFault::Invoke("StreamBufferData", [&] {
+            bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
+            return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
+        });
         return { bo.buffer, bo.offset };
     }
 
@@ -148,7 +158,11 @@ namespace Axle::RHI {
         desc.dstBuffer = dstBuffer;
         desc.dstOffset = dstOffset;
 
-        nri::BufferOffset bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
+        nri::BufferOffset bo{};
+        ScopedRHIFault::Invoke("StreamBufferData", [&] {
+            bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
+            return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
+        });
         return { bo.buffer, bo.offset };
     }
 
@@ -179,7 +193,11 @@ namespace Axle::RHI {
         desc.dstBuffer = dstBuffer;
         desc.dstOffset = dstOffset;
 
-        nri::BufferOffset bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
+        nri::BufferOffset bo{};
+        ScopedRHIFault::Invoke("StreamBufferData", [&] {
+            bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
+            return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
+        });
         return { bo.buffer, bo.offset };
     }
 

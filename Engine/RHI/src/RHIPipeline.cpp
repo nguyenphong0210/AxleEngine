@@ -4,6 +4,7 @@
 #include <cstring>
 #include <algorithm>
 #include <iostream>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 
 namespace Axle::RHI {
 
@@ -20,6 +21,7 @@ namespace Axle::RHI {
         , m_RootRegisterSpace(other.m_RootRegisterSpace)
         , m_RootConstants(std::move(other.m_RootConstants))
         , m_DescriptorSets(std::move(other.m_DescriptorSets))
+        , m_DescriptorRanges(std::move(other.m_DescriptorRanges))
     {
         other.m_Layout = nullptr;
         other.m_RootRegisterSpace = 0;
@@ -32,6 +34,7 @@ namespace Axle::RHI {
             m_RootRegisterSpace = other.m_RootRegisterSpace;
             m_RootConstants = std::move(other.m_RootConstants);
             m_DescriptorSets = std::move(other.m_DescriptorSets);
+            m_DescriptorRanges = std::move(other.m_DescriptorRanges);
             other.m_Layout = nullptr;
             other.m_RootRegisterSpace = 0;
         }
@@ -39,34 +42,34 @@ namespace Axle::RHI {
     }
 
     bool RHIPipelineLayout::Init(const nri::PipelineLayoutDesc& desc) {
-        Shutdown();
-
-        auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) {
-            AXLE_CORE_ERROR("RHIPipelineLayout::Init failed: RHIDevice is not initialized!");
-            return false;
+        auto& device = RHIDevice::Get();
+        if (!device.IsNativeReady()) return false;
+        const auto& core = device.GetNRICore();
+        const auto& limits = core.GetDeviceDesc(*device.GetNRIDevice()).pipelineLayout;
+        if ((desc.rootConstantNum && !desc.rootConstants) || (desc.rootDescriptorNum && !desc.rootDescriptors) ||
+            (desc.rootSamplerNum && !desc.rootSamplers) || (desc.descriptorSetNum && !desc.descriptorSets) ||
+            desc.descriptorSetNum > limits.descriptorSetMaxNum || desc.rootDescriptorNum > limits.rootDescriptorMaxNum ||
+            desc.rootSamplerNum > limits.rootSamplerMaxNum || desc.rootConstantNum > limits.rootConstantMaxSize / 4) return false;
+        uint64_t bytes = 0;
+        for (uint32_t i = 0; i < desc.rootConstantNum; ++i) {
+            if (!desc.rootConstants[i].size || desc.rootConstants[i].size % 4) return false;
+            bytes += desc.rootConstants[i].size;
         }
-
-        auto* nativeDevice = rhiDevice.GetNRIDevice();
-        const auto& nriCore = rhiDevice.GetNRICore();
-        if (!nativeDevice) return false;
-
-        nri::Result res = nriCore.CreatePipelineLayout(*nativeDevice, desc, m_Layout);
-        if (res != nri::Result::SUCCESS || !m_Layout) {
-            AXLE_CORE_ERROR("RHIPipelineLayout::Init: CreatePipelineLayout failed with code {0}!", static_cast<uint32_t>(res));
-            return false;
+        if (bytes > limits.rootConstantMaxSize) return false;
+        RHIPipelineLayout candidate;
+        candidate.m_RootRegisterSpace = desc.rootRegisterSpace;
+        if (desc.rootConstantNum) candidate.m_RootConstants.assign(desc.rootConstants, desc.rootConstants + desc.rootConstantNum);
+        if (desc.descriptorSetNum) candidate.m_DescriptorSets.assign(desc.descriptorSets, desc.descriptorSets + desc.descriptorSetNum);
+        candidate.m_DescriptorRanges.resize(desc.descriptorSetNum);
+        for (uint32_t i = 0; i < desc.descriptorSetNum; ++i) {
+            auto& set = candidate.m_DescriptorSets[i];
+            if (set.rangeNum && !set.ranges) return false;
+            if (set.rangeNum) candidate.m_DescriptorRanges[i].assign(set.ranges, set.ranges + set.rangeNum);
+            set.ranges = candidate.m_DescriptorRanges[i].data();
         }
-
-        m_RootRegisterSpace = desc.rootRegisterSpace;
-        if (desc.rootConstants && desc.rootConstantNum > 0) {
-            m_RootConstants.assign(desc.rootConstants, desc.rootConstants + desc.rootConstantNum);
-        }
-        if (desc.descriptorSets && desc.descriptorSetNum > 0) {
-            m_DescriptorSets.assign(desc.descriptorSets, desc.descriptorSets + desc.descriptorSetNum);
-        }
-
-        AXLE_CORE_INFO("RHIPipelineLayout successfully initialized (RootSpace: {0}, RootConstants: {1}, DescriptorSets: {2})",
-            m_RootRegisterSpace, m_RootConstants.size(), m_DescriptorSets.size());
+        const auto result = ScopedRHIFault::Invoke("CreatePipelineLayout", [&] { return core.CreatePipelineLayout(*device.GetNRIDevice(), desc, candidate.m_Layout); });
+        if (result != nri::Result::SUCCESS || !candidate.m_Layout) return false;
+        *this = std::move(candidate);
         return true;
     }
 
@@ -85,6 +88,7 @@ namespace Axle::RHI {
         }
         m_RootConstants.clear();
         m_DescriptorSets.clear();
+        m_DescriptorRanges.clear();
         m_RootRegisterSpace = 0;
     }
 
@@ -258,6 +262,12 @@ namespace Axle::RHI {
     }
 
     nri::Pipeline* RHIPipelineCache::GetOrCreateGraphicsPipeline(const RHIGraphicsPipelineDesc& desc) {
+        if (!desc.Layout || !desc.Layout->IsValid() || desc.Shaders.empty() || desc.Shaders.size() > UINT32_MAX ||
+            desc.VertexInput.Attributes.size() > UINT8_MAX || desc.VertexInput.Streams.size() > UINT8_MAX ||
+            desc.ColorAttachmentFormats.size() > 8 || desc.ColorAttachments.size() > 8 ||
+            (!desc.ColorAttachments.empty() && desc.ColorAttachments.size() != desc.ColorAttachmentFormats.size()) ||
+            (desc.SampleCount != 1 && desc.SampleCount != 2 && desc.SampleCount != 4 && desc.SampleCount != 8) || !m_MaxCapacity) return nullptr;
+        for (const auto& shader : desc.Shaders) if (!shader.GetData() || !shader.GetSize()) return nullptr;
         uint64_t hash = ComputeGraphicsPipelineHash(desc);
 
         // 1. Check LRU cache
@@ -280,6 +290,29 @@ namespace Axle::RHI {
         auto* nativeDevice = rhiDevice.GetNRIDevice();
         const auto& nriCore = rhiDevice.GetNRICore();
         if (!nativeDevice) return nullptr;
+
+        const auto& limits = nriCore.GetDeviceDesc(*nativeDevice);
+        if (desc.VertexInput.Attributes.size() > limits.shaderStage.vertex.attributeMaxNum ||
+            desc.VertexInput.Streams.size() > limits.shaderStage.vertex.streamMaxNum ||
+            desc.ColorAttachmentFormats.size() > limits.shaderStage.fragment.attachmentMaxNum) return nullptr;
+        auto supports = [&](nri::Format format, nri::FormatSupportBits usage) {
+            if (format <= nri::Format::UNKNOWN || format >= nri::Format::MAX_NUM) return false;
+            if (desc.SampleCount == 2) usage |= nri::FormatSupportBits::MULTISAMPLE_2X;
+            if (desc.SampleCount == 4) usage |= nri::FormatSupportBits::MULTISAMPLE_4X;
+            if (desc.SampleCount == 8) usage |= nri::FormatSupportBits::MULTISAMPLE_8X;
+            return (static_cast<uint32_t>(rhiDevice.GetTextureFormatSupport(format)) & static_cast<uint32_t>(usage)) == static_cast<uint32_t>(usage);
+        };
+        for (size_t i = 0; i < desc.ColorAttachmentFormats.size(); ++i) {
+            auto usage = nri::FormatSupportBits::COLOR_ATTACHMENT;
+            if (i < desc.ColorAttachments.size() && desc.ColorAttachments[i].BlendEnabled) usage |= nri::FormatSupportBits::BLEND;
+            if (!supports(desc.ColorAttachmentFormats[i], usage)) return nullptr;
+        }
+        if ((desc.DepthStencil.DepthTestEnable || desc.DepthStencil.DepthWriteEnable || desc.DepthStencil.StencilEnable) &&
+            !supports(desc.DepthStencil.DepthStencilFormat, nri::FormatSupportBits::DEPTH_STENCIL_ATTACHMENT)) return nullptr;
+        for (const auto& attribute : desc.VertexInput.Attributes) {
+            if (attribute.StreamIndex >= desc.VertexInput.Streams.size() || attribute.Format <= nri::Format::UNKNOWN ||
+                attribute.Format >= nri::Format::MAX_NUM || !(nriCore.GetFormatSupport(*nativeDevice, attribute.Format) & nri::FormatSupportBits::VERTEX_BUFFER)) return nullptr;
+        }
 
         // Convert Shaders
         std::vector<nri::ShaderDesc> nriShaders;
@@ -397,8 +430,9 @@ namespace Axle::RHI {
         }
 
         nri::Pipeline* newPipeline = nullptr;
-        nri::Result res = nriCore.CreateGraphicsPipeline(*nativeDevice, pipelineDesc, newPipeline);
+        nri::Result res = ScopedRHIFault::Invoke("CreateGraphicsPipeline", [&] { return nriCore.CreateGraphicsPipeline(*nativeDevice, pipelineDesc, newPipeline); });
         if (res != nri::Result::SUCCESS || !newPipeline) {
+            if (newPipeline) nriCore.DestroyPipeline(newPipeline);
             AXLE_CORE_ERROR("RHIPipelineCache: CreateGraphicsPipeline failed with code {0}!", static_cast<uint32_t>(res));
             return nullptr;
         }
@@ -431,6 +465,7 @@ namespace Axle::RHI {
     }
 
     nri::Pipeline* RHIPipelineCache::GetOrCreateComputePipeline(const RHIComputePipelineDesc& desc) {
+        if (!desc.Layout || !desc.Layout->IsValid() || !desc.ComputeShader.GetData() || !desc.ComputeShader.GetSize() || !m_MaxCapacity) return nullptr;
         uint64_t hash = ComputeComputePipelineHash(desc);
 
         // 1. Check LRU cache
@@ -458,8 +493,9 @@ namespace Axle::RHI {
         compDesc.shader = desc.ComputeShader.ToNRIShaderDesc();
 
         nri::Pipeline* newPipeline = nullptr;
-        nri::Result res = nriCore.CreateComputePipeline(*nativeDevice, compDesc, newPipeline);
+        nri::Result res = ScopedRHIFault::Invoke("CreateComputePipeline", [&] { return nriCore.CreateComputePipeline(*nativeDevice, compDesc, newPipeline); });
         if (res != nri::Result::SUCCESS || !newPipeline) {
+            if (newPipeline) nriCore.DestroyPipeline(newPipeline);
             AXLE_CORE_ERROR("RHIPipelineCache: CreateComputePipeline failed with code {0}!", static_cast<uint32_t>(res));
             return nullptr;
         }

@@ -228,7 +228,7 @@ namespace Axle {
         layoutDesc.rootDescriptorNum = 1;
         layoutDesc.descriptorSets = &descSet;
         layoutDesc.descriptorSetNum = 1;
-        layoutDesc.shaderStages = nri::StageBits::ALL;
+        layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_PipelineLayout.Init(layoutDesc);
     }

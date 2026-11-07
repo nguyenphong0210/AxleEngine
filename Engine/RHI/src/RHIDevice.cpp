@@ -290,6 +290,11 @@ namespace Axle::RHI {
             !interfaces.Core.CreateCommittedTexture || !interfaces.Core.CreateCommittedBuffer ||
             !interfaces.Core.CreateTextureView || !interfaces.Core.CreateBufferView ||
             !interfaces.Core.DestroyTexture || !interfaces.Core.DestroyBuffer || !interfaces.Core.DestroyDescriptor ||
+            !interfaces.Core.GetFormatSupport || !interfaces.Core.GetBufferDesc ||
+            !interfaces.Core.GetTextureMemoryDesc || !interfaces.Core.GetBufferMemoryDesc ||
+            !interfaces.Core.AllocateMemory || !interfaces.Core.FreeMemory ||
+            !interfaces.Core.BindTextureMemory || !interfaces.Core.BindBufferMemory ||
+            !interfaces.Core.MapBuffer || !interfaces.Core.UnmapBuffer ||
             !interfaces.Core.GetDeviceNativeObject || !interfaces.Core.GetQueueNativeObject)
             return reject("CoreInterface");
         res = ScopedRHIFault::Invoke("HelperInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::HelperInterface), &interfaces.Helper); });

@@ -47,8 +47,6 @@ namespace Axle {
     }
 
     void RHIObjectPicker::Shutdown() {
-        if (!m_Initialized) return;
-
         if (m_Device && m_Device->GetGraphicsQueue()) {
             m_Device->GetNRICore().QueueWaitIdle(m_Device->GetGraphicsQueue());
         }
@@ -143,7 +141,7 @@ namespace Axle {
         layoutDesc.rootRegisterSpace = 0;
         layoutDesc.rootConstants = &rootConst;
         layoutDesc.rootConstantNum = 1;
-        layoutDesc.shaderStages = nri::StageBits::ALL;
+        layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_PipelineLayout.Init(layoutDesc);
     }
@@ -192,11 +190,12 @@ namespace Axle {
             m_Device->GetNRICore().QueueWaitIdle(m_Device->GetGraphicsQueue());
         }
 
-        m_PickingTexture = std::make_unique<RHI::RHITexture>();
-        m_PickingTexture->Init(RHI::RHITextureDesc::IntegerTarget2D(width, height, "RHIObjectPicker_Target"));
-
-        m_DepthTexture = std::make_unique<RHI::RHITexture>();
-        m_DepthTexture->Init(RHI::RHITextureDesc::DepthStencil2D(width, height, RHI::RHITextureFormat::D32_FLOAT, "RHIObjectPicker_Depth"));
+        auto color = std::make_unique<RHI::RHITexture>();
+        auto depth = std::make_unique<RHI::RHITexture>();
+        if (!color->Init(RHI::RHITextureDesc::IntegerTarget2D(width, height, "RHIObjectPicker_Target")) ||
+            !depth->Init(RHI::RHITextureDesc::DepthStencil2D(width, height, RHI::RHITextureFormat::D32_FLOAT, "RHIObjectPicker_Depth"))) return;
+        m_PickingTexture = std::move(color);
+        m_DepthTexture = std::move(depth);
 
         m_Width = width;
         m_Height = height;
@@ -214,6 +213,7 @@ namespace Axle {
         }
 
         Resize(width, height);
+        if (m_Width != width || m_Height != height) return;
         if (!m_PickingTexture || !m_PickingTexture->IsValid()) return;
         if (!m_DepthTexture || !m_DepthTexture->IsValid()) return;
 

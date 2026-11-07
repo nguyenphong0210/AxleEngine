@@ -8,8 +8,8 @@
     "implementer": "Codex",
     "reviewer": "Codex in a separate context",
     "scope_updated_on": "2026-11-07",
-    "user_scope": "User approves Codex as primary OPT-04 implementer, separate-context Codex review at P41-03/P41-06/P41-11 and supplementary Gemini review, prioritizing maximum output quality. User asks whether GPT-6.1 Sol or GPT-6 Astra should be selected.",
-    "user_instruction": "Implement OPT-04 (latest user request, 2026-11-07).",
+    "user_scope": "Codex implements P41-01..11 and performs one consolidated separate-context review after P41-11. The latest user request replaces the intermediate P41-03/P41-06 review checkpoints; necessary package verification remains required.",
+    "user_instruction": "Implement OPT-04, then perform one consolidated review after implementation (latest user steering, 2026-11-07).",
     "code_baseline": "977f68c42755f1cfc0042854dc06dc74fc8cebc8",
     "execution_range": "OPT-04 / P41-01..P41-11 only",
     "released_packages": [
@@ -26,12 +26,13 @@
       "P41-11"
     ],
     "current_phase": "OPT-04",
-    "current_package": "P41-02",
+    "current_package": "P41-03",
     "completed_packages": [
-      "P41-01"
+      "P41-01",
+      "P41-02"
     ],
-    "implementation_status": "P41-01 implemented and self-verified in Debug/Release; P41-02 next; separate-context review pending",
-    "independent_review_status": "pending_implementation_and_separate_context_reviews",
+    "implementation_status": "P41-01/02 implemented and self-verified Debug/Release; one final consolidated review pending after P41-11",
+    "independent_review_status": "pending_single_final_separate_context_review",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
     "prerequisite_evidence": {
@@ -82,33 +83,21 @@
       "Native Editor/Runtime simulation probes preserving accepted OPT-02/03 behavior",
       "Applicable physical D3D12/Vulkan readback, GL/fallback equivalence and real windowed startup/present/teardown checks",
       "Missing required checks stay NOT RUN and dependent gates stay open",
-      "Separate-context Codex reviews at P41-03/P41-06/P41-11, with significant fixes rechecked before dependent work/acceptance"
+      "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
     ],
-    "stop_boundary": "Review after P41-03 and P41-06 before dependent production work; final separate-context review after P41-11; do not start OPT-05.",
-    "next_action": "Implement transactional construction P41-02, then P41-03 and required separate-context review before P41-04.",
+    "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
+    "next_action": "Implement P41-03, continue P41-04..11 in dependency order, then consolidated review.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
       {
-        "after": "P41-03",
-        "before": "P41-04",
-        "scope": "Readiness/fallback, transactional construction, structured errors and device loss",
-        "status": "pending"
-      },
-      {
-        "after": "P41-06",
-        "before": "P41-07",
-        "scope": "Identity/generations/device epochs and recording/submission retirement",
-        "status": "pending"
-      },
-      {
         "after": "P41-11",
         "before": "OPT-04 acceptance",
-        "scope": "Complete phase and affected real product consumers",
+        "scope": "Complete P41-01..11 implementation and affected product callers",
         "status": "pending"
       }
     ],
-    "review_policy": "Fresh-context Codex reviewer inspects contracts, source, exact diff and real evidence; read-only tracked files during review; implementing Codex fixes findings and reviewer rechecks significant changes. Same-model reviews can share blind spots. Gemini review is supplementary; no author or cursor impersonation.",
+    "review_policy": "One final fresh-context Codex review of the full OPT-04 diff, source/callers and actual evidence, with significant corrections rechecked. Intermediate separate-context reviews are superseded by the latest user instruction. Preserve implementation/self-verification/review distinctions and missing native gates.",
     "model_policy": {
       "recommended_model": "gpt-6-astra",
       "alternative": "gpt-6.1-sol when balancing quality with cost",
@@ -1236,6 +1225,28 @@
       "base_commit": "977f68c42755f1cfc0042854dc06dc74fc8cebc8",
       "timestamp_utc": "2026-11-07T03:30:32.941528+00:00",
       "body": "P41-01 implementation/self-verification complete; see docs/reviews/OPT_04_CODEX_EXECUTION.md. Debug and Release builds of AxleRHIFoundationTests/AxleRenderUnitTests/AxleEditor/AxleRuntime exit 0. Per configuration: all five foundation modes, seven Editor startup cases (strict injected rejection expected exit 1), focused CTest 3/3, actual Editor/Runtime simulation probe PASS. AF-04 architecture PASS (377 source files/18 CMake files); baseline tools 18/18 PASS. Native hardware is RTX 3070; pinned NRI remains clean.\n\nAPI validation is NOT RUN on this host: no Vulkan Khronos layer or complete D3D12/DXGI debug prerequisites. Requests for unavailable validation now reject clearly. Physical native tests enable embedded NRI validation separately; they do not close later P41-07 API-validation gates. This is self-verification, not separate-context review or phase acceptance.\n\nUser resumed the authorized task. Root remains sole source writer. Next P41-02 files: texture/buffer/mesh, sampler/pool/layout/cache helpers, affected viewport/picker/scene target callers, native regressions and phase records. Keep P41-03/P41-06/P41-11 review checkpoints. No push."
+    },
+    {
+      "id": "CG-20261107T034454758616Z-CODEX-ec4c88",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T033032941528Z-CODEX-d6aa97",
+      "base_commit": "aba9a3c",
+      "timestamp_utc": "2026-11-07T03:44:54.758616+00:00",
+      "body": "Latest user steering: implement all OPT-04 first, then review once to reduce token use. The live task now has one consolidated final separate-context review after P41-11; intermediate P41-03/P41-06 review checkpoints are superseded. Package checks and native acceptance requirements remain active. Root remains sole source writer; no intermediate reviewer will be spawned. Current HEAD aba9a3c delivers P41-01. P41-02 source and native checks are in progress; do not treat that package or the phase as accepted."
+    },
+    {
+      "id": "CG-20261107T034818086247Z-CODEX-eaa3e7",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T034454758616Z-CODEX-ec4c88",
+      "base_commit": "aba9a3c",
+      "timestamp_utc": "2026-11-07T03:48:18.086247+00:00",
+      "body": "P41-02 implemented and self-verified from aba9a3c. Final Debug/Release builds exit 0; per configuration: resource modes 3/3, native window/view resource modes 2/2, P41-01 foundation regressions 5/5, Editor startup/rollback 7/7 expected exits, focused rendering/material/VFX CTest 6/6, physical D3D12/Vulkan VFX GPU regressions 2/2. Actual old-generation pixels/bytes and drawable mesh survive injected creation/upload failures. See docs/reviews/OPT_04_CODEX_EXECUTION.md and p41-02-final-<config>-results.json under ignored agent-runs. API-validation prerequisites remain unavailable; embedded NRI validation is exercised on both physical APIs. One final consolidated review remains pending under latest user steering. Next source tranche: P41-03 device errors, command submission, swapchain/UI bounded failure paths and production renderer propagation. No push."
     }
   ],
   "deferred_tasks": [

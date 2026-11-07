@@ -28,7 +28,7 @@ namespace Axle::RHI {
             case RHITextureFormat::R32_UINT:          return nri::Format::R32_UINT;
             case RHITextureFormat::D32_FLOAT:         return nri::Format::D32_SFLOAT;
             case RHITextureFormat::D24_UNORM_S8_UINT: return nri::Format::D24_UNORM_S8_UINT;
-            default:                                  return nri::Format::RGBA8_UNORM;
+            default:                                  return nri::Format::UNKNOWN;
         }
     }
 
@@ -162,8 +162,10 @@ namespace Axle::RHI {
         uint64_t GetNativeDSVHandle() const;
 
     private:
+        bool Build(const RHITextureDesc& desc);
         RHITextureDesc m_Desc;
         nri::Texture* m_Texture = nullptr;
+        nri::Memory* m_Memory = nullptr;
         nri::Descriptor* m_SRV = nullptr;
         nri::Descriptor* m_RTV = nullptr;
         nri::Descriptor* m_DSV = nullptr;

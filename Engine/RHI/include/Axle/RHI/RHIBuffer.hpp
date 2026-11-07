@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <limits>
 
 #ifdef _WIN32
 #undef min
@@ -87,7 +88,7 @@ namespace Axle::RHI {
         static RHIBufferDesc Constant(uint64_t size, RHIMemoryLocation location = RHIMemoryLocation::HostUpload, const std::string& name = "") {
             RHIBufferDesc desc;
             // Constant buffers in D3D12/Vulkan typically align to 256 bytes
-            desc.Size = (size + 255) & ~255ULL;
+            desc.Size = size > std::numeric_limits<uint64_t>::max() - 255 ? 0 : (size + 255) & ~255ULL;
             desc.Usage = RHIBufferUsage::Constant;
             desc.MemoryLocation = location;
             desc.DebugName = name;
@@ -97,7 +98,7 @@ namespace Axle::RHI {
         static RHIBufferDesc Structured(uint64_t elementCount, uint32_t elementStride, bool readWrite = false,
                                         RHIMemoryLocation location = RHIMemoryLocation::Device, const std::string& name = "") {
             RHIBufferDesc desc;
-            desc.Size = elementCount * elementStride;
+            desc.Size = !elementStride || elementCount > std::numeric_limits<uint64_t>::max() / elementStride ? 0 : elementCount * elementStride;
             desc.StructureStride = elementStride;
             desc.Usage = readWrite
                 ? (RHIBufferUsage::ShaderResource | RHIBufferUsage::ShaderResourceStorage)
@@ -128,13 +129,13 @@ namespace Axle::RHI {
         RHIBuffer(RHIBuffer&& other) noexcept;
         RHIBuffer& operator=(RHIBuffer&& other) noexcept;
 
-        // Initialize committed buffer and optionally upload initial data
+        // Publish a complete candidate. Initial data must cover desc.Size bytes.
         bool Init(const RHIBufferDesc& desc, const void* initialData = nullptr);
 
-        // Initialize placed buffer on externally allocated/bound memory
+        // Borrow externally allocated memory; the caller retains its lifetime.
         bool InitPlaced(const RHIBufferDesc& desc, nri::Memory* memory, uint64_t memoryOffset);
 
-        // Adopt an already created & bound native NRI buffer (e.g. from group allocation)
+        // Transfer buffer and optional memory ownership only on success.
         bool InitAdopt(const RHIBufferDesc& desc, nri::Buffer* existingBuffer, nri::Memory* memory = nullptr);
 
         // Shutdown and release NRI resources
@@ -144,7 +145,8 @@ namespace Axle::RHI {
         void* Map(uint64_t offset = 0, uint64_t size = 0);
         void Unmap();
 
-        // Synchronously update data (if host-visible, memcpy directly; if device-local, via helper.UploadData)
+        // Host updates support ranges. Device-local updates require the whole buffer:
+        // the pinned NRI UploadData helper has no byte count or destination offset.
         bool UpdateData(const void* data, uint64_t size, uint64_t offset = 0);
 
         bool IsValid() const { return m_Buffer != nullptr; }
@@ -160,12 +162,16 @@ namespace Axle::RHI {
         operator nri::Buffer*() const { return m_Buffer; }
 
     private:
+        bool Build(const RHIBufferDesc& desc, const void* initialData, nri::Memory* borrowedMemory = nullptr, uint64_t memoryOffset = 0);
+        bool BuildView();
         RHIBufferDesc m_Desc;
         nri::Buffer* m_Buffer = nullptr;
         nri::Memory* m_Memory = nullptr;
         nri::Descriptor* m_CBV = nullptr;
-        bool m_IsCommitted = false;
+        bool m_OwnsMemory = false;
         void* m_MappedData = nullptr;
+        uint64_t m_MappedOffset = 0;
+        uint64_t m_MappedSize = 0;
     };
 
     // =========================================================================

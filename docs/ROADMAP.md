@@ -1,3 +1,5 @@
+Latest user steering (2026-11-07): implement all P41-01..11, then perform one consolidated final review. This supersedes intermediate review checkpoints; package verification and native acceptance gates remain required.
+
 # Architecture Optimization Roadmap
 
 Updated: **2026-11-07**. Ordering baseline: `7869fce` (post-Vehicle retirement).
@@ -195,8 +197,8 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 
 **Work:** Implement real backend readiness and GL fallback, transactional resource creation, error/device-loss handling, stable primitive/resource identity, recording/submission leases, state tracking, frame completion, presentation, view targets and shared uploads/cache.
 
-- [x] **P41-01:** Backend readiness and fallback equivalence (self-verified; P41-03 review pending).
-- [ ] **P41-02:** Transactional GPU resource construction.
+- [x] **P41-01:** Backend readiness and fallback equivalence (self-verified; final review pending).
+- [x] **P41-02:** Transactional GPU resource construction (self-verified; final review pending).
 - [ ] **P41-03:** Error propagation and device-loss state.
 - [ ] **P41-04:** Primitive creation and canonical mesh identity.
 - [ ] **P41-05:** Resource identity and generation ownership.
@@ -209,10 +211,10 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 
 **Exit:** D3D12/Vulkan use the pinned NRI contract; GL is an explicit compatibility adapter. Creation failure, resize, recorded-but-unsubmitted work and shutdown have relevant current evidence; missing native checks remain NOT RUN.
 
-**Assignment:** Codex implementation with separate-context Codex review at P41-03/P41-06/P41-11 and supplementary Gemini review; [current handoff](agents/handoffs/OPT_04_CODEX.md). Complete P41-01..11 and stop after the final review gate.
+**Assignment:** Codex implementation with one consolidated separate-context Codex review after P41-11 and supplementary Gemini review; [current handoff](agents/handoffs/OPT_04_CODEX.md). Complete P41-01..11 and stop after the final review gate.
 
 **Evidence:** [Codex execution record](reviews/OPT_04_CODEX_EXECUTION.md).
-P41-01 is self-verified in Debug/Release; P41-02 is next. No phase acceptance is claimed.
+P41-01/02 are self-verified in Debug/Release; P41-03 is next. No phase acceptance is claimed.
 
 ### OPT-05 - Unify rendering across Editor, previews and Runtime
 

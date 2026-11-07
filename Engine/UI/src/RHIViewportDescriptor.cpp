@@ -1,5 +1,6 @@
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 
 namespace Axle {
 
@@ -39,41 +40,39 @@ namespace Axle {
     }
 
     bool RHIViewportDescriptor::Init(ImGuiLayer* imguiLayer, const RHIViewportDesc& desc) {
-        Shutdown();
+        RHIViewportDescriptor candidate;
         if (!imguiLayer) {
             AXLE_CORE_ERROR("RHIViewportDescriptor::Init failed: ImGuiLayer is null!");
             return false;
         }
 
-        m_ImGuiLayer = imguiLayer;
-        m_Desc = desc;
-        m_OwnsColorTexture = true;
+        candidate.m_ImGuiLayer = imguiLayer;
+        candidate.m_Desc = desc;
+        candidate.m_OwnsColorTexture = true;
 
-        m_OwnedColorTexture = std::make_unique<RHI::RHITexture>();
+        candidate.m_OwnedColorTexture = std::make_unique<RHI::RHITexture>();
         auto colorDesc = RHI::RHITextureDesc::RenderTarget2D(desc.Width, desc.Height, desc.ColorFormat, desc.DebugName + "_Color");
-        if (!m_OwnedColorTexture->Init(colorDesc)) {
+        if (!candidate.m_OwnedColorTexture->Init(colorDesc)) {
             AXLE_CORE_ERROR("RHIViewportDescriptor::Init: Failed to create color texture!");
-            Shutdown();
             return false;
         }
-        m_ColorTexture = m_OwnedColorTexture.get();
+        candidate.m_ColorTexture = candidate.m_OwnedColorTexture.get();
 
         if (desc.EnableDepth) {
-            m_DepthTexture = std::make_unique<RHI::RHITexture>();
+            candidate.m_DepthTexture = std::make_unique<RHI::RHITexture>();
             auto depthDesc = RHI::RHITextureDesc::DepthStencil2D(desc.Width, desc.Height, desc.DepthFormat, desc.DebugName + "_Depth");
-            if (!m_DepthTexture->Init(depthDesc)) {
+            if (!candidate.m_DepthTexture->Init(depthDesc)) {
                 AXLE_CORE_ERROR("RHIViewportDescriptor::Init: Failed to create depth texture!");
-                Shutdown();
                 return false;
             }
         }
 
-        if (!RegisterWithImGui()) {
+        if (!candidate.RegisterWithImGui()) {
             AXLE_CORE_ERROR("RHIViewportDescriptor::Init: Failed to register texture with ImGuiLayer!");
-            Shutdown();
             return false;
         }
 
+        *this = std::move(candidate);
         return true;
     }
 
@@ -88,21 +87,23 @@ namespace Axle {
     }
 
     bool RHIViewportDescriptor::BindExternalTexture(ImGuiLayer* imguiLayer, RHI::RHITexture* texture) {
-        Shutdown();
+        RHIViewportDescriptor candidate;
         if (!imguiLayer || !texture || !texture->IsValid()) {
             AXLE_CORE_ERROR("RHIViewportDescriptor::BindExternalTexture failed: Invalid arguments!");
             return false;
         }
 
-        m_ImGuiLayer = imguiLayer;
-        m_ColorTexture = texture;
-        m_OwnsColorTexture = false;
-        m_Desc.Width = texture->GetWidth();
-        m_Desc.Height = texture->GetHeight();
-        m_Desc.ColorFormat = texture->GetFormat();
-        m_Desc.EnableDepth = false;
+        candidate.m_ImGuiLayer = imguiLayer;
+        candidate.m_ColorTexture = texture;
+        candidate.m_OwnsColorTexture = false;
+        candidate.m_Desc.Width = texture->GetWidth();
+        candidate.m_Desc.Height = texture->GetHeight();
+        candidate.m_Desc.ColorFormat = texture->GetFormat();
+        candidate.m_Desc.EnableDepth = false;
 
-        return RegisterWithImGui();
+        if (!candidate.RegisterWithImGui()) return false;
+        *this = std::move(candidate);
+        return true;
     }
 
     bool RHIViewportDescriptor::SetHDR(bool enableHDR) {
@@ -110,111 +111,33 @@ namespace Axle {
         return SetColorFormat(targetFormat);
     }
 
-    bool RHIViewportDescriptor::SetColorFormat(RHI::RHITextureFormat newFormat) {
-        if (m_Desc.ColorFormat == newFormat && IsValid()) {
-            return true;
-        }
-
-        if (!m_OwnsColorTexture) {
-            AXLE_CORE_WARN("RHIViewportDescriptor::SetColorFormat cannot modify externally-owned texture!");
-            return false;
-        }
-
-        m_Desc.ColorFormat = newFormat;
-        if (m_Desc.Width == 0 || m_Desc.Height == 0) {
-            return true;
-        }
-
-        UnregisterFromImGui();
-
-        auto colorDesc = RHI::RHITextureDesc::RenderTarget2D(m_Desc.Width, m_Desc.Height, m_Desc.ColorFormat, m_Desc.DebugName + "_Color");
-        if (!m_OwnedColorTexture) {
-            m_OwnedColorTexture = std::make_unique<RHI::RHITexture>();
-        }
-        if (!m_OwnedColorTexture->Init(colorDesc)) {
-            AXLE_CORE_ERROR("RHIViewportDescriptor::SetColorFormat: Failed to recreate color texture!");
-            Shutdown();
-            return false;
-        }
-        m_ColorTexture = m_OwnedColorTexture.get();
-
-        if (!RegisterWithImGui()) {
-            AXLE_CORE_ERROR("RHIViewportDescriptor::SetColorFormat: Failed to register texture with ImGui!");
-            Shutdown();
-            return false;
-        }
-
-        return true;
+    bool RHIViewportDescriptor::SetColorFormat(RHI::RHITextureFormat format) {
+        if (!m_OwnsColorTexture) return false;
+        if (m_Desc.ColorFormat == format && IsValid()) return true;
+        auto desc = m_Desc;
+        desc.ColorFormat = format;
+        return Init(m_ImGuiLayer, desc);
     }
 
-    bool RHIViewportDescriptor::SetDepthFormat(RHI::RHITextureFormat depthFormat) {
-        if (m_Desc.DepthFormat == depthFormat && m_DepthTexture && m_DepthTexture->IsValid()) {
+    bool RHIViewportDescriptor::SetDepthFormat(RHI::RHITextureFormat format) {
+        if (m_Desc.DepthFormat == format && IsValid()) return true;
+        if (!m_Desc.EnableDepth) {
+            if (format != RHI::RHITextureFormat::D32_FLOAT && format != RHI::RHITextureFormat::D24_UNORM_S8_UINT) return false;
+            m_Desc.DepthFormat = format;
             return true;
         }
-
-        m_Desc.DepthFormat = depthFormat;
-        if (!m_Desc.EnableDepth || m_Desc.Width == 0 || m_Desc.Height == 0) {
-            return true;
-        }
-
-        if (!m_DepthTexture) {
-            m_DepthTexture = std::make_unique<RHI::RHITexture>();
-        }
-        auto depthDesc = RHI::RHITextureDesc::DepthStencil2D(m_Desc.Width, m_Desc.Height, m_Desc.DepthFormat, m_Desc.DebugName + "_Depth");
-        if (!m_DepthTexture->Init(depthDesc)) {
-            AXLE_CORE_ERROR("RHIViewportDescriptor::SetDepthFormat: Failed to recreate depth texture!");
-            return false;
-        }
-
-        return true;
+        if (!m_OwnsColorTexture) return false;
+        auto desc = m_Desc;
+        desc.DepthFormat = format;
+        return Init(m_ImGuiLayer, desc);
     }
 
-    bool RHIViewportDescriptor::Resize(uint32_t newWidth, uint32_t newHeight) {
-        if (newWidth == 0 || newHeight == 0) {
-            return false;
-        }
-
-        if (newWidth == m_Desc.Width && newHeight == m_Desc.Height && IsValid()) {
-            return true;
-        }
-
-        if (!m_OwnsColorTexture) {
-            AXLE_CORE_WARN("RHIViewportDescriptor::Resize cannot resize externally-owned texture!");
-            return false;
-        }
-
-        UnregisterFromImGui();
-
-        m_Desc.Width = newWidth;
-        m_Desc.Height = newHeight;
-
-        auto colorDesc = RHI::RHITextureDesc::RenderTarget2D(newWidth, newHeight, m_Desc.ColorFormat, m_Desc.DebugName + "_Color");
-        if (!m_OwnedColorTexture->Init(colorDesc)) {
-            AXLE_CORE_ERROR("RHIViewportDescriptor::Resize: Failed to recreate color texture!");
-            Shutdown();
-            return false;
-        }
-        m_ColorTexture = m_OwnedColorTexture.get();
-
-        if (m_Desc.EnableDepth) {
-            if (!m_DepthTexture) {
-                m_DepthTexture = std::make_unique<RHI::RHITexture>();
-            }
-            auto depthDesc = RHI::RHITextureDesc::DepthStencil2D(newWidth, newHeight, m_Desc.DepthFormat, m_Desc.DebugName + "_Depth");
-            if (!m_DepthTexture->Init(depthDesc)) {
-                AXLE_CORE_ERROR("RHIViewportDescriptor::Resize: Failed to recreate depth texture!");
-                Shutdown();
-                return false;
-            }
-        }
-
-        if (!RegisterWithImGui()) {
-            AXLE_CORE_ERROR("RHIViewportDescriptor::Resize: Failed to register resized texture with ImGuiLayer!");
-            Shutdown();
-            return false;
-        }
-
-        return true;
+    bool RHIViewportDescriptor::Resize(uint32_t width, uint32_t height) {
+        if (!width || !height || !m_OwnsColorTexture) return false;
+        if (m_Desc.Width == width && m_Desc.Height == height && IsValid()) return true;
+        auto desc = m_Desc;
+        desc.Width = width; desc.Height = height;
+        return Init(m_ImGuiLayer, desc);
     }
 
     void RHIViewportDescriptor::Shutdown() {
@@ -236,6 +159,7 @@ namespace Axle {
     }
 
     bool RHIViewportDescriptor::RegisterWithImGui() {
+        if (RHI::ScopedRHIFault::Invoke("RegisterViewportTexture", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS) return false;
         if (!m_ImGuiLayer || !m_ColorTexture || !m_ColorTexture->IsValid()) {
             return false;
         }
@@ -249,8 +173,7 @@ namespace Axle {
             m_ImTextureID = m_ImGuiLayer->RegisterTextureDescriptor(cpuHandle);
             return m_ImTextureID != 0;
         } else if (m_ImGuiLayer->GetBackendType() == ImGuiBackendType::OpenGL) {
-            m_ImTextureID = 1;
-            return true;
+            return false; // Native RHI textures have no OpenGL registration.
         } else if (m_ImGuiLayer->GetBackendType() == ImGuiBackendType::Vulkan) {
             uint64_t vkImageView = m_ColorTexture->GetNativeSRVHandle();
             if (vkImageView == 0) {

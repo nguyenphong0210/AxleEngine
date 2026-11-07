@@ -29,39 +29,44 @@
 namespace Axle {
 
     namespace {
-        // NRI may return a created wrapper even when committed memory allocation fails.
-        // Exercise that real two-stage failure without exhausting the user's GPU memory.
+        // Reject allocation after the real native vertex wrapper exists.
         class ScopedVertexAllocationFailure {
         public:
             explicit ScopedVertexAllocationFailure(const nri::CoreInterface& core)
-                : m_Core(const_cast<nri::CoreInterface&>(core)) {
-                m_Original = m_Core.CreateCommittedBuffer;
+                : m_Core(const_cast<nri::CoreInterface&>(core)),
+                  m_Create(m_Core.CreateBuffer), m_Allocate(m_Core.AllocateMemory) {
                 s_Active = this;
-                m_Core.CreateCommittedBuffer = CreateCommittedBuffer;
+                m_Core.CreateBuffer = CreateBuffer;
+                m_Core.AllocateMemory = AllocateMemory;
             }
             ~ScopedVertexAllocationFailure() {
-                m_Core.CreateCommittedBuffer = m_Original;
+                m_Core.CreateBuffer = m_Create;
+                m_Core.AllocateMemory = m_Allocate;
                 s_Active = nullptr;
             }
             ScopedVertexAllocationFailure(const ScopedVertexAllocationFailure&) = delete;
             ScopedVertexAllocationFailure& operator=(const ScopedVertexAllocationFailure&) = delete;
             bool WasInjected() const { return m_Injected; }
-
         private:
-            static nri::Result NRI_CALL CreateCommittedBuffer(nri::Device& device,
-                nri::MemoryLocation location, float priority, const nri::BufferDesc& desc,
-                nri::Buffer*& buffer) {
+            static nri::Result NRI_CALL CreateBuffer(nri::Device& device, const nri::BufferDesc& desc, nri::Buffer*& buffer) {
                 auto& self = *s_Active;
-                if (!self.m_Injected && (desc.usage & nri::BufferUsageBits::VERTEX)) {
+                self.m_Vertex = (desc.usage & nri::BufferUsageBits::VERTEX) != 0;
+                return self.m_Create(device, desc, buffer);
+            }
+            static nri::Result NRI_CALL AllocateMemory(nri::Device& device, const nri::AllocateMemoryDesc& desc, nri::Memory*& memory) {
+                auto& self = *s_Active;
+                if (!self.m_Injected && self.m_Vertex) {
                     self.m_Injected = true;
-                    auto result = self.m_Core.CreateBuffer(device, desc, buffer);
-                    return result == nri::Result::SUCCESS ? nri::Result::OUT_OF_MEMORY : result;
+                    memory = nullptr;
+                    return nri::Result::OUT_OF_MEMORY;
                 }
-                return self.m_Original(device, location, priority, desc, buffer);
+                return self.m_Allocate(device, desc, memory);
             }
             nri::CoreInterface& m_Core;
-            decltype(nri::CoreInterface::CreateCommittedBuffer) m_Original;
+            decltype(nri::CoreInterface::CreateBuffer) m_Create;
+            decltype(nri::CoreInterface::AllocateMemory) m_Allocate;
             bool m_Injected = false;
+            bool m_Vertex = false;
             static inline ScopedVertexAllocationFailure* s_Active = nullptr;
         };
     }

@@ -1,6 +1,7 @@
 #include <Axle/RHI/RHIDescriptorPool.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 
 namespace Axle::RHI {
 
@@ -30,7 +31,8 @@ namespace Axle::RHI {
     }
 
     bool RHIDescriptorPool::Init(const RHIDescriptorPoolDesc& desc) {
-        Shutdown();
+        if (!desc.MaxDescriptorSets) return false;
+        RHIDescriptorPool candidate;
 
         auto& rhiDevice = RHIDevice::Get();
         if (!rhiDevice.IsNativeReady()) {
@@ -42,29 +44,30 @@ namespace Axle::RHI {
         const auto& nriCore = rhiDevice.GetNRICore();
         if (!nativeDevice) return false;
 
-        m_Desc = desc;
+        candidate.m_Desc = desc;
 
         nri::DescriptorPoolDesc poolDesc = {};
-        poolDesc.descriptorSetMaxNum = m_Desc.MaxDescriptorSets;
-        poolDesc.textureMaxNum = m_Desc.MaxTextures;
-        poolDesc.samplerMaxNum = m_Desc.MaxSamplers;
-        poolDesc.constantBufferMaxNum = m_Desc.MaxConstantBuffers;
-        poolDesc.storageTextureMaxNum = m_Desc.MaxStorageTextures;
-        poolDesc.bufferMaxNum = m_Desc.MaxBuffers;
-        poolDesc.storageBufferMaxNum = m_Desc.MaxStorageBuffers;
-        poolDesc.structuredBufferMaxNum = m_Desc.MaxStructuredBuffers;
-        poolDesc.flags = m_Desc.Flags;
+        poolDesc.descriptorSetMaxNum = candidate.m_Desc.MaxDescriptorSets;
+        poolDesc.textureMaxNum = candidate.m_Desc.MaxTextures;
+        poolDesc.samplerMaxNum = candidate.m_Desc.MaxSamplers;
+        poolDesc.constantBufferMaxNum = candidate.m_Desc.MaxConstantBuffers;
+        poolDesc.storageTextureMaxNum = candidate.m_Desc.MaxStorageTextures;
+        poolDesc.bufferMaxNum = candidate.m_Desc.MaxBuffers;
+        poolDesc.storageBufferMaxNum = candidate.m_Desc.MaxStorageBuffers;
+        poolDesc.structuredBufferMaxNum = candidate.m_Desc.MaxStructuredBuffers;
+        poolDesc.flags = candidate.m_Desc.Flags;
 
-        nri::Result res = nriCore.CreateDescriptorPool(*nativeDevice, poolDesc, m_Pool);
-        if (res != nri::Result::SUCCESS || !m_Pool) {
+        nri::Result res = ScopedRHIFault::Invoke("CreateDescriptorPool", [&] { return nriCore.CreateDescriptorPool(*nativeDevice, poolDesc, candidate.m_Pool); });
+        if (res != nri::Result::SUCCESS || !candidate.m_Pool) {
             AXLE_CORE_ERROR("RHIDescriptorPool::Init: CreateDescriptorPool failed for '{0}' with code {1}!",
-                m_Desc.DebugName, static_cast<uint32_t>(res));
+                candidate.m_Desc.DebugName, static_cast<uint32_t>(res));
             return false;
         }
 
-        m_AllocatedSets = 0;
+        candidate.m_AllocatedSets = 0;
         AXLE_CORE_INFO("RHIDescriptorPool: Initialized '{0}' (MaxSets: {1}, MaxTextures: {2}, MaxSamplers: {3})",
-            m_Desc.DebugName, m_Desc.MaxDescriptorSets, m_Desc.MaxTextures, m_Desc.MaxSamplers);
+            candidate.m_Desc.DebugName, candidate.m_Desc.MaxDescriptorSets, candidate.m_Desc.MaxTextures, candidate.m_Desc.MaxSamplers);
+        *this = std::move(candidate);
         return true;
     }
 
@@ -80,7 +83,7 @@ namespace Axle::RHI {
     }
 
     nri::DescriptorSet* RHIDescriptorPool::AllocateDescriptorSet(const RHIPipelineLayout& layout, uint32_t setIndex, uint32_t variableNum) {
-        if (!m_Pool || !layout.IsValid()) return nullptr;
+        if (!m_Pool || !layout.IsValid() || m_AllocatedSets >= m_Desc.MaxDescriptorSets || setIndex >= layout.GetDescriptorSets().size()) return nullptr;
 
         auto& rhiDevice = RHIDevice::Get();
         const auto& nriCore = rhiDevice.GetNRICore();
@@ -99,7 +102,7 @@ namespace Axle::RHI {
 
     std::vector<nri::DescriptorSet*> RHIDescriptorPool::AllocateDescriptorSets(const RHIPipelineLayout& layout, uint32_t setIndex, uint32_t count, uint32_t variableNum) {
         std::vector<nri::DescriptorSet*> sets;
-        if (!m_Pool || !layout.IsValid() || count == 0) return sets;
+        if (!m_Pool || !layout.IsValid() || !count || count > m_Desc.MaxDescriptorSets - m_AllocatedSets || setIndex >= layout.GetDescriptorSets().size()) return sets;
 
         sets.resize(count, nullptr);
         auto& rhiDevice = RHIDevice::Get();

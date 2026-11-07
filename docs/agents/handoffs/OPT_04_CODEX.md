@@ -1,3 +1,5 @@
+Latest user steering (2026-11-07): implement all P41-01..11, then perform one consolidated final review. This supersedes intermediate review checkpoints; package verification and native acceptance gates remain required.
+
 # Codex implementation and review handoff: OPT-04 / P41-01..P41-11
 
 User scope, 2026-11-07: **Codex implements OPT-04**, with a separate-context

@@ -12,6 +12,25 @@
 #endif
 
 namespace Axle::RHI {
+    nri::FormatSupportBits RHIDevice::GetTextureFormatSupport(nri::Format format) const {
+        if (!IsNativeReady()) return nri::FormatSupportBits::UNSUPPORTED;
+        auto support = m_NRI.Core.GetFormatSupport(*m_Device, format);
+#if defined(_WIN32)
+        // Pinned NRI queries the typed DSV format, while DescriptorD3D12 patches
+        // depth SRVs to the corresponding sampled format. Query that view too.
+        if (GetBackend() == RHIType::Direct3D12 &&
+            (format == nri::Format::D32_SFLOAT || format == nri::Format::D24_UNORM_S8_UINT)) {
+            auto* native = static_cast<ID3D12Device*>(m_NRI.Core.GetDeviceNativeObject(m_Device));
+            D3D12_FEATURE_DATA_FORMAT_SUPPORT sampled{};
+            sampled.Format = format == nri::Format::D32_SFLOAT ? DXGI_FORMAT_R32_FLOAT : DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+            if (native && SUCCEEDED(native->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &sampled, sizeof(sampled))) &&
+                (sampled.Support1 & (D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE | D3D12_FORMAT_SUPPORT1_SHADER_LOAD)))
+                support |= nri::FormatSupportBits::TEXTURE;
+        }
+#endif
+        return support;
+    }
+
     bool RHIDevice::IsGraphicsAPIValidationAvailable(RHIType backend) {
 #if defined(_WIN32)
         if (backend == RHIType::Vulkan) {

@@ -71,47 +71,50 @@ namespace Axle::RHI {
     }
 
     bool RHIMesh::Init(const std::vector<RHIVertex3D>& vertices, const std::vector<uint32_t>& indices, const std::string& debugName) {
-        if (vertices.empty() || indices.empty()) {
+        if (vertices.empty() || indices.empty() || vertices.size() > INT32_MAX || indices.size() > UINT32_MAX ||
+            std::any_of(indices.begin(), indices.end(), [&](uint32_t index) { return index >= vertices.size(); }) ||
+            std::any_of(vertices.begin(), vertices.end(), [](const RHIVertex3D& vertex) {
+                return !std::isfinite(vertex.Position.x) || !std::isfinite(vertex.Position.y) || !std::isfinite(vertex.Position.z);
+            })) {
             AXLE_CORE_ERROR("RHIMesh::Init failed: Vertex or Index array is empty! (Mesh: '{0}')", debugName);
             return false;
         }
 
-        Shutdown();
-        m_DebugName = debugName;
-        m_VertexCount = static_cast<uint32_t>(vertices.size());
-        m_IndexCount = static_cast<uint32_t>(indices.size());
-        UpdateBoundingBox(vertices);
+        RHIMesh candidate;
+        candidate.m_DebugName = debugName;
+        candidate.m_VertexCount = static_cast<uint32_t>(vertices.size());
+        candidate.m_IndexCount = static_cast<uint32_t>(indices.size());
+        candidate.UpdateBoundingBox(vertices);
 
         uint64_t vbSize = static_cast<uint64_t>(vertices.size() * sizeof(RHIVertex3D));
         uint64_t ibSize = static_cast<uint64_t>(indices.size() * sizeof(uint32_t));
 
         // Direct upload to DeviceUpload VRAM
         RHIBufferDesc vbDesc = RHIBufferDesc::Vertex(vbSize, RHIMemoryLocation::DeviceUpload, debugName + "_VB");
-        if (!m_VertexBuffer.Init(vbDesc, vertices.data())) {
+        if (!candidate.m_VertexBuffer.Init(vbDesc, vertices.data())) {
             AXLE_CORE_ERROR("RHIMesh::Init failed: Could not allocate Vertex Buffer for '{0}'!", debugName);
-            Shutdown();
             return false;
         }
 
         RHIBufferDesc ibDesc = RHIBufferDesc::Index(ibSize, RHIMemoryLocation::DeviceUpload, debugName + "_IB");
-        if (!m_IndexBuffer.Init(ibDesc, indices.data())) {
+        if (!candidate.m_IndexBuffer.Init(ibDesc, indices.data())) {
             AXLE_CORE_ERROR("RHIMesh::Init failed: Could not allocate Index Buffer for '{0}'!", debugName);
-            Shutdown();
             return false;
         }
 
-        if (m_Submeshes.empty()) {
+        if (candidate.m_Submeshes.empty()) {
             RHISubmesh defaultSubmesh;
             defaultSubmesh.Name = debugName.empty() ? "MainSubmesh" : debugName;
             defaultSubmesh.IndexOffset = 0;
-            defaultSubmesh.IndexCount = m_IndexCount;
+            defaultSubmesh.IndexCount = candidate.m_IndexCount;
             defaultSubmesh.VertexOffset = 0;
-            defaultSubmesh.VertexCount = m_VertexCount;
-            defaultSubmesh.BoundingMin = m_BoundingMin;
-            defaultSubmesh.BoundingMax = m_BoundingMax;
-            m_Submeshes.push_back(defaultSubmesh);
+            defaultSubmesh.VertexCount = candidate.m_VertexCount;
+            defaultSubmesh.BoundingMin = candidate.m_BoundingMin;
+            defaultSubmesh.BoundingMax = candidate.m_BoundingMax;
+            candidate.m_Submeshes.push_back(defaultSubmesh);
         }
 
+        *this = std::move(candidate);
         return true;
     }
 
@@ -123,67 +126,71 @@ namespace Axle::RHI {
             return false;
         }
 
-        if (vertices.empty() || indices.empty()) {
+        if (vertices.empty() || indices.empty() || vertices.size() > INT32_MAX || indices.size() > UINT32_MAX ||
+            std::any_of(indices.begin(), indices.end(), [&](uint32_t index) { return index >= vertices.size(); }) ||
+            std::any_of(vertices.begin(), vertices.end(), [](const RHIVertex3D& vertex) {
+                return !std::isfinite(vertex.Position.x) || !std::isfinite(vertex.Position.y) || !std::isfinite(vertex.Position.z);
+            })) {
             AXLE_CORE_ERROR("RHIMesh::StreamUpload failed: Vertex or Index array is empty! (Mesh: '{0}')", debugName);
             return false;
         }
 
-        Shutdown();
-        m_DebugName = debugName;
-        m_VertexCount = static_cast<uint32_t>(vertices.size());
-        m_IndexCount = static_cast<uint32_t>(indices.size());
-        UpdateBoundingBox(vertices);
+        RHIMesh candidate;
+        candidate.m_DebugName = debugName;
+        candidate.m_VertexCount = static_cast<uint32_t>(vertices.size());
+        candidate.m_IndexCount = static_cast<uint32_t>(indices.size());
+        candidate.UpdateBoundingBox(vertices);
 
         uint64_t vbSize = static_cast<uint64_t>(vertices.size() * sizeof(RHIVertex3D));
         uint64_t ibSize = static_cast<uint64_t>(indices.size() * sizeof(uint32_t));
 
         // Allocate Device-local high performance VRAM buffers
         RHIBufferDesc vbDesc = RHIBufferDesc::Vertex(vbSize, RHIMemoryLocation::Device, debugName + "_VB");
-        if (!m_VertexBuffer.Init(vbDesc)) {
+        if (!candidate.m_VertexBuffer.Init(vbDesc)) {
             AXLE_CORE_ERROR("RHIMesh::StreamUpload: Device-local VB allocation failed for '{0}'!", debugName);
-            Shutdown();
             return false;
         }
 
         RHIBufferDesc ibDesc = RHIBufferDesc::Index(ibSize, RHIMemoryLocation::Device, debugName + "_IB");
-        if (!m_IndexBuffer.Init(ibDesc)) {
+        if (!candidate.m_IndexBuffer.Init(ibDesc)) {
             AXLE_CORE_ERROR("RHIMesh::StreamUpload: Device-local IB allocation failed for '{0}'!", debugName);
-            Shutdown();
             return false;
         }
 
         // Staged upload via RHIStreamer
         RHICopyBatch copyBatch = streamer.BeginCopyBatch();
-        streamer.StreamBufferUpload(copyBatch, m_VertexBuffer, 0, vertices.data(), vbSize);
-        streamer.StreamBufferUpload(copyBatch, m_IndexBuffer, 0, indices.data(), ibSize);
+        if (!copyBatch || !streamer.StreamBufferUpload(copyBatch, candidate.m_VertexBuffer, 0, vertices.data(), vbSize) ||
+            !streamer.StreamBufferUpload(copyBatch, candidate.m_IndexBuffer, 0, indices.data(), ibSize)) return false;
+        // Failed unconsumed batches are discarded by EndFrame, never recorded.
 
         // Transition destination buffers to CopyDest state before copy
-        cmdBuffer.TransitionBuffer(m_VertexBuffer.GetNative(), RHIAccess::None, RHIAccess::CopyDest,
+        cmdBuffer.TransitionBuffer(candidate.m_VertexBuffer.GetNative(), RHIAccess::None, RHIAccess::CopyDest,
                                    RHIPipelineStage::AllCommands, RHIPipelineStage::Copy);
-        cmdBuffer.TransitionBuffer(m_IndexBuffer.GetNative(), RHIAccess::None, RHIAccess::CopyDest,
+        cmdBuffer.TransitionBuffer(candidate.m_IndexBuffer.GetNative(), RHIAccess::None, RHIAccess::CopyDest,
                                    RHIPipelineStage::AllCommands, RHIPipelineStage::Copy);
 
         // Record GPU copy command
         streamer.CmdCopyStreamedData(cmdBuffer, copyBatch);
 
         // Transition destination buffers to Vertex/Index input state
-        cmdBuffer.TransitionBuffer(m_VertexBuffer.GetNative(), RHIAccess::CopyDest, RHIAccess::VertexBuffer,
+        cmdBuffer.TransitionBuffer(candidate.m_VertexBuffer.GetNative(), RHIAccess::CopyDest, RHIAccess::VertexBuffer,
                                    RHIPipelineStage::Copy, RHIPipelineStage::VertexShader);
-        cmdBuffer.TransitionBuffer(m_IndexBuffer.GetNative(), RHIAccess::CopyDest, RHIAccess::IndexBuffer,
+        cmdBuffer.TransitionBuffer(candidate.m_IndexBuffer.GetNative(), RHIAccess::CopyDest, RHIAccess::IndexBuffer,
                                    RHIPipelineStage::Copy, RHIPipelineStage::IndexInput);
 
-        if (m_Submeshes.empty()) {
+        if (candidate.m_Submeshes.empty()) {
             RHISubmesh defaultSubmesh;
             defaultSubmesh.Name = debugName.empty() ? "MainSubmesh" : debugName;
             defaultSubmesh.IndexOffset = 0;
-            defaultSubmesh.IndexCount = m_IndexCount;
+            defaultSubmesh.IndexCount = candidate.m_IndexCount;
             defaultSubmesh.VertexOffset = 0;
-            defaultSubmesh.VertexCount = m_VertexCount;
-            defaultSubmesh.BoundingMin = m_BoundingMin;
-            defaultSubmesh.BoundingMax = m_BoundingMax;
-            m_Submeshes.push_back(defaultSubmesh);
+            defaultSubmesh.VertexCount = candidate.m_VertexCount;
+            defaultSubmesh.BoundingMin = candidate.m_BoundingMin;
+            defaultSubmesh.BoundingMax = candidate.m_BoundingMax;
+            candidate.m_Submeshes.push_back(defaultSubmesh);
         }
 
+        *this = std::move(candidate);
         return true;
     }
 

@@ -575,7 +575,7 @@ namespace Axle {
         layoutDesc.rootSamplerNum = 2;
         layoutDesc.descriptorSets = &descSet;
         layoutDesc.descriptorSetNum = 1;
-        layoutDesc.shaderStages = nri::StageBits::ALL;
+        layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_PipelineLayout.Init(layoutDesc);
     }
@@ -728,7 +728,7 @@ namespace Axle {
         layoutDesc.rootRegisterSpace = 0;
         layoutDesc.rootDescriptors = &rootDesc;
         layoutDesc.rootDescriptorNum = 1;
-        layoutDesc.shaderStages = nri::StageBits::ALL;
+        layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_SkyboxPipelineLayout.Init(layoutDesc);
     }
@@ -852,7 +852,7 @@ namespace Axle {
         layoutDesc.rootDescriptorNum = 1;
         layoutDesc.descriptorSets = &descSet;
         layoutDesc.descriptorSetNum = 1;
-        layoutDesc.shaderStages = nri::StageBits::ALL;
+        layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_ToneMappingPipelineLayout.Init(layoutDesc);
     }
@@ -974,7 +974,7 @@ namespace Axle {
         layoutDesc.rootDescriptorNum = 1;
         layoutDesc.descriptorSets = &descSet;
         layoutDesc.descriptorSetNum = 1;
-        layoutDesc.shaderStages = nri::StageBits::ALL;
+        layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_FXAAPipelineLayout.Init(layoutDesc);
     }
@@ -1207,7 +1207,7 @@ namespace Axle {
         }
 
         if (m_SceneConstantBuffer.IsValid()) {
-            m_SceneConstantBuffer.UpdateData(&sceneConstants, sizeof(RHISceneConstants));
+            if (!m_SceneConstantBuffer.UpdateData(&sceneConstants, sizeof(RHISceneConstants))) return;
         }
 
         if (m_Streamer && m_Streamer->IsValid()) {
@@ -1227,52 +1227,52 @@ namespace Axle {
         nri::Descriptor* sceneDepthDSV = depthDSV;
         nri::Format sceneTargetFormat = m_CurrentColorFormat;
 
+        // Publish the complete target set only after every required allocation
+        // and view succeeds. Post-processing cannot allocate midway through a pass.
+        using TargetReplacement = std::pair<std::unique_ptr<RHITexture>*, std::unique_ptr<RHITexture>>;
+        std::vector<TargetReplacement> replacements;
+        auto prepareTarget = [&](std::unique_ptr<RHITexture>& target, const RHITextureDesc& desc) {
+            if (target && target->IsValid() && target->GetWidth() == desc.Width && target->GetHeight() == desc.Height &&
+                target->GetFormat() == desc.Format && target->GetDesc().SampleCount == desc.SampleCount) return true;
+            auto candidate = std::make_unique<RHITexture>();
+            if (!candidate->Init(desc)) return false;
+            replacements.emplace_back(&target, std::move(candidate));
+            return true;
+        };
+        auto publishTargets = [&] {
+            for (auto& replacement : replacements) *replacement.first = std::move(replacement.second);
+            replacements.clear();
+        };
+        auto rejectTargets = [&] {
+            if (m_Streamer) m_Streamer->EndFrame();
+        };
         if (useMSAA) {
             sceneTargetFormat = useToneMap ? nri::Format::RGBA16_SFLOAT : m_CurrentColorFormat;
-            if (!m_MSAAColorTarget || m_MSAAColorTarget->GetWidth() != width || m_MSAAColorTarget->GetHeight() != height ||
-                m_CurrentMSAASamples != activeSampleCount || m_MSAAColorTarget->GetFormat() != RHI::FromNRIFormat(sceneTargetFormat) ||
-                !m_MSAADepthTarget || m_MSAADepthTarget->GetFormat() != RHI::FromNRIFormat(m_CurrentDepthFormat)) {
-                m_MSAAColorTarget = std::make_unique<RHITexture>();
-                RHITextureDesc colorDesc = RHITextureDesc::RenderTarget2D(width, height, RHI::FromNRIFormat(sceneTargetFormat), "SceneRenderer_MSAAColor");
-                colorDesc.SampleCount = activeSampleCount;
-                m_MSAAColorTarget->Init(colorDesc);
-
-                m_MSAADepthTarget = std::make_unique<RHITexture>();
-                RHITextureDesc depthDesc = RHITextureDesc::DepthStencil2D(width, height, RHI::FromNRIFormat(m_CurrentDepthFormat), "SceneRenderer_MSAADepth");
-                depthDesc.SampleCount = activeSampleCount;
-                m_MSAADepthTarget->Init(depthDesc);
-
-                m_CurrentMSAASamples = activeSampleCount;
-            }
-            if (m_MSAAColorTarget && m_MSAAColorTarget->IsValid()) {
-                sceneTargetTexture = m_MSAAColorTarget->GetNative();
-                sceneTargetRTV = m_MSAAColorTarget->GetRTV();
-            }
-            if (m_MSAADepthTarget && m_MSAADepthTarget->IsValid()) {
-                sceneDepthTexture = m_MSAADepthTarget->GetNative();
-                sceneDepthDSV = m_MSAADepthTarget->GetDSV();
-            }
-        } else if (useToneMap) {
-            if (!m_IntermediateHDRTarget || m_IntermediateHDRTarget->GetWidth() != width || m_IntermediateHDRTarget->GetHeight() != height) {
-                m_IntermediateHDRTarget = std::make_unique<RHITexture>();
-                m_IntermediateHDRTarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHITextureFormat::RGBA16_FLOAT, "SceneRenderer_IntermediateHDR"));
-            }
-            if (m_IntermediateHDRTarget && m_IntermediateHDRTarget->IsValid()) {
-                sceneTargetTexture = m_IntermediateHDRTarget->GetNative();
-                sceneTargetRTV = m_IntermediateHDRTarget->GetRTV();
-                sceneTargetFormat = nri::Format::RGBA16_SFLOAT;
-            }
-        } else if (useFXAA) {
-            if (!m_IntermediateFXAATarget || m_IntermediateFXAATarget->GetWidth() != width || m_IntermediateFXAATarget->GetHeight() != height) {
-                m_IntermediateFXAATarget = std::make_unique<RHITexture>();
-                m_IntermediateFXAATarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHI::FromNRIFormat(m_CurrentColorFormat), "SceneRenderer_IntermediateFXAA"));
-            }
-            if (m_IntermediateFXAATarget && m_IntermediateFXAATarget->IsValid()) {
-                sceneTargetTexture = m_IntermediateFXAATarget->GetNative();
-                sceneTargetRTV = m_IntermediateFXAATarget->GetRTV();
-                sceneTargetFormat = m_CurrentColorFormat;
-            }
+            auto colorDesc = RHITextureDesc::RenderTarget2D(width, height, FromNRIFormat(sceneTargetFormat), "SceneRenderer_MSAAColor");
+            colorDesc.SampleCount = activeSampleCount;
+            auto depthDesc = RHITextureDesc::DepthStencil2D(width, height, FromNRIFormat(m_CurrentDepthFormat), "SceneRenderer_MSAADepth");
+            depthDesc.SampleCount = activeSampleCount;
+            if (!prepareTarget(m_MSAAColorTarget, colorDesc) || !prepareTarget(m_MSAADepthTarget, depthDesc)) { rejectTargets(); return; }
         }
+        if (useToneMap && !prepareTarget(m_IntermediateHDRTarget, RHITextureDesc::RenderTarget2D(width, height, RHITextureFormat::RGBA16_FLOAT, "SceneRenderer_IntermediateHDR"))) { rejectTargets(); return; }
+        if (useFXAA && !prepareTarget(m_IntermediateFXAATarget, RHITextureDesc::RenderTarget2D(width, height, FromNRIFormat(m_CurrentColorFormat), "SceneRenderer_IntermediateFXAA"))) { rejectTargets(); return; }
+        publishTargets();
+        if (useMSAA) {
+            m_CurrentMSAASamples = activeSampleCount;
+            sceneTargetTexture = m_MSAAColorTarget->GetNative(); sceneTargetRTV = m_MSAAColorTarget->GetRTV();
+            sceneDepthTexture = m_MSAADepthTarget->GetNative(); sceneDepthDSV = m_MSAADepthTarget->GetDSV();
+        } else if (useToneMap) {
+            sceneTargetTexture = m_IntermediateHDRTarget->GetNative(); sceneTargetRTV = m_IntermediateHDRTarget->GetRTV();
+            sceneTargetFormat = nri::Format::RGBA16_SFLOAT;
+        } else if (useFXAA) {
+            sceneTargetTexture = m_IntermediateFXAATarget->GetNative(); sceneTargetRTV = m_IntermediateFXAATarget->GetRTV();
+        }
+        nri::Pipeline* activePipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_PipelineHDR && activeSampleCount == 1)
+                                            ? m_PipelineHDR
+                                            : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_Pipeline && activeSampleCount == 1)
+                                                  ? m_Pipeline
+                                                  : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
+        if (!activePipeline) { rejectTargets(); return; }
 
         // 2. Begin Command Recording
         if (!m_CommandBuffer.Begin()) return;
@@ -1307,6 +1307,13 @@ namespace Axle {
         }
 
         m_CommandBuffer.BeginRendering(renderingDesc);
+        auto abandonRecording = [&] {
+            m_CommandBuffer.EndRendering();
+            m_CommandBuffer.End();
+            m_CommandBuffer.Reset();
+            rejectTargets();
+        };
+
 
         // Viewport & Scissor Setup
         nri::Viewport vp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
@@ -1316,12 +1323,7 @@ namespace Axle {
         m_CommandBuffer.SetScissor(scissor);
 
         // Bind Graphics Pipeline & Layout matching active color & depth formats and sample count
-        nri::Pipeline* activePipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_PipelineHDR && activeSampleCount == 1)
-                                            ? m_PipelineHDR
-                                            : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_Pipeline && activeSampleCount == 1)
-                                                  ? m_Pipeline
-                                                  : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
-        m_CommandBuffer.SetPipeline(activePipeline ? activePipeline : m_Pipeline);
+        m_CommandBuffer.SetPipeline(activePipeline);
         m_CommandBuffer.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
 
         // Bind Root Descriptors: [0] SceneConstants (b1), [1] MultiLightBuffer (b2)
@@ -1715,14 +1717,11 @@ namespace Axle {
             if (needsRefraction && activeSampleCount==1 && sceneDepthTexture && sceneDepthDSV) {
                 bool newColor=!m_OpaqueSceneColor || m_OpaqueSceneColor->GetWidth()!=width || m_OpaqueSceneColor->GetHeight()!=height || m_OpaqueSceneColor->GetFormat()!=FromNRIFormat(sceneTargetFormat);
                 bool newDepth=!m_OpaqueSceneDepth || m_OpaqueSceneDepth->GetWidth()!=width || m_OpaqueSceneDepth->GetHeight()!=height || m_OpaqueSceneDepth->GetFormat()!=FromNRIFormat(m_CurrentDepthFormat);
-                if (newColor) {
-                    m_OpaqueSceneColor=std::make_unique<RHITexture>();
-                    m_OpaqueSceneColor->Init(RHITextureDesc::RenderTarget2D(width,height,FromNRIFormat(sceneTargetFormat),"OpaqueSceneColor"));
+                if (!prepareTarget(m_OpaqueSceneColor, RHITextureDesc::RenderTarget2D(width,height,FromNRIFormat(sceneTargetFormat),"OpaqueSceneColor")) ||
+                    !prepareTarget(m_OpaqueSceneDepth, RHITextureDesc::DepthStencil2D(width,height,FromNRIFormat(m_CurrentDepthFormat),"OpaqueSceneDepth"))) {
+                    abandonRecording(); return;
                 }
-                if (newDepth) {
-                    m_OpaqueSceneDepth=std::make_unique<RHITexture>();
-                    m_OpaqueSceneDepth->Init(RHITextureDesc::DepthStencil2D(width,height,FromNRIFormat(m_CurrentDepthFormat),"OpaqueSceneDepth"));
-                }
+                publishTargets();
                 if (m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth->IsValid()) {
                     m_CommandBuffer.EndRendering();
                     m_CommandBuffer.TransitionTexture(sceneTargetTexture,RHIResourceLayout::ColorAttachment,RHIResourceLayout::CopySource);
@@ -1772,10 +1771,10 @@ namespace Axle {
                 !scene->GetRegistry().view<CharacterVFXComponent>().empty();
             if (hasEmitters && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV) {
                 bool fresh = !m_ParticleSceneDepth || m_ParticleSceneDepth->GetWidth()!=width || m_ParticleSceneDepth->GetHeight()!=height || m_ParticleSceneDepth->GetFormat()!=FromNRIFormat(m_CurrentDepthFormat);
-                if (fresh) {
-                    m_ParticleSceneDepth=std::make_unique<RHITexture>();
-                    m_ParticleSceneDepth->Init(RHITextureDesc::DepthStencil2D(width,height,FromNRIFormat(m_CurrentDepthFormat),"ParticleSceneDepth"));
+                if (!prepareTarget(m_ParticleSceneDepth, RHITextureDesc::DepthStencil2D(width,height,FromNRIFormat(m_CurrentDepthFormat),"ParticleSceneDepth"))) {
+                    abandonRecording(); return;
                 }
+                publishTargets();
                 if (m_ParticleSceneDepth->IsValid()) {
                     m_CommandBuffer.EndRendering();
                     m_CommandBuffer.TransitionTexture(sceneDepthTexture,RHIResourceLayout::DepthStencilWrite,RHIResourceLayout::CopySource);
@@ -1832,16 +1831,8 @@ namespace Axle {
         if (useMSAA && m_MSAAColorTarget && m_MSAAColorTarget->IsValid()) {
             nri::Texture* resolveDstTexture = colorTarget;
             if (useToneMap) {
-                if (!m_IntermediateHDRTarget || m_IntermediateHDRTarget->GetWidth() != width || m_IntermediateHDRTarget->GetHeight() != height) {
-                    m_IntermediateHDRTarget = std::make_unique<RHITexture>();
-                    m_IntermediateHDRTarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHITextureFormat::RGBA16_FLOAT, "SceneRenderer_IntermediateHDR"));
-                }
                 resolveDstTexture = m_IntermediateHDRTarget->GetNative();
             } else if (useFXAA) {
-                if (!m_IntermediateFXAATarget || m_IntermediateFXAATarget->GetWidth() != width || m_IntermediateFXAATarget->GetHeight() != height) {
-                    m_IntermediateFXAATarget = std::make_unique<RHITexture>();
-                    m_IntermediateFXAATarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHI::FromNRIFormat(m_CurrentColorFormat), "SceneRenderer_IntermediateFXAA"));
-                }
                 resolveDstTexture = m_IntermediateFXAATarget->GetNative();
             }
 
@@ -1861,10 +1852,6 @@ namespace Axle {
             nri::Texture* toneOutTexture = colorTarget;
             nri::Descriptor* toneOutRTV = colorRTV;
             if (useFXAA) {
-                if (!m_IntermediateFXAATarget || m_IntermediateFXAATarget->GetWidth() != width || m_IntermediateFXAATarget->GetHeight() != height) {
-                    m_IntermediateFXAATarget = std::make_unique<RHITexture>();
-                    m_IntermediateFXAATarget->Init(RHITextureDesc::RenderTarget2D(width, height, RHI::FromNRIFormat(m_CurrentColorFormat), "SceneRenderer_IntermediateFXAA"));
-                }
                 toneOutTexture = m_IntermediateFXAATarget->GetNative();
                 toneOutRTV = m_IntermediateFXAATarget->GetRTV();
             }

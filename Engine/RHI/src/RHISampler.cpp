@@ -1,6 +1,8 @@
 #include <Axle/RHI/RHISampler.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
+#include <cmath>
 
 namespace Axle::RHI {
 
@@ -50,30 +52,25 @@ namespace Axle::RHI {
     }
 
     bool RHISampler::Init(const RHISamplerDesc& desc) {
-        Shutdown();
-
-        auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) {
-            AXLE_CORE_ERROR("RHISampler::Init failed: RHIDevice is not initialized!");
+        auto& device = RHIDevice::Get();
+        if (!device.IsNativeReady() || !std::isfinite(desc.MipMin) || !std::isfinite(desc.MipMax) ||
+            !std::isfinite(desc.MipBias) || desc.MipMin < 0 || desc.MipMax < desc.MipMin ||
+            desc.Anisotropy < 1 || desc.Anisotropy > 16 ||
+            desc.MinFilter > RHIFilter::Linear || desc.MagFilter > RHIFilter::Linear || desc.MipFilter > RHIFilter::Linear ||
+            desc.FilterOp > RHIFilterOp::Maximum || desc.CompareOp > RHICompareOp::Always ||
+            desc.AddressU > RHIAddressMode::ClampToBorder || desc.AddressV > RHIAddressMode::ClampToBorder || desc.AddressW > RHIAddressMode::ClampToBorder)
             return false;
-        }
-
-        auto* nativeDevice = rhiDevice.GetNRIDevice();
-        const auto& nriCore = rhiDevice.GetNRICore();
-        if (!nativeDevice) return false;
-
-        m_Desc = desc;
-        nri::SamplerDesc nriDesc = m_Desc.ToNRIDesc();
-
-        nri::Result res = nriCore.CreateSampler(*nativeDevice, nriDesc, m_Sampler);
-        if (res != nri::Result::SUCCESS || !m_Sampler) {
-            AXLE_CORE_ERROR("RHISampler::Init: CreateSampler failed for '{0}' with code {1}!",
-                m_Desc.DebugName, static_cast<uint32_t>(res));
-            return false;
-        }
-
-        AXLE_CORE_INFO("RHISampler: Initialized '{0}' (Aniso: {1}x, Trilinear: {2})",
-            m_Desc.DebugName, m_Desc.Anisotropy, (m_Desc.MipFilter == RHIFilter::Linear ? "YES" : "NO"));
+        const auto& limits = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice());
+        if (desc.Anisotropy > limits.other.samplerAnisotropyMax || std::abs(desc.MipBias) > limits.other.samplerLodBiasMax) return false;
+        if (desc.UnnormalizedCoordinates && (!limits.shaderFeatures.unnormalizedCoordinates ||
+            desc.MinFilter != desc.MagFilter || desc.MipFilter != RHIFilter::Nearest || desc.MipMin != 0 || desc.MipMax != 0 ||
+            desc.Anisotropy != 1 || desc.CompareOp != RHICompareOp::None || desc.AddressU < RHIAddressMode::ClampToEdge || desc.AddressV < RHIAddressMode::ClampToEdge)) return false;
+        RHISampler candidate;
+        candidate.m_Desc = desc;
+        const auto native = desc.ToNRIDesc();
+        const auto result = ScopedRHIFault::Invoke("CreateSampler", [&] { return device.GetNRICore().CreateSampler(*device.GetNRIDevice(), native, candidate.m_Sampler); });
+        if (result != nri::Result::SUCCESS || !candidate.m_Sampler) return false;
+        *this = std::move(candidate);
         return true;
     }
 

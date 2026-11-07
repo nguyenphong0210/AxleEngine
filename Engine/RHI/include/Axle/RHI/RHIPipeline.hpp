@@ -49,6 +49,7 @@ namespace Axle::RHI {
         uint32_t m_RootRegisterSpace = 0;
         std::vector<nri::RootConstantDesc> m_RootConstants;
         std::vector<nri::DescriptorSetDesc> m_DescriptorSets;
+        std::vector<std::vector<nri::DescriptorRangeDesc>> m_DescriptorRanges;
     };
 
     // =========================================================================

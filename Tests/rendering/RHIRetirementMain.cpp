@@ -1,4 +1,9 @@
 #include "RenderTestCommon.hpp"
+#include "RHIReadback.hpp"
+#include <Axle/RHI/RHIBindless.hpp>
+#include <Axle/RHI/RHIMaterial.hpp>
+#include <Axle/RHI/RHIStreamer.hpp>
+#include <algorithm>
 #include <Axle/Log.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIBuffer.hpp>
@@ -62,12 +67,100 @@ struct TextureCopy {
     }
 };
 
+static bool ReviewRegressions() {
+    auto& device = RHIDevice::Get();
+    struct DefaultCase { std::shared_ptr<RHITexture> (*Get)(); std::array<uint8_t, 4> Color; };
+    const DefaultCase defaults[] = {
+        {RHIMaterial::GetDefaultWhiteTexture, {255, 255, 255, 255}},
+        {RHIMaterial::GetDefaultFlatNormalTexture, {128, 128, 255, 255}},
+        {RHIMaterial::GetDefaultRoughnessTexture, {128, 128, 128, 255}},
+        {RHIMaterial::GetDefaultBlackTexture, {0, 0, 0, 255}},
+        {RHIMaterial::GetDefaultIrradianceCubemap, {128, 128, 128, 255}},
+        {RHIMaterial::GetDefaultPrefilterCubemap, {128, 128, 128, 255}},
+        {RHIMaterial::GetDefaultBRDFLUT, {255, 0, 0, 255}}
+    };
+    for (const auto& test : defaults) for (const auto* boundary : {"AllocateTextureMemory", "UploadData"}) {
+        RHIMaterial::ReleaseDefaultTextures();
+        RENDER_CHECK(device.WaitIdle(), "retire previous default before recoverable failure");
+        bool reached = false;
+        {
+            ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+                if (operation == boundary) { reached = true; return nri::Result::OUT_OF_MEMORY; }
+                return {};
+            });
+            RENDER_CHECK(!test.Get() && reached && device.CanCreateResources(), "FR-02: incomplete fallback is never published");
+        }
+        auto recovered = test.Get();
+        RENDER_CHECK(recovered && recovered->IsValid() && test.Get() == recovered, "FR-02: retry publishes one complete default generation");
+        const auto pixels = RenderTests::ReadTexture(*recovered);
+        RENDER_CHECK(pixels.size() == recovered->GetWidth() * recovered->GetHeight() * 4, "FR-02: real default pixels are readable");
+        for (size_t pixel = 0; pixel < pixels.size(); pixel += 4)
+            RENDER_CHECK(std::equal(test.Color.begin(), test.Color.end(), pixels.begin() + pixel), "FR-02: retried default contains its intended GPU color");
+    }
+    RHIMaterial::ReleaseDefaultTextures();
+    RENDER_CHECK(device.WaitIdle(), "release default fault fixtures");
+    {
+        RHIBindlessRegistry registry;
+        bool reached = false;
+        {
+            ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+                if (operation == "UploadData") { reached = true; return nri::Result::OUT_OF_MEMORY; } return {};
+            });
+            RENDER_CHECK(!registry.Init(256) && reached && !registry.IsInitialized() && !registry.GetDescriptorPool().IsValid(),
+                "FR-01/02: bindless startup rolls back incomplete fallback publication");
+        }
+        RENDER_CHECK(registry.Init(256) && registry.GetRegisteredCount() == 4, "bindless startup retries with complete defaults");
+        RHITexture one, two, three;
+        auto desc = RHITextureDesc::RenderTarget2D(8, 8);
+        RENDER_CHECK(one.Init(desc) && two.Init(desc) && three.Init(desc), "real bindless replacement candidates");
+        const auto first = registry.RegisterTexture(one);
+        auto set = device.GetResources().AcquireNative(registry.GetDescriptorSet());
+        auto recording = device.GetResources().Pin(set);
+        RENDER_CHECK(first >= 4 && !registry.UnregisterTexture(first) && registry.GetRegisteredCount() == 5,
+            "FR-01: pinned unregister explicitly rejects without freeing the CPU slot");
+        RENDER_CHECK(registry.RegisterTexture(two) == RHIBindlessRegistry::FallbackWhiteIndex && registry.GetRegisteredCount() == 5,
+            "FR-01: rejected descriptor write cannot publish a CPU index");
+        recording.Reset();
+        RENDER_CHECK(device.WaitIdle(), "finish descriptor-set retirement");
+        const auto second = registry.RegisterTexture(two);
+        RENDER_CHECK(second >= 4 && second != first && registry.GetRegisteredCount() == 6, "FR-01: retry actually binds a new available slot");
+        RENDER_CHECK(registry.UnregisterTexture(first) && registry.RegisterTexture(three) == first, "FR-01: successful unregister permits slot reuse");
+        auto current = device.GetResources().Pin(set);
+        auto textures = device.GetResources().GetPinnedTextures(current);
+        RENDER_CHECK(std::find(textures.begin(), textures.end(), one.GetNative()) == textures.end() &&
+            std::find(textures.begin(), textures.end(), two.GetNative()) != textures.end() &&
+            std::find(textures.begin(), textures.end(), three.GetNative()) != textures.end(), "FR-01: descriptor dependencies match the committed CPU slots");
+        current.Reset(); set.Reset(); registry.Shutdown();
+    }
+    RHIMaterial::ReleaseDefaultTextures();
+    RENDER_CHECK(device.WaitIdle(), "retire bindless regression resources");
+    {
+        RHIStreamer streamer;
+        RENDER_CHECK(streamer.Init(), "real abandoned-batch streamer");
+        for (unsigned frame = 0; frame < 16; ++frame) {
+            RHIBuffer destination;
+            const uint32_t data[4] = {frame, 2, 3, 4};
+            RENDER_CHECK(destination.Init(RHIBufferDesc::Vertex(sizeof(data))), "abandoned destination");
+            const auto handle = destination.GetHandle(); const auto batch = streamer.BeginCopyBatch();
+            RENDER_CHECK(streamer.StreamBufferUpload(batch, destination, 0, data, sizeof(data)).IsValid(), "enqueue an unrecorded upload");
+            destination.Shutdown();
+            auto recording = device.GetResources().Pin(device.GetResources().AcquireNative(streamer.GetNative()));
+            RENDER_CHECK(!streamer.EndFrame() && device.GetResources().Acquire(handle).IsLive(), "FR-03: failed frame retirement preserves pending destination ownership");
+            recording.Reset();
+            RENDER_CHECK(streamer.EndFrame() && device.WaitIdle() && !device.GetResources().Acquire(handle).IsLive(),
+                "FR-03: native discard releases abandoned destinations every frame");
+        }
+    }
+    return device.WaitIdle();
+}
+
 static bool Native(RHIType backend) {
     auto& device = RHIDevice::Get();
     RHIDeviceDesc desc; desc.PreferredBackend = backend; desc.AllowFallback = false;
     desc.Headless = true; desc.EnableNRIValidation = true;
     desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(backend);
     RENDER_CHECK(device.Init(desc) && !device.IsSoftwareAdapter() && device.GetBackend() == backend, "strict physical lifetime fixture");
+    RENDER_CHECK(ReviewRegressions() && device.WaitIdle(), "consolidated review regression checks");
     RHITexture image;
     RENDER_CHECK(image.Init(RHITextureDesc::RenderTarget2D(8, 8)), "real image generation");
     std::vector<uint8_t> expected(8 * 8 * 4);

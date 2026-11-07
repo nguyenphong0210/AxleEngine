@@ -334,6 +334,7 @@ namespace Axle::RHI {
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (streamerInterface.EndStreamerFrame) {
             streamerInterface.EndStreamerFrame(*m_Streamer);
+            m_CopyResources.clear(); // Native retirement also discards unrecorded copy batches.
             m_CanWrapConstants = true; m_HostBlocks.clear(); m_HostUsed = 0;
             return true;
         }

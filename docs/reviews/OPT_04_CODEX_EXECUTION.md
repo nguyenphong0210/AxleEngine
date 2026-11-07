@@ -6,7 +6,8 @@ Date: 2026-11-07. Starting clean HEAD: `977f68c42755f1cfc0042854dc06dc74fc8cebc8
 Scope: P41-01 through P41-11 only. No push or OPT-05 implementation.
 
 Implementation and self-verification are separate from the consolidated final
-fresh-context review requested by the user. That review has not completed.
+fresh-context review requested by the user. Its initial pass is complete; three
+findings were reproduced and corrections are awaiting recheck (see below).
 Gemini has not supplied supplementary feedback. Two preliminary Codex readers
 provided advisory source audits; these are not checkpoint reviews. A subsequent
 advisory request failed because the reviewer account hit its usage limit.
@@ -594,7 +595,42 @@ and default integration passed again; CTest passed again at 50/50 in both config
 ## Remaining acceptance gates
 
 One consolidated separate-context final review and any corrections/rechecks remain.
-No final reviewer has run yet. Actual graphics API validation is **NOT RUN** for
+The final reviewer completed its first pass; correction recheck is pending.
+Actual graphics API validation is **NOT RUN** for
 the host-prerequisite reasons above; dependent acceptance remains open even though
 embedded NRI checks pass. The pre-existing OPT-00 manual/full-product gap remains
 separate. OPT-05 has not started and nothing has been pushed.
+
+## Consolidated fresh-context review and repairs
+
+The single authorized final reviewer `opt04_final_review` inspected baseline
+`977f68c..e03e033` and relevant P41-01..11 contracts/source/product callers. This
+was separate context using the session model, not independent-model/Gemini review.
+It rebuilt six focused targets per configuration and independently ran 32 passing
+modes. Its 16 defect probes reproduced the three P2 findings below on physical
+D3D12/Vulkan in Debug/Release. Evidence is in final-review/targeted-results.json
+and final-review/reproduction-results.json. The reviewer found no other confirmed
+source defects or unresolved source concerns; missing API validation remains open.
+It accepted the integration fixture corrections and the synchronous central-cache
+boundary as consistent with the released contracts.
+
+- **OPT04-FR-01 (P2):** Bindless registration/unregistration changed CPU slots after
+  a pinned descriptor rejected its write. Texture/sampler update APIs now report
+  success; slot/free-list changes publish only after accepted native updates.
+  Unregister explicitly reports rejection for caller retry. Bindless startup also
+  rolls back incomplete defaults/descriptor construction. Its graphics stage masks
+  are explicit, allowing the new regression to run with embedded NRI validation.
+- **OPT04-FR-02 (P2):** Seven default getters cached wrappers before Init/upload
+  success. They now build and fill local candidates, publish only on success and
+  permit retry after recoverable allocation/upload failure. Failed requests return
+  no incomplete generation. Native regressions read intended pixels after retry
+  for every getter at both failure boundaries.
+- **OPT04-FR-03 (P2):** Unrecorded streamer batches kept destination leases after
+  native frame discard. Successful checked EndFrame now clears those batch owners;
+  failed retirement preserves them. Sixteen-frame regression proves release every
+  frame and retention while an outstanding CPU recording prevents retirement.
+
+Tracked regressions are in Tests/rendering/RHIRetirementMain.cpp. Debug/Release
+policy/D3D12/Vulkan modes passed after the repairs (review-fixes-*-retirement-
+results.json); native mains enforce zero embedded NRI errors through teardown.
+Full rebuilds/affected phase gates and the same reviewer's recheck are pending.

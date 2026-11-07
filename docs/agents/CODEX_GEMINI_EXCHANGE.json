@@ -41,7 +41,7 @@
       "P41-11"
     ],
     "implementation_status": "P41-01..11 implemented; available Debug/Release phase self-verification passed; API validation and one consolidated final review remain open",
-    "independent_review_status": "pending_single_final_separate_context_review",
+    "independent_review_status": "initial_consolidated_pass_complete_three_findings_corrections_pending_recheck",
     "handoff": "docs/agents/handoffs/OPT_04_CODEX.md",
     "phase_report": "docs/reviews/OPT_04_CODEX_EXECUTION.md",
     "prerequisite_evidence": {
@@ -95,7 +95,7 @@
       "One consolidated separate-context Codex review after P41-11; significant corrections verified before acceptance"
     ],
     "stop_boundary": "Complete P41-01..11 implementation, consolidated review/fixes/verification, and stop before OPT-05.",
-    "next_action": "Commit P41-11 and perform the one authorized fresh-context final review, repair findings and recheck; stop before OPT-05.",
+    "next_action": "Finish correction rebuilds and affected gates; same final reviewer rechecks FR-01..03. Actual API validation remains NOT RUN; stop before OPT-05.",
     "transport_note": "Repository coordination only. No Gemini reply, running reviewer or actual client model change is claimed.",
     "supplementary_reviewer": "Gemini",
     "review_checkpoints": [
@@ -103,7 +103,7 @@
         "after": "P41-11",
         "before": "OPT-04 acceptance",
         "scope": "Complete P41-01..11 implementation and affected product callers",
-        "status": "pending"
+        "status": "corrections_in_progress"
       }
     ],
     "review_policy": "One final fresh-context Codex review of the full OPT-04 diff, source/callers and actual evidence, with significant corrections rechecked. Intermediate separate-context reviews are superseded by the latest user instruction. Preserve implementation/self-verification/review distinctions and missing native gates.",
@@ -1366,6 +1366,17 @@
       "base_commit": "3c289bd",
       "timestamp_utc": "2026-11-07T07:49:36.057174+00:00",
       "body": "STATUS: P41-11 implementation and available phase self-verification complete. CPU sources/shared native and GL uploads are implemented; final source includes integration fixture corrections in Tests/src/Test_Milestone8_Part2.cpp and Part3.cpp. Debug/Release full builds, 50/50 CTest each, final default integration (phase-integration-adapt7 logs), jobs/ECS 16 PASS + 3 probes, simulation product probes, 54 focused rendering cases each and GL/fallback bytes passed. Actual API validation is NOT RUN due missing host prerequisites. One fresh-context final review has not started; next action is the local implementation commit then that review. No push or OPT-05."
+    },
+    {
+      "id": "CG-20261107T080304872403Z-CODEX-04477b",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T074936057174Z-CODEX-a8a415",
+      "base_commit": "e03e033",
+      "timestamp_utc": "2026-11-07T08:03:04.872403+00:00",
+      "body": "IN_PROGRESS: Consolidated fresh-context reviewer opt04_final_review completed source/caller inspection and native verification on e03e033. Confirmed P2 OPT04-FR-01 bindless CPU slot commits despite rejected pinned descriptor update; FR-02 default textures publish before Init/upload success; FR-03 EndFrame retains abandoned streamer copy batches. Reported independent evidence: 32 passing focused modes and 16 defect probes across Debug/Release D3D12/Vulkan, artifacts final-review/targeted-results.json and reproduction-results.json. Codex will correct RHIBindless.hpp/cpp, RHIDescriptorPool.hpp/cpp, RHIMaterial.cpp, RHIStreamer.cpp and add tracked native regressions in Tests/rendering/RHIRetirementMain.cpp, then rebuild/retest and request recheck from this SAME reviewer. Actual API validation remains NOT RUN. No new review session, vendor edits, push or OPT-05."
     }
   ],
   "deferred_tasks": [

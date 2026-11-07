@@ -33,12 +33,13 @@ namespace Axle::RHI {
         uint32_t GetCapacity() const { return m_Capacity; }
         uint32_t GetRegisteredCount() const;
 
-        // Register texture SRV and return bindless index (0..Capacity-1)
+        // Returns a bindless index, or the white fallback when unavailable/in use/full.
+        // Rejected descriptor updates never publish or consume a CPU slot.
         uint32_t RegisterTexture(nri::Descriptor* srv);
         uint32_t RegisterTexture(const RHITexture& texture);
 
-        // Unregister texture slot
-        void UnregisterTexture(uint32_t index);
+        // Returns false while the descriptor set is in use; retry after retirement.
+        bool UnregisterTexture(uint32_t index);
 
         // Access underlying descriptor resources
         nri::DescriptorSet* GetDescriptorSet() const { return IsInitialized() ? m_DescriptorSet : nullptr; }
@@ -61,6 +62,7 @@ namespace Axle::RHI {
         void Bind(nri::CommandBuffer* cmdBuffer, uint32_t setIndex = 0);
 
     private:
+        void ReleaseResources();
         bool m_Initialized = false;
         uint32_t m_Capacity = 2048;
 

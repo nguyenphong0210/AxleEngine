@@ -19,8 +19,8 @@ namespace Axle::RHI {
 
     // All fallback subresources must contain defined pixels, including cube faces
     // and every prefilter mip; allocating an image alone leaves undefined data.
-    static void FillFallback(const std::shared_ptr<RHITexture>& texture, std::array<uint8_t, 4> color) {
-        if (!texture || !texture->IsValid()) return;
+    static bool FillFallback(const std::shared_ptr<RHITexture>& texture, std::array<uint8_t, 4> color) {
+        if (!texture || !texture->IsValid()) return false;
         const auto& desc = texture->GetDesc();
         std::vector<std::vector<uint8_t>> pixels;
         std::vector<nri::TextureSubresourceUploadDesc> subresources;
@@ -52,7 +52,11 @@ namespace Axle::RHI {
         upload.after.stages = nri::StageBits::FRAGMENT_SHADER;
         const auto& helper = device.GetNRIHelper();
         if (!device.GetGraphicsQueue() || !helper.UploadData || device.UploadData(&upload, 1, nullptr, 0) != nri::Result::SUCCESS)
+        {
             AXLE_CORE_ERROR("Could not initialize material fallback texture {0}", desc.DebugName);
+            return false;
+        }
+        return true;
     }
 
     static std::string Trim(const std::string& str) {
@@ -180,97 +184,59 @@ namespace Axle::RHI {
         return data;
     }
 
+    static std::shared_ptr<RHITexture> DefaultTexture(std::shared_ptr<RHITexture>& cached,
+        const RHITextureDesc& desc, std::array<uint8_t, 4> color) {
+        if (!RHIDevice::Get().CanCreateResources()) return {};
+        if (cached && cached->IsValid()) return cached;
+        auto candidate = std::make_shared<RHITexture>();
+        if (!candidate->Init(desc) || !FillFallback(candidate, color)) return {};
+        cached = std::move(candidate);
+        return cached;
+    }
+
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultWhiteTexture() {
-        if (!s_DefaultWhite && RHIDevice::Get().IsNativeReady()) {
-            s_DefaultWhite = std::make_shared<RHITexture>();
-            RHITextureDesc desc;
-            desc.Width = 1;
-            desc.Height = 1;
-            desc.Format = RHITextureFormat::RGBA8_UNORM;
-            desc.Usage = RHITextureUsage::ShaderResource;
-            desc.DebugName = "RHIDefault_White_1x1";
-            s_DefaultWhite->Init(desc);
-            FillFallback(s_DefaultWhite, {255, 255, 255, 255});
-        }
-        return s_DefaultWhite;
+        RHITextureDesc desc; desc.Width = desc.Height = 1;
+        desc.Format = RHITextureFormat::RGBA8_UNORM; desc.Usage = RHITextureUsage::ShaderResource;
+        desc.DebugName = "RHIDefault_White_1x1";
+        return DefaultTexture(s_DefaultWhite, desc, {255, 255, 255, 255});
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultFlatNormalTexture() {
-        if (!s_DefaultFlatNormal && RHIDevice::Get().IsNativeReady()) {
-            s_DefaultFlatNormal = std::make_shared<RHITexture>();
-            RHITextureDesc desc;
-            desc.Width = 1;
-            desc.Height = 1;
-            desc.Format = RHITextureFormat::RGBA8_UNORM;
-            desc.Usage = RHITextureUsage::ShaderResource;
-            desc.DebugName = "RHIDefault_FlatNormal_1x1";
-            s_DefaultFlatNormal->Init(desc);
-            FillFallback(s_DefaultFlatNormal, {128, 128, 255, 255});
-        }
-        return s_DefaultFlatNormal;
+        RHITextureDesc desc; desc.Width = desc.Height = 1;
+        desc.Format = RHITextureFormat::RGBA8_UNORM; desc.Usage = RHITextureUsage::ShaderResource;
+        desc.DebugName = "RHIDefault_FlatNormal_1x1";
+        return DefaultTexture(s_DefaultFlatNormal, desc, {128, 128, 255, 255});
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultRoughnessTexture() {
-        if (!s_DefaultRoughness && RHIDevice::Get().IsNativeReady()) {
-            s_DefaultRoughness = std::make_shared<RHITexture>();
-            RHITextureDesc desc;
-            desc.Width = 1;
-            desc.Height = 1;
-            desc.Format = RHITextureFormat::RGBA8_UNORM;
-            desc.Usage = RHITextureUsage::ShaderResource;
-            desc.DebugName = "RHIDefault_Roughness_1x1";
-            s_DefaultRoughness->Init(desc);
-            FillFallback(s_DefaultRoughness, {128, 128, 128, 255});
-        }
-        return s_DefaultRoughness;
+        RHITextureDesc desc; desc.Width = desc.Height = 1;
+        desc.Format = RHITextureFormat::RGBA8_UNORM; desc.Usage = RHITextureUsage::ShaderResource;
+        desc.DebugName = "RHIDefault_Roughness_1x1";
+        return DefaultTexture(s_DefaultRoughness, desc, {128, 128, 128, 255});
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultBlackTexture() {
-        if (!s_DefaultBlack && RHIDevice::Get().IsNativeReady()) {
-            s_DefaultBlack = std::make_shared<RHITexture>();
-            RHITextureDesc desc;
-            desc.Width = 1;
-            desc.Height = 1;
-            desc.Format = RHITextureFormat::RGBA8_UNORM;
-            desc.Usage = RHITextureUsage::ShaderResource;
-            desc.DebugName = "RHIDefault_Black_1x1";
-            s_DefaultBlack->Init(desc);
-            FillFallback(s_DefaultBlack, {0, 0, 0, 255});
-        }
-        return s_DefaultBlack;
+        RHITextureDesc desc; desc.Width = desc.Height = 1;
+        desc.Format = RHITextureFormat::RGBA8_UNORM; desc.Usage = RHITextureUsage::ShaderResource;
+        desc.DebugName = "RHIDefault_Black_1x1";
+        return DefaultTexture(s_DefaultBlack, desc, {0, 0, 0, 255});
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultIrradianceCubemap() {
-        if (!s_DefaultIrradianceCubemap && RHIDevice::Get().IsNativeReady()) {
-            s_DefaultIrradianceCubemap = std::make_shared<RHITexture>();
-            s_DefaultIrradianceCubemap->Init(RHITextureDesc::Cubemap(16, 1, RHITextureFormat::RGBA8_UNORM, "RHIDefault_Irradiance_Cubemap"));
-            FillFallback(s_DefaultIrradianceCubemap, {128, 128, 128, 255});
-        }
-        return s_DefaultIrradianceCubemap;
+        const auto desc = RHITextureDesc::Cubemap(16, 1, RHITextureFormat::RGBA8_UNORM, "RHIDefault_Irradiance_Cubemap");
+        return DefaultTexture(s_DefaultIrradianceCubemap, desc, {128, 128, 128, 255});
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultPrefilterCubemap() {
-        if (!s_DefaultPrefilterCubemap && RHIDevice::Get().IsNativeReady()) {
-            s_DefaultPrefilterCubemap = std::make_shared<RHITexture>();
-            s_DefaultPrefilterCubemap->Init(RHITextureDesc::Cubemap(16, 5, RHITextureFormat::RGBA8_UNORM, "RHIDefault_Prefilter_Cubemap"));
-            FillFallback(s_DefaultPrefilterCubemap, {128, 128, 128, 255});
-        }
-        return s_DefaultPrefilterCubemap;
+        const auto desc = RHITextureDesc::Cubemap(16, 5, RHITextureFormat::RGBA8_UNORM, "RHIDefault_Prefilter_Cubemap");
+        return DefaultTexture(s_DefaultPrefilterCubemap, desc, {128, 128, 128, 255});
     }
 
     std::shared_ptr<RHITexture> RHIMaterial::GetDefaultBRDFLUT() {
-        if (!s_DefaultBRDFLUT && RHIDevice::Get().IsNativeReady()) {
-            s_DefaultBRDFLUT = std::make_shared<RHITexture>();
-            RHITextureDesc desc;
-            desc.Width = 16;
-            desc.Height = 16;
-            desc.Format = RHITextureFormat::RGBA8_UNORM;
-            desc.Usage = RHITextureUsage::ShaderResource;
-            desc.DebugName = "RHIDefault_BRDFLUT_16x16";
-            s_DefaultBRDFLUT->Init(desc);
-            FillFallback(s_DefaultBRDFLUT, {255, 0, 0, 255});
-        }
-        return s_DefaultBRDFLUT;
+        RHITextureDesc desc; desc.Width = desc.Height = 16;
+        desc.Format = RHITextureFormat::RGBA8_UNORM; desc.Usage = RHITextureUsage::ShaderResource;
+        desc.DebugName = "RHIDefault_BRDFLUT_16x16";
+        return DefaultTexture(s_DefaultBRDFLUT, desc, {255, 0, 0, 255});
     }
 
     void RHIMaterial::ReleaseDefaultTextures() {

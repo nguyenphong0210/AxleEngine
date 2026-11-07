@@ -139,23 +139,23 @@ namespace Axle::RHI {
         return sets;
     }
 
-    void RHIDescriptorPool::UpdateTextureRange(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t baseSlot, const std::vector<nri::Descriptor*>& descriptors) {
-        if (!IsValid() || !set || descriptors.empty()) return;
+    bool RHIDescriptorPool::UpdateTextureRange(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t baseSlot, const std::vector<nri::Descriptor*>& descriptors) {
+        if (!IsValid() || !set || descriptors.empty()) return false;
 
         auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.CanCreateResources()) return;
+        if (!rhiDevice.CanCreateResources()) return false;
         const auto& nriCore = rhiDevice.GetNRICore();
         auto setLease = rhiDevice.GetResources().AcquireNative(set);
         if (!setLease.IsLive() || std::none_of(m_Sets.begin(), m_Sets.end(), [&](const auto& owned) {
             return owned.GetHandle() == setLease.GetHandle();
-        })) return;
+        })) return false;
         std::vector<RHIResourceLease> resources;
         for (auto* descriptor : descriptors) {
             auto lease = rhiDevice.GetResources().AcquireNative(descriptor);
-            if (!lease.IsLive()) return;
+            if (!lease.IsLive()) return false;
             resources.push_back(std::move(lease));
         }
-        if (!rhiDevice.GetResources().ReplaceDescriptorRange(setLease, rangeIndex, baseSlot, std::move(resources))) return;
+        if (!rhiDevice.GetResources().ReplaceDescriptorRange(setLease, rangeIndex, baseSlot, std::move(resources))) return false;
 
         nri::UpdateDescriptorRangeDesc updateDesc = {};
         updateDesc.descriptorSet = set;
@@ -165,22 +165,23 @@ namespace Axle::RHI {
         updateDesc.descriptorNum = static_cast<uint32_t>(descriptors.size());
 
         nriCore.UpdateDescriptorRanges(&updateDesc, 1);
+        return true;
     }
 
-    void RHIDescriptorPool::UpdateTexture(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t slot, nri::Descriptor* srv) {
-        if (!set || !srv) return;
+    bool RHIDescriptorPool::UpdateTexture(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t slot, nri::Descriptor* srv) {
+        if (!set || !srv) return false;
         std::vector<nri::Descriptor*> descs = { srv };
-        UpdateTextureRange(set, rangeIndex, slot, descs);
+        return UpdateTextureRange(set, rangeIndex, slot, descs);
     }
 
-    void RHIDescriptorPool::UpdateSamplerRange(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t baseSlot, const std::vector<nri::Descriptor*>& samplers) {
-        UpdateTextureRange(set, rangeIndex, baseSlot, samplers);
+    bool RHIDescriptorPool::UpdateSamplerRange(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t baseSlot, const std::vector<nri::Descriptor*>& samplers) {
+        return UpdateTextureRange(set, rangeIndex, baseSlot, samplers);
     }
 
-    void RHIDescriptorPool::UpdateSampler(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t slot, nri::Descriptor* sampler) {
-        if (!set || !sampler) return;
+    bool RHIDescriptorPool::UpdateSampler(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t slot, nri::Descriptor* sampler) {
+        if (!set || !sampler) return false;
         std::vector<nri::Descriptor*> descs = { sampler };
-        UpdateSamplerRange(set, rangeIndex, slot, descs);
+        return UpdateSamplerRange(set, rangeIndex, slot, descs);
     }
 
     void RHIDescriptorPool::Reset() {

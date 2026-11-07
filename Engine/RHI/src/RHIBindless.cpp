@@ -26,18 +26,19 @@ namespace Axle::RHI {
 
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_Capacity = std::max(256u, maxTextures);
+        auto fail = [this] { ReleaseResources(); return false; };
 
         // 1. Create 16x Anisotropic Trilinear Sampler
         if (!m_AnisoSampler.Init(RHISamplerDesc::Anisotropic16x())) {
             AXLE_CORE_ERROR("RHIBindlessRegistry: Failed to create 16x Anisotropic Sampler!");
-            return false;
+            return fail();
         }
 
         // 2. Build Pipeline Layout for Tier 2 Bindless Indexing
         nri::RootConstantDesc rootConst = {};
         rootConst.registerIndex = 0;
         rootConst.size = sizeof(RHIObjectPushConstants); // 128 bytes
-        rootConst.shaderStages = nri::StageBits::ALL;
+        rootConst.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         nri::DescriptorRangeDesc ranges[2] = {};
         // Unbounded / large texture array: Texture2D g_Textures[m_Capacity] : register(t0, space1);
@@ -65,29 +66,29 @@ namespace Axle::RHI {
         layoutDesc.rootConstantNum = 1;
         layoutDesc.descriptorSets = &setDesc;
         layoutDesc.descriptorSetNum = 1;
-        layoutDesc.shaderStages = nri::StageBits::ALL;
+        layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         if (!m_Layout.Init(layoutDesc)) {
             AXLE_CORE_ERROR("RHIBindlessRegistry: Failed to initialize bindless pipeline layout!");
-            return false;
+            return fail();
         }
 
         // 3. Initialize Descriptor Pool with Tier 2 capacity
         RHIDescriptorPoolDesc poolDesc = RHIDescriptorPoolDesc::Tier2Bindless(m_Capacity, 16);
         if (!m_Pool.Init(poolDesc)) {
             AXLE_CORE_ERROR("RHIBindlessRegistry: Failed to initialize descriptor pool!");
-            return false;
+            return fail();
         }
 
         // 4. Allocate Master Bindless Descriptor Set
         m_DescriptorSet = m_Pool.AllocateDescriptorSet(m_Layout, 0);
         if (!m_DescriptorSet) {
             AXLE_CORE_ERROR("RHIBindlessRegistry: Failed to allocate master bindless descriptor set!");
-            return false;
+            return fail();
         }
 
         // 5. Update Sampler in Set (Range index 1, slot 0)
-        m_Pool.UpdateSampler(m_DescriptorSet, 1, 0, m_AnisoSampler.GetNative());
+        if (!m_Pool.UpdateSampler(m_DescriptorSet, 1, 0, m_AnisoSampler.GetNative())) return fail();
 
         // 6. Pre-populate Slots 0..3 with Default Fallback Textures
         m_Slots.resize(m_Capacity, nullptr);
@@ -101,21 +102,11 @@ namespace Axle::RHI {
         auto roughTex = RHIMaterial::GetDefaultRoughnessTexture();
         auto blackTex = RHIMaterial::GetDefaultBlackTexture();
 
-        if (whiteTex && whiteTex->GetSRV()) {
-            m_Slots[FallbackWhiteIndex] = whiteTex->GetSRV();
-            m_Pool.UpdateTexture(m_DescriptorSet, 0, FallbackWhiteIndex, whiteTex->GetSRV());
-        }
-        if (normalTex && normalTex->GetSRV()) {
-            m_Slots[FallbackFlatNormalIndex] = normalTex->GetSRV();
-            m_Pool.UpdateTexture(m_DescriptorSet, 0, FallbackFlatNormalIndex, normalTex->GetSRV());
-        }
-        if (roughTex && roughTex->GetSRV()) {
-            m_Slots[FallbackHalfRoughnessIndex] = roughTex->GetSRV();
-            m_Pool.UpdateTexture(m_DescriptorSet, 0, FallbackHalfRoughnessIndex, roughTex->GetSRV());
-        }
-        if (blackTex && blackTex->GetSRV()) {
-            m_Slots[FallbackBlackIndex] = blackTex->GetSRV();
-            m_Pool.UpdateTexture(m_DescriptorSet, 0, FallbackBlackIndex, blackTex->GetSRV());
+        const std::shared_ptr<RHITexture> defaults[] = {whiteTex, normalTex, roughTex, blackTex};
+        for (uint32_t i = 0; i < 4; ++i) {
+            if (!defaults[i] || !defaults[i]->IsValid() || !m_Pool.UpdateTexture(m_DescriptorSet, 0, i, defaults[i]->GetSRV()))
+                return fail();
+            m_Slots[i] = defaults[i]->GetSRV();
         }
 
         m_Initialized = true;
@@ -124,18 +115,14 @@ namespace Axle::RHI {
         return true;
     }
 
-    void RHIBindlessRegistry::Shutdown() {
-        if (!m_Initialized) return;
+    void RHIBindlessRegistry::ReleaseResources() {
+        m_Pool.Shutdown(); m_Layout.Shutdown(); m_AnisoSampler.Shutdown();
+        m_DescriptorSet = nullptr; m_Slots.clear(); m_FreeList.clear(); m_Initialized = false;
+    }
 
+    void RHIBindlessRegistry::Shutdown() {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_Pool.Shutdown();
-        m_Layout.Shutdown();
-        m_AnisoSampler.Shutdown();
-        m_DescriptorSet = nullptr;
-        m_Slots.clear();
-        m_FreeList.clear();
-        m_Initialized = false;
-        AXLE_CORE_INFO("RHIBindlessRegistry: Shutdown completed.");
+        ReleaseResources();
     }
 
     uint32_t RHIBindlessRegistry::GetRegisteredCount() const {
@@ -162,10 +149,9 @@ namespace Axle::RHI {
         }
 
         uint32_t index = m_FreeList.back();
+        if (!m_Pool.UpdateTexture(m_DescriptorSet, 0, index, srv)) return FallbackWhiteIndex;
         m_FreeList.pop_back();
-
         m_Slots[index] = srv;
-        m_Pool.UpdateTexture(m_DescriptorSet, 0, index, srv);
         return index;
     }
 
@@ -174,19 +160,15 @@ namespace Axle::RHI {
         return RegisterTexture(texture.GetSRV());
     }
 
-    void RHIBindlessRegistry::UnregisterTexture(uint32_t index) {
-        if (!IsInitialized() || index < 4 || index >= m_Capacity) return;
-
+    bool RHIBindlessRegistry::UnregisterTexture(uint32_t index) {
+        if (!IsInitialized() || index < 4 || index >= m_Capacity) return false;
         std::lock_guard<std::mutex> lock(m_Mutex);
-        if (m_Slots[index] != nullptr) {
-            m_Slots[index] = nullptr;
-            // Clear slot with fallback black
-            auto blackTex = RHIMaterial::GetDefaultBlackTexture();
-            if (blackTex && blackTex->GetSRV()) {
-                m_Pool.UpdateTexture(m_DescriptorSet, 0, index, blackTex->GetSRV());
-            }
-            m_FreeList.push_back(index);
-        }
+        if (!m_Slots[index]) return true;
+        auto black = RHIMaterial::GetDefaultBlackTexture();
+        if (!black || !m_Pool.UpdateTexture(m_DescriptorSet, 0, index, black->GetSRV())) return false;
+        m_Slots[index] = nullptr;
+        m_FreeList.push_back(index);
+        return true;
     }
 
     void RHIBindlessRegistry::Bind(nri::CommandBuffer* cmdBuffer, uint32_t setIndex) {

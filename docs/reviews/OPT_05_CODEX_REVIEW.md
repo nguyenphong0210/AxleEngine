@@ -104,3 +104,39 @@ CopyTexture. Physical D3D12/Vulkan probes present seven frames each including
 resize, with actual API validation and no ImGui. Runtime now rejects renderer
 startup/render/Canvas failure and shuts service ownership down with the layer.
 Required final-source/full-product Debug/Release gates remain pending.
+
+## Correction checkpoint 4 (in progress)
+
+The production modern path compiles a sequential, whole-texture resource-use
+graph and records its declared passes in order. It validates dependencies,
+first-use/read-before-write, attachment LOAD/store/discard, duplicate/aliased
+uses and layout/access mismatches. Recording pins imported generations and
+obtains native transitions from the existing transactional state journal.
+Actual opaque/sky, refraction copy, transparent, particle depth copy, particle/
+physics, MSAA resolve, tone mapping, FXAA and export passes use this path.
+
+Debug service readbacks pass all eight MSAA/tone/FXAA combinations, repeated and
+empty views, then return to the original image without optional-pass leakage.
+Physical D3D12/Vulkan and GL focused tests pass (reflection-focused-debug-results
+and reflection-stage-debug-*.log under OPT-05). Capability flags no longer claim
+modern shadows, skeletal skinning or async compute, or nonexistent GL MSAA views.
+The forward pipeline consumes the canonical vertex description and actual frame/
+light/material register constants; decoded LDR slot formats match uploads.
+
+Existing material regressions exposed lost default native sky behavior after
+extraction; snapshots now distinguish authored sky settings from renderer fallback.
+Reflected material schema/status is published on the scene owner after rendering,
+checked against snapshot UUIDs, rather than mutating authoring during extraction.
+Enabling API validation for existing material tests exposed NRI 190's zero-valued
+StageBits::ALL in reflected pipeline layouts. Reflection now retains concrete
+shader and shared-resource stage unions, including resource-free shaders.
+Custom programs consume this concrete visibility. Built-in draw and post-process
+preparation failures reject the view instead of reporting a successful blank draw.
+
+Debug material step 106 and VFX GPU regressions pass on both physical backends
+with actual API validation and Vulkan synchronization validation. Full integration
+completed successfully (reflection-stage-debug-results.json, all five cases exit 0). Architecture checking identifies direct GL/GDI links
+from Canvas in UI2D; the pending correction moves GPU execution to Renderer and
+native CPU font rasterization to Platform. Release, Runtime product fixtures,
+remaining consumer gates and the independent correction recheck are still pending.
+This checkpoint is not acceptance.

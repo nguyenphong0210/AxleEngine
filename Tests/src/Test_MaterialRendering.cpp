@@ -77,6 +77,9 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
         desc.AllowFallback = false;
 
         desc.Headless = true;
+            desc.EnableNRIValidation = true;
+            desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(backend);
+            std::cout << "[Material GPU] Graphics API validation: " << (desc.EnableValidation ? "ENABLED" : "NOT RUN (layer unavailable)") << "\n";
 
         if (!check(device.Init(desc), "Headless device on requested backend")) return false;
 

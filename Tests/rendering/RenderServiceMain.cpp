@@ -62,6 +62,24 @@ static bool Service(RHIType backend) {
             RENDER_CHECK(green[center+1] > green[center]+30, "later scene material edits change actual output");
             result = service.RenderView(world,request);
             RENDER_CHECK(result.Success && ReadTexture(*target) == red, "saved snapshot material remains immutable after scene edits");
+            for (uint8_t samples : {uint8_t(1), uint8_t(4)}) for (bool tone : {false,true}) for (bool fxaa : {false,true}) {
+                auto post = request;
+                post.Settings.MSAASamples = samples; post.Settings.EnableToneMapping = tone; post.Settings.EnableFXAA = fxaa;
+                result = service.RenderView(world,post);
+                RENDER_CHECK(result.Success, "declared MSAA/tone/FXAA pass combination submits");
+                auto pixels = ReadTexture(*service.GetDefaultMainColorTarget());
+                RENDER_CHECK(pixels.size() == red.size() && pixels[center] > pixels[center+1]+20 && pixels[center] > pixels[center+2]+20,
+                    "actual post-processing graph retains authored red geometry");
+            }
+            Scene empty;
+            auto emptyRequest = request; emptyRequest.Settings.ClearColor = {0,0,1,1};
+            RENDER_CHECK(service.RenderView(empty,emptyRequest).Success, "empty scene still records a clear/export view");
+            auto cleared = ReadTexture(*service.GetDefaultMainColorTarget());
+            RENDER_CHECK(cleared.size() == red.size() && cleared[center+2] > 245 && cleared[center] < 8,
+                "empty views replace prior geometry with their declared clear");
+            RENDER_CHECK(service.RenderView(world,request).Success, "return from optional/empty views");
+            target = service.GetDefaultMainColorTarget();
+            RENDER_CHECK(ReadTexture(*target) == red, "optional passes cannot leak into later default views");
             const auto old = target->GetHandle();
             auto resized = request; resized.Width = resized.Height = 49;
             bool reached = false;

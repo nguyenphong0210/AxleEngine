@@ -119,6 +119,7 @@ namespace Axle::RHI {
         RHIShaderStage Stage = RHIShaderStage::Vertex;
         // Zero means unspecified (legacy/synthetic metadata); 2 means Texture2D.
         uint32_t TextureDimension = 0;
+        nri::StageBits AdditionalStages{}; // Concrete merged stages; zero means single Stage above.
     };
 
     struct RHIVertexAttribute {
@@ -140,7 +141,7 @@ namespace Axle::RHI {
         std::vector<DescriptorSetStorage> DescriptorSets;
 
         mutable std::vector<nri::DescriptorSetDesc> NRIDescriptorSets;
-        nri::StageBits ShaderStages = nri::StageBits::ALL;
+        nri::StageBits ShaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
         nri::PipelineLayoutBits Flags = nri::PipelineLayoutBits::NONE;
         uint32_t RootRegisterSpace = 0;
 
@@ -149,6 +150,7 @@ namespace Axle::RHI {
 
     struct RHIShaderReflection {
         RHIShaderStage Stage = RHIShaderStage::Vertex;
+        nri::StageBits AdditionalStages{};
         RHIShaderFormat Format = RHIShaderFormat::DXIL;
         std::string EntryPoint = "main";
 

@@ -131,6 +131,9 @@ namespace Axle {
         bool WasLastRenderSuccessful() const { return m_LastRenderSucceeded; }
         RHI::RHICompletionToken GetLastCompletion() const { return m_LastCompletion; }
         const auto& GetMaterialDiagnostics() const { return m_MaterialDiagnostics; }
+        // Apply reflected CPU schema/status on the scene owner after extraction
+        // and rendering. Entity IDs are checked against the snapshot's UUIDs.
+        void PublishMaterialFeedback(Scene& scene, const RenderWorld& world) const;
         RHI::RHISampler& GetSampler() { return m_AnisoSampler; }
         RHI::RHIDescriptorPool& GetDescriptorPool() { return m_DescriptorPool; }
         nri::DescriptorSet* GetDefaultDescriptorSet() const { return m_DefaultDescriptorSet; }
@@ -169,17 +172,17 @@ namespace Axle {
         RHI::RHIBuffer& GetSkyboxConstantBuffer() { return m_SkyboxConstantBuffer; }
 
         // Film-Grade Tone Mapping & Post-Processing Pass
-        void RenderToneMapping(RHI::RHICommandBuffer& cmd,
+        bool RenderToneMapping(RHI::RHICommandBuffer& cmd,
                                RHI::RHITexture* inputHDR,
                                RHI::RHITexture* outputTarget,
                                const RHIToneMappingConstants& constants);
 
-        void RenderToneMapping(RHI::RHICommandBuffer& cmd,
+        bool RenderToneMapping(RHI::RHICommandBuffer& cmd,
                                RHI::RHITexture* inputHDR,
                                RHI::RHITexture* outputTarget,
                                const SceneRenderSettings& settings = SceneRenderSettings{});
 
-        void RenderToneMapping(RHI::RHICommandBuffer& cmd,
+        bool RenderToneMapping(RHI::RHICommandBuffer& cmd,
                                nri::Descriptor* inputHDR_SRV,
                                nri::Texture* outputTarget,
                                nri::Descriptor* outputRTV,
@@ -195,17 +198,17 @@ namespace Axle {
         RHI::RHITexture* GetIntermediateHDRTarget() const { return GetActiveTarget(RHI::RHIViewTarget::HDR); }
 
         // Fast Approximate Anti-Aliasing (FXAA 3.11 Quality) Post-Processing Pass
-        void RenderFXAA(RHI::RHICommandBuffer& cmd,
+        bool RenderFXAA(RHI::RHICommandBuffer& cmd,
                         RHI::RHITexture* inputTexture,
                         RHI::RHITexture* outputTarget,
                         const RHIFXAAConstants& constants);
 
-        void RenderFXAA(RHI::RHICommandBuffer& cmd,
+        bool RenderFXAA(RHI::RHICommandBuffer& cmd,
                         RHI::RHITexture* inputTexture,
                         RHI::RHITexture* outputTarget,
                         const SceneRenderSettings& settings = SceneRenderSettings{});
 
-        void RenderFXAA(RHI::RHICommandBuffer& cmd,
+        bool RenderFXAA(RHI::RHICommandBuffer& cmd,
                         nri::Descriptor* inputSRV,
                         nri::Texture* outputTarget,
                         nri::Descriptor* outputRTV,
@@ -393,6 +396,11 @@ namespace Axle {
         bool m_LastRenderSucceeded = false;
         RHI::RHICompletionToken m_LastCompletion;
         std::unordered_map<uint32_t, std::string> m_MaterialDiagnostics;
+        struct MaterialFeedback {
+            std::vector<ShaderPropertyInstance> Properties;
+            uint64_t Generation = 0;
+        };
+        std::unordered_map<uint32_t, MaterialFeedback> m_MaterialFeedback;
 
         uint32_t m_LastDrawCallCount = 0;
         uint32_t m_LastRenderedEntityCount = 0;

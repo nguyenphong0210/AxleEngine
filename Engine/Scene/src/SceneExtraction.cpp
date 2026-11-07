@@ -133,6 +133,10 @@ namespace Axle {
         auto skyboxView = registry.view<SkyboxComponent>();
         for (auto entity : skyboxView) {
             const auto& sc = skyboxView.get<SkyboxComponent>(entity);
+            world.Skybox.Authored = true;
+            world.Skybox.SyncWithSun = sc.SyncWithSun;
+            world.Skybox.CustomAzimuth = sc.CustomAzimuth;
+            world.Skybox.CustomElevation = sc.CustomElevation;
             world.Skybox.Enabled = sc.Enabled;
             world.Skybox.HemisphereAmbient = sc.HemisphereAmbient;
             world.Skybox.Type = static_cast<int>(sc.Type);

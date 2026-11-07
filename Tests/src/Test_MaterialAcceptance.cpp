@@ -232,6 +232,9 @@ namespace Axle {
             desc.PreferredBackend = targetBackend;
             desc.AllowFallback = false;
             desc.Headless = true;
+            desc.EnableNRIValidation = true;
+            desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(targetBackend);
+            std::cout << "[Material GPU] Graphics API validation: " << (desc.EnableValidation ? "ENABLED" : "NOT RUN (layer unavailable)") << "\n";
             if (!check(device.Init(desc), "Headless device initialization for requested backend")) return false;
         }
 

@@ -23,6 +23,7 @@ add_library(AxleRenderer STATIC
     src/MaterialCache.cpp
     src/RenderCapabilities.cpp
     src/RenderContracts.cpp
+    src/RenderGraph.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)
 

@@ -38,8 +38,8 @@ namespace Axle {
     // 2. Constant Buffer and Root Constant Contracts
     // =========================================================================
     namespace ConstantBufferContract {
-        // Frame constants: register b0, space 0 (256 bytes CBV aligned)
-        constexpr uint32_t FrameConstantsRegister = 0;
+        // Frame constants: register b1, space 0 (256 bytes CBV aligned)
+        constexpr uint32_t FrameConstantsRegister = 1;
         constexpr uint32_t FrameConstantsSpace = 0;
         constexpr size_t   FrameConstantsSize = 256;
 

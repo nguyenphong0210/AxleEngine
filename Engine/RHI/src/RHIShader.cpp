@@ -848,7 +848,10 @@ namespace Axle::RHI {
 
     RHIAutoPipelineLayout RHIShaderReflection::BuildPipelineLayoutDesc(uint32_t rootRegisterSpace) const {
         RHIAutoPipelineLayout layout;
-        layout.ShaderStages = nri::StageBits::ALL;
+        // NRI 190's ALL is zero and is only a lazy barrier/visibility default.
+        // Pipeline layouts must contain the concrete stages of their shaders,
+        // including stages that expose no reflected resources.
+        layout.ShaderStages = RHIShaderCompiler::StageToNRI(Stage) | AdditionalStages;
 
         auto isPushConstantName = [](const std::string& name) {
             std::string lower = name;
@@ -875,7 +878,7 @@ namespace Axle::RHI {
                 bool found = false;
                 for (auto& existingRc : layout.RootConstants) {
                     if (existingRc.registerIndex == res.BindPoint) {
-                        existingRc.shaderStages |= RHIShaderCompiler::StageToNRI(res.Stage);
+                        existingRc.shaderStages |= RHIShaderCompiler::StageToNRI(res.Stage) | res.AdditionalStages;
                         existingRc.size = std::max(existingRc.size, size);
                         found = true;
                         break;
@@ -885,7 +888,7 @@ namespace Axle::RHI {
                     nri::RootConstantDesc rc = {};
                     rc.registerIndex = res.BindPoint;
                     rc.size = size;
-                    rc.shaderStages = RHIShaderCompiler::StageToNRI(res.Stage);
+                    rc.shaderStages = RHIShaderCompiler::StageToNRI(res.Stage) | res.AdditionalStages;
                     layout.RootConstants.push_back(rc);
                 }
                 continue;
@@ -924,7 +927,7 @@ namespace Axle::RHI {
             bool mergedRange = false;
             for (auto& existingRange : ranges) {
                 if (existingRange.baseRegisterIndex == res.BindPoint && existingRange.descriptorType == nriType) {
-                    existingRange.shaderStages |= RHIShaderCompiler::StageToNRI(res.Stage);
+                    existingRange.shaderStages |= RHIShaderCompiler::StageToNRI(res.Stage) | res.AdditionalStages;
                     existingRange.descriptorNum = std::max(existingRange.descriptorNum, res.BindCount);
                     mergedRange = true;
                     break;
@@ -936,7 +939,7 @@ namespace Axle::RHI {
                 range.baseRegisterIndex = res.BindPoint;
                 range.descriptorNum = res.BindCount;
                 range.descriptorType = nriType;
-                range.shaderStages = RHIShaderCompiler::StageToNRI(res.Stage);
+                range.shaderStages = RHIShaderCompiler::StageToNRI(res.Stage) | res.AdditionalStages;
                 range.flags = nri::DescriptorRangeBits::NONE;
                 ranges.push_back(range);
             }
@@ -968,11 +971,13 @@ namespace Axle::RHI {
         merged.EntryPoint = reflections.front().EntryPoint;
 
         for (const auto& refl : reflections) {
+            merged.AdditionalStages |= RHIShaderCompiler::StageToNRI(refl.Stage) | refl.AdditionalStages;
             // Merge Resources
             for (const auto& res : refl.Resources) {
                 bool found = false;
                 for (auto& existing : merged.Resources) {
                     if (existing.Name == res.Name && existing.Space == res.Space && existing.BindPoint == res.BindPoint) {
+                        existing.AdditionalStages |= RHIShaderCompiler::StageToNRI(res.Stage) | res.AdditionalStages;
                         found = true;
                         break;
                     }

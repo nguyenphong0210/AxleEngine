@@ -14,15 +14,15 @@ namespace Axle {
                 caps.SupportsHDR = true;
                 caps.SupportsToneMapping = true;
                 caps.SupportsFXAA = true;
-                caps.SupportsCascadedShadows = true;
-                caps.SupportsGPUSkinning = true;
+                caps.SupportsCascadedShadows = false;
+                caps.SupportsGPUSkinning = false;
                 caps.SupportsCustomHLSLShaders = true;
                 caps.SupportsRefractionCopy = true;
                 caps.SupportsComputeShaders = true;
-                caps.SupportsAsyncCompute = true;
+                caps.SupportsAsyncCompute = false;
                 caps.SupportsRayTracing = false;
                 caps.SupportsWireframeMode = false;
-                caps.AdvancedFeatureDiagnostic.clear();
+                caps.AdvancedFeatureDiagnostic = "Modern scene rendering does not yet execute cascaded shadow maps, skeletal skinning, wireframe or asynchronous compute. Authored data is preserved; these are later rendering packages.";
                 break;
 
             case RendererBackendType::ModernRHI_Vulkan:
@@ -32,21 +32,21 @@ namespace Axle {
                 caps.SupportsHDR = true;
                 caps.SupportsToneMapping = true;
                 caps.SupportsFXAA = true;
-                caps.SupportsCascadedShadows = true;
-                caps.SupportsGPUSkinning = true;
+                caps.SupportsCascadedShadows = false;
+                caps.SupportsGPUSkinning = false;
                 caps.SupportsCustomHLSLShaders = true;
                 caps.SupportsRefractionCopy = true;
                 caps.SupportsComputeShaders = true;
-                caps.SupportsAsyncCompute = true;
+                caps.SupportsAsyncCompute = false;
                 caps.SupportsRayTracing = false;
                 caps.SupportsWireframeMode = false;
-                caps.AdvancedFeatureDiagnostic.clear();
+                caps.AdvancedFeatureDiagnostic = "Modern scene rendering does not yet execute cascaded shadow maps, skeletal skinning, wireframe or asynchronous compute. Authored data is preserved; these are later rendering packages.";
                 break;
 
             case RendererBackendType::OpenGL_Compatibility:
                 caps.BackendName = "OpenGL Compatibility";
-                caps.SupportsMSAA = true;
-                caps.MaxMSAASamples = 4;
+                caps.SupportsMSAA = false;
+                caps.MaxMSAASamples = 1;
                 caps.SupportsHDR = false;
                 caps.SupportsToneMapping = false;
                 caps.SupportsFXAA = false;
@@ -58,7 +58,7 @@ namespace Axle {
                 caps.SupportsAsyncCompute = false;
                 caps.SupportsRayTracing = false;
                 caps.SupportsWireframeMode = true;
-                caps.AdvancedFeatureDiagnostic = "OpenGL Compatibility: Advanced passes (HDR floating-point targets, FXAA post-processing, screen-space refraction copies, custom HLSL shaders) are not supported. Authored scene values are preserved and rendered using standard GL PBR forward shading.";
+                caps.AdvancedFeatureDiagnostic = "OpenGL Compatibility: Advanced passes (MSAA view targets, HDR floating-point targets, FXAA post-processing, screen-space refraction copies, custom HLSL shaders) are not supported. Authored scene values are preserved and rendered using standard GL PBR forward shading.";
                 break;
 
             case RendererBackendType::None:

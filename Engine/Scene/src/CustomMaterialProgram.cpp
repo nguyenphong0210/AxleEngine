@@ -1,4 +1,5 @@
 #include <Axle/CustomMaterialProgram.hpp>
+#include <Axle/RenderContracts.hpp>
 #include <Axle/FileSystem.hpp>
 #include <fstream>
 #include <sstream>
@@ -56,11 +57,7 @@ namespace Axle {
                 });
             }
         } else {
-            inputDesc.Attributes.push_back({ "POSITION", 0, 0, static_cast<uint32_t>(offsetof(RHIVertex3D, Position)), nri::Format::RGB32_SFLOAT, 0 });
-            inputDesc.Attributes.push_back({ "NORMAL", 0, 1, static_cast<uint32_t>(offsetof(RHIVertex3D, Normal)), nri::Format::RGB32_SFLOAT, 0 });
-            inputDesc.Attributes.push_back({ "TANGENT", 0, 2, static_cast<uint32_t>(offsetof(RHIVertex3D, Tangent)), nri::Format::RGBA32_SFLOAT, 0 });
-            inputDesc.Attributes.push_back({ "TEXCOORD", 0, 3, static_cast<uint32_t>(offsetof(RHIVertex3D, TexCoord)), nri::Format::RG32_SFLOAT, 0 });
-            inputDesc.Attributes.push_back({ "COLOR", 0, 4, static_cast<uint32_t>(offsetof(RHIVertex3D, Color)), nri::Format::RGBA32_SFLOAT, 0 });
+            inputDesc = VertexLayoutContract::GetCanonicalVertexInputDesc();
         }
         gfxDesc.VertexInput = inputDesc;
 
@@ -296,8 +293,6 @@ namespace Axle {
         if (!generation->LayoutDescription.RootConstants.empty()) {
             result.Diagnostic="Custom material cbuffers must be descriptor-bound, not push/root constants.";return result;
         }
-        for(auto& set:generation->LayoutDescription.DescriptorSets)
-            for(auto& range:set.Ranges) range.shaderStages=nri::StageBits::ALL;
         generation->PipelineLayout = std::make_shared<RHI::RHIPipelineLayout>();
         if (!generation->PipelineLayout->Init(generation->LayoutDescription)) {
             result.Success = false;

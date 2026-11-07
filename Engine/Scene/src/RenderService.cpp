@@ -118,7 +118,9 @@ namespace Axle {
             if (!m_RHIRenderer->WasLastRenderSuccessful()) return fail("View preparation, recording or submission failed");
             result.Success = true; result.CompletionToken = m_RHIRenderer->GetLastCompletion();
             result.DrawCallCount = m_RHIRenderer->GetDrawCallCount(); result.RenderedEntityCount = m_RHIRenderer->GetRenderedEntityCount();
-            if (request.Settings.Wireframe) result.ErrorMessage = "Wireframe is unsupported on the modern renderer; solid output retained";
+            if (request.Settings.Wireframe || (request.Settings.EnableShadows && prepared.DirectionalLight && prepared.DirectionalLight->CastsShadows) ||
+                !prepared.Skins.empty() || (prepared.Skybox.Enabled && prepared.Skybox.Type == 1))
+                result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
             return result;
         }
         if (request.GLTargetFBO && (request.GLTargetFBO->GetSpecification().Width != request.Width || request.GLTargetFBO->GetSpecification().Height != request.Height))
@@ -128,7 +130,8 @@ namespace Axle {
         result.Success = true; result.DrawCallCount = static_cast<uint32_t>(prepared.Meshes.size());
         result.RenderedEntityCount = result.DrawCallCount;
         // GL executes on the current context; an NRI completion token has no meaning here.
-        if (request.Settings.EnableFXAA || request.Settings.EnableToneMapping)
+        if (request.Settings.EnableFXAA || request.Settings.EnableToneMapping || request.Settings.MSAASamples > 1 ||
+            std::any_of(prepared.Meshes.begin(),prepared.Meshes.end(),[](const auto& mesh){return mesh.Material.UseCustomShader;}))
             result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
         return result;
     }
@@ -136,16 +139,7 @@ namespace Axle {
         SceneExtractionOptions options; options.CameraOverride = &request.Camera;
         auto world = ExtractRenderWorld(scene, options);
         auto result = RenderView(world, request);
-        if (m_RHIRenderer) for (const auto& [id, diagnostic] : m_RHIRenderer->GetMaterialDiagnostics()) {
-            const auto found = world.FindStableUUID(id);
-            auto entity = static_cast<entt::entity>(id);
-            auto& registry = scene.GetRegistry();
-            if (!found || !registry.valid(entity) || !registry.all_of<IDComponent>(entity) || registry.get<IDComponent>(entity).ID != *found) continue;
-            if (auto* mat = registry.try_get<MaterialComponent>(entity)) {
-                mat->CustomShaderDiagnostic = diagnostic;
-                if (mat->MaterialAsset) mat->MaterialAsset->SetCustomShaderDiagnostic(diagnostic);
-            }
-        }
+        if (m_RHIRenderer) m_RHIRenderer->PublishMaterialFeedback(scene, world);
         return result;
     }
     RHI::RHITexture* RenderService::GetDefaultMainColorTarget() const {

@@ -5,7 +5,10 @@
 #include <Axle/RHI/RHIBarrier.hpp>
 #include <Axle/RHI/RHISampler.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <Axle/RenderGraph.hpp>
+#include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/Material.hpp>
+#include <algorithm>
 
 namespace Axle::RenderTests {
 
@@ -174,7 +177,69 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_SequentialRenderGraph() {
+        using Graph = RenderGraph;
+        using Layout = RHI::RHIResourceLayout;
+        using Access = Graph::Access;
+        using Load = Graph::Load;
+        Graph valid;
+        auto image = valid.Import("scene", nullptr);
+        auto copy = valid.Import("copy", nullptr);
+        valid.AddPass("clear", {{image,Layout::ColorAttachment,Access::Write,Load::Clear}});
+        valid.AddPass("copy", {{image,Layout::CopySource},{copy,Layout::CopyDest,Access::Write}});
+        valid.AddPass("blend", {{image,Layout::ColorAttachment,Access::Write,Load::Load},{copy,Layout::ShaderResource}});
+        valid.AddPass("export", {{image,Layout::ShaderResource}});
+        RENDER_CHECK(valid.Compile(), "sequential clear/copy/LOAD/export is a valid graph");
+        const auto& blendDeps = valid.GetDependencies(2);
+        RENDER_CHECK(std::find(blendDeps.begin(),blendDeps.end(),0) != blendDeps.end() &&
+                     std::find(blendDeps.begin(),blendDeps.end(),1) != blendDeps.end(), "graph derives RAW, WAW and WAR dependencies");
+        RENDER_CHECK(!valid.IsComplete(), "compiling is not GPU execution");
+        RHI::RHICommandBuffer commands;
+        RENDER_CHECK(!valid.BeginPass("export",commands) && !valid.IsComplete(), "out-of-order recording cannot pretend to complete");
+        Graph readFirst; auto unread = readFirst.Import("uninitialized",nullptr);
+        readFirst.AddPass("sample",{{unread,Layout::ShaderResource}});
+        RENDER_CHECK(!readFirst.Compile(), "sampling before first write rejected");
+        Graph loadFirst; auto unloaded = loadFirst.Import("uninitialized",nullptr);
+        loadFirst.AddPass("load",{{unloaded,Layout::ColorAttachment,Access::Write,Load::Load}});
+        RENDER_CHECK(!loadFirst.Compile(), "first-use LOAD rejected");
+        Graph discarded; auto lost = discarded.Import("transient",nullptr);
+        discarded.AddPass("discard",{{lost,Layout::ColorAttachment,Access::Write,Load::Clear,Graph::Store::Discard}});
+        discarded.AddPass("sample",{{lost,Layout::ShaderResource}});
+        RENDER_CHECK(!discarded.Compile(), "reading a discarded attachment rejected");
+        Graph forward;
+        forward.AddPass("consumer",{}, {"producer"}); forward.AddPass("producer",{});
+        RENDER_CHECK(!forward.Compile(), "forward/cyclic explicit dependencies rejected");
+        Graph duplicate; auto alias = duplicate.Import("one view",nullptr,true);
+        duplicate.AddPass("feedback",{{alias,Layout::ShaderResource},{alias,Layout::ColorAttachment,Access::Write,Load::Load}});
+        RENDER_CHECK(!duplicate.Compile(), "read/write feedback through one texture rejected");
+        Graph wrongLayout; auto texture = wrongLayout.Import("sampled",nullptr,true);
+        wrongLayout.AddPass("bad write",{{texture,Layout::ShaderResource,Access::Write}});
+        RENDER_CHECK(!wrongLayout.Compile(), "read-only native layout cannot declare a write");
+        Graph missing;
+        missing.AddPass("bad resource",{{99,Layout::ShaderResource}});
+        RENDER_CHECK(!missing.Compile(), "undefined resource rejected");
+        Graph duplicateNames; duplicateNames.AddPass("same",{});duplicateNames.AddPass("same",{});
+        RENDER_CHECK(!duplicateNames.Compile(), "ambiguous pass names rejected");
+        return true;
+    }
+
     static bool Test_RenderContractsSpecifications() {
+        RHI::RHIShaderReflection vertexReflection, pixelReflection;
+        vertexReflection.Stage = RHI::RHIShaderStage::Vertex;
+        pixelReflection.Stage = RHI::RHIShaderStage::Fragment;
+        RHI::RHIShaderResourceBinding shared;
+        shared.Name = "Shared"; shared.Type = RHI::RHIResourceType::ConstantBuffer;
+        shared.Stage = RHI::RHIShaderStage::Vertex; vertexReflection.Resources.push_back(shared);
+        shared.Stage = RHI::RHIShaderStage::Fragment; pixelReflection.Resources.push_back(shared);
+        auto reflection = RHI::RHIShaderReflection::Merge({vertexReflection,pixelReflection});
+        auto layout = reflection.BuildPipelineLayoutDesc();
+        const auto bothStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+        RENDER_CHECK(layout.ShaderStages == bothStages && layout.DescriptorSets.size() == 1 &&
+            layout.DescriptorSets[0].Ranges.size() == 1 && layout.DescriptorSets[0].Ranges[0].shaderStages == bothStages,
+            "merged reflection keeps concrete stages on layouts and shared resources");
+        vertexReflection.Resources.clear(); pixelReflection.Resources.clear();
+        auto resourceFree = RHI::RHIShaderReflection::Merge({vertexReflection,pixelReflection}).BuildPipelineLayoutDesc();
+        RENDER_CHECK(resourceFree.ShaderStages == bothStages, "resource-free shaders still declare pipeline stages");
         // 1. Vertex Layout Contract
         auto vtxDesc = VertexLayoutContract::GetCanonicalVertexInputDesc();
         RENDER_CHECK(VertexLayoutContract::VerifyVertexLayout(vtxDesc), "Canonical vertex layout matches 64B PBR layout");
@@ -295,6 +360,7 @@ bool RunRenderContractsUnitTests() {
     if (!Axle::RenderTests::Test_RHIBarrierContracts()) return false;
     if (!Axle::RenderTests::Test_RHISamplerContracts()) return false;
     if (!Axle::RenderTests::Test_RenderContractsSpecifications()) return false;
+    if (!Axle::RenderTests::Test_SequentialRenderGraph()) return false;
     std::cout << "  [RenderContracts] All contracts unit tests passed.\n";
     return true;
 }

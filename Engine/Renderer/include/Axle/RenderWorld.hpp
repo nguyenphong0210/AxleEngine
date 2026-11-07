@@ -114,7 +114,10 @@ namespace Axle {
     };
 
     struct RenderSkyboxData {
+        bool Authored = false;
         bool Enabled = false;
+        bool SyncWithSun = true;
+        float CustomAzimuth = 45, CustomElevation = 50;
         bool HemisphereAmbient = true;
         float SunSize = 0.02f, SunGlow = 1, Turbidity = 2;
         int Type = 0; // 0: Atmospheric Procedural, 1: Cubemap / HDRI
@@ -152,6 +155,7 @@ namespace Axle {
             Meshes.clear();
             Skins.clear();
             Particles.clear();
+            ErrorMessage.clear();
             DirectionalLight.reset();
             AdditionalDirectionalLights.clear();
             PointLights.clear();
@@ -163,7 +167,7 @@ namespace Axle {
             TotalEntities = 0;
         }
 
-        bool IsEmpty() const { return Meshes.empty() && PointLights.empty() && SpotLights.empty() && !DirectionalLight.has_value() && AdditionalDirectionalLights.empty(); }
+        bool IsEmpty() const { return Meshes.empty() && Skins.empty() && Particles.empty() && !(Skybox.Authored && Skybox.Enabled) && PointLights.empty() && SpotLights.empty() && !DirectionalLight.has_value() && AdditionalDirectionalLights.empty(); }
         size_t GetMeshCount() const { return Meshes.size(); }
         size_t GetPointLightCount() const { return PointLights.size(); }
         size_t GetSpotLightCount() const { return SpotLights.size(); }

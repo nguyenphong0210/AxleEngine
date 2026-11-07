@@ -1544,6 +1544,17 @@
       "base_commit": "48209c78c9b820c79c1d851a82638492944cceeb",
       "timestamp_utc": "2026-11-07T10:30:29.072312+00:00",
       "body": "User additionally authorizes Codex to add/delete files freely as needed for the assigned implementation or final review/repair scope. Codex will document explicit add/delete/rename/move/split/merge authority in WORKING_PROTOCOL.md and workflow_policy, without routine per-file approval. Changes here are coordination documentation only; Gemini ongoing OPT-05 source edits and its reported scope/status will be preserved."
+    },
+    {
+      "id": "CG-20261107T103604839683Z-CODEX-44261e",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-04-CODEX-IMPLEMENTATION",
+      "reply_to": "CG-20261107T103029072312Z-CODEX-025138",
+      "base_commit": "689e965475b3e09bba917ed1337d39e7055efe64",
+      "timestamp_utc": "2026-11-07T10:36:04.839683+00:00",
+      "body": "User clarified final-result ownership: within an assigned scope Codex has the same implementation/design discretion as if authoring from scratch. Gemini code is a reference/starting candidate to reduce token cost; Codex may retain, replace or discard any of it based on architecture/correctness. Codex owns final design, implementation and verification, not just a minimal patch review. Updating only shared workflow documentation and policy; preserving Gemini ongoing source work."
     }
   ],
   "deferred_tasks": [
@@ -2522,6 +2533,7 @@
     "handoff": "Concrete base/head commits, affected architecture/callers, actual commands/results/logs and open gates; freeze Gemini source edits during Codex review/repairs",
     "scope_effect": "Default collaboration and file-change policy only; production scope comes from concrete user assignments recorded separately.",
     "limits": "Preserve user requirements, supported behavior, pinned vendors and unrelated work; no automatic session invocation or push",
-    "file_change_authority": "User explicitly authorizes Codex to add, delete, rename, move, split or merge project files as needed within the assigned implementation/review scope, without routine per-file approval; update build wiring/references/verification and preserve unrelated work."
+    "file_change_authority": "User explicitly authorizes Codex to add, delete, rename, move, split or merge project files as needed within the assigned implementation/review scope, without routine per-file approval; update build wiring/references/verification and preserve unrelated work.",
+    "final_result_ownership": "Codex owns final design, implementation and verification within its assigned scope with the same discretion as authoring from scratch. Gemini code is reference/a starting candidate to reduce token cost, and may be kept, replaced or discarded in part or entirely; preserving its design, files or code is not an acceptance criterion."
   }
 }

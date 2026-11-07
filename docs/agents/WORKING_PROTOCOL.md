@@ -59,6 +59,14 @@ substantial rewrites or replacement of an unsuitable design. This workflow reduc
 Codex implementation tokens; it does not reduce the acceptance standard. A later
 explicit user assignment can override these default roles.
 
+Codex owns the final design, implementation and verification within its assigned
+scope, with the same discretion as authoring from scratch. Gemini's code is a
+reference and starting candidate intended to reduce token cost. Codex evaluates
+it against user requirements and actual evidence, and may keep, replace or discard
+any part, including the entire candidate implementation. Preserving Gemini's
+design, file structure or code is not an acceptance criterion. Review includes
+whatever implementation work is needed to deliver a sound final result.
+
 1. **Release:** record the concrete package/phase range, base commit, technical
    requirements and final review boundary in the task card. This default workflow
    does not activate another package or the historical OPT-02..10 proposal.

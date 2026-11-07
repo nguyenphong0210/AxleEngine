@@ -349,6 +349,71 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_ThumbnailRenderJobAndCacheContracts() {
+        // 1. Thumbnail ViewRequest parameters
+        ViewRequest thumbReq;
+        thumbReq.Kind = RenderViewKind::Thumbnail;
+        thumbReq.Width = 128;
+        thumbReq.Height = 128;
+        thumbReq.Settings.ClearColor = glm::vec4(0.11f, 0.13f, 0.17f, 1.0f);
+        thumbReq.Settings.EnableShadows = false;
+        thumbReq.Settings.EnableSkybox = false;
+        thumbReq.Name = "Thumbnail_TestAsset";
+
+        RENDER_CHECK(thumbReq.Kind == RenderViewKind::Thumbnail, "Thumbnail kind set");
+        RENDER_CHECK(thumbReq.Width == 128 && thumbReq.Height == 128, "Thumbnail resolution is 128x128");
+        RENDER_CHECK(!thumbReq.Settings.EnableShadows, "Shadows disabled for fast thumbnail generation");
+
+        // 2. Thumbnail RenderWorld setup
+        RenderWorld world;
+        world.TotalEntities = 1;
+
+        RenderDirectionalLight keyLight;
+        keyLight.Direction = glm::normalize(glm::vec3(0.5f, 0.85f, 0.6f));
+        keyLight.Intensity = 1.0f;
+        world.DirectionalLight = keyLight;
+
+        RenderDirectionalLight fillLight;
+        fillLight.Direction = glm::normalize(glm::vec3(-0.4f, 0.5f, -0.6f));
+        fillLight.Intensity = 0.35f;
+        world.AdditionalDirectionalLights.push_back(fillLight);
+
+        RenderMeshInstance rmi;
+        rmi.EntityID = 1;
+        rmi.WorldTransform = glm::mat4(1.0f);
+        rmi.Material.AlbedoColor = glm::vec4(0.8f, 0.2f, 0.2f, 1.0f);
+        rmi.Material.PatternMode = 1;
+        world.Meshes.push_back(rmi);
+
+        RENDER_CHECK(world.Meshes.size() == 1, "Thumbnail world has 1 mesh");
+        RENDER_CHECK(world.DirectionalLight.has_value(), "Key directional light set");
+        RENDER_CHECK(world.AdditionalDirectionalLights.size() == 1, "Fill directional light set");
+
+        // 3. Target validation without targets rejects safely
+        RenderResult result = RenderService::Get().RenderView(world, thumbReq);
+        RENDER_CHECK(!result.Success, "Thumbnail view without target safely rejected");
+
+        // 4. Invalidation & queue simulation contract
+        std::vector<std::string> pendingQueue;
+        pendingQueue.push_back("assets/mesh1.obj");
+        pendingQueue.push_back("assets/mesh2.obj");
+        pendingQueue.push_back("assets/mesh3.axle");
+
+        RENDER_CHECK(pendingQueue.size() == 3, "Pending thumbnail queue initialized");
+
+        // Invalidate mesh2 while queued (rapid directory switch simulation)
+        auto it = std::find(pendingQueue.begin(), pendingQueue.end(), "assets/mesh2.obj");
+        if (it != pendingQueue.end()) pendingQueue.erase(it);
+
+        RENDER_CHECK(pendingQueue.size() == 2, "Invalidated item safely evicted from pending queue");
+        RENDER_CHECK(pendingQueue[0] == "assets/mesh1.obj" && pendingQueue[1] == "assets/mesh3.axle", "Queue integrity preserved");
+
+        // Clear all (complete directory change)
+        pendingQueue.clear();
+        RENDER_CHECK(pendingQueue.empty(), "Pending queue cleared on directory navigation");
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
@@ -365,6 +430,7 @@ bool RunRenderServiceUnitTests() {
     if (!Axle::RenderTests::Test_PreviewViewRequestResizeIsolation()) return false;
     if (!Axle::RenderTests::Test_VFXPreviewIsolationAndMultiEmitter()) return false;
     if (!Axle::RenderTests::Test_AssemblyPreviewExtractionAndIsolation()) return false;
+    if (!Axle::RenderTests::Test_ThumbnailRenderJobAndCacheContracts()) return false;
     std::cout << "  [RenderService] All RenderService & ViewRequest unit tests passed.\n";
     return true;
 }

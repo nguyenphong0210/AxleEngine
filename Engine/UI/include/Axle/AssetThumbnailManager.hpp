@@ -64,12 +64,11 @@ namespace Axle {
         void OnUpdate();
 
     private:
-        void InitRenderer();
         void RetireTextures(std::vector<uint64_t> handles,
                             std::vector<std::shared_ptr<RHI::RHITexture>> textures,
                             std::vector<std::shared_ptr<Texture2D>> loaded,
                             std::vector<u32> generated);
-        bool RenderThumbnail(const std::filesystem::path& path, u32& outTexID, AssetCachedMeta& outMeta);
+        bool RenderThumbnail(const std::filesystem::path& path, uint64_t& outTexHandle, AssetCachedMeta& outMeta);
         bool RenderMaterialThumbnail(const std::filesystem::path& path, std::vector<uint8_t>& outPixels, uint32_t& outWidth, uint32_t& outHeight);
 
     private:
@@ -78,9 +77,6 @@ namespace Axle {
         GuiTextureRegistrar m_TextureRegistrar;
         GuiDeferredReleaser m_DeferredRelease;
         std::unordered_map<std::string, GuiTextureLease> m_GuiThumbnails;
-        u32 m_FBO = 0;
-        u32 m_RBO = 0;
-        std::unique_ptr<Shader> m_Shader;
         std::shared_ptr<VertexArray> m_PreviewSphereMesh;
 
         std::unordered_map<std::string, uint64_t> m_ThumbnailCache;
@@ -88,6 +84,7 @@ namespace Axle {
         std::unordered_map<std::string, std::shared_ptr<RHI::RHITexture>> m_RHIThumbnails;
         std::unordered_map<std::string, AssetCachedMeta> m_MetaCache;
         std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_LoadedTextures;
+        std::unordered_map<std::string, std::filesystem::file_time_type> m_AssetRevisions;
         std::vector<u32> m_GeneratedTextures;
         std::vector<std::filesystem::path> m_PendingQueue;
 

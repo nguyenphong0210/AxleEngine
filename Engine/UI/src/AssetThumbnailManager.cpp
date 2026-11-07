@@ -5,6 +5,12 @@
 #include <Axle/AssetDSL.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHIMesh.hpp>
+#include <Axle/RHIMeshRegistry.hpp>
+#include <Axle/RenderService.hpp>
+#include <Axle/RenderWorld.hpp>
+#include <Axle/ViewRequest.hpp>
+#include <Axle/Framebuffer.hpp>
 #include <Extensions/NRIHelper.h>
 #include <Axle/ImageSource.hpp>
 #include <Axle/ImageTextureCache.hpp>
@@ -23,90 +29,6 @@
 
 namespace Axle {
 
-    static const char* s_ThumbnailVertSrc = R"(
-        #version 450 core
-        layout(location = 0) in vec3 a_Position;
-
-        uniform mat4 u_ViewProjection;
-        uniform mat4 u_Transform;
-
-        out vec3 v_WorldPos;
-        out vec3 v_LocalPos;
-
-        void main() {
-            v_LocalPos = a_Position;
-            vec4 worldPos = u_Transform * vec4(a_Position, 1.0);
-            v_WorldPos = worldPos.xyz;
-            gl_Position = u_ViewProjection * worldPos;
-        }
-    )";
-
-    static const char* s_ThumbnailFragSrc = R"(
-        #version 450 core
-        layout(location = 0) out vec4 o_Color;
-
-        in vec3 v_WorldPos;
-        in vec3 v_LocalPos;
-
-        uniform int u_PatternMode;
-        uniform float u_TileScale;
-        uniform vec4 u_Color1;
-        uniform vec4 u_Color2;
-        uniform vec3 u_LightDir;
-        uniform mat4 u_Transform;
-
-        void main() {
-            float pattern = 0.0;
-            vec3 normal = vec3(0.0, 1.0, 0.0);
-            vec4 baseColor = u_Color1;
-            if (u_PatternMode == 0) {
-                vec2 coord = floor(v_WorldPos.xz * u_TileScale);
-                pattern = mod(coord.x + coord.y, 2.0);
-                baseColor = mix(u_Color1, u_Color2, pattern);
-            } else if (u_PatternMode == 1) {
-                vec3 dx = dFdx(v_WorldPos);
-                vec3 dy = dFdy(v_WorldPos);
-                normal = normalize(cross(dx, dy));
-                if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
-
-                vec3 absN = abs(normal);
-                vec2 uv = (absN.y >= absN.x && absN.y >= absN.z) ? v_LocalPos.xz :
-                          ((absN.x >= absN.z) ? v_LocalPos.zy : v_LocalPos.xy);
-                vec2 coord = floor(uv * u_TileScale + vec2(0.0001));
-                pattern = mod(coord.x + coord.y, 2.0);
-                baseColor = mix(u_Color1, u_Color2, pattern);
-            } else if (u_PatternMode == 2) {
-                vec3 nLocal = normalize(v_LocalPos);
-                float u = atan(nLocal.z, nLocal.x) / (2.0 * 3.14159265359) + 0.5;
-                float v = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
-                vec2 coord = floor(vec2(u * u_TileScale, v * (u_TileScale * 0.5)));
-                pattern = mod(coord.x + coord.y, 2.0);
-                normal = normalize((u_Transform * vec4(v_LocalPos, 0.0)).xyz);
-                baseColor = mix(u_Color1, u_Color2, pattern);
-            } else {
-                // PatternMode 3+: Unity Default Shading (Clean, solid matte surface)
-                vec3 dx = dFdx(v_WorldPos);
-                vec3 dy = dFdy(v_WorldPos);
-                normal = normalize(cross(dx, dy));
-                if (dot(normal, normalize(-v_WorldPos)) < 0.0) normal = -normal;
-                baseColor = u_Color1;
-            }
-            vec3 keyLight = normalize(u_LightDir);
-            vec3 fillLight = normalize(vec3(-0.4, 0.5, -0.6));
-
-            float NdotKey = max(dot(normal, keyLight), 0.0);
-            float NdotFill = max(dot(normal, fillLight), 0.0) * 0.35;
-            float ambient = 0.34;
-            float lighting = ambient + 0.56 * NdotKey + NdotFill;
-
-            vec3 viewDir = normalize(-v_WorldPos);
-            vec3 halfDir = normalize(keyLight + viewDir);
-            float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.22;
-
-            o_Color = vec4(baseColor.rgb * lighting + vec3(spec), baseColor.a);
-        }
-    )";
-
     AssetThumbnailManager* AssetThumbnailManager::s_Instance = nullptr;
 
     uint64_t AssetThumbnailManager::GetPreview(const std::filesystem::path& path) {
@@ -115,25 +37,12 @@ namespace Axle {
 
     AssetThumbnailManager::AssetThumbnailManager() {
         s_Instance = this;
-        if (Window::HasActiveContext()) {
-            InitRenderer();
-        }
     }
 
     AssetThumbnailManager::~AssetThumbnailManager() {
         Clear();
         if (s_Instance == this) {
             s_Instance = nullptr;
-        }
-        if (Window::HasActiveContext()) {
-            if (m_RBO) {
-                glDeleteRenderbuffers(1, &m_RBO);
-                m_RBO = 0;
-            }
-            if (m_FBO) {
-                glDeleteFramebuffers(1, &m_FBO);
-                m_FBO = 0;
-            }
         }
     }
 
@@ -163,6 +72,13 @@ namespace Axle {
         }
         m_ThumbnailDimensions.erase(key);
         m_MetaCache.erase(key);
+        m_AssetRevisions.erase(key);
+
+        auto qIt = std::find(m_PendingQueue.begin(), m_PendingQueue.end(), path);
+        if (qIt != m_PendingQueue.end()) {
+            m_PendingQueue.erase(qIt);
+        }
+
         RetireTextures(std::move(handles), std::move(textures), std::move(loaded), std::move(generated));
     }
 
@@ -170,20 +86,6 @@ namespace Axle {
         if (s_Instance) {
             s_Instance->InvalidateThumbnail(path);
         }
-    }
-
-    void AssetThumbnailManager::InitRenderer() {
-        glGenFramebuffers(1, &m_FBO);
-        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
-
-        glGenRenderbuffers(1, &m_RBO);
-        glBindRenderbuffer(GL_RENDERBUFFER, m_RBO);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, m_ThumbnailResolution, m_ThumbnailResolution);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_RBO);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        m_Shader = std::make_unique<Shader>(s_ThumbnailVertSrc, s_ThumbnailFragSrc);
     }
 
     void AssetThumbnailManager::SetImGuiLayer(ImGuiLayer* layer) {
@@ -218,6 +120,7 @@ namespace Axle {
         m_RHIThumbnails.clear();
         m_MetaCache.clear();
         m_LoadedTextures.clear();
+        m_AssetRevisions.clear();
         m_PendingQueue.clear();
     }
 
@@ -316,8 +219,8 @@ namespace Axle {
             return 0;
         }
 
-        // 3. 3D Meshes & Assemblies (legacy OpenGL FBO preview)
-        if (!Window::HasActiveContext()) {
+        // 3. 3D Meshes & Assemblies
+        if (!RHI::RHIDevice::Get().IsNativeReady() && !Window::HasActiveContext()) {
             return 0;
         }
 
@@ -330,13 +233,12 @@ namespace Axle {
 
         // Render synchronously if pending queue is empty or small
         if (m_PendingQueue.size() < 3) {
-            u32 texID = 0;
+            uint64_t handle = 0;
             AssetCachedMeta meta;
-            if (RenderThumbnail(path, texID, meta)) {
-                m_ThumbnailCache[key] = texID;
+            if (RenderThumbnail(path, handle, meta)) {
+                m_ThumbnailCache[key] = handle;
                 m_MetaCache[key] = meta;
-                m_GeneratedTextures.push_back(texID);
-                return texID;
+                return handle;
             }
         }
 
@@ -349,7 +251,7 @@ namespace Axle {
     }
 
     void AssetThumbnailManager::OnUpdate() {
-        if (!Window::HasActiveContext() || m_PendingQueue.empty()) return;
+        if ((!RHI::RHIDevice::Get().IsNativeReady() && !Window::HasActiveContext()) || m_PendingQueue.empty()) return;
 
         size_t count = 0;
         while (!m_PendingQueue.empty() && count < m_MaxGenerationsPerFrame) {
@@ -361,12 +263,11 @@ namespace Axle {
                 continue;
             }
 
-            u32 texID = 0;
+            uint64_t handle = 0;
             AssetCachedMeta meta;
-            if (RenderThumbnail(path, texID, meta)) {
-                m_ThumbnailCache[key] = texID;
+            if (RenderThumbnail(path, handle, meta)) {
+                m_ThumbnailCache[key] = handle;
                 m_MetaCache[key] = meta;
-                m_GeneratedTextures.push_back(texID);
             } else {
                 m_ThumbnailCache[key] = 0; // Mark failed to avoid infinite retry
             }
@@ -374,8 +275,9 @@ namespace Axle {
         }
     }
 
-    bool AssetThumbnailManager::RenderThumbnail(const std::filesystem::path& path, u32& outTexID, AssetCachedMeta& outMeta) {
-        if (!Window::HasActiveContext() || !m_Shader || !std::filesystem::exists(path)) return false;
+    bool AssetThumbnailManager::RenderThumbnail(const std::filesystem::path& path, uint64_t& outTexHandle, AssetCachedMeta& outMeta) {
+        if (!std::filesystem::exists(path)) return false;
+        if (!RHI::RHIDevice::Get().IsNativeReady() && !Window::HasActiveContext()) return false;
 
         auto ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
@@ -432,6 +334,7 @@ namespace Axle {
                         if (loaded.Success) {
                             AxlePackagePart part;
                             part.Name = node.Tag;
+                            part.RelativePath = node.Mesh.AssetPath;
                             part.LocalTranslation = glm::vec3(currentMat[3]);
                             part.LocalRotation = glm::quat_cast(currentMat);
                             part.LocalScale = glm::vec3(glm::length(currentMat[0]), glm::length(currentMat[1]), glm::length(currentMat[2]));
@@ -515,52 +418,59 @@ namespace Axle {
             outMeta.TileScale = firstPart.TileScale;
         }
 
-        // 2. Preserve OpenGL state to prevent corrupting ImGui / viewport rendering
-        struct GLStateScope {
-            GLint fbo = 0;
-            GLint viewport[4]{};
-            GLboolean depthTest = GL_FALSE;
-            GLboolean cullFace = GL_FALSE;
-            GLint polygonMode[2]{};
+        // 2. Build RenderWorld
+        RenderWorld world;
+        world.TotalEntities = static_cast<uint32_t>(pkg.Parts.size());
 
-            GLStateScope() {
-                glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
-                glGetIntegerv(GL_VIEWPORT, viewport);
-                depthTest = glIsEnabled(GL_DEPTH_TEST);
-                cullFace = glIsEnabled(GL_CULL_FACE);
-                glGetIntegerv(GL_POLYGON_MODE, polygonMode);
+        RenderDirectionalLight keyLight;
+        keyLight.Direction = glm::normalize(glm::vec3(0.5f, 0.85f, 0.6f));
+        keyLight.Color = glm::vec3(1.0f);
+        keyLight.Intensity = 1.0f;
+        keyLight.AmbientIntensity = 0.34f;
+        world.DirectionalLight = keyLight;
+
+        RenderDirectionalLight fillLight;
+        fillLight.Direction = glm::normalize(glm::vec3(-0.4f, 0.5f, -0.6f));
+        fillLight.Color = glm::vec3(0.85f, 0.90f, 1.0f);
+        fillLight.Intensity = 0.35f;
+        world.AdditionalDirectionalLights.push_back(fillLight);
+
+        for (size_t i = 0; i < pkg.Parts.size(); ++i) {
+            const auto& part = pkg.Parts[i];
+            glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
+                               * glm::mat4_cast(part.LocalRotation)
+                               * glm::scale(glm::mat4(1.0f), part.LocalScale);
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), -center) * localMat;
+
+            RenderMeshInstance rmi;
+            rmi.EntityID = static_cast<uint32_t>(i + 1);
+            rmi.WorldTransform = model;
+            rmi.Material.AlbedoColor = part.LoadedMesh.SourceData.ColorPrimary;
+            rmi.Material.SecondaryColor = part.LoadedMesh.SourceData.ColorSecondary;
+            rmi.Material.PatternMode = part.LoadedMesh.SourceData.PatternMode;
+            rmi.Material.TileScale = glm::vec2(part.LoadedMesh.SourceData.TileScale);
+            rmi.Material.Roughness = 0.5f;
+            rmi.Material.Metallic = 0.0f;
+
+            if (part.Name == "MaterialSphere" && m_PreviewSphereMesh) {
+                rmi.GLMesh = m_PreviewSphereMesh;
+            } else if (!part.LoadedMesh.SourceData.Vertices.empty()) {
+                rmi.GLMesh = CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
             }
 
-            ~GLStateScope() {
-                glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-                glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
-                if (depthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
-                if (cullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
-                glPolygonMode(GL_FRONT_AND_BACK, polygonMode[0]);
+#if defined(AXLE_BUILD_RHI)
+            if (RHI::RHIDevice::Get().IsNativeReady()) {
+                if (!part.LoadedMesh.SourceData.Vertices.empty()) {
+                    rmi.NativeMesh = RHI::RHIMesh::CreateFromAxleMesh(part.LoadedMesh.SourceData.Vertices, part.LoadedMesh.SourceData.Indices);
+                } else if (!part.RelativePath.empty()) {
+                    rmi.NativeMesh = RHIMeshRegistry::Get().GetOrCreateMesh(part.RelativePath);
+                }
             }
-        };
-        GLStateScope stateScope;
+#endif
+            world.Meshes.push_back(std::move(rmi));
+        }
 
-        // Allocate 2D Texture attachment
-        GLuint texID = 0;
-        glGenTextures(1, &texID);
-        glBindTexture(GL_TEXTURE_2D, texID);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_ThumbnailResolution, m_ThumbnailResolution, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-        // 3. Bind offscreen FBO and attach texture
-        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texID, 0);
-
-        glViewport(0, 0, m_ThumbnailResolution, m_ThumbnailResolution);
-        glEnable(GL_DEPTH_TEST);
-        glClearColor(0.11f, 0.13f, 0.17f, 1.0f); // Sleek studio charcoal
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // 4. Studio isometric framing camera
+        // 3. Studio camera
         float pitchRad = glm::radians(24.0f);
         float yawRad = glm::radians(38.0f);
         float distance = maxDim * 1.85f;
@@ -570,39 +480,56 @@ namespace Axle {
             distance * std::cos(pitchRad) * std::cos(yawRad)
         );
         glm::mat4 view = glm::lookAt(camPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 proj = glm::perspective(glm::radians(45.0f), 1.0f, 0.01f, distance * 6.0f);
-        glm::mat4 viewProj = proj * view;
+        PerspectiveCamera cam(45.0f, 1.0f, 0.01f, distance * 6.0f);
+        cam.SetViewMatrix(view, camPos);
 
-        m_Shader->Bind();
-        m_Shader->SetMat4("u_ViewProjection", viewProj);
-        m_Shader->SetFloat3("u_LightDir", glm::vec3(0.5f, 0.85f, 0.6f));
+        // 4. ViewRequest
+        ViewRequest request;
+        request.Kind = RenderViewKind::Thumbnail;
+        request.Width = m_ThumbnailResolution;
+        request.Height = m_ThumbnailResolution;
+        request.Camera = cam;
+        request.Settings.ClearColor = glm::vec4(0.11f, 0.13f, 0.17f, 1.0f);
+        request.Settings.EnableShadows = false;
+        request.Settings.EnableSkybox = false;
+        request.Name = "Thumbnail_" + path.filename().string();
 
-        // 5. Draw parts with center offset
-        for (const auto& part : pkg.Parts) {
-            std::shared_ptr<VertexArray> vao;
-            if (part.Name == "MaterialSphere" && m_PreviewSphereMesh) {
-                vao = m_PreviewSphereMesh;
-            } else {
-                vao = CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
+        std::string key = path.lexically_normal().string();
+
+#if defined(AXLE_BUILD_RHI)
+        if (RHI::RHIDevice::Get().IsNativeReady()) {
+            auto rhiTex = std::make_shared<RHI::RHITexture>();
+            if (rhiTex->Init(RHI::RHITextureDesc::RenderTarget2D(m_ThumbnailResolution, m_ThumbnailResolution, RHI::RHITextureFormat::RGBA8_UNORM, request.Name))) {
+                request.ColorTarget = rhiTex.get();
+                auto result = RenderService::Get().RenderView(world, request);
+                if (result.Success) {
+                    auto token = m_TextureRegistrar ? m_TextureRegistrar(*rhiTex) : GuiTextureLease{};
+                    if (token.IsValid()) {
+                        outTexHandle = token.GetID();
+                        m_GuiThumbnails[key] = std::move(token);
+                        m_RHIThumbnails[key] = std::move(rhiTex);
+                        return true;
+                    }
+                }
             }
-            if (!vao) continue;
-
-            glm::mat4 localMat = glm::translate(glm::mat4(1.0f), part.LocalTranslation)
-                               * glm::mat4_cast(part.LocalRotation)
-                               * glm::scale(glm::mat4(1.0f), part.LocalScale);
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), -center) * localMat;
-
-            m_Shader->SetMat4("u_Transform", model);
-            m_Shader->SetInt("u_PatternMode", part.LoadedMesh.SourceData.PatternMode);
-            m_Shader->SetFloat("u_TileScale", part.LoadedMesh.SourceData.TileScale);
-            m_Shader->SetFloat4("u_Color1", part.LoadedMesh.SourceData.ColorPrimary);
-            m_Shader->SetFloat4("u_Color2", part.LoadedMesh.SourceData.ColorSecondary);
-
-            RenderCommand::DrawIndexed(vao);
+            return false;
         }
+#endif
 
-        outTexID = texID;
-        return true;
+        if (Window::HasActiveContext()) {
+            FramebufferSpecification spec;
+            spec.Width = m_ThumbnailResolution;
+            spec.Height = m_ThumbnailResolution;
+            auto fb = Framebuffer::Create(spec);
+            request.GLTargetFBO = fb;
+            auto result = RenderService::Get().RenderView(world, request);
+            if (result.Success) {
+                outTexHandle = fb->GetColorAttachmentRendererID();
+                m_GeneratedTextures.push_back(static_cast<u32>(outTexHandle));
+                return true;
+            }
+        }
+        return false;
     }
 
     bool AssetThumbnailManager::RenderMaterialThumbnail(const std::filesystem::path& path, std::vector<uint8_t>& outPixels, uint32_t& outWidth, uint32_t& outHeight) {

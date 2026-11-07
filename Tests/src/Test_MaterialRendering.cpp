@@ -488,7 +488,11 @@ bool VerifyMaterialRendering(const std::filesystem::path& root) {
     lm.UseCustomShader=false; lm.AlbedoColor={0,0,1,1};
     auto mixed=render();
     if (!check(sum(mixed,0,64,2)>sum(mixed,0,64,0)*2+1000 && sum(mixed,64,128,1)>1000,"Built-in and custom layouts can alternate in a frame")) return false;
-    auto fixtureSky=scene->CreateEntity("Authored fixture sky");fixtureSky.AddComponent<SkyboxComponent>();
+    // Keep surface ambient identical while testing sky/custom binding order.
+    // The sky is explicitly authored; it must not change the lighting fixture.
+    auto fixtureSky=scene->CreateEntity("Authored fixture sky");auto& fixtureEnvironment=fixtureSky.AddComponent<SkyboxComponent>();
+    fixtureEnvironment.Intensity=0.28f;
+    fixtureEnvironment.ZenithColor=fixtureEnvironment.HorizonColor=fixtureEnvironment.GroundColor={0.22f,0.25f,0.32f};
     settings.EnableSkybox=true;
     rm.SurfaceType=SurfaceType::Transparent;rm.DepthWrite=false;
     auto afterSky=render();

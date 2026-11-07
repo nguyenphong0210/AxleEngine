@@ -472,6 +472,7 @@ namespace Axle {
         camera.SetViewMatrix(glm::lookAt(glm::vec3(0, 0, 4), glm::vec3(0), glm::vec3(0, 1, 0)),
                              glm::vec3(0, 0, 4));
         auto scene = std::make_shared<Scene>();
+        scene->CreateEntity("Authored VFX fixture light").AddComponent<DirectionalLightComponent>().CastShadows=false;
         auto entity = scene->CreateEntity("Particle readback fixture");
         auto &effect = entity.AddComponent<ParticleEmitterComponent>();
         effect.EmitterStacks.clear();

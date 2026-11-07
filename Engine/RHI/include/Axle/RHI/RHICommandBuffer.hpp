@@ -121,15 +121,18 @@ namespace Axle::RHI {
         // Reset underlying command allocator for frame-to-frame recycling
         bool Reset();
 
-        bool IsValid() const { return m_CommandBuffer != nullptr; }
-        bool IsRecording() const { return m_IsRecording; }
-        bool IsExecutable() const { return m_IsExecutable; }
+        bool IsValid() const { return m_CommandBuffer && m_Lease.IsLive(); }
+        bool IsRecording() const { return IsValid() && m_IsRecording; }
+        bool IsExecutable() const { return IsValid() && m_IsExecutable; }
+        RHIResourceLease AcquireLease() const { return m_Lease; }
 
-        nri::CommandBuffer* GetNative() const { return m_CommandBuffer; }
-        operator nri::CommandBuffer*() const { return m_CommandBuffer; }
-        nri::CommandAllocator* GetCommandAllocator() const { return m_CommandAllocator; }
+        nri::CommandBuffer* GetNative() const { return IsValid() ? m_CommandBuffer : nullptr; }
+        operator nri::CommandBuffer*() const { return GetNative(); }
+        nri::CommandAllocator* GetCommandAllocator() const { return IsValid() ? m_CommandAllocator : nullptr; }
 
     private:
+        bool Publish();
+        RHIResourceLease m_Lease;
         nri::CommandBuffer* m_CommandBuffer = nullptr;
         nri::CommandAllocator* m_CommandAllocator = nullptr;
         bool m_OwnsAllocator = false;

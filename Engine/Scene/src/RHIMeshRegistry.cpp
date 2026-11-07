@@ -21,9 +21,11 @@ namespace Axle {
     }
 
     bool RHIMeshRegistry::Init() {
-        if (m_Initialized) return true;
+        if (m_Initialized && m_Cube && m_Cube->IsValid() && m_Sphere && m_Sphere->IsValid() &&
+            m_Cylinder && m_Cylinder->IsValid() && m_Cone && m_Cone->IsValid() && m_Plane && m_Plane->IsValid()) return true;
         auto& device = RHIDevice::Get();
         if (!device.IsNativeReady()) return false;
+        Shutdown();
 
         // Generate built-in primitive meshes with high-fidelity curvature (Godot & Unity parity)
         m_Cube = RHIMesh::CreateCube(1.0f);
@@ -57,27 +59,27 @@ namespace Axle {
     }
 
     std::shared_ptr<RHIMesh> RHIMeshRegistry::GetCube() {
-        if (!m_Cube && !m_Initialized) Init();
+        if ((!m_Cube || !m_Cube->IsValid()) && !Init()) return nullptr;
         return m_Cube;
     }
 
     std::shared_ptr<RHIMesh> RHIMeshRegistry::GetSphere() {
-        if (!m_Sphere && !m_Initialized) Init();
+        if ((!m_Sphere || !m_Sphere->IsValid()) && !Init()) return nullptr;
         return m_Sphere;
     }
 
     std::shared_ptr<RHIMesh> RHIMeshRegistry::GetCylinder() {
-        if (!m_Cylinder && !m_Initialized) Init();
+        if ((!m_Cylinder || !m_Cylinder->IsValid()) && !Init()) return nullptr;
         return m_Cylinder;
     }
 
     std::shared_ptr<RHIMesh> RHIMeshRegistry::GetCone() {
-        if (!m_Cone && !m_Initialized) Init();
+        if ((!m_Cone || !m_Cone->IsValid()) && !Init()) return nullptr;
         return m_Cone;
     }
 
     std::shared_ptr<RHIMesh> RHIMeshRegistry::GetPlane() {
-        if (!m_Plane && !m_Initialized) Init();
+        if ((!m_Plane || !m_Plane->IsValid()) && !Init()) return nullptr;
         return m_Plane;
     }
 

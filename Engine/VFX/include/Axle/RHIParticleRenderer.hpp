@@ -196,12 +196,12 @@ namespace Axle {
         RHI::RHIPipelineLayout m_PipelineLayout;
 
         // Default PSOs (AlphaBlend, Additive, Multiply, Cutout in SDR & HDR formats)
-        nri::Pipeline* m_PipelineAlphaBlendSDR = nullptr;
-        nri::Pipeline* m_PipelineAlphaBlendHDR = nullptr;
-        nri::Pipeline* m_PipelineAdditiveSDR = nullptr;
-        nri::Pipeline* m_PipelineAdditiveHDR = nullptr;
-        nri::Pipeline* m_PipelineCutoutSDR = nullptr;
-        nri::Pipeline* m_PipelineCutoutHDR = nullptr;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineAlphaBlendSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineAlphaBlendHDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineAdditiveSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineAdditiveHDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineCutoutSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineCutoutHDR;
 
         // GPU Buffers
         RHI::RHIBuffer m_ConstantBuffer;

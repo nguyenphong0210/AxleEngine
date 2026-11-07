@@ -55,7 +55,7 @@ namespace Axle::RHI {
         // Reconfigure presentation mode (VSync vs Low-Latency Mailbox)
         void SetVSync(bool vsync);
 
-        bool IsValid() const { return m_Initialized && (m_SwapChain != nullptr || m_IsLegacyOpenGL); }
+        bool IsValid() const { return m_Initialized && ((m_SwapChain && m_Lease.IsLive()) || m_IsLegacyOpenGL); }
         bool NeedsResize() const { return m_NeedsResize; }
         bool IsMinimized() const { return m_IsMinimized; }
 
@@ -75,11 +75,12 @@ namespace Axle::RHI {
 
         nri::Fence* GetCurrentAcquireSemaphore() const;
         nri::Fence* GetCurrentReleaseSemaphore() const;
-        nri::Fence* GetFrameFence() const { return m_FrameFence; }
+        nri::Fence* GetFrameFence() const { return IsValid() ? m_FrameFence : nullptr; }
 
-        nri::SwapChain* GetNRISwapChain() const { return m_SwapChain; }
+        nri::SwapChain* GetNRISwapChain() const { return IsValid() ? m_SwapChain : nullptr; }
 
     private:
+        RHIResourceLease m_Lease;
         bool CreateNRIResources(const RHISurface& surface);
         void DestroyNRIResources();
         bool RecreateSwapChain();

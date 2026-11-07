@@ -1,6 +1,7 @@
 #pragma once
 #include <Axle/RHI/RHICommon.hpp>
 #include <Axle/RHI/RHIStatus.hpp>
+#include <Axle/RHI/RHIResource.hpp>
 
 #include <NRI.h>
 #include <Extensions/NRIDeviceCreation.h>
@@ -46,8 +47,11 @@ namespace Axle::RHI {
         bool ObserveResult(nri::Result result, std::string_view operation, std::string_view resource = {}, bool timedOut = false);
         RHIDeviceState GetState() const { return m_State; }
         const std::optional<RHIGPUError>& GetFirstError() const { return m_FirstError; }
-        bool CanSubmit() const { return IsNativeReady() && m_State == RHIDeviceState::Ready; }
-        bool CanCreateResources() const { return IsNativeReady() && (m_State == RHIDeviceState::Ready || m_State == RHIDeviceState::SurfaceRebuildRequired); }
+        bool CanSubmit() const { return IsNativeReady() && m_Resources.IsOwnerThread() && m_State == RHIDeviceState::Ready; }
+        bool CanCreateResources() const { return IsNativeReady() && m_Resources.IsOwnerThread() && (m_State == RHIDeviceState::Ready || m_State == RHIDeviceState::SurfaceRebuildRequired); }
+        RHIResourceService& GetResources() { return m_Resources; }
+        const RHIResourceService& GetResources() const { return m_Resources; }
+        uint64_t GetEpoch() const { return m_Resources.GetEpoch(); }
         void SurfaceRebuilt() { if (m_State == RHIDeviceState::SurfaceRebuildRequired) m_State = RHIDeviceState::Ready; }
         void ReleaseNative(std::function<void()> release);
 
@@ -100,6 +104,7 @@ namespace Axle::RHI {
         nri::Device* m_Device = nullptr;
         nri::Queue* m_GraphicsQueue = nullptr;
         NRIInterfaces m_NRI;
+        RHIResourceService m_Resources;
     };
 
 }

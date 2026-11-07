@@ -165,6 +165,8 @@ int main(int argc, char** argv) {
         } else ok = NativeReadiness(mode == "vulkan" ? RHIType::Vulkan : RHIType::Direct3D12);
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; }
     RHIDevice::Get().Shutdown();
+    ok = Axle::RenderTests::Check(Axle::RHI::GetRHIValidationErrorCount() == 0,
+        "native validation reported no errors, including teardown", __FILE__, __LINE__) && ok;
     std::cout << "RHIFoundation: " << (ok ? "PASS" : "FAIL") << '\n';
     return ok ? 0 : 1;
 }

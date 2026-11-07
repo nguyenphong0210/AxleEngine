@@ -86,7 +86,7 @@ namespace Axle {
         std::unique_ptr<RHI::RHITexture> m_DepthTexture;
 
         RHI::RHIPipelineLayout m_PipelineLayout;
-        nri::Pipeline* m_Pipeline = nullptr;
+        RHI::RHIResourceRef<nri::Pipeline> m_Pipeline;
 
         RHI::RHIShaderBytecode m_VertexShader;
         RHI::RHIShaderBytecode m_PixelShader;

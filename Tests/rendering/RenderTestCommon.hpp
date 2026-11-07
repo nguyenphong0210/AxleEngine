@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Axle/RHI/RHICommon.hpp>
+#include <Axle/RHI/RHIDiagnostics.hpp>
 #include <glm/glm.hpp>
 #include <iostream>
 #include <string>

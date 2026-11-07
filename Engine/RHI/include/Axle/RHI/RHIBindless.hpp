@@ -29,7 +29,7 @@ namespace Axle::RHI {
         bool Init(uint32_t maxTextures = 2048);
         void Shutdown();
 
-        bool IsInitialized() const { return m_Initialized; }
+        bool IsInitialized() const { return m_Initialized && m_Pool.IsValid() && m_Layout.IsValid(); }
         uint32_t GetCapacity() const { return m_Capacity; }
         uint32_t GetRegisteredCount() const;
 
@@ -41,7 +41,7 @@ namespace Axle::RHI {
         void UnregisterTexture(uint32_t index);
 
         // Access underlying descriptor resources
-        nri::DescriptorSet* GetDescriptorSet() const { return m_DescriptorSet; }
+        nri::DescriptorSet* GetDescriptorSet() const { return IsInitialized() ? m_DescriptorSet : nullptr; }
         RHIDescriptorPool& GetDescriptorPool() { return m_Pool; }
         const RHISampler& GetDefaultSampler() const { return m_AnisoSampler; }
         const RHIPipelineLayout& GetPipelineLayout() const { return m_Layout; }

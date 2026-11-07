@@ -186,6 +186,8 @@ int main(int argc, char** argv) {
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; ok = false; }
     RHIMeshRegistry::Get().Shutdown(); RHIDevice::Get().Shutdown(); window.reset();
     AssetManager::Shutdown(); PhysicsEngine::Shutdown(); JobSystem::Shutdown();
+    ok = Axle::RenderTests::Check(Axle::RHI::GetRHIValidationErrorCount() == 0,
+        "native validation reported no errors, including teardown", __FILE__, __LINE__) && ok;
     std::cout << "Primitives: " << (ok ? "PASS" : "FAIL") << '\n';
     return ok ? 0 : 1;
 }

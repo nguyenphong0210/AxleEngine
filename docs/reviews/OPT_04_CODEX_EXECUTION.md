@@ -244,12 +244,66 @@ CMake's stderr diagnostic as a shell error; the direct-subprocess rerun returned
 Embedded NRI validation was active; graphics API validation remains NOT RUN.
 P41-04 is implemented/self-verified; the consolidated final review is pending.
 
+## P41-05 - Device epochs and resource generations
+
+Starting from P41-04 commit `59f12b6`. RHIResourceService owns a native device
+context with a unique epoch, weak slot table and changing generations. Strong
+leases retain complete resource payloads and their dependencies; native cleanup
+is queued on release and runs on the render owner after checked completion.
+Device close invalidates all remaining generations and destroys their native
+payloads before destroying the actual owning NRI device. An unresolved process-exit
+owner is quarantined rather than destroying in-flight storage.
+
+Textures, buffers, sampler/layout/pool/pipeline generations, streamers, commands
+and swapchains use this owner. Getters reject closed generations; stale wrapper
+destruction after a new device opens cannot call the new device's interfaces.
+Pipeline cache entries retain layouts and persistent renderer pipeline members
+hold RHIResourceRef leases. Descriptor generations retain their layout, arena and
+bound resource generations; arena reset builds a replacement. Group allocations
+use typed memory leases held by their bound buffers. Raw externally borrowed memory
+remains the external owner's responsibility until all buffer leases retire.
+
+Live native UI owners close before their NRI device through a weak guarded owner
+hook. Destroyed UI owners cannot be called by that hook. The builtin mesh registry
+rebuilds stale device caches while preserving sharing inside the current epoch.
+Raw native lookup remains a migration adapter: an address alone cannot detect
+reuse; new persistent callers use the handle/lease contract.
+
+AxleRHIIdentityTests covers stale handles, actual slot reuse, strong shared leases,
+worker-thread release without native cleanup, owning-device close/reopen, all native
+wrapper types, descriptor dependency/arena replacement, grouped memory and late
+old-wrapper teardown. Native view tests also close a device while the original
+UI and shared builtin mesh are still alive, reopen it, and render through a new
+UI/mesh generation. Both physical backends pass with embedded NRI validation.
+
+Final Debug/Release builds of AxleRHIIdentityTests, AxleRHIResourceTests,
+AxleRHIErrorTests, AxlePrimitiveTests, AxleRHIResourceViewTests,
+AxleRHIFoundationTests and AxleVFXGPUTests passed (exit 0). Build logs:
+p41-05-final-build-{debug,release}.log. Each configuration then passed all 29
+runner cases: identity 3, resources 3, errors 5, primitives 5, views 2, UI epoch/error
+4, VFX GPU 2 and foundation 5. Commands/logs/exits are in run05.py <Config> --views,
+more05.py <Config> and p41-05-{debug,release}{,-more}-results.json. Focused CTest
+passed 5/5 in each configuration. Fresh explicit/fallback GL images match byte for
+byte for all five primitives in both configurations (pixels05.py).
+
+Log inspection caught an external-memory fixture freeing borrowed memory before
+its now-deferred buffer generations retired. The fixture now explicitly retains
+a buffer lease and checks the drain before its external owner frees the allocation.
+Native diagnostics now have a process-wide atomic validation error count, and every
+focused native test fails on any NRI error, including teardown. The final runs above
+pass this check; earlier logs are not evidence. Architecture AF-04 passed (384 files,
+18 CMake files), diff whitespace passed and pinned NRI is clean at 6998e3f.
+
+P41-05 is implemented/self-verified. Recording/submission pinning is P41-06 work;
+graphics API validation and the consolidated final review remain open. Product
+executables/full phase gates will be rebuilt at the phase checkpoint.
+
 ## Remaining work
 
-P41-05..11 remain. P41-05 resource-service/identity test files have been prepared
-but are not wired into the build or verified yet. Next: integrate device epoch and
-generation ownership throughout native wrappers and migration caches, then continue
-in dependency order and perform the requested consolidated final review.
+P41-06..11 remain. Next: pin complete generations from CPU recording/GUI image
+publication through successful submission and checked completion, including abandon,
+failure and nested retirement; migrate raw UI callbacks to independent leased owners.
+Continue in dependency order and perform one consolidated final review after P41-11.
 
 Full phase builds, CTest, integration, jobs/ECS, final native product simulation, GPU
 readbacks and final window/lifetime checks remain open. API-validation prerequisites

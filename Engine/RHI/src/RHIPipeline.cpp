@@ -18,6 +18,7 @@ namespace Axle::RHI {
 
     RHIPipelineLayout::RHIPipelineLayout(RHIPipelineLayout&& other) noexcept
         : m_Layout(other.m_Layout)
+        , m_Lease(std::move(other.m_Lease))
         , m_RootRegisterSpace(other.m_RootRegisterSpace)
         , m_RootConstants(std::move(other.m_RootConstants))
         , m_DescriptorSets(std::move(other.m_DescriptorSets))
@@ -30,6 +31,7 @@ namespace Axle::RHI {
     RHIPipelineLayout& RHIPipelineLayout::operator=(RHIPipelineLayout&& other) noexcept {
         if (this != &other) {
             Shutdown();
+            m_Lease = std::move(other.m_Lease);
             m_Layout = other.m_Layout;
             m_RootRegisterSpace = other.m_RootRegisterSpace;
             m_RootConstants = std::move(other.m_RootConstants);
@@ -69,6 +71,10 @@ namespace Axle::RHI {
         }
         const auto result = ScopedRHIFault::Invoke("CreatePipelineLayout", [&] { return core.CreatePipelineLayout(*device.GetNRIDevice(), desc, candidate.m_Layout); });
         if (result != nri::Result::SUCCESS || !candidate.m_Layout) return false;
+        const auto functions = core; auto layout = candidate.m_Layout;
+        candidate.m_Lease = device.GetResources().Publish(RHIResourceKind::Layout, "PipelineLayout", {layout},
+            [functions, layout] { functions.DestroyPipelineLayout(layout); });
+        if (!candidate.m_Lease.IsLive()) return false;
         *this = std::move(candidate);
         return true;
     }
@@ -79,7 +85,8 @@ namespace Axle::RHI {
     }
 
     void RHIPipelineLayout::Shutdown() {
-        if (m_Layout) {
+        if (m_Lease) { m_Lease.Reset(); m_Layout = nullptr; }
+        else if (m_Layout) {
             auto& rhiDevice = RHIDevice::Get();
             if (rhiDevice.IsNativeReady()) {
                 auto core = rhiDevice.GetNRICore(); auto layout = m_Layout;
@@ -238,10 +245,6 @@ namespace Axle::RHI {
         while (m_LRUList.size() > m_MaxCapacity) {
             const auto& victim = m_LRUList.back();
             m_Lookup.erase(victim.Hash);
-            if (victim.Pipeline && rhiDevice.IsNativeReady()) {
-                auto core = nriCore; auto pipeline = victim.Pipeline;
-                rhiDevice.ReleaseNative([core, pipeline] { core.DestroyPipeline(pipeline); });
-            }
             m_LRUList.pop_back();
         }
     }
@@ -251,15 +254,6 @@ namespace Axle::RHI {
     }
 
     void RHIPipelineCache::Clear() {
-        auto& rhiDevice = RHIDevice::Get();
-        const auto& nriCore = rhiDevice.GetNRICore();
-
-        for (auto& entry : m_LRUList) {
-            if (entry.Pipeline && rhiDevice.IsNativeReady()) {
-                auto core = nriCore; auto pipeline = entry.Pipeline;
-                rhiDevice.ReleaseNative([core, pipeline] { core.DestroyPipeline(pipeline); });
-            }
-        }
         m_LRUList.clear();
         m_Lookup.clear();
     }
@@ -276,6 +270,11 @@ namespace Axle::RHI {
 
         // 1. Check LRU cache
         auto it = m_Lookup.find(hash);
+        if (it != m_Lookup.end() && !it->second->Lease.IsLive()) {
+            m_LRUList.erase(it->second);
+            m_Lookup.erase(it);
+            it = m_Lookup.end();
+        }
         if (it != m_Lookup.end()) {
             m_HitCount++;
             // Splice to front of LRU list (mark most recently used)
@@ -448,13 +447,6 @@ namespace Axle::RHI {
         if (m_LRUList.size() >= m_MaxCapacity) {
             const auto& victim = m_LRUList.back();
             m_Lookup.erase(victim.Hash);
-            if (victim.Pipeline) {
-                if (rhiDevice.IsNativeReady()) {
-                    rhiDevice.WaitIdle();
-                }
-                auto core = nriCore; auto pipeline = victim.Pipeline;
-                rhiDevice.ReleaseNative([core, pipeline] { core.DestroyPipeline(pipeline); });
-            }
             m_LRUList.pop_back();
         }
 
@@ -462,6 +454,10 @@ namespace Axle::RHI {
         PipelineEntry entry;
         entry.Hash = hash;
         entry.Pipeline = newPipeline;
+        const auto functions = nriCore;
+        entry.Lease = rhiDevice.GetResources().Publish(RHIResourceKind::Pipeline, "Pipeline", {newPipeline},
+            [functions, newPipeline] { functions.DestroyPipeline(newPipeline); }, {desc.Layout->AcquireLease()});
+        if (!entry.Lease.IsLive()) { nriCore.DestroyPipeline(newPipeline); return nullptr; }
         entry.IsCompute = false;
 
         m_LRUList.push_front(entry);
@@ -479,6 +475,11 @@ namespace Axle::RHI {
 
         // 1. Check LRU cache
         auto it = m_Lookup.find(hash);
+        if (it != m_Lookup.end() && !it->second->Lease.IsLive()) {
+            m_LRUList.erase(it->second);
+            m_Lookup.erase(it);
+            it = m_Lookup.end();
+        }
         if (it != m_Lookup.end()) {
             m_HitCount++;
             m_LRUList.splice(m_LRUList.begin(), m_LRUList, it->second);
@@ -516,13 +517,6 @@ namespace Axle::RHI {
         if (m_LRUList.size() >= m_MaxCapacity) {
             const auto& victim = m_LRUList.back();
             m_Lookup.erase(victim.Hash);
-            if (victim.Pipeline) {
-                if (rhiDevice.IsNativeReady()) {
-                    rhiDevice.WaitIdle();
-                }
-                auto core = nriCore; auto pipeline = victim.Pipeline;
-                rhiDevice.ReleaseNative([core, pipeline] { core.DestroyPipeline(pipeline); });
-            }
             m_LRUList.pop_back();
         }
 
@@ -530,6 +524,10 @@ namespace Axle::RHI {
         PipelineEntry entry;
         entry.Hash = hash;
         entry.Pipeline = newPipeline;
+        const auto functions = nriCore;
+        entry.Lease = rhiDevice.GetResources().Publish(RHIResourceKind::Pipeline, "Pipeline", {newPipeline},
+            [functions, newPipeline] { functions.DestroyPipeline(newPipeline); }, {desc.Layout->AcquireLease()});
+        if (!entry.Lease.IsLive()) { nriCore.DestroyPipeline(newPipeline); return nullptr; }
         entry.IsCompute = true;
 
         m_LRUList.push_front(entry);

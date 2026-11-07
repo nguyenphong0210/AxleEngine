@@ -132,11 +132,13 @@ namespace Axle::RHI {
         // Publish a complete candidate. Initial data must cover desc.Size bytes.
         bool Init(const RHIBufferDesc& desc, const void* initialData = nullptr);
 
-        // Borrow externally allocated memory; the caller retains its lifetime.
+        // Borrow external memory. Its owner must retain it through all buffer
+        // leases and checked retirement, including after this wrapper shuts down.
         bool InitPlaced(const RHIBufferDesc& desc, nri::Memory* memory, uint64_t memoryOffset);
 
         // Transfer buffer and optional memory ownership only on success.
-        bool InitAdopt(const RHIBufferDesc& desc, nri::Buffer* existingBuffer, nri::Memory* memory = nullptr);
+        bool InitAdopt(const RHIBufferDesc& desc, nri::Buffer* existingBuffer, nri::Memory* memory = nullptr,
+                       std::vector<RHIResourceLease> dependencies = {});
 
         // Shutdown and release NRI resources
         void Shutdown();
@@ -149,21 +151,26 @@ namespace Axle::RHI {
         // the pinned NRI UploadData helper has no byte count or destination offset.
         bool UpdateData(const void* data, uint64_t size, uint64_t offset = 0);
 
-        bool IsValid() const { return m_Buffer != nullptr; }
+        bool IsValid() const { return m_Buffer && m_Lease.IsLive(); }
+        RHIResourceHandle GetHandle() const { return m_Lease.GetHandle(); }
+        RHIResourceLease AcquireLease() const { return m_Lease; }
         uint64_t GetSize() const { return m_Desc.Size; }
         uint32_t GetStructureStride() const { return m_Desc.StructureStride; }
         RHIBufferUsage GetUsage() const { return m_Desc.Usage; }
         RHIMemoryLocation GetMemoryLocation() const { return m_Desc.MemoryLocation; }
         const RHIBufferDesc& GetDesc() const { return m_Desc; }
 
-        nri::Buffer* GetNative() const { return m_Buffer; }
-        nri::Memory* GetNativeMemory() const { return m_Memory; }
-        nri::Descriptor* GetCBV() const { return m_CBV; }
-        operator nri::Buffer*() const { return m_Buffer; }
+        nri::Buffer* GetNative() const { return IsValid() ? m_Buffer : nullptr; }
+        nri::Memory* GetNativeMemory() const { return IsValid() ? m_Memory : nullptr; }
+        nri::Descriptor* GetCBV() const { return IsValid() ? m_CBV : nullptr; }
+        operator nri::Buffer*() const { return GetNative(); }
 
     private:
         bool Build(const RHIBufferDesc& desc, const void* initialData, nri::Memory* borrowedMemory = nullptr, uint64_t memoryOffset = 0);
         bool BuildView();
+        bool Publish(std::vector<RHIResourceLease> dependencies = {});
+        RHIResourceLease m_Lease;
+        std::shared_ptr<bool> m_Mapping;
         RHIBufferDesc m_Desc;
         nri::Buffer* m_Buffer = nullptr;
         nri::Memory* m_Memory = nullptr;
@@ -186,6 +193,12 @@ namespace Axle::RHI {
         float UsagePercent() const { return BudgetBytes > 0 ? (static_cast<float>(UsageBytes) / static_cast<float>(BudgetBytes)) * 100.0f : 0.0f; }
     };
 
+    struct RHIMemoryAllocation {
+        nri::Memory* Native = nullptr;
+        RHIResourceLease Lease;
+        nri::Memory* GetNative() const { return Lease.IsLive() ? Native : nullptr; }
+    };
+
     class RHIMemoryManager {
     public:
         // Query active GPU VRAM budget & usage
@@ -195,12 +208,12 @@ namespace Axle::RHI {
         // Allocates large chunks (up to preferredChunkSize, default 256MB) to prevent heap allocation explosion
         static bool AllocateBufferGroup(const std::vector<RHIBufferDesc>& descs,
                                        std::vector<std::unique_ptr<RHIBuffer>>& outBuffers,
-                                       std::vector<nri::Memory*>& outAllocatedChunks,
+                                       std::vector<RHIMemoryAllocation>& outAllocatedChunks,
                                        RHIMemoryLocation location = RHIMemoryLocation::Device,
                                        uint64_t preferredChunkSize = 256 * 1024 * 1024);
 
         // Free group allocated memory chunks
-        static void FreeAllocatedChunks(std::vector<nri::Memory*>& chunks);
+        static void FreeAllocatedChunks(std::vector<RHIMemoryAllocation>& chunks);
     };
 
 }

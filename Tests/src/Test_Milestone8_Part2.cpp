@@ -1900,7 +1900,7 @@ bool RunTest_Step53_Phase32_Step5_Part1_GPUMemoryAndBuffers() {
     };
 
     std::vector<std::unique_ptr<RHIBuffer>> outGroupBuffers;
-    std::vector<nri::Memory*> outChunks;
+    std::vector<RHIMemoryAllocation> outChunks;
     bool groupAllocOk = RHIMemoryManager::AllocateBufferGroup(groupDescs, outGroupBuffers, outChunks, RHIMemoryLocation::Device, 64 * 1024 * 1024);
     assert(groupAllocOk);
     assert(outGroupBuffers.size() == groupDescs.size());

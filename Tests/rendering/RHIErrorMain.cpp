@@ -193,6 +193,8 @@ int main(int argc, char** argv) {
         ok = mode.find("window") != std::string::npos ? Windowed(backend) : Native(backend);
     }
     RHIDevice::Get().Shutdown();
+    ok = Axle::RenderTests::Check(Axle::RHI::GetRHIValidationErrorCount() == 0,
+        "native validation reported no errors, including teardown", __FILE__, __LINE__) && ok;
     std::cout << "RHIError: " << (ok ? "PASS" : "FAIL") << '\n';
     return ok ? 0 : 1;
 }

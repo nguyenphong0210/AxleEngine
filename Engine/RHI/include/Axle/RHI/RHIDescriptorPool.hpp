@@ -49,8 +49,9 @@ namespace Axle::RHI {
         bool Init(const RHIDescriptorPoolDesc& desc = RHIDescriptorPoolDesc());
         void Shutdown();
 
-        bool IsValid() const { return m_Pool != nullptr; }
-        nri::DescriptorPool* GetNative() const { return m_Pool; }
+        bool IsValid() const { return m_Pool && m_Lease.IsLive(); }
+        nri::DescriptorPool* GetNative() const { return IsValid() ? m_Pool : nullptr; }
+        RHIResourceLease AcquireLease() const { return m_Lease; }
         const RHIDescriptorPoolDesc& GetDesc() const { return m_Desc; }
         uint32_t GetAllocatedSetCount() const { return m_AllocatedSets; }
 
@@ -77,6 +78,8 @@ namespace Axle::RHI {
 
     private:
         RHIDescriptorPoolDesc m_Desc;
+        RHIResourceLease m_Lease;
+        std::vector<RHIResourceLease> m_Sets;
         nri::DescriptorPool* m_Pool = nullptr;
         uint32_t m_AllocatedSets = 0;
     };

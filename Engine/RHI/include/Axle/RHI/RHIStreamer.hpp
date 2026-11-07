@@ -88,9 +88,10 @@ namespace Axle::RHI {
         // Release streamer resources
         void Shutdown();
 
-        bool IsValid() const { return m_Streamer != nullptr; }
-        nri::Streamer* GetNative() const { return m_Streamer; }
-        operator nri::Streamer*() const { return m_Streamer; }
+        bool IsValid() const { return m_Streamer && m_Lease.IsLive(); }
+        nri::Streamer* GetNative() const { return IsValid() ? m_Streamer : nullptr; }
+        operator nri::Streamer*() const { return GetNative(); }
+        RHIResourceLease AcquireLease() const { return m_Lease; }
         const RHIStreamerDesc& GetDesc() const { return m_Desc; }
 
         // Statically allocated constant ring-buffer
@@ -132,6 +133,8 @@ namespace Axle::RHI {
         void EndFrame();
 
     private:
+        bool Build(RHIDevice& device, const RHIStreamerDesc& desc);
+        RHIResourceLease m_Lease;
         nri::Streamer* m_Streamer = nullptr;
         RHIStreamerDesc m_Desc;
         RHIDevice* m_Device = nullptr;

@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/RHI/RHICommon.hpp>
+#include <Axle/RHI/RHIResource.hpp>
 #include <NRI.h>
 #include <string>
 
@@ -145,16 +146,18 @@ namespace Axle::RHI {
         bool Init(const RHITextureDesc& desc);
         void Shutdown();
 
-        bool IsValid() const { return m_Texture != nullptr; }
+        bool IsValid() const { return m_Texture && m_Lease.IsLive(); }
+        RHIResourceHandle GetHandle() const { return m_Lease.GetHandle(); }
+        RHIResourceLease AcquireLease() const { return m_Lease; }
         const RHITextureDesc& GetDesc() const { return m_Desc; }
         uint32_t GetWidth() const { return m_Desc.Width; }
         uint32_t GetHeight() const { return m_Desc.Height; }
         RHITextureFormat GetFormat() const { return m_Desc.Format; }
 
-        nri::Texture* GetNative() const { return m_Texture; }
-        nri::Descriptor* GetSRV() const { return m_SRV; }
-        nri::Descriptor* GetRTV() const { return m_RTV; }
-        nri::Descriptor* GetDSV() const { return m_DSV; }
+        nri::Texture* GetNative() const { return IsValid() ? m_Texture : nullptr; }
+        nri::Descriptor* GetSRV() const { return IsValid() ? m_SRV : nullptr; }
+        nri::Descriptor* GetRTV() const { return IsValid() ? m_RTV : nullptr; }
+        nri::Descriptor* GetDSV() const { return IsValid() ? m_DSV : nullptr; }
 
         // Returns native platform descriptor handle (e.g. D3D12_CPU_DESCRIPTOR_HANDLE ptr for SRV)
         uint64_t GetNativeSRVHandle() const;
@@ -164,6 +167,7 @@ namespace Axle::RHI {
     private:
         bool Build(const RHITextureDesc& desc);
         RHITextureDesc m_Desc;
+        RHIResourceLease m_Lease;
         nri::Texture* m_Texture = nullptr;
         nri::Memory* m_Memory = nullptr;
         nri::Descriptor* m_SRV = nullptr;

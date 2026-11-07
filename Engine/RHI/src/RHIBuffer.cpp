@@ -84,6 +84,8 @@ namespace Axle::RHI {
     RHIBuffer& RHIBuffer::operator=(RHIBuffer&& other) noexcept {
         if (this != &other) {
             Shutdown();
+            m_Lease = std::move(other.m_Lease);
+            m_Mapping = std::move(other.m_Mapping);
             m_Desc = std::move(other.m_Desc);
             m_Buffer = std::exchange(other.m_Buffer, nullptr);
             m_Memory = std::exchange(other.m_Memory, nullptr);
@@ -142,7 +144,12 @@ namespace Axle::RHI {
         nri::BindBufferMemoryDesc binding{m_Buffer, m_Memory, memoryOffset};
         result = ScopedRHIFault::Invoke("BindBufferMemory", [&] { return core.BindBufferMemory(&binding, 1); });
         if (result != nri::Result::SUCCESS || !BuildView()) return false;
-        return !initialData || UpdateData(initialData, desc.Size);
+        std::vector<RHIResourceLease> dependencies;
+        if (borrowedMemory) {
+            auto memoryLease = device.GetResources().AcquireNative(borrowedMemory);
+            if (memoryLease.IsLive()) dependencies.push_back(std::move(memoryLease));
+        }
+        return Publish(std::move(dependencies)) && (!initialData || UpdateData(initialData, desc.Size));
     }
 
     bool RHIBuffer::InitPlaced(const RHIBufferDesc& desc, nri::Memory* memory, uint64_t memoryOffset) {
@@ -153,7 +160,7 @@ namespace Axle::RHI {
         return true;
     }
 
-    bool RHIBuffer::InitAdopt(const RHIBufferDesc& desc, nri::Buffer* existingBuffer, nri::Memory* memory) {
+    bool RHIBuffer::InitAdopt(const RHIBufferDesc& desc, nri::Buffer* existingBuffer, nri::Memory* memory, std::vector<RHIResourceLease> dependencies) {
         if (!existingBuffer || existingBuffer == m_Buffer || (memory && memory == m_Memory) || !ValidBufferDesc(desc)) return false;
         const auto& core = RHIDevice::Get().GetNRICore();
         const auto& native = core.GetBufferDesc(*existingBuffer);
@@ -169,13 +176,34 @@ namespace Axle::RHI {
         }
         candidate.m_Memory = memory;
         candidate.m_OwnsMemory = memory != nullptr;
+        if (!candidate.Publish(std::move(dependencies))) {
+            candidate.m_Buffer = nullptr; candidate.m_Memory = nullptr; candidate.m_OwnsMemory = false;
+            return false;
+        }
         *this = std::move(candidate);
         return true;
     }
 
+    bool RHIBuffer::Publish(std::vector<RHIResourceLease> dependencies) {
+        auto& device = RHIDevice::Get();
+        const auto core = device.GetNRICore();
+        auto cbv = m_CBV; auto buffer = m_Buffer; auto memory = m_OwnsMemory ? m_Memory : nullptr;
+        m_Mapping = std::make_shared<bool>(false);
+        auto mapping = m_Mapping;
+        m_Lease = device.GetResources().Publish(RHIResourceKind::Buffer, m_Desc.DebugName, {buffer, cbv},
+            [core, cbv, buffer, memory, mapping] {
+                if (*mapping) core.UnmapBuffer(*buffer);
+                if (cbv) core.DestroyDescriptor(cbv);
+                core.DestroyBuffer(buffer);
+                if (memory) core.FreeMemory(memory);
+            }, std::move(dependencies));
+        return m_Lease.IsLive();
+    }
+
     void RHIBuffer::Shutdown() {
         auto& device = RHIDevice::Get();
-        if (device.IsNativeReady()) {
+        if (m_Lease) m_Lease.Reset();
+        else if (device.IsNativeReady()) {
             Unmap();
             const auto core = device.GetNRICore();
             auto cbv = m_CBV; auto buffer = m_Buffer; auto memory = m_OwnsMemory ? m_Memory : nullptr;
@@ -187,12 +215,13 @@ namespace Axle::RHI {
         }
         m_CBV = nullptr; m_Buffer = nullptr; m_Memory = nullptr;
         m_OwnsMemory = false; m_MappedData = nullptr;
+        m_Mapping.reset();
         m_MappedOffset = m_MappedSize = 0;
         m_Desc = {};
     }
 
     void* RHIBuffer::Map(uint64_t offset, uint64_t size) {
-        if (!RHIDevice::Get().CanCreateResources() || !m_Buffer || m_Desc.MemoryLocation == RHIMemoryLocation::Device || offset >= m_Desc.Size) return nullptr;
+        if (!RHIDevice::Get().CanCreateResources() || !IsValid() || m_Desc.MemoryLocation == RHIMemoryLocation::Device || offset >= m_Desc.Size) return nullptr;
         const uint64_t count = size ? size : m_Desc.Size - offset;
         if (count > m_Desc.Size - offset) return nullptr;
         if (m_MappedData) {
@@ -206,18 +235,20 @@ namespace Axle::RHI {
             return m_MappedData ? nri::Result::SUCCESS : nri::Result::FAILURE;
         });
         if (result != nri::Result::SUCCESS) return nullptr;
+        *m_Mapping = true;
         m_MappedOffset = offset; m_MappedSize = count;
         return m_MappedData;
     }
 
     void RHIBuffer::Unmap() {
         auto& device = RHIDevice::Get();
-        if (m_Buffer && m_MappedData && device.IsNativeReady()) device.GetNRICore().UnmapBuffer(*m_Buffer);
+        if (IsValid() && m_MappedData && device.GetResources().IsOwnerThread()) device.GetNRICore().UnmapBuffer(*m_Buffer);
+        if (m_Mapping) *m_Mapping = false;
         m_MappedData = nullptr; m_MappedOffset = m_MappedSize = 0;
     }
 
     bool RHIBuffer::UpdateData(const void* data, uint64_t size, uint64_t offset) {
-        if (!m_Buffer || !data || !size || offset > m_Desc.Size || size > m_Desc.Size - offset) return false;
+        if (!IsValid() || !data || !size || offset > m_Desc.Size || size > m_Desc.Size - offset) return false;
         auto& device = RHIDevice::Get();
         if (!device.CanCreateResources()) return false;
         if (m_Desc.MemoryLocation == RHIMemoryLocation::HostUpload || m_Desc.MemoryLocation == RHIMemoryLocation::DeviceUpload) {
@@ -262,7 +293,7 @@ namespace Axle::RHI {
 
     bool RHIMemoryManager::AllocateBufferGroup(const std::vector<RHIBufferDesc>& descs,
                                              std::vector<std::unique_ptr<RHIBuffer>>& outBuffers,
-                                             std::vector<nri::Memory*>& outAllocatedChunks,
+                                             std::vector<RHIMemoryAllocation>& outAllocatedChunks,
                                              RHIMemoryLocation location,
                                              uint64_t preferredChunkSize)
     {
@@ -273,10 +304,14 @@ namespace Axle::RHI {
         std::vector<std::unique_ptr<RHIBuffer>> candidates;
         std::vector<nri::Buffer*> buffers(descs.size(), nullptr);
         std::vector<nri::Memory*> chunks;
+        std::vector<RHIMemoryAllocation> allocations;
+        std::vector<RHIResourceLease> memoryLeases;
         auto fail = [&] {
             candidates.clear();
             for (auto* buffer : buffers) if (buffer) core.DestroyBuffer(buffer);
-            FreeAllocatedChunks(chunks);
+            allocations.clear();
+            memoryLeases.clear();
+            for (auto* chunk : chunks) if (chunk) core.FreeMemory(chunk);
             return false;
         };
         for (size_t i = 0; i < descs.size(); ++i) {
@@ -298,10 +333,20 @@ namespace Axle::RHI {
             // The pinned helper frees and nulls its allocations on failure.
             if (result != nri::Result::SUCCESS) return fail();
         }
+        for (auto*& chunk : chunks) {
+            auto* memory = chunk;
+            auto functions = core;
+            auto lease = device.GetResources().Publish(RHIResourceKind::Memory, "BufferGroupMemory", {memory},
+                [functions, memory] { functions.FreeMemory(memory); });
+            if (!lease.IsLive()) return fail();
+            memoryLeases.push_back(lease);
+            allocations.push_back({memory, std::move(lease)});
+            chunk = nullptr;
+        }
         for (size_t i = 0; i < descs.size(); ++i) {
             auto desc = descs[i]; desc.MemoryLocation = location;
             auto candidate = std::make_unique<RHIBuffer>();
-            if (!candidate->InitAdopt(desc, buffers[i])) return fail();
+            if (!candidate->InitAdopt(desc, buffers[i], nullptr, memoryLeases)) return fail();
             buffers[i] = nullptr;
             candidates.push_back(std::move(candidate));
         }
@@ -309,22 +354,12 @@ namespace Axle::RHI {
         outBuffers.clear();
         FreeAllocatedChunks(outAllocatedChunks);
         outBuffers = std::move(candidates);
-        outAllocatedChunks = std::move(chunks);
+        outAllocatedChunks = std::move(allocations);
         return true;
     }
 
-    void RHIMemoryManager::FreeAllocatedChunks(std::vector<nri::Memory*>& chunks) {
-        auto& rhiDevice = RHIDevice::Get();
-        if (!rhiDevice.IsNativeReady()) return;
-        const auto& core = rhiDevice.GetNRICore();
-        if (!core.FreeMemory) return;
-
-        for (auto* chunk : chunks) {
-            if (chunk) {
-                auto functions = core;
-                rhiDevice.ReleaseNative([functions, chunk] { functions.FreeMemory(chunk); });
-            }
-        }
+    void RHIMemoryManager::FreeAllocatedChunks(std::vector<RHIMemoryAllocation>& chunks) {
+        // Bound buffers and recorded/submitted leases retain their allocations.
         chunks.clear();
     }
 

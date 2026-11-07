@@ -147,9 +147,12 @@ static bool MemoryOwnership() {
         RHIBuffer placed;
         RENDER_CHECK(!placed.InitPlaced(desc, memory, 1), "misaligned external placement rejects");
         RENDER_CHECK(placed.InitPlaced(desc, memory, 0), "borrow external allocation");
+        auto lease = placed.AcquireLease();
         placed.Shutdown();
+        RENDER_CHECK(lease.IsLive(), "the caller keeps borrowed memory alive while a buffer lease survives its wrapper");
         RENDER_CHECK(placed.InitPlaced(desc, memory, 0), "borrowed allocation survives buffer destruction");
     }
+    RENDER_CHECK(device.WaitIdle(), "retire all bound buffer generations before the external owner frees its memory");
     core.FreeMemory(memory); memory = nullptr;
     RENDER_CHECK(core.CreateBuffer(*device.GetNRIDevice(), native, raw) == nri::Result::SUCCESS &&
         core.AllocateMemory(*device.GetNRIDevice(), allocation, memory) == nri::Result::SUCCESS, "adoption source objects");
@@ -166,7 +169,7 @@ static bool MemoryOwnership() {
     RENDER_CHECK(adopted.InitAdopt(desc, raw, memory), "caller retries same live buffer and allocation after rejection");
     adopted.Shutdown();
     std::vector<std::unique_ptr<RHIBuffer>> group;
-    std::vector<nri::Memory*> chunks;
+    std::vector<RHIMemoryAllocation> chunks;
     std::vector<RHIBufferDesc> descs(2, desc);
     RENDER_CHECK(RHIMemoryManager::AllocateBufferGroup(descs, group, chunks, RHIMemoryLocation::HostUpload), "real grouped allocation");
     auto* old = group.front()->GetNative();
@@ -292,6 +295,8 @@ int main(int argc, char** argv) {
         if (ok) ok = Textures() && Buffers() && MemoryOwnership() && HelpersAndMeshes() && PipelineFailures();
         device.Shutdown();
     }
+    ok = Axle::RenderTests::Check(Axle::RHI::GetRHIValidationErrorCount() == 0,
+        "native validation reported no errors, including teardown", __FILE__, __LINE__) && ok;
     std::cout << "RHIResource: " << (ok ? "PASS" : "FAIL") << '\n';
     return ok ? 0 : 1;
 }

@@ -1,5 +1,6 @@
 add_library(AxleRHI STATIC
     src/RHIDevice.cpp
+    src/RHIResource.cpp
     src/RHIValidation.cpp
     src/RHISurface.cpp
     src/RHISwapChain.cpp

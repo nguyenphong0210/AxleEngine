@@ -321,6 +321,16 @@ namespace Axle {
                 throw std::runtime_error("UI backend initialization failed; product candidate must be rolled back");
             }
             m_Initialized = true;
+            if (m_BackendType != ImGuiBackendType::OpenGL) {
+                if (!m_DescriptorCallbacks || !m_DescriptorCallbacks->Owner) {
+                    m_DescriptorCallbacks = std::make_shared<ImGuiDescriptorCallbackState>();
+                    m_DescriptorCallbacks->Owner = this;
+                }
+                std::weak_ptr<ImGuiDescriptorCallbackState> owner = m_DescriptorCallbacks;
+                RHI::RHIDevice::Get().GetResources().BeforeDeviceClose([owner] {
+                    if (auto state = owner.lock(); state && state->Owner) state->Owner->Shutdown();
+                });
+            }
         } catch (...) {
             Shutdown();
             throw;
@@ -649,6 +659,7 @@ namespace Axle {
     }
 
     void ImGuiLayer::Shutdown() {
+        if (m_DescriptorCallbacks) m_DescriptorCallbacks->Owner = nullptr;
         auto& device = RHI::RHIDevice::Get();
         if (m_ContextCreated && m_BackendType != ImGuiBackendType::OpenGL && device.IsNativeReady() &&
             !device.WaitIdle() && device.GetState() != RHI::RHIDeviceState::Lost) {

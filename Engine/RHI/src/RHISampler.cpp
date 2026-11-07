@@ -36,6 +36,7 @@ namespace Axle::RHI {
 
     RHISampler::RHISampler(RHISampler&& other) noexcept
         : m_Desc(other.m_Desc)
+        , m_Lease(std::move(other.m_Lease))
         , m_Sampler(other.m_Sampler)
     {
         other.m_Sampler = nullptr;
@@ -44,6 +45,7 @@ namespace Axle::RHI {
     RHISampler& RHISampler::operator=(RHISampler&& other) noexcept {
         if (this != &other) {
             Shutdown();
+            m_Lease = std::move(other.m_Lease);
             m_Desc = other.m_Desc;
             m_Sampler = other.m_Sampler;
             other.m_Sampler = nullptr;
@@ -70,12 +72,17 @@ namespace Axle::RHI {
         const auto native = desc.ToNRIDesc();
         const auto result = ScopedRHIFault::Invoke("CreateSampler", [&] { return device.GetNRICore().CreateSampler(*device.GetNRIDevice(), native, candidate.m_Sampler); });
         if (result != nri::Result::SUCCESS || !candidate.m_Sampler) return false;
+        auto core = device.GetNRICore(); auto sampler = candidate.m_Sampler;
+        candidate.m_Lease = device.GetResources().Publish(RHIResourceKind::Sampler, desc.DebugName, {sampler},
+            [core, sampler] { core.DestroyDescriptor(sampler); });
+        if (!candidate.m_Lease.IsLive()) return false;
         *this = std::move(candidate);
         return true;
     }
 
     void RHISampler::Shutdown() {
-        if (m_Sampler) {
+        if (m_Lease) { m_Lease.Reset(); m_Sampler = nullptr; }
+        else if (m_Sampler) {
             auto& rhiDevice = RHIDevice::Get();
             if (rhiDevice.IsNativeReady()) {
                 auto core = rhiDevice.GetNRICore(); auto sampler = m_Sampler;

@@ -2,6 +2,7 @@
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#include <algorithm>
 
 namespace Axle::RHI {
 
@@ -11,6 +12,8 @@ namespace Axle::RHI {
 
     RHIDescriptorPool::RHIDescriptorPool(RHIDescriptorPool&& other) noexcept
         : m_Desc(other.m_Desc)
+        , m_Lease(std::move(other.m_Lease))
+        , m_Sets(std::move(other.m_Sets))
         , m_Pool(other.m_Pool)
         , m_AllocatedSets(other.m_AllocatedSets)
     {
@@ -21,6 +24,8 @@ namespace Axle::RHI {
     RHIDescriptorPool& RHIDescriptorPool::operator=(RHIDescriptorPool&& other) noexcept {
         if (this != &other) {
             Shutdown();
+            m_Lease = std::move(other.m_Lease);
+            m_Sets = std::move(other.m_Sets);
             m_Desc = other.m_Desc;
             m_Pool = other.m_Pool;
             m_AllocatedSets = other.m_AllocatedSets;
@@ -65,6 +70,10 @@ namespace Axle::RHI {
         }
 
         candidate.m_AllocatedSets = 0;
+        const auto functions = nriCore; auto pool = candidate.m_Pool;
+        candidate.m_Lease = rhiDevice.GetResources().Publish(RHIResourceKind::Pool, desc.DebugName, {pool},
+            [functions, pool] { functions.DestroyDescriptorPool(pool); });
+        if (!candidate.m_Lease.IsLive()) return false;
         AXLE_CORE_INFO("RHIDescriptorPool: Initialized '{0}' (MaxSets: {1}, MaxTextures: {2}, MaxSamplers: {3})",
             candidate.m_Desc.DebugName, candidate.m_Desc.MaxDescriptorSets, candidate.m_Desc.MaxTextures, candidate.m_Desc.MaxSamplers);
         *this = std::move(candidate);
@@ -72,7 +81,9 @@ namespace Axle::RHI {
     }
 
     void RHIDescriptorPool::Shutdown() {
-        if (m_Pool) {
+        m_Sets.clear();
+        if (m_Lease) { m_Lease.Reset(); m_Pool = nullptr; }
+        else if (m_Pool) {
             auto& rhiDevice = RHIDevice::Get();
             if (rhiDevice.IsNativeReady()) {
                 auto core = rhiDevice.GetNRICore(); auto pool = m_Pool;
@@ -84,7 +95,7 @@ namespace Axle::RHI {
     }
 
     nri::DescriptorSet* RHIDescriptorPool::AllocateDescriptorSet(const RHIPipelineLayout& layout, uint32_t setIndex, uint32_t variableNum) {
-        if (!m_Pool || !layout.IsValid() || m_AllocatedSets >= m_Desc.MaxDescriptorSets || setIndex >= layout.GetDescriptorSets().size()) return nullptr;
+        if (!IsValid() || !layout.IsValid() || m_AllocatedSets >= m_Desc.MaxDescriptorSets || setIndex >= layout.GetDescriptorSets().size()) return nullptr;
 
         auto& rhiDevice = RHIDevice::Get();
         const auto& nriCore = rhiDevice.GetNRICore();
@@ -98,12 +109,15 @@ namespace Axle::RHI {
         }
 
         m_AllocatedSets++;
+        auto lease = rhiDevice.GetResources().Publish(RHIResourceKind::DescriptorSet, "DescriptorSet", {set}, {}, {m_Lease, layout.AcquireLease()});
+        if (!lease.IsLive()) return nullptr;
+        m_Sets.push_back(std::move(lease));
         return set;
     }
 
     std::vector<nri::DescriptorSet*> RHIDescriptorPool::AllocateDescriptorSets(const RHIPipelineLayout& layout, uint32_t setIndex, uint32_t count, uint32_t variableNum) {
         std::vector<nri::DescriptorSet*> sets;
-        if (!m_Pool || !layout.IsValid() || !count || count > m_Desc.MaxDescriptorSets - m_AllocatedSets || setIndex >= layout.GetDescriptorSets().size()) return sets;
+        if (!IsValid() || !layout.IsValid() || !count || count > m_Desc.MaxDescriptorSets - m_AllocatedSets || setIndex >= layout.GetDescriptorSets().size()) return sets;
 
         sets.resize(count, nullptr);
         auto& rhiDevice = RHIDevice::Get();
@@ -117,14 +131,31 @@ namespace Axle::RHI {
         }
 
         m_AllocatedSets += count;
+        for (auto* set : sets) {
+            auto lease = rhiDevice.GetResources().Publish(RHIResourceKind::DescriptorSet, "DescriptorSet", {set}, {}, {m_Lease, layout.AcquireLease()});
+            if (!lease.IsLive()) return {};
+            m_Sets.push_back(std::move(lease));
+        }
         return sets;
     }
 
     void RHIDescriptorPool::UpdateTextureRange(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t baseSlot, const std::vector<nri::Descriptor*>& descriptors) {
-        if (!set || descriptors.empty()) return;
+        if (!IsValid() || !set || descriptors.empty()) return;
 
         auto& rhiDevice = RHIDevice::Get();
+        if (!rhiDevice.CanCreateResources()) return;
         const auto& nriCore = rhiDevice.GetNRICore();
+        auto setLease = rhiDevice.GetResources().AcquireNative(set);
+        if (!setLease.IsLive() || std::none_of(m_Sets.begin(), m_Sets.end(), [&](const auto& owned) {
+            return owned.GetHandle() == setLease.GetHandle();
+        })) return;
+        std::vector<RHIResourceLease> resources;
+        for (auto* descriptor : descriptors) {
+            auto lease = rhiDevice.GetResources().AcquireNative(descriptor);
+            if (!lease.IsLive()) return;
+            resources.push_back(std::move(lease));
+        }
+        if (!rhiDevice.GetResources().ReplaceDescriptorRange(setLease, rangeIndex, baseSlot, std::move(resources))) return;
 
         nri::UpdateDescriptorRangeDesc updateDesc = {};
         updateDesc.descriptorSet = set;
@@ -143,19 +174,7 @@ namespace Axle::RHI {
     }
 
     void RHIDescriptorPool::UpdateSamplerRange(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t baseSlot, const std::vector<nri::Descriptor*>& samplers) {
-        if (!set || samplers.empty()) return;
-
-        auto& rhiDevice = RHIDevice::Get();
-        const auto& nriCore = rhiDevice.GetNRICore();
-
-        nri::UpdateDescriptorRangeDesc updateDesc = {};
-        updateDesc.descriptorSet = set;
-        updateDesc.rangeIndex = rangeIndex;
-        updateDesc.baseDescriptor = baseSlot;
-        updateDesc.descriptors = samplers.data();
-        updateDesc.descriptorNum = static_cast<uint32_t>(samplers.size());
-
-        nriCore.UpdateDescriptorRanges(&updateDesc, 1);
+        UpdateTextureRange(set, rangeIndex, baseSlot, samplers);
     }
 
     void RHIDescriptorPool::UpdateSampler(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t slot, nri::Descriptor* sampler) {
@@ -165,17 +184,13 @@ namespace Axle::RHI {
     }
 
     void RHIDescriptorPool::Reset() {
-        if (m_Pool) {
-            auto& rhiDevice = RHIDevice::Get();
-            if (rhiDevice.IsNativeReady()) {
-                rhiDevice.GetNRICore().ResetDescriptorPool(*m_Pool);
-            }
-            m_AllocatedSets = 0;
-        }
+        // Replacing the arena preserves old descriptor-set generations and their
+        // layout/dependency ownership for clients retaining leases.
+        if (IsValid()) Init(m_Desc);
     }
 
     void RHIDescriptorPool::Bind(nri::CommandBuffer* cmdBuffer) {
-        if (m_Pool && cmdBuffer) {
+        if (IsValid() && cmdBuffer) {
             auto& rhiDevice = RHIDevice::Get();
             if (rhiDevice.IsNativeReady()) {
                 rhiDevice.GetNRICore().CmdSetDescriptorPool(*cmdBuffer, *m_Pool);

@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/RHI/RHICommon.hpp>
+#include <Axle/RHI/RHIResource.hpp>
 #include <NRI.h>
 
 #include <memory>
@@ -178,8 +179,9 @@ namespace Axle::RHI {
         bool Init(const RHISamplerDesc& desc = RHISamplerDesc::Anisotropic16x());
         void Shutdown();
 
-        bool IsValid() const { return m_Sampler != nullptr; }
-        nri::Descriptor* GetNative() const { return m_Sampler; }
+        bool IsValid() const { return m_Sampler && m_Lease.IsLive(); }
+        nri::Descriptor* GetNative() const { return IsValid() ? m_Sampler : nullptr; }
+        RHIResourceLease AcquireLease() const { return m_Lease; }
         const RHISamplerDesc& GetDesc() const { return m_Desc; }
 
         // Returns static immutable RootSamplerDesc for Pipeline Layout
@@ -187,6 +189,7 @@ namespace Axle::RHI {
 
     private:
         RHISamplerDesc m_Desc;
+        RHIResourceLease m_Lease;
         nri::Descriptor* m_Sampler = nullptr;
     };
 

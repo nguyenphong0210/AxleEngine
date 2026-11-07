@@ -122,10 +122,10 @@ namespace Axle {
         RHI::RHIPipelineLayout m_PipelineLayout;
 
         // Default PSOs (DepthTest On & Off for SDR & HDR)
-        nri::Pipeline* m_PipelineSDR_Depth = nullptr;
-        nri::Pipeline* m_PipelineSDR_NoDepth = nullptr;
-        nri::Pipeline* m_PipelineHDR_Depth = nullptr;
-        nri::Pipeline* m_PipelineHDR_NoDepth = nullptr;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineSDR_Depth;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineSDR_NoDepth;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineHDR_Depth;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineHDR_NoDepth;
 
         // GPU Buffers
         RHI::RHIBuffer m_ConstantBuffer;

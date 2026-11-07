@@ -256,8 +256,8 @@ namespace Axle {
     private:
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
-        nri::Pipeline* m_Pipeline = nullptr;
-        nri::Pipeline* m_PipelineHDR = nullptr;
+        RHI::RHIResourceRef<nri::Pipeline> m_Pipeline;
+        RHI::RHIResourceRef<nri::Pipeline> m_PipelineHDR;
 
         nri::Format m_CurrentColorFormat = nri::Format::RGBA8_UNORM;
         nri::Format m_CurrentDepthFormat = nri::Format::D32_SFLOAT;
@@ -312,8 +312,8 @@ namespace Axle {
 
         // Atmospheric Skybox Resources
         RHI::RHIPipelineLayout m_SkyboxPipelineLayout;
-        nri::Pipeline* m_SkyboxPipeline = nullptr;
-        nri::Pipeline* m_SkyboxPipelineHDR = nullptr;
+        RHI::RHIResourceRef<nri::Pipeline> m_SkyboxPipeline;
+        RHI::RHIResourceRef<nri::Pipeline> m_SkyboxPipelineHDR;
         RHI::RHIBuffer m_SkyboxConstantBuffer;
         RHI::RHIShaderBytecode m_SkyboxVertexShader;
         RHI::RHIShaderBytecode m_SkyboxPixelShader;
@@ -321,8 +321,8 @@ namespace Axle {
 
         // Tone Mapping Post-Processing Resources
         RHI::RHIPipelineLayout m_ToneMappingPipelineLayout;
-        nri::Pipeline* m_ToneMappingPipelineSDR = nullptr;
-        nri::Pipeline* m_ToneMappingPipelineHDR = nullptr;
+        RHI::RHIResourceRef<nri::Pipeline> m_ToneMappingPipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_ToneMappingPipelineHDR;
         RHI::RHIBuffer m_ToneMappingConstantBuffer;
         RHI::RHIShaderBytecode m_ToneMappingVertexShader;
         RHI::RHIShaderBytecode m_ToneMappingPixelShader;
@@ -332,8 +332,8 @@ namespace Axle {
 
         // Fast Approximate Anti-Aliasing (FXAA) Resources
         RHI::RHIPipelineLayout m_FXAAPipelineLayout;
-        nri::Pipeline* m_FXAAPipelineSDR = nullptr;
-        nri::Pipeline* m_FXAAPipelineHDR = nullptr;
+        RHI::RHIResourceRef<nri::Pipeline> m_FXAAPipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_FXAAPipelineHDR;
         RHI::RHIBuffer m_FXAAConstantBuffer;
         RHI::RHIShaderBytecode m_FXAAVertexShader;
         RHI::RHIShaderBytecode m_FXAAPixelShader;

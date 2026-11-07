@@ -15,7 +15,8 @@ namespace Axle::RHI {
     }
 
     bool RHIBindlessRegistry::Init(uint32_t maxTextures) {
-        if (m_Initialized) return true;
+        if (IsInitialized()) return true;
+        Shutdown();
 
         auto& rhiDevice = RHIDevice::Get();
         if (!rhiDevice.CanCreateResources()) {
@@ -146,7 +147,7 @@ namespace Axle::RHI {
     }
 
     uint32_t RHIBindlessRegistry::RegisterTexture(nri::Descriptor* srv) {
-        if (!m_Initialized || !srv) return FallbackWhiteIndex;
+        if (!IsInitialized() || !srv) return FallbackWhiteIndex;
 
         std::lock_guard<std::mutex> lock(m_Mutex);
 
@@ -174,7 +175,7 @@ namespace Axle::RHI {
     }
 
     void RHIBindlessRegistry::UnregisterTexture(uint32_t index) {
-        if (!m_Initialized || index < 4 || index >= m_Capacity) return;
+        if (!IsInitialized() || index < 4 || index >= m_Capacity) return;
 
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (m_Slots[index] != nullptr) {
@@ -189,7 +190,7 @@ namespace Axle::RHI {
     }
 
     void RHIBindlessRegistry::Bind(nri::CommandBuffer* cmdBuffer, uint32_t setIndex) {
-        if (!m_Initialized || !cmdBuffer || !m_DescriptorSet) return;
+        if (!IsInitialized() || !cmdBuffer || !m_DescriptorSet) return;
         m_Pool.Bind(cmdBuffer);
         RHIDescriptorPool::BindDescriptorSet(cmdBuffer, setIndex, m_DescriptorSet, nri::BindPoint::GRAPHICS);
     }

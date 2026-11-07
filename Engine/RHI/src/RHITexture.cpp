@@ -13,6 +13,7 @@ namespace Axle::RHI {
 
     RHITexture::RHITexture(RHITexture&& other) noexcept
         : m_Desc(std::move(other.m_Desc))
+        , m_Lease(std::move(other.m_Lease))
         , m_Texture(other.m_Texture)
         , m_Memory(other.m_Memory)
         , m_SRV(other.m_SRV)
@@ -29,6 +30,7 @@ namespace Axle::RHI {
         if (this != &other) {
             Shutdown();
             m_Desc = std::move(other.m_Desc);
+            m_Lease = std::move(other.m_Lease);
             m_Texture = other.m_Texture;
             m_Memory = other.m_Memory;
             m_SRV = other.m_SRV;
@@ -192,12 +194,24 @@ namespace Axle::RHI {
             }
         }
 
-        return true;
+        const auto functions = core;
+        auto srv = m_SRV, rtv = m_RTV, dsv = m_DSV;
+        auto texture = m_Texture; auto ownedMemory = m_Memory;
+        m_Lease = rhiDevice.GetResources().Publish(RHIResourceKind::Texture, desc.DebugName, {texture, srv, rtv, dsv},
+            [functions, srv, rtv, dsv, texture, ownedMemory] {
+                if (srv) functions.DestroyDescriptor(srv);
+                if (rtv) functions.DestroyDescriptor(rtv);
+                if (dsv) functions.DestroyDescriptor(dsv);
+                functions.DestroyTexture(texture);
+                functions.FreeMemory(ownedMemory);
+            });
+        return m_Lease.IsLive();
     }
 
     void RHITexture::Shutdown() {
         auto& device = RHIDevice::Get();
-        if (device.IsNativeReady()) {
+        if (m_Lease) m_Lease.Reset();
+        else if (device.IsNativeReady()) {
             const auto core = device.GetNRICore();
             auto srv = m_SRV, rtv = m_RTV, dsv = m_DSV;
             auto texture = m_Texture; auto memory = m_Memory;
@@ -216,19 +230,19 @@ namespace Axle::RHI {
     }
 
     uint64_t RHITexture::GetNativeSRVHandle() const {
-        if (!m_SRV) return 0;
+        if (!IsValid() || !m_SRV) return 0;
         const auto& core = RHIDevice::Get().GetNRICore();
         return core.GetDescriptorNativeObject(m_SRV);
     }
 
     uint64_t RHITexture::GetNativeRTVHandle() const {
-        if (!m_RTV) return 0;
+        if (!IsValid() || !m_RTV) return 0;
         const auto& core = RHIDevice::Get().GetNRICore();
         return core.GetDescriptorNativeObject(m_RTV);
     }
 
     uint64_t RHITexture::GetNativeDSVHandle() const {
-        if (!m_DSV) return 0;
+        if (!IsValid() || !m_DSV) return 0;
         const auto& core = RHIDevice::Get().GetNRICore();
         return core.GetDescriptorNativeObject(m_DSV);
     }

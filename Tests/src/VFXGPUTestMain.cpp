@@ -1,3 +1,4 @@
+#include <Axle/RHI/RHIDiagnostics.hpp>
 #include "TestWorkspace.hpp"
 #include "Test_VFXAcceptance.hpp"
 #include <Axle/FileSystem.hpp>
@@ -20,6 +21,10 @@ int main() {
         Axle::RHIMeshRegistry::Get().Shutdown();
         Axle::RHI::RHIMaterial::ReleaseDefaultTextures();
         device.Shutdown();
+    }
+    if (Axle::RHI::GetRHIValidationErrorCount()) {
+        std::cerr << "NRI validation reported errors, including teardown" << std::endl;
+        ok = false;
     }
     return ok ? 0 : 1;
 }

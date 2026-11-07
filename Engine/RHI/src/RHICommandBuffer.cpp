@@ -11,7 +11,8 @@ namespace Axle::RHI {
     }
 
     RHICommandBuffer::RHICommandBuffer(RHICommandBuffer&& other) noexcept
-        : m_CommandBuffer(other.m_CommandBuffer)
+        : m_Lease(std::move(other.m_Lease))
+        , m_CommandBuffer(other.m_CommandBuffer)
         , m_CommandAllocator(other.m_CommandAllocator)
         , m_OwnsAllocator(other.m_OwnsAllocator)
         , m_IsRecording(other.m_IsRecording)
@@ -29,6 +30,7 @@ namespace Axle::RHI {
     RHICommandBuffer& RHICommandBuffer::operator=(RHICommandBuffer&& other) noexcept {
         if (this != &other) {
             Shutdown();
+            m_Lease = std::move(other.m_Lease);
             m_CommandBuffer = other.m_CommandBuffer;
             m_CommandAllocator = other.m_CommandAllocator;
             m_OwnsAllocator = other.m_OwnsAllocator;
@@ -53,6 +55,7 @@ namespace Axle::RHI {
         candidate.m_CommandAllocator = allocator;
         const auto result = ScopedRHIFault::Invoke("CreateCommandBuffer", [&] { return device.GetNRICore().CreateCommandBuffer(*allocator, candidate.m_CommandBuffer); });
         if (result != nri::Result::SUCCESS || !candidate.m_CommandBuffer) return false;
+        if (!candidate.Publish()) return false;
         *this = std::move(candidate);
         return true;
     }
@@ -68,13 +71,32 @@ namespace Axle::RHI {
         if (result != nri::Result::SUCCESS || !candidate.m_CommandAllocator) return false;
         result = ScopedRHIFault::Invoke("CreateCommandBuffer", [&] { return core.CreateCommandBuffer(*candidate.m_CommandAllocator, candidate.m_CommandBuffer); });
         if (result != nri::Result::SUCCESS || !candidate.m_CommandBuffer) return false;
+        if (!candidate.Publish()) return false;
         *this = std::move(candidate);
         return true;
     }
 
+    bool RHICommandBuffer::Publish() {
+        auto& device = RHIDevice::Get();
+        const auto core = device.GetNRICore();
+        auto commands = m_CommandBuffer; auto allocator = m_OwnsAllocator ? m_CommandAllocator : nullptr;
+        std::vector<RHIResourceLease> dependencies;
+        if (!m_OwnsAllocator) {
+            auto owner = device.GetResources().AcquireNative(m_CommandAllocator);
+            if (owner.IsLive()) dependencies.push_back(std::move(owner));
+        }
+        m_Lease = device.GetResources().Publish(RHIResourceKind::Commands, "Commands", {commands, allocator},
+            [core, commands, allocator] {
+                core.DestroyCommandBuffer(commands);
+                if (allocator) core.DestroyCommandAllocator(allocator);
+            }, std::move(dependencies));
+        return m_Lease.IsLive();
+    }
+
     void RHICommandBuffer::Shutdown() {
         auto& device = RHIDevice::Get();
-        if (device.IsNativeReady()) {
+        if (m_Lease) m_Lease.Reset();
+        else if (device.IsNativeReady()) {
             const auto core = device.GetNRICore();
             auto commands = m_CommandBuffer;
             auto allocator = m_OwnsAllocator ? m_CommandAllocator : nullptr;
@@ -88,7 +110,7 @@ namespace Axle::RHI {
     }
 
     bool RHICommandBuffer::Begin(nri::DescriptorPool* descriptorPool) {
-        if (!m_CommandBuffer || m_IsRecording || !RHIDevice::Get().CanSubmit()) return false;
+        if (!IsValid() || m_IsRecording || !RHIDevice::Get().CanSubmit()) return false;
         m_IsExecutable = false;
 
         auto& rhiDevice = RHIDevice::Get();
@@ -104,7 +126,7 @@ namespace Axle::RHI {
     }
 
     bool RHICommandBuffer::End() {
-        if (!m_CommandBuffer || !m_IsRecording) return false;
+        if (!IsValid() || !m_IsRecording) return false;
 
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
@@ -121,7 +143,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::PipelineBarrier(const RHIBarrierGroup& barrierGroup) {
-        if (!m_CommandBuffer || !m_IsRecording || barrierGroup.IsEmpty()) return;
+        if (!IsValid() || !m_IsRecording || barrierGroup.IsEmpty()) return;
 
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
@@ -177,14 +199,14 @@ namespace Axle::RHI {
     void RHICommandBuffer::TransitionBuffer(nri::Buffer* buffer, RHIAccess beforeAccess, RHIAccess afterAccess,
                                             RHIPipelineStage beforeStage, RHIPipelineStage afterStage)
     {
-        if (!buffer || !m_CommandBuffer || !m_IsRecording) return;
+        if (!buffer || !IsValid() || !m_IsRecording) return;
         RHIBarrierGroup group;
         group.AddBuffer(buffer, beforeAccess, afterAccess, beforeStage, afterStage);
         PipelineBarrier(group);
     }
 
     bool RHICommandBuffer::TransitionBuffer(RHIResourceStateTracker& tracker, nri::Buffer* buffer, RHIAccess targetAccess, RHIPipelineStage targetStage) {
-        if (!buffer || !m_CommandBuffer || !m_IsRecording) return false;
+        if (!buffer || !IsValid() || !m_IsRecording) return false;
         RHIBarrierGroup group;
         if (tracker.TransitionBuffer(buffer, targetAccess, targetStage, group)) {
             PipelineBarrier(group);
@@ -194,30 +216,30 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::CopyStreamedData(RHIStreamer& streamer, uint64_t copyBatch) {
-        if (!m_CommandBuffer || !m_IsRecording || copyBatch == 0) return;
+        if (!IsValid() || !m_IsRecording || copyBatch == 0) return;
         streamer.CmdCopyStreamedData(*m_CommandBuffer, copyBatch);
     }
 
     void RHICommandBuffer::SetPipeline(nri::Pipeline* pipeline) {
-        if (!m_CommandBuffer || !m_IsRecording || !pipeline) return;
+        if (!IsValid() || !m_IsRecording || !pipeline) return;
         auto& rhiDevice = RHIDevice::Get();
         rhiDevice.GetNRICore().CmdSetPipeline(*m_CommandBuffer, *pipeline);
     }
 
     void RHICommandBuffer::SetPipelineLayout(nri::BindPoint bindPoint, const RHIPipelineLayout& layout) {
-        if (!m_CommandBuffer || !m_IsRecording || !layout.IsValid()) return;
+        if (!IsValid() || !m_IsRecording || !layout.IsValid()) return;
         auto& rhiDevice = RHIDevice::Get();
         rhiDevice.GetNRICore().CmdSetPipelineLayout(*m_CommandBuffer, bindPoint, *layout.GetNative());
     }
 
     void RHICommandBuffer::SetDescriptorPool(nri::DescriptorPool* descriptorPool) {
-        if (!m_CommandBuffer || !m_IsRecording || !descriptorPool) return;
+        if (!IsValid() || !m_IsRecording || !descriptorPool) return;
         auto& rhiDevice = RHIDevice::Get();
         rhiDevice.GetNRICore().CmdSetDescriptorPool(*m_CommandBuffer, *descriptorPool);
     }
 
     void RHICommandBuffer::SetDescriptorSet(nri::BindPoint bindPoint, uint32_t setIndex, nri::DescriptorSet* descriptorSet) {
-        if (!m_CommandBuffer || !m_IsRecording || !descriptorSet) return;
+        if (!IsValid() || !m_IsRecording || !descriptorSet) return;
         nri::SetDescriptorSetDesc desc = {};
         desc.bindPoint = bindPoint;
         desc.setIndex = setIndex;
@@ -226,7 +248,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetRootConstants(uint32_t rootConstantIndex, const void* data, uint32_t size, nri::BindPoint bindPoint) {
-        if (!m_CommandBuffer || !m_IsRecording || !data || size == 0) return;
+        if (!IsValid() || !m_IsRecording || !data || size == 0) return;
         nri::SetRootConstantsDesc desc = {};
         desc.rootConstantIndex = rootConstantIndex;
         desc.data = data;
@@ -237,7 +259,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetRootDescriptor(uint32_t rootDescriptorIndex, nri::Descriptor* descriptor, uint32_t offset, nri::BindPoint bindPoint) {
-        if (!m_CommandBuffer || !m_IsRecording || !descriptor) return;
+        if (!IsValid() || !m_IsRecording || !descriptor) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (!core.CmdSetRootDescriptor) return;
@@ -251,12 +273,12 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetVertexBuffers(uint32_t baseSlot, const nri::VertexBufferDesc* vertexBufferDescs, uint32_t count) {
-        if (!m_CommandBuffer || !m_IsRecording || !vertexBufferDescs || count == 0) return;
+        if (!IsValid() || !m_IsRecording || !vertexBufferDescs || count == 0) return;
         RHIDevice::Get().GetNRICore().CmdSetVertexBuffers(*m_CommandBuffer, baseSlot, vertexBufferDescs, count);
     }
 
     void RHICommandBuffer::SetVertexBuffer(uint32_t slot, const nri::Buffer* buffer, uint64_t offset, uint32_t stride) {
-        if (!m_CommandBuffer || !m_IsRecording || !buffer) return;
+        if (!IsValid() || !m_IsRecording || !buffer) return;
         nri::VertexBufferDesc desc = {};
         desc.buffer = buffer;
         desc.offset = offset;
@@ -269,7 +291,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetIndexBuffer(const nri::Buffer* buffer, uint64_t offset, nri::IndexType indexType) {
-        if (!m_CommandBuffer || !m_IsRecording || !buffer) return;
+        if (!IsValid() || !m_IsRecording || !buffer) return;
         RHIDevice::Get().GetNRICore().CmdSetIndexBuffer(*m_CommandBuffer, *buffer, offset, indexType);
     }
 
@@ -278,7 +300,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetViewports(const nri::Viewport* viewports, uint32_t count) {
-        if (!m_CommandBuffer || !m_IsRecording || !viewports || count == 0) return;
+        if (!IsValid() || !m_IsRecording || !viewports || count == 0) return;
         RHIDevice::Get().GetNRICore().CmdSetViewports(*m_CommandBuffer, viewports, count);
     }
 
@@ -287,7 +309,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::SetScissors(const nri::Rect* rects, uint32_t count) {
-        if (!m_CommandBuffer || !m_IsRecording || !rects || count == 0) return;
+        if (!IsValid() || !m_IsRecording || !rects || count == 0) return;
         RHIDevice::Get().GetNRICore().CmdSetScissors(*m_CommandBuffer, rects, count);
     }
 
@@ -296,27 +318,27 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::BeginRendering(const nri::RenderingDesc& renderingDesc) {
-        if (!m_CommandBuffer || !m_IsRecording) return;
+        if (!IsValid() || !m_IsRecording) return;
         RHIDevice::Get().GetNRICore().CmdBeginRendering(*m_CommandBuffer, renderingDesc);
     }
 
     void RHICommandBuffer::EndRendering() {
-        if (!m_CommandBuffer || !m_IsRecording) return;
+        if (!IsValid() || !m_IsRecording) return;
         RHIDevice::Get().GetNRICore().CmdEndRendering(*m_CommandBuffer);
     }
 
     void RHICommandBuffer::ClearAttachments(const nri::ClearAttachmentDesc* clearDescs, uint32_t clearDescNum, const nri::Rect* rects, uint32_t rectNum) {
-        if (!m_CommandBuffer || !m_IsRecording || !clearDescs || clearDescNum == 0) return;
+        if (!IsValid() || !m_IsRecording || !clearDescs || clearDescNum == 0) return;
         RHIDevice::Get().GetNRICore().CmdClearAttachments(*m_CommandBuffer, clearDescs, clearDescNum, rects, rectNum);
     }
 
     void RHICommandBuffer::ResolveTexture(nri::Texture* dstTexture, const nri::Texture* srcTexture, nri::ResolveOp resolveOp) {
-        if (!m_CommandBuffer || !m_IsRecording || !dstTexture || !srcTexture) return;
+        if (!IsValid() || !m_IsRecording || !dstTexture || !srcTexture) return;
         RHIDevice::Get().GetNRICore().CmdResolveTexture(*m_CommandBuffer, *dstTexture, nullptr, *srcTexture, nullptr, resolveOp);
     }
 
     void RHICommandBuffer::Draw(const nri::DrawDesc& drawDesc) {
-        if (!m_CommandBuffer || !m_IsRecording) return;
+        if (!IsValid() || !m_IsRecording) return;
         RHIDevice::Get().GetNRICore().CmdDraw(*m_CommandBuffer, drawDesc);
     }
 
@@ -330,7 +352,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::DrawIndexed(const nri::DrawIndexedDesc& drawIndexedDesc) {
-        if (!m_CommandBuffer || !m_IsRecording) return;
+        if (!IsValid() || !m_IsRecording) return;
         RHIDevice::Get().GetNRICore().CmdDrawIndexed(*m_CommandBuffer, drawIndexedDesc);
     }
 
@@ -345,7 +367,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::Dispatch(const nri::DispatchDesc& dispatchDesc) {
-        if (!m_CommandBuffer || !m_IsRecording) return;
+        if (!IsValid() || !m_IsRecording) return;
         RHIDevice::Get().GetNRICore().CmdDispatch(*m_CommandBuffer, dispatchDesc);
     }
 
@@ -358,7 +380,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::DrawIndirect(const nri::Buffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride, const nri::Buffer* countBuffer, uint64_t countBufferOffset) {
-        if (!m_CommandBuffer || !m_IsRecording || drawNum == 0) return;
+        if (!IsValid() || !m_IsRecording || drawNum == 0) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (core.CmdDrawIndirect) {
@@ -377,7 +399,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::DrawIndexedIndirect(const nri::Buffer& buffer, uint64_t offset, uint32_t drawNum, uint32_t stride, const nri::Buffer* countBuffer, uint64_t countBufferOffset) {
-        if (!m_CommandBuffer || !m_IsRecording || drawNum == 0) return;
+        if (!IsValid() || !m_IsRecording || drawNum == 0) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (core.CmdDrawIndexedIndirect) {
@@ -396,7 +418,7 @@ namespace Axle::RHI {
     }
 
     void RHICommandBuffer::DispatchIndirect(const nri::Buffer& buffer, uint64_t offset) {
-        if (!m_CommandBuffer || !m_IsRecording) return;
+        if (!IsValid() || !m_IsRecording) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
         if (core.CmdDispatchIndirect) {
@@ -415,7 +437,7 @@ namespace Axle::RHI {
     }
 
     bool RHICommandBuffer::Submit(nri::Queue* queue, nri::Fence* waitFence, uint64_t waitValue, nri::Fence* signalFence, uint64_t signalValue) {
-        if (!m_CommandBuffer || m_IsRecording || !m_IsExecutable) return false;
+        if (!IsValid() || m_IsRecording || !m_IsExecutable) return false;
         const nri::CommandBuffer* commands = m_CommandBuffer;
         return SubmitBatch(&commands, 1, queue, waitFence, waitValue, signalFence, signalValue);
     }
@@ -485,18 +507,15 @@ namespace Axle::RHI {
     }
 
     bool RHICommandBuffer::Reset() {
-        if (!m_CommandAllocator) return false;
+        if (!IsValid() || !m_CommandAllocator) return false;
         auto& rhiDevice = RHIDevice::Get();
         if (!rhiDevice.CanSubmit()) return false;
 
         const auto& core = rhiDevice.GetNRICore();
         if (!rhiDevice.WaitIdle()) return false;
         if (m_NeedsRecreation) {
-            if (m_CommandBuffer) core.DestroyCommandBuffer(m_CommandBuffer);
-            m_CommandBuffer = nullptr;
-            const auto result = ScopedRHIFault::Invoke("CreateCommandBuffer", [&] { return core.CreateCommandBuffer(*m_CommandAllocator, m_CommandBuffer); });
-            if (result != nri::Result::SUCCESS || !m_CommandBuffer) return false;
-            m_NeedsRecreation = false;
+            const bool initialized = m_OwnsAllocator ? Init() : Init(m_CommandAllocator);
+            if (!initialized) return false;
         }
         if (m_OwnsAllocator && core.ResetCommandAllocator) {
             core.ResetCommandAllocator(*m_CommandAllocator);

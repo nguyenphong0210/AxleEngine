@@ -37,8 +37,9 @@ namespace Axle::RHI {
         // Release layout resource from GPU
         void Shutdown();
 
-        bool IsValid() const { return m_Layout != nullptr; }
-        nri::PipelineLayout* GetNative() const { return m_Layout; }
+        bool IsValid() const { return m_Layout && m_Lease.IsLive(); }
+        nri::PipelineLayout* GetNative() const { return IsValid() ? m_Layout : nullptr; }
+        RHIResourceLease AcquireLease() const { return m_Lease; }
         uint32_t GetRootRegisterSpace() const { return m_RootRegisterSpace; }
 
         const std::vector<nri::RootConstantDesc>& GetRootConstants() const { return m_RootConstants; }
@@ -46,6 +47,7 @@ namespace Axle::RHI {
 
     private:
         nri::PipelineLayout* m_Layout = nullptr;
+        RHIResourceLease m_Lease;
         uint32_t m_RootRegisterSpace = 0;
         std::vector<nri::RootConstantDesc> m_RootConstants;
         std::vector<nri::DescriptorSetDesc> m_DescriptorSets;
@@ -226,6 +228,7 @@ namespace Axle::RHI {
 
     private:
         struct PipelineEntry {
+            RHIResourceLease Lease;
             uint64_t Hash = 0;
             nri::Pipeline* Pipeline = nullptr;
             bool IsCompute = false;

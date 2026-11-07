@@ -1,5 +1,6 @@
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#include <Axle/RHI/RHIDiagnostics.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/Log.hpp>
@@ -8,12 +9,16 @@
 #include <algorithm>
 #include <chrono>
 #include <thread>
+#include <atomic>
 
 namespace Axle::RHI {
+    static std::atomic<uint64_t> s_ValidationErrors{0};
+    uint64_t GetRHIValidationErrorCount() noexcept { return s_ValidationErrors.load(); }
 
     static void NRI_CALL NriMessageCallback(nri::Message messageType, const char* file, uint32_t line, const char* message, void* userArg) {
         (void)userArg;
         if (messageType == nri::Message::ERROR) {
+            s_ValidationErrors.fetch_add(1);
             AXLE_CORE_ERROR("[NRI Error] ({0}:{1}) {2}", file ? file : "", line, message ? message : "");
         } else if (messageType == nri::Message::WARNING) {
             AXLE_CORE_WARN("[NRI Warning] ({0}:{1}) {2}", file ? file : "", line, message ? message : "");
@@ -234,6 +239,8 @@ namespace Axle::RHI {
             return false;
         }
 
+        const auto native = m_Device;
+        if (!m_Resources.Open([native] { if (native) nri::nriDestroyDevice(native); })) return false;
         m_Initialized = true;
         m_State = RHIDeviceState::Ready;
         return true;
@@ -439,6 +446,7 @@ namespace Axle::RHI {
 
     bool RHIDevice::WaitForFence(nri::Fence* fence, uint64_t value, uint32_t timeoutMilliseconds) {
         if (!value) return true;
+        if (!m_Resources.IsOwnerThread()) return false;
         if (!IsNativeReady() || !fence || m_State == RHIDeviceState::Lost) return false;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMilliseconds);
         do {
@@ -457,6 +465,7 @@ namespace Axle::RHI {
 
     bool RHIDevice::WaitIdle(uint32_t timeoutMilliseconds) {
         if (!m_Device) return true;
+        if (!m_Resources.IsOwnerThread()) return false;
         if (!IsNativeReady() || m_State == RHIDeviceState::Lost) return false;
         if (!m_IdleFence) {
             const auto result = ScopedRHIFault::Invoke("CreateIdleFence", [&] { return m_NRI.Core.CreateFence(*m_Device, 0, m_IdleFence); });
@@ -475,6 +484,7 @@ namespace Axle::RHI {
             m_DeferredCleanup.clear();
             for (auto& release : releases) release();
         }
+        m_Resources.CollectAfterDrain();
         return true;
     }
 
@@ -485,6 +495,7 @@ namespace Axle::RHI {
 
     bool RHIDevice::Shutdown() {
         if (!m_Initialized) return true;
+        if (!m_Resources.IsOwnerThread()) return false;
 
         AXLE_CORE_INFO("Shutting down RHI Device ({0})...", RHITypeToString(m_Capabilities.ActiveBackend));
 
@@ -502,6 +513,7 @@ namespace Axle::RHI {
         }
         m_State = m_State == RHIDeviceState::Lost ? RHIDeviceState::Lost : RHIDeviceState::Stopping;
 
+        m_Resources.PrepareDeviceClose();
         RHIPipelineCache::Get().Clear();
 
         RHIMaterial::ReleaseDefaultTextures();
@@ -510,10 +522,8 @@ namespace Axle::RHI {
 
         if (m_IdleFence) { m_NRI.Core.DestroyFence(m_IdleFence); m_IdleFence = nullptr; }
         m_IdleValue = 0;
-        if (m_Device) {
-            nri::nriDestroyDevice(m_Device);
-            m_Device = nullptr;
-        }
+        m_Resources.CloseAfterDrain();
+        m_Device = nullptr;
 
         m_GraphicsQueue = nullptr;
         m_NRI = {};

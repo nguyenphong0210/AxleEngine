@@ -141,12 +141,32 @@ namespace Axle::RHI {
         m_FrameInFlightIndex = 0;
         m_CurrentTextureIndex = 0;
         m_NeedsResize = false;
+        const auto functions = core; const auto swapFunctions = sc;
+        const auto frames = m_Frames; const auto ownedTextures = m_Textures;
+        auto fence = m_FrameFence; auto swapchain = m_SwapChain;
+        m_Lease = device.GetResources().Publish(RHIResourceKind::Surface, "Swapchain", {swapchain, fence},
+            [functions, swapFunctions, frames, ownedTextures, fence, swapchain] {
+                for (const auto& frame : frames) if (frame.CommandAllocator) functions.DestroyCommandAllocator(frame.CommandAllocator);
+                for (const auto& texture : ownedTextures) {
+                    if (texture.AcquireSemaphore) functions.DestroyFence(texture.AcquireSemaphore);
+                    if (texture.ReleaseSemaphore) functions.DestroyFence(texture.ReleaseSemaphore);
+                }
+                if (fence) functions.DestroyFence(fence);
+                if (swapchain) swapFunctions.DestroySwapChain(swapchain);
+            });
+        if (!m_Lease.IsLive()) return false;
+        for (const auto& frame : frames) device.GetResources().AddAlias(m_Lease, frame.CommandAllocator);
+        for (const auto& texture : ownedTextures) device.GetResources().AddAlias(m_Lease, texture.Texture);
         return true;
     }
 
     void RHISwapChain::DestroyNRIResources() {
         auto& device = RHIDevice::Get();
-        if (device.IsNativeReady()) {
+        if (m_Lease) {
+            const bool current = m_Lease.IsLive();
+            m_Lease.Reset();
+            if (current) device.WaitIdle();
+        } else if (device.IsNativeReady()) {
             device.WaitIdle();
             const auto core = device.GetNRICore();
             const auto sc = device.GetNRISwapChain();
@@ -175,7 +195,7 @@ namespace Axle::RHI {
     }
 
     bool RHISwapChain::BeginFrame() {
-        if (!m_Initialized || m_IsMinimized || m_Acquired) return false;
+        if (!IsValid() || m_IsMinimized || m_Acquired) return false;
 
         if (m_IsLegacyOpenGL) {
             m_CurrentTextureIndex = (m_CurrentTextureIndex + 1) % m_ActualTextureCount;
@@ -209,7 +229,7 @@ namespace Axle::RHI {
     }
 
     bool RHISwapChain::PresentFrame(const nri::CommandBuffer* const* commandBuffers, uint32_t commandBufferNum) {
-        if (!m_Initialized || m_IsMinimized || !m_Acquired) return false;
+        if (!IsValid() || m_IsMinimized || !m_Acquired) return false;
 
         if (m_IsLegacyOpenGL) {
             m_FrameCount++; m_Acquired = false;
@@ -328,6 +348,7 @@ namespace Axle::RHI {
     }
 
     nri::Texture* RHISwapChain::GetCurrentTexture() const {
+        if (!IsValid()) return nullptr;
         if (m_CurrentTextureIndex < m_Textures.size()) {
             return m_Textures[m_CurrentTextureIndex].Texture;
         }
@@ -335,6 +356,7 @@ namespace Axle::RHI {
     }
 
     nri::Texture* RHISwapChain::GetTexture(uint32_t index) const {
+        if (!IsValid()) return nullptr;
         if (index < m_Textures.size()) {
             return m_Textures[index].Texture;
         }
@@ -342,6 +364,7 @@ namespace Axle::RHI {
     }
 
     nri::CommandAllocator* RHISwapChain::GetCurrentCommandAllocator() const {
+        if (!IsValid()) return nullptr;
         if (m_FrameInFlightIndex < m_Frames.size()) {
             return m_Frames[m_FrameInFlightIndex].CommandAllocator;
         }
@@ -349,6 +372,7 @@ namespace Axle::RHI {
     }
 
     nri::Fence* RHISwapChain::GetCurrentAcquireSemaphore() const {
+        if (!IsValid()) return nullptr;
         if (!m_ActualTextureCount) return nullptr;
         uint32_t acquireIndex = static_cast<uint32_t>(m_FrameCount % m_ActualTextureCount);
         if (acquireIndex < m_Textures.size()) {
@@ -358,6 +382,7 @@ namespace Axle::RHI {
     }
 
     nri::Fence* RHISwapChain::GetCurrentReleaseSemaphore() const {
+        if (!IsValid()) return nullptr;
         if (m_CurrentTextureIndex < m_Textures.size()) {
             return m_Textures[m_CurrentTextureIndex].ReleaseSemaphore;
         }

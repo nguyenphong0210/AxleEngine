@@ -10,7 +10,8 @@ namespace Axle::RHI {
     }
 
     RHIStreamer::RHIStreamer(RHIStreamer&& other) noexcept
-        : m_Streamer(other.m_Streamer)
+        : m_Lease(std::move(other.m_Lease))
+        , m_Streamer(other.m_Streamer)
         , m_Desc(other.m_Desc)
         , m_Device(other.m_Device)
     {
@@ -21,6 +22,7 @@ namespace Axle::RHI {
     RHIStreamer& RHIStreamer::operator=(RHIStreamer&& other) noexcept {
         if (this != &other) {
             Shutdown();
+            m_Lease = std::move(other.m_Lease);
             m_Streamer = other.m_Streamer;
             m_Desc = other.m_Desc;
             m_Device = other.m_Device;
@@ -36,7 +38,13 @@ namespace Axle::RHI {
     }
 
     bool RHIStreamer::Init(RHIDevice& device, const RHIStreamerDesc& desc) {
-        Shutdown();
+        RHIStreamer candidate;
+        if (!candidate.Build(device, desc)) return false;
+        *this = std::move(candidate);
+        return true;
+    }
+
+    bool RHIStreamer::Build(RHIDevice& device, const RHIStreamerDesc& desc) {
 
         if (!device.CanCreateResources()) {
             AXLE_CORE_ERROR("RHIStreamer::Init failed: RHIDevice is not initialized!");
@@ -70,6 +78,10 @@ namespace Axle::RHI {
 
         m_Desc = desc;
         m_Device = &device;
+        auto destroy = streamerInterface.DestroyStreamer; auto streamer = m_Streamer;
+        m_Lease = device.GetResources().Publish(RHIResourceKind::Streamer, "Streamer", {streamer},
+            [destroy, streamer] { destroy(streamer); });
+        if (!m_Lease.IsLive()) return false;
 
         AXLE_CORE_INFO("RHIStreamer successfully initialized (ConstantRing: {0} MB, FramesInFlight: {1}).",
             desc.ConstantBufferSize / (1024 * 1024), desc.QueuedFrameNum);
@@ -77,7 +89,8 @@ namespace Axle::RHI {
     }
 
     void RHIStreamer::Shutdown() {
-        if (m_Streamer && m_Device) {
+        if (m_Lease) m_Lease.Reset();
+        else if (m_Streamer && m_Device) {
             const auto& streamerInterface = m_Device->GetNRIStreamer();
             if (streamerInterface.DestroyStreamer) {
                 auto destroy = streamerInterface.DestroyStreamer; auto streamer = m_Streamer;
@@ -89,28 +102,30 @@ namespace Axle::RHI {
     }
 
     nri::Buffer* RHIStreamer::GetConstantBuffer() const {
-        if (!m_Streamer || !m_Device) return nullptr;
+        if (!IsValid() || !m_Device) return nullptr;
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (!streamerInterface.GetStreamerConstantBuffer) return nullptr;
-        return streamerInterface.GetStreamerConstantBuffer(*m_Streamer);
+        auto* buffer = streamerInterface.GetStreamerConstantBuffer(*m_Streamer);
+        m_Device->GetResources().AddAlias(m_Lease, buffer);
+        return buffer;
     }
 
     uint32_t RHIStreamer::StreamConstantData(const void* data, uint32_t size) {
-        if (!m_Streamer || !m_Device || !data || size == 0) return 0;
+        if (!IsValid() || !m_Device || !data || size == 0) return 0;
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (!streamerInterface.StreamConstantData) return 0;
         return streamerInterface.StreamConstantData(*m_Streamer, data, size);
     }
 
     void* RHIStreamer::StreamHostData(const void* data, uint64_t size, uint32_t alignment) {
-        if (!m_Streamer || !m_Device || !data || size == 0) return nullptr;
+        if (!IsValid() || !m_Device || !data || size == 0) return nullptr;
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (!streamerInterface.StreamHostData) return nullptr;
         return streamerInterface.StreamHostData(*m_Streamer, data, size, alignment);
     }
 
     RHICopyBatch RHIStreamer::BeginCopyBatch() {
-        if (!m_Streamer || !m_Device) return 0;
+        if (!IsValid() || !m_Device) return 0;
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (!streamerInterface.BeginStreamerCopyBatch) return 0;
         RHICopyBatch batch = 0;
@@ -122,7 +137,7 @@ namespace Axle::RHI {
     }
 
     RHIStreamedBuffer RHIStreamer::StreamBufferData(const void* data, uint64_t size, uint32_t alignment) {
-        if (!m_Streamer || !m_Device || !data || size == 0) return {};
+        if (!IsValid() || !m_Device || !data || size == 0) return {};
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (!streamerInterface.StreamBufferData) return {};
 
@@ -140,13 +155,14 @@ namespace Axle::RHI {
             bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
             return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
         });
+        m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
         return { bo.buffer, bo.offset };
     }
 
     RHIStreamedBuffer RHIStreamer::StreamBufferUpload(RHICopyBatch copyBatch, nri::Buffer* dstBuffer, uint64_t dstOffset,
                                                     const void* data, uint64_t size, uint32_t alignment)
     {
-        if (!m_Streamer || !m_Device || !dstBuffer || !data || size == 0 || copyBatch == 0) return {};
+        if (!IsValid() || !m_Device || !dstBuffer || !data || size == 0 || copyBatch == 0) return {};
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (!streamerInterface.StreamBufferData) return {};
 
@@ -164,6 +180,7 @@ namespace Axle::RHI {
             bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
             return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
         });
+        m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
         return { bo.buffer, bo.offset };
     }
 
@@ -176,7 +193,7 @@ namespace Axle::RHI {
     RHIStreamedBuffer RHIStreamer::StreamBufferUploadChunks(RHICopyBatch copyBatch, nri::Buffer* dstBuffer, uint64_t dstOffset,
                                                           const std::vector<RHIStreamChunk>& chunks, uint32_t alignment)
     {
-        if (!m_Streamer || !m_Device || !dstBuffer || chunks.empty() || copyBatch == 0) return {};
+        if (!IsValid() || !m_Device || !dstBuffer || chunks.empty() || copyBatch == 0) return {};
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (!streamerInterface.StreamBufferData) return {};
 
@@ -199,6 +216,7 @@ namespace Axle::RHI {
             bo = streamerInterface.StreamBufferData(*m_Streamer, desc);
             return bo.buffer ? nri::Result::SUCCESS : nri::Result::FAILURE;
         });
+        m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
         return { bo.buffer, bo.offset };
     }
 
@@ -209,7 +227,7 @@ namespace Axle::RHI {
     }
 
     RHIStreamedBuffer RHIStreamer::StreamTextureData(const RHIStreamTextureDesc& desc) {
-        if (!m_Streamer || !m_Device || !desc.DstTexture || !desc.Data || desc.CopyBatch == 0) return {};
+        if (!IsValid() || !m_Device || !desc.DstTexture || !desc.Data || desc.CopyBatch == 0) return {};
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (!streamerInterface.StreamTextureData) return {};
 
@@ -231,11 +249,12 @@ namespace Axle::RHI {
         nriDesc.dstRegion.planes = nri::PlaneBits::ALL;
 
         nri::BufferOffset bo = streamerInterface.StreamTextureData(*m_Streamer, nriDesc);
+        m_Device->GetResources().AddAlias(m_Lease, bo.buffer);
         return { bo.buffer, bo.offset };
     }
 
     void RHIStreamer::CmdCopyStreamedData(nri::CommandBuffer& cmdBuffer, RHICopyBatch copyBatch) {
-        if (!m_Streamer || !m_Device || copyBatch == 0) return;
+        if (!IsValid() || !m_Device || copyBatch == 0) return;
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (streamerInterface.CmdCopyStreamedData) {
             streamerInterface.CmdCopyStreamedData(cmdBuffer, *m_Streamer, copyBatch);
@@ -249,7 +268,7 @@ namespace Axle::RHI {
     }
 
     void RHIStreamer::EndFrame() {
-        if (!m_Streamer || !m_Device) return;
+        if (!IsValid() || !m_Device) return;
         const auto& streamerInterface = m_Device->GetNRIStreamer();
         if (streamerInterface.EndStreamerFrame) {
             streamerInterface.EndStreamerFrame(*m_Streamer);

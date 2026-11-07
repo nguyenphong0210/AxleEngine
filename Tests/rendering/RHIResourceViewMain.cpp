@@ -7,6 +7,7 @@
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHIObjectPicker.hpp>
+#include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
@@ -16,6 +17,29 @@
 using namespace Axle;
 using namespace Axle::RHI;
 using Axle::RenderTests::ReadTexture;
+
+static bool EpochOwnership(RHIType backend) {
+    auto& device = RHIDevice::Get();
+    WindowProps props; props.Title = "OPT-04 device ownership"; props.Width = props.Height = 96; props.Maximized = false;
+    props.GraphicsBackend = backend == RHIType::Vulkan ? GraphicsAPI::Vulkan : GraphicsAPI::Direct3D12;
+    Window window(props);
+    ImGuiLayer ui(backend == RHIType::Vulkan ? ImGuiBackendType::Vulkan : ImGuiBackendType::Direct3D12);
+    ui.Init(window.GetNativeWindow()); ui.Begin(); ui.End();
+    auto oldMesh = RHIMeshRegistry::Get().GetCube();
+    RENDER_CHECK(oldMesh && oldMesh->IsValid(), "old epoch owns a real shared builtin");
+    const auto epoch = device.GetEpoch();
+    RENDER_CHECK(device.Shutdown() && !ui.IsInitialized() && !ImGui::GetCurrentContext() && !oldMesh->IsValid(),
+        "device closes the live native UI owner and all scene resources before native destruction");
+    RHIDeviceDesc desc; desc.PreferredBackend = backend; desc.AllowFallback = false; desc.EnableNRIValidation = true;
+    desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(backend);
+    RENDER_CHECK(device.Init(desc) && device.GetEpoch() != epoch, "new physical device epoch");
+    auto freshMesh = RHIMeshRegistry::Get().GetCube();
+    RENDER_CHECK(freshMesh && freshMesh->IsValid() && freshMesh != oldMesh, "registry replaces stale migration caches with current-epoch resources");
+    oldMesh.reset();
+    ui.Init(window.GetNativeWindow()); ui.Begin(); ui.End(); ui.Shutdown();
+    RENDER_CHECK(freshMesh->IsValid() && device.WaitIdle(), "stale mesh/UI teardown cannot damage the new device");
+    return true;
+}
 
 static bool UIErrors(RHIType backend) {
     auto& device = RHIDevice::Get();
@@ -159,11 +183,14 @@ int main(int argc, char** argv) {
     desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(desc.PreferredBackend);
     auto& device = RHIDevice::Get();
     bool ok = device.Init(desc) && device.GetBackend() == desc.PreferredBackend && !device.IsSoftwareAdapter();
-    try { if (ok) ok = argc > 2 && std::string(argv[2]) == "errors" ? UIErrors(desc.PreferredBackend) : Run(desc.PreferredBackend); }
+    try { if (ok) ok = argc > 2 && std::string(argv[2]) == "epoch" ? EpochOwnership(desc.PreferredBackend) :
+        argc > 2 && std::string(argv[2]) == "errors" ? UIErrors(desc.PreferredBackend) : Run(desc.PreferredBackend); }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; ok = false; }
     RHIMeshRegistry::Get().Shutdown();
     device.Shutdown();
     JobSystem::Shutdown();
+    ok = Axle::RenderTests::Check(Axle::RHI::GetRHIValidationErrorCount() == 0,
+        "native validation reported no errors, including teardown", __FILE__, __LINE__) && ok;
     std::cout << "RHIResourceView: " << (ok ? "PASS" : "FAIL") << '\n';
     return ok ? 0 : 1;
 }

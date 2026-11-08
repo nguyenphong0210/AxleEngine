@@ -73,6 +73,34 @@ its interactive UI rows remain open. PLG VEH-01..03 detailed feature rows are
 explicitly deferred under the preserved OPT-07/08 scope, not passed by prototypes.
 AF-05 cannot close until all applicable mandatory rows, including UI, are verified.
 
+## Coordinator verification completed in this session
+
+- Source candidate commit: `96bdad7`; documentation/task-state follow-up commit:
+  `c601e0f`. `git diff --check` and exchange schema validation passed.
+- Editor-free CPU tree `out/opt10-cpu`: Debug **3/3** and Release **3/3** CTest
+  passed (`StaticPluginLifetimeTests`, `ArchitectureStressTests`,
+  `PluginFoundationTests`). Stress output covered scheduler 1/2/16, 2,048 Jolt
+  jobs per run and bounded records high-water 1/4/3.
+- Fresh Debug `build-opt10`: build of Editor/Runtime/AxleAllTests exit 0; full
+  CTest **73/73** passed; default `AxleTests.exe` integration passed after current
+  fixture repairs; repeated stress/DLL/simulation rows passed. Native Debug rows
+  passed for D3D12/Vulkan RHI/resource/frame/presentation/error/viewport/service,
+  GL/fallback image/primitive/Canvas, Editor startup/rejection, generated external
+  plugin session/submission and product workflow. Runtime loose/cooked probes
+  passed after adding current project `SchemaVersion: 1` and explicit empty plugin
+  selection. Logs: `build-opt10/acceptance-debug-final/20261108T150335.645637Z/`
+  and `build-opt10/debug-final-console.log`.
+- Release CPU build/tests passed in `out/opt10-cpu`; a fresh full Release product
+  build was started in `build-opt10` and was still compiling when the coordinator
+  stopped owned build processes to end the turn. No Release full-product PASS is
+  claimed. The Debug detached export stage had begun real snapshot/build work but
+  was stopped with the owned runner after prolonged exporter activity; no export
+  acceptance PASS is claimed. The preserved stop record is
+  `build-opt10/acceptance-debug-final/20261108T150335.645637Z/coordinator-stop.json`.
+- The Computer Use native pipe failed with OS error 2 on initial, retry and fresh
+  kernel attempts. Interactive Plugins UI observation/click/capture therefore
+  remains **NOT RUN**.
+
 ## Verification and open gates
 
 Fresh build tree: `build-opt10`. The user accidentally removed the previous build

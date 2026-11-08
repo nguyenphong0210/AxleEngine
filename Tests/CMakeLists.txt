@@ -342,6 +342,17 @@ add_test(NAME PluginUnitTests COMMAND $<TARGET_FILE:AxlePluginUnitTests>)
 add_test(NAME PluginHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxlePluginUnitTests> --case plugin-probe)
 set_tests_properties(PluginUnitTests PluginHarnessFailure PROPERTIES LABELS "plugin;cpu")
 set_tests_properties(PluginUnitTests PluginHarnessFailure PROPERTIES TIMEOUT 30)
+# PLG-06 native loader/transaction fixture. These are real shared libraries;
+# this slice intentionally does not claim PLG-04/05 host/build integration.
+add_library(AxlePluginRuntimeGood SHARED plugin/PluginRuntimeFixture.cpp)
+add_library(AxlePluginRuntimeFail SHARED plugin/PluginRuntimeFixture.cpp)
+target_compile_definitions(AxlePluginRuntimeFail PRIVATE AXLE_FIXTURE_FAIL)
+add_executable(AxlePluginRuntimeTests plugin/PluginRuntimeMain.cpp)
+target_link_libraries(AxlePluginRuntimeTests PRIVATE Axle::PluginRuntime)
+add_dependencies(AxlePluginRuntimeTests AxlePluginRuntimeGood AxlePluginRuntimeFail)
+add_test(NAME PluginRuntimeTests COMMAND AxlePluginRuntimeTests
+    $<TARGET_FILE:AxlePluginRuntimeGood> $<TARGET_FILE:AxlePluginRuntimeFail>)
+set_tests_properties(PluginRuntimeTests PROPERTIES LABELS "plugin;cpu" TIMEOUT 30)
 
 # Dedicated Foundation, Application & Services Unit Test Target (AF-02)
 add_executable(AxleFoundationUnitTests EXCLUDE_FROM_ALL

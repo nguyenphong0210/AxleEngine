@@ -1,23 +1,23 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "SCENE-LIGHTING-PARITY",
-    "title": "Authored-only scene lighting parity across native and GL",
-    "state": "in_progress",
+    "id": "SANDBOX-DEFAULT-PROJECT",
+    "title": "Rename development sample to Sandbox and make it the Editor startup default",
+    "state": "complete",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Codex",
-    "code_baseline": "b78fa6ee83d03fded95c64258103cb2fa50106ef",
-    "user_instruction": "User requests UE-like Lit behavior without added lights and consistent GL/native appearance (2026-11-07).",
-    "user_scope": "UE-like Lit semantics: no authored illumination/environment means black nonemissive surfaces and default black background. Similar basic material colors across D3D12/Vulkan/OpenGL through matching lighting/ambient/display conventions. Private previews own explicit lights; preserve emissive/unlit behavior. No OPT-06 or vendor changes.",
-    "codex_report": "docs/reviews/SCENE_LIGHTING_PARITY.md",
-    "next_action": "Implement shared lighting policy and actual three-backend no-light/explicit-light/emission/environment regressions; source recheck, build/test and local commit.",
+    "code_baseline": "dee64e5",
+    "user_instruction": "User requests renaming the project in Samples to Sandbox and opening it by default after building (2026-11-08).",
+    "user_scope": "Rename Samples/TestProject to Samples/Sandbox and its project file/name; preserve scene/assets bytes and the existing schema/empty plugin selection. Update CMake default including the old built-in cached path, current usage docs and focused startup verification. Preserve custom/disabled defaults. No OPT-06 framework expansion or unrelated RHI edits.",
     "preserve_unrelated_changes": [
-      "Samples/TestProject/TestProject.axleproj",
-      "Samples/TestProject/assets/scenes/Test.axlescene"
+      "Engine/RHI/src/RHIDescriptorPool.cpp",
+      "Engine/RHI/src/RHIFrameContext.cpp"
     ],
-    "implementation_status": "Implemented and targeted Debug physical 12/12 plus numerical 36/36 comparisons, maximum RGB delta0.7161/255. Final Debug/Release builds/regressions pending.",
-    "independent_review_status": "separate_context_source_recheck_no_remaining_P1_P2"
+    "next_action": "Assigned Sandbox rename/default startup complete. No push or later OPT work.",
+    "source_commit": "3e3a423",
+    "implementation_status": "Sandbox folder/project/name and default startup delivered; old built-in cache follows the rename while custom/disabled defaults are preserved.",
+    "verification": "Configure and Debug Editor/project-test build exit 0; ProjectStartupTests 1/1 PASS; real D3D12 default launch from executable directory with no --project passed five UI frames and exited 0; four cache-policy cases pass; scene SHA-256 unchanged."
   },
   "last_read": {
     "Codex": "CG-20261107T123652362433Z-GEMINI-e0f179",
@@ -1607,6 +1607,28 @@
       "base_commit": "b78fa6ee83d03fded95c64258103cb2fa50106ef",
       "timestamp_utc": "2026-11-07T16:14:41.426025+00:00",
       "body": "STATUS: Expanded user color/background steering is implemented: shared authored light policy, default black clear, aligned basic isotropic BRDF/ambient/light conversions and display parameters, explicit private studio light, safe HDR bake and canonical GL shader embedding. Targeted physical Debug 12/12 and chart36/36 pass, max RGBdelta0.7161/255. Separate-context source recheck has no remaining P1/P2. Final full Debug/Release builds and regression gates are running; no completion claimed yet. User Samples/TestProject files remain preserved."
+    },
+    {
+      "id": "CG-20261108T034129662577Z-CODEX-1e9570",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "SANDBOX-DEFAULT-PROJECT",
+      "reply_to": "CG-20261107T161441426025Z-CODEX-404c2f",
+      "base_commit": "dee64e5",
+      "timestamp_utc": "2026-11-08T03:41:29.662577+00:00",
+      "body": "IN_PROGRESS: User assigns Sandbox sample rename/default startup at base dee64e5. Expected files: Samples/TestProject -> Samples/Sandbox including Sandbox.axleproj; Editor/CMakeLists.txt; existing startup test and usage/schema docs. Preserve authored scene/assets bytes, explicit/empty default overrides and unrelated RHI edits. An existing process is building RHI test targets; I will not touch those source files or start a competing build/configure until it finishes. This assignment does not reopen or accept the outstanding OPT-06 framework."
+    },
+    {
+      "id": "CG-20261108T034647744999Z-CODEX-6451d0",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "SANDBOX-DEFAULT-PROJECT",
+      "reply_to": "CG-20261108T034129662577Z-CODEX-1e9570",
+      "base_commit": "3e3a423",
+      "timestamp_utc": "2026-11-08T03:46:47.744999+00:00",
+      "body": "DELIVERY: Sandbox development project rename/default startup committed as 3e3a423.\n\nUser scope: rename the sample project to Sandbox and use it as the default after building. Samples/TestProject is now Samples/Sandbox; project filename/name is Sandbox.axleproj / Sandbox. Schema 1 and explicit empty optional plugin selection are preserved. Authored scene bytes are unchanged (SHA-256 0FA1BA5710996941D82512A7703727C18C75C1363748D680243EF103E4CC5E93).\n\nEditor CMake default is Samples/Sandbox/Sandbox.axleproj. Existing cache values equal to the former built-in absolute TestProject path move to Sandbox on regeneration. Explicit custom/disabled defaults and CLI precedence remain intact. Updated current usage/schema docs and the existing startup regression. The independent RHI work committed as 0fd041f is preserved.\n\nActual verification:\n- cmake -S . -B build: exit 0; actual old cache migrated, generated Debug and Release EditorStartupConfig.hpp point to Sandbox.\n- Four isolated CMake cache cases (fresh, old built-in, custom, disabled): all exit 0.\n- cmake --build build --config Debug --target AxleEditor AxleProjectUnitTests --parallel 6: exit 0.\n- ctest --test-dir build -C Debug -R '^ProjectStartupTests$' --output-on-failure: 1/1 PASS, exit 0.\n- Real Debug Editor --verify-startup --rhi=dx12 from its executable directory, with no --project: Sandbox selected, five UI frames, clean exit 0. Log: build/sandbox-default/native-default-dx12.log.\n- Scene hash before/after matches. Diff checks pass. Logs/scripts: build/sandbox-default/.\n\nNo Release executable/native run is claimed. No source outside the assigned scope was changed; no push or OPT-06 acceptance."
     }
   ],
   "deferred_tasks": [

@@ -688,6 +688,18 @@ if(WIN32)
     list(APPEND AXLE_TEST_TARGETS AxleVehicleEditorTests)
     add_test(NAME VehicleEditorTests COMMAND $<TARGET_FILE:AxleVehicleEditorTests> "${CMAKE_SOURCE_DIR}")
     set_tests_properties(VehicleEditorTests PROPERTIES LABELS "plugin;editor;vehicle;cpu")
+
+    add_executable(AxleVehicleAudioVFXTests EXCLUDE_FROM_ALL
+        src/Test_VehicleAudioVFX.cpp
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/src/VehicleComponents.cpp")
+    target_include_directories(AxleVehicleAudioVFXTests PRIVATE
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/include"
+        "${CMAKE_SOURCE_DIR}/Engine/PluginSDK/include"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/glm")
+    target_link_libraries(AxleVehicleAudioVFXTests PRIVATE Axle::Core Axle::Plugin)
+    list(APPEND AXLE_TEST_TARGETS AxleVehicleAudioVFXTests)
+    add_test(NAME VehicleAudioVFXTests COMMAND $<TARGET_FILE:AxleVehicleAudioVFXTests> "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(VehicleAudioVFXTests PROPERTIES LABELS "plugin;audio;vfx;vehicle;cpu")
 endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 

@@ -1,6 +1,8 @@
 #include "PluginsPanel.hpp"
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
+#include <Axle/FileSystem.hpp>
+#include <Axle/UUID.hpp>
 
 #include <iostream>
 #include <memory>
@@ -27,17 +29,36 @@ Axle::Plugin::Manifest MakeManifest(std::string id, std::string name,
 } // namespace
 
 int main() {
+    Axle::PluginsPanel detachedPanel;
+    CHECK(!detachedPanel.ApplyDraft().Applied, "Apply requires a saved project");
+
     Axle::Plugin::Catalog catalog;
     catalog.Plugins.push_back(MakeManifest("core.base", "Core Base", {}, "Engine/Plugins/CoreBase.axleplugin"));
     catalog.Plugins.push_back(MakeManifest("game.gameplay", "Gameplay", { "core.base" }, "Projects/MyGame/Plugins/Gameplay.axleplugin"));
     catalog.Plugins.push_back(MakeManifest("tools.editor", "Editor Tools", {}, "Engine/Plugins/EditorTools.axleplugin"));
 
-    auto project = Axle::Project::New();
+    const auto root = std::filesystem::temp_directory_path() / "AxleEngine" /
+        ("PluginsPanel-" + std::to_string(static_cast<uint64_t>(Axle::UUID{})));
+    std::filesystem::create_directories(root);
+    struct Cleanup {
+        std::filesystem::path Root;
+        ~Cleanup() { Axle::Project::SetActive(nullptr); std::error_code ec; std::filesystem::remove_all(Root, ec); }
+    } cleanup{root};
+    auto project = Axle::Project::New(root);
     project->GetConfig().Name = "TestGameProject";
+    const auto projectPath = root / "ActualFilename.axleproj";
+    CHECK(Axle::ProjectSerializer(project).Serialize(projectPath), "Fixture project saved");
+    const auto previousBytes = Axle::FileSystem::ReadTextFile(projectPath);
+    auto unrelatedProject = Axle::Project::New(root);
+    unrelatedProject->GetConfig().Name = "UnrelatedActiveProject";
+    Axle::Project::SetActive(unrelatedProject);
 
     Axle::PluginsPanel panel;
     panel.SetActiveProject(project);
     panel.SetCatalog(catalog);
+    CHECK(!panel.CanApply(), "Untitled project requires Save As");
+    CHECK(!panel.ApplyDraft().Applied, "Unsaved project cannot Apply");
+    panel.SetProjectPath(projectPath);
 
     // 1. Initial State: clean, empty desired selection
     CHECK(!panel.HasDraftChanges(), "Panel starts without draft changes");
@@ -81,6 +102,15 @@ int main() {
 
     // 6. Successful Apply commits Desired state and sets Restart prompt
     panel.SetSaveSceneCallback([]() { return true; });
+    const auto blockedPath = root / "Blocked.axleproj";
+    std::filesystem::create_directory(blockedPath);
+    panel.SetProjectPath(blockedPath);
+    auto failedSave = panel.ApplyDraft();
+    CHECK(!failedSave.Applied, "Project save failure rejects Apply");
+    CHECK(panel.HasDraftChanges() && panel.GetSelectionModel()->Desired().empty(), "Save failure preserves draft and Desired");
+    CHECK(project->GetConfig().SelectedPlugins.empty() && !panel.NeedsRestart(), "Save failure rolls back config without restart");
+    CHECK(Axle::FileSystem::ReadTextFile(projectPath) == previousBytes, "Save failure preserves previous project bytes");
+    panel.SetProjectPath(projectPath);
     auto successApply = panel.ApplyDraft(false);
     CHECK(successApply.Applied, "Apply succeeds when scene save succeeds");
     CHECK(!panel.HasDraftChanges(), "Draft changes cleared after Apply");
@@ -88,6 +118,12 @@ int main() {
     CHECK(project->GetConfig().SelectedPlugins.size() == 1 &&
           project->GetConfig().SelectedPlugins[0] == "game.gameplay",
           "Desired plugin committed to project config");
+    auto persisted = std::make_shared<Axle::Project>();
+    CHECK(Axle::ProjectSerializer(persisted).Deserialize(projectPath), "Applied project can reopen");
+    CHECK(persisted->GetConfig().SelectedPlugins == project->GetConfig().SelectedPlugins, "Apply persists Desired to actual filename");
+    CHECK(unrelatedProject->GetConfig().SelectedPlugins.empty(), "Apply leaves global unrelated project alone");
+    CHECK(!std::filesystem::exists(root / "TestGameProject.axleproj") &&
+          !std::filesystem::exists(root / "UnrelatedActiveProject.axleproj"), "Apply never infers a project filename from display name");
 
     bool restartCalled = false;
     panel.SetRestartCallback([&]() { restartCalled = true; });
@@ -115,6 +151,8 @@ int main() {
     // 9. Safe Mode flag
     panel.SetSafeMode(true);
     CHECK(panel.IsSafeMode(), "Safe mode flag set");
+    panel.SetActiveProject(unrelatedProject);
+    CHECK(!panel.NeedsRestart() && panel.GetErrorMessage().empty(), "Project switch clears old pending notifications");
 
     std::cout << "Plugins panel workflow (transactions, guards, dirty doc, filters, safe mode): PASS\n";
     return 0;

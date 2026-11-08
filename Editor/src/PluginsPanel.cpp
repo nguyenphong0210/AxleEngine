@@ -1,6 +1,7 @@
 #include "PluginsPanel.hpp"
 
 #include <Axle/Log.hpp>
+#include <Axle/ProjectSerializer.hpp>
 #include <imgui.h>
 
 #include <algorithm>
@@ -29,8 +30,12 @@ PluginsPanel::PluginsPanel() {
     m_SelectionModel = std::make_unique<Plugin::SelectionModel>(m_Catalog, Plugin::ProductKind::Editor, std::vector<std::string>{});
 }
 
-void PluginsPanel::SetActiveProject(std::shared_ptr<Project> project) {
+void PluginsPanel::SetActiveProject(std::shared_ptr<Project> project, std::filesystem::path projectPath) {
     m_Project = std::move(project);
+    m_ProjectPath = std::move(projectPath);
+    m_NeedsRestart = false;
+    m_ErrorMessage.clear();
+    m_StatusMessage.clear();
     RefreshCatalog();
 }
 
@@ -63,7 +68,8 @@ bool PluginsPanel::HasDraftChanges() const {
 }
 
 bool PluginsPanel::CanApply() const {
-    return m_SelectionModel && m_SelectionModel->DraftResolution().IsValid();
+    return m_Project && !m_ProjectPath.empty() && m_SelectionModel &&
+           m_SelectionModel->DraftResolution().IsValid();
 }
 
 bool PluginsPanel::TogglePluginDraft(std::string_view id, bool enabled, bool isSimulationActive) {
@@ -91,6 +97,11 @@ Plugin::ApplyReport PluginsPanel::ApplyDraft(bool isSimulationActive) {
         m_ErrorMessage = report.Error;
         return report;
     }
+    if (!m_Project || m_ProjectPath.empty()) {
+        report.Error = "Save Project As before applying plugin changes.";
+        m_ErrorMessage = report.Error;
+        return report;
+    }
     if (!m_SelectionModel) {
         report.Error = "No active plugin selection model.";
         m_ErrorMessage = report.Error;
@@ -111,20 +122,24 @@ Plugin::ApplyReport PluginsPanel::ApplyDraft(bool isSimulationActive) {
         }
     }
 
-    report = m_SelectionModel->Apply();
-    if (!report.Applied) {
+    // Persist the draft to the actual project file before advancing Desired.
+    // The panel owns its project reference; saving a different global active
+    // project or deriving the filename from a mutable display name is unsafe.
+    auto previousSelection = m_Project->GetConfig().SelectedPlugins;
+    m_Project->GetConfig().SelectedPlugins = m_SelectionModel->Draft();
+    bool saved = false;
+    try {
+        saved = ProjectSerializer(m_Project).Serialize(m_ProjectPath);
+    } catch (...) {
+        saved = false;
+    }
+    if (!saved) {
+        m_Project->GetConfig().SelectedPlugins = std::move(previousSelection);
+        report.Error = "Could not save plugin selection. Draft changes are still pending.";
         m_ErrorMessage = report.Error;
         return report;
     }
-
-    // Persist desired selections to Project configuration
-    if (m_Project) {
-        m_Project->GetConfig().SelectedPlugins = m_SelectionModel->Desired();
-        const auto projFile = m_Project->GetProjectDirectoryPath() / (m_Project->GetConfig().Name + ".axleproj");
-        if (!Project::SaveActive(projFile)) {
-            AXLE_WARN("PluginsPanel: Project configuration could not be saved to '{0}'", projFile.string());
-        }
-    }
+    report = m_SelectionModel->Apply();
 
     m_NeedsRestart = true;
     m_StatusMessage = "Plugin changes applied successfully. Editor restart required.";
@@ -322,6 +337,9 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
         ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Pending draft changes to plugin selection.");
     } else {
         ImGui::TextDisabled("Plugin selections are up to date.");
+    }
+    if (m_ProjectPath.empty()) {
+        ImGui::TextWrapped("Save Project As before applying plugin changes.");
     }
 
     ImGui::SameLine();

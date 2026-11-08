@@ -452,7 +452,7 @@ void EditorLayer::OnAttach() {
         const char* backendFlags[] = { "dx12", "vulkan", "opengl" };
         RestartEditorWithBackend(backendFlags[m_SelectedRHIBackendIndex]);
     });
-    m_PluginsPanel.SetActiveProject(Axle::Project::GetActive());
+    m_PluginsPanel.SetActiveProject(Axle::Project::GetActive(), m_CurrentProjectPath);
 
     if (!m_CurrentProjectPath.empty()) OpenProject(m_CurrentProjectPath);
     else NewScene();
@@ -1130,7 +1130,7 @@ void EditorLayer::NewProject() {
 
     Axle::AssetManager::SetAssetDirectory(Axle::Project::GetAssetDirectory());
     m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
-    m_PluginsPanel.SetActiveProject(project);
+    m_PluginsPanel.SetActiveProject(project, m_CurrentProjectPath);
     m_CompileNotificationMessage = "Created project: " + project->GetConfig().Name;
     m_CompileNotificationTimer = 4.0f;
     UpdateWindowTitle();
@@ -1161,7 +1161,7 @@ void EditorLayer::OpenProject(const std::filesystem::path& filepath) {
         m_CurrentProjectPath = target;
         Axle::AssetManager::SetAssetDirectory(Axle::Project::GetAssetDirectory());
         m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
-        m_PluginsPanel.SetActiveProject(project);
+        m_PluginsPanel.SetActiveProject(project, m_CurrentProjectPath);
 
         // Load project's StartScene if specified
         const auto& startSceneRel = project->GetConfig().StartScene;
@@ -1215,6 +1215,7 @@ void EditorLayer::SaveProjectAs() {
             return;
         }
         m_CurrentProjectPath = target;
+        m_PluginsPanel.SetProjectPath(target);
         if (!m_CurrentScenePath.empty()) {
             const auto relativeScene = m_CurrentScenePath.lexically_relative(previousAssets);
             if (!relativeScene.empty() && *relativeScene.begin() != "..") {

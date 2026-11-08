@@ -21,7 +21,8 @@ public:
     PluginsPanel();
     ~PluginsPanel() = default;
 
-    void SetActiveProject(std::shared_ptr<Project> project);
+    void SetActiveProject(std::shared_ptr<Project> project, std::filesystem::path projectPath = {});
+    void SetProjectPath(std::filesystem::path projectPath) { m_ProjectPath = std::move(projectPath); }
     void SetCatalog(Plugin::Catalog catalog);
     void RefreshCatalog();
 
@@ -64,6 +65,7 @@ public:
 
 private:
     std::shared_ptr<Project> m_Project;
+    std::filesystem::path m_ProjectPath;
     Plugin::Catalog m_Catalog;
     std::unique_ptr<Plugin::SelectionModel> m_SelectionModel;
 

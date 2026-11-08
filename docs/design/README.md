@@ -20,6 +20,7 @@ separate contract; it must not reintroduce retired Vehicle compatibility code.
 | OPT-06..09 | [Plugin architecture](PLUGIN_SYSTEM_ARCHITECTURE.md) | Editor DLLs, selected static Runtime and project plugins |
 | OPT-06..09 | [Plugin packages](PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | SDK, Plugins window, fresh Vehicle and export |
 | During plugin implementation | [Plugin coding reference](PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | Lifecycle/build algorithms and fixtures |
+| Post-OPT-10 | [Engine Upgrade Master Roadmap](POST_OPT10_ENGINE_UPGRADE_ROADMAP.md) | Unified High-Performance Lighting (3.5ms), autoLOD (Meshlets) and LogicLOD |
 | Post-OPT-10 | [Advanced rendering roadmap](POST_OPT10_ADVANCED_RENDERING_ROADMAP.md) | Multi-threading, VRAM aliasing, materials, geometry/culling and GI |
 | Post-OPT-10 | [Logic & Simulation LOD roadmap](POST_OPT10_LOGIC_AND_SIMULATION_LOD_ROADMAP.md) | Staggered tick rates, fast-path math, spatial dormancy and animation URO |
 

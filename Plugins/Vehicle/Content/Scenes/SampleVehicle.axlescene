@@ -1,0 +1,77 @@
+# Axle Scene Definition File
+Scene: SampleVehicleScene
+Entities:
+  - Entity: 10000000000000000001
+    TagComponent:
+      Tag: Directional Sun Light
+    TransformComponent:
+      Translation: [ 0.000000 , 20.000000 , 0.000000 ]
+      Rotation: [ 0.866025 , 0.500000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 10000000000000000002
+    TagComponent:
+      Tag: Ground Runway
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 100.000000 , 1.000000 , 200.000000 ]
+    HierarchyComponent:
+      Parent: 0
+  - Entity: 10000000000000000100
+    TagComponent:
+      Tag: Vehicle Chassis
+    TransformComponent:
+      Translation: [ 0.000000 , 1.500000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      Children: [ 10000000000000000101, 10000000000000000102, 10000000000000000103, 10000000000000000104 ]
+    axle.vehicle/VehicleChassis:
+      Payload: chassis-v1 0.9 0.25 2.0 1500 0 -0.1 0 600 1000 7000 35 3500 7000 1 10000000000000000101 10000000000000000102 10000000000000000103 10000000000000000104
+  - Entity: 10000000000000000101
+    TagComponent:
+      Tag: Wheel Front Left
+    TransformComponent:
+      Translation: [ 0.850000 , 1.100000 , 1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 10000000000000000100
+    axle.vehicle/VehicleWheel:
+      Payload: wheel-v1 10000000000000000100 0 0.85 -0.15 1.4 0.35 0.25 0.15 0.45 2.5 0.6 1 1 1.0 0.0
+  - Entity: 10000000000000000102
+    TagComponent:
+      Tag: Wheel Front Right
+    TransformComponent:
+      Translation: [ -0.850000 , 1.100000 , 1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 10000000000000000100
+    axle.vehicle/VehicleWheel:
+      Payload: wheel-v1 10000000000000000100 1 -0.85 -0.15 1.4 0.35 0.25 0.15 0.45 2.5 0.6 1 1 1.0 0.0
+  - Entity: 10000000000000000103
+    TagComponent:
+      Tag: Wheel Rear Left
+    TransformComponent:
+      Translation: [ 0.850000 , 1.100000 , -1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 10000000000000000100
+    axle.vehicle/VehicleWheel:
+      Payload: wheel-v1 10000000000000000100 2 0.85 -0.15 -1.4 0.35 0.25 0.15 0.45 2.5 0.6 0 1 1.0 1.0
+  - Entity: 10000000000000000104
+    TagComponent:
+      Tag: Wheel Rear Right
+    TransformComponent:
+      Translation: [ -0.850000 , 1.100000 , -1.400000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 10000000000000000100
+    axle.vehicle/VehicleWheel:
+      Payload: wheel-v1 10000000000000000100 3 -0.85 -0.15 -1.4 0.35 0.25 0.15 0.45 2.5 0.6 0 1 1.0 1.0

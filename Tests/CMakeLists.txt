@@ -669,6 +669,25 @@ if(WIN32)
     list(APPEND AXLE_TEST_TARGETS AxleVehiclePhysicsTests)
     add_test(NAME VehiclePhysicsTests COMMAND $<TARGET_FILE:AxleVehiclePhysicsTests> "${CMAKE_SOURCE_DIR}")
     set_tests_properties(VehiclePhysicsTests PROPERTIES LABELS "plugin;physics;vehicle;cpu")
+
+    add_executable(AxleVehicleEditorTests EXCLUDE_FROM_ALL
+        src/Test_VehicleEditorAuthoring.cpp
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/src/VehicleComponents.cpp"
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/src/VehiclePhysics.cpp"
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/src/VehiclePluginRuntime.cpp")
+    target_include_directories(AxleVehicleEditorTests PRIVATE
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/include"
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Editor/include"
+        "${CMAKE_SOURCE_DIR}/Engine/PluginSDK/include"
+        "${CMAKE_SOURCE_DIR}/Engine/Physics/include"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/JoltPhysics"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/glm")
+    target_link_libraries(AxleVehicleEditorTests PRIVATE Axle::Scene Axle::Physics Axle::Core Axle::Plugin Axle::RuntimeHost)
+    add_custom_command(TARGET AxleVehicleEditorTests POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleRuntimeHost>" "$<TARGET_FILE_DIR:AxleVehicleEditorTests>")
+    list(APPEND AXLE_TEST_TARGETS AxleVehicleEditorTests)
+    add_test(NAME VehicleEditorTests COMMAND $<TARGET_FILE:AxleVehicleEditorTests> "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(VehicleEditorTests PROPERTIES LABELS "plugin;editor;vehicle;cpu")
 endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 

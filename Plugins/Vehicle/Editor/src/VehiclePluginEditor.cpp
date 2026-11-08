@@ -1,6 +1,7 @@
 #include <Axle/PluginSDK.hpp>
 #include "AxleVehicle/VehicleComponents.hpp"
 #include <string>
+#include <cmath>
 
 #if defined(_WIN32)
 #define AXLE_MODULE_IMPORT extern "C" __declspec(dllimport)
@@ -19,41 +20,104 @@ const Axle::SDK::EditorServices* s_Editor = nullptr;
 
 void DrawChassisInspector(void*, Axle::SDK::EntityRef, void* value) {
     if (!s_Editor || !value) return;
-    s_Editor->Text(s_Editor->User, "--- Vehicle Chassis ---");
-    if (auto* config = axle_vehicle_chassis_config(value)) {
-        s_Editor->DragFloat(s_Editor->User, "Mass (kg)", &config->Mass, 10.0f);
+
+    s_Editor->Text(s_Editor->User, "=== Vehicle Chassis Configuration ===");
+    auto* config = axle_vehicle_chassis_config(value);
+    auto* runtime = axle_vehicle_chassis_runtime(value);
+
+    if (config) {
+        s_Editor->DragFloat(s_Editor->User, "Half Width (m)", &config->HalfExtents[0], 0.05f);
+        s_Editor->DragFloat(s_Editor->User, "Half Height (m)", &config->HalfExtents[1], 0.05f);
+        s_Editor->DragFloat(s_Editor->User, "Half Length (m)", &config->HalfExtents[2], 0.05f);
+        s_Editor->DragFloat(s_Editor->User, "Chassis Mass (kg)", &config->Mass, 10.0f);
+        s_Editor->DragFloat(s_Editor->User, "CoM Offset Y (m)", &config->CenterOfMassOffset[1], 0.02f);
         s_Editor->DragFloat(s_Editor->User, "Max Torque (N.m)", &config->MaxEngineTorque, 10.0f);
+        s_Editor->DragFloat(s_Editor->User, "Min Idle RPM", &config->MinRPM, 50.0f);
+        s_Editor->DragFloat(s_Editor->User, "Max Redline RPM", &config->MaxRPM, 100.0f);
         s_Editor->DragFloat(s_Editor->User, "Max Steer Angle (deg)", &config->MaxSteerAngle, 1.0f);
-        s_Editor->DragFloat(s_Editor->User, "Max Brake Torque", &config->MaxBrakeTorque, 50.0f);
-        s_Editor->DragFloat(s_Editor->User, "Max Handbrake Torque", &config->MaxHandbrakeTorque, 50.0f);
+        s_Editor->DragFloat(s_Editor->User, "Service Brake Torque", &config->MaxBrakeTorque, 50.0f);
+        s_Editor->DragFloat(s_Editor->User, "Handbrake Torque", &config->MaxHandbrakeTorque, 50.0f);
+
+        // Configuration diagnostics
+        s_Editor->Text(s_Editor->User, "--- Diagnostics ---");
+        if (config->Mass <= 0.0f || !std::isfinite(config->Mass)) {
+            s_Editor->Text(s_Editor->User, "[ERROR] Chassis mass must be strictly positive!");
+        } else if (config->MinRPM >= config->MaxRPM) {
+            s_Editor->Text(s_Editor->User, "[ERROR] Max RPM must be strictly greater than Min RPM!");
+        } else if (config->MaxSteerAngle < 0.0f || config->MaxSteerAngle > 90.0f) {
+            s_Editor->Text(s_Editor->User, "[ERROR] Steer angle must be in range [0, 90] degrees!");
+        } else if (config->HalfExtents[0] <= 0.0f || config->HalfExtents[1] <= 0.0f || config->HalfExtents[2] <= 0.0f) {
+            s_Editor->Text(s_Editor->User, "[ERROR] All chassis half-extents must be strictly positive!");
+        } else {
+            s_Editor->Text(s_Editor->User, "[OK] Chassis configuration is valid.");
+        }
     }
-    if (auto* runtime = axle_vehicle_chassis_runtime(value)) {
-        s_Editor->Text(s_Editor->User, ("Speed (km/h): " + std::to_string(static_cast<int>(runtime->CurrentSpeedKmh))).c_str());
+
+    if (runtime) {
+        s_Editor->Text(s_Editor->User, "=== Live Telemetry ===");
+        s_Editor->Text(s_Editor->User, ("Vehicle Speed: " + std::to_string(static_cast<int>(runtime->CurrentSpeedKmh)) + " km/h").c_str());
         s_Editor->Text(s_Editor->User, ("Engine RPM: " + std::to_string(static_cast<int>(runtime->CurrentRPM))).c_str());
-        s_Editor->Text(s_Editor->User, ("Gear: " + std::to_string(runtime->CurrentGear)).c_str());
+        s_Editor->Text(s_Editor->User, ("Current Gear: " + (runtime->CurrentGear < 0 ? "R" : (runtime->CurrentGear == 0 ? "N" : std::to_string(runtime->CurrentGear)))).c_str());
+        s_Editor->Text(s_Editor->User, runtime->IsOnGround ? "Ground Contact: Grounded" : "Ground Contact: Airborne");
+
+        if (s_Editor->Button && s_Editor->Button(s_Editor->User, "Reset Vehicle Dynamics")) {
+            runtime->Reset();
+        }
     }
 }
 
 void DrawWheelInspector(void*, Axle::SDK::EntityRef, void* value) {
     if (!s_Editor || !value) return;
-    s_Editor->Text(s_Editor->User, "--- Vehicle Wheel ---");
-    if (auto* config = axle_vehicle_wheel_config(value)) {
-        s_Editor->DragFloat(s_Editor->User, "Radius (m)", &config->Radius, 0.01f);
-        s_Editor->DragFloat(s_Editor->User, "Width (m)", &config->Width, 0.01f);
-        s_Editor->DragFloat(s_Editor->User, "Suspension Min", &config->SuspensionMinLength, 0.01f);
-        s_Editor->DragFloat(s_Editor->User, "Suspension Max", &config->SuspensionMaxLength, 0.01f);
-        s_Editor->DragFloat(s_Editor->User, "Spring Freq (Hz)", &config->SpringFrequency, 0.1f);
-        s_Editor->DragFloat(s_Editor->User, "Spring Damping", &config->SpringDamping, 0.05f);
+
+    s_Editor->Text(s_Editor->User, "=== Vehicle Wheel Configuration ===");
+    auto* config = axle_vehicle_wheel_config(value);
+    auto* runtime = axle_vehicle_wheel_runtime(value);
+
+    if (config) {
+        static const char* s_WheelNames[4] = { "0 (Front Left)", "1 (Front Right)", "2 (Rear Left)", "3 (Rear Right)" };
+        const char* wheelName = (config->WheelIndex < 4) ? s_WheelNames[config->WheelIndex] : "Unknown";
+        s_Editor->Text(s_Editor->User, ("Assigned Role: " + std::string(wheelName)).c_str());
+
+        s_Editor->DragFloat(s_Editor->User, "Tire Radius (m)", &config->Radius, 0.01f);
+        s_Editor->DragFloat(s_Editor->User, "Tire Width (m)", &config->Width, 0.01f);
+        s_Editor->DragFloat(s_Editor->User, "Suspension Min Length (m)", &config->SuspensionMinLength, 0.01f);
+        s_Editor->DragFloat(s_Editor->User, "Suspension Max Length (m)", &config->SuspensionMaxLength, 0.01f);
+        s_Editor->DragFloat(s_Editor->User, "Spring Frequency (Hz)", &config->SpringFrequency, 0.1f);
+        s_Editor->DragFloat(s_Editor->User, "Spring Damping Ratio", &config->SpringDamping, 0.05f);
+        s_Editor->DragFloat(s_Editor->User, "Service Brake Ratio", &config->BrakeRatio, 0.05f);
+        s_Editor->DragFloat(s_Editor->User, "Handbrake Ratio", &config->HandbrakeRatio, 0.05f);
+
+        // Configuration diagnostics
+        s_Editor->Text(s_Editor->User, "--- Diagnostics ---");
+        if (config->Radius <= 0.0f || !std::isfinite(config->Radius)) {
+            s_Editor->Text(s_Editor->User, "[ERROR] Tire radius must be strictly positive!");
+        } else if (config->SuspensionMinLength >= config->SuspensionMaxLength) {
+            s_Editor->Text(s_Editor->User, "[ERROR] Suspension min length must be strictly less than max length!");
+        } else if (config->WheelIndex > 3) {
+            s_Editor->Text(s_Editor->User, "[ERROR] Wheel index must be 0, 1, 2, or 3!");
+        } else if (config->BrakeRatio < 0.0f || config->BrakeRatio > 1.0f) {
+            s_Editor->Text(s_Editor->User, "[ERROR] Brake ratio must be within [0.0, 1.0]!");
+        } else {
+            s_Editor->Text(s_Editor->User, "[OK] Wheel configuration is valid.");
+        }
     }
-    if (auto* runtime = axle_vehicle_wheel_runtime(value)) {
-        s_Editor->Text(s_Editor->User, runtime->IsOnGround ? "Status: Grounded" : "Status: Airborne");
-        s_Editor->Text(s_Editor->User, ("Suspension: " + std::to_string(runtime->CurrentSuspensionLength) + " m").c_str());
+
+    if (runtime) {
+        s_Editor->Text(s_Editor->User, "=== Live Wheel Telemetry ===");
+        s_Editor->Text(s_Editor->User, runtime->IsOnGround ? "Wheel Contact: Grounded" : "Wheel Contact: Airborne");
+        s_Editor->Text(s_Editor->User, ("Suspension Length: " + std::to_string(runtime->CurrentSuspensionLength) + " m").c_str());
+        s_Editor->Text(s_Editor->User, ("Steer Angle: " + std::to_string(runtime->SteerAngle * 57.2957795f) + " deg").c_str());
+        s_Editor->Text(s_Editor->User, ("Angular Velocity: " + std::to_string(runtime->AngularVelocity) + " rad/s").c_str());
+        s_Editor->Text(s_Editor->User, ("Longitudinal Slip: " + std::to_string(runtime->LongitudinalSlip)).c_str());
+        s_Editor->Text(s_Editor->User, ("Lateral Slip: " + std::to_string(runtime->LateralSlip)).c_str());
     }
 }
 
 } // namespace
 
+#if defined(AXLE_PLUGIN_DESCRIPTOR) && defined(AXLE_PLUGIN_ID) && defined(AXLE_PLUGIN_MODULE_NAME)
 AXLE_PLUGIN_DESCRIPTOR(AXLE_PLUGIN_ID, AXLE_PLUGIN_MODULE_NAME)
+#endif
 
 AXLE_PLUGIN_EXPORT bool ax_plugin_start(const Axle::PluginRuntime::PluginHostApi* host) noexcept {
     if (!host) return false;

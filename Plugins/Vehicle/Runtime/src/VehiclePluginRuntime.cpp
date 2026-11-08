@@ -189,7 +189,9 @@ AXLE_PLUGIN_EXPORT AxleVehicle::WheelRuntimeState* axle_vehicle_wheel_runtime(vo
 
 // ---------------- Plugin Handshake ----------------
 
+#if defined(AXLE_PLUGIN_DESCRIPTOR) && defined(AXLE_PLUGIN_ID) && defined(AXLE_PLUGIN_MODULE_NAME)
 AXLE_PLUGIN_DESCRIPTOR(AXLE_PLUGIN_ID, AXLE_PLUGIN_MODULE_NAME)
+#endif
 
 AXLE_PLUGIN_EXPORT bool ax_plugin_start(const Axle::PluginRuntime::PluginHostApi* host) noexcept {
     if (!host || host->struct_size != sizeof(*host) || host->abi_version != Axle::PluginRuntime::kPluginAbiVersion) {

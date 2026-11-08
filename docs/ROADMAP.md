@@ -307,7 +307,7 @@ for exact commands, logs, reviewer limits and later PLG-22/23 boundaries.
 **Work:** Create new data/component IDs, Jolt simulation, reset/copy/stop lifecycle, Editor authoring/debug and scoped audio/VFX adapters. Verify early retirement rather than deleting or restoring the old module again.
 
 - [x] **PLG-14:** New Vehicle data and codecs (Gemini implemented and self-verified; Plugins/Vehicle skeleton, Vehicle.axleplugin, VehicleChassis and VehicleWheel components, validation boundaries, codec round-trips, entity remapping and deliberate legacy payload nonrecognition verified in AxleVehiclePluginDataTests).
-- [ ] **PLG-15:** New Jolt Vehicle system.
+- [x] **PLG-15:** New Jolt Vehicle system (Gemini implemented and self-verified; Jolt VehicleConstraint, 4-wheel assembly, powertrain controller, driver inputs, fixed stepping, post-step telemetry synchronization, reset, rollback on malformed configs, and repeated teardown/reinitialization verified in AxleVehiclePhysicsTests).
 - [ ] **PLG-16:** Vehicle authoring and Editor Play.
 - [ ] **PLG-17:** Verify early Vehicle retirement and close remaining plugin cutover gaps.
 - [ ] **PLG-18:** Vehicle audio/VFX integrations.

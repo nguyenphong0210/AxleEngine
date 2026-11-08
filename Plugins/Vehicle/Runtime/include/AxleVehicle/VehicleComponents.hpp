@@ -88,6 +88,7 @@ struct WheelConfig {
 struct WheelRuntimeState {
     float CurrentSuspensionLength = 0.30f;
     bool IsOnGround = false;
+    float SteerAngle = 0.0f;
     float RotationAngle = 0.0f;
     float AngularVelocity = 0.0f;
     float ContactNormal[3] = { 0.0f, 1.0f, 0.0f };
@@ -100,6 +101,7 @@ struct WheelRuntimeState {
     void Reset() {
         CurrentSuspensionLength = 0.30f;
         IsOnGround = false;
+        SteerAngle = 0.0f;
         RotationAngle = 0.0f;
         AngularVelocity = 0.0f;
         ContactNormal[0] = 0.0f; ContactNormal[1] = 1.0f; ContactNormal[2] = 0.0f;

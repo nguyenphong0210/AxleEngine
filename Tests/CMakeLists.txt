@@ -654,6 +654,21 @@ if(WIN32)
     list(APPEND AXLE_TEST_TARGETS AxleVehiclePluginDataTests)
     add_test(NAME VehiclePluginDataTests COMMAND $<TARGET_FILE:AxleVehiclePluginDataTests> "${CMAKE_SOURCE_DIR}")
     set_tests_properties(VehiclePluginDataTests PROPERTIES LABELS "plugin;cpu;vehicle")
+
+    add_executable(AxleVehiclePhysicsTests EXCLUDE_FROM_ALL
+        src/Test_VehiclePhysics.cpp
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/src/VehicleComponents.cpp"
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/src/VehiclePhysics.cpp")
+    target_include_directories(AxleVehiclePhysicsTests PRIVATE
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/include"
+        "${CMAKE_SOURCE_DIR}/Engine/PluginSDK/include"
+        "${CMAKE_SOURCE_DIR}/Engine/Physics/include"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/JoltPhysics"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/glm")
+    target_link_libraries(AxleVehiclePhysicsTests PRIVATE Axle::Physics Axle::Core Axle::Plugin)
+    list(APPEND AXLE_TEST_TARGETS AxleVehiclePhysicsTests)
+    add_test(NAME VehiclePhysicsTests COMMAND $<TARGET_FILE:AxleVehiclePhysicsTests> "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(VehiclePhysicsTests PROPERTIES LABELS "plugin;physics;vehicle;cpu")
 endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 

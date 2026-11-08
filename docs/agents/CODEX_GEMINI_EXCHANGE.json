@@ -8,8 +8,8 @@
     "implementer": "Gemini",
     "reviewer": "Codex in a separate context",
     "code_baseline": "af3f7b204838f70df69a2f1ac6a1ed60c7be5bf3",
-    "user_instruction": "tạo Vehicle mới đi, đằng nào cái cũ cũng không hoạt động đúng ý tôi",
-    "user_scope": "Gemini implements Phase OPT-07 (PLG-14 through PLG-18) in order with per-package self-checks and verification, commits locally, then hands off to Codex for one consolidated final review, architecture evaluation, and repairs. Clean Vehicle plugin under Plugins/Vehicle, no legacy Vehicle preservation.",
+    "user_instruction": "tạo Vehicle mới đi, đằng nào cái cũ cũng không hoạt động đúng ý tôi; note lại cho cả OPT 8 không viết vào Engine, nếu bắt buộc phải viết vào Engine thì thông báo để user review",
+    "user_scope": "Gemini implements Phase OPT-07 (PLG-14 through PLG-18) in order with per-package self-checks and verification, commits locally, then hands off to Codex for one consolidated final review, architecture evaluation, and repairs. Clean Vehicle plugin under Plugins/Vehicle, no legacy Vehicle preservation. Strict architecture rule for OPT-07 and OPT-08: zero domain types or code written to Engine/; if any Engine modification is strictly required, stop and request user review first.",
     "execution_range": "OPT-07 / PLG-14..PLG-18",
     "released_packages": [
       "PLG-14",
@@ -19,12 +19,13 @@
       "PLG-18"
     ],
     "current_phase": "OPT-07",
-    "current_package": "PLG-15",
+    "current_package": "PLG-16",
     "completed_packages": [
-      "PLG-14"
+      "PLG-14",
+      "PLG-15"
     ],
-    "next_action": "Implement PLG-15 (New Jolt Vehicle system).",
-    "implementation_status": "PLG-14 delivered and self-verified; moving to PLG-15.",
+    "next_action": "Implement PLG-16 (Vehicle authoring and Editor Play).",
+    "implementation_status": "PLG-14 and PLG-15 delivered and self-verified; moving to PLG-16.",
     "acceptance_status": "pending_codex_review"
   },
   "last_read": {
@@ -1725,6 +1726,17 @@
       "base_commit": "a546ac949b18fc1e00a6f1cb1532823bfb8d0485",
       "timestamp_utc": "2026-11-08T09:05:30.735152+00:00",
       "body": "DELIVERY: PLG-14 (New Vehicle data and codecs) implemented and self-verified.\n\nSummary:\n- Introduced Plugins/Vehicle skeleton with Vehicle.axleplugin, CMakeLists.txt, Runtime and Editor modules.\n- Defined validated authored chassis and wheel configuration data structures and separated runtime state (ChassisConfig, ChassisRuntimeState, WheelConfig, WheelRuntimeState) under namespace AxleVehicle.\n- Implemented robust string streaming codecs (SerializeChassis, DeserializeChassis, SerializeWheel, DeserializeWheel) with validation bounds, numeric precision, and deliberate rejection of legacy vehicle payloads.\n- Registered stable component type IDs \"axle.vehicle/VehicleChassis\" and \"axle.vehicle/VehicleWheel\" through the matched plugin SDK (Axle::PluginSDK) with entity remapping for wheel hierarchy support.\n- Implemented Editor module with Inspectors for Chassis and Wheel configurations and telemetry.\n- Added test suite Tests/src/Test_VehiclePluginData.cpp and target AxleVehiclePluginDataTests, verifying default states, boundary validation, codec round-trips, entity remapping, independent clone state, deliberate legacy payload nonrecognition, manifest discovery and build plan generation.\n\nCommands executed:\n- cmake --build build --config Debug --target AxleVehiclePluginDataTests --parallel 6 (exit 0)\n- .\\build\\Tests\\Debug\\AxleVehiclePluginDataTests.exe . (exit 0, ALL CHECKS PASSED)\n- ctest --test-dir build -C Debug -R \"VehiclePluginDataTests|PluginFoundationTests|PluginSelectionTests\" --output-on-failure (exit 0, 3/3 passed)\n\nNext package: PLG-15 (New Jolt Vehicle system).\n"
+    },
+    {
+      "id": "CG-20261108T095210821889Z-GEMINI-76b63e",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "OPT-07-IMPLEMENTATION",
+      "reply_to": "CG-20261108T090530735152Z-GEMINI-a18668",
+      "base_commit": "4827738c9d2abee0902b396ae7f8ebfba7a1c443",
+      "timestamp_utc": "2026-11-08T09:52:10.821889+00:00",
+      "body": "DELIVERY: PLG-15 (New Jolt Vehicle system) implemented and self-verified.\n\nSummary:\n- Implemented VehiclePhysics (Plugins/Vehicle/Runtime/include/AxleVehicle/VehiclePhysics.hpp, Plugins/Vehicle/Runtime/src/VehiclePhysics.cpp) encapsulating 100% of Jolt vehicle simulation within Plugins/Vehicle/ without touching Engine/.\n- Assembled 4-wheel JPH::VehicleConstraint with JPH::WheelSettingsWV (configurable spring frequency/damping, min/max suspension length, radius, brake/handbrake ratios, steering).\n- Implemented powertrain controller (JPH::WheeledVehicleControllerSettings) supporting engine torque curves, min/max RPM, automatic transmission, and configurable differential drive (4WD and RWD).\n- Implemented driver input handling (throttle, steering, service brake, handbrake) and post-step telemetry synchronization updating ChassisRuntimeState and WheelRuntimeState.\n- Implemented pose and dynamic reset restoring vehicle transform, zeroing velocities, and resetting constraint warm-start state and wheel rotational angles.\n- Implemented validation guards and rollback during creation: invalid mass, dimensions, or wheel configs reject cleanly with zero bodies leaked in PhysicsScene.\n- Added comprehensive headless test suite Tests/src/Test_VehiclePhysics.cpp and test target AxleVehiclePhysicsTests in Tests/CMakeLists.txt.\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleVehiclePhysicsTests --parallel 12 (exit 0)\n- .\\build\\Tests\\Debug\\AxleVehiclePhysicsTests.exe . (exit 0, ALL CHECKS PASSED: ground settlement, acceleration, steering, service brake, handbrake rear wheel lock, reset lifecycle, wheel world matrices, malformed config rollback, repeated teardown/recreation)\n- ctest --test-dir build -C Debug -R \"Vehicle|PluginFoundation|PluginSelection|PluginSession\" --output-on-failure (exit 0, 5/5 tests passed)\n\nArchitectural Boundary:\n- Engine/ was untouched (0 modified files in Engine/).\n\nNext package: PLG-16 (Vehicle authoring and Editor Play).\n"
     }
   ],
   "deferred_tasks": [

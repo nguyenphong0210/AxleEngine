@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "axle.vehicle",
+  "name": "Vehicle",
+  "version": "1.0.0",
+  "description": "Jolt-backed wheeled vehicle simulation, authoring, and lifecycle components.",
+  "engineApiVersion": 1,
+  "platforms": ["windows-x64"],
+  "dependencies": [],
+  "modules": [
+    {"name": "VehicleRuntime", "kind": "runtime", "sourceRoot": "Runtime"},
+    {"name": "VehicleEditor", "kind": "editor", "sourceRoot": "Editor", "dependencies": ["VehicleRuntime"]}
+  ]
+}

@@ -643,6 +643,17 @@ if(WIN32)
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll" "$<TARGET_FILE_DIR:AxlePluginSubmissionTests>" VERBATIM)
     list(APPEND AXLE_TEST_TARGETS AxlePluginSubmissionTests)
     set_tests_properties(PluginServicesTests PROPERTIES RUN_SERIAL TRUE LABELS "plugin;scene;cpu" TIMEOUT 180)
+
+    add_executable(AxleVehiclePluginDataTests EXCLUDE_FROM_ALL
+        src/Test_VehiclePluginData.cpp
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/src/VehicleComponents.cpp")
+    target_include_directories(AxleVehiclePluginDataTests PRIVATE
+        "${CMAKE_SOURCE_DIR}/Plugins/Vehicle/Runtime/include"
+        "${CMAKE_SOURCE_DIR}/Engine/PluginSDK/include")
+    target_link_libraries(AxleVehiclePluginDataTests PRIVATE Axle::Plugin Axle::Core)
+    list(APPEND AXLE_TEST_TARGETS AxleVehiclePluginDataTests)
+    add_test(NAME VehiclePluginDataTests COMMAND $<TARGET_FILE:AxleVehiclePluginDataTests> "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(VehiclePluginDataTests PROPERTIES LABELS "plugin;cpu;vehicle")
 endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 

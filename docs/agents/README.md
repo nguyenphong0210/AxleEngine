@@ -20,8 +20,9 @@ explicitly if the running client/session has not loaded it.
 - **OPT-02/03**: Accepted after Codex review and verified corrections for EJ-01..EJ-14 and AF-02..AF-04; [acceptance report](../reviews/OPT_02_03_CODEX_REVIEW.md).
 - **OPT-04**: Accepted after implementation, consolidated review, correction rechecks and actual D3D12/Vulkan API validation; [execution record](../reviews/OPT_04_CODEX_EXECUTION.md).
 - **OPT-05**: Accepted after consolidated review, repairs, separate-context source rechecks and final Debug/Release consumer/API/product gates; [acceptance report](../reviews/OPT_05_CODEX_REVIEW.md).
-- **OPT-06**: **Accepted PLG-01..13 / G0/G1/G2** after Codex repairs through `af3f7b2`, separate-context correction rechecks, Debug/Release 59/59 CTest and native external DLL/Editor/restart/recovery/GPU gates. All OPT06-R1..R10 are closed; see the [acceptance review](../reviews/OPT_06_CODEX_REVIEW.md). Stop before OPT-07.
+- **OPT-06**: **Accepted PLG-01..13 / G0/G1/G2** after Codex repairs through `af3f7b2`, separate-context correction rechecks, Debug/Release 59/59 CTest and native external DLL/Editor/restart/recovery/GPU gates. All OPT06-R1..R10 are closed; see the [acceptance review](../reviews/OPT_06_CODEX_REVIEW.md). Its acceptance is scoped to PLG-01..13.
 - **Default future workflow**: Gemini implements the released scope; Codex performs one consolidated final review and owns repairs, including substantial redesign. Significant Codex corrections receive a separate-context recheck. See the [shared workflow](WORKING_PROTOCOL.md#default-implementation-and-final-review-workflow). No next phase is activated by this decision.
+- **OPT-07/08**: Plugin foundations accepted after repairs through `bd22550` under the user's narrowed review scope. Native SDK DLL/lifecycle, owned data, dependency graph and shipping script boundaries are verified; advanced feature completeness is deferred. See the [bounded review](../reviews/OPT_07_08_FOUNDATION_REVIEW.md). OPT-09 is not released.
 
 Read **[docs/ROADMAP.md](../ROADMAP.md)** for OPT-00..11 order/progress and the
 [active design index](../design/README.md) for current phase contracts.

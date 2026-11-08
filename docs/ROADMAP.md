@@ -1,9 +1,9 @@
-Latest user steering (2026-11-07): for future released scopes, Gemini implements; Codex performs one consolidated final review and owns repairs, including substantial redesign. Follow the [shared workflow](agents/WORKING_PROTOCOL.md#default-implementation-and-final-review-workflow). Required verification gates remain unchanged; no next phase is activated.
+Collaboration policy (2026-11-07): for future released scopes, Gemini implements; Codex performs one consolidated final review and owns repairs, including substantial redesign. Follow the [shared workflow](agents/WORKING_PROTOCOL.md#default-implementation-and-final-review-workflow). Required verification gates remain unchanged; no next phase is activated.
 
 # Architecture Optimization Roadmap
 
 Updated: **2026-11-08**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **OPT-06 accepted after consolidated review, repairs and final verification; OPT-02/03/04/05 remain accepted. OPT-07 is not released**.
+Status: **OPT-07/08 plugin foundations accepted after repairs and native verification; detailed plugin features are deferred by user scope. OPT-09 is not released. Earlier accepted prerequisites remain accepted**.
 
 ## Start here
 
@@ -20,13 +20,23 @@ all repaired findings, complete Debug/Release builds, 50/50 CTest and 35/35 phys
 native API cases per configuration, actual consumer/Runtime pixels and remaining
 explicit later-scope limits.
 
-**Latest completed assignment: OPT-06 consolidated review, PLG-01..13.** The
+**Accepted prerequisite: OPT-06 consolidated review, PLG-01..13.** The
 original candidate `20e0714` was rejected. Codex completed repairs through
 `af3f7b2`, obtained separate-context correction rechecks and accepted G0/G1/G2.
 The [acceptance review](reviews/OPT_06_CODEX_REVIEW.md) closes OPT06-R1..R10 and
 records Debug/Release 59/59 CTest, real external DLL authoring, actual Editor
 restart/recovery/documents, native UI and D3D12/Vulkan submitted-lifetime pixels.
-Work stops at OPT-06; OPT-07 requires its own user release.
+OPT-07/08 were subsequently delivered by Gemini and reviewed under the narrowed
+foundation scope below.
+
+**Latest completed assignment: OPT-07/08 plugin foundation review.** On 2026-11-08
+the user explicitly requested build/load/lifecycle and architecture verification,
+with detailed plugin functionality to be completed later. Corrected source
+`bd22550` passes Debug/Release 11/11 focused checks, actual six-DLL Editor startup
+on D3D12/Vulkan, persistence/copy/Play/Stop/unload and shipping script isolation.
+The [bounded acceptance](reviews/OPT_07_08_FOUNDATION_REVIEW.md) distinguishes the
+working SDK foundations from advanced development prototypes. No Engine source
+changed. This does not establish full feature completeness or release OPT-09.
 
 **Accepted prerequisite: Codex OPT-04, P41-01..P41-11.** The user reassigned
 implementation from Gemini to Codex on 2026-11-07; [current handoff](agents/handoffs/OPT_04_CODEX.md).
@@ -302,6 +312,12 @@ for exact commands, logs, reviewer limits and later PLG-22/23 boundaries.
 
 ### OPT-07 - Write Vehicle as a complete plugin
 
+**Current review:** Foundation accepted on `bd22550` under the user's narrowed
+scope; [evidence and explicit feature limits](reviews/OPT_07_08_FOUNDATION_REVIEW.md).
+Native data/Inspector/lifecycle work. Jolt driving and audio/VFX integration remain
+development prototypes for later completion. The self-verification notes below
+record prototype regressions and do not claim complete native feature integration.
+
 **Purpose:** Reintroduce Vehicle through accepted generic extension points.
 
 **Work:** Create new data/component IDs, Jolt simulation, reset/copy/stop lifecycle, Editor authoring/debug and scoped audio/VFX adapters. Verify early retirement rather than deleting or restoring the old module again.
@@ -314,9 +330,17 @@ for exact commands, logs, reviewer limits and later PLG-22/23 boundaries.
 
 **Exit:** The new plugin works in the real Editor fixture and relevant headless physics tests. Engine consumers contain no Vehicle-specific ownership or fallback. Use the new component schema; retired Vehicle data formats require no support, preservation or conversion.
 
-**Evidence:** Pending; implementation/review is not claimed here.
+**Evidence:** Native Vehicle Runtime/Editor DLLs build, load, persist/copy data and
+run through the shared lifecycle in Debug/Release. See the bounded foundation
+review for actual commands, correction recheck and advanced feature deferrals.
 
 ### OPT-08 - Convert remaining optional systems and project scripts
+
+**Current review:** Foundation accepted on `bd22550` under the user's narrowed
+scope. Native Spline/Terrain DLLs, dependencies, owned data/Inspectors and lifecycle
+work; full mesh/collider/sculpting/LOD functionality remains in development
+prototypes. Script boundary acceptance covers the matched ABI, UI-free shipping
+baseline and domain exclusion; new plugin-aware scripting features are deferred.
 
 **Purpose:** Apply the same product boundary to existing Spline/Terrain and scripts.
 
@@ -328,7 +352,9 @@ for exact commands, logs, reviewer limits and later PLG-22/23 boundaries.
 
 **Exit:** Optional systems use the common plugin lifecycle and selection graph. Scripts do not pull Editor UI or unselected domain libraries into Runtime.
 
-**Evidence:** Pending; implementation/review is not claimed here.
+**Evidence:** Debug/Release 11/11 focused checks and real six-DLL Editor startup
+on both native backends; Runtime uses a distinct shipping script DLL and explicitly
+rejects unsupported selected composition. See the [foundation review](reviews/OPT_07_08_FOUNDATION_REVIEW.md).
 
 ### OPT-09 - Build and export the exact selected Runtime
 

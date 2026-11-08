@@ -64,9 +64,10 @@ def target_modules(root, config, parsed):
     mapping = {f"Axle{name}": name for name in config["module_roots"]}
     mapping.update({f"Axle::{name}": name for name in config["module_roots"]})
     mapping["AxleScripts"] = "Editor"
+    mapping.update({"AxleSDK::Runtime": "PluginSDK", "AxleSDK::Editor": "PluginSDK"})
     for path, entries in parsed.items():
         for name, args, _ in entries:
-            if name in {"add_library", "add_executable"} and args and "$" not in args[0]:
+            if name in {"add_library", "add_executable", "axle_add_plugin_module"} and args and "$" not in args[0]:
                 module = module_for(path, root, config)
                 if module:
                     mapping.setdefault(args[0], module)
@@ -175,6 +176,14 @@ def scan_cmake(root, config):
                     scope.pop()
             dependency_property = name in {"set_property", "set_target_properties"} and any(
                 a in {"LINK_LIBRARIES", "INTERFACE_LINK_LIBRARIES"} for a in args)
+            if name == "axle_add_plugin_module":
+                if scope or len(args)<3 or args[0] not in mapping or args[1] not in {"runtime", "editor"}:
+                    errors.append(dict(kind="CoverageError",file=rel,line=line,details="unresolved native module declaration"))
+                else:
+                    for host in (["Runtime", "Editor"] if args[1]=="editor" else ["Runtime"]):
+                        edges.append(dict(kind="CMakeLink",file=rel,line=line,from_module=mapping[args[0]],from_target=args[0],
+                                          to=f"AxleSDK::{host}",to_module="PluginSDK"))
+                continue
             if name != "target_link_libraries" and not dependency_property:
                 continue
             try:
@@ -204,11 +213,11 @@ def scan_includes(root, config, reference_root):
     # Reference headers make minimal mutation fixtures resolve existing public includes.
     for tree in {reference_root, root}:
         for module, relative in config["module_roots"].items():
-            directory = tree/relative/"include"
-            if directory.exists():
-                for path in directory.rglob("*"):
-                    if path.is_file() and path.suffix in {".h", ".hpp", ".inl"}:
-                        headers[path.relative_to(directory).as_posix()].add(module_for(path, tree, config))
+            for directory in (tree/relative/"include",tree/relative/"Runtime/include",tree/relative/"Editor/include"):
+                if directory.exists():
+                    for path in directory.rglob("*"):
+                        if path.is_file() and path.suffix in {".h", ".hpp", ".inl"}:
+                            headers[path.relative_to(directory).as_posix()].add(module_for(path, tree, config))
     files = set()
     for relative in config["module_roots"].values():
         directory = root/relative

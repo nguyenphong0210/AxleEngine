@@ -3,6 +3,7 @@
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/JobSystem.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/Plugin.hpp>
 #include <AxleTerrain/TerrainComponent.hpp>
 #include <AxleTerrain/TerrainData.hpp>
 #include <AxleTerrain/TerrainMesh.hpp>
@@ -53,7 +54,9 @@ bool Test_PluginManifest(const std::filesystem::path& repoRoot) {
     TEST_CHECK(content.find("\"id\": \"axle.terrain\"") != std::string::npos, "Manifest id must be axle.terrain");
     TEST_CHECK(content.find("\"TerrainRuntime\"") != std::string::npos, "Must declare TerrainRuntime module");
     TEST_CHECK(content.find("\"TerrainEditor\"") != std::string::npos, "Must declare TerrainEditor module");
-    TEST_CHECK(content.find("\"axle.spline:SplineRuntime\"") != std::string::npos, "TerrainRuntime must depend on axle.spline:SplineRuntime");
+    auto catalog = Axle::Plugin::Discover({{repoRoot / "Plugins"},{}});
+    auto resolved = Axle::Plugin::Resolve(catalog,{"axle.terrain"},Axle::Plugin::ProductKind::Editor);
+    TEST_CHECK(resolved.IsValid() && resolved.Plugins.size()==2, "Terrain resolves its real Spline plugin/module dependencies");
 
     std::cout << "[PASS] Test_PluginManifest\n";
     return true;

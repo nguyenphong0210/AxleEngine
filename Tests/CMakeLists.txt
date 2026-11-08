@@ -253,8 +253,8 @@ target_include_directories(AxleRuntimeRenderTests PRIVATE rendering)
 target_link_libraries(AxleRuntimeRenderTests PRIVATE Axle::RuntimePlayer glad glfw)
 target_compile_definitions(AxleRuntimeRenderTests PRIVATE
     AXLE_RUNTIME_TEST_RESOURCES="${CMAKE_SOURCE_DIR}/Engine/Resources"
-    AXLE_RUNTIME_TEST_SCRIPTS="$<TARGET_FILE:AxleScripts>")
-add_dependencies(AxleRuntimeRenderTests AxleScripts)
+    AXLE_RUNTIME_TEST_SCRIPTS="$<TARGET_FILE:AxleRuntimeScripts>")
+add_dependencies(AxleRuntimeRenderTests AxleRuntimeScripts)
 
 add_executable(AxlePreviewRenderTests EXCLUDE_FROM_ALL rendering/PreviewProductMain.cpp)
 target_include_directories(AxlePreviewRenderTests PRIVATE rendering)
@@ -637,6 +637,18 @@ if(WIN32)
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleRuntimeHost>" "$<TARGET_FILE_DIR:AxlePluginSessionTests>"
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleEditorHost>" "$<TARGET_FILE_DIR:AxlePluginSessionTests>" VERBATIM)
     list(APPEND AXLE_TEST_TARGETS AxlePluginSessionTests)
+    add_executable(AxleOptionalPluginFoundationTests EXCLUDE_FROM_ALL src/Test_OptionalPluginFoundation.cpp
+        "${CMAKE_SOURCE_DIR}/Editor/src/PluginRestartSnapshot.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/PluginSession.cpp"
+        "${CMAKE_SOURCE_DIR}/Editor/src/PluginBuild.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/PluginEditorServices.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/OwnedProcess.cpp")
+    target_include_directories(AxleOptionalPluginFoundationTests PRIVATE "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/PluginSDK/$<CONFIG>")
+    target_link_libraries(AxleOptionalPluginFoundationTests PRIVATE Axle::PluginServices Axle::UI Axle::EditorHost)
+    add_dependencies(AxleOptionalPluginFoundationTests AxlePluginSDKPackage)
+    add_custom_command(TARGET AxleOptionalPluginFoundationTests POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleRuntimeHost>" "$<TARGET_FILE_DIR:AxleOptionalPluginFoundationTests>"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleEditorHost>" "$<TARGET_FILE_DIR:AxleOptionalPluginFoundationTests>" VERBATIM)
+    list(APPEND AXLE_TEST_TARGETS AxleOptionalPluginFoundationTests)
+    add_test(NAME OptionalPluginFoundationTests COMMAND $<TARGET_FILE:AxleOptionalPluginFoundationTests> "${CMAKE_COMMAND}" "${CMAKE_SOURCE_DIR}/Plugins")
+    set_tests_properties(OptionalPluginFoundationTests PROPERTIES LABELS "plugin;native;foundation" TIMEOUT 180 RUN_SERIAL TRUE)
     add_test(NAME PluginSessionTests COMMAND $<TARGET_FILE:AxlePluginSessionTests> "${CMAKE_COMMAND}" "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/create_project_plugin.py")
     set_tests_properties(PluginSessionTests PROPERTIES TIMEOUT 150 LABELS "plugin;editor;native")
     add_executable(AxlePluginSubmissionTests EXCLUDE_FROM_ALL src/Test_PluginSubmission.cpp
@@ -741,9 +753,10 @@ if (TARGET AxleTerrainRuntime)
     add_test(NAME TerrainPluginTests COMMAND $<TARGET_FILE:AxleTerrainPluginTests> "${CMAKE_SOURCE_DIR}")
     set_tests_properties(TerrainPluginTests PROPERTIES LABELS "plugin;terrain;physics;cpu")
 endif()
-add_executable(AxleProjectScriptBoundaryTests src/Test_ProjectScriptBoundary.cpp)
-target_include_directories(AxleProjectScriptBoundaryTests PRIVATE src)
+add_executable(AxleProjectScriptBoundaryTests EXCLUDE_FROM_ALL src/Test_ProjectScriptBoundary.cpp "${CMAKE_SOURCE_DIR}/Runtime/src/RuntimeStartup.cpp")
+target_include_directories(AxleProjectScriptBoundaryTests PRIVATE src "${CMAKE_SOURCE_DIR}/Runtime/src")
 target_link_libraries(AxleProjectScriptBoundaryTests PRIVATE
+    Axle::Project
     Axle::Scene
     Axle::Physics
     Axle::Core
@@ -753,7 +766,8 @@ if (MSVC)
     target_compile_options(AxleProjectScriptBoundaryTests PRIVATE /bigobj /FS)
 endif()
 list(APPEND AXLE_TEST_TARGETS AxleProjectScriptBoundaryTests)
-add_test(NAME ProjectScriptBoundaryTests COMMAND $<TARGET_FILE:AxleProjectScriptBoundaryTests>)
+add_dependencies(AxleProjectScriptBoundaryTests AxleRuntimeScripts)
+add_test(NAME ProjectScriptBoundaryTests COMMAND $<TARGET_FILE:AxleProjectScriptBoundaryTests> $<TARGET_FILE:AxleRuntimeScripts>)
 set_tests_properties(ProjectScriptBoundaryTests PROPERTIES LABELS "script;scene;cpu")
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 

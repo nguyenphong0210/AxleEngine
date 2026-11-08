@@ -1,6 +1,10 @@
 # AxleEngine Vehicle Plugin (`axle.vehicle`)
 
-The Vehicle plugin provides a physically simulated, Jolt-backed four-wheeled vehicle system for AxleEngine, implemented entirely as an independent native plugin without polluting the core Engine SDK.
+The accepted native foundation owns vehicle data, codecs, Inspectors and common
+scene lifecycle through the matched opaque SDK. Detailed driving, tuning and
+audio/VFX completeness are deferred by the user's foundation-first scope.
+`VehiclePhysics` and the audio/VFX adapters remain development prototypes tested
+separately; they are not currently connected to the SDK DLL's Start/Update path.
 
 ## Architecture
 
@@ -10,7 +14,7 @@ The Vehicle plugin provides a physically simulated, Jolt-backed four-wheeled veh
     - `axle.vehicle/VehicleChassis`: Authored chassis configuration (`ChassisConfig`) and decoupled runtime telemetry (`ChassisRuntimeState`).
     - `axle.vehicle/VehicleWheel`: Authored per-wheel setup (`WheelConfig`) and decoupled wheel telemetry (`WheelRuntimeState`).
   - Codecs: `SerializeChassis`, `DeserializeChassis`, `SerializeWheel`, `DeserializeWheel` with version headers (`chassis-v1`, `wheel-v1`), validation checks, and entity reference remapping.
-  - Physics Backend: `VehiclePhysics` managing Jolt `JPH::VehicleConstraint`, `JPH::WheeledVehicleController`, suspension springs, differential powertrain, driver inputs, and post-step synchronization.
+  - Preserved development prototype: `VehiclePhysics` manages Jolt constraints and powertrain in its isolated tests. The native DLL does not create another/private Jolt backend.
 - **Editor Module (`VehicleEditor`):**
   - Component Inspectors for Chassis and Wheels.
   - Real-time diagnostic validation for out-of-range configurations.
@@ -33,6 +37,6 @@ The Vehicle plugin provides a physically simulated, Jolt-backed four-wheeled veh
 
 ## Editor Play Lifecycle
 
-- **Play:** The scene is cloned for runtime simulation; Jolt physics constraint and body are initialized on the runtime physics scene.
+- **Play:** Owned data is cloned into the runtime scene; SDK callbacks update telemetry and contribute debug lines through canonical host services. Native driving constraints are not created by this foundation.
 - **Pause/Step:** Simulation clock advances fixed steps without mutating the original authored scene.
 - **Stop:** The simulation scene is torn down, and the original authored scene is completely restored with zero lingering state.

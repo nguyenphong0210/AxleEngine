@@ -113,6 +113,13 @@ class ArchitectureTests(unittest.TestCase):
         self.write("Engine/Scene/include/Axle/Scene.hpp", "// fixture")
         self.assertTrue(self.inspect()["violations"])
 
+    def test_native_module_declarations_retain_sdk_boundary_checks(self):
+        self.write("Engine/Core/CMakeLists.txt", "axle_add_plugin_module(BadNative editor Bad.cpp)")
+        report=self.inspect()
+        self.assertTrue(any(e.get("to")=="AxleSDK::Editor" for e in report["violations"]))
+        self.write("Engine/Core/CMakeLists.txt", "axle_add_plugin_module(${UNKNOWN} runtime Bad.cpp)")
+        self.assertTrue(any(e["kind"]=="CoverageError" for e in self.inspect()["violations"]))
+
     def test_exact_existing_allowance_and_new_header_in_same_module(self):
         self.write("Engine/Core/src/Application.cpp", "#include <Axle/Input.hpp>")
         self.assertFalse(self.inspect()["violations"])

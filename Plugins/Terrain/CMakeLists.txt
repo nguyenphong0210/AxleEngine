@@ -1,3 +1,18 @@
+if(COMMAND axle_add_plugin_module)
+    axle_add_plugin_module(TerrainRuntime runtime Runtime/src/TerrainPluginRuntime.cpp)
+    if(TARGET TerrainRuntime)
+        target_include_directories(TerrainRuntime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Runtime/include")
+        target_link_libraries(TerrainRuntime PRIVATE SplineRuntime)
+    endif()
+    axle_add_plugin_module(TerrainEditor editor Editor/src/TerrainPluginEditor.cpp)
+    if(TARGET TerrainEditor)
+        target_link_libraries(TerrainEditor PRIVATE TerrainRuntime SplineEditor)
+    endif()
+    return()
+endif()
+
+# Development-only domain prototypes; not the selected SDK DLL graph.
+
 cmake_minimum_required(VERSION 3.22)
 project(AxleTerrain LANGUAGES CXX)
 
@@ -11,7 +26,6 @@ set(TERRAIN_RUNTIME_SOURCES
     Runtime/src/TerrainSerializer.cpp
     Runtime/src/TerrainSplineCarver.cpp
     Runtime/src/TerrainPlugin.cpp
-    Runtime/src/TerrainPluginRuntime.cpp
 )
 
 set(TERRAIN_RUNTIME_HEADERS
@@ -27,7 +41,7 @@ set(TERRAIN_RUNTIME_HEADERS
     Runtime/include/AxleTerrain/TerrainPluginRuntime.hpp
 )
 
-add_library(AxleTerrainRuntime STATIC
+add_library(AxleTerrainRuntime STATIC EXCLUDE_FROM_ALL
     ${TERRAIN_RUNTIME_SOURCES}
     ${TERRAIN_RUNTIME_HEADERS}
 )
@@ -56,7 +70,6 @@ target_link_libraries(AxleTerrainRuntime PUBLIC
 set(TERRAIN_EDITOR_SOURCES
     Editor/src/TerrainSculptor.cpp
     Editor/src/TerrainEditor.cpp
-    Editor/src/TerrainPluginEditor.cpp
 )
 
 set(TERRAIN_EDITOR_HEADERS
@@ -65,7 +78,7 @@ set(TERRAIN_EDITOR_HEADERS
     Editor/include/AxleTerrainEditor/TerrainPluginEditor.hpp
 )
 
-add_library(AxleTerrainEditor STATIC
+add_library(AxleTerrainEditor STATIC EXCLUDE_FROM_ALL
     ${TERRAIN_EDITOR_SOURCES}
     ${TERRAIN_EDITOR_HEADERS}
 )

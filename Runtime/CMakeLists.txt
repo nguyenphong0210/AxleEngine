@@ -23,19 +23,25 @@ target_link_libraries(AxleRuntimePlayer PUBLIC
     Axle::Scene
     Axle::Project
     Axle::UI2D
-    Axle::Spline
-    Axle::Terrain
     Axle::Animation
     Axle::VFX
 )
 
-add_dependencies(AxleRuntime AxleScripts)
+add_library(AxleRuntimeScripts SHARED EXCLUDE_FROM_ALL "${CMAKE_SOURCE_DIR}/Editor/src/Scripts/ScriptsModule.cpp")
+set_target_properties(AxleRuntimeScripts PROPERTIES OUTPUT_NAME AxleScripts
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>")
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/AutoScripts.inc"
+    CONTENT "// Empty shipping baseline; project scripts are compiled by their declared build.\n")
+target_include_directories(AxleRuntimeScripts PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated" "${CMAKE_SOURCE_DIR}/Engine/Scene/include")
+target_compile_definitions(AxleRuntimeScripts PRIVATE AXLE_SCRIPT_BUILD_DLL AXLE_SHIPPING)
+target_link_libraries(AxleRuntimeScripts PRIVATE Axle::SceneData Axle::Platform)
+add_dependencies(AxleRuntime AxleRuntimeScripts)
 
 # Stage engine resources and scripts only; project assets are supplied by export
 add_custom_command(TARGET AxleRuntime POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    $<TARGET_FILE:AxleScripts>
-    $<TARGET_FILE_DIR:AxleRuntime>/$<TARGET_FILE_NAME:AxleScripts>
+    $<TARGET_FILE:AxleRuntimeScripts>
+    $<TARGET_FILE_DIR:AxleRuntime>/$<TARGET_FILE_NAME:AxleRuntimeScripts>
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/Engine/Resources
     $<TARGET_FILE_DIR:AxleRuntime>/Resources

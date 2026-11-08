@@ -9,6 +9,7 @@
 #include <Axle/RenderService.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
+#include <Axle/Path.hpp>
 #include "RuntimeLayer.hpp"
 #include "RuntimeStartup.hpp"
 #include "RuntimeRenderContext.hpp"
@@ -16,6 +17,7 @@
 #include <csignal>
 #include <cstdio>
 #include <filesystem>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -93,7 +95,7 @@ static void AbortHandler(int sig) {
 }
 #endif
 
-int main(int argc, char** argv) {
+int RuntimeMain(int argc, char** argv) {
 #ifdef _WIN32
     AddVectoredExceptionHandler(1, VectoredCrashHandler);
     SetUnhandledExceptionFilter(VectoredCrashHandler);
@@ -115,9 +117,9 @@ int main(int argc, char** argv) {
                 if (consumed != arg.size()-9 || value == 0 || value > 1000000) throw std::invalid_argument("--frames requires an integer from 1 to 1000000");
                 frameLimit = static_cast<uint32_t>(value);
             }
-            else if (arg == "--project" && i + 1 < argc) projectPath = argv[++i];
-            else if (arg.rfind("--project=", 0) == 0) projectPath = arg.substr(10);
-            else if (!arg.empty() && arg[0] != '-') projectPath = arg;
+            else if (arg == "--project" && i + 1 < argc) projectPath = Axle::PathFromUtf8(argv[++i]);
+            else if (arg.rfind("--project=", 0) == 0) projectPath = Axle::PathFromUtf8(arg.substr(10));
+            else if (!arg.empty() && arg[0] != '-') projectPath = Axle::PathFromUtf8(arg);
         }
 
         const auto startup = Axle::PrepareRuntimeStartup(projectPath,rhiConfig);
@@ -197,3 +199,15 @@ int main(int argc, char** argv) {
 
     return Axle::RHI::RHIDevice::Get().Shutdown() ? 0 : 1;
 }
+
+#ifdef _WIN32
+int wmain(int argc,wchar_t** arguments) {
+    std::vector<std::string> storage; storage.reserve(argc);
+    std::vector<char*> argv; argv.reserve(argc+1);
+    for(int i=0;i<argc;++i) storage.push_back(Axle::PathToUtf8(arguments[i]));
+    for(auto& argument:storage) argv.push_back(argument.data());
+    argv.push_back(nullptr); return RuntimeMain(argc,argv.data());
+}
+#else
+int main(int argc,char** argv) { return RuntimeMain(argc,argv); }
+#endif

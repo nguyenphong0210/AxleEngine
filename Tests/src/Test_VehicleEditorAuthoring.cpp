@@ -6,6 +6,8 @@
 #include <Axle/Components.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/Timestep.hpp>
+#include <Axle/SceneSerializer.hpp>
+#include <Axle/ExtensionDocument.hpp>
 
 #include <iostream>
 #include <vector>
@@ -283,10 +285,18 @@ int main(int argc, char** argv) {
         CHECK(file.is_open());
         std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         CHECK(!content.empty());
-        CHECK(content.find("axle.vehicle/VehicleChassis") != std::string::npos);
-        CHECK(content.find("axle.vehicle/VehicleWheel") != std::string::npos);
-        CHECK(content.find("chassis-v1") != std::string::npos);
-        CHECK(content.find("wheel-v1") != std::string::npos);
+        auto sample=std::make_shared<Axle::Scene>();
+        CHECK(Axle::SceneSerializer(sample.get()).Deserialize(sampleScenePath));
+        unsigned chassis=0,wheels=0;
+        for(auto handle:sample->GetRegistry().view<Axle::PassiveExtensionComponent>()) {
+            for(const auto& section:sample->GetRegistry().get<Axle::PassiveExtensionComponent>(handle).Sections) {
+                Axle::ExtensionDocument document; CHECK(Axle::ParseExtensionDocument(section.SectionName,section.Lines,document));
+                CHECK(document.Required&&document.EntityReferences&&document.Schema==1);
+                if(document.TypeId==kChassisTypeId) { VehicleChassisComponent value; CHECK(DeserializeChassis(document.Payload,value)); ++chassis; }
+                else if(document.TypeId==kWheelTypeId) { VehicleWheelComponent value; CHECK(DeserializeWheel(document.Payload,value)); ++wheels; }
+            }
+        }
+        CHECK(chassis==1&&wheels==4);
     }
 
     std::cout << "[Test_VehicleEditorAuthoring] ALL CHECKS PASSED!" << std::endl;

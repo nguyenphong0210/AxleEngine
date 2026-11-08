@@ -7,16 +7,10 @@
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
+#include <Axle/Path.hpp>
 #include <stdexcept>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/AudioEngine.hpp>
-#include <AxleSpline/SplineComponent.hpp>
-#include <AxleSpline/TrackGenerator.hpp>
-#include <AxleSpline/SplineSerializer.hpp>
-#include <AxleTerrain/TerrainComponent.hpp>
-#include <AxleTerrain/TerrainMesh.hpp>
-#include <AxleTerrain/TerrainCollider.hpp>
-#include <AxleTerrain/TerrainSerializer.hpp>
 #include <GLFW/glfw3.h>
 #include <algorithm>
 
@@ -79,7 +73,7 @@ namespace Axle {
         else if (!projPath.empty() && FileSystem::Exists(projPath)) {
             project = Project::Load(projPath);
             if (project) {
-                AXLE_INFO("Runtime: Loaded project from '{0}'", projPath.string());
+                AXLE_INFO("Runtime: Loaded project from '{0}'", PathToUtf8(projPath));
             }
         }
 
@@ -109,53 +103,30 @@ namespace Axle {
                     entity.GetComponent<NativeScriptComponent>().Bind(scriptName);
                 }
             };
-            ctx.CustomEntitySerializer = [](Entity entity, std::ostream& out) {
-                Spline::SplineSerializer::Serialize(entity, out);
-                Terrain::TerrainSerializer::Serialize(entity, out);
-            };
-            ctx.CustomSectionDeserializer = [](Entity entity, const std::string& sectionName, const std::vector<std::string>& lines) -> bool {
-                if (Spline::SplineSerializer::Deserialize(entity, sectionName, lines)) return true;
-                if (Terrain::TerrainSerializer::Deserialize(entity, sectionName, lines)) return true;
-                return false;
-            };
             serializer.SetContext(ctx);
             if (serializer.Deserialize(startScenePath)) {
                 sceneLoaded = true;
 
-                // Rebuild Track & Terrain runtime meshes/colliders for loaded scene
-                auto splineView = m_Scene->GetRegistry().view<Spline::SplineComponent>();
-                for (auto e : splineView) {
-                    auto& sc = splineView.get<Spline::SplineComponent>(e);
-                    Entity ent{ e, m_Scene.get() };
-                    Spline::TrackGenerator::BuildTrackRuntime(ent, sc, m_PhysicsScene.get(), false);
-                }
-
-                auto terrainView = m_Scene->GetRegistry().view<Terrain::TerrainComponent>();
-                for (auto e : terrainView) {
-                    auto& tc = terrainView.get<Terrain::TerrainComponent>(e);
-                    Entity ent{ e, m_Scene.get() };
-                    Terrain::TerrainMesh::BuildTerrainRuntime(ent, tc, m_PhysicsScene.get(), true);
-                    if (!ent.HasComponent<MeshInstance3D>() && tc.CombinedVAO) {
-                        ent.AddComponent<MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
-                    }
-                }
-
-                Application::Get().GetWindow().SetTitle("Axle Game - " + startScenePath.filename().stem().string());
-                AXLE_INFO("Runtime: Successfully loaded startup scene '{0}'", startScenePath.string());
+                Application::Get().GetWindow().SetTitle("Axle Game - " + PathToUtf8(startScenePath.filename().stem()));
+                AXLE_INFO("Runtime: Successfully loaded startup scene '{0}'", PathToUtf8(startScenePath));
             }
         }
 
         if (!sceneLoaded && !startScenePath.empty())
-            throw std::runtime_error("Configured Runtime startup scene could not be loaded: " + startScenePath.string());
+            throw std::runtime_error("Configured Runtime startup scene could not be loaded: " + PathToUtf8(startScenePath));
         if (!sceneLoaded) {
             AXLE_INFO("Runtime: No authored startup scene loaded; keeping an empty scene.");
             Application::Get().GetWindow().SetTitle("Axle Game - Standalone Player");
         }
 
         // Step E: Start simulation runtime
+        std::vector<std::string> extensionErrors;
+        if (!m_Scene->ExtensionsReady(extensionErrors))
+            throw std::runtime_error(extensionErrors.empty()?"Required plugin data is unavailable in this player":extensionErrors.front());
         m_SimulationDriver.Reset();
         m_SimulationDriver.Resume();
         m_Scene->OnRuntimeStart(m_PhysicsScene.get());
+        if (!m_Scene->IsRuntimeActive()) throw std::runtime_error("Runtime simulation startup failed");
         SetupPauseMenu();
         AXLE_INFO("Runtime: Simulation lifecycle started successfully.");
     }

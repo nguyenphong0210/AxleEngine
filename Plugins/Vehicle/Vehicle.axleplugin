@@ -3,7 +3,7 @@
   "id": "axle.vehicle",
   "name": "Vehicle",
   "version": "1.0.0",
-  "description": "Jolt-backed wheeled vehicle simulation, authoring, and lifecycle components.",
+  "description": "Owned vehicle components, SDK Inspectors and lifecycle. Jolt driving and audio/VFX adapters remain separate prototypes.",
   "engineApiVersion": 1,
   "platforms": ["windows-x64"],
   "dependencies": [],

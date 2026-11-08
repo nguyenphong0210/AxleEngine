@@ -3,7 +3,7 @@
   "id": "axle.spline",
   "name": "Spline",
   "version": "1.0.0",
-  "description": "Procedural Spline curve and race track generator plugin.",
+  "description": "Owned spline data, SDK Inspector and lifecycle line preview. Advanced track prototypes remain separate.",
   "engineApiVersion": 1,
   "platforms": ["windows-x64"],
   "dependencies": [],

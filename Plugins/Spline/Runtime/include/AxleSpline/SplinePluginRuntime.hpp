@@ -1,7 +1,6 @@
 #pragma once
 #include <Axle/PluginABI.hpp>
 #include <Axle/PluginSDK.hpp>
-#include <AxleSpline/SplineComponent.hpp>
 #include <cstdint>
 
 namespace AxleSpline {

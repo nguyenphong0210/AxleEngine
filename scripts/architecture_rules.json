@@ -24,7 +24,8 @@
     "Plugin": "Engine/Plugin",
     "PluginRuntime": "Engine/PluginRuntime",
     "PluginSDK": "Engine/PluginSDK",
-    "PluginServices": "Engine/PluginServices"
+    "PluginServices": "Engine/PluginServices",
+    "Vehicle": "Plugins/Vehicle"
   },
   "layers": {
     "Level0_Foundation": [
@@ -54,7 +55,8 @@
     "Level4_Plugins": [
       "Spline",
       "Terrain",
-      "PluginServices"
+      "PluginServices",
+      "Vehicle"
     ],
     "Level5_Applications": [
       "UI",
@@ -131,7 +133,10 @@
       "Axle::Core",
       "Axle::Renderer",
       "Axle::Physics",
-      "Axle::Scene"
+      "Axle::Scene",
+      "AxleSDK::Runtime",
+      "AxleSDK::Editor",
+      "SplineRuntime"
     ],
     "Terrain": [
       "Axle::Core",
@@ -143,7 +148,12 @@
       "AxleSplineRuntime",
       "AxleSplineEditor",
       "AxleTerrainRuntime",
-      "Axle::TerrainRuntime"
+      "Axle::TerrainRuntime",
+      "AxleSDK::Runtime",
+      "AxleSDK::Editor",
+      "SplineRuntime",
+      "SplineEditor",
+      "TerrainRuntime"
     ],
     "UI": [
       "Axle::UI2D",
@@ -173,12 +183,11 @@
       "Axle::Scene",
       "Axle::Project",
       "Axle::UI2D",
-      "Axle::Spline",
-      "Axle::Terrain",
       "Axle::Animation",
       "Axle::VFX",
       "Axle::RHI",
-      "Axle::RuntimePlayer"
+      "Axle::RuntimePlayer",
+      "Axle::SceneData"
     ],
     "Editor": [
       "Axle::Core",
@@ -191,8 +200,6 @@
       "Axle::Physics",
       "Axle::Scene",
       "Axle::Project",
-      "Axle::Spline",
-      "Axle::Terrain",
       "Axle::Animation",
       "Axle::VFX",
       "Axle::Plugin",
@@ -220,6 +227,11 @@
       "Axle::RuntimeHost",
       "Axle::Scene",
       "Axle::Project"
+    ],
+    "Vehicle": [
+      "AxleSDK::Runtime",
+      "AxleSDK::Editor",
+      "VehicleRuntime"
     ]
   },
   "forbidden_include_rules": [
@@ -317,7 +329,10 @@
       "from": "Runtime",
       "forbidden_to": [
         "UI",
-        "Editor"
+        "Editor",
+        "Spline",
+        "Terrain",
+        "Vehicle"
       ],
       "description": "Standalone player Runtime must never depend on Dear ImGui Editor tooling UI or Editor composition."
     },
@@ -423,6 +438,24 @@
         "PluginServices"
       ],
       "description": "Shared plugin gateways expose opaque SDK services and contain no private Engine/vendor/application implementation."
+    },
+    {
+      "from": "Vehicle",
+      "forbidden_to": [
+        "UI",
+        "Editor",
+        "Runtime"
+      ],
+      "description": "Vehicle native modules do not import application or Editor implementations."
+    },
+    {
+      "from": "Editor",
+      "forbidden_to": [
+        "Spline",
+        "Terrain",
+        "Vehicle"
+      ],
+      "description": "Editor accesses optional domain state only through SDK-scoped native registrations."
     }
   ],
   "baseline_allowances": [

@@ -1,24 +1,30 @@
 {
+  "schema": 1,
   "id": "axle.terrain",
   "name": "Axle Terrain & Sculpting System",
   "version": "1.0.0",
   "category": "Environment",
   "author": "AxleEngine Team",
-  "description": "Heightfield terrain generation, multithreaded chunked LOD, Jolt physics collider, and spline carving",
+  "description": "Owned heightfield data, SDK Inspector and lifecycle line preview. Advanced terrain prototypes remain separate.",
+  "engineApiVersion": 1,
+  "platforms": ["windows-x64"],
+  "dependencies": [{"id": "axle.spline", "version": "1.0.0"}],
   "modules": [
     {
       "name": "TerrainRuntime",
-      "type": "Runtime",
+      "kind": "runtime",
+      "sourceRoot": "Runtime",
       "dependencies": [
-        "axle.spline:SplineRuntime"
+        "SplineRuntime"
       ]
     },
     {
       "name": "TerrainEditor",
-      "type": "Editor",
+      "kind": "editor",
+      "sourceRoot": "Editor",
       "dependencies": [
         "TerrainRuntime",
-        "axle.spline:SplineEditor"
+        "SplineEditor"
       ]
     }
   ]

@@ -9,12 +9,13 @@
 #include <windows.h>
 #define CHECK(condition) do { if (!(condition)) { std::cerr << "FAIL " << __LINE__ << ": " << #condition << '\n'; return 1; } } while (false)
 int wmain(int argc, wchar_t** argv) {
-    if (argc == 5 && (std::wstring(argv[1]) == L"--product" || std::wstring(argv[1]) == L"--product-fault" || std::wstring(argv[1]) == L"--product-rejected")) {
+    if ((argc == 5 || argc == 6) && (std::wstring(argv[1]) == L"--product" || std::wstring(argv[1]) == L"--product-fault" || std::wstring(argv[1]) == L"--product-rejected")) {
         Axle::PluginRestart restart; std::string error;
         const bool fault = std::wstring(argv[1]) == L"--product-fault";
         const bool rejected = std::wstring(argv[1]) == L"--product-rejected";
+        const std::wstring backend=argc==6?argv[5]:L"dx12"; CHECK(backend==L"dx12"||backend==L"vulkan");
         std::vector<std::wstring> arguments{L"--project=" + std::filesystem::absolute(argv[3]).wstring(),
-            L"--rhi=dx12", L"--no-fallback", L"--expected-plugin-plan=" + std::wstring(argv[4]), L"--verify-restart-exit"};
+            L"--rhi="+backend, L"--no-fallback", L"--expected-plugin-plan=" + std::wstring(argv[4]), L"--verify-restart-exit"};
         const auto root = std::filesystem::absolute(argv[3]).parent_path();
         std::ifstream index(root/"Intermediate/Plugins"/(Axle::PathToUtf8(argv[4])+".generation"));
         const std::string selected((std::istreambuf_iterator<char>(index)),{});

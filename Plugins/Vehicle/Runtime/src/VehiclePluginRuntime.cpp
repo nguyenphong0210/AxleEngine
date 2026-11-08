@@ -194,6 +194,7 @@ AXLE_PLUGIN_DESCRIPTOR(AXLE_PLUGIN_ID, AXLE_PLUGIN_MODULE_NAME)
 #endif
 
 AXLE_PLUGIN_EXPORT bool ax_plugin_start(const Axle::PluginRuntime::PluginHostApi* host) noexcept {
+    try {
     if (!host || host->struct_size != sizeof(*host) || host->abi_version != Axle::PluginRuntime::kPluginAbiVersion) {
         return false;
     }
@@ -255,6 +256,7 @@ AXLE_PLUGIN_EXPORT bool ax_plugin_start(const Axle::PluginRuntime::PluginHostApi
     }
 
     return true;
+    } catch (...) { return false; }
 }
 
 AXLE_PLUGIN_EXPORT void ax_plugin_stop() noexcept {

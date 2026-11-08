@@ -8,6 +8,12 @@
 #include <Axle/Log.hpp>
 #include <Axle/JobSystem.hpp>
 #include <Axle/PhysicsEngine.hpp>
+#include <Axle/ProjectSerializer.hpp>
+#include "RuntimeStartup.hpp"
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 
 #include <iostream>
 #include <filesystem>
@@ -131,10 +137,32 @@ bool Test_LiveComponentReferenceCleanup() {
 
 } // namespace
 
-int main(int argc, char** argv) {
+bool TestShippingBoundary(const std::filesystem::path& library) {
+    const auto module=LoadLibraryW(library.c_str()); TEST_CHECK(module,"Shipping script DLL must load");
+    struct Close { HMODULE Module; ~Close(){ FreeLibrary(Module); } } close{module};
+    auto count=reinterpret_cast<std::uint32_t(*)()>(GetProcAddress(module,"Axle_GetScriptCount"));
+    auto abi=reinterpret_cast<std::uint32_t(*)()>(GetProcAddress(module,"Axle_GetScriptABIVersion"));
+    auto identity=reinterpret_cast<std::uint64_t(*)()>(GetProcAddress(module,"Axle_GetScriptBuildIdentity"));
+    auto context=reinterpret_cast<void(*)(void*)>(GetProcAddress(module,"Axle_SetImGuiContext"));
+    TEST_CHECK(count&&abi&&identity&&context,"Supported script ABI exports must exist without UI linkage");
+    TEST_CHECK(count()==0&&abi()==Axle::AXLE_SCRIPT_ABI_VERSION&&identity()==Axle::AXLE_SCRIPT_BUILD_ID,"Empty shipping script module must match host ABI");
+    context(nullptr);
+    const auto root=std::filesystem::temp_directory_path()/"AxleEngine"/("ScriptBoundary-"+std::to_string(static_cast<std::uint64_t>(Axle::UUID{})));
+    std::filesystem::create_directories(root/"assets"); auto project=Axle::Project::New(root); const auto file=root/"Project.axleproj";
+    TEST_CHECK(Axle::ProjectSerializer(project).Serialize(file),"Empty project fixture must save");
+    TEST_CHECK(Axle::PrepareRuntimeStartup(file,{}).ProjectDefinition!=nullptr,"Empty selection must remain supported");
+    project->GetConfig().SelectedPlugins={"axle.vehicle"}; TEST_CHECK(Axle::ProjectSerializer(project).Serialize(file),"Selected fixture must save");
+    bool rejected=false;
+    try { Axle::PrepareRuntimeStartup(file,{}); } catch(const std::exception& e) { rejected=std::string(e.what()).find("selected native plugins")!=std::string::npos; }
+    TEST_CHECK(rejected,"An empty scene cannot silently ignore selected modules in an unsupported player");
+    return true;
+}
+
+int wmain(int argc, wchar_t** argv) {
     Axle::Log::Init();
     Axle::JobSystem::Init(2);
     Axle::PhysicsEngine::Init();
+    if(argc!=2||!TestShippingBoundary(argv[1])) return 1;
 
     std::cout << "Running AxleProjectScriptBoundaryTests...\n";
 
@@ -143,6 +171,6 @@ int main(int argc, char** argv) {
     if (!Test_LiveComponentReferenceCleanup()) return 1;
 
     std::cout << "All Project Script Boundary Tests PASSED successfully!\n";
-    Axle::JobSystem::Shutdown();
+    Axle::PhysicsEngine::Shutdown(); Axle::JobSystem::Shutdown();
     return 0;
 }

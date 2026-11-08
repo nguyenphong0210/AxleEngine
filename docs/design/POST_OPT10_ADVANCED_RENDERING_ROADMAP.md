@@ -77,19 +77,30 @@ flowchart LR
 
 ### Pillar 4: Complex Geometry & Modern Shadows (GPU-Driven & CSM)
 
-* **Objective:** Enable rendering of dense scenes with 100,000+ mesh instances while delivering high-fidelity exterior sun shadows without perspective aliasing.
+* **Objective:** Enable rendering of dense scenes with 100,000+ mesh instances while delivering high-fidelity exterior sun shadows without perspective aliasing, supported by an end-to-end two-tier automated LOD and continuous virtual geometry pipeline.
 * **Technical Design:**
-  1. **Cascaded Shadow Maps (CSM):**
+  1. **Two-Tier Automated LOD & Virtual Geometry Pipeline:**
+     - **Tier 1 (Automated Offline LOD via `meshoptimizer`):**
+       - Integrated into Asset Cooker during `.fbx`/`.gltf` import.
+       - Runs `meshopt_simplify` to generate discrete fallback LOD levels (LOD1 at 50%, LOD2 at 25%, LOD3 at 10%) automatically with zero manual authoring in DCC tools (Blender/Maya).
+       - Used for skinned/skeletal meshes, animated foliage, transparent assets, and legacy hardware/mobile fallback, smoothly transitioned using screen-space dither cross-fading.
+     - **Tier 2 (Continuous Meshlet Virtual Geometry / Nanite-Style):**
+       - Bakes dense static meshes into clusters of up to 64 vertices and 126 primitives (`meshopt_buildMeshlets`).
+       - Builds a Directed Acyclic Graph (DAG) cluster hierarchy with locked shared boundary loops to guarantee watertight, crack-free transitions.
+       - Driven in real-time by **Task Shaders (Amplification)** and **Hardware Mesh Shaders** on D3D12 and Vulkan via NRI.
+       - Evaluates projected screen-space pixel error per cluster to select continuous LOD level dynamically with zero popping.
+  2. **Cascaded Shadow Maps (CSM):**
      - Split the primary camera view frustum into 3 to 4 depth cascades.
      - Model each cascade as an independent [`ViewRequest`](file:///d:/WorkSpace/AxleEngine/Engine/Renderer/include/Axle/ViewRequest.hpp) with an orthographic projection and depth-only target.
      - Implement Percentage-Closer Filtering (PCF 5x5) or Poisson Disk Sampling with cascade blend bands.
-  2. **GPU-Driven Pipeline:**
+  3. **GPU-Driven Pipeline:**
      - Upload scene transforms, bounding spheres, and material IDs into a unified GPU Instance Buffer (Structured Buffer).
-     - Execute a **Compute Shader** culling pass:
+     - Execute a **Task Shader / Compute Shader** culling pass:
        - Frustum Culling against view planes.
+       - Backface and Cone Culling.
        - Occlusion Culling against a Hierarchical-Z (Hi-Z) pyramid.
-     - Emit surviving instances directly into an Indirect Draw Argument buffer, dispatched via `ExecuteIndirect` (D3D12) / `vkCmdDrawIndexedIndirect` (Vulkan).
-* **Key Components:** `Engine/Scene/RHISceneRenderer`, `Engine/Renderer/ShadowPass`, `Engine/Renderer/CullingCompute`.
+     - Emit surviving instances/meshlets directly into hardware mesh shader pipelines or Indirect Draw Argument buffers dispatched via `ExecuteIndirect` (D3D12) / `vkCmdDrawIndexedIndirect` (Vulkan).
+* **Key Components:** `Engine/Scene/RHISceneRenderer`, `Engine/Renderer/ShadowPass`, `Engine/Asset/AssetCooker`, `Engine/RHI/RHIMeshShader`.
 
 ---
 

@@ -338,7 +338,6 @@ Catalog Discover(const DiscoveryOptions& options) {
 
 Resolution Resolve(const Catalog& catalog, const std::vector<std::string>& selectedIds, ProductKind product) {
     Resolution result;
-    if (!catalog.Diagnostics.empty()) { result.Diagnostics = catalog.Diagnostics; return result; }
     std::map<std::string, const Manifest*, std::less<>> byId;
     for (const auto& plugin : catalog.Plugins) byId.emplace(plugin.Id, &plugin);
     std::set<std::string, std::less<>> selected;
@@ -366,9 +365,6 @@ Resolution Resolve(const Catalog& catalog, const std::vector<std::string>& selec
         bool hasRuntime = false;
         for (const auto& module : plugin.Modules) {
             if (module.Kind == ModuleKind::Runtime) hasRuntime = true;
-            if (product == ProductKind::Runtime && module.Kind == ModuleKind::Editor) {
-                result.Diagnostics.push_back({plugin.ManifestPath, "editor module is not valid for Runtime product"});
-            }
         }
         if (product == ProductKind::Runtime && !hasRuntime && !plugin.Modules.empty()) {
             bool contentOnly = std::all_of(plugin.Modules.begin(), plugin.Modules.end(), [](const auto& m) { return m.Kind == ModuleKind::Content; });

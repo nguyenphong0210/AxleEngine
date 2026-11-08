@@ -53,6 +53,7 @@ namespace Axle {
         }
 
         std::istringstream fin(content);
+        auto parsedConfig = m_Project->GetConfig();
         std::string line;
         bool inProjectSection = false;
         bool inPlugins = false;
@@ -80,29 +81,30 @@ namespace Axle {
                     }
                     selectedPlugins.push_back(id);
                 } else if (trimmed.rfind("SchemaVersion:", 0) == 0) {
-                    try { m_Project->GetConfig().SchemaVersion = std::stoi(Trim(trimmed.substr(14))); }
+                    try { parsedConfig.SchemaVersion = std::stoi(Trim(trimmed.substr(14))); }
                     catch (...) { AXLE_WARN("ProjectSerializer: invalid schema version in '{0}'", filepath.string()); return false; }
                     sawSchema = true;
                     inPlugins = false;
                 } else if (trimmed.rfind("Name:", 0) == 0) {
                     inPlugins = false;
-                    m_Project->GetConfig().Name = Trim(trimmed.substr(5));
+                    parsedConfig.Name = Trim(trimmed.substr(5));
                 } else if (trimmed.rfind("StartScene:", 0) == 0) {
-                    m_Project->GetConfig().StartScene = Trim(trimmed.substr(11));
+                    parsedConfig.StartScene = Trim(trimmed.substr(11));
                 } else if (trimmed.rfind("AssetDirectory:", 0) == 0) {
-                    m_Project->GetConfig().AssetDirectory = Trim(trimmed.substr(15));
+                    parsedConfig.AssetDirectory = Trim(trimmed.substr(15));
                 } else if (trimmed.rfind("RHIBackend:", 0) == 0) {
-                    m_Project->GetConfig().RHIBackend = Trim(trimmed.substr(11));
+                    parsedConfig.RHIBackend = Trim(trimmed.substr(11));
                     inPlugins = false;
                 }
             }
         }
 
-        if (sawSchema && m_Project->GetConfig().SchemaVersion != ProjectConfig::CurrentSchemaVersion) {
-            AXLE_WARN("ProjectSerializer: unsupported project schema {0} in '{1}'", m_Project->GetConfig().SchemaVersion, filepath.string());
+        if (!sawSchema || parsedConfig.SchemaVersion != ProjectConfig::CurrentSchemaVersion) {
+            AXLE_WARN("ProjectSerializer: unsupported or missing project schema in '{0}'", filepath.string());
             return false;
         }
-        m_Project->GetConfig().SelectedPlugins = std::move(selectedPlugins);
+        parsedConfig.SelectedPlugins = std::move(selectedPlugins);
+        m_Project->GetConfig() = std::move(parsedConfig);
 
         m_Project->m_ProjectDirectory = filepath.parent_path();
         if (m_Project->m_ProjectDirectory.empty()) {

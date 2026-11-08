@@ -41,7 +41,7 @@ int main() {
     ok &= Check(catalog.Plugins.size() == 2, "valid manifests are discovered");
     ok &= Check(catalog.Diagnostics.size() == 1, "malformed manifest is retained as a diagnostic");
     const auto resolution = Axle::Plugin::Resolve(catalog, {"test.game"}, Axle::Plugin::ProductKind::Runtime);
-    ok &= Check(!resolution.IsValid(), "resolution reports an invalid catalog rather than hiding diagnostics");
+    ok &= Check(resolution.IsValid() && resolution.Plugins.size() == 2, "valid selections resolve despite unrelated malformed manifests");
 
     std::filesystem::remove(root / "bad.axleplugin", error);
     const auto cleanCatalog = Axle::Plugin::Discover({{root}});
@@ -66,6 +66,11 @@ int main() {
 
     Write(root / "Unsupported.axleproj", "Project:\n  SchemaVersion: 99\n");
     ok &= Check(!loader.Deserialize(root / "Unsupported.axleproj"), "unsupported project schema is rejected");
+    ok &= Check(loaded->GetConfig().Name == "PluginProject" && loaded->GetConfig().SelectedPlugins == project->GetConfig().SelectedPlugins,
+                "failed project load leaves the current configuration unchanged");
+    Write(root / "MissingSchema.axleproj", "Project:\n  Name: MissingSchema\n");
+    ok &= Check(!loader.Deserialize(root / "MissingSchema.axleproj"), "missing project schema is rejected");
+    ok &= Check(loaded->GetConfig().Name == "PluginProject", "missing schema failure preserves current configuration");
     std::filesystem::remove_all(root, error);
     if (ok) std::cout << "Plugin metadata, resolution, build plan and project selection: PASS\n";
     return ok ? 0 : 1;

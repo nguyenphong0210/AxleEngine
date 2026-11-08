@@ -1,7 +1,11 @@
 #include <Axle/Plugin.hpp>
+#include <Axle/PluginArtifact.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
 
+#include <algorithm>
+#include <cctype>
+#include <cwctype>
 #include <fstream>
 #include <iostream>
 
@@ -50,6 +54,24 @@ int main() {
 
     std::filesystem::remove(root / "bad.axleplugin", error);
     const auto cleanCatalog = Axle::Plugin::Discover({{root}});
+    auto projectRoot = root / "b";
+#ifdef _WIN32
+    auto mixedCase = projectRoot.wstring();
+    std::transform(mixedCase.begin(), mixedCase.end(), mixedCase.begin(), [](wchar_t c) { return static_cast<wchar_t>(std::towupper(c)); });
+    projectRoot = mixedCase;
+#endif
+    const auto originCatalog = Axle::Plugin::Discover({{root, root / "b"}, {projectRoot}});
+    const auto reorderedOriginCatalog = Axle::Plugin::Discover({{projectRoot, root}, {projectRoot}});
+    ok &= Check(originCatalog.Plugins.size() == reorderedOriginCatalog.Plugins.size(), "origin discovery is input-order independent");
+    if (originCatalog.Plugins.size() == reorderedOriginCatalog.Plugins.size()) {
+        for (size_t i = 0; i < originCatalog.Plugins.size(); ++i)
+            ok &= Check(originCatalog.Plugins[i].ManifestPath == reorderedOriginCatalog.Plugins[i].ManifestPath,
+                        "equivalent path spelling is stable across root order");
+    }
+    ok &= Check(originCatalog.IsValid() && originCatalog.Plugins.size() == 2, "overlapping physical roots do not duplicate manifests");
+    const auto projectManifest = std::find_if(originCatalog.Plugins.begin(), originCatalog.Plugins.end(), [](const auto& p) { return p.Id == "test.game"; });
+    ok &= Check(projectManifest != originCatalog.Plugins.end() && projectManifest->Source == Axle::Plugin::Origin::Project,
+                "project origin uses filesystem identity including mixed-case roots");
     const auto validResolution = Axle::Plugin::Resolve(cleanCatalog, {"test.game"}, Axle::Plugin::ProductKind::Runtime);
     ok &= Check(validResolution.IsValid() && validResolution.Plugins.size() == 2, "dependency closure resolves deterministically");
     ok &= Check(validResolution.Plugins.front().Id == "test.base", "dependencies precede dependents");
@@ -66,13 +88,22 @@ int main() {
 
     std::string receiptError;
     const auto receiptPath = root / "receipts" / "game.receipt";
-    ok &= Check(Axle::Plugin::WriteBuildReceipt(plan, plan.Artifacts.front(), receiptPath, receiptError), "build receipt writes successfully");
+    const auto receiptBinary = root / "receipt-fixture.bin";
+    Write(receiptBinary, "binary identity fixture");
+    ok &= Check(Axle::Plugin::WriteBuildReceipt(plan, plan.Artifacts.front(), receiptPath, receiptError, receiptBinary), "build receipt writes successfully");
     ok &= Check(std::filesystem::is_regular_file(receiptPath), "published build receipt exists on disk");
     std::ifstream receiptStream(receiptPath);
     std::string receiptContent((std::istreambuf_iterator<char>(receiptStream)), std::istreambuf_iterator<char>());
     ok &= Check(receiptContent.find("schema=1") != std::string::npos, "receipt contains schema version");
     ok &= Check(receiptContent.find("configuration=Debug") != std::string::npos, "receipt contains configuration");
     ok &= Check(receiptContent.find(plan.Fingerprint) != std::string::npos, "receipt contains plan fingerprint");
+    Axle::Plugin::ArtifactIdentity identity;
+    ok &= Check(Axle::Plugin::ReadArtifactReceipt(receiptPath, identity, receiptError), "complete artifact receipt parses");
+    ok &= Check(Axle::Plugin::ValidateArtifact(identity, receiptBinary, receiptPath, receiptError), "receipt validates its actual bytes");
+    Write(receiptBinary, "changed bytes");
+    ok &= Check(!Axle::Plugin::ValidateArtifact(identity, receiptBinary, receiptPath, receiptError), "changed artifact bytes are rejected");
+    Write(root / "partial.receipt", "schema=1\n");
+    ok &= Check(!Axle::Plugin::ReadArtifactReceipt(root / "partial.receipt", identity, receiptError), "partial artifact receipts are rejected");
 
     std::string cmakeError;
     const auto cmakePath = root / "cmake" / "AxleSelectedPlugins.cmake";

@@ -1,4 +1,6 @@
 #include <Axle/Plugin.hpp>
+#include <Axle/PluginArtifact.hpp>
+#include <Axle/FileSystem.hpp>
 
 #include <algorithm>
 #include <charconv>
@@ -244,13 +246,38 @@ const JsonValue* Find(const JsonValue::Object& object, std::string_view key) {
 bool IsValidId(std::string_view id) {
     if (id.empty() || id.front() == '.' || id.back() == '.') return false;
     for (const char c : id) {
-        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '-' || c == '_' || c == '/')) return false;
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '-' || c == '_')) return false;
     }
     return true;
 }
 
+std::filesystem::path PhysicalManifestPath(const std::filesystem::path& path) {
+    std::error_code ec;
+    auto result = std::filesystem::canonical(path, ec);
+    if (ec) result = std::filesystem::absolute(path).lexically_normal();
+#if defined(_WIN32)
+    const HANDLE file = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file != INVALID_HANDLE_VALUE) {
+        const DWORD size = GetFinalPathNameByHandleW(file, nullptr, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+        if (size) {
+            std::wstring buffer(size + 1, wchar_t{});
+            const DWORD count = GetFinalPathNameByHandleW(file, buffer.data(), static_cast<DWORD>(buffer.size()), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+            if (count && count < buffer.size()) {
+                buffer.resize(count);
+                if (buffer.rfind(LR"(\\?\UNC\)", 0) == 0) buffer = LR"(\\)" + buffer.substr(8);
+                else if (buffer.rfind(LR"(\\?\)", 0) == 0) buffer.erase(0, 4);
+                result = std::filesystem::path(buffer);
+            }
+        }
+        CloseHandle(file);
+    }
+#endif
+    return result;
+}
+
 bool IsSafeRelativePath(const std::filesystem::path& path) {
-    if (path.empty() || path.is_absolute()) return false;
+    if (path.empty() || path.is_absolute() || path.has_root_name() || path.has_root_directory()) return false;
     for (const auto& part : path) if (part == "..") return false;
     return true;
 }
@@ -315,6 +342,23 @@ std::optional<Manifest> ParseManifest(const std::filesystem::path& path, Diagnos
 
     Manifest manifest;
     manifest.Id = *id; manifest.Version = *version; manifest.Name = *name;
+    if (const auto* description = Find(root, "description")) {
+        if (!description->StringValue()) { diagnostic.Message = "description must be a string"; return std::nullopt; }
+        manifest.Description = *description->StringValue();
+    }
+    if (const auto* api = Find(root, "engineApiVersion")) {
+        if (!api->NumberValue() || *api->NumberValue() < 1 || *api->NumberValue() > 2147483647 ||
+            static_cast<int>(*api->NumberValue()) != *api->NumberValue()) {
+            diagnostic.Message = "engineApiVersion must be a positive integer"; return std::nullopt;
+        }
+        manifest.EngineApiVersion = static_cast<int>(*api->NumberValue());
+    }
+    if (const auto* platforms = Find(root, "platforms")) {
+        manifest.Platforms.clear();
+        if (!ReadStringArray(platforms, manifest.Platforms, error, "platforms") || manifest.Platforms.empty()) {
+            diagnostic.Message = "platforms must contain supported target names"; return std::nullopt;
+        }
+    }
     manifest.ManifestPath = path.lexically_normal(); manifest.Root = path.parent_path().lexically_normal();
     const auto* dependencies = Find(root, "dependencies");
     if (dependencies) {
@@ -366,7 +410,8 @@ std::optional<Manifest> ParseManifest(const std::filesystem::path& path, Diagnos
 
 Catalog Discover(const DiscoveryOptions& options) {
     Catalog catalog;
-    std::vector<std::filesystem::path> manifests;
+    struct Candidate { std::filesystem::path Path; Origin Source; };
+    std::vector<Candidate> manifests;
     for (const auto& root : options.Roots) {
         std::error_code error;
         if (!std::filesystem::exists(root, error) || !std::filesystem::is_directory(root, error)) {
@@ -375,16 +420,46 @@ Catalog Discover(const DiscoveryOptions& options) {
         }
         for (std::filesystem::recursive_directory_iterator it(root, error), end; it != end; it.increment(error)) {
             if (error) { catalog.Diagnostics.push_back({root, "plugin discovery failed: " + error.message()}); error.clear(); continue; }
-            if (it->is_regular_file(error) && it->path().extension() == ".axleplugin") manifests.push_back(it->path());
+            if (!it->is_regular_file(error) || it->path().extension() != ".axleplugin") continue;
+            Origin origin = Origin::Engine;
+            for (const auto& projectRoot : options.ProjectRoots) {
+                auto ancestor = std::filesystem::absolute(it->path()).parent_path();
+                while (!ancestor.empty()) {
+                    std::error_code equivalentError;
+                    if (std::filesystem::equivalent(ancestor, projectRoot, equivalentError)) { origin = Origin::Project; break; }
+                    const auto parent = ancestor.parent_path();
+                    if (parent == ancestor) break;
+                    ancestor = parent;
+                }
+                if (origin == Origin::Project) break;
+            }
+            const auto same = std::find_if(manifests.begin(), manifests.end(), [&](const auto& existing) {
+                std::error_code equivalentError;
+                return std::filesystem::equivalent(existing.Path, it->path(), equivalentError);
+            });
+            if (same != manifests.end()) {
+                if (origin == Origin::Project) same->Source = origin;
+                const auto normalized = PhysicalManifestPath(it->path());
+                if (normalized < same->Path) same->Path = normalized;
+                continue;
+            }
+            manifests.push_back({PhysicalManifestPath(it->path()), origin});
         }
     }
-    std::sort(manifests.begin(), manifests.end());
+    std::sort(manifests.begin(), manifests.end(), [](const auto& a, const auto& b) { return a.Path < b.Path; });
     std::set<std::string, std::less<>> ids;
-    for (const auto& path : manifests) {
+    for (const auto& candidate : manifests) {
+        const auto& path = candidate.Path;
         Diagnostic diagnostic;
         auto manifest = ParseManifest(path, diagnostic);
         if (!manifest) { catalog.Diagnostics.push_back(std::move(diagnostic)); continue; }
-        if (!ids.insert(manifest->Id).second) { catalog.Diagnostics.push_back({path, "duplicate plugin id '" + manifest->Id + "'"}); continue; }
+        if (!ids.insert(manifest->Id).second) {
+            catalog.AmbiguousIds.push_back(manifest->Id);
+            const auto first = std::find_if(catalog.Plugins.begin(), catalog.Plugins.end(), [&](const auto& p) { return p.Id == manifest->Id; });
+            catalog.Diagnostics.push_back({path, "duplicate plugin id '" + manifest->Id + "'; first declaration: " + first->ManifestPath.generic_string()});
+            continue;
+        }
+        manifest->Source = candidate.Source;
         catalog.Plugins.push_back(std::move(*manifest));
     }
     return catalog;
@@ -393,7 +468,10 @@ Catalog Discover(const DiscoveryOptions& options) {
 Resolution Resolve(const Catalog& catalog, const std::vector<std::string>& selectedIds, ProductKind product) {
     Resolution result;
     std::map<std::string, const Manifest*, std::less<>> byId;
-    for (const auto& plugin : catalog.Plugins) byId.emplace(plugin.Id, &plugin);
+    std::set<std::string, std::less<>> ambiguous(catalog.AmbiguousIds.begin(), catalog.AmbiguousIds.end());
+    for (const auto& plugin : catalog.Plugins) {
+        if (!byId.emplace(plugin.Id, &plugin).second) ambiguous.insert(plugin.Id);
+    }
     std::set<std::string, std::less<>> selected;
     for (const auto& id : selectedIds) {
         if (!selected.insert(id).second) { result.Diagnostics.push_back({{}, "duplicate selected plugin '" + id + "'"}); continue; }
@@ -402,11 +480,18 @@ Resolution Resolve(const Catalog& catalog, const std::vector<std::string>& selec
     std::set<std::string, std::less<>> visiting, visited;
     std::function<void(const std::string&)> visit = [&](const std::string& id) {
         if (visited.contains(id)) return;
+        if (ambiguous.contains(id)) { result.Diagnostics.push_back({{}, "ambiguous selected plugin id '" + id + "'"}); return; }
         if (!visiting.insert(id).second) { result.Diagnostics.push_back({{}, "plugin dependency cycle at '" + id + "'"}); return; }
         const auto it = byId.find(id); if (it == byId.end()) { visiting.erase(id); return; }
+        if (it->second->EngineApiVersion != 1) result.Diagnostics.push_back({it->second->ManifestPath, "unsupported Engine API version for '" + id + "'"});
+        if (std::find(it->second->Platforms.begin(), it->second->Platforms.end(), "windows-x64") == it->second->Platforms.end())
+            result.Diagnostics.push_back({it->second->ManifestPath, "plugin does not support windows-x64: '" + id + "'"});
         for (const auto& dependency : it->second->Dependencies) {
             const auto dep = byId.find(dependency.Id);
             if (dep == byId.end()) { result.Diagnostics.push_back({it->second->ManifestPath, "missing dependency '" + dependency.Id + "'"}); continue; }
+            if (it->second->Source == Origin::Engine && dep->second->Source == Origin::Project) {
+                result.Diagnostics.push_back({it->second->ManifestPath, "Engine plugin cannot depend on project plugin '" + dependency.Id + "'"}); continue;
+            }
             if (!dependency.Version.empty() && dependency.Version != "*" && dependency.Version != dep->second->Version) {
                 result.Diagnostics.push_back({it->second->ManifestPath, "dependency version mismatch for '" + dependency.Id + "'"}); continue;
             }
@@ -482,8 +567,11 @@ Resolution Resolve(const Catalog& catalog, const std::vector<std::string>& selec
 
 BuildPlan CreateBuildPlan(const Resolution& resolution, ProductKind product, std::string configuration,
                           std::string sdkFingerprint, std::string toolchainFingerprint) {
-    BuildPlan plan; plan.Product = product; plan.Configuration = std::move(configuration); plan.SdkFingerprint = std::move(sdkFingerprint);
+    BuildPlan plan; plan.Product = product; plan.Configuration = std::move(configuration); plan.SdkFingerprint = std::move(sdkFingerprint); plan.ToolchainFingerprint = toolchainFingerprint;
     if (!resolution.IsValid()) { plan.Diagnostics = resolution.Diagnostics; return plan; }
+    if (plan.Configuration.empty() || plan.SdkFingerprint.empty() || plan.ToolchainFingerprint.empty()) {
+        plan.Diagnostics.push_back({{}, "configuration, SDK and toolchain identities are required"}); return plan;
+    }
     for (const auto& plugin : resolution.Plugins) {
         std::ifstream manifestFile(plugin.ManifestPath, std::ios::binary);
         std::ostringstream manifestContents;
@@ -497,7 +585,7 @@ BuildPlan CreateBuildPlan(const Resolution& resolution, ProductKind product, std
         for (const auto& module : plugin.Modules) {
             if (product == ProductKind::Runtime && module.Kind == ModuleKind::Editor) continue;
             const auto sourceRoot = module.SourceRoot.empty() ? plugin.Root : (plugin.Root / module.SourceRoot).lexically_normal();
-            plan.Artifacts.push_back({plugin.Id, module.Name, module.Kind, sourceRoot});
+            plan.Artifacts.push_back({plugin.Id, module.Name, module.Kind, sourceRoot, plugin.Root});
             std::error_code error;
             if (!std::filesystem::exists(sourceRoot, error)) {
                 plan.Diagnostics.push_back({sourceRoot, "module source root does not exist for build fingerprint"});
@@ -538,61 +626,18 @@ const char* ToString(ProductKind kind) {
 }
 
 bool WriteBuildReceipt(const BuildPlan& plan, const BuildArtifact& artifact,
-                       const std::filesystem::path& receiptPath, std::string& error) {
-    error.clear();
-    if (!plan.IsValid()) {
-        error = "cannot write receipt from an invalid build plan";
-        return false;
-    }
-    if (receiptPath.empty()) {
-        error = "receipt path cannot be empty";
-        return false;
-    }
-    const auto parentDir = receiptPath.parent_path();
-    std::error_code ec;
-    if (!parentDir.empty()) {
-        std::filesystem::create_directories(parentDir, ec);
-    }
-    const auto tempPath = receiptPath.string() + ".tmp";
-    {
-        std::ofstream stream(tempPath, std::ios::trunc);
-        if (!stream) {
-            error = "unable to open temporary receipt file for writing: " + tempPath;
-            return false;
-        }
-        stream << "schema=1\n"
-               << "plugin_id=" << artifact.PluginId << "\n"
-               << "module_name=" << artifact.ModuleName << "\n"
-               << "kind=" << ToString(artifact.Kind) << "\n"
-               << "configuration=" << plan.Configuration << "\n"
-               << "product=" << ToString(plan.Product) << "\n"
-               << "sdk_fingerprint=" << plan.SdkFingerprint << "\n"
-               << "fingerprint=" << plan.Fingerprint << "\n"
-               << "source_root=" << artifact.SourceRoot.generic_string() << "\n";
-        stream.flush();
-        if (!stream) {
-            std::filesystem::remove(tempPath, ec);
-            error = "failed writing receipt contents: " + tempPath;
-            return false;
-        }
-    }
-#if defined(_WIN32)
-    if (!MoveFileExW(std::filesystem::path(tempPath).wstring().c_str(),
-                     receiptPath.wstring().c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        std::filesystem::remove(tempPath, ec);
-        error = "failed to atomically publish build receipt: " + receiptPath.generic_string();
-        return false;
-    }
-#else
-    std::filesystem::rename(tempPath, receiptPath, ec);
-    if (ec) {
-        std::filesystem::remove(tempPath, ec);
-        error = "failed to publish build receipt: " + receiptPath.generic_string();
-        return false;
-    }
-#endif
-    return true;
+                       const std::filesystem::path& receiptPath, std::string& error,
+                       const std::filesystem::path& binaryPath) {
+    if (!plan.IsValid()) { error = "cannot publish a receipt for an invalid plan"; return false; }
+    ArtifactIdentity identity;
+    identity.PluginId = artifact.PluginId; identity.ModuleName = artifact.ModuleName;
+    identity.Kind = artifact.Kind; identity.Product = plan.Product;
+    identity.Configuration = plan.Configuration; identity.SdkFingerprint = plan.SdkFingerprint;
+    identity.ToolchainFingerprint = plan.ToolchainFingerprint; identity.Fingerprint = plan.Fingerprint;
+    identity.SourceRoot = artifact.SourceRoot;
+    return WriteArtifactReceipt(identity, binaryPath.empty()
+        ? receiptPath.parent_path() / (artifact.ModuleName + (plan.Product == ProductKind::Runtime ? ".lib" : ".dll"))
+        : binaryPath, receiptPath, error);
 }
 
 bool GenerateCMakeInputs(const BuildPlan& plan, const std::filesystem::path& outputPath,
@@ -627,9 +672,9 @@ bool GenerateCMakeInputs(const BuildPlan& plan, const std::filesystem::path& out
 
         for (const auto& artifact : plan.Artifacts) {
             stream << "# Plugin: " << artifact.PluginId << " Module: " << artifact.ModuleName << "\n"
-                   << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_SOURCE_ROOT \"" 
+                   << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_SOURCE_ROOT \""
                    << artifact.SourceRoot.generic_string() << "\")\n"
-                   << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_KIND \"" 
+                   << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_KIND \""
                    << ToString(artifact.Kind) << "\")\n\n";
         }
         stream.flush();

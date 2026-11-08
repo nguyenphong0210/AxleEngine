@@ -24,6 +24,8 @@ enum class ProductKind {
     Tests,
 };
 
+enum class Origin { Engine, Project };
+
 struct Dependency {
     std::string Id;
     std::string Version;
@@ -41,6 +43,10 @@ struct Manifest {
     std::string Id;
     std::string Version;
     std::string Name;
+    std::string Description;
+    Origin Source = Origin::Engine;
+    int EngineApiVersion = 1;
+    std::vector<std::string> Platforms = {"windows-x64"};
     std::filesystem::path ManifestPath;
     std::filesystem::path Root;
     std::vector<Dependency> Dependencies;
@@ -55,12 +61,14 @@ struct Diagnostic {
 struct Catalog {
     std::vector<Manifest> Plugins;
     std::vector<Diagnostic> Diagnostics;
+    std::vector<std::string> AmbiguousIds;
 
     bool IsValid() const { return Diagnostics.empty(); }
 };
 
 struct DiscoveryOptions {
     std::vector<std::filesystem::path> Roots;
+    std::vector<std::filesystem::path> ProjectRoots;
 };
 
 Catalog Discover(const DiscoveryOptions& options);
@@ -86,12 +94,14 @@ struct BuildArtifact {
     std::string ModuleName;
     ModuleKind Kind = ModuleKind::Runtime;
     std::filesystem::path SourceRoot;
+    std::filesystem::path CMakeRoot;
 };
 
 struct BuildPlan {
     ProductKind Product = ProductKind::Editor;
     std::string Configuration;
     std::string SdkFingerprint;
+    std::string ToolchainFingerprint;
     std::string Fingerprint;
     std::vector<BuildArtifact> Artifacts;
     std::vector<BuildInput> Inputs;
@@ -105,7 +115,8 @@ BuildPlan CreateBuildPlan(const Resolution& resolution, ProductKind product,
                           std::string toolchainFingerprint);
 
 bool WriteBuildReceipt(const BuildPlan& plan, const BuildArtifact& artifact,
-                       const std::filesystem::path& receiptPath, std::string& error);
+                       const std::filesystem::path& receiptPath, std::string& error,
+                       const std::filesystem::path& binaryPath = {});
 
 bool GenerateCMakeInputs(const BuildPlan& plan, const std::filesystem::path& outputPath,
                          std::string& error);

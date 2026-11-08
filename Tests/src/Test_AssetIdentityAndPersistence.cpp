@@ -302,6 +302,68 @@ namespace {
         CHECK(registry.HasCodec("CustomTestComp"));
         registry.UnregisterOwner(owner);
         CHECK(!registry.HasCodec("CustomTestComp"));
+        struct LeasedCodec final : IComponentCodec {
+            std::weak_ptr<void> Code;
+            bool* DestroyedWithCode;
+            LeasedCodec(std::weak_ptr<void> code, bool* result) : Code(std::move(code)), DestroyedWithCode(result) {}
+            ~LeasedCodec() override { *DestroyedWithCode = !Code.expired(); }
+            std::string_view GetComponentName() const override { return "TransformComponent"; }
+            bool HasComponent(const entt::registry&, entt::entity) const override { return false; }
+            void CopyComponent(const ComponentCopyContext&) const override {}
+        };
+        for (auto rejectedOwner : {registry.BeginOwner(), owner + 1000000}) {
+            bool destroyedWithCode = false;
+            auto lease = std::make_shared<int>(1);
+            auto codec = std::make_unique<LeasedCodec>(lease, &destroyedWithCode);
+            CHECK(!registry.RegisterCodec(rejectedOwner, std::move(codec), std::move(lease)));
+            CHECK(destroyedWithCode);
+        }
+        struct ReentrantCodec final : IComponentCodec {
+            std::string Name;
+            std::function<void()> OnDestroy;
+            ReentrantCodec(std::string name, std::function<void()> callback) : Name(std::move(name)), OnDestroy(std::move(callback)) {}
+            ~ReentrantCodec() override { if (OnDestroy) OnDestroy(); }
+            std::string_view GetComponentName() const override { return Name; }
+            bool HasComponent(const entt::registry&, entt::entity) const override { return false; }
+            void CopyComponent(const ComponentCopyContext&) const override {}
+        };
+        const auto reentrantOwner = registry.BeginOwner(), nestedOwner = registry.BeginOwner(), survivingOwner = registry.BeginOwner();
+        int destroyed = 0;
+        bool addedDuringCleanup = false;
+        CHECK(registry.RegisterCodec(nestedOwner, std::make_unique<ReentrantCodec>("NestedOwner", [&] { ++destroyed; })));
+        CHECK(registry.RegisterCodec(reentrantOwner, std::make_unique<ReentrantCodec>("ReentrantOwner", [&] {
+            ++destroyed;
+            registry.UnregisterOwner(reentrantOwner);
+            registry.UnregisterOwner(nestedOwner);
+            addedDuringCleanup = registry.RegisterCodec(survivingOwner, std::make_unique<ReentrantCodec>("SurvivingOwner", [] {}));
+        })));
+        registry.UnregisterOwner(reentrantOwner);
+        CHECK(destroyed == 2 && addedDuringCleanup && registry.HasCodec("SurvivingOwner"));
+        CHECK(!registry.HasCodec("ReentrantOwner") && !registry.HasCodec("NestedOwner"));
+        registry.UnregisterOwner(survivingOwner);
+        struct RevokingCodec final : IComponentCodec {
+            std::string Name;
+            std::function<bool()> Has;
+            int* Copies;
+            RevokingCodec(std::string name, std::function<bool()> has, int* copies)
+                : Name(std::move(name)), Has(std::move(has)), Copies(copies) {}
+            std::string_view GetComponentName() const override { return Name; }
+            bool HasComponent(const entt::registry&, entt::entity) const override { return Has(); }
+            void CopyComponent(const ComponentCopyContext&) const override { ++*Copies; }
+        };
+        const auto revokingOwner = registry.BeginOwner(), revokedOwner = registry.BeginOwner();
+        int revokedCalls = 0, stoppedCopies = 0;
+        CHECK(registry.RegisterCodec(revokingOwner, std::make_unique<RevokingCodec>("Revoker", [&] {
+            registry.UnregisterOwner(revokingOwner);
+            registry.UnregisterOwner(revokedOwner);
+            return true;
+        }, &stoppedCopies)));
+        CHECK(registry.RegisterCodec(revokedOwner, std::make_unique<RevokingCodec>("Revoked", [&] { ++revokedCalls; return true; }, &stoppedCopies)));
+        entt::registry srcRegistry, dstRegistry;
+        const auto srcEntity = srcRegistry.create(), dstEntity = dstRegistry.create();
+        std::unordered_map<Axle::UUID, entt::entity> uuidMap;
+        registry.CopyAllComponents({dstRegistry, dstEntity, srcRegistry, srcEntity, uuidMap});
+        CHECK(revokedCalls == 0 && stoppedCopies == 0);
 
         auto scene = std::make_shared<Scene>();
         auto entity = scene->CreateEntity("VehicleEntity");
@@ -328,6 +390,18 @@ namespace {
         CHECK(sections && sections->size() == 1);
         CHECK((*sections)[0].SectionName == "PluginVehicleComponent");
         CHECK((*sections)[0].Lines.size() == 2);
+        const std::vector<std::string> nested = {
+            "      Value: 4", "      Children:", "        - Entity: 123",
+            "          TransformComponent:", "            Translation: opaque",
+            "      # authored comment", "", "      Tail: preserved"};
+        scene->StorePassiveSection(entity, "NestedPluginComponent", nested);
+        CHECK(AssemblySerializer::Serialize(assemblyPath, entity));
+        data = AssemblySerializer::LoadAssemblyData(assemblyPath);
+        CHECK(data.IsValid && data.RootNode.PassiveSections.size() == 2);
+        CHECK(data.RootNode.PassiveSections[1].Lines == nested);
+        CHECK(AssemblySerializer::SaveAssemblyData(assemblyPath, data));
+        data = AssemblySerializer::LoadAssemblyData(assemblyPath);
+        CHECK(data.IsValid && data.RootNode.PassiveSections[1].Lines == nested);
         CHECK(NoAuxiliary(root));
         return true;
     }

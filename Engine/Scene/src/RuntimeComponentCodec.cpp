@@ -4,8 +4,8 @@
 namespace Axle {
 
     template<typename T>
-    static void RegisterSimpleCodec(std::vector<std::unique_ptr<IComponentCodec>>& codecs, std::string_view name) {
-        codecs.push_back(std::make_unique<FunctionalComponentCodec<T, void(*)(const ComponentCopyContext&)>>(
+    static void RegisterSimpleCodec(ComponentCodecRegistry& codecs, std::string_view name) {
+        codecs.RegisterCodec(std::make_unique<FunctionalComponentCodec<T, void(*)(const ComponentCopyContext&)>>(
             name,
             [](const ComponentCopyContext& ctx) {
                 ctx.DstRegistry.emplace_or_replace<T>(ctx.DstEntity, ctx.SrcRegistry.get<T>(ctx.SrcEntity));
@@ -17,7 +17,7 @@ namespace Axle {
         static bool registered = false;
         if (registered) return;
         registered = true;
-        auto& m_Codecs = ComponentCodecRegistry::Get().GetMutableCodecs();
+        auto& m_Codecs = ComponentCodecRegistry::Get();
         // Visual / Rendering
         RegisterSimpleCodec<MeshInstance3D>(m_Codecs, "MeshInstance3D");
         RegisterSimpleCodec<MaterialComponent>(m_Codecs, "MaterialComponent");
@@ -30,7 +30,7 @@ namespace Axle {
 
         // Physics
         RegisterSimpleCodec<CollisionShape3D>(m_Codecs, "CollisionShape3D");
-        m_Codecs.push_back(std::make_unique<FunctionalComponentCodec<RigidBody3D, void(*)(const ComponentCopyContext&)>>(
+        m_Codecs.RegisterCodec(std::make_unique<FunctionalComponentCodec<RigidBody3D, void(*)(const ComponentCopyContext&)>>(
             "RigidBody3D", [](const ComponentCopyContext& ctx) {
                 auto copy = ctx.SrcRegistry.get<RigidBody3D>(ctx.SrcEntity);
                 copy.RuntimeBodyID = {};
@@ -38,7 +38,7 @@ namespace Axle {
             }));
 
         // Native Script (pure state copy, runtime instance deferred)
-        m_Codecs.push_back(std::make_unique<FunctionalComponentCodec<NativeScriptComponent, void(*)(const ComponentCopyContext&)>>(
+        m_Codecs.RegisterCodec(std::make_unique<FunctionalComponentCodec<NativeScriptComponent, void(*)(const ComponentCopyContext&)>>(
             "NativeScriptComponent",
             [](const ComponentCopyContext& ctx) {
                 const auto& srcNsc = ctx.SrcRegistry.get<NativeScriptComponent>(ctx.SrcEntity);
@@ -58,7 +58,7 @@ namespace Axle {
 
         // Audio
         RegisterSimpleCodec<AudioListenerComponent>(m_Codecs, "AudioListenerComponent");
-        m_Codecs.push_back(std::make_unique<FunctionalComponentCodec<AudioSourceComponent, void(*)(const ComponentCopyContext&)>>(
+        m_Codecs.RegisterCodec(std::make_unique<FunctionalComponentCodec<AudioSourceComponent, void(*)(const ComponentCopyContext&)>>(
             "AudioSourceComponent",
             [](const ComponentCopyContext& ctx) {
                 const auto& srcAsc = ctx.SrcRegistry.get<AudioSourceComponent>(ctx.SrcEntity);
@@ -82,7 +82,7 @@ namespace Axle {
 
         // Animation & Skeleton
         RegisterSimpleCodec<SkeletalMeshComponent>(m_Codecs, "SkeletalMeshComponent");
-        m_Codecs.push_back(std::make_unique<FunctionalComponentCodec<AnimatorComponent, void(*)(const ComponentCopyContext&)>>(
+        m_Codecs.RegisterCodec(std::make_unique<FunctionalComponentCodec<AnimatorComponent, void(*)(const ComponentCopyContext&)>>(
             "AnimatorComponent",
             [](const ComponentCopyContext& ctx) {
                 const auto& srcAc = ctx.SrcRegistry.get<AnimatorComponent>(ctx.SrcEntity);
@@ -95,7 +95,7 @@ namespace Axle {
         ));
 
         // Character Controller
-        m_Codecs.push_back(std::make_unique<FunctionalComponentCodec<CharacterControllerComponent, void(*)(const ComponentCopyContext&)>>(
+        m_Codecs.RegisterCodec(std::make_unique<FunctionalComponentCodec<CharacterControllerComponent, void(*)(const ComponentCopyContext&)>>(
             "CharacterControllerComponent",
             [](const ComponentCopyContext& ctx) {
                 auto cccCopy = ctx.SrcRegistry.get<CharacterControllerComponent>(ctx.SrcEntity);
@@ -105,7 +105,7 @@ namespace Axle {
         ));
 
         // Particles & VFX
-        m_Codecs.push_back(std::make_unique<FunctionalComponentCodec<ParticleEmitterComponent, void(*)(const ComponentCopyContext&)>>(
+        m_Codecs.RegisterCodec(std::make_unique<FunctionalComponentCodec<ParticleEmitterComponent, void(*)(const ComponentCopyContext&)>>(
             "ParticleEmitterComponent",
             [](const ComponentCopyContext& ctx) {
                 auto pecCopy = ctx.SrcRegistry.get<ParticleEmitterComponent>(ctx.SrcEntity);
@@ -114,7 +114,7 @@ namespace Axle {
             }
         ));
 
-        m_Codecs.push_back(std::make_unique<FunctionalComponentCodec<CharacterVFXComponent, void(*)(const ComponentCopyContext&)>>(
+        m_Codecs.RegisterCodec(std::make_unique<FunctionalComponentCodec<CharacterVFXComponent, void(*)(const ComponentCopyContext&)>>(
             "CharacterVFXComponent",
             [](const ComponentCopyContext& ctx) {
                 auto cvfxCopy = ctx.SrcRegistry.get<CharacterVFXComponent>(ctx.SrcEntity);

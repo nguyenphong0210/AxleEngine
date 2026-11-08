@@ -439,9 +439,13 @@ namespace Axle {
         while (std::getline(stream, line)) {
             if (!line.empty() && line.back() == '\r') line.pop_back();
             std::string trimmed = Trim(line);
-            if (trimmed.empty() || trimmed[0] == '#') continue;
+            const auto indent = line.find_first_not_of(" \t");
+            if (trimmed.empty() || trimmed[0] == '#') {
+                if (inEntity && currentSection == AsmSection::Custom) customSectionLines.push_back(line);
+                continue;
+            }
 
-            if (trimmed.rfind("RootEntityID:", 0) == 0) {
+            if (!inEntity && trimmed.rfind("RootEntityID:", 0) == 0) {
                 try {
                     outRootUUID = std::stoull(Trim(trimmed.substr(13)));
                 } catch (...) {
@@ -450,7 +454,7 @@ namespace Axle {
                 continue;
             }
 
-            if (trimmed.rfind("- Entity:", 0) == 0) {
+            if (indent == 2 && trimmed.rfind("- Entity:", 0) == 0) {
                 if (inEntity) {
                     flushCustom();
                     entities.push_back(current);
@@ -468,25 +472,33 @@ namespace Axle {
 
             if (!inEntity) continue;
 
-            // Section markers
-            if (trimmed == "TagComponent:") { flushCustom(); currentSection = AsmSection::Tag; continue; }
-            if (trimmed == "TransformComponent:") { flushCustom(); currentSection = AsmSection::Transform; current.HasTransform = true; continue; }
-            if (trimmed == "MeshInstance3D:" || trimmed == "MeshComponent:") { flushCustom(); currentSection = AsmSection::Mesh; current.HasMesh = true; continue; }
-            if (trimmed == "CollisionShape3D:" || trimmed == "CollisionShape:") { flushCustom(); currentSection = AsmSection::CollisionShape; current.HasCollisionShape = true; continue; }
-            if (trimmed == "RigidBody3D:" || trimmed == "RigidBodyComponent:") { flushCustom(); currentSection = AsmSection::RigidBody; current.HasRigidBody = true; continue; }
-            if (trimmed == "MaterialComponent:") { flushCustom(); currentSection = AsmSection::Material; current.HasMaterial = true; continue; }
-            if (trimmed == "NativeScriptComponent:") { flushCustom(); currentSection = AsmSection::NativeScript; current.HasNativeScript = true; continue; }
-            if (trimmed == "CameraComponent:") { flushCustom(); currentSection = AsmSection::Camera; current.HasCamera = true; continue; }
-            if (trimmed == "AudioListenerComponent:") { flushCustom(); currentSection = AsmSection::AudioListener; current.HasAudioListener = true; continue; }
-            if (trimmed == "AudioSourceComponent:") { flushCustom(); currentSection = AsmSection::AudioSource; current.HasAudioSource = true; continue; }
-            if (trimmed == "PointLightComponent:") { flushCustom(); currentSection = AsmSection::PointLight; current.HasPointLight = true; continue; }
-            if (trimmed == "SpotLightComponent:") { flushCustom(); currentSection = AsmSection::SpotLight; current.HasSpotLight = true; continue; }
-            if (trimmed == "SkeletalMeshComponent:") { flushCustom(); currentSection = AsmSection::SkeletalMesh; current.HasSkeletalMesh = true; continue; }
-            if (trimmed == "AnimatorComponent:") { flushCustom(); currentSection = AsmSection::Animator; current.HasAnimator = true; continue; }
-            if (trimmed == "HierarchyComponent:") { flushCustom(); currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
-            if (trimmed == "Children:") { flushCustom(); currentSection = AsmSection::HierarchyChildren; continue; }
+            // Opaque plugin payloads are indentation-scoped, including nested
+            // names that happen to match built-in components or hierarchy keys.
+            if (currentSection == AsmSection::Custom && indent > 4) {
+                customSectionLines.push_back(line);
+                continue;
+            }
 
-            size_t indent = line.find_first_not_of(" \t");
+            // Section markers
+            if (indent == 4) {
+                if (trimmed == "TagComponent:") { flushCustom(); currentSection = AsmSection::Tag; continue; }
+                if (trimmed == "TransformComponent:") { flushCustom(); currentSection = AsmSection::Transform; current.HasTransform = true; continue; }
+                if (trimmed == "MeshInstance3D:" || trimmed == "MeshComponent:") { flushCustom(); currentSection = AsmSection::Mesh; current.HasMesh = true; continue; }
+                if (trimmed == "CollisionShape3D:" || trimmed == "CollisionShape:") { flushCustom(); currentSection = AsmSection::CollisionShape; current.HasCollisionShape = true; continue; }
+                if (trimmed == "RigidBody3D:" || trimmed == "RigidBodyComponent:") { flushCustom(); currentSection = AsmSection::RigidBody; current.HasRigidBody = true; continue; }
+                if (trimmed == "MaterialComponent:") { flushCustom(); currentSection = AsmSection::Material; current.HasMaterial = true; continue; }
+                if (trimmed == "NativeScriptComponent:") { flushCustom(); currentSection = AsmSection::NativeScript; current.HasNativeScript = true; continue; }
+                if (trimmed == "CameraComponent:") { flushCustom(); currentSection = AsmSection::Camera; current.HasCamera = true; continue; }
+                if (trimmed == "AudioListenerComponent:") { flushCustom(); currentSection = AsmSection::AudioListener; current.HasAudioListener = true; continue; }
+                if (trimmed == "AudioSourceComponent:") { flushCustom(); currentSection = AsmSection::AudioSource; current.HasAudioSource = true; continue; }
+                if (trimmed == "PointLightComponent:") { flushCustom(); currentSection = AsmSection::PointLight; current.HasPointLight = true; continue; }
+                if (trimmed == "SpotLightComponent:") { flushCustom(); currentSection = AsmSection::SpotLight; current.HasSpotLight = true; continue; }
+                if (trimmed == "SkeletalMeshComponent:") { flushCustom(); currentSection = AsmSection::SkeletalMesh; current.HasSkeletalMesh = true; continue; }
+                if (trimmed == "AnimatorComponent:") { flushCustom(); currentSection = AsmSection::Animator; current.HasAnimator = true; continue; }
+                if (trimmed == "HierarchyComponent:") { flushCustom(); currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
+            }
+            if (indent == 6 && currentSection == AsmSection::Hierarchy && trimmed == "Children:") { currentSection = AsmSection::HierarchyChildren; continue; }
+
             if (indent == 4 && trimmed.back() == ':' && trimmed.find(' ') == std::string::npos && !trimmed.starts_with("-")) {
                 flushCustom();
                 currentSection = AsmSection::Custom;

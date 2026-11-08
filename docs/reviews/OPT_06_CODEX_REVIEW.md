@@ -7,6 +7,13 @@ commits named in the final delivery).
 
 ## Decision
 
+**Repair resumed (2026-11-08):** The user challenged the premature stop at this
+report. Codex is completing the original PLG-01..13 repair/verification scope.
+See the [live completion work record](../agents/handoffs/OPT_06_CODEX_COMPLETION.md).
+The first correction checkpoint passes four Debug tests and five of seven explicit
+contract probes; phase acceptance is still withheld. Historical findings below
+describe the reviewed candidate, with final statuses to be updated after completion.
+
 **NOT ACCEPTED.** The candidate supplies useful metadata, loader and UI foundations,
 but does not deliver the PLG-01..13 product workflow required by G0/G1/G2.
 The delivery message `CG-20261108T025845874637Z-GEMINI-c7dae3` is an implementer

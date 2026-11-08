@@ -162,65 +162,24 @@ std::string LastError() {
 #endif
 }
 
-bool ValidateReceipt(const std::filesystem::path& receipt_path, const std::string& expected_id,
-                     const std::string& expected_config, std::string& error) {
-    if (receipt_path.empty()) return true;
-    std::error_code ec;
-    if (!std::filesystem::is_regular_file(receipt_path, ec)) {
-        error = "build receipt does not exist or is not a regular file: " + receipt_path.generic_string();
-        return false;
-    }
-    std::ifstream stream(receipt_path);
-    if (!stream) {
-        error = "unable to open build receipt: " + receipt_path.generic_string();
-        return false;
-    }
-    std::string line;
-    std::unordered_map<std::string, std::string> fields;
-    while (std::getline(stream, line)) {
-        while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
-        if (line.empty() || line[0] == '#') continue;
-        auto eq = line.find('=');
-        if (eq != std::string::npos) {
-            fields[line.substr(0, eq)] = line.substr(eq + 1);
-        }
-    }
-    auto schemaIt = fields.find("schema");
-    if (schemaIt == fields.end() || schemaIt->second != "1") {
-        error = "unsupported or missing build receipt schema version";
-        return false;
-    }
-    auto pluginIt = fields.find("plugin_id");
-    if (pluginIt != fields.end() && !expected_id.empty() && pluginIt->second != expected_id) {
-        error = "build receipt plugin ID mismatch: expected '" + expected_id + "', got '" + pluginIt->second + "'";
-        return false;
-    }
-    auto configIt = fields.find("configuration");
-    if (configIt != fields.end() && !expected_config.empty() && configIt->second != expected_config) {
-        error = "build receipt configuration mismatch: expected '" + expected_config + "', got '" + configIt->second + "'";
-        return false;
-    }
-    return true;
-}
-
 } // namespace
 
 NativePlugin::~NativePlugin() { Stop(); }
 
-bool NativePlugin::Load(const std::filesystem::path& module_path, std::string expected_id,
-                        std::string expected_config, RegistrationRegistry& registry,
-                        std::string& diagnostic, const std::filesystem::path& receipt_path) {
+bool NativePlugin::Load(const LoadRequest& request, RegistrationRegistry& registry, std::string& diagnostic) {
+    const auto& module_path = request.ModulePath;
+    const auto& expected_id = request.Expected.ModuleName;
+    const auto& expected_config = request.Expected.Configuration;
     diagnostic.clear();
     if (m_Handle || m_Active) { diagnostic = "plugin is already loaded"; return false; }
     if (module_path.empty() || !module_path.is_absolute()) {
         diagnostic = "plugin path must be absolute and controlled by the resolver"; return false;
     }
 
-    if (!receipt_path.empty()) {
-        if (!ValidateReceipt(receipt_path, expected_id, expected_config, diagnostic)) {
-            return false;
-        }
+    if (request.Expected.Product == Plugin::ProductKind::Runtime) {
+        diagnostic = "shipping Runtime native DLL loading is unsupported"; return false;
     }
+    if (!Plugin::ValidateArtifact(request.Expected, module_path, request.ReceiptPath, diagnostic)) return false;
 
     m_Handle = OpenLibrary(module_path);
     if (!m_Handle) { diagnostic = LastError(); return false; }
@@ -242,13 +201,17 @@ bool NativePlugin::Load(const std::filesystem::path& module_path, std::string ex
         return fail("invalid plugin descriptor");
     if (descriptor->abi_version != kPluginAbiVersion) return fail("plugin ABI mismatch");
     if (expected_id != descriptor->module_id) return fail("plugin module ID mismatch");
+    if (!descriptor->plugin_id || request.Expected.PluginId != descriptor->plugin_id) return fail("plugin ID mismatch");
+    if (!descriptor->sdk_fingerprint || request.Expected.SdkFingerprint != descriptor->sdk_fingerprint) return fail("plugin SDK mismatch");
+    if (!descriptor->toolchain_fingerprint || request.Expected.ToolchainFingerprint != descriptor->toolchain_fingerprint) return fail("plugin toolchain mismatch");
     if (!expected_config.empty() && (!descriptor->build_config || expected_config != descriptor->build_config))
         return fail("plugin build configuration mismatch");
 
     m_State = registry.m_State;
     m_Owner = registry.BeginOwner();
     m_ModuleId = descriptor->module_id;
-    PluginHostApi host{kPluginAbiVersion, this,
+    m_SdkFingerprint = request.Expected.SdkFingerprint;
+    m_Host = {sizeof(PluginHostApi), kPluginAbiVersion, this, m_SdkFingerprint.c_str(),
         [](void* user, const char* id, void* resource, void (*destroy)(void*)) noexcept -> bool {
             try {
                 auto* plugin = static_cast<NativePlugin*>(user);
@@ -257,11 +220,11 @@ bool NativePlugin::Load(const std::filesystem::path& module_path, std::string ex
             } catch (...) {
                 return false;
             }
-        }};
+        }, nullptr};
 
     bool startSuccess = false;
     try {
-        startSuccess = start(&host);
+        startSuccess = start(&m_Host);
     } catch (...) {
         startSuccess = false;
     }

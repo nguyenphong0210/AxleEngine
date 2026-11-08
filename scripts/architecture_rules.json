@@ -20,7 +20,9 @@
     "Terrain": "Plugins/Terrain",
     "Editor": "Editor",
     "Runtime": "Runtime",
-    "SceneData": "Engine/SceneData"
+    "SceneData": "Engine/SceneData",
+    "Plugin": "Engine/Plugin",
+    "PluginRuntime": "Engine/PluginRuntime"
   },
   "layers": {
     "Level0_Foundation": [
@@ -39,7 +41,9 @@
       "Animation",
       "VFX",
       "Project",
-      "UI2D"
+      "UI2D",
+      "Plugin",
+      "PluginRuntime"
     ],
     "Level3_Scene_Simulation": [
       "Scene"
@@ -181,10 +185,19 @@
       "Axle::Spline",
       "Axle::Terrain",
       "Axle::Animation",
-      "Axle::VFX"
+      "Axle::VFX",
+      "Axle::Plugin",
+      "Axle::PluginRuntime"
     ],
     "SceneData": [
       "Axle::Core"
+    ],
+    "Plugin": [
+      "Axle::Core"
+    ],
+    "PluginRuntime": [
+      "Axle::Plugin",
+      "dl"
     ]
   },
   "forbidden_include_rules": [
@@ -207,7 +220,9 @@
         "Terrain",
         "Editor",
         "Runtime",
-        "SceneData"
+        "SceneData",
+        "Plugin",
+        "PluginRuntime"
       ],
       "description": "Foundation Core must not have upward dependencies on platform, rendering, physics, scene, UI or applications."
     },
@@ -220,7 +235,9 @@
         "UI",
         "Editor",
         "Runtime",
-        "SceneData"
+        "SceneData",
+        "Plugin",
+        "PluginRuntime"
       ],
       "description": "Asset subsystem must not depend on GPU rendering, scene, or UI."
     },
@@ -234,7 +251,9 @@
         "UI",
         "Editor",
         "Runtime",
-        "SceneData"
+        "SceneData",
+        "Plugin",
+        "PluginRuntime"
       ],
       "description": "Physics subsystem must not depend directly on rendering, GPU resources, asset DSL, scene, or UI."
     },
@@ -291,9 +310,58 @@
         "Spline",
         "Terrain",
         "Editor",
-        "Runtime"
+        "Runtime",
+        "Plugin",
+        "PluginRuntime"
       ],
       "description": "Generic scene data may depend only on Core; concrete system integration belongs in Scene bridges."
+    },
+    {
+      "from": "Plugin",
+      "forbidden_to": [
+        "Platform",
+        "RHI",
+        "Renderer",
+        "Audio",
+        "Asset",
+        "Physics",
+        "Animation",
+        "VFX",
+        "Project",
+        "UI2D",
+        "UI",
+        "Scene",
+        "Spline",
+        "Terrain",
+        "Editor",
+        "Runtime",
+        "SceneData",
+        "PluginRuntime"
+      ],
+      "description": "Plugin infrastructure does not import optional modules, scene or product implementation."
+    },
+    {
+      "from": "PluginRuntime",
+      "forbidden_to": [
+        "Platform",
+        "RHI",
+        "Renderer",
+        "Audio",
+        "Asset",
+        "Physics",
+        "Animation",
+        "VFX",
+        "Project",
+        "UI2D",
+        "UI",
+        "Scene",
+        "Spline",
+        "Terrain",
+        "Editor",
+        "Runtime",
+        "SceneData"
+      ],
+      "description": "Plugin infrastructure does not import optional modules, scene or product implementation."
     }
   ],
   "baseline_allowances": [

@@ -34,7 +34,13 @@ int main(int argc, char** argv) {
     Axle::PluginRuntime::RegistrationRegistry registrations;
     Axle::PluginRuntime::NativePlugin plugin;
     std::string diagnostic;
-    const bool loaded = plugin.Load(std::filesystem::absolute(argv[1]), "fixture.counter", "Debug", registrations, diagnostic, root / "schema-only.receipt");
+    Axle::PluginRuntime::LoadRequest loadRequest;
+    loadRequest.ModulePath = std::filesystem::absolute(argv[1]); loadRequest.ReceiptPath = root / "schema-only.receipt";
+    loadRequest.Expected.PluginId = "fixture.counter"; loadRequest.Expected.ModuleName = "fixture.counter";
+    loadRequest.Expected.Configuration = "Debug"; loadRequest.Expected.SdkFingerprint = "fixture-sdk";
+    loadRequest.Expected.ToolchainFingerprint = "fixture-toolchain"; loadRequest.Expected.Fingerprint = "fixture-plan";
+    loadRequest.Expected.SourceRoot = root;
+    const bool loaded = plugin.Load(loadRequest, registrations, diagnostic);
     probe("schema-only receipt loads native DLL", loaded);
     plugin.Stop();
 
@@ -66,10 +72,10 @@ int main(int argc, char** argv) {
     auto add = [&](auto owner, const char* name) { codecs.RegisterCodec(owner, std::make_unique<Axle::FunctionalComponentCodec<ProbeComponent, void(*)(const Axle::ComponentCopyContext&)>>(name, [](const Axle::ComponentCopyContext&) {})); };
     const auto ownerA = codecs.BeginOwner(), ownerB = codecs.BeginOwner();
     add(ownerA, "ProbeA"); add(ownerB, "ProbeB");
-    auto& mutableCodecs = codecs.GetMutableCodecs();
-    mutableCodecs.erase(mutableCodecs.end() - 2);
+    codecs.UnregisterOwner(ownerA);
+    if (!codecs.HasCodec("ProbeB")) return 3;
     codecs.UnregisterOwner(ownerB);
-    probe("mutable codec erase breaks owner removal", codecs.HasCodec("ProbeB"));
+    probe("scoped codec removal leaves callbacks registered", codecs.HasCodec("ProbeB"));
     codecs.UnregisterOwner(ownerA);
     std::cout << "Observed " << observed << "/7 defects. OPT-06 requires zero failures.\n";
     return observed == 0 ? 0 : 1;

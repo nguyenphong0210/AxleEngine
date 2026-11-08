@@ -1,17 +1,8 @@
 #include <cstddef>
 
-struct HostApi {
-    unsigned int abi_version;
-    void* user_data;
-    bool (*register_resource)(void*, const char*, void*, void (*)(void*));
-};
-struct Descriptor {
-    unsigned int struct_size;
-    unsigned int abi_version;
-    const char* module_id;
-    const char* build_config;
-};
-
+#include <Axle/PluginABI.hpp>
+using HostApi = Axle::PluginRuntime::PluginHostApi;
+using Descriptor = Axle::PluginRuntime::PluginDescriptor;
 namespace {
 int* g_resource = nullptr;
 void Destroy(void* resource) { delete static_cast<int*>(resource); g_resource = nullptr; }
@@ -24,7 +15,8 @@ void Destroy(void* resource) { delete static_cast<int*>(resource); g_resource = 
 #endif
 
 AXLE_EXPORT const Descriptor* ax_plugin_get_descriptor() {
-    static const Descriptor descriptor{sizeof(Descriptor), 1, "fixture.counter", "Debug"};
+    static const Descriptor descriptor{sizeof(Descriptor), Axle::PluginRuntime::kPluginAbiVersion,
+        "fixture.counter", "fixture.counter", AXLE_PLUGIN_BUILD_CONFIGURATION, "fixture-sdk", "fixture-toolchain"};
     return &descriptor;
 }
 

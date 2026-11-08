@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace Axle {
 
@@ -62,18 +63,30 @@ namespace Axle {
 
         static ComponentCodecRegistry& Get();
 
-        Owner BeginOwner() { return m_NextOwner++; }
-        void RegisterCodec(std::unique_ptr<IComponentCodec> codec);
-        void RegisterCodec(Owner owner, std::unique_ptr<IComponentCodec> codec);
+        Owner BeginOwner() { const auto owner = m_NextOwner++; m_ActiveOwners.insert(owner); return owner; }
+        bool RegisterCodec(std::unique_ptr<IComponentCodec> codec);
+        bool RegisterCodec(Owner owner, std::unique_ptr<IComponentCodec> codec,
+                           std::shared_ptr<void> moduleLease = {});
         void UnregisterOwner(Owner owner) noexcept;
 
-        const std::vector<std::unique_ptr<IComponentCodec>>& GetCodecs() const { return m_Codecs; }
-        std::vector<std::unique_ptr<IComponentCodec>>& GetMutableCodecs() {
-            while (m_Owners.size() < m_Codecs.size()) {
-                m_Owners.push_back(0);
+        struct Registration {
+            Owner OwnerId;
+            // Destroy the codec before releasing its executable code.
+            std::shared_ptr<void> ModuleLease;
+            std::unique_ptr<IComponentCodec> Codec;
+            Registration(Owner owner, std::shared_ptr<void> lease, std::unique_ptr<IComponentCodec> codec)
+                : OwnerId(owner), ModuleLease(std::move(lease)), Codec(std::move(codec)) {}
+            Registration(Registration&&) noexcept = default;
+            Registration& operator=(Registration&& other) noexcept {
+                if (this != &other) {
+                    Codec.reset();
+                    ModuleLease = std::move(other.ModuleLease);
+                    Codec = std::move(other.Codec);
+                    OwnerId = other.OwnerId;
+                }
+                return *this;
             }
-            return m_Codecs;
-        }
+        };
 
         void CopyAllComponents(const ComponentCopyContext& ctx) const;
         bool HasCodec(std::string_view componentName) const;
@@ -81,11 +94,13 @@ namespace Axle {
 
     private:
         ComponentCodecRegistry();
+        ~ComponentCodecRegistry();
         void RegisterBuiltinCodecs();
 
         std::uint64_t m_NextOwner = 1;
-        std::vector<std::unique_ptr<IComponentCodec>> m_Codecs;
-        std::vector<Owner> m_Owners;
+        std::vector<std::shared_ptr<Registration>> m_Codecs;
+        std::unordered_set<Owner> m_ActiveOwners;
+        bool m_ShuttingDown = false;
     };
 
     void RegisterRuntimeComponentCodecs();

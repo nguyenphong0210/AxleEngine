@@ -362,12 +362,16 @@ set_tests_properties(PluginUnitTests PluginHarnessFailure PROPERTIES TIMEOUT 30)
 # this slice intentionally does not claim PLG-04/05 host/build integration.
 add_library(AxlePluginRuntimeGood SHARED plugin/PluginRuntimeFixture.cpp)
 add_library(AxlePluginRuntimeFail SHARED plugin/PluginRuntimeFixture.cpp)
+foreach(fixtureTarget AxlePluginRuntimeGood AxlePluginRuntimeFail)
+    target_include_directories(${fixtureTarget} PRIVATE "${CMAKE_SOURCE_DIR}/Engine/PluginRuntime/include")
+    target_compile_definitions(${fixtureTarget} PRIVATE AXLE_PLUGIN_BUILD_CONFIGURATION="$<CONFIG>")
+endforeach()
 target_compile_definitions(AxlePluginRuntimeFail PRIVATE AXLE_FIXTURE_FAIL)
 add_executable(AxlePluginRuntimeTests plugin/PluginRuntimeMain.cpp)
 target_link_libraries(AxlePluginRuntimeTests PRIVATE Axle::PluginRuntime)
 add_dependencies(AxlePluginRuntimeTests AxlePluginRuntimeGood AxlePluginRuntimeFail)
 add_test(NAME PluginRuntimeTests COMMAND AxlePluginRuntimeTests
-    $<TARGET_FILE:AxlePluginRuntimeGood> $<TARGET_FILE:AxlePluginRuntimeFail>)
+    $<TARGET_FILE:AxlePluginRuntimeGood> $<TARGET_FILE:AxlePluginRuntimeFail> "$<CONFIG>")
 set_tests_properties(PluginRuntimeTests PROPERTIES LABELS "plugin;cpu" TIMEOUT 30)
 
 # Dedicated Foundation, Application & Services Unit Test Target (AF-02)

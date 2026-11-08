@@ -5,30 +5,16 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <Axle/PluginABI.hpp>
+#include <Axle/PluginArtifact.hpp>
 
 namespace Axle::PluginRuntime {
 
-inline constexpr std::uint32_t kPluginAbiVersion = 1;
-
-// This is the only ABI exchanged with a native plugin. Keep it C-compatible:
-// no STL types, ownership, exceptions or compiler-generated type information.
-struct PluginHostApi {
-    std::uint32_t abi_version;
-    void* user_data;
-    bool (*register_resource)(void* user_data, const char* resource_id,
-                             void* resource, void (*destroy)(void*));
+struct LoadRequest {
+    std::filesystem::path ModulePath;
+    std::filesystem::path ReceiptPath;
+    Plugin::ArtifactIdentity Expected;
 };
-
-struct PluginDescriptor {
-    std::uint32_t struct_size;
-    std::uint32_t abi_version;
-    const char* module_id;
-    const char* build_config;
-};
-
-using GetDescriptorFn = const PluginDescriptor* (*)();
-using StartFn = bool (*)(const PluginHostApi*);
-using StopFn = void (*)();
 
 class RegistrationRegistry final {
 public:
@@ -61,9 +47,7 @@ public:
     NativePlugin& operator=(const NativePlugin&) = delete;
     ~NativePlugin();
 
-    bool Load(const std::filesystem::path& module_path, std::string expected_id,
-              std::string expected_config, RegistrationRegistry& registry,
-              std::string& diagnostic, const std::filesystem::path& receipt_path = {});
+    bool Load(const LoadRequest& request, RegistrationRegistry& registry, std::string& diagnostic);
     void Stop() noexcept;
     bool IsActive() const noexcept { return m_Active; }
     const std::string& ModuleId() const noexcept { return m_ModuleId; }
@@ -75,6 +59,8 @@ private:
     RegistrationRegistry::Owner m_Owner = 0;
     std::string m_ModuleId;
     bool m_Active = false;
+    PluginHostApi m_Host{};
+    std::string m_SdkFingerprint;
 };
 
 } // namespace Axle::PluginRuntime

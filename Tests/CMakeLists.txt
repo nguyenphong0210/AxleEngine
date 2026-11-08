@@ -182,6 +182,11 @@ target_link_libraries(AxlePluginFoundationTests PRIVATE Axle::Plugin Axle::Proje
 add_test(NAME PluginFoundationTests COMMAND $<TARGET_FILE:AxlePluginFoundationTests>)
 set_tests_properties(PluginFoundationTests PROPERTIES LABELS "plugin;cpu")
 
+add_executable(AxlePluginSelectionTests EXCLUDE_FROM_ALL src/Test_PluginSelectionModel.cpp)
+target_link_libraries(AxlePluginSelectionTests PRIVATE Axle::Plugin)
+add_test(NAME PluginSelectionTests COMMAND $<TARGET_FILE:AxlePluginSelectionTests>)
+set_tests_properties(PluginSelectionTests PROPERTIES LABELS "plugin;cpu")
+
 # Explicit baseline toolchain; failure probes must validate their exact cause.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 

@@ -16,12 +16,14 @@ int main() {
     int failures = 0;
     const auto check = [&](bool value) { if (!value) ++failures; };
     auto scene = std::make_shared<Axle::SceneData>();
-    const std::string document = "Scene: Test\nEntities:\n  - Entity: 10\n    TransformComponent:\n      Translation: [ 1 , 2 , 3 ]\n    PhysicsPlugin:\n      Nested:\n        Value: 42\n";
+    const std::string document = "Scene: Test\nEntities:\n  - Entity: 10\n    TransformComponent:\n      Translation: [ 1 , 2 , 3 ]\n    PhysicsPlugin:\n      Nested:\n        Value: 42\n        - Entity: 123\n";
     check(Axle::SceneDataDocument::Deserialize(document, *scene));
     auto entity = scene->GetEntityByUUID(Axle::UUID(10));
     check(entity.GetWorldTransform()[3].x == 1.0f);
     check(entity.GetScene() == nullptr);
     check(Axle::SceneDataDocument::Serialize(*scene).find("        Value: 42") != std::string::npos);
+    check(scene->GetRegistry().view<Axle::IDComponent>().size() == 1);
+    check(Axle::SceneDataDocument::Serialize(*scene).find("        - Entity: 123") != std::string::npos);
     auto copy = Axle::SceneData::Copy(scene);
     check(copy->GetPassiveSections(copy->GetEntityByUUID(Axle::UUID(10)))->size() == 1);
     Axle::SceneCommandBuffer oldCommands;

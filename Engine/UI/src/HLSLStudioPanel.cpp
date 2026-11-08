@@ -3,6 +3,8 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/CustomShaderInterface.hpp>
+#include <Axle/PlatformUtils.hpp>
+#include <Axle/Path.hpp>
 #include <imgui.h>
 #include <fstream>
 #include <sstream>
@@ -89,7 +91,7 @@ namespace Axle {
     HLSLStudioPanel::HLSLStudioPanel() {
         m_SourceCode = GetDefaultPBRTemplate("CustomForwardPBR");
         m_SavedSourceCode = m_SourceCode;
-        m_CurrentFilePath = "assets/shaders/CustomForwardPBR.hlsl";
+        m_CurrentFilePath.clear();
     }
 
     HLSLStudioPanel::~HLSLStudioPanel() = default;
@@ -98,12 +100,12 @@ namespace Axle {
         std::ifstream file(filepath);
         if (!file.is_open()) {
             // Try resolving via FileSystem if relative
-            std::filesystem::path resolved = FileSystem::ResolveAssetPath(filepath.string());
+            std::filesystem::path resolved = FileSystem::ResolveAssetPath(PathToUtf8(filepath));
             file.open(resolved);
             if (file.is_open()) {
                 m_CurrentFilePath = resolved;
             } else {
-                AXLE_ERROR("HLSLStudioPanel: Failed to open HLSL file '{}'", filepath.string());
+                AXLE_ERROR("HLSLStudioPanel: Failed to open HLSL file '{}'", PathToUtf8(filepath));
                 return;
             }
         } else {
@@ -121,28 +123,23 @@ namespace Axle {
         m_CompileMessage.clear();
         m_WarningMessage.clear();
 
-        AXLE_INFO("HLSLStudioPanel: Successfully loaded shader '{}'", m_CurrentFilePath.string());
+        AXLE_INFO("HLSLStudioPanel: Successfully loaded shader '{}'", PathToUtf8(m_CurrentFilePath));
     }
 
     bool HLSLStudioPanel::SaveFile() {
-        if (m_CurrentFilePath.empty()) {
-            m_CurrentFilePath = "assets/shaders/CustomForwardPBR.hlsl";
-        }
-
-        std::filesystem::create_directories(m_CurrentFilePath.parent_path());
-        std::ofstream file(m_CurrentFilePath, std::ios::trunc);
-        if (!file.is_open()) {
-            AXLE_ERROR("HLSLStudioPanel: Failed to save file to '{}'", m_CurrentFilePath.string());
-            return false;
-        }
-
-        file << m_SourceCode;
-        file.close();
-
-        m_SavedSourceCode = m_SourceCode;
-        m_IsDirty = false;
-        AXLE_INFO("HLSLStudioPanel: Saved '{}' ({} bytes)", m_CurrentFilePath.string(), m_SourceCode.size());
-        return true;
+        try {
+            auto target = m_CurrentFilePath;
+            if (target.empty()) {
+                const auto root = PathToUtf8(FileSystem::GetAssetDirectory());
+                const auto selected = FileDialogs::SaveFile("HLSL (*.hlsl)\0*.hlsl\0", root.c_str(), "hlsl");
+                if (selected.empty()) return false;
+                target = PathFromUtf8(selected);
+            }
+            if (target.has_parent_path()) std::filesystem::create_directories(target.parent_path());
+            std::string error;
+            if (!FileSystem::WriteTextFileAtomically(target, m_SourceCode, &error)) { m_CompileMessage = error; return false; }
+            m_CurrentFilePath = target; m_SavedSourceCode = m_SourceCode; m_IsDirty = false; return true;
+        } catch (const std::exception& error) { m_CompileMessage = error.what(); return false; }
     }
 
     bool HLSLStudioPanel::CompileShader() {
@@ -162,7 +159,7 @@ namespace Axle {
             "assets/shaders"
         };
         if (!m_CurrentFilePath.empty()) {
-            includeDirs.push_back(m_CurrentFilePath.parent_path().string());
+            includeDirs.push_back(PathToUtf8(m_CurrentFilePath.parent_path()));
         }
 
         bool overallSuccess = true;
@@ -172,7 +169,7 @@ namespace Axle {
         auto compileStage = [&](RHI::RHIShaderStage stage, const std::string& entryPoint, const std::string& stageName) -> bool {
             RHI::RHIShaderCompileDesc desc;
             desc.Source = m_SourceCode;
-            desc.SourcePath = m_CurrentFilePath.empty() ? "ShaderStudio.hlsl" : m_CurrentFilePath.string();
+            desc.SourcePath = m_CurrentFilePath.empty() ? "ShaderStudio.hlsl" : PathToUtf8(m_CurrentFilePath);
             desc.EntryPoint = entryPoint;
             desc.Stage = stage;
             desc.ShaderModel = "6_0";
@@ -219,12 +216,12 @@ namespace Axle {
             m_CompileMessage = oss.str();
             m_WarningMessage = accumulatedWarnings;
             AXLE_INFO("HLSLStudioPanel: Live compilation passed for '{}' in {:.1f} ms",
-                      m_CurrentFilePath.filename().string(), m_LastCompileTimeMs);
+                      PathToUtf8(m_CurrentFilePath.filename()), m_LastCompileTimeMs);
         } else {
             m_CompileMessage = accumulatedErrors;
             m_WarningMessage = accumulatedWarnings;
             AXLE_ERROR("HLSLStudioPanel: Compilation failed for '{}':\n{}",
-                       m_CurrentFilePath.filename().string(), m_CompileMessage);
+                       PathToUtf8(m_CurrentFilePath.filename()), m_CompileMessage);
         }
 
         return overallSuccess;
@@ -238,7 +235,7 @@ namespace Axle {
     void HLSLStudioPanel::CreateNewShaderTemplate(const std::string& shaderName) {
         m_SourceCode = GetDefaultPBRTemplate(shaderName);
         m_SavedSourceCode.clear();
-        m_CurrentFilePath = "assets/shaders/" + shaderName + ".hlsl";
+        m_CurrentFilePath.clear();
         m_IsDirty = true;
         m_HasCompiled = false;
         m_CompileMessage.clear();
@@ -255,7 +252,7 @@ namespace Axle {
         }
 
         std::string title = "HLSL Shader Studio: " +
-            (m_CurrentFilePath.empty() ? "Untitled" : m_CurrentFilePath.filename().string()) +
+            (m_CurrentFilePath.empty() ? "Untitled" : PathToUtf8(m_CurrentFilePath.filename())) +
             (m_IsDirty ? " *###HLSLStudioPanel" : "###HLSLStudioPanel");
 
         if (m_RequestFocus) {

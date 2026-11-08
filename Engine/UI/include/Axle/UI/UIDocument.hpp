@@ -32,6 +32,8 @@ namespace Axle {
     public:
         UIDocument();
         ~UIDocument() = default;
+        UIDocument(UIDocument&&) noexcept = default;
+        UIDocument& operator=(UIDocument&&) noexcept = default;
 
         template<typename T, typename... Args>
         T* CreateNode(UINode* parent, Args&&... args) {

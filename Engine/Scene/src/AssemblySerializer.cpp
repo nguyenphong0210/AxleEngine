@@ -1,3 +1,4 @@
+#include <Axle/Path.hpp>
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/AssemblySerializer.hpp>
 #include <Axle/MaterialComponentCodec.hpp>
@@ -93,7 +94,7 @@ namespace Axle {
 
         u64 rootUUID = rootEntity.GetComponent<IDComponent>().ID;
         std::string rootName = rootEntity.HasComponent<TagComponent>() ?
-                               rootEntity.GetComponent<TagComponent>().Tag : filepath.stem().string();
+                               rootEntity.GetComponent<TagComponent>().Tag : PathToUtf8(filepath.stem());
 
         fout << std::fixed << std::setprecision(6);
         fout << "# Axle Unified Asset File\n";
@@ -344,7 +345,7 @@ namespace Axle {
 
         if (!FileSystem::WriteIdentifiedTextFile(filepath, fout.str())) return false;
         AXLE_INFO("AssemblySerializer: Successfully exported Assembly '{0}' ({1} entities) to '{2}'",
-                  rootName, hierarchy.size(), filepath.string());
+                  rootName, hierarchy.size(), PathToUtf8(filepath));
         return true;
     }
 
@@ -839,7 +840,7 @@ namespace Axle {
 
         std::string content = FileSystem::ReadTextFile(filepath);
         if (content.empty()) {
-            AXLE_ERROR("AssemblySerializer: Could not read assembly file '{0}'", filepath.string());
+            AXLE_ERROR("AssemblySerializer: Could not read assembly file '{0}'", PathToUtf8(filepath));
             return {};
         }
 
@@ -848,7 +849,7 @@ namespace Axle {
         auto rawEntities = ParseAssemblyEntities(fin, rootOldUUID);
 
         if (!ValidateAssemblyEntities(rawEntities, rootOldUUID)) {
-            AXLE_ERROR("AssemblySerializer: Invalid entity identities or hierarchy in '{0}'", filepath.string());
+            AXLE_ERROR("AssemblySerializer: Invalid entity identities or hierarchy in '{0}'", PathToUtf8(filepath));
             return {};
         }
 
@@ -936,7 +937,7 @@ namespace Axle {
                 if (!mat.AlbedoPath.empty() && mat.UseAlbedoMap) {
                     auto resolved = FileSystem::ResolveAssetPath(mat.AlbedoPath);
                     if (FileSystem::Exists(resolved)) {
-                        mat.AlbedoMap = Texture2D::Create(resolved.string());
+                        mat.AlbedoMap = Texture2D::Create(PathToUtf8(resolved));
                     }
                 }
             }
@@ -987,7 +988,7 @@ namespace Axle {
         for (const auto& [id, entity] : oldToEntity) {
             auto& registry = targetScene->GetRegistry();
             ResolveAnimationBinding(registry.try_get<SkeletalMeshComponent>((entt::entity)entity),
-                registry.try_get<AnimatorComponent>((entt::entity)entity), filepath.generic_string());
+                registry.try_get<AnimatorComponent>((entt::entity)entity), PathToUtf8(filepath));
         }
 
         // Restore custom and passive plugin components
@@ -1128,7 +1129,7 @@ namespace Axle {
         Entity rootEntity = oldToEntity[rawEntities[rootIndex].OldUUID];
 
         // Attach AssemblyComponent on Root Entity for source tracking
-        rootEntity.AddComponent<AssemblyComponent>(filepath.string(), rawEntities[rootIndex].OldUUID);
+        rootEntity.AddComponent<AssemblyComponent>(PathToUtf8(filepath), rawEntities[rootIndex].OldUUID);
         if (!transaction.Commit()) { targetScene->StopAfterExtensionFailure(); return {}; }
         rollback.Committed = true;
 
@@ -1185,7 +1186,7 @@ namespace Axle {
         fout << "      Children:\n";
 
         fout.close();
-        AXLE_INFO("AssemblySerializer: Created new Assembly '{0}' at '{1}'", name, filepath.string());
+        AXLE_INFO("AssemblySerializer: Created new Assembly '{0}' at '{1}'", name, PathToUtf8(filepath));
         return true;
     }
 
@@ -1203,7 +1204,7 @@ namespace Axle {
 
         if (!ValidateAssemblyEntities(rawEntities, rootUUID)) return data;
 
-        data.Name = filepath.stem().string();
+        data.Name = PathToUtf8(filepath.stem());
         data.IsValid = true;
 
         // Build node map
@@ -1390,7 +1391,7 @@ namespace Axle {
         WriteAssemblyNode(fout, data.RootNode, (u64)rootUUID, 0);
 
         if (!fout.good() || !FileSystem::WriteIdentifiedTextFile(filepath, fout.str())) return false;
-        AXLE_INFO("AssemblySerializer: Saved Assembly data '{0}' to '{1}'", data.Name, filepath.string());
+        AXLE_INFO("AssemblySerializer: Saved Assembly data '{0}' to '{1}'", data.Name, PathToUtf8(filepath));
         return true;
     }
 

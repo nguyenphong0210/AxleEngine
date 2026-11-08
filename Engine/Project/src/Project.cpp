@@ -1,3 +1,4 @@
+#include <Axle/Path.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
 #include <Axle/FileSystem.hpp>
@@ -35,7 +36,7 @@ namespace Axle {
         if (project) {
             FileSystem::SetAssetDirectory(project->GetAssetDirectory());
             AXLE_INFO("Project: Activated project '{0}' (Asset root: '{1}')", 
-                project->GetConfig().Name, project->GetAssetDirectory().string());
+                project->GetConfig().Name, PathToUtf8(project->GetAssetDirectory()));
         }
     }
 
@@ -76,16 +77,26 @@ namespace Axle {
         const auto oldAssets = GetAssetDirectory();
         const auto newAssets = s_ActiveProject->m_Config.AssetDirectory.is_absolute()
             ? oldAssets : target.parent_path() / s_ActiveProject->m_Config.AssetDirectory;
+        const auto oldPlugins = s_ActiveProject->m_ProjectDirectory / "Plugins";
+        const auto newPlugins = target.parent_path() / "Plugins";
+        if (oldPlugins.lexically_normal() != newPlugins.lexically_normal() && std::filesystem::exists(oldPlugins)) {
+            const auto relativeDestination = std::filesystem::weakly_canonical(newPlugins)
+                .lexically_relative(std::filesystem::weakly_canonical(oldPlugins));
+            if ((!relativeDestination.empty() && *relativeDestination.begin() != "..") ||
+                (std::filesystem::exists(newPlugins) && !std::filesystem::is_empty(newPlugins))) {
+                AXLE_WARN("Project: Save As requires an empty plugin destination outside its source tree"); return false;
+            }
+        }
         std::error_code error;
         if (oldAssets.lexically_normal() != newAssets.lexically_normal() && std::filesystem::exists(oldAssets)) {
             const auto relativeDestination = std::filesystem::weakly_canonical(newAssets)
                 .lexically_relative(std::filesystem::weakly_canonical(oldAssets));
             if (!relativeDestination.empty() && *relativeDestination.begin() != "..") {
-                AXLE_WARN("Project: Save As cannot copy assets into their own subtree: {0}", newAssets.string());
+                AXLE_WARN("Project: Save As cannot copy assets into their own subtree: {0}", PathToUtf8(newAssets));
                 return false;
             }
             if (std::filesystem::exists(newAssets) && !std::filesystem::is_empty(newAssets)) {
-                AXLE_WARN("Project: Save As requires an empty destination asset directory: {0}", newAssets.string());
+                AXLE_WARN("Project: Save As requires an empty destination asset directory: {0}", PathToUtf8(newAssets));
                 return false;
             }
             std::filesystem::create_directories(newAssets.parent_path(), error);
@@ -94,6 +105,11 @@ namespace Axle {
                 AXLE_ERROR("Project: Failed to preserve assets on Save As: {0}", error.message());
                 return false;
             }
+        }
+        if (oldPlugins.lexically_normal() != newPlugins.lexically_normal() && std::filesystem::exists(oldPlugins)) {
+            std::filesystem::create_directories(newPlugins.parent_path(), error);
+            std::filesystem::copy(oldPlugins, newPlugins, std::filesystem::copy_options::recursive, error);
+            if (error) { AXLE_ERROR("Project: Failed to preserve project plugins on Save As: {0}", error.message()); return false; }
         }
         ProjectSerializer serializer(s_ActiveProject);
         if (serializer.Serialize(target)) {

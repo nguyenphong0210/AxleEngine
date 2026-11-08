@@ -29,6 +29,7 @@ namespace Axle {
         bool SaveAs(const std::string& newPath, std::vector<VFXDiagnostic>& diagnostics);
 
         const std::string& GetFilePath() const { return m_FilePath; }
+        void RelocateCleanDocument(const std::string& path) { if (!m_IsDirty) m_FilePath = path; }
         void DiscardChanges();
         bool IsDirty() const { return m_IsDirty; }
         uint64_t GetCurrentRevision() const { return m_CurrentRevision; }

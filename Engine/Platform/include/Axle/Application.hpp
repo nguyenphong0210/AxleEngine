@@ -44,6 +44,7 @@ namespace Axle {
 
         // Run the main game loop
         bool Run(uint32_t frameLimit = 0);
+        uint64_t GetCompletedFrameCount() const { return m_CompletedFrames; }
 
         // Request graceful shutdown
         void Close();
@@ -86,6 +87,7 @@ namespace Axle {
         std::vector<std::shared_ptr<IApplicationService>> m_Services;
 
         bool m_Running = true;
+        uint64_t m_CompletedFrames = 0;
         f32 m_LastFrameTime = 0.0f;
 
         static Application* s_Instance;

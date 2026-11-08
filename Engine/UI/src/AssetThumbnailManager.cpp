@@ -1,3 +1,4 @@
+#include <Axle/Path.hpp>
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/Application.hpp>
@@ -48,7 +49,7 @@ namespace Axle {
     }
 
     void AssetThumbnailManager::InvalidateThumbnail(const std::filesystem::path& path) {
-        std::string key = path.lexically_normal().string();
+        std::string key = PathToUtf8(path.lexically_normal());
         m_GuiThumbnails.erase(key);
         std::vector<uint64_t> handles;
         std::vector<std::shared_ptr<RHI::RHITexture>> textures;
@@ -134,7 +135,7 @@ namespace Axle {
     }
 
     glm::vec2 AssetThumbnailManager::GetThumbnailDimensions(const std::filesystem::path& path) const {
-        std::string key = path.lexically_normal().string();
+        std::string key = PathToUtf8(path.lexically_normal());
         auto it = m_ThumbnailDimensions.find(key);
         if (it != m_ThumbnailDimensions.end()) {
             return it->second;
@@ -143,7 +144,7 @@ namespace Axle {
     }
 
     const AssetCachedMeta* AssetThumbnailManager::GetCachedMeta(const std::filesystem::path& path) const {
-        std::string key = path.lexically_normal().string();
+        std::string key = PathToUtf8(path.lexically_normal());
         auto it = m_MetaCache.find(key);
         if (it != m_MetaCache.end()) {
             return &it->second;
@@ -161,7 +162,7 @@ namespace Axle {
             revision^=value+0x9e3779b97f4a7c15ull+(revision<<6)+(revision>>2);
         };
         append(path);
-        if(auto dependencies=m_SourceDependencies.find(path.lexically_normal().string());dependencies!=m_SourceDependencies.end())
+        if(auto dependencies=m_SourceDependencies.find(PathToUtf8(path.lexically_normal()));dependencies!=m_SourceDependencies.end())
             for(const auto& source:dependencies->second)append(source);
         return revision;
     }
@@ -169,19 +170,19 @@ namespace Axle {
     uint64_t AssetThumbnailManager::GetOrCreateThumbnail(const std::filesystem::path& path) {
 
 
-        std::string key = path.lexically_normal().string();
+        std::string key = PathToUtf8(path.lexically_normal());
         if (!m_ThumbnailCache.contains(key)) while (m_ThumbnailCache.size()>=MaxCacheEntries)
             InvalidateThumbnail(m_ThumbnailCache.begin()->first);
-        auto ext = path.extension().string();
+        auto ext = PathToUtf8(path.extension());
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
         // Resolve source image path if this is a Texture descriptor or raw media
         std::filesystem::path imagePath;
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
             imagePath = FileSystem::ResolveAssetPath(path);
-        } else if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::Texture) {
+        } else if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(PathToUtf8(path)) == AssetKind::Texture) {
             TextureDescriptor desc;
-            if (TextureDescriptor::Load(path.string(), desc) && !desc.Source.empty()) {
+            if (TextureDescriptor::Load(PathToUtf8(path), desc) && !desc.Source.empty()) {
                 imagePath = FileSystem::ResolveAssetPath(desc.Source);
             }
         }
@@ -226,7 +227,7 @@ namespace Axle {
         }
 
         // Check if path is supported 3D format
-        const auto kind=ext==".axleasset"?AssetDSL::PeekAssetKindFromFile(path.string()):AssetKind::Unknown;
+        const auto kind=ext==".axleasset"?AssetDSL::PeekAssetKindFromFile(PathToUtf8(path)):AssetKind::Unknown;
         bool isSupported = ((ext == ".axleasset" && (kind==AssetKind::Material||kind==AssetKind::Mesh)) || ext == ".axlemesh" || ext == ".axle" || ext == ".axlebin" ||
                             ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx");
         if (!isSupported) {
@@ -249,7 +250,7 @@ namespace Axle {
             auto path = m_PendingQueue.front();
             m_PendingQueue.erase(m_PendingQueue.begin());
 
-            std::string key = path.lexically_normal().string();
+            std::string key = PathToUtf8(path.lexically_normal());
             if (m_ThumbnailCache.find(key) != m_ThumbnailCache.end()) {
                 continue;
             }
@@ -270,11 +271,11 @@ namespace Axle {
 
     bool AssetThumbnailManager::RenderThumbnail(const std::filesystem::path& path, uint64_t& outTexHandle, AssetCachedMeta& outMeta) {
         if (!std::filesystem::exists(path)) return false;
-        auto ext = path.extension().string();
+        auto ext = PathToUtf8(path.extension());
         std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
         RenderWorld world;
         glm::vec3 minimum(1e9f), maximum(-1e9f);
-        outMeta.Name = path.stem().string();
+        outMeta.Name = PathToUtf8(path.stem());
         auto bounds = [&](const glm::mat4& matrix, const auto& vertices, size_t indices) {
             for (const auto& vertex : vertices) {
                 const auto position = glm::vec3(matrix * glm::vec4(vertex, 1));
@@ -282,7 +283,7 @@ namespace Axle {
             }
             outMeta.VertexCount += vertices.size(); outMeta.TriangleCount += indices / 3;
         };
-        if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string())==AssetKind::Material) {
+        if (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(PathToUtf8(path))==AssetKind::Material) {
             MaterialComponent material;
             if (!SceneHierarchyPanel::LoadMaterialAsset(path, material)) return false;
             Scene scene; auto sphere = scene.CreateEntity("Material thumbnail");
@@ -342,7 +343,7 @@ namespace Axle {
                 dependencies.insert(dependencies.end(),includes.begin(),includes.end());
             }
         }
-        m_SourceDependencies[path.lexically_normal().string()]=std::move(dependencies);
+        m_SourceDependencies[PathToUtf8(path.lexically_normal())]=std::move(dependencies);
         outMeta.Center = (minimum + maximum) * 0.5f; outMeta.BoundingSize = maximum - minimum;
         outMeta.MaxDimension = std::max({outMeta.BoundingSize.x, outMeta.BoundingSize.y, outMeta.BoundingSize.z, 0.05f});
         outMeta.SubPartCount = world.Meshes.size(); outMeta.IsPackage = world.Meshes.size() > 1;
@@ -353,12 +354,12 @@ namespace Axle {
         world.AdditionalDirectionalLights.push_back(fill);
         ViewRequest request; request.Kind = RenderViewKind::Thumbnail; request.Width = request.Height = m_ThumbnailResolution;
         request.Settings.EnableShadows = request.Settings.EnableSkybox = false;
-        request.Settings.ClearColor = {0.11f,0.13f,0.17f,1}; request.Name = "Thumbnail " + path.filename().string();
+        request.Settings.ClearColor = {0.11f,0.13f,0.17f,1}; request.Name = "Thumbnail " + PathToUtf8(path.filename());
         const float distance = outMeta.MaxDimension * 1.85f;
         const glm::vec3 position = glm::normalize(glm::vec3(0.6f,0.45f,0.8f)) * distance;
         request.Camera = PerspectiveCamera(45,1,0.01f,distance*6);
         request.Camera.SetViewMatrix(glm::lookAt(position,glm::vec3(0),glm::vec3(0,1,0)),position);
-        const auto cacheKey = path.lexically_normal().string();
+        const auto cacheKey = PathToUtf8(path.lexically_normal());
         if (RHI::RHIDevice::Get().IsNativeReady()) {
             auto targets = std::make_shared<RHI::RHIViewTargets>();
             RHI::RHIViewTargetDesc desc; desc.Width = desc.Height = m_ThumbnailResolution;

@@ -1,3 +1,6 @@
+#include <Axle/Path.hpp>
+#include <cwctype>
+#include <map>
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/ShaderPropertyPersistence.hpp>
 #include <Axle/SceneSerializer.hpp>
@@ -61,8 +64,48 @@ namespace Axle {
     }
 
     bool SceneSerializer::Serialize(const std::filesystem::path& filepath) {
+        std::string error;
+        if (!SaveCanvasDocuments(error)) { AXLE_ERROR("SceneSerializer: {0}", error); return false; }
         const auto serialized = SerializeToString();
         return !serialized.empty() && FileSystem::WriteIdentifiedTextFile(filepath, serialized);
+    }
+    std::filesystem::path SceneSerializer::CanvasDocumentPath(Entity entity) {
+        const auto& canvas = entity.GetComponent<UICanvasComponent>();
+        if (canvas.Document && !canvas.Document->GetFilePath().empty())
+            return FileSystem::ResolveAssetPath(PathFromUtf8(canvas.Document->GetFilePath()));
+        if (!canvas.AssetPath.empty()) return FileSystem::ResolveAssetPath(PathFromUtf8(canvas.AssetPath));
+        return FileSystem::GetAssetDirectory() / "ui" / (std::to_string(static_cast<std::uint64_t>(entity.GetUUID())) + ".axleui");
+    }
+    bool SceneSerializer::SaveCanvasDocuments(std::string& error) {
+        if (!m_Scene) return false;
+        try {
+            struct Pending { Entity EntityValue; std::shared_ptr<UIDocument> Document; std::filesystem::path Path; std::string Reference; bool Write; };
+            std::vector<Pending> pending;
+            std::map<std::wstring, std::size_t> targets;
+            for (auto id : m_Scene->GetRegistry().view<UICanvasComponent>()) {
+                Entity entity{id, m_Scene}; const auto& canvas = entity.GetComponent<UICanvasComponent>();
+                if (!canvas.Document) continue;
+                auto path = CanvasDocumentPath(entity); std::string reference;
+                if (!FileSystem::MakeAssetReference(path, reference)) { error = "UI document must be inside the active asset root"; return false; }
+                auto key = std::filesystem::weakly_canonical(path).wstring();
+#ifdef _WIN32
+                std::transform(key.begin(), key.end(), key.begin(), [](wchar_t c) { return static_cast<wchar_t>(std::towlower(c)); });
+#endif
+                const bool write = canvas.Document->IsDirty() || !std::filesystem::exists(path);
+                const auto found = targets.find(key);
+                if (found != targets.end()) {
+                    const auto& previous = pending[found->second];
+                    if (previous.Document != canvas.Document && previous.Write && write) { error = "Two edited UI documents target the same file"; return false; }
+                    if (write && !previous.Write) found->second = pending.size();
+                } else targets.emplace(std::move(key), pending.size());
+                pending.push_back({entity, canvas.Document, std::move(path), std::move(reference), write});
+            }
+            for (auto& item : pending) {
+                if (item.Write && !item.Document->SaveToFile(PathToUtf8(item.Path))) { error = "Could not save UI document: " + PathToUtf8(item.Path); return false; }
+                item.EntityValue.GetComponent<UICanvasComponent>().AssetPath = item.Reference;
+            }
+            return true;
+        } catch (const std::exception& exception) { error = exception.what(); return false; }
     }
 
     std::string SceneSerializer::SerializeToString() {
@@ -77,12 +120,12 @@ namespace Axle {
 
         auto& registry = m_Scene->GetRegistry();
 
-        // Ensure every entity has an IDComponent
+        // Capturing a document for dirty checks must not mutate authored state.
         auto tagView = registry.view<TagComponent>();
         for (auto entityID : tagView) {
             Entity entity{ entityID, m_Scene };
             if (!entity.HasComponent<IDComponent>()) {
-                entity.AddComponent<IDComponent>(UUID());
+                return {};
             }
         }
 
@@ -462,21 +505,6 @@ namespace Axle {
             // UICanvasComponent
             if (entity.HasComponent<UICanvasComponent>()) {
                 auto& uic = entity.GetComponent<UICanvasComponent>();
-                if (uic.Document && uic.AssetPath.empty()) {
-                    uic.AssetPath = "assets/ui/" + entity.GetName() + ".axleui";
-                }
-                if (uic.Document && !uic.AssetPath.empty()) {
-                    std::filesystem::path fullDocPath = uic.AssetPath;
-                    if (!std::filesystem::exists(fullDocPath)) {
-                        fullDocPath = FileSystem::GetAssetDirectory() / uic.AssetPath;
-                    }
-                    if (uic.Document->IsDirty() || !std::filesystem::exists(fullDocPath)) {
-                        if (fullDocPath.has_parent_path() && !std::filesystem::exists(fullDocPath.parent_path())) {
-                            std::filesystem::create_directories(fullDocPath.parent_path());
-                        }
-                        uic.Document->SaveToFile(fullDocPath.string());
-                    }
-                }
                 ss << "    UICanvasComponent:\n";
                 ss << "      AssetPath: " << uic.AssetPath << "\n";
                 if (uic.DataSourceEntityID != 0) {
@@ -510,15 +538,15 @@ namespace Axle {
     bool SceneSerializer::Deserialize(const std::filesystem::path& filepath) {
         std::string content = FileSystem::ReadTextFile(filepath);
         if (content.empty()) {
-            AXLE_ERROR("SceneSerializer: Could not read scene file: '{0}'", filepath.string());
+            AXLE_ERROR("SceneSerializer: Could not read scene file: '{0}'", PathToUtf8(filepath));
             return false;
         }
 
-        m_ResourceOwnerPath = filepath.generic_string();
+        m_ResourceOwnerPath = PathToUtf8(filepath);
         bool success = DeserializeFromString(content);
         m_ResourceOwnerPath.clear();
         if (success) {
-            AXLE_INFO("SceneSerializer: Successfully loaded scene from '{0}'", filepath.string());
+            AXLE_INFO("SceneSerializer: Successfully loaded scene from '{0}'", PathToUtf8(filepath));
         }
         return success;
     }
@@ -1399,13 +1427,10 @@ namespace Axle {
                         if (trimmed.rfind("AssetPath:", 0) == 0) {
                             uic.AssetPath = Trim(trimmed.substr(10));
                             if (!uic.AssetPath.empty()) {
-                                std::filesystem::path fullPath = uic.AssetPath;
-                                if (!std::filesystem::exists(fullPath)) {
-                                    fullPath = FileSystem::GetAssetDirectory() / uic.AssetPath;
-                                }
+                                auto fullPath = FileSystem::ResolveAssetPath(PathFromUtf8(uic.AssetPath));
                                 if (std::filesystem::exists(fullPath)) {
                                     uic.Document = std::make_shared<UIDocument>();
-                                    UIParser::ParseFile(fullPath.string(), *uic.Document);
+                                    UIParser::ParseFile(PathToUtf8(fullPath), *uic.Document);
                                 }
                             }
                         } else if (trimmed.rfind("DataSourceEntityID:", 0) == 0) {

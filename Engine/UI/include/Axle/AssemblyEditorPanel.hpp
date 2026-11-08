@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <functional>
 
 namespace Axle {
 
@@ -21,6 +22,7 @@ namespace Axle {
 
         void SetAssembly(const std::filesystem::path& filepath);
         const std::filesystem::path& GetCurrentAsset() const { return m_CurrentAssetPath; }
+        void RelocateCleanDocument(const std::filesystem::path& path) { if (!m_IsDirty) { m_CurrentAssetPath = path; m_AssemblyData.SourcePath = path; } }
 
         void SetSceneContext(Scene* scene, PhysicsScene* physicsScene, const SceneSerializerContext* serializerContext);
 
@@ -33,6 +35,11 @@ namespace Axle {
         Scene* GetPreviewScene() const { return m_PreviewScene.get(); }
         const AssemblyData& GetAssemblyData() const { return m_AssemblyData; }
         void SyncPreviewScene();
+        bool IsDirty() const { return m_IsDirty; }
+        bool SaveDocument();
+        void DiscardChanges();
+        void ShutdownPreview();
+        void SetComponentDrawers(std::function<bool(Entity)> draw, std::function<bool(Entity)> add) { m_ComponentDrawer = std::move(draw); m_AddComponentDrawer = std::move(add); }
         void InitRHI(ImGuiLayer* layer);
         RHIViewportDescriptor* GetRHIViewport() { return &m_RHIViewport; }
         const std::shared_ptr<Framebuffer>& GetGLFramebuffer() const { return m_Framebuffer; }
@@ -40,9 +47,10 @@ namespace Axle {
 
     private:
         void RenderPreview(float width, float height);
-        void DrawNodeHierarchy(AssemblyNode& node, int index, int& selectedId, AssemblyNode*& selectedNode);
+        void DrawNodeHierarchy(AssemblyNode& node, std::uint64_t index, std::uint64_t& selectedId, AssemblyNode*& selectedNode);
         void DrawNodeInspector(AssemblyNode* node);
-        void SaveAssembly();
+        bool SaveAssembly();
+        bool CapturePreviewData();
         void InstantiateIntoScene();
 
     private:
@@ -53,9 +61,9 @@ namespace Axle {
         bool m_IsDirty = false;
 
         // Selection in hierarchy
-        int m_SelectedNodeIndex = 0;
+        std::uint64_t m_SelectedNodeIndex = 0;
         AssemblyNode* m_SelectedNode = nullptr;
-        std::unordered_map<int, uint32_t> m_NodeIndexToEntityID;
+        std::unordered_map<std::uint64_t, uint32_t> m_NodeIndexToEntityID;
 
         // Scene context for instantiating & asset loading
         Scene* m_Scene = nullptr;
@@ -91,6 +99,7 @@ namespace Axle {
         std::string m_StatusMessage;
         float m_StatusTimer = 0.0f;
         std::string m_DiagnosticMessage;
+        std::function<bool(Entity)> m_ComponentDrawer, m_AddComponentDrawer;
     };
 
 }

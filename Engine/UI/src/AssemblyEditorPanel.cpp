@@ -6,6 +6,7 @@
 #include <Axle/MeshResourceResolver.hpp>
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/Path.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 
@@ -17,6 +18,7 @@
 #include <algorithm>
 #include <functional>
 #include <unordered_set>
+#include <sstream>
 
 namespace Axle {
     void AssemblyEditorPanel::InitRHI(ImGuiLayer* layer) {
@@ -39,8 +41,11 @@ namespace Axle {
     }
 
     void AssemblyEditorPanel::SetAssembly(const std::filesystem::path& filepath) {
+        auto candidate = AssemblySerializer::LoadAssemblyData(filepath, m_SerializerContext);
+        if (!candidate.IsValid) { m_StatusMessage = "Could not open Assembly: " + PathToUtf8(filepath); return; }
         m_CurrentAssetPath = filepath;
-        m_AssemblyData = AssemblySerializer::LoadAssemblyData(filepath, m_SerializerContext);
+        m_AssemblyData = std::move(candidate);
+        m_NodeIndexToEntityID.clear();
         m_HasAssembly = m_AssemblyData.IsValid;
         m_IsOpen = true;
         m_IsDirty = false;
@@ -53,26 +58,68 @@ namespace Axle {
         m_PanOffset = glm::vec3(0.0f);
 
         SyncPreviewScene();
+        if (m_HasAssembly) m_SelectedNodeIndex = m_AssemblyData.RootNode.AuthoredUUID;
     }
 
-    void AssemblyEditorPanel::SaveAssembly() {
-        if (!m_HasAssembly || m_CurrentAssetPath.empty()) return;
+    bool AssemblyEditorPanel::CapturePreviewData() {
+        if (!m_PreviewScene || !m_HasAssembly || m_NodeIndexToEntityID.empty()) return true;
+        std::function<bool(AssemblyNode&)> capture = [&](AssemblyNode& node) {
+            const auto found = m_NodeIndexToEntityID.find(node.AuthoredUUID);
+            if (found != m_NodeIndexToEntityID.end()) {
+                Entity entity{static_cast<entt::entity>(found->second), m_PreviewScene.get()};
+                if (!entity) return false;
+                std::vector<UnknownComponentSection> sections;
+                if (const auto* passive = m_PreviewScene->GetPassiveSections(entity)) sections = *passive;
+                std::ostringstream encoded;
+                if (!m_PreviewScene->SerializeExtensions(entity, encoded)) return false;
+                UnknownComponentSection current;
+                const auto flush = [&] {
+                    if (current.SectionName.empty()) return true;
+                    if (std::any_of(sections.begin(), sections.end(), [&](const auto& other) { return other.SectionName == current.SectionName; })) return false;
+                    sections.push_back(std::move(current)); current = {}; return true;
+                };
+                std::istringstream input(encoded.str()); std::string line;
+                while (std::getline(input, line)) {
+                    if (line.starts_with("    ") && !line.starts_with("     ") && line.ends_with(':')) {
+                        if (!flush()) return false;
+                        current.SectionName = line.substr(4, line.size() - 5);
+                    } else if (!current.SectionName.empty()) current.Lines.push_back(line);
+                }
+                if (!flush()) return false;
+                node.PassiveSections = std::move(sections); node.AuthoredUUID = entity.GetUUID();
+            }
+            for (auto& child : node.Children) if (!capture(child)) return false;
+            return true;
+        };
+        return capture(m_AssemblyData.RootNode);
+    }
+    bool AssemblyEditorPanel::SaveDocument() { return SaveAssembly(); }
+    void AssemblyEditorPanel::DiscardChanges() { if (!m_CurrentAssetPath.empty()) SetAssembly(m_CurrentAssetPath); }
+    void AssemblyEditorPanel::ShutdownPreview() {
+        m_ComponentDrawer = {}; m_AddComponentDrawer = {};
+        if (m_PreviewScene) m_PreviewScene->Clear();
+        m_PreviewScene.reset(); m_NodeIndexToEntityID.clear();
+    }
+    bool AssemblyEditorPanel::SaveAssembly() {
+        if (!m_HasAssembly || m_CurrentAssetPath.empty()) return false;
+        if (!CapturePreviewData()) { m_StatusMessage = "Could not save plugin data in the Assembly preview."; return false; }
 
         if (AssemblySerializer::SaveAssemblyData(m_CurrentAssetPath, m_AssemblyData)) {
             m_IsDirty = false;
             m_StatusMessage = "Saved Assembly successfully!";
             m_StatusTimer = 3.5f;
-            AXLE_INFO("Assembly Editor: Saved '{0}'", m_CurrentAssetPath.filename().string());
+            AXLE_INFO("Assembly Editor: Saved '{0}'", PathToUtf8(m_CurrentAssetPath.filename()));
+            return true;
         }
+        m_StatusMessage = "Could not save Assembly. Changes are still pending.";
+        return false;
     }
 
     void AssemblyEditorPanel::InstantiateIntoScene() {
         if (!m_HasAssembly || !m_Scene || m_CurrentAssetPath.empty()) return;
 
         // Auto-save before instantiating if modified
-        if (m_IsDirty) {
-            SaveAssembly();
-        }
+        if (m_IsDirty && !SaveAssembly()) return;
 
         m_Scene->InstantiateAssembly(m_CurrentAssetPath, m_PhysicsScene, glm::vec3(0.0f), m_SerializerContext);
         m_StatusMessage = "Added Assembly instance into active Scene!";
@@ -80,6 +127,7 @@ namespace Axle {
     }
 
     void AssemblyEditorPanel::SyncPreviewScene() {
+        if (!CapturePreviewData()) { m_StatusMessage = "Could not preserve plugin edits while rebuilding the preview."; return; }
         m_PreviewScene = std::make_unique<Scene>();
         m_NodeIndexToEntityID.clear();
 
@@ -120,7 +168,7 @@ namespace Axle {
 
         // 3. Recursive Assembly Hierarchy
         if (m_HasAssembly) {
-            std::function<void(AssemblyNode&, Entity, int)> buildNode = [&](AssemblyNode& node, Entity parent, int index) {
+            std::function<void(AssemblyNode&, Entity)> buildNode = [&](AssemblyNode& node, Entity parent) {
                 Entity ent = node.AuthoredUUID ? m_PreviewScene->CreateEntityWithUUID(UUID(node.AuthoredUUID), node.Tag.empty() ? "Part" : node.Tag)
                                               : m_PreviewScene->CreateEntity(node.Tag.empty() ? "Part" : node.Tag);
                 if (parent) {
@@ -157,15 +205,15 @@ namespace Axle {
                     rb = node.RigidBody;
                 }
 
-                m_NodeIndexToEntityID[index] = static_cast<uint32_t>((entt::entity)ent);
+                node.AuthoredUUID = ent.GetUUID();
+                m_NodeIndexToEntityID[node.AuthoredUUID] = static_cast<uint32_t>((entt::entity)ent);
 
                 for (size_t i = 0; i < node.Children.size(); ++i) {
-                    int childId = index * 100 + static_cast<int>(i) + 1;
-                    buildNode(node.Children[i], ent, childId);
+                    buildNode(node.Children[i], ent);
                 }
             };
 
-            buildNode(m_AssemblyData.RootNode, Entity{}, 0);
+            buildNode(m_AssemblyData.RootNode, Entity{});
         }
 
         m_PreviewScene->UpdateWorldTransforms();
@@ -258,7 +306,7 @@ namespace Axle {
         }
     }
 
-    void AssemblyEditorPanel::DrawNodeHierarchy(AssemblyNode& node, int index, int& selectedId, AssemblyNode*& selectedNode) {
+    void AssemblyEditorPanel::DrawNodeHierarchy(AssemblyNode& node, std::uint64_t index, std::uint64_t& selectedId, AssemblyNode*& selectedNode) {
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
         if (index == selectedId) {
             flags |= ImGuiTreeNodeFlags_Selected;
@@ -293,7 +341,7 @@ namespace Axle {
 
         if (opened && !node.Children.empty()) {
             for (size_t i = 0; i < node.Children.size(); ++i) {
-                int childId = index * 100 + static_cast<int>(i) + 1;
+                auto childId = node.Children[i].AuthoredUUID;
                 DrawNodeHierarchy(node.Children[i], childId, selectedId, selectedNode);
             }
             ImGui::TreePop();
@@ -556,7 +604,7 @@ namespace Axle {
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Assembly Parts");
             ImGui::Separator();
             if (m_HasAssembly) {
-                DrawNodeHierarchy(m_AssemblyData.RootNode, 0, m_SelectedNodeIndex, m_SelectedNode);
+                DrawNodeHierarchy(m_AssemblyData.RootNode, m_AssemblyData.RootNode.AuthoredUUID, m_SelectedNodeIndex, m_SelectedNode);
             } else {
                 ImGui::TextDisabled("No Assembly loaded.");
             }
@@ -632,6 +680,18 @@ namespace Axle {
             ImGui::Separator();
             if (m_HasAssembly) {
                 DrawNodeInspector(m_SelectedNode);
+                const auto found = m_NodeIndexToEntityID.find(m_SelectedNodeIndex);
+                if (m_PreviewScene && found != m_NodeIndexToEntityID.end()) {
+                    Entity selected{static_cast<entt::entity>(found->second), m_PreviewScene.get()};
+                    if (selected && m_ComponentDrawer && m_ComponentDrawer(selected)) m_IsDirty = true;
+                    if (selected && m_AddComponentDrawer) {
+                        if (ImGui::Button("Add plugin component")) ImGui::OpenPopup("AssemblyPluginComponents");
+                        if (ImGui::BeginPopup("AssemblyPluginComponents")) {
+                            if (m_AddComponentDrawer(selected)) m_IsDirty = true;
+                            ImGui::EndPopup();
+                        }
+                    }
+                }
             } else {
                 ImGui::TextDisabled("Select an entity.");
             }
@@ -647,7 +707,7 @@ namespace Axle {
                 InstantiateIntoScene();
             }
             ImGui::SameLine();
-            ImGui::TextDisabled("Location: %s", m_CurrentAssetPath.string().c_str());
+            ImGui::TextDisabled("Location: %s", PathToUtf8(m_CurrentAssetPath).c_str());
         }
         ImGui::End();
 

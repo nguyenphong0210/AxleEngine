@@ -1,3 +1,4 @@
+#include <Axle/Path.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/UUID.hpp>
 #include <algorithm>
@@ -35,7 +36,7 @@ namespace Axle {
             relative = path.lexically_normal().lexically_relative(root);
             if (relative.empty() || relative.is_absolute() || *relative.begin() == "..") return {};
         }
-        return Package::NormalizePath(relative.generic_string());
+        return Package::NormalizePath(PathToUtf8(relative));
     }
 
     bool FileSystem::MountPackage(const std::filesystem::path& packagePath) {
@@ -96,9 +97,9 @@ namespace Axle {
             return resolved;
         }
 
-        std::string relStr = relativePath.generic_string();
+        std::string relStr = PathToUtf8(relativePath);
         if (relStr.rfind("assets/", 0) == 0) {
-            auto subCandidate = GetAssetDirectory() / relStr.substr(7);
+            auto subCandidate = GetAssetDirectory() / PathFromUtf8(relStr.substr(7));
             if (std::filesystem::exists(subCandidate)) {
                 return subCandidate;
             }
@@ -121,7 +122,7 @@ namespace Axle {
             }
 
             // Also check Shaders/ subfolder if relativePath begins with shaders/
-            std::string relStr = relativePath.generic_string();
+            std::string relStr = PathToUtf8(relativePath);
             if (relStr.rfind("shaders/", 0) == 0) {
                 auto candidateShaders = root / "Shaders" / relStr.substr(8);
                 if (std::filesystem::exists(candidateShaders)) {
@@ -159,7 +160,7 @@ namespace Axle {
                     return buffer.str();
                 }
             }
-            AXLE_CORE_WARN("FileSystem: Unable to open file for reading: {0}", filepath.string());
+            AXLE_CORE_WARN("FileSystem: Unable to open file for reading: {0}", PathToUtf8(filepath));
             return "";
         }
 
@@ -192,7 +193,7 @@ namespace Axle {
                     }
                 }
             }
-            AXLE_CORE_WARN("FileSystem: Unable to open binary file for reading: {0}", filepath.string());
+            AXLE_CORE_WARN("FileSystem: Unable to open binary file for reading: {0}", PathToUtf8(filepath));
             return {};
         }
 
@@ -201,7 +202,7 @@ namespace Axle {
 
         std::vector<uint8_t> buffer(static_cast<size_t>(size));
         if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
-            AXLE_CORE_WARN("FileSystem: Failed reading binary content from: {0}", filepath.string());
+            AXLE_CORE_WARN("FileSystem: Failed reading binary content from: {0}", PathToUtf8(filepath));
             return {};
         }
 
@@ -245,7 +246,7 @@ namespace Axle {
         {
             std::ofstream out(tempPath, std::ios::binary);
             if (!out.is_open()) {
-                if (outError) *outError = "Failed to open temporary file for write: " + tempPath.string();
+                if (outError) *outError = "Failed to open temporary file for write: " + PathToUtf8(tempPath);
                 return false;
             }
             if (size > 0 && data != nullptr) {
@@ -302,7 +303,7 @@ namespace Axle {
         }
         relative = relative.lexically_normal();
         if (error || relative.empty() || relative.is_absolute() || *relative.begin() == "..") return false;
-        reference = relative.generic_string();
+        reference = PathToUtf8(relative);
         return true;
     }
 
@@ -317,13 +318,13 @@ namespace Axle {
             std::getline(input, first);
         }
         if (first.empty()) {
-            if (error) *error = "Cannot read asset identity: " + path.string();
+            if (error) *error = "Cannot read asset identity: " + PathToUtf8(path);
             return false;
         }
         if (!first.empty() && first.back() == '\r') first.pop_back();
         constexpr std::string_view prefix = "# AxleFileIdentity: ";
         if (first.rfind(prefix, 0) != 0) {
-            if (error) *error = "Asset has no embedded identity: " + path.string();
+            if (error) *error = "Asset has no embedded identity: " + PathToUtf8(path);
             return false;
         }
         std::istringstream values(first.substr(prefix.size()));
@@ -331,12 +332,12 @@ namespace Axle {
         std::string value, extra;
         if (!(values >> version >> value) || version != 1 || (values >> extra) || value.empty() ||
             !std::all_of(value.begin(), value.end(), [](unsigned char c) { return c >= '0' && c <= '9'; })) {
-            if (error) *error = "Malformed or unsupported asset identity: " + path.string();
+            if (error) *error = "Malformed or unsupported asset identity: " + PathToUtf8(path);
             return false;
         }
         try { id = std::stoull(value); } catch (...) { id = 0; }
         if (id == 0) {
-            if (error) *error = "Invalid asset UUID: " + path.string();
+            if (error) *error = "Invalid asset UUID: " + PathToUtf8(path);
             return false;
         }
         return true;

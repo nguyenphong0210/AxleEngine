@@ -195,6 +195,7 @@ namespace Axle {
             if (m_RenderContext && !m_RenderContext->Present(*m_Window)) { m_Running = false; return false; }
 
             m_Window->SwapBuffers();
+            ++m_CompletedFrames;
             ++frames;
         }
         return true;

@@ -1,4 +1,5 @@
 #pragma once
+#include <Axle/Path.hpp>
 #include <Axle/Types.hpp>
 #include <Axle/AssetDSL.hpp>
 #include <string>
@@ -77,7 +78,7 @@ namespace Axle {
 
         if (ext == ".axlescene" || ext == ".scene") return AssetType::Scene;
         if (ext == ".axleasset") {
-            AssetKind kind = AssetDSL::PeekAssetKindFromFile(path.string());
+            AssetKind kind = AssetDSL::PeekAssetKindFromFile(PathToUtf8(path));
             switch (kind) {
                 case AssetKind::Material:        return AssetType::Material;
                 case AssetKind::ParticleEmitter: return AssetType::ParticleEmitter;

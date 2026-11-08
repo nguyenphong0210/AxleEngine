@@ -29,6 +29,8 @@ namespace Axle {
         void SetContext(const SceneSerializerContext& context) { m_Context = context; }
 
         bool Serialize(const std::filesystem::path& filepath);
+        bool SaveCanvasDocuments(std::string& error);
+        static std::filesystem::path CanvasDocumentPath(Entity entity);
         bool Deserialize(const std::filesystem::path& filepath);
 
         std::string SerializeToString();

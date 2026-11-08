@@ -44,10 +44,12 @@ namespace Axle {
 
         // Source buffer access
         const std::filesystem::path& GetCurrentFilePath() const { return m_CurrentFilePath; }
+        void RelocateCleanDocument(const std::filesystem::path& path) { if (!m_IsDirty) m_CurrentFilePath = path; }
         const std::string& GetSourceCode() const { return m_SourceCode; }
         void SetSourceCode(const std::string& code);
 
         bool IsDirty() const { return m_IsDirty; }
+        void DiscardChanges() { SetSourceCode(m_SavedSourceCode); }
         bool LastCompileSuccess() const { return m_LastCompileSuccess; }
         const std::string& GetCompileMessage() const { return m_CompileMessage; }
         const std::string& GetWarningMessage() const { return m_WarningMessage; }

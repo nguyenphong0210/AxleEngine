@@ -34,7 +34,7 @@ namespace {
             std::istringstream input(text);
             while (std::getline(input, line)) {
                 const auto trimmed = Trim(line);
-                if (trimmed.starts_with("- Entity:")) {
+                if (line.find_first_not_of(" \t") == 2 && trimmed.starts_with("- Entity:")) {
                     flush();
                     const auto id = std::stoull(trimmed.substr(9));
                     if (!id || scene.GetEntityByUUID(UUID(id))) throw std::invalid_argument("Invalid entity UUID");

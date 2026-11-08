@@ -1,3 +1,4 @@
+#include <Axle/Path.hpp>
 #include <Axle/Package.hpp>
 #include <Axle/Log.hpp>
 #include <cstdio>
@@ -81,34 +82,38 @@ namespace Axle {
     bool Package::Open(const std::filesystem::path& filepath) {
         Close();
 
-        FILE* f = fopen(filepath.string().c_str(), "rb");
+        #ifdef _WIN32
+        FILE* f = _wfopen(filepath.c_str(), L"rb");
+#else
+        FILE* f = fopen(filepath.c_str(), "rb");
+#endif
         if (!f) {
-            AXLE_CORE_ERROR("Package: Failed to open package file at '{0}'", filepath.string());
+            AXLE_CORE_ERROR("Package: Failed to open package file at '{0}'", PathToUtf8(filepath));
             return false;
         }
 
         PackageHeader header;
         if (fread(&header, sizeof(PackageHeader), 1, f) != 1) {
-            AXLE_CORE_ERROR("Package: Failed to read package header from '{0}'", filepath.string());
+            AXLE_CORE_ERROR("Package: Failed to read package header from '{0}'", PathToUtf8(filepath));
             fclose(f);
             return false;
         }
 
         if (memcmp(header.Magic, "AXPK", 4) != 0) {
-            AXLE_CORE_ERROR("Package: Invalid magic header in '{0}'. Expected 'AXPK'", filepath.string());
+            AXLE_CORE_ERROR("Package: Invalid magic header in '{0}'. Expected 'AXPK'", PathToUtf8(filepath));
             fclose(f);
             return false;
         }
 
         if (header.Version != 1) {
-            AXLE_CORE_ERROR("Package: Unsupported version {0} in '{1}'", header.Version, filepath.string());
+            AXLE_CORE_ERROR("Package: Unsupported version {0} in '{1}'", header.Version, PathToUtf8(filepath));
             fclose(f);
             return false;
         }
 
         // Seek to Table of Contents
         if (fseek(f, static_cast<long>(header.TableOfContentsOffset), SEEK_SET) != 0) {
-            AXLE_CORE_ERROR("Package: Corrupt table of contents offset in '{0}'", filepath.string());
+            AXLE_CORE_ERROR("Package: Corrupt table of contents offset in '{0}'", PathToUtf8(filepath));
             fclose(f);
             return false;
         }
@@ -154,7 +159,7 @@ namespace Axle {
         m_FileHandle = f;
 
         AXLE_CORE_INFO("Package: Successfully mounted archive '{0}' ({1} assets, {2} KB data)",
-            filepath.filename().string(), m_EntriesByPath.size(), m_Header.TotalDataSize / 1024);
+            PathToUtf8(filepath.filename()), m_EntriesByPath.size(), m_Header.TotalDataSize / 1024);
 
         return true;
     }
@@ -275,7 +280,7 @@ namespace Axle {
     bool PackageWriter::AddFile(const std::string& virtualPath, const std::filesystem::path& sourceDiskPath, UUID uuid, uint16_t type) {
         if (!m_IsWriting) return false;
         if (!std::filesystem::exists(sourceDiskPath)) {
-            AXLE_CORE_WARN("PackageWriter: Source disk path does not exist: '{0}'", sourceDiskPath.string());
+            AXLE_CORE_WARN("PackageWriter: Source disk path does not exist: '{0}'", PathToUtf8(sourceDiskPath));
             return false;
         }
 
@@ -313,9 +318,13 @@ namespace Axle {
     bool PackageWriter::Finish() {
         if (!m_IsWriting) return false;
 
-        FILE* f = fopen(m_OutputPath.string().c_str(), "wb");
+        #ifdef _WIN32
+        FILE* f = _wfopen(m_OutputPath.c_str(), L"wb");
+#else
+        FILE* f = fopen(m_OutputPath.c_str(), "wb");
+#endif
         if (!f) {
-            AXLE_CORE_ERROR("PackageWriter: Could not create output file '{0}'", m_OutputPath.string());
+            AXLE_CORE_ERROR("PackageWriter: Could not create output file '{0}'", PathToUtf8(m_OutputPath));
             m_IsWriting = false;
             return false;
         }
@@ -356,7 +365,7 @@ namespace Axle {
                         currentDataOffset += fileSize;
                     }
                 } else {
-                    AXLE_CORE_ERROR("PackageWriter: Failed reading file '{0}'", pending.SourceFilePath.string());
+                    AXLE_CORE_ERROR("PackageWriter: Failed reading file '{0}'", PathToUtf8(pending.SourceFilePath));
                     pending.Entry.Size = 0;
                     pending.Entry.CompressedSize = 0;
                 }
@@ -407,7 +416,7 @@ namespace Axle {
         m_IsWriting = false;
 
         AXLE_CORE_INFO("PackageWriter: Finished building '{0}' ({1} entries, {2} KB total)",
-            m_OutputPath.filename().string(), header.EntryCount, (header.TotalDataSize + header.TableOfContentsSize) / 1024);
+            PathToUtf8(m_OutputPath.filename()), header.EntryCount, (header.TotalDataSize + header.TableOfContentsSize) / 1024);
 
         return true;
     }

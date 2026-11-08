@@ -15,8 +15,10 @@ namespace Axle {
         ~UICanvasDesignerPanel() = default;
 
         void OpenDocument(const std::filesystem::path& path);
-        void SaveDocument();
-        void ReloadDocument();
+        bool SaveDocument(const std::filesystem::path& path = {});
+        bool ReloadDocument();
+        bool IsDirty() const { return m_TextBuffer != m_TextEditBuffer; }
+        void DiscardChanges();
 
         void OnImGuiRender(bool* p_open = nullptr);
 
@@ -24,6 +26,7 @@ namespace Axle {
         void SetOpen(bool open) { m_IsOpen = open; }
 
         const std::filesystem::path& GetCurrentPath() const { return m_FilePath; }
+        void RelocateCleanDocument(const std::filesystem::path& path) { if (!IsDirty()) m_FilePath = path; }
 
     private:
         void InitializeMockContext();

@@ -1,3 +1,4 @@
+#include <Axle/Path.hpp>
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/CurveEditorWidget.hpp>
 #include <Axle/Components.hpp>
@@ -51,7 +52,7 @@ namespace Axle {
     VFXEditorPanel::VFXEditorPanel() {
         m_Config = ParticleEmitterConfig::CreateNeutral();
         SyncStacksFromDocument();
-        const auto path = (FileSystem::GetAssetDirectory() / "VFX" / "NewEffect.axleasset").string();
+        const auto path = PathToUtf8(FileSystem::GetAssetDirectory() / "VFX" / "NewEffect.axleasset");
         strncpy_s(m_FilePath, path.c_str(), sizeof(m_FilePath) - 1);
 
         if (Window::HasActiveContext()) {
@@ -194,6 +195,14 @@ namespace Axle {
         m_Document.CommitTransaction("Edit Emitter Modules");
         m_Diagnostics.clear();
         return m_Document.Save(m_Diagnostics);
+    }
+    void VFXEditorPanel::RelocateCleanDocument(const std::filesystem::path& path) {
+        if (m_Document.IsDirty()) return;
+        const auto text = PathToUtf8(path); m_Document.RelocateCleanDocument(text);
+        strncpy_s(m_FilePath, text.c_str(), sizeof(m_FilePath) - 1);
+    }
+    void VFXEditorPanel::DiscardDocument() {
+        m_Document.DiscardChanges(); SyncStacksFromDocument();
     }
     bool VFXEditorPanel::SaveDocumentAs(const std::string& filePath) {
         SyncCurrentStackConfig();
@@ -683,8 +692,8 @@ namespace Axle {
                      !error && it != end; it.increment(error)) {
                     if (!it->is_regular_file(error)) continue;
                     const auto path = it->path();
-                    const auto extension = path.extension().string();
-                    if (extension == ".axle_vfx" || (extension == ".axleasset" && AssetDSL::PeekAssetKindFromFile(path.string()) == AssetKind::ParticleEmitter))
+                    const auto extension = PathToUtf8(path.extension());
+                    if (extension == ".axle_vfx" || (extension == ".axleasset" && AssetDSL::PeekAssetKindFromFile(PathToUtf8(path)) == AssetKind::ParticleEmitter))
                         m_EffectFiles.push_back(path);
                 }
                 std::sort(m_EffectFiles.begin(), m_EffectFiles.end());
@@ -702,9 +711,9 @@ namespace Axle {
                     for (const auto& path : m_EffectFiles) {
                         std::error_code error;
                         const auto relative = std::filesystem::relative(path, FileSystem::GetAssetDirectory(), error);
-                        const auto label = error ? path.generic_string() : relative.generic_string();
+                        const auto label = error ? PathToUtf8(path) : PathToUtf8(relative);
                         if (filter.PassFilter(label.c_str()) && ImGui::Selectable(label.c_str()))
-                            strncpy_s(m_FilePath, path.string().c_str(), sizeof(m_FilePath) - 1);
+                            strncpy_s(m_FilePath, PathToUtf8(path).c_str(), sizeof(m_FilePath) - 1);
                     }
                     if (m_EffectFiles.empty()) ImGui::TextDisabled("No particle effect assets in this project.");
                     ImGui::EndChild();
@@ -1205,12 +1214,12 @@ namespace Axle {
         ImGui::TextUnformatted(label);
         bool changed = false;
         auto accepts = [&](const std::filesystem::path &candidate) {
-            auto extension = candidate.extension().string();
+            auto extension = PathToUtf8(candidate.extension());
             std::transform(extension.begin(), extension.end(), extension.begin(),
                            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return mesh ? extension == ".obj"
                         : extension == ".axleasset" &&
-                              AssetDSL::PeekAssetKindFromFile(candidate.string()) == AssetKind::Material;
+                              AssetDSL::PeekAssetKindFromFile(PathToUtf8(candidate)) == AssetKind::Material;
         };
         auto assign = [&](const std::filesystem::path &candidate) {
             const auto resolved = FileSystem::ResolveAssetPath(candidate);
@@ -1221,8 +1230,8 @@ namespace Axle {
             }
             std::error_code error;
             auto relative = std::filesystem::relative(resolved, FileSystem::GetAssetDirectory(), error);
-            path = !error && !relative.empty() && *relative.begin() != ".." ? relative.generic_string()
-                                                                            : resolved.generic_string();
+            path = !error && !relative.empty() && *relative.begin() != ".." ? PathToUtf8(relative)
+                                                                            : PathToUtf8(resolved);
             changed = true;
         };
         const auto text = path.empty() ? std::string("Select resource...")
@@ -1261,8 +1270,8 @@ namespace Axle {
                                      sizeof(m_ResourceSearch));
             ImGui::BeginChild("Results", ImVec2(320, 240));
             for (const auto &file : m_ResourceFiles) {
-                if (!m_ResourceSearch[0] || file.generic_string().find(m_ResourceSearch) != std::string::npos)
-                    if (ImGui::Selectable(file.filename().string().c_str())) {
+                if (!m_ResourceSearch[0] || PathToUtf8(file).find(m_ResourceSearch) != std::string::npos)
+                    if (ImGui::Selectable(PathToUtf8(file.filename()).c_str())) {
                         assign(file);
                         ImGui::CloseCurrentPopup();
                     }

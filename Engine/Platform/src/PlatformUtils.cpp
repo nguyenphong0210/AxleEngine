@@ -1,5 +1,8 @@
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/Application.hpp>
+#include <Axle/Path.hpp>
+#include <cstring>
+#include <iterator>
 
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -18,61 +21,46 @@
 
 namespace Axle {
 
+#ifdef _WIN32
+    namespace {
+        std::wstring WideFilter(const char* filter) {
+            std::wstring result;
+            for (const char* part = filter; part && *part; part += std::strlen(part) + 1) {
+                result += PathFromUtf8(part).wstring(); result.push_back(L'\0');
+            }
+            result.push_back(L'\0'); return result;
+        }
+        std::string FileDialog(bool save, const char* filter, const char* defaultPath, const char* defaultExt) {
+            OPENFILENAMEW request{};
+            wchar_t selected[32768]{};
+            const auto wideFilter = WideFilter(filter);
+            const auto initial = defaultPath && *defaultPath ? PathFromUtf8(defaultPath) : std::filesystem::current_path();
+            const auto directory = initial.wstring();
+            const auto extension = defaultExt ? PathFromUtf8(defaultExt).wstring() : std::wstring{};
+            request.lStructSize = sizeof(request);
+            request.hwndOwner = glfwGetWin32Window(static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow()));
+            request.lpstrFile = selected; request.nMaxFile = static_cast<DWORD>(std::size(selected));
+            request.lpstrFilter = wideFilter.c_str(); request.nFilterIndex = 1;
+            request.lpstrInitialDir = directory.c_str(); request.lpstrDefExt = extension.empty() ? nullptr : extension.c_str();
+            request.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+            if ((save ? GetSaveFileNameW(&request) : GetOpenFileNameW(&request)) == TRUE) return PathToUtf8(std::filesystem::path(selected));
+            return {};
+        }
+    }
+#endif
     std::string FileDialogs::OpenFile(const char* filter, const char* defaultPath) {
 #ifdef _WIN32
-        OPENFILENAMEA ofn;
-        CHAR szFile[260] = { 0 };
-        CHAR currentDir[260] = { 0 };
-
-        ZeroMemory(&ofn, sizeof(OPENFILENAMEA));
-        ofn.lStructSize = sizeof(OPENFILENAMEA);
-        ofn.hwndOwner = glfwGetWin32Window(static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow()));
-        ofn.lpstrFile = szFile;
-        ofn.nMaxFile = sizeof(szFile);
-        ofn.lpstrFilter = filter;
-        ofn.nFilterIndex = 1;
-        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
-
-        if (defaultPath && *defaultPath) {
-            ofn.lpstrInitialDir = defaultPath;
-        } else if (GetCurrentDirectoryA(260, currentDir)) {
-            ofn.lpstrInitialDir = currentDir;
-        }
-
-        if (GetOpenFileNameA(&ofn) == TRUE) {
-            return ofn.lpstrFile;
-        }
+        return FileDialog(false, filter, defaultPath, nullptr);
+#else
+        return {};
 #endif
-        return "";
     }
-
     std::string FileDialogs::SaveFile(const char* filter, const char* defaultPath, const char* defaultExt) {
 #ifdef _WIN32
-        OPENFILENAMEA ofn;
-        CHAR szFile[260] = { 0 };
-        CHAR currentDir[260] = { 0 };
-
-        ZeroMemory(&ofn, sizeof(OPENFILENAMEA));
-        ofn.lStructSize = sizeof(OPENFILENAMEA);
-        ofn.hwndOwner = glfwGetWin32Window(static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow()));
-        ofn.lpstrFile = szFile;
-        ofn.nMaxFile = sizeof(szFile);
-        ofn.lpstrFilter = filter;
-        ofn.nFilterIndex = 1;
-        ofn.lpstrDefExt = defaultExt;
-        ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
-
-        if (defaultPath && *defaultPath) {
-            ofn.lpstrInitialDir = defaultPath;
-        } else if (GetCurrentDirectoryA(260, currentDir)) {
-            ofn.lpstrInitialDir = currentDir;
-        }
-
-        if (GetSaveFileNameA(&ofn) == TRUE) {
-            return ofn.lpstrFile;
-        }
+        return FileDialog(true, filter, defaultPath, defaultExt);
+#else
+        return {};
 #endif
-        return "";
     }
 
     std::string FileDialogs::OpenFolder(const char* defaultPath) {
@@ -102,7 +90,7 @@ namespace Axle {
 
                 if (!defaultPathStr.empty()) {
                     std::error_code ec;
-                    std::filesystem::path absPath = std::filesystem::absolute(defaultPathStr, ec);
+                    std::filesystem::path absPath = std::filesystem::absolute(PathFromUtf8(defaultPathStr), ec);
                     if (!ec && std::filesystem::exists(absPath, ec)) {
                         IShellItem* pDefaultFolder = nullptr;
                         std::wstring wp = absPath.wstring();
@@ -119,9 +107,7 @@ namespace Axle {
                     if (SUCCEEDED(pFileOpen->GetResult(&pItem)) && pItem) {
                         PWSTR pszFilePath = nullptr;
                         if (SUCCEEDED(pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath)) && pszFilePath) {
-                            char pathBuf[MAX_PATH * 2] = { 0 };
-                            WideCharToMultiByte(CP_UTF8, 0, pszFilePath, -1, pathBuf, sizeof(pathBuf), NULL, NULL);
-                            resultPath = pathBuf;
+                            resultPath = PathToUtf8(std::filesystem::path(pszFilePath));
                             CoTaskMemFree(pszFilePath);
                         }
                         pItem->Release();
@@ -130,15 +116,15 @@ namespace Axle {
                 pFileOpen->Release();
             } else {
                 // Fallback to classic SHBrowseForFolder on STA thread
-                BROWSEINFOA bi = { 0 };
-                bi.lpszTitle = "Select Destination Folder";
+                BROWSEINFOW bi = { 0 };
+                bi.lpszTitle = L"Select Destination Folder";
                 bi.ulFlags = BIF_RETURNONLYFSDIRS;
                 bi.hwndOwner = NULL;
-                LPITEMIDLIST pidl = SHBrowseForFolderA(&bi);
+                LPITEMIDLIST pidl = SHBrowseForFolderW(&bi);
                 if (pidl != 0) {
-                    CHAR path[MAX_PATH];
-                    if (SHGetPathFromIDListA(pidl, path)) {
-                        resultPath = path;
+                    wchar_t path[MAX_PATH];
+                    if (SHGetPathFromIDListW(pidl, path)) {
+                        resultPath = PathToUtf8(std::filesystem::path(path));
                     }
                     CoTaskMemFree(pidl);
                 }

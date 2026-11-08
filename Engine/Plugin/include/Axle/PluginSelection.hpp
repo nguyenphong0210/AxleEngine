@@ -38,6 +38,9 @@ public:
     bool SetDraftSelected(std::string_view id, bool selected);
     ApplyReport Apply();
     void Revert();
+    void RefreshCatalog(Catalog catalog);
+    std::vector<std::string> DependentSelections(std::string_view id) const;
+    bool RemoveDraftWithDependents(std::string_view id);
 
     // Returns a stable explanation suitable for a row in the Plugins window.
     // Empty means the plugin is neither selected nor a known dependency.

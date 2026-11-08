@@ -1,4 +1,5 @@
 #include <Axle/AssetSerializer.hpp>
+#include <Axle/Path.hpp>
 #include <Axle/AssetDSL.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
@@ -1457,7 +1458,7 @@ namespace Axle {
     AssetSerializer::AssetCompileResult AssetSerializer::CompileAssetDirectory(const std::filesystem::path& assetDirectory, bool forceRebakeAll) {
         AssetCompileResult result;
         if (!std::filesystem::exists(assetDirectory)) {
-            AXLE_WARN("AssetSerializer: Asset directory '{0}' does not exist", assetDirectory.string());
+            AXLE_WARN("AssetSerializer: Asset directory '{0}' does not exist", PathToUtf8(assetDirectory));
             return result;
         }
 
@@ -1473,9 +1474,11 @@ namespace Axle {
             if (ext == ".axle") {
                 // Check if package manifest
                 std::ifstream testFile(path);
-                std::string firstLine;
-                std::getline(testFile, firstLine);
-                bool isPackage = (firstLine.rfind("Package:", 0) == 0);
+                const std::string header((std::istreambuf_iterator<char>(testFile)), {});
+                // Assembly is authored scene data; compiling it as mesh data
+                // would discard its native component sections.
+                if (header.starts_with("AssetType: Assembly") || header.find("\nAssetType: Assembly") != std::string::npos) continue;
+                bool isPackage = header.starts_with("Package:") || header.find("\nPackage:") != std::string::npos;
 
                 if (isPackage) {
                     auto pkg = LoadPackage(path);
@@ -1519,7 +1522,7 @@ namespace Axle {
         }
 
         AXLE_INFO("AssetSerializer: Compilation scan completed for '{0}' (Recompiled: {1}, Up-to-date: {2}, Failed: {3})",
-            assetDirectory.string(), result.RecompiledCount, result.UpToDateCount, result.FailedCount);
+            PathToUtf8(assetDirectory), result.RecompiledCount, result.UpToDateCount, result.FailedCount);
 
         return result;
     }

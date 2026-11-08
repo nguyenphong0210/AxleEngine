@@ -1,4 +1,5 @@
 #include <Axle/AssetDSL.hpp>
+#include <Axle/Path.hpp>
 #include <Axle/FileSystem.hpp>
 #include <fstream>
 #include <sstream>
@@ -134,7 +135,7 @@ namespace Axle {
     }
 
     AssetKind AssetDSL::PeekAssetKindFromFile(const std::string& filepath) {
-        const auto content = FileSystem::ReadTextFile(filepath);
+        const auto content = FileSystem::ReadTextFile(PathFromUtf8(filepath));
         return PeekAssetKind(content);
     }
 
@@ -728,7 +729,7 @@ namespace Axle {
     }
 
     bool AssetDSL::ParseFile(const std::string& filepath, AssetDocument& outDoc, std::string* outError) {
-        const auto content = FileSystem::ReadTextFile(filepath);
+        const auto content = FileSystem::ReadTextFile(PathFromUtf8(filepath));
         if (content.empty()) {
             if (outError) *outError = "Could not read asset file: " + filepath;
             return false;

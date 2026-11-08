@@ -1,5 +1,6 @@
 #include <Axle/UI/UIDocument.hpp>
 #include <Axle/UI/UIParser.hpp>
+#include <Axle/Path.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -241,17 +242,19 @@ namespace Axle {
 
     void UIDocument::SetFilePath(const std::string& path) {
         m_FilePath = path;
-        if (std::filesystem::exists(m_FilePath)) {
-            m_LastWriteTime = std::filesystem::last_write_time(m_FilePath);
-        }
+        std::error_code error;
+        const auto time = std::filesystem::last_write_time(PathFromUtf8(m_FilePath), error);
+        if (!error) m_LastWriteTime = time;
     }
 
     bool UIDocument::CheckAndHotReload() {
-        if (m_FilePath.empty() || !std::filesystem::exists(m_FilePath)) return false;
-        auto currentWriteTime = std::filesystem::last_write_time(m_FilePath);
+        if (m_IsDirty) return false;
+        if (m_FilePath.empty()) return false;
+        std::error_code error;
+        auto currentWriteTime = std::filesystem::last_write_time(PathFromUtf8(m_FilePath), error);
+        if (error) return false;
         if (currentWriteTime > m_LastWriteTime) {
-            m_LastWriteTime = currentWriteTime;
-            bool ok = UIParser::ParseFile(m_FilePath, *this);
+            bool ok = LoadFromFile(m_FilePath);
             if (ok) {
                 m_LayoutDirty = true;
             }
@@ -272,9 +275,9 @@ namespace Axle {
         bool ok = UIParser::SaveFile(targetPath, *this, &err);
         if (ok) {
             m_FilePath = targetPath;
-            if (std::filesystem::exists(m_FilePath)) {
-                m_LastWriteTime = std::filesystem::last_write_time(m_FilePath);
-            }
+            std::error_code error;
+            const auto time = std::filesystem::last_write_time(PathFromUtf8(m_FilePath), error);
+            if (!error) m_LastWriteTime = time;
             m_IsDirty = false;
         }
         return ok;
@@ -283,9 +286,11 @@ namespace Axle {
     bool UIDocument::LoadFromFile(const std::string& path) {
         if (path.empty()) return false;
         std::string err;
-        bool ok = UIParser::ParseFile(path, *this, &err);
+        UIDocument candidate;
+        candidate.m_DefaultFont = m_DefaultFont;
+        bool ok = UIParser::ParseFile(path, candidate, &err);
         if (ok) {
-            SetFilePath(path);
+            *this = std::move(candidate);
             m_IsDirty = false;
             m_LayoutDirty = true;
         }

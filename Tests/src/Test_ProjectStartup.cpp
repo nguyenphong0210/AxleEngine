@@ -51,9 +51,12 @@ int main() {
     CHECK(Project::GetAssetDirectory() == missing / "assets", "A missing project asset root cannot select another project's assets");
     CHECK(Axle::FileSystem::GetAssetDirectory() == missing / "assets", "Explicit FileSystem root remains authoritative when absent");
     Project::SetActive(Project::New(firstRoot));
+    std::filesystem::create_directories(firstRoot / "Plugins/Mover");
+    std::ofstream(firstRoot / "Plugins/Mover/Mover.cpp") << "authored plugin source";
     const auto target = source / "SavedProject" / "Project.axleproj";
     CHECK(Project::SaveActive(target), "Save As preserves untitled assets");
     CHECK(std::filesystem::exists(target.parent_path() / "assets/authored.txt"), "Saved project owns its asset copy");
+    CHECK(std::filesystem::exists(target.parent_path() / "Plugins/Mover/Mover.cpp"), "Save As preserves project plugin sources");
     CHECK(Axle::FileSystem::GetAssetDirectory() == target.parent_path() / "assets", "Save As updates active asset root");
     CHECK(Project::SaveActive(target), "Saving an existing project is repeatable");
     const auto blockedTarget = source / "OccupiedProject" / "Project.axleproj";

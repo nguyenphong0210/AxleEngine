@@ -47,6 +47,7 @@ namespace Axle {
         void PollEvents();
         void SwapBuffers();
         bool ShouldClose() const;
+        void CancelCloseRequest();
 
         void SetVSync(bool enabled);
         bool IsVSync() const { return m_Data.VSync; }

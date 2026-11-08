@@ -235,6 +235,7 @@ namespace Axle {
     bool Window::ShouldClose() const {
         return glfwWindowShouldClose(m_Window);
     }
+    void Window::CancelCloseRequest() { glfwSetWindowShouldClose(m_Window, GLFW_FALSE); }
 
     void Window::SetVSync(bool enabled) {
         m_Data.VSync = enabled;

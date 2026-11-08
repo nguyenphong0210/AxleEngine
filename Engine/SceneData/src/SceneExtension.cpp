@@ -58,8 +58,10 @@ bool SceneData::ExtensionsReady(std::vector<std::string>& errors) const {
         for (const auto& section : m_Registry.get<PassiveExtensionComponent>(entity).Sections) {
             if (!IsExtensionDocument(section.SectionName)) continue;
             ExtensionDocument document;
-            if (!ParseExtensionDocument(section.SectionName, section.Lines, document) || document.Required) {
-                ready = false; errors.push_back("Required or invalid plugin component is unresolved: " + section.SectionName);
+            if (!ParseExtensionDocument(section.SectionName, section.Lines, document)) {
+                ready = false; errors.push_back("Malformed plugin component data must be repaired before simulation.");
+            } else if (document.Required) {
+                ready = false; errors.push_back("Required plugin component is unavailable: " + document.TypeId + " (schema " + std::to_string(document.Schema) + ")");
             }
         }
     }

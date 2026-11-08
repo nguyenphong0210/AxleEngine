@@ -1,3 +1,4 @@
+#include <Axle/Path.hpp>
 #include <Axle/AssetManager.hpp>
 #include <Axle/AssetMetadataSerializer.hpp>
 #include <Axle/TextureDescriptor.hpp>
@@ -27,7 +28,7 @@ namespace Axle {
         }
         bool ResolveOwned(const std::filesystem::path& root, const std::filesystem::path& path,
                           std::filesystem::path& absolute, std::filesystem::path& relative, std::string* error) {
-            auto fail = [&] { if (error) *error = "Asset path is empty or outside its configured root: " + path.generic_string(); return false; };
+            auto fail = [&] { if (error) *error = "Asset path is empty or outside its configured root: " + PathToUtf8(path); return false; };
             if (root.empty() || path.empty()) return fail();
             std::error_code ec;
             auto candidate = path;
@@ -41,13 +42,13 @@ namespace Axle {
             return true;
         }
         std::string BuiltinName(const std::filesystem::path& path) {
-            auto name = path.generic_string();
+            auto name = PathToUtf8(path);
             std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c); });
             const auto id = ParseBuiltinMesh(name);
             return id ? std::string(GetBuiltinMeshDefinition(*id)->Name) : std::string{};
         }
         std::string PathKey(const std::filesystem::path& path) {
-            auto key = path.lexically_normal().generic_string();
+            auto key = PathToUtf8(path.lexically_normal());
 #ifdef _WIN32
             std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c){ return std::tolower(c); });
 #endif
@@ -68,7 +69,7 @@ namespace Axle {
                         key.ends_with("path") || key.ends_with("map");
                     const bool quoted = value.size() >= 2 && value.front() == '"' && value.back() == '"';
                     auto plain = quoted ? value.substr(1, value.size()-2) : value;
-                    if (pathField && PathKey(plain) == PathKey(oldPath)) {
+                    if (pathField && PathKey(PathFromUtf8(plain)) == PathKey(PathFromUtf8(oldPath))) {
                         line = match[1].str() + (quoted ? "\"" + newPath + "\"" : newPath) + match[4].str();
                     }
                 }
@@ -96,7 +97,7 @@ namespace Axle {
                 std::string failure;
                 if (!FileSystem::WriteTextFileAtomically(edit.path, edit.before, &failure)) {
                     success = false;
-                    if (error) *error += "; rollback failed for " + edit.path.string() + ": " + failure;
+                    if (error) *error += "; rollback failed for " + PathToUtf8(edit.path) + ": " + failure;
                 }
             }
             return success;
@@ -120,7 +121,7 @@ namespace Axle {
         return {id, AssetType::Mesh, std::string("builtin://")+names[uint64_t(id)-BuiltinAssets::CubeUUID], 1};
     }
     std::string AssetManager::NormalizePathKey(const std::filesystem::path& path) {
-        if (IsBuiltin(path)) return GetBuiltinMetadata(path).FilePath.generic_string();
+        if (IsBuiltin(path)) return PathToUtf8(GetBuiltinMetadata(path).FilePath);
         std::filesystem::path full, relative;
         return ResolveOwned(s_AssetDirectory, path, full, relative, nullptr) ? PathKey(relative) : std::string{};
     }
@@ -330,7 +331,7 @@ namespace Axle {
         if (!ResolveOwned(s_AssetDirectory,oldPath,oldFull,oldRel,error) ||
             !ResolveOwned(s_AssetDirectory,newPath,newFull,newRel,error) || !std::filesystem::is_regular_file(newFull)) return false;
         std::vector<PathEdit> edits;
-        if (!CollectPathEdits(s_AssetDirectory,oldRel.generic_string(),newRel.generic_string(),edits,error)) return false;
+        if (!CollectPathEdits(s_AssetDirectory,PathToUtf8(oldRel),PathToUtf8(newRel),edits,error)) return false;
         size_t count = 0;
         for (const auto& edit : edits) {
             if (!FileSystem::WriteTextFileAtomically(edit.path,edit.after,error)) {
@@ -357,7 +358,7 @@ namespace Axle {
         if (ec) return fail(ec.message());
         std::vector<PathEdit> edits;
         if (!AssetMetadataSerializer::IsNativeAsset(oldFull) &&
-            !CollectPathEdits(s_AssetDirectory,oldRel.generic_string(),newRel.generic_string(),edits,error)) return false;
+            !CollectPathEdits(s_AssetDirectory,PathToUtf8(oldRel),PathToUtf8(newRel),edits,error)) return false;
         size_t count = 0;
         for (const auto& edit : edits) {
             if (!FileSystem::WriteTextFileAtomically(edit.path,edit.after,error)) {

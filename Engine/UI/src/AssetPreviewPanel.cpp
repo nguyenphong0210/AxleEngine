@@ -1,3 +1,4 @@
+#include <Axle/Path.hpp>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -51,6 +52,9 @@ namespace Axle {
 
     AssetPreviewPanel::~AssetPreviewPanel() {
         FreeIconTextures();
+        ShutdownPreview();
+    }
+    void AssetPreviewPanel::ShutdownPreview() {
         if (m_PreviewScene) {
             m_PreviewScene->Clear();
             m_PreviewScene.reset();
@@ -160,12 +164,12 @@ namespace Axle {
             return;
         }
 
-        std::string ext = assetPath.extension().string();
+        std::string ext = PathToUtf8(assetPath.extension());
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-        bool isMaterial = (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(assetPath.string()) == AssetKind::Material);
+        bool isMaterial = (ext == ".axleasset" && AssetDSL::PeekAssetKindFromFile(PathToUtf8(assetPath)) == AssetKind::Material);
         bool is3D = (ext == ".axlemesh" || ext == ".axle" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx" || isMaterial ||
-            (ext==".axleasset"&&AssetDSL::PeekAssetKindFromFile(assetPath.string())==AssetKind::Mesh));
+            (ext==".axleasset"&&AssetDSL::PeekAssetKindFromFile(PathToUtf8(assetPath))==AssetKind::Mesh));
         if (!is3D) {
             m_HasAsset = false;
             m_IsAssembly = false;
@@ -179,7 +183,7 @@ namespace Axle {
             if (SceneHierarchyPanel::LoadMaterialAsset(assetPath, mat)) {
                 m_IsAssembly = false;
                 m_CurrentPackage = {};
-                m_CurrentPackage.Name = assetPath.stem().string();
+                m_CurrentPackage.Name = PathToUtf8(assetPath.stem());
                 m_CurrentPackage.BoundingSize = glm::vec3(1.0f);
                 m_CurrentPackage.HalfExtent = glm::vec3(0.5f);
                 m_CurrentPackage.Success = true;
@@ -368,7 +372,7 @@ namespace Axle {
 
     bool AssetPreviewPanel::IsMaterialPreview() const {
         return !m_CurrentAssetPath.empty() && m_CurrentAssetPath.extension() == ".axleasset"
-            && AssetDSL::PeekAssetKindFromFile(m_CurrentAssetPath.string()) == AssetKind::Material;
+            && AssetDSL::PeekAssetKindFromFile(PathToUtf8(m_CurrentAssetPath)) == AssetKind::Material;
     }
 
     glm::quat AssetPreviewPanel::GetPreviewRotation() const {
@@ -398,7 +402,7 @@ namespace Axle {
 
         if (m_IsAssembly) {
             auto spawned = m_Scene->InstantiateAssembly(m_CurrentAssetPath, m_PhysicsScene, glm::vec3(0.0f, 1.0f, 0.0f), m_SerializerContext);
-            AXLE_INFO("AssetPreviewPanel: Instantiated Assembly '{0}'", m_CurrentAssetPath.filename().string());
+            AXLE_INFO("AssetPreviewPanel: Instantiated Assembly '{0}'", PathToUtf8(m_CurrentAssetPath.filename()));
             return;
         }
 
@@ -406,7 +410,7 @@ namespace Axle {
 
         glm::vec3 spawnPos(0.0f, m_CurrentPackage.HalfExtent.y, 0.0f);
         if (m_CurrentPackage.IsPackage) {
-            std::string rootTag = m_CurrentPackage.Name.empty() ? m_CurrentAssetPath.stem().string() : m_CurrentPackage.Name;
+            std::string rootTag = m_CurrentPackage.Name.empty() ? PathToUtf8(m_CurrentAssetPath.stem()) : m_CurrentPackage.Name;
             auto rootEntity = m_Scene->CreateEntity(rootTag);
             rootEntity.AddComponent<TransformComponent>(spawnPos, glm::vec3(1.0f));
             auto& rootHierarchy = rootEntity.AddComponent<HierarchyComponent>();
@@ -433,7 +437,7 @@ namespace Axle {
                 auto partFullPath = m_CurrentAssetPath.parent_path() / part.RelativePath;
                 childEntity.AddComponent<MeshInstance3D>(
                     vao ? vao : m_FallbackMesh,
-                    partFullPath.string(),
+                    PathToUtf8(partFullPath),
                     part.LoadedMesh.SourceData.PatternMode,
                     part.LoadedMesh.SourceData.TileScale,
                     part.LoadedMesh.SourceData.ColorPrimary,
@@ -447,12 +451,12 @@ namespace Axle {
         } else {
             const auto& part = m_CurrentPackage.Parts[0];
             auto vao = !m_PartVAOs.empty() ? m_PartVAOs[0] : nullptr;
-            std::string tag = m_CurrentPackage.Name.empty() ? m_CurrentAssetPath.stem().string() : m_CurrentPackage.Name;
+            std::string tag = m_CurrentPackage.Name.empty() ? PathToUtf8(m_CurrentAssetPath.stem()) : m_CurrentPackage.Name;
             auto entity = m_Scene->CreateEntity(tag);
             entity.AddComponent<TransformComponent>(spawnPos, part.LocalScale);
             entity.AddComponent<MeshInstance3D>(
                 vao ? vao : m_FallbackMesh,
-                m_CurrentAssetPath.string(),
+                PathToUtf8(m_CurrentAssetPath),
                 part.LoadedMesh.SourceData.PatternMode,
                 part.LoadedMesh.SourceData.TileScale,
                 part.LoadedMesh.SourceData.ColorPrimary,
@@ -546,7 +550,7 @@ namespace Axle {
 
         bool isMaterial = (!m_CurrentAssetPath.empty() && 
                            m_CurrentAssetPath.extension() == ".axleasset" && 
-                           AssetDSL::PeekAssetKindFromFile(m_CurrentAssetPath.string()) == AssetKind::Material);
+                           AssetDSL::PeekAssetKindFromFile(PathToUtf8(m_CurrentAssetPath)) == AssetKind::Material);
 
         if (isMaterial) {
             auto& tc = m_PreviewEntity.GetComponent<TransformComponent>();
@@ -577,8 +581,8 @@ namespace Axle {
                     break;
                 case PreviewMeshType::Custom:
                     if (!m_CustomMeshPath.empty()) {
-                        mc.AssetPath = m_CustomMeshPath.string();
-                        mc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(m_CustomMeshPath.string());
+                        mc.AssetPath = PathToUtf8(m_CustomMeshPath);
+                        mc.RHIMeshAsset = RHIMeshRegistry::Get().GetOrCreateMesh(PathToUtf8(m_CustomMeshPath));
                         mc.VAO = m_CustomMeshVAO;
                     }
                     break;
@@ -591,13 +595,15 @@ namespace Axle {
             centeredRoot.SetParent(m_PreviewEntity,false);
             centeredRoot.GetComponent<TransformComponent>().Translation=-m_Center;
             std::function<void(const AssemblyNode&, Entity)> spawnNodes = [&](const AssemblyNode& node, Entity parent) {
-                auto part=m_PreviewScene->CreateEntity(node.Tag.empty()?"Node":node.Tag);
+                auto part=node.AuthoredUUID ? m_PreviewScene->CreateEntityWithUUID(UUID(node.AuthoredUUID), node.Tag.empty()?"Node":node.Tag)
+                                            : m_PreviewScene->CreateEntity(node.Tag.empty()?"Node":node.Tag);
                 part.SetParent(parent,false);
                 part.GetComponent<TransformComponent>()=node.Transform;
                 if (node.HasMesh) part.AddComponent<MeshInstance3D>()=node.Mesh;
                 if (node.HasMaterial) part.AddComponent<MaterialComponent>()=node.Material;
                 if (node.HasSkeletalMesh) part.AddComponent<SkeletalMeshComponent>()=node.SkeletalMesh;
                 if (node.HasAnimator) part.AddComponent<AnimatorComponent>()=node.Animator;
+                for (const auto& section : node.PassiveSections) m_PreviewScene->StorePassiveSection(part, section.SectionName, section.Lines);
                 for (const auto& child : node.Children) spawnNodes(child,part);
             };
             spawnNodes(m_CurrentAssembly.RootNode,centeredRoot);
@@ -614,7 +620,7 @@ namespace Axle {
                 auto& pmc = partEnt.AddComponent<MeshInstance3D>();
                 if (!m_CurrentAssetPath.empty()) {
                     auto partFullPath = m_CurrentAssetPath.parent_path() / part.RelativePath;
-                    pmc.AssetPath = partFullPath.string();
+                    pmc.AssetPath = PathToUtf8(partFullPath);
 
                 }
                 pmc.VAO = i < m_PartVAOs.size() ? m_PartVAOs[i] : nullptr;
@@ -724,6 +730,10 @@ namespace Axle {
 
         const auto result=RenderService::Get().RenderView(*m_PreviewScene, request);
         m_RenderDiagnostic=result.ErrorMessage;
+        std::vector<std::string> readiness;
+        if (!m_PreviewScene->ExtensionsReady(readiness)) {
+            for (const auto& error : readiness) { if (!m_RenderDiagnostic.empty()) m_RenderDiagnostic += '\n'; m_RenderDiagnostic += error; }
+        }
         if (!result.Success) AXLE_CORE_WARN("Asset preview failed: {0}",m_RenderDiagnostic);
     }
 
@@ -796,7 +806,7 @@ namespace Axle {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                 const wchar_t* pathStr = (const wchar_t*)payload->Data;
                 std::filesystem::path droppedPath(pathStr);
-                std::string ext = droppedPath.extension().string();
+                std::string ext = PathToUtf8(droppedPath.extension());
                 std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
                 if (ext == ".axlemesh" || ext == ".axle" || ext == ".obj" || ext == ".glb" || ext == ".gltf") {
                     LoadCustomPreviewMesh(droppedPath);
@@ -917,7 +927,7 @@ namespace Axle {
                           IM_COL32(210, 210, 210, 255), badgeText.c_str());
         ImGui::SetCursorScreenPos(footer0);
         ImGui::Dummy(ImVec2(availW, footerHeight));
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_CurrentAssetPath.filename().string().c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", PathToUtf8(m_CurrentAssetPath.filename()).c_str());
 
         if (m_IsViewportHovered) {
             // Zoom scales the object, leaving the camera and lights fixed.

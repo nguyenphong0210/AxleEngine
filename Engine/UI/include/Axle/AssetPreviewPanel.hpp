@@ -60,6 +60,7 @@ namespace Axle {
         RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
         const std::shared_ptr<Framebuffer>& GetGLFramebuffer() const { return m_Framebuffer; }
         Scene* GetPreviewScene() const { return m_PreviewScene.get(); }
+        void ShutdownPreview();
         const std::string& GetRenderDiagnostic() const { return m_RenderDiagnostic; }
         void UpdateMaterialPreview(const MaterialComponent& mat);
 

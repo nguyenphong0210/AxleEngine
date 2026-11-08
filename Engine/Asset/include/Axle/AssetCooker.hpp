@@ -17,6 +17,9 @@ namespace Axle {
         bool IncludeShaders = true;                        // Bundle Engine shaders (Checkerboard, Skybox, etc.)
         std::filesystem::path ExecutableDirectory;        // Explicit build output; no cross-config fallback when set
         bool CopyExecutables = true;                       // Bundle AxleRuntime.exe & AxleScripts.dll
+        // Composition-owned validation runs before opening or modifying output.
+        std::function<bool(std::string&)> Preflight;
+        std::function<bool(const std::filesystem::path&, std::string&)> ValidatePluginDocument;
     };
 
     struct CookResult {

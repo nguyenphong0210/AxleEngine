@@ -1137,6 +1137,17 @@ namespace Axle {
         if (!world.ErrorMessage.empty() || !m_Frame.Begin()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
         auto rollback = std::unique_ptr<RHISceneRenderer, std::function<void(RHISceneRenderer*)>>(this,
             [&](auto*) { if (!m_LastRenderSucceeded) m_Frame.Abandon(); });
+        // The extracted CPU snapshot may be released immediately after this
+        // call. Record executable owners in the actual submission pin chain.
+        if (!world.DebugLines.empty()) {
+            std::vector<std::shared_ptr<void>> owners;
+            for (const auto& line : world.DebugLines) if (line.OwnerLease) owners.push_back(line.OwnerLease);
+            if (!owners.empty()) {
+                auto lease = m_Device->GetResources().Publish(RHIResourceKind::Memory, "Scene extension owners", {},
+                    [owners = std::move(owners)] {});
+                if (!lease || !Commands().KeepAlive(lease)) return;
+            }
+        }
         m_LastDrawCallCount = 0;
         m_CustomDescriptorPool.Reset(); // The preceding RenderScene submission completed before reuse.
         m_LastRenderedEntityCount = 0;

@@ -3,6 +3,8 @@
 #include <Axle/UI/UIParser.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/Path.hpp>
+#include <Axle/PlatformUtils.hpp>
 #include <imgui.h>
 #include <fstream>
 #include <sstream>
@@ -26,58 +28,77 @@ namespace Axle {
     }
 
     void UICanvasDesignerPanel::OpenDocument(const std::filesystem::path& path) {
+        const auto previous = m_FilePath;
         m_FilePath = path;
         m_IsOpen = true;
-        ReloadDocument();
+        if (!ReloadDocument()) m_FilePath = previous;
     }
 
-    void UICanvasDesignerPanel::ReloadDocument() {
-        if (m_FilePath.empty()) return;
+    bool UICanvasDesignerPanel::ReloadDocument() {
+        try {
+        if (m_FilePath.empty()) return false;
 
         std::filesystem::path fullPath = m_FilePath;
         if (!std::filesystem::exists(fullPath)) {
-            fullPath = FileSystem::ResolveAssetPath(m_FilePath.string());
+            fullPath = FileSystem::ResolveAssetPath(m_FilePath);
         }
 
         std::ifstream file(fullPath);
         if (file.is_open()) {
             std::stringstream ss;
             ss << file.rdbuf();
-            m_TextBuffer = ss.str();
+            const auto text = ss.str();
+            if (file.bad() || text.size() >= sizeof(m_TextEditBuffer)) { m_StatusMessage = "Document cannot be loaded completely into the source editor."; return false; }
+            m_TextBuffer = text;
 
             std::strncpy(m_TextEditBuffer, m_TextBuffer.c_str(), sizeof(m_TextEditBuffer) - 1);
             m_TextEditBuffer[sizeof(m_TextEditBuffer) - 1] = '\0';
 
             RecompileFromBuffer();
-            m_StatusMessage = "Loaded: " + fullPath.filename().string();
+            m_StatusMessage = "Loaded: " + PathToUtf8(fullPath.filename());
+            return true;
         } else {
-            m_StatusMessage = "Failed to open: " + fullPath.string();
+            m_StatusMessage = "Failed to open: " + PathToUtf8(fullPath);
             m_HasParseError = true;
             m_ErrorMessage = "File could not be opened";
+            return false;
         }
+        } catch (const std::exception& error) { m_StatusMessage = error.what(); return false; }
     }
 
-    void UICanvasDesignerPanel::SaveDocument() {
-        if (m_FilePath.empty()) return;
-
-        std::filesystem::path fullPath = m_FilePath;
+    bool UICanvasDesignerPanel::SaveDocument(const std::filesystem::path& path) {
+        try {
+        std::filesystem::path fullPath = path.empty() ? m_FilePath : path;
+        if (fullPath.empty()) {
+            const auto root = PathToUtf8(FileSystem::GetAssetDirectory());
+            const auto selected = FileDialogs::SaveFile("UI Canvas (*.axleui)\0*.axleui\0All Files (*.*)\0*.*\0", root.c_str(), "axleui");
+            if (selected.empty()) return false;
+            fullPath = PathFromUtf8(selected);
+        }
         if (!std::filesystem::exists(fullPath)) {
-            fullPath = FileSystem::ResolveAssetPath(m_FilePath.string());
+            fullPath = FileSystem::ResolveAssetPath(fullPath);
         }
 
         if (fullPath.has_parent_path() && !std::filesystem::exists(fullPath.parent_path())) {
             std::filesystem::create_directories(fullPath.parent_path());
         }
 
-        std::ofstream file(fullPath);
-        if (file.is_open()) {
-            file << m_TextEditBuffer;
-            m_StatusMessage = "Saved: " + fullPath.filename().string();
+        std::string error;
+        if (FileSystem::WriteIdentifiedTextFile(fullPath, m_TextEditBuffer, &error)) {
+            m_FilePath = fullPath;
+            m_StatusMessage = "Saved: " + PathToUtf8(fullPath.filename());
             m_TextBuffer = m_TextEditBuffer;
             RecompileFromBuffer();
+            return true;
         } else {
-            m_StatusMessage = "Failed to save file!";
+            m_StatusMessage = "Failed to save: " + error;
+            return false;
         }
+        } catch (const std::exception& error) { m_StatusMessage = error.what(); return false; }
+    }
+    void UICanvasDesignerPanel::DiscardChanges() {
+        std::strncpy(m_TextEditBuffer, m_TextBuffer.c_str(), sizeof(m_TextEditBuffer) - 1);
+        m_TextEditBuffer[sizeof(m_TextEditBuffer) - 1] = '\0'; RecompileFromBuffer();
     }
 
     void UICanvasDesignerPanel::RecompileFromBuffer() {
@@ -86,7 +107,7 @@ namespace Axle {
         bool ok = UIParser::ParseSource(m_TextEditBuffer, *newDoc, &err);
         if (ok) {
             m_Document = newDoc;
-            m_Document->SetFilePath(m_FilePath.string());
+            m_Document->SetFilePath(PathToUtf8(m_FilePath));
             m_HasParseError = false;
             m_ErrorMessage.clear();
             m_StatusMessage = "Parsed successfully (" + std::to_string(m_Document->GetNodeCount()) + " nodes)";

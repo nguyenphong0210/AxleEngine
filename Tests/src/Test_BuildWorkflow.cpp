@@ -57,13 +57,14 @@ int main(int argc, char** argv) {
     CHECK(receiptAfterCancel == receiptBefore, "Cancelled build preserves the last-known-good receipt");
     CHECK(std::chrono::steady_clock::now() - started < std::chrono::seconds(10), "No wait for the slow build's full duration");
 
-    const auto assets = request.BuildDirectory / "fixture-assets";
+    const auto suffix = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto assets = request.BuildDirectory / ("fixture-assets-" + suffix);
     std::filesystem::create_directories(assets);
     std::ofstream(assets / "fixture.txt") << "authored fixture";
     Axle::FileSystem::SetAssetDirectory(assets);
     Axle::CookSettings settings;
     settings.AssetDirectory = assets;
-    settings.OutputDirectory = request.BuildDirectory / "package";
+    settings.OutputDirectory = request.BuildDirectory / ("package-" + suffix);
     settings.IncludeShaders = false;
     settings.BakeMeshesToBinary = false;
     settings.ExecutableDirectory = request.ExecutableDirectory;
@@ -75,6 +76,24 @@ int main(int argc, char** argv) {
     settings.CopyExecutables = false;
     cooked = Axle::AssetCooker::CookProject(settings);
     CHECK(cooked.Success && !cooked.RuntimeCopied, "Asset-only export needs no Runtime build");
+    const auto package = cooked.PackagePath;
+    std::ifstream savedPackage(package, std::ios::binary);
+    const std::string beforePreflight((std::istreambuf_iterator<char>(savedPackage)), {});
+    savedPackage.close();
+    std::ofstream(assets / "Required.AXLESCENE") << "Entities:\n  - Entity: 1\n    AxlePlugin_73747564696f2e6d6f7665722f4d6f766572:\n      Required: true\n";
+    cooked = Axle::AssetCooker::CookProject(settings);
+    CHECK(!cooked.Success && cooked.ErrorMessage.find("preflight") != std::string::npos, "Missing plugin-aware preflight rejects native data before output mutation");
+    std::ifstream rejectedPackage(package, std::ios::binary);
+    CHECK(std::string((std::istreambuf_iterator<char>(rejectedPackage)), {}) == beforePreflight, "Rejected plugin data preserves the published package");
+    settings.ValidatePluginDocument = [](const auto&, std::string& error) { error = "Required plugin schema is unavailable"; return false; };
+    cooked = Axle::AssetCooker::CookProject(settings);
+    CHECK(!cooked.Success && cooked.ErrorMessage.find("schema") != std::string::npos, "Composition validator failure is propagated");
+    settings.ValidatePluginDocument = [](const auto&, std::string&) { return true; };
+    cooked = Axle::AssetCooker::CookProject(settings);
+    CHECK(cooked.Success, "Validated plugin documents can be cooked as data");
+    settings.AssetDirectory = request.BuildDirectory / ("missing-assets-" + suffix);
+    cooked = Axle::AssetCooker::CookProject(settings);
+    CHECK(!cooked.Success && cooked.ErrorMessage.find("unavailable") != std::string::npos, "Explicit missing asset root cannot fall back to a different unchecked tree");
     std::cout << "Build success/failure/cancellation and exact-output packaging: PASS\n";
     return 0;
 }

@@ -4,6 +4,9 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ExtensionDocument.hpp>
+#include <Axle/SceneDataDocument.hpp>
+#include <Axle/AssemblySerializer.hpp>
+#include <Axle/FileSystem.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/JobSystem.hpp>
 #include <Axle/Log.hpp>
@@ -14,6 +17,23 @@
 #include <tuple>
 
 namespace Axle {
+bool ValidatePluginAssetDocument(const std::filesystem::path& path, std::string& error) {
+    try {
+        std::vector<std::string> errors;
+        if (AssemblySerializer::IsAssemblyFile(path)) {
+            Scene preview;
+            if (!AssemblySerializer::Deserialize(path, &preview) || !preview.ExtensionsReady(errors)) {
+                error = errors.empty() ? "Assembly plugin data could not be instantiated" : errors.front(); return false;
+            }
+            return true;
+        }
+        SceneData preview;
+        if (!SceneDataDocument::Deserialize(FileSystem::ReadTextFile(path), preview) || !preview.ExtensionsReady(errors)) {
+            error = errors.empty() ? "Scene plugin data could not be read" : errors.front(); return false;
+        }
+        return true;
+    } catch (const std::exception& exception) { error = exception.what(); return false; }
+}
 namespace {
 using Registry = PluginRuntime::RegistrationRegistry;
 constexpr const char* ExtensionKey = "axle.native.plugins";
@@ -67,6 +87,7 @@ struct PluginServiceSession::State : std::enable_shared_from_this<State> {
     std::shared_ptr<Registry::State> Registrations;
     const std::thread::id Thread = std::this_thread::get_id();
     bool Alive = false;
+    bool AcceptJobs = true;
     int CallbackDepth = 0;
     std::map<std::string, std::shared_ptr<NativeType>> Types;
     std::map<std::uint64_t, std::shared_ptr<OwnerContext>> Owners;
@@ -433,6 +454,7 @@ bool PluginServiceSession::Bind(std::string& error) {
     };
     api.SubmitJob = [](void* user, std::uint64_t owner, std::uint64_t scene, void (*work)(void*), void (*complete)(void*), void* data, void (*destroy)(void*)) -> bool {
         return Checked([&] { auto* state = Access(user, owner); if (!state || !work || !destroy || !SceneData::FindInstance(scene) || !JobSystem::IsInitialized()) return false;
+            if (!state->AcceptJobs) return false;
             auto context = state->EnsureOwner(owner); if (!context) return false;
             auto job = std::make_unique<PluginJob>(); job->Code = context->Code; job->Owner = owner; job->Scene = scene; job->Data = data; job->Complete = complete;
             auto* pending = job.get();
@@ -458,6 +480,7 @@ bool PluginServiceSession::Bind(std::string& error) {
     if (!AxleRuntimeHost_BindV1(&api)) { error = "Could not bind the canonical Runtime host"; return false; }
     m_State->Alive = true;
     if (!SceneExtensionRegistry::Register(ExtensionKey, [state = m_State](SceneData& scene) {
+        std::erase_if(state->Scenes, [](const auto& scene) { return scene.expired(); });
         auto extension = std::make_shared<PluginScene>(scene, state); state->Scenes.push_back(extension); return extension;
     })) {
         m_State->Alive = false; AxleRuntimeHost_UnbindV1(m_State.get()); error = "Could not attach native services to existing scenes"; return false;
@@ -478,6 +501,21 @@ void PluginServiceSession::Attach(PluginRuntime::LoadRequest& request) const {
     };
 }
 void PluginServiceSession::Drain() { m_State->Drain(); }
+void PluginServiceSession::Quiesce() {
+    if (!m_State || m_State->Thread != std::this_thread::get_id()) return;
+    m_State->AcceptJobs = false;
+    for (auto& [id, owner] : m_State->Owners) owner->Completions.Invalidate();
+    while (!m_State->Jobs.empty()) {
+        auto job = std::move(m_State->Jobs.begin()->second);
+        m_State->Jobs.erase(m_State->Jobs.begin());
+        job->Handle.Cancel(); job->Handle.Wait();
+    }
+}
+void PluginServiceSession::ResumeJobs() {
+    if (!m_State || !m_State->Alive || m_State->Thread != std::this_thread::get_id() || m_State->AcceptJobs) return;
+    for (auto& [id, owner] : m_State->Owners) owner->Completions.Reset();
+    m_State->AcceptJobs = true;
+}
 void PluginServiceSession::RehydrateScenes() {
     if (!m_State->Alive || m_State->Thread != std::this_thread::get_id()) return;
     const auto scenes = m_State->Scenes;

@@ -1,5 +1,6 @@
 #include <Axle/UI/UIParser.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/Path.hpp>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -326,14 +327,14 @@ namespace Axle {
     }
 
     bool UIParser::ParseFile(const std::string& filepath, UIDocument& outDocument, std::string* outError) {
-        std::filesystem::path p(filepath);
+        std::filesystem::path p = PathFromUtf8(filepath);
         std::string source = FileSystem::ReadTextFile(p);
         if (source.empty() && p.extension() == ".axleui") {
             p.replace_extension(".axleasset");
             source = FileSystem::ReadTextFile(p);
         }
         if (source.empty()) {
-            auto resolved = FileSystem::ResolveAssetPath(filepath);
+            auto resolved = FileSystem::ResolveAssetPath(PathFromUtf8(filepath));
             source = FileSystem::ReadTextFile(resolved);
             if (source.empty() && resolved.extension() == ".axleui") {
                 resolved.replace_extension(".axleasset");
@@ -351,7 +352,8 @@ namespace Axle {
 
         bool success = ParseSource(source, outDocument, outError);
         if (success) {
-            outDocument.SetFilePath(p.string());
+            outDocument.SetFilePath(PathToUtf8(p));
+            outDocument.SetDirty(false);
         }
         return success;
     }
@@ -555,7 +557,7 @@ namespace Axle {
     }
 
     bool UIParser::SaveFile(const std::string& filepath, const UIDocument& document, std::string* outError) {
-        return FileSystem::WriteIdentifiedTextFile(filepath, SerializeDocument(document), outError);
+        return FileSystem::WriteIdentifiedTextFile(PathFromUtf8(filepath), SerializeDocument(document), outError);
     }
 
 } // namespace Axle

@@ -1,3 +1,4 @@
+#include <Axle/Path.hpp>
 #include <Axle/TextureDescriptor.hpp>
 #include <Axle/ParticleEmitterSerializer.hpp>
 #include <Axle/ParticleEffectSerializer.hpp>
@@ -69,7 +70,7 @@ namespace Axle {
             return { CBAssetKind::Folder, "Folder", "DIR", IM_COL32(245, 185, 45, 255) };
         }
 
-        auto ext = entry.path().extension().string();
+        auto ext = PathToUtf8(entry.path().extension());
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
         if (ext == ".axlemesh") {
@@ -106,7 +107,7 @@ namespace Axle {
             return { CBAssetKind::Document, "UI Canvas", "UI", IM_COL32(56, 189, 248, 255) };
         }
         if (ext == ".axleasset") {
-            auto dslKind = AssetDSL::PeekAssetKindFromFile(entry.path().string());
+            auto dslKind = AssetDSL::PeekAssetKindFromFile(PathToUtf8(entry.path()));
             switch (dslKind) {
                 case Axle::AssetKind::Material:
                     return { CBAssetKind::Material, "Material Asset", "MAT", IM_COL32(255, 135, 45, 255) };
@@ -524,7 +525,7 @@ namespace Axle {
         std::ofstream fout(newPath);
         if (fout.is_open()) {
             fout << "# Axle Scene Definition File\n";
-            fout << "Scene: " << newPath.stem().string() << "\n";
+            fout << "Scene: " << PathToUtf8(newPath.stem()) << "\n";
             fout << "Entities:\n";
             fout.close();
             AssetManager::GetOrCreateMetadata(newPath);
@@ -538,7 +539,7 @@ namespace Axle {
         while (std::filesystem::exists(newPath)) {
             newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
         }
-        Material mat(newPath.stem().string());
+        Material mat(PathToUtf8(newPath.stem()));
         if (mat.Save(newPath)) {
             AssetManager::GetOrCreateMetadata(newPath);
         }
@@ -552,13 +553,13 @@ namespace Axle {
             newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
         }
         TextureDescriptor desc;
-        desc.Name = newPath.stem().string();
+        desc.Name = PathToUtf8(newPath.stem());
         desc.Type = "Color";
         desc.Filter = "Anisotropic16x";
         desc.WrapU = "Repeat";
         desc.WrapV = "Repeat";
         desc.GenerateMips = true;
-        if (TextureDescriptor::Save(newPath.string(), desc)) {
+        if (TextureDescriptor::Save(PathToUtf8(newPath), desc)) {
             AssetManager::GetOrCreateMetadata(newPath);
         }
         return newPath;
@@ -571,21 +572,21 @@ namespace Axle {
             std::error_code error;
             const bool exists = std::filesystem::exists(newPath, error);
             if (error) {
-                AXLE_CORE_ERROR("Cannot create VFX asset '{}': {}", newPath.string(), error.message());
+                AXLE_CORE_ERROR("Cannot create VFX asset '{}': {}", PathToUtf8(newPath), error.message());
                 return {};
             }
             if (!exists) break;
             newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
         }
         ParticleEffectDefinition effectDef;
-        effectDef.Name = newPath.stem().string();
+        effectDef.Name = PathToUtf8(newPath.stem());
         std::vector<VFXDiagnostic> diags;
-        if (ParticleEffectSerializer::SerializeToFile(newPath.string(), effectDef, &diags)) {
+        if (ParticleEffectSerializer::SerializeToFile(PathToUtf8(newPath), effectDef, &diags)) {
             AssetManager::GetOrCreateMetadata(newPath);
             return newPath;
         }
         for (const auto& diagnostic : diags)
-            AXLE_CORE_ERROR("Create VFX asset '{}': {}", newPath.string(), diagnostic.Message);
+            AXLE_CORE_ERROR("Create VFX asset '{}': {}", PathToUtf8(newPath), diagnostic.Message);
         return {};
     }
 
@@ -597,10 +598,10 @@ namespace Axle {
         }
         UIDocument doc;
         auto* root = doc.CreateNode<UICanvasNode>(nullptr);
-        root->ID = newPath.stem().string();
+        root->ID = PathToUtf8(newPath.stem());
         root->ReferenceResolution = glm::vec2(1920.0f, 1080.0f);
 
-        if (UIParser::SaveFile(newPath.string(), doc)) {
+        if (UIParser::SaveFile(PathToUtf8(newPath), doc)) {
             AssetManager::GetOrCreateMetadata(newPath);
         }
         return newPath;
@@ -613,7 +614,7 @@ namespace Axle {
             newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
         }
         AxleMeshSource mesh;
-        mesh.Name = newPath.stem().string();
+        mesh.Name = PathToUtf8(newPath.stem());
         mesh.BoundingSize = glm::vec3(1.0f);
         mesh.HalfExtent = glm::vec3(0.5f);
         mesh.Vertices = {
@@ -740,7 +741,7 @@ namespace Axle {
             newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
         }
         PhysicsMaterial defaultPhysMat;
-        defaultPhysMat.Name = newPath.stem().string();
+        defaultPhysMat.Name = PathToUtf8(newPath.stem());
         defaultPhysMat.Friction = 0.85f;
         defaultPhysMat.Restitution = 0.05f;
         defaultPhysMat.Density = 1000.0f;
@@ -757,7 +758,7 @@ namespace Axle {
             newPath = parentDir / (baseName + "_" + std::to_string(counter++) + ".axleasset");
         }
         TerrainAsset defaultTerrain;
-        defaultTerrain.Name = newPath.stem().string();
+        defaultTerrain.Name = PathToUtf8(newPath.stem());
         defaultTerrain.Size = glm::vec2(1024.0f, 1024.0f);
         defaultTerrain.HeightScale = 60.0f;
         if (TerrainAsset::Save(newPath, defaultTerrain)) {
@@ -775,7 +776,7 @@ namespace Axle {
         std::filesystem::create_directories(newPath.parent_path());
         std::ofstream fout(newPath);
         if (fout.is_open()) {
-            fout << HLSLStudioPanel::GetDefaultPBRTemplate(newPath.stem().string());
+            fout << HLSLStudioPanel::GetDefaultPBRTemplate(PathToUtf8(newPath.stem()));
             fout.close();
             AssetManager::GetOrCreateMetadata(newPath);
         }
@@ -854,7 +855,7 @@ namespace Axle {
             if (ImGui::MenuItem("VFX Asset (.axleasset)")) {
                 auto path = CreateNewVFXAsset(m_CurrentDirectory);
                 SetStatusNotification(path.empty() ? "Could not create VFX asset. See Console."
-                                                  : "Created VFX Asset: " + path.filename().string());
+                                                  : "Created VFX Asset: " + PathToUtf8(path.filename()));
                 if (!path.empty()) RefreshThumbnails();
             }
             if (ImGui::MenuItem("UI Canvas Asset (.axleasset)")) {
@@ -871,7 +872,7 @@ namespace Axle {
             }
             if (ImGui::MenuItem("HLSL Shader (.hlsl)")) {
                 auto p = CreateNewHLSLShader(m_CurrentDirectory);
-                SetStatusNotification("Created HLSL Shader: " + p.filename().string());
+                SetStatusNotification("Created HLSL Shader: " + PathToUtf8(p.filename()));
                 if (m_OnOpenHLSLStudioCallback) {
                     m_OnOpenHLSLStudioCallback(p);
                 }
@@ -882,9 +883,9 @@ namespace Axle {
                 while (std::filesystem::exists(newAsmPath)) {
                     newAsmPath = m_CurrentDirectory / ("New_Assembly_" + std::to_string(counter++) + ".axleasset");
                 }
-                if (AssemblySerializer::CreateEmptyAssembly(newAsmPath, newAsmPath.stem().string())) {
+                if (AssemblySerializer::CreateEmptyAssembly(newAsmPath, PathToUtf8(newAsmPath.stem()))) {
                     AssetManager::GetOrCreateMetadata(newAsmPath);
-                    SetStatusNotification("Created Assembly: " + newAsmPath.filename().string());
+                    SetStatusNotification("Created Assembly: " + PathToUtf8(newAsmPath.filename()));
                     if (m_OnOpenAssemblyCallback) {
                         m_OnOpenAssemblyCallback(newAsmPath);
                     }
@@ -979,7 +980,7 @@ namespace Axle {
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.45f, 0.52f, 0.62f, 1.0f), ">");
                 ImGui::SameLine();
-                if (ImGui::Button(part.string().c_str())) {
+                if (ImGui::Button(PathToUtf8(part).c_str())) {
                     m_CurrentDirectory = accum;
                     m_SelectedEntry.clear();
                 }
@@ -1003,7 +1004,7 @@ namespace Axle {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.35f, 0.40f, 0.48f, 1.0f), "|");
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.40f, 0.75f, 1.0f, 1.0f), "Selected: %s", m_SelectedEntry.filename().string().c_str());
+            ImGui::TextColored(ImVec4(0.40f, 0.75f, 1.0f, 1.0f), "Selected: %s", PathToUtf8(m_SelectedEntry.filename()).c_str());
         }
 
         if (m_StatusNotificationTimer > 0.0f && !m_StatusNotificationMessage.empty()) {
@@ -1028,7 +1029,7 @@ namespace Axle {
 
     void ContentBrowserPanel::RenderDirectoryContents() {
         if (!std::filesystem::exists(m_CurrentDirectory)) {
-            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "Directory not found: %s", m_CurrentDirectory.string().c_str());
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "Directory not found: %s", PathToUtf8(m_CurrentDirectory).c_str());
             return;
         }
 
@@ -1037,7 +1038,7 @@ namespace Axle {
         std::vector<std::filesystem::directory_entry> files;
 
         for (const auto& entry : std::filesystem::directory_iterator(m_CurrentDirectory)) {
-            const auto filename = entry.path().filename().string();
+            const auto filename = PathToUtf8(entry.path().filename());
             if (!m_ShowHiddenFiles && !filename.empty() && filename[0] == '.') {
                 continue;
             }
@@ -1059,10 +1060,10 @@ namespace Axle {
         }
 
         std::sort(directories.begin(), directories.end(), [](const auto& a, const auto& b) {
-            return a.path().filename().string() < b.path().filename().string();
+            return PathToUtf8(a.path().filename()) < PathToUtf8(b.path().filename());
         });
         std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) {
-            return a.path().filename().string() < b.path().filename().string();
+            return PathToUtf8(a.path().filename()) < PathToUtf8(b.path().filename());
         });
 
         std::vector<std::filesystem::directory_entry> allEntries;
@@ -1094,7 +1095,7 @@ namespace Axle {
                     ImGui::PushID(itemIndex++);
 
                     const auto& path = entry.path();
-                    std::string filenameStr = path.filename().string();
+                    std::string filenameStr = PathToUtf8(path.filename());
                     bool isDir = entry.is_directory();
                     auto meta = GetAssetVisualMeta(entry);
 
@@ -1135,24 +1136,24 @@ namespace Axle {
                             m_CurrentDirectory /= path.filename();
                             m_SelectedEntry.clear();
                         } else {
-                            std::string ext = path.extension().string();
+                            std::string ext = PathToUtf8(path.extension());
                             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                             if ((ext == ".axlescene" || ext == ".scene") && m_OnOpenSceneCallback) {
                                 m_OnOpenSceneCallback(path);
-                                SetStatusNotification("Loaded scene: " + path.filename().string());
+                                SetStatusNotification("Loaded scene: " + PathToUtf8(path.filename()));
                             } else if (ext == ".axleproj" && m_OnOpenProjectCallback) {
                                 m_OnOpenProjectCallback(path);
-                                SetStatusNotification("Loaded project: " + path.filename().string());
+                                SetStatusNotification("Loaded project: " + PathToUtf8(path.filename()));
                             } else if (ext == ".hlsl" && m_OnOpenHLSLStudioCallback) {
                                 m_OnOpenHLSLStudioCallback(path);
-                                SetStatusNotification("Opened HLSL Shader Studio: " + path.filename().string());
-                            } else if ((ext == ".axleui" || ext == ".axleasset") && m_OnOpenUICanvasCallback && (ext == ".axleui" || AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::Canvas)) {
+                                SetStatusNotification("Opened HLSL Shader Studio: " + PathToUtf8(path.filename()));
+                            } else if ((ext == ".axleui" || ext == ".axleasset") && m_OnOpenUICanvasCallback && (ext == ".axleui" || AssetDSL::PeekAssetKindFromFile(PathToUtf8(path)) == Axle::AssetKind::Canvas)) {
                                 m_OnOpenUICanvasCallback(path);
-                                SetStatusNotification("Opened UI Designer: " + path.filename().string());
+                                SetStatusNotification("Opened UI Designer: " + PathToUtf8(path.filename()));
                             } else if ((ext == ".axle_vfx" || ext == ".vfx" || ext == ".axleasset") && m_OnOpenVFXCallback) {
-                                if (ext == ".axle_vfx" || ext == ".vfx" || AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::ParticleEmitter) {
+                                if (ext == ".axle_vfx" || ext == ".vfx" || AssetDSL::PeekAssetKindFromFile(PathToUtf8(path)) == Axle::AssetKind::ParticleEmitter) {
                                     m_OnOpenVFXCallback(path);
-                                    SetStatusNotification("Opened VFX Editor: " + path.filename().string());
+                                    SetStatusNotification("Opened VFX Editor: " + PathToUtf8(path.filename()));
                                 }
                             }
                             // Note: .axle files are inspected via single-click into Properties + Asset Preview tabs
@@ -1166,14 +1167,14 @@ namespace Axle {
                             m_OnSelectAssetCallback(path);
                         }
                         if (m_AssetPreviewPanel && !isDir) {
-                            std::string ext = path.extension().string();
+                            std::string ext = PathToUtf8(path.extension());
                             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                             if (ext == ".axle" || ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                                 m_AssetPreviewPanel->SetAsset(path);
                             }
                         }
 
-                        std::string ext = path.extension().string();
+                        std::string ext = PathToUtf8(path.extension());
                         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
                         ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "%s", filenameStr.c_str());
@@ -1199,7 +1200,7 @@ namespace Axle {
                             if (ImGui::MenuItem("Instantiate into Active Scene")) {
                                 if (m_OnInstantiateAssemblyCallback) {
                                     m_OnInstantiateAssemblyCallback(path);
-                                    SetStatusNotification("Spawned Assembly: " + path.filename().string());
+                                    SetStatusNotification("Spawned Assembly: " + PathToUtf8(path.filename()));
                                 }
                             }
                             ImGui::Separator();
@@ -1209,7 +1210,7 @@ namespace Axle {
                             if (ImGui::MenuItem("Open Scene in Viewport")) {
                                 if (m_OnOpenSceneCallback) {
                                     m_OnOpenSceneCallback(path);
-                                    SetStatusNotification("Loaded scene: " + path.filename().string());
+                                    SetStatusNotification("Loaded scene: " + PathToUtf8(path.filename()));
                                 }
                             }
                             ImGui::Separator();
@@ -1217,14 +1218,14 @@ namespace Axle {
                             if (ImGui::MenuItem("Open Project")) {
                                 if (m_OnOpenProjectCallback) {
                                     m_OnOpenProjectCallback(path);
-                                    SetStatusNotification("Loaded project: " + path.filename().string());
+                                    SetStatusNotification("Loaded project: " + PathToUtf8(path.filename()));
                                 }
                             }
                             ImGui::Separator();
                         } else if (ext == ".axleui" || ext == ".axleasset") {
                             bool isCanvas = (ext == ".axleui");
                             if (ext == ".axleasset") {
-                                isCanvas = (AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::Canvas);
+                                isCanvas = (AssetDSL::PeekAssetKindFromFile(PathToUtf8(path)) == Axle::AssetKind::Canvas);
                             }
                             if (isCanvas) {
                                 if (ImGui::MenuItem("Open in UI Canvas Designer")) {
@@ -1237,7 +1238,7 @@ namespace Axle {
                         } else if (ext == ".axle_vfx" || ext == ".vfx" || ext == ".axleasset") {
                             bool isVFX = (ext == ".axle_vfx" || ext == ".vfx");
                             if (ext == ".axleasset") {
-                                isVFX = (AssetDSL::PeekAssetKindFromFile(path.string()) == Axle::AssetKind::ParticleEmitter);
+                                isVFX = (AssetDSL::PeekAssetKindFromFile(PathToUtf8(path)) == Axle::AssetKind::ParticleEmitter);
                             }
                             if (isVFX) {
                                 if (ImGui::MenuItem("Open in Visual FX Editor")) {
@@ -1251,9 +1252,9 @@ namespace Axle {
 
                         if (ext == ".axlemesh" || ext == ".axlebin") {
                             if (ImGui::MenuItem("Convert to Wavefront OBJ (.obj)")) {
-                                auto outObj = path.parent_path() / (path.stem().string() + ".obj");
+                                auto outObj = path.parent_path() / (PathToUtf8(path.stem()) + ".obj");
                                 if (AssetSerializer::ConvertAxleToOBJ(path, outObj)) {
-                                    SetStatusNotification("Exported to " + outObj.filename().string());
+                                    SetStatusNotification("Exported to " + PathToUtf8(outObj.filename()));
                                 }
                             }
 
@@ -1270,7 +1271,7 @@ namespace Axle {
                                 if (isPackage) {
                                     if (ImGui::MenuItem("Export Subparts to Separate .obj Files")) {
                                         if (AssetSerializer::ConvertAxlePackagePartsToOBJ(path)) {
-                                            SetStatusNotification("Exported subparts to " + path.stem().string() + "_obj_parts/");
+                                            SetStatusNotification("Exported subparts to " + PathToUtf8(path.stem()) + "_obj_parts/");
                                         }
                                     }
                                 }
@@ -1278,27 +1279,27 @@ namespace Axle {
                             ImGui::Separator();
                         } else if (ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                             if (ImGui::MenuItem("Convert to Axle Mesh (.axle)")) {
-                                auto outAxle = path.parent_path() / (path.stem().string() + ".axle");
+                                auto outAxle = path.parent_path() / (PathToUtf8(path.stem()) + ".axle");
                                 if (AssetSerializer::AutoConvertModel(path, outAxle)) {
-                                    SetStatusNotification("Converted to " + outAxle.filename().string());
+                                    SetStatusNotification("Converted to " + PathToUtf8(outAxle.filename()));
                                 }
                             }
                             ImGui::Separator();
                         }
 
                         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
-                            std::filesystem::path descPath = path.parent_path() / (path.stem().string() + ".axleasset");
+                            std::filesystem::path descPath = path.parent_path() / (PathToUtf8(path.stem()) + ".axleasset");
                             std::error_code ec;
                             bool hasDesc = std::filesystem::exists(descPath, ec);
                             if (!hasDesc) {
                                 if (ImGui::MenuItem("Create Texture Descriptor (.axleasset)")) {
                                     auto desc = TextureDescriptor::CreateFromImageFile(path, FileSystem::GetAssetDirectory());
-                                    if (TextureDescriptor::Save(descPath.string(), desc)) {
+                                    if (TextureDescriptor::Save(PathToUtf8(descPath), desc)) {
                                         AssetManager::GetOrCreateMetadata(descPath);
                                         if (m_OnSelectAssetCallback) {
                                             m_OnSelectAssetCallback(descPath);
                                         }
-                                        SetStatusNotification("Created Texture Descriptor: " + descPath.filename().string());
+                                        SetStatusNotification("Created Texture Descriptor: " + PathToUtf8(descPath.filename()));
                                     }
                                 }
                             } else {
@@ -1328,7 +1329,7 @@ namespace Axle {
                             std::error_code relEc;
                             auto rel = std::filesystem::relative(path, m_RootDirectory, relEc);
                             if (!relEc) {
-                                ImGui::SetClipboardText(rel.string().c_str());
+                                ImGui::SetClipboardText(PathToUtf8(rel).c_str());
                             }
                         }
 
@@ -1337,7 +1338,7 @@ namespace Axle {
 
                     // Drag & Drop Source
                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                        std::string fullPathStr = path.string();
+                        std::string fullPathStr = PathToUtf8(path);
                         ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", fullPathStr.c_str(), fullPathStr.size() + 1);
                         ImGui::Text("Asset: %s", filenameStr.c_str());
                         ImGui::EndDragDropSource();
@@ -1521,7 +1522,7 @@ namespace Axle {
                         std::error_code relEc;
                         auto rel = std::filesystem::relative(path, m_RootDirectory, relEc);
                         if (!relEc) {
-                            ImGui::TextDisabled("Path: %s", rel.string().c_str());
+                            ImGui::TextDisabled("Path: %s", PathToUtf8(rel).c_str());
                         }
 
                         ImGui::EndTooltip();
@@ -1557,18 +1558,18 @@ namespace Axle {
                 if (ImGui::BeginMenu("Create")) {
                     if (ImGui::MenuItem("New Folder")) {
                         auto p = CreateNewFolder(m_CurrentDirectory);
-                        SetStatusNotification("Created Folder: " + p.filename().string());
+                        SetStatusNotification("Created Folder: " + PathToUtf8(p.filename()));
                         RefreshThumbnails();
                     }
                     ImGui::Separator();
                     if (ImGui::MenuItem("Scene (.axlescene)")) {
                         auto p = CreateNewScene(m_CurrentDirectory);
-                        SetStatusNotification("Created Scene: " + p.filename().string());
+                        SetStatusNotification("Created Scene: " + PathToUtf8(p.filename()));
                         RefreshThumbnails();
                     }
                     if (ImGui::MenuItem("Material Asset (.axleasset)")) {
                         auto p = CreateNewMaterial(m_CurrentDirectory);
-                        SetStatusNotification("Created Material Asset: " + p.filename().string());
+                        SetStatusNotification("Created Material Asset: " + PathToUtf8(p.filename()));
                         if (m_OnSelectAssetCallback) {
                             m_OnSelectAssetCallback(p);
                         }
@@ -1576,7 +1577,7 @@ namespace Axle {
                     }
                     if (ImGui::MenuItem("Texture Asset (.axleasset)")) {
                         auto p = CreateNewTexture(m_CurrentDirectory);
-                        SetStatusNotification("Created Texture Asset: " + p.filename().string());
+                        SetStatusNotification("Created Texture Asset: " + PathToUtf8(p.filename()));
                         if (m_OnSelectAssetCallback) {
                             m_OnSelectAssetCallback(p);
                         }
@@ -1585,7 +1586,7 @@ namespace Axle {
                     if (ImGui::MenuItem("VFX Asset (.axleasset)")) {
                         auto p = CreateNewVFXAsset(m_CurrentDirectory);
                         SetStatusNotification(p.empty() ? "Could not create VFX asset. See Console."
-                                                        : "Created VFX Asset: " + p.filename().string());
+                                                        : "Created VFX Asset: " + PathToUtf8(p.filename()));
                         if (!p.empty()) {
                             if (m_OnSelectAssetCallback) m_OnSelectAssetCallback(p);
                             RefreshThumbnails();
@@ -1593,7 +1594,7 @@ namespace Axle {
                     }
                     if (ImGui::MenuItem("UI Canvas Asset (.axleasset)")) {
                         auto p = CreateNewCanvas(m_CurrentDirectory);
-                        SetStatusNotification("Created UI Canvas Asset: " + p.filename().string());
+                        SetStatusNotification("Created UI Canvas Asset: " + PathToUtf8(p.filename()));
                         if (m_OnSelectAssetCallback) {
                             m_OnSelectAssetCallback(p);
                         }
@@ -1601,7 +1602,7 @@ namespace Axle {
                     }
                     if (ImGui::MenuItem("3D Mesh Asset (.axleasset)")) {
                         auto p = CreateNewMesh(m_CurrentDirectory);
-                        SetStatusNotification("Created 3D Mesh Asset: " + p.filename().string());
+                        SetStatusNotification("Created 3D Mesh Asset: " + PathToUtf8(p.filename()));
                         if (m_OnSelectAssetCallback) {
                             m_OnSelectAssetCallback(p);
                         }
@@ -1609,27 +1610,27 @@ namespace Axle {
                     }
                     if (ImGui::MenuItem("C++ Script (Header-Only .hpp)")) {
                         auto p = CreateNewScript(m_CurrentDirectory);
-                        SetStatusNotification("Created C++ Script: " + p.filename().string());
+                        SetStatusNotification("Created C++ Script: " + PathToUtf8(p.filename()));
                         RefreshThumbnails();
                     }
                     if (ImGui::MenuItem("C++ Class (.hpp + .cpp)")) {
                         auto [hppP, cppP] = CreateNewClass(m_CurrentDirectory);
-                        SetStatusNotification("Created C++ Class: " + hppP.stem().string() + " (.hpp & .cpp)");
+                        SetStatusNotification("Created C++ Class: " + PathToUtf8(hppP.stem()) + " (.hpp & .cpp)");
                         RefreshThumbnails();
                     }
                     if (ImGui::MenuItem("Physics Material Asset (.axleasset)")) {
                         auto p = CreateNewPhysicsMaterial(m_CurrentDirectory);
-                        SetStatusNotification("Created Physics Material: " + p.filename().string());
+                        SetStatusNotification("Created Physics Material: " + PathToUtf8(p.filename()));
                         RefreshThumbnails();
                     }
                     if (ImGui::MenuItem("Terrain Asset (.axleasset)")) {
                         auto p = CreateNewTerrain(m_CurrentDirectory);
-                        SetStatusNotification("Created Terrain Asset: " + p.filename().string());
+                        SetStatusNotification("Created Terrain Asset: " + PathToUtf8(p.filename()));
                         RefreshThumbnails();
                     }
                     if (ImGui::MenuItem("HLSL Shader (.hlsl)")) {
                         auto p = CreateNewHLSLShader(m_CurrentDirectory);
-                        SetStatusNotification("Created HLSL Shader: " + p.filename().string());
+                        SetStatusNotification("Created HLSL Shader: " + PathToUtf8(p.filename()));
                         if (m_OnOpenHLSLStudioCallback) {
                             m_OnOpenHLSLStudioCallback(p);
                         }
@@ -1641,9 +1642,9 @@ namespace Axle {
                         while (std::filesystem::exists(newAsmPath)) {
                             newAsmPath = m_CurrentDirectory / ("New_Assembly_" + std::to_string(counter++) + ".axle");
                         }
-                        if (AssemblySerializer::CreateEmptyAssembly(newAsmPath, newAsmPath.stem().string())) {
+                        if (AssemblySerializer::CreateEmptyAssembly(newAsmPath, PathToUtf8(newAsmPath.stem()))) {
                             AssetManager::GetOrCreateMetadata(newAsmPath);
-                            SetStatusNotification("Created Assembly: " + newAsmPath.filename().string());
+                            SetStatusNotification("Created Assembly: " + PathToUtf8(newAsmPath.filename()));
                             if (m_OnOpenAssemblyCallback) {
                                 m_OnOpenAssemblyCallback(newAsmPath);
                             }

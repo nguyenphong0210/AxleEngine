@@ -51,9 +51,10 @@ bool SelectionModel::Requires(std::string_view root, std::string_view dependency
 }
 
 bool SelectionModel::SetDraftSelected(std::string_view id, bool selected) {
+    const std::string stableId(id); id = stableId;
     m_LastError.clear();
     const auto* manifest = Find(id);
-    if (!manifest) {
+    if (!manifest && (selected || !IsDraft(id))) {
         m_LastError = "Unknown plugin: " + std::string(id);
         return false;
     }
@@ -94,6 +95,20 @@ void SelectionModel::Revert() {
     m_Draft = m_Desired;
     m_LastError.clear();
     RecomputeDraftResolution();
+}
+void SelectionModel::RefreshCatalog(Catalog catalog) { m_Catalog = std::move(catalog); RecomputeDraftResolution(); }
+std::vector<std::string> SelectionModel::DependentSelections(std::string_view id) const {
+    std::vector<std::string> roots;
+    for (const auto& explicitId : m_Draft) {
+        std::vector<std::string> visiting;
+        if (Requires(explicitId, id, visiting)) roots.push_back(explicitId);
+    }
+    return roots;
+}
+bool SelectionModel::RemoveDraftWithDependents(std::string_view id) {
+    auto removals = DependentSelections(id); removals.emplace_back(id);
+    std::erase_if(m_Draft, [&](const auto& selected) { return std::find(removals.begin(), removals.end(), selected) != removals.end(); });
+    m_LastError.clear(); RecomputeDraftResolution(); return true;
 }
 
 void SelectionModel::RecomputeDraftResolution() {

@@ -1,4 +1,5 @@
 #include <Axle/ParticleEffectSerializer.hpp>
+#include <Axle/Path.hpp>
 #include <Axle/AssetDSL.hpp>
 #include "ParticleAssetFileIO.hpp"
 #include <fstream>
@@ -758,7 +759,7 @@ namespace Axle {
     bool ParticleEffectSerializer::DeserializeFromFile(const std::string& filePath,
                                                        ParticleEffectDefinition& outEffect,
                                                        std::vector<VFXDiagnostic>* outDiagnostics) {
-        std::ifstream in(filePath, std::ios::binary);
+        std::ifstream in(PathFromUtf8(filePath), std::ios::binary);
         if (!in.is_open()) {
             if (outDiagnostics) {
                 outDiagnostics->push_back({ VFXDiagnosticSeverity::Error, "FILE_NOT_FOUND", "", "Cannot open file: " + filePath });

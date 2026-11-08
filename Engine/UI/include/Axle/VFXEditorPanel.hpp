@@ -87,6 +87,8 @@ namespace Axle {
         void NewDocument(const std::string& name = "NewEffect");
         bool OpenDocument(const std::string& filePath);
         bool SaveDocument();
+        void RelocateCleanDocument(const std::filesystem::path& path);
+        void DiscardDocument();
         bool DuplicateEmitterStack(size_t index);
         bool ReorderEmitterStack(size_t from, size_t to);
         bool SetSubEmitterTarget(size_t linkIndex, const std::string& targetId);

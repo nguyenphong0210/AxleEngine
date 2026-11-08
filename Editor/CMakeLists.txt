@@ -5,6 +5,13 @@ add_executable(AxleEditor
     src/PluginBuild.cpp
     src/OwnedProcess.cpp
     src/PluginsPanel.cpp
+    src/PluginSession.cpp
+    src/PluginWorkflow.cpp
+    src/PluginWorkflowProbe.cpp
+    src/PluginEditorServices.cpp
+    src/PluginRestart.cpp
+    src/PluginRestartSnapshot.cpp
+    src/DocumentGuard.cpp
 )
 
 target_include_directories(AxleEditor PRIVATE
@@ -24,6 +31,8 @@ target_link_libraries(AxleEditor PRIVATE
     Axle::Project
     Axle::Plugin
     Axle::PluginRuntime
+    Axle::PluginServices
+    Axle::EditorHost
     Axle::Spline
     Axle::Terrain
     Axle::Animation
@@ -95,6 +104,12 @@ add_custom_command(TARGET AxleEditor POST_BUILD
 )
 
 add_dependencies(AxleEditor AxleScripts)
+add_dependencies(AxleEditor AxlePluginSDKPackage)
+target_include_directories(AxleEditor PRIVATE "${CMAKE_BINARY_DIR}/PluginSDK/$<CONFIG>")
+add_custom_command(TARGET AxleEditor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:AxleRuntimeHost>" "$<TARGET_FILE_DIR:AxleEditor>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:AxleEditorHost>" "$<TARGET_FILE_DIR:AxleEditor>"
+    VERBATIM)
 
 # Export builds this exact configured Runtime target on demand, not as an Editor dependency.
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/RuntimeBuildConfig.hpp"
@@ -117,4 +132,4 @@ if(AXLE_EDITOR_DEFAULT_PROJECT)
     file(TO_CMAKE_PATH "${AXLE_EDITOR_DEFAULT_PROJECT_PATH}" AXLE_EDITOR_DEFAULT_PROJECT_PATH)
 endif()
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/EditorStartupConfig.hpp"
-    CONTENT "#pragma once\n#define AXLE_EDITOR_DEFAULT_PROJECT R\"axle(${AXLE_EDITOR_DEFAULT_PROJECT_PATH})axle\"\n")
+    CONTENT "#pragma once\n#define AXLE_EDITOR_DEFAULT_PROJECT R\"axle(${AXLE_EDITOR_DEFAULT_PROJECT_PATH})axle\"\n#define AXLE_ENGINE_PLUGIN_ROOT R\"axle(${CMAKE_SOURCE_DIR}/Plugins)axle\"\n")

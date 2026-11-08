@@ -43,6 +43,13 @@ int main() {
     model.Revert();
     ok &= Check(model.IsDraft("test.game") && !model.HasDraftChanges(), "Revert restores Desired state");
     ok &= Check(!model.SetDraftSelected("missing", true), "unknown plugin selection is rejected");
+    const auto roots = model.DependentSelections("test.base");
+    ok &= Check(roots == std::vector<std::string>{"test.game"}, "dependent disable identifies the complete explicit transaction");
+    ok &= Check(model.RemoveDraftWithDependents("test.base") && model.Draft().empty() && model.IsDesired("test.game"), "confirmed disable changes the entire draft while Desired stays durable");
+    model.RefreshCatalog(catalog);
+    ok &= Check(model.Draft().empty() && model.IsDesired("test.game"), "catalog refresh preserves unsaved draft decisions");
+    SelectionModel missing(catalog, ProductKind::Editor, {"missing.plugin"});
+    ok &= Check(missing.SetDraftSelected(missing.Draft().front(), false) && missing.DraftResolution().IsValid(), "a missing saved selection can be removed safely through an aliased row ID");
     if (ok) std::cout << "Plugin selection Draft/Desired/Apply/Revert transaction: PASS\n";
     return ok ? 0 : 1;
 }

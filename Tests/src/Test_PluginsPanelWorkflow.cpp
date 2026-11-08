@@ -80,6 +80,12 @@ int main() {
     CHECK(panel.GetErrorMessage().find("required by") != std::string::npos &&
           panel.GetErrorMessage().find("game.gameplay") != std::string::npos,
           "Rejection reason is visible in error message");
+    CHECK(panel.PendingDisable() == "core.base", "Dependent removal requires an explicit whole-draft decision");
+    panel.CancelDependentDisable();
+    CHECK(panel.GetSelectionModel()->IsDraft("game.gameplay"), "Cancelling dependent disable preserves the draft");
+    panel.SetBusy(true, "Building selected plugins");
+    CHECK(!panel.TogglePluginDraft("tools.editor", true) && !panel.ApplyDraft().Applied, "Build/export/restart freeze is enforced by the model APIs");
+    panel.SetBusy(false);
 
     // 4. Play-Disabled Changes Guard (simulation active)
     bool simToggle = panel.TogglePluginDraft("tools.editor", true, true);

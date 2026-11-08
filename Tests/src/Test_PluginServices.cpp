@@ -63,7 +63,8 @@ int Run(int argc, wchar_t** argv) {
     std::atomic_bool cancel{false}; const auto built = Axle::BuildPlugins(request, cancel);
     if (!built.Success) std::cerr << built.Error << " log=" << Axle::Plugin::PathUtf8(built.LogPath) << '\n';
     CHECK(built.Success);
-    Axle::Project::New(root);
+    Axle::Project::SetActive(Axle::Project::New(root));
+    CHECK(Axle::Project::GetActive());
     auto edit = std::make_shared<Axle::Scene>();
     Axle::PluginRuntime::RegistrationRegistry registrations;
     Axle::PluginServiceSession services(registrations); std::string error;
@@ -228,11 +229,15 @@ int Run(int argc, wchar_t** argv) {
     CHECK(workOnOwner() && workAccess() == 0 && completionAccess());
     CHECK(submit(playRef.Scene)); Axle::JobSystem::WaitForAll(); services.Drain();
     CHECK(completed() == 0); Axle::JobSystem::PumpMainThreadCompletions(); CHECK(completed() == 1 && jobsDestroyed() == 1);
+    CHECK(submit(playRef.Scene)); Axle::JobSystem::WaitForAll(); services.Drain();
+    services.Quiesce(); CHECK(!submit(playRef.Scene));
+    Axle::JobSystem::PumpMainThreadCompletions(); CHECK(completed() == 1 && jobsDestroyed() == 2);
+    services.ResumeJobs(); CHECK(submit(playRef.Scene)); services.Quiesce(); services.ResumeJobs();
     auto privateScene = std::make_shared<Axle::Scene>(); const auto oldId = privateScene->GetInstanceId();
     CHECK(submit(oldId)); privateScene->Clear(); CHECK(privateScene->GetInstanceId() != oldId && !Axle::SceneData::FindInstance(oldId));
-    Axle::JobSystem::WaitForAll(); services.Drain(); Axle::JobSystem::PumpMainThreadCompletions(); CHECK(completed() == 1 && jobsDestroyed() == 2);
+    Axle::JobSystem::WaitForAll(); services.Drain(); Axle::JobSystem::PumpMainThreadCompletions(); CHECK(completed() == 1 && jobsDestroyed() == 4);
     play->OnRuntimeStop(); CHECK(stops(playData) == 1 && dependencyStops() > 0 && Axle::ExtractRenderWorld(*play).DebugLines.empty() && snapshot.DebugLines.size() == 1);
-    CHECK(submit(playRef.Scene)); editorModule.Stop(); module.Stop(); baseModule.Stop(); CHECK(jobsDestroyed() == 3);
+    CHECK(submit(playRef.Scene)); editorModule.Stop(); module.Stop(); baseModule.Stop(); CHECK(jobsDestroyed() == 5);
     Axle::JobSystem::PumpMainThreadCompletions(); CHECK(completed() == 1);
     std::vector<std::string> errors; CHECK(!edit->ExtensionsReady(errors));
     CHECK(!api.GetComponent(api.User, owner, ref, "custom.plugin/Mover"));

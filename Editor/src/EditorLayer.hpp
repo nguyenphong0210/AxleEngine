@@ -39,6 +39,9 @@
 #include <Axle/AssetCooker.hpp>
 #include "RuntimeBuild.hpp"
 #include "PluginsPanel.hpp"
+#include "PluginSession.hpp"
+#include "PluginRestart.hpp"
+#include "DocumentGuard.hpp"
 #include <unordered_map>
 #include <vector>
 #include <filesystem>
@@ -68,6 +71,7 @@ public:
     void OnScenePause();
     void OnSceneStop();
     void VerifySimulationContract();
+    void VerifyPluginWorkflow();
     Axle::SimulationDriver& GetSimulationDriver() { return m_SimulationDriver; }
     const Axle::SimulationDriver& GetSimulationDriver() const { return m_SimulationDriver; }
     void CompileAndHotReloadAssets(bool forceRebakeAll = false);
@@ -83,8 +87,8 @@ public:
 
     void NewScene();
     void OpenScene(const std::filesystem::path& filepath = {});
-    void SaveScene(const std::filesystem::path& filepath = {});
-    void SaveSceneAs();
+    bool SaveScene(const std::filesystem::path& filepath = {});
+    bool SaveSceneAs();
     void UpdateWindowTitle();
     const std::filesystem::path& GetCurrentScenePath() const { return m_CurrentScenePath; }
     const std::filesystem::path& GetCurrentProjectPath() const { return m_CurrentProjectPath; }
@@ -213,7 +217,31 @@ public:
     void OpenUICanvasDesigner(const std::filesystem::path& path);
     void OpenPluginsPanel() { m_ShowPluginsPanel = true; }
     Axle::PluginsPanel& GetPluginsPanel() { return m_PluginsPanel; }
+    const Axle::PluginProjectSession* GetPluginSession() const { return m_PluginSession.get(); }
+    void SetExpectedPluginSnapshot(Axle::PluginRestartSnapshot snapshot) { m_ExpectedPluginSnapshot = std::move(snapshot); }
 private:
+    bool CheckDocuments(std::string action, std::string title, std::function<void()> continuation, std::string document = {});
+    std::vector<Axle::GuardedDocument> CollectDocuments();
+    std::string SerializeEditorScene() const;
+    void RenderDocumentDecision();
+    void RefreshPluginPanel(bool preserveDraft = true);
+    void BuildSelectedPlugins();
+    void StartExportGame();
+    void LaunchProjectRestart(const std::filesystem::path& project, const std::string& backend);
+    void RequestClose();
+    void RelocateCleanDocuments(const std::filesystem::path& oldAssets, const std::filesystem::path& newAssets);
+    void OpenAssemblyDocument(const std::filesystem::path& path);
+    void OpenShaderDocument(const std::filesystem::path& path);
+    void OpenVFXDocument(const std::filesystem::path& path);
+    bool WorkFrozen() const;
+    Axle::PhysicsScene* EditorPhysics() const { return m_SceneState == SceneState::Edit ? m_PhysicsScene.get() : m_EditorPhysicsScene.get(); }
+    std::unique_ptr<Axle::PluginProjectSession> m_PluginSession;
+    std::optional<Axle::PluginRestartSnapshot> m_ExpectedPluginSnapshot;
+    Axle::PluginRestart m_PluginRestart;
+    Axle::DocumentGuard m_DocumentGuard;
+    std::string m_SceneSavedData;
+    bool m_Attaching = true, m_Closing = false;
+    bool m_CloseAfterWork = false;
 
     Axle::f32 m_LastDeltaTime = 0.0f;
 

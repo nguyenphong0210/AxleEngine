@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "@PLUGIN_ID@",
+  "name": "@PLUGIN_NAME@",
+  "version": "1.0.0",
+  "description": "A project component with an Inspector and simulation update.",
+  "engineApi": 1,
+  "platforms": ["windows-x64"],
+  "modules": [
+    {"name": "@MODULE@_Runtime", "kind": "runtime", "sourceRoot": "Runtime"},
+    {"name": "@MODULE@_Editor", "kind": "editor", "sourceRoot": "Editor", "dependencies": ["@MODULE@_Runtime"]}
+  ]
+}

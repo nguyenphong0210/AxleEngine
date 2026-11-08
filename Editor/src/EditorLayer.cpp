@@ -18,6 +18,8 @@
 #include <Axle/AssetCooker.hpp>
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/Project.hpp>
+#include <Axle/ProjectSerializer.hpp>
+#include <Axle/Path.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/AudioEngine.hpp>
 #include <AxleSpline/SplineComponent.hpp>
@@ -185,9 +187,7 @@ void EditorLayer::OnAttach() {
         m_VFXEditorPanel.OpenEntityEffect(entity);
     });
     m_ContentBrowserPanel.SetOpenVFXCallback([this](const std::filesystem::path& path) {
-        m_ShowVFXEditor = true;
-        m_VFXEditorPanel.SetOpen(true);
-        m_VFXEditorPanel.OpenDocument(path.string());
+        OpenVFXDocument(path);
     });
 
     // Setup Serializer Context for meshes & scripts
@@ -225,14 +225,10 @@ void EditorLayer::OnAttach() {
         OpenProject(path);
     });
     m_ContentBrowserPanel.SetOpenAssemblyCallback([this](const std::filesystem::path& path) {
-        m_AssemblyEditorPanel.SetAssembly(path);
-        m_ShowAssemblyEditor = true;
+        OpenAssemblyDocument(path);
     });
     m_ContentBrowserPanel.SetOpenHLSLStudioCallback([this](const std::filesystem::path& path) {
-        m_HLSLStudioPanel.OpenFile(path);
-        m_ShowHLSLStudio = true;
-        m_HLSLStudioPanel.SetOpen(true);
-        m_HLSLStudioPanel.Focus();
+        OpenShaderDocument(path);
     });
     m_ContentBrowserPanel.SetInstantiateAssemblyCallback([this](const std::filesystem::path& path) {
         auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene.get(), glm::vec3(0.0f, 0.0f, 0.0f), &m_SerializerContext);
@@ -258,13 +254,13 @@ void EditorLayer::OnAttach() {
         }
         if (Axle::AssemblySerializer::Serialize(targetPath, ent, m_PhysicsScene.get(), &m_SerializerContext)) {
             Axle::AssetManager::GetOrCreateMetadata(targetPath);
-            m_ContentBrowserPanel.SetStatusNotification("Packaged Prefab Assembly: " + targetPath.filename().string());
-            AXLE_INFO("Packaged Entity '{0}' into Prefab Assembly '{1}'", ent.GetName(), targetPath.string());
+            m_ContentBrowserPanel.SetStatusNotification("Packaged Prefab Assembly: " + Axle::PathToUtf8(targetPath.filename()));
+            AXLE_INFO("Packaged Entity '{0}' into Prefab Assembly '{1}'", ent.GetName(), Axle::PathToUtf8(targetPath));
         }
     });
 
     m_SceneHierarchyPanel.SetSpawnAssetCallback([this](const std::filesystem::path& path) {
-        std::string ext = path.extension().string();
+        std::string ext = Axle::PathToUtf8(path.extension());
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         if (ext == ".axle") {
             auto ent = m_Scene->InstantiateAssembly(path, m_PhysicsScene.get(), glm::vec3(0.0f, 0.0f, 0.0f), &m_SerializerContext);
@@ -274,7 +270,7 @@ void EditorLayer::OnAttach() {
         } else if (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
             std::filesystem::path axlePath = path;
             if (ext != ".axlemesh" && ext != ".axle") {
-                axlePath = path.parent_path() / (path.stem().string() + ".axlemesh");
+                axlePath = path.parent_path() / (Axle::PathToUtf8(path.stem()) + ".axlemesh");
                 if (!std::filesystem::exists(axlePath)) {
                     Axle::AssetSerializer::AutoConvertModel(path, axlePath, true);
                 }
@@ -283,7 +279,7 @@ void EditorLayer::OnAttach() {
             if (pkg.Success) {
                 glm::vec3 spawnPos(0.0f, 0.0f, 0.0f);
                 if (pkg.IsPackage) {
-                    std::string rootTag = pkg.Name.empty() ? axlePath.stem().string() : pkg.Name;
+                    std::string rootTag = pkg.Name.empty() ? Axle::PathToUtf8(axlePath.stem()) : pkg.Name;
                     auto rootEntity = m_Scene->CreateEntity(rootTag);
                     rootEntity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
                     auto& rootHierarchy = rootEntity.AddComponent<Axle::HierarchyComponent>();
@@ -297,7 +293,7 @@ void EditorLayer::OnAttach() {
                         auto partVao = Axle::CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                         childEntity.AddComponent<Axle::MeshInstance3D>(
                             partVao ? partVao : m_CubeMesh,
-                            partFullPath.string(),
+                            Axle::PathToUtf8(partFullPath),
                             part.LoadedMesh.SourceData.PatternMode,
                             part.LoadedMesh.SourceData.TileScale,
                             part.LoadedMesh.SourceData.ColorPrimary,
@@ -310,13 +306,13 @@ void EditorLayer::OnAttach() {
                     m_SceneHierarchyPanel.SetSelectedEntity(rootEntity);
                 } else if (!pkg.Parts.empty()) {
                     const auto& part = pkg.Parts[0];
-                    std::string entityTag = pkg.Name.empty() ? axlePath.stem().string() : pkg.Name;
+                    std::string entityTag = pkg.Name.empty() ? Axle::PathToUtf8(axlePath.stem()) : pkg.Name;
                     auto newEnt = m_Scene->CreateEntity(entityTag);
                     newEnt.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
                     auto partVao = Axle::CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                     newEnt.AddComponent<Axle::MeshInstance3D>(
                         partVao ? partVao : m_CubeMesh,
-                        axlePath.string(),
+                        Axle::PathToUtf8(axlePath),
                         part.LoadedMesh.SourceData.PatternMode,
                         part.LoadedMesh.SourceData.TileScale,
                         part.LoadedMesh.SourceData.ColorPrimary,
@@ -329,18 +325,15 @@ void EditorLayer::OnAttach() {
     });
 
     m_SceneHierarchyPanel.SetOpenAssemblyEditorCallback([this](const std::filesystem::path& path) {
-        m_AssemblyEditorPanel.SetAssembly(path);
-        m_ShowAssemblyEditor = true;
+        OpenAssemblyDocument(path);
     });
     m_SceneHierarchyPanel.SetOpenHLSLStudioCallback([this](const std::filesystem::path& path) {
-        m_HLSLStudioPanel.OpenFile(path);
-        m_ShowHLSLStudio = true;
-        m_HLSLStudioPanel.SetOpen(true);
-        m_HLSLStudioPanel.Focus();
+        OpenShaderDocument(path);
     });
 
     // Register Plugin Component Drawers (Phase 29A: Spline Track & Phase 29B: Terrain Plugin)
     m_SceneHierarchyPanel.SetCustomComponentDrawer([this](Axle::Entity entity) {
+        if (m_PluginSession && !WorkFrozen()) m_PluginSession->EditorServices().DrawComponents(entity);
         if (entity && entity.HasComponent<Axle::Spline::SplineComponent>()) {
             Axle::Spline::SplineEditor::DrawInspector(entity, m_PhysicsScene.get());
         }
@@ -350,6 +343,7 @@ void EditorLayer::OnAttach() {
     });
 
     m_SceneHierarchyPanel.SetCustomAddComponentDrawer([this](Axle::Entity entity) {
+        if (m_PluginSession && !WorkFrozen()) m_PluginSession->EditorServices().DrawAddComponents(entity);
         if (ImGui::BeginMenu("Environment Plugins")) {
             bool hasSpline = entity.HasComponent<Axle::Spline::SplineComponent>();
             if (hasSpline) ImGui::BeginDisabled();
@@ -441,13 +435,17 @@ void EditorLayer::OnAttach() {
     });
 
     // Default startup is an unsaved, empty project; reopening is always explicit.
-    m_PluginsPanel.SetSaveSceneCallback([this]() {
-        if (!m_CurrentScenePath.empty()) {
-            SaveScene(m_CurrentScenePath);
-            return true;
-        }
-        return true;
+    m_DocumentGuard.SetCollector([this] { return CollectDocuments(); });
+    m_PluginsPanel.SetDocumentGuard([this](std::string& error) {
+        const bool ready = CheckDocuments("apply-plugins", "Save or discard edits before applying plugin selections.",
+            [this] { m_PluginsPanel.ApplyDraft(m_SceneState != SceneState::Edit); });
+        error = m_DocumentGuard.Error(); return ready;
     });
+    m_PluginsPanel.SetEnginePluginRoot(Axle::GetPluginSessionEnvironment().EnginePlugins);
+    m_PluginsPanel.SetBuildCallback([this] { BuildSelectedPlugins(); });
+    m_PluginsPanel.SetCancelBuildCallback([this] { if (m_PluginSession) m_PluginSession->CancelBuild(); });
+    m_PluginsPanel.SetRefreshCallback([this] { RefreshPluginPanel(); });
+    m_PluginsPanel.SetAppliedCallback([this] { RefreshPluginPanel(); });
     m_PluginsPanel.SetRestartCallback([this]() {
         const char* backendFlags[] = { "dx12", "vulkan", "opengl" };
         RestartEditorWithBackend(backendFlags[m_SelectedRHIBackendIndex]);
@@ -456,6 +454,25 @@ void EditorLayer::OnAttach() {
 
     if (!m_CurrentProjectPath.empty()) OpenProject(m_CurrentProjectPath);
     else NewScene();
+
+    m_PluginSession = std::make_unique<Axle::PluginProjectSession>(Axle::GetPluginSessionEnvironment());
+    std::string pluginError;
+    if (!m_PluginSession->Bind(pluginError)) throw std::runtime_error(pluginError);
+    m_PluginSession->Open(Axle::Project::GetActive(), m_CurrentProjectPath, m_PluginsPanel.IsSafeMode(), m_ExpectedPluginSnapshot);
+    m_PluginsPanel.SetCatalog(m_PluginSession->Catalog());
+    m_PluginsPanel.SetActiveIds(m_PluginSession->ActiveIds());
+    m_PluginsPanel.SetExternalError(m_PluginSession->Error());
+    m_PluginsPanel.SetNeedsRestart(m_PluginSession->GetStatus() != Axle::PluginProjectSession::Status::Active);
+    m_PluginsPanel.SetSafeMode(m_PluginSession->IsSafeMode());
+    if (m_PluginSession->IsSafeMode()) m_ShowPluginsPanel = true;
+    m_AssemblyEditorPanel.SetComponentDrawers(
+        [this](Axle::Entity entity) { return !WorkFrozen() && m_PluginSession->EditorServices().DrawComponents(entity); },
+        [this](Axle::Entity entity) { return !WorkFrozen() && m_PluginSession->EditorServices().DrawAddComponents(entity); });
+    m_SceneSavedData = SerializeEditorScene();
+    m_Attaching = false;
+    Axle::Application::Get().GetWindow().SetWindowCloseCallback([this](const Axle::WindowCloseEvent&) {
+        Axle::Application::Get().GetWindow().CancelCloseRequest(); RequestClose();
+    });
 
     UpdateWindowTitle();
 
@@ -478,6 +495,10 @@ void EditorLayer::UnlockCursor() {
 }
 
 void EditorLayer::OnDetach() {
+    m_Closing = true;
+    Axle::Application::Get().GetWindow().SetWindowCloseCallback({});
+    m_PluginRestart.Cancel();
+    if (m_PluginSession) m_PluginSession->Quiesce();
     m_CompileOwner.Invalidate();
     Axle::ScriptCompiler::Get().Cancel();
     Axle::ScriptCompiler::Get().WaitForCompletion();
@@ -504,6 +525,8 @@ void EditorLayer::OnDetach() {
     m_UIPalettePanel.SetContext(nullptr);
     m_AssetPreviewPanel.SetSceneContext(nullptr, nullptr, nullptr, nullptr);
     m_AssemblyEditorPanel.SetSceneContext(nullptr, nullptr, nullptr);
+    m_AssetPreviewPanel.ShutdownPreview();
+    m_AssemblyEditorPanel.ShutdownPreview();
     m_VFXEditorPanel.SetSceneContext(nullptr);
     m_VFXEditorPanel.ShutdownRHI();
 
@@ -543,6 +566,7 @@ void EditorLayer::OnDetach() {
     m_RHISceneRenderer = nullptr; m_SceneRenderer = nullptr;
     Axle::RenderService::Get().Shutdown();
     m_Framebuffer.reset();
+    if (m_PluginSession) { m_PluginSession->Shutdown(); m_PluginSession.reset(); }
 
     AXLE_INFO("EditorLayer::OnDetach -> [11/14] Shutdown PhysicsScene");
     m_PhysicsScene.reset();
@@ -568,6 +592,7 @@ void EditorLayer::OnWindowResize(Axle::u32 width, Axle::u32 height) {
 }
 
 void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
+    if (WorkFrozen()) return;
     if (filepaths.empty()) return;
 
     // 1. Determine destination directory based on UI hover state
@@ -587,9 +612,9 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
         std::filesystem::path srcPath(filepathStr);
         if (!std::filesystem::exists(srcPath, ec)) continue;
 
-        std::string ext = srcPath.extension().string();
+        std::string ext = Axle::PathToUtf8(srcPath.extension());
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
-        std::string stem = srcPath.stem().string();
+        std::string stem = Axle::PathToUtf8(srcPath.stem());
 
         if (ext == ".axlescene" || ext == ".scene") {
             OpenScene(srcPath);
@@ -603,7 +628,7 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
             }
             auto loaded = Axle::AssetSerializer::LoadMesh(destAxlePath);
             AXLE_INFO("Asset Pipeline: Ingested .axle asset '{0}' (Cache: {1})",
-                destAxlePath.filename().string(), loaded.LoadedFromCache ? "HIT" : "MISS");
+                Axle::PathToUtf8(destAxlePath.filename()), loaded.LoadedFromCache ? "HIT" : "MISS");
 
             if (m_ViewportHovered && loaded.Success) {
                 glm::mat4 invVP = glm::inverse(m_CameraController->GetCamera().GetViewProjectionMatrix());
@@ -640,7 +665,7 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
                 entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
                 auto vao = Axle::CreateVertexArrayFromMeshSource(loaded.SourceData);
                 entity.AddComponent<Axle::MeshInstance3D>(
-                    vao, destAxlePath.string(),
+                    vao, Axle::PathToUtf8(destAxlePath),
                     loaded.SourceData.PatternMode, loaded.SourceData.TileScale,
                     loaded.SourceData.ColorPrimary, loaded.SourceData.ColorSecondary
                 );
@@ -662,7 +687,7 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
                 std::filesystem::copy_file(srcPath, destImgPath, std::filesystem::copy_options::overwrite_existing, ec);
             }
             AXLE_INFO("Asset Pipeline: Ingested texture '{0}' into '{1}' (Zero-companion raw media)",
-                destImgPath.filename().string(), texDestFolder.string());
+                Axle::PathToUtf8(destImgPath.filename()), Axle::PathToUtf8(texDestFolder));
         } else if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac") {
             std::filesystem::path audioDestFolder;
             if (m_ContentBrowserPanel.IsWindowHovered()) {
@@ -678,7 +703,7 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
                 std::filesystem::copy_file(srcPath, destAudioPath, std::filesystem::copy_options::overwrite_existing, ec);
             }
             AXLE_INFO("Asset Pipeline: Ingested audio '{0}' into '{1}' (Zero-companion raw media)",
-                destAudioPath.filename().string(), audioDestFolder.string());
+                Axle::PathToUtf8(destAudioPath.filename()), Axle::PathToUtf8(audioDestFolder));
         } else if (ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".webm") {
             std::filesystem::path videoDestFolder;
             if (m_ContentBrowserPanel.IsWindowHovered()) {
@@ -694,14 +719,14 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
                 std::filesystem::copy_file(srcPath, destVideoPath, std::filesystem::copy_options::overwrite_existing, ec);
             }
             AXLE_INFO("Asset Pipeline: Ingested video '{0}' into '{1}' (Zero-companion raw media)",
-                destVideoPath.filename().string(), videoDestFolder.string());
+                Axle::PathToUtf8(destVideoPath.filename()), Axle::PathToUtf8(videoDestFolder));
         } else {
             // General asset file copy (textures, shaders, scenes, documents)
             std::filesystem::path destPath = destFolder / srcPath.filename();
             if (srcPath != destPath) {
                 std::filesystem::copy_file(srcPath, destPath, std::filesystem::copy_options::overwrite_existing, ec);
                 AXLE_INFO("Asset Pipeline: Ingested file '{0}' into '{1}'",
-                    srcPath.filename().string(), destFolder.string());
+                    Axle::PathToUtf8(srcPath.filename()), Axle::PathToUtf8(destFolder));
             }
         }
     }
@@ -713,6 +738,11 @@ void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
 }
 
 void EditorLayer::OnScenePlay() {
+    if (WorkFrozen()) return;
+    if (m_SceneState == SceneState::Edit && m_PluginSession && !m_PluginSession->MatchesDesired()) {
+        m_PluginsPanel.SetExternalError("Build and restart to activate the Desired plugin selection before Play.");
+        m_ShowPluginsPanel = true; return;
+    }
     if (m_SceneState == SceneState::Play) return;
     if (m_SceneState == SceneState::Pause) {
         m_SceneState = SceneState::Play;
@@ -728,10 +758,32 @@ void EditorLayer::OnScenePlay() {
 
     CompileAndHotReloadAssets(false);
 
-    // Deep clone EditorScene into an ephemeral RuntimeScene (Phase 18.2: Safe Scene State)
-    m_RuntimeScene = Axle::Scene::Copy(m_EditorScene);
+    std::vector<std::string> readiness;
+    if (!m_EditorScene->ExtensionsReady(readiness)) {
+        m_PluginsPanel.SetExternalError(readiness.empty() ? "Scene plugin data is not ready for Play" : readiness.front());
+        m_ShowPluginsPanel = true; return;
+    }
+    // Stage the entire world before publishing Play or replacing edit physics.
+    std::unique_ptr<Axle::PhysicsScene> candidatePhysics;
+    std::shared_ptr<Axle::Scene> candidate;
+    try {
+        candidatePhysics = std::make_unique<Axle::PhysicsScene>();
+        candidate = Axle::Scene::Copy(m_EditorScene);
+        if (!candidate) { m_PluginsPanel.SetExternalError("Could not clone scene plugin data for Play"); m_ShowPluginsPanel = true; return; }
+        Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(Axle::Application::Get().GetWindow().GetNativeWindow()));
+        Axle::ScriptHotReloadManager::Get().SyncImGuiContext(ImGui::GetCurrentContext());
+        candidate->OnRuntimeStart(candidatePhysics.get());
+        if (!candidate->IsRuntimeActive() || candidate->IsSimulationFaulted()) {
+            candidate->OnRuntimeStop(candidatePhysics.get()); candidate->Clear();
+            m_PluginsPanel.SetExternalError("Scene plugin initialization failed; the edit world was kept"); m_ShowPluginsPanel = true; return;
+        }
+    } catch (const std::exception& error) {
+        if (candidate) { candidate->OnRuntimeStop(candidatePhysics.get()); candidate->Clear(); }
+        m_PluginsPanel.SetExternalError(std::string("Play failed: ") + error.what()); m_ShowPluginsPanel = true; return;
+    }
+    m_RuntimeScene = std::move(candidate);
     m_EditorPhysicsScene = std::move(m_PhysicsScene);
-    m_PhysicsScene = std::make_unique<Axle::PhysicsScene>();
+    m_PhysicsScene = std::move(candidatePhysics);
     m_Scene = m_RuntimeScene;
 
     // Update panel contexts to point to the active runtime scene
@@ -743,14 +795,12 @@ void EditorLayer::OnScenePlay() {
     m_SimulationDriver.Reset();
     m_SimulationDriver.SetSpeed(m_SimulationSpeed);
     m_SimulationDriver.Resume();
-    Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(Axle::Application::Get().GetWindow().GetNativeWindow()));
-    Axle::ScriptHotReloadManager::Get().SyncImGuiContext(ImGui::GetCurrentContext());
-    m_Scene->OnRuntimeStart(m_PhysicsScene.get());
     m_UseEditorCameraInPlay = false;
     AXLE_INFO("Simulation started (Play Mode). Ephemeral Runtime Scene cloned from pristine Editor Scene.");
 }
 
 void EditorLayer::CompileAndHotReloadAssets(bool forceRebakeAll) {
+    if (WorkFrozen()) return;
     auto assetDir = Axle::FileSystem::GetAssetDirectory();
     auto result = Axle::AssetSerializer::CompileAssetDirectory(assetDir, forceRebakeAll);
 
@@ -789,6 +839,7 @@ void EditorLayer::CompileAndHotReloadAssets(bool forceRebakeAll) {
 }
 
 void EditorLayer::TriggerScriptCompilationAndReload() {
+    if (WorkFrozen()) return;
     if (Axle::ScriptCompiler::Get().IsCompiling()) {
         return;
     }
@@ -798,6 +849,7 @@ void EditorLayer::TriggerScriptCompilationAndReload() {
     AXLE_INFO("Editor: Starting background script compilation for 'AxleScripts'...");
 
     Axle::ScriptCompiler::Get().CompileAsync(m_CompileOwner.GetToken(), [this](const Axle::CompilationResult& result) {
+        if (WorkFrozen()) return;
         if (result.Success) {
             auto reloadResult = Axle::ScriptHotReloadManager::Get().Reload(m_Scene, m_SceneState == SceneState::Play);
             if (reloadResult.Success) {
@@ -834,8 +886,8 @@ void EditorLayer::OpenInVisualStudio() {
     }
 #ifdef _WIN32
     if (std::filesystem::exists(slnPath)) {
-        ShellExecuteA(NULL, "open", slnPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
-        AXLE_INFO("Editor: Opened Visual Studio solution '{0}'", slnPath.string());
+        ShellExecuteA(NULL, "open", Axle::PathToUtf8(slnPath).c_str(), NULL, NULL, SW_SHOWNORMAL);
+        AXLE_INFO("Editor: Opened Visual Studio solution '{0}'", Axle::PathToUtf8(slnPath));
     } else {
         ShellExecuteA(NULL, "open", std::filesystem::current_path().string().c_str(), NULL, NULL, SW_SHOWNORMAL);
         AXLE_INFO("Editor: Opened project folder '{0}'", std::filesystem::current_path().string());
@@ -849,12 +901,13 @@ void EditorLayer::OpenScriptsDirectory() {
         std::filesystem::create_directories(scriptsDir);
     }
 #ifdef _WIN32
-    ShellExecuteA(NULL, "open", scriptsDir.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
-    AXLE_INFO("Editor: Opened scripts directory '{0}'", scriptsDir.string());
+    ShellExecuteA(NULL, "open", Axle::PathToUtf8(scriptsDir).c_str(), NULL, NULL, SW_SHOWNORMAL);
+    AXLE_INFO("Editor: Opened scripts directory '{0}'", Axle::PathToUtf8(scriptsDir));
 #endif
 }
 
 void EditorLayer::NewScene() {
+    if (!CheckDocuments("new-scene", "Save or discard edits before creating a scene.", [this] { NewScene(); })) return;
     m_CompileOwner.Invalidate();
     Axle::ScriptCompiler::Get().Cancel();
     Axle::ScriptCompiler::Get().WaitForCompletion();
@@ -875,6 +928,7 @@ void EditorLayer::NewScene() {
     m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
     m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
     m_CompileNotificationMessage = "Created new empty scene";
+    m_SceneSavedData = SerializeEditorScene();
     m_CompileNotificationTimer = 3.5f;
     UpdateWindowTitle();
     AXLE_INFO("Editor: Created new empty scene");
@@ -883,23 +937,24 @@ void EditorLayer::NewScene() {
 
 
 void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
+    if (!CheckDocuments("open-scene", "Save or discard edits before opening a scene.", [this, filepath] { OpenScene(filepath); })) return;
     std::filesystem::path targetPath = filepath;
     if (targetPath.empty()) {
         auto scenesDir = Axle::FileSystem::ResolveAssetPath("scenes");
         if (!std::filesystem::exists(scenesDir)) {
             std::filesystem::create_directories(scenesDir);
         }
-        std::string defaultPathStr = scenesDir.string();
+        std::string defaultPathStr = Axle::PathToUtf8(scenesDir);
 
         std::string selected = Axle::FileDialogs::OpenFile("Axle Scene (*.axlescene)\0*.axlescene\0All Files (*.*)\0*.*\0", defaultPathStr.c_str());
         if (selected.empty()) {
             return;
         }
-        targetPath = selected;
+        targetPath = Axle::PathFromUtf8(selected);
     }
 
     if (!std::filesystem::exists(targetPath)) {
-        AXLE_WARN("Editor: Scene file does not exist: '{0}'", targetPath.string());
+        AXLE_WARN("Editor: Scene file does not exist: '{0}'", Axle::PathToUtf8(targetPath));
         return;
     }
 
@@ -923,6 +978,7 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
 
     if (serializer.Deserialize(targetPath)) {
         m_CurrentScenePath = targetPath;
+        m_SceneSavedData = SerializeEditorScene();
 
         // Cache initial dynamic states for ResetSimulation()
         auto rbView = m_Scene->GetRegistry().view<Axle::RigidBody3D, Axle::TransformComponent>();
@@ -1019,88 +1075,75 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
         m_AssetPreviewPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), m_CubeMesh, &m_SerializerContext);
         m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
 
-        m_CompileNotificationMessage = "Loaded scene: " + targetPath.filename().string();
+        m_CompileNotificationMessage = "Loaded scene: " + Axle::PathToUtf8(targetPath.filename());
         m_CompileNotificationTimer = 3.5f;
         UpdateWindowTitle();
-        AXLE_INFO("Editor: Successfully loaded scene from '{0}'", targetPath.string());
+        AXLE_INFO("Editor: Successfully loaded scene from '{0}'", Axle::PathToUtf8(targetPath));
     }
 }
 
-void EditorLayer::SaveScene(const std::filesystem::path& filepath) {
+bool EditorLayer::SaveScene(const std::filesystem::path& filepath) {
+    if (m_Closing || m_PluginRestart.IsWaiting() || (m_PluginSession && m_PluginSession->IsBuilding())) return false;
+    try {
     if (filepath.empty() && m_CurrentScenePath.empty()) {
-        SaveSceneAs();
-        return;
+        return SaveSceneAs();
     }
 
     auto targetPath = filepath.empty() ? m_CurrentScenePath : filepath;
 
-    // Synchronize UI documents associated with UICanvasComponent
-    Axle::Scene* activeScene = m_EditorScene ? m_EditorScene.get() : m_Scene.get();
-    if (activeScene) {
-        auto view = activeScene->GetRegistry().view<Axle::UICanvasComponent>();
-        for (auto entityID : view) {
-            Axle::Entity ent{ entityID, activeScene };
-            auto& uic = ent.GetComponent<Axle::UICanvasComponent>();
-            if (uic.Document) {
-                if (uic.AssetPath.empty()) {
-                    uic.AssetPath = "assets/ui/" + ent.GetName() + ".axleui";
-                }
-                std::filesystem::path fullPath = uic.AssetPath;
-                if (!std::filesystem::exists(fullPath)) {
-                    fullPath = Axle::FileSystem::GetAssetDirectory() / uic.AssetPath;
-                }
-                if (uic.Document->IsDirty() || !std::filesystem::exists(fullPath)) {
-                    if (fullPath.has_parent_path() && !std::filesystem::exists(fullPath.parent_path())) {
-                        std::filesystem::create_directories(fullPath.parent_path());
-                    }
-                    uic.Document->SaveToFile(fullPath.string());
-                    AXLE_INFO("Synchronized UI Document for Entity '{0}' to '{1}'", ent.GetName(), fullPath.string());
-                }
-            }
-        }
+    std::string conflict;
+    if (!Axle::DocumentGuard::ValidateSaveTargets(CollectDocuments(), conflict)) {
+        m_PluginsPanel.SetExternalError(conflict); return false;
     }
 
     // Always serialize pristine EditorScene even if simulation is active (Phase 18.2)
-    Axle::SceneSerializer serializer(m_EditorScene ? m_EditorScene.get() : m_Scene.get(), m_PhysicsScene.get());
+    Axle::SceneSerializer serializer(m_EditorScene ? m_EditorScene.get() : m_Scene.get(), EditorPhysics());
     serializer.SetContext(m_SerializerContext);
 
     if (serializer.Serialize(targetPath)) {
         m_CurrentScenePath = targetPath;
-        m_CompileNotificationMessage = "Saved scene: " + targetPath.filename().string();
+        m_SceneSavedData = SerializeEditorScene();
+        m_CompileNotificationMessage = "Saved scene: " + Axle::PathToUtf8(targetPath.filename());
         m_CompileNotificationTimer = 3.5f;
         UpdateWindowTitle();
-        AXLE_INFO("Editor: Successfully saved scene to '{0}'", targetPath.string());
+        AXLE_INFO("Editor: Successfully saved scene to '{0}'", Axle::PathToUtf8(targetPath));
+        return true;
     }
+    } catch (const std::exception& error) { AXLE_ERROR("Could not save scene: {0}", error.what()); }
+    return false;
 }
 
-void EditorLayer::SaveSceneAs() {
+bool EditorLayer::SaveSceneAs() {
     auto scenesDir = Axle::FileSystem::ResolveAssetPath("scenes");
     if (!std::filesystem::exists(scenesDir)) {
         std::filesystem::create_directories(scenesDir);
     }
-    std::string defaultPathStr = scenesDir.string();
+    std::string defaultPathStr = Axle::PathToUtf8(scenesDir);
 
     std::string filepath = Axle::FileDialogs::SaveFile("Axle Scene (*.axlescene)\0*.axlescene\0All Files (*.*)\0*.*\0", defaultPathStr.c_str(), "axlescene");
     if (!filepath.empty()) {
-        std::filesystem::path target(filepath);
+        auto target = Axle::PathFromUtf8(filepath);
         if (target.extension() != ".axlescene") {
             target += ".axlescene";
         }
-        SaveScene(target);
+        return SaveScene(target);
     }
+    return false;
 }
 
 void EditorLayer::NewProject() {
+    if (m_SceneState != SceneState::Edit) { m_PluginsPanel.SetExternalError("Stop simulation before changing projects"); m_ShowPluginsPanel = true; return; }
+    if (!CheckDocuments("new-project", "Save or discard edits before creating a project.", [this] { NewProject(); })) return;
     m_CompileOwner.Invalidate();
     Axle::ScriptCompiler::Get().Cancel();
     Axle::ScriptCompiler::Get().WaitForCompletion();
     m_CompileOwner.Reset();
 
     auto defaultDir = std::filesystem::current_path();
-    std::string filepath = Axle::FileDialogs::SaveFile("Axle Project (*.axleproj)\0*.axleproj\0All Files (*.*)\0*.*\0", defaultDir.string().c_str(), "axleproj");
+    std::string filepath = Axle::FileDialogs::SaveFile("Axle Project (*.axleproj)\0*.axleproj\0All Files (*.*)\0*.*\0", Axle::PathToUtf8(defaultDir).c_str(), "axleproj");
     if (filepath.empty()) return;
 
-    std::filesystem::path target(filepath);
+    auto target = Axle::PathFromUtf8(filepath);
     if (target.extension() != ".axleproj") {
         target += ".axleproj";
     }
@@ -1113,10 +1156,15 @@ void EditorLayer::NewProject() {
     std::filesystem::create_directories(assetDir / "shaders");
 
     auto project = Axle::Project::New(projectDir);
-    project->GetConfig().Name = target.stem().string();
+    project->GetConfig().Name = Axle::PathToUtf8(target.stem());
     project->GetConfig().AssetDirectory = "assets";
     project->GetConfig().StartScene.clear();
 
+    if (!m_Attaching) {
+        Axle::ProjectSerializer serializer(project);
+        if (serializer.Serialize(target)) LaunchProjectRestart(target, "dx12");
+        return;
+    }
     const auto previousProject = Axle::Project::GetActive();
     Axle::Project::SetActive(project);
     if (!Axle::Project::SaveActive(target)) {
@@ -1134,20 +1182,30 @@ void EditorLayer::NewProject() {
     m_CompileNotificationMessage = "Created project: " + project->GetConfig().Name;
     m_CompileNotificationTimer = 4.0f;
     UpdateWindowTitle();
-    AXLE_INFO("Editor: Created and activated new project '{0}' at '{1}'", project->GetConfig().Name, target.string());
+    AXLE_INFO("Editor: Created and activated new project '{0}' at '{1}'", project->GetConfig().Name, Axle::PathToUtf8(target));
 }
 
 void EditorLayer::OpenProject(const std::filesystem::path& filepath) {
+    if (m_SceneState != SceneState::Edit) { m_PluginsPanel.SetExternalError("Stop simulation before changing projects"); m_ShowPluginsPanel = true; return; }
+    if (!CheckDocuments("open-project", "Save or discard edits before opening a project.", [this, filepath] { OpenProject(filepath); })) return;
     std::filesystem::path target = filepath;
     if (target.empty()) {
         auto currentDir = m_CurrentProjectPath.empty() ? std::filesystem::current_path() : m_CurrentProjectPath.parent_path();
-        std::string selected = Axle::FileDialogs::OpenFile("Axle Project (*.axleproj)\0*.axleproj\0All Files (*.*)\0*.*\0", currentDir.string().c_str());
+        std::string selected = Axle::FileDialogs::OpenFile("Axle Project (*.axleproj)\0*.axleproj\0All Files (*.*)\0*.*\0", Axle::PathToUtf8(currentDir).c_str());
         if (selected.empty()) return;
-        target = selected;
+        target = Axle::PathFromUtf8(selected);
     }
 
     if (!std::filesystem::exists(target)) {
-        AXLE_WARN("Editor: Project file does not exist: '{0}'", target.string());
+        AXLE_WARN("Editor: Project file does not exist: '{0}'", Axle::PathToUtf8(target));
+        return;
+    }
+
+    if (!m_Attaching) {
+        auto project = std::make_shared<Axle::Project>(); Axle::ProjectSerializer serializer(project);
+        if (!serializer.Deserialize(target)) return;
+        auto backend = project->GetConfig().RHIBackend;
+        LaunchProjectRestart(target, backend == "Vulkan" ? "vulkan" : backend == "OpenGL" ? "opengl" : "dx12");
         return;
     }
 
@@ -1179,13 +1237,14 @@ void EditorLayer::OpenProject(const std::filesystem::path& filepath) {
         m_CompileNotificationMessage = "Loaded project: " + project->GetConfig().Name;
         m_CompileNotificationTimer = 4.0f;
         UpdateWindowTitle();
-        AXLE_INFO("Editor: Successfully opened project '{0}'", target.string());
+        AXLE_INFO("Editor: Successfully opened project '{0}'", Axle::PathToUtf8(target));
     } else {
-        AXLE_ERROR("Editor: Failed to load project from '{0}'", target.string());
+        AXLE_ERROR("Editor: Failed to load project from '{0}'", Axle::PathToUtf8(target));
     }
 }
 
 void EditorLayer::SaveProject() {
+    if (WorkFrozen()) return;
     if (m_CurrentProjectPath.empty()) {
         SaveProjectAs();
         return;
@@ -1193,15 +1252,17 @@ void EditorLayer::SaveProject() {
     if (Axle::Project::SaveActive(m_CurrentProjectPath)) {
         m_CompileNotificationMessage = "Saved project configuration";
         m_CompileNotificationTimer = 3.5f;
-        AXLE_INFO("Editor: Saved project to '{0}'", m_CurrentProjectPath.string());
+        AXLE_INFO("Editor: Saved project to '{0}'", Axle::PathToUtf8(m_CurrentProjectPath));
     }
 }
 
 void EditorLayer::SaveProjectAs() {
+    if (m_SceneState != SceneState::Edit) { m_PluginsPanel.SetExternalError("Stop simulation before relocating the project"); m_ShowPluginsPanel = true; return; }
+    if (!CheckDocuments("save-project-as", "Save or discard document edits before saving the project to a new location.", [this] { SaveProjectAs(); })) return;
     auto currentDir = m_CurrentProjectPath.empty() ? std::filesystem::current_path() : m_CurrentProjectPath.parent_path();
-    std::string filepath = Axle::FileDialogs::SaveFile("Axle Project (*.axleproj)\0*.axleproj\0All Files (*.*)\0*.*\0", currentDir.string().c_str(), "axleproj");
+    std::string filepath = Axle::FileDialogs::SaveFile("Axle Project (*.axleproj)\0*.axleproj\0All Files (*.*)\0*.*\0", Axle::PathToUtf8(currentDir).c_str(), "axleproj");
     if (!filepath.empty()) {
-        std::filesystem::path target(filepath);
+        auto target = Axle::PathFromUtf8(filepath);
         if (target.extension() != ".axleproj") {
             target += ".axleproj";
         }
@@ -1209,13 +1270,15 @@ void EditorLayer::SaveProjectAs() {
         if (!project) return;
         const auto previousName = project->GetConfig().Name;
         const auto previousAssets = Axle::Project::GetAssetDirectory();
-        project->GetConfig().Name = target.stem().string();
+        project->GetConfig().Name = Axle::PathToUtf8(target.stem());
         if (!Axle::Project::SaveActive(target)) {
             project->GetConfig().Name = previousName;
             return;
         }
         m_CurrentProjectPath = target;
         m_PluginsPanel.SetProjectPath(target);
+        RelocateCleanDocuments(previousAssets, Axle::Project::GetAssetDirectory());
+        if (m_PluginSession) { m_PluginSession->SetProjectFile(target); RefreshPluginPanel(false); }
         if (!m_CurrentScenePath.empty()) {
             const auto relativeScene = m_CurrentScenePath.lexically_relative(previousAssets);
             if (!relativeScene.empty() && *relativeScene.begin() != "..") {
@@ -1235,7 +1298,7 @@ void EditorLayer::UpdateWindowTitle() {
     if (auto active = Axle::Project::GetActive()) {
         projName = active->GetConfig().Name;
     }
-    std::string sceneName = m_CurrentScenePath.empty() ? "Untitled" : m_CurrentScenePath.filename().string();
+    std::string sceneName = m_CurrentScenePath.empty() ? "Untitled" : Axle::PathToUtf8(m_CurrentScenePath.filename());
     Axle::Application::Get().GetWindow().SetTitle("Axle Engine - " + projName + " - [" + sceneName + "]");
 }
 
@@ -1319,6 +1382,40 @@ void EditorLayer::ResetSimulation() {
 }
 
 void EditorLayer::OnUpdate(Axle::Timestep ts) {
+    if (m_PluginSession) {
+        const bool wasBuilding = m_PluginSession->IsBuilding(); m_PluginSession->Pump();
+        if (wasBuilding && !m_PluginSession->IsBuilding()) {
+            m_PluginsPanel.SetExternalError(m_PluginSession->Error());
+            m_PluginsPanel.SetNeedsRestart(m_PluginSession->GetStatus() == Axle::PluginProjectSession::Status::NeedsRestart || m_PluginSession->IsSafeMode());
+            const auto path = m_PluginSession->LastBuild().LogPath;
+            m_PluginsPanel.SetBuildLog(path, [path] { ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
+        }
+        m_PluginsPanel.SetCancelBuildCallback(m_PluginSession->IsBuilding() ? std::function<void()>([this] { m_PluginSession->CancelBuild(); }) : std::function<void()>{});
+        const auto [stage, log] = m_PluginSession->BuildProgress();
+        if (m_PluginSession->IsBuilding() && !log.empty()) m_PluginsPanel.SetBuildLog(log, [log] { ShellExecuteW(nullptr, L"open", log.c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
+        const auto status = m_PluginSession->GetStatus();
+        m_PluginsPanel.SetBusy(m_PluginSession->IsBuilding() || m_RuntimeBuildFuture.valid() || m_PluginRestart.IsWaiting(),
+            m_PluginSession->IsBuilding() ? stage : m_PluginRestart.IsWaiting() ? "Waiting for new Editor startup..." : m_RuntimeBuildFuture.valid() ? "Building Runtime..." :
+            status == Axle::PluginProjectSession::Status::NeedsRestart ? "Plugin build is ready. Restart to activate it." :
+            status == Axle::PluginProjectSession::Status::NeedsBuild ? "Build selected plugins before restarting." :
+            status == Axle::PluginProjectSession::Status::Recovery ? "Native plugins are disabled for recovery." :
+            m_PluginSession->LastBuild().Cancelled ? "Plugin build cancelled. The active session was kept." :
+            status == Axle::PluginProjectSession::Status::Active ? "Active plugins are up to date." : "");
+    }
+    std::string restartError;
+    const auto restart = m_PluginRestart.Poll(restartError, [this](std::string& error) {
+        for (const auto& document : CollectDocuments()) if (document.IsDirty()) {
+            error = "A document changed during restart; the current Editor was kept"; return false;
+        }
+        return true;
+    });
+    if (restart == Axle::PluginRestart::Result::Failed) m_PluginsPanel.SetExternalError(restartError);
+    if (restart == Axle::PluginRestart::Result::Committed) { m_Closing = true; Axle::Application::Get().Close(); return; }
+    if (m_CloseAfterWork && !m_RuntimeBuildFuture.valid() && (!m_PluginSession || !m_PluginSession->IsBuilding())) {
+        m_CloseAfterWork = false; RequestClose();
+    }
+    if (WorkFrozen()) { UnlockCursor(); return; }
+    if (m_PluginSession) m_PluginSession->ResumeJobs();
     Axle::ScriptCompiler::Get().PollCompletion();
     m_LastDeltaTime = ts.GetSeconds();
 
@@ -1977,6 +2074,7 @@ void EditorLayer::RenderToolbar() {
 
 void EditorLayer::OnImGuiRender() {
     ImGuizmo::BeginFrame();
+    ImGui::BeginDisabled(WorkFrozen());
 
     // 1. Global Main Menu Bar (At the absolute top of the application window)
     if (ImGui::BeginMainMenuBar()) {
@@ -2022,7 +2120,7 @@ void EditorLayer::OnImGuiRender() {
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Exit", "Alt+F4")) {
-                Axle::Application::Get().Close();
+                RequestClose();
             }
             ImGui::EndMenu();
         }
@@ -2310,7 +2408,7 @@ void EditorLayer::OnImGuiRender() {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
             const char* pathStr = static_cast<const char*>(payload->Data);
             std::filesystem::path assetPath(pathStr);
-            std::string ext = assetPath.extension().string();
+            std::string ext = Axle::PathToUtf8(assetPath.extension());
             std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
             if (ext == ".axlescene" || ext == ".scene") {
@@ -2359,11 +2457,11 @@ void EditorLayer::OnImGuiRender() {
                 if (spawned) {
                     m_SceneHierarchyPanel.SetSelectedEntity(spawned);
                     AXLE_INFO("Instantiated Assembly '{0}' into Viewport at ({1:.2f}, {2:.2f}, {3:.2f})",
-                        assetPath.stem().string(), spawnPos.x, spawnPos.y, spawnPos.z);
+                        Axle::PathToUtf8(assetPath.stem()), spawnPos.x, spawnPos.y, spawnPos.z);
                 }
             } else if (ext == ".axlemesh" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".fbx") {
                 if (ext != ".axlemesh" && ext != ".axle") {
-                    std::filesystem::path axlePath = assetPath.parent_path() / (assetPath.stem().string() + ".axlemesh");
+                    std::filesystem::path axlePath = assetPath.parent_path() / (Axle::PathToUtf8(assetPath.stem()) + ".axlemesh");
                     if (!std::filesystem::exists(axlePath)) {
                         Axle::AssetSerializer::AutoConvertModel(assetPath, axlePath, true);
                     }
@@ -2412,7 +2510,7 @@ void EditorLayer::OnImGuiRender() {
                     }
 
                     if (pkg.IsPackage) {
-                        std::string rootTag = pkg.Name.empty() ? assetPath.stem().string() : pkg.Name;
+                        std::string rootTag = pkg.Name.empty() ? Axle::PathToUtf8(assetPath.stem()) : pkg.Name;
                         auto rootEntity = m_Scene->CreateEntity(rootTag);
                         rootEntity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
                         auto& rootHierarchy = rootEntity.AddComponent<Axle::HierarchyComponent>();
@@ -2426,7 +2524,7 @@ void EditorLayer::OnImGuiRender() {
                             auto partVao = Axle::CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                             childEntity.AddComponent<Axle::MeshInstance3D>(
                                 partVao ? partVao : m_CubeMesh,
-                                partFullPath.string(),
+                                Axle::PathToUtf8(partFullPath),
                                 part.LoadedMesh.SourceData.PatternMode,
                                 part.LoadedMesh.SourceData.TileScale,
                                 part.LoadedMesh.SourceData.ColorPrimary,
@@ -2442,14 +2540,14 @@ void EditorLayer::OnImGuiRender() {
                             rootTag, pkg.Parts.size(), spawnPos.x, spawnPos.y, spawnPos.z);
                     } else if (!pkg.Parts.empty()) {
                         const auto& part = pkg.Parts[0];
-                        std::string entityTag = pkg.Name.empty() ? assetPath.stem().string() : pkg.Name;
+                        std::string entityTag = pkg.Name.empty() ? Axle::PathToUtf8(assetPath.stem()) : pkg.Name;
                         auto entity = m_Scene->CreateEntity(entityTag);
                         entity.AddComponent<Axle::TransformComponent>(spawnPos, glm::vec3(1.0f));
 
                         auto partVao = Axle::CreateVertexArrayFromMeshSource(part.LoadedMesh.SourceData);
                         entity.AddComponent<Axle::MeshInstance3D>(
                             partVao ? partVao : m_CubeMesh,
-                            assetPath.string(),
+                            Axle::PathToUtf8(assetPath),
                             part.LoadedMesh.SourceData.PatternMode,
                             part.LoadedMesh.SourceData.TileScale,
                             part.LoadedMesh.SourceData.ColorPrimary,
@@ -2534,11 +2632,11 @@ void EditorLayer::OnImGuiRender() {
                     textureSourcePath = desc.Source;
                     textureType = desc.Type;
                 } else if (ext == ".axleasset") {
-                    Axle::AssetKind kind = Axle::AssetDSL::PeekAssetKindFromFile(assetPath.string());
+                    Axle::AssetKind kind = Axle::AssetDSL::PeekAssetKindFromFile(Axle::PathToUtf8(assetPath));
                     if (kind == Axle::AssetKind::Texture) {
                         isTexture = true;
                         Axle::TextureDescriptor desc;
-                        if (Axle::TextureDescriptor::Load(assetPath.string(), desc)) {
+                        if (Axle::TextureDescriptor::Load(Axle::PathToUtf8(assetPath), desc)) {
                             textureSourcePath = desc.Source;
                             textureType = desc.Type;
                         }
@@ -2569,7 +2667,7 @@ void EditorLayer::OnImGuiRender() {
                         }
                         m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
                         AXLE_INFO("Applied Texture '{0}' ({1}) onto Entity '{2}'",
-                            assetPath.filename().string(), textureType, hitEntity.GetName());
+                            Axle::PathToUtf8(assetPath.filename()), textureType, hitEntity.GetName());
                     } else {
                         m_SceneHierarchyPanel.SetSelectedAsset(assetPath);
                     }
@@ -2582,7 +2680,7 @@ void EditorLayer::OnImGuiRender() {
                             hitEntity.AddComponent<Axle::MaterialComponent>();
                         }
                         auto& mc = hitEntity.GetComponent<Axle::MaterialComponent>();
-                        mc.AssetPath = assetPath.string();
+                        mc.AssetPath = Axle::PathToUtf8(assetPath);
                         if (matAsset) {
                             mc.SetAsset(matUUID, matAsset);
                         }
@@ -2592,14 +2690,14 @@ void EditorLayer::OnImGuiRender() {
                         }
                         m_SceneHierarchyPanel.SetSelectedEntity(hitEntity);
                         AXLE_INFO("Applied Material Asset '{0}' onto Entity '{1}' (Handle: {2})",
-                            assetPath.stem().string(), hitEntity.GetName(), (uint64_t)matUUID);
+                            Axle::PathToUtf8(assetPath.stem()), hitEntity.GetName(), (uint64_t)matUUID);
                     } else {
                         m_SceneHierarchyPanel.SetSelectedAsset(assetPath);
                     }
                 }
             } else if (ext == ".hpp" || ext == ".cpp") {
                 // Drop Script into Viewport onto an Entity under the cursor
-                std::string scriptName = assetPath.stem().string();
+                std::string scriptName = Axle::PathToUtf8(assetPath.stem());
                 if (Axle::ScriptRegistry::Has(scriptName)) {
                     ImVec2 mousePos = ImGui::GetMousePos();
                     float mouseX = mousePos.x - viewportMin.x;
@@ -3092,25 +3190,15 @@ void EditorLayer::OnImGuiRender() {
         for (auto ent : canvasView) {
             auto& comp = canvasView.get<Axle::UICanvasComponent>(ent);
             if (comp.Visible && !comp.AssetPath.empty()) {
-                if (!comp.Document || !comp.Document->GetRootNode()) {
-                    if (!comp.Document) comp.Document = std::make_shared<Axle::UIDocument>();
-
-                    std::filesystem::path targetPath = comp.AssetPath;
-                    if (!std::filesystem::exists(targetPath)) {
-                        std::string s = targetPath.generic_string();
-                        if (s.rfind("Editor/", 0) == 0 && std::filesystem::exists(s.substr(7))) {
-                            targetPath = s.substr(7);
-                        } else if (std::filesystem::exists(Axle::FileSystem::ResolveAssetPath(comp.AssetPath))) {
-                            targetPath = Axle::FileSystem::ResolveAssetPath(comp.AssetPath);
-                        } else if (std::filesystem::exists(std::filesystem::path("../../../") / comp.AssetPath)) {
-                            targetPath = std::filesystem::path("../../../") / comp.AssetPath;
-                        }
+                if (!WorkFrozen()) {
+                    if (!comp.Document || !comp.Document->GetRootNode()) {
+                        if (!comp.Document) comp.Document = std::make_shared<Axle::UIDocument>();
+                        const auto targetPath = Axle::FileSystem::ResolveAssetPath(Axle::PathFromUtf8(comp.AssetPath));
+                        m_SceneHierarchyPanel.SetSelectedUINode(nullptr);
+                        comp.Document->LoadFromFile(Axle::PathToUtf8(targetPath));
+                    } else if (comp.Document->CheckAndHotReload()) {
+                        m_SceneHierarchyPanel.SetSelectedUINode(nullptr);
                     }
-
-                    comp.Document->SetFilePath(targetPath.string());
-                    comp.Document->LoadFromFile(targetPath.string());
-                } else {
-                    comp.Document->CheckAndHotReload();
                 }
 
                 if (comp.Document && comp.Document->GetRootNode()) {
@@ -3194,9 +3282,13 @@ void EditorLayer::OnImGuiRender() {
     }
 
     // 10e. Plugins Panel (PLG-10)
+    ImGui::EndDisabled();
     if (m_ShowPluginsPanel) {
+        ImGui::BeginDisabled(m_DocumentGuard.IsPending() || m_PluginRestart.IsWaiting());
         m_PluginsPanel.OnImGuiRender(&m_ShowPluginsPanel, m_SceneState != SceneState::Edit);
+        ImGui::EndDisabled();
     }
+    ImGui::BeginDisabled(WorkFrozen());
 
     // 11. Performance & Telemetry Panel
     if (m_ShowTelemetry) {
@@ -3235,13 +3327,28 @@ void EditorLayer::OnImGuiRender() {
     RenderImportModal();
 
     // 11. Standalone Game Packaging & Export Modal (Phase 23)
+    ImGui::EndDisabled();
+    ImGui::BeginDisabled(m_DocumentGuard.IsPending() || m_PluginRestart.IsWaiting() || (m_PluginSession && m_PluginSession->IsBuilding()));
     RenderExportGameModal();
+    ImGui::EndDisabled();
+    ImGui::BeginDisabled(WorkFrozen());
 
     // 12. Project Configuration & Hardware Graphics RHI Settings Modal (Phase 33 Step 6)
     RenderProjectSettingsModal();
 
     // 13. Unity Style Persistent Status Bar (Bottom edge)
     RenderStatusBar();
+    ImGui::EndDisabled();
+    RenderDocumentDecision();
+    if (m_PluginRestart.IsWaiting()) ImGui::OpenPopup("Restarting Editor");
+    if (ImGui::BeginPopupModal("Restarting Editor", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (!m_PluginRestart.IsWaiting()) ImGui::CloseCurrentPopup();
+        else {
+            ImGui::TextUnformatted("Waiting for the new Editor to acknowledge startup.");
+            if (ImGui::Button("Cancel restart")) { m_PluginRestart.Cancel(); ImGui::CloseCurrentPopup(); }
+        }
+        ImGui::EndPopup();
+    }
 }
 
 void EditorLayer::RenderStatusBar() {
@@ -3293,7 +3400,7 @@ void EditorLayer::RenderStatusBar() {
             }
         }
 
-        std::string sceneName = m_CurrentScenePath.empty() ? "Untitled Scene" : m_CurrentScenePath.filename().string();
+        std::string sceneName = m_CurrentScenePath.empty() ? "Untitled Scene" : Axle::PathToUtf8(m_CurrentScenePath.filename());
         std::string rightText = std::string(rhiName) + " | " + std::to_string(static_cast<int>(fps)) + " FPS (" +
                                 std::to_string(static_cast<int>(ms)) + " ms) | " + sceneName;
 
@@ -3324,7 +3431,7 @@ void EditorLayer::SetupNextImportModal() {
         m_ImportModalData.TargetFolder = Axle::FileSystem::ResolveAssetPath("models");
     }
 
-    std::string stem = m_ImportModalData.SourcePath.stem().string();
+    std::string stem = Axle::PathToUtf8(m_ImportModalData.SourcePath.stem());
     std::string outName = stem + ".axle";
     strncpy_s(m_ImportModalData.OutputFileName, sizeof(m_ImportModalData.OutputFileName), outName.c_str(), _TRUNCATE);
 
@@ -3354,7 +3461,7 @@ void EditorLayer::RenderImportModal() {
         m_ShowImportModal = modalOpen;
 
         // Detect model extension and format badge
-        std::string ext = m_ImportModalData.SourcePath.extension().string();
+        std::string ext = Axle::PathToUtf8(m_ImportModalData.SourcePath.extension());
         std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return std::tolower(c); });
 
         const char* formatName = "3D Asset";
@@ -3388,13 +3495,13 @@ void EditorLayer::RenderImportModal() {
             ImGui::TableNextColumn();
             ImGui::TextDisabled("Source File:");
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(m_ImportModalData.SourcePath.filename().string().c_str());
+            ImGui::TextUnformatted(Axle::PathToUtf8(m_ImportModalData.SourcePath.filename()).c_str());
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextDisabled("Source Path:");
             ImGui::TableNextColumn();
-            ImGui::TextWrapped("%s", m_ImportModalData.SourcePath.string().c_str());
+            ImGui::TextWrapped("%s", Axle::PathToUtf8(m_ImportModalData.SourcePath).c_str());
 
             std::error_code ec;
             auto sz = std::filesystem::file_size(m_ImportModalData.SourcePath, ec);
@@ -3416,7 +3523,7 @@ void EditorLayer::RenderImportModal() {
             ImGui::TableNextColumn();
             ImGui::TextDisabled("Target Folder:");
             ImGui::TableNextColumn();
-            ImGui::TextWrapped("%s", m_ImportModalData.TargetFolder.string().c_str());
+            ImGui::TextWrapped("%s", Axle::PathToUtf8(m_ImportModalData.TargetFolder).c_str());
 
             ImGui::EndTable();
         }
@@ -3514,7 +3621,7 @@ void EditorLayer::RenderImportModal() {
         if (ImGui::Button("Convert & Import", ImVec2(160, 32))) {
             std::string outNameStr = m_ImportModalData.OutputFileName;
             if (outNameStr.empty()) {
-                outNameStr = m_ImportModalData.SourcePath.stem().string() + ".axle";
+                outNameStr = Axle::PathToUtf8(m_ImportModalData.SourcePath.stem()) + ".axle";
             }
             if (outNameStr.length() < 5 || outNameStr.substr(outNameStr.length() - 5) != ".axle") {
                 outNameStr += ".axle";
@@ -3533,7 +3640,7 @@ void EditorLayer::RenderImportModal() {
 
             if (success) {
                 AXLE_INFO("Asset Pipeline: Successfully converted '{0}' -> '{1}' (with binary cache)",
-                    m_ImportModalData.SourcePath.filename().string(), destAxlePath.filename().string());
+                    Axle::PathToUtf8(m_ImportModalData.SourcePath.filename()), Axle::PathToUtf8(destAxlePath.filename()));
 
                 ImGui::CloseCurrentPopup();
                 if (!m_PendingImportQueue.empty()) {
@@ -3543,7 +3650,7 @@ void EditorLayer::RenderImportModal() {
                 }
             } else {
                 m_ImportModalData.ErrorMessage = "Conversion failed! Check console logs for error details.";
-                AXLE_ERROR("Asset Pipeline: Failed to convert model '{0}'", m_ImportModalData.SourcePath.string());
+                AXLE_ERROR("Asset Pipeline: Failed to convert model '{0}'", Axle::PathToUtf8(m_ImportModalData.SourcePath));
             }
         }
         ImGui::PopStyleColor(3);
@@ -3569,14 +3676,14 @@ void EditorLayer::FinishExportGame(const Axle::CookSettings& settings) {
     auto res = Axle::AssetCooker::CookProject(settings);
     m_ExportStatusSuccess = res.Success;
     if (res.Success) {
-        m_ExportLastOutputDir = res.PackagePath.parent_path().string();
+        m_ExportLastOutputDir = Axle::PathToUtf8(res.PackagePath.parent_path());
         std::string extraBundle;
         if (res.RuntimeCopied && res.ScriptsCopied) {
             extraBundle = " + AxleRuntime.exe & AxleScripts.dll";
         } else if (res.RuntimeCopied) {
             extraBundle = " + AxleRuntime.exe";
         }
-        m_ExportStatusMessage = "Succeeded! Created " + res.PackagePath.filename().string() + " (" +
+        m_ExportStatusMessage = "Succeeded! Created " + Axle::PathToUtf8(res.PackagePath.filename()) + " (" +
             std::to_string(res.TotalAssetsCooked) + " assets, " +
             std::to_string(res.PackageSizeBytes / 1024) + " KB)" + extraBundle +
             "\nOutput Folder: " + m_ExportLastOutputDir;
@@ -3596,7 +3703,7 @@ void EditorLayer::RenderExportGameModal() {
             else {
                 m_ExportStatusSuccess = false;
                 m_ExportStatusMessage = result.Error;
-                if (!result.LogPath.empty()) m_ExportStatusMessage += "\nBuild log: " + result.LogPath.string();
+                if (!result.LogPath.empty()) m_ExportStatusMessage += "\nBuild log: " + Axle::PathToUtf8(result.LogPath);
             }
         } catch (const std::exception& error) {
             m_ExportStatusSuccess = false;
@@ -3657,35 +3764,7 @@ void EditorLayer::RenderExportGameModal() {
 
         ImGui::BeginDisabled(buildBusy);
         if (ImGui::Button("Export & Cook Game", ImVec2(180.0f, 32.0f))) {
-            Axle::CookSettings settings;
-            if (auto proj = Axle::Project::GetActive()) {
-                settings.ProjectPath = proj->GetProjectDirectoryPath() / "Project.axleproj";
-                settings.AssetDirectory = proj->GetAssetDirectory();
-            } else {
-                settings.AssetDirectory = Axle::FileSystem::GetAssetDirectory();
-            }
-            settings.OutputDirectory = m_ExportDirectoryBuffer;
-            settings.BakeMeshesToBinary = m_ExportBakeMeshes;
-            settings.IncludeShaders = m_ExportIncludeShaders;
-            settings.CopyExecutables = m_ExportCopyExecutables;
-
-            m_ExportStatusSuccess = false;
-            m_ExportLastOutputDir.clear();
-            if (settings.CopyExecutables) {
-                const auto request = Axle::GetRuntimeBuildRequest();
-                settings.ExecutableDirectory = request.ExecutableDirectory;
-                m_PendingExportSettings = settings;
-                m_RuntimeBuildCancel = std::make_shared<std::atomic_bool>(false);
-                try {
-                    m_RuntimeBuildFuture = std::async(std::launch::async,
-                        [request, cancel = m_RuntimeBuildCancel] { return Axle::BuildRuntime(request, *cancel); });
-                    m_ExportStatusMessage = "Building standalone player... Export starts after the build succeeds.";
-                } catch (const std::exception& error) {
-                    m_ExportStatusMessage = "Could not start Runtime build: " + std::string(error.what());
-                }
-            } else {
-                FinishExportGame(settings);
-            }
+            StartExportGame();
         }
 
         if (m_ExportStatusSuccess && !m_ExportLastOutputDir.empty()) {
@@ -3787,14 +3866,14 @@ void EditorLayer::RenderProjectSettingsModal() {
                 config.Name = nameBuf;
             }
 
-            std::string startSceneStr = config.StartScene.string();
+            std::string startSceneStr = Axle::PathToUtf8(config.StartScene);
             char sceneBuf[260];
             strncpy_s(sceneBuf, sizeof(sceneBuf), startSceneStr.c_str(), _TRUNCATE);
             if (ImGui::InputText("Start Scene", sceneBuf, sizeof(sceneBuf))) {
                 config.StartScene = sceneBuf;
             }
 
-            std::string assetDirStr = config.AssetDirectory.string();
+            std::string assetDirStr = Axle::PathToUtf8(config.AssetDirectory);
             char assetBuf[260];
             strncpy_s(assetBuf, sizeof(assetBuf), assetDirStr.c_str(), _TRUNCATE);
             if (ImGui::InputText("Asset Directory", assetBuf, sizeof(assetBuf))) {
@@ -3903,32 +3982,11 @@ void EditorLayer::RenderProjectSettingsModal() {
 }
 
 void EditorLayer::RestartEditorWithBackend(const std::string& backendArg) {
-    AXLE_INFO("Restarting Axle Editor with RHI Backend: --rhi={0}", backendArg);
-#if defined(_WIN32)
-    char exePath[MAX_PATH];
-    if (GetModuleFileNameA(NULL, exePath, MAX_PATH) > 0) {
-        std::string cmd = std::string("\"") + exePath + "\" --rhi=" + backendArg;
-        if (!m_CurrentProjectPath.empty()) {
-            cmd += " \"" + m_CurrentProjectPath.string() + "\"";
-        }
-
-        STARTUPINFOA si{};
-        si.cb = sizeof(si);
-        PROCESS_INFORMATION pi{};
-        if (CreateProcessA(NULL, cmd.data(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            Axle::Application::Get().Close();
-        } else {
-            AXLE_ERROR("Failed to launch restart process!");
-        }
-    }
-#else
-    Axle::Application::Get().Close();
-#endif
+    LaunchProjectRestart(m_CurrentProjectPath, backendArg);
 }
 
 void EditorLayer::OpenUICanvasDesigner(const std::filesystem::path& path) {
+    if (!CheckDocuments("open-ui-source", "Save or discard edits before opening another UI source.", [this, path] { OpenUICanvasDesigner(path); }, "ui-source")) return;
     m_UICanvasDesignerPanel.OpenDocument(path);
     m_ShowUICanvasDesigner = true;
 }

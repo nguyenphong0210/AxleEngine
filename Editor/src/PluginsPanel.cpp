@@ -36,11 +36,13 @@ void PluginsPanel::SetActiveProject(std::shared_ptr<Project> project, std::files
     m_NeedsRestart = false;
     m_ErrorMessage.clear();
     m_StatusMessage.clear();
+    m_PendingDisable.clear(); m_ActiveIds.clear();
     RefreshCatalog();
 }
 
-void PluginsPanel::SetCatalog(Plugin::Catalog catalog) {
+void PluginsPanel::SetCatalog(Plugin::Catalog catalog, bool preserveDraft) {
     m_Catalog = std::move(catalog);
+    if (preserveDraft && m_SelectionModel) { m_SelectionModel->RefreshCatalog(m_Catalog); return; }
     std::vector<std::string> desired;
     if (m_Project) {
         desired = m_Project->GetConfig().SelectedPlugins;
@@ -52,8 +54,9 @@ void PluginsPanel::RefreshCatalog() {
     Plugin::DiscoveryOptions options;
     if (m_Project && !m_Project->GetProjectDirectoryPath().empty()) {
         options.Roots.push_back(m_Project->GetProjectDirectoryPath() / "Plugins");
+        options.ProjectRoots.push_back(m_Project->GetProjectDirectoryPath() / "Plugins");
     }
-    options.Roots.push_back(std::filesystem::current_path() / "Plugins");
+    if (!m_EnginePluginRoot.empty()) options.Roots.push_back(m_EnginePluginRoot);
 
     m_Catalog = Plugin::Discover(options);
     std::vector<std::string> desired;
@@ -68,11 +71,12 @@ bool PluginsPanel::HasDraftChanges() const {
 }
 
 bool PluginsPanel::CanApply() const {
-    return m_Project && !m_ProjectPath.empty() && m_SelectionModel &&
+    return !m_Busy && m_Project && !m_ProjectPath.empty() && m_SelectionModel &&
            m_SelectionModel->DraftResolution().IsValid();
 }
 
 bool PluginsPanel::TogglePluginDraft(std::string_view id, bool enabled, bool isSimulationActive) {
+    if (m_Busy) { m_ErrorMessage = "Plugin changes are frozen while building, exporting or restarting."; return false; }
     if (isSimulationActive) {
         m_ErrorMessage = "Cannot modify plugin selection while simulation is active. Stop Play mode first.";
         return false;
@@ -84,6 +88,7 @@ bool PluginsPanel::TogglePluginDraft(std::string_view id, bool enabled, bool isS
     bool ok = m_SelectionModel->SetDraftSelected(id, enabled);
     if (!ok) {
         m_ErrorMessage = m_SelectionModel->LastError();
+        if (!enabled && !m_SelectionModel->DependentSelections(id).empty()) m_PendingDisable = id;
     } else {
         m_ErrorMessage.clear();
     }
@@ -92,6 +97,7 @@ bool PluginsPanel::TogglePluginDraft(std::string_view id, bool enabled, bool isS
 
 Plugin::ApplyReport PluginsPanel::ApplyDraft(bool isSimulationActive) {
     Plugin::ApplyReport report;
+    if (m_Busy) { report.Error = m_ErrorMessage = "Plugin changes are frozen while building, exporting or restarting."; return report; }
     if (isSimulationActive) {
         report.Error = "Cannot apply plugin selection while simulation is active. Stop Play mode first.";
         m_ErrorMessage = report.Error;
@@ -114,7 +120,10 @@ Plugin::ApplyReport PluginsPanel::ApplyDraft(bool isSimulationActive) {
     }
 
     // Document guard: Save scene first if callback provided
-    if (m_OnSaveScene) {
+    if (m_DocumentGuard) {
+        std::string error;
+        if (!m_DocumentGuard(error)) { report.Error = m_ErrorMessage = std::move(error); return report; }
+    } else if (m_OnSaveScene) {
         if (!m_OnSaveScene()) {
             report.Error = "Applying plugin changes cancelled: saving current scene failed.";
             m_ErrorMessage = report.Error;
@@ -144,10 +153,15 @@ Plugin::ApplyReport PluginsPanel::ApplyDraft(bool isSimulationActive) {
     m_NeedsRestart = true;
     m_StatusMessage = "Plugin changes applied successfully. Editor restart required.";
     m_ErrorMessage.clear();
+    if (report.Applied && m_OnApplied) {
+        try { m_OnApplied(); }
+        catch (const std::exception& error) { m_ErrorMessage = std::string("Selection was saved, but refresh failed: ") + error.what(); }
+    }
     return report;
 }
 
 void PluginsPanel::RevertDraft() {
+    if (m_Busy) { m_ErrorMessage = "Plugin changes are frozen while building, exporting or restarting."; return; }
     if (m_SelectionModel) {
         m_SelectionModel->Revert();
     }
@@ -155,9 +169,15 @@ void PluginsPanel::RevertDraft() {
 }
 
 void PluginsPanel::RequestRestart() {
+    if (m_Busy) return;
     if (m_OnRestart) {
         m_OnRestart();
     }
+}
+bool PluginsPanel::ConfirmDependentDisable(bool isSimulationActive) {
+    if (m_Busy || isSimulationActive || m_PendingDisable.empty() || !m_SelectionModel) return false;
+    m_SelectionModel->RemoveDraftWithDependents(m_PendingDisable);
+    m_PendingDisable.clear(); m_ErrorMessage.clear(); return true;
 }
 
 void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
@@ -165,6 +185,16 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
     if (!ImGui::Begin("Plugins", pOpen, ImGuiWindowFlags_NoCollapse)) {
         ImGui::End();
         return;
+    }
+    if (!m_PendingDisable.empty()) ImGui::OpenPopup("Disable required plugins?");
+    if (ImGui::BeginPopupModal("Disable required plugins?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("Disabling %s also removes these explicit selections:", m_PendingDisable.c_str());
+        if (m_SelectionModel) for (const auto& id : m_SelectionModel->DependentSelections(m_PendingDisable)) ImGui::BulletText("%s", id.c_str());
+        ImGui::BeginDisabled(m_Busy || isSimulationActive);
+        if (ImGui::Button("Disable all")) { ConfirmDependentDisable(isSimulationActive); ImGui::CloseCurrentPopup(); }
+        ImGui::EndDisabled(); ImGui::SameLine();
+        if (ImGui::Button("Cancel")) { CancelDependentDisable(); ImGui::CloseCurrentPopup(); }
+        ImGui::EndPopup();
     }
 
     const float windowWidth = ImGui::GetContentRegionAvail().x;
@@ -227,9 +257,18 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
     }
 
     if (!isNarrow) ImGui::SameLine();
+    ImGui::BeginDisabled(m_Busy);
     if (ImGui::Button("Refresh")) {
-        RefreshCatalog();
+        if (m_OnRefresh) m_OnRefresh(); else {
+            Plugin::DiscoveryOptions options{{m_EnginePluginRoot}, {}};
+            if (m_Project && !m_Project->GetProjectDirectoryPath().empty()) {
+                const auto root = m_Project->GetProjectDirectoryPath() / "Plugins";
+                options.Roots.push_back(root); options.ProjectRoots.push_back(root);
+            }
+            SetCatalog(Plugin::Discover(options), true);
+        }
     }
+    ImGui::EndDisabled();
 
     ImGui::Separator();
 
@@ -244,7 +283,7 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
     }
 
     // 6. Plugin Entries List
-    const float footerHeight = 70.0f;
+    const float footerHeight = m_OnBuild ? (m_NeedsRestart ? (isNarrow ? 260.0f : 190.0f) : (isNarrow ? 200.0f : 150.0f)) : (m_NeedsRestart ? 140.0f : 95.0f);
     ImGui::BeginChild("PluginListRegion", ImVec2(0.0f, -footerHeight), true);
 
     if (m_Catalog.Plugins.empty()) {
@@ -265,36 +304,47 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
             }
 
             // Apply source filter
-            bool isProjectPlugin = false;
-            if (m_Project && !m_Project->GetProjectDirectoryPath().empty()) {
-                isProjectPlugin = plugin.ManifestPath.string().find(m_Project->GetProjectDirectoryPath().string()) != std::string::npos;
-            }
+            const bool isProjectPlugin = plugin.Source == Plugin::Origin::Project;
             if (m_SourceFilter == SourceFilter::Engine && isProjectPlugin) continue;
             if (m_SourceFilter == SourceFilter::Project && !isProjectPlugin) continue;
 
             // Apply status filter
             const bool isDraftSelected = m_SelectionModel && m_SelectionModel->IsDraft(plugin.Id);
-            if (m_StatusFilter == StatusFilter::Enabled && !isDraftSelected) continue;
-            if (m_StatusFilter == StatusFilter::Disabled && isDraftSelected) continue;
+            const auto& draftGraph = m_SelectionModel->DraftResolution().Plugins;
+            const bool draftEnabled = std::any_of(draftGraph.begin(), draftGraph.end(), [&](const auto& item) { return item.Id == plugin.Id; });
+            if (m_StatusFilter == StatusFilter::Enabled && !draftEnabled) continue;
+            if (m_StatusFilter == StatusFilter::Disabled && draftEnabled) continue;
 
             ImGui::PushID(plugin.Id.c_str());
+            const auto rowPath = plugin.ManifestPath.u8string();
+            ImGui::PushID(reinterpret_cast<const char*>(rowPath.c_str()));
 
             // Checkbox (disabled during simulation)
-            bool checked = isDraftSelected;
-            if (isSimulationActive) {
+            bool checked = draftEnabled || isDraftSelected;
+            if (isSimulationActive || m_Busy) {
                 ImGui::BeginDisabled();
             }
             if (ImGui::Checkbox("##Enabled", &checked)) {
                 TogglePluginDraft(plugin.Id, checked, isSimulationActive);
             }
-            if (isSimulationActive) {
+            if (isSimulationActive || m_Busy) {
                 ImGui::EndDisabled();
             }
 
             ImGui::SameLine();
+            ImGui::PushTextWrapPos(0.0f);
             ImGui::TextColored(ImVec4(0.3f, 0.85f, 1.0f, 1.0f), "%s", plugin.Name.c_str());
-            ImGui::SameLine();
+            if (!isNarrow) ImGui::SameLine();
             ImGui::TextDisabled("v%s (%s)", plugin.Version.c_str(), plugin.Id.c_str());
+            ImGui::PopTextWrapPos();
+            const bool active = std::find(m_ActiveIds.begin(), m_ActiveIds.end(), plugin.Id) != m_ActiveIds.end();
+            ImGui::Indent(28.0f);
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("%s | %s | %s", isProjectPlugin ? "Project" : "Engine", active ? "Active" : "Inactive",
+                m_SelectionModel->IsDesired(plugin.Id) ? "Desired explicitly" : "Dependency or not desired");
+            ImGui::PopTextWrapPos();
+            if (!plugin.Description.empty()) ImGui::TextWrapped("%s", plugin.Description.c_str());
+            ImGui::Unindent(28.0f);
 
             // Dependency explanation
             if (m_SelectionModel) {
@@ -323,7 +373,15 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::PopID();
+            ImGui::PopID();
         }
+    }
+    if (m_SelectionModel) for (const auto& id : m_SelectionModel->Draft()) {
+        if (std::any_of(m_Catalog.Plugins.begin(), m_Catalog.Plugins.end(), [&](const auto& item) { return item.Id == id; })) continue;
+        ImGui::PushID(id.c_str()); ImGui::TextWrapped("Missing selection: %s", id.c_str());
+        ImGui::BeginDisabled(m_Busy || isSimulationActive);
+        if (ImGui::SmallButton("Remove missing selection")) { TogglePluginDraft(id, false, isSimulationActive); ImGui::EndDisabled(); ImGui::PopID(); break; }
+        ImGui::EndDisabled(); ImGui::PopID();
     }
 
     ImGui::EndChild();
@@ -334,7 +392,7 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
     const bool canApply = CanApply();
 
     if (hasChanges) {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Pending draft changes to plugin selection.");
+        ImGui::PushTextWrapPos(0.0f); ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Pending draft changes to plugin selection."); ImGui::PopTextWrapPos();
     } else {
         ImGui::TextDisabled("Plugin selections are up to date.");
     }
@@ -342,9 +400,9 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
         ImGui::TextWrapped("Save Project As before applying plugin changes.");
     }
 
-    ImGui::SameLine();
+    if (!isNarrow) ImGui::SameLine();
     const float buttonsWidth = 210.0f;
-    ImGui::SetCursorPosX(ImGui::GetWindowWidth() - buttonsWidth - 15.0f);
+    if (!isNarrow) ImGui::SetCursorPosX(ImGui::GetWindowWidth() - buttonsWidth - 15.0f);
 
     // Apply Button
     const bool applyEnabled = hasChanges && canApply && !isSimulationActive;
@@ -357,20 +415,30 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
     ImGui::SameLine();
 
     // Revert Button
-    const bool revertEnabled = hasChanges && !isSimulationActive;
+    const bool revertEnabled = hasChanges && !isSimulationActive && !m_Busy;
     if (!revertEnabled) ImGui::BeginDisabled();
     if (ImGui::Button("Revert", ImVec2(95.0f, 26.0f))) {
         RevertDraft();
     }
     if (!revertEnabled) ImGui::EndDisabled();
+    if (m_OnBuild) {
+        ImGui::Spacing();
+        if (!m_BuildStatus.empty()) ImGui::TextWrapped("%s", m_BuildStatus.c_str());
+        ImGui::BeginDisabled(m_Busy || isSimulationActive || hasChanges || m_ProjectPath.empty());
+        if (ImGui::Button("Build selected plugins")) m_OnBuild();
+        ImGui::EndDisabled();
+        if (m_Busy && m_OnCancelBuild) { if (!isNarrow) ImGui::SameLine(); if (ImGui::Button("Cancel build")) m_OnCancelBuild(); }
+        if (!m_BuildLog.empty() && m_OnOpenLog) { if (!isNarrow) ImGui::SameLine(); if (ImGui::Button("Open build log")) m_OnOpenLog(); }
+    }
 
     // 8. Restart Notification
     if (m_NeedsRestart) {
         ImGui::Spacing();
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.95f, 0.55f, 1.0f));
-        ImGui::Text("Changes applied. Restart required to load native modules.");
+        ImGui::TextWrapped("Changes applied. Restart required to load native modules.");
         ImGui::PopStyleColor();
-        ImGui::SameLine();
+        if (!isNarrow) ImGui::SameLine();
+        ImGui::BeginDisabled(m_Busy || isSimulationActive);
         if (ImGui::SmallButton("Restart Now")) {
             RequestRestart();
         }
@@ -378,6 +446,7 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
         if (ImGui::SmallButton("Later")) {
             ClearRestart();
         }
+        ImGui::EndDisabled();
     }
 
     ImGui::End();

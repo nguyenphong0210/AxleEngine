@@ -191,7 +191,9 @@
       "Axle::Animation",
       "Axle::VFX",
       "Axle::Plugin",
-      "Axle::PluginRuntime"
+      "Axle::PluginRuntime",
+      "Axle::PluginServices",
+      "Axle::EditorHost"
     ],
     "SceneData": [
       "Axle::Core"

@@ -23,7 +23,8 @@ public:
 
     void SetActiveProject(std::shared_ptr<Project> project, std::filesystem::path projectPath = {});
     void SetProjectPath(std::filesystem::path projectPath) { m_ProjectPath = std::move(projectPath); }
-    void SetCatalog(Plugin::Catalog catalog);
+    void SetCatalog(Plugin::Catalog catalog, bool preserveDraft = false);
+    void SetEnginePluginRoot(std::filesystem::path root) { m_EnginePluginRoot = std::move(root); }
     void RefreshCatalog();
 
     void OnImGuiRender(bool* pOpen = nullptr, bool isSimulationActive = false);
@@ -37,6 +38,11 @@ public:
     bool CanApply() const;
     Plugin::ApplyReport ApplyDraft(bool isSimulationActive = false);
     void RevertDraft();
+    bool ConfirmDependentDisable(bool isSimulationActive = false);
+    void CancelDependentDisable() { m_PendingDisable.clear(); m_ErrorMessage.clear(); }
+    const std::string& PendingDisable() const { return m_PendingDisable; }
+    void SetBusy(bool busy, std::string status = {}) { m_Busy = busy; m_BuildStatus = std::move(status); }
+    void SetActiveIds(std::vector<std::string> ids) { m_ActiveIds = std::move(ids); }
 
     // Search and filter controls
     const std::string& GetSearchFilter() const { return m_SearchFilter; }
@@ -51,10 +57,18 @@ public:
 
     // Callbacks & notification state
     void SetSaveSceneCallback(std::function<bool()> callback) { m_OnSaveScene = std::move(callback); }
+    void SetDocumentGuard(std::function<bool(std::string&)> callback) { m_DocumentGuard = std::move(callback); }
     void SetRestartCallback(std::function<void()> callback) { m_OnRestart = std::move(callback); }
+    void SetBuildCallback(std::function<void()> callback) { m_OnBuild = std::move(callback); }
+    void SetCancelBuildCallback(std::function<void()> callback) { m_OnCancelBuild = std::move(callback); }
+    void SetRefreshCallback(std::function<void()> callback) { m_OnRefresh = std::move(callback); }
+    void SetAppliedCallback(std::function<void()> callback) { m_OnApplied = std::move(callback); }
+    void SetBuildLog(std::filesystem::path path, std::function<void()> open) { m_BuildLog = std::move(path); m_OnOpenLog = std::move(open); }
+    void SetExternalError(std::string error) { m_ErrorMessage = std::move(error); }
 
     bool NeedsRestart() const { return m_NeedsRestart; }
     void ClearRestart() { m_NeedsRestart = false; }
+    void SetNeedsRestart(bool needed) { m_NeedsRestart = needed; }
     void RequestRestart();
 
     const std::string& GetErrorMessage() const { return m_ErrorMessage; }
@@ -66,6 +80,7 @@ public:
 private:
     std::shared_ptr<Project> m_Project;
     std::filesystem::path m_ProjectPath;
+    std::filesystem::path m_EnginePluginRoot = std::filesystem::current_path() / "Plugins";
     Plugin::Catalog m_Catalog;
     std::unique_ptr<Plugin::SelectionModel> m_SelectionModel;
 
@@ -77,9 +92,15 @@ private:
     std::string m_StatusMessage;
     bool m_NeedsRestart = false;
     bool m_SafeMode = false;
+    bool m_Busy = false;
+    std::string m_BuildStatus, m_PendingDisable;
+    std::vector<std::string> m_ActiveIds;
+    std::filesystem::path m_BuildLog;
 
     std::function<bool()> m_OnSaveScene;
+    std::function<bool(std::string&)> m_DocumentGuard;
     std::function<void()> m_OnRestart;
+    std::function<void()> m_OnBuild, m_OnCancelBuild, m_OnRefresh, m_OnApplied, m_OnOpenLog;
 };
 
 } // namespace Axle

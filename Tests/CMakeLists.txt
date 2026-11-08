@@ -192,6 +192,15 @@ target_include_directories(AxlePluginsPanelWorkflowTests PRIVATE src "${CMAKE_SO
 target_link_libraries(AxlePluginsPanelWorkflowTests PRIVATE Axle::Plugin Axle::Project Axle::Core Axle::UI)
 add_test(NAME PluginsPanelWorkflowTests COMMAND $<TARGET_FILE:AxlePluginsPanelWorkflowTests>)
 set_tests_properties(PluginsPanelWorkflowTests PROPERTIES LABELS "plugin;cpu")
+add_executable(AxlePluginDocumentGuardTests EXCLUDE_FROM_ALL src/Test_PluginDocumentGuard.cpp "${CMAKE_SOURCE_DIR}/Editor/src/DocumentGuard.cpp")
+target_include_directories(AxlePluginDocumentGuardTests PRIVATE "${CMAKE_SOURCE_DIR}/Editor/src")
+add_test(NAME PluginDocumentGuardTests COMMAND $<TARGET_FILE:AxlePluginDocumentGuardTests>)
+add_executable(AxlePluginRestartTests EXCLUDE_FROM_ALL src/Test_PluginRestart.cpp "${CMAKE_SOURCE_DIR}/Editor/src/PluginRestart.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/PluginRestartSnapshot.cpp")
+target_include_directories(AxlePluginRestartTests PRIVATE "${CMAKE_SOURCE_DIR}/Editor/src")
+target_link_libraries(AxlePluginRestartTests PRIVATE Axle::Plugin)
+add_test(NAME PluginRestartTests COMMAND $<TARGET_FILE:AxlePluginRestartTests>)
+set_tests_properties(PluginRestartTests PROPERTIES LABELS "plugin;editor;native" TIMEOUT 30)
+set_tests_properties(PluginDocumentGuardTests PROPERTIES LABELS "plugin;editor;cpu")
 
 # Explicit baseline toolchain; failure probes must validate their exact cause.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -575,7 +584,7 @@ add_test(NAME Opt0203ReviewRegressions COMMAND $<TARGET_FILE:AxleOpt0203ReviewTe
 set_tests_properties(Opt0203ReviewRegressions PROPERTIES LABELS "review;ecs-jobs;sim;cpu" TIMEOUT 60)
 
 set(AXLE_TEST_TARGETS AxleSceneDataBoundaryTests AxleOpt0203ReviewTests AxleFoundationUnitTests AxleSceneMutationUnitTests AxleSimulationClockUnitTests AxleEditorCutoverUnitTests AxleRuntimeProductParityUnitTests AxleProjectUnitTests AxleAssetUnitTests AxleAssetFormatUnitTests AxleSceneDataUnitTests AxleSharedRuntimePhasesUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
-list(APPEND AXLE_TEST_TARGETS AxlePluginFoundationTests AxlePluginSelectionTests AxlePluginsPanelWorkflowTests AxlePluginRuntimeTests)
+list(APPEND AXLE_TEST_TARGETS AxlePluginFoundationTests AxlePluginSelectionTests AxlePluginsPanelWorkflowTests AxlePluginRuntimeTests AxlePluginDocumentGuardTests AxlePluginRestartTests)
 list(APPEND AXLE_TEST_TARGETS AxlePrimitiveTests AxleRHIIdentityTests AxleRHIRetirementTests AxleRHIStateTests AxleRHIFrameTests AxleRHIPresentationTests AxleImageSourceTests)
 if(WIN32)
     add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp")
@@ -607,6 +616,32 @@ if(WIN32)
     add_custom_command(TARGET AxlePluginServicesTests POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleEditorHost>" "$<TARGET_FILE_DIR:AxlePluginServicesTests>")
     list(APPEND AXLE_TEST_TARGETS AxlePluginServicesTests)
     add_test(NAME PluginServicesTests COMMAND $<TARGET_FILE:AxlePluginServicesTests> "${CMAKE_COMMAND}" "${CMAKE_CURRENT_SOURCE_DIR}/src/PluginBuildFixture")
+    add_executable(AxlePluginSessionTests EXCLUDE_FROM_ALL src/Test_PluginSession.cpp
+        "${CMAKE_SOURCE_DIR}/Editor/src/PluginRestartSnapshot.cpp"
+        "${CMAKE_SOURCE_DIR}/Editor/src/PluginSession.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/PluginBuild.cpp"
+        "${CMAKE_SOURCE_DIR}/Editor/src/PluginEditorServices.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/OwnedProcess.cpp")
+    target_include_directories(AxlePluginSessionTests PRIVATE "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/PluginSDK/$<CONFIG>")
+    target_link_libraries(AxlePluginSessionTests PRIVATE Axle::PluginServices Axle::UI Axle::EditorHost)
+    add_dependencies(AxlePluginSessionTests AxlePluginSDKPackage)
+    add_custom_command(TARGET AxlePluginSessionTests POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleRuntimeHost>" "$<TARGET_FILE_DIR:AxlePluginSessionTests>"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleEditorHost>" "$<TARGET_FILE_DIR:AxlePluginSessionTests>" VERBATIM)
+    list(APPEND AXLE_TEST_TARGETS AxlePluginSessionTests)
+    add_test(NAME PluginSessionTests COMMAND $<TARGET_FILE:AxlePluginSessionTests> "${CMAKE_COMMAND}" "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/create_project_plugin.py")
+    set_tests_properties(PluginSessionTests PROPERTIES TIMEOUT 150 LABELS "plugin;editor;native")
+    add_executable(AxlePluginSubmissionTests EXCLUDE_FROM_ALL src/Test_PluginSubmission.cpp
+        "${CMAKE_SOURCE_DIR}/Editor/src/PluginRestartSnapshot.cpp"
+        "${CMAKE_SOURCE_DIR}/Editor/src/PluginSession.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/PluginBuild.cpp"
+        "${CMAKE_SOURCE_DIR}/Editor/src/PluginEditorServices.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/OwnedProcess.cpp")
+    target_include_directories(AxlePluginSubmissionTests PRIVATE "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/PluginSDK/$<CONFIG>")
+    target_link_libraries(AxlePluginSubmissionTests PRIVATE Axle::PluginServices Axle::UI Axle::EditorHost)
+    add_dependencies(AxlePluginSubmissionTests AxlePluginSDKPackage)
+    add_custom_command(TARGET AxlePluginSubmissionTests POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleRuntimeHost>" "$<TARGET_FILE_DIR:AxlePluginSubmissionTests>"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleEditorHost>" "$<TARGET_FILE_DIR:AxlePluginSubmissionTests>"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll" "$<TARGET_FILE_DIR:AxlePluginSubmissionTests>"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll" "$<TARGET_FILE_DIR:AxlePluginSubmissionTests>" VERBATIM)
+    list(APPEND AXLE_TEST_TARGETS AxlePluginSubmissionTests)
     set_tests_properties(PluginServicesTests PROPERTIES RUN_SERIAL TRUE LABELS "plugin;scene;cpu" TIMEOUT 180)
 endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)

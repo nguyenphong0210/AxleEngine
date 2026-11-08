@@ -4,7 +4,17 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <memory>
+#include <mutex>
 namespace Axle {
+struct PluginBuildProgress {
+    mutable std::mutex Mutex;
+    std::string Stage;
+    std::filesystem::path Log;
+    void Set(std::string stage, std::filesystem::path log = {}) {
+        std::lock_guard lock(Mutex); Stage = std::move(stage); if (!log.empty()) Log = std::move(log);
+    }
+};
 struct PluginBuildRequest {
     std::filesystem::path CMake;
     std::filesystem::path ProjectDirectory;
@@ -14,6 +24,7 @@ struct PluginBuildRequest {
     std::string GeneratorToolset;
     std::filesystem::path GeneratorInstance;
     Plugin::BuildPlan Plan;
+    std::shared_ptr<PluginBuildProgress> Progress;
 };
 struct PluginBuildResult {
     bool Success = false;

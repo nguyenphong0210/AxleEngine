@@ -6,6 +6,7 @@
 #include <Axle/AssetCooker.hpp>
 #include <Axle/Project.hpp>
 #include <Axle/ProjectSerializer.hpp>
+#include <Axle/Path.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
@@ -116,7 +117,7 @@ static void AbortHandler(int sig) {
 }
 #endif
 
-int main(int argc, char** argv) {
+int EditorMain(int argc, char** argv) {
 #ifdef _WIN32
     AddVectoredExceptionHandler(1, VectoredCrashHandler);
     SetUnhandledExceptionFilter(VectoredCrashHandler);
@@ -131,22 +132,52 @@ int main(int argc, char** argv) {
     bool verifyEmptyStartup = false;
     bool verifyStartup = false;
     bool verifySimulation = false;
+    bool verifyPluginWorkflow = false;
+    bool verifyPluginRecovery = false;
     bool safeMode = false;
+    bool verifyRestartExit = false, verifyRestartFrameFailure = false;
+    std::string expectedPluginPlan, restartChannel;
+    Axle::PluginRestartSnapshot expectedPluginSnapshot;
+    bool hasPluginGeneration = false;
+    unsigned long restartParent = 0;
     std::string startupRejection;
     for (int i = 1; i < argc; ++i) {
         std::string argument = argv[i];
         if (argument == "--empty-project") emptyProject = true;
         else if (argument == "--safe-mode" || argument == "--recovery") safeMode = true;
+        else if (argument == "--verify-restart-exit") verifyRestartExit = true;
+        else if (argument == "--verify-restart-frame-failure") verifyRestartFrameFailure = true;
+        else if (argument.rfind("--expected-plugin-plan=", 0) == 0) expectedPluginPlan = argument.substr(23);
+        else if (argument.starts_with("--expected-plugin-generation=")) {
+            const auto path = argument.substr(std::string("--expected-plugin-generation=").size());
+            hasPluginGeneration = true; expectedPluginSnapshot.Generation = path == "none" ? std::filesystem::path{} : Axle::PathFromUtf8(path);
+        }
+        else if (argument.starts_with("--expected-plugin-receipts=")) expectedPluginSnapshot.ReceiptSet = argument.substr(std::string("--expected-plugin-receipts=").size());
+        else if (argument.rfind("--restart-channel=", 0) == 0) restartChannel = argument.substr(18);
+        else if (argument.rfind("--restart-parent=", 0) == 0) {
+            try { std::size_t consumed = 0; auto text = argument.substr(17); restartParent = std::stoul(text, &consumed); if (consumed != text.size()) return 1; }
+            catch (...) { return 1; }
+        }
         else if (argument == "--verify-empty-startup") verifyEmptyStartup = true;
         else if (argument == "--verify-startup") verifyStartup = true;
         else if (argument == "--verify-simulation") verifySimulation = true;
+        else if (argument == "--verify-plugin-workflow") verifyPluginWorkflow = true;
+        else if (argument == "--verify-plugin-recovery") { verifyPluginRecovery = true; verifyStartup = true; }
         else if (argument.rfind("--verify-startup-rejection=", 0) == 0) startupRejection = argument.substr(27);
-        else if (argument == "--project" && i + 1 < argc) requestedProject = argv[++i];
-        else if (argument.rfind("--project=", 0) == 0) requestedProject = argument.substr(10);
+        else if (argument == "--project" && i + 1 < argc) requestedProject = Axle::PathFromUtf8(argv[++i]);
+        else if (argument.rfind("--project=", 0) == 0) requestedProject = Axle::PathFromUtf8(argument.substr(10));
         else {
-            const std::filesystem::path candidate(argument);
+            const auto candidate = Axle::PathFromUtf8(argument);
             if (candidate.extension() == ".axleproj" || candidate.extension() == ".axleproject")
                 requestedProject = candidate;
+        }
+    }
+    Axle::PluginRestartChild restartChild;
+    const bool restarting = !restartChannel.empty() || restartParent != 0 || !expectedPluginPlan.empty();
+    if (restarting) {
+        std::string error;
+        if (expectedPluginPlan.empty() || !hasPluginGeneration || expectedPluginSnapshot.ReceiptSet.empty() || requestedProject.empty() || safeMode || !restartChild.Connect(restartChannel, restartParent, error)) {
+            fprintf(stderr, "Invalid restart handoff: %s\n", error.c_str()); return 1;
         }
     }
 
@@ -157,7 +188,7 @@ int main(int argc, char** argv) {
             Axle::Log::Init();
             std::filesystem::path outDir = "Export";
             if (i + 1 < argc && argv[i + 1][0] != '-') {
-                outDir = argv[++i];
+                outDir = Axle::PathFromUtf8(argv[++i]);
             }
             Axle::CookSettings settings;
             if (requestedProject.empty() || !Axle::Project::Load(requestedProject)) {
@@ -170,11 +201,20 @@ int main(int argc, char** argv) {
             settings.BakeMeshesToBinary = true;
             settings.IncludeShaders = true;
             settings.CopyExecutables = true;
+            const auto environment = Axle::GetPluginSessionEnvironment();
+            const auto pluginRoot = Axle::Project::GetProjectDirectory() / "Plugins";
+            const auto catalog = Axle::Plugin::Discover({{environment.EnginePlugins, pluginRoot}, {pluginRoot}});
+            const auto selected = Axle::Plugin::Resolve(catalog, Axle::Project::GetActive()->GetConfig().SelectedPlugins, Axle::Plugin::ProductKind::Runtime);
+            if (!selected.IsValid()) { AXLE_ERROR("CLI export rejected: selected plugins cannot be resolved"); return 1; }
+            for (const auto& plugin : selected.Plugins) for (const auto& module : plugin.Modules)
+                if (module.Kind == Axle::Plugin::ModuleKind::Runtime) {
+                    AXLE_ERROR("CLI export rejected: static native plugin player composition is scheduled for PLG-22"); return 1;
+                }
 
             auto res = Axle::AssetCooker::CookProject(settings);
             if (res.Success) {
                 AXLE_INFO("CLI Export Succeeded! Created {0} ({1} assets, {2} KB)",
-                    res.PackagePath.string(), res.TotalAssetsCooked, res.PackageSizeBytes / 1024);
+                    Axle::PathToUtf8(res.PackagePath), res.TotalAssetsCooked, res.PackageSizeBytes / 1024);
                 return 0;
             } else {
                 AXLE_ERROR("CLI Export Failed: {0}", res.ErrorMessage);
@@ -212,7 +252,10 @@ int main(int argc, char** argv) {
 
     Axle::GraphicsAPI activeAPI = Axle::GraphicsAPI::None;
     bool startupRejected = false;
+    bool productReady = false;
     Axle::RHI::ScopedRHIFault startupFault([&](std::string_view operation) -> std::optional<nri::Result> {
+        if (restarting && verifyRestartFrameFailure && productReady && operation == "QueuePresent" &&
+            Axle::Application::Get().GetCompletedFrameCount() == 4) return nri::Result::FAILURE;
         if (!startupRejection.empty() && operation == startupRejection &&
             (!startupRejected || startupRejection == "CreateDevice")) {
             startupRejected = true;
@@ -221,6 +264,15 @@ int main(int argc, char** argv) {
         return {};
     });
 
+    // Enclose every product return/exception, including rejected restart
+    // candidates. Application locals unwind before device callbacks retire;
+    // process caches must still exist when those callbacks run.
+    struct ProductDeviceCleanup {
+        ~ProductDeviceCleanup() {
+            Axle::RHIMeshRegistry::Get().Shutdown();
+            Axle::RHI::RHIDevice::Get().Shutdown();
+        }
+    } deviceCleanup;
     try {
         class PhysicsApplicationService final : public Axle::IApplicationService {
         public:
@@ -272,6 +324,7 @@ int main(int argc, char** argv) {
                     if (Axle::RHI::ScopedRHIFault::Invoke("ProductUI", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS)
                         throw std::runtime_error("Injected rejection after native UI readiness");
                     editorLayer = std::make_shared<EditorLayer>(startupPath);
+                    if (restarting) editorLayer->SetExpectedPluginSnapshot(expectedPluginSnapshot);
                     if (safeMode) editorLayer->GetPluginsPanel().SetSafeMode(true);
                     app->PushLayer(editorLayer);
                     if (Axle::RHI::ScopedRHIFault::Invoke("ProductRenderer", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS)
@@ -289,6 +342,33 @@ int main(int argc, char** argv) {
                 AXLE_ERROR("No requested backend could initialize the complete Editor");
                 return 1;
             }
+            if (restarting) {
+                const auto* session = editorLayer->GetPluginSession();
+                if (!session || session->GetStatus() != Axle::PluginProjectSession::Status::Active ||
+                    session->ActiveFingerprint() != expectedPluginPlan) {
+                    AXLE_ERROR("Restart rejected: plugin plan or verified generation changed before child startup"); return 1;
+                }
+                const auto expectedBackend = rhiConfig.PreferredBackend;
+                if (Axle::ToImGuiBackend(activeAPI) != Axle::ToImGuiBackend(Axle::RHI::RHISwitcher::ToGraphicsAPI(expectedBackend)))
+                    { AXLE_ERROR("Restart rejected: requested graphics backend did not initialize"); return 1; }
+                struct RestartHandshake final : Axle::Layer {
+                    Axle::PluginRestartChild& Child;
+                    bool Committed = false;
+                    bool ExitAfterCommit;
+                    RestartHandshake(Axle::PluginRestartChild& child, bool exitAfterCommit) : Child(child), ExitAfterCommit(exitAfterCommit) {}
+                    void OnImGuiRender() override {
+                        if (Committed) return;
+                        std::string error;
+                        if (Axle::Application::Get().GetCompletedFrameCount() >= 5 && !Child.Ready(error)) throw std::runtime_error(error);
+                        const auto state = Child.Poll(error);
+                        if (state == Axle::PluginRestartChild::Result::Failed) throw std::runtime_error(error);
+                        Committed = state == Axle::PluginRestartChild::Result::Committed;
+                        if (Committed && ExitAfterCommit) Axle::Application::Get().Close();
+                    }
+                };
+                app->PushLayer(std::make_shared<RestartHandshake>(restartChild, verifyRestartExit));
+            }
+            productReady = true;
             if (!startupRejection.empty() && !startupRejected) throw std::runtime_error("Startup rejection probe did not reach the requested operation");
             if (verifyEmptyStartup || verifyStartup) {
                 // Check after the Editor's UI each frame: panels may mutate the scene.
@@ -296,9 +376,10 @@ int main(int argc, char** argv) {
                     std::shared_ptr<EditorLayer> Editor;
                     unsigned Frames = 0;
                     bool RequireEmpty;
+                    bool RequireRecovery;
                     std::filesystem::path ExpectedProjectDirectory = Axle::Project::GetProjectDirectory();
-                    StartupVerifier(std::shared_ptr<EditorLayer> editor, bool requireEmpty)
-                        : Editor(std::move(editor)), RequireEmpty(requireEmpty) {}
+                    StartupVerifier(std::shared_ptr<EditorLayer> editor, bool requireEmpty, bool requireRecovery)
+                        : Editor(std::move(editor)), RequireEmpty(requireEmpty), RequireRecovery(requireRecovery) {}
                     void OnImGuiRender() override {
                         if (Axle::Project::GetProjectDirectory() != ExpectedProjectDirectory)
                             throw std::runtime_error("Editor startup project changed unexpectedly");
@@ -306,21 +387,24 @@ int main(int argc, char** argv) {
                             !Axle::Project::GetActive()->GetConfig().StartScene.empty() ||
                             !std::filesystem::is_empty(Axle::Project::GetAssetDirectory())))
                             throw std::runtime_error("Editor empty startup verification failed after UI frame");
+                        if (RequireRecovery && (!Editor->GetPluginSession() || !Editor->GetPluginSession()->IsSafeMode() || Editor->GetPluginSession()->HasNativeModules()))
+                            throw std::runtime_error("Plugin recovery startup did not disable native modules");
                         if (++Frames == 5) {
                             if (RequireEmpty)
                                 AXLE_INFO("Editor empty startup verification: PASS (0 entities, 0 assets, no start scene; 5 UI frames)");
                             else
                                 AXLE_INFO("Editor startup verification: PASS (project '{0}', {1} entities; 5 UI frames)",
-                                    ExpectedProjectDirectory.string(), Editor->GetSceneEntityCount());
+                                    Axle::PathToUtf8(ExpectedProjectDirectory), Editor->GetSceneEntityCount());
                             Axle::Application::Get().Close();
                         }
                     }
                 };
                 if (verifyEmptyStartup && !requestedProject.empty()) throw std::runtime_error("Empty startup verification requires an untitled project");
-                app->PushLayer(std::make_shared<StartupVerifier>(editorLayer, verifyEmptyStartup));
+                app->PushLayer(std::make_shared<StartupVerifier>(editorLayer, verifyEmptyStartup, verifyPluginRecovery));
             }
-            if (verifySimulation) editorLayer->VerifySimulationContract();
-            else app->Run();
+            if (verifyPluginWorkflow) { editorLayer->VerifyPluginWorkflow(); app->Close(); }
+            else if (verifySimulation) editorLayer->VerifySimulationContract();
+            else if (!app->Run()) throw std::runtime_error("Editor rendering or presentation failed");
             AXLE_INFO("Main: Application run loop completed, now destroying app object...");
         }
 
@@ -354,3 +438,15 @@ int main(int argc, char** argv) {
 
     return 0;
 }
+
+#ifdef _WIN32
+int wmain(int argc, wchar_t** arguments) {
+    std::vector<std::string> storage; storage.reserve(argc);
+    std::vector<char*> argv; argv.reserve(argc + 1);
+    for (int i = 0; i < argc; ++i) storage.push_back(Axle::PathToUtf8(arguments[i]));
+    for (auto& argument : storage) argv.push_back(argument.data());
+    argv.push_back(nullptr); return EditorMain(argc, argv.data());
+}
+#else
+int main(int argc, char** argv) { return EditorMain(argc, argv); }
+#endif

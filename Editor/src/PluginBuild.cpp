@@ -148,6 +148,7 @@ PluginBuildResult BuildPlugins(const PluginBuildRequest& request, const std::ato
         const auto stage = root / "Staging" / stamp;
         std::filesystem::create_directories(source); std::filesystem::create_directories(output);
         result.LogPath = root / ("build-" + stamp + ".log");
+        if (request.Progress) request.Progress->Set("Freezing selected plugin sources...", result.LogPath);
         std::string error;
         Plugin::BuildPlan snapshotGraph;
         if (!FreezeSources(plan, work / "i", snapshotGraph, error) ||
@@ -166,6 +167,7 @@ PluginBuildResult BuildPlugins(const PluginBuildRequest& request, const std::ato
         if (!request.Generator.empty()) { configure.push_back(L"-G"); configure.push_back(std::filesystem::u8path(request.Generator).wstring()); }
         if (!request.GeneratorToolset.empty()) { configure.push_back(L"-T"); configure.push_back(std::filesystem::u8path(request.GeneratorToolset).wstring()); }
         if (!request.GeneratorInstance.empty()) configure.push_back(L"-DCMAKE_GENERATOR_INSTANCE=" + request.GeneratorInstance.wstring());
+        if (request.Progress) request.Progress->Set("Configuring selected plugin modules...");
         auto process = RunOwnedProcess(request.CMake, configure, root, result.LogPath, cancel);
         result.ExitCode = process.ExitCode; result.Cancelled = process.Cancelled;
         if (process.ExitCode != 0 || process.Cancelled) { result.Error = process.Error; return result; }
@@ -182,9 +184,11 @@ PluginBuildResult BuildPlugins(const PluginBuildRequest& request, const std::ato
         }
         std::vector<std::wstring> arguments{L"--build", build.wstring(), L"--config", std::filesystem::u8path(plan.Configuration).wstring(), L"--target"};
         for (const auto& artifact : plan.Artifacts) if (artifact.Kind != Plugin::ModuleKind::Content) arguments.push_back(std::filesystem::u8path(artifact.ModuleName).wstring());
+        if (request.Progress) request.Progress->Set("Compiling selected plugin modules...");
         process = RunOwnedProcess(request.CMake, arguments, root, result.LogPath, cancel);
         result.ExitCode = process.ExitCode; result.Cancelled = process.Cancelled;
         if (process.ExitCode != 0 || process.Cancelled) { result.Error = process.Error; return result; }
+        if (request.Progress) request.Progress->Set("Validating and publishing the plugin generation...");
         const auto current = Plugin::CreateBuildPlan(plan.FrozenResolution, plan.Product, plan.Configuration, plan.SdkFingerprint, plan.ToolchainFingerprint);
         if (!current.IsValid() || current.Fingerprint != plan.Fingerprint) { result.Error = "Plugin sources changed during the frozen build"; return result; }
         if (cancel.load()) { result.Cancelled = true; result.Error = "Plugin build cancelled before publication"; return result; }

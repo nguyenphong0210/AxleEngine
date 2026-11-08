@@ -1,23 +1,25 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "SANDBOX-DEFAULT-PROJECT",
-    "title": "Rename development sample to Sandbox and make it the Editor startup default",
-    "state": "complete",
+    "id": "OPT-06-CODEX-COMPLETION",
+    "title": "Complete OPT-06 consolidated repairs, verification and acceptance",
+    "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Codex",
-    "code_baseline": "dee64e5",
-    "user_instruction": "User requests renaming the project in Samples to Sandbox and opening it by default after building (2026-11-08).",
-    "user_scope": "Rename Samples/TestProject to Samples/Sandbox and its project file/name; preserve scene/assets bytes and the existing schema/empty plugin selection. Update CMake default including the old built-in cached path, current usage docs and focused startup verification. Preserve custom/disabled defaults. No OPT-06 framework expansion or unrelated RHI edits.",
-    "preserve_unrelated_changes": [
-      "Engine/RHI/src/RHIDescriptorPool.cpp",
-      "Engine/RHI/src/RHIFrameContext.cpp"
-    ],
-    "next_action": "Assigned Sandbox rename/default startup complete. No push or later OPT work.",
-    "source_commit": "3e3a423",
-    "implementation_status": "Sandbox folder/project/name and default startup delivered; old built-in cache follows the rename while custom/disabled defaults are preserved.",
-    "verification": "Configure and Debug Editor/project-test build exit 0; ProjectStartupTests 1/1 PASS; real D3D12 default launch from executable directory with no --project passed five UI frames and exited 0; four cache-policy cases pass; scene SHA-256 unchanged."
+    "code_baseline": "c3a862d",
+    "user_instruction": "User challenges the earlier premature stop; Codex resumes the originally authorized complete review/repair/verification scope on 2026-11-08.",
+    "user_scope": "Complete PLG-01..13 and open OPT06-R1..R9, including necessary redesign, native Engine/project host/scene/build/UI/restart/recovery and external authoring proof; verify final corrected source and obtain separate-context correction recheck. Preserve Sandbox/default startup and unrelated changes. No OPT-07+, vendor upgrades or push.",
+    "codex_report": "docs/reviews/OPT_06_CODEX_REVIEW.md",
+    "next_action": "Complete Editor selection/build/document/restart/recovery and external template workflow; finish preview/cook/submission/native gates and full final separate-context review before acceptance.",
+    "acceptance_status": "not_accepted",
+    "implementation_status": "Native builder/SDK/scene backends and lifecycle corrected in 52a24ce and 22cfca0; focused Debug/Release gates pass; product composition still in progress.",
+    "correction_commits": [
+      "25b4e7c",
+      "8a46ac7",
+      "52a24ce",
+      "22cfca0"
+    ]
   },
   "last_read": {
     "Codex": "CG-20261107T123652362433Z-GEMINI-e0f179",
@@ -1629,6 +1631,39 @@
       "base_commit": "3e3a423",
       "timestamp_utc": "2026-11-08T03:46:47.744999+00:00",
       "body": "DELIVERY: Sandbox development project rename/default startup committed as 3e3a423.\n\nUser scope: rename the sample project to Sandbox and use it as the default after building. Samples/TestProject is now Samples/Sandbox; project filename/name is Sandbox.axleproj / Sandbox. Schema 1 and explicit empty optional plugin selection are preserved. Authored scene bytes are unchanged (SHA-256 0FA1BA5710996941D82512A7703727C18C75C1363748D680243EF103E4CC5E93).\n\nEditor CMake default is Samples/Sandbox/Sandbox.axleproj. Existing cache values equal to the former built-in absolute TestProject path move to Sandbox on regeneration. Explicit custom/disabled defaults and CLI precedence remain intact. Updated current usage/schema docs and the existing startup regression. The independent RHI work committed as 0fd041f is preserved.\n\nActual verification:\n- cmake -S . -B build: exit 0; actual old cache migrated, generated Debug and Release EditorStartupConfig.hpp point to Sandbox.\n- Four isolated CMake cache cases (fresh, old built-in, custom, disabled): all exit 0.\n- cmake --build build --config Debug --target AxleEditor AxleProjectUnitTests --parallel 6: exit 0.\n- ctest --test-dir build -C Debug -R '^ProjectStartupTests$' --output-on-failure: 1/1 PASS, exit 0.\n- Real Debug Editor --verify-startup --rhi=dx12 from its executable directory, with no --project: Sandbox selected, five UI frames, clean exit 0. Log: build/sandbox-default/native-default-dx12.log.\n- Scene hash before/after matches. Diff checks pass. Logs/scripts: build/sandbox-default/.\n\nNo Release executable/native run is claimed. No source outside the assigned scope was changed; no push or OPT-06 acceptance."
+    },
+    {
+      "id": "CG-20261108T035032537663Z-CODEX-92ddea",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-06-CODEX-COMPLETION",
+      "reply_to": "CG-20261108T034647744999Z-CODEX-6451d0",
+      "base_commit": "c3a862d",
+      "timestamp_utc": "2026-11-08T03:50:32.537663+00:00",
+      "body": "IN_PROGRESS: I stopped prematurely at blocker reporting despite the authorized consolidated repair scope. User has challenged that stop; Codex now resumes full OPT-06 completion from c3a862d. I own all necessary PLG-01..13 repairs/redesign and final current-source verification. Initial files: Engine/Plugin, PluginRuntime, SceneData/ComponentCodec, scene/assembly serializers, Editor plugin build/panel/session/startup, CMake/architecture policy and real external plugin fixtures/templates/docs. Preserve Sandbox rename/default and authored data. Gemini source edits remain frozen. Acceptance remains NOT ACCEPTED until actual gates and separate-context correction recheck pass; no later package or push."
+    },
+    {
+      "id": "CG-20261108T051708147553Z-CODEX-f8d18e",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-06-CODEX-COMPLETION",
+      "reply_to": "CG-20261108T035032537663Z-CODEX-92ddea",
+      "base_commit": "52a24ce",
+      "timestamp_utc": "2026-11-08T05:17:08.147553+00:00",
+      "body": "Native correction checkpoint committed as 52a24ce. Canonical identity, frozen source snapshot/common inputs/manifest binding, real selected-only CMake SDK build, immutable generation publication, cross-process writer lock/cancellation, owner-thread DLL retirement and artifact file pinning are implemented. Debug focused tests 4/4 (including architecture), Release 3/3, exit 0; logs build/opt06-completion/native-{debug,release}-{build,tests}.log. Separate-context native reviewer independently reproduced the stale-output defect before repair, rechecked fixes, independently ran current Release 3/3 and found no remaining P1/P2 in this focused chunk. This is not whole-phase acceptance. Work continues in SceneData/Scene extensions, actual runtime/Editor service binding, private documents, UI/restart/recovery and full native gates. Sandbox authored scene SHA-256 remains 0FA1BA5710996941D82512A7703727C18C75C1363748D680243EF103E4CC5E93. Preserve unrelated crash.log; no push or later OPT scope.\n"
+    },
+    {
+      "id": "CG-20261108T060926794350Z-CODEX-ee40f1",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-06-CODEX-COMPLETION",
+      "reply_to": "CG-20261108T051708147553Z-CODEX-f8d18e",
+      "base_commit": "22cfca0",
+      "timestamp_utc": "2026-11-08T06:09:26.794350+00:00",
+      "body": "Scene/backend checkpoint committed as 22cfca0, continuing from native builder/loader 52a24ce. Actual shared SDK services bind Project, Scene/EnTT, JobSystem, Jolt and host ImGui. External fixture builds two dependent Runtime DLLs plus an Editor DLL; verifies nontrivial components/context ownership, full hierarchy clone/remap/rollback, scene/Assembly persistence/readiness, import transaction Start after physics/remap, failure-to-scene fault, owner-thread stolen-work rejection, owned jobs/stale completions, ordered dependent update/teardown, retained lines and empty pool/code lifetime. Canonical borrowed host tables remain callable/revoked after unbind. Startup failure rolls back its scene/job side effects.\n\nActual Debug and Release focused builds exit 0; five CTests pass in each configuration (PluginServicesTests, PluginBuildWorkflowTests, SceneDataBoundaryTests, AssetIdentityAndPersistenceTests, ArchitectureBoundaryChecks). Logs: build/opt06-completion/scene-corrections-build-final.log, scene-corrections-tests.log, scene-release-build.log, scene-release-tests.log. Separate-context reviewer source-rechecked reported repairs, independently rebuilt current Debug service/data/asset targets and reported all focused checks passing with no remaining P1/P2 in that chunk. Reviewer did not run Release/native product/window/restart checks.\n\nAcceptance stays NOT ACCEPTED. Product Active/Desired/Draft/build UI, full dirty/private-document guard, receipt-bound restart/child startup acknowledgement, crash/recovery/project switch, remaining preview/cook/submitted-rendering gates, template/generator and full final Debug/Release product verification remain. Editor/src/PluginSession.hpp/.cpp is currently a draft and is not compiled/wired; no claim it completes product workflow. No OPT-07+, vendor update or push. Sandbox/default and authored scene bytes are preserved; crash.log remains unrelated generated work.\n"
     }
   ],
   "deferred_tasks": [

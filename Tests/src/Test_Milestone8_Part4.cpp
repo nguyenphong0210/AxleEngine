@@ -2646,14 +2646,16 @@ bool RunTest_Step96_Phase34_Step7_BidirectionalDocumentSynchronization() {
     // [96.5] End-to-End Scene (.axlescene) & UI (.axleui) Synchronization
     std::cout << "\n[96.5] Testing End-to-End Scene & UI Document Co-Serialization..." << std::endl;
     {
-        std::filesystem::path scenePath = std::filesystem::current_path() / "build" / "test_sync_scene.axlescene";
-        std::filesystem::path uiDocPath = std::filesystem::current_path() / "build" / "test_scene_ui.axleui";
+        const auto assetRoot = Axle::FileSystem::GetAssetDirectory();
+        std::filesystem::create_directories(assetRoot);
+        std::filesystem::path scenePath = assetRoot / "test_sync_scene.axlescene";
+        std::filesystem::path uiDocPath = assetRoot / "test_scene_ui.axleui";
 
         // 1. Create Scene with UICanvasComponent
         auto scene = std::make_shared<Scene>();
         Entity canvasEntity = scene->CreateEntity("HUD_Canvas");
         auto& uic = canvasEntity.AddComponent<UICanvasComponent>();
-        uic.AssetPath = uiDocPath.string();
+        uic.AssetPath = "test_scene_ui.axleui";
         uic.SortOrder = 5;
         uic.Visible = true;
         uic.Document = std::make_shared<UIDocument>();

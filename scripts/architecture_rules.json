@@ -1,7 +1,7 @@
 {
-  "version": "2.0.0",
+  "version": "3.0.0",
   "baseline_commit": "842cf7de6fac8368eb76fbf6a027b934681166e2",
-  "description": "Architectural layering rules and narrow expiring baseline allowances for AxleEngine.",
+  "description": "Enforced architecture boundaries after baseline migration; no baseline allowances.",
   "module_roots": {
     "Core": "Engine/Core",
     "Platform": "Engine/Platform",
@@ -25,7 +25,8 @@
     "PluginRuntime": "Engine/PluginRuntime",
     "PluginSDK": "Engine/PluginSDK",
     "PluginServices": "Engine/PluginServices",
-    "Vehicle": "Plugins/Vehicle"
+    "Vehicle": "Plugins/Vehicle",
+    "PhysicsDebug": "Engine/PhysicsDebug"
   },
   "layers": {
     "Level0_Foundation": [
@@ -50,7 +51,8 @@
       "PluginSDK"
     ],
     "Level3_Scene_Simulation": [
-      "Scene"
+      "Scene",
+      "PhysicsDebug"
     ],
     "Level4_Plugins": [
       "Spline",
@@ -127,7 +129,8 @@
       "Axle::Asset",
       "Axle::Audio",
       "Axle::VFX",
-      "Axle::UI2D"
+      "Axle::UI2D",
+      "Axle::PhysicsDebug"
     ],
     "Spline": [
       "Axle::Core",
@@ -233,6 +236,11 @@
       "AxleSDK::Runtime",
       "AxleSDK::Editor",
       "VehicleRuntime"
+    ],
+    "PhysicsDebug": [
+      "Axle::Physics",
+      "Axle::Renderer",
+      "Axle::RHI"
     ]
   },
   "forbidden_include_rules": [
@@ -259,7 +267,9 @@
         "Plugin",
         "PluginRuntime",
         "PluginSDK",
-        "PluginServices"
+        "PluginServices",
+        "PhysicsDebug",
+        "Vehicle"
       ],
       "description": "Foundation Core must not have upward dependencies on platform, rendering, physics, scene, UI or applications."
     },
@@ -276,7 +286,9 @@
         "Plugin",
         "PluginRuntime",
         "PluginSDK",
-        "PluginServices"
+        "PluginServices",
+        "PhysicsDebug",
+        "Vehicle"
       ],
       "description": "Asset subsystem must not depend on GPU rendering, scene, or UI."
     },
@@ -294,7 +306,9 @@
         "Plugin",
         "PluginRuntime",
         "PluginSDK",
-        "PluginServices"
+        "PluginServices",
+        "PhysicsDebug",
+        "Vehicle"
       ],
       "description": "Physics subsystem must not depend directly on rendering, GPU resources, asset DSL, scene, or UI."
     },
@@ -359,7 +373,9 @@
         "Plugin",
         "PluginRuntime",
         "PluginSDK",
-        "PluginServices"
+        "PluginServices",
+        "PhysicsDebug",
+        "Vehicle"
       ],
       "description": "Generic scene data may depend only on Core; concrete system integration belongs in Scene bridges."
     },
@@ -385,7 +401,9 @@
         "SceneData",
         "PluginRuntime",
         "PluginSDK",
-        "PluginServices"
+        "PluginServices",
+        "PhysicsDebug",
+        "Vehicle"
       ],
       "description": "Plugin infrastructure does not import optional modules, scene or product implementation."
     },
@@ -409,7 +427,9 @@
         "Editor",
         "Runtime",
         "SceneData",
-        "PluginServices"
+        "PluginServices",
+        "PhysicsDebug",
+        "Vehicle"
       ],
       "description": "Plugin infrastructure does not import optional modules, scene or product implementation."
     },
@@ -436,7 +456,9 @@
         "SceneData",
         "Plugin",
         "PluginRuntime",
-        "PluginServices"
+        "PluginServices",
+        "PhysicsDebug",
+        "Vehicle"
       ],
       "description": "Shared plugin gateways expose opaque SDK services and contain no private Engine/vendor/application implementation."
     },
@@ -457,267 +479,155 @@
         "Vehicle"
       ],
       "description": "Editor accesses optional domain state only through SDK-scoped native registrations."
+    },
+    {
+      "from": "PhysicsDebug",
+      "forbidden_to": [
+        "Scene",
+        "UI",
+        "Editor",
+        "Runtime",
+        "Vehicle",
+        "Spline",
+        "Terrain",
+        "PluginServices"
+      ],
+      "description": "Physics debug consumes vendor primitives and graphics services without scene/domain/product ownership."
+    },
+    {
+      "from": "Platform",
+      "forbidden_to": [
+        "RHI",
+        "Renderer",
+        "Asset",
+        "Scene",
+        "SceneData",
+        "Physics",
+        "PhysicsDebug",
+        "UI",
+        "UI2D",
+        "Editor",
+        "Runtime",
+        "PluginServices"
+      ],
+      "description": "Subsystem implementation must not import its higher-level consumers."
+    },
+    {
+      "from": "RHI",
+      "forbidden_to": [
+        "Renderer",
+        "Scene",
+        "SceneData",
+        "Physics",
+        "PhysicsDebug",
+        "UI",
+        "UI2D",
+        "Vehicle",
+        "Spline",
+        "Terrain",
+        "Editor",
+        "Runtime",
+        "PluginServices"
+      ],
+      "description": "Subsystem implementation must not import its higher-level consumers."
+    },
+    {
+      "from": "Renderer",
+      "forbidden_to": [
+        "Scene",
+        "UI",
+        "Editor",
+        "Runtime",
+        "Vehicle",
+        "Spline",
+        "Terrain",
+        "PluginServices"
+      ],
+      "description": "Subsystem implementation must not import its higher-level consumers."
+    },
+    {
+      "from": "Audio",
+      "forbidden_to": [
+        "RHI",
+        "Renderer",
+        "Scene",
+        "SceneData",
+        "UI",
+        "Editor",
+        "Runtime",
+        "Vehicle",
+        "Spline",
+        "Terrain",
+        "PluginServices"
+      ],
+      "description": "Subsystem implementation must not import its higher-level consumers."
+    },
+    {
+      "from": "Project",
+      "forbidden_to": [
+        "RHI",
+        "Renderer",
+        "Scene",
+        "SceneData",
+        "UI",
+        "Editor",
+        "Runtime",
+        "Vehicle",
+        "Spline",
+        "Terrain",
+        "PluginServices"
+      ],
+      "description": "Subsystem implementation must not import its higher-level consumers."
     }
   ],
-  "baseline_allowances": [
-    {
-      "id": "ALLOW-001",
-      "from_module": "Core",
-      "to_module": "Platform",
-      "files": [
-        "Engine/Core/include/Axle/Application.hpp",
-        "Engine/Core/src/Application.cpp"
-      ],
-      "evidence": "Application boots window and reads raw input via Axle/Input.hpp before dedicated Platform host.",
-      "owning_package": "AF-02",
-      "expiration_condition": "Core bootstrap refactoring in AF-02 completes",
-      "edges": [
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Core/include/Axle/Application.hpp",
-          "to": "Axle/Window.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Core/src/Application.cpp",
-          "to": "Axle/Input.hpp"
-        }
-      ]
-    },
-    {
-      "id": "ALLOW-002",
-      "from_module": "Core",
-      "to_module": "Physics",
-      "files": [
-        "Engine/Core/src/Application.cpp"
-      ],
-      "evidence": "Application directly initializes and shuts down PhysicsEngine singleton.",
-      "owning_package": "AF-02",
-      "expiration_condition": "Lifecycle ownership moved to Application runtime services in AF-02 / EJ-07",
-      "edges": [
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Core/src/Application.cpp",
-          "to": "Axle/PhysicsEngine.hpp"
-        }
-      ]
-    },
-    {
-      "id": "ALLOW-003",
-      "from_module": "Core",
-      "to_module": "Renderer",
-      "files": [
-        "Engine/Core/src/Application.cpp"
-      ],
-      "evidence": "Application directly issues RenderCommand::Init() in Core.",
-      "owning_package": "AF-02",
-      "expiration_condition": "Renderer initialization moved to host/render service in AF-02 / P41-01",
-      "edges": [
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Core/src/Application.cpp",
-          "to": "Axle/RenderCommand.hpp"
-        }
-      ]
-    },
-    {
-      "id": "ALLOW-004",
-      "from_module": "Asset",
-      "to_module": "Renderer",
-      "files": [
-        "Engine/Asset/CMakeLists.txt",
-        "Engine/Asset/include/Axle/AssetManager.hpp",
-        "Engine/Asset/include/Axle/AssetSerializer.hpp",
-        "Engine/Asset/src/AssetManager.cpp",
-        "Engine/Asset/src/AssetSerializer.cpp"
-      ],
-      "evidence": "AssetManager references Texture2D directly and CMakeLists.txt links Axle::Renderer.",
-      "owning_package": "AF-04",
-      "expiration_condition": "CPU decode/registry separated from GPU upload in AF-04 / P41-11",
-      "edges": [
-        {
-          "kind": "CMakeLink",
-          "file": "Engine/Asset/CMakeLists.txt",
-          "from_target": "AxleAsset",
-          "to": "Axle::Renderer"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Asset/include/Axle/AssetManager.hpp",
-          "to": "Axle/Texture2D.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Asset/include/Axle/AssetManager.hpp",
-          "to": "Axle/Material.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Asset/include/Axle/AssetSerializer.hpp",
-          "to": "Axle/VertexArray.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Asset/src/AssetSerializer.cpp",
-          "to": "Axle/Buffer.hpp"
-        }
-      ]
-    },
-    {
-      "id": "ALLOW-005",
-      "from_module": "Asset",
-      "to_module": "RHI",
-      "files": [
-        "Engine/Asset/CMakeLists.txt",
-        "Engine/Asset/include/Axle/AssetManager.hpp",
-        "Engine/Asset/src/AssetSerializer.cpp"
-      ],
-      "evidence": "AssetSerializer and AssetManager include Axle/RHI/* and CMakeLists.txt links Axle::RHI.",
-      "owning_package": "AF-04",
-      "expiration_condition": "RHI decoupling in AF-04 / P41-11",
-      "edges": [
-        {
-          "kind": "CMakeLink",
-          "file": "Engine/Asset/CMakeLists.txt",
-          "from_target": "AxleAsset",
-          "to": "Axle::RHI"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Asset/include/Axle/AssetManager.hpp",
-          "to": "Axle/RHI/RHIMaterial.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Asset/src/AssetSerializer.cpp",
-          "to": "Axle/RHI/RHIDevice.hpp"
-        }
-      ]
-    },
-    {
-      "id": "ALLOW-006",
-      "from_module": "Physics",
-      "to_module": "Renderer",
-      "files": [
-        "Engine/Physics/CMakeLists.txt",
-        "Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp",
-        "Engine/Physics/src/PhysicsDebugRenderer.cpp"
-      ],
-      "evidence": "PhysicsDebugRenderer draws through RenderCommand and CMakeLists.txt links Axle::Renderer.",
-      "owning_package": "P41-25",
-      "expiration_condition": "Debug rendering extracted into generic consumer in P41-25",
-      "edges": [
-        {
-          "kind": "CMakeLink",
-          "file": "Engine/Physics/CMakeLists.txt",
-          "from_target": "AxlePhysics",
-          "to": "Axle::Renderer"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp",
-          "to": "Axle/Shader.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp",
-          "to": "Axle/VertexArray.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp",
-          "to": "Axle/Buffer.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/src/PhysicsDebugRenderer.cpp",
-          "to": "Axle/RenderCommand.hpp"
-        }
-      ]
-    },
-    {
-      "id": "ALLOW-007",
-      "from_module": "Physics",
-      "to_module": "RHI",
-      "files": [
-        "Engine/Physics/CMakeLists.txt",
-        "Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp",
-        "Engine/Physics/src/RHIPhysicsDebugRenderer.cpp"
-      ],
-      "evidence": "RHIPhysicsDebugRenderer directly records RHI command buffers and CMakeLists.txt links Axle::RHI.",
-      "owning_package": "P41-25",
-      "expiration_condition": "Debug drawing routed through extraction in P41-25",
-      "edges": [
-        {
-          "kind": "CMakeLink",
-          "file": "Engine/Physics/CMakeLists.txt",
-          "from_target": "AxlePhysics",
-          "to": "Axle::RHI"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp",
-          "to": "Axle/RHI/RHICommon.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp",
-          "to": "Axle/RHI/RHIDevice.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp",
-          "to": "Axle/RHI/RHIBuffer.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp",
-          "to": "Axle/RHI/RHIPipeline.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp",
-          "to": "Axle/RHI/RHICommandBuffer.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/src/RHIPhysicsDebugRenderer.cpp",
-          "to": "Axle/RHI/RHIShader.hpp"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/src/RHIPhysicsDebugRenderer.cpp",
-          "to": "Axle/RHI/RHIPipeline.hpp"
-        }
-      ]
-    },
-    {
-      "id": "ALLOW-008",
-      "from_module": "Physics",
-      "to_module": "Asset",
-      "files": [
-        "Engine/Physics/CMakeLists.txt",
-        "Engine/Physics/include/Axle/PhysicsMaterial.hpp"
-      ],
-      "evidence": "PhysicsMaterial includes Axle/AssetDSL.hpp and CMakeLists.txt links Axle::Asset.",
-      "owning_package": "AF-04",
-      "expiration_condition": "CPU asset-format/DSL boundary extracted in AF-04; AF-01 owns identity/persistence, not module extraction",
-      "edges": [
-        {
-          "kind": "CMakeLink",
-          "file": "Engine/Physics/CMakeLists.txt",
-          "from_target": "AxlePhysics",
-          "to": "Axle::Asset"
-        },
-        {
-          "kind": "SourceInclude",
-          "file": "Engine/Physics/include/Axle/PhysicsMaterial.hpp",
-          "to": "Axle/AssetDSL.hpp"
-        }
-      ]
-    }
-  ],
+  "baseline_allowances": [],
   "path_module_overrides": {
     "Engine/UI/include/Axle/UI": "UI2D"
+  },
+  "forbidden_vendor_includes": {
+    "Core": [
+      "GLFW/",
+      "glad/",
+      "imgui.h",
+      "Jolt/",
+      "NRI",
+      "NRD",
+      "Extensions/"
+    ],
+    "SceneData": [
+      "GLFW/",
+      "glad/",
+      "imgui.h",
+      "Jolt/",
+      "NRI",
+      "NRD"
+    ],
+    "Physics": [
+      "GLFW/",
+      "glad/",
+      "imgui.h",
+      "NRI",
+      "NRD"
+    ],
+    "RHI": [
+      "entt/",
+      "Jolt/",
+      "imgui.h"
+    ],
+    "PluginSDK": [
+      "entt/",
+      "Jolt/",
+      "GLFW/",
+      "glad/",
+      "imgui.h"
+    ]
+  },
+  "vendor_include_roots": {
+    "ThirdParty/entt/src/entt": "entt/",
+    "ThirdParty/JoltPhysics/Jolt": "Jolt/",
+    "ThirdParty/glfw/include/GLFW": "GLFW/",
+    "ThirdParty/glad/include/glad": "glad/",
+    "ThirdParty/imgui": "imgui.h/",
+    "ThirdParty/NRI": "NRI/"
   }
 }

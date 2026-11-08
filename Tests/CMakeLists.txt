@@ -1,11 +1,15 @@
 add_executable(AxleStaticPluginLifetimeTests EXCLUDE_FROM_ALL src/Test_StaticPluginLifetime.cpp)
 target_link_libraries(AxleStaticPluginLifetimeTests PRIVATE Axle::PluginRuntime)
 add_test(NAME StaticPluginLifetimeTests COMMAND $<TARGET_FILE:AxleStaticPluginLifetimeTests>)
+add_executable(AxleArchitectureStressTests EXCLUDE_FROM_ALL src/ArchitectureStressMain.cpp)
+target_link_libraries(AxleArchitectureStressTests PRIVATE Axle::Physics Axle::SceneData)
+add_test(NAME ArchitectureStressTests COMMAND $<TARGET_FILE:AxleArchitectureStressTests>)
+set_tests_properties(ArchitectureStressTests PROPERTIES LABELS "architecture;ecs-jobs;physics;cpu" TIMEOUT 120)
 if(NOT AXLE_BUILD_EDITOR)
     add_executable(AxlePluginFoundationTests EXCLUDE_FROM_ALL src/Test_PluginFoundation.cpp)
     target_link_libraries(AxlePluginFoundationTests PRIVATE Axle::Plugin Axle::Project)
     add_test(NAME PluginFoundationTests COMMAND $<TARGET_FILE:AxlePluginFoundationTests>)
-    add_custom_target(AxleAllTests DEPENDS AxlePluginFoundationTests AxleStaticPluginLifetimeTests)
+    add_custom_target(AxleAllTests DEPENDS AxlePluginFoundationTests AxleStaticPluginLifetimeTests AxleArchitectureStressTests)
     return()
 endif()
 
@@ -559,7 +563,9 @@ add_test(NAME ArchitectureForbiddenEdgeFixture COMMAND "${Python3_EXECUTABLE}"
     --fixture "${CMAKE_SOURCE_DIR}/Tests/Fixtures/ArchitectureViolationFixture" --expect-violation)
 add_test(NAME BaselineToolRegressions COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_SOURCE_DIR}/scripts/test_baseline_tools.py")
-set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture BaselineToolRegressions
+add_test(NAME AcceptanceEvidenceRegressions COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_SOURCE_DIR}/scripts/test_architecture_acceptance.py")
+set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture BaselineToolRegressions AcceptanceEvidenceRegressions
     PROPERTIES LABELS "architecture;cpu" TIMEOUT 60)
 
 # Explicit developer/test build. Neither this target nor its executables are in ALL.
@@ -785,7 +791,7 @@ add_dependencies(AxleProjectScriptBoundaryTests AxleRuntimeScripts)
 add_custom_command(TARGET AxleProjectScriptBoundaryTests POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleRuntimeHost>" "$<TARGET_FILE_DIR:AxleProjectScriptBoundaryTests>" VERBATIM)
 add_test(NAME ProjectScriptBoundaryTests COMMAND $<TARGET_FILE:AxleProjectScriptBoundaryTests> $<TARGET_FILE:AxleRuntimeScripts>)
 set_tests_properties(ProjectScriptBoundaryTests PROPERTIES LABELS "script;scene;cpu")
-add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
+add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests AxleArchitectureStressTests)
 
 # Explicit review gate for known OPT-06 contract failures. Keep out of the
 # routine regression suite until the incomplete plugin candidate is repaired.

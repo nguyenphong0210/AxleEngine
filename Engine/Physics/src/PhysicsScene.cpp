@@ -1,6 +1,6 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsEngine.hpp>
-#include <Axle/PhysicsDebugRenderer.hpp>
+#include <Jolt/Renderer/DebugRenderer.h>
 #include <Axle/Log.hpp>
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
@@ -93,10 +93,6 @@ namespace Axle {
 
         m_PhysicsSystem.DrawConstraints(&renderer);
         m_PhysicsSystem.DrawConstraintLimits(&renderer);
-    }
-
-    void PhysicsScene::DrawDebug(PhysicsDebugRenderer &renderer, const PhysicsDrawSettings &settings) {
-        DrawDebug(static_cast<JPH::DebugRenderer &>(renderer), settings);
     }
 
     BodyID PhysicsScene::CreateBox(const BoxBodyProps &props) {

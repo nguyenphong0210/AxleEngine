@@ -845,7 +845,8 @@ bool RunTest_Step104_Phase38_1_MaterialStudioParityAndHLSLCompiler() {
 
         studio.CreateNewShaderTemplate("TestDynamicShader");
         assert(studio.IsDirty() == true);
-        assert(studio.GetCurrentFilePath().string().find("TestDynamicShader.hlsl") != std::string::npos);
+        assert(studio.GetCurrentFilePath().empty()); // A new template requires an explicit Save As destination.
+        assert(studio.GetSourceCode().find("TestDynamicShader.hlsl") != std::string::npos);
 
         studio.SetSourceCode("// custom test code\nfloat4 main() : SV_Target { return float4(1,0,0,1); }");
         assert(studio.GetSourceCode().find("float4 main()") != std::string::npos);

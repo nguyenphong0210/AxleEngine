@@ -250,6 +250,15 @@ def scan_includes(root, config, reference_root):
                 continue
             spelling = match[1].replace("\\", "/")
             relative_header = (path.parent/spelling).resolve()
+            vendor_spellings = [spelling]
+            for directory, prefix in config.get("vendor_include_roots", {}).items():
+                vendor_root = (root/directory).resolve()
+                if relative_header.is_relative_to(vendor_root):
+                    vendor_spellings.append(prefix + relative_header.relative_to(vendor_root).as_posix())
+            if any(candidate == prefix or candidate.startswith(prefix) for candidate in vendor_spellings
+                   for prefix in config.get("forbidden_vendor_includes", {}).get(module, [])):
+                errors.append(dict(kind="SourceInclude", file=rel, line=line, from_module=module,
+                                   to=spelling, details=f"{module} -> {spelling} violates vendor ownership"))
             target = module_for(relative_header, root, config) if relative_header.is_file() else None
             if not target:
                 owners = headers.get(spelling, set())

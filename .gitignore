@@ -42,6 +42,7 @@
 
 # CMake Build Directories & Artifacts
 build/
+/build-opt10/
 /bin/
 /lib/
 out/

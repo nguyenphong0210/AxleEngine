@@ -122,7 +122,7 @@ class ArchitectureTests(unittest.TestCase):
 
     def test_exact_existing_allowance_and_new_header_in_same_module(self):
         self.write("Engine/Core/src/Application.cpp", "#include <Axle/Input.hpp>")
-        self.assertFalse(self.inspect()["violations"])
+        self.assertTrue(self.inspect()["violations"])
         self.write("Engine/Core/src/Application.cpp", "#include <Axle/NewBoundary.hpp>")
         self.write("Engine/Platform/include/Axle/NewBoundary.hpp", "// fixture")
         self.assertTrue(self.inspect()["violations"])
@@ -148,8 +148,36 @@ class ArchitectureTests(unittest.TestCase):
 
     def test_closed_package_disables_its_allowance(self):
         self.write("Engine/Core/src/Application.cpp", "#include <Axle/Input.hpp>")
-        self.assertFalse(self.inspect()["violations"])
-        self.assertTrue(arch.inspect(self.root, CONFIG, ROOT, ["AF-02"])["violations"])
+        config = copy.deepcopy(CONFIG)
+        config["baseline_allowances"] = [dict(id="synthetic-history", from_module="Core", to_module="Platform",
+            owning_package="AF-02", expiration_condition="test-only historical migration",
+            edges=[dict(kind="SourceInclude", file="Engine/Core/src/Application.cpp", to="Axle/Input.hpp")])]
+        self.assertFalse(arch.inspect(self.root, config, ROOT)["violations"])
+        self.assertTrue(arch.inspect(self.root, config, ROOT, ["AF-02"])["violations"])
+
+    def test_accepted_policy_has_no_baseline_allowances(self):
+        self.assertEqual(CONFIG["baseline_allowances"], [])
+
+    def test_low_level_gpu_and_ecs_back_edges_are_rejected(self):
+        for path, header in [("Engine/Physics/src/Draw.cpp", "Axle/Shader.hpp"),
+                             ("Engine/RHI/include/Axle/RHI/Bridge.hpp", "Axle/RHIECSStreamer.hpp"),
+                             ("Engine/Renderer/src/Bad.cpp", "Axle/Scene.hpp")]:
+            with self.subTest(path=path):
+                self.write(path, f'#include <{header}>')
+                self.assertTrue(any(e["file"] == path for e in self.inspect()["violations"]))
+
+    def test_vendor_and_optional_domain_back_edges_are_rejected(self):
+        for module, header in [("Core", "AxleVehicle/VehiclePhysics.hpp"),
+                               ("RHI", "entt/entt.hpp"), ("Physics", "glad/glad.h")]:
+            path = f"Engine/{module}/src/Forbidden.cpp"
+            self.write(path, f'#include <{header}>')
+            self.assertTrue(any(e["file"] == path and e["kind"] == "SourceInclude"
+                                for e in self.inspect()["violations"]))
+
+    def test_relative_vendor_header_cannot_bypass_ownership(self):
+        self.write("ThirdParty/entt/src/entt/entt.hpp", "// actual fixture vendor header")
+        self.write("Engine/RHI/src/Bad.cpp", '#include "../../../ThirdParty/entt/src/entt/entt.hpp"')
+        self.assertTrue(any(e["kind"] == "SourceInclude" for e in self.inspect()["violations"]))
 
     def test_unknown_link_and_property_based_construction_are_not_silently_allowed(self):
         for command in ["target_link_libraries(AxleAsset PRIVATE new_unknown_library)",

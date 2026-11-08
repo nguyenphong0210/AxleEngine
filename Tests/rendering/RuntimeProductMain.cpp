@@ -50,7 +50,7 @@ static std::filesystem::path Fixture(const std::string& mode,bool cooked) {
     auto* text=document.CreateNode<UITextNode>(canvas);text->Position={8,56};text->Text="AX";text->FontSize=32;
     auto* button=document.CreateNode<UIButtonNode>(canvas);button->ID="click";button->Position={200,180};button->Size={80,32};button->OnClickAction="Probe.Click";
     std::string tga(18,'\0');tga[2]=2;tga[12]=1;tga[14]=1;tga[16]=32;tga[17]=0x28;tga.append("\xff\0\0\xff",4);
-    const std::string project="Project:\n  Name: Runtime fixture\n  StartScene: start.axlescene\n  AssetDirectory: assets\n  RHIBackend: Vulkan\n";
+    const std::string project="Project:\n  SchemaVersion: 1\n  Name: Runtime fixture\n  StartScene: start.axlescene\n  AssetDirectory: assets\n  RHIBackend: Vulkan\n  Plugins:\n";
     if (cooked) {
         PackageWriter package;Require(package.Begin(root/"Data.axlepak"),"package begin");
         for (const auto& entry : std::vector<std::pair<std::string,std::string>>{{"Project.axleproj",project},{"start.axlescene",sceneText},{"hud.ui",document.Serialize()},{"hud.tga",tga}})

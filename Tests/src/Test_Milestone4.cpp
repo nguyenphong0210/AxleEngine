@@ -733,7 +733,40 @@ bool RunTest_Step21_Phase18_AsyncBackgroundScriptCompiler() {
 
     std::cout << "\n[21.2] Testing Asynchronous Background Compilation (Non-Blocking UI)..." << std::endl;
     auto& compiler = Axle::ScriptCompiler::Get();
-    compiler.SetBuildConfig("Release");
+    // The compiler contract uses workspace/build. Use a real disposable DLL
+    // project rather than assuming the user's Engine build tree is named build.
+    const auto fixture = std::filesystem::absolute("async_native_compiler_fixture");
+    std::filesystem::create_directories(fixture);
+    {
+        std::ofstream cmake(fixture / "CMakeLists.txt");
+        cmake << "cmake_minimum_required(VERSION 3.22)\nproject(AsyncNativeCompiler LANGUAGES CXX)\n"
+                 "add_library(AxleTestScripts SHARED probe.cpp)\n";
+        std::ofstream source(fixture / "probe.cpp");
+        source << "extern \"C\" __declspec(dllexport) int AxleAsyncCompilerProbe() { return 42; }\n";
+        assert(cmake && source);
+    }
+    const std::string configure = "cmake -S \"" + fixture.string() + "\" -B \"" + (fixture / "build").string() + "\"";
+    assert(std::system(configure.c_str()) == 0);
+    const auto previousWorkspace = compiler.GetWorkspaceDirectory();
+    const auto previousConfig = compiler.GetBuildConfig();
+    const auto previousTarget = compiler.GetTarget();
+    struct RestoreCompilerConfig {
+        Axle::ScriptCompiler& Compiler;
+        std::filesystem::path Workspace;
+        std::string Config, Target;
+        ~RestoreCompilerConfig() {
+            Compiler.SetWorkspaceDirectory(Workspace);
+            Compiler.SetBuildConfig(Config);
+            Compiler.SetTarget(Target);
+        }
+    } restoreCompiler{compiler, previousWorkspace, previousConfig, previousTarget};
+#ifdef NDEBUG
+    const std::string config = "Release";
+#else
+    const std::string config = "Debug";
+#endif
+    compiler.SetWorkspaceDirectory(fixture);
+    compiler.SetBuildConfig(config);
     compiler.SetTarget("AxleTestScripts");
 
     std::atomic<bool> callbackFired{ false };
@@ -756,6 +789,7 @@ bool RunTest_Step21_Phase18_AsyncBackgroundScriptCompiler() {
     assert(callbackFired.load());
     assert(asyncResult.Success);
     assert(asyncResult.ExitCode == 0);
+    assert(std::filesystem::is_regular_file(fixture / "build" / config / "AxleTestScripts.dll"));
     assert(asyncResult.DurationSeconds > 0.0);
     std::cout << "  -> PASS: Compilation completed in background in " << asyncResult.DurationSeconds << "s." << std::endl;
     std::cout << "  -> PASS: Editor UI simulated " << simulatedUiFrames << " frames without freezing!" << std::endl;

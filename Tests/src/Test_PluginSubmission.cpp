@@ -4,6 +4,7 @@
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHIDiagnostics.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
@@ -22,6 +23,7 @@ int Run(int argc, wchar_t** argv) {
     struct Cleanup { ~Cleanup() { ImGui::DestroyContext(); PhysicsEngine::Shutdown(); JobSystem::Shutdown(); } } cleanup;
     RHIDeviceDesc description; description.PreferredBackend = std::wstring(argv[2]) == L"vulkan" ? RHIType::Vulkan : RHIType::Direct3D12;
     description.AllowFallback = false; description.Headless = true; description.EnableNRIValidation = true;
+    description.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(description.PreferredBackend);
     auto& device = RHIDevice::Get(); CHECK(device.Init(description)); CHECK(!device.GetCapabilities().IsSoftwareAdapter);
     struct DeviceCleanup { ~DeviceCleanup() { RHIDevice::Get().Shutdown(); } } deviceCleanup;
     auto project = Project::Load(argv[1]); CHECK(project);
@@ -63,4 +65,13 @@ int Run(int argc, wchar_t** argv) {
     std::cout << "Native plugin line pixels=" << green << "; scene/session released after submission, DLL retained through GPU completion and unloaded after command retirement: PASS\n";
     return 0;
 }
-int wmain(int argc, wchar_t** argv) { try { return Run(argc,argv); } catch(const std::exception& error) { std::cerr << error.what() << '\n'; return 1; } }
+int wmain(int argc, wchar_t** argv) {
+    try {
+        const int result = Run(argc, argv); // All scene/session/device cleanup precedes the validation check.
+        if (Axle::RHI::GetRHIValidationErrorCount() != 0) {
+            std::cerr << "Native plugin submission: validation errors, including teardown\n";
+            return 1;
+        }
+        return result;
+    } catch(const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
+}

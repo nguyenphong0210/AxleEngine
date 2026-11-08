@@ -94,8 +94,6 @@ namespace Axle {
         f32 Restitution = 0.0f;
     };
 
-    class PhysicsDebugRenderer;
-
     class PhysicsScene {
     public:
         PhysicsScene(const PhysicsSettings& settings = PhysicsSettings());
@@ -104,8 +102,7 @@ namespace Axle {
         // Step simulation by delta time
         void Step(Timestep ts, i32 collisionSteps = 1);
 
-        // Debug visualization using PhysicsDebugRenderer (OpenGL) or RHIPhysicsDebugRenderer / JPH::DebugRenderer
-        void DrawDebug(PhysicsDebugRenderer& renderer, const PhysicsDrawSettings& settings = PhysicsDrawSettings());
+        // Emit vendor debug primitives into a caller-owned consumer, without graphics dependencies.
         void DrawDebug(JPH::DebugRenderer& renderer, const PhysicsDrawSettings& settings = PhysicsDrawSettings());
 
         // Body creation and management

@@ -43,6 +43,7 @@ target_link_libraries(AxleScene
         Axle::Renderer
         Axle::Animation
         Axle::Physics
+        Axle::PhysicsDebug
         Axle::Asset
         Axle::Audio
         Axle::VFX

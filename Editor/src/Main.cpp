@@ -283,6 +283,7 @@ int EditorMain(int argc, char** argv) {
         if (!startupRejection.empty() && operation == startupRejection &&
             (!startupRejected || startupRejection == "CreateDevice")) {
             startupRejected = true;
+            AXLE_INFO("STARTUP_FAULT_REACHED {0}", operation);
             return nri::Result::FAILURE;
         }
         return {};

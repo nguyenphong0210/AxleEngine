@@ -79,7 +79,7 @@
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHIStreamer.hpp>
-#include <Axle/RHI/RHIECSStreamer.hpp>
+#include <Axle/RHIECSStreamer.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
 #include <Axle/RHI/RHIVertexLayout.hpp>

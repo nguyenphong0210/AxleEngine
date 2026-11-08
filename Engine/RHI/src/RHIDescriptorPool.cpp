@@ -74,8 +74,6 @@ namespace Axle::RHI {
         candidate.m_Lease = rhiDevice.GetResources().Publish(RHIResourceKind::Pool, desc.DebugName, {pool},
             [functions, pool] { functions.DestroyDescriptorPool(pool); });
         if (!candidate.m_Lease.IsLive()) return false;
-        AXLE_CORE_INFO("RHIDescriptorPool: Initialized '{0}' (MaxSets: {1}, MaxTextures: {2}, MaxSamplers: {3})",
-            candidate.m_Desc.DebugName, candidate.m_Desc.MaxDescriptorSets, candidate.m_Desc.MaxTextures, candidate.m_Desc.MaxSamplers);
         *this = std::move(candidate);
         return true;
     }

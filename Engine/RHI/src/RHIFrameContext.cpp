@@ -59,9 +59,13 @@ namespace Axle::RHI {
         if (!frame.Commands.Reset()) return false; // Conservative whole-queue drain remains intentional.
         frame.UniformViews.clear();
         device.GetResources().CollectAfterDrain();
-        RHIDescriptorPool descriptors;
-        if (!descriptors.Init(frame.Descriptors.GetDesc())) return false;
-        frame.Descriptors = std::move(descriptors);
+        if (frame.Descriptors.IsValid()) {
+            frame.Descriptors.Reset();
+        } else {
+            RHIDescriptorPool descriptors;
+            if (!descriptors.Init(frame.Descriptors.GetDesc())) return false;
+            frame.Descriptors = std::move(descriptors);
+        }
         if (!device.GetResources().SetBufferState(frame.Uniform.AcquireLease(), {nri::AccessBits::HOST_WRITE, nri::StageBits::HOST}) ||
             !device.GetResources().SetBufferState(frame.Upload.AcquireLease(), {nri::AccessBits::HOST_WRITE, nri::StageBits::HOST})) return false;
         frame.UniformData = static_cast<unsigned char*>(frame.Uniform.Map());

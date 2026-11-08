@@ -58,25 +58,34 @@ namespace Axle {
 
     class ComponentCodecRegistry {
     public:
+        using Owner = std::uint64_t;
+
         static ComponentCodecRegistry& Get();
 
+        Owner BeginOwner() { return m_NextOwner++; }
         void RegisterCodec(std::unique_ptr<IComponentCodec> codec);
-        const std::vector<std::unique_ptr<IComponentCodec>>& GetCodecs() const { return m_Codecs; }
-        std::vector<std::unique_ptr<IComponentCodec>>& GetMutableCodecs() { return m_Codecs; }
+        void RegisterCodec(Owner owner, std::unique_ptr<IComponentCodec> codec);
+        void UnregisterOwner(Owner owner) noexcept;
 
-        void CopyAllComponents(const ComponentCopyContext& ctx) const {
-            for (const auto& codec : m_Codecs) {
-                if (codec->HasComponent(ctx.SrcRegistry, ctx.SrcEntity)) {
-                    codec->CopyComponent(ctx);
-                }
+        const std::vector<std::unique_ptr<IComponentCodec>>& GetCodecs() const { return m_Codecs; }
+        std::vector<std::unique_ptr<IComponentCodec>>& GetMutableCodecs() {
+            while (m_Owners.size() < m_Codecs.size()) {
+                m_Owners.push_back(0);
             }
+            return m_Codecs;
         }
+
+        void CopyAllComponents(const ComponentCopyContext& ctx) const;
+        bool HasCodec(std::string_view componentName) const;
+        std::size_t Size() const noexcept { return m_Codecs.size(); }
 
     private:
         ComponentCodecRegistry();
         void RegisterBuiltinCodecs();
 
+        std::uint64_t m_NextOwner = 1;
         std::vector<std::unique_ptr<IComponentCodec>> m_Codecs;
+        std::vector<Owner> m_Owners;
     };
 
     void RegisterRuntimeComponentCodecs();

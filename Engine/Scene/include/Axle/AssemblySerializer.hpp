@@ -5,6 +5,7 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/ComponentCodec.hpp>
 
 #include <filesystem>
 #include <string>
@@ -29,6 +30,7 @@ namespace Axle {
         SkeletalMeshComponent SkeletalMesh;
         bool HasAnimator = false;
         AnimatorComponent Animator;
+        std::vector<UnknownComponentSection> PassiveSections;
         std::vector<AssemblyNode> Children;
     };
 

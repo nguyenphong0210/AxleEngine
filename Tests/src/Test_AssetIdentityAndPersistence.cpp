@@ -292,6 +292,45 @@ namespace {
 #endif
         CHECK(NoAuxiliary(root)); return true;
     }
+    bool PluginComponentAndAssemblyPassiveSectionRetention() {
+        auto root = Fixture();
+        auto& registry = ComponentCodecRegistry::Get();
+        auto owner = registry.BeginOwner();
+        struct CustomTestComp {};
+        registry.RegisterCodec(owner, std::make_unique<FunctionalComponentCodec<CustomTestComp, void(*)(const ComponentCopyContext&)>>(
+            "CustomTestComp", [](const ComponentCopyContext&) {}));
+        CHECK(registry.HasCodec("CustomTestComp"));
+        registry.UnregisterOwner(owner);
+        CHECK(!registry.HasCodec("CustomTestComp"));
+
+        auto scene = std::make_shared<Scene>();
+        auto entity = scene->CreateEntity("VehicleEntity");
+        scene->StorePassiveSection(entity, "PluginVehicleComponent", {"Chassis: Sports", "Wheels: 4"});
+        CHECK(scene->HasPassiveSections(entity));
+
+        auto assemblyPath = root / "vehicle.axle";
+        CHECK(AssemblySerializer::Serialize(assemblyPath, entity));
+        auto text = FileSystem::ReadTextFile(assemblyPath);
+        CHECK(text.find("PluginVehicleComponent:") != std::string::npos);
+        CHECK(text.find("Chassis: Sports") != std::string::npos);
+
+        auto data = AssemblySerializer::LoadAssemblyData(assemblyPath);
+        CHECK(data.IsValid);
+        CHECK(data.RootNode.PassiveSections.size() == 1);
+        CHECK(data.RootNode.PassiveSections[0].SectionName == "PluginVehicleComponent");
+        CHECK(AssemblySerializer::SaveAssemblyData(assemblyPath, data));
+
+        Scene targetScene;
+        auto spawned = AssemblySerializer::Deserialize(assemblyPath, &targetScene);
+        CHECK(bool(spawned));
+        CHECK(targetScene.HasPassiveSections(spawned));
+        const auto* sections = targetScene.GetPassiveSections(spawned);
+        CHECK(sections && sections->size() == 1);
+        CHECK((*sections)[0].SectionName == "PluginVehicleComponent");
+        CHECK((*sections)[0].Lines.size() == 2);
+        CHECK(NoAuxiliary(root));
+        return true;
+    }
 }
 
 int main(int argc,char** argv) {
@@ -315,7 +354,8 @@ int main(int argc,char** argv) {
         {"path and builtin validation",PathAndBuiltinValidation},
         {"invalid atomic input and failure",AtomicInvalidInputAndReplacementFailure},
         {"failed identity publication",FailedNativeImportDoesNotPublish},
-        {"scene assembly project persistence",SceneAssemblyAndProjectSavesKeepPreviousBytes}
+        {"scene assembly project persistence",SceneAssemblyAndProjectSavesKeepPreviousBytes},
+        {"plugin component and assembly passive section retention",PluginComponentAndAssemblyPassiveSectionRetention}
     };
     size_t passed=0;
     try {

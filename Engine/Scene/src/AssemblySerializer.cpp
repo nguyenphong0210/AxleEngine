@@ -320,6 +320,21 @@ namespace Axle {
                     fout << "      BoolOverride: " << param << " " << (val ? "true" : "false") << "\n";
                 }
             }
+
+            // Custom and passive plugin components
+            if (context && context->CustomEntitySerializer) {
+                context->CustomEntitySerializer(entity, fout);
+            }
+            if (entity.GetScene()->HasPassiveSections(entity)) {
+                if (const auto* sections = entity.GetScene()->GetPassiveSections(entity)) {
+                    for (const auto& sec : *sections) {
+                        fout << "    " << sec.SectionName << ":\n";
+                        for (const auto& l : sec.Lines) {
+                            fout << l << "\n";
+                        }
+                    }
+                }
+            }
         }
 
         if (!FileSystem::WriteIdentifiedTextFile(filepath, fout.str())) return false;
@@ -380,6 +395,7 @@ namespace Axle {
         bool HasHierarchy = false;
         u64 ParentOldUUID = 0;
         std::vector<u64> ChildrenOldUUIDs;
+        std::vector<UnknownComponentSection> PassiveSections;
     };
 
     enum class AsmSection {
@@ -399,7 +415,8 @@ namespace Axle {
         SkeletalMesh,
         Animator,
         Hierarchy,
-        HierarchyChildren
+        HierarchyChildren,
+        Custom
     };
 
     static std::vector<RawAssemblyEntity> ParseAssemblyEntities(std::istream& stream, u64& outRootUUID) {
@@ -408,6 +425,16 @@ namespace Axle {
         RawAssemblyEntity current;
         bool inEntity = false;
         AsmSection currentSection = AsmSection::None;
+        std::string currentCustomSectionName;
+        std::vector<std::string> customSectionLines;
+
+        auto flushCustom = [&]() {
+            if (currentSection == AsmSection::Custom && !currentCustomSectionName.empty()) {
+                current.PassiveSections.push_back({currentCustomSectionName, customSectionLines});
+                customSectionLines.clear();
+                currentCustomSectionName.clear();
+            }
+        };
 
         while (std::getline(stream, line)) {
             if (!line.empty() && line.back() == '\r') line.pop_back();
@@ -425,6 +452,7 @@ namespace Axle {
 
             if (trimmed.rfind("- Entity:", 0) == 0) {
                 if (inEntity) {
+                    flushCustom();
                     entities.push_back(current);
                 }
                 current = RawAssemblyEntity{};
@@ -441,21 +469,30 @@ namespace Axle {
             if (!inEntity) continue;
 
             // Section markers
-            if (trimmed == "TagComponent:") { currentSection = AsmSection::Tag; continue; }
-            if (trimmed == "TransformComponent:") { currentSection = AsmSection::Transform; current.HasTransform = true; continue; }
-            if (trimmed == "MeshInstance3D:" || trimmed == "MeshComponent:") { currentSection = AsmSection::Mesh; current.HasMesh = true; continue; }
-            if (trimmed == "CollisionShape3D:" || trimmed == "CollisionShape:") { currentSection = AsmSection::CollisionShape; current.HasCollisionShape = true; continue; }
-            if (trimmed == "RigidBody3D:" || trimmed == "RigidBodyComponent:") { currentSection = AsmSection::RigidBody; current.HasRigidBody = true; continue; }
-            if (trimmed == "MaterialComponent:") { currentSection = AsmSection::Material; current.HasMaterial = true; continue; }
-            if (trimmed == "NativeScriptComponent:") { currentSection = AsmSection::NativeScript; current.HasNativeScript = true; continue; }
-            if (trimmed == "CameraComponent:") { currentSection = AsmSection::Camera; current.HasCamera = true; continue; }
-            if (trimmed == "AudioListenerComponent:") { currentSection = AsmSection::AudioListener; current.HasAudioListener = true; continue; }
-            if (trimmed == "AudioSourceComponent:") { currentSection = AsmSection::AudioSource; current.HasAudioSource = true; continue; }
-            if (trimmed == "PointLightComponent:") { currentSection = AsmSection::PointLight; current.HasPointLight = true; continue; }
-            if (trimmed == "SpotLightComponent:") { currentSection = AsmSection::SpotLight; current.HasSpotLight = true; continue; }
-            if (trimmed == "SkeletalMeshComponent:") { currentSection = AsmSection::SkeletalMesh; current.HasSkeletalMesh = true; continue; }
-            if (trimmed == "AnimatorComponent:") { currentSection = AsmSection::Animator; current.HasAnimator = true; continue; }
-            if (trimmed == "HierarchyComponent:") { currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
+            if (trimmed == "TagComponent:") { flushCustom(); currentSection = AsmSection::Tag; continue; }
+            if (trimmed == "TransformComponent:") { flushCustom(); currentSection = AsmSection::Transform; current.HasTransform = true; continue; }
+            if (trimmed == "MeshInstance3D:" || trimmed == "MeshComponent:") { flushCustom(); currentSection = AsmSection::Mesh; current.HasMesh = true; continue; }
+            if (trimmed == "CollisionShape3D:" || trimmed == "CollisionShape:") { flushCustom(); currentSection = AsmSection::CollisionShape; current.HasCollisionShape = true; continue; }
+            if (trimmed == "RigidBody3D:" || trimmed == "RigidBodyComponent:") { flushCustom(); currentSection = AsmSection::RigidBody; current.HasRigidBody = true; continue; }
+            if (trimmed == "MaterialComponent:") { flushCustom(); currentSection = AsmSection::Material; current.HasMaterial = true; continue; }
+            if (trimmed == "NativeScriptComponent:") { flushCustom(); currentSection = AsmSection::NativeScript; current.HasNativeScript = true; continue; }
+            if (trimmed == "CameraComponent:") { flushCustom(); currentSection = AsmSection::Camera; current.HasCamera = true; continue; }
+            if (trimmed == "AudioListenerComponent:") { flushCustom(); currentSection = AsmSection::AudioListener; current.HasAudioListener = true; continue; }
+            if (trimmed == "AudioSourceComponent:") { flushCustom(); currentSection = AsmSection::AudioSource; current.HasAudioSource = true; continue; }
+            if (trimmed == "PointLightComponent:") { flushCustom(); currentSection = AsmSection::PointLight; current.HasPointLight = true; continue; }
+            if (trimmed == "SpotLightComponent:") { flushCustom(); currentSection = AsmSection::SpotLight; current.HasSpotLight = true; continue; }
+            if (trimmed == "SkeletalMeshComponent:") { flushCustom(); currentSection = AsmSection::SkeletalMesh; current.HasSkeletalMesh = true; continue; }
+            if (trimmed == "AnimatorComponent:") { flushCustom(); currentSection = AsmSection::Animator; current.HasAnimator = true; continue; }
+            if (trimmed == "HierarchyComponent:") { flushCustom(); currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
+            if (trimmed == "Children:") { flushCustom(); currentSection = AsmSection::HierarchyChildren; continue; }
+
+            size_t indent = line.find_first_not_of(" \t");
+            if (indent == 4 && trimmed.back() == ':' && trimmed.find(' ') == std::string::npos && !trimmed.starts_with("-")) {
+                flushCustom();
+                currentSection = AsmSection::Custom;
+                currentCustomSectionName = trimmed.substr(0, trimmed.length() - 1);
+                continue;
+            }
 
             switch (currentSection) {
                 case AsmSection::Tag: {
@@ -737,12 +774,17 @@ namespace Axle {
                     }
                     break;
                 }
+                case AsmSection::Custom: {
+                    customSectionLines.push_back(line);
+                    break;
+                }
                 default:
                     break;
             }
         }
 
         if (inEntity) {
+            flushCustom();
             entities.push_back(current);
         }
 
@@ -894,6 +936,20 @@ namespace Axle {
             auto& registry = targetScene->GetRegistry();
             ResolveAnimationBinding(registry.try_get<SkeletalMeshComponent>((entt::entity)entity),
                 registry.try_get<AnimatorComponent>((entt::entity)entity), filepath.generic_string());
+        }
+
+        // Restore custom and passive plugin components
+        for (const auto& raw : rawEntities) {
+            Entity entity = oldToEntity[raw.OldUUID];
+            for (const auto& sec : raw.PassiveSections) {
+                bool handled = false;
+                if (context && context->CustomSectionDeserializer) {
+                    handled = context->CustomSectionDeserializer(entity, sec.SectionName, sec.Lines);
+                }
+                if (!handled) {
+                    targetScene->StorePassiveSection(entity, sec.SectionName, sec.Lines);
+                }
+            }
         }
 
         // Pass 2: Reconstruct Hierarchy parent-child links
@@ -1107,6 +1163,7 @@ namespace Axle {
             node.SkeletalMesh = raw.SkeletalMesh;
             node.HasAnimator = raw.HasAnimator;
             node.Animator = raw.Animator;
+            node.PassiveSections = raw.PassiveSections;
             nodeMap[raw.OldUUID] = node;
         }
 
@@ -1221,6 +1278,13 @@ namespace Axle {
             }
             for (const auto& [param, val] : node.Animator.BoolOverrides) {
                 out << "      BoolOverride: " << param << " " << (val ? "true" : "false") << "\n";
+            }
+        }
+
+        for (const auto& sec : node.PassiveSections) {
+            out << "    " << sec.SectionName << ":\n";
+            for (const auto& l : sec.Lines) {
+                out << l << "\n";
             }
         }
 

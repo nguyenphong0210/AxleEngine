@@ -126,20 +126,8 @@ namespace Axle {
                 auto splineView = m_Scene->GetRegistry().view<Spline::SplineComponent>();
                 for (auto e : splineView) {
                     auto& sc = splineView.get<Spline::SplineComponent>(e);
-                    auto mesh = Spline::TrackGenerator::GenerateTrackMesh(sc.Curve, sc);
-                    sc.TrackVAO = Spline::TrackGenerator::BuildVAO(mesh);
-                    sc.VertexCount = static_cast<u32>(mesh.GetVertexCount());
-                    sc.TriangleCount = static_cast<u32>(mesh.GetTriangleCount());
-                    sc.Dirty = false;
                     Entity ent{ e, m_Scene.get() };
-                    if (!ent.HasComponent<MeshInstance3D>()) {
-                        ent.AddComponent<MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
-                    } else {
-                        ent.GetComponent<MeshInstance3D>().VAO = sc.TrackVAO;
-                    }
-                    if (m_PhysicsScene && sc.GeneratePhysics) {
-                        sc.RuntimeBodyID = Spline::TrackGenerator::CreatePhysicsCollider(mesh, sc, *m_PhysicsScene);
-                    }
+                    Spline::TrackGenerator::BuildTrackRuntime(ent, sc, m_PhysicsScene.get(), false);
                 }
 
                 auto terrainView = m_Scene->GetRegistry().view<Terrain::TerrainComponent>();

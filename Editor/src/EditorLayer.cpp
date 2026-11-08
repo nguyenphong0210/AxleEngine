@@ -994,46 +994,8 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
         auto splineView = m_Scene->GetRegistry().view<Axle::Spline::SplineComponent>();
         for (auto e : splineView) {
             auto& sc = splineView.get<Axle::Spline::SplineComponent>(e);
-            auto mesh = Axle::Spline::TrackGenerator::GenerateTrackMesh(sc.Curve, sc);
-            sc.TrackVAO = Axle::Spline::TrackGenerator::BuildVAO(mesh);
-            sc.VertexCount = static_cast<Axle::u32>(mesh.GetVertexCount());
-            sc.TriangleCount = static_cast<Axle::u32>(mesh.GetTriangleCount());
-            sc.Dirty = false;
-
-            std::shared_ptr<Axle::RHI::RHIMesh> trackRHIMesh = nullptr;
-            if (Axle::RHI::RHIDevice::Get().IsNativeReady() && !mesh.IsEmpty()) {
-                std::vector<glm::vec3> trackNormals(mesh.Positions.size(), glm::vec3(0.0f));
-                for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
-                    uint32_t i0 = mesh.Indices[i], i1 = mesh.Indices[i + 1], i2 = mesh.Indices[i + 2];
-                    if (i0 < mesh.Positions.size() && i1 < mesh.Positions.size() && i2 < mesh.Positions.size()) {
-                        glm::vec3 fn = glm::cross(mesh.Positions[i1] - mesh.Positions[i0], mesh.Positions[i2] - mesh.Positions[i0]);
-                        trackNormals[i0] += fn;
-                        trackNormals[i1] += fn;
-                        trackNormals[i2] += fn;
-                    }
-                }
-                for (auto& n : trackNormals) {
-                    if (glm::dot(n, n) > 1e-6f) n = glm::normalize(n);
-                    else n = glm::vec3(0.0f, 1.0f, 0.0f);
-                }
-                trackRHIMesh = Axle::RHI::RHIMesh::CreateFromRaw(
-                    mesh.Positions, mesh.Indices, trackNormals, mesh.UVs,
-                    glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), "SplineTrack_RHI"
-                );
-            }
-
             Axle::Entity ent{ e, m_Scene.get() };
-            if (!ent.HasComponent<Axle::MeshInstance3D>()) {
-                auto& mi = ent.AddComponent<Axle::MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
-                mi.RHIMeshAsset = trackRHIMesh;
-            } else {
-                auto& mi = ent.GetComponent<Axle::MeshInstance3D>();
-                mi.VAO = sc.TrackVAO;
-                mi.RHIMeshAsset = trackRHIMesh;
-            }
-            if (m_PhysicsScene && sc.GeneratePhysics) {
-                sc.RuntimeBodyID = Axle::Spline::TrackGenerator::CreatePhysicsCollider(mesh, sc, *m_PhysicsScene);
-            }
+            Axle::Spline::TrackGenerator::BuildTrackRuntime(ent, sc, m_PhysicsScene.get(), true);
         }
 
         auto terrainView = m_Scene->GetRegistry().view<Axle::Terrain::TerrainComponent>();

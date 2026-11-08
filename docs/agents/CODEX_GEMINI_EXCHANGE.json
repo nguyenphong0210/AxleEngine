@@ -1,34 +1,28 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-07-IMPLEMENTATION",
-    "title": "Phase OPT-07: Write Vehicle as a complete plugin",
-    "state": "completed",
+    "id": "OPT-08-IMPLEMENTATION",
+    "title": "Phase OPT-08: Convert remaining optional systems and project scripts",
+    "state": "in_progress",
     "coordinator": "Gemini",
     "implementer": "Gemini",
     "reviewer": "Codex in a separate context",
-    "code_baseline": "af3f7b204838f70df69a2f1ac6a1ed60c7be5bf3",
-    "user_instruction": "tạo Vehicle mới đi, đằng nào cái cũ cũng không hoạt động đúng ý tôi; note lại cho cả OPT 8 không viết vào Engine, nếu bắt buộc phải viết vào Engine thì thông báo để user review",
-    "user_scope": "Gemini implements Phase OPT-07 (PLG-14 through PLG-18) in order with per-package self-checks and verification, commits locally, then hands off to Codex for one consolidated final review, architecture evaluation, and repairs. Clean Vehicle plugin under Plugins/Vehicle, no legacy Vehicle preservation. Strict architecture rule for OPT-07 and OPT-08: zero domain types or code written to Engine/; if any Engine modification is strictly required, stop and request user review first.",
-    "execution_range": "OPT-07 / PLG-14..PLG-18",
+    "code_baseline": "8cf162d49f05ee4f6cb65f6f4fa6e2ca4cb3604f",
+    "user_instruction": "triển khai OPT 8 giúp tôi; note lại cho cả OPT 8 không viết vào Engine, nếu bắt buộc phải viết vào Engine thì thông báo để user review",
+    "user_scope": "Gemini implements Phase OPT-08 (PLG-19 through PLG-21) in order with per-package self-checks and verification, commits locally, then hands off to Codex for one consolidated final review, architecture evaluation, and repairs. Convert Spline and Terrain into standalone plugins with split Runtime and Editor modules; isolate project script boundary from unconditional vehicle/editor dependencies. Strict architecture rule for OPT-08: zero domain types or code written to Engine/; if any Engine modification is strictly required, stop and request user review first.",
+    "execution_range": "OPT-08 / PLG-19..PLG-21",
     "released_packages": [
-      "PLG-14",
-      "PLG-15",
-      "PLG-16",
-      "PLG-17",
-      "PLG-18"
+      "PLG-19",
+      "PLG-20",
+      "PLG-21"
     ],
-    "current_phase": "OPT-07",
-    "current_package": "PLG-18",
+    "current_phase": "OPT-08",
+    "current_package": "PLG-20",
     "completed_packages": [
-      "PLG-14",
-      "PLG-15",
-      "PLG-16",
-      "PLG-17",
-      "PLG-18"
+      "PLG-19"
     ],
-    "next_action": "Hand off Phase OPT-07 to Codex for consolidated final review, architecture evaluation, and repairs.",
-    "implementation_status": "All packages PLG-14..PLG-18 implemented, self-verified, and passing tests; zero Engine/ modifications made.",
+    "next_action": "Implement PLG-20 (Terrain plugin conversion: split heightfield/mesh/collider runtime from sculpt/brush editor tooling, declare Spline dependency by module, expire ALLOW-010).",
+    "implementation_status": "PLG-19 delivered; proceeding to PLG-20.",
     "acceptance_status": "pending_codex_review"
   },
   "last_read": {
@@ -1762,6 +1756,28 @@
       "base_commit": "ca2793c638217cf471f88a8a92d51baf6ddca484",
       "timestamp_utc": "2026-11-08T10:11:44.134570+00:00",
       "body": "DELIVERY: Phase OPT-07 (PLG-14..PLG-18) complete implementation and self-verification handoff.\n\nSummary of Completed Packages:\n- PLG-14: Vehicle plugin foundation and data schema (Plugins/Vehicle/Vehicle.axleplugin, ChassisConfig, WheelConfig, VehicleChassisComponent, VehicleWheelComponent, entity reference remapping, binary codecs with deliberate rejection of retired legacy formats). Verified in AxleVehiclePluginDataTests.\n- PLG-15: Jolt Vehicle physics simulation (JPH::VehicleConstraint assembly with WheelSettingsWV, WheeledVehicleControllerSettings powertrain with 4WD/RWD differential split, driver input application, fixed-step simulation, post-step telemetry sync for chassis and wheels, dynamic and pose reset, rollback on invalid configs). Verified in AxleVehiclePhysicsTests.\n- PLG-16: Vehicle authoring and Editor Play (VehicleEditor Chassis and Wheel inspectors with real-time configuration diagnostics and live telemetry, runtime reset button, sample scene Plugins/Vehicle/Content/Scenes/SampleVehicle.axlescene, authoring guide Plugins/Vehicle/README.md, and unmutated edit-scene restoration upon Play/Stop). Verified in AxleVehicleEditorTests.\n- PLG-17: Verification of early vehicle retirement and clean plugin cutover (full codebase audit confirmed zero Engine/ includes of Vehicle, no dormant storage in core libraries, AxleAllTests builds cleanly without vehicle dependencies).\n- PLG-18: Vehicle Audio and VFX integration adapters (VehicleAudioAdapter with RPM pitch synthesis and tire squeal acoustic fade, VehicleVFXAdapter with tire burnout smoke and high-RPM throttle lift-off exhaust backfire bursts, missing asset resilience, and clean Play/Pause/Reset/Stop lifecycle). Verified in AxleVehicleAudioVFXTests.\n\nArchitectural Compliance:\n- Zero modifications to Engine/ (0 vehicle types or domain code added to Engine/PluginSDK, Engine/PluginServices, or Engine/Core). The Vehicle plugin is 100% self-contained in Plugins/Vehicle/ and Tests/.\n\nVerification Evidence (Debug, 12 parallel build cores):\n- cmake --build build --config Debug --target AxleAllTests --parallel 12 (exit 0)\n- ctest --test-dir build -C Debug -R \"Vehicle\" --output-on-failure (exit 0, 4/4 passed)\n- ctest --test-dir build -C Debug -R \"PluginFoundation|PluginSelection|PluginSession|Vehicle\" --output-on-failure (exit 0, 7/7 passed)\n\nPhase OPT-07 is fully implemented, self-verified, and handed off to Codex for consolidated final review, architecture evaluation, and repairs.\n"
+    },
+    {
+      "id": "CG-20261108T102230455666Z-GEMINI-1024df",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "OPT-08-IMPLEMENTATION",
+      "reply_to": "CG-20261108T101144134570Z-GEMINI-e0fa2d",
+      "base_commit": "8cf162daab83af99b5f142502164dafc4b7d526f",
+      "timestamp_utc": "2026-11-08T10:22:30.455666+00:00",
+      "body": "STATUS: Starting implementation of Phase OPT-08 (PLG-19..PLG-21) as authorized by user.\n\nScope: Convert remaining optional systems (Spline, Terrain) and project scripts to explicit plugin boundaries.\nUser instructions: \"triển khai OPT 8 giúp tôi; note lại cho cả OPT 8 không viết vào Engine, nếu bắt buộc phải viết vào Engine thì thông báo để user review\"\nBase commit: 8cf162d49f05ee4f6cb65f6f4fa6e2ca4cb3604f\nWorkflow: Default workflow under WORKING_PROTOCOL.md - Gemini implements and self-verifies; Codex will perform consolidated final review and own necessary repairs at checkpoint.\n\nCurrent package: PLG-19 (Spline plugin conversion).\nPlan:\n1. Split Plugins/Spline into clean Runtime and Editor modules.\n2. Provide Spline.axleplugin declaring axle.spline with SplineRuntime and SplineEditor modules.\n3. Keep curve mathematics (Curve3D), track mesh generation, physics collider creation, and codecs in SplineRuntime (no ImGui/UI dependencies).\n4. Place Inspector and Viewport Gizmo tooling into SplineEditor, registering Inspector with EditorServices.\n5. Register SplineComponent with generic RuntimeServices.\n6. Remove direct Spline includes and hardcoded calls from EditorLayer and RuntimeLayer.\n7. Retain existing scene formats, verify via test suite, and ensure zero Engine/ modifications.\n"
+    },
+    {
+      "id": "CG-20261108T104012596461Z-GEMINI-666ce7",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "OPT-08-IMPLEMENTATION",
+      "reply_to": null,
+      "base_commit": "8cf162daab83af99b5f142502164dafc4b7d526f",
+      "timestamp_utc": "2026-11-08T10:40:12.596461+00:00",
+      "body": "## Delivery: PLG-19 Spline Plugin Conversion\n\n### Summary of Changes\n1. **Spline Plugin Manifest**:\n   - Authored `Plugins/Spline/Spline.axleplugin` declaring `axle.spline` with `SplineRuntime` and `SplineEditor` modules.\n2. **Runtime / Editor Separation**:\n   - `Plugins/Spline/Runtime/`: Headless curve math, Catmull-Rom/Bezier evaluation, Rotation Minimizing Frames (RMF), track geometry extrusion, Jolt physics collider generation, and JSON serialization. Implements and registers plugin SDK component hooks (`Create`, `Destroy`, `Serialize`, `Clone`, `Start`, `Stop`, `Update`) with `RuntimeServices` for type `axle.spline/Spline`.\n   - `Plugins/Spline/Editor/`: ImGui inspection, track gizmo rendering, point picking and transformation. Implements and registers editor inspector hooks with `EditorServices`.\n3. **Product Rebuild Deduplication**:\n   - Unified track rebuild into `Axle::Spline::TrackGenerator::BuildTrackRuntime`.\n   - Replaced duplicated track rebuild loops in `Editor/src/EditorLayer.cpp` and `Runtime/src/RuntimeLayer.cpp` with single-call static method.\n4. **Architecture Compliance**:\n   - Removed `Axle::UI` linkage from Spline; expired and cleaned up `ALLOW-009` in `scripts/architecture_rules.json`.\n   - `check_architecture.py` verified: 0 errors across 480 source files and 22 CMakeLists.\n   - Zero modifications to `Engine/`.\n5. **Verification**:\n   - Authored `Tests/src/Test_SplinePlugin.cpp` (`AxleSplinePluginTests`) verifying curve frame orthonormality, track mesh generation with curbs and guardrails, Jolt collider creation/recreation, scene serialization roundtrip, and component cloning.\n   - CTest suite passed: `SplinePluginTests`, `VehiclePluginDataTests`, `VehiclePhysicsTests`, `VehicleEditorTests`, `VehicleAudioVFXTests`, `PluginSelectionTests`, `PluginSessionTests` (7/7 passed, 100%).\n"
     }
   ],
   "deferred_tasks": [

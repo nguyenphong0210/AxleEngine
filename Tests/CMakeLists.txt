@@ -700,6 +700,19 @@ if(WIN32)
     list(APPEND AXLE_TEST_TARGETS AxleVehicleAudioVFXTests)
     add_test(NAME VehicleAudioVFXTests COMMAND $<TARGET_FILE:AxleVehicleAudioVFXTests> "${CMAKE_SOURCE_DIR}")
     set_tests_properties(VehicleAudioVFXTests PROPERTIES LABELS "plugin;audio;vfx;vehicle;cpu")
+
+    add_executable(AxleSplinePluginTests EXCLUDE_FROM_ALL
+        src/Test_SplinePlugin.cpp)
+    target_include_directories(AxleSplinePluginTests PRIVATE
+        "${CMAKE_SOURCE_DIR}/Plugins/Spline/Runtime/include"
+        "${CMAKE_SOURCE_DIR}/Engine/PluginSDK/include"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/glm"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/entt/src"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/JoltPhysics")
+    target_link_libraries(AxleSplinePluginTests PRIVATE Axle::SplineRuntime Axle::Physics Axle::Scene Axle::Core Axle::Plugin)
+    list(APPEND AXLE_TEST_TARGETS AxleSplinePluginTests)
+    add_test(NAME SplinePluginTests COMMAND $<TARGET_FILE:AxleSplinePluginTests> "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(SplinePluginTests PROPERTIES LABELS "plugin;spline;physics;cpu")
 endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 

@@ -1,7 +1,11 @@
 #include <AxleSpline/TrackGenerator.hpp>
 #include <Axle/Buffer.hpp>
+#include <Axle/Components.hpp>
+#include <Axle/Entity.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/PhysicsLayers.hpp>
+#include <Axle/RHI/RHIMesh.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
@@ -214,6 +218,65 @@ namespace Axle::Spline {
         if (!bodyID.IsInvalid() && scene.IsBodyValid(bodyID)) {
             scene.GetBodyInterface().RemoveBody(bodyID);
             scene.GetBodyInterface().DestroyBody(bodyID);
+        }
+    }
+
+    void TrackGenerator::BuildTrackRuntime(
+        Entity entity,
+        SplineComponent& sc,
+        PhysicsScene* physicsScene,
+        bool createRHI
+    ) {
+        sc.Curve.RebuildCache();
+        auto mesh = GenerateTrackMesh(sc.Curve, sc);
+        sc.TrackVAO = BuildVAO(mesh);
+        sc.VertexCount = static_cast<u32>(mesh.GetVertexCount());
+        sc.TriangleCount = static_cast<u32>(mesh.GetTriangleCount());
+        sc.Dirty = false;
+
+        std::shared_ptr<RHI::RHIMesh> trackRHIMesh = nullptr;
+        if (createRHI && RHI::RHIDevice::Get().IsNativeReady() && !mesh.IsEmpty()) {
+            std::vector<glm::vec3> trackNormals(mesh.Positions.size(), glm::vec3(0.0f));
+            for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
+                uint32_t i0 = mesh.Indices[i], i1 = mesh.Indices[i + 1], i2 = mesh.Indices[i + 2];
+                if (i0 < mesh.Positions.size() && i1 < mesh.Positions.size() && i2 < mesh.Positions.size()) {
+                    glm::vec3 fn = glm::cross(mesh.Positions[i1] - mesh.Positions[i0], mesh.Positions[i2] - mesh.Positions[i0]);
+                    trackNormals[i0] += fn;
+                    trackNormals[i1] += fn;
+                    trackNormals[i2] += fn;
+                }
+            }
+            for (auto& n : trackNormals) {
+                if (glm::dot(n, n) > 1e-6f) n = glm::normalize(n);
+                else n = glm::vec3(0.0f, 1.0f, 0.0f);
+            }
+            trackRHIMesh = RHI::RHIMesh::CreateFromRaw(
+                mesh.Positions, mesh.Indices, trackNormals, mesh.UVs,
+                glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), "SplineTrack_RHI"
+            );
+        }
+
+        if (entity) {
+            if (!entity.HasComponent<MeshInstance3D>()) {
+                auto& mi = entity.AddComponent<MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
+                mi.RHIMeshAsset = trackRHIMesh;
+            } else {
+                auto& mi = entity.GetComponent<MeshInstance3D>();
+                mi.VAO = sc.TrackVAO;
+                mi.RHIMeshAsset = trackRHIMesh;
+            }
+        }
+
+        if (physicsScene && sc.GeneratePhysics) {
+            if (!sc.RuntimeBodyID.IsInvalid() && physicsScene->IsBodyValid(sc.RuntimeBodyID)) {
+                DestroyPhysicsCollider(sc.RuntimeBodyID, *physicsScene);
+                sc.RuntimeBodyID = BodyID{};
+            }
+            glm::mat4 wt(1.0f);
+            if (entity && entity.HasComponent<TransformComponent>()) {
+                wt = entity.GetComponent<TransformComponent>().GetLocalTransform();
+            }
+            sc.RuntimeBodyID = CreatePhysicsCollider(mesh, sc, *physicsScene, wt);
         }
     }
 

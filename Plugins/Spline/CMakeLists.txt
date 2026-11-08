@@ -4,31 +4,46 @@ project(AxleSpline LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(SPLINE_SOURCES
-    src/SplinePlugin.cpp
-    src/Curve3D.cpp
-    src/TrackGenerator.cpp
-    src/SplineEditor.cpp
-    src/SplineSerializer.cpp
+# Module 1: SplineRuntime (Headless, no ImGui, pure runtime curve math and Jolt physics)
+add_library(AxleSplineRuntime STATIC
+    Runtime/src/Curve3D.cpp
+    Runtime/src/TrackGenerator.cpp
+    Runtime/src/SplineSerializer.cpp
+    Runtime/src/SplinePlugin.cpp
+    Runtime/src/SplinePluginRuntime.cpp
 )
+add_library(Axle::SplineRuntime ALIAS AxleSplineRuntime)
+add_library(AxleSpline ALIAS AxleSplineRuntime)
+add_library(Axle::Spline ALIAS AxleSplineRuntime)
 
-set(SPLINE_HEADERS
-    include/AxleSpline/SplinePlugin.hpp
-    include/AxleSpline/Curve3D.hpp
-    include/AxleSpline/SplineComponent.hpp
-    include/AxleSpline/TrackGenerator.hpp
-    include/AxleSpline/SplineEditor.hpp
-    include/AxleSpline/SplineSerializer.hpp
-)
-
-add_library(AxleSpline STATIC
-    ${SPLINE_SOURCES}
-    ${SPLINE_HEADERS}
-)
-add_library(Axle::Spline ALIAS AxleSpline)
-
-target_include_directories(AxleSpline PUBLIC
+target_include_directories(AxleSplineRuntime PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Runtime/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/Engine/PluginSDK/include>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/glm>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/entt/src>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/JoltPhysics>
+)
+
+target_link_libraries(AxleSplineRuntime PUBLIC
+    Axle::Core
+    Axle::Renderer
+    Axle::Physics
+    Axle::Scene
+)
+
+# Module 2: SplineEditor (Editor Inspector and Viewport Gizmos)
+add_library(AxleSplineEditor STATIC
+    Editor/src/SplineEditor.cpp
+    Editor/src/SplinePluginEditor.cpp
+)
+add_library(Axle::SplineEditor ALIAS AxleSplineEditor)
+
+target_include_directories(AxleSplineEditor PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Editor/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Runtime/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/Engine/PluginSDK/include>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/glm>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/entt/src>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/imgui>
@@ -36,10 +51,7 @@ target_include_directories(AxleSpline PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ThirdParty/ImGuizmo/src>
 )
 
-target_link_libraries(AxleSpline PUBLIC
+target_link_libraries(AxleSplineEditor PUBLIC
     Axle::Core
-    Axle::Renderer
-    Axle::Physics
     Axle::Scene
-    Axle::UI
 )

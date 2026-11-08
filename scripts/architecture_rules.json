@@ -295,8 +295,7 @@
       "forbidden_to": [
         "UI",
         "Editor",
-        "Runtime",
-        "PluginSDK"
+        "Runtime"
       ],
       "description": "Spline plugin must not depend on Editor UI or host applications."
     },
@@ -676,27 +675,6 @@
           "kind": "SourceInclude",
           "file": "Engine/Physics/include/Axle/PhysicsMaterial.hpp",
           "to": "Axle/AssetDSL.hpp"
-        }
-      ]
-    },
-    {
-      "id": "ALLOW-009",
-      "from_module": "Spline",
-      "to_module": "UI",
-      "files": [
-        "Plugins/Spline/CMakeLists.txt",
-        "Plugins/Spline/src/SplineEditor.cpp",
-        "Plugins/Spline/include/AxleSpline/SplineEditor.hpp"
-      ],
-      "evidence": "Spline plugin embeds ImGui editor tooling directly and links Axle::UI.",
-      "owning_package": "PLG-19",
-      "expiration_condition": "Spline Runtime/Editor tooling separation in PLG-19 completes",
-      "edges": [
-        {
-          "kind": "CMakeLink",
-          "file": "Plugins/Spline/CMakeLists.txt",
-          "from_target": "AxleSpline",
-          "to": "Axle::UI"
         }
       ]
     },

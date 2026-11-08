@@ -2,6 +2,7 @@
 #include <AxleSpline/Curve3D.hpp>
 #include <AxleSpline/SplineComponent.hpp>
 #include <Axle/Types.hpp>
+#include <Axle/Entity.hpp>
 #include <Axle/VertexArray.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <glm/glm.hpp>
@@ -38,6 +39,14 @@ namespace Axle::Spline {
 
         // Safely destroy runtime physics body
         static void DestroyPhysicsCollider(BodyID bodyID, PhysicsScene& scene);
+
+        // Rebuild track mesh, VAO/RHI meshes, and physics collider in one unified call
+        static void BuildTrackRuntime(
+            Entity entity,
+            SplineComponent& sc,
+            PhysicsScene* physicsScene = nullptr,
+            bool createRHI = false
+        );
     };
 
 }

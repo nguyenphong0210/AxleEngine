@@ -5,6 +5,7 @@ add_executable(AxleEditor
     src/PluginBuild.cpp
     src/OwnedProcess.cpp
     src/PluginsPanel.cpp
+    src/ProjectPluginCreator.cpp
     src/PluginSession.cpp
     src/PluginWorkflow.cpp
     src/PluginWorkflowProbe.cpp
@@ -103,6 +104,12 @@ add_custom_command(TARGET AxleEditor POST_BUILD
 )
 
 add_dependencies(AxleEditor AxleScripts)
+add_custom_target(AxleProjectPluginTemplates
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/Templates/ProjectPlugin"
+    "$<TARGET_FILE_DIR:AxleEditor>/Resources/ProjectPlugin"
+    VERBATIM)
+add_dependencies(AxleEditor AxleProjectPluginTemplates)
 add_dependencies(AxleEditor AxlePluginSDKPackage)
 target_include_directories(AxleEditor PRIVATE "${CMAKE_BINARY_DIR}/PluginSDK/$<CONFIG>")
 add_custom_command(TARGET AxleEditor POST_BUILD

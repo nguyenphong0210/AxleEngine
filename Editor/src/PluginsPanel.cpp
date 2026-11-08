@@ -2,6 +2,7 @@
 
 #include <Axle/Log.hpp>
 #include <Axle/ProjectSerializer.hpp>
+#include <Axle/Path.hpp>
 #include <imgui.h>
 
 #include <algorithm>
@@ -24,6 +25,25 @@ bool CaseInsensitiveContains(std::string_view text, std::string_view query) {
     return it != text.end();
 }
 
+std::string ModuleFromName(std::string_view name) {
+    std::string module; bool capitalize = true;
+    for (unsigned char c : name) {
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (!module.empty() && c >= '0' && c <= '9')) {
+            module += capitalize && c >= 'a' && c <= 'z' ? c-'a'+'A' : c;
+            capitalize = false;
+        } else capitalize = true;
+    }
+    return module.empty() ? "MyPlugin" : module.substr(0,64);
+}
+std::string IdFromModule(std::string_view module) {
+    std::string id = "project.";
+    for (unsigned char c : module) {
+        if (c >= 'A' && c <= 'Z') c += 'a'-'A';
+        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) id += c;
+    }
+    return id;
+}
+
 } // namespace
 
 PluginsPanel::PluginsPanel() {
@@ -37,6 +57,7 @@ void PluginsPanel::SetActiveProject(std::shared_ptr<Project> project, std::files
     m_ErrorMessage.clear();
     m_StatusMessage.clear();
     m_PendingDisable.clear(); m_ActiveIds.clear();
+    m_CreateDialogOpen = false; m_CreateError.clear();
     RefreshCatalog();
 }
 
@@ -64,6 +85,68 @@ void PluginsPanel::RefreshCatalog() {
         desired = m_Project->GetConfig().SelectedPlugins;
     }
     m_SelectionModel = std::make_unique<Plugin::SelectionModel>(m_Catalog, Plugin::ProductKind::Editor, desired);
+}
+
+void PluginsPanel::RefreshPreservingDraft() {
+    Plugin::DiscoveryOptions options{{m_EnginePluginRoot},{}};
+    if (m_Project && !m_Project->GetProjectDirectoryPath().empty()) {
+        const auto root = m_Project->GetProjectDirectoryPath()/"Plugins";
+        options.Roots.push_back(root); options.ProjectRoots.push_back(root);
+    }
+    SetCatalog(Plugin::Discover(options),true);
+}
+
+bool PluginsPanel::CreatePlugin(std::string name, std::string id, std::string module, bool isSimulationActive) {
+    m_CreateError.clear();
+    if (m_Busy || isSimulationActive) {
+        m_CreateError = "Stop Play mode and wait for the current operation before creating a plugin."; return false;
+    }
+    std::error_code ec;
+    if (!m_Project || m_ProjectPath.empty() || !std::filesystem::is_regular_file(m_ProjectPath,ec) || ec ||
+        !std::filesystem::equivalent(m_ProjectPath.parent_path(),m_Project->GetProjectDirectoryPath(),ec) || ec) {
+        m_CreateError = "Save Project As before creating a plugin."; return false;
+    }
+    std::filesystem::path created;
+    if (!CreateProjectPlugin({m_ProjectPath,m_PluginTemplate,m_EnginePluginRoot,name,id,module},created,m_CreateError)) return false;
+    // Refresh metadata only. Draft, Desired and the running Active graph stay intact.
+    m_ErrorMessage.clear();
+    try { RefreshPreservingDraft(); if (m_OnRefresh) m_OnRefresh(); }
+    catch (const std::exception& error) { m_ErrorMessage = std::string("Plugin created, but session refresh failed: ")+error.what(); }
+    m_SearchFilter = id; m_SourceFilter = SourceFilter::Project; m_StatusFilter = StatusFilter::All;
+    m_StatusMessage = "Created Plugins/" + module + ". Select the plugin, Apply, Build and Restart to use it.";
+    return true;
+}
+
+void PluginsPanel::DrawCreateDialog(bool isSimulationActive) {
+    if (!m_CreateDialogOpen) return;
+    ImGui::OpenPopup("Create Project Plugin");
+    ImGui::SetNextWindowSize(ImVec2(480,0),ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Create Project Plugin",&m_CreateDialogOpen,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("Create a Runtime component and Editor Inspector inside this project.");
+        ImGui::BeginDisabled(m_Busy || isSimulationActive);
+        ImGui::TextUnformatted("Display name"); ImGui::SetNextItemWidth(-1);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        if (ImGui::InputText("##CreateName",m_CreateName,sizeof(m_CreateName),ImGuiInputTextFlags_AutoSelectAll)) {
+            if (!m_CreateModuleEdited) strncpy_s(m_CreateModule,ModuleFromName(m_CreateName).c_str(),_TRUNCATE);
+            if (!m_CreateIdEdited) strncpy_s(m_CreateId,IdFromModule(m_CreateModule).c_str(),_TRUNCATE);
+        }
+        ImGui::TextUnformatted("Folder / module"); ImGui::SetNextItemWidth(-1);
+        if (ImGui::InputText("##CreateModule",m_CreateModule,sizeof(m_CreateModule))) {
+            m_CreateModuleEdited = true;
+            if (!m_CreateIdEdited) strncpy_s(m_CreateId,IdFromModule(m_CreateModule).c_str(),_TRUNCATE);
+        }
+        ImGui::TextUnformatted("Plugin ID"); ImGui::SetNextItemWidth(-1);
+        if (ImGui::InputText("##CreateId",m_CreateId,sizeof(m_CreateId))) m_CreateIdEdited = true;
+        ImGui::TextWrapped("Plugin ID is the persistent identity. Keep it stable after saving component data.");
+        if (m_Project) ImGui::TextWrapped("Location: %s",PathToUtf8(m_Project->GetProjectDirectoryPath()/"Plugins"/PathFromUtf8(m_CreateModule)).c_str());
+        if (!m_CreateError.empty()) ImGui::TextWrapped("%s",m_CreateError.c_str());
+        if (ImGui::Button("Create",ImVec2(100,0)) && CreatePlugin(m_CreateName,m_CreateId,m_CreateModule,isSimulationActive)) {
+            m_CreateDialogOpen = false; ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled(); ImGui::SameLine();
+        if (ImGui::Button("Cancel",ImVec2(100,0))) { m_CreateDialogOpen = false; ImGui::CloseCurrentPopup(); }
+        ImGui::EndPopup();
+    }
 }
 
 bool PluginsPanel::HasDraftChanges() const {
@@ -200,6 +283,15 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
     const float windowWidth = ImGui::GetContentRegionAvail().x;
     const bool isNarrow = (windowWidth < 420.0f);
 
+    ImGui::BeginDisabled(m_Busy || isSimulationActive || !m_Project || m_ProjectPath.empty());
+    if (ImGui::Button("Create Plugin...")) {
+        m_CreateDialogOpen = true; m_CreateError.clear(); m_CreateModuleEdited = m_CreateIdEdited = false;
+        strncpy_s(m_CreateName,"My Plugin",_TRUNCATE); strncpy_s(m_CreateModule,"MyPlugin",_TRUNCATE); strncpy_s(m_CreateId,"project.myplugin",_TRUNCATE);
+    }
+    ImGui::EndDisabled();
+    if (m_ProjectPath.empty()) ImGui::TextWrapped("Save Project As to create project plugins.");
+    DrawCreateDialog(isSimulationActive);
+
     // 1. Safe Mode Notification
     if (m_SafeMode) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
@@ -227,6 +319,8 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
         }
         ImGui::Separator();
     }
+
+    if (!m_StatusMessage.empty()) ImGui::TextWrapped("%s",m_StatusMessage.c_str());
 
     // 4. Search and Filters Toolbar
     char searchBuf[128];
@@ -259,14 +353,7 @@ void PluginsPanel::OnImGuiRender(bool* pOpen, bool isSimulationActive) {
     if (!isNarrow) ImGui::SameLine();
     ImGui::BeginDisabled(m_Busy);
     if (ImGui::Button("Refresh")) {
-        if (m_OnRefresh) m_OnRefresh(); else {
-            Plugin::DiscoveryOptions options{{m_EnginePluginRoot}, {}};
-            if (m_Project && !m_Project->GetProjectDirectoryPath().empty()) {
-                const auto root = m_Project->GetProjectDirectoryPath() / "Plugins";
-                options.Roots.push_back(root); options.ProjectRoots.push_back(root);
-            }
-            SetCatalog(Plugin::Discover(options), true);
-        }
+        if (m_OnRefresh) m_OnRefresh(); else RefreshPreservingDraft();
     }
     ImGui::EndDisabled();
 

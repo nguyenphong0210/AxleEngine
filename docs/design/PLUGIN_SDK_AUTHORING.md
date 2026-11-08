@@ -12,6 +12,22 @@ dependency produces `build/PluginSDK/<configuration>` with matched headers,
 CMake helpers, import libraries and shared host DLLs. Use the same Windows x64
 MSVC compiler, CRT and configuration as the Editor.
 
+In a saved project, open **Edit > Plugins > Create Plugin...**. Enter a display
+name; Folder/module and Plugin ID are suggested automatically and remain editable.
+Create writes the Runtime component, dependent Editor Inspector, manifest, CMake
+and README under `<project>/Plugins/<module>`, then shows the new plugin in the
+list. It uses the template packaged with Editor and requires no Python at runtime.
+It preserves pending selections and does not enable or load code automatically.
+Select the new plugin, Apply, Build selected plugins and Restart Now to activate it.
+
+Creation is disabled during Play/build/export/restart and requires Save Project As
+for an untitled project. Existing folders, duplicate IDs/module names and invalid
+names are rejected. Files are staged and validated before nonoverwriting publication;
+a project lock prevents concurrent Editor creators from publishing conflicting IDs.
+Cancel creates no files. Plugin IDs remain persistent authored identities.
+
+The repository also provides a command-line generator:
+
 ```powershell
 python scripts/create_project_plugin.py D:\Projects\Example\Example.axleproj --id studio.mover --module StudioMover --name "Studio Mover"
 ```

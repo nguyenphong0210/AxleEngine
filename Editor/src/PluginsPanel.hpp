@@ -3,6 +3,7 @@
 #include <Axle/Plugin.hpp>
 #include <Axle/PluginSelection.hpp>
 #include <Axle/Project.hpp>
+#include "ProjectPluginCreator.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -26,6 +27,9 @@ public:
     void SetCatalog(Plugin::Catalog catalog, bool preserveDraft = false);
     void SetEnginePluginRoot(std::filesystem::path root) { m_EnginePluginRoot = std::move(root); }
     void RefreshCatalog();
+    void SetPluginTemplateDirectory(std::filesystem::path path) { m_PluginTemplate = std::move(path); }
+    bool CreatePlugin(std::string name, std::string id, std::string module, bool isSimulationActive = false);
+    const std::string& GetCreateError() const { return m_CreateError; }
 
     void OnImGuiRender(bool* pOpen = nullptr, bool isSimulationActive = false);
 
@@ -78,6 +82,12 @@ public:
     void SetSafeMode(bool safeMode) { m_SafeMode = safeMode; }
 
 private:
+    void DrawCreateDialog(bool isSimulationActive);
+    void RefreshPreservingDraft();
+    std::filesystem::path m_PluginTemplate = ProjectPluginTemplateDirectory();
+    bool m_CreateDialogOpen = false, m_CreateModuleEdited = false, m_CreateIdEdited = false;
+    char m_CreateName[129] = "My Plugin", m_CreateModule[65] = "MyPlugin", m_CreateId[121] = "project.myplugin";
+    std::string m_CreateError;
     std::shared_ptr<Project> m_Project;
     std::filesystem::path m_ProjectPath;
     std::filesystem::path m_EnginePluginRoot = std::filesystem::current_path() / "Plugins";

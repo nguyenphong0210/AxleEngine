@@ -2,8 +2,8 @@ Latest user steering (2026-11-07): for future released scopes, Gemini implements
 
 # Architecture Optimization Roadmap
 
-Updated: **2026-11-07**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **OPT-05 accepted after consolidated review, repairs and final Debug/Release/native validation. OPT-02/03/04 remain accepted**.
+Updated: **2026-11-08**. Ordering baseline: `7869fce` (post-Vehicle retirement).
+Status: **OPT-06 reviewed, NOT ACCEPTED: incomplete PLG-01..13 integration and verified defects. OPT-02/03/04/05 remain accepted**.
 
 ## Start here
 
@@ -18,7 +18,14 @@ verification. Significant corrections received separate-context source rechecks.
 The [acceptance report](reviews/OPT_05_CODEX_REVIEW.md) records source `de97d9b`,
 all repaired findings, complete Debug/Release builds, 50/50 CTest and 35/35 physical
 native API cases per configuration, actual consumer/Runtime pixels and remaining
-explicit later-scope limits. Stop here: OPT-06 is not released.
+explicit later-scope limits.
+
+**Current assignment: OPT-06 consolidated review, PLG-01..13.** The user requested
+review/acceptance on 2026-11-08. The candidate `20e0714` is **not accepted**;
+the [Codex review](reviews/OPT_06_CODEX_REVIEW.md) records missing shared-host,
+native scene lifecycle, real source plugin and restart/recovery implementation,
+reproduced contract failures and the verified Apply persistence correction.
+Do not advance to OPT-07 on the implementer's completion claim.
 
 **Accepted prerequisite: Codex OPT-04, P41-01..P41-11.** The user reassigned
 implementation from Gemini to Codex on 2026-11-07; [current handoff](agents/handoffs/OPT_04_CODEX.md).
@@ -260,6 +267,9 @@ per configuration. Separate-context source/correction review is complete.
 P41-26 Editor-disabled build closure remains later scope; stop before OPT-06.
 
 ### OPT-06 - Deliver the plugin framework and Plugins window
+
+**Review:** NOT ACCEPTED; [findings and evidence](reviews/OPT_06_CODEX_REVIEW.md).
+Individual foundations and existing green tests do not close G0/G1/G2.
 
 **Purpose:** Prove a general Engine/project plugin workflow before implementing Vehicle.
 

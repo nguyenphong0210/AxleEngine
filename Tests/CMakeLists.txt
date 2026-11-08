@@ -599,6 +599,17 @@ if(WIN32)
 endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 
+# Explicit review gate for known OPT-06 contract failures. Keep out of the
+# routine regression suite until the incomplete plugin candidate is repaired.
+add_executable(AxleOpt06ReviewProbes EXCLUDE_FROM_ALL
+    plugin/Opt06ReviewProbes.cpp "${CMAKE_SOURCE_DIR}/Editor/src/PluginBuild.cpp")
+target_include_directories(AxleOpt06ReviewProbes PRIVATE "${CMAKE_SOURCE_DIR}/Editor/src")
+target_link_libraries(AxleOpt06ReviewProbes PRIVATE Axle::Plugin Axle::PluginRuntime Axle::Scene)
+add_dependencies(AxleOpt06ReviewProbes AxlePluginRuntimeGood)
+if(MSVC)
+    target_compile_options(AxleOpt06ReviewProbes PRIVATE /bigobj /FS)
+endif()
+
 foreach(testTarget IN LISTS AXLE_TEST_TARGETS)
     target_include_directories(${testTarget} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_compile_definitions(${testTarget} PRIVATE

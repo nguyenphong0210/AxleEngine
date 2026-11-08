@@ -722,10 +722,14 @@ bool GenerateCMakeInputs(const BuildPlan& plan, const std::filesystem::path& out
     out << ")\n";
     for (const auto& artifact : plan.Artifacts) {
         out << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_SOURCE_ROOT " << quote(PathUtf8(artifact.SourceRoot)) << ")\n";
+        out << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_INSTALL_ROOT " << quote(PathUtf8(artifact.CMakeRoot)) << ")\n";
         out << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_KIND " << quote(ToString(artifact.Kind)) << ")\n";
         out << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_ID " << quote(artifact.PluginId) << ")\n";
         out << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_FINGERPRINT " << quote(artifact.Fingerprint) << ")\n";
     }
+    out << "set(AXLE_FROZEN_PLUGIN_ROOTS";
+    for (const auto& root : plan.CMakeRoots) out << ' ' << quote(PathUtf8(root));
+    out << ")\n";
     for (std::size_t index = 0; index < plan.CMakeRoots.size(); ++index) {
         out << "add_subdirectory(" << quote(PathUtf8(plan.CMakeRoots[index])) << " plugin-" << index << ")\n";
     }
@@ -736,6 +740,7 @@ bool GenerateCMakeInputs(const BuildPlan& plan, const std::filesystem::path& out
             << "get_target_property(moduleImported " << artifact.ModuleName << " IMPORTED)\n"
             << "if(NOT moduleType STREQUAL \"SHARED_LIBRARY\" OR moduleImported)\n"
             << "message(FATAL_ERROR \"Selected module must build a native shared library: " << artifact.ModuleName << "\")\nendif()\n";
+        out << "axle_validate_plugin_module(" << artifact.ModuleName << ")\n";
         if (!artifact.Dependencies.empty()) {
             out << "target_link_libraries(" << artifact.ModuleName << " PRIVATE";
             for (const auto& dependency : artifact.Dependencies) out << ' ' << dependency;

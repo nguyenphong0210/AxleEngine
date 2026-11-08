@@ -145,6 +145,12 @@ message(FATAL_ERROR "Unselected plugin configured")
     Write(plugin / "CMakeLists.txt", "add_custom_target(CustomPlugin_Runtime)\n");
     const auto noOutput = Axle::BuildPlugins(Request(root, argv[1]), cancel);
     CHECK(!noOutput.Success && noOutput.PublishedReceipts.empty(), "successful no-output target cannot publish a stale DLL with a fresh receipt");
+    Write(plugin / "CMakeLists.txt", "axle_add_plugin_module(CustomPlugin_Runtime runtime [=[" + Axle::Plugin::PathUtf8(runtimeSource) + "]=])\n"
+        "target_include_directories(CustomPlugin_Runtime PRIVATE [=[" + Axle::Plugin::PathUtf8(plugin / "include") + "]=])\n");
+    const auto liveSource = Axle::BuildPlugins(Request(root, argv[1]), cancel);
+    CHECK(!liveSource.Success && liveSource.PublishedReceipts.empty() &&
+        Axle::FileSystem::ReadTextFile(liveSource.LogPath).find("escapes its frozen inputs") != std::string::npos,
+        "absolute live compiler inputs cannot bypass frozen source snapshots");
     Write(plugin / "CMakeLists.txt", originalCmake);
     Write(plugin / "SnapshotHold.flag", "hold");
     const auto snapshotRequest = Request(root, argv[1]);

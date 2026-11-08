@@ -42,6 +42,26 @@ flowchart TD
 | **6. Film-Grade Post-Processing** | `~0.4 - 0.6 ms` | ACES Filmic Tone Mapping, PBR eye adaptation (auto-exposure), and thresholded bloom. |
 | **TOTAL LIGHTING PIPELINE** | **~3.5 - 5.0 ms** | **Leaves over 60% of frame time free for game logic, physics, and draw calls!** |
 
+### Mandatory Highlight: Dynamic Diffuse Global Illumination (DDGI Probes) — "The Practical Real-Time Lumen Alternative"
+
+> [!IMPORTANT]
+> **Core Mandate:** DDGI Probes is designated as a **First-Class Mandatory Pillar** of the Post-OPT-10 visual upgrade. It replaces flat ambient lighting with real-time, multi-bounce indirect illumination and realistic color bleeding (e.g. sun hitting a red brick wall casts a warm crimson bounce light onto adjacent floors and ceilings) without the crippling hardware penalty of Lumen.
+
+#### Technical Architecture of DDGI in AxleEngine:
+1. **Probe Grid Volume:**
+   - An axis-aligned 3D lattice of probes enclosing the playable scene space (e.g., $32 \times 16 \times 32$ probes spaced 2–3 meters apart).
+   - Can dynamically scroll with the player (Cascaded / Scrolling Probe Volume) to support vast open-world areas.
+2. **Dual Octahedral Texture Atlases (Zero VRAM Waste):**
+   - **Irradiance Texture Atlas:** Each probe occupies an $8 \times 8$ texel octahedral tile storing multi-bounce RGB irradiance with a 1-pixel border.
+   - **Distance / Visibility Texture Atlas:** Each probe occupies a $16 \times 16$ texel octahedral tile storing mean distance and variance $(r, r^2)$ using Chebyshev's inequality. This mathematically **eliminates light leaking through thin walls or corners**.
+3. **Ray Generation & Temporal Integration (High Performance):**
+   - Uses Hardware Ray Tracing (DXR / VK KHR Ray Tracing via NRI) with 64 to 128 rays per probe.
+   - **Temporal Staggering:** Updates only **25% of the probes per frame** (interleaved 4-frame cycle), consuming only `~1.2 - 1.8 ms` of GPU time.
+   - **Hysteresis Blending:** New ray samples blend with prior frame probe history using exponential moving average ($\alpha = 0.95 - 0.98$), guaranteeing 100% flicker-free temporal stability.
+4. **Shading Integration in `RHISceneRenderer`:**
+   - During the PBR forward/deferred shading pass, surface fragments perform a fast trilinear fetch from the 8 surrounding probes, weighted by Chebyshev visibility.
+   - Provides smooth, photorealistic indirect bounce lighting for static and dynamic entities alike.
+
 ### Scalability Presets
 * **Ultra/High (RTX 3070/4070+):** Full DDGI probes, 4-cascade CSM, Volumetric Fog, GTAO $\rightarrow$ **144+ FPS**.
 * **Medium (RTX 2060 / GTX 1660):** 3-cascade CSM, Half-Res GTAO, Froxel Fog, Staggered DDGI $\rightarrow$ **100–120+ FPS**.

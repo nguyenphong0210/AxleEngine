@@ -33,10 +33,6 @@ target_link_libraries(AxleEditor PRIVATE
     Axle::PluginRuntime
     Axle::PluginServices
     Axle::EditorHost
-    Axle::Spline
-    Axle::SplineEditor
-    Axle::Terrain
-    Axle::TerrainEditor
     Axle::Animation
     Axle::VFX
 )

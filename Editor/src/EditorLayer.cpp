@@ -22,17 +22,6 @@
 #include <Axle/Path.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/AudioEngine.hpp>
-#include <AxleSpline/SplineComponent.hpp>
-#include <AxleSpline/SplineEditor.hpp>
-#include <AxleSpline/TrackGenerator.hpp>
-#include <AxleSpline/SplinePlugin.hpp>
-#include <AxleSpline/SplineSerializer.hpp>
-#include <AxleTerrain/TerrainPlugin.hpp>
-#include <AxleTerrain/TerrainComponent.hpp>
-#include <AxleTerrain/TerrainEditor.hpp>
-#include <AxleTerrain/TerrainMesh.hpp>
-#include <AxleTerrain/TerrainCollider.hpp>
-#include <AxleTerrain/TerrainSerializer.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/RHIObjectPicker.hpp>
@@ -68,10 +57,6 @@ void EditorLayer::OnAttach() {
 
     // Initialize Audio Subsystem
     Axle::AudioEngine::Init();
-
-    // Initialize Plugin Subsystems
-    Axle::Spline::SplinePlugin::Initialize();
-    Axle::Terrain::TerrainPlugin::Initialize();
 
     auto& window = Axle::Application::Get().GetWindow();
     Axle::ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(window.GetNativeWindow()));
@@ -203,15 +188,8 @@ void EditorLayer::OnAttach() {
             entity.GetComponent<Axle::NativeScriptComponent>().Bind(scriptName);
         }
     };
-    m_SerializerContext.CustomEntitySerializer = [](Axle::Entity entity, std::ostream& out) {
-        Axle::Spline::SplineSerializer::Serialize(entity, out);
-        Axle::Terrain::TerrainSerializer::Serialize(entity, out);
-    };
-    m_SerializerContext.CustomSectionDeserializer = [](Axle::Entity entity, const std::string& sectionName, const std::vector<std::string>& lines) -> bool {
-        if (Axle::Spline::SplineSerializer::Deserialize(entity, sectionName, lines)) return true;
-        if (Axle::Terrain::TerrainSerializer::Deserialize(entity, sectionName, lines)) return true;
-        return false;
-    };
+    m_SerializerContext.CustomEntitySerializer = nullptr;
+    m_SerializerContext.CustomSectionDeserializer = nullptr;
 
     m_AssemblyEditorPanel.SetSceneContext(m_Scene.get(), m_PhysicsScene.get(), &m_SerializerContext);
 
@@ -331,107 +309,13 @@ void EditorLayer::OnAttach() {
         OpenShaderDocument(path);
     });
 
-    // Register Plugin Component Drawers (Phase 29A: Spline Track & Phase 29B: Terrain Plugin)
+    // Register Plugin Component Drawers (Dispatched via PluginSession / EditorServices)
     m_SceneHierarchyPanel.SetCustomComponentDrawer([this](Axle::Entity entity) {
         if (m_PluginSession && !WorkFrozen()) m_PluginSession->EditorServices().DrawComponents(entity);
-        if (entity && entity.HasComponent<Axle::Spline::SplineComponent>()) {
-            Axle::Spline::SplineEditor::DrawInspector(entity, m_PhysicsScene.get());
-        }
-        if (entity && entity.HasComponent<Axle::Terrain::TerrainComponent>()) {
-            Axle::Terrain::TerrainEditor::DrawInspector(entity, m_PhysicsScene.get(), m_Scene.get());
-        }
     });
 
     m_SceneHierarchyPanel.SetCustomAddComponentDrawer([this](Axle::Entity entity) {
         if (m_PluginSession && !WorkFrozen()) m_PluginSession->EditorServices().DrawAddComponents(entity);
-        if (ImGui::BeginMenu("Environment Plugins")) {
-            bool hasSpline = entity.HasComponent<Axle::Spline::SplineComponent>();
-            if (hasSpline) ImGui::BeginDisabled();
-            if (ImGui::MenuItem("🛣️ Spline Track (SplineComponent)")) {
-                auto& sc = entity.AddComponent<Axle::Spline::SplineComponent>(Axle::Spline::SplineType::CatmullRom, true);
-                sc.Curve.AddNode({ glm::vec3(-40.0f, 0.0f, -20.0f), 0.0f, 1.0f });
-                sc.Curve.AddNode({ glm::vec3(40.0f, 0.0f, -20.0f), 15.0f, 1.0f });
-                sc.Curve.AddNode({ glm::vec3(40.0f, 0.0f, 20.0f), 15.0f, 1.0f });
-                sc.Curve.AddNode({ glm::vec3(-40.0f, 0.0f, 20.0f), 0.0f, 1.0f });
-                sc.Curve.RebuildCache();
-                auto mesh = Axle::Spline::TrackGenerator::GenerateTrackMesh(sc.Curve, sc);
-                sc.TrackVAO = Axle::Spline::TrackGenerator::BuildVAO(mesh);
-                sc.VertexCount = static_cast<Axle::u32>(mesh.GetVertexCount());
-                sc.TriangleCount = static_cast<Axle::u32>(mesh.GetTriangleCount());
-                std::shared_ptr<Axle::RHI::RHIMesh> trackRHIMesh = nullptr;
-                if (Axle::RHI::RHIDevice::Get().IsNativeReady() && !mesh.IsEmpty()) {
-                    std::vector<glm::vec3> trackNormals(mesh.Positions.size(), glm::vec3(0.0f));
-                    for (size_t i = 0; i + 2 < mesh.Indices.size(); i += 3) {
-                        uint32_t i0 = mesh.Indices[i], i1 = mesh.Indices[i + 1], i2 = mesh.Indices[i + 2];
-                        if (i0 < mesh.Positions.size() && i1 < mesh.Positions.size() && i2 < mesh.Positions.size()) {
-                            glm::vec3 fn = glm::cross(mesh.Positions[i1] - mesh.Positions[i0], mesh.Positions[i2] - mesh.Positions[i0]);
-                            trackNormals[i0] += fn;
-                            trackNormals[i1] += fn;
-                            trackNormals[i2] += fn;
-                        }
-                    }
-                    for (auto& n : trackNormals) {
-                        if (glm::dot(n, n) > 1e-6f) n = glm::normalize(n);
-                        else n = glm::vec3(0.0f, 1.0f, 0.0f);
-                    }
-                    trackRHIMesh = Axle::RHI::RHIMesh::CreateFromRaw(
-                        mesh.Positions, mesh.Indices, trackNormals, mesh.UVs,
-                        glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), "SplineTrack_RHI"
-                    );
-                }
-
-                if (!entity.HasComponent<Axle::MeshInstance3D>()) {
-                    auto& mi = entity.AddComponent<Axle::MeshInstance3D>(sc.TrackVAO, 1, 4.0f, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f), glm::vec4(0.3f, 0.3f, 0.3f, 1.0f));
-                    mi.RHIMeshAsset = trackRHIMesh;
-                } else {
-                    auto& mi = entity.GetComponent<Axle::MeshInstance3D>();
-                    mi.VAO = sc.TrackVAO;
-                    mi.RHIMeshAsset = trackRHIMesh;
-                }
-                ImGui::CloseCurrentPopup();
-            }
-            if (hasSpline) ImGui::EndDisabled();
-
-            bool hasTerrain = entity.HasComponent<Axle::Terrain::TerrainComponent>();
-            if (hasTerrain) ImGui::BeginDisabled();
-            if (ImGui::MenuItem("🏔️ Off-Road Terrain (TerrainComponent)")) {
-                auto& tc = entity.AddComponent<Axle::Terrain::TerrainComponent>(128u, 128u, 1.0f, 1.0f);
-                tc.Data.GenerateHills(0.025f, 8.0f, 3);
-                tc.Data.AutoGenerateSplatmap(32.0f, 18.0f);
-                tc.CombinedVAO = Axle::Terrain::TerrainMesh::BuildCombinedVAO(tc.Data);
-
-                std::shared_ptr<Axle::RHI::RHIMesh> terrainRHIMesh = nullptr;
-                if (Axle::RHI::RHIDevice::Get().IsNativeReady()) {
-                    uint32_t resX = tc.Data.GetResolutionX();
-                    uint32_t resZ = tc.Data.GetResolutionZ();
-                    glm::vec3 scale(tc.Data.GetSpacingX(), 1.0f, tc.Data.GetSpacingZ());
-                    glm::vec3 origin = tc.Data.GetOrigin();
-                    const auto& heights = tc.Data.GetHeights();
-                    const auto& splats = tc.Data.GetSplatmap();
-                    terrainRHIMesh = Axle::RHI::RHIMesh::CreateTerrainHeightfield(resX, resZ, heights, scale, origin, splats);
-                }
-
-                if (!entity.HasComponent<Axle::MeshInstance3D>()) {
-                    auto& mi = entity.AddComponent<Axle::MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
-                    mi.RHIMeshAsset = terrainRHIMesh;
-                } else {
-                    auto& mi = entity.GetComponent<Axle::MeshInstance3D>();
-                    mi.VAO = tc.CombinedVAO;
-                    mi.RHIMeshAsset = terrainRHIMesh;
-                    mi.PatternMode = 0;
-                    mi.TileScale = 8.0f;
-                    mi.Color1 = glm::vec4(0.35f, 0.55f, 0.25f, 1.0f);
-                    mi.Color2 = glm::vec4(0.45f, 0.35f, 0.2f, 1.0f);
-                }
-                if (m_PhysicsScene && tc.GeneratePhysics) {
-                    tc.PhysicsBodyID = Axle::Terrain::TerrainCollider::CreateTerrainCollider(tc.Data, *m_PhysicsScene, tc.Friction, tc.Restitution);
-                }
-                ImGui::CloseCurrentPopup();
-            }
-            if (hasTerrain) ImGui::EndDisabled();
-
-            ImGui::EndMenu();
-        }
     });
 
     // Default startup is an unsaved, empty project; reopening is always explicit.
@@ -548,10 +432,6 @@ void EditorLayer::OnDetach() {
 
     AXLE_INFO("EditorLayer::OnDetach -> [7/14] AudioEngine::Shutdown");
     Axle::AudioEngine::Shutdown();
-
-    AXLE_INFO("EditorLayer::OnDetach -> [8/14] TerrainPlugin & SplinePlugin Shutdown");
-    Axle::Terrain::TerrainPlugin::Shutdown();
-    Axle::Spline::SplinePlugin::Shutdown();
 
     AXLE_INFO("EditorLayer::OnDetach -> [9/14] Wait GPU idle");
     if (Axle::RHI::RHIDevice::Get().IsNativeReady()) {
@@ -990,47 +870,6 @@ void EditorLayer::OpenScene(const std::filesystem::path& filepath) {
             }
         }
 
-        // Rebuild Track & Terrain runtime meshes/colliders for loaded scene
-        auto splineView = m_Scene->GetRegistry().view<Axle::Spline::SplineComponent>();
-        for (auto e : splineView) {
-            auto& sc = splineView.get<Axle::Spline::SplineComponent>(e);
-            Axle::Entity ent{ e, m_Scene.get() };
-            Axle::Spline::TrackGenerator::BuildTrackRuntime(ent, sc, m_PhysicsScene.get(), true);
-        }
-
-        auto terrainView = m_Scene->GetRegistry().view<Axle::Terrain::TerrainComponent>();
-        for (auto e : terrainView) {
-            auto& tc = terrainView.get<Axle::Terrain::TerrainComponent>(e);
-            tc.CombinedVAO = Axle::Terrain::TerrainMesh::BuildCombinedVAO(tc.Data);
-
-            std::shared_ptr<Axle::RHI::RHIMesh> terrainRHIMesh = nullptr;
-            if (Axle::RHI::RHIDevice::Get().IsNativeReady()) {
-                uint32_t resX = tc.Data.GetResolutionX();
-                uint32_t resZ = tc.Data.GetResolutionZ();
-                glm::vec3 scale(tc.Data.GetSpacingX(), 1.0f, tc.Data.GetSpacingZ());
-                glm::vec3 origin = tc.Data.GetOrigin();
-                const auto& heights = tc.Data.GetHeights();
-                const auto& splats = tc.Data.GetSplatmap();
-                terrainRHIMesh = Axle::RHI::RHIMesh::CreateTerrainHeightfield(resX, resZ, heights, scale, origin, splats);
-            }
-
-            Axle::Entity ent{ e, m_Scene.get() };
-            if (!ent.HasComponent<Axle::MeshInstance3D>()) {
-                auto& mi = ent.AddComponent<Axle::MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
-                mi.RHIMeshAsset = terrainRHIMesh;
-            } else {
-                auto& mi = ent.GetComponent<Axle::MeshInstance3D>();
-                mi.VAO = tc.CombinedVAO;
-                mi.RHIMeshAsset = terrainRHIMesh;
-                mi.PatternMode = 0;
-                mi.TileScale = 8.0f;
-                mi.Color1 = glm::vec4(0.35f, 0.55f, 0.25f, 1.0f);
-                mi.Color2 = glm::vec4(0.45f, 0.35f, 0.2f, 1.0f);
-            }
-            if (m_PhysicsScene && tc.GeneratePhysics) {
-                tc.PhysicsBodyID = Axle::Terrain::TerrainCollider::CreateTerrainCollider(tc.Data, *m_PhysicsScene, tc.Friction, tc.Restitution);
-            }
-        }
 
         m_SceneHierarchyPanel.SetContext(m_Scene.get(), m_PhysicsScene.get());
         m_UIPalettePanel.SetContext(m_Scene.get());
@@ -2928,18 +2767,6 @@ void EditorLayer::OnImGuiRender() {
                 }
             }
 
-            // 3D Spline Track & Control Points Gizmo (Phase 29A Step 5)
-            if (selectedEntity.HasComponent<Axle::Spline::SplineComponent>()) {
-                Axle::Spline::SplineEditor::DrawViewportGizmo(
-                    selectedEntity,
-                    cameraView,
-                    cameraProj,
-                    glm::vec2(viewportMin.x, viewportMin.y),
-                    glm::vec2(viewportMin.x + viewportBounds.x, viewportMin.y + viewportBounds.y),
-                    m_GizmoType,
-                    m_PhysicsScene.get()
-                );
-            }
 
             // 4. Interactive 2D Canvas Gizmo Handles (Phase 34 Step 7 - RectTransformGizmo)
             if (selectedEntity.HasComponent<Axle::UICanvasComponent>()) {

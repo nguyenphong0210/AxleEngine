@@ -118,7 +118,7 @@ bool NativePlugin::Load(const std::filesystem::path& module_path, std::string ex
         return fail("invalid plugin descriptor");
     if (descriptor->abi_version != kPluginAbiVersion) return fail("plugin ABI mismatch");
     if (expected_id != descriptor->module_id) return fail("plugin module ID mismatch");
-    if (!expected_config.empty() && descriptor->build_config && expected_config != descriptor->build_config)
+    if (!expected_config.empty() && (!descriptor->build_config || expected_config != descriptor->build_config))
         return fail("plugin build configuration mismatch");
 
     m_Registry = &registry; m_Owner = registry.BeginOwner(); m_ModuleId = descriptor->module_id;

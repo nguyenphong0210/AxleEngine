@@ -34,7 +34,7 @@ class RegistrationRegistry final {
 public:
     using Owner = std::uint64_t;
 
-    RegistrationRegistry() = default;
+    RegistrationRegistry();
     RegistrationRegistry(const RegistrationRegistry&) = delete;
     RegistrationRegistry& operator=(const RegistrationRegistry&) = delete;
     ~RegistrationRegistry();

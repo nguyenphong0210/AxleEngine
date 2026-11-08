@@ -20,6 +20,8 @@ struct RegistrationRegistry::Entry {
     void (*destroy)(void*);
 };
 
+RegistrationRegistry::RegistrationRegistry() = default;
+
 RegistrationRegistry::~RegistrationRegistry() {
     for (auto it = m_Entries.rbegin(); it != m_Entries.rend(); ++it) {
         if ((*it)->destroy) (*it)->destroy((*it)->resource);

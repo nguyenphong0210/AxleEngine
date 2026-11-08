@@ -12,6 +12,7 @@
 #include <Axle/ScriptableEntity.hpp>
 #include <Axle/SceneCommandBuffer.hpp>
 #include <Axle/ScriptHotReloadManager.hpp>
+#include <Axle/Log.hpp>
 
 namespace Axle {
 
@@ -25,6 +26,7 @@ namespace Axle {
 
     Scene::~Scene() {
         Clear();
+        m_Extensions.clear();
         ScriptHotReloadManager::Get().UnregisterScene(this);
     }
 
@@ -56,13 +58,14 @@ namespace Axle {
         }
 
         // 2. Concrete subsystem teardown
+        DestroyExtensions(entity);
         ScenePhysicsBridge::TeardownEntityPhysics(*this, entityID, pScene);
         SceneAudioBridge::TeardownEntityAudio(*this, entityID);
         SceneCharacterBridge::TeardownEntityCharacter(*this, entityID);
         SceneScriptBridge::TeardownEntityScript(*this, entityID);
 
         // 3. Delegate to generic SceneData data destruction
-        DestroyEntityData(entity);
+        DestroyEntityData(entity, false);
         m_Destroying.erase(entityID);
     }
 
@@ -71,33 +74,65 @@ namespace Axle {
     }
 
     Entity Scene::DuplicateEntity(Entity entity, PhysicsScene* physicsScene) {
-        Entity newEntity = SceneData::DuplicateEntity(entity);
-        if (!newEntity) return {};
-
-        PhysicsScene* pScene = physicsScene ? physicsScene : m_RuntimePhysicsScene;
-        if (pScene) {
-            ScenePhysicsBridge::CreateBodyForEntity(*this, (entt::entity)newEntity, pScene);
-        }
-
-        // Recursive duplication for children
-        if (entity.HasComponent<HierarchyComponent>()) {
-            auto children = entity.GetComponent<HierarchyComponent>().Children;
-            for (auto childID : children) {
-                if (m_Registry.valid(childID)) {
-                    Entity childEntity{ childID, this };
-                    Entity duplicatedChild = DuplicateEntity(childEntity, pScene);
-                    if (duplicatedChild) {
-                        duplicatedChild.SetParent(newEntity, false);
-                    }
+        if (!CanMutate() || !entity || entity.GetSceneData() != this) return {};
+        std::vector<Entity> sources;
+        std::unordered_set<entt::entity> visited;
+        std::function<bool(Entity)> collect = [&](Entity current) {
+            if (!current || !visited.insert(current).second || !CanCopyExtensions(current)) return false;
+            sources.push_back(current);
+            if (current.HasComponent<HierarchyComponent>()) {
+                const auto children = current.GetComponent<HierarchyComponent>().Children;
+                for (auto child : children) {
+                    if (!m_Registry.valid(child)) continue;
+                    if (!collect(Entity{child, this})) return false;
                 }
             }
-        }
-
-        return newEntity;
+            return true;
+        };
+        if (!collect(entity)) return {};
+        ExtensionTransaction transaction(*this);
+        std::vector<Entity> created;
+        std::unordered_map<UUID, entt::entity> entities;
+        std::unordered_map<std::uint64_t, std::uint64_t> remap;
+        const auto rollback = [&] { for (auto clone : created) if (clone) DestroyEntity(clone, physicsScene ? physicsScene : m_RuntimePhysicsScene); };
+        try {
+            // Allocate the entire destination subtree before any codec runs.
+            // Every clone receives the same complete authored UUID mapping.
+            for (auto source : sources) {
+                auto clone = CreateEntity(source.GetName() + " (Copy)");
+                if (!clone) { rollback(); return {}; }
+                created.push_back(clone); entities.emplace(source.GetUUID(), clone);
+                remap.emplace(static_cast<std::uint64_t>(source.GetUUID()), static_cast<std::uint64_t>(clone.GetUUID()));
+            }
+            for (std::size_t i = 0; i < sources.size(); ++i) {
+                const ComponentCopyContext context{m_Registry, created[i], m_Registry, sources[i], entities};
+                ComponentCodecRegistry::Get().CopyAllComponents(context);
+                if (!CopyExtensions(created[i], sources[i], remap)) { rollback(); return {}; }
+            }
+            for (std::size_t i = 0; i < sources.size(); ++i) {
+                if (!sources[i].HasComponent<HierarchyComponent>()) continue;
+                const auto hierarchy = sources[i].GetComponent<HierarchyComponent>();
+                Entity parent;
+                if (m_Registry.valid(hierarchy.Parent) && m_Registry.all_of<IDComponent>(hierarchy.Parent)) {
+                    const auto mapped = entities.find(m_Registry.get<IDComponent>(hierarchy.Parent).ID);
+                    parent = Entity{mapped == entities.end() ? hierarchy.Parent : mapped->second, this};
+                }
+                created[i].SetParent(parent, false);
+                auto& cloneHierarchy = created[i].GetComponent<HierarchyComponent>();
+                cloneHierarchy.InheritTransform = hierarchy.InheritTransform;
+                cloneHierarchy.InheritScale = hierarchy.InheritScale;
+            }
+            auto* physics = physicsScene ? physicsScene : m_RuntimePhysicsScene;
+            if (physics) for (auto clone : created) ScenePhysicsBridge::CreateBodyForEntity(*this, clone, physics);
+            if (!transaction.Commit()) { rollback(); StopAfterExtensionFailure(); return {}; }
+            ++m_SceneGeneration; ++m_TransformRevision;
+            return created.front();
+        } catch (...) { rollback(); return {}; }
     }
 
     void Scene::Clear() {
         if (!CanMutate()) return;
+        ClearExtensions();
         m_RuntimeActive = false;
         if (m_RuntimePhysicsScene) {
             for (auto entity : m_Registry.view<RigidBody3D>()) ScenePhysicsBridge::TeardownEntityPhysics(*this, entity, m_RuntimePhysicsScene);
@@ -107,7 +142,7 @@ namespace Axle {
         SceneCharacterBridge::OnRuntimeStop(*this);
         m_RuntimePhysicsScene = nullptr;
 
-        SceneData::Clear();
+        ClearData();
     }
 
     Entity Scene::FindEntityByBodyID(BodyID bodyID) {
@@ -123,7 +158,8 @@ namespace Axle {
     }
 
     std::shared_ptr<Scene> Scene::Copy(std::shared_ptr<Scene> other) {
-        if (!other) return nullptr;
+        if (!other || !other->CanMutate()) return nullptr;
+        for (auto entity : other->m_Registry.view<IDComponent>()) if (!other->CanCopyExtensions(Entity{entity, other.get()})) return nullptr;
 
         std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
 
@@ -144,6 +180,8 @@ namespace Axle {
         }
 
         // Pass 2: Deep copy all components via ComponentCodecRegistry
+        std::unordered_map<std::uint64_t, std::uint64_t> extensionRemap;
+        for (const auto& [uuid, entity] : entMap) extensionRemap.emplace(static_cast<std::uint64_t>(uuid), static_cast<std::uint64_t>(uuid));
         for (auto srcEntityID : idView) {
             UUID uuid = other->m_Registry.get<IDComponent>(srcEntityID).ID;
             entt::entity dstEntityID = entMap[uuid];
@@ -157,6 +195,7 @@ namespace Axle {
             };
 
             ComponentCodecRegistry::Get().CopyAllComponents(ctx);
+            if (!newScene->CopyExtensions(Entity{dstEntityID, newScene.get()}, Entity{srcEntityID, other.get()}, extensionRemap)) return nullptr;
         }
 
         // Pass 3: Remap Hierarchy Relationships using UUID mapping
@@ -252,6 +291,8 @@ namespace Axle {
 
     void Scene::OnRuntimeStart(PhysicsScene* physicsScene) {
         if (!CanMutate()) return;
+        std::vector<std::string> extensionErrors;
+        if (!ExtensionsReady(extensionErrors)) { m_SimulationFaulted = true; return; }
         m_SimulationFaulted = false;
         UpdateWorldTransforms();
         m_RuntimeActive = true;
@@ -262,26 +303,33 @@ namespace Axle {
         SceneScriptBridge::OnRuntimeStart(*this);
         SceneCharacterBridge::OnRuntimeStart(*this, physicsScene);
         SceneAudioBridge::OnRuntimeStart(*this);
+        if (!StartExtensions()) {
+            OnRuntimeStop(physicsScene); m_SimulationFaulted = true;
+            AXLE_ERROR("Scene runtime stopped: native extension initialization failed"); return;
+        }
         OnCommandsApplied();
     }
 
     void Scene::ExecuteFrameScriptPhase(Timestep dt) {
-        if (!CanMutate()) return;
+        if (!CanMutate() || m_SimulationFaulted) return;
         RecordPhase(SimulationPhase::FrameScripts);
         SceneScriptBridge::OnUpdate(*this, dt);
+        RunExtensionPhase(ExtensionPhase::Frame, dt.GetSeconds());
     }
 
     void Scene::ExecuteFixedControlsPhase(Timestep fixedDt, PhysicsScene* physicsScene) {
-        if (!CanMutate()) return;
+        if (!CanMutate() || m_SimulationFaulted) return;
+        m_ExtensionFixedDelta = fixedDt.GetSeconds();
         RecordPhase(SimulationPhase::FixedControls);
         auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
         GetCommandBuffer().Execute(*this);
         SceneScriptBridge::OnFixedUpdate(*this, fixedDt);
         SceneCharacterBridge::OnFixedUpdate(*this, fixedDt, ps);
+        RunExtensionPhase(ExtensionPhase::FixedControls, fixedDt.GetSeconds());
     }
 
     void Scene::ExecutePhysicsPhase(Timestep fixedDt, PhysicsScene* physicsScene) {
-        if (!CanMutate()) return;
+        if (!CanMutate() || m_SimulationFaulted) return;
         RecordPhase(SimulationPhase::Physics);
         auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
         if (ps) {
@@ -290,27 +338,30 @@ namespace Axle {
     }
 
     void Scene::ExecutePostStepSyncPhase(PhysicsScene* physicsScene) {
-        if (!CanMutate()) return;
+        if (!CanMutate() || m_SimulationFaulted) return;
         RecordPhase(SimulationPhase::PostStepSync);
         auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
         ScenePhysicsBridge::SynchronizeTransforms(*this, ps);
         UpdateWorldTransformsParallel(64);
         SceneCharacterBridge::OnPostStepSync(*this, ps);
+        RunExtensionPhase(ExtensionPhase::PostPhysics, m_ExtensionFixedDelta);
     }
 
     void Scene::ExecuteAnimationVFXPhase(Timestep fixedDt, PhysicsScene* physicsScene) {
-        if (!CanMutate()) return;
+        if (!CanMutate() || m_SimulationFaulted) return;
         RecordPhase(SimulationPhase::AnimationVFX);
         auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
         SceneCharacterBridge::UpdateAnimationAndVFX(*this, fixedDt, ps);
+        RunExtensionPhase(ExtensionPhase::Animation, fixedDt.GetSeconds());
         UpdateWorldTransformsParallel(64);
     }
 
     void Scene::ExecuteLatePresentationPhase(Timestep dt, PhysicsScene* physicsScene) {
-        if (!CanMutate()) return;
+        if (!CanMutate() || m_SimulationFaulted) return;
         RecordPhase(SimulationPhase::LatePresentation);
         auto* ps = physicsScene ? physicsScene : m_RuntimePhysicsScene;
         SceneScriptBridge::OnLateUpdate(*this, dt);
+        if (!RunExtensionPhase(ExtensionPhase::Late, dt.GetSeconds())) return;
         UpdateWorldTransformsParallel(64);
         SceneAudioBridge::OnUpdate(*this, dt, ps);
     }
@@ -320,6 +371,12 @@ namespace Axle {
         ExecutePhysicsPhase(fixedDt, physicsScene);
         ExecutePostStepSyncPhase(physicsScene);
         ExecuteAnimationVFXPhase(fixedDt, physicsScene);
+    }
+    bool Scene::RunExtensionPhase(ExtensionPhase phase, float dt) {
+        if (UpdateExtensions(phase, dt)) return true;
+        std::vector<std::string> errors; ExtensionsReady(errors);
+        for (const auto& error : errors) AXLE_ERROR("Scene runtime stopped: {0}", error);
+        OnRuntimeStop(m_RuntimePhysicsScene); m_SimulationFaulted = true; return false;
     }
 
     void Scene::StepSimulation(Timestep dt, PhysicsScene* physicsScene) {
@@ -357,6 +414,7 @@ namespace Axle {
 
     void Scene::OnRuntimeStop(PhysicsScene* /*physicsScene*/) {
         if (!CanMutate()) return;
+        StopExtensions();
         m_RuntimeActive = false;
         SceneAudioBridge::OnRuntimeStop(*this);
         SceneCharacterBridge::OnRuntimeStop(*this);

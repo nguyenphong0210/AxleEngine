@@ -6,16 +6,27 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/matrix_decompose.hpp>
 #include <algorithm>
+#include <map>
 #include <Axle/Log.hpp>
 
 namespace Axle {
+    namespace Detail {
+        std::vector<SceneData*>& LiveScenes();
+        std::map<std::string, SceneExtensionRegistry::Factory>& ExtensionFactories();
+        std::uint64_t NextSceneInstance();
+    }
 
     SceneData::SceneData() {
         m_CommandBuffer = std::make_unique<SceneCommandBuffer>();
+        m_InstanceId = Detail::NextSceneInstance();
+        for (const auto& [key, factory] : Detail::ExtensionFactories()) m_Extensions.emplace(key, factory(*this));
+        Detail::LiveScenes().push_back(this);
     }
 
     SceneData::~SceneData() {
         Clear();
+        m_Extensions.clear();
+        std::erase(Detail::LiveScenes(), this);
     }
 
     Entity SceneData::CreateEntity(const std::string& name) {
@@ -34,6 +45,12 @@ namespace Axle {
 
     void SceneData::Clear() {
         if (!CanMutate()) return;
+        ClearExtensions();
+        ClearData();
+    }
+    void SceneData::ClearData() {
+        if (!CanMutate()) return;
+        m_InstanceId = Detail::NextSceneInstance();
         m_Lifetime->Epoch.fetch_add(1);
         if (m_CommandBuffer) {
             m_CommandBuffer->Clear();
@@ -73,8 +90,9 @@ namespace Axle {
         m_Destroying.erase(entityID);
     }
 
-    void SceneData::DestroyEntityData(Entity entity) {
+    void SceneData::DestroyEntityData(Entity entity, bool notifyExtensions) {
         const auto entityID = static_cast<entt::entity>(entity);
+        if (notifyExtensions) DestroyExtensions(entity);
 
         // 2. Unlink from parent's children vector if parent exists
         if (entity.HasComponent<HierarchyComponent>()) {
@@ -96,7 +114,7 @@ namespace Axle {
     }
 
     Entity SceneData::DuplicateEntity(Entity entity) {
-        if (!CanMutate() || !entity || entity.GetSceneData() != this) return {};
+        if (!CanMutate() || !entity || entity.GetSceneData() != this || !CanCopyExtensions(entity)) return {};
 
         std::string name = "Entity";
         if (entity.HasComponent<TagComponent>()) {
@@ -120,6 +138,9 @@ namespace Axle {
 
         // Deep copy components via ComponentCodecRegistry
         ComponentCodecRegistry::Get().CopyAllComponents(ctx);
+        if (!CopyExtensions(newEntity, entity, {{static_cast<std::uint64_t>(entity.GetUUID()), static_cast<std::uint64_t>(newEntity.GetUUID())}})) {
+            DestroyEntity(newEntity); return {};
+        }
 
         // Preserve parent link if entity is parented
         if (entity.HasComponent<HierarchyComponent>()) {
@@ -276,7 +297,8 @@ namespace Axle {
     }
 
     std::shared_ptr<SceneData> SceneData::Copy(const std::shared_ptr<SceneData>& other) {
-        if (!other) return nullptr;
+        if (!other || !other->CanMutate()) return nullptr;
+        for (auto entity : other->m_Registry.view<IDComponent>()) if (!other->CanCopyExtensions(Entity{entity, other.get()})) return nullptr;
 
         std::shared_ptr<SceneData> newScene = std::make_shared<SceneData>();
 
@@ -297,6 +319,8 @@ namespace Axle {
         }
 
         // Pass 2: Deep copy all components via ComponentCodecRegistry
+        std::unordered_map<std::uint64_t, std::uint64_t> extensionRemap;
+        for (const auto& [uuid, entity] : entMap) extensionRemap.emplace(static_cast<std::uint64_t>(uuid), static_cast<std::uint64_t>(uuid));
         for (auto srcEntityID : idView) {
             UUID uuid = other->m_Registry.get<IDComponent>(srcEntityID).ID;
             entt::entity dstEntityID = entMap[uuid];
@@ -310,6 +334,7 @@ namespace Axle {
             };
 
             ComponentCodecRegistry::Get().CopyAllComponents(ctx);
+            if (!newScene->CopyExtensions(Entity{dstEntityID, newScene.get()}, Entity{srcEntityID, other.get()}, extensionRemap)) return nullptr;
         }
 
         // Pass 3: Remap Hierarchy Relationships using UUID mapping
@@ -339,6 +364,7 @@ namespace Axle {
 
     void SceneData::StorePassiveSection(Entity entity, const std::string& sectionName, const std::vector<std::string>& lines) {
         if (!CanMutate() || !entity || entity.GetSceneData() != this) return;
+        if (DeserializeExtension(entity, sectionName, lines)) return;
 
         auto& pec = entity.HasComponent<PassiveExtensionComponent>()
             ? entity.GetComponent<PassiveExtensionComponent>()

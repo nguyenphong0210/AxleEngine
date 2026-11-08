@@ -140,6 +140,11 @@ namespace Axle {
         std::vector<glm::mat4> BoneMatrices;
         bool CastsShadows = true;
     };
+    struct RenderDebugLine {
+        std::shared_ptr<void> OwnerLease;
+        glm::vec3 From{0}, To{0};
+        glm::vec4 Color{1};
+    };
 
     // Immutable extracted snapshot of a scene ready for rendering.
     // Retains zero mutable references to the ECS registry or Scene.
@@ -157,6 +162,7 @@ namespace Axle {
             Meshes.clear();
             Skins.clear();
             Particles.clear();
+            DebugLines.clear();
             ErrorMessage.clear();
             DirectionalLight.reset();
             AdditionalDirectionalLights.clear();
@@ -169,7 +175,7 @@ namespace Axle {
             TotalEntities = 0;
         }
 
-        bool IsEmpty() const { return Meshes.empty() && Skins.empty() && Particles.empty() && !(Skybox.Authored && Skybox.Enabled) && PointLights.empty() && SpotLights.empty() && !DirectionalLight.has_value() && AdditionalDirectionalLights.empty(); }
+        bool IsEmpty() const { return Meshes.empty() && Skins.empty() && Particles.empty() && DebugLines.empty() && !(Skybox.Authored && Skybox.Enabled) && PointLights.empty() && SpotLights.empty() && !DirectionalLight.has_value() && AdditionalDirectionalLights.empty(); }
         size_t GetMeshCount() const { return Meshes.size(); }
         size_t GetPointLightCount() const { return PointLights.size(); }
         size_t GetSpotLightCount() const { return SpotLights.size(); }
@@ -186,6 +192,7 @@ namespace Axle {
         std::vector<RenderMeshInstance> Meshes;
         std::vector<RenderSkinInstance> Skins;
         std::vector<std::shared_ptr<const RenderParticleData>> Particles;
+        std::vector<RenderDebugLine> DebugLines;
         std::string ErrorMessage;
         std::optional<RenderDirectionalLight> DirectionalLight;
         std::vector<RenderDirectionalLight> AdditionalDirectionalLights;

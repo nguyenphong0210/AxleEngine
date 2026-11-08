@@ -127,7 +127,9 @@ message(FATAL_ERROR "Unselected plugin configured")
     CHECK(Axle::Plugin::HashArtifactFile(goodBinary, error) == goodHash, "source rebuild does not overwrite active artifact generation");
     const auto commonHeader = plugin / "include/Value.hpp";
     const auto headerTime = std::filesystem::last_write_time(commonHeader);
-    Write(commonHeader, "#pragma once\ninline constexpr int SharedValue = 13;\n");
+    auto changedHeader = Axle::FileSystem::ReadTextFile(commonHeader);
+    const auto headerValue = changedHeader.find("SharedValue = 11"); CHECK(headerValue != std::string::npos, "shared authored header contains observable value");
+    changedHeader.replace(headerValue, 16, "SharedValue = 13"); Write(commonHeader, changedHeader);
     std::filesystem::last_write_time(commonHeader, headerTime);
     const auto sharedRequest = Request(root, argv[1]);
     CHECK(sharedRequest.Plan.Fingerprint != request.Plan.Fingerprint && sharedRequest.Plan.Artifacts.front().Fingerprint != request.Plan.Artifacts.front().Fingerprint,

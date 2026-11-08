@@ -1,3 +1,6 @@
 if(TARGET CustomPlugin_Runtime)
     target_include_directories(CustomPlugin_Runtime PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../include")
 endif()
+if(TARGET CustomPlugin_Base)
+    target_include_directories(CustomPlugin_Base PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../include")
+endif()

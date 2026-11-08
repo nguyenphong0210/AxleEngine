@@ -69,6 +69,7 @@ add_subdirectory(Engine/SceneData)
 add_subdirectory(Engine/Scene)
 add_subdirectory(Engine/PluginSDK)
 add_subdirectory(Engine/PluginRuntime)
+add_subdirectory(Engine/PluginServices)
 
 # Load Engine Plugins
 add_subdirectory(Plugins/Spline)

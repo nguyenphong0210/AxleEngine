@@ -50,8 +50,8 @@ namespace Axle {
         return false;
     }
 
-    static void CollectHierarchy(Entity current, std::vector<Entity>& outEntities) {
-        if (!current) return;
+    static bool CollectHierarchy(Entity current, std::vector<Entity>& outEntities) {
+        if (!current || std::find(outEntities.begin(), outEntities.end(), current) != outEntities.end()) return false;
         outEntities.push_back(current);
 
         if (current.HasComponent<HierarchyComponent>()) {
@@ -60,10 +60,12 @@ namespace Axle {
             for (auto childHandle : hc.Children) {
                 if (childHandle != entt::null && reg.valid(childHandle)) {
                     Entity childEntity{ childHandle, current.GetScene() };
-                    CollectHierarchy(childEntity, outEntities);
+                    if (!childEntity.HasComponent<HierarchyComponent>() || childEntity.GetComponent<HierarchyComponent>().Parent != static_cast<entt::entity>(current)) continue;
+                    if (!CollectHierarchy(childEntity, outEntities)) return false;
                 }
             }
         }
+        return true;
     }
 
     bool AssemblySerializer::Serialize(const std::filesystem::path& filepath,
@@ -78,13 +80,15 @@ namespace Axle {
         std::ostringstream fout;
 
         std::vector<Entity> hierarchy;
-        CollectHierarchy(rootEntity, hierarchy);
+        if (!CollectHierarchy(rootEntity, hierarchy)) return false;
+        std::unordered_set<std::uint64_t> authoredIds;
 
         // Ensure all entities have IDComponent
         for (auto& e : hierarchy) {
             if (!e.HasComponent<IDComponent>()) {
                 e.AddComponent<IDComponent>(UUID());
             }
+            if (!static_cast<std::uint64_t>(e.GetUUID()) || !authoredIds.insert(e.GetUUID()).second) return false;
         }
 
         u64 rootUUID = rootEntity.GetComponent<IDComponent>().ID;
@@ -203,7 +207,7 @@ namespace Axle {
             if (entity.HasComponent<HierarchyComponent>()) {
                 auto& hc = entity.GetComponent<HierarchyComponent>();
                 u64 parentUUID = 0;
-                if (hc.Parent != entt::null && reg.valid(hc.Parent) && reg.all_of<IDComponent>(hc.Parent)) {
+                if (uuid != rootUUID && hc.Parent != entt::null && reg.valid(hc.Parent) && reg.all_of<IDComponent>(hc.Parent)) {
                     parentUUID = reg.get<IDComponent>(hc.Parent).ID;
                 }
 
@@ -211,7 +215,7 @@ namespace Axle {
                 fout << "      Parent: " << parentUUID << "\n";
                 fout << "      Children:\n";
                 for (auto childH : hc.Children) {
-                    if (childH != entt::null && reg.valid(childH) && reg.all_of<IDComponent>(childH)) {
+                    if (childH != entt::null && reg.valid(childH) && reg.all_of<IDComponent, HierarchyComponent>(childH) && reg.get<HierarchyComponent>(childH).Parent == static_cast<entt::entity>(entity)) {
                         fout << "        - " << reg.get<IDComponent>(childH).ID << "\n";
                     }
                 }
@@ -322,6 +326,7 @@ namespace Axle {
             }
 
             // Custom and passive plugin components
+            if (!entity.GetSceneData()->SerializeExtensions(entity, fout)) return false;
             if (context && context->CustomEntitySerializer) {
                 context->CustomEntitySerializer(entity, fout);
             }
@@ -803,12 +808,34 @@ namespace Axle {
         return entities;
     }
 
+    static bool ValidateAssemblyEntities(const std::vector<RawAssemblyEntity>& entities, u64 root) {
+        if (entities.empty() || !root) return false;
+        std::unordered_map<u64, const RawAssemblyEntity*> byId;
+        for (const auto& entity : entities) if (!entity.OldUUID || !byId.emplace(entity.OldUUID, &entity).second) return false;
+        if (!byId.contains(root) || byId.at(root)->ParentOldUUID) return false;
+        for (const auto& entity : entities) {
+            if (entity.OldUUID != root && (!entity.ParentOldUUID || !byId.contains(entity.ParentOldUUID))) return false;
+            std::unordered_set<u64> children;
+            for (auto child : entity.ChildrenOldUUIDs) {
+                if (!byId.contains(child) || !children.insert(child).second || byId.at(child)->ParentOldUUID != entity.OldUUID) return false;
+            }
+        }
+        std::unordered_set<u64> visited;
+        std::vector<u64> pending{root};
+        while (!pending.empty()) {
+            const auto id = pending.back(); pending.pop_back();
+            if (!visited.insert(id).second) return false;
+            for (auto child : byId.at(id)->ChildrenOldUUIDs) pending.push_back(child);
+        }
+        return visited.size() == entities.size();
+    }
+
     Entity AssemblySerializer::Deserialize(const std::filesystem::path& filepath,
                                           Scene* targetScene,
                                           PhysicsScene* physicsScene,
                                           const glm::vec3& spawnPosition,
                                           const SceneSerializerContext* context) {
-        if (!targetScene) return {};
+        if (!targetScene || !targetScene->CanMutate()) return {};
 
         std::string content = FileSystem::ReadTextFile(filepath);
         if (content.empty()) {
@@ -820,8 +847,8 @@ namespace Axle {
         u64 rootOldUUID = 0;
         auto rawEntities = ParseAssemblyEntities(fin, rootOldUUID);
 
-        if (rawEntities.empty()) {
-            AXLE_ERROR("AssemblySerializer: No entities found in '{0}'", filepath.string());
+        if (!ValidateAssemblyEntities(rawEntities, rootOldUUID)) {
+            AXLE_ERROR("AssemblySerializer: Invalid entity identities or hierarchy in '{0}'", filepath.string());
             return {};
         }
 
@@ -839,6 +866,17 @@ namespace Axle {
         // Map OldUUID -> NewUUID and OldUUID -> Created Entity
         std::unordered_map<u64, u64> oldToNewUUID;
         std::unordered_map<u64, Entity> oldToEntity;
+        SceneData::ExtensionTransaction transaction(*targetScene);
+        struct RollbackGuard {
+            Scene& Target;
+            PhysicsScene* Physics;
+            std::vector<Entity> Created;
+            bool Committed = false;
+            ~RollbackGuard() {
+                if (!Committed) for (auto entity : Created) if (entity) Target.DestroyEntity(entity, Physics);
+            }
+        } rollback{*targetScene, physicsScene};
+        rollback.Created.reserve(rawEntities.size());
 
         for (const auto& raw : rawEntities) {
             UUID newUUID;
@@ -851,6 +889,8 @@ namespace Axle {
             u64 newUUID = oldToNewUUID[raw.OldUUID];
 
             Entity entity = targetScene->CreateEntityWithUUID(newUUID, raw.Tag);
+            if (!entity) return {};
+            rollback.Created.push_back(entity);
             oldToEntity[raw.OldUUID] = entity;
 
             // TransformComponent: newly created entities do not have TransformComponent yet
@@ -965,6 +1005,14 @@ namespace Axle {
         }
 
         // Pass 2: Reconstruct Hierarchy parent-child links
+        std::unordered_map<std::uint64_t, std::uint64_t> extensionRemap;
+        for (const auto& [oldUUID, entity] : oldToEntity) extensionRemap.emplace(oldUUID, static_cast<std::uint64_t>(entity.GetUUID()));
+        for (const auto& [oldUUID, entity] : oldToEntity) {
+            if (!targetScene->CanCopyExtensions(entity) || !targetScene->CopyExtensions(entity, entity, extensionRemap)) {
+                // No physics has been created yet. Roll back only this assembly.
+                return {};
+            }
+        }
         for (const auto& raw : rawEntities) {
             Entity entity = oldToEntity[raw.OldUUID];
             auto& hc = entity.AddComponent<HierarchyComponent>();
@@ -1081,6 +1129,8 @@ namespace Axle {
 
         // Attach AssemblyComponent on Root Entity for source tracking
         rootEntity.AddComponent<AssemblyComponent>(filepath.string(), rawEntities[rootIndex].OldUUID);
+        if (!transaction.Commit()) { targetScene->StopAfterExtensionFailure(); return {}; }
+        rollback.Committed = true;
 
         AXLE_INFO("AssemblySerializer: Instantiated Assembly '{0}' ({1} entities) into scene at ({2:.2f}, {3:.2f}, {4:.2f})",
                   rawEntities[rootIndex].Tag, rawEntities.size(), spawnPosition.x, spawnPosition.y, spawnPosition.z);
@@ -1151,7 +1201,7 @@ namespace Axle {
         auto rawEntities = ParseAssemblyEntities(fin, rootUUID);
         fin.close();
 
-        if (rawEntities.empty()) return data;
+        if (!ValidateAssemblyEntities(rawEntities, rootUUID)) return data;
 
         data.Name = filepath.stem().string();
         data.IsValid = true;
@@ -1176,6 +1226,7 @@ namespace Axle {
             node.HasAnimator = raw.HasAnimator;
             node.Animator = raw.Animator;
             node.PassiveSections = raw.PassiveSections;
+            node.AuthoredUUID = raw.OldUUID;
             nodeMap[raw.OldUUID] = node;
         }
 
@@ -1305,7 +1356,7 @@ namespace Axle {
         out << "      Children:\n";
         std::vector<u64> childUUIDs;
         for (size_t i = 0; i < node.Children.size(); ++i) {
-            u64 childUUID = (u64)UUID();
+            u64 childUUID = node.Children[i].AuthoredUUID ? node.Children[i].AuthoredUUID : (u64)UUID();
             childUUIDs.push_back(childUUID);
             out << "        - " << childUUID << "\n";
         }
@@ -1317,9 +1368,16 @@ namespace Axle {
 
     bool AssemblySerializer::SaveAssemblyData(const std::filesystem::path& filepath,
                                              const AssemblyData& data) {
+        std::unordered_set<u64> ids;
+        std::function<bool(const AssemblyNode&)> validate = [&](const AssemblyNode& node) {
+            if (node.AuthoredUUID && !ids.insert(node.AuthoredUUID).second) return false;
+            for (const auto& child : node.Children) if (!validate(child)) return false;
+            return true;
+        };
+        if (!validate(data.RootNode)) return false;
         std::ostringstream fout;
 
-        UUID rootUUID;
+        const UUID rootUUID = data.RootNode.AuthoredUUID ? UUID(data.RootNode.AuthoredUUID) : UUID();
         fout << std::fixed << std::setprecision(6);
         fout << "# Axle Unified Asset File\n";
         fout << "AxleAsset:\n";

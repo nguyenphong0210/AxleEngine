@@ -29,12 +29,12 @@ struct RegistryEntry {
 };
 
 struct RegistrationRegistry::State {
-    std::atomic<std::uint64_t> nextOwner{1};
     std::vector<std::unique_ptr<RegistryEntry>> entries;
     bool alive = true;
     const std::thread::id ownerThread = std::this_thread::get_id();
     std::unordered_set<Owner> owners;
     std::unordered_map<Owner, std::weak_ptr<void>> leases;
+    std::unordered_map<Owner, std::string> pluginIds;
 
     ~State() {
         DestroyAll();
@@ -42,7 +42,7 @@ struct RegistrationRegistry::State {
 
     void DestroyAll() noexcept {
         alive = false;
-        owners.clear(); leases.clear();
+        owners.clear(); leases.clear(); pluginIds.clear();
         std::vector<std::unique_ptr<RegistryEntry>> toDestroy;
         toDestroy.swap(entries);
         for (auto it = toDestroy.rbegin(); it != toDestroy.rend(); ++it) {
@@ -56,7 +56,9 @@ struct RegistrationRegistry::State {
 
     Owner BeginOwner() {
         if (!alive || std::this_thread::get_id() != ownerThread) return 0;
+        static std::atomic<std::uint64_t> nextOwner{1};
         const auto owner = nextOwner.fetch_add(1);
+        if (!owner) return 0;
         owners.insert(owner);
         return owner;
     }
@@ -73,7 +75,7 @@ struct RegistrationRegistry::State {
 
     void Rollback(Owner owner) noexcept {
         if (owner == 0 || std::this_thread::get_id() != ownerThread) return;
-        owners.erase(owner); leases.erase(owner);
+        owners.erase(owner); leases.erase(owner); pluginIds.erase(owner);
         for (;;) {
             auto it = std::find_if(entries.rbegin(), entries.rend(), [owner](const auto& entry) { return entry->owner == owner; });
             if (it == entries.rend()) break;
@@ -125,12 +127,26 @@ std::size_t RegistrationRegistry::Size() const noexcept {
 }
 
 std::shared_ptr<void> RegistrationRegistry::GetOwnerLease(Owner owner) const {
-    if (!IsOwnerActive(owner)) return {};
-    const auto it = m_State->leases.find(owner);
-    return it == m_State->leases.end() ? nullptr : it->second.lock();
+    return LeaseFor(m_State, owner);
 }
 bool RegistrationRegistry::IsOwnerActive(Owner owner) const {
-    return m_State && std::this_thread::get_id() == m_State->ownerThread && m_State->alive && m_State->owners.contains(owner);
+    return OwnerIsActive(m_State, owner);
+}
+bool RegistrationRegistry::OwnerIsActive(const std::shared_ptr<State>& state, Owner owner) {
+    return state && std::this_thread::get_id() == state->ownerThread && state->alive && state->owners.contains(owner);
+}
+std::shared_ptr<void> RegistrationRegistry::LeaseFor(const std::shared_ptr<State>& state, Owner owner) {
+    if (!OwnerIsActive(state, owner)) return {};
+    const auto it = state->leases.find(owner);
+    return it == state->leases.end() ? nullptr : it->second.lock();
+}
+bool RegistrationRegistry::RegisterFor(const std::shared_ptr<State>& state, Owner owner, const char* id, void* resource, void (*destroy)(void*)) {
+    return state && state->Register(owner, id, resource, destroy);
+}
+std::string RegistrationRegistry::PluginIdFor(const std::shared_ptr<State>& state, Owner owner) {
+    if (!OwnerIsActive(state, owner)) return {};
+    const auto found = state->pluginIds.find(owner);
+    return found == state->pluginIds.end() ? "" : found->second;
 }
 
 namespace {
@@ -209,6 +225,8 @@ struct NativePlugin::ModuleState {
     PluginHostApi Host{};
     std::string Sdk;
     void* ServiceUser = nullptr;
+    std::shared_ptr<void> ServiceLifetime;
+    void (*OwnerInitialized)(void*, std::uint64_t, bool) = nullptr;
     const void* (*GetService)(void*, std::uint64_t, std::uint32_t, std::uint32_t) = nullptr;
     void Revoke() noexcept {
         Active = false;
@@ -264,6 +282,7 @@ bool NativePlugin::Load(const LoadRequest& request, RegistrationRegistry& regist
     auto fail = [&](const char* reason) {
         diagnostic = reason;
         code->Active = false;
+        if (code->Owner && request.OwnerInitialized) { try { request.OwnerInitialized(request.ServiceUser, code->Owner, false); } catch (...) {} }
         if (code->Registry) code->Registry->Rollback(code->Owner);
         code->Registry.reset();
         return false;
@@ -286,8 +305,11 @@ bool NativePlugin::Load(const LoadRequest& request, RegistrationRegistry& regist
     code->Owner = registry.BeginOwner();
     if (!code->Owner) return fail("plugin registration requires a live owner-thread registry");
     code->Registry->leases[code->Owner] = code;
+    code->Registry->pluginIds[code->Owner] = expected.PluginId;
     code->Sdk = expected.SdkFingerprint;
     code->ServiceUser = request.ServiceUser;
+    code->ServiceLifetime = request.ServiceLifetime;
+    code->OwnerInitialized = request.OwnerInitialized;
     code->GetService = request.GetService;
     code->Active = true;
     code->Host = {sizeof(PluginHostApi), kPluginAbiVersion, code.get(), code->Owner, code->Sdk.c_str(),
@@ -309,6 +331,10 @@ bool NativePlugin::Load(const LoadRequest& request, RegistrationRegistry& regist
     bool started = false;
     try { started = start(&code->Host); } catch (...) {}
     if (!started) return fail("plugin start failed; registration rolled back");
+    if (request.OwnerInitialized) {
+        try { request.OwnerInitialized(request.ServiceUser, code->Owner, true); }
+        catch (...) { return fail("host could not commit plugin initialization"); }
+    }
     m_ModuleId = expected.ModuleName;
     m_Module = std::move(code);
     m_Active = true;
@@ -330,6 +356,13 @@ void NativePlugin::Stop() noexcept {
     }
     // Stop and FreeLibrary run only after every retained payload/destructor/job
     // releases its lease. The host table remains valid through that boundary.
+}
+bool NativePlugin::AbortStartup() noexcept {
+    if (m_Module && std::this_thread::get_id() != m_Module->OwnerThread) return false;
+    if (m_Module && m_Module->OwnerInitialized) {
+        try { m_Module->OwnerInitialized(m_Module->ServiceUser, m_Module->Owner, false); } catch (...) {}
+    }
+    Stop(); return true;
 }
 
 void NativePlugin::CollectRetiredModules() noexcept {

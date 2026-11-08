@@ -16,6 +16,7 @@
 namespace Axle {
 
     struct AssemblyNode {
+        std::uint64_t AuthoredUUID = 0;
         std::string Tag = "Entity";
         TransformComponent Transform;
         bool HasMesh = false;

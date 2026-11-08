@@ -1,11 +1,19 @@
 add_library(AxlePluginSDK INTERFACE)
 add_library(Axle::PluginSDK ALIAS AxlePluginSDK)
 target_include_directories(AxlePluginSDK INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/Axle/PluginSDK.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/Axle/PluginABI.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/RuntimeHost.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/EditorHost.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AxlePluginSDK.cmake.in")
 
 file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/include/Axle/PluginSDK.hpp" sdkHeaderHash)
 file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/include/Axle/PluginABI.hpp" abiHeaderHash)
 file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AxlePluginSDK.cmake.in" sdkRecipeHash)
-string(SHA256 AXLE_PLUGIN_SDK_HASH "${sdkHeaderHash};${abiHeaderHash};${sdkRecipeHash};Windows-x64;CXX20;MD;ABI2")
+file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/src/RuntimeHost.cpp" runtimeGatewayHash)
+file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/src/EditorHost.cpp" editorGatewayHash)
+string(SHA256 AXLE_PLUGIN_SDK_HASH "${sdkHeaderHash};${abiHeaderHash};${sdkRecipeHash};${runtimeGatewayHash};${editorGatewayHash};Windows-x64;CXX20;MD;ABI2")
 set(AXLE_PLUGIN_TOOLCHAIN_ID "${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}-MSVC${MSVC_VERSION}-x64-MD")
 set(AXLE_PLUGIN_SDK_DIRECTORY "${CMAKE_BINARY_DIR}/PluginSDK/$<CONFIG>")
 
@@ -18,7 +26,7 @@ target_compile_definitions(AxleRuntimeHost PRIVATE AXLE_RUNTIME_HOST_EXPORTS
 add_library(AxleEditorHost SHARED src/EditorHost.cpp)
 add_library(Axle::EditorHost ALIAS AxleEditorHost)
 target_link_libraries(AxleEditorHost PUBLIC Axle::PluginSDK Axle::RuntimeHost)
-target_compile_definitions(AxleEditorHost PRIVATE AXLE_EDITOR_HOST_EXPORTS)
+target_compile_definitions(AxleEditorHost PRIVATE AXLE_EDITOR_HOST_EXPORTS AXLE_PLUGIN_HOST_SDK="${AXLE_PLUGIN_SDK_HASH}-$<CONFIG>")
 
 configure_file(cmake/AxlePluginSDK.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/AxlePluginSDK.cmake.gen" @ONLY)
 file(GENERATE OUTPUT "${AXLE_PLUGIN_SDK_DIRECTORY}/AxlePluginSDK.cmake"

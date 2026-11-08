@@ -16,6 +16,8 @@ struct LoadRequest {
     Plugin::ArtifactIdentity Expected;
     void* ServiceUser = nullptr;
     const void* (*GetService)(void*, std::uint64_t owner, std::uint32_t service_id, std::uint32_t minimum_size) = nullptr;
+    std::shared_ptr<void> ServiceLifetime;
+    void (*OwnerInitialized)(void*, std::uint64_t owner, bool succeeded) = nullptr;
 };
 
 class RegistrationRegistry final {
@@ -36,6 +38,10 @@ public:
     std::size_t Size() const noexcept;
     std::shared_ptr<void> GetOwnerLease(Owner owner) const;
     bool IsOwnerActive(Owner owner) const;
+    static bool OwnerIsActive(const std::shared_ptr<State>& state, Owner owner);
+    static std::shared_ptr<void> LeaseFor(const std::shared_ptr<State>& state, Owner owner);
+    static std::string PluginIdFor(const std::shared_ptr<State>& state, Owner owner);
+    static bool RegisterFor(const std::shared_ptr<State>& state, Owner owner, const char* id, void* resource, void (*destroy)(void*));
 
     std::shared_ptr<State> GetState() const noexcept { return m_State; }
 
@@ -53,6 +59,7 @@ public:
 
     bool Load(const LoadRequest& request, RegistrationRegistry& registry, std::string& diagnostic);
     void Stop() noexcept;
+    bool AbortStartup() noexcept;
     // Pump on the session owner thread each frame and before host shutdown.
     // Worker releases never invoke plugin teardown or the native loader.
     static void CollectRetiredModules() noexcept;

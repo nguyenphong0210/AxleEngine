@@ -1,0 +1,8 @@
+add_library(AxlePluginServices STATIC src/PluginServices.cpp)
+add_library(Axle::PluginServices ALIAS AxlePluginServices)
+target_include_directories(AxlePluginServices PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(AxlePluginServices PRIVATE "${CMAKE_BINARY_DIR}/PluginSDK/$<CONFIG>")
+target_link_libraries(AxlePluginServices PUBLIC Axle::PluginRuntime Axle::RuntimeHost Axle::Scene Axle::Project)
+if(MSVC)
+    target_compile_options(AxlePluginServices PRIVATE /bigobj /FS)
+endif()

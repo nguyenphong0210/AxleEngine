@@ -575,6 +575,7 @@ add_test(NAME Opt0203ReviewRegressions COMMAND $<TARGET_FILE:AxleOpt0203ReviewTe
 set_tests_properties(Opt0203ReviewRegressions PROPERTIES LABELS "review;ecs-jobs;sim;cpu" TIMEOUT 60)
 
 set(AXLE_TEST_TARGETS AxleSceneDataBoundaryTests AxleOpt0203ReviewTests AxleFoundationUnitTests AxleSceneMutationUnitTests AxleSimulationClockUnitTests AxleEditorCutoverUnitTests AxleRuntimeProductParityUnitTests AxleProjectUnitTests AxleAssetUnitTests AxleAssetFormatUnitTests AxleSceneDataUnitTests AxleSharedRuntimePhasesUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
+list(APPEND AXLE_TEST_TARGETS AxlePluginFoundationTests AxlePluginSelectionTests AxlePluginsPanelWorkflowTests AxlePluginRuntimeTests)
 list(APPEND AXLE_TEST_TARGETS AxlePrimitiveTests AxleRHIIdentityTests AxleRHIRetirementTests AxleRHIStateTests AxleRHIFrameTests AxleRHIPresentationTests AxleImageSourceTests)
 if(WIN32)
     add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp")
@@ -598,6 +599,15 @@ if(WIN32)
     add_test(NAME PluginBuildWorkflowTests COMMAND $<TARGET_FILE:AxlePluginBuildWorkflowTests>
         "${CMAKE_COMMAND}" "${CMAKE_CURRENT_SOURCE_DIR}/src/PluginBuildFixture" "$<CONFIG>")
     set_tests_properties(PluginBuildWorkflowTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
+    add_executable(AxlePluginServicesTests EXCLUDE_FROM_ALL src/Test_PluginServices.cpp "${CMAKE_SOURCE_DIR}/Editor/src/PluginBuild.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/OwnedProcess.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/PluginEditorServices.cpp")
+    target_include_directories(AxlePluginServicesTests PRIVATE "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/PluginSDK/$<CONFIG>")
+    target_link_libraries(AxlePluginServicesTests PRIVATE Axle::PluginServices Axle::UI Axle::EditorHost)
+    add_dependencies(AxlePluginServicesTests AxlePluginSDKPackage)
+    add_custom_command(TARGET AxlePluginServicesTests POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleRuntimeHost>" "$<TARGET_FILE_DIR:AxlePluginServicesTests>")
+    add_custom_command(TARGET AxlePluginServicesTests POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleEditorHost>" "$<TARGET_FILE_DIR:AxlePluginServicesTests>")
+    list(APPEND AXLE_TEST_TARGETS AxlePluginServicesTests)
+    add_test(NAME PluginServicesTests COMMAND $<TARGET_FILE:AxlePluginServicesTests> "${CMAKE_COMMAND}" "${CMAKE_CURRENT_SOURCE_DIR}/src/PluginBuildFixture")
+    set_tests_properties(PluginServicesTests PROPERTIES RUN_SERIAL TRUE LABELS "plugin;scene;cpu" TIMEOUT 180)
 endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 

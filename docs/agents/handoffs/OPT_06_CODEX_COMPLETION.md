@@ -84,3 +84,40 @@ integration and final full product gates remain open.
 `docs/reviews/OPT_06_CODEX_REVIEW.md` remains the acceptance ledger. No missing
 implementation or unavailable required gate may be relabeled as a pass. Existing
 `crash.log` is unrelated generated work and must not be staged or removed blindly.
+
+## Scene/backend correction checkpoint (2026-11-08)
+
+The current correction adds actual SDK backends for Project, Scene/EnTT, shared
+JobSystem, Jolt velocity controls and retained debug contributions; host ImGui
+controls/Inspector use the same context. A real external fixture compiles two
+Runtime DLLs (producer/dependent) and an Editor DLL through the standalone SDK.
+Generic scene extensions own nontrivial values, descriptor contexts and code;
+copy/duplicate/import use complete remaps and transaction commit before Start.
+Missing required/incompatible data faults readiness; opaque references reject
+unsafe copy. Failed initialization removes its scene/job side effects. Owner
+callbacks run in admission/dependency order, with reverse teardown. SDK calls
+also reject scheduler work stolen by the OS owner thread. Revoked gateway tables
+remain callable during deferred teardown; worker releases stay on owner retirement.
+
+Current-source Debug and Release focused gates pass 5/5, exit 0:
+PluginServicesTests, PluginBuildWorkflowTests, SceneDataBoundaryTests,
+AssetIdentityAndPersistenceTests and ArchitectureBoundaryChecks. Build/test logs:
+`build/opt06-completion/scene-corrections-build-final.log`,
+`scene-corrections-tests.log`, `scene-release-build.log`, `scene-release-tests.log`.
+The focused reviewer source-rechecked its reported repairs, independently rebuilt
+Debug service/data/asset targets and reported 4/4 focused checks plus the explicit
+persistence rerun passing, with no remaining P1/P2 in this chunk. It did not run
+Release or native product/window/pixel/restart tests. Its final notification hit a
+usage limit after that detailed recheck message; no broader acceptance is inferred.
+
+Remaining work is now concentrated in product composition. New
+`Editor/src/PluginSession.hpp/.cpp` is a draft, **not yet compiled or wired**.
+Do not count that model or the headless ImGui frame as a completed Editor workflow.
+Required next work: real Active/Desired/Draft and build/progress/cancel wiring;
+all dirty/private-document Save/Discard/Cancel and save failures; receipt-bound
+project/backend restart with successful child startup before parent close;
+crash/recovery/retry, project switch and close races; remaining private preview
+and cooker preflight paths; submitted rendering lifetime/native pixels; shipped
+project template/generator and complete external authoring proof; final full
+Debug/Release product gates and separate-context correction recheck. Keep phase
+acceptance NOT ACCEPTED until those are actually completed.

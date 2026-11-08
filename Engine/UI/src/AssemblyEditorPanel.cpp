@@ -121,11 +121,15 @@ namespace Axle {
         // 3. Recursive Assembly Hierarchy
         if (m_HasAssembly) {
             std::function<void(AssemblyNode&, Entity, int)> buildNode = [&](AssemblyNode& node, Entity parent, int index) {
-                Entity ent = m_PreviewScene->CreateEntity(node.Tag.empty() ? "Part" : node.Tag);
+                Entity ent = node.AuthoredUUID ? m_PreviewScene->CreateEntityWithUUID(UUID(node.AuthoredUUID), node.Tag.empty() ? "Part" : node.Tag)
+                                              : m_PreviewScene->CreateEntity(node.Tag.empty() ? "Part" : node.Tag);
                 if (parent) {
                     ent.SetParent(parent, false);
                 }
                 ent.GetComponent<TransformComponent>() = node.Transform;
+                for (const auto& section : node.PassiveSections) {
+                    m_PreviewScene->StorePassiveSection(ent, section.SectionName, section.Lines);
+                }
 
                 if (node.HasMesh) {
                     auto& mesh = ent.AddComponent<MeshInstance3D>();

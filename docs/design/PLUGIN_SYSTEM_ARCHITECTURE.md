@@ -355,6 +355,51 @@ cross-module `delete`. Do not store unstable numeric EnTT type indices in assets
 
 ## 8. Registration, EnTT and scene ownership
 
+### Implemented facade decision (2026-11-08 correction)
+
+The corrected OPT-06 implementation uses opaque C/POD host tables instead of
+exporting Engine C++ classes or vendor SDKs to DLLs. AxleRuntimeHost and
+AxleEditorHost own the canonical shared gateway tables; one application-owned
+PluginServiceSession supplies their callbacks to its existing Project, Scene,
+JobSystem, Jolt and renderer instances. The SDK import targets expose no Engine
+static libraries, EnTT, Jolt, enkiTS or ImGui implementation. Physics operations
+therefore call the single host Jolt backend through a narrow facade; Editor
+controls call the host ImGui implementation/context. A separate shared Jolt
+build is unnecessary for this facade because no Jolt types cross the SDK.
+This replaces the proposed direct vendor/matched C++ component surface above;
+it does not replace Jolt or create another scheduler/renderer.
+
+Each scene still owns one EnTT registry. Native data occupies a host-compiled
+wrapper pool keyed by stable type IDs on those same entities. A plugin allocates
+its private nontrivial payloads and supplies Create/Destroy/Serialize/Clone and
+lifecycle callbacks. No plugin-generated EnTT pool/vtable enters the host.
+Descriptors and their code remain pinned by each scene that used them, including
+an empty pool. The descriptor takes ownership of a non-null User context only
+after registration succeeds, with an explicit DestroyUser callback; the context
+must not also be transferred to the immediate generic resource registry.
+
+Session composition must admit modules in resolver dependency order. Scene
+phases run all data for an admitted owner before its dependents, with stable
+type/entity ordering inside that owner. Stop/destruction run in reverse order.
+Hierarchy duplicate/import transactions allocate and remap the complete entity
+graph and establish hierarchy/physics before invoking Start. Clone failure rolls
+back the whole new graph. Callback failure stops/faults the affected simulation.
+
+SDK access requires both the OS owner thread and zero scheduler task depth;
+work stolen by the owner thread still cannot access live ECS/physics/UI. Owner
+jobs use the existing JobSystem and its owner-token main-thread completion queue.
+Scene instance IDs change on Clear, rejecting completions for a replaced scene.
+Unbinding a host installs callable revoked operations, so retained destructors
+can safely use a borrowed table after service shutdown. Module Stop/FreeLibrary
+and final code retirement run on the loading thread, including worker releases.
+
+Canonical AxlePlugin sections contain type/schema/required/reference metadata and
+hex-encoded payload bytes. Missing data remains passive and byte-preserved;
+required/incompatible data blocks simulation, and unresolved entity references
+block unsafe copying. The scene, generic data document, Assembly and private
+Assembly Editor preview paths use the same extension seam. Full product UI/restart and
+native rendering/export gates are tracked separately in the OPT-06 review ledger.
+
 Scene continues to own one EnTT registry per scene. Plugins use it for their
 typed components; no parallel Vehicle entity database replaces the registry.
 An application-owned plugin session creates scene extension instances for edit,

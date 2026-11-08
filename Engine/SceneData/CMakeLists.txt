@@ -1,5 +1,7 @@
 add_library(AxleSceneData STATIC
     src/SceneData.cpp
+    src/SceneExtension.cpp
+    src/ExtensionDocument.cpp
     src/ComponentCodec.cpp
     src/Entity.cpp
     src/SceneCommandBuffer.cpp

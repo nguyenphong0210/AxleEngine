@@ -96,6 +96,7 @@ namespace {
                     for (const auto& raw : section.Lines) out << raw << '\n';
                 }
             }
+            if (!scene.SerializeExtensions(Entity{entity, const_cast<SceneData*>(&scene)}, out)) return {};
         }
         return out.str();
     }

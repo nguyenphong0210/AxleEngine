@@ -2,6 +2,7 @@
 #include <Axle/Types.hpp>
 #include <Axle/UUID.hpp>
 #include <Axle/ComponentCodec.hpp>
+#include <Axle/SceneExtension.hpp>
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 
@@ -78,8 +79,36 @@ namespace Axle {
         const std::vector<UnknownComponentSection>* GetPassiveSections(Entity entity) const;
         bool HasPassiveSections(Entity entity) const;
 
+        std::uint64_t GetInstanceId() const { return m_InstanceId; }
+        static SceneData* FindInstance(std::uint64_t id);
+        bool IsOwnerThread() const { return std::this_thread::get_id() == m_OwnerThread; }
+        std::shared_ptr<SceneExtension> GetExtension(const std::string& key) const;
+        bool SerializeExtensions(Entity entity, std::ostream& output) const;
+        bool DeserializeExtension(Entity entity, const std::string& section, const std::vector<std::string>& lines);
+        bool ExtensionsReady(std::vector<std::string>& errors) const;
+        bool CanCopyExtensions(Entity entity) const;
+        bool CopyExtensions(Entity destination, Entity source, const std::unordered_map<std::uint64_t, std::uint64_t>& remap);
+        bool StartExtensions();
+        void StopExtensions();
+        void ClearExtensions();
+        void DestroyExtensions(Entity entity);
+        bool UpdateExtensions(ExtensionPhase phase, float dt);
+        std::vector<ExtensionDebugLine> ExtractExtensionDebug() const;
+        class ExtensionTransaction {
+        public:
+            explicit ExtensionTransaction(SceneData& scene) : Scene(scene) { scene.BeginExtensionTransaction(); }
+            ~ExtensionTransaction() { if (!Finished) Scene.EndExtensionTransaction(false); }
+            ExtensionTransaction(const ExtensionTransaction&) = delete;
+            ExtensionTransaction& operator=(const ExtensionTransaction&) = delete;
+            bool Commit() { Finished = true; return Scene.EndExtensionTransaction(true); }
+        private:
+            SceneData& Scene;
+            bool Finished = false;
+        };
+
     protected:
-        void DestroyEntityData(Entity entity);
+        void DestroyEntityData(Entity entity, bool notifyExtensions = true);
+        void ClearData();
 
         entt::registry m_Registry;
         std::unique_ptr<SceneCommandBuffer> m_CommandBuffer;
@@ -89,8 +118,13 @@ namespace Axle {
         std::thread::id m_OwnerThread = std::this_thread::get_id();
         uint32_t m_IterationDepth = 0;
         std::unordered_set<entt::entity> m_Destroying;
+        std::uint64_t m_InstanceId = 0;
+        std::unordered_map<std::string, std::shared_ptr<SceneExtension>> m_Extensions;
 
         friend class Entity;
+        friend class SceneExtensionRegistry;
+        void BeginExtensionTransaction();
+        bool EndExtensionTransaction(bool commit);
     };
 
 }

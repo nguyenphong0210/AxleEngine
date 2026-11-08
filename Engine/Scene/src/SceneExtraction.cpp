@@ -314,6 +314,10 @@ namespace Axle {
         }
 
         world.SceneRevision = scene.GetTransformRevision();
+        for (const auto& line : scene.ExtractExtensionDebug()) {
+            world.DebugLines.push_back({line.CodeLease, {line.From[0], line.From[1], line.From[2]},
+                {line.To[0], line.To[1], line.To[2]}, {line.Color[0], line.Color[1], line.Color[2], line.Color[3]}});
+        }
         world.TotalEntities = registry.storage<entt::entity>() ? static_cast<uint32_t>(registry.storage<entt::entity>()->size()) : 0;
 
         return world;

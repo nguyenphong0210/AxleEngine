@@ -1789,9 +1789,9 @@ namespace Axle {
         }
 
         // 6.5. Jolt Physics Debug Wireframe Pass (Colliders, wheel suspension raycasts, bounds)
-        if (settings.ShowPhysicsDebug && m_PhysicsDebugRenderer) {
+        if (m_PhysicsDebugRenderer && ((settings.ShowPhysicsDebug && physicsScene) || !world.DebugLines.empty())) {
             PhysicsScene* activePhysics = physicsScene;
-            if (activePhysics) {
+            {
                 m_PhysicsDebugRenderer->Begin(camera.GetPosition(),
                                              camera.GetViewProjectionMatrixZO(),
                                              sceneTargetFormat,
@@ -1801,7 +1801,8 @@ namespace Axle {
                                              settings.PhysicsDepthBias,
                                              settings.PhysicsAlphaMultiplier);
 
-                activePhysics->DrawDebug(*m_PhysicsDebugRenderer, settings.PhysicsDrawSettings);
+                if (settings.ShowPhysicsDebug && activePhysics) activePhysics->DrawDebug(*m_PhysicsDebugRenderer, settings.PhysicsDrawSettings);
+                for (const auto& line : world.DebugLines) m_PhysicsDebugRenderer->DrawLineSegment(line.From, line.To, line.Color);
 
 
                 m_PhysicsDebugRenderer->End(Commands());

@@ -487,6 +487,7 @@ namespace Axle {
             }
 
             // Custom Entity Serializer Hook (for plugins e.g. SplineComponent, TerrainComponent)
+            if (!m_Scene->SerializeExtensions(entity, ss)) return {};
             if (m_Context.CustomEntitySerializer) {
                 m_Context.CustomEntitySerializer(entity, ss);
             }

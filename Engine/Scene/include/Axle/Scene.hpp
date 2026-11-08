@@ -127,6 +127,7 @@ namespace Axle {
         bool IsRuntimeActive() const { return m_RuntimeActive; }
         bool IsSimulationFaulted() const { return m_SimulationFaulted; }
         void StopAfterScriptReloadFailure() { OnRuntimeStop(m_RuntimePhysicsScene); m_SimulationFaulted = true; }
+        void StopAfterExtensionFailure() { OnRuntimeStop(m_RuntimePhysicsScene); m_SimulationFaulted = true; }
 
         // Script reload hooks (Script Bridge)
         void OnPreScriptReload();
@@ -136,11 +137,13 @@ namespace Axle {
         const UIDataContext& GetUIDataContext() const { return m_UIDataContext; }
 
     private:
+        bool RunExtensionPhase(ExtensionPhase phase, float dt);
         PhysicsScene* m_RuntimePhysicsScene = nullptr;
         UIDataContext m_UIDataContext;
         bool m_PhaseTracingEnabled = false;
         bool m_RuntimeActive = false;
         bool m_SimulationFaulted = false;
+        float m_ExtensionFixedDelta = 0;
         std::unordered_set<entt::entity> m_PendingPhysicsEntities;
         std::vector<SimulationPhase> m_PhaseTrace;
 

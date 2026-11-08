@@ -404,9 +404,12 @@ namespace Axle {
 
         // 5. Physics debug wireframes
         PhysicsDebugRenderer* activeDebug = physicsDebugRenderer ? physicsDebugRenderer : m_InternalDebugRenderer.get();
-        if (settings.ShowPhysicsDebug && activeDebug && physicsScene) {
+        if (activeDebug && ((settings.ShowPhysicsDebug && physicsScene) || !world.DebugLines.empty())) {
             activeDebug->Begin(camera.GetPosition(),settings.PhysicsDepthBias,settings.PhysicsAlphaMultiplier);
-            physicsScene->DrawDebug(*activeDebug, settings.PhysicsDrawSettings);
+            if (settings.ShowPhysicsDebug && physicsScene) physicsScene->DrawDebug(*activeDebug, settings.PhysicsDrawSettings);
+            for (const auto& line : world.DebugLines) activeDebug->DrawLine(
+                JPH::RVec3(line.From.x, line.From.y, line.From.z), JPH::RVec3(line.To.x, line.To.y, line.To.z),
+                JPH::Color(static_cast<uint8_t>(line.Color.r * 255), static_cast<uint8_t>(line.Color.g * 255), static_cast<uint8_t>(line.Color.b * 255), static_cast<uint8_t>(line.Color.a * 255)));
             activeDebug->End(camera.GetViewProjectionMatrix());
             m_PhysicsDebugLineCount=activeDebug->GetLineCount();
         }

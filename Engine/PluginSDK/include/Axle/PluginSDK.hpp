@@ -27,6 +27,10 @@ struct ComponentType {
     bool Required;
     bool ContainsEntityReferences;
     void* User;
+    // Ownership transfers only when RegisterComponent succeeds. The descriptor
+    // destroys this context after its last value/scene pin, before code unload.
+    // A transferred context must not also be owned by register_resource.
+    void (*DestroyUser)(void*);
     void* (*Create)(void*, EntityRef, const char*, std::uint32_t);
     void (*Destroy)(void*, void*);
     bool (*Serialize)(void*, const void*, TextSink, void* sinkUser);
@@ -40,10 +44,12 @@ struct RuntimeServices {
     std::uint32_t Version;
     const char* SdkFingerprint;
     void* User;
-    const void* (*Address)(void*, ServiceAddress);
+    const void* (*Address)(void*, std::uint64_t owner, ServiceAddress, std::uint64_t scene);
     bool (*RegisterComponent)(void*, std::uint64_t owner, const ComponentType*);
-    bool (*GetTransform)(void*, EntityRef, Transform*);
-    bool (*SetTransform)(void*, EntityRef, const Transform*);
+    bool (*GetTransform)(void*, std::uint64_t owner, EntityRef, Transform*);
+    bool (*SetTransform)(void*, std::uint64_t owner, EntityRef, const Transform*);
+    bool (*GetLinearVelocity)(void*, std::uint64_t owner, EntityRef, float* out3);
+    bool (*SetLinearVelocity)(void*, std::uint64_t owner, EntityRef, const float* velocity3);
     bool (*SetComponent)(void*, std::uint64_t owner, EntityRef, const char* typeId, const char* payload, std::uint32_t bytes);
     void* (*GetComponent)(void*, std::uint64_t owner, EntityRef, const char* typeId);
     bool (*RemoveComponent)(void*, std::uint64_t owner, EntityRef, const char* typeId);
@@ -89,6 +95,7 @@ AXLE_RUNTIME_HOST_API const char* AxleRuntimeHost_ToolchainFingerprint() noexcep
 AXLE_RUNTIME_HOST_API bool AxleRuntimeHost_BindV1(const Axle::SDK::RuntimeServices*) noexcept;
 AXLE_RUNTIME_HOST_API bool AxleRuntimeHost_UnbindV1(void* user) noexcept;
 AXLE_EDITOR_HOST_API const Axle::SDK::EditorServices* AxleEditorHost_GetV1() noexcept;
+AXLE_EDITOR_HOST_API const char* AxleEditorHost_SdkFingerprint() noexcept;
 AXLE_EDITOR_HOST_API bool AxleEditorHost_BindV1(const Axle::SDK::EditorServices*) noexcept;
 AXLE_EDITOR_HOST_API bool AxleEditorHost_UnbindV1(void* user) noexcept;
 }

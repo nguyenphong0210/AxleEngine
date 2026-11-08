@@ -3,7 +3,7 @@ Collaboration policy (2026-11-07): for future released scopes, Gemini implements
 # Architecture Optimization Roadmap
 
 Updated: **2026-11-08**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **OPT-07/08 plugin foundations accepted after repairs and native verification; detailed plugin features are deferred by user scope. OPT-09 is not released. Earlier accepted prerequisites remain accepted**.
+Status: **OPT-07/08 plugin foundations accepted after repairs and native verification; detailed plugin features are deferred by user scope. OPT-09 selected Runtime/export foundations are implemented and verified; OPT-10 is not released. Earlier accepted prerequisites remain accepted**.
 
 ## Start here
 
@@ -29,14 +29,16 @@ restart/recovery/documents, native UI and D3D12/Vulkan submitted-lifetime pixels
 OPT-07/08 were subsequently delivered by Gemini and reviewed under the narrowed
 foundation scope below.
 
-**Latest completed assignment: OPT-07/08 plugin foundation review.** On 2026-11-08
+**Accepted prerequisite: OPT-07/08 plugin foundation review.** On 2026-11-08
 the user explicitly requested build/load/lifecycle and architecture verification,
 with detailed plugin functionality to be completed later. Corrected source
 `bd22550` passes Debug/Release 11/11 focused checks, actual six-DLL Editor startup
 on D3D12/Vulkan, persistence/copy/Play/Stop/unload and shipping script isolation.
 The [bounded acceptance](reviews/OPT_07_08_FOUNDATION_REVIEW.md) distinguishes the
 working SDK foundations from advanced development prototypes. No Engine source
-changed. This does not establish full feature completeness or release OPT-09.
+changed. This does not establish full feature completeness. The subsequent user assignment explicitly releases OPT-09 only.
+
+**Latest completed assignment: Codex OPT-09, PLG-22/23 and P41-26.** Static selected Runtime and snapshot-bound export pass final Debug/Release 69/69 CTest, five exact product combinations per configuration, D3D12/Vulkan detached player launches and package/error checks (30/30 command outcomes each). Separate-context source rechecks found no remaining concrete P1/P2; execution evidence is Codex coordinator evidence. See the [delivery record](reviews/OPT_09_IMPLEMENTATION.md). Detailed plugin features stay deferred; OPT-10 is not released.
 
 **Accepted prerequisite: Codex OPT-04, P41-01..P41-11.** The user reassigned
 implementation from Gemini to Codex on 2026-11-07; [current handoff](agents/handoffs/OPT_04_CODEX.md).
@@ -362,13 +364,13 @@ rejects unsupported selected composition. See the [foundation review](reviews/OP
 
 **Work:** Statically compose only selected Runtime modules; cook/export from the same validated selection snapshot; reconcile final module and product boundaries.
 
-- [ ] **PLG-22:** Selected static Runtime.
-- [ ] **PLG-23:** Snapshot-bound cook/export.
-- [ ] **P41-26:** Build and ownership boundaries.
+- [x] **PLG-22:** Selected static Runtime.
+- [x] **PLG-23:** Snapshot-bound cook/export.
+- [x] **P41-26:** Build and ownership boundaries.
 
 **Exit:** A packaged player launches with the expected content. Runtime builds with Editor disabled; excluded plugins are absent from configuration/linking/shipped code, not merely idle. Stale build receipts and missing required data prevent misleading export.
 
-**Evidence:** Pending; implementation/review is not claimed here.
+**Evidence:** [Final implementation, correction review and verification](reviews/OPT_09_IMPLEMENTATION.md): 69/69 CTest and 30/30 selected native export/player command outcomes per configuration. Editor-free CPU suite 2/2; Editor-only configure passes. The GL option controls backend admission, with compatibility implementation retained.
 
 ### OPT-10 - Accept and enforce the architecture
 

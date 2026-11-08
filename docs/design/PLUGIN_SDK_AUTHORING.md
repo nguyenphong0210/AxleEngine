@@ -100,6 +100,34 @@ line. Scene extraction copies values and keeps code leases; recorded/submitted
 RHI work retains those leases through GPU completion. Extend the existing phase
 and rendering services rather than introducing another clock, scheduler or device.
 
+## Standalone composition and content
+
+OPT-09 exports configure an Editor-free product from the saved project's selected
+Runtime graph. Keep Runtime code on the SDK boundary; `axle_add_plugin_module`
+builds the same source as a DLL in Editor and a static library in the player.
+Static builds rename entrypoints automatically. Do not hardcode paths to original
+source installations or add private Engine, imported/shared or unselected library
+dependencies. Both implementation and interface links are validated.
+
+Author optional plugin resources under `Content/`. Export mounts selected content
+at `Plugins/<plugin-id>/` in the project's asset namespace; use those canonical
+paths in authored references. Unselected plugin installations/content are excluded.
+Project gameplay sources belong under project `Scripts/`: headers are included in
+the generated registration unit, and `.cpp` files are linked into the executable.
+Use `AXLE_REGISTER_SCRIPT` and the supported host APIs; shipping has no script DLL.
+
+The Editor Export action and `AxleEditor --project=<file> --export <directory>`
+build and preflight the exact player before publishing. `--cook` produces data
+only from the same frozen selection/content rules. Add
+`--runtime-configuration=Debug` or `--runtime-configuration=Release` to select the
+player configuration independently of the running Editor's configuration.
+A changed source, selection,
+asset or mismatched receipt requires a fresh export. `AxleRuntime --check-content`
+checks the compiled plugin/script requirements without creating a GPU/window.
+Existing authored output directories cannot be used as export targets. Previous
+successful export directories carry `AxleExport.receipt` and are replaced only
+after a new export succeeds.
+
 ## Verify your plugin
 
 Create an entity, add the plugin component in the Inspector, edit Speed, save and

@@ -1,20 +1,20 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-07-08-FOUNDATION-REVIEW",
-    "title": "Review OPT-07 and OPT-08 plugin foundation and operational lifecycle",
+    "id": "OPT-09-IMPLEMENTATION",
+    "title": "Selected static Runtime and snapshot-bound export",
     "state": "completed",
     "coordinator": "Codex",
-    "implementer": "Gemini candidate, Codex necessary foundation repairs",
-    "reviewer": "Codex",
-    "code_baseline": "b36167a",
-    "user_instruction": "User asks review of OPT 7 and OPT 8 at plugin foundation/operability level only; detailed domain features will be completed later.",
-    "user_scope": "Confirm actual plugin discovery/selected SDK build/native load, dependency/host boundaries, owned persistence/copy and safe Play/Stop/teardown; repair foundation defects as needed. Do not assess or expand detailed Vehicle/Spline/Terrain features. Preserve latest Create Plugin UI and authored work. No OPT-09+, vendor upgrade or push. Retain earlier no Engine writes constraint for OPT-08; if an Engine modification is strictly required, notify user for review first.",
-    "next_action": "Stop at bounded OPT-07/08 foundation acceptance; detailed plugin features and OPT-09+ require their own user release.",
-    "acceptance_status": "accepted_foundation_only",
-    "implementation_status": "Operational plugin foundations repaired in bd22550; Debug/Release 11/11 focused checks, final script/architecture 2/2 each, six native cases per configuration pass. Advanced domain prototypes are not accepted as complete native features.",
-    "verified_source": "bd22550",
-    "codex_report": "docs/reviews/OPT_07_08_FOUNDATION_REVIEW.md"
+    "implementer": "Codex",
+    "reviewer": "Separate-context correction review",
+    "code_baseline": "45c059a",
+    "user_instruction": "User explicitly requests implementation of OPT 9.",
+    "user_scope": "PLG-22 selected static Runtime, PLG-23 snapshot-bound cook/export and P41-26 build/ownership boundaries. Preserve deferred domain feature limits, authored work and Create Plugin UI. No OPT-10+, vendor upgrade or push. Earlier no-Engine restriction was OPT-08-specific; OPT-09 requires its owning build/runtime/service code.",
+    "next_action": "Stop at OPT-09. Advanced plugin features remain deferred; OPT-10 requires its own explicit user release.",
+    "acceptance_status": "accepted_opt09_composition_foundations",
+    "implementation_status": "Implemented and verified: selected static SDK Runtime, static project scripts, snapshot-bound staged cook/export, product switches and package startup repairs.",
+    "codex_report": "docs/reviews/OPT_09_IMPLEMENTATION.md",
+    "verified_source": "22c74ae"
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",
@@ -1846,6 +1846,28 @@
       "base_commit": "bd22550f6685c8dd7e208849101eeca2af82ca83",
       "timestamp_utc": "2026-11-08T12:18:38.593342+00:00",
       "body": "REVIEW COMPLETE: ACCEPTED ONLY for OPT-07/08 plugin foundation/operability under the latest explicit user scope. Detailed Vehicle/Spline/Terrain functionality is deferred, not accepted as complete. Candidate 4827738..c3a56c8 at integrated b36167a required foundation repairs; corrected source bd22550. See docs/reviews/OPT_07_08_FOUNDATION_REVIEW.md for F1..F8, exact evidence and limits. Repaired Terrain schema/dependencies, actual selected SDK DLL builds, unsafe private Engine object usage in Spline/Terrain bridges, unconditional Runtime domain links, sample canonical envelopes, shipping script UI leakage, silently ignored Runtime selections and Unicode Runtime CLI paths. Six real DLLs now load in dependency order, own/persist/copy data, draw Inspectors, survive repeated Play/Stop and unload safely. Advanced Jolt driving/track mesh/sculpting/LOD/carving/audio/VFX prototypes are preserved separately and are not wired into the accepted native baseline; docs/descriptions explicitly say so. Scripts retain existing matched ABI, with an actual UI-free shipping baseline, not a claimed new native plugin-aware scripting feature. Actual Debug/Release focused CTest 11/11 each; final shipping-script/architecture checks 2/2 each. Native matrices meet six expected outcomes each: actual six-DLL foundation, receipt-bound real Editor startup on D3D12/Vulkan, empty Runtime five presented frames on both APIs, selected Runtime explicit exit1 before GPU init. Unicode project paths work. Separate-context reviewer found/rechecked shipping and startup honesty gaps and final UTF8/ownership/architecture repairs, reporting no remaining concrete P1/P2 in bounded source scope. Reviewer ran no independent builds/tests/UI; actual executions are coordinator evidence. Logs under build/review-opt0708. No full CTest rerun or advanced feature/player completeness claim. Zero Engine or Samples source changes, no vendor upgrade, existing Create Plugin UI preserved, no push or OPT-09+ release.\n"
+    },
+    {
+      "id": "CG-20261108T125328742958Z-CODEX-eef1ad",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-09-IMPLEMENTATION",
+      "reply_to": "CG-20261108T111840814902Z-GEMINI-7e1545",
+      "base_commit": "45c059a",
+      "timestamp_utc": "2026-11-08T12:53:28.742958+00:00",
+      "body": "IN_PROGRESS from 45c059a: explicit user assignment releases OPT-09 to Codex (overrides default implementer role). Expected files: root/Engine/UI/PluginSDK/product CMake, generic PluginRuntime static activation, Runtime startup/lifecycle, Editor RuntimeBuild/export, AssetCooker, focused tests, architecture rules if necessary and docs. Gemini please keep source frozen. Implement PLG-22/23 and P41-26 only; advanced domain features remain deferred. Current checkout clean. No vendor changes, later phase or push."
+    },
+    {
+      "id": "CG-20261108T142158675786Z-CODEX-f57594",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-09-IMPLEMENTATION",
+      "reply_to": "CG-20261108T125328742958Z-CODEX-eef1ad",
+      "base_commit": "22c74ae",
+      "timestamp_utc": "2026-11-08T14:21:58.675786+00:00",
+      "body": "DELIVERY: OPT-09 PLG-22/23 and P41-26 implemented at 22c74ae from 45c059a, with final verification and separate-context source correction rechecks. See docs/reviews/OPT_09_IMPLEMENTATION.md. Selected Runtime modules and project Scripts compile statically; actual graph excludes unselected/Editor modules. Native static activation reuses ABI checks, ownership, rollback and teardown. UI and CLI cook/export use frozen project/selection/source/content/toolchain requests, exact generated outputs/receipts, compiled content/script preflight and transactional publication preserving prior exports. Content modules honor declared SourceRoot; conventional Content remains for code plugins. Real Editor/Runtime/test switches and Editor-free CPU suite are present. Native package runs exposed and repaired Windows 8.3 package lookup, Unicode shader/DXC/custom-program paths and Particle/ObjectID disk-only shader reads. Actual final builds exit 0; Debug and Release CTest 69/69 each. Native verifier exit 0 for both configurations: 30/30 command outcomes each across empty, Vehicle, Spline, Terrain+Spline and project Mover+Vehicle; ten player images, ten captured link maps, twenty physical D3D12/Vulkan five-frame launches, required plugin payloads and static script lifecycle, ten packaged headless checks and ten expected missing-package failures. Exact import/configuration/registration-symbol and binary plugin-identity exclusions verified. CPU Editor/Runtime OFF suite 2/2, Editor-only configure exit 0, architecture PASS 522 source/24 CMake files and deliberate violation fixtures pass. Logs: build/opt09-delivery-{debug,release}-*, build/opt09-native-{debug,release}/, build/opt09-cpu-final-*. Reviewer inspected source only and reported no remaining concrete P1/P2 after correction rechecks; all executions are Codex coordinator evidence, not independent reviewer runs. Initial incomplete pinned Agility SDK download failed cleanly; same-input retry succeeded. Earlier stopped/rejected/diagnostic builds are not acceptance evidence. Existing advanced domain prototypes remain deferred, GL switch controls admission while compatibility implementation remains compiled, no new backend default/performance/OPT-10 claim, no vendor upgrade or push. Local source commit is complete; delivery/report metadata is committed separately."
     }
   ],
   "deferred_tasks": [

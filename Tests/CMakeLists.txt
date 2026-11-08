@@ -177,6 +177,11 @@ target_include_directories(AxleProjectUnitTests PRIVATE src "${CMAKE_SOURCE_DIR}
 target_link_libraries(AxleProjectUnitTests PRIVATE Axle::Project Axle::Scene Axle::UI)
 add_test(NAME ProjectStartupTests COMMAND $<TARGET_FILE:AxleProjectUnitTests>)
 
+add_executable(AxlePluginFoundationTests EXCLUDE_FROM_ALL src/Test_PluginFoundation.cpp)
+target_link_libraries(AxlePluginFoundationTests PRIVATE Axle::Plugin Axle::Project)
+add_test(NAME PluginFoundationTests COMMAND $<TARGET_FILE:AxlePluginFoundationTests>)
+set_tests_properties(PluginFoundationTests PROPERTIES LABELS "plugin;cpu")
+
 # Explicit baseline toolchain; failure probes must validate their exact cause.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 

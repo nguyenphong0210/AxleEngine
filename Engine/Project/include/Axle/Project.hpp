@@ -3,14 +3,19 @@
 #include <string>
 #include <filesystem>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace Axle {
 
     struct ProjectConfig {
+        static constexpr int CurrentSchemaVersion = 1;
+        int SchemaVersion = CurrentSchemaVersion;
         std::string Name = "Untitled";
         std::filesystem::path StartScene;
         std::filesystem::path AssetDirectory = "assets";
         std::string RHIBackend = "Direct3D12"; // "Direct3D12", "Vulkan", "OpenGL"
+        std::vector<std::string> SelectedPlugins;
     };
 
     class Project {

@@ -25,10 +25,13 @@ namespace Axle {
         std::stringstream fout;
         fout << "# Axle Engine Project Configuration File\n";
         fout << "Project:\n";
+        fout << "  SchemaVersion: " << config.SchemaVersion << "\n";
         fout << "  Name: " << config.Name << "\n";
         fout << "  StartScene: " << config.StartScene.string() << "\n";
         fout << "  AssetDirectory: " << config.AssetDirectory.string() << "\n";
         fout << "  RHIBackend: " << config.RHIBackend << "\n";
+        fout << "  Plugins:\n";
+        for (const auto& id : config.SelectedPlugins) fout << "    - " << id << "\n";
 
         std::string outError;
         if (!FileSystem::WriteTextFileAtomically(filepath, fout.str(), &outError)) {
@@ -52,6 +55,9 @@ namespace Axle {
         std::istringstream fin(content);
         std::string line;
         bool inProjectSection = false;
+        bool inPlugins = false;
+        bool sawSchema = false;
+        std::vector<std::string> selectedPlugins;
 
         while (std::getline(fin, line)) {
             std::string trimmed = Trim(line);
@@ -59,11 +65,27 @@ namespace Axle {
 
             if (trimmed == "Project:") {
                 inProjectSection = true;
+                inPlugins = false;
                 continue;
             }
 
             if (inProjectSection) {
-                if (trimmed.rfind("Name:", 0) == 0) {
+                if (trimmed == "Plugins:") {
+                    inPlugins = true;
+                } else if (inPlugins && trimmed.rfind("- ", 0) == 0) {
+                    const auto id = Trim(trimmed.substr(2));
+                    if (id.empty() || std::find(selectedPlugins.begin(), selectedPlugins.end(), id) != selectedPlugins.end()) {
+                        AXLE_WARN("ProjectSerializer: invalid or duplicate plugin selection in '{0}'", filepath.string());
+                        return false;
+                    }
+                    selectedPlugins.push_back(id);
+                } else if (trimmed.rfind("SchemaVersion:", 0) == 0) {
+                    try { m_Project->GetConfig().SchemaVersion = std::stoi(Trim(trimmed.substr(14))); }
+                    catch (...) { AXLE_WARN("ProjectSerializer: invalid schema version in '{0}'", filepath.string()); return false; }
+                    sawSchema = true;
+                    inPlugins = false;
+                } else if (trimmed.rfind("Name:", 0) == 0) {
+                    inPlugins = false;
                     m_Project->GetConfig().Name = Trim(trimmed.substr(5));
                 } else if (trimmed.rfind("StartScene:", 0) == 0) {
                     m_Project->GetConfig().StartScene = Trim(trimmed.substr(11));
@@ -71,9 +93,16 @@ namespace Axle {
                     m_Project->GetConfig().AssetDirectory = Trim(trimmed.substr(15));
                 } else if (trimmed.rfind("RHIBackend:", 0) == 0) {
                     m_Project->GetConfig().RHIBackend = Trim(trimmed.substr(11));
+                    inPlugins = false;
                 }
             }
         }
+
+        if (sawSchema && m_Project->GetConfig().SchemaVersion != ProjectConfig::CurrentSchemaVersion) {
+            AXLE_WARN("ProjectSerializer: unsupported project schema {0} in '{1}'", m_Project->GetConfig().SchemaVersion, filepath.string());
+            return false;
+        }
+        m_Project->GetConfig().SelectedPlugins = std::move(selectedPlugins);
 
         m_Project->m_ProjectDirectory = filepath.parent_path();
         if (m_Project->m_ProjectDirectory.empty()) {

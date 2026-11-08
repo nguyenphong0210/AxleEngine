@@ -714,6 +714,23 @@ if(WIN32)
     add_test(NAME SplinePluginTests COMMAND $<TARGET_FILE:AxleSplinePluginTests> "${CMAKE_SOURCE_DIR}")
     set_tests_properties(SplinePluginTests PROPERTIES LABELS "plugin;spline;physics;cpu")
 endif()
+if (TARGET AxleTerrainRuntime)
+    add_executable(AxleTerrainPluginTests src/Test_TerrainPlugin.cpp)
+    target_include_directories(AxleTerrainPluginTests PRIVATE
+        "${CMAKE_SOURCE_DIR}/Plugins/Terrain/include"
+        "${CMAKE_SOURCE_DIR}/Plugins/Terrain/Runtime/include"
+        "${CMAKE_SOURCE_DIR}/Plugins/Terrain/Editor/include"
+        "${CMAKE_SOURCE_DIR}/Plugins/Spline/include"
+        "${CMAKE_SOURCE_DIR}/Plugins/Spline/Runtime/include"
+        "${CMAKE_SOURCE_DIR}/Engine/PluginSDK/include"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/glm"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/entt/src"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/JoltPhysics")
+    target_link_libraries(AxleTerrainPluginTests PRIVATE Axle::TerrainRuntime Axle::TerrainEditor Axle::SplineRuntime Axle::Physics Axle::Scene Axle::Core Axle::Plugin)
+    list(APPEND AXLE_TEST_TARGETS AxleTerrainPluginTests)
+    add_test(NAME TerrainPluginTests COMMAND $<TARGET_FILE:AxleTerrainPluginTests> "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(TerrainPluginTests PROPERTIES LABELS "plugin;terrain;physics;cpu")
+endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 
 # Explicit review gate for known OPT-06 contract failures. Keep out of the

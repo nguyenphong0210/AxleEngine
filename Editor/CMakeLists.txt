@@ -36,6 +36,7 @@ target_link_libraries(AxleEditor PRIVATE
     Axle::Spline
     Axle::SplineEditor
     Axle::Terrain
+    Axle::TerrainEditor
     Axle::Animation
     Axle::VFX
 )

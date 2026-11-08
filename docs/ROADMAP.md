@@ -323,7 +323,7 @@ for exact commands, logs, reviewer limits and later PLG-22/23 boundaries.
 **Work:** Separate Runtime/Editor modules for Spline and Terrain; declare project script dependencies against shared hosts and the SDK. These are conversions of existing capabilities, not new terrain or scripting feature expansion.
 
 - [x] **PLG-19:** Spline plugin conversion.
-- [ ] **PLG-20:** Terrain plugin conversion.
+- [x] **PLG-20:** Terrain plugin conversion.
 - [ ] **PLG-21:** Project script boundary.
 
 **Exit:** Optional systems use the common plugin lifecycle and selection graph. Scripts do not pull Editor UI or unselected domain libraries into Runtime.

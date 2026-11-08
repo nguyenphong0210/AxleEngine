@@ -6,7 +6,14 @@
 #include <memory>
 #include <vector>
 
+namespace Axle {
+    class Entity;
+    class PhysicsScene;
+}
+
 namespace Axle::Terrain {
+
+    struct TerrainComponent;
 
     class TerrainMesh {
     public:
@@ -46,6 +53,14 @@ namespace Axle::Terrain {
 
         // Build a single unified VAO for the entire terrain (optimal for single-draw-call scenes)
         static std::shared_ptr<VertexArray> BuildCombinedVAO(const TerrainData& terrain);
+
+        // Unified runtime terrain builder (creates/updates mesh VAO and Jolt physics collider)
+        static void BuildTerrainRuntime(
+            Entity entity,
+            TerrainComponent& tc,
+            PhysicsScene* physicsScene,
+            bool createRHI = true
+        );
     };
 
-}
+} // namespace Axle::Terrain

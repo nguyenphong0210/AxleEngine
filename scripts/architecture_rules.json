@@ -138,7 +138,12 @@
       "Axle::Renderer",
       "Axle::Physics",
       "Axle::Scene",
-      "Axle::Spline"
+      "Axle::Spline",
+      "Axle::SplineRuntime",
+      "AxleSplineRuntime",
+      "AxleSplineEditor",
+      "AxleTerrainRuntime",
+      "Axle::TerrainRuntime"
     ],
     "UI": [
       "Axle::UI2D",
@@ -304,8 +309,7 @@
       "forbidden_to": [
         "UI",
         "Editor",
-        "Runtime",
-        "PluginSDK"
+        "Runtime"
       ],
       "description": "Terrain plugin must not depend on Editor UI or host applications."
     },
@@ -675,27 +679,6 @@
           "kind": "SourceInclude",
           "file": "Engine/Physics/include/Axle/PhysicsMaterial.hpp",
           "to": "Axle/AssetDSL.hpp"
-        }
-      ]
-    },
-    {
-      "id": "ALLOW-010",
-      "from_module": "Terrain",
-      "to_module": "UI",
-      "files": [
-        "Plugins/Terrain/CMakeLists.txt",
-        "Plugins/Terrain/src/TerrainEditor.cpp",
-        "Plugins/Terrain/include/AxleTerrain/TerrainEditor.hpp"
-      ],
-      "evidence": "Terrain plugin embeds ImGui editor tooling directly and links Axle::UI.",
-      "owning_package": "PLG-20",
-      "expiration_condition": "Terrain Runtime/Editor tooling separation in PLG-20 completes",
-      "edges": [
-        {
-          "kind": "CMakeLink",
-          "file": "Plugins/Terrain/CMakeLists.txt",
-          "from_target": "AxleTerrain",
-          "to": "Axle::UI"
         }
       ]
     }

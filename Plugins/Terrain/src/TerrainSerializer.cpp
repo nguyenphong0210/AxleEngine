@@ -5,6 +5,7 @@
 #include <Axle/Log.hpp>
 #include <algorithm>
 #include <filesystem>
+#include <sstream>
 #include <string>
 
 namespace Axle::Terrain {
@@ -113,4 +114,97 @@ namespace Axle::Terrain {
         return true;
     }
 
-}
+    std::string TerrainSerializer::SerializeToString(const TerrainComponent& comp) {
+        std::ostringstream ss;
+        ss << "ResolutionX: " << comp.Data.GetResolutionX() << "\n";
+        ss << "ResolutionZ: " << comp.Data.GetResolutionZ() << "\n";
+        ss << "SpacingX: " << comp.Data.GetSpacingX() << "\n";
+        ss << "SpacingZ: " << comp.Data.GetSpacingZ() << "\n";
+        if (!comp.DataFilePath.empty()) {
+            ss << "DataFilePath: " << comp.DataFilePath << "\n";
+        }
+        ss << "UseChunkedLOD: " << (comp.UseChunkedLOD ? "true" : "false") << "\n";
+        ss << "ChunkSize: " << comp.ChunkSize << "\n";
+        ss << "GeneratePhysics: " << (comp.GeneratePhysics ? "true" : "false") << "\n";
+        ss << "Friction: " << comp.Friction << "\n";
+        ss << "Restitution: " << comp.Restitution << "\n";
+        return ss.str();
+    }
+
+    bool TerrainSerializer::DeserializeFromString(TerrainComponent& comp, const std::string& text) {
+        std::istringstream ss(text);
+        std::string line;
+        std::vector<std::string> lines;
+        while (std::getline(ss, line)) {
+            lines.push_back(line);
+        }
+
+        u32 resX = 128;
+        u32 resZ = 128;
+        f32 spacingX = 1.0f;
+        f32 spacingZ = 1.0f;
+        std::string dataFilePath;
+        bool useChunkedLOD = false;
+        u32 chunkSize = 32;
+        bool generatePhysics = true;
+        f32 friction = 0.85f;
+        f32 restitution = 0.05f;
+
+        for (const auto& rawLine : lines) {
+            std::string trimmed = Trim(rawLine);
+            if (trimmed.empty() || trimmed[0] == '#') continue;
+
+            if (trimmed.rfind("ResolutionX:", 0) == 0) {
+                try { resX = std::stoul(Trim(trimmed.substr(12))); } catch (...) {}
+            } else if (trimmed.rfind("ResolutionZ:", 0) == 0) {
+                try { resZ = std::stoul(Trim(trimmed.substr(12))); } catch (...) {}
+            } else if (trimmed.rfind("SpacingX:", 0) == 0) {
+                try { spacingX = std::stof(Trim(trimmed.substr(9))); } catch (...) {}
+            } else if (trimmed.rfind("SpacingZ:", 0) == 0) {
+                try { spacingZ = std::stof(Trim(trimmed.substr(9))); } catch (...) {}
+            } else if (trimmed.rfind("DataFilePath:", 0) == 0) {
+                dataFilePath = Trim(trimmed.substr(13));
+                if (!dataFilePath.empty() && (dataFilePath.front() == '"' || dataFilePath.front() == '\'')) {
+                    dataFilePath = dataFilePath.substr(1, dataFilePath.length() - 2);
+                }
+            } else if (trimmed.rfind("UseChunkedLOD:", 0) == 0) {
+                useChunkedLOD = (Trim(trimmed.substr(14)) == "true");
+            } else if (trimmed.rfind("ChunkSize:", 0) == 0) {
+                try { chunkSize = std::stoul(Trim(trimmed.substr(10))); } catch (...) {}
+            } else if (trimmed.rfind("GeneratePhysics:", 0) == 0) {
+                generatePhysics = (Trim(trimmed.substr(16)) == "true");
+            } else if (trimmed.rfind("Friction:", 0) == 0) {
+                try { friction = std::stof(Trim(trimmed.substr(9))); } catch (...) {}
+            } else if (trimmed.rfind("Restitution:", 0) == 0) {
+                try { restitution = std::stof(Trim(trimmed.substr(12))); } catch (...) {}
+            }
+        }
+
+        comp.DataFilePath = dataFilePath;
+        comp.UseChunkedLOD = useChunkedLOD;
+        comp.ChunkSize = chunkSize;
+        comp.GeneratePhysics = generatePhysics;
+        comp.Friction = friction;
+        comp.Restitution = restitution;
+
+        bool loadedFromFile = false;
+        if (!dataFilePath.empty()) {
+            std::filesystem::path resolved = dataFilePath;
+            if (!FileSystem::Exists(resolved)) {
+                resolved = FileSystem::ResolveAssetPath(dataFilePath);
+            }
+            if (FileSystem::Exists(resolved)) {
+                if (comp.Data.LoadFromFile(resolved.string())) {
+                    loadedFromFile = true;
+                }
+            }
+        }
+
+        if (!loadedFromFile) {
+            comp.Data.Resize(resX, resZ, spacingX, spacingZ);
+        }
+
+        return true;
+    }
+
+} // namespace Axle::Terrain

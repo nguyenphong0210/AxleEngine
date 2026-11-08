@@ -1,0 +1,25 @@
+{
+  "id": "axle.terrain",
+  "name": "Axle Terrain & Sculpting System",
+  "version": "1.0.0",
+  "category": "Environment",
+  "author": "AxleEngine Team",
+  "description": "Heightfield terrain generation, multithreaded chunked LOD, Jolt physics collider, and spline carving",
+  "modules": [
+    {
+      "name": "TerrainRuntime",
+      "type": "Runtime",
+      "dependencies": [
+        "axle.spline:SplineRuntime"
+      ]
+    },
+    {
+      "name": "TerrainEditor",
+      "type": "Editor",
+      "dependencies": [
+        "TerrainRuntime",
+        "axle.spline:SplineEditor"
+      ]
+    }
+  ]
+}

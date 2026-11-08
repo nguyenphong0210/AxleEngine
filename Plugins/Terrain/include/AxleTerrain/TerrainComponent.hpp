@@ -2,7 +2,7 @@
 
 #include <AxleTerrain/TerrainData.hpp>
 #include <AxleTerrain/TerrainChunk.hpp>
-#include <AxleTerrain/TerrainSculptor.hpp>
+#include <AxleTerrain/TerrainSculptTypes.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/VertexArray.hpp>
 #include <memory>
@@ -32,4 +32,4 @@ namespace Axle::Terrain {
             : Data(static_cast<u32>(resX), static_cast<u32>(resZ), spacingX, spacingZ) {}
     };
 
-}
+} // namespace Axle::Terrain

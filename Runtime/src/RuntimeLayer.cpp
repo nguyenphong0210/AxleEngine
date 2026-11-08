@@ -133,15 +133,10 @@ namespace Axle {
                 auto terrainView = m_Scene->GetRegistry().view<Terrain::TerrainComponent>();
                 for (auto e : terrainView) {
                     auto& tc = terrainView.get<Terrain::TerrainComponent>(e);
-                    tc.CombinedVAO = Terrain::TerrainMesh::BuildCombinedVAO(tc.Data);
                     Entity ent{ e, m_Scene.get() };
-                    if (!ent.HasComponent<MeshInstance3D>()) {
+                    Terrain::TerrainMesh::BuildTerrainRuntime(ent, tc, m_PhysicsScene.get(), true);
+                    if (!ent.HasComponent<MeshInstance3D>() && tc.CombinedVAO) {
                         ent.AddComponent<MeshInstance3D>(tc.CombinedVAO, 0, 8.0f, glm::vec4(0.35f, 0.55f, 0.25f, 1.0f), glm::vec4(0.45f, 0.35f, 0.2f, 1.0f));
-                    } else {
-                        ent.GetComponent<MeshInstance3D>().VAO = tc.CombinedVAO;
-                    }
-                    if (m_PhysicsScene && tc.GeneratePhysics) {
-                        tc.PhysicsBodyID = Terrain::TerrainCollider::CreateTerrainCollider(tc.Data, *m_PhysicsScene, tc.Friction, tc.Restitution);
                     }
                 }
 

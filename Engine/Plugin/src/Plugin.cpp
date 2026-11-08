@@ -146,7 +146,49 @@ private:
             case 'n': result.push_back('\n'); break;
             case 'r': result.push_back('\r'); break;
             case 't': result.push_back('\t'); break;
-            case 'u': error = "unicode escapes are not supported in plugin metadata"; return std::nullopt;
+            case 'u': {
+                auto readHex = [this]() -> std::optional<uint32_t> {
+                    if (m_Position + 4 > m_Text.size()) return std::nullopt;
+                    uint32_t value = 0;
+                    for (size_t i = 0; i < 4; ++i) {
+                        const char digit = m_Text[m_Position++];
+                        value <<= 4;
+                        if (digit >= '0' && digit <= '9') value += static_cast<uint32_t>(digit - '0');
+                        else if (digit >= 'a' && digit <= 'f') value += static_cast<uint32_t>(digit - 'a' + 10);
+                        else if (digit >= 'A' && digit <= 'F') value += static_cast<uint32_t>(digit - 'A' + 10);
+                        else return std::nullopt;
+                    }
+                    return value;
+                };
+                auto codepoint = readHex();
+                if (!codepoint) { error = "invalid unicode escape"; return std::nullopt; }
+                if (*codepoint >= 0xD800 && *codepoint <= 0xDBFF) {
+                    if (m_Position + 2 > m_Text.size() || m_Text[m_Position] != '\\' || m_Text[m_Position + 1] != 'u') {
+                        error = "unpaired unicode surrogate"; return std::nullopt;
+                    }
+                    m_Position += 2;
+                    auto low = readHex();
+                    if (!low || *low < 0xDC00 || *low > 0xDFFF) { error = "invalid unicode surrogate pair"; return std::nullopt; }
+                    *codepoint = 0x10000 + ((*codepoint - 0xD800) << 10) + (*low - 0xDC00);
+                } else if (*codepoint >= 0xDC00 && *codepoint <= 0xDFFF) {
+                    error = "unpaired unicode surrogate"; return std::nullopt;
+                }
+                if (*codepoint <= 0x7F) result.push_back(static_cast<char>(*codepoint));
+                else if (*codepoint <= 0x7FF) {
+                    result.push_back(static_cast<char>(0xC0 | (*codepoint >> 6)));
+                    result.push_back(static_cast<char>(0x80 | (*codepoint & 0x3F)));
+                } else if (*codepoint <= 0xFFFF) {
+                    result.push_back(static_cast<char>(0xE0 | (*codepoint >> 12)));
+                    result.push_back(static_cast<char>(0x80 | ((*codepoint >> 6) & 0x3F)));
+                    result.push_back(static_cast<char>(0x80 | (*codepoint & 0x3F)));
+                } else if (*codepoint <= 0x10FFFF) {
+                    result.push_back(static_cast<char>(0xF0 | (*codepoint >> 18)));
+                    result.push_back(static_cast<char>(0x80 | ((*codepoint >> 12) & 0x3F)));
+                    result.push_back(static_cast<char>(0x80 | ((*codepoint >> 6) & 0x3F)));
+                    result.push_back(static_cast<char>(0x80 | (*codepoint & 0x3F)));
+                } else { error = "unicode codepoint is out of range"; return std::nullopt; }
+                break;
+            }
             default: error = "invalid string escape"; return std::nullopt;
             }
         }

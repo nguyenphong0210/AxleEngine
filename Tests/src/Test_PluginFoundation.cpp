@@ -25,7 +25,7 @@ int main() {
     std::filesystem::create_directories(root / "b", error);
 
     Write(root / "a" / "base.axleplugin", R"({
-        "schema": 1, "id": "test.base", "version": "1.0.0", "name": "Base",
+        "schema": 1, "id": "test.base", "version": "1.0.0", "name": "B\u0061se",
         "modules": [{"name": "base-runtime", "kind": "runtime"}]
     })");
     Write(root / "b" / "game.axleplugin", R"({
@@ -40,6 +40,7 @@ int main() {
     bool ok = true;
     ok &= Check(catalog.Plugins.size() == 2, "valid manifests are discovered");
     ok &= Check(catalog.Diagnostics.size() == 1, "malformed manifest is retained as a diagnostic");
+    ok &= Check(catalog.Plugins.front().Name == "Base", "unicode escapes decode to UTF-8 metadata");
     const auto resolution = Axle::Plugin::Resolve(catalog, {"test.game"}, Axle::Plugin::ProductKind::Runtime);
     ok &= Check(resolution.IsValid() && resolution.Plugins.size() == 2, "valid selections resolve despite unrelated malformed manifests");
 

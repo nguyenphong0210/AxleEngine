@@ -15,6 +15,15 @@ Gameplay suspends at speed zero and while paused; an explicit Step performs one
 complete fixed tick. Tick input includes `Input::IsKeyJustPressed` and
 `IsKeyJustReleased`; edges survive zero-tick frames and are consumed once.
 
+The development toolbar compiles the configured `AxleScripts` module; it does not
+turn an arbitrary header created in the asset browser into a compiled module.
+Selected static exports discover project `Scripts/` headers and `.cpp` sources;
+register script classes with `AXLE_REGISTER_SCRIPT`. Keep shipping gameplay code
+there and verify it with `AxleRuntime --check-content`. The player has no script
+DLL; Editor development retains its separately validated generation-swap path.
+See [plugin/static authoring](../design/PLUGIN_SDK_AUTHORING.md) and
+[architecture acceptance](ARCHITECTURE_ACCEPTANCE.md) for the product boundaries.
+
 AxleEngine adopts a high-performance **Hybrid ECS / C++ Native Scripting Architecture**. By writing gameplay code directly in native C++20, your game achieves zero language-bridge overhead, direct SIMD vectorization, and seamless integration with Jolt Physics and EnTT ECS—all while maintaining the ergonomic component-attachment workflows of modern engines.
 
 ---
@@ -162,7 +171,7 @@ sequenceDiagram
     Manager->>DLL: Validate GetScriptABIVersion() == 4
     Manager->>Manager: Serialize active script fields to memory
     Manager->>Editor: Re-bind new vtables and restore serialized field values
-    Editor-->>Dev: [OK] Scripts reloaded in ~0.4s!
+    Editor-->>Dev: [OK] Scripts reloaded after validation
 ```
 
 ---

@@ -241,7 +241,7 @@ classDiagram
 
 Dotted arrows indicate API use, not retained members. Native device/queue labels abbreviate NRI types. Wrappers may manage native handles explicitly.
 
-Sources: [Engine/RHI/include/Axle/RHI/RHIDevice.hpp](../../Engine/RHI/include/Axle/RHI/RHIDevice.hpp), [Engine/RHI/include/Axle/RHI/RHISwapChain.hpp](../../Engine/RHI/include/Axle/RHI/RHISwapChain.hpp), [Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp](../../Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp).
+Sources: [Engine/RHI/include/Axle/RHI/RHIDevice.hpp](../../Engine/RHI/include/Axle/RHI/RHIDevice.hpp), [Engine/RHI/include/Axle/RHI/RHISwapChain.hpp](../../Engine/RHI/include/Axle/RHI/RHISwapChain.hpp), [Engine/Renderer/include/Axle/RHIECSStreamer.hpp](../../Engine/Renderer/include/Axle/RHIECSStreamer.hpp).
 
 ## 8. Asset registry, DSL and packages
 

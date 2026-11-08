@@ -11,6 +11,7 @@ separate contract; it must not reintroduce retired Vehicle compatibility code.
 
 | Read when | Document | Purpose |
 | --- | --- | --- |
+| OPT-10 | [Implemented seams and acceptance](../guides/ARCHITECTURE_ACCEPTANCE.md) | Current APIs, reproducible evidence and mandatory open gates |
 | OPT-01..10 | [Master contract](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | Fixed decisions, AF packages and cross-plan dependencies |
 | OPT-01..03 | [EnTT/enkiTS plan](ENTT_ENKITS_REFACTOR_PLAN.md) | Threading, task lifetime, ECS and shared simulation |
 | OPT-04..05 | [NRI contract](NRI_INTEGRATION_CONTRACT.md) | Pinned vendor, device/resource/frame ownership |

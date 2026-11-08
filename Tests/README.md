@@ -37,3 +37,19 @@ deleted canvas stays deleted, and verifies explicit canvas/widget creation. Nati
 startup can be checked separately with `--verify-empty-startup`; it runs five
 real update/UI frames and checks for unintended scene/asset creation after each
 UI frame. It does not certify manual UI interaction or visual rendering quality.
+
+## Architecture acceptance
+
+`AxleArchitectureStressTests` links only Physics/SceneData and their CPU dependencies.
+It exercises scheduler sizes 1/2/hardware, stale completion generations, constrained
+Jolt records, batched ECS removals and two physics worlds. It is also available in
+the Editor-free CPU suite. `AcceptanceEvidenceRegressions` rejects missing tools,
+watchdog expiry and expected exit codes without their required proof.
+
+The maintained `scripts/run_architecture_acceptance.py` rebuilds explicit products
+before current-source Debug/Release verification. Its native stage covers actual
+rendering/presentation/Canvas, external DLL submitted lifetimes and the Editor's
+plugin workflow; its export stage checks detached selected static players and
+link/import exclusions. Native interactive observation remains a separate gate.
+See [the architecture guide](../docs/guides/ARCHITECTURE_ACCEPTANCE.md) and
+[OPT-10 evidence](../docs/reviews/OPT_10_ARCHITECTURE_ACCEPTANCE.md).

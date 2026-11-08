@@ -1,9 +1,10 @@
 # Project plugin authoring
 
-OPT-06 delivers the PLG-01..13 native Editor workflow. Selected static player
-composition and packaged content mounting remain PLG-22/23. Editor export refuses
-to bundle a player that cannot contain its selected native modules; data-only
-cooking validates native scene/Assembly data against the active codecs first.
+The native Editor workflow uses selected DLL modules. OPT-09 adds selected static
+Runtime composition and snapshot-bound packaged content. Both products use the
+same SDK registration, service and lifetime boundaries. See
+[architecture acceptance](../guides/ARCHITECTURE_ACCEPTANCE.md) for the implemented
+seams, reproduction commands and separately required UI/review evidence.
 
 ## Create and activate a plugin
 

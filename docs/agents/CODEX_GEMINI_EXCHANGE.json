@@ -1,20 +1,24 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-09-IMPLEMENTATION",
-    "title": "Selected static Runtime and snapshot-bound export",
-    "state": "completed",
+    "id": "OPT-10-IMPLEMENTATION",
+    "title": "Architecture acceptance and enforcement",
+    "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Separate-context correction review",
-    "code_baseline": "45c059a",
-    "user_instruction": "User explicitly requests implementation of OPT 9.",
-    "user_scope": "PLG-22 selected static Runtime, PLG-23 snapshot-bound cook/export and P41-26 build/ownership boundaries. Preserve deferred domain feature limits, authored work and Create Plugin UI. No OPT-10+, vendor upgrade or push. Earlier no-Engine restriction was OPT-08-specific; OPT-09 requires its owning build/runtime/service code.",
-    "next_action": "Stop at OPT-09. Advanced plugin features remain deferred; OPT-10 requires its own explicit user release.",
-    "acceptance_status": "accepted_opt09_composition_foundations",
-    "implementation_status": "Implemented and verified: selected static SDK Runtime, static project scripts, snapshot-bound staged cook/export, product switches and package startup repairs.",
-    "codex_report": "docs/reviews/OPT_09_IMPLEMENTATION.md",
-    "verified_source": "22c74ae"
+    "code_baseline": "6ee333d31afac8845055cd6f291db5597ad55ed9",
+    "user_instruction": "User explicitly requests implementation of OPT-10. User accidentally removed prior build directory; rebuild in build-opt10.",
+    "user_scope": "EJ-15, PLG-24, EJ-16/17, PLG-25 and AF-05. Preserve narrowed OPT-07/08 foundation scope. No OPT-11, domain feature expansion, vendor upgrade or push.",
+    "next_action": "Codex implements and verifies; freeze concurrent source edits. Required unexecuted gates stay open.",
+    "acceptance_status": "pending_current_source_evidence",
+    "implementation_status": "Candidate committed as 96bdad7; full Debug integration and 73/73 CTest passed in coordinator runs. Final Debug/Release native/export verification in progress.",
+    "source_commit": "96bdad7",
+    "correction_review_status": "Separate-context source review/rechecks report no remaining concrete P1/P2; no independent test execution claimed.",
+    "open_gates": [
+      "Final Debug/Release automated matrix in progress",
+      "Native interactive UI NOT RUN: Computer Use native pipe unavailable (OS error 2) after required retries"
+    ]
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",
@@ -1868,6 +1872,28 @@
       "base_commit": "22c74ae",
       "timestamp_utc": "2026-11-08T14:21:58.675786+00:00",
       "body": "DELIVERY: OPT-09 PLG-22/23 and P41-26 implemented at 22c74ae from 45c059a, with final verification and separate-context source correction rechecks. See docs/reviews/OPT_09_IMPLEMENTATION.md. Selected Runtime modules and project Scripts compile statically; actual graph excludes unselected/Editor modules. Native static activation reuses ABI checks, ownership, rollback and teardown. UI and CLI cook/export use frozen project/selection/source/content/toolchain requests, exact generated outputs/receipts, compiled content/script preflight and transactional publication preserving prior exports. Content modules honor declared SourceRoot; conventional Content remains for code plugins. Real Editor/Runtime/test switches and Editor-free CPU suite are present. Native package runs exposed and repaired Windows 8.3 package lookup, Unicode shader/DXC/custom-program paths and Particle/ObjectID disk-only shader reads. Actual final builds exit 0; Debug and Release CTest 69/69 each. Native verifier exit 0 for both configurations: 30/30 command outcomes each across empty, Vehicle, Spline, Terrain+Spline and project Mover+Vehicle; ten player images, ten captured link maps, twenty physical D3D12/Vulkan five-frame launches, required plugin payloads and static script lifecycle, ten packaged headless checks and ten expected missing-package failures. Exact import/configuration/registration-symbol and binary plugin-identity exclusions verified. CPU Editor/Runtime OFF suite 2/2, Editor-only configure exit 0, architecture PASS 522 source/24 CMake files and deliberate violation fixtures pass. Logs: build/opt09-delivery-{debug,release}-*, build/opt09-native-{debug,release}/, build/opt09-cpu-final-*. Reviewer inspected source only and reported no remaining concrete P1/P2 after correction rechecks; all executions are Codex coordinator evidence, not independent reviewer runs. Initial incomplete pinned Agility SDK download failed cleanly; same-input retry succeeded. Earlier stopped/rejected/diagnostic builds are not acceptance evidence. Existing advanced domain prototypes remain deferred, GL switch controls admission while compatibility implementation remains compiled, no new backend default/performance/OPT-10 claim, no vendor upgrade or push. Local source commit is complete; delivery/report metadata is committed separately."
+    },
+    {
+      "id": "CG-20261108T143652842973Z-CODEX-43fe09",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-10-IMPLEMENTATION",
+      "reply_to": "CG-20261108T142158675786Z-CODEX-f57594",
+      "base_commit": "6ee333d31afac8845055cd6f291db5597ad55ed9",
+      "timestamp_utc": "2026-11-08T14:36:52.842973+00:00",
+      "body": "IN_PROGRESS OPT-10 at base 6ee333d. The prior uncommitted task-card/status update disappeared alongside the accidental build cleanup; this restores the current user-authorized task. Codex is implementing PhysicsDebug extraction, retirement of the RHI ECS forwarding shim, zero baseline allowances, stronger include/vendor rules, bounded thread-count/Jolt/ECS stress tests and a maintained current-source acceptance runner. A protocol-required separate-context reviewer is source-reviewing the corrections; fresh Debug build is in progress. No acceptance or native PASS claimed yet. Expected docs: build/plugin/job/seam guides, roadmap/index and canonical OPT-10 report. Freeze concurrent Gemini source changes; preserve the narrowed optional plugin foundation scope."
+    },
+    {
+      "id": "CG-20261108T150519718863Z-CODEX-78d61a",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-10-IMPLEMENTATION",
+      "reply_to": "CG-20261108T143652842973Z-CODEX-43fe09",
+      "base_commit": "96bdad7f1034aaf05a4b6112abb7014951f9b9c2",
+      "timestamp_utc": "2026-11-08T15:05:19.718863+00:00",
+      "body": "STATUS: OPT-10 candidate committed as 96bdad7. PhysicsDebug extraction and removal of the RHI ECS forwarding shim, zero baseline allowances, vendor/domain boundary rejection, CPU/Jolt/ECS stress, maintained current-source acceptance runner and evidence-integrity checks are implemented. Separate-context review found and source-rechecked OPT10-R1..R4; no remaining concrete P1/P2 reported. Reviewer ran no builds/tests. Coordinator fresh Editor/Runtime-free Debug suite passed 3/3; full Debug CTest passed 73/73; default Debug integration passed after aligning old fixtures to current schema, isolated compiler workspace, canonical UI asset root and untitled HLSL template policy. The final Debug full runner and fresh Release build are now running against 96bdad7. Native UI observation/click/capture is NOT RUN because the Computer Use native pipe failed OS2 across mandated retries; this gate keeps final OPT-10 acceptance open. Detailed domain plugin features and OPT-11 remain deferred; no push."
     }
   ],
   "deferred_tasks": [

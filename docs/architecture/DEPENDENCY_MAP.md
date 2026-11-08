@@ -1,9 +1,11 @@
-# Current Dependency Map
+# Historical dependency snapshot
 
 > **Dated source snapshot:** this survey predates the 2026-11-04 Vehicle
 > retirement and later sample cleanup. It is retained for architectural context,
 > not current API/feature support. Follow the [optimization roadmap](../ROADMAP.md)
 > for execution; unavailable source paths below are historical references.
+
+Current enforced boundaries and reproduction: [architecture acceptance](../guides/ARCHITECTURE_ACCEPTANCE.md).
 
 Reviewed: 2026-11-01. Link dependencies, build-order constraints and textual include edges are different relationships. This report keeps them separate.
 

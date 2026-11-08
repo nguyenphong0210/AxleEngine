@@ -6,15 +6,15 @@ Read the **[Architecture Optimization Roadmap](ROADMAP.md)** first. It is the
 single execution and progress checklist: OPT-00..OPT-10 cleans up the architecture;
 OPT-11 and later feature work are deferred.
 
-- **Current Status**: Phase OPT-03 completed (AF-02, EJ-08..EJ-10, AF-03, AF-04, EJ-11..EJ-14 delivered and verified).
-  - Clean Level-0 `Core` leaf library.
-  - `Application` in `Platform` (Level 1).
-  - Parallel EnTT view iteration with tombstone safety and `SceneCommandBuffer` mutation boundaries.
-  - Read-only transform evaluation with monotonic revisions (`GetTransformRevision()`).
-  - `SceneData` separated from subsystem bridges.
-  - Pure CPU `AssetManager` with native embedded UUIDs and raw root-relative paths (companion `.meta` sidecars eliminated).
-  - Unified `SimulationDriver`, `SimulationClock`, and `SimulationInputAdapter` resolving defect `ECSJ-05`.
-- **Next Phase**: [OPT-04](ROADMAP.md#opt-04---nri-device-and-gpu-lifetime-foundation) (NRI device and GPU lifetime foundation).
+- **Current status**: OPT-01..09 architecture foundations are delivered and verified;
+  OPT-10 acceptance/enforcement is now in progress. Detailed optional plugin
+  capabilities and OPT-11 remain deferred. Read the
+  [current acceptance record](reviews/OPT_10_ARCHITECTURE_ACCEPTANCE.md) for executed
+  evidence and required open gates.
+- **Implemented contracts**: CPU Core/SceneData/assets, owner-scoped jobs and shared
+  simulation, checked native rendering/resource lifetimes, SDK DLL/static plugin
+  composition and snapshot-bound export. See
+  [architecture acceptance and seams](guides/ARCHITECTURE_ACCEPTANCE.md).
 
 | Read next | Use it for |
 | --- | --- |
@@ -44,7 +44,7 @@ OPT-11 and later feature work are deferred.
 - [Rendering](guides/RENDERING.md), [materials/shaders](guides/MATERIALS_AND_SHADERS.md) and [UI documents/binding](guides/UI.md).
 - [Asset format reference](reference/ASSET_FORMAT.md).
 
-Vehicle simulation is retired from the core engine. A standalone replacement plugin is planned in [OPT-07](ROADMAP.md#opt-07---write-vehicle-as-a-complete-plugin).
+The built-in Vehicle is retired. Selected Vehicle/Spline/Terrain plugin foundations are delivered; detailed domain features remain deferred under the bounded [OPT-07/08 review](reviews/OPT_07_08_FOUNDATION_REVIEW.md).
 
 ## Maintenance rules
 

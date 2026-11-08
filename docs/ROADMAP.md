@@ -3,7 +3,7 @@ Collaboration policy (2026-11-07): for future released scopes, Gemini implements
 # Architecture Optimization Roadmap
 
 Updated: **2026-11-08**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **OPT-07/08 plugin foundations accepted after repairs and native verification; detailed plugin features are deferred by user scope. OPT-09 selected Runtime/export foundations are implemented and verified; OPT-10 is not released. Earlier accepted prerequisites remain accepted**.
+Status: **OPT-07/08 plugin foundations accepted after repairs and native verification; detailed plugin features are deferred by user scope. OPT-09 selected Runtime/export foundations are implemented and verified; OPT-10 is released and in progress. Earlier accepted prerequisites remain accepted**.
 
 ## Start here
 
@@ -36,9 +36,9 @@ with detailed plugin functionality to be completed later. Corrected source
 on D3D12/Vulkan, persistence/copy/Play/Stop/unload and shipping script isolation.
 The [bounded acceptance](reviews/OPT_07_08_FOUNDATION_REVIEW.md) distinguishes the
 working SDK foundations from advanced development prototypes. No Engine source
-changed. This does not establish full feature completeness. The subsequent user assignment explicitly releases OPT-09 only.
+changed. This does not establish full feature completeness. OPT-09 was subsequently delivered; the latest user assignment now releases OPT-10.
 
-**Latest completed assignment: Codex OPT-09, PLG-22/23 and P41-26.** Static selected Runtime and snapshot-bound export pass final Debug/Release 69/69 CTest, five exact product combinations per configuration, D3D12/Vulkan detached player launches and package/error checks (30/30 command outcomes each). Separate-context source rechecks found no remaining concrete P1/P2; execution evidence is Codex coordinator evidence. See the [delivery record](reviews/OPT_09_IMPLEMENTATION.md). Detailed plugin features stay deferred; OPT-10 is not released.
+**Latest completed assignment: Codex OPT-09, PLG-22/23 and P41-26.** Static selected Runtime and snapshot-bound export pass final Debug/Release 69/69 CTest, five exact product combinations per configuration, D3D12/Vulkan detached player launches and package/error checks (30/30 command outcomes each). Separate-context source rechecks found no remaining concrete P1/P2; execution evidence is Codex coordinator evidence. See the [delivery record](reviews/OPT_09_IMPLEMENTATION.md). Detailed plugin features stay deferred; OPT-10 is released and in progress.
 
 **Accepted prerequisite: Codex OPT-04, P41-01..P41-11.** The user reassigned
 implementation from Gemini to Codex on 2026-11-07; [current handoff](agents/handoffs/OPT_04_CODEX.md).
@@ -387,7 +387,7 @@ rejects unsupported selected composition. See the [foundation review](reviews/OP
 
 **Exit:** All 73 architecture packages and their applicable acceptance rows have current evidence. Required unavailable checks remain open. Boundary checks reject deliberate violations. No performance improvement is claimed without measurement.
 
-**Evidence:** Pending; implementation/review is not claimed here.
+**Evidence:** [Current OPT-10 implementation and open acceptance gates](reviews/OPT_10_ARCHITECTURE_ACCEPTANCE.md). Native UI and automated verification remain separate; required NOT RUN gates prevent final closure.
 
 ### OPT-11 - Resume advanced rendering and feature work later
 

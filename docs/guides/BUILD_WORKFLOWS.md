@@ -107,42 +107,50 @@ The Editor and Runtime post-build steps do not bundle these test assets.
 Open **File/Build -> Export Standalone Game**, keep **Build and bundle standalone
 player** enabled, choose the output directory, and click **Export & Cook Game**.
 
-1. Editor starts `cmake --build <configured build> --config <Editor configuration>
-   --target AxleRuntime` on a worker, without opening a console window.
-2. The UI reports build progress status. Closing the application cancels its
-   owned build process tree; another export cannot start concurrently.
-3. Only after a successful build does asset cooking/package export run.
-4. Packaging selects the exact Runtime output directory for that configuration,
-   including its matching `AxleScripts.dll`. A failed build never falls back to an
-   old executable elsewhere in the checkout.
+The exporter captures the saved project, selected Runtime modules, project Scripts,
+assets, selected plugin Content, Engine resources/sources, pinned vendors and
+matched toolchain into an immutable request. It builds an Editor-free static
+player against that snapshot in a separate product/cache tree. The active Editor
+build does not supply its player. Matching receipts and headless content preflight
+must pass before a staged package replaces an earlier successful export.
 
-The player build uses the same configuration as the running Editor (for example,
-Release Editor builds Release Runtime). Build output is saved as
-`runtime-build-*.log` in the configured build directory; failures show the log path.
-Asset-only export, with the player checkbox disabled, does not build Runtime.
-
-This on-demand Windows player build requires the configured engine checkout,
-CMake and the configured compiler/toolchain. Moving only the Editor executable
-does not install a build SDK. Missing build tools/output files produce an export
-error. Native button interaction is a separate check from the process tests.
-
-Manual Runtime build remains available for developers:
+Shipping contains selected static Runtime modules and statically registered project
+scripts, without plugin/script/host/Editor DLL imports. Development Runtime remains
+an explicit target with its matching development script and Runtime host DLLs.
+Asset-only export follows the same snapshot rules and does not build a player.
+Closing/cancelling the owned build preserves the earlier successful output.
 
 ```powershell
-cmake --build build --config Release --target AxleRuntime --parallel 6
+./build/Editor/Release/AxleEditor.exe --project=D:/Projects/MyGame/MyGame.axleproj --export D:/Exports/MyGame --runtime-configuration=Release
+./build/Editor/Release/AxleEditor.exe --project=D:/Projects/MyGame/MyGame.axleproj --cook D:/Exports/MyGameData
 ```
 
-Runtime output stays in `build/Runtime/<configuration>`; its build no longer
-copies the player into the Editor output directory. The command-line cooker uses
-prebuilt executables when executable bundling is requested; it does not invoke
-the Editor's asynchronous build workflow. Missing required binaries fail bundling.
+The UI uses its running Editor configuration by default. CLI
+`--runtime-configuration=Debug|Release` can select the player's configuration.
+Build logs and matching request/product receipts are retained in the generated
+Runtime build cache. A failed build never bundles an unrelated old executable.
+Export requires the engine checkout, configured CMake/MSVC/Windows SDK and pinned
+vendor dependencies; moving only Editor.exe does not install a build SDK.
 
-## Relationship to Phase 41
+## Product switches and architecture gates
 
-This is build-workflow separation, not completion of Phase 41's Runtime/rendering
-or module-isolation packages. Engine/plugin libraries still have the existing
-transitive dependencies. `AXLE_BUILD_EDITOR=OFF` and the new render harness targets
-in the Phase 41 design remain proposed until their packages implement them.
+`AXLE_BUILD_EDITOR`, `AXLE_BUILD_RUNTIME` and `AXLE_BUILD_TESTS` control target
+configuration. Editor-only builds use Runtime/tests OFF. Editor-free tests have
+an independent CPU suite. Shipping export configures Editor/tests OFF and the
+validated selected Runtime graph. `AXLE_ENABLE_GL_COMPATIBILITY=OFF` rejects GL
+admission/fallback; compatibility code is still compiled, so this is not binary
+GL exclusion or the deferred full renderer cutover.
+
+```powershell
+cmake -S . -B out/player -DAXLE_BUILD_EDITOR=OFF -DAXLE_BUILD_RUNTIME=ON -DAXLE_BUILD_TESTS=OFF
+cmake --build out/player --config Release --target AxleRuntime --parallel 8
+python scripts/check_architecture.py
+python scripts/run_architecture_acceptance.py --build build --output build/acceptance
+```
+
+See [architecture acceptance](ARCHITECTURE_ACCEPTANCE.md) for current APIs,
+strict evidence semantics and native/manual gates. The records below describe
+historical verification, not results newly produced by these commands.
 
 ## Verification of the layout/startup change (2026-11-03)
 

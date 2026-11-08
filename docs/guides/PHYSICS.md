@@ -10,6 +10,12 @@ Platform/Application initializes the baseline systems, while simulation scenes a
 
 Sources: [PhysicsEngine](../../Engine/Physics/include/Axle/PhysicsEngine.hpp), [PhysicsScene](../../Engine/Physics/include/Axle/PhysicsScene.hpp), [job adapter](../../Engine/Physics/include/Axle/JobSystemEnkiTS.hpp).
 
+`Axle::Physics` links only Core and Jolt. Graphics debug consumers live in
+`Axle::PhysicsDebug`; Scene composition links that target. Physics emits through
+`DrawDebug(JPH::DebugRenderer&, ...)` and does not include concrete GL/RHI renderers.
+See [architecture acceptance](ARCHITECTURE_ACCEPTANCE.md) for the boundary/stress
+gates and actual verification status.
+
 ## 2. Scene components and world APIs
 
 RigidBody3D describes motion and runtime body identity; CollisionShape3D describes geometry and surface parameters. Scene lifecycle code combines them and synchronizes transforms. Changing authoring data does not automatically mutate a live body until synchronized.

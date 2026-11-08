@@ -3,11 +3,12 @@
 > **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
 > technical contract, not a separate phase queue. Old Phase/G labels and
 > source-audit baselines are retained for traceability. Early Vehicle retirement
-> is delivered; acceptance and new plugin implementation remain open.
+> is delivered; the roadmap and current OPT-10 record own bounded acceptance.
 
 Date: **2026-11-04**. Source baseline:
 **cb200d373550b6dd4f7e12d483a161012d863a27**.
 Status: **technical contract; execution/progress is tracked in [docs/ROADMAP.md](../ROADMAP.md)**.
+Implemented seams and reproduction are documented in [architecture acceptance](../guides/ARCHITECTURE_ACCEPTANCE.md); [the OPT-10 record](../reviews/OPT_10_ARCHITECTURE_ACCEPTANCE.md) distinguishes current verification from required open gates.
 
 The latest user priority is to make the architecture clean before expanding
 features. This coordinator combines NRI/RHI standardization, EnTT/enkiTS

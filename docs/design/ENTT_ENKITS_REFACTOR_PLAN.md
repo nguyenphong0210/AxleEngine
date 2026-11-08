@@ -7,17 +7,12 @@
 
 Date: **2026-11-04**. Source baseline:
 **84ad556678693c33039703801ea013d2d2686913**.
-Status: **technical contract; EJ-00 baseline delivered by Gemini and corrected/verified
-by Codex in `af5721b` on 2026-11-05; [correction evidence](../reviews/OPT_01_BASELINE_CORRECTIONS.md)
-records author verification, not a separate post-fix independent review. EJ-01..17 remain unreleased**.
-
-The user requests a detailed plan following the
-[EnTT/enkiTS review](../architecture/ENTT_ENKITS_REVIEW.md). This task changes
-documentation only at its original baseline. EJ-00 fixtures and harness are now
-verified; no later EJ package is released by that baseline. Keep EnTT, enkiTS and Jolt.
-No production fault fixes, Vehicle deletion, plugin implementation or vendor upgrade
-are performed by this document. The [exchange](../agents/CODEX_GEMINI_EXCHANGE.json)
-owns the next actual assignment.
+Status (2026-11-08): **EJ-00..EJ-14 accepted after corrections. EJ-15..17 are
+released in OPT-10 and currently being verified.** The roadmap/exchange own current
+release and acceptance, and [architecture acceptance](../guides/ARCHITECTURE_ACCEPTANCE.md)
+describes the implemented APIs and reproducible gates. Original source-audit
+observations below remain historical design context; they do not reopen accepted
+packages or release later feature work.
 
 This is the **Phase 42 ECS/jobs workstream**, retaining all EJ identifiers under
 the [Architecture Foundation master plan](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md).
@@ -711,26 +706,21 @@ mock callback test cannot substitute for the real DLL teardown rows.
 
 ## 11. Build, evidence and measurement
 
-Proposed new targets: `AxleJobsECSTests`, a separate native script/bridge integration
-target if needed, and CTest label `ecs-jobs`. These names are **not available yet**.
-EJ-00 establishes the actual targets under Tests as EXCLUDE_FROM_ALL, using immutable
-small fixtures and local writable workspaces. Include them in AxleAllTests without
-adding Editor/Runtime as transitive test dependencies.
-
-Future command examples after target implementation:
+Implemented targets include `AxleJobsECSTests`, `AxleArchitectureStressTests`,
+`AxleScriptLifecycleReviewTests` and the SceneData/simulation suites under `Tests/`.
+They are EXCLUDE_FROM_ALL and built explicitly by AxleAllTests. CTest labels
+`ecs-jobs` and `architecture` select the CPU/stress gates. Actual Editor/Runtime
+parity and physical render/product probes are separately invoked by the maintained
+acceptance runner; they are not transitive CPU-test build dependencies.
 
 ```powershell
-cmake --build build --config Debug --target AxleJobsECSTests --parallel 6
+cmake --build build --config Debug --target AxleAllTests --parallel 8
 ctest --test-dir build -C Debug -L ecs-jobs --output-on-failure
-cmake --build build --config Release --target AxleJobsECSTests --parallel 6
-ctest --test-dir build -C Release -L ecs-jobs --output-on-failure
-cmake --build build --config Release --target AxleEditor AxleRuntime --parallel 6
+python scripts/run_architecture_acceptance.py --build build --output build/acceptance
 ```
 
-The last command deliberately builds both products for acceptance; it does not
-change default build behavior. Test fixtures may invoke the actual Editor/Runtime
-as opt-in external runs after they are built, rather than making CPU tests build them.
-Do not run this block during the current documentation-only task.
+The runner defaults to Debug and Release and records native prerequisites honestly.
+Its result never substitutes for native UI observations or independent review.
 
 Report baseline and after-change allocation/task high-water, queue depth/latency,
 wait time and per-phase/tick counts with machine/config/workload. Correctness comes

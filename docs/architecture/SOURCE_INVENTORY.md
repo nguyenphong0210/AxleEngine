@@ -158,19 +158,19 @@ snapshot, not a fresh line-count measurement.
 | [Engine/Physics/CMakeLists.txt](../../Engine/Physics/CMakeLists.txt) | 22 | — |
 | [Engine/Physics/include/Axle/CharacterController.hpp](../../Engine/Physics/include/Axle/CharacterController.hpp) | 116 | CharacterControllerSettings, CharacterController, CharacterContactListenerImpl |
 | [Engine/Physics/include/Axle/JobSystemEnkiTS.hpp](../../Engine/Physics/include/Axle/JobSystemEnkiTS.hpp) | 65 | JobSystemEnkiTS, EnkiJob, EnkiTask |
-| [Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp](../../Engine/Physics/include/Axle/PhysicsDebugRenderer.hpp) | 52 | DebugLineVertex, PhysicsDebugRenderer |
+| [Engine/PhysicsDebug/include/Axle/PhysicsDebugRenderer.hpp](../../Engine/PhysicsDebug/include/Axle/PhysicsDebugRenderer.hpp) | 52 | DebugLineVertex, PhysicsDebugRenderer |
 | [Engine/Physics/include/Axle/PhysicsEngine.hpp](../../Engine/Physics/include/Axle/PhysicsEngine.hpp) | 17 | PhysicsEngine |
 | [Engine/Physics/include/Axle/PhysicsLayers.hpp](../../Engine/Physics/include/Axle/PhysicsLayers.hpp) | 84 | ObjectLayerPairFilterImpl, BPLayerInterfaceImpl, ObjectVsBroadPhaseLayerFilterImpl |
 | [Engine/Physics/include/Axle/PhysicsMaterial.hpp](../../Engine/Physics/include/Axle/PhysicsMaterial.hpp) | 90 | PhysicsMaterial |
 | [Engine/Physics/include/Axle/PhysicsMath.hpp](../../Engine/Physics/include/Axle/PhysicsMath.hpp) | 48 | — |
 | [Engine/Physics/include/Axle/PhysicsScene.hpp](../../Engine/Physics/include/Axle/PhysicsScene.hpp) | 196 | PhysicsSettings, RayCastHit, BoxBodyProps, SphereBodyProps, CylinderBodyProps, ConeBodyProps, PlaneBodyProps, PhysicsDrawSettings, PhysicsScene |
-| [Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp](../../Engine/Physics/include/Axle/RHIPhysicsDebugRenderer.hpp) | 146 | RHIDebugLineVertex, RHIPhysicsDebugConstants, JoltInitHelper, RHIPhysicsDebugRenderer |
+| [Engine/PhysicsDebug/include/Axle/RHIPhysicsDebugRenderer.hpp](../../Engine/PhysicsDebug/include/Axle/RHIPhysicsDebugRenderer.hpp) | 146 | RHIDebugLineVertex, RHIPhysicsDebugConstants, JoltInitHelper, RHIPhysicsDebugRenderer |
 | [Engine/Physics/src/CharacterController.cpp](../../Engine/Physics/src/CharacterController.cpp) | 221 | — |
 | [Engine/Physics/src/JobSystemEnkiTS.cpp](../../Engine/Physics/src/JobSystemEnkiTS.cpp) | 129 | — |
-| [Engine/Physics/src/PhysicsDebugRenderer.cpp](../../Engine/Physics/src/PhysicsDebugRenderer.cpp) | 137 | — |
+| [Engine/PhysicsDebug/src/PhysicsDebugRenderer.cpp](../../Engine/PhysicsDebug/src/PhysicsDebugRenderer.cpp) | 137 | — |
 | [Engine/Physics/src/PhysicsEngine.cpp](../../Engine/Physics/src/PhysicsEngine.cpp) | 73 | — |
 | [Engine/Physics/src/PhysicsScene.cpp](../../Engine/Physics/src/PhysicsScene.cpp) | 447 | — |
-| [Engine/Physics/src/RHIPhysicsDebugRenderer.cpp](../../Engine/Physics/src/RHIPhysicsDebugRenderer.cpp) | 451 | — |
+| [Engine/PhysicsDebug/src/RHIPhysicsDebugRenderer.cpp](../../Engine/PhysicsDebug/src/RHIPhysicsDebugRenderer.cpp) | 451 | — |
 | [Engine/Platform/CMakeLists.txt](../../Engine/Platform/CMakeLists.txt) | 22 | — |
 | [Engine/Platform/include/Axle/Events.hpp](../../Engine/Platform/include/Axle/Events.hpp) | 44 | WindowResizeEvent, WindowCloseEvent, KeyPressedEvent, KeyReleasedEvent, MouseMovedEvent, MouseScrolledEvent, MouseButtonPressedEvent, MouseButtonReleasedEvent |
 | [Engine/Platform/include/Axle/Input.hpp](../../Engine/Platform/include/Axle/Input.hpp) | 51 | InputContext, Input |
@@ -242,7 +242,7 @@ snapshot, not a fresh line-count measurement.
 | [Engine/RHI/include/Axle/RHI/RHICommon.hpp](../../Engine/RHI/include/Axle/RHI/RHICommon.hpp) | 89 | RHIAdapterInfo, RHIDeviceCapabilities, RHIDeviceDesc |
 | [Engine/RHI/include/Axle/RHI/RHIDescriptorPool.hpp](../../Engine/RHI/include/Axle/RHI/RHIDescriptorPool.hpp) | 84 | RHIDescriptorPoolDesc, RHIDescriptorPool |
 | [Engine/RHI/include/Axle/RHI/RHIDevice.hpp](../../Engine/RHI/include/Axle/RHI/RHIDevice.hpp) | 81 | NRIInterfaces, RHIDevice |
-| [Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp](../../Engine/RHI/include/Axle/RHI/RHIECSStreamer.hpp) | 150 | GPUInstanceData, GPUIndirectDrawCommand, GPUIndirectDrawIndexedCommand, RHIECSStreamResult, RHIMeshBatchKey, RHIMultiMeshBatch, RHIECSStreamer |
+| [Engine/Renderer/include/Axle/RHIECSStreamer.hpp](../../Engine/Renderer/include/Axle/RHIECSStreamer.hpp) | 150 | GPUInstanceData, GPUIndirectDrawCommand, GPUIndirectDrawIndexedCommand, RHIECSStreamResult, RHIMeshBatchKey, RHIMultiMeshBatch, RHIECSStreamer |
 | [Engine/RHI/include/Axle/RHI/RHILight.hpp](../../Engine/RHI/include/Axle/RHI/RHILight.hpp) | 230 | RHIDirectionalLight, RHIPointLight, RHISpotLight, RHIGPUDirectionalLight, RHIGPUPointLight, RHIGPUSpotLight, RHIMultiLightBufferData, RHIMultiLightBuffer |
 | [Engine/RHI/include/Axle/RHI/RHIMaterial.hpp](../../Engine/RHI/include/Axle/RHI/RHIMaterial.hpp) | 196 | RHIMaterialDesc, RHIMaterial |
 | [Engine/RHI/include/Axle/RHI/RHIMesh.hpp](../../Engine/RHI/include/Axle/RHI/RHIMesh.hpp) | 127 | RHISubmesh, RHIMesh |

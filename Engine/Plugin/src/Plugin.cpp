@@ -341,6 +341,11 @@ std::optional<Manifest> ParseManifest(const std::filesystem::path& path, Diagnos
         else { diagnostic.Message = "unknown module kind '" + *moduleKind + "'"; return std::nullopt; }
         if (!moduleNames.insert(*moduleName).second) { diagnostic.Message = "duplicate module '" + *moduleName + "'"; return std::nullopt; }
         ModuleDescriptor module{*moduleName, kind};
+        if (const auto* sourceRoot = Find(*object, "sourceRoot")) {
+            const auto* value = sourceRoot->StringValue();
+            if (!value || !IsSafeRelativePath(*value)) { diagnostic.Message = "module sourceRoot must be a safe relative path"; return std::nullopt; }
+            module.SourceRoot = *value;
+        }
         if (!ReadStringArray(Find(*object, "dependencies"), module.Dependencies, error, "module dependencies")) { diagnostic.Message = error; return std::nullopt; }
         manifest.Modules.push_back(std::move(module));
     }
@@ -413,6 +418,58 @@ Resolution Resolve(const Catalog& catalog, const std::vector<std::string>& selec
             if (!contentOnly) result.Diagnostics.push_back({plugin.ManifestPath, "Runtime plugin has no runtime or content module"});
         }
     }
+
+    struct ModuleNode { const Manifest* Plugin; const ModuleDescriptor* Module; std::string Key; };
+    std::map<std::string, std::vector<ModuleNode>, std::less<>> modulesByName;
+    std::map<std::string, ModuleNode, std::less<>> modulesByKey;
+    for (const auto& plugin : result.Plugins) {
+        for (const auto& module : plugin.Modules) {
+            const auto key = plugin.Id + ":" + module.Name;
+            ModuleNode node{&plugin, &module, key};
+            modulesByName[module.Name].push_back(node);
+            modulesByKey.emplace(key, node);
+        }
+    }
+    std::map<std::string, std::vector<std::string>, std::less<>> moduleEdges;
+    for (const auto& [key, node] : modulesByKey) {
+        for (const auto& dependency : node.Module->Dependencies) {
+            const auto candidates = modulesByName.find(dependency);
+            if (candidates == modulesByName.end()) {
+                result.Diagnostics.push_back({node.Plugin->ManifestPath, "missing module dependency '" + dependency + "' for '" + key + "'"});
+                continue;
+            }
+            std::vector<ModuleNode> usable;
+            for (const auto& candidate : candidates->second) {
+                const bool samePlugin = candidate.Plugin->Id == node.Plugin->Id;
+                const bool declaredPluginDependency = std::any_of(node.Plugin->Dependencies.begin(), node.Plugin->Dependencies.end(),
+                    [&](const auto& pluginDependency) { return pluginDependency.Id == candidate.Plugin->Id; });
+                if (samePlugin || declaredPluginDependency) usable.push_back(candidate);
+            }
+            if (usable.size() != 1) {
+                result.Diagnostics.push_back({node.Plugin->ManifestPath, usable.empty()
+                    ? "module dependency '" + dependency + "' is outside the plugin dependency closure"
+                    : "module dependency '" + dependency + "' is ambiguous"});
+                continue;
+            }
+            const auto& target = usable.front();
+            if (node.Module->Kind == ModuleKind::Runtime && target.Module->Kind == ModuleKind::Editor) {
+                result.Diagnostics.push_back({node.Plugin->ManifestPath, "runtime module '" + key + "' cannot depend on editor module '" + target.Key + "'"});
+            }
+            if (node.Module->Kind == ModuleKind::Content && target.Module->Kind != ModuleKind::Content) {
+                result.Diagnostics.push_back({node.Plugin->ManifestPath, "content module '" + key + "' cannot depend on code module '" + target.Key + "'"});
+            }
+            moduleEdges[key].push_back(target.Key);
+        }
+    }
+    std::map<std::string, int, std::less<>> moduleVisit;
+    std::function<void(const std::string&)> visitModule = [&](const std::string& key) {
+        if (moduleVisit[key] == 1) { result.Diagnostics.push_back({{}, "module dependency cycle at '" + key + "'"}); return; }
+        if (moduleVisit[key] == 2) return;
+        moduleVisit[key] = 1;
+        for (const auto& dependency : moduleEdges[key]) visitModule(dependency);
+        moduleVisit[key] = 2;
+    };
+    for (const auto& [key, unused] : modulesByKey) visitModule(key);
     return result;
 }
 
@@ -421,13 +478,41 @@ BuildPlan CreateBuildPlan(const Resolution& resolution, ProductKind product, std
     BuildPlan plan; plan.Product = product; plan.Configuration = std::move(configuration); plan.SdkFingerprint = std::move(sdkFingerprint);
     if (!resolution.IsValid()) { plan.Diagnostics = resolution.Diagnostics; return plan; }
     for (const auto& plugin : resolution.Plugins) {
-        BuildInput manifestInput{plugin.ManifestPath, plugin.Id + "@" + plugin.Version};
+        std::ifstream manifestFile(plugin.ManifestPath, std::ios::binary);
+        std::ostringstream manifestContents;
+        if (!manifestFile) {
+            plan.Diagnostics.push_back({plugin.ManifestPath, "unable to read manifest for build fingerprint"});
+            continue;
+        }
+        manifestContents << manifestFile.rdbuf();
+        BuildInput manifestInput{plugin.ManifestPath.lexically_normal(), manifestContents.str()};
         plan.Inputs.push_back(manifestInput);
         for (const auto& module : plugin.Modules) {
             if (product == ProductKind::Runtime && module.Kind == ModuleKind::Editor) continue;
-            plan.Artifacts.push_back({plugin.Id, module.Name, module.Kind, plugin.Root});
+            const auto sourceRoot = module.SourceRoot.empty() ? plugin.Root : (plugin.Root / module.SourceRoot).lexically_normal();
+            plan.Artifacts.push_back({plugin.Id, module.Name, module.Kind, sourceRoot});
+            std::error_code error;
+            if (!std::filesystem::exists(sourceRoot, error)) {
+                plan.Diagnostics.push_back({sourceRoot, "module source root does not exist for build fingerprint"});
+                continue;
+            }
+            if (std::filesystem::is_regular_file(sourceRoot, error)) {
+                std::ifstream sourceFile(sourceRoot, std::ios::binary);
+                std::ostringstream sourceContents; sourceContents << sourceFile.rdbuf();
+                plan.Inputs.push_back({sourceRoot, sourceContents.str()});
+            } else if (std::filesystem::is_directory(sourceRoot, error)) {
+                for (std::filesystem::recursive_directory_iterator it(sourceRoot, error), end; it != end; it.increment(error)) {
+                    if (error) { plan.Diagnostics.push_back({sourceRoot, "unable to enumerate module source root: " + error.message()}); error.clear(); continue; }
+                    if (!it->is_regular_file(error)) continue;
+                    std::ifstream sourceFile(it->path(), std::ios::binary);
+                    std::ostringstream sourceContents; sourceContents << sourceFile.rdbuf();
+                    plan.Inputs.push_back({it->path().lexically_normal(), sourceContents.str()});
+                }
+            }
         }
     }
+    if (!plan.Diagnostics.empty()) return plan;
+    std::sort(plan.Inputs.begin(), plan.Inputs.end(), [](const auto& a, const auto& b) { return a.Path.generic_string() < b.Path.generic_string(); });
     std::sort(plan.Artifacts.begin(), plan.Artifacts.end(), [](const auto& a, const auto& b) {
         return std::tie(a.PluginId, a.ModuleName) < std::tie(b.PluginId, b.ModuleName);
     });

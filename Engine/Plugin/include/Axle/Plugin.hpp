@@ -32,6 +32,7 @@ struct Dependency {
 struct ModuleDescriptor {
     std::string Name;
     ModuleKind Kind = ModuleKind::Runtime;
+    std::filesystem::path SourceRoot;
     std::vector<std::string> Dependencies;
 };
 

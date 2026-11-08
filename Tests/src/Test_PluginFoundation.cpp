@@ -26,15 +26,19 @@ int main() {
 
     Write(root / "a" / "base.axleplugin", R"({
         "schema": 1, "id": "test.base", "version": "1.0.0", "name": "B\u0061se",
-        "modules": [{"name": "base-runtime", "kind": "runtime"}]
+        "modules": [{"name": "base-runtime", "kind": "runtime", "sourceRoot": "src"}]
     })");
     Write(root / "b" / "game.axleplugin", R"({
         "schema": 1, "id": "test.game", "version": "2.0.0", "name": "Game",
         "dependencies": [{"id": "test.base", "version": "1.0.0"}],
-        "modules": [{"name": "game-runtime", "kind": "runtime", "dependencies": ["base-runtime"]},
+        "modules": [{"name": "game-runtime", "kind": "runtime", "sourceRoot": "src", "dependencies": ["base-runtime"]},
                     {"name": "game-editor", "kind": "editor"}]
     })");
     Write(root / "bad.axleplugin", R"({"schema": 1, "id": "test.bad", "version": "1", "name": "Bad", "modules": [})");
+    std::filesystem::create_directories(root / "a" / "src", error);
+    std::filesystem::create_directories(root / "b" / "src", error);
+    Write(root / "a" / "src" / "base.cpp", "base-v1");
+    Write(root / "b" / "src" / "game.cpp", "game-v1");
 
     const auto catalog = Axle::Plugin::Discover({{root}});
     bool ok = true;
@@ -53,6 +57,12 @@ int main() {
                                                     "Debug", "sdk-a", "toolchain-a");
     ok &= Check(plan.IsValid() && plan.Artifacts.size() == 2, "runtime build plan excludes editor modules");
     ok &= Check(!plan.Fingerprint.empty(), "build plan has a stable identity");
+    Write(root / "b" / "src" / "game.cpp", "game-v2");
+    const auto changedCatalog = Axle::Plugin::Discover({{root}});
+    const auto changedResolution = Axle::Plugin::Resolve(changedCatalog, {"test.game"}, Axle::Plugin::ProductKind::Runtime);
+    const auto changedPlan = Axle::Plugin::CreateBuildPlan(changedResolution, Axle::Plugin::ProductKind::Runtime,
+                                                           "Debug", "sdk-a", "toolchain-a");
+    ok &= Check(changedPlan.Fingerprint != plan.Fingerprint, "module source changes invalidate the build fingerprint");
 
     auto project = std::make_shared<Axle::Project>();
     project->GetConfig().Name = "PluginProject";

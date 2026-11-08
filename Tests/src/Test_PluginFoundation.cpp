@@ -64,6 +64,27 @@ int main() {
                                                            "Debug", "sdk-a", "toolchain-a");
     ok &= Check(changedPlan.Fingerprint != plan.Fingerprint, "module source changes invalidate the build fingerprint");
 
+    std::string receiptError;
+    const auto receiptPath = root / "receipts" / "game.receipt";
+    ok &= Check(Axle::Plugin::WriteBuildReceipt(plan, plan.Artifacts.front(), receiptPath, receiptError), "build receipt writes successfully");
+    ok &= Check(std::filesystem::is_regular_file(receiptPath), "published build receipt exists on disk");
+    std::ifstream receiptStream(receiptPath);
+    std::string receiptContent((std::istreambuf_iterator<char>(receiptStream)), std::istreambuf_iterator<char>());
+    ok &= Check(receiptContent.find("schema=1") != std::string::npos, "receipt contains schema version");
+    ok &= Check(receiptContent.find("configuration=Debug") != std::string::npos, "receipt contains configuration");
+    ok &= Check(receiptContent.find(plan.Fingerprint) != std::string::npos, "receipt contains plan fingerprint");
+
+    std::string cmakeError;
+    const auto cmakePath = root / "cmake" / "AxleSelectedPlugins.cmake";
+    ok &= Check(Axle::Plugin::GenerateCMakeInputs(plan, cmakePath, cmakeError), "cmake inputs generate successfully");
+    ok &= Check(std::filesystem::is_regular_file(cmakePath), "published cmake inputs exist on disk");
+    std::ifstream cmakeStream(cmakePath);
+    std::string cmakeContent((std::istreambuf_iterator<char>(cmakeStream)), std::istreambuf_iterator<char>());
+    ok &= Check(cmakeContent.find("set(AXLE_SELECTED_PLUGIN_COUNT 2)") != std::string::npos, "cmake inputs contain selected count");
+    ok &= Check(cmakeContent.find(plan.Fingerprint) != std::string::npos, "cmake inputs contain plan fingerprint");
+    ok &= Check(cmakeContent.find("AXLE_PLUGIN_game-runtime_SOURCE_ROOT") != std::string::npos, "cmake inputs declare selected module");
+    ok &= Check(cmakeContent.find("game-editor") == std::string::npos, "runtime cmake inputs exclude editor module");
+
     auto project = std::make_shared<Axle::Project>();
     project->GetConfig().Name = "PluginProject";
     project->GetConfig().SelectedPlugins = {"test.base", "test.game"};

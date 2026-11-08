@@ -104,6 +104,12 @@ BuildPlan CreateBuildPlan(const Resolution& resolution, ProductKind product,
                           std::string configuration, std::string sdkFingerprint,
                           std::string toolchainFingerprint);
 
+bool WriteBuildReceipt(const BuildPlan& plan, const BuildArtifact& artifact,
+                       const std::filesystem::path& receiptPath, std::string& error);
+
+bool GenerateCMakeInputs(const BuildPlan& plan, const std::filesystem::path& outputPath,
+                         std::string& error);
+
 const char* ToString(ModuleKind kind);
 const char* ToString(ProductKind kind);
 

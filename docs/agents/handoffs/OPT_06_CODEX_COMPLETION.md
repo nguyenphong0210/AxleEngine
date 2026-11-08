@@ -1,123 +1,63 @@
-# OPT-06 Codex completion work record
+# OPT-06 Codex completion handoff
 
-User direction: finish the previously authorized consolidated review, repairs and
-verification. Codex's earlier stop at blocker reporting was premature. This is
-the same PLG-01..13 boundary; no OPT-07 work, vendor upgrade or push is released.
-Preserve Sandbox (`3e3a423`), the RHI correction (`0fd041f`) and authored assets.
+Date: **2026-11-08**. Status: **ACCEPTED / complete for PLG-01..13**.
+Canonical findings, verification and limits:
+[OPT-06 acceptance review](../../reviews/OPT_06_CODEX_REVIEW.md).
 
-## Current checkpoint (2026-11-08)
+## Source and corrections
 
-- Candidate reviewed: `20e0714`; resumed base: `c3a862d`.
-- Acceptance remains **NOT ACCEPTED**, with completion work in progress.
-- R7 codec ownership now uses one owned record, retains executable code through
-  destruction, revokes owner registration, detaches before destructor callbacks,
-  and checks revocation during snapshot invocation. Mutable storage API retired;
-  runtime codec registration migrated. Rejection, reentry and revocation regressions
-  added without dropping original persistence/copy checks.
-- R6 nested Assembly parsing now scopes built-in markers by indentation and
-  preserves opaque nested component names, entity keys, comments and blank lines.
-  Private preview/required-data lifecycle is still outstanding.
-- R8 discovery now models Engine/project origin, Engine API and target platform;
-  selected duplicate IDs are rejected. Physical aliases and overlapping roots are
-  deduplicated; Windows physical spelling is normalized before fingerprinting.
-- R9 architecture policy includes metadata/native modules and protects lower layers.
-- R4 artifact foundation uses a single strict receipt parser and actual binary
-  hash, separate plugin/module identities, SDK/toolchain/configuration/plan checks.
-  Native descriptor/host ABI is version 2; receiptless loading is rejected.
-  Fixture now reports its actual build configuration (not hardcoded Debug).
-- Debug rebuilt foundation/runtime/asset/probe executables; four CTests pass:
-  PluginFoundationTests, PluginRuntimeTests, AssetIdentityAndPersistenceTests,
-  ArchitectureBoundaryChecks. Logs: `build/opt06-completion/artifact-build-final.log`
-  and `artifact-tests.log`.
-- Explicit contract probes now pass 5/7. The two remaining failures are the old
-  builder's incomplete prebuilt receipt validation and invalid-plan success.
-  Probe exit remains 1; this is not phase acceptance.
-- Separate-context reviewer `/root/opt06_foundation_recheck` rechecked R6/R7/R8/R9
-  and found no remaining P1/P2 after follow-up fixes. It inspected logs, did not
-  independently rerun tests, and excluded unfinished receipt/SDK/product work.
+Candidate `20e0714` was rejected; Codex resumed completion from `c3a862d` under
+the user's original review/repair assignment. The final corrected production
+source is **`af3f7b2`**. Coherent correction commits:
 
-## Work still required before final acceptance
+- `25b4e7c`: durable Apply transaction and held-project identity.
+- `8a46ac7`: discovery compatibility, scoped codecs, nested Assembly data,
+  canonical receipts and architecture boundaries.
+- `52a24ce`: frozen native source builder, matched SDK, shared host/loader ownership.
+- `22cfca0`: canonical Engine service/scene backends and three real DLL lifecycle proof.
+- `c263840`: reject compiler sources/includes outside frozen build inputs.
+- `e2b9cc4`: authored/private-document preservation, stable Assembly identities,
+  cooker readiness and executable leases retained by actual RHI submissions.
+- `af3f7b2`: complete Editor session/build/selection/documents/restart/recovery,
+  shipped external template/generator, native product/restart/submission probes.
 
-Native builder/loader correction checkpoint (2026-11-08): real selected-only
-CMake configure/build, standalone opaque shared SDK package, frozen source
-snapshots/common inputs, exact manifest binding, immutable generation publication,
-project writer lock, owned cancellation and strict cached artifact validation are
-implemented. Real DLL regressions cover Unicode/spaces outside the Engine tree,
-preserved source/header timestamps, configure/compiler failure, successful
-no-output targets, concurrent writers and source mutation during compilation.
-Loader regressions cover owner revocation, retained host/code, worker Stop/final
-lease retirement on the owner thread and deny-write/delete artifact handles.
-Debug and Release focused tests pass 3/3; logs `native-{debug,release}-build.log`
-and `native-{debug,release}-tests.log` under `build/opt06-completion/`.
-The focused separate-context reviewer independently reproduced stale-output
-publication, then source-rechecked its fix and the frozen-manifest correction.
-Phase acceptance is still withheld; the following remaining list is historical
-and the native builder portion of item 1 is now implemented. Scene/Editor service
-integration and final full product gates remain open.
+The SDK uses shared C/POD gateway tables to canonical host services rather than
+exporting Engine/vendor C++ implementations. The architecture decision and
+[authoring guide](../../design/PLUGIN_SDK_AUTHORING.md) describe the supported surface.
 
-1. Replace builder's duplicate receipt logic with canonical identity validation.
-   Generate a selected-only standalone CMake graph; configure and compile real
-   DLL modules using a frozen SDK/toolchain plan. Use cross-process writer locking,
-   immutable staging/generations, actual compiler/configure failure, Unicode/spaces,
-   cancellation and unchanged artifact/receipt rollback tests. Replace the text-DLL
-   process fixture with real external source modules.
-2. Implement shared runtime/editor SDK host ownership and prove that two real DLLs
-   observe canonical host project/jobs/physics/render/registry/UI services without
-   linking private Engine/vendor state. Explicitly export the supported surface.
-   Finish the descriptor/host service/lifetime ABI and retain host tables/module
-   leases through callbacks, components, empty pools and teardown.
-3. Implement real plugin per-scene component/system lifecycle, copy/remap and owned
-   persistence/readiness across scenes, Assembly and private preview. Integrate
-   shared simulation phases, owner jobs/main-thread callbacks and retained render
-   contributions. Prove nontrivial component destruction before code unload.
-4. Connect Editor discovery, plan/build/native session, Active/Desired/Draft states,
-   dependency transactions and real Plugins UI. Implement dirty scene/private
-   document Save/Discard/Cancel, save failure, frozen build/export edits, owned
-   cancellable build UI, safe startup/recovery and one receipt-bound project/backend
-   restart. Do not quit an active session on a failed build/launch.
-5. Supply the project plugin SDK/template, external component/Inspector/update
-   proof and complete discover/select/build/restart/save/reopen/Play workflow.
-6. Rebuild/run final Debug and Release gates and native product/UI/DLL failure
-   cases, obtain focused separate-context rechecks of significant later corrections,
-   update all finding statuses and roadmap, then accept only verified final source.
+## Verification and correction review
 
-`docs/reviews/OPT_06_CODEX_REVIEW.md` remains the acceptance ledger. No missing
-implementation or unavailable required gate may be relabeled as a pass. Existing
-`crash.log` is unrelated generated work and must not be staged or removed blindly.
+- Full final Debug and Release builds succeed; CTest **59/59 per configuration**.
+- Original contract probes reproduce **0/7 defects per configuration**.
+- Each configuration passes all 17 expected results in the external/native driver,
+  including exact receipt-bound startup, rejected plan, partial module startup,
+  fifth-Present failure, recovery/restored startup and exception cleanup.
+- Physical RTX3070 D3D12/Vulkan submission tests report **38 green pixels each
+  per configuration**, retaining DLL code after scene/session release until GPU
+  completion and command retirement.
+- Actual Editor/Runtime simulation verifies 30/60/144 Hz and pause/step/resume on
+  both backends/configurations. Default Sandbox startup passes both backends.
+- Native Debug computer use verifies normal/narrow Plugins layout, selection state,
+  native Inspector edits, close Cancel, explicit Save and clean close.
+- Separate-context reviewers checked the foundation/native/scene/product repairs.
+  Product reviewer independently ran Debug 8/8 plus snapshot 2/2 and rebuilt Editor.
+  Final source-only reviewer found/rechecked all-return cleanup and Run failure
+  propagation; no remaining concrete P1/P2 in its focused correction scope.
+  Independent Release/native UI/GPU execution is not claimed.
 
-## Scene/backend correction checkpoint (2026-11-08)
+Logs and disposable fixture metadata: `build/opt06-completion/` (ignored).
+Final report names exact commands, logs, expected-negative exits and review limits.
+Native driver marker cleanup is fixture setup, not a claim of automated UI retry;
+the real-DLL session test exercises production ClearAbandonedSessions separately.
 
-The current correction adds actual SDK backends for Project, Scene/EnTT, shared
-JobSystem, Jolt velocity controls and retained debug contributions; host ImGui
-controls/Inspector use the same context. A real external fixture compiles two
-Runtime DLLs (producer/dependent) and an Editor DLL through the standalone SDK.
-Generic scene extensions own nontrivial values, descriptor contexts and code;
-copy/duplicate/import use complete remaps and transaction commit before Start.
-Missing required/incompatible data faults readiness; opaque references reject
-unsafe copy. Failed initialization removes its scene/job side effects. Owner
-callbacks run in admission/dependency order, with reverse teardown. SDK calls
-also reject scheduler work stolen by the OS owner thread. Revoked gateway tables
-remain callable during deferred teardown; worker releases stay on owner retirement.
+## Boundary and preservation
 
-Current-source Debug and Release focused gates pass 5/5, exit 0:
-PluginServicesTests, PluginBuildWorkflowTests, SceneDataBoundaryTests,
-AssetIdentityAndPersistenceTests and ArchitectureBoundaryChecks. Build/test logs:
-`build/opt06-completion/scene-corrections-build-final.log`,
-`scene-corrections-tests.log`, `scene-release-build.log`, `scene-release-tests.log`.
-The focused reviewer source-rechecked its reported repairs, independently rebuilt
-Debug service/data/asset targets and reported 4/4 focused checks plus the explicit
-persistence rerun passing, with no remaining P1/P2 in this chunk. It did not run
-Release or native product/window/pixel/restart tests. Its final notification hit a
-usage limit after that detailed recheck message; no broader acceptance is inferred.
+All OPT06-R1..R10 are closed. G0/G1/G2 are accepted. No OPT-07+ release, fresh
+Vehicle, static selected player, packaged plugin content, vendor upgrade or push.
+PLG-22/23 own selected Runtime composition/export; current export refuses an
+unsupported native player and cooker validates required plugin documents first.
 
-Remaining work is now concentrated in product composition. New
-`Editor/src/PluginSession.hpp/.cpp` is a draft, **not yet compiled or wired**.
-Do not count that model or the headless ImGui frame as a completed Editor workflow.
-Required next work: real Active/Desired/Draft and build/progress/cancel wiring;
-all dirty/private-document Save/Discard/Cancel and save failures; receipt-bound
-project/backend restart with successful child startup before parent close;
-crash/recovery/retry, project switch and close races; remaining private preview
-and cooker preflight paths; submitted rendering lifetime/native pixels; shipped
-project template/generator and complete external authoring proof; final full
-Debug/Release product gates and separate-context correction recheck. Keep phase
-acceptance NOT ACCEPTED until those are actually completed.
+Sandbox/default startup is retained. Authored scene SHA256:
+`0FA1BA5710996941D82512A7703727C18C75C1363748D680243EF103E4CC5E93`.
+Unrelated source/design commits remain preserved. Generated `crash.log` remains
+untracked and is not staged. Work stops at the accepted OPT-06 boundary.

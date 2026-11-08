@@ -3,10 +3,10 @@
 > **Execution:** follow [OPT-00..11](../ROADMAP.md). This document is a
 > technical contract, not a separate phase queue. Old Phase/G labels and
 > source-audit baselines are retained for traceability. Early Vehicle retirement
-> is delivered; acceptance and new plugin implementation remain open.
+> is delivered; the roadmap owns current package acceptance and release status.
 
 Date: **2026-11-04**. Baseline: **3190ab205ace417b81172c0fa92f92e64b5b46f4**.
-Status: **plugin contracts; PLG-00..25 remain open; early Vehicle retirement delivered separately; OPT-00 awaits independent clean-removal verification**.
+Status (2026-11-08): **PLG-00 prerequisite and PLG-01..13 accepted; PLG-14..25 remain later scope. See the OPT-06 review and roadmap for evidence and release authority**.
 
 The user requests detailed plans before code. DLL modules in Editor, static
 Runtime modules, project-level selection and a new Plugins window are the selected
@@ -22,7 +22,8 @@ domain in the [master contract](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md). The
 master's external prerequisite edges supplement this plan's internal graph.
 Retain all PLG identifiers. Use the [NRI contract](NRI_INTEGRATION_CONTRACT.md)
 for shared GPU/device/frame ownership; plugins must not create another renderer
-or link private Engine/NRI device state. No production implementation is released.
+or link private Engine/NRI device state. Only packages explicitly released in the
+exchange may be implemented; this plan does not authorize later work.
 
 The subsequent [EnTT/enkiTS review](../architecture/ENTT_ENKITS_REVIEW.md) found
 existing concurrency/lifetime faults. The

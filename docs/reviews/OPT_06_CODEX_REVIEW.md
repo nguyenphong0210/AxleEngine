@@ -1,249 +1,138 @@
-# OPT-06 consolidated review
+# OPT-06 consolidated review and acceptance
 
-Date: **2026-11-08**. Reviewer: **Codex**. Candidate: `20e0714`.
-Reviewed implementation range: `0ca38cd..20e0714` (including the earlier loader,
-metadata, selection and runtime-receipt foundation commits, not just the four
-commits named in the final delivery).
+Date: **2026-11-08**. Reviewer/final repair owner: **Codex**.
+Original candidate: `20e0714` (`0ca38cd..20e0714`); resumed base: `c3a862d`.
+Final corrected production source: **`af3f7b2`**.
 
 ## Decision
 
-**Repair resumed (2026-11-08):** The user challenged the premature stop at this
-report. Codex is completing the original PLG-01..13 repair/verification scope.
-See the [live completion work record](../agents/handoffs/OPT_06_CODEX_COMPLETION.md).
-The first correction checkpoint passes four Debug tests and five of seven explicit
-contract probes; phase acceptance is still withheld. Historical findings below
-describe the reviewed candidate, with final statuses to be updated after completion.
+**ACCEPTED for OPT-06 / PLG-01..13 (G0, G1 and G2).** The original candidate
+was not accepted. Codex completed the missing product composition and repaired
+the reproduced defects, rather than treating its passing foundation tests as
+phase acceptance. All ten findings below are closed against the corrected source.
+Significant repairs received separate-context rechecks.
 
-**NOT ACCEPTED.** The candidate supplies useful metadata, loader and UI foundations,
-but does not deliver the PLG-01..13 product workflow required by G0/G1/G2.
-The delivery message `CG-20261108T025845874637Z-GEMINI-c7dae3` is an implementer
-claim, not independent acceptance. Existing tests passing does not close the
-missing shared host, scene extension, real source plugin or restart/recovery gates.
+The release ends at the general native Editor plugin framework and external
+authoring proof. OPT-07+ is not activated. Fresh Vehicle, Spline/Terrain conversion,
+script conversion, selected static player composition and packaged plugin content
+remain their recorded later packages. See the [authoring guide](../design/PLUGIN_SDK_AUTHORING.md).
 
-Codex repaired the isolated Apply persistence transaction and verified it with a
-separate-context source recheck. Remaining work includes absent framework layers
-and reproduced defects; it cannot be closed by approving the existing slices.
-OPT-07 and later work remain outside this review.
+## Findings and corrections
 
-## Findings
-
-### OPT06-R1 / P1 — Shared Engine/Editor host and SDK are absent (OPEN)
-
-`Engine/Core/CMakeLists.txt:1`, `Engine/Physics/CMakeLists.txt:1` and
-`Engine/PluginRuntime/CMakeLists.txt:1` still build static libraries.
-`Engine/Project/include/Axle/Project.hpp` keeps the active project in an inline
-static member. No shared Runtime/Editor host, supported SDK export/import surface,
-shared Jolt/ImGui ownership contract, or two-DLL host-state proof was added.
-
-The fixture DLL owns an integer and registers a destructor callback. It never
-uses Project, Scene/EnTT pools, physics, jobs, rendering or Editor services.
-Consequently its successful load cannot establish PLG-05/07 host ownership.
-The loader's own README explicitly says PLG-04/05 acceptance is still required
-before product use. Required correction: implement and verify the shared host/SDK
-before attaching actual project components and systems to products.
-
-### OPT06-R2 / P1 — Build/load/restart/recovery are not connected (OPEN)
-
-Source-wide caller inspection finds no product caller of `BuildPlugins`,
-`CreateBuildPlan`, `GenerateCMakeInputs` or `NativePlugin::Load`.
-Editor links the libraries but only persists selection and invokes the existing
-backend restart helper. `Editor/src/Main.cpp` handles `--safe-mode`/`--recovery`
-by setting a panel flag; it supplies no native plugin startup/session or failure
-recovery. Thus selecting, applying and restarting cannot activate a project DLL.
-
-`Editor/src/EditorLayer.cpp:444` also reports a successful scene save regardless
-of `SaveScene` failure, skips an untitled scene and has no private-document guard.
-The restart helper carries project/backend but no validated plugin receipt or
-startup handoff. Save/Discard/Cancel, private documents, build failures, close races
-and a single successful restarted plugin session remain unproven. These are
-PLG-10..12 deliverables, not later Vehicle or selected shipping Runtime work.
-
-### OPT06-R3 / P1 — Source builder has no configure/staging workflow or real DLL proof (OPEN)
-
-`Editor/src/PluginBuild.cpp` only calls `cmake --build` on an already configured
-directory; `ProjectDirectory` is unused. Generated CMake inputs contain variables
-but no configured target/module composition. There is no caller that turns a
-resolved project selection into a standalone configured plugin project.
-
-Successful outputs are read directly from `BinaryDirectory`, with no immutable
-generation/staging boundary and no artifact-bound receipt. Failure preservation
-tests compare only receipt text, not an already active DLL generation. A global
-atomic flag excludes concurrent calls in one process, not writers in two Editor
-processes.
-
-`Tests/src/PluginBuildFixture/CMakeLists.txt` declares `project(... NONE)` and a
-custom target; `WritePlugin.cmake:9` writes plain text to `CustomPlugin_Runtime.dll`.
-This verifies process cancellation/logging but **does not compile or link a DLL**.
-It cannot satisfy the PLG-11/13 external source authoring proof. The native loader
-fixture and this fake build fixture are separate disconnected paths.
-
-### OPT06-R4 / P1 — Receipt validation accepts incomplete or mismatched identities (OPEN)
-
-`Engine/PluginRuntime/src/PluginRuntime.cpp:165` requires only `schema=1`;
-plugin/configuration comparisons are conditional on fields being present. A real
-fixture DLL loads successfully with a receipt containing only `schema=1`.
-Omitting a receipt entirely also bypasses this check. Module identity, SDK,
-toolchain, product, fingerprint and binary provenance are not validated.
-The loader uses one expected ID for descriptor `module_id` and receipt `plugin_id`,
-although the build planner models plugin and module IDs separately.
-
-`Editor/src/PluginBuild.cpp` similarly accepts a matching prebuilt receipt with
-no configuration field, and an invalid plan with an empty item list reports
-successful/up-to-date. Both defects were reproduced through production APIs.
-Required correction: one canonical validated artifact identity used by planner,
-builder, loader and restart session, with incomplete/invalid inputs rejected.
-
-### OPT06-R5 / P1 — Per-scene plugin ownership and scheduling are not implemented (OPEN)
-
-The candidate introduces generic `void*` registration and codec owner numbers,
-but no plugin scene-instance registry, typed pool/module lifetime pin, scene
-attach/detach/start/stop extension, nontrivial component copy/remap contract,
-owned simulation/job completion integration or retained render contribution.
-No changes to Scene's lifecycle/scheduler, JobSystem or renderer implement the
-PLG-07/09 consumers. Existing shared simulation/script tests establish their
-existing services; they do not establish native plugin ownership through those
-services. Empty typed pools, detached/private scenes and pending work remain
-outside the fixture's lifetime coverage.
-
-### OPT06-R6 / P1 — Assembly parsing drops nested plugin data (OPEN)
-
-`Engine/Scene/src/AssemblySerializer.cpp:471` recognizes built-in headers after
-trimming indentation. At line 487, any nested `Children:` ends a custom section
-and switches to hierarchy parsing. A custom component containing `Value`, nested
-`Children` and `Tail` retains only its first line after load. This was reproduced
-with real `Serialize`/`LoadAssemblyData` calls. The existing flat two-line fixture
-does not exercise the failure.
-
-`Engine/UI/src/AssemblyEditorPanel.cpp` builds preview entities from known fields
-without restoring/interpreting the new passive blocks. There is also no
-owner/type/schema/required-data readiness contract to block Play/cook or unsafe
-opaque-reference duplication. PLG-08 is partial. This finding concerns current
-plugin data; legacy Vehicle format retention is not an acceptance requirement.
-
-### OPT06-R7 / P1 — Mutable codec storage breaks scoped ownership (OPEN)
-
-`Engine/SceneData/include/Axle/ComponentCodec.hpp:71` exposes mutable codec storage
-while ownership lives in a separate positional vector. Padding only handles append
-growth. Register owners A/B, erase A through `GetMutableCodecs`, then unregister B:
-B's codec remains registered because its index no longer matches its owner.
-The review probe reproduces this with the public API. Unloading B can then leave
-its virtual callback/destructor resident in a host registry.
-
-Required correction: encapsulate codec/owner/lifetime in one registration record
-and migrate the mutable runtime registration caller; owner cleanup must not rely
-on callers preserving parallel vector indices. This is separate from the absent
-typed EnTT pool lifetime pin in R5.
-
-### OPT06-R8 / P1 — Resolver discards duplicate-ID diagnostics and compatibility policy (OPEN)
-
-`Engine/Plugin/src/Plugin.cpp:367` records a duplicate ID and keeps one manifest.
-`Resolve` at line 393 ignores the catalog diagnostic and accepts that selected ID,
-silently choosing whichever manifest sorted first. A two-root duplicate fixture
-reproduces a valid resolution despite invalid discovery.
-
-Manifest/resolve data also has no Engine-versus-project origin, Engine API/SDK or
-platform compatibility fields. A selected manifest declaring Engine API `999` and
-an unsupported platform resolves successfully. Engine-to-project dependency
-prohibition therefore cannot be enforced either. Preserve diagnostics per row,
-reject ambiguous selected IDs and validate the effective graph's compatibility.
-
-### OPT06-R9 / P2 — Architecture gate is not maintained (OPEN)
-
-The current `check_architecture.py --closed-package AF-04` run exits **2**, with
-seven diagnostics: unknown owners for both plugin targets, unresolved plugin
-includes and undeclared Editor link edges. `scripts/architecture_rules.json`
-does not describe either new module. Update the explicit module boundaries and
-their checks without suppressing violations or weakening unrelated policy.
-
-### OPT06-R10 / P1 — Apply acknowledges persistence failure (FIXED by Codex)
-
-The candidate advances Desired before saving, derives a filename from the display
-name, saves the global active project instead of its held project and reports
-success even if saving fails. A new regression first failed against the candidate
-with `FAIL: Apply requires a saved project` (exit 1).
-
-Correction commit: **`25b4e7c`**. The correction requires a saved project path, propagates the actual New/Open/Save
-As path, atomically persists the held project's draft, restores config on failure
-and advances Desired/restart only after persistence succeeds. Project switching
-clears old pending notifications. Expanded tests cover no project, untitled Apply,
-scene-save refusal, project-save failure, preserved bytes/draft/Desired, different
-display name/filename, reopen, and an unrelated global active project.
-
-A separate-context source reviewer found no remaining P1/P2 in this correction;
-that reviewer inspected the Debug log but did not independently rerun tests.
-This closes R10 only, not R2's missing document/build/recovery transaction.
-
-## Package assessment
-
-| Package | Verified status |
+| Finding | Final status and verified correction |
 | --- | --- |
-| PLG-01 | Partial metadata discovery; origin/compatibility/duplicate handling open |
-| PLG-02 | Partial deterministic graph checks; R8 blocks closure |
-| PLG-03 | Versioned selection persistence exists; Apply repair verified; malformed schema/product integration gates still required |
-| PLG-04 | Fingerprints/receipt writer exist; configured selected-module graph and identity validation incomplete |
-| PLG-05 | Shared host/SDK and two-DLL service proof absent |
-| PLG-06 | Integer-resource native loader foundation only; identity/session gates incomplete |
-| PLG-07 | Native component/scene lifecycle and retained typed pools absent |
-| PLG-08 | Passive Assembly blocks added; nested data loss and readiness/preview gates open |
-| PLG-09 | Native plugin phase/job/render ownership integration absent |
-| PLG-10 | Menu/window/view model added; full native workflow/layout acceptance NOT RUN |
-| PLG-11 | Cancellable build-process helper exists; real external DLL configure/build/staging absent |
-| PLG-12 | Selection save and backend restart hooks only; integrated recovery/documents/build transaction absent |
-| PLG-13 | External project SDK/template and complete authoring proof absent |
+| OPT06-R1 / P1: shared hosts/SDK absent | **FIXED**, `52a24ce`, `22cfca0`. Runtime/Editor host DLLs expose matched C/POD gateways to canonical application services. Three real external DLLs prove shared Project, registry, jobs, physics, renderer and ImGui ownership in Debug/Release. |
+| OPT06-R2 / P1: disconnected product workflow | **FIXED**, `e2b9cc4`, `af3f7b2`. Editor composes selection, immutable build generations, startup activation, private-document guard, safe recovery and acknowledged project/backend restart. Real Editor workflow and negative startup tests pass. |
+| OPT06-R3 / P1: simulated source build | **FIXED**, `52a24ce`, `c263840`, `af3f7b2`. Standalone matched SDK configures/compiles actual selected DLLs from frozen sources; locks writers, stages immutable generations and preserves earlier outputs on configure/compiler/cancel failure. Live absolute source/include escapes are rejected. |
+| OPT06-R4 / P1: incomplete artifact identity accepted | **FIXED**, `8a46ac7`, `52a24ce`, `af3f7b2`. One strict receipt validates plugin/module, SDK, toolchain, configuration, product, plan and actual DLL hash. Restart additionally binds canonical generation and a locked receipt snapshot; same-plan replacement and incomplete identities are rejected. |
+| OPT06-R5 / P1: native scene ownership absent | **FIXED**, `52a24ce`, `22cfca0`, `e2b9cc4`. Owned scene extensions retain descriptors, values, empty pools, callbacks, jobs and code through teardown. Whole-graph remaps, transactional Clone/Start, shared simulation phases and actual GPU submission lifetime are tested. |
+| OPT06-R6 / P1: nested Assembly data loss | **FIXED**, `8a46ac7`, `22cfca0`, `e2b9cc4`. Indentation-scoped passive sections preserve nested keys; private previews restore owned data. Stable authored UUIDs replace arithmetic preview keys. Missing required/schema data blocks Play/cook; opaque references reject unsafe copy. Wide/deep Assembly tests pass. |
+| OPT06-R7 / P1: mutable codec ownership | **FIXED**, `8a46ac7`. Codec, owner and executable lease live in one encapsulated registration record. Mutable positional storage is retired; revocation/reentry/owner cleanup tests pass. |
+| OPT06-R8 / P1: duplicate/compatibility resolution | **FIXED**, `8a46ac7`. Selected ambiguous IDs fail; origin, Engine API, platform and Engine-to-project dependency constraints are enforced. Physical aliases are deduplicated and identities deterministic. |
+| OPT06-R9 / P2: architecture gate broken | **FIXED**, `8a46ac7`, `52a24ce`, `22cfca0`, `af3f7b2`. Explicit Plugin/host/service/product ownership and link edges are maintained; architecture and forbidden-edge checks pass in both configurations. |
+| OPT06-R10 / P1: Apply reports failed persistence as success | **FIXED**, `25b4e7c`, `af3f7b2`. Apply atomically saves the held project's actual file, rolls back on failure and advances Desired only after success. Active remains the running graph. Untitled/failed-save/unrelated-global-project cases pass. |
 
-## Verification record
+The original seven explicit contract probes now reproduce **0/7 defects**, exit 0,
+in both configurations. They remain a separate explicit acceptance executable.
+The historical failed candidate review and original reproductions remain in Git
+history; they are not evidence of a failure in the accepted corrected source.
 
-Logs are under `build/review-opt06/` (generated/ignored). All results below are
-actual Codex runs, distinct from Gemini's delivery evidence.
+## Delivered package boundary
 
-- Candidate Debug builds of plugin, project, asset, scene-data, runtime-build
-  tests and Editor/Runtime: exit **0** (`build-Debug.log`). An earlier command
-  accidentally named the CTest name `AxleAssetIdentityAndPersistenceTests` as a
-  target and exited 1; the corrected command uses `AxleAssetUnitTests`.
-- Candidate targeted Debug CTest:
-  `ctest --test-dir build -C Debug -R 'Plugin|Asset|SceneData|ProjectStartup|BuildWorkflow' --output-on-failure`:
-  **16/16 PASS**, exit **0** (`ctest-candidate-Debug.log`).
-- Apply regression before correction: exit **1** (`apply-before-fix.log`).
-- Corrected Debug panel/Editor rebuild and focused panel tests in **both Debug
-  and Release**: exit **0**, **1/1 PASS per configuration**
-  (`build-apply-fixed-Debug.log`, `ctest-apply-fixed-Debug.log`,
-  `ctest-apply-fixed-Release.log`).
-- Seven additional defect probes compiled against production APIs and real
-  loader fixture: all **7 defects reproduced** (`probes-results.log`).
-  This is failure evidence, not a successful acceptance gate.
-- Final architecture check: exit **2**, seven diagnostics
-  (`architecture-final.log`, original run in `architecture.log`).
-- `python scripts/test_baseline_tools.py`: exit **0**, **18/18 PASS**
-  (`baseline-tools.log`).
-- Final Debug targeted CTest after correction: **16/16 PASS**, exit **0**
-  (`ctest-final-Debug.log`), using the same targeted command above.
-- Release build:
-  `cmake --build build --config Release --target AxlePluginFoundationTests AxlePluginSelectionTests AxlePluginsPanelWorkflowTests AxlePluginRuntimeTests AxleAllTests AxleEditor AxleRuntime`:
-  exit **0** (`build-final-Release.log`). This rebuilds the broad test executables
-  before using their results; existing linker runtime-library warnings remain.
-- Full Release `ctest --test-dir build -C Release --output-on-failure`:
-  **55/56 PASS**, exit **8**. The failing test is
-  `ArchitectureBoundaryChecks`, matching R9 (`ctest-final-Release.log`).
-  The other 55 results do not waive this failure or the absent native gates.
-- Committed contract probe Debug rebuild: exit **0**
-  (`build-contract-probes-Debug.log`). Running the command below returns **1**,
-  with **7/7 defects reproduced** (`contract-probes-Debug.log`).
-- `git diff --check` and exchange schema/reference validation: exit **0**.
+| Packages | Accepted result |
+| --- | --- |
+| PLG-01..04 | Side-effect-free Engine/project/content-only metadata discovery; deterministic compatible graph; durable explicit Desired selection; canonical product plans and artifact identities. Content-only discovery does not claim later content mounting/packaging. |
+| PLG-05..06 | Shared gateway ownership, frozen SDK and real Debug/Release loader handshake; scoped registration, startup rollback, owner-thread retirement and safe mode. |
+| PLG-07..09 | Native nontrivial component lifecycle across edit/Play/duplicate/Assembly/private scenes; persistence/readiness/remap; shared phases/jobs and retained submitted render contributions. |
+| PLG-10..12 | Accessible Plugins window, dependency transactions, Draft/Desired/Active states, actual async build/log/cancel, guarded documents, restart handoff, failure preservation and recovery/retry. |
+| PLG-13 | Shipped template/generator and external Unicode-path project proof with Runtime component, dependent Editor Inspector, update, save/reopen, Play/clone/Stop and native restart. No Engine/root CMake edit is needed by the plugin author. |
 
-The committed explicit negative gate can be rerun with:
+The supported SDK is an opaque host facade, documented in the
+[architecture decision](../design/PLUGIN_SYSTEM_ARCHITECTURE.md#implemented-facade-decision-2026-11-08-correction).
+Plugins allocate/destroy their own nontrivial payloads, while host-compiled wrappers
+use the canonical EnTT registry. Plugins do not link private Engine/vendor state;
+Jolt, enkiTS, ImGui and rendering operations execute through the host. This replaces
+the initial direct vendor/C++ export proposal and is an explicit design correction.
+
+## Executed verification
+
+Generated logs are under **`build/opt06-completion/`**. These are Codex runs;
+Gemini's initial delivery message is not substituted for verification.
+
+| Gate | Debug | Release | Evidence |
+| --- | --- | --- | --- |
+| Build `AxleAllTests AxleEditor AxleRuntime AxleOpt06ReviewProbes` | PASS, exit 0 | PASS, exit 0 | `final-debug-build.log`, `final-debug-product-build.log`, `final-release-build.log` |
+| Full CTest | **59/59 PASS**, exit 0 | **59/59 PASS**, exit 0 | `final-debug-tests.log`, `final-release-tests.log` |
+| Original seven defect probes | **0 defects**, exit 0 | **0 defects**, exit 0 | `contract-final-{debug,release}.log` |
+| External template and native product driver | All 17 checks meet expected exit | All 17 checks meet expected exit | `final-native-{debug,release}.json`, corresponding `native-final-*` logs |
+| Actual submitted GPU/code lifetime | D3D12 and Vulkan PASS; **38 green pixels each** | D3D12 and Vulkan PASS; **38 green pixels each** | `native-final-submission-{dx12,vulkan}-{debug,release}.log` |
+| Native Editor/Runtime simulation | Both backends; 30/60/144 Hz PASS | Both backends; 30/60/144 Hz PASS | `final-simulation-{debug,release}.json`, per-product logs |
+| Default Sandbox startup | Both backends PASS | Both backends PASS | `final-default-startup-{dx12,vulkan}-{debug,release}.log` |
+
+Build and routine test commands:
 
 ```powershell
-cmake --build build --config Debug --target AxleOpt06ReviewProbes
-build/Tests/Debug/AxleOpt06ReviewProbes.exe build/Tests/Debug/AxlePluginRuntimeGood.dll build/review-opt06/contract-probes
+cmake --build build --config Debug --target AxleAllTests AxleEditor AxleRuntime AxleOpt06ReviewProbes --parallel 6
+ctest --test-dir build -C Debug --output-on-failure
+cmake --build build --config Release --target AxleAllTests AxleEditor AxleRuntime AxleOpt06ReviewProbes --parallel 6
+ctest --test-dir build -C Release --output-on-failure
+build/Tests/Debug/AxleOpt06ReviewProbes.exe build/Tests/Debug/AxlePluginRuntimeGood.dll build/opt06-completion/contract-final-debug
+build/Tests/Release/AxleOpt06ReviewProbes.exe build/Tests/Release/AxlePluginRuntimeGood.dll build/opt06-completion/contract-final-release
 ```
 
-It returns nonzero while any reproduced contract violation remains. It is
-deliberately separate from the existing routine CTest suite: a routine green
-result must not hide this failing acceptance gate. Fixture descriptors currently
-hardcode `Debug` even in Release builds; existing Release loader tests therefore
-do not establish a genuine Release ABI/configuration handshake.
+The native driver executes the generated external template through production
+session/build APIs, then actual Editor workflow, exact receipt-bound child restart,
+wrong-plan rejection, fifth-Present failure, abandoned-session recovery, partial
+DLL startup failure after registration, restored startup, filesystem recovery and
+exception teardown. Intentional rejection must exit **1**, not crash, timeout or
+acknowledge the parent. The caught-exception probe intentionally exits 1; the
+driver records that as its expected result. Temporary markers are explicitly
+constructed/cleared in disposable fixtures; actual `ClearAbandonedSessions` retry
+is separately exercised by the real-DLL session test. This is not a claim of
+automated native UI retry clicks.
 
-Required native Plugins UI, real project component/Inspector/update/save/reopen,
-restart/recovery and shared-service DLL gates are **NOT RUN / implementation
-absent**. No acceptance of those paths is inferred from a linked Editor executable.
-No sample files, vendor revisions, later OPT package or remote branch was changed.
+Native computer use also checked Plugins through Edit at normal and approximately
+350px width, Draft/Apply/Active separation, A-to-empty-to-A reconciliation, actual
+Runtime Inspector Speed 3.5-to-6 editing, close guard, Cancel retaining the edited
+value, toolbar Save and clean close. These observations used a disposable Debug
+fixture and are distinct from headless ImGui and Release verification.
+
+The product probe checks failed Clone/Start rollback, unchanged authored physics
+during Play, read-only dirty capture, new same-name Canvas saves, Cancel/Discard,
+conflicting writers, selected-node hot reload, reopen and Save As with continued
+private/UI saves into the copied project. A final probe repair uses physical-path
+relative resolution across Windows short/long aliases. Startup cleanup now retires
+device callbacks on every return/exception before static cache destruction, and
+failed `Application::Run` is reported as failure. Both failure paths were rerun on
+the final native binaries.
+
+## Independent correction rechecks
+
+Separate-context foundation/native/scene reviewers checked their respective repair
+chunks. The product reviewer source-rechecked its findings, independently rebuilt
+and ran **8/8** focused Debug checks, then independently rebuilt the strengthened
+receipt-snapshot targets, ran **2/2** checks and rebuilt Debug Editor. Logs include
+`independent-snapshot-debug-build.log`, `independent-snapshot-debug-tests.log` and
+`independent-snapshot-editor-debug-build.log`.
+
+The final focused reviewer found the startup-rejection cleanup bypass; the outer
+product cleanup guard closed it. It rechecked that guard, physical-path probe
+correction and `Run()` failure propagation and reported no remaining P1/P2 in
+that scope. That final check was source-only. Independent reviewers did not run
+Release, native computer use or GPU acceptance; those are the coordinator's
+executed gates above. No Gemini reply or reviewer test execution is invented.
+
+## Limits and preservation
+
+- Native plugin activation is startup-only; live unload/hot swap is deferred.
+- Selected static Runtime composition is PLG-22 and exact packaged plugin content
+  is PLG-23. Editor export refuses a player that lacks selected native modules;
+  data cooking preflights required native documents before output mutation.
+- Content mounting, marketplace/distribution and arbitrary binary compatibility
+  are not claimed by metadata discovery or the matched source SDK.
+- No new Vehicle implementation, later OPT package, pinned vendor upgrade or push.
+- Sandbox/default startup is preserved. Its authored scene SHA256 remains
+  `0FA1BA5710996941D82512A7703727C18C75C1363748D680243EF103E4CC5E93`.
+  Generated `crash.log` remains untracked and is not part of the delivery.
+- Existing APIENTRY/runtime-library linker warnings remain; no failed check is
+  waived by those warnings.

@@ -3,7 +3,7 @@ Latest user steering (2026-11-07): for future released scopes, Gemini implements
 # Architecture Optimization Roadmap
 
 Updated: **2026-11-08**. Ordering baseline: `7869fce` (post-Vehicle retirement).
-Status: **OPT-06 reviewed, NOT ACCEPTED: incomplete PLG-01..13 integration and verified defects. OPT-02/03/04/05 remain accepted**.
+Status: **OPT-06 accepted after consolidated review, repairs and final verification; OPT-02/03/04/05 remain accepted. OPT-07 is not released**.
 
 ## Start here
 
@@ -12,7 +12,7 @@ cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that clean
 is accepted. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
-**Latest completed assignment: OPT-05, P41-12..20 and P41-25.** Gemini delivered
+**Accepted prerequisite: OPT-05, P41-12..20 and P41-25.** Gemini delivered
 the initial candidate; Codex owns the corrected design, implementation and final
 verification. Significant corrections received separate-context source rechecks.
 The [acceptance report](reviews/OPT_05_CODEX_REVIEW.md) records source `de97d9b`,
@@ -20,12 +20,13 @@ all repaired findings, complete Debug/Release builds, 50/50 CTest and 35/35 phys
 native API cases per configuration, actual consumer/Runtime pixels and remaining
 explicit later-scope limits.
 
-**Current assignment: OPT-06 consolidated review, PLG-01..13.** The user requested
-review/acceptance on 2026-11-08. The candidate `20e0714` is **not accepted**;
-the [Codex review](reviews/OPT_06_CODEX_REVIEW.md) records missing shared-host,
-native scene lifecycle, real source plugin and restart/recovery implementation,
-reproduced contract failures and the verified Apply persistence correction.
-Do not advance to OPT-07 on the implementer's completion claim.
+**Latest completed assignment: OPT-06 consolidated review, PLG-01..13.** The
+original candidate `20e0714` was rejected. Codex completed repairs through
+`af3f7b2`, obtained separate-context correction rechecks and accepted G0/G1/G2.
+The [acceptance review](reviews/OPT_06_CODEX_REVIEW.md) closes OPT06-R1..R10 and
+records Debug/Release 59/59 CTest, real external DLL authoring, actual Editor
+restart/recovery/documents, native UI and D3D12/Vulkan submitted-lifetime pixels.
+Work stops at OPT-06; OPT-07 requires its own user release.
 
 **Accepted prerequisite: Codex OPT-04, P41-01..P41-11.** The user reassigned
 implementation from Gemini to Codex on 2026-11-07; [current handoff](agents/handoffs/OPT_04_CODEX.md).
@@ -268,30 +269,36 @@ P41-26 Editor-disabled build closure remains later scope; stop before OPT-06.
 
 ### OPT-06 - Deliver the plugin framework and Plugins window
 
-**Review:** NOT ACCEPTED; [findings and evidence](reviews/OPT_06_CODEX_REVIEW.md).
-Individual foundations and existing green tests do not close G0/G1/G2.
+**Review:** ACCEPTED for PLG-01..13 / G0/G1/G2 on corrected source `af3f7b2`;
+[findings, correction rechecks and executed evidence](reviews/OPT_06_CODEX_REVIEW.md).
 
 **Purpose:** Prove a general Engine/project plugin workflow before implementing Vehicle.
 
 **Work:** Implement manifest discovery/resolution, project selections and build receipts; shared hosts and DLL lifecycle; generic component/codecs/scheduling; Plugins settings; cancellable build/apply/restart/recovery; a real external project plugin template.
 
-- [ ] **PLG-01:** Metadata discovery.
-- [ ] **PLG-02:** Dependency and module resolution.
-- [ ] **PLG-03:** Project selection and migration policy.
-- [ ] **PLG-04:** Product plan and artifact identities.
-- [ ] **PLG-05:** Shared hosts, vendor identity and SDK exports.
-- [ ] **PLG-06:** Native loader and scoped registration.
-- [ ] **PLG-07:** Per-scene component and system extensions.
-- [ ] **PLG-08:** Persistence and unresolved component data.
-- [ ] **PLG-09:** Simulation phases, jobs and render contributions.
-- [ ] **PLG-10:** Plugins window.
-- [ ] **PLG-11:** Project plugin builds.
-- [ ] **PLG-12:** Apply, restart and recovery.
-- [ ] **PLG-13:** Project plugin authoring proof.
+- [x] **PLG-01:** Metadata discovery.
+- [x] **PLG-02:** Dependency and module resolution.
+- [x] **PLG-03:** Project selection and migration policy.
+- [x] **PLG-04:** Product plan and artifact identities.
+- [x] **PLG-05:** Shared hosts, vendor identity and SDK exports.
+- [x] **PLG-06:** Native loader and scoped registration.
+- [x] **PLG-07:** Per-scene component and system extensions.
+- [x] **PLG-08:** Persistence and unresolved component data.
+- [x] **PLG-09:** Simulation phases, jobs and render contributions.
+- [x] **PLG-10:** Plugins window.
+- [x] **PLG-11:** Project plugin builds.
+- [x] **PLG-12:** Apply, restart and recovery.
+- [x] **PLG-13:** Project plugin authoring proof.
 
 **Exit:** A project plugin with owned component state works through the common SDK. Disabled modules are discoverable from metadata but are not configured, compiled or loaded. Desired/Active state and dependency reasons are visible. Editor uses DLLs; live plugin unloading is deferred.
 
-**Evidence:** Pending; implementation/review is not claimed here.
+**Evidence:** Debug/Release builds and 59/59 CTest per configuration; original
+contract probes reproduce 0/7 defects; real external template, Inspector/update,
+save/reopen/Play/copy and native acknowledged restart/failure/recovery pass.
+Physical D3D12/Vulkan submission tests retain executable code through actual GPU
+completion and produce 38 green pixels per backend/configuration. Native Debug
+Plugins layout/edit/close-save behavior was observed separately. See the review
+for exact commands, logs, reviewer limits and later PLG-22/23 boundaries.
 
 ### OPT-07 - Write Vehicle as a complete plugin
 

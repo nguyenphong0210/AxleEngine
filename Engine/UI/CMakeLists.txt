@@ -27,6 +27,9 @@ target_link_libraries(AxleUI2D
 # ==============================================================================
 # AxleUI Static Library (Editor Tooling UI via Dear ImGui)
 # ==============================================================================
+if(NOT AXLE_BUILD_EDITOR)
+    return()
+endif()
 add_library(AxleUI STATIC
     src/ImGuiLayer.cpp
     src/DebugPanel.cpp

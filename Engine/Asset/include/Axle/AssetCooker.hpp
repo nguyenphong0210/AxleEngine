@@ -15,8 +15,10 @@ namespace Axle {
         std::string PackageName = "Data.axlepak";          // Name of monolithic package archive
         bool BakeMeshesToBinary = true;                    // Pre-compile text .axle to fast binary .axlebin
         bool IncludeShaders = true;                        // Bundle Engine shaders (Checkerboard, Skybox, etc.)
+        std::filesystem::path ShaderDirectory;             // Explicit product resources; no cwd fallback when supplied
         std::filesystem::path ExecutableDirectory;        // Explicit build output; no cross-config fallback when set
         bool CopyExecutables = true;                       // Bundle AxleRuntime.exe & AxleScripts.dll
+        bool RequireScriptsDll = true;                    // Matched legacy development player only; shipping scripts are static
         // Composition-owned validation runs before opening or modifying output.
         std::function<bool(std::string&)> Preflight;
         std::function<bool(const std::filesystem::path&, std::string&)> ValidatePluginDocument;

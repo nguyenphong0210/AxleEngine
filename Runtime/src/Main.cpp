@@ -2,6 +2,7 @@
 #include <Axle/ImageSource.hpp>
 #include <Axle/ImageTextureCache.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/JobSystem.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <Axle/PhysicsEngine.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
@@ -108,10 +109,12 @@ int RuntimeMain(int argc, char** argv) {
         std::filesystem::path projectPath;
         uint32_t frameLimit = 0;
         bool verifySimulation = false;
+        bool checkContent = false;
         auto rhiConfig = Axle::RHI::RHISwitcher::ParseCommandLine(argc, argv);
         for (int i = 1; i < argc; ++i) {
             const std::string arg = argv[i];
             if (arg == "--verify-simulation") verifySimulation = true;
+            else if (arg == "--check-content") checkContent = true;
             else if (arg.rfind("--frames=", 0) == 0) {
                 size_t consumed = 0; const auto value = std::stoul(arg.substr(9),&consumed);
                 if (consumed != arg.size()-9 || value == 0 || value > 1000000) throw std::invalid_argument("--frames requires an integer from 1 to 1000000");
@@ -124,6 +127,17 @@ int RuntimeMain(int argc, char** argv) {
 
         const auto startup = Axle::PrepareRuntimeStartup(projectPath,rhiConfig);
         projectPath = startup.ProjectPath; rhiConfig = startup.Backend;
+        if (checkContent) {
+            if (!startup.ProjectDefinition) throw std::runtime_error("Content preflight requires a project");
+            Axle::Log::Init(); Axle::JobSystem::Init(4);
+            struct StopJobs { ~StopJobs() { Axle::JobSystem::Shutdown(); } } stopJobs;
+            Axle::Project::SetActive(startup.ProjectDefinition);
+            Axle::InitializeCompiledScripts();
+            Axle::RuntimeComposition composition;
+            Axle::ValidateCompiledRuntimeContent(Axle::Project::GetAssetDirectory());
+            AXLE_INFO("Compiled Runtime content preflight passed");
+            return 0;
+        }
 
         class PhysicsApplicationService final : public Axle::IApplicationService {
         public:

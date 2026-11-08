@@ -738,8 +738,8 @@ bool GenerateCMakeInputs(const BuildPlan& plan, const std::filesystem::path& out
         out << "if(NOT TARGET " << artifact.ModuleName << ")\nmessage(FATAL_ERROR \"Missing selected module: " << artifact.ModuleName << "\")\nendif()\n";
         out << "get_target_property(moduleType " << artifact.ModuleName << " TYPE)\n"
             << "get_target_property(moduleImported " << artifact.ModuleName << " IMPORTED)\n"
-            << "if(NOT moduleType STREQUAL \"SHARED_LIBRARY\" OR moduleImported)\n"
-            << "message(FATAL_ERROR \"Selected module must build a native shared library: " << artifact.ModuleName << "\")\nendif()\n";
+            << "if(NOT moduleType STREQUAL \"" << (plan.Product == ProductKind::Runtime ? "STATIC_LIBRARY" : "SHARED_LIBRARY") << "\" OR moduleImported)\n"
+            << "message(FATAL_ERROR \"Selected module has an invalid native library type: " << artifact.ModuleName << "\")\nendif()\n";
         out << "axle_validate_plugin_module(" << artifact.ModuleName << ")\n";
         if (!artifact.Dependencies.empty()) {
             out << "target_link_libraries(" << artifact.ModuleName << " PRIVATE";

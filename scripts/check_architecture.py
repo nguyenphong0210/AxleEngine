@@ -138,6 +138,10 @@ def scan_cmake(root, config):
                                          line=line, details="dynamic CMake evaluation requires configured-graph support"))
             if name not in {"include", "add_subdirectory"} or not args:
                 continue
+            # This is the sole external product graph entry. Runtime build
+            # receipts freeze it and the configured closure checker audits it.
+            if path.relative_to(root).as_posix() == "Runtime/CMakeLists.txt" and name == "include" and args == ["${AXLE_RUNTIME_PLUGIN_GRAPH}"]:
+                continue
             try:
                 token = args[0].replace("${CMAKE_SOURCE_DIR}", root.as_posix()).replace(
                     "${CMAKE_CURRENT_SOURCE_DIR}", path.parent.as_posix()).replace(
@@ -185,6 +189,13 @@ def scan_cmake(root, config):
                                           to=f"AxleSDK::{host}",to_module="PluginSDK"))
                 continue
             if name != "target_link_libraries" and not dependency_property:
+                continue
+            # Generic static SDK constructors, mirroring axle_add_plugin_module.
+            # Accept only these exact host edges; arbitrary additions still fail.
+            if rel == "Runtime/StaticModules.cmake" and name == "target_link_libraries" and args in [
+                ["${target}", "PRIVATE", "Axle::PluginSDK", "Axle::RuntimeHost"],
+                ["${product}", "PRIVATE", "${AXLE_SELECTED_PLUGIN_MODULES}"],
+            ]:
                 continue
             try:
                 if dependency_property or scope:

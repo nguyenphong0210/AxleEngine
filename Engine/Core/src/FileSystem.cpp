@@ -33,7 +33,12 @@ namespace Axle {
             std::error_code error;
             auto root = std::filesystem::weakly_canonical(FileSystem::GetAssetDirectory(), error);
             if (error) return {};
-            relative = path.lexically_normal().lexically_relative(root);
+            // Resolve the same existing ancestors on both sides. Windows short
+            // names and junction aliases must also work for virtual descendants
+            // that have no loose file on disk in a packaged game.
+            const auto normalized = std::filesystem::weakly_canonical(path, error);
+            if (error) return {};
+            relative = normalized.lexically_relative(root);
             if (relative.empty() || relative.is_absolute() || *relative.begin() == "..") return {};
         }
         return Package::NormalizePath(PathToUtf8(relative));

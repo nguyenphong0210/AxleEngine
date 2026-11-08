@@ -1,6 +1,7 @@
 #include <Axle/CustomMaterialProgram.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/Path.hpp>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -86,7 +87,7 @@ namespace Axle {
         uint64_t hash = 14695981039346656037ull;
         for (const auto& dependency : dependencies) {
             std::ifstream file(dependency,std::ios::binary);
-            const auto identity=std::filesystem::absolute(dependency,ec).lexically_normal().generic_string();
+            const auto identity=PathToUtf8(std::filesystem::absolute(dependency,ec).lexically_normal());
             for (unsigned char c : identity) { hash^=c; hash*=1099511628211ull; }
             if (!file) { hash^=0xfe; hash*=1099511628211ull; continue; }
             char c;
@@ -98,7 +99,7 @@ namespace Axle {
 
     std::string CustomProgramCache::ComputeFingerprint(const CustomProgramKey& key) const {
         const auto* entry=FindEntry(key);
-        return ComputeFingerprint(std::filesystem::path(key.ShaderPath),entry?entry->Dependencies:std::vector<std::filesystem::path>{});
+        return ComputeFingerprint(PathFromUtf8(key.ShaderPath),entry?entry->Dependencies:std::vector<std::filesystem::path>{});
     }
 
     ProgramEntry& CustomProgramCache::RefreshEntry(const CustomProgramKey& key, const std::string& fingerprint) {
@@ -177,9 +178,10 @@ namespace Axle {
         CandidateBuildResult result;
         (void)fingerprint;
 
-        std::string resolvedPath = FileSystem::ResolveAssetPath(key.ShaderPath).string();
+        const auto resolvedNative = FileSystem::ResolveAssetPath(PathFromUtf8(key.ShaderPath));
+        const auto resolvedPath = PathToUtf8(resolvedNative);
         std::error_code ec;
-        if (!std::filesystem::exists(resolvedPath, ec)) {
+        if (!std::filesystem::exists(resolvedNative, ec)) {
             result.Success = false;
             result.Diagnostic = "Shader file does not exist: " + key.ShaderPath;
             return result;
@@ -202,7 +204,7 @@ namespace Axle {
             }
         }
 
-        std::string source = FileSystem::ReadTextFile(resolvedPath);
+        std::string source = FileSystem::ReadTextFile(resolvedNative);
         if (source.empty()) {
             result.Success = false;
             result.Diagnostic = "Shader file is empty: " + key.ShaderPath;
@@ -220,7 +222,7 @@ namespace Axle {
             static const std::regex missingInclude(R"deps(['"]([^'"]+)['"] file not found)deps");
             std::smatch missing;
             if(std::regex_search(preprocessError,missing,missingInclude))
-                result.Dependencies.push_back((std::filesystem::path(resolvedPath).parent_path()/missing[1].str()).lexically_normal());
+                result.Dependencies.push_back((resolvedNative.parent_path()/PathFromUtf8(missing[1].str())).lexically_normal());
             result.Diagnostic=preprocessError; return result;
         }
         // DXC reports active includes after macro expansion, including nested includes.
@@ -230,8 +232,8 @@ namespace Axle {
         while(std::getline(preprocessed,line)) {
             std::smatch match;
             if(!std::regex_search(line,match,lineDirective))continue;
-            std::filesystem::path dependency=match[1].str();
-            if(dependency.is_relative())dependency=std::filesystem::path(resolvedPath).parent_path()/dependency;
+            auto dependency=PathFromUtf8(match[1].str());
+            if(dependency.is_relative())dependency=resolvedNative.parent_path()/dependency;
             dependency=std::filesystem::weakly_canonical(dependency,ec);
             if(!ec && std::filesystem::is_regular_file(dependency,ec))result.Dependencies.push_back(dependency);
         }

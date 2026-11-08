@@ -1,5 +1,6 @@
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/Path.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/RHI/RHIShader.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
@@ -128,21 +129,14 @@ namespace Axle {
 
         std::string shaderSource;
         auto shaderPath = FileSystem::ResolveAssetPath("shaders/Particle.hlsl");
-        if (!std::filesystem::exists(shaderPath)) {
+        if (!FileSystem::Exists(shaderPath)) {
             shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "Particle.hlsl";
         }
-        if (!std::filesystem::exists(shaderPath)) {
+        if (!FileSystem::Exists(shaderPath)) {
             shaderPath = "Engine/Resources/Shaders/Particle.hlsl";
         }
 
-        if (std::filesystem::exists(shaderPath)) {
-            std::ifstream file(shaderPath);
-            if (file.is_open()) {
-                std::stringstream ss;
-                ss << file.rdbuf();
-                shaderSource = ss.str();
-            }
-        }
+        if (FileSystem::Exists(shaderPath)) shaderSource = FileSystem::ReadTextFile(shaderPath);
 
         if (shaderSource.empty()) {
             AXLE_CORE_ERROR("RHIParticleRenderer: Failed to locate Particle.hlsl!");
@@ -151,7 +145,7 @@ namespace Axle {
 
         RHI::RHIShaderCompileDesc vsDesc;
         vsDesc.Source = shaderSource;
-        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.SourcePath = PathToUtf8(shaderPath);
         vsDesc.EntryPoint = "VSMain";
         vsDesc.Stage = RHI::RHIShaderStage::Vertex;
         vsDesc.HLSLVersion = "2021";

@@ -1,8 +1,10 @@
 #include "RuntimeStartup.hpp"
+#include "RuntimeComposition.hpp"
 #include <Axle/FileSystem.hpp>
 #include <Axle/ProjectSerializer.hpp>
 #include <Axle/Path.hpp>
 #include <stdexcept>
+#include <algorithm>
 
 namespace Axle {
     RuntimeStartup PrepareRuntimeStartup(const std::filesystem::path& requested, RHI::RHIBackendConfig backend) {
@@ -29,13 +31,27 @@ namespace Axle {
             for (const auto* name : {"Sandbox.axleproj", "Project.axleproj"})
                 if (FileSystem::Exists(name)) { startup.ProjectPath = name; break; }
         }
-        if (startup.ProjectPath.empty()) return startup;
+        if (startup.ProjectPath.empty()) {
+#if defined(AXLE_STATIC_RUNTIME)
+            throw std::runtime_error("Packaged Runtime project is missing");
+#else
+            return startup;
+#endif
+        }
         if (!FileSystem::Exists(startup.ProjectPath)) throw std::runtime_error("Runtime project is missing: " + PathToUtf8(startup.ProjectPath));
         auto project = std::make_shared<Project>();
         ProjectSerializer serializer(project);
         if (!serializer.Deserialize(startup.ProjectPath)) throw std::runtime_error("Runtime project cannot be read: " + PathToUtf8(startup.ProjectPath));
-        if (!project->GetConfig().SelectedPlugins.empty())
-            throw std::runtime_error("This player cannot contain selected native plugins; selected static composition is scheduled for PLG-22");
+        auto requestedSelection = project->GetConfig().SelectedPlugins;
+        auto compiledSelection = CompiledRuntimeSelection();
+        std::sort(requestedSelection.begin(), requestedSelection.end());
+        std::sort(compiledSelection.begin(), compiledSelection.end());
+        if (requestedSelection != compiledSelection)
+            throw std::runtime_error("Runtime project selection does not match the compiled product snapshot");
+#if defined(AXLE_STATIC_RUNTIME)
+        if (project->GetConfig().RuntimeSnapshot != CompiledRuntimeSnapshot())
+            throw std::runtime_error("Packaged project does not match the compiled Runtime snapshot");
+#endif
         if (startup.Backend.RawArgument.empty()) {
             const auto type = RHI::StringToRHIType(project->GetConfig().RHIBackend);
             if (type == RHI::RHIType::None) throw std::runtime_error("Unsupported project rendering backend: " + project->GetConfig().RHIBackend);

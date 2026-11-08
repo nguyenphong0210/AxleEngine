@@ -54,6 +54,7 @@ Makefile
 !Tests/src/PluginBuildFixture/cmake/Common.cmake
 !CMakeLists.txt
 !cmake/*.cmake
+!Runtime/StaticModules.cmake
 
 # IDE & Editor Specific Files
 .vs/

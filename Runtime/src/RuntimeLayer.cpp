@@ -7,6 +7,7 @@
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ScriptableEntity.hpp>
+#include <Axle/ScriptRegistry.hpp>
 #include <Axle/Path.hpp>
 #include <stdexcept>
 #include <Axle/RenderCommand.hpp>
@@ -32,8 +33,12 @@ namespace Axle {
 
         // 1. Sync GLFW input context and initialize gameplay scripts module
         ScriptHotReloadManager::Get().SyncInputContext(static_cast<GLFWwindow*>(window.GetNativeWindow()));
+#if !defined(AXLE_STATIC_RUNTIME)
         ScriptHotReloadManager::Get().Initialize("AxleScripts.dll");
         ScriptHotReloadManager::Get().SyncImGuiContext(nullptr);
+#endif
+        InitializeCompiledScripts();
+        m_Composition = std::make_unique<RuntimeComposition>();
 
         // 2. Initialize Hardware 2D Canvas for In-Game UI & HUD
         m_Canvas.Init();
@@ -97,6 +102,7 @@ namespace Axle {
             ctx.ConeMesh = PrimitiveMesh::CreateCone(32);
             ctx.PlaneMesh = PrimitiveMesh::CreatePlane();
             ctx.ScriptBinder = [](Entity entity, const std::string& scriptName) {
+                if (!scriptName.empty() && !ScriptRegistry::Has(scriptName)) throw std::runtime_error("Required project script is missing from this player: " + scriptName);
                 if (!entity.HasComponent<NativeScriptComponent>()) {
                     entity.AddComponent<NativeScriptComponent>().Bind(scriptName);
                 } else {
@@ -132,6 +138,7 @@ namespace Axle {
     }
 
     void RuntimeLayer::OnUpdate(Timestep ts) {
+        if (m_Composition) m_Composition->Drain();
         // 0. Update Audio Subsystem
         AudioEngine::Update();
 
@@ -332,6 +339,7 @@ namespace Axle {
             m_Scene->OnRuntimeStop(m_PhysicsScene.get());
         }
         m_Scene.reset();
+        m_Composition.reset();
         m_PhysicsScene.reset();
         ScriptHotReloadManager::Get().Shutdown();
         AudioEngine::Shutdown();

@@ -14,6 +14,7 @@
 #include <Axle/UI/Canvas2D.hpp>
 #include <Axle/UI/UIDocument.hpp>
 #include <Axle/SimulationDriver.hpp>
+#include "RuntimeComposition.hpp"
 
 #include <memory>
 #include <filesystem>
@@ -45,6 +46,7 @@ namespace Axle {
     private:
         std::filesystem::path m_ProjectPath;
         std::shared_ptr<Project> m_PreparedProject;
+        std::unique_ptr<RuntimeComposition> m_Composition;
         std::shared_ptr<Scene> m_Scene;
         std::unique_ptr<PhysicsScene> m_PhysicsScene;
         SimulationDriver m_SimulationDriver;

@@ -5,6 +5,7 @@
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssetTypes.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/UUID.hpp>
 
 #include <fstream>
 #include <system_error>
@@ -96,7 +97,7 @@ namespace Axle {
         return {};
     }
 
-    CookResult AssetCooker::CookProject(const CookSettings& settings, ProgressCallback progressCb) {
+    static CookResult CookInto(const CookSettings& settings, AssetCooker::ProgressCallback progressCb) {
         CookResult result;
         result.Success = false;
         const auto effectiveAssets = settings.AssetDirectory.empty() ? FileSystem::GetAssetDirectory() : settings.AssetDirectory;
@@ -131,8 +132,8 @@ namespace Axle {
         std::filesystem::path runtimeExe, scriptsDll;
         if (settings.CopyExecutables) {
             runtimeExe = resolveExecutable("AxleRuntime.exe");
-            scriptsDll = resolveExecutable("AxleScripts.dll");
-            if (runtimeExe.empty() || scriptsDll.empty()) {
+            if (settings.RequireScriptsDll) scriptsDll = resolveExecutable("AxleScripts.dll");
+            if (runtimeExe.empty() || (settings.RequireScriptsDll && scriptsDll.empty())) {
                 result.ErrorMessage = "Standalone player or scripts module is missing. Build Runtime before exporting executables.";
                 return result;
             }
@@ -197,9 +198,9 @@ namespace Axle {
         }
 
         if (!projFile.empty() && std::filesystem::exists(projFile)) {
-            writer.AddFile("Project.axleproj", projFile);
+            if (!writer.AddFile("Project.axleproj", projFile)) throw std::runtime_error("Failed to append required package input");
             if (PathToUtf8(projFile.filename()) != "Project.axleproj") {
-                writer.AddFile(PathToUtf8(projFile.filename()), projFile);
+                if (!writer.AddFile(PathToUtf8(projFile.filename()), projFile)) throw std::runtime_error("Failed to append required package input");
             }
             result.TotalAssetsCooked++;
             AXLE_INFO("AssetCooker: Bundled project configuration '{0}'", PathToUtf8(projFile.filename()));
@@ -211,7 +212,10 @@ namespace Axle {
         std::vector<std::filesystem::path> assetFiles;
         if (std::filesystem::exists(assetDir)) {
             AXLE_INFO("AssetCooker: Scanning asset directory '{0}'", PathToUtf8(assetDir));
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(assetDir)) {
+            for (std::filesystem::recursive_directory_iterator it(assetDir), end; it != end; ++it) {
+                if (it->is_symlink()) throw std::runtime_error("Cook input contains a filesystem link");
+                if (it->is_directory() && it->path().filename() == ".cache") { it.disable_recursion_pending(); continue; }
+                const auto& entry = *it;
                 if (entry.is_regular_file()) {
                     assetFiles.push_back(entry.path());
                 }
@@ -230,24 +234,23 @@ namespace Axle {
                 auto relPath = std::filesystem::relative(path, assetDir);
                 std::string virtPath = PathToUtf8(relPath);
 
-                UUID uuid = AssetManager::GetAssetUUID(path);
+                std::uint64_t embeddedId = 0;
+                FileSystem::ReadFileIdentity(path, embeddedId);
+                UUID uuid = embeddedId;
                 uint16_t assetType = static_cast<uint16_t>(GetAssetTypeFromPath(path));
 
                 if ((ext == ".axle" || ext == ".axlemesh") && assetType != static_cast<std::uint16_t>(AssetType::Assembly) && settings.BakeMeshesToBinary) {
                     // Pre-bake or ensure binary cache exists
-                    auto cachePath = AssetSerializer::GetCachePathFor(path);
-                    if (!std::filesystem::exists(cachePath)) {
-                        AssetSerializer::LoadMesh(path);
-                    }
-
-                    if (std::filesystem::exists(cachePath)) {
-                        auto cacheRel = std::filesystem::relative(cachePath, assetDir);
-                        writer.AddFile(PathToUtf8(cacheRel), cachePath, uuid, assetType);
-                        result.TotalAssetsCooked++;
-                    }
+                    const auto cacheRel = relPath.parent_path() / ".cache" / (relPath.stem().wstring() + L".axlebin");
+                    const auto cachePath = outputDir / ".cook-cache" / relPath;
+                    std::filesystem::create_directories(cachePath.parent_path());
+                    AxleMeshSource mesh;
+                    if (!AssetSerializer::LoadFromAxleText(path, mesh) || !AssetSerializer::SaveToAxleBinary(cachePath, mesh)) throw std::runtime_error("Required mesh cannot be baked: " + PathToUtf8(path));
+                    if (!writer.AddFile(PathToUtf8(cacheRel), cachePath, uuid, assetType)) throw std::runtime_error("Failed to append baked mesh");
+                    result.TotalAssetsCooked++;
                 }
 
-                writer.AddFile(virtPath, path, uuid, assetType);
+                if (!writer.AddFile(virtPath, path, uuid, assetType)) throw std::runtime_error("Failed to append required package input");
                 result.TotalAssetsCooked++;
 
                 if (progressCb) {
@@ -268,8 +271,10 @@ namespace Axle {
                 "Resources/shaders"
             };
 
-            std::filesystem::path shaderDir;
+            std::filesystem::path shaderDir = settings.ShaderDirectory;
+            if (!shaderDir.empty() && !std::filesystem::is_directory(shaderDir)) throw std::runtime_error("Product shader directory is missing");
             for (const auto& root : shaderSearchRoots) {
+                if (!shaderDir.empty()) break;
                 if (std::filesystem::exists(root)) {
                     shaderDir = root;
                     break;
@@ -281,7 +286,7 @@ namespace Axle {
                 for (const auto& entry : std::filesystem::directory_iterator(shaderDir)) {
                     if (entry.is_regular_file()) {
                         std::string virtPath = "shaders/" + PathToUtf8(entry.path().filename());
-                        writer.AddFile(virtPath, entry.path());
+                        if (!writer.AddFile(virtPath, entry.path())) throw std::runtime_error("Failed to append required package input");
                         result.TotalAssetsCooked++;
                     }
                 }
@@ -294,6 +299,7 @@ namespace Axle {
             AXLE_ERROR("AssetCooker: {0}", result.ErrorMessage);
             return result;
         }
+        std::filesystem::remove_all(outputDir / ".cook-cache");
 
         result.PackageSizeBytes = std::filesystem::file_size(pkgPath, ec);
         result.Success = true;
@@ -303,6 +309,12 @@ namespace Axle {
 
         // 5. Copy Standalone Executables & DLLs
         if (settings.CopyExecutables) {
+            for (const auto* companion : {"dxcompiler.dll", "dxil.dll", "Resources", "AxleRuntime.build.receipt"}) {
+                const auto source = settings.ExecutableDirectory / companion;
+                if (settings.ExecutableDirectory.empty() || !std::filesystem::exists(source)) continue;
+                std::filesystem::copy(source, outputDir / companion,
+                    std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing);
+            }
             if (!runtimeExe.empty()) {
                 auto targetExe = outputDir / "AxleRuntime.exe";
                 std::filesystem::copy_file(runtimeExe, targetExe, std::filesystem::copy_options::overwrite_existing, ec);
@@ -329,8 +341,6 @@ namespace Axle {
                     result.ErrorMessage = "Failed to copy scripts module: " + ec.message();
                     return result;
                 }
-            } else {
-                AXLE_WARN("AssetCooker: AxleScripts.dll not found in search paths.");
             }
 
             // Copy audio assets directory loose if present so miniaudio disk streaming operates without hitch
@@ -339,6 +349,7 @@ namespace Axle {
                 auto audioDstDir = outputDir / "assets" / "audio";
                 std::filesystem::create_directories(audioDstDir, ec);
                 std::filesystem::copy(audioSrcDir, audioDstDir, std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
+                if (ec) throw std::runtime_error("Cannot copy required loose audio: " + ec.message());
                 if (!ec) {
                     AXLE_INFO("AssetCooker: Bundled companion audio assets to '{0}'", PathToUtf8(audioDstDir));
                 }
@@ -353,10 +364,69 @@ namespace Axle {
                     auto targetAudioPath = outputDir / "assets" / rel;
                     std::filesystem::create_directories(targetAudioPath.parent_path(), ec);
                     std::filesystem::copy_file(path, targetAudioPath, std::filesystem::copy_options::overwrite_existing, ec);
+                    if (ec) throw std::runtime_error("Cannot copy required audio file: " + ec.message());
                 }
             }
         }
 
+        return result;
+    }
+
+    CookResult AssetCooker::CookProject(const CookSettings& settings, ProgressCallback progressCb) {
+        CookResult result;
+        std::filesystem::path stage, backup, output;
+        try {
+            auto requested = settings.OutputDirectory.empty() ? std::filesystem::path("Export") : settings.OutputDirectory;
+            if (requested.is_relative()) requested = (settings.ProjectPath.empty() ? std::filesystem::current_path() : settings.ProjectPath.parent_path()) / requested;
+            output = std::filesystem::weakly_canonical(requested);
+            const auto overlaps = [](const auto& a, const auto& b) {
+                if (a.empty() || b.empty()) return false;
+                const auto left = std::filesystem::weakly_canonical(a), right = std::filesystem::weakly_canonical(b);
+                const auto within = [](const auto& child, const auto& parent) { const auto rel = child.lexically_relative(parent); return !rel.empty() && *rel.begin() != ".."; };
+                return within(left, right) || within(right, left);
+            };
+            const auto assets = settings.AssetDirectory.empty() ? FileSystem::GetAssetDirectory() : settings.AssetDirectory;
+            if (output == output.root_path() || output.filename().empty() || overlaps(output, assets) ||
+                (!settings.ExecutableDirectory.empty() && overlaps(output, settings.ExecutableDirectory)) ||
+                (!settings.ProjectPath.empty() && overlaps(output, settings.ProjectPath))) {
+                result.ErrorMessage = "Export output overlaps a protected product input"; return result;
+            }
+            if (settings.PackageName.empty() || std::filesystem::path(settings.PackageName).filename() != settings.PackageName) {
+                result.ErrorMessage = "Package name must be a filename"; return result;
+            }
+            if (std::filesystem::exists(output) && (!std::filesystem::is_directory(output) ||
+                (!std::filesystem::is_empty(output) && !std::filesystem::is_regular_file(output / "AxleExport.receipt")))) {
+                result.ErrorMessage = "Export output contains files not owned by an earlier export"; return result;
+            }
+            std::filesystem::create_directories(output.parent_path());
+#ifdef _WIN32
+            struct OutputLock {
+                HANDLE File = INVALID_HANDLE_VALUE;
+                ~OutputLock() { if (File != INVALID_HANDLE_VALUE) CloseHandle(File); }
+            } lock;
+            const auto lockPath = output.parent_path() / (output.filename().wstring() + L".export.lock");
+            lock.File = CreateFileW(lockPath.c_str(), GENERIC_WRITE | DELETE, FILE_SHARE_READ, nullptr,
+                CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+            if (lock.File == INVALID_HANDLE_VALUE) { result.ErrorMessage = "Another export owns this output directory"; return result; }
+#endif
+            const auto suffix = std::to_string(static_cast<std::uint64_t>(UUID()));
+            stage = output.parent_path() / (output.filename().wstring() + L".staging-" + std::filesystem::path(suffix).wstring());
+            backup = output.parent_path() / (output.filename().wstring() + L".previous-" + std::filesystem::path(suffix).wstring());
+            auto staged = settings; staged.OutputDirectory = stage;
+            result = CookInto(staged, std::move(progressCb));
+            if (!result.Success) { std::filesystem::remove_all(stage); return result; }
+            if (settings.Preflight && !settings.Preflight(result.ErrorMessage)) { result.Success = false; std::filesystem::remove_all(stage); return result; }
+            std::ofstream marker(stage / "AxleExport.receipt"); marker << "schema=1\npackage=" << settings.PackageName << '\n'; marker.close();
+            if (!marker) throw std::runtime_error("Cannot finish export receipt");
+            if (std::filesystem::exists(output)) std::filesystem::rename(output, backup);
+            try { std::filesystem::rename(stage, output); }
+            catch (...) { if (std::filesystem::exists(backup)) std::filesystem::rename(backup, output); throw; }
+            std::error_code cleanup; std::filesystem::remove_all(backup, cleanup);
+            result.PackagePath = output / settings.PackageName;
+        } catch (const std::exception& exception) {
+            result.Success = false; result.ErrorMessage = exception.what();
+            std::error_code cleanup; if (!stage.empty()) std::filesystem::remove_all(stage, cleanup);
+        }
         return result;
     }
 

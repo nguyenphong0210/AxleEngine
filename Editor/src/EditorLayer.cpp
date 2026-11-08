@@ -3488,10 +3488,10 @@ void EditorLayer::RenderExportGameModal() {
     if (m_RuntimeBuildFuture.valid() && m_RuntimeBuildFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         try {
             const auto result = m_RuntimeBuildFuture.get();
-            if (result.Success) FinishExportGame(m_PendingExportSettings);
+            if (result.Success && result.Request && Axle::BindRuntimeExport(*result.Request, result, m_PendingExportSettings, m_ExportStatusMessage)) FinishExportGame(m_PendingExportSettings);
             else {
                 m_ExportStatusSuccess = false;
-                m_ExportStatusMessage = result.Error;
+                if (!result.Error.empty()) m_ExportStatusMessage = result.Error;
                 if (!result.LogPath.empty()) m_ExportStatusMessage += "\nBuild log: " + Axle::PathToUtf8(result.LogPath);
             }
         } catch (const std::exception& error) {

@@ -16,6 +16,7 @@ namespace Axle {
         std::filesystem::path AssetDirectory = "assets";
         std::string RHIBackend = "Direct3D12"; // "Direct3D12", "Vulkan", "OpenGL"
         std::vector<std::string> SelectedPlugins;
+        std::string RuntimeSnapshot; // Set only in a compiled product's packaged configuration.
     };
 
     class Project {

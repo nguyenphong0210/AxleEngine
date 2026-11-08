@@ -1,3 +1,14 @@
+add_executable(AxleStaticPluginLifetimeTests EXCLUDE_FROM_ALL src/Test_StaticPluginLifetime.cpp)
+target_link_libraries(AxleStaticPluginLifetimeTests PRIVATE Axle::PluginRuntime)
+add_test(NAME StaticPluginLifetimeTests COMMAND $<TARGET_FILE:AxleStaticPluginLifetimeTests>)
+if(NOT AXLE_BUILD_EDITOR)
+    add_executable(AxlePluginFoundationTests EXCLUDE_FROM_ALL src/Test_PluginFoundation.cpp)
+    target_link_libraries(AxlePluginFoundationTests PRIVATE Axle::Plugin Axle::Project)
+    add_test(NAME PluginFoundationTests COMMAND $<TARGET_FILE:AxlePluginFoundationTests>)
+    add_custom_target(AxleAllTests DEPENDS AxlePluginFoundationTests AxleStaticPluginLifetimeTests)
+    return()
+endif()
+
 # Dedicated Test Executable for Automated Verifications
 add_executable(AxleTests EXCLUDE_FROM_ALL
     src/Test.cpp
@@ -72,6 +83,7 @@ target_link_libraries(AxleTests PRIVATE
     Axle::Project
     Axle::Spline
     Axle::Terrain
+    Axle::TerrainEditor
     Axle::Animation
     Axle::VFX
 )
@@ -583,13 +595,15 @@ endif()
 add_test(NAME Opt0203ReviewRegressions COMMAND $<TARGET_FILE:AxleOpt0203ReviewTests>)
 set_tests_properties(Opt0203ReviewRegressions PROPERTIES LABELS "review;ecs-jobs;sim;cpu" TIMEOUT 60)
 
-set(AXLE_TEST_TARGETS AxleSceneDataBoundaryTests AxleOpt0203ReviewTests AxleFoundationUnitTests AxleSceneMutationUnitTests AxleSimulationClockUnitTests AxleEditorCutoverUnitTests AxleRuntimeProductParityUnitTests AxleProjectUnitTests AxleAssetUnitTests AxleAssetFormatUnitTests AxleSceneDataUnitTests AxleSharedRuntimePhasesUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
+set(AXLE_TEST_TARGETS AxleStaticPluginLifetimeTests AxleSceneDataBoundaryTests AxleOpt0203ReviewTests AxleFoundationUnitTests AxleSceneMutationUnitTests AxleSimulationClockUnitTests AxleEditorCutoverUnitTests AxleRuntimeProductParityUnitTests AxleProjectUnitTests AxleAssetUnitTests AxleAssetFormatUnitTests AxleSceneDataUnitTests AxleSharedRuntimePhasesUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
 list(APPEND AXLE_TEST_TARGETS AxlePluginFoundationTests AxlePluginSelectionTests AxlePluginsPanelWorkflowTests AxlePluginRuntimeTests AxlePluginDocumentGuardTests AxlePluginRestartTests)
 list(APPEND AXLE_TEST_TARGETS AxlePrimitiveTests AxleRHIIdentityTests AxleRHIRetirementTests AxleRHIStateTests AxleRHIFrameTests AxleRHIPresentationTests AxleImageSourceTests)
 if(WIN32)
-    add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp")
+    add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/OwnedProcess.cpp")
     target_include_directories(AxleBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/Editor/generated/$<CONFIG>")
-    target_link_libraries(AxleBuildWorkflowTests PRIVATE Axle::Asset)
+    target_link_libraries(AxleBuildWorkflowTests PRIVATE Axle::Asset Axle::Project Axle::Plugin)
+    add_dependencies(AxleBuildWorkflowTests AxleRuntime)
+    target_compile_definitions(AxleBuildWorkflowTests PRIVATE AXLE_TEST_RUNTIME_EXE="$<TARGET_FILE:AxleRuntime>" AXLE_TEST_RUNTIME_HOST="$<TARGET_FILE:AxleRuntimeHost>")
     list(APPEND AXLE_TEST_TARGETS AxleBuildWorkflowTests AxleScriptLifecycleReviewTests)
     add_test(NAME BuildWorkflowFixtureConfigure COMMAND "${CMAKE_COMMAND}"
         -S "${CMAKE_CURRENT_SOURCE_DIR}/src/BuildWorkflowFixture"
@@ -753,9 +767,10 @@ if (TARGET AxleTerrainRuntime)
     add_test(NAME TerrainPluginTests COMMAND $<TARGET_FILE:AxleTerrainPluginTests> "${CMAKE_SOURCE_DIR}")
     set_tests_properties(TerrainPluginTests PROPERTIES LABELS "plugin;terrain;physics;cpu")
 endif()
-add_executable(AxleProjectScriptBoundaryTests EXCLUDE_FROM_ALL src/Test_ProjectScriptBoundary.cpp "${CMAKE_SOURCE_DIR}/Runtime/src/RuntimeStartup.cpp")
+add_executable(AxleProjectScriptBoundaryTests EXCLUDE_FROM_ALL src/Test_ProjectScriptBoundary.cpp)
 target_include_directories(AxleProjectScriptBoundaryTests PRIVATE src "${CMAKE_SOURCE_DIR}/Runtime/src")
 target_link_libraries(AxleProjectScriptBoundaryTests PRIVATE
+    Axle::RuntimePlayer
     Axle::Project
     Axle::Scene
     Axle::Physics
@@ -767,6 +782,7 @@ if (MSVC)
 endif()
 list(APPEND AXLE_TEST_TARGETS AxleProjectScriptBoundaryTests)
 add_dependencies(AxleProjectScriptBoundaryTests AxleRuntimeScripts)
+add_custom_command(TARGET AxleProjectScriptBoundaryTests POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleRuntimeHost>" "$<TARGET_FILE_DIR:AxleProjectScriptBoundaryTests>" VERBATIM)
 add_test(NAME ProjectScriptBoundaryTests COMMAND $<TARGET_FILE:AxleProjectScriptBoundaryTests> $<TARGET_FILE:AxleRuntimeScripts>)
 set_tests_properties(ProjectScriptBoundaryTests PROPERTIES LABELS "script;scene;cpu")
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)

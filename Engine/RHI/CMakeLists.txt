@@ -23,6 +23,7 @@ add_library(AxleRHI STATIC
     src/RHILight.cpp
 )
 add_library(Axle::RHI ALIAS AxleRHI)
+target_compile_definitions(AxleRHI PRIVATE AXLE_ENABLE_GL_COMPATIBILITY=$<BOOL:${AXLE_ENABLE_GL_COMPATIBILITY}>)
 
 target_include_directories(AxleRHI PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

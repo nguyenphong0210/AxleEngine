@@ -142,10 +142,15 @@ namespace Axle::RHI {
     bool RHISwitcher::InitializeProduct(const RHIBackendConfig& config,
         const std::function<bool(GraphicsAPI)>& initializeCandidate) {
         auto preferred = config.PreferredBackend == RHIType::None ? RHIType::Direct3D12 : config.PreferredBackend;
+#if !AXLE_ENABLE_GL_COMPATIBILITY
+        if (preferred == RHIType::OpenGL) return false;
+#endif
         std::vector<RHIType> candidates{preferred};
         if (config.AllowFallback && preferred != RHIType::OpenGL) {
             candidates.push_back(preferred == RHIType::Direct3D12 ? RHIType::Vulkan : RHIType::Direct3D12);
+#if AXLE_ENABLE_GL_COMPATIBILITY
             candidates.push_back(RHIType::OpenGL);
+#endif
         }
         auto& device = RHIDevice::Get();
         for (auto backend : candidates) {

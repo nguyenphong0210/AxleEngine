@@ -153,8 +153,8 @@ bool TestShippingBoundary(const std::filesystem::path& library) {
     TEST_CHECK(Axle::PrepareRuntimeStartup(file,{}).ProjectDefinition!=nullptr,"Empty selection must remain supported");
     project->GetConfig().SelectedPlugins={"axle.vehicle"}; TEST_CHECK(Axle::ProjectSerializer(project).Serialize(file),"Selected fixture must save");
     bool rejected=false;
-    try { Axle::PrepareRuntimeStartup(file,{}); } catch(const std::exception& e) { rejected=std::string(e.what()).find("selected native plugins")!=std::string::npos; }
-    TEST_CHECK(rejected,"An empty scene cannot silently ignore selected modules in an unsupported player");
+    try { Axle::PrepareRuntimeStartup(file,{}); } catch(const std::exception& e) { rejected=std::string(e.what()).find("compiled product snapshot")!=std::string::npos; }
+    TEST_CHECK(rejected,"The development player's empty composition must reject a different project selection");
     return true;
 }
 

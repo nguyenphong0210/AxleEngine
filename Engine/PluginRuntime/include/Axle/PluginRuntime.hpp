@@ -20,6 +20,12 @@ struct LoadRequest {
     void (*OwnerInitialized)(void*, std::uint64_t owner, bool succeeded) = nullptr;
 };
 
+struct StaticModule {
+    GetDescriptorFn Descriptor = nullptr;
+    StartFn Start = nullptr;
+    StopFn Stop = nullptr;
+};
+
 class RegistrationRegistry final {
 public:
     using Owner = std::uint64_t;
@@ -58,6 +64,8 @@ public:
     ~NativePlugin();
 
     bool Load(const LoadRequest& request, RegistrationRegistry& registry, std::string& diagnostic);
+    bool LoadStatic(const LoadRequest& request, const StaticModule& module,
+                    RegistrationRegistry& registry, std::string& diagnostic);
     void Stop() noexcept;
     bool AbortStartup() noexcept;
     // Pump on the session owner thread each frame and before host shutdown.
@@ -69,6 +77,7 @@ public:
     const PluginHostApi* GetHostApi() const noexcept;
 
 private:
+    bool LoadImpl(const LoadRequest&, const StaticModule*, RegistrationRegistry&, std::string&);
     struct ModuleState;
     std::shared_ptr<ModuleState> m_Module;
     std::string m_ModuleId;

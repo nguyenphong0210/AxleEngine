@@ -1,4 +1,5 @@
 #include <Axle/RHISceneRenderer.hpp>
+#include <Axle/Path.hpp>
 #include <Axle/RenderGraph.hpp>
 #include <Axle/SceneLighting.hpp>
 #include <Axle/RenderContracts.hpp>
@@ -156,11 +157,11 @@ namespace Axle {
             FileSystem::GetAssetDirectory().parent_path()
         };
 
-        std::vector<std::string> subdirs = {
+        std::vector<std::filesystem::path> subdirs = {
             "Engine/Resources/Shaders",
             "Resources/Shaders",
             "shaders",
-            (FileSystem::GetAssetDirectory() / "shaders").string(),
+            FileSystem::GetAssetDirectory() / "shaders",
             "assets/shaders"
         };
 
@@ -468,7 +469,7 @@ namespace Axle {
                 std::stringstream ss;
                 ss << file.rdbuf();
                 shaderSource = ss.str();
-                AXLE_CORE_INFO("RHISceneRenderer: Loaded ForwardPBR shader from {0}", shaderPath.string());
+                AXLE_CORE_INFO("RHISceneRenderer: Loaded ForwardPBR shader from {0}", PathToUtf8(shaderPath));
             }
         }
 
@@ -482,7 +483,7 @@ namespace Axle {
         // Compile Vertex Shader
         RHIShaderCompileDesc vsDesc;
         vsDesc.Source = shaderSource;
-        vsDesc.SourcePath = shaderPath.empty() ? "ForwardPBR.hlsl" : shaderPath.string();
+        vsDesc.SourcePath = shaderPath.empty() ? "ForwardPBR.hlsl" : PathToUtf8(shaderPath);
         vsDesc.EntryPoint = "VSMain";
         vsDesc.Stage = RHIShaderStage::Vertex;
         vsDesc.HLSLVersion = "2021";
@@ -671,7 +672,7 @@ namespace Axle {
 
         RHIShaderCompileDesc vsDesc;
         vsDesc.Source = shaderSource;
-        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.SourcePath = PathToUtf8(shaderPath);
         vsDesc.EntryPoint = "VSMain";
         vsDesc.Stage = RHIShaderStage::Vertex;
         vsDesc.HLSLVersion = "2021";
@@ -772,7 +773,7 @@ namespace Axle {
 
         RHIShaderCompileDesc vsDesc;
         vsDesc.Source = shaderSource;
-        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.SourcePath = PathToUtf8(shaderPath);
         vsDesc.EntryPoint = "VSMain";
         vsDesc.Stage = RHIShaderStage::Vertex;
         vsDesc.HLSLVersion = "2021";
@@ -894,7 +895,7 @@ namespace Axle {
 
         RHIShaderCompileDesc vsDesc;
         vsDesc.Source = shaderSource;
-        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.SourcePath = PathToUtf8(shaderPath);
         vsDesc.EntryPoint = "VSMain";
         vsDesc.Stage = RHIShaderStage::Vertex;
         vsDesc.HLSLVersion = "2021";
@@ -1535,7 +1536,7 @@ namespace Axle {
                         diagnostic("");
                         if (mat.UseCustomShader) {
                             CustomProgramKey key;
-                            key.ShaderPath=mat.CustomShaderPath.empty()?"":FileSystem::ResolveAssetPath(mat.CustomShaderPath).lexically_normal().string();
+                            key.ShaderPath=mat.CustomShaderPath.empty()?"":PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(mat.CustomShaderPath)).lexically_normal());
                             key.Backend=m_Device->GetBackend();
                             auto [fingerprint,inserted]=customFingerprints.try_emplace(key);
                             if(inserted && !key.ShaderPath.empty())fingerprint->second=m_CustomProgramCache.ComputeFingerprint(key);

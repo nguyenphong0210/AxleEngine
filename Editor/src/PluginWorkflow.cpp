@@ -144,9 +144,6 @@ void EditorLayer::StartExportGame() {
     settings.IncludeShaders = m_ExportIncludeShaders; settings.CopyExecutables = m_ExportCopyExecutables;
     settings.Preflight = [this, copy = settings.CopyExecutables](std::string& error) {
         if (!m_PluginSession || !m_PluginSession->MatchesDesired()) { error = "Build and restart to activate Desired plugins before exporting"; return false; }
-        if (copy) for (const auto& module : m_PluginSession->DesiredPlan().Artifacts) if (module.Kind == Plugin::ModuleKind::Runtime) {
-            error = "Standalone native plugin composition is scheduled for PLG-22; this player cannot contain selected native modules"; return false;
-        }
         std::vector<std::string> errors;
         if (m_EditorScene && !m_EditorScene->ExtensionsReady(errors)) { error = errors.empty() ? "Scene plugin data is not ready" : errors.front(); return false; }
         return true;
@@ -154,14 +151,17 @@ void EditorLayer::StartExportGame() {
     settings.ValidatePluginDocument = ValidatePluginAssetDocument;
     m_ExportStatusSuccess = false; m_ExportLastOutputDir.clear();
     if (!settings.Preflight(m_ExportStatusMessage)) return;
+    auto request = GetRuntimeBuildRequest(); request.ProjectPath = m_CurrentProjectPath;
+    if (!FreezeRuntimeBuildRequest(request, m_ExportStatusMessage)) return;
+    if (!ValidateRuntimeBuildDocuments(request, settings.ValidatePluginDocument, m_ExportStatusMessage)) return;
+    settings.OutputDirectory = std::filesystem::absolute(settings.OutputDirectory.is_absolute() ? settings.OutputDirectory : m_CurrentProjectPath.parent_path() / settings.OutputDirectory);
     if (settings.CopyExecutables) {
-        const auto request = GetRuntimeBuildRequest(); settings.ExecutableDirectory = request.ExecutableDirectory;
         m_PendingExportSettings = settings; m_RuntimeBuildCancel = std::make_shared<std::atomic_bool>(false);
         try {
             m_RuntimeBuildFuture = std::async(std::launch::async, [request, cancel = m_RuntimeBuildCancel] { return BuildRuntime(request, *cancel); });
             m_ExportStatusMessage = "Building standalone player... Export starts after the build succeeds.";
         } catch (const std::exception& error) { m_ExportStatusMessage = error.what(); }
-    } else FinishExportGame(settings);
+    } else if (BindRuntimeCook(request, settings, m_ExportStatusMessage)) FinishExportGame(settings);
 }
 void EditorLayer::OpenAssemblyDocument(const std::filesystem::path& path) {
     if (!CheckDocuments("open-assembly", "Save or discard Assembly edits before opening another file.", [this, path] { OpenAssemblyDocument(path); }, "assembly")) return;

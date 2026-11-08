@@ -258,16 +258,24 @@ bool NativePlugin::IsActive() const noexcept {
 const PluginHostApi* NativePlugin::GetHostApi() const noexcept { return m_Module ? &m_Module->Host : nullptr; }
 
 bool NativePlugin::Load(const LoadRequest& request, RegistrationRegistry& registry, std::string& diagnostic) {
+    return LoadImpl(request, nullptr, registry, diagnostic);
+}
+bool NativePlugin::LoadStatic(const LoadRequest& request, const StaticModule& module, RegistrationRegistry& registry, std::string& diagnostic) {
+    if (request.Expected.Product != Plugin::ProductKind::Runtime) { diagnostic = "static modules require Runtime identity"; return false; }
+    return LoadImpl(request, &module, registry, diagnostic);
+}
+bool NativePlugin::LoadImpl(const LoadRequest& request, const StaticModule* compiled, RegistrationRegistry& registry, std::string& diagnostic) {
     diagnostic.clear();
     if (m_Module || m_Active) { diagnostic = "plugin is already loaded"; return false; }
-    if (request.ModulePath.empty() || !request.ModulePath.is_absolute()) {
+    if (!compiled && (request.ModulePath.empty() || !request.ModulePath.is_absolute())) {
         diagnostic = "plugin path must be absolute and controlled by the resolver"; return false;
     }
-    if (request.Expected.Product == Plugin::ProductKind::Runtime) {
+    if (!compiled && request.Expected.Product == Plugin::ProductKind::Runtime) {
         diagnostic = "shipping Runtime native DLL loading is unsupported"; return false;
     }
     CollectRetiredModules();
     auto code = std::shared_ptr<ModuleState>(new ModuleState, ModuleState::Delete);
+    if (!compiled) {
 #if defined(_WIN32)
     // Pin the validated file before hashing it. Neither a concurrent writer nor
     // a path replacement may change the bytes between validation and loading,
@@ -279,6 +287,7 @@ bool NativePlugin::Load(const LoadRequest& request, RegistrationRegistry& regist
     if (!Plugin::ValidateArtifact(request.Expected, request.ModulePath, request.ReceiptPath, diagnostic)) return false;
     code->Handle = OpenLibrary(request.ModulePath);
     if (!code->Handle) { diagnostic = LastError(); return false; }
+    }
     auto fail = [&](const char* reason) {
         diagnostic = reason;
         code->Active = false;
@@ -287,9 +296,9 @@ bool NativePlugin::Load(const LoadRequest& request, RegistrationRegistry& regist
         code->Registry.reset();
         return false;
     };
-    auto query = reinterpret_cast<GetDescriptorFn>(FindSymbol(code->Handle, "ax_plugin_get_descriptor"));
-    auto start = reinterpret_cast<StartFn>(FindSymbol(code->Handle, "ax_plugin_start"));
-    code->Stop = reinterpret_cast<StopFn>(FindSymbol(code->Handle, "ax_plugin_stop"));
+    auto query = compiled ? compiled->Descriptor : reinterpret_cast<GetDescriptorFn>(FindSymbol(code->Handle, "ax_plugin_get_descriptor"));
+    auto start = compiled ? compiled->Start : reinterpret_cast<StartFn>(FindSymbol(code->Handle, "ax_plugin_start"));
+    code->Stop = compiled ? compiled->Stop : reinterpret_cast<StopFn>(FindSymbol(code->Handle, "ax_plugin_stop"));
     if (!query || !start || !code->Stop) return fail("required plugin entrypoint is missing");
     const PluginDescriptor* descriptor = nullptr;
     try { descriptor = query(); } catch (...) { return fail("plugin descriptor callback threw"); }

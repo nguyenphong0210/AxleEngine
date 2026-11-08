@@ -1,5 +1,6 @@
 #include <Axle/RHI/RHIShader.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/Path.hpp>
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -65,7 +66,7 @@ namespace Axle::RHI {
             out.write(reinterpret_cast<const char*>(Data.data()), Data.size());
             return out.good();
         } catch (const std::exception& e) {
-            AXLE_CORE_ERROR("Failed to save shader bytecode to '{0}': {1}", filepath.string(), e.what());
+            AXLE_CORE_ERROR("Failed to save shader bytecode to '{0}': {1}", PathToUtf8(filepath), e.what());
             return false;
         }
     }
@@ -91,7 +92,7 @@ namespace Axle::RHI {
                 in.read(reinterpret_cast<char*>(bc.Data.data()), size);
             }
         } catch (const std::exception& e) {
-            AXLE_CORE_ERROR("Failed to load shader bytecode from '{0}': {1}", filepath.string(), e.what());
+            AXLE_CORE_ERROR("Failed to load shader bytecode from '{0}': {1}", PathToUtf8(filepath), e.what());
             bc.Data.clear();
         }
 
@@ -152,8 +153,8 @@ namespace Axle::RHI {
 
         std::vector<std::filesystem::path> searchPaths;
 
-        char exePathBuf[MAX_PATH];
-        if (GetModuleFileNameA(NULL, exePathBuf, MAX_PATH)) {
+        wchar_t exePathBuf[MAX_PATH];
+        if (GetModuleFileNameW(NULL, exePathBuf, MAX_PATH)) {
             std::filesystem::path exeDir = std::filesystem::path(exePathBuf).parent_path();
             searchPaths.push_back(exeDir / "dxcompiler.dll");
         }
@@ -168,12 +169,12 @@ namespace Axle::RHI {
             if (std::filesystem::exists(path)) {
                 std::filesystem::path dxilPath = path.parent_path() / "dxil.dll";
                 if (std::filesystem::exists(dxilPath) && !m_DxilDll) {
-                    m_DxilDll = LoadLibraryA(dxilPath.string().c_str());
+                    m_DxilDll = LoadLibraryW(dxilPath.c_str());
                 }
 
-                hDxc = LoadLibraryA(path.string().c_str());
+                hDxc = LoadLibraryW(path.c_str());
                 if (hDxc) {
-                    AXLE_CORE_INFO("RHIShaderCompiler: Loaded DXC library from '{0}'", path.string());
+                    AXLE_CORE_INFO("RHIShaderCompiler: Loaded DXC library from '{0}'", PathToUtf8(path));
                     break;
                 }
             }
@@ -323,10 +324,10 @@ namespace Axle::RHI {
         }
 
         if (!desc.SourcePath.empty()) {
-            std::filesystem::path p(desc.SourcePath);
+            auto p = PathFromUtf8(desc.SourcePath);
             if (p.has_parent_path()) {
                 wargs.push_back(L"-I");
-                wargs.push_back(ToWide(p.parent_path().string()));
+                wargs.push_back(ToWide(PathToUtf8(p.parent_path())));
             }
         }
 
@@ -427,13 +428,13 @@ namespace Axle::RHI {
     RHIShaderCompileResult RHIShaderCompiler::CompileFromFile(const std::filesystem::path& filepath, const RHIShaderCompileDesc& desc) {
         RHIShaderCompileResult result;
         if (!std::filesystem::exists(filepath)) {
-            result.ErrorMessage = "Shader file does not exist: " + filepath.string();
+            result.ErrorMessage = "Shader file does not exist: " + PathToUtf8(filepath);
             return result;
         }
 
         std::ifstream file(filepath);
         if (!file.is_open()) {
-            result.ErrorMessage = "Failed to open shader file: " + filepath.string();
+            result.ErrorMessage = "Failed to open shader file: " + PathToUtf8(filepath);
             return result;
         }
 
@@ -442,7 +443,7 @@ namespace Axle::RHI {
 
         RHIShaderCompileDesc fullDesc = desc;
         fullDesc.Source = buffer.str();
-        fullDesc.SourcePath = filepath.string();
+        fullDesc.SourcePath = PathToUtf8(filepath);
 
         return Compile(fullDesc);
     }
@@ -464,7 +465,7 @@ namespace Axle::RHI {
         std::vector<std::wstring> arguments{L"-P",L"-HV",ToWide(desc.HLSLVersion)};
         arguments.push_back(L"-D"); arguments.push_back(desc.Format==RHIShaderFormat::SPIRV?L"__spirv__=1":L"__directx__=1");
         if (desc.Format!=RHIShaderFormat::SPIRV) {arguments.push_back(L"-D");arguments.push_back(L"_DX12=1");}
-        if (!desc.SourcePath.empty()) {arguments.push_back(L"-I");arguments.push_back(ToWide(std::filesystem::path(desc.SourcePath).parent_path().string()));}
+        if (!desc.SourcePath.empty()) {arguments.push_back(L"-I");arguments.push_back(PathFromUtf8(desc.SourcePath).parent_path().wstring());}
         for (const auto& dir:desc.IncludeDirs) {arguments.push_back(L"-I");arguments.push_back(ToWide(dir));}
         for (const auto& macro:desc.Macros) {arguments.push_back(L"-D");arguments.push_back(ToWide(macro.Name+"="+macro.Definition));}
         std::vector<LPCWSTR> raw;
@@ -524,11 +525,11 @@ namespace Axle::RHI {
         ss << std::hex << std::setfill('0') << std::setw(8) << hash;
         std::string hashStr = ss.str();
 
-        std::string stem = sourcePath.stem().string();
+        std::string stem = PathToUtf8(sourcePath.stem());
         std::string stageTag = StageToString(desc.Stage);
         std::string filename = stem + "_" + desc.EntryPoint + "_" + stageTag + "_" + formatTag + "_" + hashStr + ext;
 
-        return targetDir / filename;
+        return targetDir / PathFromUtf8(filename);
     }
 
     static void ExtractDependenciesInternal(
@@ -537,7 +538,7 @@ namespace Axle::RHI {
         std::unordered_set<std::string>& visited,
         std::vector<std::filesystem::path>& result)
     {
-        std::string canonicalKey = filepath.lexically_normal().string();
+        std::string canonicalKey = PathToUtf8(filepath.lexically_normal());
         if (visited.count(canonicalKey)) return;
         visited.insert(canonicalKey);
 
@@ -551,7 +552,7 @@ namespace Axle::RHI {
             searchDirs.push_back(filepath.parent_path());
         }
         for (const auto& inc : includeDirs) {
-            searchDirs.push_back(inc);
+            searchDirs.push_back(PathFromUtf8(inc));
         }
         searchDirs.push_back("ThirdParty/NRI/Include");
         searchDirs.push_back("../ThirdParty/NRI/Include");
@@ -573,7 +574,7 @@ namespace Axle::RHI {
 
                 std::string incName = line.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
                 for (const auto& searchDir : searchDirs) {
-                    std::filesystem::path candidate = searchDir / incName;
+                    std::filesystem::path candidate = searchDir / PathFromUtf8(incName);
                     if (std::filesystem::exists(candidate)) {
                         std::filesystem::path normCandidate = candidate.lexically_normal();
                         result.push_back(normCandidate);
@@ -603,7 +604,7 @@ namespace Axle::RHI {
     {
         RHIShaderCompileResult result;
         if (!std::filesystem::exists(filepath)) {
-            result.ErrorMessage = "Shader source file does not exist: " + filepath.string();
+            result.ErrorMessage = "Shader source file does not exist: " + PathToUtf8(filepath);
             return result;
         }
 
@@ -627,7 +628,7 @@ namespace Axle::RHI {
                         if (!ec && depTime > cacheTime) {
                             depStale = true;
                             AXLE_CORE_INFO("RHIShaderCompiler: Dependency '{0}' is newer than cache for '{1}'. Triggering recompile.",
-                                dep.filename().string(), filepath.filename().string());
+                                PathToUtf8(dep.filename()), PathToUtf8(filepath.filename()));
                             break;
                         }
                     }
@@ -649,7 +650,7 @@ namespace Axle::RHI {
                                 sbuf << sf.rdbuf();
                                 RHIShaderCompileDesc reflDesc = desc;
                                 reflDesc.Source = sbuf.str();
-                                reflDesc.SourcePath = filepath.string();
+                                reflDesc.SourcePath = PathToUtf8(filepath);
                                 result.Reflection = ReflectFromSource(reflDesc);
                             }
                         } else {
@@ -657,7 +658,7 @@ namespace Axle::RHI {
                         }
 
                         AXLE_CORE_INFO("RHIShaderCompiler: Cache hit for {0} shader '{1}' ({2} bytes) from '{3}'",
-                            StageToString(desc.Stage), desc.EntryPoint, result.Bytecode.GetSize(), cachePath.string());
+                            StageToString(desc.Stage), desc.EntryPoint, result.Bytecode.GetSize(), PathToUtf8(cachePath));
                         return result;
                     }
                 }
@@ -666,7 +667,7 @@ namespace Axle::RHI {
 
         // Cache Miss, Stale, or Forced Recompile
         AXLE_CORE_INFO("RHIShaderCompiler: Cache miss for {0} shader '{1}'. Compiling from source '{2}'...",
-            StageToString(desc.Stage), desc.EntryPoint, filepath.string());
+            StageToString(desc.Stage), desc.EntryPoint, PathToUtf8(filepath));
 
         result = CompileFromFile(filepath, desc);
         result.CachedPath = cachePath;
@@ -674,9 +675,9 @@ namespace Axle::RHI {
 
         if (result.Success) {
             if (result.Bytecode.SaveToFile(cachePath)) {
-                AXLE_CORE_INFO("RHIShaderCompiler: Successfully cached bytecode to '{0}'", cachePath.string());
+                AXLE_CORE_INFO("RHIShaderCompiler: Successfully cached bytecode to '{0}'", PathToUtf8(cachePath));
             } else {
-                AXLE_CORE_WARN("RHIShaderCompiler: Failed to write bytecode cache to '{0}'", cachePath.string());
+                AXLE_CORE_WARN("RHIShaderCompiler: Failed to write bytecode cache to '{0}'", PathToUtf8(cachePath));
             }
         }
 
@@ -720,7 +721,7 @@ namespace Axle::RHI {
         std::error_code ec;
         for (const auto& entry : std::filesystem::directory_iterator(targetDir, ec)) {
             if (entry.is_regular_file()) {
-                std::string ext = entry.path().extension().string();
+                std::string ext = PathToUtf8(entry.path().extension());
                 if (ext == ".dxil" || ext == ".spv" || ext == ".bin") {
                     if (std::filesystem::remove(entry.path(), ec)) {
                         count++;
@@ -1231,10 +1232,10 @@ namespace Axle::RHI {
             wargs.push_back(ToWide(incDir));
         }
         if (!desc.SourcePath.empty()) {
-            std::filesystem::path p(desc.SourcePath);
+            auto p = PathFromUtf8(desc.SourcePath);
             if (p.has_parent_path()) {
                 wargs.push_back(L"-I");
-                wargs.push_back(ToWide(p.parent_path().string()));
+                wargs.push_back(ToWide(PathToUtf8(p.parent_path())));
             }
         }
 

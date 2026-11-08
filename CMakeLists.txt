@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(AXLE_BUILD_EDITOR "Build the Editor product" ON)
+option(AXLE_BUILD_RUNTIME "Configure the standalone Runtime product" ON)
+option(AXLE_BUILD_TESTS "Configure explicit regression targets" ON)
+option(AXLE_ENABLE_GL_COMPATIBILITY "Allow the OpenGL compatibility backend" ON)
+set(AXLE_RUNTIME_PLUGIN_GRAPH "" CACHE FILEPATH "Validated, frozen Runtime plugin graph")
+
 enable_testing()
 
 # Disable unnecessary parts of GLFW to speed up the build
@@ -71,13 +77,25 @@ add_subdirectory(Engine/PluginSDK)
 add_subdirectory(Engine/PluginRuntime)
 add_subdirectory(Engine/PluginServices)
 
-# Load Engine Plugins
-add_subdirectory(Plugins/Spline)
-add_subdirectory(Plugins/Terrain)
+# Load development-only prototypes for the explicit Editor integration suite.
+if(AXLE_BUILD_TESTS AND AXLE_BUILD_EDITOR)
+    add_subdirectory(Plugins/Spline)
+    add_subdirectory(Plugins/Terrain)
+endif()
 
 # Load Axle Editor
-add_subdirectory(Editor)
+if(AXLE_BUILD_EDITOR)
+    add_subdirectory(Editor)
+endif()
 
 # Load Axle Standalone Runtime (Game Player)
-add_subdirectory(Runtime)# Explicit test targets and immutable fixtures live outside the Editor product.
-add_subdirectory(Tests)
+if(AXLE_BUILD_RUNTIME)
+    add_subdirectory(Runtime)
+endif()
+# Tests currently exercise Editor composition as well as CPU-only libraries.
+if(AXLE_BUILD_TESTS)
+    if(AXLE_BUILD_EDITOR AND NOT AXLE_BUILD_RUNTIME)
+        message(FATAL_ERROR "The Editor integration suite requires Runtime configuration; use AXLE_BUILD_TESTS=OFF or the Editor-free CPU suite")
+    endif()
+    add_subdirectory(Tests)
+endif()

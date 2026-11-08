@@ -4,6 +4,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/Path.hpp>
 #include <Axle/RHI/RHIBarrier.hpp>
 #include <Axle/RHI/RHIVertexLayout.hpp>
 #include <fstream>
@@ -75,24 +76,17 @@ namespace Axle {
 
         std::string shaderSource;
         auto shaderPath = FileSystem::ResolveAssetPath("shaders/ObjectID.hlsl");
-        if (!std::filesystem::exists(shaderPath)) {
+        if (!FileSystem::Exists(shaderPath)) {
             shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "ObjectID.hlsl";
         }
-        if (!std::filesystem::exists(shaderPath)) {
+        if (!FileSystem::Exists(shaderPath)) {
             shaderPath = "Engine/Resources/Shaders/ObjectID.hlsl";
         }
 
-        if (std::filesystem::exists(shaderPath)) {
-            std::ifstream file(shaderPath);
-            if (file.is_open()) {
-                std::stringstream ss;
-                ss << file.rdbuf();
-                shaderSource = ss.str();
-            }
-        }
+        if (FileSystem::Exists(shaderPath)) shaderSource = FileSystem::ReadTextFile(shaderPath);
 
         if (shaderSource.empty()) {
-            AXLE_CORE_ERROR("RHIObjectPicker: Failed to locate ObjectID.hlsl at '{0}'", shaderPath.string());
+            AXLE_CORE_ERROR("RHIObjectPicker: Failed to locate ObjectID.hlsl at '{0}'", PathToUtf8(shaderPath));
             return false;
         }
 
@@ -101,7 +95,7 @@ namespace Axle {
         // Compile Vertex Shader
         RHI::RHIShaderCompileDesc vsDesc;
         vsDesc.Source = shaderSource;
-        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.SourcePath = PathToUtf8(shaderPath);
         vsDesc.EntryPoint = "VSMain";
         vsDesc.Stage = RHI::RHIShaderStage::Vertex;
         vsDesc.HLSLVersion = "2021";

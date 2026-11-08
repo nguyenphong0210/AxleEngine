@@ -200,16 +200,40 @@ int EditorMain(int argc, char** argv) {
             settings.OutputDirectory = outDir;
             settings.BakeMeshesToBinary = true;
             settings.IncludeShaders = true;
-            settings.CopyExecutables = true;
+            settings.CopyExecutables = arg == "--export";
             const auto environment = Axle::GetPluginSessionEnvironment();
             const auto pluginRoot = Axle::Project::GetProjectDirectory() / "Plugins";
             const auto catalog = Axle::Plugin::Discover({{environment.EnginePlugins, pluginRoot}, {pluginRoot}});
-            const auto selected = Axle::Plugin::Resolve(catalog, Axle::Project::GetActive()->GetConfig().SelectedPlugins, Axle::Plugin::ProductKind::Runtime);
+            const auto selected = Axle::Plugin::Resolve(catalog, Axle::Project::GetActive()->GetConfig().SelectedPlugins, Axle::Plugin::ProductKind::Editor);
             if (!selected.IsValid()) { AXLE_ERROR("CLI export rejected: selected plugins cannot be resolved"); return 1; }
-            for (const auto& plugin : selected.Plugins) for (const auto& module : plugin.Modules)
-                if (module.Kind == Axle::Plugin::ModuleKind::Runtime) {
-                    AXLE_ERROR("CLI export rejected: static native plugin player composition is scheduled for PLG-22"); return 1;
-                }
+            Axle::JobSystem::Init(4);
+            struct StopJobs { ~StopJobs() { Axle::JobSystem::Shutdown(); } } stopJobs;
+            ImGuiContext* validationContext = ImGui::CreateContext();
+            struct DestroyContext { ImGuiContext* Context; ~DestroyContext() { ImGui::DestroyContext(Context); } } destroyContext{validationContext};
+            Axle::PluginBuildRequest pluginBuild;
+            pluginBuild.CMake = environment.CMake; pluginBuild.SdkDirectory = environment.SdkDirectory;
+            pluginBuild.ProjectDirectory = Axle::Project::GetProjectDirectory();
+            pluginBuild.Generator = environment.Generator; pluginBuild.GeneratorToolset = environment.GeneratorToolset; pluginBuild.GeneratorInstance = environment.GeneratorInstance;
+            pluginBuild.Plan = Axle::Plugin::CreateBuildPlan(selected, Axle::Plugin::ProductKind::Editor, environment.Configuration, environment.SdkFingerprint, environment.ToolchainFingerprint);
+            std::atomic_bool cancel{false};
+            const auto validationBuild = Axle::BuildPlugins(pluginBuild, cancel);
+            if (!validationBuild.Success) { AXLE_ERROR("Plugin validation build failed: {0}", validationBuild.Error); return 1; }
+            Axle::PluginProjectSession validationSession(environment);
+            std::string error;
+            if (!validationSession.Bind(error) || !validationSession.Open(Axle::Project::GetActive(), requestedProject)) { AXLE_ERROR("Cannot activate plugin data preflight: {0} {1}", error, validationSession.Error()); return 1; }
+            settings.ValidatePluginDocument = Axle::ValidatePluginAssetDocument;
+            auto request = Axle::GetRuntimeBuildRequest(); request.ProjectPath = requestedProject;
+            for (int option = 1; option < argc; ++option) {
+                const std::string value = argv[option];
+                if (value.starts_with("--runtime-configuration=")) request.Configuration = value.substr(24);
+            }
+            if (!Axle::FreezeRuntimeBuildRequest(request, error) || !Axle::ValidateRuntimeBuildDocuments(request, settings.ValidatePluginDocument, error)) { AXLE_ERROR("Product preflight failed: {0}", error); return 1; }
+            settings.OutputDirectory = std::filesystem::absolute(outDir.is_absolute() ? outDir : requestedProject.parent_path() / outDir);
+            if (settings.CopyExecutables) {
+                const auto built = Axle::BuildRuntime(request, cancel);
+                if (!built.Success || !Axle::BindRuntimeExport(request, built, settings, error)) { AXLE_ERROR("Runtime export build failed: {0} {1}; log: {2}", built.Error, error, Axle::PathToUtf8(built.LogPath)); return 1; }
+                AXLE_INFO("Runtime product build: {0}; generation: {1}", Axle::PathToUtf8(built.ProductBuildDirectory), Axle::PathToUtf8(built.GenerationDirectory));
+            } else if (!Axle::BindRuntimeCook(request, settings, error)) { AXLE_ERROR("Snapshot cook failed: {0}", error); return 1; }
 
             auto res = Axle::AssetCooker::CookProject(settings);
             if (res.Success) {

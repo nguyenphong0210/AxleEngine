@@ -117,9 +117,9 @@ add_custom_command(TARGET AxleEditor POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:AxleEditorHost>" "$<TARGET_FILE_DIR:AxleEditor>"
     VERBATIM)
 
-# Export builds this exact configured Runtime target on demand, not as an Editor dependency.
+# Export configures an isolated Editor-free product from a frozen request.
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/RuntimeBuildConfig.hpp"
-    CONTENT "#pragma once\n#define AXLE_RUNTIME_CMAKE R\"axle(${CMAKE_COMMAND})axle\"\n#define AXLE_RUNTIME_BUILD_DIRECTORY R\"axle(${CMAKE_BINARY_DIR})axle\"\n#define AXLE_RUNTIME_EXECUTABLE_DIRECTORY R\"axle($<TARGET_FILE_DIR:AxleRuntime>)axle\"\n#define AXLE_RUNTIME_CONFIGURATION \"$<CONFIG>\"\n")
+    CONTENT "#pragma once\n#define AXLE_RUNTIME_CMAKE R\"axle(${CMAKE_COMMAND})axle\"\n#define AXLE_RUNTIME_BUILD_DIRECTORY R\"axle(${CMAKE_BINARY_DIR})axle\"\n#define AXLE_RUNTIME_EXECUTABLE_DIRECTORY R\"axle()axle\"\n#define AXLE_RUNTIME_SOURCE_DIRECTORY R\"axle(${CMAKE_SOURCE_DIR})axle\"\n#define AXLE_RUNTIME_GENERATOR R\"axle(${CMAKE_GENERATOR})axle\"\n#define AXLE_RUNTIME_TOOLSET R\"axle(${CMAKE_GENERATOR_TOOLSET})axle\"\n#define AXLE_RUNTIME_INSTANCE R\"axle(${CMAKE_GENERATOR_INSTANCE})axle\"\n#define AXLE_RUNTIME_COMPILER R\"axle(${CMAKE_CXX_COMPILER})axle\"\n#define AXLE_RUNTIME_COMPILER_VERSION \"${CMAKE_CXX_COMPILER_VERSION}\"\n#define AXLE_RUNTIME_WINDOWS_SDK \"${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}\"\n#define AXLE_RUNTIME_PLATFORM_TOOLSET \"${CMAKE_VS_PLATFORM_TOOLSET}\"\n#define AXLE_RUNTIME_CONFIGURATION \"$<CONFIG>\"\n")
 target_include_directories(AxleEditor PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
 
 # Development convenience only. Clear this cache entry for a distributed Editor.

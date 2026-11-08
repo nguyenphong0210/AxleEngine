@@ -72,7 +72,9 @@ struct EditorServices {
 }
 
 #if defined(_WIN32)
-#if defined(AXLE_RUNTIME_HOST_EXPORTS)
+#if defined(AXLE_STATIC_RUNTIME)
+#define AXLE_RUNTIME_HOST_API
+#elif defined(AXLE_RUNTIME_HOST_EXPORTS)
 #define AXLE_RUNTIME_HOST_API __declspec(dllexport)
 #else
 #define AXLE_RUNTIME_HOST_API __declspec(dllimport)
@@ -82,7 +84,11 @@ struct EditorServices {
 #else
 #define AXLE_EDITOR_HOST_API __declspec(dllimport)
 #endif
+#if defined(AXLE_STATIC_RUNTIME)
+#define AXLE_PLUGIN_EXPORT extern "C"
+#else
 #define AXLE_PLUGIN_EXPORT extern "C" __declspec(dllexport)
+#endif
 #else
 #define AXLE_RUNTIME_HOST_API __attribute__((visibility("default")))
 #define AXLE_EDITOR_HOST_API __attribute__((visibility("default")))

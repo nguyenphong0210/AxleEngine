@@ -187,7 +187,8 @@
       "Axle::VFX",
       "Axle::RHI",
       "Axle::RuntimePlayer",
-      "Axle::SceneData"
+      "Axle::SceneData",
+      "Axle::PluginServices"
     ],
     "Editor": [
       "Axle::Core",

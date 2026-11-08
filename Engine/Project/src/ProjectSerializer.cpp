@@ -96,6 +96,9 @@ namespace Axle {
                 } else if (trimmed.rfind("RHIBackend:", 0) == 0) {
                     parsedConfig.RHIBackend = Trim(trimmed.substr(11));
                     inPlugins = false;
+                } else if (trimmed.rfind("RuntimeSnapshot:", 0) == 0) {
+                    parsedConfig.RuntimeSnapshot = Trim(trimmed.substr(16));
+                    inPlugins = false;
                 }
             }
         }

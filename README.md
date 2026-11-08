@@ -159,7 +159,7 @@ cd AxleEngine
 git submodule update --init --recursive
 ```
 
-Development startup opens `Samples/TestProject/TestProject.axleproj`. Use
+Development startup opens `Samples/Sandbox/Sandbox.axleproj`. Use
 `--empty-project` for a fresh untitled project, or open another project with
 File -> Open Project / `--project path/to/Game.axleproj`. Test fixtures remain
 isolated under [Tests/Fixtures](Tests/README.md).

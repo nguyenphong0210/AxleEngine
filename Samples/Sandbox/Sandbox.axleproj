@@ -1,5 +1,7 @@
 # Axle Engine Project Configuration File
 Project:
-  Name: TestProject
+  SchemaVersion: 1
+  Name: Sandbox
   StartScene: scenes/Test.axlescene
   AssetDirectory: assets
+  Plugins:

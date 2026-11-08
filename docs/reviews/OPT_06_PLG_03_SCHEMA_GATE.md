@@ -5,13 +5,12 @@ The current project selection schema is version `1` and is emitted as
 version, or an unsupported version, is rejected before its parsed values are
 applied. Failed loads leave the existing `ProjectConfig` unchanged.
 
-Existing files such as `Samples/TestProject/TestProject.axleproj` and
-`Tests/Fixtures/LegacyProject.axleproj` intentionally remain untouched. They
-are historical fixtures until a separate migration/template decision is made;
-they must not be silently treated as current-format plugin projects. The
-integration gate is therefore to update only current-format templates or to
-provide an explicit legacy inspection path before enabling plugin selection in
-those products.
+The user renamed the development sample to `Samples/Sandbox/Sandbox.axleproj`
+on 2026-11-08. It uses schema 1 and an empty optional plugin selection, preserving
+the authored scene and asset paths. The Editor can open that current-format
+project without selecting optional plugins. Historical fixtures such as
+`Tests/Fixtures/LegacyProject.axleproj` remain unchanged; missing/unsupported
+schemas are still rejected, with no implicit legacy fallback.
 
 The CPU fixture `AxlePluginFoundationTests` covers current-format round-trip,
 unsupported-schema rejection, missing-schema rejection and state preservation

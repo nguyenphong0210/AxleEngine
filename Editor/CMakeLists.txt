@@ -101,7 +101,13 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/RuntimeBui
 target_include_directories(AxleEditor PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
 
 # Development convenience only. Clear this cache entry for a distributed Editor.
-set(AXLE_EDITOR_DEFAULT_PROJECT "${CMAKE_SOURCE_DIR}/Samples/TestProject/TestProject.axleproj"
+# Follow the renamed built-in sample for existing build trees. Explicit custom
+# defaults and an intentionally empty default retain their configured values.
+if(AXLE_EDITOR_DEFAULT_PROJECT STREQUAL "${CMAKE_SOURCE_DIR}/Samples/TestProject/TestProject.axleproj")
+    set(AXLE_EDITOR_DEFAULT_PROJECT "${CMAKE_SOURCE_DIR}/Samples/Sandbox/Sandbox.axleproj"
+        CACHE FILEPATH "Project opened by Editor when no explicit project is supplied (empty disables)" FORCE)
+endif()
+set(AXLE_EDITOR_DEFAULT_PROJECT "${CMAKE_SOURCE_DIR}/Samples/Sandbox/Sandbox.axleproj"
     CACHE FILEPATH "Project opened by Editor when no explicit project is supplied (empty disables)")
 set(AXLE_EDITOR_DEFAULT_PROJECT_PATH "")
 if(AXLE_EDITOR_DEFAULT_PROJECT)

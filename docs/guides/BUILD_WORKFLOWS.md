@@ -14,7 +14,7 @@ Regenerate the CMake project after updating from an older revision.
 
 ## Development sample, empty startup and explicit projects
 
-Development builds open `Samples/TestProject/TestProject.axleproj` when launched
+Development builds open `Samples/Sandbox/Sandbox.axleproj` when launched
 without an explicit project. This loads the sample's authored `scenes/Test.axlescene`;
 it does not inject sample entities into every scene. The CMake cache entry
 `AXLE_EDITOR_DEFAULT_PROJECT` embeds an absolute startup project path in Editor
@@ -41,6 +41,11 @@ cmake -S . -B build '-DAXLE_EDITOR_DEFAULT_PROJECT:FILEPATH='
 Rebuild Editor after changing the cache entry. The sample remains a real project
 in `Samples`; edits/save operations affect that project. No sample content is
 copied into Editor or Engine, and Runtime/test builds retain their separate paths.
+
+The built-in sample is named **Sandbox**. Existing build trees configured with
+the former built-in `Samples/TestProject/TestProject.axleproj` path update to
+Sandbox on regeneration; explicit custom defaults and a disabled default remain
+unchanged.
 
 The untitled asset root is unique under `%TEMP%/AxleEngine/UntitledProjects`.
 Use **Save Project As** to preserve authored assets in the chosen project folder.

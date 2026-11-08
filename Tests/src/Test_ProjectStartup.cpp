@@ -14,6 +14,15 @@ int main() {
     Axle::Tests::InitializeWorkspace();
     using Axle::Project;
     const auto workspace = std::filesystem::current_path();
+    const auto sandboxPath = std::filesystem::path(AXLE_TEST_SOURCE_DIR) / "Samples/Sandbox/Sandbox.axleproj";
+    auto sandbox = Axle::OpenEditorStartupProject(Axle::ResolveEditorStartupProject({}, sandboxPath));
+    CHECK(sandbox && sandbox->GetConfig().Name == "Sandbox", "Development default opens the renamed Sandbox project");
+    CHECK(sandbox->GetConfig().SelectedPlugins.empty(), "Sandbox opens with no optional plugins selected");
+    CHECK(sandbox->GetConfig().StartScene == "scenes/Test.axlescene" &&
+          Project::GetAssetDirectory() == sandboxPath.parent_path() / "assets",
+          "Sandbox keeps its authored scene and asset root");
+    Project::SetActive(nullptr);
+    Axle::FileSystem::SetAssetDirectory(workspace / "assets");
     const auto source = workspace / "startup-fixtures" / std::to_string(static_cast<uint64_t>(Axle::UUID{}));
     std::filesystem::create_directories(source);
     std::ofstream(source / "AxleEditor.axleproj") << "Project:\n  Name: Must not auto-open\n  StartScene: scenes/Sample.axlescene\n  AssetDirectory: unrelated-assets\n";

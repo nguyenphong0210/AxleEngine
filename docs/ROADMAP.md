@@ -324,7 +324,7 @@ for exact commands, logs, reviewer limits and later PLG-22/23 boundaries.
 
 - [x] **PLG-19:** Spline plugin conversion.
 - [x] **PLG-20:** Terrain plugin conversion.
-- [ ] **PLG-21:** Project script boundary.
+- [x] **PLG-21:** Project script boundary.
 
 **Exit:** Optional systems use the common plugin lifecycle and selection graph. Scripts do not pull Editor UI or unselected domain libraries into Runtime.
 

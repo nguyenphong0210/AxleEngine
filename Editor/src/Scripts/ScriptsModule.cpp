@@ -2,7 +2,9 @@
 #include <Axle/Input.hpp>
 #include <Axle/Log.hpp>
 
+#if defined(AXLE_ENABLE_IMGUI) || !defined(AXLE_SHIPPING)
 #include <imgui.h>
+#endif
 
 #if __has_include("AutoScripts.inc")
     #include "AutoScripts.inc"
@@ -13,10 +15,14 @@ struct GLFWwindow;
 extern "C" {
 
     AXLE_SCRIPT_API void Axle_SetImGuiContext(void* context) {
+#if defined(AXLE_ENABLE_IMGUI) || !defined(AXLE_SHIPPING)
         if (context) {
             ImGui::SetCurrentContext(static_cast<ImGuiContext*>(context));
             AXLE_INFO("AxleScripts.dll: ImGui context synchronized");
         }
+#else
+        (void)context;
+#endif
     }
 
     AXLE_SCRIPT_API void Axle_SetInputContext(void* context) {

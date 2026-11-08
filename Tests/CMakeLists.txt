@@ -731,6 +731,20 @@ if (TARGET AxleTerrainRuntime)
     add_test(NAME TerrainPluginTests COMMAND $<TARGET_FILE:AxleTerrainPluginTests> "${CMAKE_SOURCE_DIR}")
     set_tests_properties(TerrainPluginTests PROPERTIES LABELS "plugin;terrain;physics;cpu")
 endif()
+add_executable(AxleProjectScriptBoundaryTests src/Test_ProjectScriptBoundary.cpp)
+target_include_directories(AxleProjectScriptBoundaryTests PRIVATE src)
+target_link_libraries(AxleProjectScriptBoundaryTests PRIVATE
+    Axle::Scene
+    Axle::Physics
+    Axle::Core
+    Axle::Platform
+)
+if (MSVC)
+    target_compile_options(AxleProjectScriptBoundaryTests PRIVATE /bigobj /FS)
+endif()
+list(APPEND AXLE_TEST_TARGETS AxleProjectScriptBoundaryTests)
+add_test(NAME ProjectScriptBoundaryTests COMMAND $<TARGET_FILE:AxleProjectScriptBoundaryTests>)
+set_tests_properties(ProjectScriptBoundaryTests PROPERTIES LABELS "script;scene;cpu")
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 
 # Explicit review gate for known OPT-06 contract failures. Keep out of the

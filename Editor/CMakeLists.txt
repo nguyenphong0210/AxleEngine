@@ -76,6 +76,7 @@ target_include_directories(AxleScripts PUBLIC
     src
     src/Scripts
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_SOURCE_DIR}/ThirdParty/imgui
 )
 
 target_compile_definitions(AxleScripts PRIVATE

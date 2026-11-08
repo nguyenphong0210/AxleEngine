@@ -441,6 +441,19 @@ void EditorLayer::OnAttach() {
     });
 
     // Default startup is an unsaved, empty project; reopening is always explicit.
+    m_PluginsPanel.SetSaveSceneCallback([this]() {
+        if (!m_CurrentScenePath.empty()) {
+            SaveScene(m_CurrentScenePath);
+            return true;
+        }
+        return true;
+    });
+    m_PluginsPanel.SetRestartCallback([this]() {
+        const char* backendFlags[] = { "dx12", "vulkan", "opengl" };
+        RestartEditorWithBackend(backendFlags[m_SelectedRHIBackendIndex]);
+    });
+    m_PluginsPanel.SetActiveProject(Axle::Project::GetActive());
+
     if (!m_CurrentProjectPath.empty()) OpenProject(m_CurrentProjectPath);
     else NewScene();
 
@@ -1117,6 +1130,7 @@ void EditorLayer::NewProject() {
 
     Axle::AssetManager::SetAssetDirectory(Axle::Project::GetAssetDirectory());
     m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
+    m_PluginsPanel.SetActiveProject(project);
     m_CompileNotificationMessage = "Created project: " + project->GetConfig().Name;
     m_CompileNotificationTimer = 4.0f;
     UpdateWindowTitle();
@@ -1147,6 +1161,7 @@ void EditorLayer::OpenProject(const std::filesystem::path& filepath) {
         m_CurrentProjectPath = target;
         Axle::AssetManager::SetAssetDirectory(Axle::Project::GetAssetDirectory());
         m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
+        m_PluginsPanel.SetActiveProject(project);
 
         // Load project's StartScene if specified
         const auto& startSceneRel = project->GetConfig().StartScene;
@@ -2010,6 +2025,12 @@ void EditorLayer::OnImGuiRender() {
             }
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Edit")) {
+            if (ImGui::MenuItem("Plugins...")) {
+                m_ShowPluginsPanel = true;
+            }
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("Asset")) {
             if (ImGui::MenuItem("Compile Modified Assets", "Ctrl+Shift+B")) {
                 CompileAndHotReloadAssets(false);
@@ -2124,6 +2145,7 @@ void EditorLayer::OnImGuiRender() {
             ImGui::MenuItem("UI Library", nullptr, &m_ShowUIPalette);
             ImGui::MenuItem("UI Canvas Designer", nullptr, &m_ShowUICanvasDesigner);
             ImGui::MenuItem("HLSL Shader Studio", nullptr, &m_ShowHLSLStudio);
+            ImGui::MenuItem("Plugins", nullptr, &m_ShowPluginsPanel);
             ImGui::MenuItem("Performance & Debug", nullptr, &m_ShowTelemetry);
             ImGui::MenuItem("Physics Wireframe", "F1", &m_ShowPhysicsDebug);
             if (m_RHIViewport && m_RHIViewport->IsValid()) {
@@ -3170,6 +3192,11 @@ void EditorLayer::OnImGuiRender() {
         m_HLSLStudioPanel.OnImGuiRender(&m_ShowHLSLStudio);
     }
 
+    // 10e. Plugins Panel (PLG-10)
+    if (m_ShowPluginsPanel) {
+        m_PluginsPanel.OnImGuiRender(&m_ShowPluginsPanel, m_SceneState != SceneState::Edit);
+    }
+
     // 11. Performance & Telemetry Panel
     if (m_ShowTelemetry) {
         Axle::TelemetryData telemetry{
@@ -3771,6 +3798,11 @@ void EditorLayer::RenderProjectSettingsModal() {
             strncpy_s(assetBuf, sizeof(assetBuf), assetDirStr.c_str(), _TRUNCATE);
             if (ImGui::InputText("Asset Directory", assetBuf, sizeof(assetBuf))) {
                 config.AssetDirectory = assetBuf;
+            }
+
+            ImGui::Spacing();
+            if (ImGui::Button("Manage Plugins...", ImVec2(150.0f, 26.0f))) {
+                m_ShowPluginsPanel = true;
             }
 
             ImGui::Spacing();

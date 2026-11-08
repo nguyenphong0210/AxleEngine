@@ -131,10 +131,12 @@ int main(int argc, char** argv) {
     bool verifyEmptyStartup = false;
     bool verifyStartup = false;
     bool verifySimulation = false;
+    bool safeMode = false;
     std::string startupRejection;
     for (int i = 1; i < argc; ++i) {
         std::string argument = argv[i];
         if (argument == "--empty-project") emptyProject = true;
+        else if (argument == "--safe-mode" || argument == "--recovery") safeMode = true;
         else if (argument == "--verify-empty-startup") verifyEmptyStartup = true;
         else if (argument == "--verify-startup") verifyStartup = true;
         else if (argument == "--verify-simulation") verifySimulation = true;
@@ -270,6 +272,7 @@ int main(int argc, char** argv) {
                     if (Axle::RHI::ScopedRHIFault::Invoke("ProductUI", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS)
                         throw std::runtime_error("Injected rejection after native UI readiness");
                     editorLayer = std::make_shared<EditorLayer>(startupPath);
+                    if (safeMode) editorLayer->GetPluginsPanel().SetSafeMode(true);
                     app->PushLayer(editorLayer);
                     if (Axle::RHI::ScopedRHIFault::Invoke("ProductRenderer", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS)
                         throw std::runtime_error("Injected rejection after Editor renderer readiness");

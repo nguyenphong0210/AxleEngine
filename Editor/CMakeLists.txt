@@ -2,6 +2,8 @@ add_executable(AxleEditor
     src/Main.cpp
     src/EditorLayer.cpp
     src/RuntimeBuild.cpp
+    src/PluginBuild.cpp
+    src/PluginsPanel.cpp
 )
 
 target_include_directories(AxleEditor PRIVATE
@@ -19,6 +21,8 @@ target_link_libraries(AxleEditor PRIVATE
     Axle::Physics
     Axle::Scene
     Axle::Project
+    Axle::Plugin
+    Axle::PluginRuntime
     Axle::Spline
     Axle::Terrain
     Axle::Animation

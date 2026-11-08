@@ -187,6 +187,12 @@ target_link_libraries(AxlePluginSelectionTests PRIVATE Axle::Plugin)
 add_test(NAME PluginSelectionTests COMMAND $<TARGET_FILE:AxlePluginSelectionTests>)
 set_tests_properties(PluginSelectionTests PROPERTIES LABELS "plugin;cpu")
 
+add_executable(AxlePluginsPanelWorkflowTests EXCLUDE_FROM_ALL src/Test_PluginsPanelWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/PluginsPanel.cpp")
+target_include_directories(AxlePluginsPanelWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src")
+target_link_libraries(AxlePluginsPanelWorkflowTests PRIVATE Axle::Plugin Axle::Project Axle::Core Axle::UI)
+add_test(NAME PluginsPanelWorkflowTests COMMAND $<TARGET_FILE:AxlePluginsPanelWorkflowTests>)
+set_tests_properties(PluginsPanelWorkflowTests PROPERTIES LABELS "plugin;cpu")
+
 # Explicit baseline toolchain; failure probes must validate their exact cause.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
@@ -578,6 +584,18 @@ if(WIN32)
     add_test(NAME BuildWorkflowTests COMMAND $<TARGET_FILE:AxleBuildWorkflowTests>
         "${CMAKE_COMMAND}" "${CMAKE_CURRENT_BINARY_DIR}/Build Workflow Fixture" "$<CONFIG>")
     set_tests_properties(BuildWorkflowTests PROPERTIES FIXTURES_REQUIRED BuildWorkflow RUN_SERIAL TRUE TIMEOUT 30)
+
+    add_executable(AxlePluginBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_PluginBuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/PluginBuild.cpp")
+    target_include_directories(AxlePluginBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src")
+    target_link_libraries(AxlePluginBuildWorkflowTests PRIVATE Axle::Plugin Axle::Core)
+    list(APPEND AXLE_TEST_TARGETS AxlePluginBuildWorkflowTests)
+    add_test(NAME PluginBuildFixtureConfigure COMMAND "${CMAKE_COMMAND}"
+        -S "${CMAKE_CURRENT_SOURCE_DIR}/src/PluginBuildFixture"
+        -B "${CMAKE_CURRENT_BINARY_DIR}/Plugin Build Fixture")
+    set_tests_properties(PluginBuildFixtureConfigure PROPERTIES FIXTURES_SETUP PluginBuildWorkflow)
+    add_test(NAME PluginBuildWorkflowTests COMMAND $<TARGET_FILE:AxlePluginBuildWorkflowTests>
+        "${CMAKE_COMMAND}" "${CMAKE_CURRENT_BINARY_DIR}/Plugin Build Fixture" "$<CONFIG>")
+    set_tests_properties(PluginBuildWorkflowTests PROPERTIES FIXTURES_REQUIRED PluginBuildWorkflow RUN_SERIAL TRUE TIMEOUT 30)
 endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 

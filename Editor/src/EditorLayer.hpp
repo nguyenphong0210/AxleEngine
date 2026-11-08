@@ -38,6 +38,7 @@
 #include <atomic>
 #include <Axle/AssetCooker.hpp>
 #include "RuntimeBuild.hpp"
+#include "PluginsPanel.hpp"
 #include <unordered_map>
 #include <vector>
 #include <filesystem>
@@ -192,6 +193,7 @@ private:
     Axle::UIPalettePanel m_UIPalettePanel;
     Axle::UICanvasDesignerPanel m_UICanvasDesignerPanel;
     Axle::HLSLStudioPanel m_HLSLStudioPanel;
+    Axle::PluginsPanel m_PluginsPanel;
 
     // Panel Visibility Flags
     bool m_ShowSceneHierarchy = true;
@@ -203,11 +205,14 @@ private:
     bool m_ShowHLSLStudio = false;
     bool m_ShowUIPalette = true;
     bool m_ShowUICanvasDesigner = false;
+    bool m_ShowPluginsPanel = false;
     bool m_ShowTelemetry = false;
     bool m_ResetLayout = true;
 
 public:
     void OpenUICanvasDesigner(const std::filesystem::path& path);
+    void OpenPluginsPanel() { m_ShowPluginsPanel = true; }
+    Axle::PluginsPanel& GetPluginsPanel() { return m_PluginsPanel; }
 private:
 
     Axle::f32 m_LastDeltaTime = 0.0f;

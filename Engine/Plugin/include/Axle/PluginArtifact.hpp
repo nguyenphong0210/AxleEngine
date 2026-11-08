@@ -20,6 +20,7 @@ struct ArtifactIdentity {
 };
 
 std::string HashArtifactFile(const std::filesystem::path& path, std::string& error);
+std::string PathUtf8(const std::filesystem::path& path);
 bool ReadArtifactReceipt(const std::filesystem::path& path, ArtifactIdentity& identity, std::string& error);
 bool WriteArtifactReceipt(const ArtifactIdentity& identity, const std::filesystem::path& binary,
                           const std::filesystem::path& receipt, std::string& error);

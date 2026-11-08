@@ -1,6 +1,15 @@
-cmake_minimum_required(VERSION 3.22)
-project(AxlePluginBuildFixture NONE)
-add_custom_target(CustomPlugin_Runtime
-    COMMAND "${CMAKE_COMMAND}" "-DOUTPUT=${CMAKE_BINARY_DIR}/output"
-        "-DFLAGS=${CMAKE_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/WritePlugin.cmake"
-    VERBATIM)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ConfigureFailure.flag")
+    message(FATAL_ERROR "Intentional external plugin configure failure")
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/SlowBuild.flag")
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep 20)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/SnapshotHold.flag")
+    message(STATUS "Snapshot fixture compilation held")
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep 3)
+endif()
+axle_add_plugin_module(CustomPlugin_Runtime runtime Runtime/Runtime.cpp)
+include(cmake/Common.cmake)
+if(TARGET CustomPlugin_Runtime AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/CompileFailure.flag")
+    target_compile_definitions(CustomPlugin_Runtime PRIVATE AXLE_FIXTURE_COMPILE_FAILURE)
+endif()

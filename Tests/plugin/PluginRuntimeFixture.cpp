@@ -1,10 +1,12 @@
 #include <cstddef>
+#include <thread>
 
 #include <Axle/PluginABI.hpp>
 using HostApi = Axle::PluginRuntime::PluginHostApi;
 using Descriptor = Axle::PluginRuntime::PluginDescriptor;
 namespace {
 int* g_resource = nullptr;
+std::thread::id* g_stopThread = nullptr;
 void Destroy(void* resource) { delete static_cast<int*>(resource); g_resource = nullptr; }
 }
 
@@ -30,5 +32,6 @@ AXLE_EXPORT bool ax_plugin_start(const HostApi* host) {
 #endif
 }
 
-AXLE_EXPORT void ax_plugin_stop() {}
+AXLE_EXPORT void ax_fixture_observe_stop(std::thread::id* output) { g_stopThread = output; }
+AXLE_EXPORT void ax_plugin_stop() { if (g_stopThread) *g_stopThread = std::this_thread::get_id(); }
 

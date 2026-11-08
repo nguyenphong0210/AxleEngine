@@ -363,7 +363,7 @@ set_tests_properties(PluginUnitTests PluginHarnessFailure PROPERTIES TIMEOUT 30)
 add_library(AxlePluginRuntimeGood SHARED plugin/PluginRuntimeFixture.cpp)
 add_library(AxlePluginRuntimeFail SHARED plugin/PluginRuntimeFixture.cpp)
 foreach(fixtureTarget AxlePluginRuntimeGood AxlePluginRuntimeFail)
-    target_include_directories(${fixtureTarget} PRIVATE "${CMAKE_SOURCE_DIR}/Engine/PluginRuntime/include")
+    target_link_libraries(${fixtureTarget} PRIVATE Axle::PluginSDK)
     target_compile_definitions(${fixtureTarget} PRIVATE AXLE_PLUGIN_BUILD_CONFIGURATION="$<CONFIG>")
 endforeach()
 target_compile_definitions(AxlePluginRuntimeFail PRIVATE AXLE_FIXTURE_FAIL)
@@ -589,24 +589,22 @@ if(WIN32)
         "${CMAKE_COMMAND}" "${CMAKE_CURRENT_BINARY_DIR}/Build Workflow Fixture" "$<CONFIG>")
     set_tests_properties(BuildWorkflowTests PROPERTIES FIXTURES_REQUIRED BuildWorkflow RUN_SERIAL TRUE TIMEOUT 30)
 
-    add_executable(AxlePluginBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_PluginBuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/PluginBuild.cpp")
-    target_include_directories(AxlePluginBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src")
-    target_link_libraries(AxlePluginBuildWorkflowTests PRIVATE Axle::Plugin Axle::Core)
+    add_executable(AxlePluginBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_PluginBuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/PluginBuild.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/OwnedProcess.cpp")
+    target_include_directories(AxlePluginBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/PluginSDK/$<CONFIG>")
+    target_link_libraries(AxlePluginBuildWorkflowTests PRIVATE Axle::Plugin Axle::Core Axle::PluginRuntime Axle::RuntimeHost)
+    add_dependencies(AxlePluginBuildWorkflowTests AxlePluginSDKPackage)
+    add_custom_command(TARGET AxlePluginBuildWorkflowTests POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:AxleRuntimeHost>" "$<TARGET_FILE_DIR:AxlePluginBuildWorkflowTests>")
     list(APPEND AXLE_TEST_TARGETS AxlePluginBuildWorkflowTests)
-    add_test(NAME PluginBuildFixtureConfigure COMMAND "${CMAKE_COMMAND}"
-        -S "${CMAKE_CURRENT_SOURCE_DIR}/src/PluginBuildFixture"
-        -B "${CMAKE_CURRENT_BINARY_DIR}/Plugin Build Fixture")
-    set_tests_properties(PluginBuildFixtureConfigure PROPERTIES FIXTURES_SETUP PluginBuildWorkflow)
     add_test(NAME PluginBuildWorkflowTests COMMAND $<TARGET_FILE:AxlePluginBuildWorkflowTests>
-        "${CMAKE_COMMAND}" "${CMAKE_CURRENT_BINARY_DIR}/Plugin Build Fixture" "$<CONFIG>")
-    set_tests_properties(PluginBuildWorkflowTests PROPERTIES FIXTURES_REQUIRED PluginBuildWorkflow RUN_SERIAL TRUE TIMEOUT 30)
+        "${CMAKE_COMMAND}" "${CMAKE_CURRENT_SOURCE_DIR}/src/PluginBuildFixture" "$<CONFIG>")
+    set_tests_properties(PluginBuildWorkflowTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
 endif()
 add_custom_target(AxleAllTests DEPENDS ${AXLE_TEST_TARGETS} AxleRHIFoundationTests AxleRHIResourceTests AxleRHIResourceViewTests AxleRHIErrorTests AxleRenderServiceTests AxleRuntimeRenderTests AxlePreviewRenderTests)
 
 # Explicit review gate for known OPT-06 contract failures. Keep out of the
 # routine regression suite until the incomplete plugin candidate is repaired.
 add_executable(AxleOpt06ReviewProbes EXCLUDE_FROM_ALL
-    plugin/Opt06ReviewProbes.cpp "${CMAKE_SOURCE_DIR}/Editor/src/PluginBuild.cpp")
+    plugin/Opt06ReviewProbes.cpp "${CMAKE_SOURCE_DIR}/Editor/src/PluginBuild.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/OwnedProcess.cpp")
 target_include_directories(AxleOpt06ReviewProbes PRIVATE "${CMAKE_SOURCE_DIR}/Editor/src")
 target_link_libraries(AxleOpt06ReviewProbes PRIVATE Axle::Plugin Axle::PluginRuntime Axle::Scene)
 add_dependencies(AxleOpt06ReviewProbes AxlePluginRuntimeGood)

@@ -49,6 +49,7 @@ struct Manifest {
     std::vector<std::string> Platforms = {"windows-x64"};
     std::filesystem::path ManifestPath;
     std::filesystem::path Root;
+    std::string AuthoredManifest;
     std::vector<Dependency> Dependencies;
     std::vector<ModuleDescriptor> Modules;
 };
@@ -95,6 +96,8 @@ struct BuildArtifact {
     ModuleKind Kind = ModuleKind::Runtime;
     std::filesystem::path SourceRoot;
     std::filesystem::path CMakeRoot;
+    std::vector<std::string> Dependencies;
+    std::string Fingerprint;
 };
 
 struct BuildPlan {
@@ -106,6 +109,8 @@ struct BuildPlan {
     std::vector<BuildArtifact> Artifacts;
     std::vector<BuildInput> Inputs;
     std::vector<Diagnostic> Diagnostics;
+    Resolution FrozenResolution;
+    std::vector<std::filesystem::path> CMakeRoots;
 
     bool IsValid() const { return Diagnostics.empty(); }
 };

@@ -22,7 +22,8 @@
     "Runtime": "Runtime",
     "SceneData": "Engine/SceneData",
     "Plugin": "Engine/Plugin",
-    "PluginRuntime": "Engine/PluginRuntime"
+    "PluginRuntime": "Engine/PluginRuntime",
+    "PluginSDK": "Engine/PluginSDK"
   },
   "layers": {
     "Level0_Foundation": [
@@ -43,7 +44,8 @@
       "Project",
       "UI2D",
       "Plugin",
-      "PluginRuntime"
+      "PluginRuntime",
+      "PluginSDK"
     ],
     "Level3_Scene_Simulation": [
       "Scene"
@@ -197,7 +199,12 @@
     ],
     "PluginRuntime": [
       "Axle::Plugin",
+      "Axle::PluginSDK",
       "dl"
+    ],
+    "PluginSDK": [
+      "Axle::PluginSDK",
+      "Axle::RuntimeHost"
     ]
   },
   "forbidden_include_rules": [
@@ -222,7 +229,8 @@
         "Runtime",
         "SceneData",
         "Plugin",
-        "PluginRuntime"
+        "PluginRuntime",
+        "PluginSDK"
       ],
       "description": "Foundation Core must not have upward dependencies on platform, rendering, physics, scene, UI or applications."
     },
@@ -237,7 +245,8 @@
         "Runtime",
         "SceneData",
         "Plugin",
-        "PluginRuntime"
+        "PluginRuntime",
+        "PluginSDK"
       ],
       "description": "Asset subsystem must not depend on GPU rendering, scene, or UI."
     },
@@ -253,7 +262,8 @@
         "Runtime",
         "SceneData",
         "Plugin",
-        "PluginRuntime"
+        "PluginRuntime",
+        "PluginSDK"
       ],
       "description": "Physics subsystem must not depend directly on rendering, GPU resources, asset DSL, scene, or UI."
     },
@@ -271,7 +281,8 @@
       "forbidden_to": [
         "UI",
         "Editor",
-        "Runtime"
+        "Runtime",
+        "PluginSDK"
       ],
       "description": "Spline plugin must not depend on Editor UI or host applications."
     },
@@ -280,7 +291,8 @@
       "forbidden_to": [
         "UI",
         "Editor",
-        "Runtime"
+        "Runtime",
+        "PluginSDK"
       ],
       "description": "Terrain plugin must not depend on Editor UI or host applications."
     },
@@ -312,7 +324,8 @@
         "Editor",
         "Runtime",
         "Plugin",
-        "PluginRuntime"
+        "PluginRuntime",
+        "PluginSDK"
       ],
       "description": "Generic scene data may depend only on Core; concrete system integration belongs in Scene bridges."
     },
@@ -336,7 +349,8 @@
         "Editor",
         "Runtime",
         "SceneData",
-        "PluginRuntime"
+        "PluginRuntime",
+        "PluginSDK"
       ],
       "description": "Plugin infrastructure does not import optional modules, scene or product implementation."
     },
@@ -362,6 +376,32 @@
         "SceneData"
       ],
       "description": "Plugin infrastructure does not import optional modules, scene or product implementation."
+    },
+    {
+      "from": "PluginSDK",
+      "forbidden_to": [
+        "Core",
+        "Platform",
+        "RHI",
+        "Renderer",
+        "Audio",
+        "Asset",
+        "Physics",
+        "Animation",
+        "VFX",
+        "Project",
+        "UI2D",
+        "UI",
+        "Scene",
+        "Spline",
+        "Terrain",
+        "Editor",
+        "Runtime",
+        "SceneData",
+        "Plugin",
+        "PluginRuntime"
+      ],
+      "description": "Shared plugin gateways expose opaque SDK services and contain no private Engine/vendor/application implementation."
     }
   ],
   "baseline_allowances": [

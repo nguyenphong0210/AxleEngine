@@ -38,6 +38,23 @@ Preserve Sandbox (`3e3a423`), the RHI correction (`0fd041f`) and authored assets
 
 ## Work still required before final acceptance
 
+Native builder/loader correction checkpoint (2026-11-08): real selected-only
+CMake configure/build, standalone opaque shared SDK package, frozen source
+snapshots/common inputs, exact manifest binding, immutable generation publication,
+project writer lock, owned cancellation and strict cached artifact validation are
+implemented. Real DLL regressions cover Unicode/spaces outside the Engine tree,
+preserved source/header timestamps, configure/compiler failure, successful
+no-output targets, concurrent writers and source mutation during compilation.
+Loader regressions cover owner revocation, retained host/code, worker Stop/final
+lease retirement on the owner thread and deny-write/delete artifact handles.
+Debug and Release focused tests pass 3/3; logs `native-{debug,release}-build.log`
+and `native-{debug,release}-tests.log` under `build/opt06-completion/`.
+The focused separate-context reviewer independently reproduced stale-output
+publication, then source-rechecked its fix and the frozen-manifest correction.
+Phase acceptance is still withheld; the following remaining list is historical
+and the native builder portion of item 1 is now implemented. Scene/Editor service
+integration and final full product gates remain open.
+
 1. Replace builder's duplicate receipt logic with canonical identity validation.
    Generate a selected-only standalone CMake graph; configure and compile real
    DLL modules using a frozen SDK/toolchain plan. Use cross-process writer locking,

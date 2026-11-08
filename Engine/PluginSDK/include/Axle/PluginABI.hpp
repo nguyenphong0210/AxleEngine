@@ -11,6 +11,7 @@ struct PluginHostApi {
     std::uint32_t struct_size;
     std::uint32_t abi_version;
     void* user_data;
+    std::uint64_t owner_id;
     const char* sdk_fingerprint;
     bool (*register_resource)(void*, const char*, void*, void (*)(void*));
     const void* (*get_service)(void*, std::uint32_t service_id, std::uint32_t minimum_size);

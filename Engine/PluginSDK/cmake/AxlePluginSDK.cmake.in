@@ -1,0 +1,76 @@
+# Relocatable matched-toolchain SDK. This file and include/lib/bin form a unit.
+if(NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+    message(FATAL_ERROR "Axle plugin SDK requires Windows x64 MSVC")
+endif()
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "@CMAKE_CXX_COMPILER_ID@" OR
+   NOT CMAKE_CXX_COMPILER_VERSION STREQUAL "@CMAKE_CXX_COMPILER_VERSION@")
+    message(FATAL_ERROR "Axle plugin SDK compiler identity does not match")
+endif()
+set(AXLE_SDK_CONFIGURATION "$<CONFIG>")
+set(AXLE_SDK_FINGERPRINT "@AXLE_PLUGIN_SDK_HASH@-$<CONFIG>")
+set(AXLE_SDK_TOOLCHAIN_FINGERPRINT "@AXLE_PLUGIN_TOOLCHAIN_ID@-$<CONFIG>")
+if(CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_CONFIGURATION_TYPES "${AXLE_SDK_CONFIGURATION}" CACHE STRING "SDK configuration" FORCE)
+elseif(NOT CMAKE_BUILD_TYPE STREQUAL AXLE_SDK_CONFIGURATION)
+    message(FATAL_ERROR "Axle plugin SDK configuration does not match CMAKE_BUILD_TYPE")
+endif()
+foreach(host Runtime Editor)
+    if(NOT TARGET AxleSDK::${host})
+        add_library(AxleSDK::${host} SHARED IMPORTED GLOBAL)
+        set_target_properties(AxleSDK::${host} PROPERTIES
+            IMPORTED_IMPLIB "${CMAKE_CURRENT_LIST_DIR}/lib/Axle${host}Host.lib"
+            IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/bin/Axle${host}Host.dll"
+            INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/include")
+    endif()
+endforeach()
+set_property(TARGET AxleSDK::Editor PROPERTY INTERFACE_LINK_LIBRARIES AxleSDK::Runtime)
+
+# Selected module names/kinds are supplied by the frozen build graph. Discovery
+# never evaluates this script or any plugin's CMakeLists.txt.
+function(axle_add_plugin_module target kind)
+    if(NOT target IN_LIST AXLE_SELECTED_PLUGIN_MODULES)
+        return()
+    endif()
+    if(NOT kind STREQUAL "runtime" AND NOT kind STREQUAL "editor")
+        message(FATAL_ERROR "Invalid native plugin module kind: ${kind}")
+    endif()
+    if(NOT kind STREQUAL "${AXLE_PLUGIN_${target}_KIND}")
+        message(FATAL_ERROR "Plugin module kind differs from its manifest: ${target}")
+    endif()
+    add_library(${target} SHARED ${ARGN})
+    # Force compilation when authored input content changes even if its mtime
+    # was preserved; unchanged modules keep the same stamp and cached objects.
+    set(stamp "${CMAKE_BINARY_DIR}/Fingerprints/${target}.hpp")
+    set(stampContent "#pragma once\n#define AXLE_MODULE_SOURCE_FINGERPRINT \"${AXLE_PLUGIN_${target}_FINGERPRINT}\"\n")
+    set(previousStamp "")
+    if(EXISTS "${stamp}")
+        file(READ "${stamp}" previousStamp)
+    endif()
+    if(NOT previousStamp STREQUAL stampContent)
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/Fingerprints")
+        file(WRITE "${stamp}" "${stampContent}")
+    endif()
+    target_compile_features(${target} PRIVATE cxx_std_20)
+    target_compile_options(${target} PRIVATE /EHsc /GR /utf-8 "/FI${stamp}")
+    set_target_properties(${target} PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+        RUNTIME_OUTPUT_DIRECTORY "${AXLE_PLUGIN_OUTPUT_DIRECTORY}"
+        ARCHIVE_OUTPUT_DIRECTORY "${AXLE_PLUGIN_OUTPUT_DIRECTORY}")
+    foreach(config Debug Release RelWithDebInfo MinSizeRel)
+        string(TOUPPER "${config}" upper)
+        set_target_properties(${target} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY_${upper} "${AXLE_PLUGIN_OUTPUT_DIRECTORY}"
+            ARCHIVE_OUTPUT_DIRECTORY_${upper} "${AXLE_PLUGIN_OUTPUT_DIRECTORY}")
+    endforeach()
+    target_compile_definitions(${target} PRIVATE
+        AXLE_MODULE_INPUT_IDENTITY="${AXLE_PLUGIN_${target}_FINGERPRINT}"
+        AXLE_PLUGIN_ID="${AXLE_PLUGIN_${target}_ID}"
+        AXLE_PLUGIN_MODULE_NAME="${target}"
+        AXLE_PLUGIN_BUILD_CONFIGURATION="${AXLE_SDK_CONFIGURATION}"
+        AXLE_PLUGIN_SDK_FINGERPRINT="${AXLE_SDK_FINGERPRINT}"
+        AXLE_PLUGIN_TOOLCHAIN_FINGERPRINT="${AXLE_SDK_TOOLCHAIN_FINGERPRINT}")
+    target_link_libraries(${target} PRIVATE AxleSDK::Runtime)
+    if(kind STREQUAL "editor")
+        target_link_libraries(${target} PRIVATE AxleSDK::Editor)
+    endif()
+endfunction()

@@ -6,6 +6,9 @@
 
 namespace Axle {
 
+    std::shared_ptr<Project> Project::s_ActiveProject;
+    std::shared_ptr<Project> Project::GetActive() { return s_ActiveProject; }
+
     const std::filesystem::path& Project::GetProjectDirectory() {
         if (s_ActiveProject) {
             return s_ActiveProject->m_ProjectDirectory;

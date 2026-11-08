@@ -1,318 +1,209 @@
 #include "PluginBuild.hpp"
-
-#include <chrono>
+#include "OwnedProcess.hpp"
+#include <Axle/PluginArtifact.hpp>
+#include <Axle/FileSystem.hpp>
+#include <Axle/UUID.hpp>
+#include <algorithm>
 #include <fstream>
-#include <system_error>
-#include <vector>
-
+#include <sstream>
+#include <set>
+#include <map>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
 #endif
-
 namespace Axle {
-
 namespace {
-
-static std::atomic<bool> s_BuildInProgress{false};
-
-struct ScopedBuildLock {
-    bool Locked = false;
-    ScopedBuildLock() {
-        Locked = !s_BuildInProgress.exchange(true);
-    }
-    ~ScopedBuildLock() {
-        if (Locked) {
-            s_BuildInProgress.store(false);
-        }
-    }
-    bool IsLocked() const { return Locked; }
-};
-
-#ifdef _WIN32
-struct Handle {
-    HANDLE Value = nullptr;
-    ~Handle() { if (Value && Value != INVALID_HANDLE_VALUE) CloseHandle(Value); }
-    Handle(const Handle&) = delete;
-    Handle& operator=(const Handle&) = delete;
-    explicit Handle(HANDLE value = nullptr) : Value(value) {}
-};
-
-std::wstring Quote(const std::wstring& value) {
-    std::wstring result = L"\"";
-    size_t slashes = 0;
-    for (wchar_t ch : value) {
-        if (ch == L'\\') { ++slashes; continue; }
-        result.append(ch == L'"' ? slashes * 2 + 1 : slashes, L'\\');
-        result += ch;
-        slashes = 0;
-    }
-    result.append(slashes * 2, L'\\');
-    return result + L'"';
+std::atomic_bool building{false};
+struct BuildLock { bool Owned = !building.exchange(true); ~BuildLock() { if (Owned) building = false; } };
+std::string QuoteText(const std::string& text) {
+    std::string equals = "=";
+    while (text.find("]" + equals + "]") != std::string::npos) equals += '=';
+    return "[" + equals + "[" + text + "]" + equals + "]";
 }
-#endif
-
-bool IsItemUpToDate(const PluginBuildItem& item, const std::filesystem::path& binaryDir,
-                    const std::string& config, const std::string& planFingerprint,
-                    const std::string& planSdk) {
-    std::error_code ec;
-    const auto dllPath = binaryDir / (item.ModuleName + ".dll");
-    const auto receiptPath = binaryDir / (item.ModuleName + ".build.receipt");
-
-    if (!std::filesystem::is_regular_file(dllPath, ec) ||
-        !std::filesystem::is_regular_file(receiptPath, ec)) {
-        return false;
+std::string QuotePath(const std::filesystem::path& path) { return QuoteText(Plugin::PathUtf8(path)); }
+Plugin::ArtifactIdentity Identity(const Plugin::BuildPlan& plan, const Plugin::BuildArtifact& artifact) {
+    Plugin::ArtifactIdentity id;
+    id.PluginId = artifact.PluginId; id.ModuleName = artifact.ModuleName; id.Kind = artifact.Kind;
+    id.Product = plan.Product; id.Configuration = plan.Configuration; id.SdkFingerprint = plan.SdkFingerprint;
+    id.ToolchainFingerprint = plan.ToolchainFingerprint; id.Fingerprint = plan.Fingerprint; id.SourceRoot = artifact.SourceRoot;
+    return id;
+}
+bool ValidateGeneration(const Plugin::BuildPlan& plan, const std::filesystem::path& directory, std::vector<std::filesystem::path>& receipts) {
+    std::string error;
+    for (const auto& artifact : plan.Artifacts) {
+        if (artifact.Kind == Plugin::ModuleKind::Content) continue;
+        const auto receipt = directory / (artifact.ModuleName + ".build.receipt");
+        if (!Plugin::ValidateArtifact(Identity(plan, artifact), directory / (artifact.ModuleName + ".dll"), receipt, error)) return false;
+        receipts.push_back(receipt);
     }
-
-    std::ifstream receipt(receiptPath);
-    if (!receipt.is_open()) return false;
-
-    std::string line;
-    bool sawSchema = false;
-    std::string recPluginId, recModule, recConfig, recFingerprint, recSdk;
-    while (std::getline(receipt, line)) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-        if (line.rfind("schema=", 0) == 0) {
-            if (line.substr(7) == "1") sawSchema = true;
-        } else if (line.rfind("plugin_id=", 0) == 0) {
-            recPluginId = line.substr(10);
-        } else if (line.rfind("module_name=", 0) == 0) {
-            recModule = line.substr(12);
-        } else if (line.rfind("configuration=", 0) == 0) {
-            recConfig = line.substr(14);
-        } else if (line.rfind("fingerprint=", 0) == 0) {
-            recFingerprint = line.substr(12);
-        } else if (line.rfind("sdk_fingerprint=", 0) == 0) {
-            recSdk = line.substr(16);
-        }
-    }
-
-    if (!sawSchema) return false;
-    if (!item.PluginId.empty() && recPluginId != item.PluginId) return false;
-    if (!item.ModuleName.empty() && recModule != item.ModuleName) return false;
-    if (!config.empty() && !recConfig.empty() && recConfig != config) return false;
-
-    const std::string expectedFingerprint = !item.Fingerprint.empty() ? item.Fingerprint : planFingerprint;
-    if (!expectedFingerprint.empty() && recFingerprint != expectedFingerprint) return false;
-
-    const std::string expectedSdk = !item.SdkFingerprint.empty() ? item.SdkFingerprint : planSdk;
-    if (!expectedSdk.empty() && recSdk != expectedSdk) return false;
-
     return true;
 }
-
-} // namespace
-
-bool IsPluginBuildInProgress() {
-    return s_BuildInProgress.load();
+bool Within(const std::filesystem::path& child, const std::filesystem::path& parent) {
+    std::error_code ec;
+    const auto normalizedParent = std::filesystem::weakly_canonical(parent, ec);
+    if (ec) return false;
+    const auto normalizedChild = std::filesystem::weakly_canonical(child, ec);
+    if (ec) return false;
+    const auto relative = normalizedChild.lexically_relative(normalizedParent);
+    return !relative.empty() && relative != "." && *relative.begin() != "..";
 }
-
+bool FreezeSources(const Plugin::BuildPlan& plan, const std::filesystem::path& snapshot,
+                   Plugin::BuildPlan& graph, std::string& error) {
+    graph = plan;
+    std::map<std::filesystem::path, std::filesystem::path> roots;
+    for (const auto& plugin : plan.FrozenResolution.Plugins)
+        roots.emplace(plugin.Root.lexically_normal(), snapshot / plugin.Id);
+    std::set<std::filesystem::path> files;
+    for (const auto& input : plan.Inputs) {
+        auto root = std::find_if(roots.begin(), roots.end(), [&](const auto& pair) { return Within(input.Path, pair.first); });
+        if (root == roots.end()) { error = "Frozen input is outside its plugin installation"; return false; }
+        const auto destination = root->second / input.Path.lexically_relative(root->first);
+        if (!Within(destination, snapshot)) { error = "Invalid frozen input destination"; return false; }
+        files.insert(destination.lexically_normal());
+        // Preserve timestamps only when the exact frozen bytes remain unchanged.
+        // The authored files are never passed to the compiler or CMake.
+        if (std::filesystem::is_regular_file(destination) && FileSystem::ReadTextFile(destination) == input.Content) continue;
+        std::filesystem::create_directories(destination.parent_path());
+        if (!FileSystem::WriteTextFileAtomically(destination, input.Content, &error)) return false;
+    }
+    if (std::filesystem::exists(snapshot)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(snapshot)) {
+            if (entry.is_symlink()) { error = "Unexpected link in owned source snapshot"; return false; }
+            if (entry.is_regular_file() && !files.contains(entry.path().lexically_normal())) {
+                if (!Within(entry.path(), snapshot)) { error = "Invalid snapshot cleanup path"; return false; }
+                std::filesystem::remove(entry.path());
+            }
+        }
+    }
+    for (auto& root : graph.CMakeRoots) root = roots.at(root.lexically_normal());
+    for (auto& artifact : graph.Artifacts) {
+        const auto original = artifact.CMakeRoot.lexically_normal();
+        artifact.SourceRoot = roots.at(original) / artifact.SourceRoot.lexically_relative(original);
+        artifact.CMakeRoot = roots.at(original);
+    }
+    return true;
+}
+}
+bool IsPluginBuildInProgress() { return building.load(); }
 PluginBuildResult BuildPlugins(const PluginBuildRequest& request, const std::atomic_bool& cancel) {
     PluginBuildResult result;
-
-    // 1. Simultaneous writer rejection (build lock)
-    ScopedBuildLock lock;
-    if (!lock.IsLocked()) {
-        result.Error = "Simultaneous plugin build rejected: another build is in progress.";
-        return result;
+    BuildLock memoryLock;
+    if (!memoryLock.Owned) { result.Error = "Simultaneous plugin build rejected"; return result; }
+    const auto& frozen = request.Plan;
+    if (!frozen.IsValid() || frozen.Fingerprint.empty() || frozen.Configuration.empty() || frozen.SdkFingerprint.empty() ||
+        frozen.ToolchainFingerprint.empty() || frozen.Product == Plugin::ProductKind::Runtime) {
+        result.Error = "A complete validated native product plan is required"; return result;
     }
-
-    // 2. Cancellation check
-    if (cancel.load()) {
-        result.Error = "Plugin build cancelled.";
-        return result;
+    if (frozen.Configuration != "Debug" && frozen.Configuration != "Release" &&
+        frozen.Configuration != "RelWithDebInfo" && frozen.Configuration != "MinSizeRel") {
+        result.Error = "Unsupported native plugin build configuration"; return result;
     }
-
-    // 3. Resolve items to build
-    std::vector<PluginBuildItem> items = request.Items;
-    if (items.empty() && request.Plan.IsValid()) {
-        for (const auto& artifact : request.Plan.Artifacts) {
-            PluginBuildItem item;
-            item.PluginId = artifact.PluginId;
-            item.ModuleName = artifact.ModuleName;
-            item.Kind = artifact.Kind;
-            item.SourceRoot = artifact.SourceRoot;
-            item.Fingerprint = request.Plan.Fingerprint;
-            item.SdkFingerprint = request.Plan.SdkFingerprint;
-            items.push_back(std::move(item));
-        }
-    }
-
-    if (items.empty()) {
-        result.Success = true;
-        result.UpToDate = true;
-        result.ExitCode = 0;
-        return result;
-    }
-
-    // 4. Prebuilt no-op check
-    bool allUpToDate = true;
-    for (const auto& item : items) {
-        if (!IsItemUpToDate(item, request.BinaryDirectory, request.Configuration,
-                            request.Plan.Fingerprint, request.Plan.SdkFingerprint)) {
-            allUpToDate = false;
-            break;
-        }
-    }
-
-    if (allUpToDate) {
-        result.Success = true;
-        result.UpToDate = true;
-        result.ExitCode = 0;
-        return result;
-    }
-
-    std::error_code ec;
-    if (!std::filesystem::is_regular_file(request.CMake, ec) ||
-        !std::filesystem::is_directory(request.BuildDirectory, ec) ||
-        request.BinaryDirectory.empty()) {
-        result.Error = "Plugin build tools or configured build directory are unavailable.";
-        return result;
-    }
-
-    const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-    result.LogPath = request.BuildDirectory / ("plugin-build-" + std::to_string(stamp) + ".log");
-
-#ifdef _WIN32
-    SECURITY_ATTRIBUTES security{ sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE };
-    Handle output(CreateFileW(result.LogPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
-                              &security, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
-    Handle input(CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                             &security, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
-    Handle job(CreateJobObjectW(nullptr, nullptr));
-    if (output.Value == INVALID_HANDLE_VALUE || input.Value == INVALID_HANDLE_VALUE || !job.Value) {
-        result.Error = "Could not create plugin build log/process handles.";
-        return result;
-    }
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
-    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    if (!SetInformationJobObject(job.Value, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
-        result.Error = "Could not configure plugin build process ownership.";
-        return result;
-    }
-
-    auto command = Quote(request.CMake.wstring()) + L" --build " + Quote(request.BuildDirectory.wstring());
-    if (!request.Configuration.empty()) {
-        command += L" --config " + Quote(std::filesystem::path(request.Configuration).wstring());
-    }
-    if (!request.TargetName.empty()) {
-        command += L" --target " + Quote(std::filesystem::path(request.TargetName).wstring());
-    } else {
-        for (const auto& item : items) {
-            command += L" --target " + Quote(std::filesystem::path(item.ModuleName).wstring());
-        }
-    }
-
-    std::vector<wchar_t> mutableCommand(command.begin(), command.end());
-    mutableCommand.push_back(0);
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    startup.dwFlags = STARTF_USESTDHANDLES;
-    startup.hStdOutput = startup.hStdError = output.Value;
-    startup.hStdInput = input.Value;
-    PROCESS_INFORMATION process{};
-    if (!CreateProcessW(request.CMake.c_str(), mutableCommand.data(), nullptr, nullptr, TRUE,
-                        CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, request.BuildDirectory.c_str(),
-                        &startup, &process)) {
-        result.Error = "Could not start CMake plugin build (Windows error " + std::to_string(GetLastError()) + ").";
-        return result;
-    }
-    Handle processHandle(process.hProcess), thread(process.hThread);
-    if (!AssignProcessToJobObject(job.Value, processHandle.Value)) {
-        TerminateProcess(processHandle.Value, 1);
-        result.Error = "Could not attach plugin build to its process owner.";
-        return result;
-    }
-    if (ResumeThread(thread.Value) == static_cast<DWORD>(-1)) {
-        result.Error = "Could not resume plugin build.";
-        return result;
-    }
-
-    for (;;) {
-        const DWORD wait = WaitForSingleObject(processHandle.Value, 100);
-        if (cancel.load()) {
-            TerminateJobObject(job.Value, 1);
-            WaitForSingleObject(processHandle.Value, 5000);
-            result.Error = "Plugin build cancelled.";
-            return result;
-        }
-        if (wait == WAIT_OBJECT_0) break;
-        if (wait != WAIT_TIMEOUT) {
-            result.Error = "Plugin build process wait failed.";
-            return result;
-        }
-    }
-
-    DWORD exitCode = 1;
-    if (!GetExitCodeProcess(processHandle.Value, &exitCode)) {
-        result.Error = "Could not read plugin build exit code.";
-        return result;
-    }
-    result.ExitCode = static_cast<int>(exitCode);
-    if (exitCode != 0) {
-        result.Error = "Plugin build failed (exit " + std::to_string(exitCode) + "). See " + result.LogPath.string();
-        return result;
-    }
-
-    // Verify DLL output and atomically write build receipts
-    for (const auto& item : items) {
-        const auto dllPath = request.BinaryDirectory / (item.ModuleName + ".dll");
-        if (!std::filesystem::is_regular_file(dllPath, ec)) {
-            result.Error = "Plugin build finished without expected module: " + item.ModuleName;
-            return result;
-        }
-
-        const auto receiptPath = request.BinaryDirectory / (item.ModuleName + ".build.receipt");
-        const auto receiptTemp = receiptPath.string() + ".tmp";
-        {
-            std::ofstream receipt(receiptTemp, std::ios::trunc);
-            if (!receipt) {
-                result.Error = "Plugin build succeeded but receipt could not be written for: " + item.ModuleName;
-                return result;
-            }
-            receipt << "schema=1\n"
-                    << "plugin_id=" << item.PluginId << "\n"
-                    << "module_name=" << item.ModuleName << "\n"
-                    << "kind=" << Plugin::ToString(item.Kind) << "\n"
-                    << "configuration=" << request.Configuration << "\n"
-                    << "product=" << Plugin::ToString(request.Plan.Product) << "\n"
-                    << "sdk_fingerprint=" << (!item.SdkFingerprint.empty() ? item.SdkFingerprint : request.Plan.SdkFingerprint) << "\n"
-                    << "fingerprint=" << (!item.Fingerprint.empty() ? item.Fingerprint : request.Plan.Fingerprint) << "\n"
-                    << "source_root=" << item.SourceRoot.generic_string() << "\n";
-            receipt.flush();
-            if (!receipt) {
-                std::error_code removeEc;
-                std::filesystem::remove(receiptTemp, removeEc);
-                result.Error = "Plugin build succeeded but receipt could not be completed for: " + item.ModuleName;
-                return result;
-            }
-        }
-
-        std::error_code renameEc;
-        if (!MoveFileExW(std::filesystem::path(receiptTemp).wstring().c_str(),
-                         receiptPath.wstring().c_str(),
-                         MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-            renameEc = std::error_code(static_cast<int>(GetLastError()), std::system_category());
-        }
-
-        if (renameEc) {
-            std::error_code removeEc;
-            std::filesystem::remove(receiptTemp, removeEc);
-            result.Error = "Plugin build succeeded but receipt could not be published for: " + item.ModuleName;
-            return result;
-        }
-        result.PublishedReceipts.push_back(receiptPath);
-    }
-
-    result.Success = true;
+    const auto plan = Plugin::CreateBuildPlan(frozen.FrozenResolution, frozen.Product, frozen.Configuration, frozen.SdkFingerprint, frozen.ToolchainFingerprint);
+    if (!plan.IsValid() || plan.Fingerprint != frozen.Fingerprint) { result.Error = "Plugin sources differ from the frozen request"; return result; }
+    if (cancel.load()) { result.Cancelled = true; result.Error = "Plugin build cancelled"; return result; }
+    const bool hasNative = std::any_of(plan.Artifacts.begin(), plan.Artifacts.end(), [](const auto& a) { return a.Kind != Plugin::ModuleKind::Content; });
+    if (!hasNative) { result.Success = result.UpToDate = true; result.ExitCode = 0; return result; }
+    if (request.ProjectDirectory.empty() || !request.ProjectDirectory.is_absolute()) { result.Error = "A saved absolute project root is required"; return result; }
+#ifndef _WIN32
+    result.Error = "Native plugin builds require Windows"; return result;
 #else
-    result.Error = "Plugin building is currently supported only on Windows.";
-#endif
+    try {
+        const auto root = std::filesystem::absolute(request.BuildDirectory.empty()
+            ? request.ProjectDirectory / "Intermediate/Plugins" : request.BuildDirectory);
+        const auto generations = root / "Generations";
+        std::filesystem::create_directories(generations);
+        struct DiskLock {
+            HANDLE Handle = INVALID_HANDLE_VALUE;
+            ~DiskLock() { if (Handle != INVALID_HANDLE_VALUE) CloseHandle(Handle); }
+        } diskLock;
+        diskLock.Handle = CreateFileW((root / ".build.lock").c_str(), GENERIC_WRITE | DELETE, FILE_SHARE_READ,
+            nullptr, CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+        if (diskLock.Handle == INVALID_HANDLE_VALUE) { result.Error = "Simultaneous plugin build rejected by project writer lock"; return result; }
+        const auto index = root / (plan.Fingerprint + ".generation");
+        std::ifstream indexStream(index, std::ios::binary);
+        const std::string cachedText((std::istreambuf_iterator<char>(indexStream)), std::istreambuf_iterator<char>());
+        if (!cachedText.empty()) {
+            const auto cached = std::filesystem::u8path(cachedText);
+            if (Within(cached, generations) && ValidateGeneration(plan, cached, result.PublishedReceipts)) {
+                result.Success = result.UpToDate = true; result.ExitCode = 0; result.GenerationDirectory = cached; return result;
+            }
+            result.PublishedReceipts.clear();
+        }
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(request.CMake, ec) ||
+            !std::filesystem::is_regular_file(request.SdkDirectory / "AxlePluginSDK.cmake", ec)) {
+            result.Error = "CMake and matching native SDK package are required"; return result;
+        }
+        const auto stamp = std::to_string(static_cast<std::uint64_t>(UUID{}));
+        if (plan.SdkFingerprint.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.") != std::string::npos) {
+            result.Error = "Invalid SDK cache key"; return result;
+        }
+        // Leave path budget for MSBuild/FileTracker's nested scratch and log
+        // filenames, including for Unicode projects outside the Engine tree.
+        const auto work = root / "W" / (plan.SdkFingerprint.substr(0, 16) + "-" + plan.Configuration + "-" + Plugin::ToString(plan.Product));
+        const auto source = work / "s", build = work / "b", output = work / "o";
+        const auto stage = root / "Staging" / stamp;
+        std::filesystem::create_directories(source); std::filesystem::create_directories(output);
+        result.LogPath = root / ("build-" + stamp + ".log");
+        std::string error;
+        Plugin::BuildPlan snapshotGraph;
+        if (!FreezeSources(plan, work / "i", snapshotGraph, error) ||
+            !Plugin::GenerateCMakeInputs(snapshotGraph, source / "SelectedPlugins.cmake", error)) { result.Error = error; return result; }
+        std::ostringstream bootstrap;
+        bootstrap << "cmake_minimum_required(VERSION 3.22)\nproject(AxleSelectedPlugins LANGUAGES CXX)\n"
+            << "include(" << QuotePath(request.SdkDirectory / "AxlePluginSDK.cmake") << ")\n"
+            << "if(NOT AXLE_SDK_FINGERPRINT STREQUAL " << QuoteText(plan.SdkFingerprint) << ")\n"
+            << "message(FATAL_ERROR \"SDK differs from the frozen plugin plan\")\nendif()\n"
+            << "if(NOT AXLE_SDK_TOOLCHAIN_FINGERPRINT STREQUAL " << QuoteText(plan.ToolchainFingerprint) << ")\n"
+            << "message(FATAL_ERROR \"Toolchain differs from the frozen plugin plan\")\nendif()\n"
+            << "set(AXLE_PLUGIN_OUTPUT_DIRECTORY " << QuotePath(output) << ")\n"
+            << "include(${CMAKE_CURRENT_LIST_DIR}/SelectedPlugins.cmake)\n";
+        if (!FileSystem::WriteTextFileAtomically(source / "CMakeLists.txt", bootstrap.str(), &error)) { result.Error = error; return result; }
+        std::vector<std::wstring> configure{L"-S", source.wstring(), L"-B", build.wstring(), L"-A", L"x64"};
+        if (!request.Generator.empty()) { configure.push_back(L"-G"); configure.push_back(std::filesystem::u8path(request.Generator).wstring()); }
+        if (!request.GeneratorToolset.empty()) { configure.push_back(L"-T"); configure.push_back(std::filesystem::u8path(request.GeneratorToolset).wstring()); }
+        if (!request.GeneratorInstance.empty()) configure.push_back(L"-DCMAKE_GENERATOR_INSTANCE=" + request.GeneratorInstance.wstring());
+        auto process = RunOwnedProcess(request.CMake, configure, root, result.LogPath, cancel);
+        result.ExitCode = process.ExitCode; result.Cancelled = process.Cancelled;
+        if (process.ExitCode != 0 || process.Cancelled) { result.Error = process.Error; return result; }
+        // A successful target is not evidence that it emitted a current binary.
+        // Remove only mutable expected outputs; immutable active generations are
+        // never touched. Missing outputs force correctly configured targets to
+        // relink and cannot be re-receipted from an earlier invocation.
+        for (const auto& artifact : plan.Artifacts) if (artifact.Kind != Plugin::ModuleKind::Content) {
+            for (const auto& extension : {".dll", ".lib", ".pdb"}) {
+                const auto file = output / (artifact.ModuleName + extension);
+                if (!Within(file, output)) { result.Error = "Invalid native output path"; return result; }
+                std::filesystem::remove(file);
+            }
+        }
+        std::vector<std::wstring> arguments{L"--build", build.wstring(), L"--config", std::filesystem::u8path(plan.Configuration).wstring(), L"--target"};
+        for (const auto& artifact : plan.Artifacts) if (artifact.Kind != Plugin::ModuleKind::Content) arguments.push_back(std::filesystem::u8path(artifact.ModuleName).wstring());
+        process = RunOwnedProcess(request.CMake, arguments, root, result.LogPath, cancel);
+        result.ExitCode = process.ExitCode; result.Cancelled = process.Cancelled;
+        if (process.ExitCode != 0 || process.Cancelled) { result.Error = process.Error; return result; }
+        const auto current = Plugin::CreateBuildPlan(plan.FrozenResolution, plan.Product, plan.Configuration, plan.SdkFingerprint, plan.ToolchainFingerprint);
+        if (!current.IsValid() || current.Fingerprint != plan.Fingerprint) { result.Error = "Plugin sources changed during the frozen build"; return result; }
+        if (cancel.load()) { result.Cancelled = true; result.Error = "Plugin build cancelled before publication"; return result; }
+        for (const auto& artifact : plan.Artifacts) {
+            if (artifact.Kind == Plugin::ModuleKind::Content) continue;
+            std::filesystem::create_directories(stage);
+            for (const auto& extension : {".dll", ".lib", ".pdb"}) {
+                const auto file = output / (artifact.ModuleName + extension);
+                if (std::filesystem::is_regular_file(file)) std::filesystem::copy_file(file, stage / file.filename(), std::filesystem::copy_options::overwrite_existing);
+            }
+            if (!Plugin::WriteBuildReceipt(plan, artifact, stage / (artifact.ModuleName + ".build.receipt"), error, stage / (artifact.ModuleName + ".dll"))) { result.Error = error; return result; }
+        }
+        const auto destination = generations / (plan.Fingerprint + "-" + stamp);
+        std::filesystem::rename(stage, destination);
+        if (!ValidateGeneration(plan, destination, result.PublishedReceipts)) { result.Error = "Staged artifact validation failed"; return result; }
+        if (!FileSystem::WriteTextFileAtomically(index, Plugin::PathUtf8(destination), &error)) { result.Error = error; return result; }
+        result.GenerationDirectory = destination; result.Success = true; result.ExitCode = 0;
+    } catch (const std::exception& exception) { result.Error = exception.what(); }
     return result;
+#endif
 }
-
-} // namespace Axle
+}

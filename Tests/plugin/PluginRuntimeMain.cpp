@@ -4,12 +4,17 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <thread>
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 using namespace Axle;
 #define CHECK(c) do { if (!(c)) { std::cerr << "FAIL " << __LINE__ << ": " << #c << '\n'; return 1; } } while(false)
 int main(int argc, char** argv) {
     CHECK(argc == 4);
-    const auto root = std::filesystem::temp_directory_path() / "AxleEngine" / ("PluginRuntime-" + std::to_string(static_cast<uint64_t>(UUID{})));
+    const auto root = std::filesystem::temp_directory_path() / "AxleEngine" / ("PluginRuntime-" + std::to_string(static_cast<uint64_t>(Axle::UUID{})));
     std::filesystem::create_directories(root);
     struct Cleanup { std::filesystem::path Root; ~Cleanup() { std::error_code ec; std::filesystem::remove_all(Root, ec); } } cleanup{root};
     Plugin::ArtifactIdentity identity;
@@ -26,6 +31,18 @@ int main(int argc, char** argv) {
     CHECK(good.Load(goodRequest, registry, error));
     CHECK(good.IsActive() && registry.Has("fixture.counter"));
     good.Stop(); CHECK(!good.IsActive() && registry.Size() == 0);
+    {
+        CHECK(good.Load(goodRequest, registry, error));
+        auto codeLease = good.GetCodeLease();
+        const auto* retainedHost = good.GetHostApi();
+        const auto owner = retainedHost->owner_id;
+        CHECK(registry.GetOwnerLease(owner) && registry.IsOwnerActive(owner));
+        good.Stop();
+        CHECK(!registry.IsOwnerActive(owner) && !registry.GetOwnerLease(owner));
+        CHECK(!retainedHost->register_resource(retainedHost->user_data, "after-stop", nullptr, nullptr));
+        CHECK(!retainedHost->get_service(retainedHost->user_data, 1, 1));
+        codeLease.reset();
+    }
     PluginRuntime::NativePlugin failing;
     CHECK(!failing.Load(failRequest, registry, error));
     CHECK(registry.Size() == 0);
@@ -53,11 +70,70 @@ int main(int argc, char** argv) {
     std::ofstream(partial.ReceiptPath) << "schema=1\n";
     CHECK(!mismatch.Load(partial, registry, error));
     partial.ReceiptPath.clear(); CHECK(!mismatch.Load(partial, registry, error));
+    int serviceCalls = 0;
+    auto serviceRequest = goodRequest;
+    serviceRequest.ServiceUser = &serviceCalls;
+    serviceRequest.GetService = [](void* user, std::uint64_t, std::uint32_t, std::uint32_t) -> const void* {
+        ++*static_cast<int*>(user); return user;
+    };
+    {
+        PluginRuntime::NativePlugin serviceModule;
+        CHECK(serviceModule.Load(serviceRequest, registry, error));
+        const auto* host = serviceModule.GetHostApi();
+        CHECK(host->get_service(host->user_data, 1, 1) == &serviceCalls && serviceCalls == 1);
+        registry.Rollback(host->owner_id);
+        CHECK(!serviceModule.IsActive());
+        CHECK(!host->get_service(host->user_data, 1, 1) && serviceCalls == 1);
+    }
     {
         PluginRuntime::NativePlugin lease;
-        { PluginRuntime::RegistrationRegistry shorterRegistry; CHECK(lease.Load(goodRequest, shorterRegistry, error)); }
+        const PluginRuntime::PluginHostApi* host = nullptr;
+        { PluginRuntime::RegistrationRegistry shorterRegistry; CHECK(lease.Load(serviceRequest, shorterRegistry, error)); host = lease.GetHostApi(); }
+        CHECK(!lease.IsActive() && !host->get_service(host->user_data, 1, 1) && serviceCalls == 1);
         lease.Stop(); CHECK(!lease.IsActive());
     }
+#if defined(_WIN32)
+    {
+        auto pinnedRequest = goodRequest;
+        pinnedRequest.ModulePath = root / "pinned.dll";
+        pinnedRequest.ReceiptPath = root / "pinned.receipt";
+        std::filesystem::copy_file(goodRequest.ModulePath, pinnedRequest.ModulePath);
+        CHECK(Plugin::WriteArtifactReceipt(identity, pinnedRequest.ModulePath, pinnedRequest.ReceiptPath, error));
+        PluginRuntime::NativePlugin pinned;
+        CHECK(pinned.Load(pinnedRequest, registry, error));
+        auto lease = pinned.GetCodeLease(); pinned.Stop();
+        const auto writer = CreateFileW(pinnedRequest.ModulePath.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (writer != INVALID_HANDLE_VALUE) CloseHandle(writer);
+        CHECK(writer == INVALID_HANDLE_VALUE);
+        CHECK(!MoveFileW(pinnedRequest.ModulePath.c_str(), (root / "renamed.dll").c_str()));
+        lease.reset();
+        CHECK(MoveFileW(pinnedRequest.ModulePath.c_str(), (root / "renamed.dll").c_str()));
+    }
+    // Teardown must stay on the Engine thread even when the last code-bearing
+    // job releases its lease from a worker, or a transferred session stops there.
+    for (bool workerStop : {false, true}) {
+        PluginRuntime::NativePlugin affine;
+        CHECK(affine.Load(goodRequest, registry, error));
+        auto retained = affine.GetCodeLease();
+        const auto native = GetModuleHandleW(goodRequest.ModulePath.c_str());
+        const auto observe = reinterpret_cast<void(*)(std::thread::id*)>(GetProcAddress(native, "ax_fixture_observe_stop"));
+        CHECK(observe);
+        std::thread::id stopThread;
+        observe(&stopThread);
+        if (!workerStop) affine.Stop();
+        std::thread worker([&, lease = std::move(retained)]() mutable {
+            if (workerStop) affine.Stop();
+            lease.reset();
+            PluginRuntime::NativePlugin::CollectRetiredModules();
+        });
+        worker.join();
+        CHECK(stopThread == std::thread::id{} && GetModuleHandleW(goodRequest.ModulePath.c_str()));
+        PluginRuntime::NativePlugin::CollectRetiredModules();
+        CHECK(stopThread == std::this_thread::get_id() && registry.Size() == 0);
+        CHECK(!GetModuleHandleW(goodRequest.ModulePath.c_str()));
+    }
+#endif
     std::cout << "Plugin runtime: validated artifact bytes/identity, real configuration handshake, rollback and lifetime PASS\n";
     return 0;
 }

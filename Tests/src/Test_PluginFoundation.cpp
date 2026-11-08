@@ -41,6 +41,8 @@ int main() {
     Write(root / "bad.axleplugin", R"({"schema": 1, "id": "test.bad", "version": "1", "name": "Bad", "modules": [})");
     std::filesystem::create_directories(root / "a" / "src", error);
     std::filesystem::create_directories(root / "b" / "src", error);
+    Write(root / "a" / "CMakeLists.txt", "# selected module metadata fixture\n");
+    Write(root / "b" / "CMakeLists.txt", "# selected module metadata fixture\n");
     Write(root / "a" / "src" / "base.cpp", "base-v1");
     Write(root / "b" / "src" / "game.cpp", "game-v1");
 
@@ -79,6 +81,14 @@ int main() {
                                                     "Debug", "sdk-a", "toolchain-a");
     ok &= Check(plan.IsValid() && plan.Artifacts.size() == 2, "runtime build plan excludes editor modules");
     ok &= Check(!plan.Fingerprint.empty(), "build plan has a stable identity");
+    const auto frozenManifest = validResolution.Plugins.back().AuthoredManifest;
+    Write(root / "b/game.axleplugin", "{}\n");
+    ok &= Check(!Axle::Plugin::CreateBuildPlan(validResolution, Axle::Plugin::ProductKind::Runtime, "Debug", "sdk-a", "toolchain-a").IsValid(),
+        "changed manifest cannot be paired with an old resolved graph");
+    std::filesystem::remove(root / "b/game.axleplugin");
+    ok &= Check(!Axle::Plugin::CreateBuildPlan(validResolution, Axle::Plugin::ProductKind::Runtime, "Debug", "sdk-a", "toolchain-a").IsValid(),
+        "deleted manifest invalidates its resolved graph");
+    Write(root / "b/game.axleplugin", frozenManifest);
     Write(root / "b" / "src" / "game.cpp", "game-v2");
     const auto changedCatalog = Axle::Plugin::Discover({{root}});
     const auto changedResolution = Axle::Plugin::Resolve(changedCatalog, {"test.game"}, Axle::Plugin::ProductKind::Runtime);

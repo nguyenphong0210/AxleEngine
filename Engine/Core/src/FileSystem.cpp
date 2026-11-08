@@ -239,7 +239,8 @@ namespace Axle {
 
         static std::atomic<uint64_t> s_Counter{0};
         auto now = std::chrono::steady_clock::now().time_since_epoch().count();
-        std::filesystem::path tempPath = target.string() + ".tmp." + std::to_string(now) + "." + std::to_string(s_Counter++);
+        std::filesystem::path tempPath = target;
+        tempPath += ".tmp." + std::to_string(now) + "." + std::to_string(s_Counter++);
 
         {
             std::ofstream out(tempPath, std::ios::binary);

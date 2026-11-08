@@ -51,6 +51,7 @@ CMakeCache.txt
 cmake_install.cmake
 Makefile
 *.cmake
+!Tests/src/PluginBuildFixture/cmake/Common.cmake
 !CMakeLists.txt
 !cmake/*.cmake
 
@@ -99,3 +100,6 @@ test_output/
 /docs/agents/CODEX_GEMINI_EXCHANGE.json.lock
 /docs/agents/.exchange-*.tmp
 /scripts/__pycache__/
+
+# Generated per-project native plugin build cache and immutable artifacts.
+**/Intermediate/Plugins/

@@ -32,7 +32,7 @@ namespace Axle {
         static std::filesystem::path GetAssetDirectory();
         static std::filesystem::path GetAssetFileSystemPath(const std::filesystem::path& path);
 
-        static std::shared_ptr<Project> GetActive() { return s_ActiveProject; }
+        static std::shared_ptr<Project> GetActive();
         static void SetActive(std::shared_ptr<Project> project);
 
         static std::shared_ptr<Project> New(const std::filesystem::path& directory = {});
@@ -44,7 +44,7 @@ namespace Axle {
         ProjectConfig m_Config;
         std::filesystem::path m_ProjectDirectory;
 
-        inline static std::shared_ptr<Project> s_ActiveProject = nullptr;
+        static std::shared_ptr<Project> s_ActiveProject;
 
         friend class ProjectSerializer;
     };

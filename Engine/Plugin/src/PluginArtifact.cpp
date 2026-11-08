@@ -14,18 +14,41 @@ bool ValidField(const std::string& value) {
 bool Complete(const ArtifactIdentity& id) {
     return ValidField(id.PluginId) && ValidField(id.ModuleName) && ValidField(id.Configuration) &&
         ValidField(id.SdkFingerprint) && ValidField(id.ToolchainFingerprint) && ValidField(id.Fingerprint) &&
-        !id.SourceRoot.empty() && ValidField(id.SourceRoot.generic_string()) &&
+        !id.SourceRoot.empty() && ValidField(PathUtf8(id.SourceRoot)) &&
         (id.Kind == ModuleKind::Runtime || id.Kind == ModuleKind::Editor) &&
         (id.Product == ProductKind::Editor || id.Product == ProductKind::Tests || id.Product == ProductKind::Runtime);
 }
+bool NativeImage(const std::filesystem::path& path, std::string& error) {
+    std::ifstream file(path, std::ios::binary);
+    std::array<unsigned char, 64> dos{};
+    file.read(reinterpret_cast<char*>(dos.data()), dos.size());
+    const auto offset = static_cast<std::uint32_t>(dos[60]) | (static_cast<std::uint32_t>(dos[61]) << 8) |
+        (static_cast<std::uint32_t>(dos[62]) << 16) | (static_cast<std::uint32_t>(dos[63]) << 24);
+    if (!file || dos[0] != 'M' || dos[1] != 'Z' || offset < dos.size()) { error = "artifact is not a native DLL"; return false; }
+    file.seekg(offset);
+    std::array<unsigned char, 26> pe{};
+    file.read(reinterpret_cast<char*>(pe.data()), pe.size());
+    if (!file || pe[0] != 'P' || pe[1] != 'E' || pe[2] || pe[3] || pe[4] != 0x64 || pe[5] != 0x86 ||
+        !(pe[23] & 0x20) || pe[24] != 0x0b || pe[25] != 0x02) {
+        error = "artifact requires an x64 PE32+ DLL image"; return false;
+    }
+    return true;
 }
+
+}
+
+std::string PathUtf8(const std::filesystem::path& path) {
+    const auto text = path.generic_u8string();
+    return {reinterpret_cast<const char*>(text.data()), text.size()};
+}
+
 
 std::string HashArtifactFile(const std::filesystem::path& path, std::string& error) {
     error.clear();
     std::error_code ec;
-    if (!std::filesystem::is_regular_file(path, ec)) { error = "artifact is not a regular file: " + path.generic_string(); return {}; }
+    if (!std::filesystem::is_regular_file(path, ec)) { error = "artifact is not a regular file: " + PathUtf8(path); return {}; }
     std::ifstream in(path, std::ios::binary);
-    if (!in) { error = "cannot read artifact: " + path.generic_string(); return {}; }
+    if (!in) { error = "cannot read artifact: " + PathUtf8(path); return {}; }
     std::uint64_t hash = 1469598103934665603ull;
     std::array<char, 16384> buffer;
     std::uint64_t size = 0;
@@ -34,7 +57,7 @@ std::string HashArtifactFile(const std::filesystem::path& path, std::string& err
         for (std::streamsize i = 0; i < in.gcount(); ++i) { hash ^= static_cast<unsigned char>(buffer[i]); hash *= 1099511628211ull; }
         size += static_cast<std::uint64_t>(in.gcount());
     }
-    if (!in.eof() || !size) { error = "artifact is empty or unreadable: " + path.generic_string(); return {}; }
+    if (!in.eof() || !size) { error = "artifact is empty or unreadable: " + PathUtf8(path); return {}; }
     std::ostringstream out;
     out << std::hex << std::setw(16) << std::setfill('0') << hash << '-' << size;
     return out.str();
@@ -43,7 +66,7 @@ std::string HashArtifactFile(const std::filesystem::path& path, std::string& err
 bool ReadArtifactReceipt(const std::filesystem::path& path, ArtifactIdentity& identity, std::string& error) {
     error.clear();
     std::ifstream in(path, std::ios::binary);
-    if (!in) { error = "cannot read artifact receipt: " + path.generic_string(); return false; }
+    if (!in) { error = "cannot read artifact receipt: " + PathUtf8(path); return false; }
     std::map<std::string, std::string> fields;
     std::string line;
     while (std::getline(in, line)) {
@@ -84,12 +107,13 @@ bool WriteArtifactReceipt(const ArtifactIdentity& identity, const std::filesyste
     if (!Complete(identity)) { error = "cannot publish an incomplete artifact identity"; return false; }
     const auto hash = HashArtifactFile(binary, error);
     if (hash.empty()) return false;
+    if (identity.Product != ProductKind::Runtime && !NativeImage(binary, error)) return false;
     std::ostringstream out;
     out << "schema=1\nplugin_id=" << identity.PluginId << "\nmodule_name=" << identity.ModuleName
         << "\nkind=" << ToString(identity.Kind) << "\nconfiguration=" << identity.Configuration
         << "\nproduct=" << ToString(identity.Product) << "\nsdk_fingerprint=" << identity.SdkFingerprint
         << "\ntoolchain_fingerprint=" << identity.ToolchainFingerprint << "\nfingerprint=" << identity.Fingerprint
-        << "\nsource_root=" << identity.SourceRoot.generic_string() << "\nbinary_hash=" << hash << '\n';
+        << "\nsource_root=" << PathUtf8(identity.SourceRoot) << "\nbinary_hash=" << hash << '\n';
     return FileSystem::WriteTextFileAtomically(receipt, out.str(), &error);
 }
 
@@ -106,6 +130,7 @@ bool ValidateArtifact(const ArtifactIdentity& expected, const std::filesystem::p
     }
     const auto hash = HashArtifactFile(binary, error);
     if (hash.empty()) return false;
+    if (expected.Product != ProductKind::Runtime && !NativeImage(binary, error)) return false;
     if (hash != actual.BinaryHash || (!expected.BinaryHash.empty() && expected.BinaryHash != hash)) {
         error = "artifact bytes do not match its receipt"; return false;
     }

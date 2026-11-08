@@ -14,6 +14,8 @@ struct LoadRequest {
     std::filesystem::path ModulePath;
     std::filesystem::path ReceiptPath;
     Plugin::ArtifactIdentity Expected;
+    void* ServiceUser = nullptr;
+    const void* (*GetService)(void*, std::uint64_t owner, std::uint32_t service_id, std::uint32_t minimum_size) = nullptr;
 };
 
 class RegistrationRegistry final {
@@ -32,6 +34,8 @@ public:
     void Rollback(Owner owner) noexcept;
     bool Has(const std::string& resource_id) const;
     std::size_t Size() const noexcept;
+    std::shared_ptr<void> GetOwnerLease(Owner owner) const;
+    bool IsOwnerActive(Owner owner) const;
 
     std::shared_ptr<State> GetState() const noexcept { return m_State; }
 
@@ -49,18 +53,19 @@ public:
 
     bool Load(const LoadRequest& request, RegistrationRegistry& registry, std::string& diagnostic);
     void Stop() noexcept;
-    bool IsActive() const noexcept { return m_Active; }
+    // Pump on the session owner thread each frame and before host shutdown.
+    // Worker releases never invoke plugin teardown or the native loader.
+    static void CollectRetiredModules() noexcept;
+    bool IsActive() const noexcept;
     const std::string& ModuleId() const noexcept { return m_ModuleId; }
+    std::shared_ptr<void> GetCodeLease() const { return m_Module; }
+    const PluginHostApi* GetHostApi() const noexcept;
 
 private:
-    void* m_Handle = nullptr;
-    StopFn m_Stop = nullptr;
-    std::shared_ptr<RegistrationRegistry::State> m_State;
-    RegistrationRegistry::Owner m_Owner = 0;
+    struct ModuleState;
+    std::shared_ptr<ModuleState> m_Module;
     std::string m_ModuleId;
     bool m_Active = false;
-    PluginHostApi m_Host{};
-    std::string m_SdkFingerprint;
 };
 
 } // namespace Axle::PluginRuntime

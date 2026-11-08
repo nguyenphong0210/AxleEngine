@@ -315,7 +315,7 @@ std::string HashInputs(const std::vector<BuildInput>& inputs, ProductKind produc
         hash ^= 0xff; hash *= 1099511628211ull;
     };
     add(std::to_string(static_cast<int>(product))); add(configuration); add(sdk); add(toolchain);
-    for (const auto& input : inputs) { add(input.Path.generic_string()); add(input.Content); }
+    for (const auto& input : inputs) { add(PathUtf8(input.Path)); add(input.Content); }
     std::ostringstream out; out << std::hex << hash;
     return out.str();
 }
@@ -341,6 +341,7 @@ std::optional<Manifest> ParseManifest(const std::filesystem::path& path, Diagnos
     auto name = RequiredString(root, "name", error); if (!name) { diagnostic.Message = error; return std::nullopt; }
 
     Manifest manifest;
+    manifest.AuthoredManifest = contents.str();
     manifest.Id = *id; manifest.Version = *version; manifest.Name = *name;
     if (const auto* description = Find(root, "description")) {
         if (!description->StringValue()) { diagnostic.Message = "description must be a string"; return std::nullopt; }
@@ -456,7 +457,7 @@ Catalog Discover(const DiscoveryOptions& options) {
         if (!ids.insert(manifest->Id).second) {
             catalog.AmbiguousIds.push_back(manifest->Id);
             const auto first = std::find_if(catalog.Plugins.begin(), catalog.Plugins.end(), [&](const auto& p) { return p.Id == manifest->Id; });
-            catalog.Diagnostics.push_back({path, "duplicate plugin id '" + manifest->Id + "'; first declaration: " + first->ManifestPath.generic_string()});
+            catalog.Diagnostics.push_back({path, "duplicate plugin id '" + manifest->Id + "'; first declaration: " + PathUtf8(first->ManifestPath)});
             continue;
         }
         manifest->Source = candidate.Source;
@@ -523,6 +524,9 @@ Resolution Resolve(const Catalog& catalog, const std::vector<std::string>& selec
         }
     }
     std::map<std::string, std::vector<std::string>, std::less<>> moduleEdges;
+    for (const auto& [name, candidates] : modulesByName) {
+        if (candidates.size() > 1) result.Diagnostics.push_back({{}, "selected module names must be unique: '" + name + "'"});
+    }
     for (const auto& [key, node] : modulesByKey) {
         for (const auto& dependency : node.Module->Dependencies) {
             const auto candidates = modulesByName.find(dependency);
@@ -568,49 +572,109 @@ Resolution Resolve(const Catalog& catalog, const std::vector<std::string>& selec
 BuildPlan CreateBuildPlan(const Resolution& resolution, ProductKind product, std::string configuration,
                           std::string sdkFingerprint, std::string toolchainFingerprint) {
     BuildPlan plan; plan.Product = product; plan.Configuration = std::move(configuration); plan.SdkFingerprint = std::move(sdkFingerprint); plan.ToolchainFingerprint = toolchainFingerprint;
+    plan.FrozenResolution = resolution;
     if (!resolution.IsValid()) { plan.Diagnostics = resolution.Diagnostics; return plan; }
     if (plan.Configuration.empty() || plan.SdkFingerprint.empty() || plan.ToolchainFingerprint.empty()) {
         plan.Diagnostics.push_back({{}, "configuration, SDK and toolchain identities are required"}); return plan;
     }
     for (const auto& plugin : resolution.Plugins) {
         std::ifstream manifestFile(plugin.ManifestPath, std::ios::binary);
-        std::ostringstream manifestContents;
-        if (!manifestFile) {
-            plan.Diagnostics.push_back({plugin.ManifestPath, "unable to read manifest for build fingerprint"});
-            continue;
+        std::ostringstream manifestBytes; manifestBytes << manifestFile.rdbuf();
+        if (!manifestFile || manifestFile.bad() || plugin.AuthoredManifest.empty() || manifestBytes.str() != plugin.AuthoredManifest) {
+            plan.Diagnostics.push_back({plugin.ManifestPath, "manifest changed since discovery; refresh and resolve again"}); continue;
         }
-        manifestContents << manifestFile.rdbuf();
-        BuildInput manifestInput{plugin.ManifestPath.lexically_normal(), manifestContents.str()};
-        plan.Inputs.push_back(manifestInput);
+        plan.Inputs.push_back({plugin.ManifestPath.lexically_normal(), plugin.AuthoredManifest});
+        bool hasCode = false;
+        std::error_code error;
+        const auto canonicalRoot = std::filesystem::weakly_canonical(plugin.Root, error);
+        if (error || !std::filesystem::is_directory(canonicalRoot)) {
+            plan.Diagnostics.push_back({plugin.Root, "plugin installation is unavailable"}); continue;
+        }
+        std::vector<std::filesystem::path> excludedRoots;
         for (const auto& module : plugin.Modules) {
-            if (product == ProductKind::Runtime && module.Kind == ModuleKind::Editor) continue;
             const auto sourceRoot = module.SourceRoot.empty() ? plugin.Root : (plugin.Root / module.SourceRoot).lexically_normal();
-            plan.Artifacts.push_back({plugin.Id, module.Name, module.Kind, sourceRoot, plugin.Root});
-            std::error_code error;
-            if (!std::filesystem::exists(sourceRoot, error)) {
-                plan.Diagnostics.push_back({sourceRoot, "module source root does not exist for build fingerprint"});
+            if (product == ProductKind::Runtime && module.Kind == ModuleKind::Editor) {
+                // A shared plugin root still contains common inputs. Exclude only
+                // a distinct editor subtree, never the entire installation.
+                if (sourceRoot != plugin.Root) excludedRoots.push_back(sourceRoot);
                 continue;
             }
-            if (std::filesystem::is_regular_file(sourceRoot, error)) {
-                std::ifstream sourceFile(sourceRoot, std::ios::binary);
-                std::ostringstream sourceContents; sourceContents << sourceFile.rdbuf();
-                plan.Inputs.push_back({sourceRoot, sourceContents.str()});
-            } else if (std::filesystem::is_directory(sourceRoot, error)) {
-                for (std::filesystem::recursive_directory_iterator it(sourceRoot, error), end; it != end; it.increment(error)) {
-                    if (error) { plan.Diagnostics.push_back({sourceRoot, "unable to enumerate module source root: " + error.message()}); error.clear(); continue; }
-                    if (!it->is_regular_file(error)) continue;
-                    std::ifstream sourceFile(it->path(), std::ios::binary);
-                    std::ostringstream sourceContents; sourceContents << sourceFile.rdbuf();
-                    plan.Inputs.push_back({it->path().lexically_normal(), sourceContents.str()});
-                }
+            plan.Artifacts.push_back({plugin.Id, module.Name, module.Kind, sourceRoot, plugin.Root, module.Dependencies});
+            hasCode |= module.Kind != ModuleKind::Content;
+            const auto canonicalSource = std::filesystem::weakly_canonical(sourceRoot, error);
+            const auto relative = canonicalSource.lexically_relative(canonicalRoot);
+            if (error || !std::filesystem::exists(sourceRoot) || relative.empty() || *relative.begin() == "..") {
+                plan.Diagnostics.push_back({sourceRoot, "module source root is missing or escapes plugin installation"});
             }
+        }
+        // CMake includes, shared headers and authored configure inputs outside a
+        // module's subtree affect its output too. Freeze the whole installation,
+        // excluding generated caches and product-ineligible module subtrees.
+        for (std::filesystem::recursive_directory_iterator it(plugin.Root, error), end; it != end; it.increment(error)) {
+            if (error) { plan.Diagnostics.push_back({plugin.Root, "unable to enumerate plugin inputs: " + error.message()}); break; }
+            const auto path = it->path().lexically_normal();
+            const auto name = PathUtf8(path.filename());
+            const auto physical = std::filesystem::weakly_canonical(path, error);
+            const auto relative = physical.lexically_relative(canonicalRoot);
+            if (error || relative.empty() || *relative.begin() == "..") {
+                plan.Diagnostics.push_back({path, "input escapes plugin installation"});
+                if (it->is_directory()) it.disable_recursion_pending();
+                error.clear(); continue;
+            }
+            const bool excluded = std::any_of(excludedRoots.begin(), excludedRoots.end(), [&](const auto& excludedRoot) {
+                const auto rel = path.lexically_relative(excludedRoot);
+                return !rel.empty() && *rel.begin() != "..";
+            });
+            if (it->is_directory(error) && (excluded || name == ".git" || name == "Intermediate" || name == "Binaries" || name == "build" || name == "CMakeFiles")) {
+                it.disable_recursion_pending(); continue;
+            }
+            if (excluded || !it->is_regular_file(error)) continue;
+            if (path == plugin.ManifestPath.lexically_normal()) {
+                continue;
+            }
+            std::ifstream file(path, std::ios::binary);
+            if (!file) { plan.Diagnostics.push_back({path, "unable to read plugin input"}); continue; }
+            std::ostringstream bytes; bytes << file.rdbuf();
+            if (file.bad()) { plan.Diagnostics.push_back({path, "unable to read complete plugin input"}); continue; }
+            plan.Inputs.push_back({path, bytes.str()});
+        }
+        if (hasCode) {
+            const auto cmakePath = plugin.Root / "CMakeLists.txt";
+            std::ifstream cmakeFile(cmakePath, std::ios::binary);
+            if (!cmakeFile) { plan.Diagnostics.push_back({cmakePath, "selected code plugin requires CMakeLists.txt"}); continue; }
+            plan.CMakeRoots.push_back(plugin.Root);
         }
     }
     if (!plan.Diagnostics.empty()) return plan;
-    std::sort(plan.Inputs.begin(), plan.Inputs.end(), [](const auto& a, const auto& b) { return a.Path.generic_string() < b.Path.generic_string(); });
+    std::sort(plan.Inputs.begin(), plan.Inputs.end(), [](const auto& a, const auto& b) { return PathUtf8(a.Path) < PathUtf8(b.Path); });
     std::sort(plan.Artifacts.begin(), plan.Artifacts.end(), [](const auto& a, const auto& b) {
         return std::tie(a.PluginId, a.ModuleName) < std::tie(b.PluginId, b.ModuleName);
     });
+    // Module-specific content stamps preserve incremental builds across selection
+    // changes and do not depend on filesystem timestamps.
+    std::map<std::string, std::size_t> artifactByName;
+    for (std::size_t i = 0; i < plan.Artifacts.size(); ++i) artifactByName.emplace(plan.Artifacts[i].ModuleName, i);
+    std::set<std::string> computing;
+    std::function<std::string(std::size_t)> moduleFingerprint = [&](std::size_t index) -> std::string {
+        auto& artifact = plan.Artifacts[index];
+        if (!artifact.Fingerprint.empty()) return artifact.Fingerprint;
+        if (!computing.insert(artifact.ModuleName).second) { plan.Diagnostics.push_back({{}, "module fingerprint dependency cycle"}); return {}; }
+        std::vector<BuildInput> inputs;
+        inputs.push_back({"module-identity", artifact.PluginId + ":" + artifact.ModuleName + ":" + ToString(artifact.Kind)});
+        for (const auto& input : plan.Inputs) {
+            const auto relative = input.Path.lexically_relative(artifact.CMakeRoot);
+            if (!relative.empty() && *relative.begin() != "..") inputs.push_back(input);
+        }
+        for (const auto& dependency : artifact.Dependencies) {
+            const auto it = artifactByName.find(dependency);
+            if (it == artifactByName.end()) { plan.Diagnostics.push_back({{}, "missing artifact dependency: " + dependency}); continue; }
+            inputs.push_back({"dependency/" + dependency, moduleFingerprint(it->second)});
+        }
+        computing.erase(artifact.ModuleName);
+        artifact.Fingerprint = HashInputs(inputs, product, plan.Configuration, plan.SdkFingerprint, toolchainFingerprint);
+        return artifact.Fingerprint;
+    };
+    for (std::size_t i = 0; i < plan.Artifacts.size(); ++i) moduleFingerprint(i);
     plan.Fingerprint = HashInputs(plan.Inputs, product, plan.Configuration, plan.SdkFingerprint, toolchainFingerprint);
     return plan;
 }
@@ -640,67 +704,45 @@ bool WriteBuildReceipt(const BuildPlan& plan, const BuildArtifact& artifact,
         : binaryPath, receiptPath, error);
 }
 
-bool GenerateCMakeInputs(const BuildPlan& plan, const std::filesystem::path& outputPath,
-                         std::string& error) {
-    error.clear();
-    if (!plan.IsValid()) {
-        error = "cannot generate CMake inputs from an invalid build plan";
-        return false;
+bool GenerateCMakeInputs(const BuildPlan& plan, const std::filesystem::path& outputPath, std::string& error) {
+    if (!plan.IsValid() || plan.Fingerprint.empty() || outputPath.empty()) {
+        error = "cannot generate a module graph from an invalid or incomplete plan"; return false;
     }
-    if (outputPath.empty()) {
-        error = "output path cannot be empty";
-        return false;
+    const auto quote = [](const std::string& value) {
+        std::string equal = "=";
+        while (value.find("]" + equal + "]") != std::string::npos) equal += '=';
+        return "[" + equal + "[" + value + "]" + equal + "]";
+    };
+    std::ostringstream out;
+    out << "# Frozen Axle plugin module graph\n# Fingerprint: " << plan.Fingerprint << '\n';
+    out << "set(AXLE_SELECTED_PLUGIN_COUNT " << plan.Artifacts.size() << ")\n";
+    out << "set(AXLE_SELECTED_PLUGIN_FINGERPRINT " << quote(plan.Fingerprint) << ")\n";
+    out << "set(AXLE_SELECTED_PLUGIN_MODULES";
+    for (const auto& artifact : plan.Artifacts) if (artifact.Kind != ModuleKind::Content) out << ' ' << quote(artifact.ModuleName);
+    out << ")\n";
+    for (const auto& artifact : plan.Artifacts) {
+        out << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_SOURCE_ROOT " << quote(PathUtf8(artifact.SourceRoot)) << ")\n";
+        out << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_KIND " << quote(ToString(artifact.Kind)) << ")\n";
+        out << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_ID " << quote(artifact.PluginId) << ")\n";
+        out << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_FINGERPRINT " << quote(artifact.Fingerprint) << ")\n";
     }
-    const auto parentDir = outputPath.parent_path();
-    std::error_code ec;
-    if (!parentDir.empty()) {
-        std::filesystem::create_directories(parentDir, ec);
+    for (std::size_t index = 0; index < plan.CMakeRoots.size(); ++index) {
+        out << "add_subdirectory(" << quote(PathUtf8(plan.CMakeRoots[index])) << " plugin-" << index << ")\n";
     }
-    const auto tempPath = outputPath.string() + ".tmp";
-    {
-        std::ofstream stream(tempPath, std::ios::trunc);
-        if (!stream) {
-            error = "unable to open temporary CMake inputs file: " + tempPath;
-            return false;
-        }
-        stream << "# Generated by AxleEngine Plugin Build Planner\n"
-               << "# Fingerprint: " << plan.Fingerprint << "\n"
-               << "# Product: " << ToString(plan.Product) << "\n"
-               << "# Configuration: " << plan.Configuration << "\n\n"
-               << "set(AXLE_SELECTED_PLUGIN_COUNT " << plan.Artifacts.size() << ")\n"
-               << "set(AXLE_SELECTED_PLUGIN_FINGERPRINT \"" << plan.Fingerprint << "\")\n\n";
-
-        for (const auto& artifact : plan.Artifacts) {
-            stream << "# Plugin: " << artifact.PluginId << " Module: " << artifact.ModuleName << "\n"
-                   << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_SOURCE_ROOT \""
-                   << artifact.SourceRoot.generic_string() << "\")\n"
-                   << "set(AXLE_PLUGIN_" << artifact.ModuleName << "_KIND \""
-                   << ToString(artifact.Kind) << "\")\n\n";
-        }
-        stream.flush();
-        if (!stream) {
-            std::filesystem::remove(tempPath, ec);
-            error = "failed writing CMake inputs file";
-            return false;
+    for (const auto& artifact : plan.Artifacts) {
+        if (artifact.Kind == ModuleKind::Content) continue;
+        out << "if(NOT TARGET " << artifact.ModuleName << ")\nmessage(FATAL_ERROR \"Missing selected module: " << artifact.ModuleName << "\")\nendif()\n";
+        out << "get_target_property(moduleType " << artifact.ModuleName << " TYPE)\n"
+            << "get_target_property(moduleImported " << artifact.ModuleName << " IMPORTED)\n"
+            << "if(NOT moduleType STREQUAL \"SHARED_LIBRARY\" OR moduleImported)\n"
+            << "message(FATAL_ERROR \"Selected module must build a native shared library: " << artifact.ModuleName << "\")\nendif()\n";
+        if (!artifact.Dependencies.empty()) {
+            out << "target_link_libraries(" << artifact.ModuleName << " PRIVATE";
+            for (const auto& dependency : artifact.Dependencies) out << ' ' << dependency;
+            out << ")\n";
         }
     }
-#if defined(_WIN32)
-    if (!MoveFileExW(std::filesystem::path(tempPath).wstring().c_str(),
-                     outputPath.wstring().c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        std::filesystem::remove(tempPath, ec);
-        error = "failed to atomically publish CMake inputs: " + outputPath.generic_string();
-        return false;
-    }
-#else
-    std::filesystem::rename(tempPath, outputPath, ec);
-    if (ec) {
-        std::filesystem::remove(tempPath, ec);
-        error = "failed to publish CMake inputs: " + outputPath.generic_string();
-        return false;
-    }
-#endif
-    return true;
+    return FileSystem::WriteTextFileAtomically(outputPath, out.str(), &error);
 }
 
 } // namespace Axle::Plugin

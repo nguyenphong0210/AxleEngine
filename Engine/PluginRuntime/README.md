@@ -1,19 +1,27 @@
-# PluginRuntime PLG-06 foundation
+# Native plugin loader
 
-This target contains the native loader and transactional registration seam for
-OPT-06. It is intentionally independent of the project resolver and product
-build planner. PLG-04 must provide the canonical artifact receipt and PLG-05
-must provide the shared host/SDK ownership policy before this loader is used by
-Editor or Runtime products.
+The loader consumes the canonical artifact identity from Axle::Plugin and the
+versioned ABI from Axle::PluginSDK. It does not discover plugins or run CMake.
+Shipping Runtime DLL loading is explicitly rejected; selected static Runtime
+composition belongs to its separate product package.
 
-The loader validates the absolute path supplied by that resolver, descriptor
-ABI, stable module ID and build configuration before calling `ax_plugin_start`.
+Before loading, it validates every receipt field and the actual x64 DLL bytes.
+A Windows read handle denies writes/replacement from before hashing through the
+last code lease. The descriptor separately validates plugin/module identity,
+ABI, SDK, toolchain and actual configuration before `ax_plugin_start`.
 Each load receives an owner token. Registrations made during startup are
 rolled back when startup fails and are destroyed before the module is unloaded.
-`ax_plugin_stop` runs before owner rollback, so a plugin can release its own
-state while its module is still resident.
+Logical Stop revokes services and rolls registrations back first. Components,
+callbacks and jobs retain code leases; the durable host table remains valid but
+rejects calls after revocation. The final lease invokes `ax_plugin_stop` and
+FreeLibrary on the loading thread. Worker Stop and final releases enter an
+intrusive retirement queue; sessions must call `CollectRetiredModules` on their
+owner thread each frame and before service shutdown. Registry construction and
+destruction also collect that thread's retirements. NativePlugin instance calls
+are exclusive (no concurrent Load/Stop/access to the same instance).
 
 `Tests/plugin/PluginRuntimeFixture.cpp` builds real good/failing DLLs and
-`PluginRuntimeTests` verifies descriptor/config rejection, startup rollback and
-stop/unload registration cleanup. This does not establish PLG-04/05 build-plan,
-SDK export, or Editor/Runtime host acceptance.
+`PluginRuntimeTests` verifies identity rejection, rollback/revocation, shorter
+registry lifetime, worker retirement and artifact file pinning. The external
+build fixture also loads a real source-built DLL with a nontrivial destructor.
+These focused checks do not establish the unfinished scene/UI/product workflow.

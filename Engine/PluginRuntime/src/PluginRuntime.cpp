@@ -7,6 +7,8 @@
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
+#include <thread>
+#include <mutex>
 
 #if defined(_WIN32)
 #ifndef NOMINMAX
@@ -30,6 +32,9 @@ struct RegistrationRegistry::State {
     std::atomic<std::uint64_t> nextOwner{1};
     std::vector<std::unique_ptr<RegistryEntry>> entries;
     bool alive = true;
+    const std::thread::id ownerThread = std::this_thread::get_id();
+    std::unordered_set<Owner> owners;
+    std::unordered_map<Owner, std::weak_ptr<void>> leases;
 
     ~State() {
         DestroyAll();
@@ -37,6 +42,7 @@ struct RegistrationRegistry::State {
 
     void DestroyAll() noexcept {
         alive = false;
+        owners.clear(); leases.clear();
         std::vector<std::unique_ptr<RegistryEntry>> toDestroy;
         toDestroy.swap(entries);
         for (auto it = toDestroy.rbegin(); it != toDestroy.rend(); ++it) {
@@ -48,13 +54,16 @@ struct RegistrationRegistry::State {
         }
     }
 
-    Owner BeginOwner() noexcept {
-        return nextOwner.fetch_add(1);
+    Owner BeginOwner() {
+        if (!alive || std::this_thread::get_id() != ownerThread) return 0;
+        const auto owner = nextOwner.fetch_add(1);
+        owners.insert(owner);
+        return owner;
     }
 
     bool Register(Owner owner, const char* resource_id, void* resource,
                   void (*destroy)(void*)) {
-        if (!alive || owner == 0 || !resource_id || !*resource_id) return false;
+        if (std::this_thread::get_id() != ownerThread || !alive || !owners.contains(owner) || !resource_id || !*resource_id) return false;
         if (std::any_of(entries.begin(), entries.end(), [resource_id](const auto& entry) {
                 return entry->id == resource_id;
             })) return false;
@@ -63,15 +72,15 @@ struct RegistrationRegistry::State {
     }
 
     void Rollback(Owner owner) noexcept {
-        if (owner == 0) return;
-        for (auto it = entries.begin(); it != entries.end();) {
-            if ((*it)->owner != owner) { ++it; continue; }
-            if ((*it)->destroy) {
-                try {
-                    (*it)->destroy((*it)->resource);
-                } catch (...) {}
-            }
-            it = entries.erase(it);
+        if (owner == 0 || std::this_thread::get_id() != ownerThread) return;
+        owners.erase(owner); leases.erase(owner);
+        for (;;) {
+            auto it = std::find_if(entries.rbegin(), entries.rend(), [owner](const auto& entry) { return entry->owner == owner; });
+            if (it == entries.rend()) break;
+            const auto index = static_cast<std::size_t>(std::distance(it, entries.rend()) - 1);
+            auto detached = std::move(entries[index]);
+            entries.erase(entries.begin() + index);
+            if (detached->destroy) { try { detached->destroy(detached->resource); } catch (...) {} }
         }
     }
 
@@ -85,9 +94,10 @@ struct RegistrationRegistry::State {
 };
 
 RegistrationRegistry::RegistrationRegistry()
-    : m_State(std::make_shared<State>()) {}
+    : m_State(std::make_shared<State>()) { NativePlugin::CollectRetiredModules(); }
 
 RegistrationRegistry::~RegistrationRegistry() {
+    NativePlugin::CollectRetiredModules();
     if (m_State) {
         m_State->DestroyAll();
     }
@@ -112,6 +122,15 @@ bool RegistrationRegistry::Has(const std::string& resource_id) const {
 
 std::size_t RegistrationRegistry::Size() const noexcept {
     return m_State ? m_State->Size() : 0;
+}
+
+std::shared_ptr<void> RegistrationRegistry::GetOwnerLease(Owner owner) const {
+    if (!IsOwnerActive(owner)) return {};
+    const auto it = m_State->leases.find(owner);
+    return it == m_State->leases.end() ? nullptr : it->second.lock();
+}
+bool RegistrationRegistry::IsOwnerActive(Owner owner) const {
+    return m_State && std::this_thread::get_id() == m_State->ownerThread && m_State->alive && m_State->owners.contains(owner);
 }
 
 namespace {
@@ -164,101 +183,177 @@ std::string LastError() {
 
 } // namespace
 
+struct NativePlugin::ModuleState {
+    // Intrusive retirement queues cannot fail allocation during noexcept Stop.
+    // Queue storage intentionally survives process static destruction: the host
+    // explicitly drains its owner thread before unloading service providers.
+    struct RetirementQueue {
+        std::mutex Mutex;
+        ModuleState* Stops = nullptr;
+        ModuleState* Deletes = nullptr;
+    };
+    static RetirementQueue& Queue() { static auto* queue = new RetirementQueue; return *queue; }
+    ModuleState* StopNext = nullptr;
+    ModuleState* DeleteNext = nullptr;
+    std::shared_ptr<ModuleState> PendingStop;
+    void* Handle = nullptr;
+#if defined(_WIN32)
+    HANDLE ArtifactFile = INVALID_HANDLE_VALUE;
+#endif
+    StopFn Stop = nullptr;
+    bool StartEntered = false;
+    std::atomic<bool> Active{false};
+    const std::thread::id OwnerThread = std::this_thread::get_id();
+    std::shared_ptr<RegistrationRegistry::State> Registry;
+    RegistrationRegistry::Owner Owner = 0;
+    PluginHostApi Host{};
+    std::string Sdk;
+    void* ServiceUser = nullptr;
+    const void* (*GetService)(void*, std::uint64_t, std::uint32_t, std::uint32_t) = nullptr;
+    void Revoke() noexcept {
+        Active = false;
+        if (Registry && Owner) Registry->Rollback(Owner);
+        Registry.reset();
+    }
+    static void Delete(ModuleState* module) noexcept {
+        if (std::this_thread::get_id() == module->OwnerThread) { delete module; return; }
+        auto& queue = Queue();
+        std::lock_guard lock(queue.Mutex);
+        module->DeleteNext = queue.Deletes; queue.Deletes = module;
+    }
+    ~ModuleState() {
+        Active = false;
+        if (Registry && Owner) Registry->Rollback(Owner);
+        if (StartEntered && Stop) { try { Stop(); } catch (...) {} }
+        CloseLibrary(Handle);
+#if defined(_WIN32)
+        if (ArtifactFile != INVALID_HANDLE_VALUE) CloseHandle(ArtifactFile);
+#endif
+    }
+};
+
 NativePlugin::~NativePlugin() { Stop(); }
+bool NativePlugin::IsActive() const noexcept {
+    return m_Active && m_Module && std::this_thread::get_id() == m_Module->OwnerThread && m_Module->Active && m_Module->Registry &&
+        m_Module->Registry->alive && m_Module->Registry->owners.contains(m_Module->Owner);
+}
+const PluginHostApi* NativePlugin::GetHostApi() const noexcept { return m_Module ? &m_Module->Host : nullptr; }
 
 bool NativePlugin::Load(const LoadRequest& request, RegistrationRegistry& registry, std::string& diagnostic) {
-    const auto& module_path = request.ModulePath;
-    const auto& expected_id = request.Expected.ModuleName;
-    const auto& expected_config = request.Expected.Configuration;
     diagnostic.clear();
-    if (m_Handle || m_Active) { diagnostic = "plugin is already loaded"; return false; }
-    if (module_path.empty() || !module_path.is_absolute()) {
+    if (m_Module || m_Active) { diagnostic = "plugin is already loaded"; return false; }
+    if (request.ModulePath.empty() || !request.ModulePath.is_absolute()) {
         diagnostic = "plugin path must be absolute and controlled by the resolver"; return false;
     }
-
     if (request.Expected.Product == Plugin::ProductKind::Runtime) {
         diagnostic = "shipping Runtime native DLL loading is unsupported"; return false;
     }
-    if (!Plugin::ValidateArtifact(request.Expected, module_path, request.ReceiptPath, diagnostic)) return false;
-
-    m_Handle = OpenLibrary(module_path);
-    if (!m_Handle) { diagnostic = LastError(); return false; }
+    CollectRetiredModules();
+    auto code = std::shared_ptr<ModuleState>(new ModuleState, ModuleState::Delete);
+#if defined(_WIN32)
+    // Pin the validated file before hashing it. Neither a concurrent writer nor
+    // a path replacement may change the bytes between validation and loading,
+    // including while a component/job retains code after logical Stop.
+    code->ArtifactFile = CreateFileW(request.ModulePath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (code->ArtifactFile == INVALID_HANDLE_VALUE) { diagnostic = LastError(); return false; }
+#endif
+    if (!Plugin::ValidateArtifact(request.Expected, request.ModulePath, request.ReceiptPath, diagnostic)) return false;
+    code->Handle = OpenLibrary(request.ModulePath);
+    if (!code->Handle) { diagnostic = LastError(); return false; }
     auto fail = [&](const char* reason) {
         diagnostic = reason;
-        CloseLibrary(m_Handle); m_Handle = nullptr; return false;
+        code->Active = false;
+        if (code->Registry) code->Registry->Rollback(code->Owner);
+        code->Registry.reset();
+        return false;
     };
-    auto get_descriptor = reinterpret_cast<GetDescriptorFn>(FindSymbol(m_Handle, "ax_plugin_get_descriptor"));
-    auto start = reinterpret_cast<StartFn>(FindSymbol(m_Handle, "ax_plugin_start"));
-    m_Stop = reinterpret_cast<StopFn>(FindSymbol(m_Handle, "ax_plugin_stop"));
-    if (!get_descriptor || !start || !m_Stop) return fail("required plugin entrypoint is missing");
+    auto query = reinterpret_cast<GetDescriptorFn>(FindSymbol(code->Handle, "ax_plugin_get_descriptor"));
+    auto start = reinterpret_cast<StartFn>(FindSymbol(code->Handle, "ax_plugin_start"));
+    code->Stop = reinterpret_cast<StopFn>(FindSymbol(code->Handle, "ax_plugin_stop"));
+    if (!query || !start || !code->Stop) return fail("required plugin entrypoint is missing");
     const PluginDescriptor* descriptor = nullptr;
-    try {
-        descriptor = get_descriptor();
-    } catch (...) {
-        return fail("plugin get_descriptor threw an unhandled exception across C ABI");
-    }
-    if (!descriptor || descriptor->struct_size < sizeof(PluginDescriptor) || !descriptor->module_id)
-        return fail("invalid plugin descriptor");
+    try { descriptor = query(); } catch (...) { return fail("plugin descriptor callback threw"); }
+    if (!descriptor || descriptor->struct_size < sizeof(PluginDescriptor) || !descriptor->module_id) return fail("invalid plugin descriptor");
     if (descriptor->abi_version != kPluginAbiVersion) return fail("plugin ABI mismatch");
-    if (expected_id != descriptor->module_id) return fail("plugin module ID mismatch");
-    if (!descriptor->plugin_id || request.Expected.PluginId != descriptor->plugin_id) return fail("plugin ID mismatch");
-    if (!descriptor->sdk_fingerprint || request.Expected.SdkFingerprint != descriptor->sdk_fingerprint) return fail("plugin SDK mismatch");
-    if (!descriptor->toolchain_fingerprint || request.Expected.ToolchainFingerprint != descriptor->toolchain_fingerprint) return fail("plugin toolchain mismatch");
-    if (!expected_config.empty() && (!descriptor->build_config || expected_config != descriptor->build_config))
-        return fail("plugin build configuration mismatch");
-
-    m_State = registry.m_State;
-    m_Owner = registry.BeginOwner();
-    m_ModuleId = descriptor->module_id;
-    m_SdkFingerprint = request.Expected.SdkFingerprint;
-    m_Host = {sizeof(PluginHostApi), kPluginAbiVersion, this, m_SdkFingerprint.c_str(),
+    const auto& expected = request.Expected;
+    if (expected.ModuleName != descriptor->module_id) return fail("plugin module ID mismatch");
+    if (!descriptor->plugin_id || expected.PluginId != descriptor->plugin_id) return fail("plugin ID mismatch");
+    if (!descriptor->sdk_fingerprint || expected.SdkFingerprint != descriptor->sdk_fingerprint) return fail("plugin SDK mismatch");
+    if (!descriptor->toolchain_fingerprint || expected.ToolchainFingerprint != descriptor->toolchain_fingerprint) return fail("plugin toolchain mismatch");
+    if (!descriptor->build_config || expected.Configuration != descriptor->build_config) return fail("plugin build configuration mismatch");
+    code->Registry = registry.m_State;
+    code->Owner = registry.BeginOwner();
+    if (!code->Owner) return fail("plugin registration requires a live owner-thread registry");
+    code->Registry->leases[code->Owner] = code;
+    code->Sdk = expected.SdkFingerprint;
+    code->ServiceUser = request.ServiceUser;
+    code->GetService = request.GetService;
+    code->Active = true;
+    code->Host = {sizeof(PluginHostApi), kPluginAbiVersion, code.get(), code->Owner, code->Sdk.c_str(),
         [](void* user, const char* id, void* resource, void (*destroy)(void*)) noexcept -> bool {
             try {
-                auto* plugin = static_cast<NativePlugin*>(user);
-                if (!plugin || !plugin->m_State) return false;
-                return plugin->m_State->Register(plugin->m_Owner, id, resource, destroy);
-            } catch (...) {
-                return false;
-            }
-        }, nullptr};
-
-    bool startSuccess = false;
-    try {
-        startSuccess = start(&m_Host);
-    } catch (...) {
-        startSuccess = false;
-    }
-
-    if (!startSuccess) {
-        if (m_State) m_State->Rollback(m_Owner);
-        m_State.reset();
-        m_Owner = 0;
-        m_Stop = nullptr;
-        return fail("plugin start failed; registration rolled back");
-    }
+                const auto* module = static_cast<ModuleState*>(user);
+                return module && std::this_thread::get_id() == module->OwnerThread && module->Active && module->Registry && module->Registry->Register(module->Owner, id, resource, destroy);
+            } catch (...) { return false; }
+        },
+        [](void* user, std::uint32_t service, std::uint32_t minimumSize) noexcept -> const void* {
+            try {
+                const auto* module = static_cast<ModuleState*>(user);
+                return module && std::this_thread::get_id() == module->OwnerThread && module->Active && module->Registry &&
+                    module->Registry->alive && module->Registry->owners.contains(module->Owner) && module->GetService
+                    ? module->GetService(module->ServiceUser, module->Owner, service, minimumSize) : nullptr;
+            } catch (...) { return nullptr; }
+        }};
+    code->StartEntered = true;
+    bool started = false;
+    try { started = start(&code->Host); } catch (...) {}
+    if (!started) return fail("plugin start failed; registration rolled back");
+    m_ModuleId = expected.ModuleName;
+    m_Module = std::move(code);
     m_Active = true;
     return true;
 }
 
 void NativePlugin::Stop() noexcept {
-    if (!m_Handle) return;
-    if (m_Active && m_Stop) {
-        try {
-            m_Stop();
-        } catch (...) {}
-    }
-    if (m_State && m_Owner) {
-        try {
-            m_State->Rollback(m_Owner);
-        } catch (...) {}
-    }
-    m_State.reset();
-    m_Owner = 0;
-    m_Stop = nullptr;
+    auto code = std::move(m_Module);
     m_Active = false;
     m_ModuleId.clear();
-    CloseLibrary(m_Handle);
-    m_Handle = nullptr;
+    if (!code) return;
+    code->Active = false;
+    if (std::this_thread::get_id() == code->OwnerThread) code->Revoke();
+    else {
+        auto& queue = ModuleState::Queue();
+        std::lock_guard lock(queue.Mutex);
+        code->PendingStop = code;
+        code->StopNext = queue.Stops; queue.Stops = code.get();
+    }
+    // Stop and FreeLibrary run only after every retained payload/destructor/job
+    // releases its lease. The host table remains valid through that boundary.
+}
+
+void NativePlugin::CollectRetiredModules() noexcept {
+    auto& queue = ModuleState::Queue();
+    for (;;) {
+        ModuleState* retired = nullptr;
+        bool stop = false;
+        {
+            std::lock_guard lock(queue.Mutex);
+            auto** next = &queue.Stops;
+            while (*next && (*next)->OwnerThread != std::this_thread::get_id()) next = &(*next)->StopNext;
+            if (*next) { retired = *next; *next = retired->StopNext; stop = true; }
+            else {
+                next = &queue.Deletes;
+                while (*next && (*next)->OwnerThread != std::this_thread::get_id()) next = &(*next)->DeleteNext;
+                if (*next) { retired = *next; *next = retired->DeleteNext; }
+            }
+        }
+        if (!retired) break;
+        if (stop) {
+            auto keepAlive = std::move(retired->PendingStop);
+            retired->Revoke();
+        } else delete retired;
+    }
 }
 
 } // namespace Axle::PluginRuntime

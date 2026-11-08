@@ -30,11 +30,18 @@ int main(int argc, char** argv) {
     auto result = Axle::BuildRuntime(request, cancel);
     CHECK(result.Success && result.ExitCode == 0, result.Error);
     CHECK(std::filesystem::is_regular_file(result.LogPath), "Build output is captured to a log");
+    CHECK(std::filesystem::is_regular_file(result.ReceiptPath), "Successful build publishes a receipt");
+    std::ifstream receipt(result.ReceiptPath);
+    const std::string receiptBefore((std::istreambuf_iterator<char>(receipt)), std::istreambuf_iterator<char>());
+    CHECK(receiptBefore.find("schema=1") != std::string::npos, "Build receipt has a schema marker");
 
     std::ofstream(failure) << "fail";
     result = Axle::BuildRuntime(request, cancel);
     std::filesystem::remove(failure);
     CHECK(!result.Success && result.ExitCode != 0, "A failed build must fail even when stale executable files exist");
+    std::ifstream failedReceipt(result.ReceiptPath);
+    const std::string receiptAfterFailure((std::istreambuf_iterator<char>(failedReceipt)), std::istreambuf_iterator<char>());
+    CHECK(receiptAfterFailure == receiptBefore, "Failed build preserves the last-known-good receipt");
 
     std::ofstream(slow) << "slow";
     const auto started = std::chrono::steady_clock::now();
@@ -45,6 +52,9 @@ int main(int argc, char** argv) {
     result = pending.get();
     std::filesystem::remove(slow);
     CHECK(!result.Success && result.Error.find("cancelled") != std::string::npos, "Cancellation is reported");
+    std::ifstream cancelledReceipt(result.ReceiptPath);
+    const std::string receiptAfterCancel((std::istreambuf_iterator<char>(cancelledReceipt)), std::istreambuf_iterator<char>());
+    CHECK(receiptAfterCancel == receiptBefore, "Cancelled build preserves the last-known-good receipt");
     CHECK(std::chrono::steady_clock::now() - started < std::chrono::seconds(10), "No wait for the slow build's full duration");
 
     const auto assets = request.BuildDirectory / "fixture-assets";

@@ -16,6 +16,9 @@ namespace Axle {
         int ExitCode = -1;
         std::filesystem::path ExecutableDirectory;
         std::filesystem::path LogPath;
+        // Written only after both player artifacts pass validation.  Consumers
+        // may use this as the last-known-good marker after a failed build.
+        std::filesystem::path ReceiptPath;
         std::string Error;
     };
 

@@ -1,6 +1,8 @@
 #include "RuntimeBuild.hpp"
 #include "RuntimeBuildConfig.hpp"
 #include <chrono>
+#include <fstream>
+#include <system_error>
 #include <vector>
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -44,6 +46,7 @@ namespace Axle {
     RuntimeBuildResult BuildRuntime(const RuntimeBuildRequest& request, const std::atomic_bool& cancel) {
         RuntimeBuildResult result;
         result.ExecutableDirectory = request.ExecutableDirectory;
+        result.ReceiptPath = request.ExecutableDirectory / "AxleRuntime.build.receipt";
         std::error_code ec;
         if (!std::filesystem::is_regular_file(request.CMake, ec) ||
             !std::filesystem::is_regular_file(request.BuildDirectory / "CMakeCache.txt", ec) ||
@@ -122,6 +125,47 @@ namespace Axle {
         if (!std::filesystem::is_regular_file(request.ExecutableDirectory / "AxleRuntime.exe", ec) ||
             !std::filesystem::is_regular_file(request.ExecutableDirectory / "AxleScripts.dll", ec)) {
             result.Error = "Runtime build finished without the expected player and scripts module.";
+            return result;
+        }
+        // Publish a last-known-good marker only after the complete artifact set
+        // has been validated.  Write and rename so a cancelled/failed build can
+        // never leave a truncated receipt that looks usable to the Editor.
+        const auto receiptTemp = result.ReceiptPath.string() + ".tmp";
+        {
+            std::ofstream receipt(receiptTemp, std::ios::trunc);
+            if (!receipt) {
+                result.Error = "Runtime build succeeded but its receipt could not be written.";
+                return result;
+            }
+            receipt << "schema=1\n"
+                    << "configuration=" << request.Configuration << "\n"
+                    << "player=AxleRuntime.exe\n"
+                    << "scripts=AxleScripts.dll\n";
+            receipt.flush();
+            if (!receipt) {
+                std::error_code removeEc;
+                std::filesystem::remove(receiptTemp, removeEc);
+                result.Error = "Runtime build succeeded but its receipt could not be completed.";
+                return result;
+            }
+        }
+        std::error_code renameEc;
+#ifdef _WIN32
+        // std::filesystem::rename does not replace an existing file on
+        // Windows. MoveFileEx provides an atomic replacement on the same
+        // volume and keeps the old receipt if the replacement cannot happen.
+        if (!MoveFileExW(std::filesystem::path(receiptTemp).wstring().c_str(),
+                         result.ReceiptPath.wstring().c_str(),
+                         MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            renameEc = std::error_code(static_cast<int>(GetLastError()), std::system_category());
+        }
+#else
+        std::filesystem::rename(receiptTemp, result.ReceiptPath, renameEc);
+#endif
+        if (renameEc) {
+            std::error_code removeEc;
+            std::filesystem::remove(receiptTemp, removeEc);
+            result.Error = "Runtime build succeeded but its receipt could not be published.";
             return result;
         }
         result.Success = true;

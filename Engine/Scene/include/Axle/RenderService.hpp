@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <mutex>
 #include <thread>
 #include <unordered_map>
 
@@ -82,12 +83,14 @@ namespace Axle {
         RHI::RHITexture* GetDefaultMainColorTarget() const;
 
     private:
+        static uint64_t PackState(RenderServiceState state, uint64_t epoch);
+        static RenderStateSnapshot UnpackState(uint64_t packed);
         void SetState(RenderServiceState state);
-        bool m_Initialized = false;
-        mutable std::atomic<RenderServiceState> m_State{RenderServiceState::Stopped};
-        mutable std::atomic<uint64_t> m_StateEpoch{1};
+        std::atomic<bool> m_Initialized{false};
+        mutable std::atomic<uint64_t> m_StateSnapshot{0};
         uint64_t m_Epoch = 0;
         void* m_GLContext = nullptr;
+        mutable std::mutex m_OwnerMutex;
         std::thread::id m_Owner;
         std::shared_ptr<int> m_Lifetime = std::make_shared<int>(0);
         std::unordered_map<std::string, std::shared_ptr<VertexArray>> m_GLMeshes;

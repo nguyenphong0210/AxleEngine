@@ -10,27 +10,50 @@
 
 namespace Axle {
     RenderService& RenderService::Get() { static RenderService service; return service; }
-    RenderService::RenderService() = default;
+    RenderService::RenderService() : m_StateSnapshot(PackState(RenderServiceState::Stopped, 1)) {}
     RenderService::~RenderService() { Shutdown(); m_Lifetime.reset(); }
 
+    uint64_t RenderService::PackState(RenderServiceState state, uint64_t epoch) {
+        constexpr uint64_t stateMask = 0xffu;
+        return (epoch << 8u) | (static_cast<uint64_t>(state) & stateMask);
+    }
+    RenderStateSnapshot RenderService::UnpackState(uint64_t packed) {
+        return {static_cast<RenderServiceState>(packed & 0xffu), packed >> 8u};
+    }
+
     void RenderService::SetState(RenderServiceState state) {
-        const auto previous = m_State.exchange(state, std::memory_order_acq_rel);
-        if (previous != state) m_StateEpoch.fetch_add(1, std::memory_order_acq_rel);
+        auto current = m_StateSnapshot.load(std::memory_order_acquire);
+        for (;;) {
+            const auto previous = UnpackState(current);
+            const auto epoch = previous.State == state ? previous.StateEpoch : previous.StateEpoch + 1;
+            const auto desired = PackState(state, epoch);
+            if (m_StateSnapshot.compare_exchange_weak(current, desired, std::memory_order_acq_rel)) return;
+        }
     }
 
     bool RenderService::Init() {
         auto& device = RHI::RHIDevice::Get();
         void* context = Window::HasActiveContext() ? glfwGetCurrentContext() : nullptr;
-        if (m_Initialized && m_Owner == std::this_thread::get_id() &&
+        bool initialized = false;
+        std::thread::id owner;
+        {
+            std::lock_guard lock(m_OwnerMutex);
+            initialized = m_Initialized.load(std::memory_order_acquire);
+            owner = m_Owner;
+        }
+        if (initialized && owner == std::this_thread::get_id() &&
             ((m_RHIRenderer && m_Epoch == device.GetEpoch() && device.CanCreateResources()) ||
              (m_GLRenderer && m_GLContext == context && context))) return true;
-        if (m_Owner != std::thread::id{} && m_Owner != std::this_thread::get_id()) {
+        if (owner != std::thread::id{} && owner != std::this_thread::get_id()) {
             AXLE_CORE_ERROR("RenderService::Init rejected on a non-owner thread");
             return false;
         }
         Shutdown();
         SetState(RenderServiceState::Starting);
-        m_Owner = std::this_thread::get_id();
+        {
+            std::lock_guard lock(m_OwnerMutex);
+            m_Owner = std::this_thread::get_id();
+        }
         if (device.IsNativeReady()) {
             if (!device.CanCreateResources()) { SetState(RenderServiceState::Failed); return false; }
             auto candidate = std::make_unique<RHISceneRenderer>();
@@ -43,49 +66,56 @@ namespace Axle {
             if (!candidate->IsReady()) { SetState(RenderServiceState::Failed); return false; }
             m_GLRenderer = std::move(candidate); m_GLContext = context;
         } else { SetState(RenderServiceState::Failed); return false; }
-        m_Initialized = true; SetState(RenderServiceState::Running); return true;
+        m_Initialized.store(true, std::memory_order_release); SetState(RenderServiceState::Running); return true;
     }
     void RenderService::Shutdown() {
-        if (m_Owner != std::thread::id{} && m_Owner != std::this_thread::get_id()) {
+        std::thread::id owner;
+        {
+            std::lock_guard lock(m_OwnerMutex);
+            owner = m_Owner;
+        }
+        if (owner != std::thread::id{} && owner != std::this_thread::get_id()) {
             AXLE_CORE_ERROR("RenderService::Shutdown rejected on a non-owner thread");
             return;
         }
-        if (m_Initialized) SetState(RenderServiceState::Draining);
+        if (m_Initialized.load(std::memory_order_acquire)) SetState(RenderServiceState::Draining);
         m_DefaultMainTargets.reset(); m_GLMeshes.clear(); m_NativeSourceMeshes.clear();
         m_RHIRenderer.reset(); m_GLRenderer.reset();
-        m_Initialized = false; m_Epoch = 0; m_GLContext = nullptr; m_Owner = {};
+        m_Initialized.store(false, std::memory_order_release); m_Epoch = 0; m_GLContext = nullptr;
+        {
+            std::lock_guard lock(m_OwnerMutex);
+            m_Owner = {};
+        }
         SetState(RenderServiceState::Stopped);
     }
     bool RenderService::IsOwnerThread() const {
-        if (m_Owner == std::thread::id{} || m_Owner != std::this_thread::get_id()) return false;
+        std::thread::id owner;
+        {
+            std::lock_guard lock(m_OwnerMutex);
+            owner = m_Owner;
+        }
+        if (owner == std::thread::id{} || owner != std::this_thread::get_id()) return false;
         const auto& device = RHI::RHIDevice::Get();
         return !device.IsNativeReady() || device.IsOwnerThread();
     }
     RenderServiceState RenderService::GetState() const {
-        auto state = m_State.load(std::memory_order_acquire);
-        if (!m_Initialized) return state;
+        const auto snapshot = UnpackState(m_StateSnapshot.load(std::memory_order_acquire));
+        auto state = snapshot.State;
+        if (!m_Initialized.load(std::memory_order_acquire)) return state;
         const auto deviceState = RHI::RHIDevice::Get().GetState();
-        RenderServiceState effective = state;
         switch (deviceState) {
-            case RHI::RHIDeviceState::SurfaceRebuildRequired: effective = RenderServiceState::SurfaceRebuildRequired; break;
-            case RHI::RHIDeviceState::Lost: effective = RenderServiceState::DeviceLost; break;
-            case RHI::RHIDeviceState::Stopping: effective = RenderServiceState::Draining; break;
-            default: break;
+            case RHI::RHIDeviceState::SurfaceRebuildRequired: return RenderServiceState::SurfaceRebuildRequired;
+            case RHI::RHIDeviceState::Lost: return RenderServiceState::DeviceLost;
+            case RHI::RHIDeviceState::Stopping: return RenderServiceState::Draining;
+            default: return state;
         }
-        if (effective != state && m_State.compare_exchange_strong(state, effective, std::memory_order_acq_rel))
-            m_StateEpoch.fetch_add(1, std::memory_order_acq_rel);
-        return effective;
     }
     RenderStateSnapshot RenderService::GetStateSnapshot() const {
-        for (;;) {
-            const auto before = m_StateEpoch.load(std::memory_order_acquire);
-            const auto state = GetState();
-            const auto after = m_StateEpoch.load(std::memory_order_acquire);
-            if (before == after) return {state, after};
-        }
+        const auto snapshot = UnpackState(m_StateSnapshot.load(std::memory_order_acquire));
+        return {GetState(), snapshot.StateEpoch};
     }
     uint64_t RenderService::GetStateEpoch() const {
-        return m_StateEpoch.load(std::memory_order_acquire);
+        return UnpackState(m_StateSnapshot.load(std::memory_order_acquire)).StateEpoch;
     }
     bool RenderService::RequireOwner(std::string_view operation) const {
         if (IsOwnerThread()) return true;
@@ -98,7 +128,10 @@ namespace Axle {
         const auto state = GetStateSnapshot();
         report.State = state.State;
         report.StateEpoch = state.StateEpoch;
-        report.OwnerBound = m_Owner != std::thread::id{};
+        {
+            std::lock_guard lock(m_OwnerMutex);
+            report.OwnerBound = m_Owner != std::thread::id{};
+        }
         report.IsOwnerThread = IsOwnerThread();
         report.NativeReady = device.IsNativeReady();
         report.ContextReady = device.IsContextReady();

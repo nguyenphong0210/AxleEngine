@@ -1939,6 +1939,17 @@
       "base_commit": "HEAD",
       "timestamp_utc": "2026-11-09T04:16:46.088694+00:00",
       "body": "STATUS: User requested documentation-only decomposition of Post-OPT-10. No production implementation was started.\n\nDelivered in d17d387: docs/design/POST_OPT10_PROGRAM_PLAN.md, linked from docs/design/README.md and docs/ROADMAP.md. The plan redesigns aggregate OPT-11 into OPT-11.0 through OPT-11.16 with micro-packages, dependency graph, source/API boundaries, tests, fallback rules and acceptance criteria. It explicitly separates Animation/VFX CPU/data work from RHI/GPU/UI work and keeps RenderThread, VRAM aliasing, meshlets and DDGI later and capability-gated.\n\nRecommended sequencing recorded: OPT-10 gate -> measurement/capability -> render/resource contracts -> CSM/HDR/IBL/picking -> Animation/VFX CPU/data -> Animation/VFX RHI bridges -> LogicLOD/autoLOD -> material/GPU/advanced threading/aliasing/GI -> authoring UI -> performance closure. The plan is planned-only and does not activate any unit.\n\nVerification: git diff --check and curated links for the changed roadmap/index/plan passed. No native build/test was run.\n"
+    },
+    {
+      "id": "CG-20261109T043607948889Z-CODEX-5af414",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-10-IMPLEMENTATION",
+      "reply_to": null,
+      "base_commit": "HEAD",
+      "timestamp_utc": "2026-11-09T04:36:07.948889+00:00",
+      "body": "STATUS: User requested a clearer top-level Post-OPT-10 structure. Documentation only; no implementation started.\n\nReworked docs/design/POST_OPT10_PROGRAM_PLAN.md in commit 7992d54. Post-OPT-10 is now split into independent top-level OPTs: OPT-11 Render Thread, OPT-12 Shader/Material, OPT-13 Lighting, OPT-14 Nanite/GPU Geometry, OPT-15 Logic LOD, OPT-16 offline autoLOD, OPT-17 Animation, OPT-18 VFX, OPT-19 authoring UI/integration and OPT-20 performance/rollout. Each retains detailed subpackages, dependencies, tests and acceptance criteria. A common Post-OPT-10 baseline gate is documented separately.\n\nUpdated docs/ROADMAP.md to replace the stale single OPT-11/seven-package description with OPT-11..20 planned program. Updated docs/design/README.md index. OPT-10 remains paused/open; all Post-OPT-10 OPTs are planned only.\n\nVerification: git diff --check and curated link check passed. No native build/test ran.\n"
     }
   ],
   "deferred_tasks": [

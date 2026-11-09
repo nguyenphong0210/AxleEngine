@@ -5,17 +5,19 @@
     "title": "Ownership design and capability probes",
     "state": "in_progress",
     "coordinator": "Codex",
-    "implementer": "Gemini",
-    "reviewer": "Codex consolidated final review",
-    "code_baseline": "73a8971",
-    "user_instruction": "User explicitly requests beginning OPT-11 with item 1; execute one package at a time and commit each package separately.",
+    "implementer": "Codex",
+    "reviewer": "Separate-context correction review",
+    "code_baseline": "b5ddfb0",
+    "user_instruction": "User explicitly requests Codex implement OPT-11 one package at a time, with verification and a separate commit per package.",
     "user_scope": "C11-01 only: owner-thread binding, worker state machine, capability probes, synchronous fallback and focused tests. No C11-02..07, vendor upgrade or push.",
-    "next_action": "Gemini implements and self-verifies C11-01, then stops at the package boundary for Codex review.",
-    "acceptance_status": "open",
-    "implementation_status": "Released to Gemini; implementation not started in this checkout.",
-    "source_commit": "73a8971",
+    "next_action": "Perform separate-context source review of C11-01 candidate c277848; stop before C11-02.",
+    "acceptance_status": "open_codex_review",
+    "implementation_status": "Implemented and self-verified; candidate c277848.",
+    "source_commit": "c277848",
     "correction_review_status": "Not run",
-    "open_gates": []
+    "open_gates": [
+      "Separate-context source review of C11-01 not run"
+    ]
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",
@@ -2045,6 +2047,17 @@
       "base_commit": "ac623a9883df8c64b6262cbae7c8d1d14db4e553",
       "timestamp_utc": "2026-11-09T10:36:52.844178+00:00",
       "body": "HANDOFF: User has now released OPT-11 package C11-01 only, with an explicit one-package/one-commit rule.\n\nPackage: C11-01 / 11.1 Ownership design and capability probes\nBase commit: 73a8971\nImplementer: Gemini\nReviewer: Codex consolidated final review\n\nRequired scope:\n- bind RenderService/RHIDevice/resource/presentation ownership to one declared render owner;\n- add worker state/capability reporting and wrong-owner-thread guards;\n- define startup/surface/device-loss/shutdown transitions and preserve synchronous fallback;\n- audit callers of CanSubmit/resource creation/WaitIdle/resize/present so producer paths do not issue native calls;\n- add focused CPU/fault-injection tests and package documentation/evidence.\n\nStop boundary: do not implement C11-02 snapshot queue, C11-03 worker presentation, C11-04 parallel recording, C11-05 aliasing, C11-06 stress or C11-07 acceptance in this handoff. Use the architecture contract in docs/design/OPT_11_ARCHITECTURE_AND_ALGORITHMS.md and the execution plan in docs/design/OPT_11_EXECUTION_PLAN.md. Report exact files, base/head commits, commands, exit codes and unavailable native gates; label the result implemented/self-verified pending Codex review.\n"
+    },
+    {
+      "id": "CG-20261109T112148297952Z-CODEX-4c5bd4",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-11-C11-01",
+      "reply_to": "CG-20261109T103652844178Z-CODEX-4bfe4e",
+      "base_commit": "c2778482419e048526734ffbb5de214366c8d8e0",
+      "timestamp_utc": "2026-11-09T11:21:48.297952+00:00",
+      "body": "DELIVERY: User redirected implementation of OPT-11 C11-01 to Codex. Gemini handoff is superseded for this package.\n\nImplemented/self-verified candidate: c277848 (feat(opt11): add C11-01 ownership contract)\nBase: b5ddfb0\n\nScope delivered:\n- RHIDevice owner-thread query and explicit OPT-11 capability fields for worker ownership, parallel-recording probe status, placed resources and transient aliasing.\n- RenderServiceState and RenderOwnershipReport with owner binding, state transitions, diagnostics and wrong-thread Init/Shutdown/RequireOwner rejection.\n- Synchronous fallback preserved; no render worker, queue, parallel recording, aliasing or later package work started.\n- Focused RenderService ownership test covering unbound/failed startup, foreign thread Init/Shutdown/owner rejection and owner cleanup.\n\nVerification this turn:\n- cmake --build build --config Debug --target AxleRenderUnitTests --parallel 8: exit 0\n- .\\\\build\\\\Tests\\\\Debug\\\\AxleRenderUnitTests.exe: exit 0\n- cmake --build build --config Debug --target AxleRHIFoundationTests AxleRHIErrorTests AxleRHIStateTests --parallel 8: exit 0\n- ctest --test-dir build -C Debug -R \"RenderUnitTests|RHIStatePolicy|RHIErrorPolicy|RHIFoundationPolicy\" --output-on-failure: 4/4 passed\n- cmake --build build --config Release --target AxleRenderUnitTests --parallel 8: exit 0\n- .\\\\build\\\\Tests\\\\Release\\\\AxleRenderUnitTests.exe: exit 0\n- python scripts/check_architecture.py: exit 0, AXLE_ARCH_CHECK PASS\n\nOpen gate: separate-context Codex source review remains required. Stop before C11-02.\n"
     }
   ],
   "deferred_tasks": [

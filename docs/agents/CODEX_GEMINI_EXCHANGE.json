@@ -3,22 +3,20 @@
   "current_task": {
     "id": "OPT-11-C11-04",
     "title": "Parallel command recording probe and CPU fallback",
-    "state": "in_progress",
+    "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Separate-context correction review",
-    "code_baseline": "5b3204a",
+    "code_baseline": "658bab9",
     "user_instruction": "User explicitly authorized Codex to finish unfinished C11-01..03 work and then implement C11-04 sequentially, with one package per commit and review.",
     "user_scope": "C11-01 through C11-04 only; no C11-05+ or vendor upgrade/push.",
-    "next_action": "Complete separate-context recheck of the latest C11-03 and C11-04 corrections, then close OPT-11 C11-04 boundary.",
-    "acceptance_status": "open_final_correction_rechecks",
-    "implementation_status": "C11-01..03 corrected and self-verified; C11-04 implemented in 5b3204a and self-verified.",
+    "next_action": "Stop at the authorized C11-04 boundary; C11-05+ require a separate user instruction.",
+    "acceptance_status": "accepted_for_C11-01_to_C11-04_scope_with_vulkan_not_run",
+    "implementation_status": "C11-01..03 corrected and self-verified; C11-04 implemented and corrected in 5b3204a; final worker fallback correction in 658bab9.",
     "source_commit": "c732385",
-    "correction_review_status": "C11-01 clean recheck at c46dccb; C11-02 rewrite rebuilt/passed with no concrete defect reported; C11-03 latest 320a145 recheck pending; C11-04 latest 5b3204a recheck pending.",
+    "correction_review_status": "C11-01 clean recheck; C11-02 final rebuild/review clean; C11-03 final recheck verified b3735e2 and R16 fixed in 658bab9 with Debug CTest pass; C11-04 final recheck clean with P2 observations only.",
     "open_gates": [
-      "C11-03 separate-context recheck after 320a145 pending",
-      "C11-04 separate-context recheck after 5b3204a pending",
-      "Vulkan native path not run in this environment"
+      "Vulkan native path NOT RUN in this environment; no dependent package is being activated"
     ]
   },
   "last_read": {
@@ -2225,6 +2223,39 @@
       "base_commit": "320a145ce5964a0cd78d6d15f72f2711ff0bc3e5",
       "timestamp_utc": "2026-11-09T15:05:17.311353+00:00",
       "body": "DELIVERY: Codex completed OPT-11 C11-01 through C11-04 in sequential local commits.\n\nCommits:\n- C11-01 corrections are present through 4f6825d (atomic packed service/RHI snapshots, effective state mapping, failed-init ownership release).\n- C11-02 final queue correction: ac2d7c8 (fixed-capacity mutex ring, protected replacement, drop/age/sequence accounting, no runtime queue allocation).\n- C11-03 worker corrections: c46dccb and 320a145 (bounded in-flight/results, native offscreen RenderView+Poll probe, state epochs/diagnostics, stopping/lost cancellation, external-target rejection, synchronous fallback handoff).\n- C11-04 implementation: 5b3204a (pinned-NRI probe records native secondary merge unsupported; deterministic DAG levels and CPU-preparation fallback with validation and worker partitioning).\n\nVerification run in this session:\n- Debug CTest RenderUnitTests/RHIStatePolicy/RHIErrorPolicy: 3/3 passed.\n- Debug AxleRenderUnitTests direct: exit 0, including native D3D12 worker offscreen render+Poll and C11-04 fallback tests.\n- Release AxleRenderUnitTests direct: exit 0.\n- Native AxleRHIStateTests.exe dx12: exit 0, including native C11-04 probe decision.\n- Native AxleRHIErrorTests.exe dx12 and dx12_window: exit 0 (RHIError PASS).\n- python scripts/check_architecture.py: PASS, 527 files and 25 CMake files.\n\nReview distinction:\n- C11-01 final separate-context recheck: clean at c46dccb; residual pre-existing RHIDevice bool diagnostic race remains outside changed path.\n- C11-02 final separate-context review: current queue rewrite was rebuilt and passed; no remaining concrete defect reported.\n- C11-03 recheck of 320a145 after the latest R8-R12 fixes is requested and pending; the fixes were locally rebuilt and the Debug/Release/native gates above passed.\n- C11-04 review findings were repaired in 5b3204a; final recheck after those repairs is pending.\n\nNo push performed. C11-05 and later remain deferred.\n"
+    },
+    {
+      "id": "CG-20261109T150905717960Z-CODEX-683c69",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-04",
+      "reply_to": "CG-20261109T150517311353Z-CODEX-fa695b",
+      "base_commit": "b3735e2473194d82723d60ff210a0843af58a7d5",
+      "timestamp_utc": "2026-11-09T15:09:05.717960+00:00",
+      "body": "FINAL C11-04 RECHECK — 5b3204a (source/tests; no edits)\n\nVERIFIED:\n- Debug build AxleRenderUnitTests + AxleRHIStateTests exit 0.\n- CTest `ctest --test-dir build -C Debug -R '^(RenderUnitTests|RHIStatePolicy)$' --output-on-failure`: 2/2 passed.\n- Direct binaries pass, including C11-04 fallback, cycle/missing/duplicate validation, worker partition and zero-worker serial rows.\n- CMake wiring and architecture boundaries remain clean.\n\nRemaining P2 observations:\n- `RHIRecordingPlan::Validate` does not clear a caller-provided diagnostic on success, so a reused diagnostic string can retain stale failure text.\n- `BuildLevels()` returns an empty vector for both a valid empty plan and invalid plans; callers should use `Validate` first if they need to distinguish no work from rejection.\n- `RHIRecordingBatch` has no explicit owner-only/unsafe marker. Same-level unsafe batches rely on callers retaining the original plan metadata to avoid concurrent execution; current tests cover ordering but not scheduler enforcement.\n- Unknown enum values for `ActiveBackend` are treated as modern CPU-preparation fallback rather than rejected as unsupported; minor defensive capability edge.\n\nNo P1/P0 remains in the amended C11-04 scope.\n"
+    },
+    {
+      "id": "CG-20261109T151237342635Z-CODEX-a6ecfc",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-03",
+      "reply_to": "CG-20261109T132848978042Z-CODEX-6cb088",
+      "base_commit": "b3735e2",
+      "timestamp_utc": "2026-11-09T15:12:37.342635+00:00",
+      "body": "CORRECTION RECHECK: b3735e2 on 320a145.\n\nVerification:\n- cmake --build build --config Debug --target AxleRenderUnitTests --parallel 8: exit 0.\n- ctest --test-dir build -C Debug -R RenderUnitTests --output-on-failure: 1/1 passed, exit 0.\n\nThe fallback now initializes configured RHI when absent, allows caller-owned sync targets, publishes current state, and Stop cleans owned fallback device.\n\nC11-03-R16 [P1] RenderSynchronously calls SetState(Running) despite there being no worker thread. Subsequent Submit sees Running and accepts frames into m_Frames, but no ThreadMain consumes them; Poll never returns their results. Stop's non-joinable branch shuts down owned RHI and sets Stopped but does not cancel those queued frames. The sync path must remain Stopped/reject Submit or use a distinct synchronous state. Existing tests do not exercise RenderSynchronously followed by Submit/Stop.\n\nNo other new P1 found; no C11-04 scope in b3735e2.\n"
+    },
+    {
+      "id": "CG-20261109T151425945109Z-CODEX-43d769",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-11-C11-04",
+      "reply_to": "CG-20261109T151237342635Z-CODEX-a6ecfc",
+      "base_commit": "658bab995457c124ff46805b48099bededc7af34",
+      "timestamp_utc": "2026-11-09T15:14:25.945109+00:00",
+      "body": "DELIVERY UPDATE: Final C11-03 R16 correction is complete in 658bab9 on top of b3735e2. RenderSynchronously now leaves the worker state non-running when no worker thread exists, so later Submit rejects rather than enqueueing unconsumed frames. Debug RenderUnitTests rebuilt and CTest RenderUnitTests passed 1/1.\n\nC11-04 final separate-context recheck (5b3204a) passed with no P1/P0. Remaining observations are P2 only: caller diagnostics are not cleared on Validate success, valid-empty and invalid plans both return empty from BuildLevels (Validate distinguishes them), batches rely on plan metadata for owner-only scheduling, and unknown backend enum values fall back to CPU preparation.\n\nThe latest accepted implementation commits are: ac2d7c8 (C11-02), c46dccb/320a145/b3735e2/658bab9 (C11-03 corrections), and 5b3204a (C11-04). Native D3D12, Debug/Release RenderUnitTests, focused CTest and architecture checks remain passing; Vulkan native is NOT RUN in this environment.\n"
     }
   ],
   "deferred_tasks": [

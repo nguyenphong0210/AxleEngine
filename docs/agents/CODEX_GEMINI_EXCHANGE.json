@@ -1,25 +1,21 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-10-IMPLEMENTATION",
-    "title": "Architecture acceptance and enforcement",
+    "id": "OPT-11-C11-01",
+    "title": "Ownership design and capability probes",
     "state": "in_progress",
     "coordinator": "Codex",
-    "implementer": "Codex",
-    "reviewer": "Separate-context correction review",
-    "code_baseline": "6ee333d31afac8845055cd6f291db5597ad55ed9",
-    "user_instruction": "User explicitly requests implementation of OPT-10. User accidentally removed prior build directory; rebuild in build-opt10.",
-    "user_scope": "EJ-15, PLG-24, EJ-16/17, PLG-25 and AF-05. Preserve narrowed OPT-07/08 foundation scope. No OPT-11, domain feature expansion, vendor upgrade or push.",
-    "next_action": "Stop at OPT-10 until native interactive UI observation and complete Release/export evidence are available; do not activate OPT-11.",
-    "acceptance_status": "open_native_ui_and_release_export_gates",
-    "implementation_status": "Implemented and source-reviewed; candidate 96bdad7; docs/evidence c601e0f. Coordinator Debug 73/73 CTest, default integration, CPU Debug/Release 3/3, native Debug render/plugin/simulation rows passed.",
-    "source_commit": "96bdad7",
-    "correction_review_status": "Separate-context source review/rechecks report no remaining concrete P1/P2; no independent test execution claimed.",
-    "open_gates": [
-      "Native interactive UI observation/click/capture NOT RUN: Computer Use native pipe unavailable OS2 after initial/retry/fresh-kernel retries",
-      "Fresh full Release product verification not completed; Release CPU 3/3 passed",
-      "Detached Debug export stage stopped after prolonged owned exporter activity; no export PASS claimed"
-    ]
+    "implementer": "Gemini",
+    "reviewer": "Codex consolidated final review",
+    "code_baseline": "73a8971",
+    "user_instruction": "User explicitly requests beginning OPT-11 with item 1; execute one package at a time and commit each package separately.",
+    "user_scope": "C11-01 only: owner-thread binding, worker state machine, capability probes, synchronous fallback and focused tests. No C11-02..07, vendor upgrade or push.",
+    "next_action": "Gemini implements and self-verifies C11-01, then stops at the package boundary for Codex review.",
+    "acceptance_status": "open",
+    "implementation_status": "Released to Gemini; implementation not started in this checkout.",
+    "source_commit": "73a8971",
+    "correction_review_status": "Not run",
+    "open_gates": []
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",
@@ -2038,6 +2034,17 @@
       "base_commit": "73a8971abf65a83cbf7cbc49d5c66f4cd0bb5b2e",
       "timestamp_utc": "2026-11-09T10:27:23.232952+00:00",
       "body": "STATUS: User instruction (2026-11-09): when an OPT is released for implementation, execute one concrete package/item at a time, run its applicable verification, commit that package coherently, record the evidence, and only then proceed to the next package. Do not implement an entire OPT in one batch. This applies to OPT-11 and later, and any future OPT package range. Current OPT-10 task card remains unchanged and OPT-11 is not released.\n"
+    },
+    {
+      "id": "CG-20261109T103652844178Z-CODEX-4bfe4e",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "HANDOFF",
+      "task": "OPT-11-C11-01",
+      "reply_to": "CG-20261109T045432280489Z-GEMINI-767813",
+      "base_commit": "ac623a9883df8c64b6262cbae7c8d1d14db4e553",
+      "timestamp_utc": "2026-11-09T10:36:52.844178+00:00",
+      "body": "HANDOFF: User has now released OPT-11 package C11-01 only, with an explicit one-package/one-commit rule.\n\nPackage: C11-01 / 11.1 Ownership design and capability probes\nBase commit: 73a8971\nImplementer: Gemini\nReviewer: Codex consolidated final review\n\nRequired scope:\n- bind RenderService/RHIDevice/resource/presentation ownership to one declared render owner;\n- add worker state/capability reporting and wrong-owner-thread guards;\n- define startup/surface/device-loss/shutdown transitions and preserve synchronous fallback;\n- audit callers of CanSubmit/resource creation/WaitIdle/resize/present so producer paths do not issue native calls;\n- add focused CPU/fault-injection tests and package documentation/evidence.\n\nStop boundary: do not implement C11-02 snapshot queue, C11-03 worker presentation, C11-04 parallel recording, C11-05 aliasing, C11-06 stress or C11-07 acceptance in this handoff. Use the architecture contract in docs/design/OPT_11_ARCHITECTURE_AND_ALGORITHMS.md and the execution plan in docs/design/OPT_11_EXECUTION_PLAN.md. Report exact files, base/head commits, commands, exit codes and unavailable native gates; label the result implemented/self-verified pending Codex review.\n"
     }
   ],
   "deferred_tasks": [

@@ -65,7 +65,14 @@ namespace Axle::RHI {
 
     bool RHIPrimaryCommandBatch::Reset() {
         if (m_Commands.empty() || m_Poisoned) return false;
-        for (auto& command : m_Commands) if (!command.Reset()) return false;
+        for (auto& command : m_Commands) {
+            if (!command.Reset()) {
+                // A partial reset leaves mixed allocator state; never expose
+                // that batch for another recording or submission.
+                m_Poisoned = true;
+                return false;
+            }
+        }
         m_Submitted = false;
         return true;
     }

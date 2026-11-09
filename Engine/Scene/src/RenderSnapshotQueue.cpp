@@ -1,8 +1,14 @@
 #include <Axle/RenderSnapshotQueue.hpp>
 
 #include <algorithm>
+#include <chrono>
 
 namespace Axle {
+
+    static uint64_t NowNs() {
+        return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+    }
 
     RenderSnapshotQueue::RenderSnapshotQueue(uint32_t capacity)
         : m_Capacity(capacity), m_Slots(capacity) {
@@ -47,6 +53,7 @@ namespace Axle {
     }
 
     RenderSnapshotPushResult RenderSnapshotQueue::Push(RenderSnapshotTicket ticket) {
+        std::lock_guard admission(m_AdmissionMutex);
         if (m_Stopping.load(std::memory_order_acquire)) {
             m_RejectedStopping.fetch_add(1, std::memory_order_relaxed);
             return RenderSnapshotPushResult::RejectedStopping;
@@ -54,8 +61,32 @@ namespace Axle {
         if (!m_Capacity) return RenderSnapshotPushResult::InvalidCapacity;
         uint64_t position = 0; Slot* slot = nullptr;
         if (!TryReserveProducer(position, slot)) {
-            m_RejectedFull.fetch_add(1, std::memory_order_relaxed);
-            return RenderSnapshotPushResult::RejectedFull;
+            // Interactive frames may replace stale unprotected work. Protected
+            // tickets are retained and cause an explicit rejection instead.
+            std::vector<RenderSnapshotTicket> protectedTickets;
+            uint64_t removed = 0;
+            while (auto old = Pop()) {
+                if (old->ProtectedRequest) protectedTickets.push_back(std::move(*old));
+                else ++removed;
+            }
+            if (!protectedTickets.empty()) {
+                for (auto& protectedTicket : protectedTickets) {
+                    uint64_t restorePosition = 0; Slot* restoreSlot = nullptr;
+                    if (!TryReserveProducer(restorePosition, restoreSlot)) break;
+                    restoreSlot->Ticket.emplace(std::move(protectedTicket));
+                    restoreSlot->Sequence.store(restorePosition + 1, std::memory_order_release);
+                }
+                m_Dropped.fetch_add(removed, std::memory_order_relaxed);
+                m_ProtectedRejected.fetch_add(1, std::memory_order_relaxed);
+                m_RejectedFull.fetch_add(1, std::memory_order_relaxed);
+                return RenderSnapshotPushResult::RejectedFull;
+            }
+            m_Replaced.fetch_add(removed, std::memory_order_relaxed);
+            m_Dropped.fetch_add(removed, std::memory_order_relaxed);
+            if (!TryReserveProducer(position, slot)) {
+                m_RejectedFull.fetch_add(1, std::memory_order_relaxed);
+                return RenderSnapshotPushResult::RejectedFull;
+            }
         }
         if (!ticket.Sequence) ticket.Sequence = m_NextSequence.fetch_add(1, std::memory_order_relaxed);
         else {
@@ -65,6 +96,7 @@ namespace Axle {
         }
         slot->Ticket.emplace(std::move(ticket));
         slot->Sequence.store(position + 1, std::memory_order_release);
+        if (Depth() == 1) m_OldestExtractedAtNs.store(slot->Ticket->ExtractedAtNs ? slot->Ticket->ExtractedAtNs : NowNs(), std::memory_order_release);
         m_Accepted.fetch_add(1, std::memory_order_relaxed);
         const auto depth = Depth();
         auto high = m_HighWaterMark.load(std::memory_order_relaxed);
@@ -79,7 +111,11 @@ namespace Axle {
         std::optional<RenderSnapshotTicket> result = std::move(slot->Ticket);
         slot->Ticket.reset();
         slot->Sequence.store(position + m_Capacity, std::memory_order_release);
-        if (result) m_Consumed.fetch_add(1, std::memory_order_relaxed);
+        if (result) {
+            m_Consumed.fetch_add(1, std::memory_order_relaxed);
+            m_LastConsumedSequence.store(result->Sequence, std::memory_order_release);
+            if (!Depth()) m_OldestExtractedAtNs.store(0, std::memory_order_release);
+        }
         return result;
     }
 
@@ -99,7 +135,10 @@ namespace Axle {
         return latest;
     }
 
-    void RenderSnapshotQueue::Stop() { m_Stopping.store(true, std::memory_order_release); }
+    void RenderSnapshotQueue::Stop() {
+        std::lock_guard admission(m_AdmissionMutex);
+        m_Stopping.store(true, std::memory_order_release);
+    }
 
     RenderSnapshotQueueStats RenderSnapshotQueue::GetStats() const {
         RenderSnapshotQueueStats stats;
@@ -111,6 +150,12 @@ namespace Axle {
         stats.Consumed = m_Consumed.load(std::memory_order_acquire);
         stats.RejectedFull = m_RejectedFull.load(std::memory_order_acquire);
         stats.RejectedStopping = m_RejectedStopping.load(std::memory_order_acquire);
+        stats.ProtectedRejected = m_ProtectedRejected.load(std::memory_order_acquire);
+        stats.Replaced = m_Replaced.load(std::memory_order_acquire);
+        stats.Dropped = m_Dropped.load(std::memory_order_acquire);
+        stats.LastConsumedSequence = m_LastConsumedSequence.load(std::memory_order_acquire);
+        const auto oldest = m_OldestExtractedAtNs.load(std::memory_order_acquire);
+        stats.OldestAgeNs = oldest ? NowNs() - oldest : 0;
         stats.Drained = m_Drained.load(std::memory_order_acquire);
         return stats;
     }

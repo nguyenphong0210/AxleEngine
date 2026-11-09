@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <vector>
 
@@ -39,6 +40,12 @@ namespace Axle {
         uint64_t Consumed = 0;
         uint64_t RejectedFull = 0;
         uint64_t RejectedStopping = 0;
+        uint64_t ProtectedRejected = 0;
+        uint64_t BlockedProducers = 0; // explicit reject policy never blocks producers
+        uint64_t Replaced = 0;
+        uint64_t Dropped = 0;
+        uint64_t LastConsumedSequence = 0;
+        uint64_t OldestAgeNs = 0;
         uint64_t Drained = 0;
     };
 
@@ -84,8 +91,14 @@ namespace Axle {
         std::atomic<uint64_t> m_Consumed{0};
         std::atomic<uint64_t> m_RejectedFull{0};
         std::atomic<uint64_t> m_RejectedStopping{0};
+        std::atomic<uint64_t> m_ProtectedRejected{0};
+        std::atomic<uint64_t> m_Replaced{0};
+        std::atomic<uint64_t> m_Dropped{0};
+        std::atomic<uint64_t> m_LastConsumedSequence{0};
+        std::atomic<uint64_t> m_OldestExtractedAtNs{0};
         std::atomic<uint64_t> m_Drained{0};
         std::atomic<bool> m_Stopping{false};
+        mutable std::mutex m_AdmissionMutex;
     };
 
 }

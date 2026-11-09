@@ -20,15 +20,21 @@ namespace Axle::RenderTests {
         RenderSnapshotQueue queue(2);
         RENDER_CHECK(queue.Capacity() == 2 && queue.GetStats().Depth == 0, "fixed queue capacity and empty start");
         RENDER_CHECK(queue.Push(Ticket(1)) == RenderSnapshotPushResult::Accepted, "first snapshot accepted");
-        RENDER_CHECK(queue.Push(Ticket(2, true)) == RenderSnapshotPushResult::Accepted, "protected snapshot accepted");
-        RENDER_CHECK(queue.Push(Ticket(3)) == RenderSnapshotPushResult::RejectedFull, "full queue rejects unprotected snapshot");
+        RENDER_CHECK(queue.Push(Ticket(2)) == RenderSnapshotPushResult::Accepted, "second snapshot accepted");
+        RENDER_CHECK(queue.Push(Ticket(3)) == RenderSnapshotPushResult::Accepted, "full queue replaces stale unprotected snapshots");
         auto stats = queue.GetStats();
-        RENDER_CHECK(stats.Depth == 2 && stats.HighWaterMark == 2 && stats.RejectedFull == 1,
-            "queue pressure is bounded and observable");
+        RENDER_CHECK(stats.Depth == 1 && stats.HighWaterMark == 2 && stats.Replaced == 2 && stats.Dropped == 2,
+            "queue pressure replacement is bounded and observable");
 
         auto latest = queue.PopLatest();
-        RENDER_CHECK(latest && latest->Sequence == 2 && latest->ProtectedRequest && queue.GetStats().Depth == 0,
-            "PopLatest preserves the admitted protected snapshot");
+        RENDER_CHECK(latest && latest->Sequence == 3 && !latest->ProtectedRequest && queue.GetStats().Depth == 0,
+            "PopLatest returns the newest replacement");
+        RenderSnapshotQueue protectedFull(2);
+        protectedFull.Push(Ticket(20, true));
+        protectedFull.Push(Ticket(21, true));
+        RENDER_CHECK(protectedFull.Push(Ticket(22)) == RenderSnapshotPushResult::RejectedFull &&
+            protectedFull.GetStats().ProtectedRejected == 1 && protectedFull.GetStats().Depth == 2,
+            "full protected queue rejects without dropping protected work");
         RenderSnapshotQueue protectedQueue(4);
         protectedQueue.Push(Ticket(10, true));
         protectedQueue.Push(Ticket(11, true));
@@ -63,7 +69,7 @@ namespace Axle::RenderTests {
         producer.join(); consumer.join();
         concurrent.Drain();
         stats = concurrent.GetStats();
-        RENDER_CHECK(stats.Accepted == accepted.load() && stats.Consumed == consumed.load(),
+        RENDER_CHECK(stats.Accepted == accepted.load() && stats.Consumed == consumed.load() + stats.Dropped,
             "concurrent producer/consumer accounting is exact");
         RENDER_CHECK(stats.Depth == 0 && stats.Accepted + stats.RejectedFull == total,
             "concurrent queue remains bounded with no lost accounting");

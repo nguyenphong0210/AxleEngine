@@ -6,6 +6,7 @@
 #include <Axle/ImageSource.hpp>
 #include <GLFW/glfw3.h>
 #include <cmath>
+#include <string_view>
 
 namespace Axle {
     RenderService& RenderService::Get() { static RenderService service; return service; }
@@ -18,27 +19,75 @@ namespace Axle {
         if (m_Initialized && m_Owner == std::this_thread::get_id() &&
             ((m_RHIRenderer && m_Epoch == device.GetEpoch() && device.CanCreateResources()) ||
              (m_GLRenderer && m_GLContext == context && context))) return true;
-        if (m_Initialized && m_Owner != std::this_thread::get_id()) return false;
+        if (m_Owner != std::thread::id{} && m_Owner != std::this_thread::get_id()) {
+            m_State = RenderServiceState::Failed;
+            AXLE_CORE_ERROR("RenderService::Init rejected on a non-owner thread");
+            return false;
+        }
         Shutdown();
+        m_State = RenderServiceState::Starting;
         m_Owner = std::this_thread::get_id();
         if (device.IsNativeReady()) {
-            if (!device.CanCreateResources()) return false;
+            if (!device.CanCreateResources()) { m_State = RenderServiceState::Failed; return false; }
             auto candidate = std::make_unique<RHISceneRenderer>();
-            if (!candidate->Init()) return false;
+            if (!candidate->Init()) { m_State = RenderServiceState::Failed; return false; }
             m_RHIRenderer = std::move(candidate); m_Epoch = device.GetEpoch();
             std::weak_ptr<int> alive = m_Lifetime;
             device.GetResources().BeforeDeviceClose([this, alive] { if (alive.lock()) Shutdown(); });
         } else if (context) {
             auto candidate = std::make_unique<SceneRenderer>();
-            if (!candidate->IsReady()) return false;
+            if (!candidate->IsReady()) { m_State = RenderServiceState::Failed; return false; }
             m_GLRenderer = std::move(candidate); m_GLContext = context;
-        } else return false;
-        m_Initialized = true; return true;
+        } else { m_State = RenderServiceState::Failed; return false; }
+        m_Initialized = true; m_State = RenderServiceState::Running; return true;
     }
     void RenderService::Shutdown() {
+        if (m_Owner != std::thread::id{} && m_Owner != std::this_thread::get_id()) {
+            m_State = RenderServiceState::Failed;
+            AXLE_CORE_ERROR("RenderService::Shutdown rejected on a non-owner thread");
+            return;
+        }
+        if (m_Initialized) m_State = RenderServiceState::Draining;
         m_DefaultMainTargets.reset(); m_GLMeshes.clear(); m_NativeSourceMeshes.clear();
         m_RHIRenderer.reset(); m_GLRenderer.reset();
-        m_Initialized = false; m_Epoch = 0; m_GLContext = nullptr;
+        m_Initialized = false; m_Epoch = 0; m_GLContext = nullptr; m_Owner = {};
+        m_State = RenderServiceState::Stopped;
+    }
+    bool RenderService::IsOwnerThread() const {
+        return m_Owner != std::thread::id{} && m_Owner == std::this_thread::get_id();
+    }
+    bool RenderService::RequireOwner(std::string_view operation) const {
+        if (IsOwnerThread()) return true;
+        AXLE_CORE_ERROR("RenderService operation '{0}' rejected on a non-owner thread", operation);
+        return false;
+    }
+    RenderOwnershipReport RenderService::GetOwnershipReport() const {
+        const auto& device = RHI::RHIDevice::Get();
+        RenderOwnershipReport report;
+        report.State = m_State;
+        report.OwnerBound = m_Owner != std::thread::id{};
+        report.IsOwnerThread = IsOwnerThread();
+        report.NativeReady = device.IsNativeReady();
+        report.ContextReady = device.IsContextReady();
+        report.Backend = device.GetBackend();
+        report.DeviceCapabilities = device.GetCapabilities();
+
+        if (!report.OwnerBound) report.OwnerDiagnostic = "RenderService has no bound owner thread";
+        else if (!report.IsOwnerThread) report.OwnerDiagnostic = "Caller is not the RenderService owner thread";
+        else if (report.Backend == RHI::RHIType::OpenGL) report.OwnerDiagnostic = "OpenGL remains synchronous until context transfer is proven";
+        else if (!report.NativeReady) report.OwnerDiagnostic = "Native RHI device is not ready";
+        else if (!report.DeviceCapabilities.SupportsRenderWorkerOwnership) report.OwnerDiagnostic = "Native render-worker ownership is unavailable";
+        else report.OwnerDiagnostic = "Native render-worker ownership is available for a future worker binding";
+
+        if (report.NativeReady) {
+            switch (device.GetState()) {
+                case RHI::RHIDeviceState::SurfaceRebuildRequired: report.State = RenderServiceState::SurfaceRebuildRequired; break;
+                case RHI::RHIDeviceState::Lost: report.State = RenderServiceState::DeviceLost; break;
+                case RHI::RHIDeviceState::Stopping: report.State = RenderServiceState::Draining; break;
+                default: break;
+            }
+        }
+        return report;
     }
     RendererCapabilities RenderService::GetActiveCapabilities() const {
         const auto& device = RHI::RHIDevice::Get();

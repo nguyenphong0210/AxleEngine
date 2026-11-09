@@ -8,10 +8,33 @@
 #include <Axle/RenderCapabilities.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 
 namespace Axle {
+
+    enum class RenderServiceState {
+        Stopped,
+        Starting,
+        Running,
+        SurfaceRebuildRequired,
+        DeviceLost,
+        Draining,
+        Failed
+    };
+
+    struct RenderOwnershipReport {
+        RenderServiceState State = RenderServiceState::Stopped;
+        bool OwnerBound = false;
+        bool IsOwnerThread = false;
+        bool NativeReady = false;
+        bool ContextReady = false;
+        RHI::RHIType Backend = RHI::RHIType::None;
+        RHI::RHIDeviceCapabilities DeviceCapabilities{};
+        std::string OwnerDiagnostic;
+    };
 
     // Central rendering coordinator.
     // Orchestrates views, handles renderer selection (modern RHI vs OpenGL compatibility),
@@ -29,6 +52,10 @@ namespace Axle {
         bool Init();
         void Shutdown();
         bool IsInitialized() const { return m_Initialized; }
+        RenderServiceState GetState() const { return m_State; }
+        bool IsOwnerThread() const;
+        bool RequireOwner(std::string_view operation) const;
+        RenderOwnershipReport GetOwnershipReport() const;
 
         // Primary rendering entry points
         RenderResult RenderView(const RenderWorld& world, const ViewRequest& request);
@@ -45,6 +72,7 @@ namespace Axle {
 
     private:
         bool m_Initialized = false;
+        RenderServiceState m_State = RenderServiceState::Stopped;
         uint64_t m_Epoch = 0;
         void* m_GLContext = nullptr;
         std::thread::id m_Owner;

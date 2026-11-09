@@ -72,6 +72,7 @@ namespace Axle::RHI {
         bool IsInitialized() const { return m_Initialized; }
         bool IsBackendSelected() const { return m_Initialized; }
         bool IsNativeReady() const { return m_Initialized && m_Device && m_GraphicsQueue; }
+        bool IsOwnerThread() const { return m_Resources.IsOwnerThread(); }
         bool IsContextReady() const { return m_ContextReady; }
         // Set by product composition only after window and entry points are ready.
         void SetContextReady(bool ready) { m_ContextReady = m_Initialized && ready; }

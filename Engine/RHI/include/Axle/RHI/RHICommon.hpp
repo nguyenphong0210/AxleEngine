@@ -56,6 +56,15 @@ namespace Axle::RHI {
         bool IsSoftwareAdapter = false;
         bool IsHeadless = false;
 
+        // OPT-11 ownership and capability probes. These are deliberately
+        // separate from hardware feature bits: a native API feature is not an
+        // engine feature until its ownership and validation contract is proven.
+        bool RequiresOwnerThreadForNativeOperations = true;
+        bool SupportsRenderWorkerOwnership = false;
+        bool SupportsParallelCommandRecording = false; // enabled only after C11-04 probe
+        bool SupportsPlacedResources = false;
+        bool SupportsTransientResourceAliasing = false;
+
         // Modern hardware features
         bool IsRayTracingSupported = false;
         uint32_t RayTracingTier = 0; // DXR 1.0 (Tier 1), DXR 1.1 (Tier 2), etc.

@@ -11,13 +11,11 @@
     "user_instruction": "User reopened C11-04 implementation and authorized the current primary-command-buffer batch path; future secondary/hybrid work is deferred.",
     "user_scope": "C11-04 current primary-batch implementation only; no vendor upgrade, secondary merge, C11-05+ or push.",
     "next_action": "Stop at C11-04; secondary/hybrid recording and C11-05+ require separate user instruction.",
-    "acceptance_status": "accepted_C11_04_primary_batch_with_vulkan_not_run",
-    "implementation_status": "C11-04 primary command batch path implemented and hardened in 2b6178e, 9aec366 and 4caf323.",
+    "acceptance_status": "accepted_C11_04_primary_batch_D3D12_and_Vulkan",
+    "implementation_status": "C11-04 primary command batch path implemented and hardened in 2b6178e, 9aec366 and 4caf323; native D3D12 and Vulkan state/primary-batch probes pass.",
     "source_commit": "c732385",
-    "correction_review_status": "Separate-context review PASS for 2b6178e + 9aec366; partial-reset poison correction 4caf323 locally verified with focused tests.",
-    "open_gates": [
-      "Vulkan native primary-batch path NOT RUN in this environment; no dependent package activated"
-    ]
+    "correction_review_status": "Separate-context review PASS for 2b6178e + 9aec366; partial-reset poison correction 4caf323 locally verified; native Vulkan RHIStateTests now PASS.",
+    "open_gates": []
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",

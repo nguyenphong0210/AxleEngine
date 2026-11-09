@@ -1,6 +1,5 @@
 #include <Axle/RenderSnapshotQueue.hpp>
 
-#include <algorithm>
 #include <chrono>
 
 namespace Axle {
@@ -11,159 +10,169 @@ namespace Axle {
     }
 
     RenderSnapshotQueue::RenderSnapshotQueue(uint32_t capacity)
-        : m_Capacity(capacity), m_Slots(capacity) {
-        for (uint64_t i = 0; i < m_Slots.size(); ++i) m_Slots[i].Sequence.store(i, std::memory_order_relaxed);
+        : m_Capacity(capacity), m_Entries(capacity), m_Scratch() {
+        m_Scratch.reserve(capacity);
     }
+
     RenderSnapshotQueue::~RenderSnapshotQueue() { Drain(); }
 
-    bool RenderSnapshotQueue::TryReserveProducer(uint64_t& position, Slot*& slot) {
-        if (!m_Capacity) return false;
-        position = m_EnqueuePosition.load(std::memory_order_relaxed);
-        for (;;) {
-            slot = &m_Slots[position % m_Capacity];
-            const auto sequence = slot->Sequence.load(std::memory_order_acquire);
-            const auto difference = static_cast<int64_t>(sequence - position);
-            if (difference == 0) {
-                if (m_EnqueuePosition.compare_exchange_weak(position, position + 1,
-                        std::memory_order_relaxed, std::memory_order_relaxed)) return true;
-            } else if (difference < 0) return false;
-            else position = m_EnqueuePosition.load(std::memory_order_relaxed);
-        }
+    uint32_t RenderSnapshotQueue::LogicalIndex(uint32_t offset) const {
+        return (m_ReadIndex + offset) % m_Capacity;
     }
 
-    bool RenderSnapshotQueue::TryReserveConsumer(uint64_t& position, Slot*& slot) {
-        if (!m_Capacity) return false;
-        position = m_DequeuePosition.load(std::memory_order_relaxed);
-        for (;;) {
-            slot = &m_Slots[position % m_Capacity];
-            const auto sequence = slot->Sequence.load(std::memory_order_acquire);
-            const auto difference = static_cast<int64_t>(sequence - (position + 1));
-            if (difference == 0) {
-                if (m_DequeuePosition.compare_exchange_weak(position, position + 1,
-                        std::memory_order_relaxed, std::memory_order_relaxed)) return true;
-            } else if (difference < 0) return false;
-            else position = m_DequeuePosition.load(std::memory_order_relaxed);
-        }
-    }
-
-    uint64_t RenderSnapshotQueue::Depth() const {
-        const auto write = m_EnqueuePosition.load(std::memory_order_acquire);
-        const auto read = m_DequeuePosition.load(std::memory_order_acquire);
-        return write >= read ? write - read : 0;
+    void RenderSnapshotQueue::RemoveLogical(uint32_t offset) {
+        for (uint32_t i = offset; i + 1 < m_Count; ++i)
+            m_Entries[LogicalIndex(i)] = std::move(m_Entries[LogicalIndex(i + 1)]);
+        m_Entries[LogicalIndex(m_Count - 1)].reset();
+        m_WriteIndex = LogicalIndex(m_Count - 1);
+        --m_Count;
     }
 
     RenderSnapshotPushResult RenderSnapshotQueue::Push(RenderSnapshotTicket ticket) {
-        std::lock_guard admission(m_AdmissionMutex);
-        if (m_Stopping.load(std::memory_order_acquire)) {
-            m_RejectedStopping.fetch_add(1, std::memory_order_relaxed);
+        std::lock_guard lock(m_Mutex);
+        if (m_Stopping) {
+            ++m_RejectedStopping;
             return RenderSnapshotPushResult::RejectedStopping;
         }
         if (!m_Capacity) return RenderSnapshotPushResult::InvalidCapacity;
-        uint64_t position = 0; Slot* slot = nullptr;
-        if (!TryReserveProducer(position, slot)) {
-            // Interactive frames may replace stale unprotected work. Protected
-            // tickets are retained and cause an explicit rejection instead.
-            std::vector<RenderSnapshotTicket> protectedTickets;
-            uint64_t removed = 0;
-            while (auto old = Pop()) {
-                if (old->ProtectedRequest) protectedTickets.push_back(std::move(*old));
-                else ++removed;
-            }
-            if (!protectedTickets.empty()) {
-                for (auto& protectedTicket : protectedTickets) {
-                    uint64_t restorePosition = 0; Slot* restoreSlot = nullptr;
-                    if (!TryReserveProducer(restorePosition, restoreSlot)) break;
-                    restoreSlot->Ticket.emplace(std::move(protectedTicket));
-                    restoreSlot->Sequence.store(restorePosition + 1, std::memory_order_release);
+
+        ticket.Sequence = m_NextSequence++;
+        if (m_Count == m_Capacity) {
+            uint32_t removed = 0;
+            for (uint32_t i = m_Count; i > 0; --i) {
+                const auto offset = i - 1;
+                if (m_Entries[LogicalIndex(offset)] && !m_Entries[LogicalIndex(offset)]->ProtectedRequest) {
+                    RemoveLogical(offset);
+                    ++removed;
+                    ++m_Replaced;
+                    ++m_Dropped;
+                    ++m_Consumed;
                 }
-                m_Dropped.fetch_add(removed, std::memory_order_relaxed);
-                m_ProtectedRejected.fetch_add(1, std::memory_order_relaxed);
-                m_RejectedFull.fetch_add(1, std::memory_order_relaxed);
-                return RenderSnapshotPushResult::RejectedFull;
             }
-            m_Replaced.fetch_add(removed, std::memory_order_relaxed);
-            m_Dropped.fetch_add(removed, std::memory_order_relaxed);
-            if (!TryReserveProducer(position, slot)) {
-                m_RejectedFull.fetch_add(1, std::memory_order_relaxed);
+            if (!removed) {
+                ++m_RejectedFull;
+                ++m_ProtectedRejected;
                 return RenderSnapshotPushResult::RejectedFull;
             }
         }
-        if (!ticket.Sequence) ticket.Sequence = m_NextSequence.fetch_add(1, std::memory_order_relaxed);
-        else {
-            auto next = m_NextSequence.load(std::memory_order_relaxed);
-            while (next <= ticket.Sequence && !m_NextSequence.compare_exchange_weak(next, ticket.Sequence + 1,
-                    std::memory_order_relaxed, std::memory_order_relaxed)) {}
-        }
-        slot->Ticket.emplace(std::move(ticket));
-        slot->Sequence.store(position + 1, std::memory_order_release);
-        if (Depth() == 1) m_OldestExtractedAtNs.store(slot->Ticket->ExtractedAtNs ? slot->Ticket->ExtractedAtNs : NowNs(), std::memory_order_release);
-        m_Accepted.fetch_add(1, std::memory_order_relaxed);
-        const auto depth = Depth();
-        auto high = m_HighWaterMark.load(std::memory_order_relaxed);
-        while (high < depth && !m_HighWaterMark.compare_exchange_weak(high, depth,
-                std::memory_order_relaxed, std::memory_order_relaxed)) {}
+
+        m_Entries[m_WriteIndex].emplace(std::move(ticket));
+        m_WriteIndex = (m_WriteIndex + 1) % m_Capacity;
+        ++m_Count;
+        ++m_Accepted;
+        if (m_Count > m_HighWaterMark) m_HighWaterMark = m_Count;
+        if (m_Count == 1) RefreshOldestAnchor();
         return RenderSnapshotPushResult::Accepted;
     }
 
     std::optional<RenderSnapshotTicket> RenderSnapshotQueue::Pop() {
-        uint64_t position = 0; Slot* slot = nullptr;
-        if (!TryReserveConsumer(position, slot)) return std::nullopt;
-        std::optional<RenderSnapshotTicket> result = std::move(slot->Ticket);
-        slot->Ticket.reset();
-        slot->Sequence.store(position + m_Capacity, std::memory_order_release);
-        if (result) {
-            m_Consumed.fetch_add(1, std::memory_order_relaxed);
-            m_LastConsumedSequence.store(result->Sequence, std::memory_order_release);
-            if (!Depth()) m_OldestExtractedAtNs.store(0, std::memory_order_release);
-        }
+        std::lock_guard lock(m_Mutex);
+        if (!m_Count) return std::nullopt;
+        auto result = std::move(m_Entries[m_ReadIndex]);
+        m_Entries[m_ReadIndex].reset();
+        m_ReadIndex = (m_ReadIndex + 1) % m_Capacity;
+        --m_Count;
+        ++m_Consumed;
+        if (result) m_LastConsumedSequence = result->Sequence;
+        RefreshOldestAnchor();
         return result;
     }
 
     std::optional<RenderSnapshotTicket> RenderSnapshotQueue::PopLatest() {
-        std::optional<RenderSnapshotTicket> latest;
-        while (auto next = Pop()) {
-            if (next->ProtectedRequest) {
-                // A protected request is never discarded while looking for a
-                // newer interactive frame. Return it immediately and leave
-                // later tickets for the next consumer call.
-                latest = std::move(next);
+        std::lock_guard lock(m_Mutex);
+        if (!m_Count) return std::nullopt;
+
+        uint32_t selected = m_Count - 1;
+        for (uint32_t i = 0; i < m_Count; ++i) {
+            if (m_Entries[LogicalIndex(i)] && m_Entries[LogicalIndex(i)]->ProtectedRequest) {
+                selected = i;
                 break;
-            } else {
-                latest = std::move(next);
             }
         }
-        return latest;
+
+        auto result = std::move(m_Entries[LogicalIndex(selected)]);
+        m_Scratch.clear();
+        uint64_t discarded = 0;
+        for (uint32_t i = 0; i < m_Count; ++i) {
+            if (i == selected) continue;
+            if (i < selected && m_Entries[LogicalIndex(i)] && !m_Entries[LogicalIndex(i)]->ProtectedRequest) {
+                ++discarded;
+                continue;
+            }
+            m_Scratch.push_back(std::move(*m_Entries[LogicalIndex(i)]));
+        }
+        for (auto& entry : m_Entries) entry.reset();
+        m_ReadIndex = 0;
+        m_WriteIndex = 0;
+        m_Count = 0;
+        for (auto& survivor : m_Scratch) {
+            m_Entries[m_WriteIndex].emplace(std::move(survivor));
+            m_WriteIndex = (m_WriteIndex + 1) % m_Capacity;
+            ++m_Count;
+        }
+        ++m_Consumed;
+        m_Consumed += discarded;
+        m_Dropped += discarded;
+        if (result) m_LastConsumedSequence = result->Sequence;
+        RefreshOldestAnchor();
+        return result;
     }
 
     void RenderSnapshotQueue::Stop() {
-        std::lock_guard admission(m_AdmissionMutex);
-        m_Stopping.store(true, std::memory_order_release);
+        std::lock_guard lock(m_Mutex);
+        m_Stopping = true;
+    }
+
+    bool RenderSnapshotQueue::IsStopping() const {
+        std::lock_guard lock(m_Mutex);
+        return m_Stopping;
+    }
+
+    uint64_t RenderSnapshotQueue::OldestAgeNs() const {
+        if (!m_OldestExtractedAtNs) return 0;
+        const auto now = NowNs();
+        return now >= m_OldestExtractedAtNs ? now - m_OldestExtractedAtNs : 0;
     }
 
     RenderSnapshotQueueStats RenderSnapshotQueue::GetStats() const {
+        std::lock_guard lock(m_Mutex);
         RenderSnapshotQueueStats stats;
         stats.Capacity = m_Capacity;
-        stats.Depth = Depth();
-        stats.HighWaterMark = m_HighWaterMark.load(std::memory_order_acquire);
-        stats.NextSequence = m_NextSequence.load(std::memory_order_acquire);
-        stats.Accepted = m_Accepted.load(std::memory_order_acquire);
-        stats.Consumed = m_Consumed.load(std::memory_order_acquire);
-        stats.RejectedFull = m_RejectedFull.load(std::memory_order_acquire);
-        stats.RejectedStopping = m_RejectedStopping.load(std::memory_order_acquire);
-        stats.ProtectedRejected = m_ProtectedRejected.load(std::memory_order_acquire);
-        stats.Replaced = m_Replaced.load(std::memory_order_acquire);
-        stats.Dropped = m_Dropped.load(std::memory_order_acquire);
-        stats.LastConsumedSequence = m_LastConsumedSequence.load(std::memory_order_acquire);
-        const auto oldest = m_OldestExtractedAtNs.load(std::memory_order_acquire);
-        stats.OldestAgeNs = oldest ? NowNs() - oldest : 0;
-        stats.Drained = m_Drained.load(std::memory_order_acquire);
+        stats.Depth = m_Count;
+        stats.HighWaterMark = m_HighWaterMark;
+        stats.NextSequence = m_NextSequence;
+        stats.Accepted = m_Accepted;
+        stats.Consumed = m_Consumed;
+        stats.RejectedFull = m_RejectedFull;
+        stats.RejectedStopping = m_RejectedStopping;
+        stats.ProtectedRejected = m_ProtectedRejected;
+        stats.Replaced = m_Replaced;
+        stats.Dropped = m_Dropped;
+        stats.LastConsumedSequence = m_LastConsumedSequence;
+        stats.OldestAgeNs = OldestAgeNs();
+        stats.Drained = m_Drained;
         return stats;
     }
 
+    void RenderSnapshotQueue::RefreshOldestAnchor() {
+        if (!m_Count) {
+            m_OldestExtractedAtNs = 0;
+            return;
+        }
+        const auto& oldest = m_Entries[m_ReadIndex];
+        m_OldestExtractedAtNs = oldest && oldest->ExtractedAtNs ? oldest->ExtractedAtNs : NowNs();
+    }
+
     uint64_t RenderSnapshotQueue::Drain() {
-        uint64_t count = 0;
-        while (Pop()) ++count;
-        m_Drained.fetch_add(count, std::memory_order_relaxed);
+        std::lock_guard lock(m_Mutex);
+        const auto count = m_Count;
+        for (auto& entry : m_Entries) entry.reset();
+        m_ReadIndex = 0;
+        m_WriteIndex = 0;
+        m_Count = 0;
+        m_Consumed += count;
+        m_Drained += count;
+        RefreshOldestAnchor();
         return count;
     }
 

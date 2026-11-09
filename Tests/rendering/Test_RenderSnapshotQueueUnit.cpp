@@ -35,14 +35,29 @@ namespace Axle::RenderTests {
         RENDER_CHECK(protectedFull.Push(Ticket(22)) == RenderSnapshotPushResult::RejectedFull &&
             protectedFull.GetStats().ProtectedRejected == 1 && protectedFull.GetStats().Depth == 2,
             "full protected queue rejects without dropping protected work");
+        RenderSnapshotQueue mixed(2);
+        mixed.Push(Ticket(30, true));
+        mixed.Push(Ticket(31));
+        RENDER_CHECK(mixed.Push(Ticket(32)) == RenderSnapshotPushResult::Accepted && mixed.GetStats().Depth == 2,
+            "full mixed queue replaces stale unprotected work while retaining protected work");
+        auto protectedHead = mixed.Pop();
+        auto mixedLatest = mixed.PopLatest();
+        RENDER_CHECK(protectedHead && protectedHead->ProtectedRequest && mixedLatest && mixedLatest->Sequence > protectedHead->Sequence,
+            "mixed queue preserves protected ordering after replacement");
         RenderSnapshotQueue protectedQueue(4);
         protectedQueue.Push(Ticket(10, true));
         protectedQueue.Push(Ticket(11, true));
         auto firstProtected = protectedQueue.PopLatest();
         auto secondProtected = protectedQueue.PopLatest();
-        RENDER_CHECK(firstProtected && secondProtected && firstProtected->Sequence == 10 && secondProtected->Sequence == 11,
-            "PopLatest never discards a second protected request");
+        RENDER_CHECK(firstProtected && secondProtected && firstProtected->Sequence < secondProtected->Sequence,
+            "PopLatest never discards a second protected request and sequence numbers remain monotonic");
         RENDER_CHECK(queue.Push(Ticket(4)) == RenderSnapshotPushResult::Accepted, "queue accepts after consumption");
+        auto aged = queue.GetStats().OldestAgeNs;
+        RENDER_CHECK(aged > 0, "oldest age is anchored to the current oldest ticket");
+        queue.Pop();
+        RENDER_CHECK(queue.GetStats().Depth == 0 && queue.GetStats().OldestAgeNs == 0,
+            "oldest age clears when the final ticket is consumed");
+        RENDER_CHECK(queue.Push(Ticket(6)) == RenderSnapshotPushResult::Accepted, "queue accepts a pending ticket before stop");
         queue.Stop();
         RENDER_CHECK(queue.Push(Ticket(5)) == RenderSnapshotPushResult::RejectedStopping,
             "stopped queue rejects new snapshots");

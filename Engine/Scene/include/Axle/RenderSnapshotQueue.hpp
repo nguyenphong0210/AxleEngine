@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Axle/RenderWorld.hpp>
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -10,9 +9,6 @@
 
 namespace Axle {
 
-    // An immutable scene snapshot plus the metadata needed to make queue
-    // pressure and latency observable. LeaseAnchor keeps any external resource
-    // generations alive until the consumer releases the ticket.
     struct RenderSnapshotTicket {
         RenderWorld World;
         uint64_t Sequence = 0;
@@ -41,7 +37,7 @@ namespace Axle {
         uint64_t RejectedFull = 0;
         uint64_t RejectedStopping = 0;
         uint64_t ProtectedRejected = 0;
-        uint64_t BlockedProducers = 0; // explicit reject policy never blocks producers
+        uint64_t BlockedProducers = 0;
         uint64_t Replaced = 0;
         uint64_t Dropped = 0;
         uint64_t LastConsumedSequence = 0;
@@ -49,10 +45,10 @@ namespace Axle {
         uint64_t Drained = 0;
     };
 
-    // Bounded sequence-number queue. It is safe for the normal one-producer /
-    // one-consumer path and uses the same per-slot sequence protocol for a
-    // producer and consumer that overlap during stop/drain. It never allocates
-    // after construction and never silently drops a protected ticket.
+    // A fixed-capacity, mutex-protected ring. Push, Pop and Stop share one
+    // admission boundary, so stop cannot race a producer and protected-ticket
+    // replacement remains atomic. Storage and scratch capacity are reserved
+    // during construction.
     class RenderSnapshotQueue {
     public:
         explicit RenderSnapshotQueue(uint32_t capacity = 3);
@@ -66,39 +62,37 @@ namespace Axle {
         std::optional<RenderSnapshotTicket> PopLatest();
 
         void Stop();
-        bool IsStopping() const { return m_Stopping.load(std::memory_order_acquire); }
+        bool IsStopping() const;
         uint32_t Capacity() const { return m_Capacity; }
         RenderSnapshotQueueStats GetStats() const;
         uint64_t Drain();
 
     private:
-        struct Slot {
-            std::atomic<uint64_t> Sequence{0};
-            std::optional<RenderSnapshotTicket> Ticket;
-        };
-
-        bool TryReserveProducer(uint64_t& position, Slot*& slot);
-        bool TryReserveConsumer(uint64_t& position, Slot*& slot);
-        uint64_t Depth() const;
+        uint32_t LogicalIndex(uint32_t offset) const;
+        void RemoveLogical(uint32_t offset);
+        void RefreshOldestAnchor();
+        uint64_t OldestAgeNs() const;
 
         const uint32_t m_Capacity;
-        std::vector<Slot> m_Slots;
-        std::atomic<uint64_t> m_EnqueuePosition{0};
-        std::atomic<uint64_t> m_DequeuePosition{0};
-        std::atomic<uint64_t> m_NextSequence{1};
-        std::atomic<uint64_t> m_HighWaterMark{0};
-        std::atomic<uint64_t> m_Accepted{0};
-        std::atomic<uint64_t> m_Consumed{0};
-        std::atomic<uint64_t> m_RejectedFull{0};
-        std::atomic<uint64_t> m_RejectedStopping{0};
-        std::atomic<uint64_t> m_ProtectedRejected{0};
-        std::atomic<uint64_t> m_Replaced{0};
-        std::atomic<uint64_t> m_Dropped{0};
-        std::atomic<uint64_t> m_LastConsumedSequence{0};
-        std::atomic<uint64_t> m_OldestExtractedAtNs{0};
-        std::atomic<uint64_t> m_Drained{0};
-        std::atomic<bool> m_Stopping{false};
-        mutable std::mutex m_AdmissionMutex;
+        std::vector<std::optional<RenderSnapshotTicket>> m_Entries;
+        std::vector<RenderSnapshotTicket> m_Scratch;
+        uint32_t m_ReadIndex = 0;
+        uint32_t m_WriteIndex = 0;
+        uint32_t m_Count = 0;
+        uint64_t m_NextSequence = 1;
+        uint64_t m_HighWaterMark = 0;
+        uint64_t m_Accepted = 0;
+        uint64_t m_Consumed = 0;
+        uint64_t m_RejectedFull = 0;
+        uint64_t m_RejectedStopping = 0;
+        uint64_t m_ProtectedRejected = 0;
+        uint64_t m_Replaced = 0;
+        uint64_t m_Dropped = 0;
+        uint64_t m_LastConsumedSequence = 0;
+        uint64_t m_OldestExtractedAtNs = 0;
+        uint64_t m_Drained = 0;
+        bool m_Stopping = false;
+        mutable std::mutex m_Mutex;
     };
 
 }

@@ -54,18 +54,24 @@ namespace Axle {
             std::lock_guard lock(m_OwnerMutex);
             m_Owner = std::this_thread::get_id();
         }
+        auto failInitialization = [&] {
+            SetState(RenderServiceState::Failed);
+            std::lock_guard lock(m_OwnerMutex);
+            m_Owner = {};
+            return false;
+        };
         if (device.IsNativeReady()) {
-            if (!device.CanCreateResources()) { SetState(RenderServiceState::Failed); return false; }
+            if (!device.CanCreateResources()) return failInitialization();
             auto candidate = std::make_unique<RHISceneRenderer>();
-            if (!candidate->Init()) { SetState(RenderServiceState::Failed); return false; }
+            if (!candidate->Init()) return failInitialization();
             m_RHIRenderer = std::move(candidate); m_Epoch = device.GetEpoch();
             std::weak_ptr<int> alive = m_Lifetime;
             device.GetResources().BeforeDeviceClose([this, alive] { if (alive.lock()) Shutdown(); });
         } else if (context) {
             auto candidate = std::make_unique<SceneRenderer>();
-            if (!candidate->IsReady()) { SetState(RenderServiceState::Failed); return false; }
+            if (!candidate->IsReady()) return failInitialization();
             m_GLRenderer = std::move(candidate); m_GLContext = context;
-        } else { SetState(RenderServiceState::Failed); return false; }
+        } else return failInitialization();
         m_Initialized.store(true, std::memory_order_release); SetState(RenderServiceState::Running); return true;
     }
     void RenderService::Shutdown() {

@@ -41,11 +41,11 @@ namespace Axle::RenderTests {
         auto bound = service.GetOwnershipReport();
         RENDER_CHECK(bound.State == RenderServiceState::Failed && bound.StateEpoch > initial.StateEpoch,
             "Failed startup advances the producer-visible state epoch");
-        RENDER_CHECK(bound.OwnerBound && bound.IsOwnerThread, "Failed startup still binds ownership to the initiating thread");
+        RENDER_CHECK(!bound.OwnerBound && !bound.IsOwnerThread, "Failed startup releases ownership for retry");
         RENDER_CHECK(!bound.NativeReady && !bound.DeviceCapabilities.SupportsRenderWorkerOwnership &&
             !bound.DeviceCapabilities.SupportsTransientResourceAliasing,
             "Unprobed worker ownership and transient aliasing stay disabled");
-        RENDER_CHECK(service.RequireOwner("unit-test-owner"), "Bound owner may execute owner-only operation");
+        RENDER_CHECK(!service.RequireOwner("unit-test-owner"), "Released failed startup has no owner-only operation");
 
         std::atomic<bool> foreignOwner{true};
         std::atomic<bool> foreignRequire{true};
@@ -53,13 +53,11 @@ namespace Axle::RenderTests {
         std::atomic<bool> foreignStateUnchanged{false};
         std::atomic<uint64_t> foreignEpoch{0};
         std::thread foreign([&] {
-            const auto before = service.GetState();
-            const auto beforeEpoch = service.GetStateEpoch();
             foreignOwner.store(service.IsOwnerThread(), std::memory_order_release);
             foreignRequire.store(service.RequireOwner("unit-test-foreign"), std::memory_order_release);
             foreignInit.store(service.Init(), std::memory_order_release);
-            service.Shutdown();
-            foreignStateUnchanged.store(service.GetState() == before && service.GetStateEpoch() == beforeEpoch, std::memory_order_release);
+            const auto retry = service.GetOwnershipReport();
+            foreignStateUnchanged.store(retry.State == RenderServiceState::Failed && !retry.OwnerBound, std::memory_order_release);
             foreignEpoch.store(service.GetStateEpoch(), std::memory_order_release);
         });
         foreign.join();
@@ -68,9 +66,9 @@ namespace Axle::RenderTests {
         RENDER_CHECK(!foreignInit.load(std::memory_order_acquire),
             "Foreign thread cannot acquire ownership after a failed startup");
         RENDER_CHECK(foreignStateUnchanged.load(std::memory_order_acquire) && !service.IsInitialized(),
-            "Foreign Init/Shutdown are rejected without poisoning owner-thread state");
-        RENDER_CHECK(foreignEpoch.load(std::memory_order_acquire) == service.GetStateEpoch(),
-            "Foreign owner rejection leaves state epoch unchanged");
+            "Foreign retry can recover a failed startup without leaking ownership");
+        RENDER_CHECK(foreignEpoch.load(std::memory_order_acquire) > bound.StateEpoch,
+            "Retry state transitions advance the producer-visible epoch");
 
         service.Shutdown();
         auto stopped = service.GetOwnershipReport();

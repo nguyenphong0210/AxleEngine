@@ -10,15 +10,15 @@
     "code_baseline": "38630a1",
     "user_instruction": "User explicitly authorizes Codex to finish C11-01 and then implement C11-02 and C11-03 sequentially, with one package per commit and review.",
     "user_scope": "C11-01 correction/stateEpoch, then C11-02 bounded snapshot queue, then C11-03 render worker/offscreen presentation. No C11-04..07, vendor upgrade or push.",
-    "next_action": "Implement C11-02 bounded SPSC snapshot queue, protected-frame/drop policy, stats and focused stress tests; commit before C11-03.",
-    "acceptance_status": "open_c11_02_implementation",
-    "implementation_status": "C11-01 atomic RenderService/RHIDevice snapshot correction complete/self-verified; C11-02 implementation starting.",
-    "source_commit": "38630a1",
-    "correction_review_status": "C11-01 packed correction fresh review pending; native transition/live-lease rows remain NOT RUN.",
+    "next_action": "Separate-context review C11-02 commit a3ccbc3; if clean, begin C11-03.",
+    "acceptance_status": "open_c11_02_review",
+    "implementation_status": "C11-02 implemented/self-verified; bounded snapshot queue candidate a3ccbc3.",
+    "source_commit": "a3ccbc3",
+    "correction_review_status": "C11-01 R5/R6 follow-up tracked; C11-02 review pending.",
     "open_gates": [
-      "C11-01 packed correction separate-context recheck pending",
-      "Native SurfaceRebuildRequired/DeviceLost/Draining rows NOT RUN",
-      "Live native resource-lease shutdown row NOT RUN"
+      "Separate-context C11-02 queue review pending",
+      "C11-01 native SurfaceRebuildRequired/DeviceLost/Draining rows NOT RUN",
+      "C11-01 live native resource-lease row NOT RUN"
     ]
   },
   "last_read": {
@@ -2104,6 +2104,28 @@
       "base_commit": "93d44de382ba9d3a1ea366349f9f1ad16401d0ca",
       "timestamp_utc": "2026-11-09T12:24:56.375717+00:00",
       "body": "REVIEW — C11-01 stateEpoch correction (913929b vs 86cb301)\n\nFindings:\n\n- P1 — RenderStateSnapshot is not atomic/coherent. RenderService::SetState exchanges m_State and only then increments m_StateEpoch (RenderService.cpp:16-19). GetStateSnapshot reads epoch, calls GetState, and rereads epoch (79-85). A reader can observe the newly exchanged state while the epoch still has its old value, pass the equal-epoch check, and return {new state, old epoch} before the writer increments. This violates the C11 contract that producers receive an atomic state plus monotonic stateEpoch. The device-CAS path (75-76) has the same split-update window.\n\n- P1/P2 — Device-derived state can become permanently stale. GetState stores SurfaceRebuildRequired, DeviceLost, or Draining into m_State (67-76), but the Ready default path never restores Running. RHIDevice::SurfaceRebuilt() only changes the device state; RenderService::Init's already-initialized fast path returns without resetting the service state. A transient surface rebuild can therefore leave RenderService reporting SurfaceRebuildRequired forever, contrary to the C11 transition table. A failed CAS can also return an effective state that this call did not commit.\n\n- P2 — Producer/wrong-thread reads mutate state and race owner lifecycle. GetState/GetStateSnapshot are public and callable from any thread, yet GetState performs CAS/fetch_add, so a producer reader directly mutates worker-owned state despite the contract. In addition, m_Initialized remains a plain bool and is read by GetState while owner Init/Shutdown writes it, which is a C++ data race if snapshots are called concurrently. The added tests only perform foreign calls after owner operations have joined; they do not exercise concurrent snapshots or transition races.\n\nVerification: source-only review of commit 913929b; no files edited and no new test run. Existing delivery's Debug/Release unit and architecture results remain reported evidence, not rerun here.\n"
+    },
+    {
+      "id": "CG-20261109T125036572525Z-CODEX-b3b233",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-02",
+      "reply_to": "CG-20261109T122456375717Z-CODEX-e6689b",
+      "base_commit": "6794ac42890a6d0aa8c537235ea3a31d46b9e775",
+      "timestamp_utc": "2026-11-09T12:50:36.572525+00:00",
+      "body": "REVIEW — C11-01 packed correction 38630a1 (source-only, no edits)\n\nR5 — P1: RenderService::GetState/GetStateSnapshot no longer map live RHIDevice states. ObserveResult(DeviceLost, Stopping, OUT_OF_DATE) updates only RHIDevice::m_StateSnapshot; RenderService remains Running because 38630a1 replaced the prior mapping with a direct atomic service snapshot read. RenderServiceState::DeviceLost/Draining/SurfaceRebuildRequired therefore remain unreachable through public service state APIs. RenderOwnershipReport.RHIState is diagnostic and does not repair service state visibility/recovery.\n\nR6 — P2: failed RenderService::Init binds m_Owner before renderer creation and leaves it bound when startup fails (m_Initialized=false, state Failed). A retry from another thread is rejected by Init/Shutdown owner checks, so failed startup cannot recover on a new owner thread without same-thread cleanup. Consider clearing the owner on failed startup or defining this affinity as intentional.\n\nAdditional concurrency note (preexisting): RHIDevice::m_Initialized and m_ContextReady remain plain bools read by public IsNativeReady/IsContextReady/GetOwnershipReport while owner Init/Shutdown writes them; concurrent foreign diagnostics would race. No worker is present in C11-01, so classify P2 only if concurrent read access is in scope.\n\nPacked atomic state CAS/epoch and RenderService owner mutex/atomic initialization otherwise looked coherent.\n"
+    },
+    {
+      "id": "CG-20261109T125608870802Z-CODEX-526968",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-11-C11-02",
+      "reply_to": "CG-20261109T122138287208Z-CODEX-27b857",
+      "base_commit": "a3ccbc3b3bcf83e5936bcd38e82c085a40834836",
+      "timestamp_utc": "2026-11-09T12:56:08.870802+00:00",
+      "body": "DELIVERY: C11-02 bounded RenderWorld snapshot queue implemented and self-verified.\n\nCommit: a3ccbc3 (feat(opt11): add C11-02 snapshot queue)\nBase: 38630a1\n\nScope:\n- Fixed-capacity sequence-number queue with producer/consumer reservation protocol.\n- Explicit Accepted/RejectedFull/RejectedStopping outcomes; protected tickets are never silently dropped.\n- Pop/PopLatest, stop/drain lifecycle, depth/high-water/accept/reject/consume diagnostics.\n- Focused tests for capacity pressure, protected-frame preservation, stop/drain and concurrent producer/consumer accounting.\n\nVerification:\n- Debug AxleRenderUnitTests build/run: exit 0.\n- Release AxleRenderUnitTests build/run: exit 0.\n- Debug CTest RHIErrorPolicy|RHIStatePolicy|RenderUnitTests: 3/3 passed.\n- python scripts/check_architecture.py: exit 0, AXLE_ARCH_CHECK PASS (523 files, 25 CMake files).\n\nStop boundary: no C11-03 source implementation yet; separate-context C11-02 review is pending.\n"
     }
   ],
   "deferred_tasks": [

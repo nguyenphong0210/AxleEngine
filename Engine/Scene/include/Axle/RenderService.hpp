@@ -7,6 +7,7 @@
 #include <Axle/SceneRenderer.hpp>
 #include <Axle/RenderCapabilities.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -31,6 +32,8 @@ namespace Axle {
         bool IsOwnerThread = false;
         bool NativeReady = false;
         bool ContextReady = false;
+        bool RHIIsOwnerThread = false;
+        bool OwnershipAligned = false;
         RHI::RHIType Backend = RHI::RHIType::None;
         RHI::RHIDeviceCapabilities DeviceCapabilities{};
         std::string OwnerDiagnostic;
@@ -52,7 +55,7 @@ namespace Axle {
         bool Init();
         void Shutdown();
         bool IsInitialized() const { return m_Initialized; }
-        RenderServiceState GetState() const { return m_State; }
+        RenderServiceState GetState() const;
         bool IsOwnerThread() const;
         bool RequireOwner(std::string_view operation) const;
         RenderOwnershipReport GetOwnershipReport() const;
@@ -72,7 +75,7 @@ namespace Axle {
 
     private:
         bool m_Initialized = false;
-        RenderServiceState m_State = RenderServiceState::Stopped;
+        std::atomic<RenderServiceState> m_State{RenderServiceState::Stopped};
         uint64_t m_Epoch = 0;
         void* m_GLContext = nullptr;
         std::thread::id m_Owner;

@@ -28,6 +28,7 @@ namespace Axle::RenderTests {
         RENDER_CHECK(initial.State == RenderServiceState::Stopped, "RenderService starts stopped");
         RENDER_CHECK(!initial.OwnerBound && !initial.IsOwnerThread, "RenderService has no owner before initialization");
         RENDER_CHECK(!initial.NativeReady && initial.Backend == RHI::RHIType::None, "Uninitialized RHI is reported honestly");
+        RENDER_CHECK(!initial.OwnershipAligned && !initial.RHIIsOwnerThread, "Uninitialized ownership is not reported as aligned");
         RENDER_CHECK(!service.RequireOwner("unit-test-before-init"), "Unbound RenderService rejects owner-only operation");
 
         RenderWorld world;
@@ -37,28 +38,30 @@ namespace Axle::RenderTests {
             "RenderService records failed startup without a native device or GL context");
         auto bound = service.GetOwnershipReport();
         RENDER_CHECK(bound.OwnerBound && bound.IsOwnerThread, "Failed startup still binds ownership to the initiating thread");
-        RENDER_CHECK(!bound.NativeReady && !bound.DeviceCapabilities.SupportsRenderWorkerOwnership,
-            "Worker ownership stays disabled when native initialization is unavailable");
+        RENDER_CHECK(!bound.NativeReady && !bound.DeviceCapabilities.SupportsRenderWorkerOwnership &&
+            !bound.DeviceCapabilities.SupportsTransientResourceAliasing,
+            "Unprobed worker ownership and transient aliasing stay disabled");
         RENDER_CHECK(service.RequireOwner("unit-test-owner"), "Bound owner may execute owner-only operation");
 
         std::atomic<bool> foreignOwner{true};
         std::atomic<bool> foreignRequire{true};
         std::atomic<bool> foreignInit{true};
-        std::atomic<bool> foreignShutdownObserved{false};
+        std::atomic<bool> foreignStateUnchanged{false};
         std::thread foreign([&] {
+            const auto before = service.GetState();
             foreignOwner.store(service.IsOwnerThread(), std::memory_order_release);
             foreignRequire.store(service.RequireOwner("unit-test-foreign"), std::memory_order_release);
             foreignInit.store(service.Init(), std::memory_order_release);
             service.Shutdown();
-            foreignShutdownObserved.store(service.GetState() == RenderServiceState::Failed, std::memory_order_release);
+            foreignStateUnchanged.store(service.GetState() == before, std::memory_order_release);
         });
         foreign.join();
         RENDER_CHECK(!foreignOwner.load(std::memory_order_acquire) && !foreignRequire.load(std::memory_order_acquire),
             "Foreign thread cannot satisfy RenderService ownership");
         RENDER_CHECK(!foreignInit.load(std::memory_order_acquire),
             "Foreign thread cannot acquire ownership after a failed startup");
-        RENDER_CHECK(foreignShutdownObserved.load(std::memory_order_acquire) && !service.IsInitialized(),
-            "Foreign shutdown is rejected without destroying owner-thread state");
+        RENDER_CHECK(foreignStateUnchanged.load(std::memory_order_acquire) && !service.IsInitialized(),
+            "Foreign Init/Shutdown are rejected without poisoning owner-thread state");
 
         service.Shutdown();
         auto stopped = service.GetOwnershipReport();

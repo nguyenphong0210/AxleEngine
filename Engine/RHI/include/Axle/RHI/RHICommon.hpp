@@ -60,10 +60,12 @@ namespace Axle::RHI {
         // separate from hardware feature bits: a native API feature is not an
         // engine feature until its ownership and validation contract is proven.
         bool RequiresOwnerThreadForNativeOperations = true;
-        bool SupportsRenderWorkerOwnership = false;
+        bool SupportsRenderWorkerOwnership = false; // enabled only after the C11-03 native worker probe
         bool SupportsParallelCommandRecording = false; // enabled only after C11-04 probe
         bool SupportsPlacedResources = false;
-        bool SupportsTransientResourceAliasing = false;
+        bool SupportsTransientResourceAliasing = false; // enabled only after the C11-05 graph/barrier probe
+        bool HasPlacedResourcePrimitives = false;
+        bool HasResourceAliasingFeature = false;
 
         // Modern hardware features
         bool IsRayTracingSupported = false;

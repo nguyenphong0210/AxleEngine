@@ -350,6 +350,8 @@ namespace Axle::RHI {
         m_Capabilities.SupportsParallelCommandRecording = false;
         m_Capabilities.SupportsPlacedResources = false;
         m_Capabilities.SupportsTransientResourceAliasing = false;
+        m_Capabilities.HasPlacedResourcePrimitives = false;
+        m_Capabilities.HasResourceAliasingFeature = false;
         m_Capabilities.IsRayTracingSupported = false;
         m_Capabilities.RayTracingTier = 0;
         m_Capabilities.IsMeshShaderSupported = false;
@@ -396,16 +398,18 @@ namespace Axle::RHI {
         m_Capabilities.IsDescriptorHeapSupported = desc.features.descriptorHeap;
 
         m_Capabilities.RequiresOwnerThreadForNativeOperations = true;
-        // A native NRI device can be initialized on a future render worker, but
-        // every native operation must remain on that bound owner thread.
-        m_Capabilities.SupportsRenderWorkerOwnership = true;
+        // C11-03 must prove that the complete device/resource/presentation
+        // ownership transfer works on a native render worker. Until then this
+        // remains a capability probe result, not an advertised engine feature.
+        m_Capabilities.SupportsRenderWorkerOwnership = false;
         // C11-04 must prove a portable command-buffer merge contract before
         // this becomes true. The current wrapper deliberately reports false.
         m_Capabilities.SupportsParallelCommandRecording = false;
-        m_Capabilities.SupportsPlacedResources = m_NRI.Core.CreatePlacedBuffer &&
+        m_Capabilities.HasPlacedResourcePrimitives = m_NRI.Core.CreatePlacedBuffer &&
             m_NRI.Core.CreatePlacedTexture && m_NRI.Core.BindBufferMemory && m_NRI.Core.BindTextureMemory;
-        m_Capabilities.SupportsTransientResourceAliasing = desc.features.resourceAliasing &&
-            m_Capabilities.SupportsPlacedResources;
+        m_Capabilities.HasResourceAliasingFeature = desc.features.resourceAliasing;
+        m_Capabilities.SupportsPlacedResources = false;
+        m_Capabilities.SupportsTransientResourceAliasing = false;
 
         m_Capabilities.MaxTextureDimension2D = desc.dimensions.texture2DMaxDim;
         m_Capabilities.MaxComputeWorkGroupInvocations = desc.shaderStage.compute.workGroupInvocationMaxNum;
@@ -429,9 +433,9 @@ namespace Axle::RHI {
             m_Capabilities.SupportsRenderWorkerOwnership ? "AVAILABLE" : "UNSUPPORTED");
         AXLE_CORE_INFO("  Parallel Command Recording: {0}",
             m_Capabilities.SupportsParallelCommandRecording ? "AVAILABLE" : "PROBE REQUIRED");
-        AXLE_CORE_INFO("  Placed Resources: {0}; Transient Aliasing: {1}",
-            m_Capabilities.SupportsPlacedResources ? "AVAILABLE" : "UNSUPPORTED",
-            m_Capabilities.SupportsTransientResourceAliasing ? "AVAILABLE" : "UNSUPPORTED");
+        AXLE_CORE_INFO("  Placed Resource Primitives: {0}; Transient Aliasing: {1}",
+            m_Capabilities.HasPlacedResourcePrimitives ? "AVAILABLE" : "UNSUPPORTED",
+            m_Capabilities.SupportsTransientResourceAliasing ? "AVAILABLE" : "PROBE REQUIRED");
         AXLE_CORE_INFO("  Max Texture 2D: {0}x{0}", m_Capabilities.MaxTextureDimension2D);
         AXLE_CORE_INFO("  Max Compute Group Invocations: {0}", m_Capabilities.MaxComputeWorkGroupInvocations);
         AXLE_CORE_INFO("  Max Compute Shared Memory: {0} KB", m_Capabilities.MaxComputeSharedMemorySize / 1024);

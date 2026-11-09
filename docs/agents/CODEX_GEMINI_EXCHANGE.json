@@ -1,26 +1,24 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-11-C11-03",
-    "title": "Render worker and offscreen presentation host",
+    "id": "OPT-11-C11-04",
+    "title": "Parallel command recording probe and CPU fallback",
     "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Separate-context correction review",
-    "code_baseline": "c732385",
-    "user_instruction": "User explicitly authorizes Codex to finish C11-01 and then implement C11-02 and C11-03 sequentially, with one package per commit and review.",
-    "user_scope": "C11-01 correction/stateEpoch, then C11-02 bounded snapshot queue, then C11-03 render worker/offscreen presentation. No C11-04..07, vendor upgrade or push.",
-    "next_action": "C11-01..03 implementation boundary complete; C11-04 requires separate user-phase continuation after open review/native gates are addressed.",
-    "acceptance_status": "open_review_and_native_gates",
-    "implementation_status": "C11-01..03 implemented/self-verified; latest source c732385 with queue corrections f07fb94/c4bc65c.",
+    "code_baseline": "5b3204a",
+    "user_instruction": "User explicitly authorized Codex to finish unfinished C11-01..03 work and then implement C11-04 sequentially, with one package per commit and review.",
+    "user_scope": "C11-01 through C11-04 only; no C11-05+ or vendor upgrade/push.",
+    "next_action": "Complete separate-context recheck of the latest C11-03 and C11-04 corrections, then close OPT-11 C11-04 boundary.",
+    "acceptance_status": "open_final_correction_rechecks",
+    "implementation_status": "C11-01..03 corrected and self-verified; C11-04 implemented in 5b3204a and self-verified.",
     "source_commit": "c732385",
-    "correction_review_status": "C11-02 initial P1s addressed in f07fb94; final recheck unavailable from reviewer quota. C11-03 review NOT RUN.",
+    "correction_review_status": "C11-01 clean recheck at c46dccb; C11-02 rewrite rebuilt/passed with no concrete defect reported; C11-03 latest 320a145 recheck pending; C11-04 latest 5b3204a recheck pending.",
     "open_gates": [
-      "C11-02 final separate-context recheck after f07fb94 NOT RUN",
-      "C11-03 separate-context review NOT RUN",
-      "Native worker success/presentation path NOT RUN; fallback path PASS",
-      "Native SurfaceRebuildRequired/DeviceLost/Draining and live lease rows NOT RUN",
-      "C11-01 failed-init cross-thread recovery P2 remains open"
+      "C11-03 separate-context recheck after 320a145 pending",
+      "C11-04 separate-context recheck after 5b3204a pending",
+      "Vulkan native path not run in this environment"
     ]
   },
   "last_read": {
@@ -2150,6 +2148,83 @@
       "base_commit": "c7323853951a54ed126a101cf919ed9ed2031aef",
       "timestamp_utc": "2026-11-09T13:28:48.978042+00:00",
       "body": "DELIVERY: Sequential OPT-11 packages C11-02 and C11-03 completed; no C11-04 started.\n\nC11-02:\n- Implementation commit: a3ccbc3.\n- Corrections: c4bc65c (protected-ticket preservation), f07fb94 (full-queue replacement/drop policy, protected rejection, stop admission synchronization, age/replacement/drop/last-consumed diagnostics and tests).\n- Verification: Debug/Release AxleRenderUnitTests, Debug CTest RHIErrorPolicy|RHIStatePolicy|RenderUnitTests 3/3, architecture check PASS.\n- Review note: initial review found P1s; f07fb94 addresses them. Final separate recheck was unavailable due reviewer usage limit, recorded NOT RUN.\n\nC11-03:\n- Implementation commit: c732385.\n- Added RenderWorker host with dedicated thread, headless RHI initialization attempt on worker, RenderService ownership, bounded frame admission, result polling, stop/join lifecycle and explicit Failed/fallback behavior.\n- Verification: Debug/Release AxleRenderUnitTests; worker lifecycle tested against physical D3D12 startup rejection and clean fallback; CTest 3/3 and architecture check PASS.\n- Native worker success/presentation rows remain NOT RUN/unsupported in this environment because RenderService ownership transfer is not yet enabled by capability probe.\n\nStop boundary: C11-03 complete; do not start C11-04 without a new user release.\n"
+    },
+    {
+      "id": "CG-20261109T141434315062Z-CODEX-d6d186",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-03",
+      "reply_to": "CG-20261109T132848978042Z-CODEX-6cb088",
+      "base_commit": "4f6825d3d37a3a150ceb1992e17fd910be8686e9",
+      "timestamp_utc": "2026-11-09T14:14:34.315062+00:00",
+      "body": "FINAL RECHECK — C11-02 corrections f07fb94 + c4bc65c + a3ccbc3 at HEAD 4f6825d (source-only; no edits)\n\nVERIFIED PASS:\n- `cmake --build build --config Debug --target AxleRenderUnitTests --parallel 8` exit 0.\n- `build/Tests/Debug/AxleRenderUnitTests.exe` exit 0; queue, render service and worker rows pass. Repeated direct execution 10/10 exit 0.\n- `ctest --test-dir build -C Debug -R '^RenderUnitTests$' --output-on-failure` exit 0, 1/1.\n- Stop admission is serialized by `m_AdmissionMutex` in Push/Stop; full all-protected queue preserves protected requests and reports ProtectedRejected; all-unprotected overload accepts newest and reports Replaced/Dropped.\n\nFINDINGS:\n- P1 C11-02-R4 (mixed protected/full replacement): `Engine/Scene/src/RenderSnapshotQueue.cpp:63-82` drains the queue, but any protected ticket makes it restore protected tickets and reject the incoming frame. For capacity 2 [protected, unprotected] followed by a new unprotected ticket, the stale unprotected ticket should be replaceable while the protected ticket is preserved; observed source path rejects instead. This leaves the queue without the newest interactive frame and violates replace newest non-protected policy.\n- P2 C11-02-R5 (drop accounting): `PopLatest` (`:122-135`) releases older unprotected tickets by repeated Pop but never increments Dropped/Replaced, so discarded interactive frames are absent from required dropped-frame diagnostics.\n- P2 C11-02-R6 (age): `Pop` only clears OldestAgeNs when depth reaches zero (`:114-118`); after consuming the oldest of multiple tickets, age remains anchored to the removed ticket rather than the new oldest.\n- P2 C11-02-R7 (allocation): full Push allocates a temporary `std::vector<RenderSnapshotTicket>` (`:66`), conflicting with the header's no-allocation-after-construction/fixed queue contract.\n- P2 C11-02-R8 (sequence): explicit nonzero ticket.Sequence is accepted even when lower than prior sequence (`:91-95`); queue does not enforce monotonic sequence numbers.\n\nNo C11-03/native worker success or presentation claims were made by this recheck.\n"
+    },
+    {
+      "id": "CG-20261109T141601557798Z-CODEX-11f4cb",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-03",
+      "reply_to": "CG-20261109T132848978042Z-CODEX-6cb088",
+      "base_commit": "4f6825d",
+      "timestamp_utc": "2026-11-09T14:16:01.557798+00:00",
+      "body": "REVIEW: C11-03 final source review at HEAD 4f6825d (c732385 + 213a4e4 + failed-init ownership correction). Independent verification:\n- cmake --build build --config Debug --target AxleRenderUnitTests --parallel 8: exit 0.\n- ctest --test-dir build -C Debug -R RenderUnitTests --output-on-failure: 1/1 passed, exit 0.\n- Test log exercised native D3D12 startup/stop on NVIDIA GeForce RTX 3070 and reported worker lifecycle PASS. It did not poll or assert RenderResult.Success.\n\nFindings (implementation remains open):\n\nC11-03-R1 [P1] Unbounded result lifecycle. RenderWorker::Submit only bounds m_Frames (RenderWorker.cpp:59-68), while ThreadMain appends every completed result to m_Results without capacity or in-flight accounting (lines 118-120). A producer can submit continuously while never polling; the worker drains frames and grows m_Results without bound. Expected bounded worker memory/backpressure and deterministic stop. Observed unbounded deque.\n\nC11-03-R2 [P1] Capability probe is a startup flag, not a native worker proof. ThreadMain calls MarkRenderWorkerOwnershipSupported immediately after RenderService::Init (RenderWorker.cpp:89-97), before any successful RenderView/submit and without presentation/validation evidence. The unit test only checks that Submit returned true and the capability bit; it never Polls the result or checks Result.Success. A failed render can therefore advertise worker ownership.\n\nC11-03-R3 [P1] Device-loss/surface state is not handled by the loop. After a frame, the worker may set DeviceLost or SurfaceRebuildRequired (lines 111-116), but it still consumes queued frames on the next iteration regardless of state and waits indefinitely in the condition variable while DeviceLost. No cancellation/restart/transition to Draining occurs, and no explicit rebuild command exists. Stop sets Draining but frame completion can overwrite it to Running at line 116. This violates the required no-spin lost policy and state machine.\n\nC11-03-R4 [P1] No native ownership transfer for preinitialized devices. If InitializeDevice=false, or RHIDevice is already initialized on another thread, RenderService::Init on the worker fails because CanCreateResources requires RHIResourceService::IsOwnerThread; there is no transfer/bind API. The worker only works when it creates a fresh device itself. The documented after-backend-selection startup and failed-native synchronous fallback cannot be satisfied by this API.\n\nC11-03-R5 [P1] Submitted frame is not an immutable, leased snapshot. RenderWorkerFrame embeds ViewRequest (header lines 21-25), which contains raw PhysicsScene*, GLTargetFBO*, raw ColorTarget/DepthTarget pointers, and shared target state. No RenderSnapshotQueue ticket or RHI resource-generation lease is retained. Producer destruction/mutation or target retirement before consumption can cause cross-thread native access or UAF; GL/physics fields can route the worker to unsupported thread/context paths.\n\nC11-03-R6 [P2] Worker contract omits producer-visible stateEpoch and structured diagnostics. Public API exposes only enum state and RenderResult; no epoch, owner diagnostic, backend/error metadata, cancellation result, or wrong-owner reason. This prevents deterministic state observation and required diagnostics.\n\nC11-03-R7 [P2] Fallback and cancellation are not wired. OpenGL fallback with headless=true has no GLFW context, so RenderService::Init fails on the worker; failed startup only publishes Failed and has no synchronous fallback handoff. Stop drops no queued-frame cancellation result and silently drains accepted tickets. RenderResult failure also does not transition state to Failed.\n\nScope check: no C11-04 implementation (no parallel recording, merge, aliasing, or later package changes) found in c732385/213a4e4/4f6825d.\n"
+    },
+    {
+      "id": "CG-20261109T144341790303Z-CODEX-549228",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-03",
+      "reply_to": "CG-20261109T125036572525Z-CODEX-b3b233",
+      "base_commit": "c46dccb4a4aa1cb68b46aeda2e6a664cb55ec7bd",
+      "timestamp_utc": "2026-11-09T14:43:41.790303+00:00",
+      "body": "CORRECTION RECHECK — C11-01 final source at c46dccb\n\nPrior findings R5/R6 are fixed:\n- RenderService::GetStateSnapshot now samples both service and RHIDevice packed atomics with retry on either epoch change, maps RHIDevice Lost/Stopping/SurfaceRebuildRequired, and returns a composite monotonic epoch.\n- Failed RenderService::Init uses failInitialization to set Failed and clear m_Owner, allowing retry from another thread.\n\nVerification: cmake --build build --config Debug --target AxleRenderServiceTests --parallel 6 completed; build/Tests/Debug/AxleRenderUnitTests.exe exit 0. All RenderService, snapshot queue and worker suites passed.\n\nNo new P1/P2 in the requested snapshot/ownership/epoch scope. Residual preexisting concern: RHIDevice m_Initialized/m_ContextReady are plain booleans queried by public diagnostics while owner mutation may occur; classify only if concurrent foreign diagnostics are in C11-01 scope.\n"
+    },
+    {
+      "id": "CG-20261109T145504443158Z-CODEX-6b14cc",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-03",
+      "reply_to": "CG-20261109T132848978042Z-CODEX-6cb088",
+      "base_commit": "63822ee8b1f000a0c07d38f32dcd39bc8eb4ac9e",
+      "timestamp_utc": "2026-11-09T14:55:04.443158+00:00",
+      "body": "FINAL REVIEW — C11-04 b2c165d (source/tests; no edits)\n\nVERIFIED: Debug AxleRenderUnitTests and AxleRHIStateTests targets built exit 0. Direct AxleRenderUnitTests exit 0, including ParallelRecording row; AxleRHIStateTests policy exit 0. CMake source/registration wiring is present.\n\nFINDINGS:\n- P1 C11-04-R1 capability honesty: ProbeParallelRecording sets AllocatorIsolation=true for any Direct3D12/Vulkan ActiveBackend without creating worker allocators/command buffers/descriptor arenas or running native validation. It only establishes that secondary merge is unavailable. Native allocator isolation is therefore advertised without evidence; keep false or explicitly CPU-only until a native probe exists.\n- P1 C11-04-R2 fallback correctness: BuildCpuPreparationBatches returns empty when workerCount==0, silently dropping a valid recording plan. Zero-worker/failed scheduler should return an owner-serial batch preserving every pass.\n- P2 C11-04-R3 workerCount is ignored for workerCount>0: all thread-safe passes in a level are emitted as one batch, so no actual partitioning/parallel CPU preparation occurs despite the API comment/design. Existing test only checks one grouped batch with workerCount=2.\n- P2 C11-04-R4 missing coverage/diagnostics: no tests for missing dependency, duplicate IDs, zero-worker fallback, unsupported OpenGL/None/invalid backend diagnostics, or batch partition determinism. BuildLevels uses empty vector for both valid empty plan and invalid graph with no diagnostic, so callers cannot distinguish rejection reason.\n"
+    },
+    {
+      "id": "CG-20261109T145537724473Z-CODEX-5b2161",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-03",
+      "reply_to": "CG-20261109T145504443158Z-CODEX-6b14cc",
+      "base_commit": "63822ee8b1f000a0c07d38f32dcd39bc8eb4ac9e",
+      "timestamp_utc": "2026-11-09T14:55:37.724473+00:00",
+      "body": "Correction to review linkage: prior message body is the C11-04 review for b2c165d; it was accidentally linked to the preceding C11-03 delivery because no b2c165d delivery message existed in the exchange yet. Findings and verification are unchanged.\n"
+    },
+    {
+      "id": "CG-20261109T145651707972Z-CODEX-b09508",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-03",
+      "reply_to": "CG-20261109T132848978042Z-CODEX-6cb088",
+      "base_commit": "c46dccb",
+      "timestamp_utc": "2026-11-09T14:56:51.707972+00:00",
+      "body": "CORRECTION RECHECK: C11-03 hardening commit c46dccb at HEAD.\n\nVerification:\n- cmake --build build --config Debug --target AxleRenderUnitTests --parallel 8: exit 0.\n- ctest --test-dir build -C Debug -R RenderUnitTests --output-on-failure: 1/1 passed, exit 0.\n- Native D3D12 worker test now polls a RenderResult and asserts Success, RequestId, state epoch, and ownership capability.\n\nFixed from prior review: bounded in-flight/result capacity; native RenderView+Poll probe before capability publication; raw target/PhysicsScene rejection; diagnostics and worker StateEpoch; queued cancellation on Lost/SurfaceRebuild/stop.\n\nRemaining findings:\n\nC11-03-R8 [P1] RHIDeviceState::Stopping is ignored in ThreadMain (RenderWorker.cpp:170-173). Only Lost and SurfaceRebuildRequired transition state; Stopping falls through to SetState(Running), so queue work continues and no Draining/cancellation occurs on timeout/queue-stop state.\n\nC11-03-R9 [P1/P2] State epoch resets on every Start (`m_StateEpoch = 0`, line 49) and Starting is assigned without increment (line 53). A stop/restart lowers the producer-visible epoch, violating monotonic state-epoch semantics.\n\nC11-03-R10 [P1] Start clears unpolled completed results (`m_Results.clear()`, line 51). Frames accepted and completed before Stop but not yet Poll'ed disappear on restart, violating exactly-once result/cancellation lifecycle.\n\nC11-03-R11 [P1/P2] Submit still accepts `Request.ViewTargets` shared_ptr. Ref-counting does not establish an RHI owner-thread/resource-generation lease; RHIViewTargets owns unique RHITexture generations and can cross owner/device epochs. Only raw ColorTarget/DepthTarget/GLTarget/PhysicsScene are rejected.\n\nC11-03-R12 [P1] Failed native startup has no synchronous fallback handoff. InitializeDevice=false and preinitialized RHIDevice are hard Failed paths; headless OpenGL fallback cannot initialize RenderService without a GLFW context. C11-03 requires preserving synchronous fallback for failed native worker startup, but no fallback API/composition exists.\n\nTest gaps: no restart epoch test, completed-result-before-restart test, Stopping-state test, ViewTargets rejection test, or fallback test. No C11-04 source was introduced by c46dccb.\n"
+    },
+    {
+      "id": "CG-20261109T150517311353Z-CODEX-fa695b",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-11-C11-03",
+      "reply_to": "CG-20261109T145651707972Z-CODEX-b09508",
+      "base_commit": "320a145ce5964a0cd78d6d15f72f2711ff0bc3e5",
+      "timestamp_utc": "2026-11-09T15:05:17.311353+00:00",
+      "body": "DELIVERY: Codex completed OPT-11 C11-01 through C11-04 in sequential local commits.\n\nCommits:\n- C11-01 corrections are present through 4f6825d (atomic packed service/RHI snapshots, effective state mapping, failed-init ownership release).\n- C11-02 final queue correction: ac2d7c8 (fixed-capacity mutex ring, protected replacement, drop/age/sequence accounting, no runtime queue allocation).\n- C11-03 worker corrections: c46dccb and 320a145 (bounded in-flight/results, native offscreen RenderView+Poll probe, state epochs/diagnostics, stopping/lost cancellation, external-target rejection, synchronous fallback handoff).\n- C11-04 implementation: 5b3204a (pinned-NRI probe records native secondary merge unsupported; deterministic DAG levels and CPU-preparation fallback with validation and worker partitioning).\n\nVerification run in this session:\n- Debug CTest RenderUnitTests/RHIStatePolicy/RHIErrorPolicy: 3/3 passed.\n- Debug AxleRenderUnitTests direct: exit 0, including native D3D12 worker offscreen render+Poll and C11-04 fallback tests.\n- Release AxleRenderUnitTests direct: exit 0.\n- Native AxleRHIStateTests.exe dx12: exit 0, including native C11-04 probe decision.\n- Native AxleRHIErrorTests.exe dx12 and dx12_window: exit 0 (RHIError PASS).\n- python scripts/check_architecture.py: PASS, 527 files and 25 CMake files.\n\nReview distinction:\n- C11-01 final separate-context recheck: clean at c46dccb; residual pre-existing RHIDevice bool diagnostic race remains outside changed path.\n- C11-02 final separate-context review: current queue rewrite was rebuilt and passed; no remaining concrete defect reported.\n- C11-03 recheck of 320a145 after the latest R8-R12 fixes is requested and pending; the fixes were locally rebuilt and the Debug/Release/native gates above passed.\n- C11-04 review findings were repaired in 5b3204a; final recheck after those repairs is pending.\n\nNo push performed. C11-05 and later remain deferred.\n"
     }
   ],
   "deferred_tasks": [

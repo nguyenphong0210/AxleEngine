@@ -1,25 +1,24 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-11-C11-01..03",
-    "title": "Render ownership, snapshot queue and worker presentation",
+    "id": "OPT-11-C11-02",
+    "title": "Bounded RenderWorld snapshot queue",
     "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Separate-context correction review",
-    "code_baseline": "4762aed",
+    "code_baseline": "38630a1",
     "user_instruction": "User explicitly authorizes Codex to finish C11-01 and then implement C11-02 and C11-03 sequentially, with one package per commit and review.",
     "user_scope": "C11-01 correction/stateEpoch, then C11-02 bounded snapshot queue, then C11-03 render worker/offscreen presentation. No C11-04..07, vendor upgrade or push.",
-    "next_action": "Run separate-context recheck of packed state snapshot d21ef57; if clean, close C11-01 correction and begin C11-02.",
-    "acceptance_status": "open_stateepoch_recheck",
-    "implementation_status": "C11-01 stateEpoch correction implemented/self-verified; packed atomic snapshot candidate d21ef57.",
-    "source_commit": "d21ef57",
-    "correction_review_status": "Prior recheck found P1 atomicity/sticky-state/data-race defects in 913929b; d21ef57 repairs them; fresh recheck pending.",
+    "next_action": "Implement C11-02 bounded SPSC snapshot queue, protected-frame/drop policy, stats and focused stress tests; commit before C11-03.",
+    "acceptance_status": "open_c11_02_implementation",
+    "implementation_status": "C11-01 atomic RenderService/RHIDevice snapshot correction complete/self-verified; C11-02 implementation starting.",
+    "source_commit": "38630a1",
+    "correction_review_status": "C11-01 packed correction fresh review pending; native transition/live-lease rows remain NOT RUN.",
     "open_gates": [
-      "Separate-context recheck of packed state snapshot d21ef57 pending",
-      "Native SurfaceRebuildRequired transition test NOT RUN",
-      "Native DeviceLost/Draining transition test NOT RUN",
-      "Live native resource-lease shutdown test NOT RUN"
+      "C11-01 packed correction separate-context recheck pending",
+      "Native SurfaceRebuildRequired/DeviceLost/Draining rows NOT RUN",
+      "Live native resource-lease shutdown row NOT RUN"
     ]
   },
   "last_read": {

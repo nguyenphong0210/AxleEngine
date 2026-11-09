@@ -42,6 +42,15 @@ Each OPT has its own base commit, implementation scope, tests, evidence and
 acceptance record. A plan or a completed earlier OPT does not release the next
 one.
 
+## Commit-unit convention
+
+Every numbered package below is one implementation/review unit. The `Cxx-yy`
+label is the suggested commit identifier (`C11-01`, `C12-03`, and so on). Use
+one coherent local commit per unit, with production changes and focused tests
+kept together. Documentation-only acceptance updates may use a second commit
+with the same unit label and an `acceptance` suffix. Do not combine unrelated
+units or start the next unit before the previous evidence is recorded.
+
 ## Post-OPT-10 baseline gate
 
 Before OPT-11 begins:
@@ -59,29 +68,29 @@ CPU` is accepted without this baseline.
 
 ## OPT-11 — Render Thread, parallel command recording and VRAM aliasing
 
-**Goal:** Decouple simulation from rendering, scale draw-call generation across
-worker cores, and optimize transient GPU memory without violating RHI owner
-thread, resource lifetime, or cache coherency rules.
+**Goal:** Design and measure decoupled simulation/render ownership, parallel draw
+recording and transient GPU memory strategies without violating RHI owner
+thread, resource lifetime or cache coherency rules. The recording and aliasing
+paths remain prototypes until backend contracts are verified.
 
 Packages:
 
-- **11.1 Ownership design:** specify device, resource, RenderService,
+- **C11-01 / 11.1 Ownership design:** specify device, resource, RenderService,
   presentation, shutdown and device-loss ownership.
-- **11.2 Snapshot queue:** bounded `RenderWorld` lock-free queue, back-pressure,
+- **C11-02 / 11.2 Snapshot queue:** bounded `RenderWorld` lock-free queue, back-pressure,
   frame-drop policy and one-frame latency diagnostics.
-- **11.3 Offscreen worker & presentation:** run a dedicated render worker and
+- **C11-03 / 11.3 Offscreen worker & presentation:** run a dedicated render worker and
   transfer resize, acquire, present and surface rebuild safely without
   cross-thread `CanSubmit` violations.
-- **11.4 Parallel command recording:** leverage NRI independent multi-threaded
-  command allocators and `enkiTS` worker jobs to record draw passes concurrently,
-  merging into the primary command list prior to queue submission.
-- **11.5 Transient VRAM aliasing:** integrate topological lifetime analysis into
-  `RenderGraph`, allocate transient targets from shared hardware heaps
-  (`ID3D12Heap` via `CreatePlacedResource` / Vulkan memory suballocation), and
-  automatically emit aliasing memory barriers and cache invalidations.
-- **11.6 Plugin/lifetime stress:** test plugin callbacks, resource leases,
+- **C11-04 / 11.4 Parallel command recording:** evaluate NRI command-allocator and
+  `enkiTS` worker-job support, record independent passes only where the actual
+  backend contract permits it, and merge into the primary command list.
+- **C11-05 / 11.5 Transient VRAM aliasing:** integrate topological lifetime analysis into
+  `RenderGraph`, evaluate shared-heap/placed-resource strategies for each
+  backend, and validate aliasing barriers before enabling the optimization.
+- **C11-06 / 11.6 Plugin/lifetime stress:** test plugin callbacks, resource leases,
   shutdown and restart while frames are queued and transient heaps are active.
-- **11.7 Acceptance:** identical image output, bounded latency, clean shutdown,
+- **C11-07 / 11.7 Acceptance:** identical image output, bounded latency, clean shutdown,
   measured CPU overlap, verified VRAM reduction from aliased passes, and
   device-loss recovery.
 
@@ -94,17 +103,17 @@ node-editor work.
 
 Packages:
 
-- **12.1 Material IR:** stable node/value IDs, schema version, validation and
+- **C12-01 / 12.1 Material IR:** stable node/value IDs, schema version, validation and
   serialization.
-- **12.2 Existing compiler backend:** lower a minimal graph to current HLSL,
+- **C12-02 / 12.2 Existing compiler backend:** lower a minimal graph to current HLSL,
   DXIL and SPIR-V compilation.
-- **12.3 Reflection/layout:** descriptor compatibility, pipeline cache keys and
+- **C12-03 / 12.3 Reflection/layout:** descriptor compatibility, pipeline cache keys and
   last-known-good reload.
-- **12.4 Resource semantics:** texture color space, sampler, fallback and
+- **C12-04 / 12.4 Resource semantics:** texture color space, sampler, fallback and
   authored dependency diagnostics.
-- **12.5 Optional Slang evaluation:** prototype Slang as a backend; it must not
+- **C12-05 / 12.5 Optional Slang evaluation:** prototype Slang as a backend; it must not
   be required by existing materials.
-- **12.6 OpenGL policy:** define a separate lowering path or explicit unsupported
+- **C12-06 / 12.6 OpenGL policy:** define a separate lowering path or explicit unsupported
   feature diagnostic; never claim HLSL works on OpenGL automatically.
 
 Acceptance requires cross-backend shader/layout tests, invalid-graph rollback and
@@ -112,71 +121,69 @@ stable authored asset round-trips.
 
 ## OPT-13 — Performance-First Lighting, Volumetric Atmosphere, DDGI and Post-Processing
 
-**Goal:** Deliver a complete high-fidelity lighting stack within a strict
-3.5ms–5.0ms GPU budget on mainstream hardware, featuring Cascaded Shadows,
+**Goal:** Deliver a measurable high-fidelity lighting stack, with the existing budget retained as a target hypothesis, featuring Cascaded Shadows,
 Screen-Space Ambient/Reflections, Froxel Volumetric Fog, Dynamic Diffuse GI
 probes with capability fallback, and Film-Grade Post-Processing.
 
 Packages:
 
-- **13.1 Cascade contract & implementation:** camera-space split, texel
+- **C13-01 / 13.1 Cascade contract & implementation:** camera-space split, texel
   stabilization, depth bias, 3–4 cascades with PCF 5x5 sampling across D3D12
   and Vulkan, preserving the OpenGL compatibility fallback.
-- **13.2 HDR Environment & IBL:** authored HDR skyboxes, pre-filtered
+- **C13-02 / 13.2 HDR Environment & IBL:** authored HDR skyboxes, pre-filtered
   radiance/irradiance cubemaps, split-sum 2D BRDF LUT integration, and diffuse
   ambient fallback.
-- **13.3 Screen-space ambient & reflections:** depth/normal history,
-  half-resolution GTAO/SSAO compute pass with bilateral depth-aware
-  reconstruction (75% ALU savings), and bounded SSR ray-marching with temporal
-  invalidation.
-- **13.4 Volumetric Fog & God Rays:** low-resolution Frustum Voxel Grid
-  (*Froxel* $160 \times 90 \times 64$) with temporal reprojection, phase
-  function scattering, and directional sun shaft integration.
-- **13.5 Dynamic Diffuse Global Illumination (DDGI Probes):** 3D axis-aligned
-  probe grid volume ($32 \times 16 \times 32$), dual octahedral texture
-  atlases (irradiance $8 \times 8$ and distance/variance $16 \times 16$ with
-  Chebyshev visibility to eliminate light leaking), temporal 25% staggered ray
-  updates, hardware ray-tracing via NRI with seamless fallback to IBL/ambient
-  probe when RT is unavailable.
-- **13.6 Film-Grade Post-Processing:** ACES Filmic Tone Mapping, PBR eye
+- **C13-03 / 13.3 Screen-space ambient & reflections:** depth/normal history,
+  configurable-resolution GTAO/SSAO compute pass with bilateral depth-aware
+  reconstruction, and bounded SSR ray-marching with temporal invalidation.
+- **C13-04 / 13.4 Volumetric Fog & God Rays:** low-resolution Frustum Voxel Grid
+  (*Froxel*) with a measured starting resolution, temporal reprojection, phase
+  function scattering and directional sun shaft integration.
+- **C13-05 / 13.5 Dynamic Diffuse Global Illumination (DDGI Probes):** 3D axis-aligned
+  probe grid, dual octahedral texture atlases for irradiance and distance/
+  variance, Chebyshev visibility experiments and temporally staggered ray
+  updates. Hardware ray tracing remains optional with an IBL/ambient fallback.
+- **C13-06 / 13.6 Film-Grade Post-Processing:** ACES Filmic Tone Mapping, PBR eye
   adaptation (auto-exposure compute pass with luminance histogram), thresholded
   bloom with dual-filtering blur, and color grading LUTs.
-- **13.7 Acceptance & Budget verification:** backend readbacks, resize/device-failure
-  tests, quality thresholds, verified lighting budget ($\le 5.0\text{ ms}$ at
-  1080p on target hardware), and fallback parity on non-RT/OpenGL devices.
+- **C13-07 / 13.7 Acceptance & Budget verification:** backend readbacks, resize/device-failure
+  tests, quality thresholds, measured budget reports at stated resolutions and
+  hardware, and fallback parity on non-RT/OpenGL devices. The 5 ms target is
+  reported as met or missed; it is not assumed as a gate before measurement.
 
 ## OPT-14 — Nanite-style virtual geometry and GPU culling
 
-**Goal:** Enable rendering of dense scenes (100k+ instances) through
-continuous GPU-driven meshlet clustering, cluster DAG hierarchy, and hardware
-task/mesh shaders on D3D12/Vulkan, with strict capability-gated indexed
-fallback.
+**Goal:** Evaluate scalable GPU-driven geometry through meshlet clustering,
+cluster hierarchy and hardware task/mesh shaders on D3D12/Vulkan, with strict
+capability-gated indexed fallback. Dense-scene scale is a benchmark target, not
+an acceptance promise.
 
 Packages:
 
-- **14.1 GPU instance data:** bounds, transforms, material IDs and generation
+- **C14-01 / 14.1 GPU instance data:** bounds, transforms, material IDs and generation
   ownership in unified structured buffers.
-- **14.2 GPU-driven culling (Hi-Z):** compute shader frustum culling, cone
+- **C14-02 / 14.2 GPU-driven culling (Hi-Z):** compute shader frustum culling, cone
   backface culling, two-phase occlusion culling against a Hierarchical-Z depth
   pyramid, and indirect draw argument generation (`ExecuteIndirect` /
   `vkCmdDrawIndexedIndirect`).
-- **14.3 Meshlet asset generation & schema:** cluster generation via
+- **C14-03 / 14.3 Meshlet asset generation & schema:** cluster generation via
   `meshoptimizer` (`meshopt_buildMeshlets`, $\le 64$ vertices, $\le 126$
   primitives), cluster bounding spheres/cones, source hashing, and
   deterministic debug cluster coloring.
-- **14.4 Cluster DAG hierarchy:** recursive cluster grouping into a Directed
-  Acyclic Graph with locked shared boundary loops to guarantee watertight,
-  100% crack-free continuous LOD transitions.
-- **14.5 Hardware Task & Mesh Shader pipeline:** Task (Amplification) Shaders
+- **C14-04 / 14.4 Cluster DAG hierarchy:** experiment with recursive cluster grouping
+  into a Directed Acyclic Graph and locked shared boundary loops; validate
+  watertight transitions with geometry fixtures rather than assuming them.
+- **C14-05 / 14.5 Hardware Task & Mesh Shader pipeline:** Task (Amplification) Shaders
   evaluating projected screen-space error per cluster for dynamic continuous
   LOD selection and frustum/cone culling; Mesh Shaders emitting primitives
   directly to rasterizer on D3D12 and Vulkan via NRI.
-- **14.6 Capability gate & indexed fallback:** robust feature detection with
+- **C14-06 / 14.6 Capability gate & indexed fallback:** robust feature detection with
   seamless, automatic fallback to offline discrete LOD indexed draws on devices
   without native mesh shader support.
-- **14.7 Scale verification & acceptance:** benchmark 100k+ instances, verify
-  zero crack artifacts on cluster boundaries, ensure identical visibility/image
-  output against indexed fallback, and validate dynamic device recovery.
+- **C14-07 / 14.7 Scale verification & acceptance:** benchmark representative dense
+  scenes, report any scale target with the scene/hardware definition, verify
+  crack tolerances and visibility/image parity against indexed fallback, and
+  validate dynamic device recovery.
 
 ## OPT-15 — Logic LOD and simulation scaling
 
@@ -184,20 +191,20 @@ Packages:
 
 Packages:
 
-- **15.1 Tick identity:** public monotonic tick index in `SimulationClock`.
-- **15.2 Significance policy:** tier data, distance/visibility inputs and
+- **C15-01 / 15.1 Tick identity:** public monotonic tick index in `SimulationClock`.
+- **C15-02 / 15.2 Significance policy:** tier data, distance/visibility inputs and
   hysteresis.
-- **15.3 Deterministic scheduler:** modulo staggering, bounded work and stable
+- **C15-03 / 15.3 Deterministic scheduler:** modulo staggering, bounded work and stable
   entity ordering.
-- **15.4 Spatial index:** scene-owned cells, migration and query tests.
-- **15.5 Dormancy:** explicit sleep/wake events, persistence and excluded-view
+- **C15-04 / 15.4 Spatial index:** scene-owned cells, migration and query tests.
+- **C15-05 / 15.5 Dormancy:** explicit sleep/wake events, persistence and excluded-view
   rules.
-- **15.6 Interpolation:** visual interpolation for skipped logic ticks without
+- **C15-06 / 15.6 Interpolation:** visual interpolation for skipped logic ticks without
   changing fixed-step authority.
-- **15.7 Physics policy:** sleeping/interest hints first; body deactivation only
+- **C15-07 / 15.7 Physics policy:** sleeping/interest hints first; body deactivation only
   after contacts, joints, triggers, characters and wake-up are specified.
-- **15.8 Plugin API:** read-only significance/tier queries for project plugins.
-- **15.9 Animation URO:** update intervals and cached pose invalidation only after
+- **C15-08 / 15.8 Plugin API:** read-only significance/tier queries for project plugins.
+- **C15-09 / 15.9 Animation URO:** update intervals and cached pose invalidation only after
   event, root-motion and VFX semantics are covered.
 
 The first accepted slice keeps Jolt bodies active. “0% dormant CPU” is a measured
@@ -209,15 +216,15 @@ target, not a design assumption.
 
 Packages:
 
-- **16.1 Derived schema:** source hash, settings, tool version and provenance.
-- **16.2 Simplifier wrapper:** integrate meshoptimizer behind a narrow Engine
+- **C16-01 / 16.1 Derived schema:** source hash, settings, tool version and provenance.
+- **C16-02 / 16.2 Simplifier wrapper:** integrate meshoptimizer behind a narrow Engine
   wrapper with license and version records.
-- **16.3 Static LOD generation:** deterministic ratios, bounds and material groups.
-- **16.4 Cooker/cache:** invalidation, package inclusion and failed-artifact
+- **C16-03 / 16.3 Static LOD generation:** deterministic ratios, bounds and material groups.
+- **C16-04 / 16.4 Cooker/cache:** invalidation, package inclusion and failed-artifact
   rejection.
-- **16.5 Runtime selection:** screen-space policy, original-mesh fallback and
+- **C16-05 / 16.5 Runtime selection:** screen-space policy, original-mesh fallback and
   diagnostics.
-- **16.6 Special meshes:** explicit skinned, transparent, collision and
+- **C16-06 / 16.6 Special meshes:** explicit skinned, transparent, collision and
   unsupported-mesh behavior.
 
 Acceptance requires clean-checkout reproducibility, source-change invalidation
@@ -229,19 +236,19 @@ and visual/runtime fallback tests. Continuous meshlets belong to OPT-14.
 
 Packages:
 
-- **17.1 Foundation audit:** reclassify existing A0–A3/B1/B2/G1 evidence against
+- **C17-01 / 17.1 Foundation audit:** reclassify existing A0–A3/B1/B2/G1 evidence against
   current source.
-- **17.2 CPU correctness:** skeleton topology, bind fallback, sampling, blending,
+- **C17-02 / 17.2 CPU correctness:** skeleton topology, bind fallback, sampling, blending,
   events, root motion and malformed input.
-- **17.3 Authored resources:** versioned skeleton/clip/controller/mesh definitions,
+- **C17-03 / 17.3 Authored resources:** versioned skeleton/clip/controller/mesh definitions,
   atomic save and failed-save preservation.
-- **17.4 Instance isolation:** copy/duplicate clocks, triggers, transitions and
+- **C17-04 / 17.4 Instance isolation:** copy/duplicate clocks, triggers, transitions and
   independent runtime state.
-- **17.5 RHI geometry:** backend-neutral skeletal conversion and palette leases.
-- **17.6 RHI draw:** D3D12 and Vulkan skinned PBR/depth variants, resize and
+- **C17-05 / 17.5 RHI geometry:** backend-neutral skeletal conversion and palette leases.
+- **C17-06 / 17.6 RHI draw:** D3D12 and Vulkan skinned PBR/depth variants, resize and
   teardown.
-- **17.7 Picking/shadows:** pose-consistent picking and explicit shadow limits.
-- **17.8 Acceptance:** CPU, GPU, private preview and native UI evidence kept as
+- **C17-07 / 17.7 Picking/shadows:** pose-consistent picking and explicit shadow limits.
+- **C17-08 / 17.8 Acceptance:** CPU, GPU, private preview and native UI evidence kept as
   separate states.
 
 OPT-17 starts after OPT-13's render contracts. It does not create a private
@@ -253,20 +260,20 @@ renderer or depend on VFX merely to reuse preview behavior.
 
 Packages:
 
-- **18.1 Evidence audit:** reclassify Phase 39 reports and current panel/runtime
+- **C18-01 / 18.1 Evidence audit:** reclassify Phase 39 reports and current panel/runtime
   behavior.
-- **18.2 Effect assets:** versioned multi-emitter definitions, stable IDs and
+- **C18-02 / 18.2 Effect assets:** versioned multi-emitter definitions, stable IDs and
   resource references.
-- **18.3 Runtime instances:** independent RNG, playback, duration, looping,
+- **C18-03 / 18.3 Runtime instances:** independent RNG, playback, duration, looping,
   scrubbing and bounded events.
-- **18.4 Child systems:** bounded sub-emitter relationships, collision policy and
+- **C18-04 / 18.4 Child systems:** bounded sub-emitter relationships, collision policy and
   missing-resource diagnostics.
-- **18.5 Scene persistence:** scene/assembly round-trip without GPU handles or
+- **C18-05 / 18.5 Scene persistence:** scene/assembly round-trip without GPU handles or
   ImGui dependencies.
-- **18.6 RHI submission:** per-emitter buffers, descriptors and resource leases.
-- **18.7 Backend coverage:** D3D12/Vulkan multi-emitter readback, depth/blend,
+- **C18-06 / 18.6 RHI submission:** per-emitter buffers, descriptors and resource leases.
+- **C18-07 / 18.7 Backend coverage:** D3D12/Vulkan multi-emitter readback, depth/blend,
   resize and device-loss tests.
-- **18.8 Acceptance:** CPU, GPU, preview and native UI evidence separated.
+- **C18-08 / 18.8 Acceptance:** CPU, GPU, preview and native UI evidence separated.
 
 OPT-18 follows the shared render/material contracts. CPU work can be prepared
 alongside OPT-17, but the full VFX phase is not closed until native GPU and UI
@@ -278,15 +285,15 @@ gates pass.
 
 Packages:
 
-- **19.1 Animation documents:** open/save/dirty/history and private preview.
-- **19.2 Animation tools:** graph, dopesheet, events, selection, picking and
+- **C19-01 / 19.1 Animation documents:** open/save/dirty/history and private preview.
+- **C19-02 / 19.2 Animation tools:** graph, dopesheet, events, selection, picking and
   input routing.
-- **19.3 VFX documents:** open/save/dirty/history and isolated preview.
-- **19.4 VFX tools:** emitter order, curves/gradients, resource pickers and
+- **C19-03 / 19.3 VFX documents:** open/save/dirty/history and isolated preview.
+- **C19-04 / 19.4 VFX tools:** emitter order, curves/gradients, resource pickers and
   multi-emitter controls.
-- **19.5 Material editor:** graph editing, compile diagnostics and last-good
+- **C19-05 / 19.5 Material editor:** graph editing, compile diagnostics and last-good
   program behavior.
-- **19.6 Real UI matrix:** narrow/wide layout, restart, failed save, undo,
+- **C19-06 / 19.6 Real UI matrix:** narrow/wide layout, restart, failed save, undo,
   selection changes, close/reopen and project reload.
 
 No CPU count or panel existence is accepted as GPU/UI proof. UI must use the
@@ -298,13 +305,13 @@ existing RenderService, PluginSession and resource ownership contracts.
 
 Packages:
 
-- **20.1 Benchmark matrix:** fixed scenes, backends, hardware tiers and presets.
-- **20.2 Image quality:** golden images, tolerance policy and fallback parity.
-- **20.3 Performance:** CPU/GPU frame time, memory, submissions and percentile
+- **C20-01 / 20.1 Benchmark matrix:** fixed scenes, backends, hardware tiers and presets.
+- **C20-02 / 20.2 Image quality:** golden images, tolerance policy and fallback parity.
+- **C20-03 / 20.3 Performance:** CPU/GPU frame time, memory, submissions and percentile
   reports.
-- **20.4 Reliability:** resize, device loss, restart, export and plugin selection.
-- **20.5 Cutover:** remove only measured temporary adapters and update docs.
-- **20.6 Acceptance:** close OPT-11..OPT-19 independently; keep unsupported or
+- **C20-04 / 20.4 Reliability:** resize, device loss, restart, export and plugin selection.
+- **C20-05 / 20.5 Cutover:** remove only measured temporary adapters and update docs.
+- **C20-06 / 20.6 Acceptance:** close OPT-11..OPT-19 independently; keep unsupported or
   unmeasured features deferred.
 
 ## VFX and Animation order

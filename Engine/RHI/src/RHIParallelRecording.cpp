@@ -12,9 +12,48 @@ namespace Axle::RHI {
             result.Diagnostic = "native parallel recording is unavailable without a modern RHI backend";
             return result;
         }
-        result.Mode = RHIParallelRecordingMode::CpuPreparation;
-        result.Diagnostic = "native allocator isolation and merge are not enabled: pinned NRI exposes primary command buffers and batch submit, but no portable secondary execute/merge contract or completed validation probe";
+        result.Mode = RHIParallelRecordingMode::PrimaryBatch;
+        result.PrimaryBatchSubmission = true;
+        result.Diagnostic = "independent primary command buffers and batch submission are available; worker recording leases and secondary merge remain capability-gated";
         return result;
+    }
+
+    RHIPrimaryCommandBatch::~RHIPrimaryCommandBatch() { Shutdown(); }
+
+    bool RHIPrimaryCommandBatch::Init(uint32_t commandBufferCount) {
+        Shutdown();
+        if (!commandBufferCount || !RHIDevice::Get().CanCreateResources()) return false;
+        m_Commands.resize(commandBufferCount);
+        for (auto& command : m_Commands) {
+            if (!command.Init()) {
+                Shutdown();
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void RHIPrimaryCommandBatch::Shutdown() {
+        for (auto& command : m_Commands) command.Shutdown();
+        m_Commands.clear();
+        m_Submitted = false;
+    }
+
+    RHICommandBuffer* RHIPrimaryCommandBatch::Get(uint32_t index) {
+        return index < m_Commands.size() ? &m_Commands[index] : nullptr;
+    }
+
+    bool RHIPrimaryCommandBatch::Submit() {
+        if (m_Commands.empty() || m_Submitted) return false;
+        std::vector<RHICommandBuffer*> commands;
+        commands.reserve(m_Commands.size());
+        for (auto& command : m_Commands) {
+            if (!command.IsExecutable()) return false;
+            commands.push_back(&command);
+        }
+        if (!RHICommandBuffer::SubmitBatch(commands)) return false;
+        m_Submitted = true;
+        return true;
     }
 
     bool RHIRecordingPlan::Validate(std::string* diagnostic) const {

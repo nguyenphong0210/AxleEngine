@@ -8,9 +8,9 @@ namespace Axle::RenderTests {
         RHI::RHIDeviceCapabilities capabilities;
         capabilities.ActiveBackend = RHI::RHIType::Direct3D12;
         const auto probe = RHI::ProbeParallelRecording(capabilities);
-        RENDER_CHECK(probe.Mode == RHI::RHIParallelRecordingMode::CpuPreparation &&
-            !probe.AllocatorIsolation && !probe.SecondaryMerge,
-            "native merge remains disabled until the pinned NRI contract is proven");
+        RENDER_CHECK(probe.Mode == RHI::RHIParallelRecordingMode::PrimaryBatch &&
+            probe.PrimaryBatchSubmission && !probe.WorkerRecording && !probe.SecondaryMerge,
+            "modern RHI selects independent primary batches while keeping worker leases gated");
 
         RHI::RHIRecordingPlan plan;
         plan.Passes = {

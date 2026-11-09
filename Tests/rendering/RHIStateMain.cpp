@@ -85,9 +85,17 @@ static bool Native(RHIType backend) {
     init.EnableNRIValidation = true; init.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(backend);
     RENDER_CHECK(device.Init(init) && device.GetBackend() == backend && !device.IsSoftwareAdapter(), "physical state fixture");
     const auto recordingProbe = ProbeParallelRecording(device.GetCapabilities());
-    RENDER_CHECK(recordingProbe.Mode == RHIParallelRecordingMode::CpuPreparation &&
-        !recordingProbe.AllocatorIsolation && !recordingProbe.SecondaryMerge,
-        "native parallel recording probe selects the validated CPU fallback");
+    RENDER_CHECK(recordingProbe.Mode == RHIParallelRecordingMode::PrimaryBatch &&
+        recordingProbe.PrimaryBatchSubmission && !recordingProbe.WorkerRecording && !recordingProbe.SecondaryMerge,
+        "native probe selects independent primary batch submission");
+    RHIPrimaryCommandBatch primaryBatch;
+    RENDER_CHECK(primaryBatch.Init(2), "independent primary command batch allocators");
+    for (uint32_t i = 0; i < primaryBatch.Size(); ++i) {
+        auto* command = primaryBatch.Get(i);
+        RENDER_CHECK(command && command->Begin() && command->End(), "record independent primary command buffer");
+    }
+    RENDER_CHECK(primaryBatch.Submit() && device.WaitIdle(), "submit independent primary command buffers as one batch");
+    primaryBatch.Shutdown();
     RHITexture msaa, resolved, depth, depthCopy;
     auto desc = RHITextureDesc::RenderTarget2D(8, 8); desc.SampleCount = 4;
     RENDER_CHECK(msaa.Init(desc) && resolved.Init(RHITextureDesc::RenderTarget2D(8, 8)) &&

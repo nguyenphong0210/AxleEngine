@@ -51,7 +51,9 @@ namespace Axle::RenderTests {
         auto secondProtected = protectedQueue.PopLatest();
         RENDER_CHECK(firstProtected && secondProtected && firstProtected->Sequence < secondProtected->Sequence,
             "PopLatest never discards a second protected request and sequence numbers remain monotonic");
-        RENDER_CHECK(queue.Push(Ticket(4)) == RenderSnapshotPushResult::Accepted, "queue accepts after consumption");
+        auto agedTicket = Ticket(4);
+        agedTicket.ExtractedAtNs = 1;
+        RENDER_CHECK(queue.Push(std::move(agedTicket)) == RenderSnapshotPushResult::Accepted, "queue accepts after consumption");
         auto aged = queue.GetStats().OldestAgeNs;
         RENDER_CHECK(aged > 0, "oldest age is anchored to the current oldest ticket");
         queue.Pop();

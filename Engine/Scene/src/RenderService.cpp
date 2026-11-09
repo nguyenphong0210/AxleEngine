@@ -99,13 +99,32 @@ namespace Axle {
         return !device.IsNativeReady() || device.IsOwnerThread();
     }
     RenderServiceState RenderService::GetState() const {
-        return UnpackState(m_StateSnapshot.load(std::memory_order_acquire)).State;
+        return GetStateSnapshot().State;
     }
     RenderStateSnapshot RenderService::GetStateSnapshot() const {
-        return UnpackState(m_StateSnapshot.load(std::memory_order_acquire));
+        const auto& device = RHI::RHIDevice::Get();
+        for (;;) {
+            const auto serviceBefore = UnpackState(m_StateSnapshot.load(std::memory_order_acquire));
+            const auto rhiBefore = device.GetStateSnapshot();
+            const auto serviceAfter = UnpackState(m_StateSnapshot.load(std::memory_order_acquire));
+            const auto rhiAfter = device.GetStateSnapshot();
+            if (serviceBefore.StateEpoch != serviceAfter.StateEpoch || rhiBefore.StateEpoch != rhiAfter.StateEpoch) continue;
+
+            RenderServiceState state = serviceBefore.State;
+            switch (rhiBefore.State) {
+                case RHI::RHIDeviceState::SurfaceRebuildRequired: state = RenderServiceState::SurfaceRebuildRequired; break;
+                case RHI::RHIDeviceState::Lost: state = RenderServiceState::DeviceLost; break;
+                case RHI::RHIDeviceState::Stopping: state = RenderServiceState::Draining; break;
+                default: break;
+            }
+            // Both domains are monotonic. Packing them keeps the producer-visible
+            // epoch monotonic while preserving which domain advanced it.
+            const auto epoch = (serviceBefore.StateEpoch << 32u) | (rhiBefore.StateEpoch & 0xffffffffu);
+            return {state, epoch};
+        }
     }
     uint64_t RenderService::GetStateEpoch() const {
-        return UnpackState(m_StateSnapshot.load(std::memory_order_acquire)).StateEpoch;
+        return GetStateSnapshot().StateEpoch;
     }
     bool RenderService::RequireOwner(std::string_view operation) const {
         if (IsOwnerThread()) return true;

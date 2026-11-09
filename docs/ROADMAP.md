@@ -416,7 +416,7 @@ rejects unsupported selected composition. See the [foundation review](reviews/OP
 | OPT-04..05 | [NRI contract](design/NRI_INTEGRATION_CONTRACT.md), [render architecture](design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md), [package plan](design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md), [coding reference](design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md) | Device/resource/frame/services and real product consumers |
 | OPT-06..09 | [Plugin architecture](design/PLUGIN_SYSTEM_ARCHITECTURE.md), [package plan](design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md), [coding reference](design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | SDK, Plugins window, project builds, fresh Vehicle and selected Runtime |
 | OPT-10 | Acceptance matrices in the master and domain plans | Current cross-product evidence and boundary enforcement |
-| OPT-11 and later | [Design archive](archive/design/README.md#deferred-feature-work) | Deferred features and remaining acceptance obligations |
+| OPT-11 and later | [Micro-OPT program plan](design/POST_OPT10_PROGRAM_PLAN.md), [design archive](archive/design/README.md#deferred-feature-work) | Post-OPT-10 units, deferred features and remaining acceptance obligations |
 
 The [documentation hub](README.md) separates working guides, source snapshots,
 future contracts and archived delivery evidence. The [historical product roadmap](../ROADMAP.md)
@@ -427,6 +427,7 @@ retains old milestones; it is not another optimization checklist.
 After OPT-10, use this order for later work. Fixes required to preserve an existing
 workflow may be scoped earlier with explicit evidence; that does not release a
 whole feature phase. Old outstanding acceptance is retained, never relabeled PASS.
+The detailed Post-OPT-10 decomposition is in the [micro-OPT program plan](design/POST_OPT10_PROGRAM_PLAN.md); this table remains the high-level order.
 
 | Later order | Work | Preserved status / reference |
 | --- | --- | --- |

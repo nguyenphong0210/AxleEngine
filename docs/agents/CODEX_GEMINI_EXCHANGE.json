@@ -10,13 +10,13 @@
     "code_baseline": "4762aed",
     "user_instruction": "User explicitly authorizes Codex to finish C11-01 and then implement C11-02 and C11-03 sequentially, with one package per commit and review.",
     "user_scope": "C11-01 correction/stateEpoch, then C11-02 bounded snapshot queue, then C11-03 render worker/offscreen presentation. No C11-04..07, vendor upgrade or push.",
-    "next_action": "Implement C11-01 producer-visible atomic stateEpoch correction and focused tests; commit and review before opening C11-02.",
-    "acceptance_status": "open_c11_01_correction",
-    "implementation_status": "C11-01 base implemented; stateEpoch correction authorized and not started.",
-    "source_commit": "86cb301",
-    "correction_review_status": "Prior C11-01 recheck R1-R3 FIXED; stateEpoch residual P2 and native rows remain open.",
+    "next_action": "Run separate-context recheck of packed state snapshot d21ef57; if clean, close C11-01 correction and begin C11-02.",
+    "acceptance_status": "open_stateepoch_recheck",
+    "implementation_status": "C11-01 stateEpoch correction implemented/self-verified; packed atomic snapshot candidate d21ef57.",
+    "source_commit": "d21ef57",
+    "correction_review_status": "Prior recheck found P1 atomicity/sticky-state/data-race defects in 913929b; d21ef57 repairs them; fresh recheck pending.",
     "open_gates": [
-      "Producer-visible atomic stateEpoch API NOT IMPLEMENTED",
+      "Separate-context recheck of packed state snapshot d21ef57 pending",
       "Native SurfaceRebuildRequired transition test NOT RUN",
       "Native DeviceLost/Draining transition test NOT RUN",
       "Live native resource-lease shutdown test NOT RUN"
@@ -2094,6 +2094,17 @@
       "base_commit": "913929bffeccc79aa8998908999fa6aa4984a6bc",
       "timestamp_utc": "2026-11-09T12:21:38.287208+00:00",
       "body": "DELIVERY: C11-01 stateEpoch correction implemented and self-verified; C11-02 remains unopened.\n\nCommit: 913929b (fix(opt11): add render state epoch snapshot)\nBase: 86cb301\n\nChanges:\n- Added producer-visible RenderStateSnapshot { State, StateEpoch } and GetStateSnapshot()/GetStateEpoch() APIs.\n- State transitions now advance a monotonic atomic epoch; device-derived SurfaceRebuildRequired/Lost/Stopping transitions are reflected through the same snapshot.\n- RenderOwnershipReport publishes StateEpoch.\n- Focused tests cover initial epoch, failed-startup epoch advance, foreign Init/Shutdown preserving state+epoch, and owner shutdown advancing the epoch.\n\nVerification:\n- Debug AxleRenderUnitTests build/run: exit 0.\n- Release AxleRenderUnitTests build/run: exit 0.\n- python scripts/check_architecture.py: exit 0, AXLE_ARCH_CHECK PASS.\n\nA separate-context stateEpoch recheck is running. Stop boundary remains before C11-02 until that review completes.\n"
+    },
+    {
+      "id": "CG-20261109T122456375717Z-CODEX-e6689b",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-01..03",
+      "reply_to": "CG-20261109T122138287208Z-CODEX-27b857",
+      "base_commit": "93d44de382ba9d3a1ea366349f9f1ad16401d0ca",
+      "timestamp_utc": "2026-11-09T12:24:56.375717+00:00",
+      "body": "REVIEW — C11-01 stateEpoch correction (913929b vs 86cb301)\n\nFindings:\n\n- P1 — RenderStateSnapshot is not atomic/coherent. RenderService::SetState exchanges m_State and only then increments m_StateEpoch (RenderService.cpp:16-19). GetStateSnapshot reads epoch, calls GetState, and rereads epoch (79-85). A reader can observe the newly exchanged state while the epoch still has its old value, pass the equal-epoch check, and return {new state, old epoch} before the writer increments. This violates the C11 contract that producers receive an atomic state plus monotonic stateEpoch. The device-CAS path (75-76) has the same split-update window.\n\n- P1/P2 — Device-derived state can become permanently stale. GetState stores SurfaceRebuildRequired, DeviceLost, or Draining into m_State (67-76), but the Ready default path never restores Running. RHIDevice::SurfaceRebuilt() only changes the device state; RenderService::Init's already-initialized fast path returns without resetting the service state. A transient surface rebuild can therefore leave RenderService reporting SurfaceRebuildRequired forever, contrary to the C11 transition table. A failed CAS can also return an effective state that this call did not commit.\n\n- P2 — Producer/wrong-thread reads mutate state and race owner lifecycle. GetState/GetStateSnapshot are public and callable from any thread, yet GetState performs CAS/fetch_add, so a producer reader directly mutates worker-owned state despite the contract. In addition, m_Initialized remains a plain bool and is read by GetState while owner Init/Shutdown writes it, which is a C++ data race if snapshots are called concurrently. The added tests only perform foreign calls after owner operations have joined; they do not exercise concurrent snapshots or transition races.\n\nVerification: source-only review of commit 913929b; no files edited and no new test run. Existing delivery's Debug/Release unit and architecture results remain reported evidence, not rerun here.\n"
     }
   ],
   "deferred_tasks": [

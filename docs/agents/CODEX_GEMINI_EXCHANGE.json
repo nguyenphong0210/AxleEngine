@@ -1,26 +1,25 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-11-C11-01",
-    "title": "Ownership design and capability probes",
+    "id": "OPT-11-C11-01..03",
+    "title": "Render ownership, snapshot queue and worker presentation",
     "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Separate-context correction review",
-    "code_baseline": "b5ddfb0",
-    "user_instruction": "User explicitly requests Codex implement OPT-11 one package at a time, with verification and a separate commit per package.",
-    "user_scope": "C11-01 only: owner-thread binding, worker state machine, capability probes, synchronous fallback and focused tests. No C11-02..07, vendor upgrade or push.",
-    "next_action": "Repair or explicitly defer the producer-visible atomic stateEpoch contract, then resolve native transition/live-lease gates before releasing C11-02 to Gemini.",
-    "acceptance_status": "open_contract_and_native_gates",
-    "implementation_status": "Implemented and self-verified; corrected candidate 86cb301.",
+    "code_baseline": "4762aed",
+    "user_instruction": "User explicitly authorizes Codex to finish C11-01 and then implement C11-02 and C11-03 sequentially, with one package per commit and review.",
+    "user_scope": "C11-01 correction/stateEpoch, then C11-02 bounded snapshot queue, then C11-03 render worker/offscreen presentation. No C11-04..07, vendor upgrade or push.",
+    "next_action": "Implement C11-01 producer-visible atomic stateEpoch correction and focused tests; commit and review before opening C11-02.",
+    "acceptance_status": "open_c11_01_correction",
+    "implementation_status": "C11-01 base implemented; stateEpoch correction authorized and not started.",
     "source_commit": "86cb301",
-    "correction_review_status": "Separate-context recheck: R1-R3 FIXED; R4 native rows NOT RUN; residual P2 stateEpoch gap reported in CG-20261109T121343670671Z-CODEX-093b46.",
+    "correction_review_status": "Prior C11-01 recheck R1-R3 FIXED; stateEpoch residual P2 and native rows remain open.",
     "open_gates": [
+      "Producer-visible atomic stateEpoch API NOT IMPLEMENTED",
       "Native SurfaceRebuildRequired transition test NOT RUN",
       "Native DeviceLost/Draining transition test NOT RUN",
-      "Live native resource-lease shutdown test NOT RUN",
-      "Release correction recheck executable NOT RUN (Release build passed)",
-      "Producer-visible atomic stateEpoch API NOT IMPLEMENTED"
+      "Live native resource-lease shutdown test NOT RUN"
     ]
   },
   "last_read": {

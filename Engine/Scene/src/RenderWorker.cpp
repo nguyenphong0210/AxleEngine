@@ -139,7 +139,6 @@ namespace Axle {
             }
             return false;
         }
-        SetState(RenderWorkerState::Running);
         result.RequestId = frame.RequestId;
         result.Result = service.RenderView(frame.World, frame.Request);
         result.State = GetState();

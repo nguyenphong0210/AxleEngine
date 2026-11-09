@@ -59,14 +59,15 @@ namespace Axle::RHI {
         bool WaitForCompletion(RHICompletionToken token, uint32_t timeoutMilliseconds = 2000);
         RHICompletionToken GetLastSubmittedToken() const { return {GetEpoch(), m_SubmittedValue}; }
         bool ObserveResult(nri::Result result, std::string_view operation, std::string_view resource = {}, bool timedOut = false);
-        RHIDeviceState GetState() const { return m_State; }
+        RHIStateSnapshot GetStateSnapshot() const;
+        RHIDeviceState GetState() const { return GetStateSnapshot().State; }
         const std::optional<RHIGPUError>& GetFirstError() const { return m_FirstError; }
-        bool CanSubmit() const { return IsNativeReady() && m_Resources.IsOwnerThread() && m_State == RHIDeviceState::Ready; }
-        bool CanCreateResources() const { return IsNativeReady() && m_Resources.IsOwnerThread() && (m_State == RHIDeviceState::Ready || m_State == RHIDeviceState::SurfaceRebuildRequired); }
+        bool CanSubmit() const { return IsNativeReady() && m_Resources.IsOwnerThread() && GetState() == RHIDeviceState::Ready; }
+        bool CanCreateResources() const { return IsNativeReady() && m_Resources.IsOwnerThread() && (GetState() == RHIDeviceState::Ready || GetState() == RHIDeviceState::SurfaceRebuildRequired); }
         RHIResourceService& GetResources() { return m_Resources; }
         const RHIResourceService& GetResources() const { return m_Resources; }
         uint64_t GetEpoch() const { return m_Resources.GetEpoch(); }
-        void SurfaceRebuilt() { if (m_State == RHIDeviceState::SurfaceRebuildRequired) m_State = RHIDeviceState::Ready; }
+        void SurfaceRebuilt() { if (GetState() == RHIDeviceState::SurfaceRebuildRequired) SetState(RHIDeviceState::Ready); }
         void ReleaseNative(std::function<void()> release);
 
         bool IsInitialized() const { return m_Initialized; }
@@ -99,6 +100,13 @@ namespace Axle::RHI {
         const nri::WrapperVKInterface& GetNRIWrapperVK() const { return m_NRI.WrapperVK; }
 
     private:
+        static constexpr uint64_t PackState(RHIDeviceState state, uint64_t epoch) {
+            return (epoch << 8u) | (static_cast<uint64_t>(state) & 0xffu);
+        }
+        static constexpr RHIStateSnapshot UnpackState(uint64_t packed) {
+            return {static_cast<RHIDeviceState>(packed & 0xffu), packed >> 8u};
+        }
+        void SetState(RHIDeviceState state);
         bool TryInitNRI(RHIType backend, const RHIDeviceDesc& desc, const nri::AdapterDesc* adapterDesc);
         void InitOpenGLFallback();
         void PopulateCapabilities();
@@ -106,7 +114,7 @@ namespace Axle::RHI {
     private:
         bool m_Initialized = false;
         bool m_ContextReady = false;
-        RHIDeviceState m_State = RHIDeviceState::Uninitialized;
+        std::atomic<uint64_t> m_StateSnapshot{PackState(RHIDeviceState::Uninitialized, 1)};
         std::optional<RHIGPUError> m_FirstError;
         nri::Fence* m_IdleFence = nullptr;
         uint64_t m_IdleValue = 0;

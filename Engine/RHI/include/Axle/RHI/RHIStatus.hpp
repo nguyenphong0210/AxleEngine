@@ -9,6 +9,11 @@
 namespace Axle::RHI {
     enum class RHIDeviceState { Uninitialized, Ready, SurfaceRebuildRequired, Lost, Stopping };
 
+    struct RHIStateSnapshot {
+        RHIDeviceState State = RHIDeviceState::Uninitialized;
+        uint64_t StateEpoch = 0;
+    };
+
     struct RHIGPUError {
         nri::Result NativeResult = nri::Result::SUCCESS;
         RHIType Backend = RHIType::None;

@@ -99,20 +99,10 @@ namespace Axle {
         return !device.IsNativeReady() || device.IsOwnerThread();
     }
     RenderServiceState RenderService::GetState() const {
-        const auto snapshot = UnpackState(m_StateSnapshot.load(std::memory_order_acquire));
-        auto state = snapshot.State;
-        if (!m_Initialized.load(std::memory_order_acquire)) return state;
-        const auto deviceState = RHI::RHIDevice::Get().GetState();
-        switch (deviceState) {
-            case RHI::RHIDeviceState::SurfaceRebuildRequired: return RenderServiceState::SurfaceRebuildRequired;
-            case RHI::RHIDeviceState::Lost: return RenderServiceState::DeviceLost;
-            case RHI::RHIDeviceState::Stopping: return RenderServiceState::Draining;
-            default: return state;
-        }
+        return UnpackState(m_StateSnapshot.load(std::memory_order_acquire)).State;
     }
     RenderStateSnapshot RenderService::GetStateSnapshot() const {
-        const auto snapshot = UnpackState(m_StateSnapshot.load(std::memory_order_acquire));
-        return {GetState(), snapshot.StateEpoch};
+        return UnpackState(m_StateSnapshot.load(std::memory_order_acquire));
     }
     uint64_t RenderService::GetStateEpoch() const {
         return UnpackState(m_StateSnapshot.load(std::memory_order_acquire)).StateEpoch;
@@ -136,6 +126,7 @@ namespace Axle {
         report.NativeReady = device.IsNativeReady();
         report.ContextReady = device.IsContextReady();
         report.RHIIsOwnerThread = device.IsOwnerThread();
+        report.RHIState = device.GetStateSnapshot();
         report.OwnershipAligned = report.OwnerBound && report.IsOwnerThread &&
             (!report.NativeReady || report.RHIIsOwnerThread);
         report.Backend = device.GetBackend();
@@ -145,6 +136,8 @@ namespace Axle {
         else if (!report.OwnershipAligned) report.OwnerDiagnostic = "RenderService and RHI resource ownership are not aligned";
         else if (report.Backend == RHI::RHIType::OpenGL) report.OwnerDiagnostic = "OpenGL remains synchronous until context transfer is proven";
         else if (!report.NativeReady) report.OwnerDiagnostic = "Native RHI device is not ready";
+        else if (report.RHIState.State == RHI::RHIDeviceState::Lost) report.OwnerDiagnostic = "Native RHI device is lost";
+        else if (report.RHIState.State == RHI::RHIDeviceState::SurfaceRebuildRequired) report.OwnerDiagnostic = "Native RHI surface rebuild is required";
         else if (!report.DeviceCapabilities.SupportsRenderWorkerOwnership) report.OwnerDiagnostic = "Native render-worker ownership requires the C11-03 probe";
         else report.OwnerDiagnostic = "Native render-worker ownership is enabled";
         return report;

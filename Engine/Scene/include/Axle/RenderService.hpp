@@ -41,6 +41,7 @@ namespace Axle {
         bool ContextReady = false;
         bool RHIIsOwnerThread = false;
         bool OwnershipAligned = false;
+        RHI::RHIStateSnapshot RHIState{};
         RHI::RHIType Backend = RHI::RHIType::None;
         RHI::RHIDeviceCapabilities DeviceCapabilities{};
         std::string OwnerDiagnostic;

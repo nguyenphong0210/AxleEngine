@@ -41,6 +41,19 @@ namespace Axle::RHI {
         return s_Instance;
     }
 
+    RHIStateSnapshot RHIDevice::GetStateSnapshot() const {
+        return UnpackState(m_StateSnapshot.load(std::memory_order_acquire));
+    }
+    void RHIDevice::SetState(RHIDeviceState state) {
+        auto current = m_StateSnapshot.load(std::memory_order_acquire);
+        for (;;) {
+            const auto previous = UnpackState(current);
+            const auto epoch = previous.State == state ? previous.StateEpoch : previous.StateEpoch + 1;
+            const auto desired = PackState(state, epoch);
+            if (m_StateSnapshot.compare_exchange_weak(current, desired, std::memory_order_acq_rel)) return;
+        }
+    }
+
     RHIDevice::~RHIDevice() {
         if (m_Initialized) {
             Shutdown();
@@ -132,7 +145,7 @@ namespace Axle::RHI {
         }
 
         m_FirstError.reset();
-        m_State = RHIDeviceState::Uninitialized;
+        SetState(RHIDeviceState::Uninitialized);
         m_Desc = desc;
         m_Adapters = EnumerateAdapters();
 
@@ -242,7 +255,7 @@ namespace Axle::RHI {
         const auto native = m_Device;
         if (!m_Resources.Open([native] { if (native) nri::nriDestroyDevice(native); })) return false;
         m_Initialized = true;
-        m_State = RHIDeviceState::Ready;
+        SetState(RHIDeviceState::Ready);
         return true;
     }
 
@@ -462,12 +475,12 @@ namespace Axle::RHI {
         if (ambiguous) m_UnresolvedWork = true;
         if (!m_FirstError) m_FirstError = RHIGPUError{result, GetBackend() == RHIType::None ? m_Desc.PreferredBackend : GetBackend(), std::string(operation), std::string(resource), ambiguous, timedOut};
         if (m_Initialized) {
-            if (result == nri::Result::DEVICE_LOST) m_State = RHIDeviceState::Lost;
-            else if (m_State != RHIDeviceState::Lost) {
-                if (ambiguous || timedOut || operation == "QueuePresent") m_State = RHIDeviceState::Stopping;
-                if (result == nri::Result::OUT_OF_DATE && (operation == "AcquireNextTexture" || operation == "QueuePresent")) m_State = RHIDeviceState::SurfaceRebuildRequired;
+            if (result == nri::Result::DEVICE_LOST) SetState(RHIDeviceState::Lost);
+            else if (GetState() != RHIDeviceState::Lost) {
+                if (ambiguous || timedOut || operation == "QueuePresent") SetState(RHIDeviceState::Stopping);
+                if (result == nri::Result::OUT_OF_DATE && (operation == "AcquireNextTexture" || operation == "QueuePresent")) SetState(RHIDeviceState::SurfaceRebuildRequired);
             }
-            if (m_State == RHIDeviceState::Lost || m_State == RHIDeviceState::Stopping) m_ContextReady = false;
+            if (GetState() == RHIDeviceState::Lost || GetState() == RHIDeviceState::Stopping) m_ContextReady = false;
         }
         return false;
     }
@@ -475,7 +488,7 @@ namespace Axle::RHI {
     bool RHIDevice::WaitForFence(nri::Fence* fence, uint64_t value, uint32_t timeoutMilliseconds) {
         if (!value) return true;
         if (!m_Resources.IsOwnerThread()) return false;
-        if (!IsNativeReady() || !fence || m_State == RHIDeviceState::Lost) return false;
+        if (!IsNativeReady() || !fence || GetState() == RHIDeviceState::Lost) return false;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMilliseconds);
         do {
             uint64_t completed = 0;
@@ -494,7 +507,7 @@ namespace Axle::RHI {
     bool RHIDevice::WaitIdle(uint32_t timeoutMilliseconds) {
         if (!m_Device) return true;
         if (!m_Resources.IsOwnerThread()) return false;
-        if (!IsNativeReady() || m_State == RHIDeviceState::Lost) return false;
+        if (!IsNativeReady() || GetState() == RHIDeviceState::Lost) return false;
         if (!m_IdleFence) {
             const auto result = ScopedRHIFault::Invoke("CreateIdleFence", [&] { return m_NRI.Core.CreateFence(*m_Device, 0, m_IdleFence); });
             if (result != nri::Result::SUCCESS || !m_IdleFence) return false;
@@ -618,7 +631,7 @@ namespace Axle::RHI {
     }
 
     void RHIDevice::ReleaseNative(std::function<void()> release) {
-        if (m_UnresolvedWork && m_State == RHIDeviceState::Stopping) m_DeferredCleanup.push_back(std::move(release));
+        if (m_UnresolvedWork && GetState() == RHIDeviceState::Stopping) m_DeferredCleanup.push_back(std::move(release));
         else release();
     }
 
@@ -628,9 +641,9 @@ namespace Axle::RHI {
 
         AXLE_CORE_INFO("Shutting down RHI Device ({0})...", RHITypeToString(m_Capabilities.ActiveBackend));
 
-        if (m_State != RHIDeviceState::Lost && !WaitIdle()) {
-            m_State = m_State == RHIDeviceState::Lost ? RHIDeviceState::Lost : RHIDeviceState::Stopping;
-            if (m_State != RHIDeviceState::Lost) {
+        if (GetState() != RHIDeviceState::Lost && !WaitIdle()) {
+            SetState(GetState() == RHIDeviceState::Lost ? RHIDeviceState::Lost : RHIDeviceState::Stopping);
+            if (GetState() != RHIDeviceState::Lost) {
                 AXLE_CORE_ERROR("RHI shutdown retained native owners: queue completion is unresolved");
                 return false;
             }
@@ -642,14 +655,14 @@ namespace Axle::RHI {
             auto releases = std::move(m_DeferredCleanup); m_DeferredCleanup.clear();
             for (auto& release : releases) release();
         }
-        m_State = m_State == RHIDeviceState::Lost ? RHIDeviceState::Lost : RHIDeviceState::Stopping;
+        SetState(GetState() == RHIDeviceState::Lost ? RHIDeviceState::Lost : RHIDeviceState::Stopping);
 
         m_Resources.PrepareDeviceClose();
         RHIPipelineCache::Get().Clear();
 
         RHIMaterial::ReleaseDefaultTextures();
 
-        if (!WaitIdle() && m_State != RHIDeviceState::Lost) return false;
+        if (!WaitIdle() && GetState() != RHIDeviceState::Lost) return false;
 
         if (m_IdleFence) { m_NRI.Core.DestroyFence(m_IdleFence); m_IdleFence = nullptr; }
         if (m_SubmissionFence) { m_NRI.Core.DestroyFence(m_SubmissionFence); m_SubmissionFence = nullptr; }
@@ -664,7 +677,7 @@ namespace Axle::RHI {
         m_Adapters.clear();
         m_Initialized = false;
         m_ContextReady = false;
-        m_State = RHIDeviceState::Uninitialized;
+        SetState(RHIDeviceState::Uninitialized);
 
         AXLE_CORE_INFO("RHI Device successfully shut down.");
         return true;

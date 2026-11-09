@@ -50,6 +50,7 @@ namespace Axle {
         void Stop();
         bool Submit(RenderWorkerFrame frame);
         bool Poll(RenderWorkerResult& result);
+        bool RenderSynchronously(RenderWorkerFrame frame, RenderWorkerResult& result);
 
         RenderWorkerState GetState() const;
         uint64_t GetStateEpoch() const;

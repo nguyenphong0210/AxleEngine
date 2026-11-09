@@ -44,6 +44,14 @@ namespace Axle::RenderTests {
         worker.Stop();
         RENDER_CHECK(worker.GetState() == RenderWorkerState::Stopped, "worker stop joins and returns to stopped");
         RENDER_CHECK(!worker.Submit(RenderWorkerFrame{}), "stopped worker rejects new frames");
+        const auto previousEpoch = worker.GetStateEpoch();
+        RENDER_CHECK(worker.Start(config), "worker can start after completed results were polled");
+        for (int i = 0; i < 5000 && worker.GetState() == RenderWorkerState::Starting; ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        RENDER_CHECK(worker.GetState() == RenderWorkerState::Running || worker.GetState() == RenderWorkerState::Failed,
+            "restarted worker reaches an explicit state");
+        RENDER_CHECK(worker.GetStateEpoch() > previousEpoch, "worker state epoch remains monotonic across restart");
+        worker.Stop();
         std::cout << "  [RenderWorker] All worker lifecycle tests passed.\n";
         return true;
     }

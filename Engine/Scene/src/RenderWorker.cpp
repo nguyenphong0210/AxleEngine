@@ -40,16 +40,16 @@ namespace Axle {
 
     bool RenderWorker::Start(const RenderWorkerConfig& config) {
         std::lock_guard lock(m_Mutex);
-        if (m_Thread.joinable() || m_State != RenderWorkerState::Stopped || !config.QueueCapacity) return false;
+        if (m_Thread.joinable() || m_State != RenderWorkerState::Stopped || !config.QueueCapacity || !m_Results.empty()) return false;
         m_Config = config;
         m_StopRequested = false;
         m_AcceptedFrames = 0;
         m_RejectedFrames = 0;
         m_InFlight = 0;
-        m_StateEpoch = 0;
         m_LastError.clear();
         m_Results.clear();
         m_Frames.clear();
+        ++m_StateEpoch;
         m_State = RenderWorkerState::Starting;
         m_Thread = std::thread(&RenderWorker::ThreadMain, this, config);
         return true;
@@ -89,9 +89,10 @@ namespace Axle {
 
     bool RenderWorker::Submit(RenderWorkerFrame frame) {
         std::lock_guard lock(m_Mutex);
-        if (frame.Request.PhysicsScene || frame.Request.ColorTarget || frame.Request.DepthTarget || frame.Request.GLTargetFBO) {
+        if (frame.Request.PhysicsScene || frame.Request.ColorTarget || frame.Request.DepthTarget ||
+            frame.Request.GLTargetFBO || frame.Request.ViewTargets) {
             ++m_RejectedFrames;
-            m_LastError = "worker frames require owned ViewTargets; raw targets and PhysicsScene are rejected";
+            m_LastError = "worker frames require worker-created offscreen targets; external targets and PhysicsScene are rejected";
             return false;
         }
         if (m_State != RenderWorkerState::Running || m_StopRequested || m_InFlight >= m_Config.QueueCapacity) {
@@ -112,6 +113,22 @@ namespace Axle {
         m_Results.pop_front();
         if (m_InFlight) --m_InFlight;
         return true;
+    }
+
+    bool RenderWorker::RenderSynchronously(RenderWorkerFrame frame, RenderWorkerResult& result) {
+        if (m_Thread.joinable()) Stop();
+        const auto state = GetState();
+        if (state != RenderWorkerState::Stopped && state != RenderWorkerState::Failed) return false;
+        if (frame.Request.PhysicsScene || frame.Request.ColorTarget || frame.Request.DepthTarget ||
+            frame.Request.GLTargetFBO || frame.Request.ViewTargets) return false;
+        auto& service = RenderService::Get();
+        if (!service.Init()) return false;
+        result.RequestId = frame.RequestId;
+        result.Result = service.RenderView(frame.World, frame.Request);
+        result.State = state;
+        result.StateEpoch = GetStateEpoch();
+        result.Diagnostic = result.Result.ErrorMessage;
+        return result.Result.Success;
     }
 
     void RenderWorker::ThreadMain(RenderWorkerConfig config) {
@@ -170,6 +187,7 @@ namespace Axle {
             const auto ownership = service.GetOwnershipReport();
             if (ownership.RHIState.State == RHI::RHIDeviceState::Lost) SetState(RenderWorkerState::DeviceLost);
             else if (ownership.RHIState.State == RHI::RHIDeviceState::SurfaceRebuildRequired) SetState(RenderWorkerState::SurfaceRebuildRequired);
+            else if (ownership.RHIState.State == RHI::RHIDeviceState::Stopping) SetState(RenderWorkerState::Draining);
             else SetState(RenderWorkerState::Running);
             result.State = GetState();
             result.StateEpoch = GetStateEpoch();
@@ -180,7 +198,8 @@ namespace Axle {
                 if (!result.Result.Success) m_LastError = result.Result.ErrorMessage;
                 if (m_Results.size() < m_Config.QueueCapacity) m_Results.push_back(std::move(result));
                 if (successfulProbe) device.MarkRenderWorkerOwnershipSupported();
-                if (m_State == RenderWorkerState::DeviceLost || m_State == RenderWorkerState::SurfaceRebuildRequired) {
+                if (m_State == RenderWorkerState::DeviceLost || m_State == RenderWorkerState::SurfaceRebuildRequired ||
+                    m_State == RenderWorkerState::Draining) {
                     CancelPendingLocked("render worker cancelled pending frames after device state transition");
                     break;
                 }

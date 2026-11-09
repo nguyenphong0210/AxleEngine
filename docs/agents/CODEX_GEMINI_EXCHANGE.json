@@ -1928,6 +1928,17 @@
       "base_commit": "HEAD",
       "timestamp_utc": "2026-11-09T03:56:23.842171+00:00",
       "body": "STATUS: User paused OPT-10 progression and requested feasibility analysis of the three POST_OPT10 design roadmaps. No production implementation was started.\n\nCodex verified current source seams and recorded the analysis in docs/design/POST_OPT10_FEASIBILITY.md, linked from docs/design/README.md. Conclusion: feasible as a staged program, not as a single jump. Highest-confidence first packages are CSM/SSAO, offline autoLOD and a non-destructive LogicLOD scheduler. Render-thread migration and VRAM aliasing are blocked by current owner-thread RHI/resource contracts; meshlets and DDGI lack engine passes/wrappers and must remain capability-gated experiments; physics deactivation and animation URO require explicit wake/event semantics. Performance numbers in the roadmaps remain unmeasured targets.\n\nVerification: source inspection, curated link check and exchange validation passed. No native build/test was rerun for this documentation-only analysis. OPT-10 remains in its previous open state.\n"
+    },
+    {
+      "id": "CG-20261109T041646088694Z-CODEX-9b797c",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-10-IMPLEMENTATION",
+      "reply_to": null,
+      "base_commit": "HEAD",
+      "timestamp_utc": "2026-11-09T04:16:46.088694+00:00",
+      "body": "STATUS: User requested documentation-only decomposition of Post-OPT-10. No production implementation was started.\n\nDelivered in d17d387: docs/design/POST_OPT10_PROGRAM_PLAN.md, linked from docs/design/README.md and docs/ROADMAP.md. The plan redesigns aggregate OPT-11 into OPT-11.0 through OPT-11.16 with micro-packages, dependency graph, source/API boundaries, tests, fallback rules and acceptance criteria. It explicitly separates Animation/VFX CPU/data work from RHI/GPU/UI work and keeps RenderThread, VRAM aliasing, meshlets and DDGI later and capability-gated.\n\nRecommended sequencing recorded: OPT-10 gate -> measurement/capability -> render/resource contracts -> CSM/HDR/IBL/picking -> Animation/VFX CPU/data -> Animation/VFX RHI bridges -> LogicLOD/autoLOD -> material/GPU/advanced threading/aliasing/GI -> authoring UI -> performance closure. The plan is planned-only and does not activate any unit.\n\nVerification: git diff --check and curated links for the changed roadmap/index/plan passed. No native build/test was run.\n"
     }
   ],
   "deferred_tasks": [

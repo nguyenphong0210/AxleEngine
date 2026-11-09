@@ -87,8 +87,12 @@ namespace Axle {
         std::optional<RenderSnapshotTicket> latest;
         while (auto next = Pop()) {
             if (next->ProtectedRequest) {
-                if (!latest || !latest->ProtectedRequest) latest = std::move(next);
-            } else if (!latest || !latest->ProtectedRequest) {
+                // A protected request is never discarded while looking for a
+                // newer interactive frame. Return it immediately and leave
+                // later tickets for the next consumer call.
+                latest = std::move(next);
+                break;
+            } else {
                 latest = std::move(next);
             }
         }

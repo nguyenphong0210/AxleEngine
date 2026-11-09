@@ -29,6 +29,13 @@ namespace Axle::RenderTests {
         auto latest = queue.PopLatest();
         RENDER_CHECK(latest && latest->Sequence == 2 && latest->ProtectedRequest && queue.GetStats().Depth == 0,
             "PopLatest preserves the admitted protected snapshot");
+        RenderSnapshotQueue protectedQueue(4);
+        protectedQueue.Push(Ticket(10, true));
+        protectedQueue.Push(Ticket(11, true));
+        auto firstProtected = protectedQueue.PopLatest();
+        auto secondProtected = protectedQueue.PopLatest();
+        RENDER_CHECK(firstProtected && secondProtected && firstProtected->Sequence == 10 && secondProtected->Sequence == 11,
+            "PopLatest never discards a second protected request");
         RENDER_CHECK(queue.Push(Ticket(4)) == RenderSnapshotPushResult::Accepted, "queue accepts after consumption");
         queue.Stop();
         RENDER_CHECK(queue.Push(Ticket(5)) == RenderSnapshotPushResult::RejectedStopping,

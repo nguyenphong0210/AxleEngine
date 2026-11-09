@@ -2,20 +2,25 @@
   "schema_version": 1,
   "current_task": {
     "id": "OPT-11-C11-04",
-    "title": "Parallel command recording probe and CPU fallback",
-    "state": "completed",
+    "title": "Hybrid parallel command recording contract and backend probes",
+    "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Separate-context correction review",
-    "code_baseline": "4caf323",
-    "user_instruction": "User reopened C11-04 implementation and authorized the current primary-command-buffer batch path; future secondary/hybrid work is deferred.",
-    "user_scope": "C11-04 current primary-batch implementation only; no vendor upgrade, secondary merge, C11-05+ or push.",
-    "next_action": "Stop at C11-04; secondary/hybrid recording and C11-05+ require separate user instruction.",
-    "acceptance_status": "accepted_C11_04_primary_batch_D3D12_and_Vulkan",
-    "implementation_status": "C11-04 primary command batch path implemented and hardened in 2b6178e, 9aec366 and 4caf323; native D3D12 and Vulkan state/primary-batch probes pass.",
+    "code_baseline": "89b0f80",
+    "user_instruction": "User explicitly reopened C11-04 and now wants the hybrid path: retain the accepted independent-primary batch while adding a truthful secondary/worker capability contract and backend-specific proof where available.",
+    "user_scope": "C11-04 hybrid only. Preserve the accepted primary-batch path; no C11-05+, vendor upgrade or push. Native secondary/merge must remain gated by positive backend evidence and use primary-batch fallback.",
+    "next_action": "Implement the hybrid contract/probe and the first safe backend-specific slice, then stop for separate review before any broader integration.",
+    "acceptance_status": "pending_C11_04_hybrid",
+    "implementation_status": "Accepted primary batch remains at 2b6178e, 9aec366, 4caf323; hybrid work reopened by latest user instruction; no hybrid source edits yet.",
     "source_commit": "c732385",
-    "correction_review_status": "Separate-context review PASS for 2b6178e + 9aec366; partial-reset poison correction 4caf323 locally verified; native Vulkan RHIStateTests now PASS.",
-    "open_gates": []
+    "correction_review_status": "Primary batch separately reviewed and D3D12/Vulkan verified; hybrid review pending.",
+    "open_gates": [
+      "Pinned NRI portable secondary execute/merge contract",
+      "Backend-specific secondary path proof",
+      "Primary fallback on unsupported/failed validation",
+      "Separate-context review and native validation/readback"
+    ]
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",

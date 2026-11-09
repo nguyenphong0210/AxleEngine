@@ -1,6 +1,8 @@
 # Architecture and Design Documentation
 
-Reviewed: **2026-11-01**. This documentation describes the working tree inspected on that date. It separates implemented behavior from the proposed modular, layered architecture.
+Updated: **2026-11-09**. The current ownership and flow diagrams are aligned with
+OPT-01..OPT-10. Older source surveys remain dated references and are labeled as
+such.
 
 ## Reading order
 
@@ -15,6 +17,8 @@ Start with the [overview](OVERVIEW.md), [module reference](MODULES.md) and [curr
 | [Current architecture assessment](ASSESSMENT.md) | Strengths, limitations, priorities and improvement exit criteria |
 | [Software Architecture Document](SAD.md) | System context, module responsibilities, dependencies, deployment, data and architectural assessment |
 | [Software Design Description](SDD.md) | Class responsibilities, ownership, interfaces, lifecycle and extension mechanisms |
+| [Render flow](RENDER_FLOW.md) | Frame extraction, backend selection, submission and GPU retirement |
+| [Plugin flow](PLUGIN_FLOW.md) | Manifest discovery, resolution, Editor activation and Runtime export |
 | [Class relationships](CLASS_RELATIONSHIPS.md) | Subsystem UML diagrams: inheritance, composition, shared ownership and associations |
 | [Execution flows](RUNTIME_FLOWS.md) | Startup, frame updates, play/stop, script reload, assets and UI sequences |
 | [Dependency map](DEPENDENCY_MAP.md) | Direct CMake link dependencies, build ordering and cross-module includes |
@@ -27,7 +31,11 @@ Start with the [overview](OVERVIEW.md), [module reference](MODULES.md) and [curr
 | [Architecture Foundation master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | AF contracts and combined prerequisites; execution order is in docs/ROADMAP.md |
 | [NRI integration contract](../design/NRI_INTEGRATION_CONTRACT.md) | Pinned native API boundary, readiness, lifetime, frame/present and real Runtime UI rules |
 
-For a shorter introduction, read [Architecture Overview](OVERVIEW.md). [Subsystems](MODULES.md) provides a quick module reference. Existing domain guides remain useful for individual workflows; this architecture set is the reference for current dependency boundaries and cross-subsystem behavior.
+For a shorter introduction, read [Architecture Overview](OVERVIEW.md) and
+[Documentation status](../DOCUMENTATION_STATUS.md). [Subsystems](MODULES.md)
+provides a quick module reference. Existing domain guides remain useful for
+individual workflows; this architecture set is the reference for current
+dependency boundaries and cross-subsystem behavior.
 
 ## Diagram conventions
 

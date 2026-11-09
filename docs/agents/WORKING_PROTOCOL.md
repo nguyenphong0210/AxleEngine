@@ -115,10 +115,9 @@ and stops at the activated range boundary or a genuine unresolved dependency.
 It never invents Codex approval. An unavailable required check stays NOT RUN and
 blocks dependent acceptance; it is not silently waived to continue.
 
-The [autonomous execution plan](handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md)
-contains a proposed OPT-02..10 range and activation/resume prompts. Preparing
-that document alone does not activate the range. Preserve an existing release
-until an actual user instruction activates its replacement.
+The exchange is the only live task authority. Historical autonomous-range
+activation prompts were retired during the documentation cleanup. Preserve an
+existing release until an actual user instruction activates its replacement.
 
 ## Read and reply on every work session
 

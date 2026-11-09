@@ -6,9 +6,9 @@
 > is delivered; acceptance and new plugin implementation remain open.
 
 Date: **2026-11-04**. Source baseline: **3190ab205ace417b81172c0fa92f92e64b5b46f4**.
-Status: **design only; no plugin infrastructure or Vehicle replacement implemented**.
+Status: **current contract; PLG-01..13 and PLG-22/23 are implemented and verified; advanced plugin features and Vehicle replacement remain deferred**.
 
-The latest user instruction requests detailed documentation before implementation.
+The current source implements the selected SDK, host session, static Runtime and snapshot/export seams.
 The user selected DLL plugins for Editor and static plugin modules for the shipped
 Runtime. Replacing the existing Vehicle implementation from scratch is permitted;
 preserving its C++ API or exact historical driving behavior is not required.
@@ -62,7 +62,7 @@ in `fa74981`; OPT-00 reviews that delivery and PLG-17 verifies the final cutover
 | --- | --- | --- |
 | [Root CMake](../../CMakeLists.txt) | Unconditionally adds Vehicle, Spline, Terrain, Editor and Runtime directories | Product-specific configuration and resolved module selection |
 | `Engine/Vehicle/CMakeLists.txt` (retired source path) | Static library contained simulation, audio and VFX | Retirement and compatibility purge delivered; verify clean Engine and new plugin cutover |
-| [Core](../../Engine/Core/CMakeLists.txt), [Application](../../Engine/Core/src/Application.cpp) | Static Core includes application composition and uses concrete platform/render/physics services | Establish a valid shared-host boundary before loading DLLs |
+| [Core](../../Engine/Core/CMakeLists.txt), Application composition | Static Core includes application composition and uses concrete platform/render/physics services | Establish a valid shared-host boundary before loading DLLs |
 | [Scene interface](../../Engine/Scene/include/Axle/Scene.hpp), [implementation](../../Engine/Scene/src/Scene.cpp) | Owns vehicle instances and exposes vehicle queries; creates, updates, copies and renders vehicle state | Generic scene extensions and plugin-owned systems |
 | [Components](../../Engine/Scene/include/Axle/Components.hpp) | Vehicle, wheel, audio and VFX component declarations are in the common header | New Vehicle components live in the plugin |
 | [Scene serializer](../../Engine/Scene/src/SceneSerializer.cpp) | Built-in Vehicle branches and custom section callbacks coexist | Generic codecs, missing-type preservation, explicit readiness checks |

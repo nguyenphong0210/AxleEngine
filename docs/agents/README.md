@@ -48,14 +48,11 @@ The live exchange determines the current assignment; no plan releases production
 | Plugin implementation details | [Plugin coding reference](../design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | Proposed algorithms, SDK contracts and real-fixture strategy |
 | Feature status | [ROADMAP](../../ROADMAP.md) | Overall plan; not an automatic task queue |
 | Animation requirements/dependencies | [Phase 40 plan](../archive/design/deferred/ANIMATION_PHASE_40_COMPLETION_PLAN.md) | Package contracts |
-| Animation implementation details | [Animation coding reference](../archive/design/deferred/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md) | Algorithms and examples; inspect current APIs |
 | Latest animation foundation | [Verified corrections](../archive/design/reports/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md) | Existing accepted foundation evidence |
 | G1 submission | [Gemini delivery](../archive/design/reports/ANIMATION_G1_GEMINI_DELIVERY.md) | Implementer's report; review still required |
 | VFX requirements | [Phase 39 plan](../archive/design/deferred/VFX_PHASE_39_COMPLETION_PLAN.md) | Historical/scoped feature contracts |
-| VFX implementation details | [VFX coding reference](../archive/design/deferred/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) | Reference only unless a task selects it |
-| Material implementation details | [Material coding reference](../archive/design/deferred/MATERIAL_PHASE_38_3_GEMINI_IMPLEMENTATION_GUIDE.md) | Reference only unless a task selects it |
 
 ## Historical prompts
 
-Superseded one-shot prompt dumps have been retired; see [historical agent archive](archive/README.md).
+Superseded one-shot prompts and agent-specific handoffs have been retired. The exchange retains immutable historical messages; it is not a live implementation instruction. See the [historical agent archive](archive/README.md).
 Detailed reviews and delivery reports are preserved in the [design archive](../archive/design/README.md).

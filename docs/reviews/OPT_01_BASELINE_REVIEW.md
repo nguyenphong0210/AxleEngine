@@ -137,7 +137,7 @@ missing delivery, wrong-thread delivery and exactly-once correct delivery.
 ## O1-R4 - P2: shared baseline inventory is incomplete
 
 **Contract:** [AF-00](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md#7-additional-foundation-packages),
-lines 206-221, and [handoff](../agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md), AF-00 items 1-4.
+lines 206-221 and AF-00 items 1-4.
 **Reviewed artifacts:** the complete delivery diff, delivery report, architecture
 rules and the three committed scenario-result JSON snapshots.
 

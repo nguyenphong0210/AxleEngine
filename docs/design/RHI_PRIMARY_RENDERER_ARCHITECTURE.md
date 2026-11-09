@@ -6,7 +6,7 @@
 > is delivered; acceptance and new plugin implementation remain open.
 
 Date: 2026-11-03 (Asia/Saigon). Inspected source baseline: `492e6d1`.
-Status: **proposed target architecture; not an implementation or acceptance claim**.
+Status: **current rendering contract; P41-01..26 implementation evidence is recorded in OPT-04/05/09 and OPT-10**.
 
 The [Architecture Foundation master plan](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
 now coordinates this Phase 41 workstream with Phase 42 ECS/jobs and Phase 43

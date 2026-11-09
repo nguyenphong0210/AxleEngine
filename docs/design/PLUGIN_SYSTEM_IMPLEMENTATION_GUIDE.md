@@ -5,9 +5,10 @@
 > source-audit baselines are retained for traceability. Early Vehicle retirement
 > is delivered; acceptance and new plugin implementation remain open.
 
-Date: **2026-11-04**. Status: **proposed algorithms and interfaces; not implemented**.
-The current assignment is documentation only. Source baseline and selected product
-behavior are in the [architecture](PLUGIN_SYSTEM_ARCHITECTURE.md); package order
+Date: **2026-11-04**. Status: **reference algorithms; implemented seams are recorded in the OPT-06/07/08/09 reviews and OPT-10 acceptance record**.
+This document remains a reference for deferred feature work. Current source behavior and acceptance
+evidence are in the [architecture](PLUGIN_SYSTEM_ARCHITECTURE.md), [plugin flow](../architecture/PLUGIN_FLOW.md) and
+package reviews; package order
 and evidence gates are in the [plan](PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md).
 
 The examples below express contracts, not copy-ready definitions. Use the vendored

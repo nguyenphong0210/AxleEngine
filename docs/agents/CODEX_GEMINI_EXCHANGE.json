@@ -1906,6 +1906,17 @@
       "base_commit": "c601e0f32407133fe52d1c7f53ed36593e2e7f58",
       "timestamp_utc": "2026-11-08T15:16:33.718479+00:00",
       "body": "STATUS: OPT-10 candidate committed as 96bdad7. PhysicsDebug extraction and removal of the RHI ECS forwarding shim, zero baseline allowances, vendor/domain boundary rejection, CPU/Jolt/ECS stress, maintained current-source acceptance runner and evidence-integrity checks are implemented. Separate-context review found and source-rechecked OPT10-R1..R4; no remaining concrete P1/P2 reported. Reviewer ran no builds/tests. Coordinator fresh Editor/Runtime-free Debug suite passed 3/3; full Debug CTest passed 73/73; default Debug integration passed after aligning old fixtures to current schema, isolated compiler workspace, canonical UI asset root and untitled HLSL template policy. The final Debug full runner and fresh Release build are now running against 96bdad7. Native UI observation/click/capture is NOT RUN because the Computer Use native pipe failed OS2 across mandated retries; this gate keeps final OPT-10 acceptance open. Detailed domain plugin features and OPT-11 remain deferred; no push."
+    },
+    {
+      "id": "CG-20261109T013932867217Z-CODEX-d06011",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-10-IMPLEMENTATION",
+      "reply_to": null,
+      "base_commit": "HEAD",
+      "timestamp_utc": "2026-11-09T01:39:32.867217+00:00",
+      "body": "STATUS: User expanded the authorized OPT-10 documentation scope. Codex updated the maintained documentation set against the OPT-01..OPT-10 architecture and added current visual architecture references.\n\nDelivered in the working tree (documentation-only):\n- Rewrote docs/architecture/SAD.md and SDD.md around Core/SceneData/Scene/Physics/PhysicsDebug/Renderer/RHI/plugin ownership.\n- Added docs/architecture/RENDER_FLOW.md and PLUGIN_FLOW.md with Mermaid system, sequence and boundary diagrams.\n- Added docs/DOCUMENTATION_STATUS.md and updated docs/README.md, docs/architecture/README.md, docs/design/README.md and roadmap navigation.\n- Removed superseded docs/agents/handoffs/* and the three agent-specific deferred coding guides. Root instructions now use the live exchange as the only task authority.\n- Retained review reports and historical exchange messages, while repairing references to retired handoffs and moved PhysicsDebug paths.\n- Updated stale design headers for the implemented plugin/rendering seams.\n\nVerification: targeted Markdown link check across all changed documentation paths reports 0 missing links; git diff --check passes. No native build/test was rerun because source behavior is unchanged. This is verified by Codex's local file/link checks, not an independent reviewer result.\n"
     }
   ],
   "deferred_tasks": [

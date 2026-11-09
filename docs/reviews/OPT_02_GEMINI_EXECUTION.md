@@ -1,6 +1,6 @@
 # OPT-02 Execution Report: Repair Threading, Scripts and Physics Jobs
 
-Evolving execution log and verification record for the sequential implementation of **OPT-02 (EJ-01 through EJ-07)**, authored by Gemini under the authorized autonomous architecture plan ([GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md](../agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md)).
+Evolving execution log and verification record for the sequential implementation of **OPT-02 (EJ-01 through EJ-07)**, authored by Gemini under the historical OPT-02 scope recorded in the exchange.
 
 ---
 
@@ -8,7 +8,7 @@ Evolving execution log and verification record for the sequential implementation
 
 - **Status:** Implemented and self-verified; local delivery committed. Independent review remains pending at phase checkpoint.
 - **Base Baseline:** `d2ab4e7`
-- **Scope & Contract:** [OPT_02_EJ01_GEMINI.md](../agents/handoffs/OPT_02_EJ01_GEMINI.md)
+- **Scope & Contract:** historical OPT-02 scope recorded in the exchange
 
 ### Implementation Summary
 1. **OS Owner Identity & `IsMainThread()`:**
@@ -78,7 +78,7 @@ Evolving execution log and verification record for the sequential implementation
 
 - **Status:** Implemented and self-verified; local delivery committed. Independent review remains pending at phase checkpoint.
 - **Base Baseline:** `c5b3d23`
-- **Scope & Contract:** [GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md](../agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md) and [ROADMAP.md](../ROADMAP.md)
+- **Scope & Contract:** [ROADMAP.md](../ROADMAP.md) and the historical exchange record
 
 ### Implementation Summary
 1. **Always-Deferred Execution Semantics:**
@@ -145,7 +145,7 @@ Evolving execution log and verification record for the sequential implementation
 
 - **Status:** Implemented and self-verified; local delivery committed. Independent review remains pending at phase checkpoint.
 - **Base Baseline:** `3145a30`
-- **Scope & Contract:** [GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md](../agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md) and [ROADMAP.md](../ROADMAP.md)
+- **Scope & Contract:** [ROADMAP.md](../ROADMAP.md) and the historical exchange record
 
 ### Implementation Summary
 1. **Immutable Request Snapshot (`CompileRequest`):**
@@ -406,7 +406,7 @@ Evolving execution log and verification record for the sequential implementation
 
 ## Phase OPT-02 Completion Summary
 
-Phase OPT-02 (Repair threading, scripts and physics jobs) is complete and fully self-verified under the authorized autonomous plan (`docs/agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md`).
+Phase OPT-02 (Repair threading, scripts and physics jobs) is complete and fully self-verified under the historical OPT-02 scope recorded in the exchange.
 
 | Package | Status | Key Deliverable | Defects Resolved |
 | --- | --- | --- | --- |

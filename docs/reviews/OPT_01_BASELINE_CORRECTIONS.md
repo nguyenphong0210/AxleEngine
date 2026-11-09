@@ -70,7 +70,6 @@ Editor/Runtime rebuild/full AxleTests/GPU/manual UI/player/export/sanitizer/perf
 checks were not rerun for these tooling corrections. The current-format lifecycle
 passes; OPT-00's remaining full product verification is still separately recorded.
 
-The user-requested next package is **AF-01 only**, described by the
-[English Gemini handoff](../agents/handoffs/OPT_01_AF01_GEMINI.md). AF-01 is assigned
-for implementation, not implemented or accepted by this delivery. P41-00, PLG-00,
-AF-02+ and EJ-01+ remain unreleased. All changes are local; no push.
+The user-requested next package was **AF-01 only**. Its later delivery and
+combined review are recorded in [OPT-01 AF-01/P41/PLG review](OPT_01_AF01_P41_PLG_REVIEW.md).
+All changes were local; no push.

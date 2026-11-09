@@ -121,10 +121,9 @@ Code commits after the Gemini baseline:
   imply a global live hot-reload service for all running instances. Applying a
   working copy is explicit and produces an inline entity definition.
 
-The original [completion plan](../deferred/VFX_PHASE_39_COMPLETION_PLAN.md) and
-[implementation guide](../deferred/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) remain the
-scope/design references. Use this report and actual source names for current
-implementation/verification status.
+The original [completion plan](../deferred/VFX_PHASE_39_COMPLETION_PLAN.md)
+remains a historical scope reference. The agent-specific implementation guide
+was retired; use this report and actual source names for current status.
 
 
 ## Follow-up: Create VFX crash and allocation recovery (2026-11-03)

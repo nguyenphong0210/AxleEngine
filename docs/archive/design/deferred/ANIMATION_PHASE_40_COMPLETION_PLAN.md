@@ -14,8 +14,8 @@ Status: **foundation implementation in progress**. Actual completed packages and
 verification are recorded in the [foundation report](../reports/ANIMATION_PHASE_40_FOUNDATION_REPORT.md);
 unchecked packages below remain implementation/acceptance requirements.
 
-Parent: [ROADMAP.md](../../../../ROADMAP.md). Implementation contracts and the Gemini
-assignment: [coding guide](ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).
+Parent: [ROADMAP.md](../../../../ROADMAP.md). Implementation contracts are
+historical and must be revalidated against the current source before resuming.
 General rules: [development conventions](../../../guides/DEVELOPMENT.md) and
 [architecture assessment](../../../architecture/ASSESSMENT.md).
 

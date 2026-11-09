@@ -40,9 +40,9 @@ for the A-J work packages, stable authored-definition/runtime-instance boundary,
 atomic sub-steps and CPU/GPU/UI matrix. First isolate preview from scene state and
 make unchanged selection idempotent; then complete multi-emitter persistence,
 playback, real RHI rendering, authoring/resources/undo and advertised module paths.
-The [Gemini coding guide](VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) expands those
-contracts into proposed C++ types, implementation flows, test fixtures and a
-code/CPU-test handoff; physical GPU/UI acceptance remains an external check.
+The former agent-specific VFX coding guide was retired. Revalidate these
+contracts against current APIs before resuming; physical GPU/UI acceptance remains
+an external check.
 
 Acceptance: preview controls and scene playback use compatible configuration; saved assets reproduce emitter behavior; births/collisions/deaths and sub-emitter recursion have explicit limits/lifetimes. Separate CPU simulation checks from backend draw checks.
 
@@ -59,9 +59,9 @@ Acceptance: two independent entities drive two canvases without cross-talk; resi
 Runtime skeleton/clip/pose/state-machine types are foundations, not a completed
 animation editor. Follow the [Phase 40 completion plan](ANIMATION_PHASE_40_COMPLETION_PLAN.md)
 for the audited source gaps, A0-K3 packages and dependencies. The
-[Gemini coding guide](ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md) specifies
-ownership, asset formats, timing/conditions, 1D/2D blending, event delivery,
-RHI skinning, dopesheet/graph commands and concrete CPU/GPU/UI fixtures.
+The former agent-specific animation coding guide was retired. Revalidate
+ownership, asset formats, timing, RHI skinning and authoring fixtures against
+current APIs before resuming.
 
 First fix partial bind-pose sampling, topology and shared mutable animator state;
 then complete durable assets and the missing DX12/Vulkan skeletal draw path before

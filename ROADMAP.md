@@ -1,15 +1,19 @@
-# 🗺️ AxleEngine Development Roadmap & Milestone Tracker
+# AxleEngine Development Roadmap & Milestone Tracker
 
-Welcome to the **AxleEngine Development Roadmap**. This document tracks the complete architectural evolution of AxleEngine from its initial core foundation to a modern, modular, general-purpose 3D game engine.
+This file preserves the original feature and milestone history. It is not the
+current execution queue. For the architecture delivered through OPT-01..OPT-10,
+read [`docs/ROADMAP.md`](docs/ROADMAP.md), then the
+[documentation status](docs/DOCUMENTATION_STATUS.md) and the current
+[OPT-10 acceptance record](docs/reviews/OPT_10_ARCHITECTURE_ACCEPTANCE.md).
 
 ---
 
-## 📊 Roadmap Overview & Executive Summary
+## Historical roadmap context
 
-* **Engine Philosophy**: Modern C++20, Data-Oriented Design (EnTT ECS), Jolt Physics 3D, High-Performance Multi-threaded Job System (enkiTS), PBR Graphics (RHI-primary D3D12/Vulkan migration, OpenGL 4.5 compatibility), Spatial Audio (miniaudio), Native C++ Scripting with Reflection & DLL Hot-Reloading, Prefab Assemblies, and WYSIWYG Editor tooling.
-* **Phase Status**: Earlier milestones record historical deliveries. Phase 38.3 and Phase 39 retain outstanding acceptance checks. Phase 40 has delivered CPU foundations and Gemini G1 awaiting independent review. **Architecture Foundation is the highest-priority program: Phase 41 NRI/rendering, Phase 42 EnTT/enkiTS and Phase 43 plugins/Vehicle are coordinated before feature expansion; implementation remains unstarted.**
-* **Automated Test Verification**: Record evidence per suite/backend. VFX CPU (7 suites), physical DX12/Vulkan VFX readbacks, Step 102 with physical DX12, and material Step 106 on both backends pass. Interactive VFX UI/OpenGL checks and separately tracked material manual checks remain pending. See the [VFX review and acceptance report](docs/archive/design/reports/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md).
-* **Upcoming Focus / execution priority #1**: **Architecture Foundation**, using the [master plan](docs/design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) and [NRI contract](docs/design/NRI_INTEGRATION_CONTRACT.md). Preserve P41/EJ/PLG package IDs, follow shared safety/data prerequisites, and defer advanced rendering/authoring features as specified. Existing material/VFX/animation acceptance obligations remain open. Phase numbering does not determine execution order.
+The original milestone sections below retain feature history and older domain
+status. They do not release work, override the OPT queue, or describe current
+module ownership. Deferred material, VFX, animation and plugin feature work must
+be revalidated against the current architecture before resumption.
 
 ## Current architecture work: follow one roadmap
 
@@ -699,7 +703,7 @@ current architecture acceptance or instructions to resume feature work.
 - [ ] **Phase 39: Visual Particle & VFX Studio - End-to-End Editor Completion (`Engine/VFX`, `Engine/UI`, `Engine/Scene`, `Editor`)**
   - **Status (2026-11-03): Gemini's A1-J4 delivery received a corrective integration review and a neutral modular authoring upgrade. CPU tests and physical DX12/Vulkan rendering checks PASS on NVIDIA GeForce RTX 3070. Interactive editor acceptance and a separate OpenGL regression session remain pending; Phase 39 stays OPEN. Phase 40 planning and its scoped Gemini implementation handoff are tracked separately; they do not close these remaining checks.**
   - **Current evidence**: [Review and Acceptance Report](docs/archive/design/reports/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md). Commit subjects and historical checklist marks alone are not acceptance evidence.
-  - **Scope/design**: [Completion Plan](docs/archive/design/deferred/VFX_PHASE_39_COMPLETION_PLAN.md) and [Gemini Implementation Guide](docs/archive/design/deferred/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md). Proposed type names in the guide are blueprints; use actual source names below.
+  - **Scope/design**: [VFX completion plan](docs/archive/design/deferred/VFX_PHASE_39_COMPLETION_PLAN.md). Its names are historical design references; use actual current source names below.
   - [x] **A - Selection, Ownership & Lifecycle (code/automated coverage)**:
     - [x] **A1**: Idempotent selection and safe scene detach; preserve dirty work and opened asset documents across unrelated selection changes.
     - [x] **A2**: Independent panel-owned preview systems; a private scene renders them through the active RHI without advancing user scene simulation.
@@ -796,7 +800,7 @@ current architecture acceptance or instructions to resume feature work.
 
 - [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/Scene`, `Engine/UI`, `Editor`, `Runtime`)**
   - **Status (2026-11-03): A3 publication enforcement and A2 FBX baking review corrections complete.** A3's enforced immutable mesh-resource publication, non-assignability, and validated non-null replacement (R1/R2) are verified. A2's technical baking gaps (rotational Nyquist aliasing R3, transactional output R8, close STEP boundary loss R4, constant-next holds R5, terminal linear key exclusion R6, unskipped budget & nonlinear adaptive refinement R7) are resolved with permanent registered CPU tests. Release/Debug builds, unit tests, and both Animation CTests PASS. A2 remains open for expanded multi-exporter corpus verification. Animation RHI pixels, native authoring UI and standalone packaged playback are pending; Phase 38.3/39 manual checks remain separately open.
-  - **Canonical scope and dependencies**: [Phase 40 Completion Plan](docs/archive/design/deferred/ANIMATION_PHASE_40_COMPLETION_PLAN.md). **Code/algorithm/test reference**: [Gemini Implementation Guide](docs/archive/design/deferred/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).
+  - **Canonical scope and dependencies**: [Phase 40 Completion Plan](docs/archive/design/deferred/ANIMATION_PHASE_40_COMPLETION_PLAN.md). **Code/algorithm/test reference**: the archived Phase 40 completion plan; agent-specific coding guides were retired.
   - **Current coordination**: G1 was delivered in `7ba4361`/`d4dbb75` and awaits independent review. **Phase 41 rendering foundations now take priority; D1/D2 and new authoring work are deferred.** P41-23/24 reuse the relevant Phase 40 F1-F3 contracts and evidence rather than creating a parallel renderer. Use the [shared exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json); no new implementation is released by this roadmap.
   - **Execution**: 28 separately committed packages. First deliver A0-A3, B1/B2, C1/C2, B3, F1/F2 and G1/G2 as an executable import -> persist -> independent animator -> RHI preview slice; then complete authoring and acceptance. Package dependencies in the plan take precedence over the display order below.
   - [ ] **A - CPU Foundations & Instance Safety**:

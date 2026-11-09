@@ -64,9 +64,8 @@ names in `.gitmodules` do not substitute for these actual revisions.
 ## Current asset identity and persistence policy: source observations
 
 **Scope update, 2026-11-05:** The user now requires no per-asset sidecars. The
-[AF-01 handoff](../agents/handoffs/OPT_01_AF01_GEMINI.md) uses a source-controlled
-native embedded UUIDs and raw root-relative paths, without an authored central
-registry. It retires active .meta generation. The .meta behavior below is a
+accepted AF-01 review uses source-controlled native embedded UUIDs and raw
+root-relative paths, without an authored central registry. It retires active .meta generation. The .meta behavior below is a
 historical source observation at `af5721b`, not a requirement to retain or commit
 sidecars. Source capture and vendor graph evidence remain unchanged.
 

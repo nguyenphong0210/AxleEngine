@@ -1,9 +1,9 @@
 # Gemini Delivery: OPT-01 / AF-01 Stable Asset Identity and Safe Persistence
 
-Date: **2026-11-05**  
-Implementer: **Gemini**  
-Coordinator/Reviewer: **Codex**  
-Scope: **AF-01 only** (per handoff `docs/agents/handoffs/OPT_01_AF01_GEMINI.md` and commit `a19da2fd08a341652e65b5d41c917830f78aa3e8`)  
+Date: **2026-11-05**
+Implementer: **Gemini**
+Coordinator/Reviewer: **Codex**
+Scope: **AF-01 only** (historical handoff retired; delivery commit `a19da2fd08a341652e65b5d41c917830f78aa3e8`)
 Status: **Delivered (pending Codex independent review)**
 
 ---

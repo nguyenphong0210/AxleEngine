@@ -19,10 +19,9 @@ code are foundations to preserve. The work below is not implemented by this
 document, and its proposed names are not existing APIs.
 
 The parent checklist is [ROADMAP.md](../../../../ROADMAP.md). Related guidance is in
-the [editor tooling roadmap](EDITOR_TOOLING_ROADMAP.md). The companion
-[Gemini coding guide](VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) provides
-proposed C++ types, algorithms, integration flows, explicit fixtures and a
-copyable assignment prompt for a code/CPU-test-only implementer. Phase 38.3 material UI
+the [editor tooling roadmap](EDITOR_TOOLING_ROADMAP.md). The former agent-specific
+coding guide was retired; this plan is a historical design reference and must be
+revalidated against the current source before resuming. Phase 38.3 material UI
 acceptance remains a separate user-owned task; this plan does not close it or
 start Phase 40.
 

@@ -11,7 +11,7 @@ Preparation baseline: `842cf7d`
 
 ## 1. Scope and Authority
 
-Per user instructions and handoff (`docs/agents/handoffs/OPT_01_AF00_EJ00_GEMINI.md`):
+Per user instructions and the recorded OPT-01 scope:
 - Work is strictly bounded to **AF-00 + EJ-00 only**, in that order. Packages AF-01, P41-00, PLG-00, and OPT-02+ remain deferred.
 - **Engine cleanliness prioritized:** No old data formats, legacy Vehicle payloads, compatibility readers, or migration code are supported or retained.
 - **Honest defect tracking:** Known engine defects are reproduced and asserted against their expected correct behaviors. They fail honestly and are recorded as `REPRODUCED_DEFECT`, not hidden, waived, or converted into false `PASS` results.

@@ -17,9 +17,8 @@ Stop after these packages and their report. Do not implement the rest of Phase 4
 2. Read [Foundation Corrections](ANIMATION_PHASE_40_CORRECTIONS.md).
 3. Read the Phase 40 section in [ROADMAP.md](../../../../ROADMAP.md).
 4. Consult the original [completion plan](../deferred/ANIMATION_PHASE_40_COMPLETION_PLAN.md)
-   and [coding guide](../deferred/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md) for the
-   two assigned packages only. Their full-phase instructions do not expand this
-   assignment. Actual current headers take precedence over illustrative APIs.
+   for the two assigned packages only. The former coding guide was retired; its
+   full-phase instructions did not expand this assignment. Actual current headers take precedence over illustrative APIs.
 
 The [original review](ANIMATION_PHASE_40_GEMINI_REVIEW.md) describes `a6efa8c`.
 Its nine finding groups were subsequently corrected. Do not treat its old

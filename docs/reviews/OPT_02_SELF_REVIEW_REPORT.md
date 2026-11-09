@@ -1,10 +1,10 @@
 # AxleEngine Architecture Self-Review Report: Phase OPT-02
 
-**Document:** `docs/reviews/OPT_02_SELF_REVIEW_REPORT.md`  
-**Reviewer:** Gemini (Autonomous Self-Review per `GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md`)  
-**Scope:** Phase OPT-02 (*Repair threading, scripts and physics jobs*) — Packages `EJ-01` through `EJ-07`  
-**Code Baseline:** `2e56e27` (Git working tree clean)  
-**Date:** 2026-11-06  
+**Document:** `docs/reviews/OPT_02_SELF_REVIEW_REPORT.md`
+**Reviewer:** Gemini (historical self-review; the autonomous-plan document has been retired)
+**Scope:** Phase OPT-02 (*Repair threading, scripts and physics jobs*) — Packages `EJ-01` through `EJ-07`
+**Code Baseline:** `2e56e27` (Git working tree clean)
+**Date:** 2026-11-06
 **Status:** **SELF-VERIFIED & AUDITED** (Independent acceptance remains pending at milestone checkpoint)
 
 ---

@@ -6,7 +6,7 @@
 > is delivered; acceptance and new plugin implementation remain open.
 
 Date: 2026-11-03 (Asia/Saigon). Planning baseline: `492e6d1`.
-Status: **Phase 41 rendering workstream; architecture-first; no package implemented by this document**.
+Status: **historical package contract; P41-01..26 implementation evidence is recorded in the OPT reviews**.
 
 Read the [architecture contract](RHI_PRIMARY_RENDERER_ARCHITECTURE.md) and
 [implementation guide](RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md).

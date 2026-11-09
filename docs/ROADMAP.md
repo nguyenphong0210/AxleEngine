@@ -41,7 +41,7 @@ changed. This does not establish full feature completeness. OPT-09 was subsequen
 **Latest completed assignment: Codex OPT-09, PLG-22/23 and P41-26.** Static selected Runtime and snapshot-bound export pass final Debug/Release 69/69 CTest, five exact product combinations per configuration, D3D12/Vulkan detached player launches and package/error checks (30/30 command outcomes each). Separate-context source rechecks found no remaining concrete P1/P2; execution evidence is Codex coordinator evidence. See the [delivery record](reviews/OPT_09_IMPLEMENTATION.md). Detailed plugin features stay deferred; OPT-10 is released and in progress.
 
 **Accepted prerequisite: Codex OPT-04, P41-01..P41-11.** The user reassigned
-implementation from Gemini to Codex on 2026-11-07; [current handoff](agents/handoffs/OPT_04_CODEX.md).
+implementation from Gemini to Codex on 2026-11-07; see the execution record for the released scope.
 One separate-context Codex reviewer checks the full phase after P41-11; significant
 fixes are rechecked before final acceptance. Intermediate P41-03/P41-06 review
 stops are superseded. Gemini subsequently supplied a supplementary architecture
@@ -68,9 +68,8 @@ The [OPT-01 combined review](reviews/OPT_01_AF01_P41_PLG_REVIEW.md) remains the 
 accepted foundation. Identity policy is unchanged: raw external resources use
 canonical root-relative paths and native Engine assets embed UUIDs in the file.
 No sidecars, authored central identity registry or legacy migration are required.
-The [autonomous execution plan](agents/handoffs/GEMINI_AUTONOMOUS_ARCHITECTURE_PLAN.md)
-and [exchange](agents/CODEX_GEMINI_EXCHANGE.json) preserve the earlier implementation
-activation and phase deliveries. The separate OPT-00 acceptance gap remains open.
+The [exchange](agents/CODEX_GEMINI_EXCHANGE.json) preserves the earlier implementation
+messages and phase evidence. The separate OPT-00 acceptance gap remains open.
 
 **Prior checkpoint: OPT-00, clean-removal follow-up awaiting independent verification.**
 The user confirmed on **2026-11-05** that Engine must be clean: old data formats,
@@ -244,7 +243,7 @@ local commits `e351399` and `3a67116`; no push or OPT-04+ implementation was per
 
 **Exit:** D3D12/Vulkan use the pinned NRI contract; GL is an explicit compatibility adapter. Creation failure, resize, recorded-but-unsubmitted work and shutdown have relevant current evidence; missing native checks remain NOT RUN.
 
-**Assignment:** Codex implementation with one consolidated separate-context Codex review after P41-11 and supplementary Gemini review; [current handoff](agents/handoffs/OPT_04_CODEX.md). Complete P41-01..11 and stop after the final review gate.
+**Assignment:** Codex implementation with one consolidated separate-context Codex review after P41-11 and supplementary Gemini review. Complete P41-01..11 and stop after the final review gate.
 
 **Evidence:** [Codex execution record](reviews/OPT_04_CODEX_EXECUTION.md).
 P41-01..11 are implemented, verified and reviewed. Original review findings closed

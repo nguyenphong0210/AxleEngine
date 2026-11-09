@@ -11,6 +11,8 @@ OPT-11 and later feature work are deferred.
   capabilities and OPT-11 remain deferred. Read the
   [current acceptance record](reviews/OPT_10_ARCHITECTURE_ACCEPTANCE.md) for executed
   evidence and required open gates.
+- **Current architecture summary**: read [documentation status](DOCUMENTATION_STATUS.md)
+  before the detailed contracts.
 - **Implemented contracts**: CPU Core/SceneData/assets, owner-scoped jobs and shared
   simulation, checked native rendering/resource lifetimes, SDK DLL/static plugin
   composition and snapshot-bound export. See
@@ -20,9 +22,10 @@ OPT-11 and later feature work are deferred.
 | --- | --- |
 | [Optimization roadmap](ROADMAP.md) | What to do now, what follows, package progress and phase exits |
 | [Design catalog](design/README.md) | Find detailed contracts for active phases; older/deferred documents are in the archive |
-| [Architecture index](architecture/README.md) | Architectural overviews, execution flows, subsystem boundaries, and target layering |
+| [Architecture index](architecture/README.md) | SAD, SDD, Render/Plugin flows, execution flows and subsystem boundaries |
 | [Build workflows](guides/BUILD_WORKFLOWS.md), [Tests](../Tests/README.md) | Actual build, test, startup, and export workflows |
 | [Agent collaboration](agents/README.md) | Working protocol, current assignments, and delivery/review exchange |
+| [Documentation status](DOCUMENTATION_STATUS.md) | Current OPT-01..OPT-10 architecture and maintenance rules |
 | [Historical product roadmap](../ROADMAP.md) | Original feature milestones and development history |
 
 ## Documentation roles

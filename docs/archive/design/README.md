@@ -8,20 +8,17 @@ Reorganized: **2026-11-04**. These documents were removed from the active
 
 These plans/references are outside the current architecture prerequisite path.
 Read them when the roadmap resumes the relevant feature. Old phase numbers and
-embedded prompts do not release implementation; recheck current source first.
+embedded prompts do not release implementation; recheck current source first. Agent-specific coding guides and handoffs were removed during the 2026-11-09 documentation cleanup; the remaining plans are design history only.
 
 | Document | Scope |
 | --- | --- |
 | [Phase 40: Skeletal Animation Studio Completion Plan](deferred/ANIMATION_PHASE_40_COMPLETION_PLAN.md) | Deferred feature plan/reference |
-| [Phase 40: Animation Coding Guide for Gemini](deferred/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md) | Deferred feature plan/reference |
 | [Editor Tooling Improvement Roadmap](deferred/EDITOR_TOOLING_ROADMAP.md) | Deferred feature plan/reference |
-| [Phase 38.3 Material System: Implementation Handoff for Gemini](deferred/MATERIAL_PHASE_38_3_GEMINI_IMPLEMENTATION_GUIDE.md) | Deferred feature plan/reference |
 | [Material pipeline audit (Phase 38.3)](deferred/MATERIAL_PIPELINE_AUDIT.md) | Deferred feature plan/reference |
 | [Automotive material reference scene](deferred/MATERIAL_REFERENCE_SCENE.md) | Deferred feature plan/reference |
 | [Screen-space material refraction](deferred/MATERIAL_REFRACTION.md) | Deferred feature plan/reference |
 | [VFX Editor authoring guide](deferred/VFX_EDITOR_AUTHORING_GUIDE.md) | Deferred feature plan/reference |
 | [Phase 39: VFX Editor Completion Plan](deferred/VFX_PHASE_39_COMPLETION_PLAN.md) | Deferred feature plan/reference |
-| [Phase 39: VFX Editor Coding Guide for Gemini](deferred/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md) | Deferred feature plan/reference |
 | [VFX feature expansion backlog](deferred/VFX_UNITY_FEATURE_BACKLOG.md) | Deferred feature plan/reference |
 
 ## Delivery and review reports

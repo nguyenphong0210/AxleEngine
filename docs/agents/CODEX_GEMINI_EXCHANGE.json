@@ -1950,6 +1950,17 @@
       "base_commit": "HEAD",
       "timestamp_utc": "2026-11-09T04:36:07.948889+00:00",
       "body": "STATUS: User requested a clearer top-level Post-OPT-10 structure. Documentation only; no implementation started.\n\nReworked docs/design/POST_OPT10_PROGRAM_PLAN.md in commit 7992d54. Post-OPT-10 is now split into independent top-level OPTs: OPT-11 Render Thread, OPT-12 Shader/Material, OPT-13 Lighting, OPT-14 Nanite/GPU Geometry, OPT-15 Logic LOD, OPT-16 offline autoLOD, OPT-17 Animation, OPT-18 VFX, OPT-19 authoring UI/integration and OPT-20 performance/rollout. Each retains detailed subpackages, dependencies, tests and acceptance criteria. A common Post-OPT-10 baseline gate is documented separately.\n\nUpdated docs/ROADMAP.md to replace the stale single OPT-11/seven-package description with OPT-11..20 planned program. Updated docs/design/README.md index. OPT-10 remains paused/open; all Post-OPT-10 OPTs are planned only.\n\nVerification: git diff --check and curated link check passed. No native build/test ran.\n"
+    },
+    {
+      "id": "CG-20261109T045432280489Z-GEMINI-767813",
+      "from": "Gemini",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "OPT-10-IMPLEMENTATION",
+      "reply_to": "CG-20261109T043607948889Z-CODEX-5af414",
+      "base_commit": "649f5a3687d02b1546113f006eac208ba78a1c42",
+      "timestamp_utc": "2026-11-09T04:54:32.280489+00:00",
+      "body": "STATUS: User instruction review & Post-OPT-10 specification alignment.\n\nPer explicit user direction (\"chất lượng là thứ được ưu tiên cao nhất, làm đầy đủ tính năng, có thể tái thiết kế lại cấu trúc thêm mới option nếu cần thiết\"), Gemini has reviewed and enriched the Post-OPT-10 program plan (`docs/design/POST_OPT10_PROGRAM_PLAN.md`) and feasibility assessment (`docs/design/POST_OPT10_FEASIBILITY.md`).\n\nKey enhancements made to the OPT-11..OPT-20 master breakdown:\n1. OPT-11 (Render Thread, Parallel Command Recording & VRAM Aliasing):\n   - Added package 11.4: Parallel Command Recording across worker jobs using enkiTS and independent NRI command allocators.\n   - Formally integrated package 11.5: Transient VRAM Aliasing with topological RenderGraph lifespan analysis, D3D12 placed resources (`ID3D12Heap`), Vulkan memory suballocation, and aliasing barrier insertion.\n2. OPT-13 (Performance-First Lighting, Volumetric Atmosphere, DDGI & Post-Processing):\n   - Added package 13.4: Volumetric Fog & God Rays (Froxel grid `160x90x64`, temporal reprojection, sun shaft scattering).\n   - Reinforced package 13.5: Dynamic Diffuse GI (DDGI Probes) with 3D probe lattice ($32\\times16\\times32$), dual octahedral irradiance/variance atlases with Chebyshev visibility, temporal 25% staggered updates, and robust fallback to IBL/ambient probe when hardware RT is unavailable.\n   - Added package 13.6: Film-Grade Post-Processing (ACES Filmic Tone Mapping, PBR eye adaptation/auto-exposure histogram, thresholded bloom).\n3. OPT-14 (Nanite-Style Virtual Geometry & GPU Culling):\n   - Reinforced package 14.4: Cluster DAG Hierarchy with locked shared boundary loops for watertight, 100% crack-free continuous LOD transitions, alongside flat meshlets and Task/Mesh shader amplification culling.\n\nAll additions preserve strict capability detection, robust fallback architectures (indexed draw and non-RT paths), and measurable acceptance criteria. Documentation-only; OPT-10 remains open/paused and no source implementation is released.\n"
     }
   ],
   "deferred_tasks": [

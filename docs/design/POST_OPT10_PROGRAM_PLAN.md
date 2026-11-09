@@ -15,9 +15,9 @@ frozen. These are entry conditions, not a large feature OPT.
 
 ```mermaid
 flowchart TD
-    Gate[Post-OPT-10 baseline gate] --> O11[OPT-11 Render Thread]
+    Gate[Post-OPT-10 baseline gate] --> O11[OPT-11 Render Thread & VRAM Aliasing]
     Gate --> O12[OPT-12 Shader and Material]
-    O11 --> O13[OPT-13 Lighting]
+    O11 --> O13[OPT-13 Lighting & Post-Processing]
     O12 --> O13
     O11 --> O14[OPT-14 Nanite / GPU Geometry]
     O12 --> O14
@@ -57,27 +57,35 @@ Before OPT-11 begins:
 No performance number such as `120 FPS`, `3.5 ms`, `50% VRAM` or `0% dormant
 CPU` is accepted without this baseline.
 
-## OPT-11 — Render Thread and frame ownership
+## OPT-11 — Render Thread, parallel command recording and VRAM aliasing
 
-**Goal:** Decouple simulation from rendering without violating current RHI owner
-thread and resource lifetime rules.
+**Goal:** Decouple simulation from rendering, scale draw-call generation across
+worker cores, and optimize transient GPU memory without violating RHI owner
+thread, resource lifetime, or cache coherency rules.
 
 Packages:
 
 - **11.1 Ownership design:** specify device, resource, RenderService,
   presentation, shutdown and device-loss ownership.
-- **11.2 Snapshot queue:** bounded `RenderWorld` queue, back-pressure,
+- **11.2 Snapshot queue:** bounded `RenderWorld` lock-free queue, back-pressure,
   frame-drop policy and one-frame latency diagnostics.
-- **11.3 Offscreen worker:** run a render worker without window presentation and
-  prove no cross-thread `CanSubmit` or resource-owner violation.
-- **11.4 Native presentation:** transfer resize, acquire, present and surface
-  rebuild safely.
-- **11.5 Plugin/lifetime stress:** test plugin callbacks, resource leases,
-  shutdown and restart while frames are queued.
-- **11.6 Acceptance:** identical image output, bounded latency, clean shutdown,
-  device-loss recovery and measured CPU overlap.
+- **11.3 Offscreen worker & presentation:** run a dedicated render worker and
+  transfer resize, acquire, present and surface rebuild safely without
+  cross-thread `CanSubmit` violations.
+- **11.4 Parallel command recording:** leverage NRI independent multi-threaded
+  command allocators and `enkiTS` worker jobs to record draw passes concurrently,
+  merging into the primary command list prior to queue submission.
+- **11.5 Transient VRAM aliasing:** integrate topological lifetime analysis into
+  `RenderGraph`, allocate transient targets from shared hardware heaps
+  (`ID3D12Heap` via `CreatePlacedResource` / Vulkan memory suballocation), and
+  automatically emit aliasing memory barriers and cache invalidations.
+- **11.6 Plugin/lifetime stress:** test plugin callbacks, resource leases,
+  shutdown and restart while frames are queued and transient heaps are active.
+- **11.7 Acceptance:** identical image output, bounded latency, clean shutdown,
+  measured CPU overlap, verified VRAM reduction from aliased passes, and
+  device-loss recovery.
 
-Out of scope: VRAM aliasing, mesh shaders and DDGI.
+Out of scope: mesh shaders and DDGI (owned by OPT-14 and OPT-13).
 
 ## OPT-12 — Shader and Material pipeline
 
@@ -102,49 +110,73 @@ Packages:
 Acceptance requires cross-backend shader/layout tests, invalid-graph rollback and
 stable authored asset round-trips.
 
-## OPT-13 — Lighting and image quality
+## OPT-13 — Performance-First Lighting, Volumetric Atmosphere, DDGI and Post-Processing
 
-**Goal:** Complete the first measurable lighting slice before experimental GI.
+**Goal:** Deliver a complete high-fidelity lighting stack within a strict
+3.5ms–5.0ms GPU budget on mainstream hardware, featuring Cascaded Shadows,
+Screen-Space Ambient/Reflections, Froxel Volumetric Fog, Dynamic Diffuse GI
+probes with capability fallback, and Film-Grade Post-Processing.
 
 Packages:
 
-- **13.1 Cascade contract:** camera-space split, stabilization, bias and light
-  resource definitions.
-- **13.2 D3D12 CSM:** native depth targets and one-to-four cascade rendering.
-- **13.3 Vulkan CSM:** equivalent pass, diagnostics and fallback.
-- **13.4 Sampling:** PCF/filtering, cascade transitions and shadow regression
-  images; preserve the OpenGL implementation.
-- **13.5 HDR/IBL:** authored HDR skybox, environment resources and fallback.
-- **13.6 Screen-space passes:** depth/normal history, SSAO/GTAO and bounded SSR
-  with temporal invalidation.
-- **13.7 Optional GI:** probe data and budget first; ray-traced DDGI is a later
-  capability-gated experiment, not a mandatory baseline.
-
-Acceptance requires backend readbacks, resize/device-failure tests, quality
-thresholds and measured frame cost per preset.
+- **13.1 Cascade contract & implementation:** camera-space split, texel
+  stabilization, depth bias, 3–4 cascades with PCF 5x5 sampling across D3D12
+  and Vulkan, preserving the OpenGL compatibility fallback.
+- **13.2 HDR Environment & IBL:** authored HDR skyboxes, pre-filtered
+  radiance/irradiance cubemaps, split-sum 2D BRDF LUT integration, and diffuse
+  ambient fallback.
+- **13.3 Screen-space ambient & reflections:** depth/normal history,
+  half-resolution GTAO/SSAO compute pass with bilateral depth-aware
+  reconstruction (75% ALU savings), and bounded SSR ray-marching with temporal
+  invalidation.
+- **13.4 Volumetric Fog & God Rays:** low-resolution Frustum Voxel Grid
+  (*Froxel* $160 \times 90 \times 64$) with temporal reprojection, phase
+  function scattering, and directional sun shaft integration.
+- **13.5 Dynamic Diffuse Global Illumination (DDGI Probes):** 3D axis-aligned
+  probe grid volume ($32 \times 16 \times 32$), dual octahedral texture
+  atlases (irradiance $8 \times 8$ and distance/variance $16 \times 16$ with
+  Chebyshev visibility to eliminate light leaking), temporal 25% staggered ray
+  updates, hardware ray-tracing via NRI with seamless fallback to IBL/ambient
+  probe when RT is unavailable.
+- **13.6 Film-Grade Post-Processing:** ACES Filmic Tone Mapping, PBR eye
+  adaptation (auto-exposure compute pass with luminance histogram), thresholded
+  bloom with dual-filtering blur, and color grading LUTs.
+- **13.7 Acceptance & Budget verification:** backend readbacks, resize/device-failure
+  tests, quality thresholds, verified lighting budget ($\le 5.0\text{ ms}$ at
+  1080p on target hardware), and fallback parity on non-RT/OpenGL devices.
 
 ## OPT-14 — Nanite-style virtual geometry and GPU culling
 
-**Goal:** Add scalable geometry only with a complete indexed fallback.
+**Goal:** Enable rendering of dense scenes (100k+ instances) through
+continuous GPU-driven meshlet clustering, cluster DAG hierarchy, and hardware
+task/mesh shaders on D3D12/Vulkan, with strict capability-gated indexed
+fallback.
 
 Packages:
 
 - **14.1 GPU instance data:** bounds, transforms, material IDs and generation
-  ownership.
-- **14.2 Hi-Z culling:** compute frustum/occlusion culling and indirect indexed
-  draws.
-- **14.3 Capability gate:** D3D12/Vulkan mesh/task shader queries, diagnostics and
-  fallback selection.
-- **14.4 Meshlet asset schema:** cluster metadata, bounds, source hash and
-  deterministic debug viewer.
-- **14.5 D3D12 mesh pipeline:** task/mesh shader submission behind capability
-  checks.
-- **14.6 Vulkan mesh pipeline:** equivalent path, fallback and device rejection.
-- **14.7 Hierarchy experiment:** only after the flat meshlet path is correct;
-  measure whether a DAG is justified instead of assuming a Nanite equivalent.
-
-Acceptance requires identical visibility/image results against indexed fallback;
-no `100k instances` claim is accepted without the benchmark matrix.
+  ownership in unified structured buffers.
+- **14.2 GPU-driven culling (Hi-Z):** compute shader frustum culling, cone
+  backface culling, two-phase occlusion culling against a Hierarchical-Z depth
+  pyramid, and indirect draw argument generation (`ExecuteIndirect` /
+  `vkCmdDrawIndexedIndirect`).
+- **14.3 Meshlet asset generation & schema:** cluster generation via
+  `meshoptimizer` (`meshopt_buildMeshlets`, $\le 64$ vertices, $\le 126$
+  primitives), cluster bounding spheres/cones, source hashing, and
+  deterministic debug cluster coloring.
+- **14.4 Cluster DAG hierarchy:** recursive cluster grouping into a Directed
+  Acyclic Graph with locked shared boundary loops to guarantee watertight,
+  100% crack-free continuous LOD transitions.
+- **14.5 Hardware Task & Mesh Shader pipeline:** Task (Amplification) Shaders
+  evaluating projected screen-space error per cluster for dynamic continuous
+  LOD selection and frustum/cone culling; Mesh Shaders emitting primitives
+  directly to rasterizer on D3D12 and Vulkan via NRI.
+- **14.6 Capability gate & indexed fallback:** robust feature detection with
+  seamless, automatic fallback to offline discrete LOD indexed draws on devices
+  without native mesh shader support.
+- **14.7 Scale verification & acceptance:** benchmark 100k+ instances, verify
+  zero crack artifacts on cluster boundaries, ensure identical visibility/image
+  output against indexed fallback, and validate dynamic device recovery.
 
 ## OPT-15 — Logic LOD and simulation scaling
 

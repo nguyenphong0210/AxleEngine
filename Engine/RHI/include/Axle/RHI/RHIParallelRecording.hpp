@@ -45,10 +45,16 @@ namespace Axle::RHI {
         RHICommandBuffer* Get(uint32_t index);
         uint32_t Size() const { return static_cast<uint32_t>(m_Commands.size()); }
         bool Submit();
+        // Re-records the batch after GPU completion. The caller must ensure
+        // completion; Reset performs the conservative device wait used by the
+        // underlying command buffers.
+        bool Reset();
+        bool IsPoisoned() const { return m_Poisoned; }
 
     private:
         std::vector<RHICommandBuffer> m_Commands;
         bool m_Submitted = false;
+        bool m_Poisoned = false;
     };
 
     struct RHIRecordingPass {

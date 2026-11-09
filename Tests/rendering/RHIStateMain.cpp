@@ -95,7 +95,14 @@ static bool Native(RHIType backend) {
         RENDER_CHECK(command && command->Begin() && command->End(), "record independent primary command buffer");
     }
     RENDER_CHECK(primaryBatch.Submit() && device.WaitIdle(), "submit independent primary command buffers as one batch");
+    RENDER_CHECK(primaryBatch.Reset(), "reset independent primary batch after completion");
+    for (uint32_t i = 0; i < primaryBatch.Size(); ++i) {
+        auto* command = primaryBatch.Get(i);
+        RENDER_CHECK(command && command->Begin() && command->End(), "re-record reset primary command buffer");
+    }
+    RENDER_CHECK(primaryBatch.Submit() && device.WaitIdle(), "resubmit reset primary command batch");
     primaryBatch.Shutdown();
+
     RHITexture msaa, resolved, depth, depthCopy;
     auto desc = RHITextureDesc::RenderTarget2D(8, 8); desc.SampleCount = 4;
     RENDER_CHECK(msaa.Init(desc) && resolved.Init(RHITextureDesc::RenderTarget2D(8, 8)) &&

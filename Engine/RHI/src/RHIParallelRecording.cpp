@@ -30,6 +30,7 @@ namespace Axle::RHI {
                 return false;
             }
         }
+        m_Poisoned = false;
         return true;
     }
 
@@ -37,6 +38,7 @@ namespace Axle::RHI {
         for (auto& command : m_Commands) command.Shutdown();
         m_Commands.clear();
         m_Submitted = false;
+        m_Poisoned = false;
     }
 
     RHICommandBuffer* RHIPrimaryCommandBatch::Get(uint32_t index) {
@@ -44,15 +46,27 @@ namespace Axle::RHI {
     }
 
     bool RHIPrimaryCommandBatch::Submit() {
-        if (m_Commands.empty() || m_Submitted) return false;
+        if (m_Commands.empty() || m_Submitted || m_Poisoned) return false;
         std::vector<RHICommandBuffer*> commands;
         commands.reserve(m_Commands.size());
         for (auto& command : m_Commands) {
             if (!command.IsExecutable()) return false;
             commands.push_back(&command);
         }
-        if (!RHICommandBuffer::SubmitBatch(commands)) return false;
+        if (!RHICommandBuffer::SubmitBatch(commands)) {
+            // QueueSubmit may have reached the native queue before returning a
+            // failure. Never retry and risk duplicate GPU work.
+            m_Poisoned = true;
+            return false;
+        }
         m_Submitted = true;
+        return true;
+    }
+
+    bool RHIPrimaryCommandBatch::Reset() {
+        if (m_Commands.empty() || m_Poisoned) return false;
+        for (auto& command : m_Commands) if (!command.Reset()) return false;
+        m_Submitted = false;
         return true;
     }
 

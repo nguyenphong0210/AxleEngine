@@ -14,6 +14,8 @@ execute/merge operation.
 - `RHIPrimaryCommandBatch` allocates independent primary command buffers and
   submits them in one deterministic `SubmitBatch` call. Allocation, state
   tracking and submission remain on the render owner.
+- A failed or ambiguous batch submission poisons the batch and cannot be
+  retried; `Reset()` is available only for a completed successful batch.
 - `RHIRecordingPlan::BuildLevels()` validates dependencies, rejects cycles and
   computes deterministic topological levels.
 - `BuildCpuPreparationBatches()` keeps graph order, groups thread-safe work and

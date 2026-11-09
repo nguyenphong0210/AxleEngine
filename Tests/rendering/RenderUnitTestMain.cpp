@@ -7,6 +7,7 @@ bool RunRenderBackendPolicyUnitTests();
 bool RunRenderPrimitiveIdentityUnitTests();
 bool RunRenderWorldExtractionUnitTests();
 bool RunRenderServiceUnitTests();
+namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure") {
@@ -41,6 +42,11 @@ int main(int argc, char** argv) {
 
     if (!RunRenderServiceUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunRenderServiceUnitTests FAILED!\n";
+        return 1;
+    }
+
+    if (!Axle::RenderTests::RunRenderSnapshotQueueUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunRenderSnapshotQueueUnitTests FAILED!\n";
         return 1;
     }
 

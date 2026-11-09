@@ -327,6 +327,7 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_RenderPrimitiveIdentityUnit.cpp
     rendering/Test_RenderWorldExtractionUnit.cpp
     rendering/Test_RenderServiceUnit.cpp
+    rendering/Test_RenderSnapshotQueueUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
 target_link_libraries(AxleRenderUnitTests PRIVATE

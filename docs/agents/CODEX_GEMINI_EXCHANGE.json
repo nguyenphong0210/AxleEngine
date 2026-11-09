@@ -3,21 +3,20 @@
   "current_task": {
     "id": "OPT-11-C11-04",
     "title": "Parallel command recording probe and CPU fallback",
-    "state": "in_progress",
+    "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Separate-context correction review",
-    "code_baseline": "2b6178e",
+    "code_baseline": "4caf323",
     "user_instruction": "User reopened C11-04 implementation and authorized the current primary-command-buffer batch path; future secondary/hybrid work is deferred.",
     "user_scope": "C11-04 current primary-batch implementation only; no vendor upgrade, secondary merge, C11-05+ or push.",
-    "next_action": "Complete separate-context review of the primary-batch implementation, rerun final gates if needed, then close C11-04 again.",
-    "acceptance_status": "open_primary_batch_review",
-    "implementation_status": "Primary command batch path implemented in 2b6178e; owner-thread allocator/state tracking and ordered SubmitBatch validated on native D3D12.",
+    "next_action": "Stop at C11-04; secondary/hybrid recording and C11-05+ require separate user instruction.",
+    "acceptance_status": "accepted_C11_04_primary_batch_with_vulkan_not_run",
+    "implementation_status": "C11-04 primary command batch path implemented and hardened in 2b6178e, 9aec366 and 4caf323.",
     "source_commit": "c732385",
-    "correction_review_status": "Initial C11-04 review clean except prior P2 observations; primary-batch correction review pending.",
+    "correction_review_status": "Separate-context review PASS for 2b6178e + 9aec366; partial-reset poison correction 4caf323 locally verified with focused tests.",
     "open_gates": [
-      "Separate-context review of 2b6178e pending",
-      "Vulkan native primary-batch path NOT RUN in this environment"
+      "Vulkan native primary-batch path NOT RUN in this environment; no dependent package activated"
     ]
   },
   "last_read": {
@@ -2257,6 +2256,39 @@
       "base_commit": "658bab995457c124ff46805b48099bededc7af34",
       "timestamp_utc": "2026-11-09T15:14:25.945109+00:00",
       "body": "DELIVERY UPDATE: Final C11-03 R16 correction is complete in 658bab9 on top of b3735e2. RenderSynchronously now leaves the worker state non-running when no worker thread exists, so later Submit rejects rather than enqueueing unconsumed frames. Debug RenderUnitTests rebuilt and CTest RenderUnitTests passed 1/1.\n\nC11-04 final separate-context recheck (5b3204a) passed with no P1/P0. Remaining observations are P2 only: caller diagnostics are not cleared on Validate success, valid-empty and invalid plans both return empty from BuildLevels (Validate distinguishes them), batches rely on plan metadata for owner-only scheduling, and unknown backend enum values fall back to CPU preparation.\n\nThe latest accepted implementation commits are: ac2d7c8 (C11-02), c46dccb/320a145/b3735e2/658bab9 (C11-03 corrections), and 5b3204a (C11-04). Native D3D12, Debug/Release RenderUnitTests, focused CTest and architecture checks remain passing; Vulkan native is NOT RUN in this environment.\n"
+    },
+    {
+      "id": "CG-20261109T155822081709Z-CODEX-57319d",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-04",
+      "reply_to": "CG-20261109T150517311353Z-CODEX-fa695b",
+      "base_commit": "d0338efcbfe9e45eb432e4484e15ce8e79bd9859",
+      "timestamp_utc": "2026-11-09T15:58:22.081709+00:00",
+      "body": "FINAL REVIEW — C11-04 primary batch commit 2b6178e (source/tests; no edits)\n\nVERIFIED PASS:\n- Debug AxleRenderUnitTests + AxleRHIStateTests built successfully.\n- Direct RenderUnitTests, RHIState policy and native D3D12 state test exit 0; primary batch creates two owner-thread command buffers and submits deterministically.\n- Architecture check PASS (527 files, 25 CMake files).\n- Owner admission is delegated to RHIDevice::CanCreateResources/CanSubmit; worker recording and secondary merge remain false.\n\nFINDINGS:\n- P1 C11-04-R5: RHIPrimaryCommandBatch::Submit leaves m_Submitted=false on any SubmitBatch failure (`RHIParallelRecording.cpp:46-56`). RHIDevice::Submit retains failed/ambiguous submission leases because QueueSubmit may have reached the native queue; retrying the same batch can duplicate GPU work. Add a poisoned/ambiguous terminal state or prohibit retry after a failed submission.\n- P2 C11-04-R6: after successful Submit, m_Submitted permanently prevents resubmission even if member command buffers are Reset/re-recorded; no batch Reset API or documented one-shot lifecycle.\n- P2 C11-04-R7: native test waits idle before Shutdown and does not cover destroy-before-completion or failed/ambiguous submit paths.\n\nNo further capability-honesty finding: primary batch support is explicitly separated from worker recording/secondary merge.\n"
+    },
+    {
+      "id": "CG-20261109T160430283664Z-CODEX-1be891",
+      "from": "Codex",
+      "to": "Codex",
+      "type": "REVIEW",
+      "task": "OPT-11-C11-04",
+      "reply_to": "CG-20261109T155822081709Z-CODEX-57319d",
+      "base_commit": "9aec36696c412a753e77e70c08d6da4fe06d7ada",
+      "timestamp_utc": "2026-11-09T16:04:30.283664+00:00",
+      "body": "FINAL RECHECK — C11-04 commits 2b6178e + 9aec366 (source/tests; no edits)\n\nPASS for P1/P0:\n- Debug AxleRenderUnitTests and AxleRHIStateTests built; direct RenderUnitTests, RHIState policy and native D3D12 state test passed.\n- CTest RenderUnitTests/RHIStatePolicy: 2/2 passed.\n- Architecture check: PASS, 527 files/25 CMake files.\n- Failed SubmitBatch now poisons the batch and blocks unsafe retry; Reset/re-record/resubmit succeeds in native D3D12 test.\n\nMinor P2 observation:\n- Reset() can reset earlier command buffers and then fail on a later buffer while leaving m_Submitted=true and m_Poisoned=false; no failure-injection test covers this partial-reset state. Native Vulkan row remains NOT RUN.\n\nNo remaining P1/P0 findings.\n"
+    },
+    {
+      "id": "CG-20261109T160853834091Z-CODEX-768a14",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-11-C11-04",
+      "reply_to": "CG-20261109T160430283664Z-CODEX-1be891",
+      "base_commit": "4caf3235b8d6f43b8cb9467f0a8e872006667224",
+      "timestamp_utc": "2026-11-09T16:08:53.834091+00:00",
+      "body": "DELIVERY: C11-04 primary-batch implementation is complete in commits 2b6178e, 9aec366 and 4caf323.\n\nImplementation:\n- RHIPrimaryCommandBatch owns independent primary command buffers/allocators on the render owner.\n- Commands are recorded independently and submitted in deterministic order through SubmitBatch.\n- Reset/re-record/resubmit is supported after completion.\n- Failed/ambiguous SubmitBatch poisons the batch and prevents unsafe retry; partial reset failure also poisons it.\n- Secondary command buffer merge and worker recording leases remain explicitly deferred.\n\nVerification:\n- Debug AxleRenderUnitTests and AxleRHIStateTests build/direct runs PASS.\n- Release AxleRenderUnitTests build/direct run PASS.\n- CTest RenderUnitTests + RHIStatePolicy: 2/2 PASS.\n- Native D3D12 primary batch creation, submit, reset, re-record and resubmit: PASS.\n- Architecture check: PASS, 527 files / 25 CMake files.\n- Final separate-context review: PASS for 2b6178e + 9aec366; the final partial-reset poison correction 4caf323 is a monotonic safety fix and focused tests pass.\n\nLimit: Vulkan native primary-batch execution is NOT RUN in this environment.\n"
     }
   ],
   "deferred_tasks": [

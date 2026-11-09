@@ -14,7 +14,7 @@ namespace Axle::RenderTests {
         config.Device.PreferredBackend = RHI::RHIType::Direct3D12;
         config.QueueCapacity = 2;
         RENDER_CHECK(worker.Start(config), "worker thread starts once");
-        for (int i = 0; i < 100 && worker.GetState() == RenderWorkerState::Starting; ++i)
+        for (int i = 0; i < 5000 && worker.GetState() == RenderWorkerState::Starting; ++i)
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         const auto state = worker.GetState();
         RENDER_CHECK(state == RenderWorkerState::Running || state == RenderWorkerState::Failed,

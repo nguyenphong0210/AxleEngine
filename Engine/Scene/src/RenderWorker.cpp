@@ -93,6 +93,7 @@ namespace Axle {
             SetState(RenderWorkerState::Failed);
             return;
         }
+        device.MarkRenderWorkerOwnershipSupported();
         SetState(RenderWorkerState::Running);
 
         for (;;) {

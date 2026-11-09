@@ -74,6 +74,7 @@ namespace Axle::RHI {
         bool IsBackendSelected() const { return m_Initialized; }
         bool IsNativeReady() const { return m_Initialized && m_Device && m_GraphicsQueue; }
         bool IsOwnerThread() const { return m_Resources.IsOwnerThread(); }
+        void MarkRenderWorkerOwnershipSupported() { if (IsOwnerThread()) m_Capabilities.SupportsRenderWorkerOwnership = true; }
         bool IsContextReady() const { return m_ContextReady; }
         // Set by product composition only after window and entry points are ready.
         void SetContextReady(bool ready) { m_ContextReady = m_Initialized && ready; }

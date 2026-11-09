@@ -10,16 +10,17 @@
     "code_baseline": "b5ddfb0",
     "user_instruction": "User explicitly requests Codex implement OPT-11 one package at a time, with verification and a separate commit per package.",
     "user_scope": "C11-01 only: owner-thread binding, worker state machine, capability probes, synchronous fallback and focused tests. No C11-02..07, vendor upgrade or push.",
-    "next_action": "Remain at C11-01; native transition/live-lease gates are NOT RUN and block package acceptance. Do not start C11-02.",
-    "acceptance_status": "open_native_gates",
+    "next_action": "Repair or explicitly defer the producer-visible atomic stateEpoch contract, then resolve native transition/live-lease gates before releasing C11-02 to Gemini.",
+    "acceptance_status": "open_contract_and_native_gates",
     "implementation_status": "Implemented and self-verified; corrected candidate 86cb301.",
     "source_commit": "86cb301",
-    "correction_review_status": "Separate-context recheck CG-20261109T121220681609Z-CODEX-78aaa4: R1-R3 FIXED; R4 partially fixed/open for unavailable native rows.",
+    "correction_review_status": "Separate-context recheck: R1-R3 FIXED; R4 native rows NOT RUN; residual P2 stateEpoch gap reported in CG-20261109T121343670671Z-CODEX-093b46.",
     "open_gates": [
       "Native SurfaceRebuildRequired transition test NOT RUN",
       "Native DeviceLost/Draining transition test NOT RUN",
       "Live native resource-lease shutdown test NOT RUN",
-      "Release correction recheck executable NOT RUN (Release build passed)"
+      "Release correction recheck executable NOT RUN (Release build passed)",
+      "Producer-visible atomic stateEpoch API NOT IMPLEMENTED"
     ]
   },
   "last_read": {

@@ -73,6 +73,11 @@ namespace Axle {
         {
             std::lock_guard lock(m_Mutex);
             if (!m_Thread.joinable()) {
+                if (m_OwnsDevice) {
+                    RenderService::Get().Shutdown();
+                    RHI::RHIDevice::Get().Shutdown();
+                    m_OwnsDevice = false;
+                }
                 m_State = RenderWorkerState::Stopped;
                 return;
             }
@@ -119,13 +124,25 @@ namespace Axle {
         if (m_Thread.joinable()) Stop();
         const auto state = GetState();
         if (state != RenderWorkerState::Stopped && state != RenderWorkerState::Failed) return false;
-        if (frame.Request.PhysicsScene || frame.Request.ColorTarget || frame.Request.DepthTarget ||
-            frame.Request.GLTargetFBO || frame.Request.ViewTargets) return false;
+        bool initializedFallbackDevice = false;
+        auto& device = RHI::RHIDevice::Get();
+        if (!device.IsInitialized()) {
+            if (!device.Init(m_Config.Device)) return false;
+            initializedFallbackDevice = true;
+            m_OwnsDevice = true;
+        }
         auto& service = RenderService::Get();
-        if (!service.Init()) return false;
+        if (!service.Init()) {
+            if (initializedFallbackDevice) {
+                device.Shutdown();
+                m_OwnsDevice = false;
+            }
+            return false;
+        }
+        SetState(RenderWorkerState::Running);
         result.RequestId = frame.RequestId;
         result.Result = service.RenderView(frame.World, frame.Request);
-        result.State = state;
+        result.State = GetState();
         result.StateEpoch = GetStateEpoch();
         result.Diagnostic = result.Result.ErrorMessage;
         return result.Result.Success;

@@ -27,8 +27,17 @@ namespace Axle::RenderTests {
         const bool submitted = worker.Submit(std::move(frame));
         if (state == RenderWorkerState::Running) {
             RENDER_CHECK(submitted, "running worker admits an immutable frame");
-            for (int i = 0; i < 100 && worker.GetAcceptedFrames() && worker.GetRejectedFrames() == 0; ++i)
+            RenderWorkerResult result;
+            bool polled = false;
+            for (int i = 0; i < 500 && !polled; ++i) {
+                polled = worker.Poll(result);
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            RENDER_CHECK(polled, "worker publishes a bounded result for every accepted frame");
+            RENDER_CHECK(result.RequestId == 1 && result.Result.Success,
+                "native worker executes and reports a successful offscreen render");
+            RENDER_CHECK(result.StateEpoch != 0 && RHI::RHIDevice::Get().GetCapabilities().SupportsRenderWorkerOwnership,
+                "successful native worker probe publishes ownership capability and epoch");
         } else {
             RENDER_CHECK(!submitted, "failed worker rejects frames without native ownership");
         }

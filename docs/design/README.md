@@ -28,7 +28,7 @@ separate contract; it must not reintroduce retired Vehicle compatibility code.
 | Post-OPT-10 | [Advanced rendering roadmap](POST_OPT10_ADVANCED_RENDERING_ROADMAP.md) | Multi-threading, VRAM aliasing, materials, geometry/culling and GI |
 | Post-OPT-10 | [Logic & Simulation LOD roadmap](POST_OPT10_LOGIC_AND_SIMULATION_LOD_ROADMAP.md) | Staggered tick rates, fast-path math, spatial dormancy and animation URO |
 | Post-OPT-10 | [Feasibility assessment](POST_OPT10_FEASIBILITY.md) | Current-source blockers, confidence levels, measurement requirements and recommended order |
-| Post-OPT-10 | [Micro-OPT program plan](POST_OPT10_PROGRAM_PLAN.md) | Smallest planned units, dependencies, tests and acceptance gates; planning only |
+| Post-OPT-10 | [OPT-11..OPT-20 program plan](POST_OPT10_PROGRAM_PLAN.md) | Independent Render Thread, Shader, Lighting, Nanite, LogicLOD, Animation, VFX and rollout OPTs |
 
 Detailed contracts can include later packages needed to describe an end-to-end
 architecture. Their presence does not advance them ahead of the OPT sequence.

@@ -95,9 +95,11 @@ domain labels only: rendering/NRI, ECS/jobs and plugins. Their package identifie
 **P41, EJ, PLG and AF remain unchanged**, preserving contracts and review history.
 There is no need to switch between three phase queues or interpret W/G labels.
 
-The 80 existing packages appear exactly once below: **73 architecture packages**
-in OPT-01..10 and **7 deferred rendering packages** in OPT-11. OPT-00 is a review
-checkpoint outside that count. Package count is not a time estimate.
+The accepted architecture work contains **73 packages in OPT-01..10**.
+Post-OPT-10 is a separately planned OPT-11..OPT-20 program; its planned units
+are listed in [the program plan](design/POST_OPT10_PROGRAM_PLAN.md) and are not
+accepted packages yet. OPT-00 is a review checkpoint outside that count. Package
+count is not a time estimate.
 
 | Order | Phase | Result before moving on |
 | --- | --- | --- |
@@ -112,7 +114,7 @@ checkpoint outside that count. Package count is not a time estimate.
 | OPT-08 | Convert remaining optional systems and project scripts | Apply the same product boundary to existing Spline/Terrain and scripts. |
 | OPT-09 | Build and export the exact selected Runtime | Make project selection determine the actual shipped product. |
 | OPT-10 | Accept and enforce the architecture | Close the architecture effort using current product evidence. |
-| OPT-11 | Resume advanced rendering and feature work later | Keep advanced features and full rendering rollout out of the architecture prerequisite path. |
+| OPT-11..20 | Post-OPT-10 evolution | Execute the independent Render Thread, Shader, Lighting, Nanite, LogicLOD, autoLOD, Animation, VFX, UI and rollout OPTs in the program plan. |
 
 ## Progress and acceptance rules
 
@@ -388,23 +390,22 @@ rejects unsupported selected composition. See the [foundation review](reviews/OP
 
 **Evidence:** [Current OPT-10 implementation and open acceptance gates](reviews/OPT_10_ARCHITECTURE_ACCEPTANCE.md). Native UI and automated verification remain separate; required NOT RUN gates prevent final closure.
 
-### OPT-11 - Resume advanced rendering and feature work later
+### OPT-11..OPT-20 - Post-OPT-10 evolution
 
-**Purpose:** Keep advanced features and full rendering rollout out of the architecture prerequisite path.
+**Purpose:** Execute the independent Post-OPT-10 OPTs only after the OPT-10
+boundary is accepted or explicitly deferred.
 
-**Work:** After OPT-10, implement shadows, HDR/IBL, the animation render bridge and consistent picking; then measure performance, complete full rendering acceptance and perform default rollout. Follow with the separately ordered feature backlog below.
+**Work:** Follow [POST_OPT10_PROGRAM_PLAN.md](design/POST_OPT10_PROGRAM_PLAN.md).
+The plan separates Render Thread, Shader/Material, Lighting, Nanite/GPU
+Geometry, Logic LOD, offline autoLOD, Animation, VFX, authoring UI and final
+performance rollout. Every unit has its own evidence and acceptance state.
 
-- [ ] **P41-21:** Modern shadow passes.
-- [ ] **P41-22:** Authored HDR skybox and IBL.
-- [ ] **P41-23:** Animation bridge, once.
-- [ ] **P41-24:** Geometry/pose/material-consistent picking.
-- [ ] **P41-27:** Performance after correctness.
-- [ ] **P41-28:** Acceptance matrix and reproducibility.
-- [ ] **P41-29:** Cutover and cleanup.
+**Status:** Planned only. No Post-OPT-10 implementation or acceptance is claimed
+by this roadmap.
 
-**Exit:** Full historical Phase 41 closes only after its own seven remaining packages and reviewed animation prerequisites pass. OPT-10 alone does not establish full feature parity or a new backend default.
-
-**Evidence:** Pending; implementation/review is not claimed here.
+**Exit:** OPT-11..20 are closed independently against measured backend,
+performance, image-quality, reliability and UI evidence. Unsupported features
+remain deferred.
 
 ## Read documents only when needed
 
@@ -416,7 +417,7 @@ rejects unsupported selected composition. See the [foundation review](reviews/OP
 | OPT-04..05 | [NRI contract](design/NRI_INTEGRATION_CONTRACT.md), [render architecture](design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md), [package plan](design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md), [coding reference](design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md) | Device/resource/frame/services and real product consumers |
 | OPT-06..09 | [Plugin architecture](design/PLUGIN_SYSTEM_ARCHITECTURE.md), [package plan](design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md), [coding reference](design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | SDK, Plugins window, project builds, fresh Vehicle and selected Runtime |
 | OPT-10 | Acceptance matrices in the master and domain plans | Current cross-product evidence and boundary enforcement |
-| OPT-11 and later | [Micro-OPT program plan](design/POST_OPT10_PROGRAM_PLAN.md), [design archive](archive/design/README.md#deferred-feature-work) | Post-OPT-10 units, deferred features and remaining acceptance obligations |
+| OPT-11 and later | [OPT-11..OPT-20 program plan](design/POST_OPT10_PROGRAM_PLAN.md), [design archive](archive/design/README.md#deferred-feature-work) | Independent Post-OPT-10 OPTs, deferred features and remaining acceptance obligations |
 
 The [documentation hub](README.md) separates working guides, source snapshots,
 future contracts and archived delivery evidence. The [historical product roadmap](../ROADMAP.md)
@@ -427,7 +428,7 @@ retains old milestones; it is not another optimization checklist.
 After OPT-10, use this order for later work. Fixes required to preserve an existing
 workflow may be scoped earlier with explicit evidence; that does not release a
 whole feature phase. Old outstanding acceptance is retained, never relabeled PASS.
-The detailed Post-OPT-10 decomposition is in the [micro-OPT program plan](design/POST_OPT10_PROGRAM_PLAN.md); this table remains the high-level order.
+The detailed Post-OPT-10 decomposition is in the [OPT-11..OPT-20 program plan](design/POST_OPT10_PROGRAM_PLAN.md); this table remains the high-level order.
 
 | Later order | Work | Preserved status / reference |
 | --- | --- | --- |

@@ -10,16 +10,17 @@
     "code_baseline": "c732385",
     "user_instruction": "User explicitly authorizes Codex to finish C11-01 and then implement C11-02 and C11-03 sequentially, with one package per commit and review.",
     "user_scope": "C11-01 correction/stateEpoch, then C11-02 bounded snapshot queue, then C11-03 render worker/offscreen presentation. No C11-04..07, vendor upgrade or push.",
-    "next_action": "Package delivery complete; C11-03 source review is NOT RUN due reviewer quota. Do not start C11-04.",
-    "acceptance_status": "open_c11_03_review_and_native_gates",
-    "implementation_status": "C11-03 render worker host implemented/self-verified at c732385; C11-02 corrections at f07fb94.",
+    "next_action": "C11-01..03 implementation boundary complete; C11-04 requires separate user-phase continuation after open review/native gates are addressed.",
+    "acceptance_status": "open_review_and_native_gates",
+    "implementation_status": "C11-01..03 implemented/self-verified; latest source c732385 with queue corrections f07fb94/c4bc65c.",
     "source_commit": "c732385",
-    "correction_review_status": "C11-02 initial review findings addressed in f07fb94; final separate review unavailable due usage limit. C11-03 separate review NOT RUN.",
+    "correction_review_status": "C11-02 initial P1s addressed in f07fb94; final recheck unavailable from reviewer quota. C11-03 review NOT RUN.",
     "open_gates": [
-      "C11-02 final separate-context recheck NOT RUN after f07fb94 (reviewer quota)",
+      "C11-02 final separate-context recheck after f07fb94 NOT RUN",
       "C11-03 separate-context review NOT RUN",
-      "Native worker success/presentation path NOT RUN; worker fallback path verified",
-      "Native SurfaceRebuildRequired/DeviceLost/Draining and live lease rows NOT RUN"
+      "Native worker success/presentation path NOT RUN; fallback path PASS",
+      "Native SurfaceRebuildRequired/DeviceLost/Draining and live lease rows NOT RUN",
+      "C11-01 failed-init cross-thread recovery P2 remains open"
     ]
   },
   "last_read": {

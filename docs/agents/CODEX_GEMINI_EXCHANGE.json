@@ -10,15 +10,16 @@
     "code_baseline": "38630a1",
     "user_instruction": "User explicitly authorizes Codex to finish C11-01 and then implement C11-02 and C11-03 sequentially, with one package per commit and review.",
     "user_scope": "C11-01 correction/stateEpoch, then C11-02 bounded snapshot queue, then C11-03 render worker/offscreen presentation. No C11-04..07, vendor upgrade or push.",
-    "next_action": "Separate-context review C11-02 commit a3ccbc3; if clean, begin C11-03.",
+    "next_action": "Separate-context review C11-02 commits a3ccbc3+c4bc65c; if clean, begin C11-03.",
     "acceptance_status": "open_c11_02_review",
-    "implementation_status": "C11-02 implemented/self-verified; bounded snapshot queue candidate a3ccbc3.",
-    "source_commit": "a3ccbc3",
-    "correction_review_status": "C11-01 R5/R6 follow-up tracked; C11-02 review pending.",
+    "implementation_status": "C11-02 implemented/self-verified with protected-ticket correction c4bc65c.",
+    "source_commit": "c4bc65c",
+    "correction_review_status": "C11-02 review pending; C11-01 native and owner-recovery gates remain open.",
     "open_gates": [
-      "Separate-context C11-02 queue review pending",
+      "Separate-context C11-02 review pending",
       "C11-01 native SurfaceRebuildRequired/DeviceLost/Draining rows NOT RUN",
-      "C11-01 live native resource-lease row NOT RUN"
+      "C11-01 live native resource-lease row NOT RUN",
+      "C11-01 failed-init cross-thread recovery remains open P2"
     ]
   },
   "last_read": {

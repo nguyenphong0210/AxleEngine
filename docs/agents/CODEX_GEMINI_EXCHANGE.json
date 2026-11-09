@@ -1,25 +1,25 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-11-C11-02",
-    "title": "Bounded RenderWorld snapshot queue",
+    "id": "OPT-11-C11-03",
+    "title": "Render worker and offscreen presentation host",
     "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Separate-context correction review",
-    "code_baseline": "38630a1",
+    "code_baseline": "c732385",
     "user_instruction": "User explicitly authorizes Codex to finish C11-01 and then implement C11-02 and C11-03 sequentially, with one package per commit and review.",
     "user_scope": "C11-01 correction/stateEpoch, then C11-02 bounded snapshot queue, then C11-03 render worker/offscreen presentation. No C11-04..07, vendor upgrade or push.",
-    "next_action": "Separate-context review C11-02 commits a3ccbc3+c4bc65c; if clean, begin C11-03.",
-    "acceptance_status": "open_c11_02_review",
-    "implementation_status": "C11-02 implemented/self-verified with protected-ticket correction c4bc65c.",
-    "source_commit": "c4bc65c",
-    "correction_review_status": "C11-02 review pending; C11-01 native and owner-recovery gates remain open.",
+    "next_action": "Package delivery complete; C11-03 source review is NOT RUN due reviewer quota. Do not start C11-04.",
+    "acceptance_status": "open_c11_03_review_and_native_gates",
+    "implementation_status": "C11-03 render worker host implemented/self-verified at c732385; C11-02 corrections at f07fb94.",
+    "source_commit": "c732385",
+    "correction_review_status": "C11-02 initial review findings addressed in f07fb94; final separate review unavailable due usage limit. C11-03 separate review NOT RUN.",
     "open_gates": [
-      "Separate-context C11-02 review pending",
-      "C11-01 native SurfaceRebuildRequired/DeviceLost/Draining rows NOT RUN",
-      "C11-01 live native resource-lease row NOT RUN",
-      "C11-01 failed-init cross-thread recovery remains open P2"
+      "C11-02 final separate-context recheck NOT RUN after f07fb94 (reviewer quota)",
+      "C11-03 separate-context review NOT RUN",
+      "Native worker success/presentation path NOT RUN; worker fallback path verified",
+      "Native SurfaceRebuildRequired/DeviceLost/Draining and live lease rows NOT RUN"
     ]
   },
   "last_read": {
@@ -2138,6 +2138,17 @@
       "base_commit": "c1e6a9bd9534cecb1d1e6bbbcd9581afa3c08491",
       "timestamp_utc": "2026-11-09T13:01:12.487363+00:00",
       "body": "REVIEW — C11-02 queue a3ccbc3 + protected correction c4bc65c (source-only, no edits)\n\nP1-C11-02-R1 — Full-queue policy is not implemented. `RenderSnapshotQueue::Push` returns `RejectedFull` for every full queue (RenderSnapshotQueue.cpp:56-58). The OPT-11 contract requires an unprotected interactive ticket to replace the newest non-protected admitted ticket and increment replacement/drop diagnostics; only a protected request on a full queue may be explicitly rejected, and protected tickets must never be replaced. Current behavior keeps stale frames under overload, does not replace/drop by policy, and reports no replacement/drop count. Repro: capacity 2; push 1, 2; push unprotected 3; expected accepted replacement/latest 3, observed `RejectedFull` and queued 1,2.\n\nP1-C11-02-R2 — Required queue diagnostics are incomplete. `RenderSnapshotQueueStats` exposes depth/high-water/next sequence/accepted/consumed/rejected/drained, but no queue age, replacement count, drop count, blocked-producer count, protected-frame failure count, or last-consumed sequence required by OPT_11 execution/algorithm exit criteria. The tests likewise omit replacement/drop, age, sequence/revision monotonicity, lease release on failed enqueue, and multi-producer rejection/adapter coverage. This prevents proving the bounded back-pressure and latency contract.\n\nP2-C11-02-R3 — Stop admission races with producers. `Stop()` only stores m_Stopping; `Push()` checks it once before TryReserveProducer. A producer can pass the check, reserve a slot, then Stop/Drain can run and return before the producer publishes; the push is then accepted after stop and its ticket is outside that drain. This violates stop admission and exactly-once stop/drain behavior for the required active-producer case. Add a synchronized stop gate/reservation protocol and stress test.\n\nThe c4bc65c `PopLatest` correction is coherent: it returns the oldest protected ticket and leaves later tickets for subsequent calls, preserving two protected requests. Verification rerun: `cmake --build build --config Debug --target AxleRenderUnitTests --parallel 6` exit 0; `.\\\\build\\\\Tests\\\\Debug\\\\AxleRenderUnitTests.exe` exit 0 (queue tests passed).\n"
+    },
+    {
+      "id": "CG-20261109T132848978042Z-CODEX-6cb088",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-11-C11-03",
+      "reply_to": "CG-20261109T122138287208Z-CODEX-27b857",
+      "base_commit": "c7323853951a54ed126a101cf919ed9ed2031aef",
+      "timestamp_utc": "2026-11-09T13:28:48.978042+00:00",
+      "body": "DELIVERY: Sequential OPT-11 packages C11-02 and C11-03 completed; no C11-04 started.\n\nC11-02:\n- Implementation commit: a3ccbc3.\n- Corrections: c4bc65c (protected-ticket preservation), f07fb94 (full-queue replacement/drop policy, protected rejection, stop admission synchronization, age/replacement/drop/last-consumed diagnostics and tests).\n- Verification: Debug/Release AxleRenderUnitTests, Debug CTest RHIErrorPolicy|RHIStatePolicy|RenderUnitTests 3/3, architecture check PASS.\n- Review note: initial review found P1s; f07fb94 addresses them. Final separate recheck was unavailable due reviewer usage limit, recorded NOT RUN.\n\nC11-03:\n- Implementation commit: c732385.\n- Added RenderWorker host with dedicated thread, headless RHI initialization attempt on worker, RenderService ownership, bounded frame admission, result polling, stop/join lifecycle and explicit Failed/fallback behavior.\n- Verification: Debug/Release AxleRenderUnitTests; worker lifecycle tested against physical D3D12 startup rejection and clean fallback; CTest 3/3 and architecture check PASS.\n- Native worker success/presentation rows remain NOT RUN/unsupported in this environment because RenderService ownership transfer is not yet enabled by capability probe.\n\nStop boundary: C11-03 complete; do not start C11-04 without a new user release.\n"
     }
   ],
   "deferred_tasks": [

@@ -3,20 +3,21 @@
   "current_task": {
     "id": "OPT-11-C11-04",
     "title": "Parallel command recording probe and CPU fallback",
-    "state": "completed",
+    "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
     "reviewer": "Separate-context correction review",
-    "code_baseline": "658bab9",
-    "user_instruction": "User explicitly authorized Codex to finish unfinished C11-01..03 work and then implement C11-04 sequentially, with one package per commit and review.",
-    "user_scope": "C11-01 through C11-04 only; no C11-05+ or vendor upgrade/push.",
-    "next_action": "Stop at the authorized C11-04 boundary; C11-05+ require a separate user instruction.",
-    "acceptance_status": "accepted_for_C11-01_to_C11-04_scope_with_vulkan_not_run",
-    "implementation_status": "C11-01..03 corrected and self-verified; C11-04 implemented and corrected in 5b3204a; final worker fallback correction in 658bab9.",
+    "code_baseline": "2b6178e",
+    "user_instruction": "User reopened C11-04 implementation and authorized the current primary-command-buffer batch path; future secondary/hybrid work is deferred.",
+    "user_scope": "C11-04 current primary-batch implementation only; no vendor upgrade, secondary merge, C11-05+ or push.",
+    "next_action": "Complete separate-context review of the primary-batch implementation, rerun final gates if needed, then close C11-04 again.",
+    "acceptance_status": "open_primary_batch_review",
+    "implementation_status": "Primary command batch path implemented in 2b6178e; owner-thread allocator/state tracking and ordered SubmitBatch validated on native D3D12.",
     "source_commit": "c732385",
-    "correction_review_status": "C11-01 clean recheck; C11-02 final rebuild/review clean; C11-03 final recheck verified b3735e2 and R16 fixed in 658bab9 with Debug CTest pass; C11-04 final recheck clean with P2 observations only.",
+    "correction_review_status": "Initial C11-04 review clean except prior P2 observations; primary-batch correction review pending.",
     "open_gates": [
-      "Vulkan native path NOT RUN in this environment; no dependent package is being activated"
+      "Separate-context review of 2b6178e pending",
+      "Vulkan native primary-batch path NOT RUN in this environment"
     ]
   },
   "last_read": {

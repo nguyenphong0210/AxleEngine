@@ -4,6 +4,7 @@
 #include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#include <Axle/RHI/RHIParallelRecording.hpp>
 #include <cmath>
 #include <cstring>
 
@@ -83,6 +84,10 @@ static bool Native(RHIType backend) {
     RHIDeviceDesc init; init.PreferredBackend = backend; init.AllowFallback = false; init.Headless = true;
     init.EnableNRIValidation = true; init.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(backend);
     RENDER_CHECK(device.Init(init) && device.GetBackend() == backend && !device.IsSoftwareAdapter(), "physical state fixture");
+    const auto recordingProbe = ProbeParallelRecording(device.GetCapabilities());
+    RENDER_CHECK(recordingProbe.Mode == RHIParallelRecordingMode::CpuPreparation &&
+        !recordingProbe.AllocatorIsolation && !recordingProbe.SecondaryMerge,
+        "native parallel recording probe selects the validated CPU fallback");
     RHITexture msaa, resolved, depth, depthCopy;
     auto desc = RHITextureDesc::RenderTarget2D(8, 8); desc.SampleCount = 4;
     RENDER_CHECK(msaa.Init(desc) && resolved.Init(RHITextureDesc::RenderTarget2D(8, 8)) &&

@@ -10,6 +10,7 @@ add_library(AxleScene STATIC
     src/SceneExtraction.cpp
     src/RenderService.cpp
     src/RenderSnapshotQueue.cpp
+    src/RenderWorker.cpp
     src/MeshResourceResolver.cpp
     src/AnimationSceneBinding.cpp
     src/SceneSerializer.cpp

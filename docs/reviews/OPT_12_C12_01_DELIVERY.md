@@ -1,6 +1,7 @@
 # OPT-12 C12-01 Material Graph Document and CPU IR
 
 Date: **2026-11-10**. Base: `158629123ad841ce19044922332f76b8cebe5f27`.
+Implementation: `0560779`.
 Status: **C12-01 CPU implementation complete, verified and independently rechecked**.
 
 ## Released boundary

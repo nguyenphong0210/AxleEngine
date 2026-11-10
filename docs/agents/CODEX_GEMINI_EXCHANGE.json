@@ -1,32 +1,57 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-12-MATERIAL-FORMAT",
-    "title": "Record user-approved Material Graph authoring format for future C12-01 implementation",
+    "id": "OPT-12-C12-01",
+    "title": "Deliver extensible C12-01 Material Graph document, CPU IR and persistence",
     "state": "complete",
     "coordinator": "Codex",
-    "implementer": "Codex (documentation only)",
-    "code_baseline": "473d3df",
-    "user_instruction": "User approved the displayed complete format and asked to record it for implementation. The preceding interruption required showing the format before edits; edits started only after this approval.",
-    "user_scope": "Persist the approved example and constraints, link from C12-01 and the design index, and make a coherent local documentation commit. No parser/compiler implementation, node editor, MaterialX, later phase or push.",
+    "implementer": "Codex (explicit user assignment)",
+    "code_baseline": "158629123ad841ce19044922332f76b8cebe5f27",
+    "user_instruction": "User assigned C12-01 directly to Codex, then explicitly challenged hardcoded node validation and requested an extensible design. Continue the same package with a real node-definition registry.",
+    "user_scope": "Implement the approved CPU authoring format, strict parser diagnostics, extensible owned node definitions, generic typed node attributes/properties, validation/IR, identity-safe load/save, and necessary protection of existing flat material callers. Include regression tests, independent correction rechecks, documentation and coherent local commits. No shader generation/render deployment, node-editor UI, later package or push.",
     "plan_reference": "docs/design/OPT_12_MATERIAL_GRAPH_FORMAT.md",
     "expected_files": [
+      "Engine/Asset/include/Axle/AssetDSL.hpp",
+      "Engine/Asset/src/AssetDSL.cpp",
+      "Engine/Asset/include/Axle/MaterialGraph.hpp",
+      "Engine/Asset/src/MaterialGraph.cpp",
+      "Engine/Asset/CMakeLists.txt",
+      "Tests/CMakeLists.txt",
+      "Tests/src/Test_MaterialGraph.cpp",
+      "Tests/Fixtures/MaterialGraph/M_RustMetal.axleasset",
       "docs/design/OPT_12_MATERIAL_GRAPH_FORMAT.md",
       "docs/design/POST_OPT10_PROGRAM_PLAN.md",
+      "docs/reviews/OPT_12_C12_01_DELIVERY.md",
+      "docs/agents/CODEX_GEMINI_EXCHANGE.json",
+      "Engine/Core/include/Axle/BlockText.hpp",
+      "Engine/Core/src/BlockText.cpp",
+      "Engine/Core/CMakeLists.txt",
+      "Engine/Core/include/Axle/FileSystem.hpp",
+      "Engine/Core/src/FileSystem.cpp",
+      "Engine/Renderer/src/Material.cpp",
+      "Engine/RHI/src/RHIMaterial.cpp",
+      "Engine/UI/src/AssetInspector.cpp",
+      "Tests/src/Test_MaterialSerializationUnit.cpp",
+      "Engine/Asset/src/MaterialNodeRegistry.cpp",
+      "Engine/Asset/src/BuiltinMaterialNodes.cpp",
+      "Engine/Asset/src/MaterialGraphInternal.hpp",
       "docs/design/README.md",
-      "docs/agents/CODEX_GEMINI_EXCHANGE.json"
+      "docs/ROADMAP.md"
     ],
-    "approved_choices": [
-      "Keep Gemini-style blocks, explicit input/output pins and editorPos on nodes in .axleasset.",
-      "Connections is inside Graph; retain from/to nodeId.pin endpoint strings.",
-      "Parameters use name as their sole stable unique key; ParameterRef.parameter references the name, with no numeric parameter ID.",
-      "Accept one-line, two-line and multiline parameter declarations with equivalent semantics.",
-      "Use existing native uint64 identity envelope; defaults and unused parameters/nodes are permitted."
-    ],
-    "implementation_status": "Design recorded only. Parser numeric-inline handling, graph validation/compiler and Editor behavior are not implemented or newly verified.",
-    "acceptance_status": "User accepted the displayed authoring format. This is not runtime/parser acceptance or release of C12-01.",
+    "implementation_status": "Complete in 0560779a0974a1e5566eb24fe1b07397a437a180. Generic registry-driven codecs/validation; approved block format preserved. Implemented and verified by Codex.",
+    "acceptance_status": "C12-01 CPU authoring foundation complete, verified and separately reviewed. This does not accept shader lowering, native graph images, graph UI or later OPT-12 packages.",
     "open_gates": [],
-    "next_action": "Use the recorded format when C12-01 is explicitly released. Stop at the documentation boundary; prior qualified C11-07 acceptance and deferred product integrations remain unchanged."
+    "next_action": "Stop at C12-01. C12-02 and later work require a new user assignment. C11-07 deferred product paths remain unchanged.",
+    "implementation_head": "0560779a0974a1e5566eb24fe1b07397a437a180",
+    "review_status": "Separate-context c12_01_review rechecked final registry design, all R1/R2/R3 corrections and current-format fixture migration; no remaining P1/P2. Independently ran final Debug/Release graph 15/15 groups and MaterialUnit CTest 1/1 per configuration, exit 0 each. Reviewer architecture/whitespace PASS. No Gemini response/approval claimed.",
+    "verification_status": "Debug AxleAllTests+Editor+Runtime build exit0; full Debug CTest first 91/92 exit8 due legacy YAML material fixture. Fixture converted to current blocks with all assertions retained and stronger reset checks; both configurations rebuilt, final Debug rerun-failed 1/1 exit0. All 92 distinct Debug checks passed across run and corrected rerun. Release seven focused targets build exit0; final focused CTest9/9 exit0. Architecture545source/25CMake, whitespace, schema,129local-doc-links and approved-fixture equality PASS.",
+    "deferred_work": [
+      "C12-02 shader generation and actual graph rendering",
+      "C12-03 parameter instances/layout/cache ABI and rename transactions",
+      "C12-04 resource decoding/dependency resolution/backend semantics",
+      "Slang/OpenGL graph policy and full node-editor UI",
+      "Full Release CTest matrix and manual Inspector UI interaction not executed in C12-01"
+    ]
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",
@@ -2364,6 +2389,50 @@
       "base_commit": "473d3df",
       "timestamp_utc": "2026-11-10T13:47:41.712344+00:00",
       "body": "User-approved OPT-12 authoring-format checkpoint, replying to the program-planning discussion and recording subsequent direct user decisions. This is documentation-only; no other session is invoked.\n\nThe user approved the complete Gemini-style example shown by Codex and asked to record it for future implementation. Reference: docs/design/OPT_12_MATERIAL_GRAPH_FORMAT.md; linked from C12-01 in POST_OPT10_PROGRAM_PLAN.md and the design index.\n\nKeep .axleasset blocks with explicit inputs/outputs/Pin and editorPos. Connections belongs inside Graph. Parameters merge numeric ID/name into name alone, a unique stable key; ParameterRef uses parameter: \"UV_Tiling\" rather than paramId. Support compact one-line, two-line and multiline declarations with identical meaning; upgrade parser accordingly when released. Keep from/to nodeId.pin strings and numeric node IDs. Native identity remains the existing first-line uint64 envelope, with no second body UUID. Unconnected defaulted inputs and unused parameters/nodes remain valid.\n\nThe document preserves the complete approved sample and distinguishes future parsing/validation/compiler requirements from current behavior. No parser/compiler code, MaterialX integration, full graph Editor or subsequent phase is released or executed by this checkpoint. Prior C11-07 qualified acceptance/deferred product paths remain unchanged. No Gemini review or response is claimed.\n"
+    },
+    {
+      "id": "CG-20261110T135650126098Z-CODEX-206165",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-12-C12-01",
+      "reply_to": "CG-20261110T134741712344Z-CODEX-86bc1a",
+      "base_commit": "158629123ad841ce19044922332f76b8cebe5f27",
+      "timestamp_utc": "2026-11-10T13:56:50.126098+00:00",
+      "body": "IN_PROGRESS: Direct user release of C12-01 to Codex, overriding default implementation roles for this package. Base 158629123ad841ce19044922332f76b8cebe5f27; initial working tree clean. Implement approved Material Graph schema, strict source-located AssetDSL parsing, typed authoring document, validation/CPU IR, identity-safe persistence and focused tests in Engine/Asset and Tests, plus design/delivery documentation. No shader generation/render integration/node-editor UI, C12-02 onward or push. Existing format checkpoint is the contract; C11-07 deferred paths remain unchanged. No other session is invoked; preserve single source-writer ownership. Prior program-planning message was already addressed by the linked format checkpoint."
+    },
+    {
+      "id": "CG-20261110T141308418058Z-CODEX-f03e31",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-12-C12-01",
+      "reply_to": "CG-20261110T135650126098Z-CODEX-206165",
+      "base_commit": "158629123ad841ce19044922332f76b8cebe5f27",
+      "timestamp_utc": "2026-11-10T14:13:08.418058+00:00",
+      "body": "C12-01 scope refinement within authoring safety: separate-context reviewer found existing Material and RHIMaterial flat consumers could overwrite Graph assets. Fix both load/save guards and inspector failed-load handling. Extract only the generic block syntax reader into Core (no graph/domain/RHI types) so AssetDSL and existing material consumers share one strict parser without forbidden module edges. Add regression tests proving graph bytes and existing live state survive rejected flat operations. Initial built graph executable passed 13/13 groups; final-source builds/tests still pending."
+    },
+    {
+      "id": "CG-20261110T142025853611Z-CODEX-dd0cb8",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-12-C12-01",
+      "reply_to": "CG-20261110T141308418058Z-CODEX-f03e31",
+      "base_commit": "158629123ad841ce19044922332f76b8cebe5f27",
+      "timestamp_utc": "2026-11-10T14:20:25.853611+00:00",
+      "body": "User steering during C12-01: hardcoded NodeContract and node-specific codec are unsuitable for extension. Replace them with an explicitly supplied, owned node-definition registry; definitions own signatures, typed property schemas, parameter-reference metadata and revisions. Builtins register outside generic parser/validator. Preserve approved .axleasset syntax. Add a custom-node registration/parse/IR/save/load regression proving extension without central code changes. Earlier graph tests and reviewer source approval do not cover this redesign; rebuild/recheck final source before closure. No compiler/UI feature scope expansion."
+    },
+    {
+      "id": "CG-20261110T143755802255Z-CODEX-4bcc84",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-12-C12-01",
+      "reply_to": "CG-20261110T142025853611Z-CODEX-dd0cb8",
+      "base_commit": "158629123ad841ce19044922332f76b8cebe5f27",
+      "timestamp_utc": "2026-11-10T14:37:55.802255+00:00",
+      "body": "DELIVERY: C12-01 completed by Codex under direct user assignment, including the user-requested extensibility redesign. Base158629123ad841ce19044922332f76b8cebe5f27; implementation 0560779a0974a1e5566eb24fe1b07397a437a180. Report docs/reviews/OPT_12_C12_01_DELIVERY.md; approved example docs/design/OPT_12_MATERIAL_GRAPH_FORMAT.md.\n\nMaterialGraph provides CPU Create/Parse/Validate/Serialize/Load/Save with transactional output, strict source locations, typed defaults, exact parameter-name keys, graph validation, separate reachable deterministic IR, and identity-safe atomic persistence/VFS loading. Preserve authored unused nodes/defaults/layout. Generic MaterialNodeRegistry owns signatures, typed attributes/properties, parameter-binding metadata and revisions; immutable default builtin catalog is separate from generic codecs/validation. Custom ColorOffset and ParameterAlias tests demonstrate actual extension without central node-name branches. User-authorized format is unchanged. Core BlockText is syntax-only; no forbidden module link added.\n\nIndependent correction findings: R1 P1 flat Material/RHIMaterial/Inspector could overwrite graphs; fixed load-before-mutation and save destination guards plus inspector failure handling and production regressions. R2 P3 malformed separator placement fixed in strict parser. R3 P3 reordered duplicate/overlapping signatures fixed by canonical per-binding comparison. Reviewer source-rechecked all corrections and final fixtures; no remaining P1/P2.\n\nCodex executed: final Debug AxleAllTests+AxleEditor+AxleRuntime build exit0; full Debug CTest first91/92 exit8. Sole failure was old YAML fixture inside .axleasset. Converted it to current Material blocks per clean-format contract, retained every assertion and seeded non-default values to strengthen reset coverage. Rebuilt MaterialUnit Debug/Release exit0 and final Debug --rerun-failed1/1 exit0; all92 distinct Debug checks passed across those runs. Release seven focused targets build exit0, final focused CTest9/9 exit0. Graph harness15groups each configuration. Final logs build/agent-runs/c12_01_final_debug_build.log, c12_01_final_release_build.log, c12_01_final_debug_material_build.log, c12_01_final_release_material_build.log, c12_01_final_debug_ctest.log, c12_01_verified_debug_rerun.log, c12_01_verified_release_ctest.log. Architecture545sources/25CMake PASS; whitespace/schema/129local-doc-links/approved-example fixture equality PASS.\n\nSeparate-context c12_01_review independently executed final graph binaries Debug/Release15/15 groups each exit0, MaterialUnit CTest Debug/Release1/1 each exit0, architecture and whitespace checks. It did not independently execute the full native matrix. No Gemini implementation/review/approval is invented.\n\nAccept the C12-01 CPU boundary only. No graph shader generation, native graph rendering, Slang/MaterialX/plugin registration hooks, full graph UI or C12-02 onward. Entire Release CTest matrix/manual Inspector interaction NOT RUN. Native tests in full Debug run are existing product regressions, not graph rendering evidence. Existing link warnings documented; no warning-free claim. C11-07 deferred paths unchanged. Local commits only, no push. Stop at this package boundary."
     }
   ],
   "deferred_tasks": [

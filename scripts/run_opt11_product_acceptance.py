@@ -1,11 +1,34 @@
 """Run serialized real-product acceptance; requires already rebuilt binaries."""
 from __future__ import annotations
 import argparse
+from contextlib import contextmanager
 import json
+import os
 import re
 from pathlib import Path
 import subprocess
 import time
+
+
+@contextmanager
+def preserve_restart_diagnostics(paths, output):
+    """Keep pre-existing crash reports while archiving deliberate frame faults."""
+    before = {p: (p.read_bytes(), p.stat()) if p.is_file() else None for p in paths}
+    try:
+        yield
+    finally:
+        for index, (path, previous) in enumerate(before.items()):
+            if not path.is_file():
+                continue
+            current = path.read_bytes()
+            if previous and current == previous[0]:
+                continue
+            (output / f"editor_restart_diagnostic_{index}.log").write_bytes(current)
+            if previous:
+                path.write_bytes(previous[0])
+                os.utime(path, ns=(previous[1].st_atime_ns, previous[1].st_mtime_ns))
+            elif current.startswith(b"Unhandled C++ Exception: Editor rendering or presentation failed"):
+                path.unlink()
 
 
 def main() -> int:
@@ -71,11 +94,12 @@ def main() -> int:
         fingerprint = (fixture / "workflow.state").read_text(encoding="utf-8").strip()
         if not fingerprint:
             parser.error("SDK fixture fingerprint is missing")
-        for backend in ("dx12", "vulkan"):
-            for mode in ("product", "product-fault", "product-rejected"):
-                run(f"editor_restart_{backend}_{mode}", [test("AxlePluginRestartTests"), f"--{mode}", editor,
-                    projects[0], fingerprint if mode != "product-rejected" else "changed-plan", backend],
-                    markers=("PASS",), timeout=65)
+        with preserve_restart_diagnostics((root / "crash.log", editor.parent / "crash.log"), output):
+            for backend in ("dx12", "vulkan"):
+                for mode in ("product", "product-fault", "product-rejected"):
+                    run(f"editor_restart_{backend}_{mode}", [test("AxlePluginRestartTests"), f"--{mode}", editor,
+                        projects[0], fingerprint if mode != "product-rejected" else "changed-plan", backend],
+                        markers=("PASS",), timeout=65)
         failures = [c for c in cases if c["status"] != "PASS"]
         print(f"{len(cases) - len(failures)}/{len(cases)} native Editor restart cases PASS; {output / 'results.json'}")
         return 1 if failures else 0

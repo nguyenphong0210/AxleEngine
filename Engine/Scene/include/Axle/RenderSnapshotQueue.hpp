@@ -47,8 +47,9 @@ namespace Axle {
 
     // A fixed-capacity, mutex-protected ring. Push, Pop and Stop share one
     // admission boundary, so stop cannot race a producer and protected-ticket
-    // replacement remains atomic. Storage and scratch capacity are reserved
-    // during construction.
+    // replacement remains atomic. Ring/survivor storage is reserved during
+    // construction; discard paths use bounded temporary retirement storage so
+    // payload destructors execute after unlocking (and may query the queue).
     class RenderSnapshotQueue {
     public:
         explicit RenderSnapshotQueue(uint32_t capacity = 3);

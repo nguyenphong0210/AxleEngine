@@ -29,6 +29,8 @@ namespace Axle {
     }
 
     RenderSnapshotPushResult RenderSnapshotQueue::Push(RenderSnapshotTicket ticket) {
+        // Destroy module/resource payloads after admission/accounting is unlocked.
+        std::vector<RenderSnapshotTicket> retired;
         std::lock_guard lock(m_Mutex);
         if (m_Stopping) {
             ++m_RejectedStopping;
@@ -38,10 +40,12 @@ namespace Axle {
 
         ticket.Sequence = m_NextSequence++;
         if (m_Count == m_Capacity) {
+            retired.reserve(m_Count);
             uint32_t removed = 0;
             for (uint32_t i = m_Count; i > 0; --i) {
                 const auto offset = i - 1;
                 if (m_Entries[LogicalIndex(offset)] && !m_Entries[LogicalIndex(offset)]->ProtectedRequest) {
+                    retired.push_back(std::move(*m_Entries[LogicalIndex(offset)]));
                     RemoveLogical(offset);
                     ++removed;
                     ++m_Replaced;
@@ -79,8 +83,10 @@ namespace Axle {
     }
 
     std::optional<RenderSnapshotTicket> RenderSnapshotQueue::PopLatest() {
+        std::vector<RenderSnapshotTicket> retired;
         std::lock_guard lock(m_Mutex);
         if (!m_Count) return std::nullopt;
+        retired.reserve(m_Count);
 
         uint32_t selected = m_Count - 1;
         for (uint32_t i = 0; i < m_Count; ++i) {
@@ -96,6 +102,7 @@ namespace Axle {
         for (uint32_t i = 0; i < m_Count; ++i) {
             if (i == selected) continue;
             if (i < selected && m_Entries[LogicalIndex(i)] && !m_Entries[LogicalIndex(i)]->ProtectedRequest) {
+                retired.push_back(std::move(*m_Entries[LogicalIndex(i)]));
                 ++discarded;
                 continue;
             }
@@ -164,9 +171,14 @@ namespace Axle {
     }
 
     uint64_t RenderSnapshotQueue::Drain() {
+        std::vector<RenderSnapshotTicket> retired;
         std::lock_guard lock(m_Mutex);
         const auto count = m_Count;
-        for (auto& entry : m_Entries) entry.reset();
+        retired.reserve(count);
+        for (auto& entry : m_Entries) {
+            if (entry) retired.push_back(std::move(*entry));
+            entry.reset();
+        }
         m_ReadIndex = 0;
         m_WriteIndex = 0;
         m_Count = 0;

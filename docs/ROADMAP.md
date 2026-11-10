@@ -2,14 +2,15 @@ Collaboration policy (2026-11-07): for future released scopes, Gemini implements
 
 # Architecture Optimization Roadmap
 
-Updated: **2026-11-08**. Ordering baseline: `7869fce` (post-Vehicle retirement).
+Updated: **2026-11-10**. Ordering baseline: `7869fce` (post-Vehicle retirement).
 Status: **OPT-07/08 plugin foundations accepted after repairs and native verification; detailed plugin features are deferred by user scope. OPT-09 selected Runtime/export foundations are implemented and verified; OPT-10 is released and in progress. Earlier accepted prerequisites remain accepted**.
 
 ## Start here
 
 This is the single execution order and progress checklist for the architecture
-cleanup. Work down **OPT-00 -> OPT-10**; **OPT-11 is deferred** until that cleanup
-is accepted. Finish and verify one bounded package before starting the next.
+cleanup. The original order is **OPT-00 -> OPT-10 -> OPT-11**. The user's later
+explicit release activates bounded OPT-11 work without closing outstanding
+OPT-10 acceptance gates. Finish and verify one bounded package before starting the next.
 Use the phase's detailed contract only when it becomes relevant.
 
 **Accepted prerequisite: OPT-05, P41-12..20 and P41-25.** Gemini delivered
@@ -400,8 +401,12 @@ The plan separates Render Thread, Shader/Material, Lighting, Nanite/GPU
 Geometry, Logic LOD, offline autoLOD, Animation, VFX, authoring UI and final
 performance rollout. Every unit has its own evidence and acceptance state.
 
-**Status:** Planned only. No Post-OPT-10 implementation or acceptance is claimed
-by this roadmap.
+**Status, user release 2026-11-10:** C11-05 transient allocation/aliasing is
+implemented through slice .6, including native D3D12/Vulkan evidence; see the
+[delivery record](design/OPT_11_C11_05_DELIVERY.md) for commits, review and limits.
+The new executor is opt-in; current scene targets remain persistent/imported.
+C11-04 full hybrid/NRI fork stays deferred. This checkpoint does not close OPT-11
+as a phase or release C11-06, C11-07 or OPT-12..20.
 
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features

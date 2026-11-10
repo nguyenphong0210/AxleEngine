@@ -1,7 +1,7 @@
 # OPT-11 C11-05 Delivery Record
 
-This is an incremental execution record. The complete C11-05 assignment is in
-progress; a completed slice is not acceptance of the remaining native/alias gates.
+Implementation covers C11-05.1 through C11-05.6. Final regression and independent
+review evidence are recorded below; later OPT-11 packages are outside this release.
 
 ## C11-05.1
 
@@ -154,6 +154,128 @@ Technical basis:
 - Pinned NRI `Source/{D3D12,VK}/CommandBuffer*.hpp` translates global barriers;
   `Source/VK/DeviceVK.hpp` enables image alias creation flags.
 
-## Remaining slices
+## C11-05.6 - Diagnostics and integration boundary
 
-C11-05.6 metrics, final regression matrix and consolidated review remain open.
+`RenderTransientFrame::GetDiagnostics()` exposes an owner-thread value snapshot:
+requested mode, actual allocation mode, epoch/generation, lifecycle, completion
+token, first failure, resource/block/event counts and fallback reason. Native
+requested bytes sum each resource's queried requirement without sharing;
+allocated backing bytes sum actual factory allocation requests after sharing;
+estimated plan bytes retain conservative alignment rounding. Pending diagnostics
+also expose the last published generation's retained backing bytes. These figures
+exclude imported resources, readback fixtures, driver overhead and other device
+allocations; they are not a physical VRAM counter or a complete in-flight peak.
+Existing RHI completion/retirement remains authoritative for in-flight generations.
+
+Failed/poisoned candidates preserve their first diagnostic. Submit failure keeps
+the previous published generation, quarantines pending resources, and rejects
+retry/abandon. Snapshots become invalid after device epoch retirement. The test
+checks metrics while prepared, recording, ready, submitted and poisoned, including
+previous-generation retention and exact backing-byte comparisons.
+
+The production API is implemented in Renderer/RHI and exercised through real
+native fixtures. Existing `RenderGraph`/`RHISceneRenderer` callers and persistent
+`RHIViewTargets` keep their imported-resource behavior. No Editor/Runtime scene
+has been migrated wholesale to transient ownership, and no scene-wide VRAM/FPS
+improvement is claimed. Callers opt in by declaring graph-owned scratch resources;
+history, UI and persistent outputs remain imported exact generations.
+
+Owner integration sequence:
+
+1. Declare resources/passes and compile the pure `RenderTransientGraph` plan.
+2. At an explicit startup/diagnostic point, optionally run
+   `RHITransientResources::ProbeAliasing()`. It performs synchronous native proof;
+   do not call it per frame. Unsupported or unverified devices retain fallback.
+3. `Prepare(plan, imports, AllocationMode::AliasingIfValidated)` creates an
+   unpublished candidate and rebuilds the plan from its declarations/native
+   requirements. Caller-supplied precomputed allocation fields are not trusted.
+4. Follow `GetPlan()->PassOrder`, calling `Record(id, callback)` once per pass.
+   Callbacks record only declared work, including a complete initial clear/copy;
+   they must not submit/reset/end commands, reenter the frame, or export aliased
+   views. `Get(id)` permits packed transient access only in its declared pass.
+5. Call `Submit()` after all passes; only success publishes a new generation.
+   Pre-submit errors may be abandoned; ambiguous submit requires device-policy
+   recovery. Export persistent results into imported outputs before lifetime end.
+6. Inspect `GetDiagnostics()` and existing RHI retirement/completion diagnostics.
+
+Native alias support remains deliberately restricted: identical non-dedicated
+RGBA8_UNORM 2D color targets with one mip/layer/sample and device-local buffers,
+complete initial clear/copy, final whole-resource copy read, single graphics
+queue. Other classes remain unaliased. D3D12 requires enhanced barriers; Vulkan
+requires native alias primitives and positive proof. OpenGL transient allocation
+through this native API is unsupported; existing OpenGL/imported rendering stays
+on its established path. Hybrid worker recording, NRI upgrades/forks, cross-queue
+aliasing, C11-06 stress and C11-07 rollout are not included.
+
+## Final verification
+
+Hardware: NVIDIA GeForce RTX 3070, NVIDIA driver 610.88, Windows; pinned NRI
+`6998e3fbbaed1b132f386a9d49743a2481003487`. D3D12 uses ID3D12Device14/enhanced
+barriers; Vulkan reports API v1.4. Both graph fixtures report NRI validation ON
+and native API validation ON and check zero validation errors through shutdown.
+D3D12 reports the existing `CheckFeatureSupport(options22)` warning; this is not
+silently classified as a validation error or hidden.
+
+All commands below completed with exit 0 against final production source. The
+last Recording/Ready fixture assertions were rebuilt and rerun in all four alias
+normal/failure modes in both configurations after the wider matrix completed.
+
+| Gate | Debug | Release |
+| --- | --- | --- |
+| Build `AxleTransientGraphTests AxleRenderUnitTests AxleRHIResourceTests AxleRHIStateTests AxleRHIRetirementTests AxleRHIFrameTests` | PASS | PASS |
+| Native graph: committed, placed, alias, each normal and submit failure, D3D12 + Vulkan | 12/12 PASS | 12/12 PASS |
+| Existing native resource, state, retirement and frame suites, D3D12 + Vulkan | 8/8 PASS | 8/8 PASS |
+| CTest render units/harness failure and transient/resource/state/retirement policy | 6/6 PASS | 6/6 PASS |
+| Native/NRI graph validation and exact readback | PASS | PASS |
+
+Build command: `cmake --build build --config CONFIG --target` followed by the
+six targets above and `--parallel 6`. Each native executable was invoked from
+`build/Tests/CONFIG/`. Graph modes are `dx12`, `vulkan`, `dx12_placed`,
+`vulkan_placed`, `dx12_alias`, `vulkan_alias`, and each corresponding
+`_fail_submit` mode. Existing suites are `AxleRHIResourceTests`, `AxleRHIStateTests`,
+`AxleRHIRetirementTests`, `AxleRHIFrameTests`, each with `dx12` and `vulkan`.
+CTest command: `ctest --test-dir build -C CONFIG -R
+'^(RenderUnitTests|RenderHarnessFailure|TransientGraphPolicy|RHIResourcePolicy|RHIStatePolicy|RHIRetirementPolicy)$'
+--output-on-failure`.
+
+Final graph and startup-probe allocation-request totals agree in both builds:
+
+| Backend | Unaliased backing | Aliased backing | Reduction within fixture |
+| --- | ---: | ---: | ---: |
+| D3D12 enhanced barriers | 262144 bytes | 131072 bytes | 50% |
+| Vulkan | 1536 bytes | 768 bytes | 50% |
+
+`python scripts/check_architecture.py` passes (534 source files, 25 CMake files).
+`git diff --check` passes. Final logs:
+`build/c11_05_final_{debug,release}_build.log`,
+`build/c11_05_6_{debug,release}_fixture_build.log`,
+`build/c11_05_final_{Debug,Release}_graph_MODE.log`,
+`build/c11_05_final_{Debug,Release}_AxleRHI{Resource,State,Retirement,Frame}Tests_BACKEND.log`,
+`build/c11_05_final_{Debug,Release}_ctest.log`.
+
+### Consolidated independent review
+
+The separate-context Codex reviewer `c11_05_final_review` inspected the full diff
+from `488123d`, including pending .6 metrics, native ownership/barrier translation,
+failure/retirement paths, actual callers and final lifecycle assertions/docs.
+It reported no P1/P2 findings and no findings in its focused final recheck.
+It independently ran Debug `RenderUnitTests` and `TransientGraphPolicy` (2/2
+PASS) and `git diff --check` (PASS). It did not rebuild or independently execute
+the native matrix. The native evidence above is the implementer's executed
+verification, not a Gemini review or an independent native rerun.
+
+Package status: implemented and verified within the conservative supported class;
+required separate-context source review complete. No required C11-05 backend row
+is NOT RUN on this machine. Multi-vendor/other-driver coverage, scene benchmarks,
+windowed product rollout, broader alias classes and full hybrid remain unmeasured
+or outside this released package. C11-06/C11-07 are not accepted by this record.
+
+### Slice commits
+
+- C11-05.1: `4783c25` - pure transient planner (`488123d` delivery record).
+- C11-05.2: `73c9340` - committed native generation and transactional execution.
+- C11-05.3: `8393f64` - placement/query probes and borrowed-memory ownership.
+- C11-05.4: `cf453db` - deterministic interval packing and alias events.
+- C11-05.5: `b65af0a` - conservative native alias barriers and parity capability gate.
+- C11-05.6: this diagnostics, fixture validation and handoff commit; its hash is
+  recorded by the subsequent exchange delivery without a self-referential hash.

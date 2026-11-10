@@ -12,6 +12,18 @@ namespace Axle {
     class RenderTransientFrame {
     public:
         enum class AllocationMode { Committed, PlacedUnaliased, AliasingIfValidated };
+        enum class State { Empty, Prepared, Recording, Ready, Failed, Poisoned, Submitted };
+        struct Diagnostics {
+            bool Valid = false, UsesPlacedMemory = false, UsesAliasing = false;
+            State Lifecycle = State::Empty;
+            AllocationMode RequestedMode = AllocationMode::Committed;
+            uint64_t DeviceEpoch = 0, Generation = 0, LastPublishedGeneration = 0;
+            uint64_t NativeRequestedBytes = 0, AllocatedBackingBytes = 0, EstimatedPlanBytes = 0;
+            uint64_t RetainedPublishedBackingBytes = 0;
+            uint32_t ResourceCount = 0, TransientCount = 0, BlockCount = 0, AliasEventCount = 0;
+            RHI::RHICompletionToken Completion;
+            std::string Diagnostic, FirstError;
+        };
         struct Import { RenderTransientGraph::Resource Id; RHI::RHITransientView View; };
         // Trusted owner callback: record only declared work; do not end, reset,
         // submit or retain the borrowed command wrapper beyond this call.
@@ -30,6 +42,9 @@ namespace Axle {
         // imported persistent generations. Never export/capture an aliased view.
         const RHI::RHITransientView* Get(RenderTransientGraph::Resource resource) const;
         const RenderTransientGraph::Plan* GetPlan() const;
+        // Owner-thread value snapshot. Byte totals describe this generation's
+        // explicit native allocation requests, not whole-device physical VRAM.
+        Diagnostics GetDiagnostics() const;
         uint64_t GetPublishedGeneration() const { return m_Generation; }
         RHI::RHICompletionToken GetCompletion() const { return m_Completion; }
         bool IsPoisoned() const;

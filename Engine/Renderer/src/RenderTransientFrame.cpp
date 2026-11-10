@@ -73,13 +73,21 @@ namespace Axle {
         std::vector<RHI::RHITransientView> Views;
         std::vector<uint32_t> Slots;
         Graph::Plan Plan;
+        Diagnostics Info;
+        std::string FirstError;
         size_t NextPass = 0;
         bool Begun = false, Failed = false, Poisoned = false, CallbackActive = false;
         RHI::RHICommandBuffer Commands;
     };
     RenderTransientFrame::RenderTransientFrame() = default;
     RenderTransientFrame::~RenderTransientFrame() = default;
-    bool RenderTransientFrame::Fail(std::string error) { m_Error = std::move(error); return false; }
+    bool RenderTransientFrame::Fail(std::string error) {
+        if (m_Pending && (m_Pending->Failed || m_Pending->Poisoned)) {
+            if (m_Pending->FirstError.empty()) m_Pending->FirstError = error;
+            m_Error = m_Pending->FirstError;
+        } else m_Error = std::move(error);
+        return false;
+    }
     bool RenderTransientFrame::Prepare(const Graph::Plan& declarations, const std::vector<Import>& imports, AllocationMode mode) {
         auto& device = RHI::RHIDevice::Get();
         if (!device.CanSubmit() || m_Pending || m_Generation == UINT64_MAX ||
@@ -133,13 +141,23 @@ namespace Axle {
             if (!view || !req) return Fail("Transient generation invalid after allocation");
             candidate->Views[id] = *view;
             actual[id].Memory = {req->SizeBytes, req->Alignment, 1, req->MemoryType, req->MustBeDedicated};
+            if (candidate->Info.NativeRequestedBytes > UINT64_MAX - req->SizeBytes) return Fail("Native request statistics overflow");
+            candidate->Info.NativeRequestedBytes += req->SizeBytes;
         }
         if (!CompileDeclarations(actual, candidate->Plan.Passes, candidate->Plan, m_Error, pack) || !candidate->Commands.Init())
             return Fail("Transient native plan/command creation failed");
         if (pack) for (uint32_t i = 0; i < blocks.size(); ++i)
             if (candidate->Plan.Allocations[i].Block != blocks[i]) return Fail("Native alias requirements changed during preparation");
-        if (mode == AllocationMode::AliasingIfValidated && !pack)
-            candidate->Plan.Diagnostic += "; aliasing unverified/unsupported: committed fallback";
+        candidate->Plan.Diagnostic = committed ? "CommittedTransient: native candidates; aliasing disabled" :
+            candidate->Plan.AliasEvents.empty() ? "PlacedUnaliased: distinct native blocks" : "AliasedTransient: validated copy/clear class; owner alias barriers";
+        if (mode == AllocationMode::AliasingIfValidated && !pack) candidate->Plan.Diagnostic += "; unverified/unsupported aliasing: committed fallback";
+        auto& info = candidate->Info;
+        info.Valid = true; info.RequestedMode = mode; info.UsesPlacedMemory = !committed; info.UsesAliasing = !candidate->Plan.AliasEvents.empty();
+        info.DeviceEpoch = device.GetEpoch(); info.Generation = m_Generation + 1;
+        info.EstimatedPlanBytes = candidate->Plan.PlannedAllocationBytes; info.AllocatedBackingBytes = candidate->Resources.GetAllocatedBytes();
+        info.ResourceCount = static_cast<uint32_t>(candidate->Plan.Resources.size());
+        info.TransientCount = static_cast<uint32_t>(transientIds.size()); info.BlockCount = candidate->Plan.BlockCount;
+        info.AliasEventCount = static_cast<uint32_t>(candidate->Plan.AliasEvents.size()); info.Diagnostic = candidate->Plan.Diagnostic;
         m_Pending = std::move(candidate); m_Error.clear();
         return true;
     }
@@ -195,7 +213,7 @@ namespace Axle {
     bool RenderTransientFrame::Abandon() {
         if (!RHI::RHIDevice::Get().IsOwnerThread() || (m_Pending && m_Pending->Poisoned)) return false;
         if (m_Pending && m_Pending->CallbackActive) { m_Pending->Failed = true; return false; }
-        m_Pending.reset(); return true;
+        m_Pending.reset(); m_Error.clear(); return true;
     }
     const RHI::RHITransientView* RenderTransientFrame::Get(Graph::Resource resource) const {
         auto& device = RHI::RHIDevice::Get();
@@ -213,4 +231,19 @@ namespace Axle {
         return RHI::RHIDevice::Get().IsOwnerThread() && frame && frame->Epoch == RHI::RHIDevice::Get().GetEpoch() ? &frame->Plan : nullptr;
     }
     bool RenderTransientFrame::IsPoisoned() const { return m_Pending && m_Pending->Poisoned; }
+    RenderTransientFrame::Diagnostics RenderTransientFrame::GetDiagnostics() const {
+        auto& device = RHI::RHIDevice::Get();
+        const auto* frame = m_Pending ? m_Pending.get() : m_Published.get();
+        if (!device.IsOwnerThread() || !frame || frame->Epoch != device.GetEpoch()) return {};
+        auto info = frame->Info;
+        info.LastPublishedGeneration = m_Generation; info.FirstError = frame->FirstError;
+        if (!m_Pending) { info.Lifecycle = State::Submitted; info.Completion = m_Completion; }
+        else {
+            info.RetainedPublishedBackingBytes = m_Published ? m_Published->Info.AllocatedBackingBytes : 0;
+            info.Lifecycle = frame->Poisoned ? State::Poisoned : frame->Failed ? State::Failed :
+                frame->NextPass == frame->Plan.PassOrder.size() && frame->Begun ? State::Ready :
+                frame->Begun ? State::Recording : State::Prepared;
+        }
+        return info;
+    }
 }

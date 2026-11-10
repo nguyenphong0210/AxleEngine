@@ -187,6 +187,7 @@ static bool GraphAliasParity(bool failSubmit) {
     auto record = [&](RenderTransientFrame& frame) {
         for (uint32_t i = 0; i < 2; ++i) {
             if (!frame.Record(i * 2, [&](RHICommandBuffer& commands) {
+                if (frame.GetDiagnostics().Lifecycle != RenderTransientFrame::State::Recording) return false;
                 nri::AttachmentDesc color{}; color.descriptor = frame.Get(i)->RTV;
                 color.loadOp = nri::LoadOp::CLEAR; color.storeOp = nri::StoreOp::STORE;
                 color.clearValue.color.f = i ? nri::Color32f{0, 1, 0, 1} : nri::Color32f{1, 0, 0, 1};
@@ -194,6 +195,7 @@ static bool GraphAliasParity(bool failSubmit) {
                 commands.BeginRendering(rendering); commands.EndRendering();
                 commands.CopyBuffer(*frame.Get(i + 2)->Buffer, 0, *frame.Get(4)->Buffer, i * 256, 256); return true;
             })) return false;
+            if (frame.GetDiagnostics().Lifecycle != RenderTransientFrame::State::Recording) return false;
             if (!frame.Record(i * 2 + 1, [&](RHICommandBuffer& commands) {
                 nri::TextureRegionDesc region{}; region.width = region.height = 8; region.depth = 1;
                 auto destination = layout; destination.offset = i * layout.slicePitch;
@@ -201,7 +203,7 @@ static bool GraphAliasParity(bool failSubmit) {
                 commands.CopyBuffer(*frame.Get(6)->Buffer, i * 256, *frame.Get(i + 2)->Buffer, 0, 256); return true;
             })) return false;
         }
-        return true;
+        return frame.GetDiagnostics().Lifecycle == RenderTransientFrame::State::Ready;
     };
     auto verify = [&] {
         const auto* pixels = static_cast<const uint8_t*>(imageReadback.Map());
@@ -220,7 +222,9 @@ static bool GraphAliasParity(bool failSubmit) {
         frame.GetPlan()->AliasEvents.empty() && frame.GetPlan()->Diagnostic.find("fallback") != std::string::npos,
         "unverified alias request chooses committed fallback before allocation");
     RENDER_CHECK(record(frame) && frame.Submit() && device.WaitForCompletion(frame.GetCompletion()) && verify(), "committed fallback reference pixels/bytes");
-    const auto referenceBytes = frame.GetPlan()->PlannedAllocationBytes;
+    const auto referenceBytes = frame.GetDiagnostics().AllocatedBackingBytes;
+    RENDER_CHECK(frame.GetDiagnostics().Lifecycle == RenderTransientFrame::State::Submitted &&
+        !frame.GetDiagnostics().UsesAliasing && frame.GetDiagnostics().Completion == frame.GetCompletion(), "committed generation metrics identify completion and actual mode");
     {
         bool reached = false;
         ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
@@ -235,9 +239,16 @@ static bool GraphAliasParity(bool failSubmit) {
     RENDER_CHECK(probe.Supported && probe.AliasedBytes < probe.UnaliasedBytes && device.GetCapabilities().SupportsTransientResourceAliasing,
         "real backend alias capability proof");
     RENDER_CHECK(frame.Prepare(plan, imports, Mode::AliasingIfValidated) && frame.GetPlan()->AliasEvents.size() == 2 &&
-        frame.GetPlan()->BlockCount == 2 && frame.GetPlan()->PlannedAllocationBytes < referenceBytes,
+        frame.GetPlan()->BlockCount == 2 && frame.GetDiagnostics().AllocatedBackingBytes < referenceBytes,
         "native graph uses two queried shared blocks instead of four");
-    const auto aliasedBytes = frame.GetPlan()->PlannedAllocationBytes;
+    const auto aliasedBytes = frame.GetDiagnostics().AllocatedBackingBytes;
+    const auto diagnostics = frame.GetDiagnostics();
+    RENDER_CHECK(diagnostics.Valid && diagnostics.UsesAliasing && diagnostics.UsesPlacedMemory &&
+        diagnostics.RequestedMode == Mode::AliasingIfValidated && diagnostics.AliasEventCount == 2 &&
+        diagnostics.NativeRequestedBytes == referenceBytes && diagnostics.AllocatedBackingBytes * 2 == referenceBytes &&
+        diagnostics.EstimatedPlanBytes >= diagnostics.AllocatedBackingBytes &&
+        diagnostics.Lifecycle == RenderTransientFrame::State::Prepared && diagnostics.RetainedPublishedBackingBytes == referenceBytes,
+        "diagnostics distinguish native backing, aligned plan estimate and retained published generation");
     RENDER_CHECK(!frame.Get(1), "future aliased occupant cannot escape its declared pass");
     RENDER_CHECK(record(frame), "record real alias events before next occupants");
     if (failSubmit) {
@@ -246,6 +257,9 @@ static bool GraphAliasParity(bool failSubmit) {
         });
         RENDER_CHECK(!frame.Submit() && frame.IsPoisoned() && frame.GetPublishedGeneration() == 1 && !frame.Abandon(),
             "failed aliased submission retains published reference and quarantines candidates");
+        const auto firstError = frame.GetDiagnostics().FirstError;
+        RENDER_CHECK(!frame.Submit() && frame.GetDiagnostics().Lifecycle == RenderTransientFrame::State::Poisoned &&
+            frame.GetDiagnostics().FirstError == firstError && !firstError.empty(), "quarantined diagnostics preserve the first submit failure");
         return true;
     }
     RENDER_CHECK(frame.Submit() && !frame.Get(0) && device.WaitForCompletion(frame.GetCompletion()) && verify(),
@@ -344,7 +358,7 @@ static bool Native(RHIType backend, bool failSubmit, bool placed, bool alias) {
         std::cout << "Committed transient bytes: " << actualBytes << '\n';
     }
     RENDER_CHECK(device.WaitIdle(), "transient fixture bounded drain");
-    RENDER_CHECK(device.Shutdown() && !frame.Get(fixture.TempImage), "closed device epoch invalidates graph views");
+    RENDER_CHECK(device.Shutdown() && !frame.Get(fixture.TempImage) && !frame.GetDiagnostics().Valid, "closed device epoch invalidates graph views and metrics");
     return true;
 }
 

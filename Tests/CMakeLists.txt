@@ -613,6 +613,7 @@ set_tests_properties(Opt0203ReviewRegressions PROPERTIES LABELS "review;ecs-jobs
 set(AXLE_TEST_TARGETS AxleStaticPluginLifetimeTests AxleSceneDataBoundaryTests AxleOpt0203ReviewTests AxleFoundationUnitTests AxleSceneMutationUnitTests AxleSimulationClockUnitTests AxleEditorCutoverUnitTests AxleRuntimeProductParityUnitTests AxleProjectUnitTests AxleAssetUnitTests AxleAssetFormatUnitTests AxleSceneDataUnitTests AxleSharedRuntimePhasesUnitTests AxleRenderUnitTests AxlePluginUnitTests AxleTests AxleMaterialUnitTests AxleVFXUnitTests AxleVFXGPUTests AxleAnimationUnitTests AxleJobsECSTests)
 list(APPEND AXLE_TEST_TARGETS AxlePluginFoundationTests AxlePluginSelectionTests AxlePluginsPanelWorkflowTests AxlePluginRuntimeTests AxlePluginDocumentGuardTests AxlePluginRestartTests)
 list(APPEND AXLE_TEST_TARGETS AxlePrimitiveTests AxleRHIIdentityTests AxleRHIRetirementTests AxleRHIStateTests AxleRHIFrameTests AxleRHIPresentationTests AxleImageSourceTests)
+list(APPEND AXLE_TEST_TARGETS AxleTransientGraphTests)
 if(WIN32)
     add_executable(AxleBuildWorkflowTests EXCLUDE_FROM_ALL src/Test_BuildWorkflow.cpp "${CMAKE_SOURCE_DIR}/Editor/src/RuntimeBuild.cpp" "${CMAKE_SOURCE_DIR}/Editor/src/OwnedProcess.cpp")
     target_include_directories(AxleBuildWorkflowTests PRIVATE src "${CMAKE_SOURCE_DIR}/Editor/src" "${CMAKE_BINARY_DIR}/Editor/generated/$<CONFIG>")

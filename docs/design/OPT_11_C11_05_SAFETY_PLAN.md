@@ -1,7 +1,8 @@
 # OPT-11 C11-05 Safety Plan: Transient RenderGraph Allocation and VRAM Aliasing
 
-**Status:** Planning and implementation contract. This document does not release
-C11-05 for source implementation.
+**Status:** Implementation contract, with C11-05.1 through C11-05.6 implemented.
+The [delivery record](OPT_11_C11_05_DELIVERY.md) owns actual verification and
+remaining review status. This reference does not release subsequent packages.
 
 **Scope:** C11-05 only. C11-06 stress work, C11-07 acceptance, C11-04 secondary
 command recording, vendor upgrades and later OPT packages remain outside this
@@ -22,8 +23,9 @@ The user selected C11-05 before full hybrid. Start with C11-05.1, a pure CPU
 planner, and keep the accepted owner-thread primary path as the native reference.
 Secondary/bundle execution and an NRI fork are deferred pending evidence of their
 benefit. They are not prerequisites for transient allocation or VRAM aliasing.
-The live exchange records the currently released slice; later slices require
-their own delivery and verification before continuation.
+The user subsequently authorized all remaining C11-05 slices, in order, with
+one coherent commit per slice. The live exchange records that complete boundary;
+each slice retains its own delivery and verification.
 
 The hybrid plan remains a future integration reference for resource manifests,
 parent-child leases, completion retirement and the combined test matrix. Do not
@@ -87,7 +89,7 @@ flowchart LR
     F --> G[Publish after successful submit]
     G --> H[Retire after GPU completion]
     C -. default .-> I[Unaliased committed mode]
-    C -. gated later .-> J[Aliased placed mode]
+    C -. native proof required .-> J[Aliased placed mode]
 ```
 
 ### 2.1 RenderGraph layer

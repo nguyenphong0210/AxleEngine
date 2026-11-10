@@ -34,6 +34,7 @@ separate contract; it must not reintroduce retired Vehicle compatibility code.
 | OPT-11 C11-04 hybrid | [Hybrid recording implementation plan](OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md) | Deferred NRI fork/child recording design; benchmark worker primary value before resuming |
 | OPT-11 C11-05 safety | [Transient allocation and aliasing safety plan](OPT_11_C11_05_SAFETY_PLAN.md) | Pure planner, unaliased allocation, rollback, packing, alias barriers and native verification |
 | OPT-11 C11-05.1 delivery | [CPU transient planner delivery](OPT_11_C11_05_1_DELIVERY.md) | Implemented/self-verified pure planner; native allocation and aliasing remain later slices |
+| OPT-11 C11-05 delivery | [Transient graph delivery](OPT_11_C11_05_DELIVERY.md) | Native committed/placed generations, interval packing, validated aliasing, diagnostics and backend evidence |
 
 Detailed contracts can include later packages needed to describe an end-to-end
 architecture. Their presence does not advance them ahead of the OPT sequence.

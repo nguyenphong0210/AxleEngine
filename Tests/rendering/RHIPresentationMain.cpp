@@ -70,7 +70,12 @@ static bool Native(RHIType backend) {
 }
 int main(int argc, char** argv) {
     Axle::RenderTests::ConfigureFailureReporting(); Log::Init(); bool ok = false;
-    try { ok = Native(argc > 1 && std::string(argv[1]) == "vulkan" ? RHIType::Vulkan : RHIType::Direct3D12); }
+    try {
+        ok = true;
+        const unsigned rounds = argc > 2 && std::string(argv[2]) == "stress" ? 6 : 1;
+        for (unsigned round = 0; round < rounds && ok; ++round)
+            ok = Native(argc > 1 && std::string(argv[1]) == "vulkan" ? RHIType::Vulkan : RHIType::Direct3D12);
+    }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; }
     RHIDevice::Get().Shutdown();
     ok = Axle::RenderTests::Check(GetRHIValidationErrorCount() == 0, "native validation including teardown", __FILE__, __LINE__) && ok;

@@ -3,12 +3,15 @@
 #include <Axle/Log.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <atomic>
+#include <algorithm>
 #include <barrier>
 #include <filesystem>
 #include <thread>
 #include <vector>
 
 using namespace Axle;
+extern thread_local bool FailRenderOwnerAllocation;
+bool RunRenderTeardownAllocationStress();
 
 namespace {
     struct Payload {
@@ -38,6 +41,14 @@ namespace {
             queue.Push(Ticket(queue, released));
         }
         RENDER_CHECK(released == 9, "queue destruction also permits destructor queries");
+        std::cerr << "Snapshot stress: teardown allocation guard\n";
+        auto dying = std::make_unique<RenderSnapshotQueue>(2);
+        dying->Push(Ticket(*dying, released)); dying->Push(Ticket(*dying, released));
+        FailRenderOwnerAllocation = true;
+        dying.reset();
+        const bool allocationFree = std::exchange(FailRenderOwnerAllocation, false);
+        std::cerr << "Snapshot stress: queue teardown complete\n";
+        RENDER_CHECK(allocationFree && released == 11 && RunRenderTeardownAllocationStress(), "queue and stopped worker destructors allocate no retirement scratch under memory pressure");
         for (unsigned run = 0; run < 16; ++run) {
             RenderSnapshotQueue queue(7);
             std::atomic<uint64_t> created{0}, destroyed{0}, popped{0}, attempted{0};
@@ -70,17 +81,28 @@ namespace {
     }
 }
 bool RunRenderWorkerStress(RHI::RHIType backend, bool exception);
-bool RunRenderPluginStress(const std::filesystem::path& library, const std::string& config);
+bool RunRenderPluginStress(const std::filesystem::path& library, const std::string& config, RHI::RHIType backend);
+bool RunRenderTransientStress(RHI::RHIType backend, const std::string& terminal);
+bool RunRenderSyncStress(RHI::RHIType backend);
 int main(int argc, char** argv) {
     RenderTests::ConfigureFailureReporting(); Log::Init();
     bool ok = false;
     try {
         const std::string mode = argc > 1 ? argv[1] : "policy";
-        if (mode == "plugin") ok = argc == 4 && RunRenderPluginStress(argv[2], argv[3]);
+        const std::vector<std::string> modes{"policy", "plugin", "dx12_plugin", "vulkan_plugin", "dx12_native", "vulkan_native",
+            "dx12_submit", "vulkan_submit", "dx12_lost", "vulkan_lost", "dx12_worker", "vulkan_worker", "dx12_exception", "vulkan_exception", "dx12_sync", "vulkan_sync"};
+        if (std::find(modes.begin(), modes.end(), mode) == modes.end()) throw std::runtime_error("Unknown stress mode: " + mode);
+        if (mode.ends_with("plugin")) ok = argc == 4 && RunRenderPluginStress(argv[2], argv[3], mode == "plugin" ? RHI::RHIType::None :
+            mode.starts_with("vulkan") ? RHI::RHIType::Vulkan : RHI::RHIType::Direct3D12);
+        else if (mode.ends_with("sync")) ok = RunRenderSyncStress(mode.starts_with("vulkan") ? RHI::RHIType::Vulkan : RHI::RHIType::Direct3D12);
+        else if (mode.ends_with("native") || mode.ends_with("lost") || mode.ends_with("submit"))
+            ok = RunRenderTransientStress(mode.starts_with("vulkan") ? RHI::RHIType::Vulkan : RHI::RHIType::Direct3D12,
+                mode.ends_with("lost") ? "lost" : mode.ends_with("submit") ? "submit" : "normal");
         else ok = mode == "policy" ? SnapshotStress() : RunRenderWorkerStress(
             mode.starts_with("vulkan") ? RHI::RHIType::Vulkan : RHI::RHIType::Direct3D12, mode.ends_with("exception"));
     }
     catch (const std::exception& e) { std::cerr << e.what() << '\n'; }
+    RHI::RHIDevice::Get().Shutdown();
     ok = RenderTests::Check(RHI::GetRHIValidationErrorCount() == 0, "validation including stress teardown", __FILE__, __LINE__) && ok;
     std::cout << "Render lifetime stress: " << (ok ? "PASS" : "FAIL") << '\n';
     return ok ? 0 : 1;

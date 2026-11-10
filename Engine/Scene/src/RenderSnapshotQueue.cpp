@@ -14,7 +14,18 @@ namespace Axle {
         m_Scratch.reserve(capacity);
     }
 
-    RenderSnapshotQueue::~RenderSnapshotQueue() { Drain(); }
+    RenderSnapshotQueue::~RenderSnapshotQueue() {
+        // Stop admission and clear existing storage outside the lock. Constructing
+        // even an empty vector can allocate Debug iterator proxies on MSVC.
+        // Destroy callbacks while the mutex/stat members are still alive.
+        {
+            std::lock_guard lock(m_Mutex);
+            m_Consumed += m_Count; m_Drained += m_Count;
+            m_Count = m_ReadIndex = m_WriteIndex = 0;
+            m_Stopping = true; m_OldestExtractedAtNs = 0;
+        }
+        m_Entries.clear(); m_Scratch.clear();
+    }
 
     uint32_t RenderSnapshotQueue::LogicalIndex(uint32_t offset) const {
         return (m_ReadIndex + offset) % m_Capacity;

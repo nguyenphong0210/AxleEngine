@@ -261,7 +261,7 @@ target_include_directories(AxleRHIResourceViewTests PRIVATE rendering)
 target_link_libraries(AxleRHIResourceViewTests PRIVATE Axle::UI Axle::Scene)
 
 add_executable(AxleRenderServiceTests EXCLUDE_FROM_ALL rendering/RenderServiceMain.cpp)
-add_executable(AxleRenderAcceptanceTests EXCLUDE_FROM_ALL rendering/RenderAcceptanceMain.cpp)
+add_executable(AxleRenderAcceptanceTests EXCLUDE_FROM_ALL rendering/RenderAcceptanceMain.cpp rendering/RenderAcceptanceMeasure.cpp)
 target_include_directories(AxleRenderAcceptanceTests PRIVATE rendering)
 target_link_libraries(AxleRenderAcceptanceTests PRIVATE Axle::Scene)
 add_test(NAME RenderAcceptancePolicy COMMAND $<TARGET_FILE:AxleRenderAcceptanceTests>)

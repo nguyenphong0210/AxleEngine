@@ -23,11 +23,26 @@ namespace Axle {
         RenderWorld World;
         ViewRequest Request;
         uint64_t RequestId = 0;
+        // Explicit CPU image export only; ordinary frames add no capture waits.
+        bool CaptureRgba8 = false;
         // CPU payload/module retention, matching RenderSnapshotTicket::LeaseAnchor.
         // Ends after recording or cancellation; native uses need independent GPU
         // submission leases (e.g. RenderDebugLine::OwnerLease).
         std::shared_ptr<const void> LeaseAnchor;
         // External targets and physics are rejected; targets are worker-created.
+    };
+
+    inline constexpr uint64_t RenderWorkerMaxCaptureBytes = 16ull * 1024 * 1024;
+    struct RenderCpuImage {
+        uint32_t Width = 0, Height = 0;
+        std::vector<uint8_t> Rgba8;
+    };
+    struct RenderWorkerTimings {
+        // Steady-clock nanoseconds within this process; CPU wall timings include
+        // existing frame-slot retirement, not GPU timestamp measurements.
+        uint64_t Sequence = 0, EnqueuedAtNs = 0, StartedAtNs = 0;
+        uint64_t RenderFinishedAtNs = 0, ExportFinishedAtNs = 0, PublishedAtNs = 0;
+        uint32_t InFlightAtAdmission = 0;
     };
 
     struct RenderWorkerResult {
@@ -36,6 +51,8 @@ namespace Axle {
         RenderWorkerState State = RenderWorkerState::Stopped;
         uint64_t StateEpoch = 0;
         std::string Diagnostic;
+        RenderWorkerTimings Timings;
+        RenderCpuImage Image;
     };
 
     // Owns the RenderService/RHIDevice calls on its dedicated thread. The

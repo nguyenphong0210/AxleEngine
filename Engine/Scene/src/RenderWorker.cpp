@@ -2,8 +2,22 @@
 
 #include <Axle/RHI/RHIDevice.hpp>
 #include <stdexcept>
+#include <chrono>
+#include "RenderWorkerCapture.hpp"
 
 namespace Axle {
+    namespace {
+        uint64_t WorkerNowNs() {
+            return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+        }
+        bool InvalidCapture(const RenderWorkerFrame& frame) {
+            return frame.CaptureRgba8 && (frame.Request.Kind != RenderViewKind::Main ||
+                frame.Request.PhysicsScene || frame.Request.ColorTarget || frame.Request.DepthTarget ||
+                frame.Request.GLTargetFBO || frame.Request.ViewTargets || !frame.Request.Width || !frame.Request.Height ||
+                uint64_t(frame.Request.Width) * frame.Request.Height > RenderWorkerMaxCaptureBytes / 4);
+        }
+    }
 
     RenderWorker::~RenderWorker() { Stop(); }
 
@@ -71,6 +85,7 @@ namespace Axle {
         for (auto& queued : *retired) {
             queued->Cancelled->State = m_State == RenderWorkerState::Failed ? m_State : RenderWorkerState::Draining;
             queued->Cancelled->StateEpoch = m_StateEpoch;
+            queued->Cancelled->Timings.PublishedAtNs = WorkerNowNs();
             m_Results.push_back(std::move(queued->Cancelled));
         }
     }
@@ -111,9 +126,10 @@ namespace Axle {
     bool RenderWorker::Submit(RenderWorkerFrame frame) {
         std::lock_guard lock(m_Mutex);
         if (frame.Request.PhysicsScene || frame.Request.ColorTarget || frame.Request.DepthTarget ||
-            frame.Request.GLTargetFBO || frame.Request.ViewTargets) {
+            frame.Request.GLTargetFBO || frame.Request.ViewTargets || InvalidCapture(frame)) {
             ++m_RejectedFrames;
-            if (m_LastError.empty()) m_LastError = "worker frames require worker-created offscreen targets; external targets and PhysicsScene are rejected";
+            if (m_LastError.empty()) m_LastError = InvalidCapture(frame) ? "CPU image export requires a worker-owned main view within the RGBA8 byte limit" :
+                "worker frames require worker-created offscreen targets; external targets and PhysicsScene are rejected";
             return false;
         }
         if (m_State != RenderWorkerState::Running || m_StopRequested || m_InFlight >= m_Config.QueueCapacity) {
@@ -130,6 +146,10 @@ namespace Axle {
             queued->Cancelled->Result.ErrorMessage = queued->Cancelled->Diagnostic;
         } catch (...) { ++m_RejectedFrames; return false; }
         queued->Frame = std::move(frame);
+        queued->Result->Timings.Sequence = m_AcceptedFrames + 1;
+        queued->Result->Timings.EnqueuedAtNs = WorkerNowNs();
+        queued->Result->Timings.InFlightAtAdmission = static_cast<uint32_t>(m_InFlight + 1);
+        queued->Cancelled->Timings = queued->Result->Timings;
         m_Frames->push_back(std::move(queued));
         ++m_AcceptedFrames;
         ++m_InFlight;
@@ -147,6 +167,8 @@ namespace Axle {
     }
 
     bool RenderWorker::RenderSynchronously(RenderWorkerFrame frame, RenderWorkerResult& result) {
+        result = {};
+        if (InvalidCapture(frame)) { result.Result.ErrorMessage = "Invalid synchronous RGBA8 export request"; return false; }
         if (m_Thread.joinable()) Stop();
         const auto state = GetState();
         if (state != RenderWorkerState::Stopped && state != RenderWorkerState::Failed) return false;
@@ -166,10 +188,19 @@ namespace Axle {
             return false;
         }
         result.RequestId = frame.RequestId;
+        result.Timings.EnqueuedAtNs = result.Timings.StartedAtNs = WorkerNowNs();
         result.Result = service.RenderView(frame.World, frame.Request);
+        result.Timings.RenderFinishedAtNs = WorkerNowNs();
+        if (result.Result.Success && frame.CaptureRgba8 &&
+            !Detail::CaptureWorkerRgba8(service, result.Image, result.Result.CompletionToken)) {
+            result.Result.Success = false; result.Result.CompletionToken = {};
+            result.Result.ErrorMessage = "synchronous RGBA8 export failed";
+        }
+        result.Timings.ExportFinishedAtNs = WorkerNowNs();
         result.State = GetState();
         result.StateEpoch = GetStateEpoch();
         result.Diagnostic = result.Result.ErrorMessage;
+        result.Timings.PublishedAtNs = WorkerNowNs();
         return result.Result.Success;
     }
 
@@ -211,7 +242,15 @@ namespace Axle {
                 }
                 auto& result = *active->Result;
                 result.RequestId = active->Frame.RequestId;
+                result.Timings.StartedAtNs = WorkerNowNs();
                 result.Result = service->RenderView(active->Frame.World, active->Frame.Request);
+                result.Timings.RenderFinishedAtNs = WorkerNowNs();
+                if (result.Result.Success && active->Frame.CaptureRgba8 &&
+                    !Detail::CaptureWorkerRgba8(*service, result.Image, result.Result.CompletionToken)) {
+                    result.Result.Success = false; result.Result.CompletionToken = {};
+                    result.Result.ErrorMessage = "render worker RGBA8 export failed";
+                }
+                result.Timings.ExportFinishedAtNs = WorkerNowNs();
                 const auto ownership = service->GetOwnershipReport();
                 if (ownership.RHIState.State == RHI::RHIDeviceState::Lost) SetState(RenderWorkerState::DeviceLost);
                 else if (ownership.RHIState.State == RHI::RHIDeviceState::SurfaceRebuildRequired) SetState(RenderWorkerState::SurfaceRebuildRequired);
@@ -224,6 +263,7 @@ namespace Axle {
                 {
                     std::lock_guard lock(m_Mutex);
                     if (!result.Result.Success && m_LastError.empty()) m_LastError = result.Result.ErrorMessage;
+                    result.Timings.PublishedAtNs = WorkerNowNs();
                     m_Results.push_back(std::move(active->Result)); terminalPublished = true;
                     if (successfulProbe) device->MarkRenderWorkerOwnershipSupported();
                     stop = m_State == RenderWorkerState::DeviceLost || m_State == RenderWorkerState::SurfaceRebuildRequired ||
@@ -240,7 +280,9 @@ namespace Axle {
             if (m_LastError.empty()) m_LastError = "render worker exception; pending work cancelled";
             m_State = RenderWorkerState::Failed; ++m_StateEpoch;
             if (active && !terminalPublished) {
+                active->Cancelled->Timings = active->Result->Timings;
                 active->Cancelled->State = m_State; active->Cancelled->StateEpoch = m_StateEpoch;
+                active->Cancelled->Timings.PublishedAtNs = WorkerNowNs();
                 m_Results.push_back(std::move(active->Cancelled));
             }
             CancelPendingLocked(retired);

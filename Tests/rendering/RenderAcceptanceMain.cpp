@@ -1,6 +1,7 @@
 #include "RenderTestCommon.hpp"
 #include <Axle/RenderService.hpp>
 #include <Axle/Log.hpp>
+#include <filesystem>
 
 using namespace Axle;
 static bool Policy() {
@@ -33,9 +34,16 @@ static bool Policy() {
         !RHI::RHIDevice::Get().IsInitialized(), "fallback selection itself performs no GPU work");
     return true;
 }
-int main() {
+bool RunRenderAcceptanceMeasure(RHI::RHIType backend, const std::filesystem::path& output);
+int main(int argc, char** argv) {
     RenderTests::ConfigureFailureReporting(); Log::Init();
     bool ok = false;
-    try { ok = Policy(); } catch (const std::exception& e) { std::cerr << e.what() << '\n'; }
+    try {
+        const std::string mode = argc > 1 ? argv[1] : "policy";
+        ok = mode == "policy" ? Policy() : (mode == "dx12" || mode == "vulkan") && argc == 3 &&
+            RunRenderAcceptanceMeasure(mode == "vulkan" ? RHI::RHIType::Vulkan : RHI::RHIType::Direct3D12, argv[2]);
+    } catch (const std::exception& e) { std::cerr << e.what() << '\n'; }
+    RHI::RHIDevice::Get().Shutdown();
+    ok = RenderTests::Check(RHI::GetRHIValidationErrorCount() == 0, "validation including acceptance teardown", __FILE__, __LINE__) && ok;
     std::cout << "OPT11 acceptance: " << (ok ? "PASS" : "FAIL") << '\n'; return ok ? 0 : 1;
 }

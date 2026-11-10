@@ -118,7 +118,15 @@ namespace Axle::RHI {
         return true;
     }
 
-    bool RHIBuffer::Build(const RHIBufferDesc& desc, const void* initialData, nri::Memory* borrowedMemory, uint64_t memoryOffset) {
+    bool RHIBuffer::QueryMemoryRequirements(const RHIBufferDesc& desc, nri::MemoryDesc& requirements) {
+        RHIBuffer probe; nri::MemoryDesc queried{};
+        if (!probe.Build(desc, nullptr, nullptr, 0, &queried)) return false;
+        RHIDevice::Get().GetNRICore().DestroyBuffer(probe.m_Buffer); probe.m_Buffer = nullptr;
+        requirements = queried; return true;
+    }
+
+    bool RHIBuffer::Build(const RHIBufferDesc& desc, const void* initialData, nri::Memory* borrowedMemory,
+                          uint64_t memoryOffset, nri::MemoryDesc* queryOnly) {
         ScopedRHIOperation operation(desc.DebugName);
         if (!ValidBufferDesc(desc) || (initialData && desc.MemoryLocation == RHIMemoryLocation::HostReadback)) return RHIDevice::Get().ObserveResult(nri::Result::INVALID_ARGUMENT, "ValidateBufferDesc", desc.DebugName);
         m_Desc = desc;
@@ -133,6 +141,7 @@ namespace Axle::RHI {
         if (!memory.size || !memory.alignment || memoryOffset % memory.alignment ||
             memoryOffset > UINT64_MAX - memory.size || (memory.mustBeDedicated && memoryOffset) ||
             memory.size > core.GetDeviceDesc(*native).memory.allocationMaxSize) return false;
+        if (queryOnly) { *queryOnly = memory; return true; }
         m_Memory = borrowedMemory;
         if (!borrowedMemory) {
             m_OwnsMemory = true;

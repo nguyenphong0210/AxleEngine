@@ -60,9 +60,10 @@ namespace Axle {
     RenderTransientFrame::RenderTransientFrame() = default;
     RenderTransientFrame::~RenderTransientFrame() = default;
     bool RenderTransientFrame::Fail(std::string error) { m_Error = std::move(error); return false; }
-    bool RenderTransientFrame::Prepare(const Graph::Plan& declarations, const std::vector<Import>& imports) {
+    bool RenderTransientFrame::Prepare(const Graph::Plan& declarations, const std::vector<Import>& imports, AllocationMode mode) {
         auto& device = RHI::RHIDevice::Get();
-        if (!device.CanSubmit() || m_Pending || m_Generation == UINT64_MAX) return Fail("Cannot prepare transient frame in current owner/state");
+        if (!device.CanSubmit() || m_Pending || m_Generation == UINT64_MAX ||
+            (mode != AllocationMode::Committed && mode != AllocationMode::PlacedUnaliased)) return Fail("Cannot prepare transient frame in current owner/state");
         auto candidate = std::make_unique<Storage>(); candidate->Epoch = device.GetEpoch();
         if (!CompileDeclarations(declarations.Resources, declarations.Passes, candidate->Plan, m_Error)) return false;
         candidate->Views.resize(candidate->Plan.Resources.size());
@@ -86,7 +87,9 @@ namespace Axle {
                 if (!candidate->Views[id].IsLive()) return Fail("Missing transient graph import");
             } else { transientIds.push_back(id); descriptions.push_back(desc.Description); }
         }
-        if (!candidate->Resources.InitCommitted(descriptions)) return Fail("Transient committed allocation failed");
+        const bool allocated = mode == AllocationMode::Committed ? candidate->Resources.InitCommitted(descriptions) :
+            candidate->Resources.InitPlaced(descriptions);
+        if (!allocated) return Fail("Transient native allocation failed");
         auto actual = candidate->Plan.Resources;
         for (uint32_t index = 0; index < transientIds.size(); ++index) {
             const auto id = transientIds[index];

@@ -16,11 +16,13 @@ namespace Axle::RHI {
         , m_Lease(std::move(other.m_Lease))
         , m_Texture(other.m_Texture)
         , m_Memory(other.m_Memory)
+        , m_OwnsMemory(other.m_OwnsMemory)
         , m_SRV(other.m_SRV)
         , m_RTV(other.m_RTV)
         , m_DSV(other.m_DSV) {
         other.m_Texture = nullptr;
         other.m_Memory = nullptr;
+        other.m_OwnsMemory = false;
         other.m_SRV = nullptr;
         other.m_RTV = nullptr;
         other.m_DSV = nullptr;
@@ -33,11 +35,13 @@ namespace Axle::RHI {
             m_Lease = std::move(other.m_Lease);
             m_Texture = other.m_Texture;
             m_Memory = other.m_Memory;
+            m_OwnsMemory = other.m_OwnsMemory;
             m_SRV = other.m_SRV;
             m_RTV = other.m_RTV;
             m_DSV = other.m_DSV;
             other.m_Texture = nullptr;
             other.m_Memory = nullptr;
+            other.m_OwnsMemory = false;
             other.m_SRV = nullptr;
             other.m_RTV = nullptr;
             other.m_DSV = nullptr;
@@ -52,7 +56,22 @@ namespace Axle::RHI {
         return true;
     }
 
-    bool RHITexture::Build(const RHITextureDesc& desc) {
+    bool RHITexture::InitPlaced(const RHITextureDesc& desc, nri::Memory* memory, uint64_t offset) {
+        if (!memory) return false;
+        RHITexture candidate;
+        if (!candidate.Build(desc, memory, offset)) return false;
+        *this = std::move(candidate); return true;
+    }
+
+    bool RHITexture::QueryMemoryRequirements(const RHITextureDesc& desc, nri::MemoryDesc& requirements) {
+        RHITexture probe; nri::MemoryDesc queried{};
+        if (!probe.Build(desc, nullptr, 0, &queried)) return false;
+        // The unbound probe was never published or recorded and owns no memory.
+        RHIDevice::Get().GetNRICore().DestroyTexture(probe.m_Texture); probe.m_Texture = nullptr;
+        requirements = queried; return true;
+    }
+
+    bool RHITexture::Build(const RHITextureDesc& desc, nri::Memory* borrowedMemory, uint64_t offset, nri::MemoryDesc* queryOnly) {
         ScopedRHIOperation operation(desc.DebugName);
         m_Desc = desc;
 
@@ -128,13 +147,18 @@ namespace Axle::RHI {
         if (res != nri::Result::SUCCESS || !m_Texture) return false;
         nri::MemoryDesc memory{};
         core.GetTextureMemoryDesc(*m_Texture, nri::MemoryLocation::DEVICE, memory);
-        if (!memory.size || !memory.alignment || memory.size > limits.memory.allocationMaxSize) return false;
-        nri::AllocateMemoryDesc allocation{};
-        allocation.size = memory.size; allocation.type = memory.type;
-        allocation.allowMultisampleTextures = desc.SampleCount > 1;
-        res = ScopedRHIFault::Invoke("AllocateTextureMemory", [&] { return core.AllocateMemory(*dev, allocation, m_Memory); });
-        if (res != nri::Result::SUCCESS || !m_Memory) return false;
-        nri::BindTextureMemoryDesc binding{m_Texture, m_Memory, 0};
+        if (!memory.size || !memory.alignment || memory.size > limits.memory.allocationMaxSize ||
+            offset % memory.alignment || offset > UINT64_MAX - memory.size || (memory.mustBeDedicated && offset)) return false;
+        if (queryOnly) { *queryOnly = memory; return true; }
+        m_Memory = borrowedMemory; m_OwnsMemory = borrowedMemory == nullptr;
+        if (m_OwnsMemory) {
+            nri::AllocateMemoryDesc allocation{};
+            allocation.size = memory.size; allocation.type = memory.type;
+            allocation.allowMultisampleTextures = desc.SampleCount > 1;
+            res = ScopedRHIFault::Invoke("AllocateTextureMemory", [&] { return core.AllocateMemory(*dev, allocation, m_Memory); });
+            if (res != nri::Result::SUCCESS || !m_Memory) return false;
+        }
+        nri::BindTextureMemoryDesc binding{m_Texture, m_Memory, offset};
         res = ScopedRHIFault::Invoke("BindTextureMemory", [&] { return core.BindTextureMemory(&binding, 1); });
         if (res != nri::Result::SUCCESS) return false;
 
@@ -201,15 +225,20 @@ namespace Axle::RHI {
 
         const auto functions = core;
         auto srv = m_SRV, rtv = m_RTV, dsv = m_DSV;
-        auto texture = m_Texture; auto ownedMemory = m_Memory;
+        auto texture = m_Texture; auto ownedMemory = m_OwnsMemory ? m_Memory : nullptr;
+        std::vector<RHIResourceLease> dependencies;
+        if (borrowedMemory) {
+            auto lease = rhiDevice.GetResources().AcquireNative(borrowedMemory);
+            if (lease.IsLive()) dependencies.push_back(std::move(lease));
+        }
         m_Lease = rhiDevice.GetResources().Publish(RHIResourceKind::Texture, desc.DebugName, {texture, srv, rtv, dsv},
             [functions, srv, rtv, dsv, texture, ownedMemory] {
                 if (srv) functions.DestroyDescriptor(srv);
                 if (rtv) functions.DestroyDescriptor(rtv);
                 if (dsv) functions.DestroyDescriptor(dsv);
                 functions.DestroyTexture(texture);
-                functions.FreeMemory(ownedMemory);
-            });
+                if (ownedMemory) functions.FreeMemory(ownedMemory);
+            }, std::move(dependencies));
         const auto planes = desc.Format == RHITextureFormat::D24_UNORM_S8_UINT ? nri::PlaneBits::DEPTH | nri::PlaneBits::STENCIL :
             desc.Format == RHITextureFormat::D32_FLOAT ? nri::PlaneBits::DEPTH : nri::PlaneBits::COLOR;
         return m_Lease.IsLive() && rhiDevice.GetResources().DefineTextureState(m_Lease,
@@ -221,6 +250,7 @@ namespace Axle::RHI {
         if (!IsValid()) return snapshot;
         snapshot.m_Desc = m_Desc; snapshot.m_Lease = m_Lease;
         snapshot.m_Texture = m_Texture; snapshot.m_Memory = m_Memory;
+        snapshot.m_OwnsMemory = m_OwnsMemory;
         snapshot.m_SRV = m_SRV; snapshot.m_RTV = m_RTV; snapshot.m_DSV = m_DSV;
         return snapshot;
     }
@@ -231,7 +261,7 @@ namespace Axle::RHI {
         else if (device.IsNativeReady()) {
             const auto core = device.GetNRICore();
             auto srv = m_SRV, rtv = m_RTV, dsv = m_DSV;
-            auto texture = m_Texture; auto memory = m_Memory;
+            auto texture = m_Texture; auto memory = m_OwnsMemory ? m_Memory : nullptr;
             device.ReleaseNative([core, srv, rtv, dsv, texture, memory] {
                 if (srv) core.DestroyDescriptor(srv);
                 if (rtv) core.DestroyDescriptor(rtv);
@@ -243,6 +273,7 @@ namespace Axle::RHI {
         m_SRV = m_RTV = m_DSV = nullptr;
         m_Texture = nullptr;
         m_Memory = nullptr;
+        m_OwnsMemory = false;
         m_Desc = {};
     }
 

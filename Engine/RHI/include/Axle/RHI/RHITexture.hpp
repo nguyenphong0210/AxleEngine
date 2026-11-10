@@ -144,6 +144,10 @@ namespace Axle::RHI {
         RHITexture& operator=(RHITexture&& other) noexcept;
 
         bool Init(const RHITextureDesc& desc);
+        // Borrow memory; its owner must outlive every bound generation/lease.
+        // Registered memory generations are retained as dependencies automatically.
+        bool InitPlaced(const RHITextureDesc& desc, nri::Memory* memory, uint64_t offset = 0);
+        static bool QueryMemoryRequirements(const RHITextureDesc& desc, nri::MemoryDesc& requirements);
         void Shutdown();
         // Keeps this exact generation independently of the original wrapper.
         RHITexture RetainGeneration() const;
@@ -167,11 +171,13 @@ namespace Axle::RHI {
         uint64_t GetNativeDSVHandle() const;
 
     private:
-        bool Build(const RHITextureDesc& desc);
+        bool Build(const RHITextureDesc& desc, nri::Memory* borrowedMemory = nullptr, uint64_t offset = 0,
+                   nri::MemoryDesc* queryOnly = nullptr);
         RHITextureDesc m_Desc;
         RHIResourceLease m_Lease;
         nri::Texture* m_Texture = nullptr;
         nri::Memory* m_Memory = nullptr;
+        bool m_OwnsMemory = false;
         nri::Descriptor* m_SRV = nullptr;
         nri::Descriptor* m_RTV = nullptr;
         nri::Descriptor* m_DSV = nullptr;

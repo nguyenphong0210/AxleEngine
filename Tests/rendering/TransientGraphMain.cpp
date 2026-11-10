@@ -94,14 +94,72 @@ struct Fixture {
     }
 };
 
-static bool Native(RHIType backend, bool failSubmit) {
+static bool PlacementOwnership() {
+    auto& device = RHIDevice::Get(); const auto core = device.GetNRICore();
+    const auto desc = RHITextureDesc::RenderTarget2D(8, 8);
+    RHITransientRequirements queried;
+    {
+        unsigned allocations = 0;
+        ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "AllocateTextureMemory" || operation == "AllocateBufferMemory" || operation == "AllocateTransientMemory") {
+                ++allocations; return nri::Result::FAILURE;
+            } return {};
+        });
+        RENDER_CHECK(RHITransientResources::QueryRequirements(desc, queried) && allocations == 0,
+            "query-only native probes allocate no backing memory");
+    }
+    nri::AllocateMemoryDesc allocation{}; allocation.size = queried.SizeBytes; allocation.type = queried.MemoryType;
+    nri::Memory* backing = nullptr;
+    RENDER_CHECK(core.AllocateMemory(*device.GetNRIDevice(), allocation, backing) == nri::Result::SUCCESS, "external placement backing");
+    auto frees = std::make_shared<uint32_t>(0);
+    auto memory = device.GetResources().Publish(RHIResourceKind::Memory, "placement ownership proof", {backing},
+        [core, backing, frees] { ++*frees; core.FreeMemory(backing); });
+    RENDER_CHECK(memory.IsLive(), "registered memory generation");
+    RHITexture texture;
+    RENDER_CHECK(!texture.InitPlaced(desc, backing, 1) && texture.InitPlaced(desc, backing), "placement rejects misalignment and binds valid offset");
+    auto snapshot = texture.RetainGeneration();
+    memory.Reset(); texture.Shutdown();
+    RENDER_CHECK(snapshot.IsValid() && device.WaitIdle() && *frees == 0, "texture generation retains borrowed memory after owner release");
+    snapshot.Shutdown();
+    RENDER_CHECK(device.WaitIdle() && *frees == 1, "borrowed memory retires exactly once after final bound generation");
+    RHITransientResources resources;
+    RENDER_CHECK(resources.InitPlaced({desc}), "placed resource set");
+    const auto previous = resources.Get(0)->Lease.GetHandle();
+    {
+        unsigned reached = 0;
+        ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "AllocateTransientMemory" && ++reached == 2) return nri::Result::FAILURE;
+            return {};
+        });
+        RENDER_CHECK(!resources.InitPlaced({desc, desc}) && reached == 2 && resources.Get(0)->Lease.GetHandle() == previous,
+            "partially allocated placement transaction preserves old set");
+    }
+    RENDER_CHECK(!resources.InitPlaced({desc, RHIBufferDesc::Vertex(256)}, {0, 0}) && resources.Get(0)->Lease.GetHandle() == previous,
+        "incompatible texture/buffer pair cannot share a block");
+    RENDER_CHECK(resources.InitPlaced({RHITextureDesc::DepthStencil2D(8, 8)}) && resources.Get(0)->DSV,
+        "placed texture supports depth views");
+    {
+        bool reached = false;
+        ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "CreateTextureDSV") { reached = true; return nri::Result::FAILURE; } return {};
+        });
+        const auto old = resources.Get(0)->Lease.GetHandle();
+        RENDER_CHECK(!resources.InitPlaced({RHITextureDesc::DepthStencil2D(8, 8)}) && reached &&
+            resources.Get(0)->Lease.GetHandle() == old, "placed DSV failure rolls back without replacing prior depth");
+    }
+    return true;
+}
+
+static bool Native(RHIType backend, bool failSubmit, bool placed) {
+    const auto allocation = placed ? RenderTransientFrame::AllocationMode::PlacedUnaliased : RenderTransientFrame::AllocationMode::Committed;
     auto& device = RHIDevice::Get();
     RHIDeviceDesc init; init.PreferredBackend = backend; init.AllowFallback = false; init.Headless = true;
     init.EnableNRIValidation = true; init.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(backend);
     RENDER_CHECK(device.Init(init) && !device.IsSoftwareAdapter(), "physical transient fixture and validation");
+    if (placed) RENDER_CHECK(PlacementOwnership(), "placed resource ownership and rollback proof");
     Fixture fixture; RENDER_CHECK(fixture.Init(), "native graph fixture");
     RenderTransientFrame frame;
-    RENDER_CHECK(frame.Prepare(fixture.Plan, fixture.Imports) && frame.GetPublishedGeneration() == 0,
+    RENDER_CHECK(frame.Prepare(fixture.Plan, fixture.Imports, allocation) && frame.GetPublishedGeneration() == 0,
         "native allocation stays pending before submission");
     const auto actualBytes = frame.GetPlan()->RequestedBytes;
     RENDER_CHECK(actualBytes >= fixture.Plan.RequestedBytes, "native plan uses queried requirements");
@@ -118,38 +176,40 @@ static bool Native(RHIType backend, bool failSubmit) {
         RENDER_CHECK(frame.Submit() && frame.GetPublishedGeneration() == 1 && frame.GetCompletion(), "publish only after successful submit");
         RENDER_CHECK(device.WaitForCompletion(frame.GetCompletion()) && fixture.CheckPixels(), "real transient readback after checked completion");
         const auto old = frame.Get(fixture.TempImage)->Lease.GetHandle();
-        for (const auto* boundary : {"CreateBuffer", "AllocateBufferMemory", "BindBufferMemory", "CreateTexture",
-                 "AllocateTextureMemory", "BindTextureMemory", "CreateTextureSRV", "CreateTextureRTV", "CreateCommandBuffer"}) {
+        const std::vector<const char*> boundaries = placed ?
+            std::vector<const char*>{"CreateBuffer", "AllocateTransientMemory", "BindBufferMemory", "CreateTexture", "BindTextureMemory", "CreateTextureSRV", "CreateTextureRTV", "CreateCommandBuffer"} :
+            std::vector<const char*>{"CreateBuffer", "AllocateBufferMemory", "BindBufferMemory", "CreateTexture", "AllocateTextureMemory", "BindTextureMemory", "CreateTextureSRV", "CreateTextureRTV", "CreateCommandBuffer"};
+        for (const auto* boundary : boundaries) {
             unsigned reached = 0;
             ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
                 if (operation == boundary) { ++reached; return nri::Result::FAILURE; } return {};
             });
-            RENDER_CHECK(!frame.Prepare(fixture.Plan, fixture.Imports) && reached == 1 &&
+            RENDER_CHECK(!frame.Prepare(fixture.Plan, fixture.Imports, allocation) && reached == 1 &&
                 frame.GetPublishedGeneration() == 1 && frame.Get(fixture.TempImage)->Lease.GetHandle() == old,
                 "every native candidate failure preserves published generation");
         }
-        RENDER_CHECK(frame.Prepare(fixture.Plan, fixture.Imports) &&
+        RENDER_CHECK(frame.Prepare(fixture.Plan, fixture.Imports, allocation) &&
             !frame.Record(1, [](auto&) { return true; }) && !frame.Submit() && frame.Abandon() &&
             frame.Get(fixture.TempImage)->Lease.GetHandle() == old, "wrong pass order abandons only candidate");
-        RENDER_CHECK(frame.Prepare(fixture.Plan, fixture.Imports) &&
+        RENDER_CHECK(frame.Prepare(fixture.Plan, fixture.Imports, allocation) &&
             !frame.Record(0, [](auto&) -> bool { throw std::runtime_error("injected callback"); }) &&
             !frame.Submit() && frame.Abandon(), "callback exception cannot publish partial graph");
         auto mismatched = fixture.Imports; mismatched[0].View.Description = RHIBufferDesc::Vertex(4);
-        RENDER_CHECK(!frame.Prepare(fixture.Plan, mismatched) && frame.GetPublishedGeneration() == 1, "mismatched import rejects");
+        RENDER_CHECK(!frame.Prepare(fixture.Plan, mismatched, allocation) && frame.GetPublishedGeneration() == 1, "mismatched import rejects");
         auto forged = fixture.Plan;
         forged.Resources[fixture.Input].Description = mismatched[0].View.Description;
-        RENDER_CHECK(!frame.Prepare(forged, mismatched), "matching forged metadata cannot override actual imported native description");
+        RENDER_CHECK(!frame.Prepare(forged, mismatched, allocation), "matching forged metadata cannot override actual imported native description");
         bool wrongOwner = true;
-        std::thread thread([&] { wrongOwner = frame.Prepare(fixture.Plan, fixture.Imports); }); thread.join();
+        std::thread thread([&] { wrongOwner = frame.Prepare(fixture.Plan, fixture.Imports, allocation); }); thread.join();
         RENDER_CHECK(!wrongOwner, "wrong-owner native allocation rejects");
-        RENDER_CHECK(frame.Prepare(fixture.Plan, fixture.Imports) && fixture.Record(frame) && frame.Submit() &&
+        RENDER_CHECK(frame.Prepare(fixture.Plan, fixture.Imports, allocation) && fixture.Record(frame) && frame.Submit() &&
             frame.GetPublishedGeneration() == 2 && device.WaitForCompletion(frame.GetCompletion()) && fixture.CheckPixels(),
             "replacement generation renders after rollback tests");
         RHIResourceLease retained;
         RHICompletionToken token;
         {
             RenderTransientFrame temporary;
-            RENDER_CHECK(temporary.Prepare(fixture.Plan, fixture.Imports) && fixture.Record(temporary), "lifetime fixture recording");
+            RENDER_CHECK(temporary.Prepare(fixture.Plan, fixture.Imports, allocation) && fixture.Record(temporary), "lifetime fixture recording");
             retained = temporary.Get(fixture.TempImage)->Lease;
             RENDER_CHECK(temporary.Submit(), "lifetime fixture submit"); token = temporary.GetCompletion();
         }
@@ -170,7 +230,7 @@ int main(int argc, char** argv) {
             RenderTransientFrame frame; Graph::Plan empty;
             ok = !frame.Prepare(empty) && !frame.Submit() && !frame.Get(0);
         } else ok = Native(mode.find("vulkan") == 0 ? RHIType::Vulkan : RHIType::Direct3D12,
-            mode.find("fail_submit") != std::string::npos);
+            mode.find("fail_submit") != std::string::npos, mode.find("placed") != std::string::npos);
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; ok = false; }
     RHIDevice::Get().Shutdown();
     ok = Axle::RenderTests::Check(GetRHIValidationErrorCount() == 0, "native validation including transient teardown", __FILE__, __LINE__) && ok;

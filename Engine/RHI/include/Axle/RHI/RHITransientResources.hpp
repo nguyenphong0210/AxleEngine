@@ -42,6 +42,11 @@ namespace Axle::RHI {
         RHITransientResources(const RHITransientResources&) = delete;
         RHITransientResources& operator=(const RHITransientResources&) = delete;
         bool InitCommitted(const std::vector<RHITransientDesc>& descriptions);
+        static bool QueryRequirements(const RHITransientDesc& description, RHITransientRequirements& requirements);
+        // Optional block IDs allow explicit overlap. The caller owns the lifetime
+        // and alias-barrier proof. Shared blocks require identical descriptions
+        // and native requirements, no dedicated allocations, and device support.
+        bool InitPlaced(const std::vector<RHITransientDesc>& descriptions, const std::vector<uint32_t>& blocks = {});
         const RHITransientView* Get(uint32_t index) const;
         const RHITransientRequirements* GetRequirements(uint32_t index) const;
         uint64_t GetAllocatedBytes() const;

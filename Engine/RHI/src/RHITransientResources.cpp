@@ -1,4 +1,5 @@
 #include <Axle/RHI/RHITransientResources.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 
 namespace Axle::RHI {
     RHITransientView MakeTransientView(const RHITexture& texture) {
@@ -50,6 +51,7 @@ namespace Axle::RHI {
             RHITransientRequirements Requirements;
         };
         uint64_t Epoch = 0, AllocatedBytes = 0;
+        std::vector<RHIResourceLease> MemoryBlocks;
         std::vector<Entry> Entries;
     };
     RHITransientResources::RHITransientResources() = default;
@@ -82,6 +84,76 @@ namespace Axle::RHI {
         }
         m_Storage = std::move(candidate);
         return true;
+    }
+    bool RHITransientResources::QueryRequirements(const RHITransientDesc& description, RHITransientRequirements& requirements) {
+        nri::MemoryDesc queried{};
+        const auto* texture = std::get_if<RHITextureDesc>(&description);
+        const bool ok = texture ? RHITexture::QueryMemoryRequirements(*texture, queried) :
+            RHIBuffer::QueryMemoryRequirements(std::get<RHIBufferDesc>(description), queried);
+        if (!ok || !queried.size || !queried.alignment) return false;
+        requirements = {queried.size, queried.alignment, queried.type, queried.mustBeDedicated};
+        return true;
+    }
+    bool RHITransientResources::InitPlaced(const std::vector<RHITransientDesc>& descriptions, const std::vector<uint32_t>& blocks) {
+        auto& device = RHIDevice::Get();
+        if (!device.CanCreateResources() || !device.GetCapabilities().HasPlacedResourcePrimitives ||
+            descriptions.size() >= UINT32_MAX || (!blocks.empty() && blocks.size() != descriptions.size())) return false;
+        auto candidate = std::make_unique<Storage>(); candidate->Epoch = device.GetEpoch();
+        candidate->Entries.resize(descriptions.size());
+        struct Block { uint32_t First = UINT32_MAX; nri::Memory* Native = nullptr; };
+        std::vector<Block> memory(descriptions.size());
+        std::vector<uint32_t> assignments;
+        for (uint32_t i = 0; i < descriptions.size(); ++i) {
+            const auto block = blocks.empty() ? i : blocks[i];
+            if (block >= descriptions.size()) return false;
+            assignments.push_back(block);
+            const auto* buffer = std::get_if<RHIBufferDesc>(&descriptions[i]);
+            if (buffer && buffer->MemoryLocation != RHIMemoryLocation::Device) return false;
+            auto& requirements = candidate->Entries[i].Requirements;
+            if (!QueryRequirements(descriptions[i], requirements)) return false;
+            auto& backing = memory[block];
+            if (backing.First == UINT32_MAX) backing.First = i;
+            else {
+                const auto& previous = candidate->Entries[backing.First].Requirements;
+                if (!device.GetCapabilities().HasResourceAliasingFeature || requirements.MustBeDedicated || previous.MustBeDedicated ||
+                    !SameTransientDescription(descriptions[i], descriptions[backing.First]) ||
+                    requirements.SizeBytes != previous.SizeBytes || requirements.Alignment != previous.Alignment ||
+                    requirements.MemoryType != previous.MemoryType) return false;
+            }
+        }
+        const auto core = device.GetNRICore();
+        bool gap = false;
+        for (auto& block : memory) {
+            if (block.First == UINT32_MAX) { gap = true; continue; }
+            if (gap) return false;
+            const auto& requirements = candidate->Entries[block.First].Requirements;
+            nri::AllocateMemoryDesc allocation{};
+            allocation.size = requirements.SizeBytes; allocation.type = requirements.MemoryType;
+            if (const auto* texture = std::get_if<RHITextureDesc>(&descriptions[block.First]))
+                allocation.allowMultisampleTextures = texture->SampleCount > 1;
+            if (candidate->AllocatedBytes > UINT64_MAX - allocation.size) return false;
+            if (ScopedRHIFault::Invoke("AllocateTransientMemory", [&] {
+                return core.AllocateMemory(*device.GetNRIDevice(), allocation, block.Native);
+            }) != nri::Result::SUCCESS || !block.Native) return false;
+            auto* native = block.Native;
+            auto lease = device.GetResources().Publish(RHIResourceKind::Memory, "Transient block", {native},
+                [core, native] { core.FreeMemory(native); });
+            if (!lease.IsLive()) { core.FreeMemory(block.Native); return false; }
+            candidate->MemoryBlocks.push_back(std::move(lease));
+            candidate->AllocatedBytes += allocation.size;
+        }
+        for (uint32_t i = 0; i < descriptions.size(); ++i) {
+            auto& entry = candidate->Entries[i];
+            auto* backing = memory[assignments[i]].Native;
+            if (const auto* texture = std::get_if<RHITextureDesc>(&descriptions[i])) {
+                if (!entry.Texture.InitPlaced(*texture, backing)) return false;
+                entry.View = MakeTransientView(entry.Texture);
+            } else {
+                if (!entry.Buffer.InitPlaced(std::get<RHIBufferDesc>(descriptions[i]), backing, 0)) return false;
+                entry.View = MakeTransientView(entry.Buffer);
+            }
+        }
+        m_Storage = std::move(candidate); return true;
     }
     const RHITransientView* RHITransientResources::Get(uint32_t index) const {
         auto& device = RHIDevice::Get();

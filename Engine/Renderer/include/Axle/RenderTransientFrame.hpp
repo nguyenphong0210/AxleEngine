@@ -11,6 +11,7 @@ namespace Axle {
     // completion, including after replacement or destruction of this wrapper.
     class RenderTransientFrame {
     public:
+        enum class AllocationMode { Committed, PlacedUnaliased };
         struct Import { RenderTransientGraph::Resource Id; RHI::RHITransientView View; };
         // Trusted owner callback: record only declared work; do not end, reset,
         // submit or retain the borrowed command wrapper beyond this call.
@@ -19,7 +20,8 @@ namespace Axle {
         ~RenderTransientFrame();
         RenderTransientFrame(const RenderTransientFrame&) = delete;
         RenderTransientFrame& operator=(const RenderTransientFrame&) = delete;
-        bool Prepare(const RenderTransientGraph::Plan& declarations, const std::vector<Import>& imports = {});
+        bool Prepare(const RenderTransientGraph::Plan& declarations, const std::vector<Import>& imports = {},
+                     AllocationMode mode = AllocationMode::Committed);
         bool Record(RenderTransientGraph::PassId pass, const Recorder& recorder);
         bool Submit();
         bool Abandon();

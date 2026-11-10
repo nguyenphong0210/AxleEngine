@@ -135,6 +135,7 @@ namespace Axle::RHI {
         // Borrow external memory. Its owner must retain it through all buffer
         // leases and checked retirement, including after this wrapper shuts down.
         bool InitPlaced(const RHIBufferDesc& desc, nri::Memory* memory, uint64_t memoryOffset);
+        static bool QueryMemoryRequirements(const RHIBufferDesc& desc, nri::MemoryDesc& requirements);
 
         // Transfer buffer and optional memory ownership only on success.
         bool InitAdopt(const RHIBufferDesc& desc, nri::Buffer* existingBuffer, nri::Memory* memory = nullptr,
@@ -166,7 +167,8 @@ namespace Axle::RHI {
         operator nri::Buffer*() const { return GetNative(); }
 
     private:
-        bool Build(const RHIBufferDesc& desc, const void* initialData, nri::Memory* borrowedMemory = nullptr, uint64_t memoryOffset = 0);
+        bool Build(const RHIBufferDesc& desc, const void* initialData, nri::Memory* borrowedMemory = nullptr,
+                   uint64_t memoryOffset = 0, nri::MemoryDesc* queryOnly = nullptr);
         bool BuildView();
         bool Publish(std::vector<RHIResourceLease> dependencies = {});
         RHIResourceLease m_Lease;

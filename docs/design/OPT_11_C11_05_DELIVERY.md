@@ -50,7 +50,39 @@ D3D12 and 768 bytes on Vulkan. These are queried resource backing sizes, not
 whole-device budget measurements or a claim that either backend is generally
 more memory-efficient.
 
+## C11-05.3 - Placed resources and memory ownership
+
+Added query-only texture/buffer requirement probes. They validate descriptions,
+create unbound native objects and query requirements without allocating backing
+memory. `RHITexture::InitPlaced` now supports the transactional create/bind/view
+path already used for buffers. Registered memory generations become transitive
+dependencies of every bound texture/buffer generation.
+
+`RHITransientResources::InitPlaced` allocates explicit blocks, checks queried
+types/alignment/dedicated restrictions and binds resources through NRI. Explicit
+shared blocks additionally require identical descriptions/requirements and the
+native resource-aliasing feature. Callers remain responsible for lifetime/barrier
+proof; graph execution at this slice uses only distinct blocks. No capability is
+enabled solely from the presence of function pointers.
+
+The graph executor has an explicit placed-unaliased mode. The existing committed
+path remains the default. Native tests cover query probes without backing
+allocation, misaligned texture placement, depth view creation/failure, partial
+memory allocation rollback, exact-once memory retirement, and retention after the
+original memory/texture wrapper is released.
+
+Debug native graph modes `dx12`, `vulkan`, `dx12_placed`, `vulkan_placed`,
+`dx12_placed_fail_submit`, `vulkan_placed_fail_submit` pass. The existing native
+`AxleRHIResourceTests.exe dx12` and `vulkan` regression suites also pass.
+Debug CTest selection `^(RenderUnitTests|TransientGraphPolicy|RHIResourcePolicy|RHIStatePolicy)$`
+passes 4/4. Release rebuilt the graph, render-unit and resource targets; placed
+normal/failure modes pass on both backends (4/4), and the same CTest selection
+passes 4/4. All commands exit 0.
+
+Logs: `build/c11_05_3_debug_build.log`, `build/c11_05_3_debug_fixture_build.log`,
+`build/c11_05_3_*.log`, `build/c11_05_3_resources_{dx12,vulkan}.log`.
+
 ## Remaining slices
 
-C11-05.3 placement, C11-05.4 interval packing, C11-05.5 alias barriers/backend
-proof, C11-05.6 metrics and consolidated review remain open at this checkpoint.
+C11-05.4 interval packing, C11-05.5 alias barriers/backend proof, C11-05.6
+metrics and consolidated review remain open at this checkpoint.

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import json
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -12,6 +13,8 @@ def main() -> int:
     parser.add_argument("--build", default="build")
     parser.add_argument("--config", choices=("Debug", "Release"), required=True)
     parser.add_argument("--output")
+    parser.add_argument("--restart-only", action="store_true", help="Use the real SDK plugin fixture from the completed full CTest log")
+    parser.add_argument("--session-log")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     build = (root / args.build).resolve()
@@ -55,6 +58,27 @@ def main() -> int:
     test = lambda name: build / "Tests" / args.config / (name + ".exe")
     editor = build / "Editor" / args.config / "AxleEditor.exe"
     runtime = build / "Runtime" / args.config / "AxleRuntime.exe"
+    if args.restart_only:
+        session_log = Path(args.session_log) if args.session_log else build / f"c11_07_final_{args.config}_LastTest.log"
+        text = session_log.read_text(encoding="utf-8")
+        paths = re.findall(r"Session fixture: (.*)", text)
+        if len(paths) != 1:
+            parser.error("Expected one completed PluginSession fixture in the full CTest log")
+        fixture = Path(paths[0].strip())
+        projects = list(fixture.glob("*.axleproj"))
+        if len(projects) != 1:
+            parser.error("Expected one generated project in the SDK fixture")
+        fingerprint = (fixture / "workflow.state").read_text(encoding="utf-8").strip()
+        if not fingerprint:
+            parser.error("SDK fixture fingerprint is missing")
+        for backend in ("dx12", "vulkan"):
+            for mode in ("product", "product-fault", "product-rejected"):
+                run(f"editor_restart_{backend}_{mode}", [test("AxlePluginRestartTests"), f"--{mode}", editor,
+                    projects[0], fingerprint if mode != "product-rejected" else "changed-plan", backend],
+                    markers=("PASS",), timeout=65)
+        failures = [c for c in cases if c["status"] != "PASS"]
+        print(f"{len(cases) - len(failures)}/{len(cases)} native Editor restart cases PASS; {output / 'results.json'}")
+        return 1 if failures else 0
     feature_flags = ["--render-thread=worker", "--render-parallel-recording=on", "--render-transient-aliasing=on"]
     for product, binary in (("editor", editor), ("runtime", runtime)):
         for index, flag in enumerate(feature_flags + ["--render-thread=typo"]):

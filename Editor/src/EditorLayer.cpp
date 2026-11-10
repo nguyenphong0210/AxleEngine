@@ -3687,6 +3687,9 @@ void EditorLayer::RenderProjectSettingsModal() {
                 ? Axle::RHI::RHITypeToString(activeBackend)
                 : "OpenGL 4.5 Core (Legacy)";
             ImGui::BulletText("Active Running Backend: %s", activeName.c_str());
+            const auto rollout = Axle::RenderService::Get().GetProductRollout();
+            ImGui::BulletText("Product render owner: Synchronous | Native recording: Serial | Scene allocation: Persistent");
+            for (const auto& reason : rollout.Reasons) ImGui::TextWrapped("%s", reason.c_str());
 
             if (Axle::RHI::RHIDevice::Get().IsNativeReady()) {
                 const auto& caps = Axle::RHI::RHIDevice::Get().GetCapabilities();

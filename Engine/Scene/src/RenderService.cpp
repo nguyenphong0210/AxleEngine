@@ -12,6 +12,23 @@ namespace Axle {
     RenderService& RenderService::Get() { static RenderService service; return service; }
     RenderService::RenderService() : m_StateSnapshot(PackState(RenderServiceState::Stopped, 1)) {}
     RenderService::~RenderService() { Shutdown(); m_Lifetime.reset(); }
+    bool RenderService::ConfigureProductArguments(int argc, char* const* argv, std::string& error) {
+        RenderFeatureRequests requests;
+        if (!ParseRenderFeatureArguments(argc, argv, requests, error)) return false;
+        auto policy = EvaluateRenderProductRollout(requests);
+        std::lock_guard lock(m_OwnerMutex);
+        if (m_Initialized || m_Owner != std::thread::id{}) { error = "Product render policy requires stopped service"; return false; }
+        m_ProductRollout = std::move(policy);
+        error.clear();
+        if (!m_ProductRollout.CanStart) {
+            for (const auto& reason : m_ProductRollout.Reasons) error += reason + "\n";
+            return false;
+        }
+        return true;
+    }
+    RenderProductRollout RenderService::GetProductRollout() const {
+        std::lock_guard lock(m_OwnerMutex); return m_ProductRollout;
+    }
 
     uint64_t RenderService::PackState(RenderServiceState state, uint64_t epoch) {
         constexpr uint64_t stateMask = 0xffu;
@@ -32,6 +49,7 @@ namespace Axle {
     }
 
     bool RenderService::Init() {
+        if (!GetProductRollout().CanStart) { SetState(RenderServiceState::Failed); return false; }
         auto& device = RHI::RHIDevice::Get();
         void* context = Window::HasActiveContext() ? glfwGetCurrentContext() : nullptr;
         bool initialized = false;

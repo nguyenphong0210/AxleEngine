@@ -6,6 +6,7 @@
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/SceneRenderer.hpp>
 #include <Axle/RenderCapabilities.hpp>
+#include <Axle/RenderRollout.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <atomic>
 #include <memory>
@@ -69,6 +70,8 @@ namespace Axle {
         bool IsOwnerThread() const;
         bool RequireOwner(std::string_view operation) const;
         RenderOwnershipReport GetOwnershipReport() const;
+        bool ConfigureProductArguments(int argc, char* const* argv, std::string& error);
+        RenderProductRollout GetProductRollout() const;
 
         // Primary rendering entry points
         RenderResult RenderView(const RenderWorld& world, const ViewRequest& request);
@@ -93,6 +96,7 @@ namespace Axle {
         void* m_GLContext = nullptr;
         mutable std::mutex m_OwnerMutex;
         std::thread::id m_Owner;
+        RenderProductRollout m_ProductRollout = EvaluateRenderProductRollout({});
         std::shared_ptr<int> m_Lifetime = std::make_shared<int>(0);
         std::unordered_map<std::string, std::shared_ptr<VertexArray>> m_GLMeshes;
         std::unordered_map<std::string, std::shared_ptr<RHI::RHIMesh>> m_NativeSourceMeshes;

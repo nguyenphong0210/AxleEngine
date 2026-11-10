@@ -11,6 +11,7 @@
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/RenderCommand.hpp>
+#include <Axle/RenderService.hpp>
 #include <Axle/PhysicsEngine.hpp>
 #include "EditorLayer.hpp"
 #include <exception>
@@ -126,6 +127,13 @@ int EditorMain(int argc, char** argv) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
 
+    std::string renderPolicyError;
+    if (!Axle::RenderService::Get().ConfigureProductArguments(argc, argv, renderPolicyError)) {
+        fprintf(stderr, "%s\n", renderPolicyError.c_str()); return 1;
+    }
+    const auto renderPolicy = Axle::RenderService::Get().GetProductRollout();
+    fprintf(stdout, "%s\n", renderPolicy.Summary.c_str());
+    for (const auto& reason : renderPolicy.Reasons) fprintf(stderr, "Render fallback: %s\n", reason.c_str());
     // Explicit projects override the build-configured development sample.
     std::filesystem::path requestedProject;
     bool emptyProject = false;

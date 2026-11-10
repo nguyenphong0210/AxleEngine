@@ -106,6 +106,12 @@ int RuntimeMain(int argc, char** argv) {
 #endif
 
     try {
+        std::string renderPolicyError;
+        if (!Axle::RenderService::Get().ConfigureProductArguments(argc, argv, renderPolicyError))
+            throw std::runtime_error(renderPolicyError);
+        const auto renderPolicy = Axle::RenderService::Get().GetProductRollout();
+        fprintf(stdout, "%s\n", renderPolicy.Summary.c_str());
+        for (const auto& reason : renderPolicy.Reasons) fprintf(stderr, "Render fallback: %s\n", reason.c_str());
         std::filesystem::path projectPath;
         uint32_t frameLimit = 0;
         bool verifySimulation = false;

@@ -13,6 +13,25 @@ boundary.
 - [OPT-11 architecture and algorithms](OPT_11_ARCHITECTURE_AND_ALGORITHMS.md)
 - [NRI integration contract](NRI_INTEGRATION_CONTRACT.md)
 - [RHI primary renderer architecture](RHI_PRIMARY_RENDERER_ARCHITECTURE.md)
+- [C11-04 hybrid implementation plan](OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md)
+
+## Implementation order after the hybrid scope change
+
+Complete the reopened C11-04 hybrid foundation and backend verification before
+starting C11-05 native transient allocation or aliasing. The pure CPU planner is
+technically independent, but the selected delivery order remains sequential.
+This avoids changing worker recording ownership and native memory reuse together.
+The hybrid plan defines the shared resource manifests, parent-child leases,
+completion retirement and combined recording/allocation test matrix.
+
+For interval packing, a topological index is only a planning coordinate. Actual
+GPU synchronization must establish the previous occupant's last use before the
+next occupant starts; worker task completion and submission-array order alone
+are insufficient. Count all primary/child uses in the resource lifetime, keep
+alias barriers on the owner and initially extend child uses to the parent scope.
+
+Select unaliased mode while any required synchronization or backend proof is
+missing. This ordering recommendation does not release C11-05 implementation.
 
 ## 1. Risk posture and decisions
 

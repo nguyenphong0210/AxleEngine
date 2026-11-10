@@ -1,45 +1,32 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-11-C11-07",
-    "title": "Consolidated OPT-11 acceptance and evidence-based product rollout decision",
+    "id": "OPT-12-MATERIAL-FORMAT",
+    "title": "Record user-approved Material Graph authoring format for future C12-01 implementation",
     "state": "complete",
     "coordinator": "Codex",
-    "implementer": "Codex",
-    "reviewer": "Codex separate-context c11_07_final_review: source/guide/report rechecks, no P1/P2; native/product execution by implementer",
-    "code_baseline": "ebc3a79238f15d8e2db7bc50e7380ee7b0f9855f",
-    "user_instruction": "User explicitly asks Codex to carry out C11-07, following C11-06. Continue sequentially with coherent local commits and final Gemini handoff.",
-    "user_scope": "Audit actual products; implement shared rollout flags/diagnostics and necessary repairs; measure serial/worker and alias evidence; Debug/Release native/GL/product acceptance and final review. Keep unproven product paths disabled and distinguish deferred integration from tested APIs. No full hybrid/vendor upgrade/OPT-12/push.",
-    "plan_reference": "docs/design/OPT_11_C11_07_ACCEPTANCE_PLAN.md",
-    "implementation_status": "C11-07 decision delivered: d9f28e3 plan, 002cfed product policy, 0869815 latency/CPU export, 119123c actual products/review refinements; supplemental native Editor candidate verification 2853e5d and diagnostic-preservation harness a389b26.",
+    "implementer": "Codex (documentation only)",
+    "code_baseline": "473d3df",
+    "user_instruction": "User approved the displayed complete format and asked to record it for implementation. The preceding interruption required showing the format before edits; edits started only after this approval.",
+    "user_scope": "Persist the approved example and constraints, link from C12-01 and the design index, and make a coherent local documentation commit. No parser/compiler implementation, node editor, MaterialX, later phase or push.",
+    "plan_reference": "docs/design/OPT_12_MATERIAL_GRAPH_FORMAT.md",
     "expected_files": [
-      "Engine/Scene rollout policy, worker diagnostics and bounded optional CPU image export",
-      "Editor/Runtime startup and rendering diagnostics",
-      "Tests rendering policy/parity/latency/product acceptance and CMake",
-      "Acceptance report, plan, roadmap and exchange"
+      "docs/design/OPT_12_MATERIAL_GRAPH_FORMAT.md",
+      "docs/design/POST_OPT10_PROGRAM_PLAN.md",
+      "docs/design/README.md",
+      "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "acceptance_status": "Qualified acceptance: synchronous product default and tested foundation API scope accepted. Product asynchronous ownership/native parallel recording/scene aliasing DEFERRED/default OFF. Full OPT-11 product deployment NOT ACCEPTED.",
+    "approved_choices": [
+      "Keep Gemini-style blocks, explicit input/output pins and editorPos on nodes in .axleasset.",
+      "Connections is inside Graph; retain from/to nodeId.pin endpoint strings.",
+      "Parameters use name as their sole stable unique key; ParameterRef.parameter references the name, with no numeric parameter ID.",
+      "Accept one-line, two-line and multiline parameter declarations with equivalent semantics.",
+      "Use existing native uint64 identity envelope; defaults and unused parameters/nodes are permitted."
+    ],
+    "implementation_status": "Design recorded only. Parser numeric-inline handling, graph validation/compiler and Editor behavior are not implemented or newly verified.",
+    "acceptance_status": "User accepted the displayed authoring format. This is not runtime/parser acceptance or release of C12-01.",
     "open_gates": [],
-    "next_action": "C11-07 acceptance/rollout decision complete. Stop; deferred product integrations/full hybrid/OPT-12 are not automatically released.",
-    "verified_production_source": "119123cd813f3c0eec9fad78615544e0ac4044c2",
-    "supplemental_verification_harness": [
-      "2853e5d",
-      "a389b26"
-    ],
-    "delivery_reference": "docs/reviews/OPT_11_C11_07_ACCEPTANCE.md",
-    "verification_summary": "Debug/Release full builds and 91/91 CTest each; 47/47 real-product cases each; 6/6 supplemental native Editor restart-candidate cases each; 4/4 final native parity/latency processes; 24/24 extra native RHI/alias regressions. Final restart rerun preserves prior diagnostic bytes/mtime and archives expected failures. Architecture 538/25, whitespace, artifacts/hashes/schema validated.",
-    "deferred_features": {
-      "product_async_owner": "UI/native/presentation/command ownership and full snapshot audit not integrated; representative scene/end-to-end latency gates missing.",
-      "product_parallel_native_recording": "Per-worker recording authority/state journals and product benefit not accepted.",
-      "product_scene_aliasing": "Current scene/UI/history/output targets remain persistent/imported; scratch lifetimes not migrated.",
-      "full_hybrid": "Remains deferred; no NRI upgrade/fork."
-    },
-    "limits": [
-      "One RTX3070/610.88 Windows machine; other hardware/drivers, physical GPU reset, sanitizer, unbounded soak NOT RUN.",
-      "64x64 CPU-source fixture wall times are not GPU timestamp/FPS or product input-to-photon measurements.",
-      "Actual native Editor restart candidate verified via launcher; live parent Editor UI continuity and user-driven project switching remain NOT RUN.",
-      "Graph backing-request savings apply only to proven tiny API fixture, not product VRAM."
-    ]
+    "next_action": "Use the recorded format when C12-01 is explicitly released. Stop at the documentation boundary; prior qualified C11-07 acceptance and deferred product integrations remain unchanged."
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",
@@ -2366,6 +2353,17 @@
       "base_commit": "a389b26",
       "timestamp_utc": "2026-11-10T08:21:58.316860+00:00",
       "body": "Correction/clarification to the C11-07 delivery wording: the native Editor frame-fault case injects QueuePresent after four completed frames, before readiness acknowledgement; it is not a first-frame fault. The report uses pre-acknowledgement presentation failure. The final 12 native candidate cases were also rerun on a389b26 with an existing crash-report sentinel: Debug/Release each 6/6 PASS, original bytes/mtime preserved, expected diagnostic archives present. Test-launcher/candidate evidence does not establish live parent Editor UI continuity or user-driven project switching; those remain NOT RUN. Production source remains 119123c and the qualified/default-off rollout decision is unchanged.\n"
+    },
+    {
+      "id": "CG-20261110T134741712344Z-CODEX-86bc1a",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-12-MATERIAL-FORMAT",
+      "reply_to": "CG-20261109T045432280489Z-GEMINI-767813",
+      "base_commit": "473d3df",
+      "timestamp_utc": "2026-11-10T13:47:41.712344+00:00",
+      "body": "User-approved OPT-12 authoring-format checkpoint, replying to the program-planning discussion and recording subsequent direct user decisions. This is documentation-only; no other session is invoked.\n\nThe user approved the complete Gemini-style example shown by Codex and asked to record it for future implementation. Reference: docs/design/OPT_12_MATERIAL_GRAPH_FORMAT.md; linked from C12-01 in POST_OPT10_PROGRAM_PLAN.md and the design index.\n\nKeep .axleasset blocks with explicit inputs/outputs/Pin and editorPos. Connections belongs inside Graph. Parameters merge numeric ID/name into name alone, a unique stable key; ParameterRef uses parameter: \"UV_Tiling\" rather than paramId. Support compact one-line, two-line and multiline declarations with identical meaning; upgrade parser accordingly when released. Keep from/to nodeId.pin strings and numeric node IDs. Native identity remains the existing first-line uint64 envelope, with no second body UUID. Unconnected defaulted inputs and unused parameters/nodes remain valid.\n\nThe document preserves the complete approved sample and distinguishes future parsing/validation/compiler requirements from current behavior. No parser/compiler code, MaterialX integration, full graph Editor or subsequent phase is released or executed by this checkpoint. Prior C11-07 qualified acceptance/deferred product paths remain unchanged. No Gemini review or response is claimed.\n"
     }
   ],
   "deferred_tasks": [
@@ -3722,6 +3720,47 @@
         "Loss is simulated before native submission after prior checked completion.",
         "Existing scene targets remain imported/persistent; no full hybrid/NRI upgrade or C11-07 rollout.",
         "Unresolved native shutdown remains quarantined/Failed rather than claiming a clean restart; no whole-process sustained OOM guarantee."
+      ]
+    },
+    {
+      "id": "OPT-11-C11-07",
+      "title": "Consolidated OPT-11 acceptance and evidence-based product rollout decision",
+      "state": "complete",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "reviewer": "Codex separate-context c11_07_final_review: source/guide/report rechecks, no P1/P2; native/product execution by implementer",
+      "code_baseline": "ebc3a79238f15d8e2db7bc50e7380ee7b0f9855f",
+      "user_instruction": "User explicitly asks Codex to carry out C11-07, following C11-06. Continue sequentially with coherent local commits and final Gemini handoff.",
+      "user_scope": "Audit actual products; implement shared rollout flags/diagnostics and necessary repairs; measure serial/worker and alias evidence; Debug/Release native/GL/product acceptance and final review. Keep unproven product paths disabled and distinguish deferred integration from tested APIs. No full hybrid/vendor upgrade/OPT-12/push.",
+      "plan_reference": "docs/design/OPT_11_C11_07_ACCEPTANCE_PLAN.md",
+      "implementation_status": "C11-07 decision delivered: d9f28e3 plan, 002cfed product policy, 0869815 latency/CPU export, 119123c actual products/review refinements; supplemental native Editor candidate verification 2853e5d and diagnostic-preservation harness a389b26.",
+      "expected_files": [
+        "Engine/Scene rollout policy, worker diagnostics and bounded optional CPU image export",
+        "Editor/Runtime startup and rendering diagnostics",
+        "Tests rendering policy/parity/latency/product acceptance and CMake",
+        "Acceptance report, plan, roadmap and exchange"
+      ],
+      "acceptance_status": "Qualified acceptance: synchronous product default and tested foundation API scope accepted. Product asynchronous ownership/native parallel recording/scene aliasing DEFERRED/default OFF. Full OPT-11 product deployment NOT ACCEPTED.",
+      "open_gates": [],
+      "next_action": "C11-07 acceptance/rollout decision complete. Stop; deferred product integrations/full hybrid/OPT-12 are not automatically released.",
+      "verified_production_source": "119123cd813f3c0eec9fad78615544e0ac4044c2",
+      "supplemental_verification_harness": [
+        "2853e5d",
+        "a389b26"
+      ],
+      "delivery_reference": "docs/reviews/OPT_11_C11_07_ACCEPTANCE.md",
+      "verification_summary": "Debug/Release full builds and 91/91 CTest each; 47/47 real-product cases each; 6/6 supplemental native Editor restart-candidate cases each; 4/4 final native parity/latency processes; 24/24 extra native RHI/alias regressions. Final restart rerun preserves prior diagnostic bytes/mtime and archives expected failures. Architecture 538/25, whitespace, artifacts/hashes/schema validated.",
+      "deferred_features": {
+        "product_async_owner": "UI/native/presentation/command ownership and full snapshot audit not integrated; representative scene/end-to-end latency gates missing.",
+        "product_parallel_native_recording": "Per-worker recording authority/state journals and product benefit not accepted.",
+        "product_scene_aliasing": "Current scene/UI/history/output targets remain persistent/imported; scratch lifetimes not migrated.",
+        "full_hybrid": "Remains deferred; no NRI upgrade/fork."
+      },
+      "limits": [
+        "One RTX3070/610.88 Windows machine; other hardware/drivers, physical GPU reset, sanitizer, unbounded soak NOT RUN.",
+        "64x64 CPU-source fixture wall times are not GPU timestamp/FPS or product input-to-photon measurements.",
+        "Actual native Editor restart candidate verified via launcher; live parent Editor UI continuity and user-driven project switching remain NOT RUN.",
+        "Graph backing-request savings apply only to proven tiny API fixture, not product VRAM."
       ]
     }
   ],

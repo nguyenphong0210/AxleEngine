@@ -101,10 +101,18 @@ Out of scope: mesh shaders and DDGI (owned by OPT-14 and OPT-13).
 **Goal:** Establish a versioned material representation before optional Slang or
 node-editor work.
 
+**Authoring format decision (2026-11-10):** the user approved the
+[Material Graph format](OPT_12_MATERIAL_GRAPH_FORMAT.md), including the complete
+example: `.axleasset` blocks with explicit pins, `Connections` inside `Graph`,
+parameter `name` as its sole key, and one-line/two-line/multiline parameter
+declarations. This records the design; parser/compiler implementation remains
+unreleased.
+
 Packages:
 
-- **C12-01 / 12.1 Material IR:** stable node/value IDs, schema version, validation and
-  serialization.
+- **C12-01 / 12.1 Material IR:** implement the approved authoring schema, stable node
+  IDs and parameter-name keys, schema version, parsing, validation and serialization;
+  keep authored graph data distinct from compiler IR.
 - **C12-02 / 12.2 Existing compiler backend:** lower a minimal graph to current HLSL,
   DXIL and SPIR-V compilation.
 - **C12-03 / 12.3 Reflection/layout:** descriptor compatibility, pipeline cache keys and

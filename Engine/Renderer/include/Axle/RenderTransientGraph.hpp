@@ -20,6 +20,8 @@ namespace Axle {
         enum class Access { Read, Write, ReadWrite };
         enum class Load { None, Load, Clear, Discard };
         enum class Store { Preserve, Discard };
+        enum class AllocationKind { UnaliasedTransient, IntervalPacked };
+        struct Options { bool AllowAliasing = false; };
         enum class Usage {
             ShaderResource, Storage, ColorAttachment, DepthAttachment,
             CopySource, CopyDest, ResolveSource, ResolveDest,
@@ -83,6 +85,12 @@ namespace Axle {
             uint64_t SizeBytes = 0;
             bool operator==(const Allocation&) const = default;
         };
+        struct AliasEvent {
+            uint32_t Block = UINT32_MAX;
+            Resource Previous = UINT32_MAX, Next = UINT32_MAX;
+            uint32_t BeforePass = 0, AfterPass = 0;
+            bool operator==(const AliasEvent&) const = default;
+        };
         struct Plan {
             // Owning snapshots prevent edits to the graph from changing a plan.
             std::vector<ResourceDesc> Resources;
@@ -90,8 +98,12 @@ namespace Axle {
             std::vector<PassId> PassOrder;
             std::vector<std::vector<PassId>> Dependencies; // original pass IDs
             std::vector<Lifetime> Lifetimes; // transient resources in ID order
-            std::vector<Allocation> Allocations; // one distinct block per transient
+            std::vector<Allocation> Allocations; // resource ID order, abstract block IDs
+            std::vector<AliasEvent> AliasEvents;
+            AllocationKind Mode = AllocationKind::UnaliasedTransient;
+            uint32_t BlockCount = 0;
             uint64_t RequestedBytes = 0;
+            uint64_t UnaliasedAllocationBytes = 0;
             uint64_t PlannedAllocationBytes = 0;
             uint64_t PlannedPeakBytes = 0; // all unaliased candidates coexist
             uint32_t IgnoredAliasRequests = 0;
@@ -102,6 +114,9 @@ namespace Axle {
         PassId AddPass(Pass pass);
         // No native calls or publication. Failure preserves the destination plan.
         bool Compile(Plan& destination, std::string* error = nullptr) const;
+        // CPU planning only; does not enable a native capability. The realizer
+        // must re-query requirements and prove barriers before sharing memory.
+        bool Compile(Plan& destination, Options options, std::string* error = nullptr) const;
 
     private:
         std::vector<ResourceDesc> m_Resources;

@@ -82,7 +82,26 @@ passes 4/4. All commands exit 0.
 Logs: `build/c11_05_3_debug_build.log`, `build/c11_05_3_debug_fixture_build.log`,
 `build/c11_05_3_*.log`, `build/c11_05_3_resources_{dx12,vulkan}.log`.
 
+## C11-05.4 - CPU interval packing
+
+The pure compiler now accepts an explicit `AllowAliasing` planning option.
+Default compilation preserves the earlier unaliased block IDs. Opt-in planning
+sorts closed lifetimes by `(first, last, resource ID)` and uses deterministic
+first-fit coloring. Only opted-in, non-dedicated resources with equal conservative
+compatibility keys share a block, and only when the previous last pass strictly
+precedes the next first pass. Events retain the immediate previous occupant.
+
+Plans distinguish unaliased bytes, packed backing bytes, block count and logical
+alias events. No native alias capability is enabled by this compiler option.
+CPU tests cover equal-size incompatible formats/types/alignment, dedicated and
+non-opted-in resources, touching intervals, three-occupant chains and default
+fallback. All 120 generated graphs are additionally checked against an independent
+maximum-live-interval oracle and pairwise overlap checks.
+
+Debug and Release RenderUnitTests pass after rebuilding (exit 0). Logs:
+`build/c11_05_4_{debug,release}_{build,tests}.log`.
+
 ## Remaining slices
 
-C11-05.4 interval packing, C11-05.5 alias barriers/backend proof, C11-05.6
-metrics and consolidated review remain open at this checkpoint.
+C11-05.5 alias barriers/backend proof, C11-05.6 metrics and consolidated review
+remain open at this checkpoint.

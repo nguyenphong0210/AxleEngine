@@ -129,6 +129,10 @@ namespace Axle {
     }
 
     bool RenderTransientGraph::Compile(Plan& destination, std::string* error) const {
+        return Compile(destination, Options{}, error);
+    }
+
+    bool RenderTransientGraph::Compile(Plan& destination, Options options, std::string* error) const {
         if (error) error->clear();
         auto fail = [&](std::string message) {
             if (error) *error = std::move(message);
@@ -179,7 +183,7 @@ namespace Axle {
             allocationSizes[r] = padded & ~(alignment - 1);
             key.SizeBytes = mem.SizeBytes; key.Alignment = mem.Alignment; key.Granularity = mem.Granularity;
             key.MemoryType = mem.MemoryType; key.MustBeDedicated = mem.MustBeDedicated;
-            if (desc.AllowAlias) ++candidate.IgnoredAliasRequests;
+            if (desc.AllowAlias && (!options.AllowAliasing || mem.MustBeDedicated)) ++candidate.IgnoredAliasRequests;
         }
 
         names.clear();
@@ -243,13 +247,47 @@ namespace Axle {
             if (m_Resources[r].Type == Kind::Imported) continue;
             if (first[r] == UINT32_MAX) return fail("Unused transient resource: " + m_Resources[r].Name);
             candidate.Lifetimes.push_back({r, first[r], last[r], keys[r]});
-            candidate.Allocations.push_back({r, static_cast<uint32_t>(candidate.Allocations.size()), allocationSizes[r]});
+            candidate.Allocations.push_back({r, UINT32_MAX, allocationSizes[r]});
             if (!Add(candidate.RequestedBytes, keys[r].SizeBytes, candidate.RequestedBytes) ||
-                !Add(candidate.PlannedAllocationBytes, allocationSizes[r], candidate.PlannedAllocationBytes))
+                !Add(candidate.UnaliasedAllocationBytes, allocationSizes[r], candidate.UnaliasedAllocationBytes))
                 return fail("Transient byte statistics overflow");
         }
+        std::vector<size_t> order;
+        for (size_t i = 0; i < candidate.Lifetimes.size(); ++i) order.push_back(i);
+        if (options.AllowAliasing) std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            const auto& x = candidate.Lifetimes[a]; const auto& y = candidate.Lifetimes[b];
+            if (x.FirstPass != y.FirstPass) return x.FirstPass < y.FirstPass;
+            if (x.LastPass != y.LastPass) return x.LastPass < y.LastPass;
+            return x.Id < y.Id;
+        });
+        struct Block { Lifetime Occupant; bool Shareable; };
+        std::vector<Block> blocks;
+        for (auto index : order) {
+            const auto& life = candidate.Lifetimes[index];
+            const bool shareable = options.AllowAliasing && m_Resources[life.Id].AllowAlias && !life.Key.MustBeDedicated;
+            uint32_t selected = static_cast<uint32_t>(blocks.size());
+            if (shareable) for (uint32_t b = 0; b < blocks.size(); ++b) {
+                if (blocks[b].Shareable && blocks[b].Occupant.LastPass < life.FirstPass && blocks[b].Occupant.Key == life.Key) {
+                    selected = b; break;
+                }
+            }
+            if (selected == blocks.size()) {
+                blocks.push_back({life, shareable});
+                if (!Add(candidate.PlannedAllocationBytes, allocationSizes[life.Id], candidate.PlannedAllocationBytes))
+                    return fail("Packed allocation statistics overflow");
+            } else {
+                const auto& previous = blocks[selected].Occupant;
+                candidate.AliasEvents.push_back({selected, previous.Id, life.Id, previous.LastPass, life.FirstPass});
+                blocks[selected].Occupant = life;
+            }
+            candidate.Allocations[index].Block = selected;
+        }
+        candidate.BlockCount = static_cast<uint32_t>(blocks.size());
+        if (!candidate.AliasEvents.empty()) candidate.Mode = AllocationKind::IntervalPacked;
         candidate.PlannedPeakBytes = candidate.PlannedAllocationBytes;
-        candidate.Diagnostic = "UnaliasedTransient: CPU plan only; no native allocation or alias barriers";
+        candidate.Diagnostic = candidate.Mode == AllocationKind::IntervalPacked ?
+            "IntervalPacked: CPU candidate only; native alias barrier proof still required" :
+            "UnaliasedTransient: CPU plan only; no native allocation or alias barriers";
         if (candidate.IgnoredAliasRequests) candidate.Diagnostic += "; alias requests remain disabled";
         candidate.Resources = m_Resources;
         candidate.Passes = m_Passes;

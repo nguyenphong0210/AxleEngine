@@ -34,6 +34,8 @@ namespace Axle::RenderTests {
         bool SamePlan(const Graph::Plan& a, const Graph::Plan& b) {
             return a.PassOrder == b.PassOrder && a.Dependencies == b.Dependencies &&
                 a.Lifetimes == b.Lifetimes && a.Allocations == b.Allocations &&
+                a.AliasEvents == b.AliasEvents && a.Mode == b.Mode && a.BlockCount == b.BlockCount &&
+                a.UnaliasedAllocationBytes == b.UnaliasedAllocationBytes &&
                 a.RequestedBytes == b.RequestedBytes && a.PlannedAllocationBytes == b.PlannedAllocationBytes &&
                 a.PlannedPeakBytes == b.PlannedPeakBytes && a.IgnoredAliasRequests == b.IgnoredAliasRequests &&
                 a.Diagnostic == b.Diagnostic && a.Resources.size() == b.Resources.size() && a.Passes.size() == b.Passes.size();
@@ -206,6 +208,54 @@ namespace Axle::RenderTests {
             return true;
         }
 
+        bool TestIntervalPacking() {
+            auto compilePair = [](Graph::ResourceDesc a, Graph::ResourceDesc b, bool touching, Graph::Plan& result) {
+                Graph graph; graph.AddResource(std::move(a)); graph.AddResource(std::move(b));
+                graph.AddPass({"clear A", {Clear(0)}});
+                graph.AddPass({"read A", {{0}}, {0}});
+                if (touching) graph.AddPass({"read A and clear B", {{0}, Clear(1)}, {1}});
+                else graph.AddPass({"clear B", {Clear(1)}, {1}});
+                graph.AddPass({"read B", {{1}}, {2}});
+                return graph.Compile(result, {true});
+            };
+            Graph::Plan plan;
+            RENDER_CHECK(compilePair(Texture("A", true), Texture("B", true), false, plan) &&
+                plan.Mode == Graph::AllocationKind::IntervalPacked && plan.BlockCount == 1 &&
+                plan.RequestedBytes == 128 && plan.UnaliasedAllocationBytes == 128 && plan.PlannedPeakBytes == 64 &&
+                plan.Allocations[0].Block == plan.Allocations[1].Block &&
+                plan.AliasEvents == std::vector<Graph::AliasEvent>({{0, 0, 1, 1, 2}}),
+                "disjoint compatible intervals share one CPU block with exact previous/next event");
+            RENDER_CHECK(compilePair(Texture("A", true), Texture("B", true), true, plan) &&
+                plan.BlockCount == 2 && plan.AliasEvents.empty(), "touching intervals cannot share a block");
+            auto incompatible = Texture("B", true);
+            std::get<RHI::RHITextureDesc>(incompatible.Description).Format = RHI::RHITextureFormat::RGBA8_SRGB;
+            RENDER_CHECK(compilePair(Texture("A", true), incompatible, false, plan) && plan.BlockCount == 2,
+                "format mismatch prevents aliasing even at equal byte size");
+            incompatible = Texture("B", true); incompatible.Memory.MemoryType = 19;
+            RENDER_CHECK(compilePair(Texture("A", true), incompatible, false, plan) && plan.BlockCount == 2, "memory type mismatch prevents aliasing");
+            incompatible = Texture("B", true); incompatible.Memory.MustBeDedicated = true;
+            RENDER_CHECK(compilePair(Texture("A", true), incompatible, false, plan) && plan.BlockCount == 2 &&
+                plan.IgnoredAliasRequests == 1, "dedicated native requirements prevent aliasing");
+            incompatible = Texture("B", true); incompatible.Memory.Alignment = 128;
+            RENDER_CHECK(compilePair(Texture("A", true), incompatible, false, plan) && plan.BlockCount == 2 &&
+                plan.PlannedPeakBytes == 192, "alignment mismatch remains separate with checked padding");
+            RENDER_CHECK(compilePair(Texture("A", false), Texture("B", true), false, plan) && plan.BlockCount == 2,
+                "a resource that did not opt in never becomes an alias predecessor");
+            Graph chain;
+            for (uint32_t i = 0; i < 3; ++i) {
+                chain.AddResource(Texture(std::to_string(i), true));
+                chain.AddPass({"clear" + std::to_string(i), {Clear(i)}, i ? std::vector<uint32_t>{i * 2 - 1} : std::vector<uint32_t>{}});
+                chain.AddPass({"read" + std::to_string(i), {{i}}, {i * 2}});
+            }
+            Graph::Plan again;
+            RENDER_CHECK(chain.Compile(plan, {true}) && chain.Compile(again, {true}) && SamePlan(plan, again) &&
+                plan.AliasEvents == std::vector<Graph::AliasEvent>({{0, 0, 1, 1, 2}, {0, 1, 2, 3, 4}}),
+                "reuse chains track the immediate previous occupant deterministically");
+            RENDER_CHECK(chain.Compile(plan) && plan.BlockCount == 3 && plan.AliasEvents.empty() && plan.PlannedPeakBytes == 192,
+                "default compile still disables packing after an opt-in plan");
+            return true;
+        }
+
         bool TestGeneratedGraphs() {
             // Reproducible data exercises lifetimes and topology against a separate
             // interval oracle rather than only matching compiler examples.
@@ -242,6 +292,21 @@ namespace Axle::RenderTests {
                     for (auto dependency : plan.Dependencies[p])
                         RENDER_CHECK(dependency < p, "all generated hazard edges precede their consumer");
                 }
+                Graph::Plan packed, repeated;
+                RENDER_CHECK(graph.Compile(packed, {true}) && graph.Compile(repeated, {true}) && SamePlan(packed, repeated),
+                    "generated packed plans are deterministic");
+                uint32_t peakLive = 0;
+                for (uint32_t p = 0; p < passCount; ++p) {
+                    uint32_t live = 0;
+                    for (uint32_t r = 0; r < count; ++r) if (starts[r] <= p && p <= ends[r]) ++live;
+                    peakLive = std::max(peakLive, live);
+                }
+                RENDER_CHECK(packed.BlockCount == peakLive && packed.PlannedPeakBytes == uint64_t(peakLive) * 64 &&
+                    packed.AliasEvents.size() == count - peakLive, "packing matches independent maximum-live-interval oracle");
+                for (uint32_t a = 0; a < count; ++a) for (uint32_t b = a + 1; b < count; ++b) {
+                    if (packed.Allocations[a].Block == packed.Allocations[b].Block)
+                        RENDER_CHECK(ends[a] < starts[b] || ends[b] < starts[a], "generated shared blocks never contain overlapping closed lifetimes");
+                }
             }
             return true;
         }
@@ -250,7 +315,7 @@ namespace Axle::RenderTests {
     bool RunRenderTransientGraphUnitTests() {
         std::cout << "  [TransientGraph] Running C11-05.1 CPU planner contracts...\n";
         if (!TestPlansAndLifetimes() || !TestHazards() || !TestInvalidGraphs() ||
-            !TestRequirementsAndArithmetic() || !TestGeneratedGraphs()) return false;
+            !TestRequirementsAndArithmetic() || !TestIntervalPacking() || !TestGeneratedGraphs()) return false;
         std::cout << "  [TransientGraph] All planner contracts and 120 generated graphs passed.\n";
         return true;
     }

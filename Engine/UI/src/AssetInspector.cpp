@@ -457,14 +457,18 @@ namespace Axle {
     }
 
     void SceneHierarchyPanel::DrawMaterialAssetProperties(const std::filesystem::path& path) {
-        if (m_LoadedMaterialPath != path || !m_MaterialAssetLoaded) {
+        if (m_LoadedMaterialPath != path) {
             m_ActiveMaterialAsset = MaterialComponent();
-            LoadMaterialAsset(path, m_ActiveMaterialAsset);
+            m_MaterialAssetLoaded = LoadMaterialAsset(path, m_ActiveMaterialAsset);
             m_LoadedMaterialPath = path;
-            m_MaterialAssetLoaded = true;
             // The renderer publishes reflected schema and diagnostics into this
             // material instance. Share it from the first frame, before any edit.
-            if (m_AssetPreviewPanel) m_AssetPreviewPanel->UpdateMaterialPreview(m_ActiveMaterialAsset);
+            if (m_MaterialAssetLoaded && m_AssetPreviewPanel) m_AssetPreviewPanel->UpdateMaterialPreview(m_ActiveMaterialAsset);
+        }
+        if (!m_MaterialAssetLoaded) {
+            ImGui::TextWrapped("This material format cannot be edited here yet, or the file could not be read.");
+            if (ImGui::Button("Retry Loading Material")) m_LoadedMaterialPath.clear();
+            return;
         }
 
         bool changed = false;
@@ -490,9 +494,10 @@ namespace Axle {
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.50f, 0.80f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.35f, 0.58f, 1.0f));
         if (ImGui::Button("Save Material Asset", ImVec2(availW, 26.0f)) || changed) {
-            SaveMaterialAsset(path, m_ActiveMaterialAsset);
-            AssetThumbnailManager::Invalidate(path);
-            MaterialCache::ReloadMaterial(path);
+            if (SaveMaterialAsset(path, m_ActiveMaterialAsset)) {
+                AssetThumbnailManager::Invalidate(path);
+                MaterialCache::ReloadMaterial(path);
+            }
         }
         ImGui::PopStyleColor(3);
 

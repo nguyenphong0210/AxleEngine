@@ -417,6 +417,14 @@ The new executor is opt-in; current scene targets remain persistent/imported.
 C11-04 full hybrid/NRI fork stays deferred. This checkpoint does not close OPT-11
 as a fully deployed product phase or release OPT-12..20.
 
+**C12-01 direct user release, 2026-11-10:** the approved Material Graph format is
+implemented as a CPU authoring document, explicit node-definition registry,
+validated IR and identity-safe persistence. See the
+[C12-01 delivery](reviews/OPT_12_C12_01_DELIVERY.md) for source review, final
+Debug/Release evidence and the corrected current-format fixture. This accepts
+the C12-01 CPU boundary only. Shader generation, material rendering, Slang and
+node-editor integration remain separate packages; C11-07 deferrals are unchanged.
+
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features
 remain deferred.

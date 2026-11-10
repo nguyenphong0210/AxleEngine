@@ -4,6 +4,9 @@ add_library(AxleAsset STATIC
     src/AssetManager.cpp
     src/AssetCooker.cpp
     src/AssetDSL.cpp
+    src/MaterialGraph.cpp
+    src/MaterialNodeRegistry.cpp
+    src/BuiltinMaterialNodes.cpp
     src/TextureDescriptor.cpp
     src/ImageSource.cpp
     src/TerrainAsset.cpp

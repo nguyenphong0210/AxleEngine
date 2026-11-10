@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Axle/Types.hpp>
+#include <Axle/BlockText.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <string_view>
@@ -25,9 +26,12 @@ namespace Axle {
         AnimatorController
     };
 
+    using AssetSourceLocation = TextSourceLocation;
+
     struct AssetProperty {
         std::string Key;
         std::string RawValue;
+        AssetSourceLocation Source;
 
         std::string AsString() const;
         float AsFloat(float defaultVal = 0.0f) const;
@@ -47,6 +51,7 @@ namespace Axle {
         std::string Type;
         std::vector<AssetProperty> Properties;
         std::vector<std::shared_ptr<AssetBlock>> Children;
+        AssetSourceLocation Source;
 
         bool HasProperty(const std::string& key) const;
         const AssetProperty* GetProperty(const std::string& key) const;
@@ -91,7 +96,8 @@ namespace Axle {
         static AssetKind PeekAssetKindFromFile(const std::filesystem::path& filepath) { return PeekAssetKindFromFile(filepath.string()); }
 
         // Parsing
-        static bool ParseSource(std::string_view source, AssetDocument& outDoc, std::string* outError = nullptr);
+        static bool ParseSource(std::string_view source, AssetDocument& outDoc, std::string* outError = nullptr,
+                                AssetSourceLocation* outLocation = nullptr);
         static bool ParseFile(const std::string& filepath, AssetDocument& outDoc, std::string* outError = nullptr);
         static bool ParseFile(const std::filesystem::path& filepath, AssetDocument& outDoc, std::string* outError = nullptr) { return ParseFile(filepath.string(), outDoc, outError); }
 
@@ -103,11 +109,10 @@ namespace Axle {
 
         // Utilities
         static std::string StripComments(std::string_view source);
+        static std::string QuoteString(std::string_view value);
         static glm::vec4 ParseHexColor(std::string_view hex);
         static std::string FormatHexColor(const glm::vec4& color, bool includeAlpha = true);
 
-    private:
-        static bool ParseBlockInternal(std::string_view& src, std::shared_ptr<AssetBlock> block, std::string* outError);
     };
 
 } // namespace Axle

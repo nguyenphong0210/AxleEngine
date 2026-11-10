@@ -1,6 +1,7 @@
 add_library(AxleCore STATIC
     src/Log.cpp
     src/FileSystem.cpp
+    src/BlockText.cpp
     src/UUID.cpp
     src/JobSystem.cpp
     src/Package.cpp

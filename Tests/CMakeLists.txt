@@ -5,11 +5,17 @@ add_executable(AxleArchitectureStressTests EXCLUDE_FROM_ALL src/ArchitectureStre
 target_link_libraries(AxleArchitectureStressTests PRIVATE Axle::Physics Axle::SceneData)
 add_test(NAME ArchitectureStressTests COMMAND $<TARGET_FILE:AxleArchitectureStressTests>)
 set_tests_properties(ArchitectureStressTests PROPERTIES LABELS "architecture;ecs-jobs;physics;cpu" TIMEOUT 120)
+add_executable(AxleMaterialGraphTests EXCLUDE_FROM_ALL src/Test_MaterialGraph.cpp)
+target_link_libraries(AxleMaterialGraphTests PRIVATE Axle::Asset)
+add_test(NAME MaterialGraphTests COMMAND $<TARGET_FILE:AxleMaterialGraphTests>
+    "${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/MaterialGraph/M_RustMetal.axleasset"
+    "${CMAKE_CURRENT_BINARY_DIR}/MaterialGraph/$<CONFIG>")
+set_tests_properties(MaterialGraphTests PROPERTIES LABELS "asset;material;cpu" TIMEOUT 30)
 if(NOT AXLE_BUILD_EDITOR)
     add_executable(AxlePluginFoundationTests EXCLUDE_FROM_ALL src/Test_PluginFoundation.cpp)
     target_link_libraries(AxlePluginFoundationTests PRIVATE Axle::Plugin Axle::Project)
     add_test(NAME PluginFoundationTests COMMAND $<TARGET_FILE:AxlePluginFoundationTests>)
-    add_custom_target(AxleAllTests DEPENDS AxlePluginFoundationTests AxleStaticPluginLifetimeTests AxleArchitectureStressTests)
+    add_custom_target(AxleAllTests DEPENDS AxlePluginFoundationTests AxleStaticPluginLifetimeTests AxleArchitectureStressTests AxleMaterialGraphTests)
     return()
 endif()
 
@@ -643,6 +649,7 @@ set(AXLE_TEST_TARGETS AxleStaticPluginLifetimeTests AxleSceneDataBoundaryTests A
 list(APPEND AXLE_TEST_TARGETS AxlePluginFoundationTests AxlePluginSelectionTests AxlePluginsPanelWorkflowTests AxlePluginRuntimeTests AxlePluginDocumentGuardTests AxlePluginRestartTests)
 list(APPEND AXLE_TEST_TARGETS AxlePrimitiveTests AxleRHIIdentityTests AxleRHIRetirementTests AxleRHIStateTests AxleRHIFrameTests AxleRHIPresentationTests AxleImageSourceTests)
 list(APPEND AXLE_TEST_TARGETS AxleTransientGraphTests)
+list(APPEND AXLE_TEST_TARGETS AxleMaterialGraphTests)
 list(APPEND AXLE_TEST_TARGETS AxleRenderLifetimeStressTests)
 list(APPEND AXLE_TEST_TARGETS AxleRenderAcceptanceTests)
 if(WIN32)

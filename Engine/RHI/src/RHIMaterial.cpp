@@ -3,6 +3,7 @@
 #include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/BlockText.hpp>
 #include <fstream>
 #include <sstream>
 #include <cstdio>
@@ -372,6 +373,13 @@ namespace Axle::RHI {
     }
 
     bool RHIMaterial::Save(const std::filesystem::path& filepath) const {
+        std::string extension = filepath.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c){return std::tolower(c);});
+        if (FileSystem::Exists(filepath)) {
+            const auto previous = FileSystem::ReadTextFile(filepath);
+            if ((extension == ".axleasset" || extension.empty() || previous.find("Material {") != std::string::npos || previous.find("Material{") != std::string::npos) &&
+                !BlockText::IsUnversionedFlatDocument(previous, "Material")) return false;
+        }
         std::ostringstream fout;
         bool pathsValid = true;
         auto reference = [&](const std::string& path) {
@@ -475,6 +483,13 @@ namespace Axle::RHI {
         std::string content = Axle::FileSystem::ReadTextFile(filepath);
         if (content.empty()) {
             AXLE_CORE_ERROR("RHIMaterial::Load: Could not read material '{0}'", filepath.string());
+            return false;
+        }
+        std::string extension = filepath.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c){return std::tolower(c);});
+        if ((extension == ".axleasset" || extension.empty() || content.find("Material {") != std::string::npos || content.find("Material{") != std::string::npos) &&
+            !BlockText::IsUnversionedFlatDocument(content, "Material")) {
+            AXLE_CORE_ERROR("RHIMaterial::Load: Unsupported structured, versioned or malformed material '{0}'", filepath.string());
             return false;
         }
         // A reload replaces the asset, including omitted properties from older files.

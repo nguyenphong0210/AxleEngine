@@ -1,0 +1,224 @@
+# AxleFileIdentity: 1 1234567890123456789
+
+Material {
+    schemaVersion: 1
+    name: "M_RustMetal"
+    type: "Graph"
+
+    shadingModel: "DefaultLit"
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    depthWrite: true
+
+    Parameters {
+        Parameter { name: "BaseColorTint", type: "Float3", default: [1.0, 1.0, 1.0] }
+        Parameter { name: "UV_Tiling",     type: "Float2", default: [2.0, 2.0] }
+        Parameter { name: "RustAmount",    type: "Float",  default: 0.65 }
+
+        Parameter { name: "BaseMetallic", type: "Float",
+                    default: 0.90 }
+
+        Parameter {
+            name: "BaseRoughness"
+            type: "Float"
+            default: 0.25
+        }
+    }
+
+    Graph {
+        // UV coordinates.
+        Node {
+            id: 1
+            type: "InputUV"
+            editorPos: [-800, -200]
+
+            outputs {
+                Pin { name: "uv", type: "Float2" }
+            }
+        }
+
+        Node {
+            id: 2
+            type: "ParameterRef"
+            parameter: "UV_Tiling"
+            editorPos: [-800, 0]
+
+            outputs {
+                Pin { name: "value", type: "Float2" }
+            }
+        }
+
+        Node {
+            id: 3
+            type: "Multiply"
+            editorPos: [-550, -150]
+
+            inputs {
+                Pin { name: "a", type: "Float2", default: [0.0, 0.0] }
+                Pin { name: "b", type: "Float2", default: [1.0, 1.0] }
+            }
+            outputs {
+                Pin { name: "result", type: "Float2" }
+            }
+        }
+
+        // Texture sampling.
+        Node {
+            id: 4
+            type: "SampleTexture2D"
+            editorPos: [-300, -250]
+
+            properties {
+                texturePath: "textures/metal_base_d.png"
+                colorSpace: "sRGB"
+                sampler: "LinearRepeat"
+            }
+
+            inputs {
+                Pin { name: "uv", type: "Float2", default: [0.0, 0.0] }
+            }
+            outputs {
+                Pin { name: "rgba", type: "Float4" }
+                Pin { name: "rgb",  type: "Float3" }
+                Pin { name: "a",    type: "Float" }
+            }
+        }
+
+        Node {
+            id: 5
+            type: "SampleTexture2D"
+            editorPos: [-300, 0]
+
+            properties {
+                texturePath: "textures/rust_d.png"
+                colorSpace: "sRGB"
+                sampler: "LinearRepeat"
+            }
+
+            inputs {
+                Pin { name: "uv", type: "Float2", default: [0.0, 0.0] }
+            }
+            outputs {
+                Pin { name: "rgba", type: "Float4" }
+                Pin { name: "rgb",  type: "Float3" }
+                Pin { name: "a",    type: "Float" }
+            }
+        }
+
+        // Rust blending.
+        Node {
+            id: 6
+            type: "ParameterRef"
+            parameter: "RustAmount"
+            editorPos: [-300, 250]
+
+            outputs {
+                Pin { name: "value", type: "Float" }
+            }
+        }
+
+        Node {
+            id: 7
+            type: "Lerp"
+            editorPos: [0, -150]
+
+            inputs {
+                Pin { name: "a",     type: "Float3", default: [0.0, 0.0, 0.0] }
+                Pin { name: "b",     type: "Float3", default: [1.0, 1.0, 1.0] }
+                Pin { name: "alpha", type: "Float",  default: 0.0 }
+            }
+            outputs {
+                Pin { name: "result", type: "Float3" }
+            }
+        }
+
+        // Color tint.
+        Node {
+            id: 8
+            type: "ParameterRef"
+            parameter: "BaseColorTint"
+            editorPos: [0, 150]
+
+            outputs {
+                Pin { name: "value", type: "Float3" }
+            }
+        }
+
+        Node {
+            id: 9
+            type: "Multiply"
+            editorPos: [250, -150]
+
+            inputs {
+                Pin { name: "a", type: "Float3", default: [1.0, 1.0, 1.0] }
+                Pin { name: "b", type: "Float3", default: [1.0, 1.0, 1.0] }
+            }
+            outputs {
+                Pin { name: "result", type: "Float3" }
+            }
+        }
+
+        // Surface parameters.
+        Node {
+            id: 10
+            type: "ParameterRef"
+            parameter: "BaseMetallic"
+            editorPos: [250, 150]
+
+            outputs {
+                Pin { name: "value", type: "Float" }
+            }
+        }
+
+        Node {
+            id: 11
+            type: "ParameterRef"
+            parameter: "BaseRoughness"
+            editorPos: [250, 350]
+
+            outputs {
+                Pin { name: "value", type: "Float" }
+            }
+        }
+
+        // Surface output.
+        Node {
+            id: 999
+            type: "PBRMasterOutput"
+            editorPos: [550, -100]
+
+            inputs {
+                Pin { name: "BaseColor", type: "Float3", default: [1.0, 1.0, 1.0] }
+                Pin { name: "Metallic",  type: "Float",  default: 0.0 }
+                Pin { name: "Roughness", type: "Float",  default: 0.5 }
+                Pin { name: "Normal",    type: "Float3", default: [0.0, 0.0, 1.0] }
+                Pin { name: "Emission",  type: "Float3", default: [0.0, 0.0, 0.0] }
+                Pin { name: "AO",        type: "Float",  default: 1.0 }
+            }
+        }
+
+        Connections {
+            // UV scaling.
+            Connection { from: "1.uv",     to: "3.a" }
+            Connection { from: "2.value",  to: "3.b" }
+
+            // Texture coordinates.
+            Connection { from: "3.result", to: "4.uv" }
+            Connection { from: "3.result", to: "5.uv" }
+
+            // Rust blending.
+            Connection { from: "4.rgb",    to: "7.a" }
+            Connection { from: "5.rgb",    to: "7.b" }
+            Connection { from: "6.value",  to: "7.alpha" }
+
+            // Color tint.
+            Connection { from: "7.result", to: "9.a" }
+            Connection { from: "8.value",  to: "9.b" }
+
+            // Surface outputs.
+            Connection { from: "9.result", to: "999.BaseColor" }
+            Connection { from: "10.value", to: "999.Metallic" }
+            Connection { from: "11.value", to: "999.Roughness" }
+        }
+    }
+}

@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <string_view>
 #include <filesystem>
 #include <vector>
 #include <cstdint>
@@ -41,6 +42,7 @@ namespace Axle {
 
         // Optional versioned identity envelope for native text documents; no sidecars or registry.
         static bool ReadFileIdentity(const std::filesystem::path& path, uint64_t& id, std::string* error = nullptr);
+        static bool ParseFileIdentity(std::string_view text, uint64_t& id, std::string* error = nullptr);
         static bool WriteIdentifiedTextFile(const std::filesystem::path& path, const std::string& text,
                                            std::string* error = nullptr, uint64_t requestedID = 0);
 

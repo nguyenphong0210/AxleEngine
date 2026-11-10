@@ -2,6 +2,9 @@
 #include <Axle/Material.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ShaderPropertyPersistence.hpp>
+#include <Axle/FileSystem.hpp>
+#include <Axle/MaterialCache.hpp>
+#include <Axle/RHI/RHIMaterial.hpp>
 #include <sstream>
 #include <fstream>
 
@@ -9,6 +12,35 @@ using namespace Axle;
 using namespace Axle::MaterialTests;
 
 namespace {
+
+    bool TestGraphDocumentsCannotBeFlattened() {
+        ScopedTempDir temp;
+        const auto source = FileSystem::ReadTextFile(std::filesystem::path(AXLE_TEST_SOURCE_DIR) /
+            "Tests/Fixtures/MaterialGraph/M_RustMetal.axleasset");
+        MAT_TEST_CHECK(!source.empty(), "Approved graph fixture missing");
+        const auto path = temp.Path / "Graph.axleasset";
+        MAT_TEST_CHECK(FileSystem::WriteTextFileAtomically(path, source), "Cannot stage graph");
+        const auto before = FileSystem::ReadBinaryFile(path);
+        Material flat("Live", Axle::UUID(1234567890123456789ULL)); flat.SetRoughness(0.123f);
+        MAT_TEST_CHECK(!flat.Load(path, false), "Flat material loader accepted graph");
+        MAT_TEST_CHECK(flat.GetName() == "Live" && flat.GetRoughness() == 0.123f && flat.GetFilePath().empty(), "Rejected load changed live material");
+        MAT_TEST_CHECK(!flat.Save(path), "Flat material writer overwrote graph with matching identity");
+        RHI::RHIMaterial rhi("Live RHI"); rhi.SetRoughness(0.456f);
+        MAT_TEST_CHECK(!rhi.Load(path), "RHI material loader accepted graph");
+        MAT_TEST_CHECK(rhi.GetName() == "Live RHI" && rhi.GetRoughness() == 0.456f, "Rejected load changed live RHI material");
+        MAT_TEST_CHECK(!rhi.Save(path), "RHI material writer overwrote graph");
+        MAT_TEST_CHECK(!MaterialCache::GetMaterial(path), "Graph published as a flat material");
+        MAT_TEST_CHECK(!MaterialCache::GetRHIMaterial(path), "Graph published as a flat RHI material");
+        MAT_TEST_CHECK(FileSystem::ReadBinaryFile(path) == before, "Graph bytes changed");
+        // Guard malformed native candidates too, before a partial parse can mutate state.
+        const auto broken = source.substr(0, source.rfind('}'));
+        MAT_TEST_CHECK(FileSystem::WriteTextFileAtomically(path, broken), "Cannot stage malformed graph");
+        MAT_TEST_CHECK(!flat.Load(path, false) && !rhi.Load(path), "Malformed graph accepted");
+        MAT_TEST_CHECK(!flat.Save(path) && !rhi.Save(path), "Malformed graph overwritten");
+        MAT_TEST_CHECK(FileSystem::ReadTextFile(path) == broken, "Malformed graph bytes changed");
+        MAT_TEST_CHECK(flat.GetRoughness() == 0.123f && rhi.GetRoughness() == 0.456f, "Malformed graph changed live state");
+        return true;
+    }
 
     bool TestStandardMaterialPersistence() {
         ScopedTempDir temp;
@@ -139,23 +171,28 @@ namespace {
         return true;
     }
 
-    bool TestOldDefaultsOnReload() {
+    bool TestOmittedFieldsResetOnReload() {
         ScopedTempDir temp;
-        auto assetPath = temp.Path / "MinimalOld.axleasset";
+        auto assetPath = temp.Path / "Minimal.axleasset";
 
-        // Create a minimal asset missing new fields
+        // Current-format native asset with optional material fields omitted.
         {
             std::ofstream f(assetPath);
-            f << "Name: MinimalOld\n"
-              << "AlbedoColor: [1, 1, 1, 1]\n"
-              << "Roughness: 0.5\n"
-              << "Metallic: 0.0\n";
+            f << "Material {\n"
+              << "    name: \"Minimal\"\n"
+              << "    albedoColor: [1, 1, 1, 1]\n"
+              << "    roughness: 0.5\n"
+              << "    metallic: 0.0\n"
+              << "}\n";
         }
 
-        auto loaded = std::make_shared<Material>("MinimalOld");
-        MAT_TEST_CHECK(loaded->Load(assetPath), "Failed to load minimal old material");
+        auto loaded = std::make_shared<Material>("Minimal");
+        loaded->SetClearcoatStrength(0.8f);
+        loaded->SetAnisotropyStrength(0.7f);
+        loaded->SetRefractionEnabled(true);
+        MAT_TEST_CHECK(loaded->Load(assetPath), "Failed to load minimal current-format material");
 
-        // Verify sensible defaults for fields omitted in old assets
+        // Reload must reset previously populated fields that are absent in the replacement.
         MAT_TEST_APPROX_EQUAL(loaded->GetClearcoatStrength(), 0.0f, 1e-4f, "Default clearcoat strength must be 0");
         MAT_TEST_APPROX_EQUAL(loaded->GetAnisotropyStrength(), 0.0f, 1e-4f, "Default anisotropy strength must be 0");
         MAT_TEST_CHECK(loaded->GetRefractionEnabled() == false, "Default refraction must be false");
@@ -296,14 +333,17 @@ namespace {
 } // namespace
 
 bool RunMaterialSerializationUnitTests() {
+    std::cout << "  - Running TestGraphDocumentsCannotBeFlattened ...\n";
+    if (!TestGraphDocumentsCannotBeFlattened()) return false;
+
     std::cout << "  - Running TestStandardMaterialPersistence ...\n";
     if (!TestStandardMaterialPersistence()) return false;
 
     std::cout << "  - Running TestAutomotiveMaterialPersistence ...\n";
     if (!TestAutomotiveMaterialPersistence()) return false;
 
-    std::cout << "  - Running TestOldDefaultsOnReload ...\n";
-    if (!TestOldDefaultsOnReload()) return false;
+    std::cout << "  - Running TestOmittedFieldsResetOnReload ...\n";
+    if (!TestOmittedFieldsResetOnReload()) return false;
 
     std::cout << "  - Running TestTypedCustomPersistence ...\n";
     if (!TestTypedCustomPersistence()) return false;

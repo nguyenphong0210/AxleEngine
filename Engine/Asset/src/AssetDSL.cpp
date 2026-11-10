@@ -70,62 +70,8 @@ namespace Axle {
         }
     }
 
-    std::string AssetDSL::StripComments(std::string_view source) {
-        std::string result;
-        result.reserve(source.size());
-
-        bool inString = false;
-        bool inLineComment = false;
-        bool inBlockComment = false;
-
-        for (size_t i = 0; i < source.size(); ++i) {
-            char c = source[i];
-            char next = (i + 1 < source.size()) ? source[i + 1] : '\0';
-
-            if (inLineComment) {
-                if (c == '\n' || c == '\r') {
-                    inLineComment = false;
-                    result.push_back(c);
-                }
-                continue;
-            }
-
-            if (inBlockComment) {
-                if (c == '*' && next == '/') {
-                    inBlockComment = false;
-                    ++i;
-                }
-                continue;
-            }
-
-            if (inString) {
-                result.push_back(c);
-                if (c == '\\' && i + 1 < source.size()) {
-                    result.push_back(source[++i]);
-                } else if (c == '"') {
-                    inString = false;
-                }
-                continue;
-            }
-
-            if (c == '"') {
-                inString = true;
-                result.push_back(c);
-            } else if (c == '#' && (i == 0 || source[i-1] == '\n' || source[i-1] == '\r')) {
-                inLineComment = true;
-            } else if (c == '/' && next == '/') {
-                inLineComment = true;
-                ++i;
-            } else if (c == '/' && next == '*') {
-                inBlockComment = true;
-                ++i;
-            } else {
-                result.push_back(c);
-            }
-        }
-
-        return result;
-    }
+    std::string AssetDSL::StripComments(std::string_view source) { return BlockText::StripComments(source); }
+    std::string AssetDSL::QuoteString(std::string_view value) { return BlockText::QuoteString(value); }
 
     AssetKind AssetDSL::PeekAssetKind(std::string_view source) {
         std::string clean = StripComments(source);
@@ -197,10 +143,20 @@ namespace Axle {
 
     std::string AssetProperty::AsString() const {
         std::string_view val = Trim(RawValue);
-        if (val.size() >= 2 && val.front() == '"' && val.back() == '"') {
-            return std::string(val.substr(1, val.size() - 2));
+        if (val.size() < 2 || val.front() != '"' || val.back() != '"') return std::string(val);
+        std::string result;
+        for (size_t i = 1; i + 1 < val.size(); ++i) {
+            if (val[i] != '\\' || i + 2 >= val.size()) { result += val[i]; continue; }
+            switch (val[++i]) {
+                case 'n': result += '\n'; break;
+                case 'r': result += '\r'; break;
+                case 't': result += '\t'; break;
+                case 'b': result += '\b'; break;
+                case 'f': result += '\f'; break;
+                default: result += val[i]; break;
+            }
         }
-        return std::string(val);
+        return result;
     }
 
     float AssetProperty::AsFloat(float defaultVal) const {
@@ -323,15 +279,15 @@ namespace Axle {
         if (val.starts_with('[') && val.ends_with(']')) {
             val = val.substr(1, val.size() - 2);
         }
-        std::string strVal(val);
-        std::stringstream ss(strVal);
-        std::string item;
-        while (std::getline(ss, item, ',')) {
-            std::string_view trimmed = Trim(item);
-            if (trimmed.size() >= 2 && trimmed.front() == '"' && trimmed.back() == '"') {
-                result.push_back(std::string(trimmed.substr(1, trimmed.size() - 2)));
-            } else if (!trimmed.empty()) {
-                result.push_back(std::string(trimmed));
+        size_t start = 0;
+        bool quoted = false;
+        for (size_t i = 0; i <= val.size(); ++i) {
+            if (i < val.size() && quoted && val[i] == '\\' && i + 1 < val.size()) { ++i; continue; }
+            if (i < val.size() && val[i] == '"') quoted = !quoted;
+            if (i == val.size() || (!quoted && val[i] == ',')) {
+                const auto item = Trim(val.substr(start, i-start));
+                if (!item.empty()) result.push_back(AssetProperty{"", std::string(item)}.AsString());
+                start = i+1;
             }
         }
         return result;
@@ -463,11 +419,11 @@ namespace Axle {
     void AssetBlock::SetString(const std::string& key, const std::string& val) {
         for (auto& prop : Properties) {
             if (prop.Key == key) {
-                prop.RawValue = "\"" + val + "\"";
+                prop.RawValue = AssetDSL::QuoteString(val);
                 return;
             }
         }
-        Properties.push_back({ key, "\"" + val + "\"" });
+        Properties.push_back({ key, AssetDSL::QuoteString(val) });
     }
 
     void AssetBlock::SetFloat(const std::string& key, float val) {
@@ -583,7 +539,7 @@ namespace Axle {
         std::ostringstream ss;
         ss << "[";
         for (size_t i = 0; i < values.size(); ++i) {
-            ss << "\"" << values[i] << "\"";
+            ss << AssetDSL::QuoteString(values[i]);
             if (i + 1 < values.size()) ss << ", ";
         }
         ss << "]";
@@ -600,131 +556,27 @@ namespace Axle {
     // AssetDSL Parsing
     // -------------------------------------------------------------------------
 
-    bool AssetDSL::ParseBlockInternal(std::string_view& src, std::shared_ptr<AssetBlock> block, std::string* outError) {
-        SkipWhitespaceAndSeparators(src);
-
-        while (!src.empty()) {
-            SkipWhitespaceAndSeparators(src);
-            if (src.empty()) break;
-
-            if (src.front() == '}') {
-                src.remove_prefix(1);
-                return true;
-            }
-
-            std::string_view identifier = ReadWord(src);
-            if (identifier.empty()) {
-                if (!src.empty() && src.front() == '}') {
-                    src.remove_prefix(1);
-                    return true;
-                }
-                src.remove_prefix(1);
-                continue;
-            }
-
-            SkipWhitespaceAndSeparators(src);
-            if (src.empty()) break;
-
-            // Check if it's a child block: Identifier { ... }
-            if (src.front() == '{') {
-                src.remove_prefix(1);
-                auto child = std::make_shared<AssetBlock>();
-                child->Type = std::string(identifier);
-                if (!ParseBlockInternal(src, child, outError)) {
-                    return false;
-                }
-                block->Children.push_back(child);
-                continue;
-            }
-
-            // Otherwise, it must be a property: Identifier : Value
-            if (src.front() == ':') {
-                src.remove_prefix(1);
-                SkipWhitespaceAndSeparators(src);
-
-                std::string rawVal;
-                if (!src.empty() && src.front() == '"') {
-                    // Quoted string literal
-                    rawVal.push_back('"');
-                    src.remove_prefix(1);
-                    bool escaped = false;
-                    while (!src.empty()) {
-                        char c = src.front();
-                        src.remove_prefix(1);
-                        rawVal.push_back(c);
-                        if (escaped) {
-                            escaped = false;
-                        } else if (c == '\\') {
-                            escaped = true;
-                        } else if (c == '"') {
-                            break;
-                        }
-                    }
-                } else if (!src.empty() && src.front() == '[') {
-                    // Array or vector, potentially nested: [...]
-                    int bracketDepth = 0;
-                    while (!src.empty()) {
-                        char c = src.front();
-                        src.remove_prefix(1);
-                        rawVal.push_back(c);
-                        if (c == '[') {
-                            bracketDepth++;
-                        } else if (c == ']') {
-                            bracketDepth--;
-                            if (bracketDepth <= 0) break;
-                        }
-                    }
-                } else {
-                    // Scalar, boolean, or identifier
-                    while (!src.empty()) {
-                        char c = src.front();
-                        if (c == '\n' || c == '\r' || c == ';' || c == '}') {
-                            break;
-                        }
-                        rawVal.push_back(c);
-                        src.remove_prefix(1);
-                    }
-                }
-
-                block->Properties.push_back({ std::string(identifier), std::string(Trim(rawVal)) });
-            }
+    namespace {
+        std::shared_ptr<AssetBlock> ImportBlock(BlockTextNode& text) {
+            auto block = std::make_shared<AssetBlock>();
+            block->Type = std::move(text.Type); block->Source = text.Source;
+            block->Properties.reserve(text.Properties.size());
+            for (auto& property : text.Properties)
+                block->Properties.push_back({std::move(property.Key), std::move(property.RawValue), property.Source});
+            block->Children.reserve(text.Children.size());
+            for (auto& child : text.Children) block->Children.push_back(ImportBlock(*child));
+            return block;
         }
-
-        return true;
     }
 
-    bool AssetDSL::ParseSource(std::string_view source, AssetDocument& outDoc, std::string* outError) {
-        std::string clean = StripComments(source);
-        std::string_view src = clean;
-
-        SkipWhitespaceAndSeparators(src);
-        if (src.empty()) {
-            if (outError) *outError = "Asset source is empty.";
-            return false;
-        }
-
-        std::string_view rootType = ReadWord(src);
-        if (rootType.empty()) {
-            if (outError) *outError = "Expected root asset type declaration.";
-            return false;
-        }
-
-        SkipWhitespaceAndSeparators(src);
-        if (src.empty() || src.front() != '{') {
-            if (outError) *outError = "Expected '{' after root asset type '" + std::string(rootType) + "'.";
-            return false;
-        }
-        src.remove_prefix(1);
-
-        auto root = std::make_shared<AssetBlock>();
-        root->Type = std::string(rootType);
-
-        if (!ParseBlockInternal(src, root, outError)) {
-            return false;
-        }
-
-        outDoc.Root = root;
-        outDoc.Kind = StringToAssetKind(rootType);
+    bool AssetDSL::ParseSource(std::string_view source, AssetDocument& outDoc, std::string* outError,
+                              AssetSourceLocation* outLocation) {
+        std::shared_ptr<BlockTextNode> text;
+        if (!BlockText::Parse(source, text, outError, outLocation)) return false;
+        AssetDocument candidate;
+        candidate.Root = ImportBlock(*text);
+        candidate.Kind = StringToAssetKind(candidate.Root->Type);
+        outDoc = std::move(candidate);
         return true;
     }
 

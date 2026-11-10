@@ -1,12 +1,15 @@
 # OPT-12 Material Graph Format Decision
 
-Recorded: **2026-11-10**. Status: **user-approved authoring format; implementation
-pending**.
+Recorded: **2026-11-10**. Status: **user-approved authoring format; C12-01 CPU
+implementation verified and independently reviewed**.
 
 The user approved the complete example below after reviewing the Gemini-style
-block format. This document records that decision for C12-01. It does not release
-parser/compiler implementation, a node-editor package, MaterialX integration or
-the remainder of OPT-12. See the [program plan](POST_OPT10_PROGRAM_PLAN.md#opt-12--shader-and-material-pipeline)
+block format. The original documentation decision did not release implementation.
+The user subsequently assigned C12-01 directly to Codex: CPU document parsing,
+validation, IR and persistence. Shader generation, a node-editor package,
+MaterialX integration and the remainder of OPT-12 remain separate packages.
+See the [C12-01 delivery](../reviews/OPT_12_C12_01_DELIVERY.md),
+[program plan](POST_OPT10_PROGRAM_PLAN.md#opt-12--shader-and-material-pipeline)
 for package boundaries and the [exchange](../agents/CODEX_GEMINI_EXCHANGE.json)
 for the current assignment.
 
@@ -39,8 +42,8 @@ storage are not the approved example.
 
 ## Complete approved example
 
-This is a **future-format example**, not a currently supported production asset or
-an executed rendering fixture. Comments are in English for repository use. The
+This is the approved authoring example and C12-01 CPU fixture, not an executed
+rendering fixture. Comments are in English for repository use. The
 five parameters are all wired here to demonstrate their effects, not to impose
 a requirement that every parameter be consumed.
 
@@ -273,17 +276,19 @@ Material {
 
 ## Implementation requirements and limits
 
-These requirements explain the approved format; they are not claims of existing
-parser, compiler or Editor behavior.
+These requirements define the approved format. The delivery record separates
+implemented CPU behavior from future compiler and Editor behavior.
 
 1. **Parsing:** support the block syntax above and comma-separated inline
    properties, including numeric scalars. Distinguish property delimiters from
    commas inside strings/vectors. Accept equivalent line wrapping, comments and
    escaped strings. Diagnose malformed syntax with source locations; do not
    silently consume following properties or publish partial material state.
-   The existing scalar reader in [AssetDSL.cpp](../../Engine/Asset/src/AssetDSL.cpp)
-   does not yet handle the numeric-inline case correctly. Preserve meaningful
-   existing asset-parser coverage while adding the new cases.
+   C12-01 replaces the permissive scalar reader in
+   [AssetDSL.cpp](../../Engine/Asset/src/AssetDSL.cpp) with the shared, domain-neutral
+   [BlockText parser](../../Engine/Core/src/BlockText.cpp), including numeric-inline
+   handling and original-source locations. Existing asset-parser coverage remains
+   required alongside the new cases.
 2. **References:** validate unique node IDs and unique case-sensitive parameter
    names. `ParameterRef` must resolve the exact name and match its declared output
    type. An Editor rename must update supported references and instance overrides;
@@ -314,4 +319,5 @@ C12-01 verification should cover syntax equivalence for all three parameter line
 styles, identity-preserving round trips, exact names/pin references, defaults,
 unused data preservation, invalid graphs and failure rollback. Compiler/native
 image evidence is separate from this documentation decision. No source tests or
-native rendering runs are claimed by recording this example.
+native rendering runs were claimed by the original format decision. Current CPU
+verification and implementation limits are recorded in the C12-01 delivery.

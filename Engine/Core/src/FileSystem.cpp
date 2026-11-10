@@ -322,27 +322,31 @@ namespace Axle {
             std::ifstream input(path, std::ios::binary);
             std::getline(input, first);
         }
-        if (first.empty()) {
-            if (error) *error = "Cannot read asset identity: " + PathToUtf8(path);
-            return false;
-        }
+        if (ParseFileIdentity(first, id, error)) return true;
+        if (error) *error += ": " + PathToUtf8(path);
+        return false;
+    }
+
+    bool FileSystem::ParseFileIdentity(std::string_view text, uint64_t& id, std::string* error) {
+        id = 0;
+        if (error) error->clear();
+        std::string first(text.substr(0, text.find('\n')));
         if (!first.empty() && first.back() == '\r') first.pop_back();
         constexpr std::string_view prefix = "# AxleFileIdentity: ";
         if (first.rfind(prefix, 0) != 0) {
-            if (error) *error = "Asset has no embedded identity: " + PathToUtf8(path);
+            if (error) *error = "Asset has no embedded identity";
             return false;
         }
         std::istringstream values(first.substr(prefix.size()));
-        unsigned version = 0;
-        std::string value, extra;
-        if (!(values >> version >> value) || version != 1 || (values >> extra) || value.empty() ||
+        std::string version, value, extra;
+        if (!(values >> version >> value) || version != "1" || (values >> extra) || value.empty() ||
             !std::all_of(value.begin(), value.end(), [](unsigned char c) { return c >= '0' && c <= '9'; })) {
-            if (error) *error = "Malformed or unsupported asset identity: " + PathToUtf8(path);
+            if (error) *error = "Malformed or unsupported asset identity";
             return false;
         }
         try { id = std::stoull(value); } catch (...) { id = 0; }
         if (id == 0) {
-            if (error) *error = "Invalid asset UUID: " + PathToUtf8(path);
+            if (error) *error = "Invalid asset UUID";
             return false;
         }
         return true;
@@ -353,14 +357,7 @@ namespace Axle {
         if (error) error->clear();
         constexpr std::string_view prefix = "# AxleFileIdentity:";
         auto decode = [&](const std::string& line, uint64_t& id) {
-            if (line.rfind(prefix, 0) != 0) return false;
-            std::istringstream header(line.substr(prefix.size()));
-            unsigned version = 0;
-            std::string value, extra;
-            if (!(header >> version >> value) || version != 1 || (header >> extra) || value.empty() ||
-                !std::all_of(value.begin(), value.end(), [](unsigned char c){ return c >= '0' && c <= '9'; })) return false;
-            try { id = std::stoull(value); } catch (...) { return false; }
-            return id != 0;
+            return ParseFileIdentity(line, id, nullptr);
         };
         std::string body = text;
         uint64_t incoming = 0, existing = 0;

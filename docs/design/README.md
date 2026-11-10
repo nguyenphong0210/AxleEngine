@@ -29,7 +29,7 @@ separate contract; it must not reintroduce retired Vehicle compatibility code.
 | Post-OPT-10 | [Logic & Simulation LOD roadmap](POST_OPT10_LOGIC_AND_SIMULATION_LOD_ROADMAP.md) | Staggered tick rates, fast-path math, spatial dormancy and animation URO |
 | Post-OPT-10 | [Feasibility assessment](POST_OPT10_FEASIBILITY.md) | Current-source blockers, confidence levels, measurement requirements and recommended order |
 | Post-OPT-10 | [OPT-11..OPT-20 program plan](POST_OPT10_PROGRAM_PLAN.md) | Independent Render Thread, Shader, Lighting, Nanite, LogicLOD, Animation, VFX and rollout OPTs |
-| OPT-12 C12-01 design | [Approved Material Graph format](OPT_12_MATERIAL_GRAPH_FORMAT.md) | User-approved block/pin syntax, nested connections, parameter-name keys and line wrapping; implementation pending |
+| OPT-12 C12-01 | [Approved Material Graph format](OPT_12_MATERIAL_GRAPH_FORMAT.md), [CPU document delivery](../reviews/OPT_12_C12_01_DELIVERY.md) | Verified CPU document/IR, extensible node definitions and persistence; shader/render/graph UI work remains separate |
 | OPT-11 detail | [OPT-11 execution plan](OPT_11_EXECUTION_PLAN.md) | Ownership, snapshot queue, worker presentation, recording probe, transient aliasing and acceptance matrix |
 | OPT-11 implementation | [OPT-11 architecture and algorithms](OPT_11_ARCHITECTURE_AND_ALGORITHMS.md) | Gemini implementation contract, invariants, state machines, pseudocode and handoff checklist |
 | OPT-11 C11-04 hybrid | [Hybrid recording implementation plan](OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md) | Deferred NRI fork/child recording design; benchmark worker primary value before resuming |

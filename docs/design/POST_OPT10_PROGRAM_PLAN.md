@@ -105,8 +105,10 @@ node-editor work.
 [Material Graph format](OPT_12_MATERIAL_GRAPH_FORMAT.md), including the complete
 example: `.axleasset` blocks with explicit pins, `Connections` inside `Graph`,
 parameter `name` as its sole key, and one-line/two-line/multiline parameter
-declarations. This records the design; parser/compiler implementation remains
-unreleased.
+declarations. The user subsequently released C12-01 directly to Codex for CPU
+document parsing, validation, IR and persistence; see the
+[C12-01 delivery](../reviews/OPT_12_C12_01_DELIVERY.md) for current evidence.
+Shader generation and later packages remain unreleased.
 
 Packages:
 

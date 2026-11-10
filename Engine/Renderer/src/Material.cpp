@@ -2,6 +2,7 @@
 #include <Axle/ShaderPropertyPersistence.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/BlockText.hpp>
 #include <Axle/Log.hpp>
 #include <GLFW/glfw3.h>
 #include <fstream>
@@ -464,6 +465,14 @@ namespace Axle {
     }
 
     bool Material::Save(const std::filesystem::path& filepath) const {
+        // A flat writer cannot preserve versioned or structured authored documents.
+        std::string extension = filepath.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c){return std::tolower(c);});
+        if (FileSystem::Exists(filepath)) {
+            const auto previous = FileSystem::ReadTextFile(filepath);
+            if ((extension == ".axleasset" || extension.empty() || previous.find("Material {") != std::string::npos || previous.find("Material{") != std::string::npos) &&
+                !BlockText::IsUnversionedFlatDocument(previous, "Material")) return false;
+        }
         std::ostringstream fout;
         bool pathsValid = true;
         auto reference = [&](const std::string& path) {
@@ -607,6 +616,14 @@ namespace Axle {
         std::string content = FileSystem::ReadTextFile(filepath);
         if (content.empty() && !FileSystem::Exists(filepath)) {
             AXLE_ERROR("Material::Load: Could not read file '{0}'", filepath.string());
+            return false;
+        }
+
+        std::string extension = filepath.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c){return std::tolower(c);});
+        if ((extension == ".axleasset" || extension.empty() || content.find("Material {") != std::string::npos || content.find("Material{") != std::string::npos) &&
+            !BlockText::IsUnversionedFlatDocument(content, "Material")) {
+            AXLE_ERROR("Material::Load: Unsupported structured, versioned or malformed material '{0}'", filepath.string());
             return false;
         }
 

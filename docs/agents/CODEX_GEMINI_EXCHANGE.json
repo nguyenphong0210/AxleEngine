@@ -1,27 +1,44 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-11-C11-04",
-    "title": "Hybrid parallel command recording contract and backend probes",
-    "state": "in_progress",
+    "id": "OPT-11-C11-05.1",
+    "title": "Pure transient graph planner and unaliased allocation plan",
+    "state": "completed",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "reviewer": "Separate-context correction review",
-    "code_baseline": "89b0f80",
-    "user_instruction": "User reopened C11-04 for real hybrid primary plus secondary/bundle recording, permits a narrowly scoped NRI fork, and requested a detailed implementation document plus the recommended order relative to C11-05.",
-    "user_scope": "C11-04 hybrid with a narrowly scoped NRI fork extension permitted. Preserve accepted primary-batch behavior; no C11-05 implementation, unrelated vendor upgrades or push. Current step is documentation only; native child support requires positive backend evidence.",
-    "next_action": "Use docs/design/OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md for H00..H07 delivery. Complete hybrid foundation and backend verification before C11-05 native allocation/aliasing; this documentation step creates no fork and edits no production source.",
-    "acceptance_status": "pending_C11_04_hybrid",
-    "implementation_status": "Accepted primary batch remains at 2b6178e, 9aec366, 4caf323; hybrid work reopened by latest user instruction; no hybrid source edits yet.",
-    "source_commit": "c732385",
-    "correction_review_status": "Primary batch separately reviewed and D3D12/Vulkan verified; hybrid review pending.",
-    "plan_reference": "docs/design/OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md",
+    "reviewer": "Consolidated C11-05 review at package boundary",
+    "code_baseline": "ad58438",
+    "user_instruction": "User chose C11-05 before full hybrid after discussing its unproven benefit. Continue package-by-package with coherent local commits.",
+    "user_scope": "C11-05.1 pure CPU planner first. Preserve existing imported RenderGraph callers; no native allocation, aliasing enablement, NRI fork/upgrade, C11-06+ or push in this slice.",
+    "next_action": "C11-05.1 is delivered. Next bounded slice is C11-05.2 committed native realization, followed by native placement/aliasing gates; full hybrid remains deferred.",
+    "plan_reference": "docs/design/OPT_11_C11_05_SAFETY_PLAN.md",
+    "expected_files": [
+      "Engine/Renderer/include/Axle/RenderTransientGraph.hpp",
+      "Engine/Renderer/src/RenderTransientGraph.cpp",
+      "Engine/Renderer/CMakeLists.txt",
+      "Tests/rendering/Test_RenderTransientGraphUnit.cpp",
+      "Tests/rendering/RenderUnitTestMain.cpp",
+      "Tests/CMakeLists.txt",
+      "docs/design/OPT_11_C11_05_SAFETY_PLAN.md",
+      "docs/design/OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md",
+      "docs/design/OPT_11_C11_05_1_DELIVERY.md",
+      "docs/design/README.md"
+    ],
+    "implementation_status": "C11-05.1 CPU planner implemented and self-verified; no native allocation or aliasing is enabled.",
+    "acceptance_status": "self_verified_C11_05_1_pending_consolidated_C11_05_review",
     "open_gates": [
-      "Versioned NRI child-command extension with backend and validation implementations",
-      "Backend-specific secondary path proof",
-      "Primary fallback on unsupported/failed validation",
-      "Separate-context review and native validation/readback"
-    ]
+      "C11-05.2+ native realization/retirement, placement, alias barriers, readback parity and VRAM measurements",
+      "Consolidated independent C11-05 review"
+    ],
+    "delivery_report": "docs/design/OPT_11_C11_05_1_DELIVERY.md",
+    "verification": {
+      "Debug": "RenderUnitTests + RHIStatePolicy + RenderHarnessFailure 3/3 PASS",
+      "Release": "RenderUnitTests + RHIStatePolicy + RenderHarnessFailure 3/3 PASS",
+      "Planner": "Focused cases plus 120 fixed-seed generated graphs PASS",
+      "Architecture": "PASS: 529 files, 25 CMake files",
+      "NativeTransient": "NOT RUN; not implemented in CPU slice",
+      "IndependentReview": "Pending consolidated C11-05 review"
+    }
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",
@@ -2334,6 +2351,29 @@
       ],
       "protected_existing_change": "docs/design/ANIMATION_G1_GEMINI_DELIVERY.md has an uncommitted trailing blank line. Preserve it; do not stage it with coordination work.",
       "evidence_note": "Delivery report test results are Gemini's reported evidence. Codex has not independently reviewed or accepted G1 in this coordination task."
+    },
+    {
+      "id": "OPT-11-C11-04",
+      "title": "Hybrid parallel command recording contract and backend probes",
+      "state": "deferred_by_user_priority",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "reviewer": "Separate-context correction review",
+      "code_baseline": "89b0f80",
+      "user_instruction": "User reopened C11-04 for real hybrid primary plus secondary/bundle recording, permits a narrowly scoped NRI fork, and requested a detailed implementation document plus the recommended order relative to C11-05.",
+      "user_scope": "C11-04 hybrid with a narrowly scoped NRI fork extension permitted. Preserve accepted primary-batch behavior; no C11-05 implementation, unrelated vendor upgrades or push. Current step is documentation only; native child support requires positive backend evidence.",
+      "next_action": "Full hybrid/fork deferred; first measure worker-primary value before resuming secondary/bundles. User selected C11-05 next.",
+      "acceptance_status": "pending_C11_04_hybrid",
+      "implementation_status": "Accepted primary batch remains at 2b6178e, 9aec366, 4caf323; hybrid work reopened by latest user instruction; no hybrid source edits yet.",
+      "source_commit": "c732385",
+      "correction_review_status": "Primary batch separately reviewed and D3D12/Vulkan verified; hybrid review pending.",
+      "plan_reference": "docs/design/OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md",
+      "open_gates": [
+        "Versioned NRI child-command extension with backend and validation implementations",
+        "Backend-specific secondary path proof",
+        "Primary fallback on unsupported/failed validation",
+        "Separate-context review and native validation/readback"
+      ]
     }
   ],
   "completed_tasks": [

@@ -330,6 +330,7 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_RenderSnapshotQueueUnit.cpp
     rendering/Test_RenderWorkerUnit.cpp
     rendering/Test_RenderParallelRecordingUnit.cpp
+    rendering/Test_RenderTransientGraphUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
 target_link_libraries(AxleRenderUnitTests PRIVATE

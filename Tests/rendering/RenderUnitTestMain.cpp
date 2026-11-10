@@ -10,6 +10,7 @@ bool RunRenderServiceUnitTests();
 namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderWorkerUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderParallelRecordingUnitTests(); }
+namespace Axle::RenderTests { bool RunRenderTransientGraphUnitTests(); }
 
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test-failure") {
@@ -59,6 +60,11 @@ int main(int argc, char** argv) {
 
     if (!Axle::RenderTests::RunRenderParallelRecordingUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunRenderParallelRecordingUnitTests FAILED!\n";
+        return 1;
+    }
+
+    if (!Axle::RenderTests::RunRenderTransientGraphUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunRenderTransientGraphUnitTests FAILED!\n";
         return 1;
     }
 

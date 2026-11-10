@@ -19,23 +19,21 @@ Related contracts:
 
 ## 1. Decision and order relative to C11-05
 
-Complete C11-04 hybrid recording and its production gates before starting C11-05
-native transient allocation and aliasing. Preserve the accepted independent-primary
-path as the reference while adding new modes. Do not change recording ownership
-and native memory reuse in the same implementation package.
+**Priority update, 2026-11-10:** the user selected C11-05 before full hybrid after
+discussing its unproven incremental benefit over worker primary recording.
+Secondary/bundle execution and the NRI fork are deferred. Preserve this document
+as the future design, not a prerequisite blocking C11-05.
 
-C11-05's pure CPU graph planner can technically be developed independently; it
-does not require secondary commands. The selected delivery order is nevertheless
-sequential because it reduces simultaneous changes to the resource lifetime model:
+Preserve the accepted independent-primary path as the reference. Do not change
+recording ownership and native memory reuse in the same implementation package.
+The selected sequence is now:
 
 ```text
-C11-04 shared recording foundation
-  -> worker primary recording with committed resources
-  -> Vulkan secondary and D3D12 bundle proofs
-  -> hybrid integration, correctness, performance and review
-  -> C11-05 pure planner and unaliased transient resources
+C11-05 pure planner and unaliased transient resources on the accepted owner path
   -> C11-05 placed resources, interval packing and alias barrier proof
-  -> combined hybrid + aliasing validation
+  -> measure whether worker primary recording resolves the CPU bottleneck
+  -> optional Vulkan secondary / D3D12 bundle experiments and hybrid integration
+  -> combined hybrid + aliasing validation before enabling that combination
 ```
 
 Secondary execution is not a prerequisite for parallel primary recording. NRI

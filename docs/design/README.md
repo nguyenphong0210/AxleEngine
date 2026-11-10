@@ -31,8 +31,9 @@ separate contract; it must not reintroduce retired Vehicle compatibility code.
 | Post-OPT-10 | [OPT-11..OPT-20 program plan](POST_OPT10_PROGRAM_PLAN.md) | Independent Render Thread, Shader, Lighting, Nanite, LogicLOD, Animation, VFX and rollout OPTs |
 | OPT-11 detail | [OPT-11 execution plan](OPT_11_EXECUTION_PLAN.md) | Ownership, snapshot queue, worker presentation, recording probe, transient aliasing and acceptance matrix |
 | OPT-11 implementation | [OPT-11 architecture and algorithms](OPT_11_ARCHITECTURE_AND_ALGORITHMS.md) | Gemini implementation contract, invariants, state machines, pseudocode and handoff checklist |
-| OPT-11 C11-04 hybrid | [Hybrid recording implementation plan](OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md) | NRI fork extension, worker ownership, backend contracts, commit gates and order before C11-05 |
+| OPT-11 C11-04 hybrid | [Hybrid recording implementation plan](OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md) | Deferred NRI fork/child recording design; benchmark worker primary value before resuming |
 | OPT-11 C11-05 safety | [Transient allocation and aliasing safety plan](OPT_11_C11_05_SAFETY_PLAN.md) | Pure planner, unaliased allocation, rollback, packing, alias barriers and native verification |
+| OPT-11 C11-05.1 delivery | [CPU transient planner delivery](OPT_11_C11_05_1_DELIVERY.md) | Implemented/self-verified pure planner; native allocation and aliasing remain later slices |
 
 Detailed contracts can include later packages needed to describe an end-to-end
 architecture. Their presence does not advance them ahead of the OPT sequence.

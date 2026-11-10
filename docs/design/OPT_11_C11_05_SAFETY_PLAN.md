@@ -14,15 +14,20 @@ boundary.
 - [NRI integration contract](NRI_INTEGRATION_CONTRACT.md)
 - [RHI primary renderer architecture](RHI_PRIMARY_RENDERER_ARCHITECTURE.md)
 - [C11-04 hybrid implementation plan](OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md)
+- [C11-05.1 CPU planner delivery](OPT_11_C11_05_1_DELIVERY.md)
 
-## Implementation order after the hybrid scope change
+## Implementation order after the priority change (2026-11-10)
 
-Complete the reopened C11-04 hybrid foundation and backend verification before
-starting C11-05 native transient allocation or aliasing. The pure CPU planner is
-technically independent, but the selected delivery order remains sequential.
-This avoids changing worker recording ownership and native memory reuse together.
-The hybrid plan defines the shared resource manifests, parent-child leases,
-completion retirement and combined recording/allocation test matrix.
+The user selected C11-05 before full hybrid. Start with C11-05.1, a pure CPU
+planner, and keep the accepted owner-thread primary path as the native reference.
+Secondary/bundle execution and an NRI fork are deferred pending evidence of their
+benefit. They are not prerequisites for transient allocation or VRAM aliasing.
+The live exchange records the currently released slice; later slices require
+their own delivery and verification before continuation.
+
+The hybrid plan remains a future integration reference for resource manifests,
+parent-child leases, completion retirement and the combined test matrix. Do not
+change worker recording ownership and native memory reuse in the same slice.
 
 For interval packing, a topological index is only a planning coordinate. Actual
 GPU synchronization must establish the previous occupant's last use before the
@@ -31,7 +36,7 @@ are insufficient. Count all primary/child uses in the resource lifetime, keep
 alias barriers on the owner and initially extend child uses to the parent scope.
 
 Select unaliased mode while any required synchronization or backend proof is
-missing. This ordering recommendation does not release C11-05 implementation.
+missing. This document does not independently release source implementation.
 
 ## 1. Risk posture and decisions
 
@@ -172,6 +177,12 @@ The plan must report at least:
 - alias event count;
 - fallback reason and first error.
 
+C11-05.1 consumes memory requirements as supplied CPU metadata and reports
+`RequestedBytes`, `PlannedAllocationBytes` and `PlannedPeakBytes`. It does not
+report measured committed VRAM or prove native support. Before realization, the
+RHI owner must query/revalidate native requirements, limits and device identity.
+Hardware requirements must never be guessed from the texture payload size.
+
 ## 4. Pure graph compilation algorithm
 
 `Compile()` is deterministic and side-effect free from the caller's point of
@@ -205,19 +216,23 @@ track the latest writer and the set of readers since that writer:
 for pass in declaration order:
     validate every use
     for each use of resource r:
-        if use reads:
+        if lastWriter[r] exists:
             add edge(lastWriter[r], pass)
-            add pass to readers[r]
 
         if use writes:
-            add edge(lastWriter[r], pass)
             add edge(reader, pass) for every reader in readers[r]
             clear readers[r]
             lastWriter[r] = pass
+        else:
+            add pass to readers[r]
 
     add explicitly declared dependency edges
 deduplicate all edges
 ```
+
+Update readers after collecting prior hazards so a ReadWrite use never adds a
+self-dependency. Resource versions follow declaration order; an explicit forward
+dependency cannot silently reverse a conflicting resource hazard.
 
 Run Kahn's algorithm using a min-heap keyed by the original pass index. This
 keeps the topological order stable for equal dependency choices. If the output

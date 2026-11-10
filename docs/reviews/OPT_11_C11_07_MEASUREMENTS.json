@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "verified_source": "119123cd813f3c0eec9fad78615544e0ac4044c2",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 3070",
+    "driver": "610.88",
+    "nri_commit": "6998e3fbbaed1b132f386a9d49743a2481003487",
+    "api_validation": true,
+    "nri_validation": true
+  },
+  "workload": {
+    "geometry": "immutable builtin cube, red emissive material; scene edited green after reference extraction",
+    "resolution": [
+      64,
+      64
+    ],
+    "warmup_frames": 8,
+    "samples": 64,
+    "queue_capacity": 3,
+    "job_threads": 2,
+    "pixel_policy": "exact same-backend RGBA8 equality, nonempty geometry/color assertion",
+    "timing_policy": "nearest-rank CPU steady-clock nanoseconds, includes existing frame-slot waits; not GPU timestamps",
+    "scope": "offscreen API fixture; not a representative game scene or product performance claim"
+  },
+  "rows": [
+    {
+      "configuration": "Debug",
+      "backend": "dx12",
+      "clock": "cpu_steady_nanoseconds",
+      "warmup": 8,
+      "samples": 64,
+      "capacity": 3,
+      "accepted": 144,
+      "rejected": 2,
+      "image_differing_bytes": 0,
+      "serial_render_wall": {
+        "p50": 5953800,
+        "p95": 19306600,
+        "p99": 21682200
+      },
+      "worker_render_wall": {
+        "p50": 5252300,
+        "p95": 6353200,
+        "p99": 14686300
+      },
+      "worker_queue_age": {
+        "p50": 10509300,
+        "p95": 17693700,
+        "p99": 19721700
+      },
+      "worker_roundtrip": {
+        "p50": 15807100,
+        "p95": 24020300,
+        "p99": 25085000
+      },
+      "serial_export_wall": {
+        "p50": 15116100,
+        "p95": 16565600,
+        "p99": 17636300
+      },
+      "worker_export_wall": {
+        "p50": 10622000,
+        "p95": 11420000,
+        "p99": 11572200
+      },
+      "artifacts": {
+        "serial": {
+          "png": "docs/reviews/OPT_11_C11_07_ARTIFACTS/Debug_dx12_serial.png",
+          "sha256": "36b7a03e5dc16e6298a6c35e9b1b60fafddaf280a2a7a230e0bbc88515393365"
+        },
+        "worker": {
+          "png": "docs/reviews/OPT_11_C11_07_ARTIFACTS/Debug_dx12_worker.png",
+          "sha256": "36b7a03e5dc16e6298a6c35e9b1b60fafddaf280a2a7a230e0bbc88515393365"
+        }
+      }
+    },
+    {
+      "configuration": "Debug",
+      "backend": "vulkan",
+      "clock": "cpu_steady_nanoseconds",
+      "warmup": 8,
+      "samples": 64,
+      "capacity": 3,
+      "accepted": 144,
+      "rejected": 2,
+      "image_differing_bytes": 0,
+      "serial_render_wall": {
+        "p50": 2309900,
+        "p95": 3532300,
+        "p99": 3971100
+      },
+      "worker_render_wall": {
+        "p50": 2100000,
+        "p95": 2666200,
+        "p99": 4111900
+      },
+      "worker_queue_age": {
+        "p50": 4247900,
+        "p95": 5134000,
+        "p99": 6341600
+      },
+      "worker_roundtrip": {
+        "p50": 6517500,
+        "p95": 7647800,
+        "p99": 8527000
+      },
+      "serial_export_wall": {
+        "p50": 1923700,
+        "p95": 2476900,
+        "p99": 2620500
+      },
+      "worker_export_wall": {
+        "p50": 2477000,
+        "p95": 3051700,
+        "p99": 3202700
+      },
+      "artifacts": {
+        "serial": {
+          "png": "docs/reviews/OPT_11_C11_07_ARTIFACTS/Debug_vulkan_serial.png",
+          "sha256": "36b7a03e5dc16e6298a6c35e9b1b60fafddaf280a2a7a230e0bbc88515393365"
+        },
+        "worker": {
+          "png": "docs/reviews/OPT_11_C11_07_ARTIFACTS/Debug_vulkan_worker.png",
+          "sha256": "36b7a03e5dc16e6298a6c35e9b1b60fafddaf280a2a7a230e0bbc88515393365"
+        }
+      }
+    },
+    {
+      "configuration": "Release",
+      "backend": "dx12",
+      "clock": "cpu_steady_nanoseconds",
+      "warmup": 8,
+      "samples": 64,
+      "capacity": 3,
+      "accepted": 144,
+      "rejected": 2,
+      "image_differing_bytes": 0,
+      "serial_render_wall": {
+        "p50": 15434200,
+        "p95": 17869300,
+        "p99": 21887800
+      },
+      "worker_render_wall": {
+        "p50": 14686700,
+        "p95": 17043800,
+        "p99": 20974000
+      },
+      "worker_queue_age": {
+        "p50": 20753200,
+        "p95": 32188100,
+        "p99": 37652400
+      },
+      "worker_roundtrip": {
+        "p50": 31074400,
+        "p95": 47687700,
+        "p99": 52389800
+      },
+      "serial_export_wall": {
+        "p50": 15487100,
+        "p95": 16500100,
+        "p99": 16826300
+      },
+      "worker_export_wall": {
+        "p50": 11746000,
+        "p95": 12442000,
+        "p99": 12638800
+      },
+      "artifacts": {
+        "serial": {
+          "png": "docs/reviews/OPT_11_C11_07_ARTIFACTS/Release_dx12_serial.png",
+          "sha256": "36b7a03e5dc16e6298a6c35e9b1b60fafddaf280a2a7a230e0bbc88515393365"
+        },
+        "worker": {
+          "png": "docs/reviews/OPT_11_C11_07_ARTIFACTS/Release_dx12_worker.png",
+          "sha256": "36b7a03e5dc16e6298a6c35e9b1b60fafddaf280a2a7a230e0bbc88515393365"
+        }
+      }
+    },
+    {
+      "configuration": "Release",
+      "backend": "vulkan",
+      "clock": "cpu_steady_nanoseconds",
+      "warmup": 8,
+      "samples": 64,
+      "capacity": 3,
+      "accepted": 144,
+      "rejected": 2,
+      "image_differing_bytes": 0,
+      "serial_render_wall": {
+        "p50": 2018800,
+        "p95": 3173700,
+        "p99": 3476600
+      },
+      "worker_render_wall": {
+        "p50": 1256500,
+        "p95": 2893500,
+        "p99": 3431200
+      },
+      "worker_queue_age": {
+        "p50": 3286600,
+        "p95": 4687300,
+        "p99": 5649000
+      },
+      "worker_roundtrip": {
+        "p50": 4870900,
+        "p95": 6735200,
+        "p99": 7751200
+      },
+      "serial_export_wall": {
+        "p50": 1977800,
+        "p95": 2580300,
+        "p99": 3403700
+      },
+      "worker_export_wall": {
+        "p50": 2038300,
+        "p95": 2770400,
+        "p99": 2980100
+      },
+      "artifacts": {
+        "serial": {
+          "png": "docs/reviews/OPT_11_C11_07_ARTIFACTS/Release_vulkan_serial.png",
+          "sha256": "36b7a03e5dc16e6298a6c35e9b1b60fafddaf280a2a7a230e0bbc88515393365"
+        },
+        "worker": {
+          "png": "docs/reviews/OPT_11_C11_07_ARTIFACTS/Release_vulkan_worker.png",
+          "sha256": "36b7a03e5dc16e6298a6c35e9b1b60fafddaf280a2a7a230e0bbc88515393365"
+        }
+      }
+    }
+  ],
+  "product_results": {
+    "Debug": {
+      "passed": 47,
+      "total": 47,
+      "manifest": "build/c11_07_products/Debug/results.json",
+      "note": "strict/malformed cases expect exit 1; positive cases expect exit 0"
+    },
+    "Release": {
+      "passed": 47,
+      "total": 47,
+      "manifest": "build/c11_07_products/Release/results.json",
+      "note": "strict/malformed cases expect exit 1; positive cases expect exit 0"
+    }
+  },
+  "alias_allocation_requests": {
+    "Debug_dx12": {
+      "unaliased_bytes": 262144,
+      "aliased_bytes": 131072,
+      "scope": "tiny proven alias workload allocation requests; excludes imports/driver/whole-device VRAM"
+    },
+    "Debug_vulkan": {
+      "unaliased_bytes": 1536,
+      "aliased_bytes": 768,
+      "scope": "tiny proven alias workload allocation requests; excludes imports/driver/whole-device VRAM"
+    },
+    "Release_dx12": {
+      "unaliased_bytes": 262144,
+      "aliased_bytes": 131072,
+      "scope": "tiny proven alias workload allocation requests; excludes imports/driver/whole-device VRAM"
+    },
+    "Release_vulkan": {
+      "unaliased_bytes": 1536,
+      "aliased_bytes": 768,
+      "scope": "tiny proven alias workload allocation requests; excludes imports/driver/whole-device VRAM"
+    }
+  },
+  "native_editor_restart": {
+    "Debug": {
+      "passed": 6,
+      "total": 6,
+      "manifest": "build/c11_07_restart_products/Debug/results.json",
+      "scope": "native child Editor startup/acknowledgement, frame-failure/changed-plan rejection; test launcher is not a live parent Editor UI",
+      "diagnostic_preservation_verified": {
+        "existing_bytes": true,
+        "existing_mtime": true,
+        "archive": "build/c11_07_restart_products/Debug/editor_restart_diagnostic_0.log"
+      }
+    },
+    "Release": {
+      "passed": 6,
+      "total": 6,
+      "manifest": "build/c11_07_restart_products/Release/results.json",
+      "scope": "native child Editor startup/acknowledgement, frame-failure/changed-plan rejection; test launcher is not a live parent Editor UI",
+      "diagnostic_preservation_verified": {
+        "existing_bytes": true,
+        "existing_mtime": true,
+        "archive": "build/c11_07_restart_products/Release/editor_restart_diagnostic_0.log"
+      }
+    }
+  },
+  "supplemental_verification_harness": [
+    "2853e5d",
+    "a389b26"
+  ]
+}

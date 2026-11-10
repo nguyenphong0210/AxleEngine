@@ -1,14 +1,21 @@
 ﻿# OPT-11 Execution Plan: Render Thread, Parallel Recording and Transient VRAM Aliasing
 
-**Status:** Planning only. This document does not release implementation.
+**Status:** Technical reference and original planning contract. This document
+does not release implementation.
+Implementation checkpoint (2026-11-10): the user subsequently released C11-01..07
+in bounded assignments. The [C11-07 decision](../reviews/OPT_11_C11_07_ACCEPTANCE.md)
+records qualified foundation/synchronous-product acceptance and deferred
+asynchronous/native-parallel/scene-alias product integration. This reference does
+not itself release later work or claim full OPT-11 deployment.
 
 **Authority:** `docs/ROADMAP.md`, `docs/design/POST_OPT10_PROGRAM_PLAN.md`,
 `docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md`, and
 `docs/design/NRI_INTEGRATION_CONTRACT.md`.
 
 **Planning baseline:** repository `5ff4583b1c40fbf92df8edbadf64700517ceafa4`.
-The live coordination card still owns the current OPT-10 assignment; OPT-11
-starts only after OPT-10 is accepted or explicitly deferred by the user.
+That baseline predates the later explicit user releases. The live exchange owns
+the current bounded assignment; the checkpoint above records the later acceptance
+decision without rewriting the original target architecture as fully deployed.
 
 ## 1. Objective and boundary
 
@@ -56,7 +63,7 @@ The following evidence must exist before source implementation begins:
 The release record must name the exact base commit, build directories, hardware,
 backend, driver and unavailable checks.
 
-## 3. Current constraints that shape the design
+## 3. Planning-baseline constraints that shape the design
 
 The current source already gives OPT-11 useful seams, but not the finished
 feature:

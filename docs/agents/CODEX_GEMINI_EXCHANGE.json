@@ -3,27 +3,42 @@
   "current_task": {
     "id": "OPT-11-C11-07",
     "title": "Consolidated OPT-11 acceptance and evidence-based product rollout decision",
-    "state": "in_progress",
+    "state": "complete",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "reviewer": "Separate-context consolidated review at final boundary",
+    "reviewer": "Codex separate-context c11_07_final_review: source/guide/report rechecks, no P1/P2; native/product execution by implementer",
     "code_baseline": "ebc3a79238f15d8e2db7bc50e7380ee7b0f9855f",
     "user_instruction": "User explicitly asks Codex to carry out C11-07, following C11-06. Continue sequentially with coherent local commits and final Gemini handoff.",
     "user_scope": "Audit actual products; implement shared rollout flags/diagnostics and necessary repairs; measure serial/worker and alias evidence; Debug/Release native/GL/product acceptance and final review. Keep unproven product paths disabled and distinguish deferred integration from tested APIs. No full hybrid/vendor upgrade/OPT-12/push.",
     "plan_reference": "docs/design/OPT_11_C11_07_ACCEPTANCE_PLAN.md",
-    "implementation_status": "Source/caller audit confirms product rendering remains synchronous with persistent/imported targets; preparing explicit rollout policy and measured acceptance fixtures.",
+    "implementation_status": "C11-07 decision delivered: d9f28e3 plan, 002cfed product policy, 0869815 latency/CPU export, 119123c actual products/review refinements; supplemental native Editor candidate verification 2853e5d and diagnostic-preservation harness a389b26.",
     "expected_files": [
       "Engine/Scene rollout policy, worker diagnostics and bounded optional CPU image export",
       "Editor/Runtime startup and rendering diagnostics",
       "Tests rendering policy/parity/latency/product acceptance and CMake",
       "Acceptance report, plan, roadmap and exchange"
     ],
-    "acceptance_status": "pending",
-    "open_gates": [
-      "Shared product feature selection and explicit fallback reasons",
-      "Frozen serial/worker image and latency measurements",
-      "Product/native/GL/preview/export verification",
-      "Consolidated review and final per-feature rollout decision"
+    "acceptance_status": "Qualified acceptance: synchronous product default and tested foundation API scope accepted. Product asynchronous ownership/native parallel recording/scene aliasing DEFERRED/default OFF. Full OPT-11 product deployment NOT ACCEPTED.",
+    "open_gates": [],
+    "next_action": "C11-07 acceptance/rollout decision complete. Stop; deferred product integrations/full hybrid/OPT-12 are not automatically released.",
+    "verified_production_source": "119123cd813f3c0eec9fad78615544e0ac4044c2",
+    "supplemental_verification_harness": [
+      "2853e5d",
+      "a389b26"
+    ],
+    "delivery_reference": "docs/reviews/OPT_11_C11_07_ACCEPTANCE.md",
+    "verification_summary": "Debug/Release full builds and 91/91 CTest each; 47/47 real-product cases each; 6/6 supplemental native Editor restart-candidate cases each; 4/4 final native parity/latency processes; 24/24 extra native RHI/alias regressions. Final restart rerun preserves prior diagnostic bytes/mtime and archives expected failures. Architecture 538/25, whitespace, artifacts/hashes/schema validated.",
+    "deferred_features": {
+      "product_async_owner": "UI/native/presentation/command ownership and full snapshot audit not integrated; representative scene/end-to-end latency gates missing.",
+      "product_parallel_native_recording": "Per-worker recording authority/state journals and product benefit not accepted.",
+      "product_scene_aliasing": "Current scene/UI/history/output targets remain persistent/imported; scratch lifetimes not migrated.",
+      "full_hybrid": "Remains deferred; no NRI upgrade/fork."
+    },
+    "limits": [
+      "One RTX3070/610.88 Windows machine; other hardware/drivers, physical GPU reset, sanitizer, unbounded soak NOT RUN.",
+      "64x64 CPU-source fixture wall times are not GPU timestamp/FPS or product input-to-photon measurements.",
+      "Actual native Editor restart candidate verified via launcher; live parent Editor UI continuity and user-driven project switching remain NOT RUN.",
+      "Graph backing-request savings apply only to proven tiny API fixture, not product VRAM."
     ]
   },
   "last_read": {
@@ -2329,6 +2344,28 @@
       "base_commit": "dc9b90c",
       "timestamp_utc": "2026-11-10T06:30:15.844668+00:00",
       "body": "C11-06 final package delivery by Codex, following the user's explicit request to implement it after C11-05. No intermediate Gemini response was required.\n\nSource dc9b90c; baseline 7b9db0c. Sequential commits: ba6c97e execution plan/release, 4adbdc4 snapshot cleanup and concurrency stress, 57663fd worker/DLL lifecycle stress, dc9b90c native/window/long-run stress plus consolidated review corrections. Final report: docs/design/OPT_11_C11_06_DELIVERY.md; plan: docs/design/OPT_11_C11_06_STRESS_PLAN.md.\n\nImplemented and repaired: payload destruction outside queue/worker locks; CPU LeaseAnchor distinct from GPU pins; bounded pointer-owned admission/results with prebuilt cancellation results; allocation-free CPU cancellation/stopped-worker/queue teardown (including MSVC Debug proxy behavior); native thread recoverable exception boundary and first-error preservation; synchronous fallback drain outside worker mutex; failure-safe heap DLL observer retained by module lifetime.\n\nFinal verification, all exit 0: ten listed targets built for Debug/Release; 26/26 CTest per configuration (16 native/window stress cases included); 12/12 additional native transient-alias/resource/state/retirement/frame regressions per configuration. Real D3D12 and Vulkan, native/NRI validation enabled, zero observed fixture validation errors through shutdown. RTX 3070, NVIDIA 610.88; NRI remains pinned at 6998e3fbbaed1b132f386a9d49743a2481003487. No vendor edits. Architecture PASS 534 source/25 CMake files; whitespace PASS; exchange validated. Exact commands, logs and warnings are in report.\n\nStress includes 76800 snapshot tickets per CPU run; gated producer/Stop/restart and active-request allocation exceptions; real DLL callback/task/queued-ticket/GPU lifetime with actual owner-thread FreeLibrary; 3072 normal transient frames per backend/config plus 192-frame submit/loss modes (13824 successful graph frames across final native stress matrix); max three outstanding batches; all-pixel/all-word parity, exact retirement markers, stale handle/token rejection; six real window/device resize/minimize/recovery cycles per backend/config. Simulated loss is injected before native work after prior checked drain, not a physical GPU reset.\n\nSeparate-context reviewer c11_06_final_review found R1-R4 (sync lock inversion, allocating retirement/duplicate result, stack observer lifetime, lazy singleton exception boundary). All fixed and focused source rechecks report no remaining P1/P2. Reviewer independently ran CPU/Plugin Debug and Release selections, and Debug again after final boxed-result change (2/2 each executed selection), plus whitespace PASS. Reviewer did not rebuild/run native/window matrix; native results above are Codex implementer evidence, not Gemini-reviewed evidence. Initial failed post-review matrix was retained and superseded only after concrete repairs/rebuild/rerun; no failed gate was waived.\n\nC11-06 complete within declared finite matrix. Multi-vendor/other-driver, physical GPU reset, sanitizer and unbounded soak NOT RUN. Current scenes stay imported/persistent, transient executor stays opt-in, full hybrid/NRI fork and C11-07/OPT-11 rollout not implemented or accepted here. No push and no Gemini response/approval claimed.\n"
+    },
+    {
+      "id": "CG-20261110T081643233629Z-CODEX-6b4bae",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-11-C11-07",
+      "reply_to": "CG-20261110T063015844668Z-CODEX-46056e",
+      "base_commit": "119123c",
+      "timestamp_utc": "2026-11-10T08:16:43.233629+00:00",
+      "body": "C11-07 final qualified acceptance/rollout decision, by Codex under explicit user release.\n\nBaseline ebc3a79; tested production source119123cd813f3c0eec9fad78615544e0ac4044c2. Commits d9f28e3 plan,002cfed shared product selection/CLI/diagnostics,0869815 bounded CPU export and timing/parity,119123c real-consumer runner and review refinements. Supplemental verification-only commits2853e5d and a389b26 add API-validated native Editor restart candidates and preserve prior crash diagnostics. Final report docs/reviews/OPT_11_C11_07_ACCEPTANCE.md; machine data/image hashes docs/reviews/OPT_11_C11_07_MEASUREMENTS.json; guide docs/guides/OPT_11_RENDER_ROLLOUT.md.\n\nDecision: accept synchronous product defaults and the bounded tested foundation API scope. Keep product async ownership, job-worker native recording and scene transient aliasing DEFERRED/default OFF. Shared flags either explicitly fall back or fail before GPU initialization in strict mode. Current Editor/Runtime/UI/presentation still run synchronously with persistent/imported targets. This does NOT mark full OPT-11 product deployment accepted; missing bridges/performance gates are not waived. No OPT-12/hybrid/vendor upgrade/push.\n\nFinal executed verification: Debug and Release AxleAllTests+Editor+Runtime builds PASS, full CTest91/91 each. Real-product runner47/47 each includes real Editor5UI-frame startup/simulation, standalone Runtime loose+cooked, actual previews/thumbnails/canvas, strict CLI and backend fallback across D3D12/Vulkan/OpenGL. Additional API-validated native Editor restart-candidate modes(normal5completed frames+ack, deliberate first-frame failure, changed-plan rejection), using generated SDK plugins:6/6 each configuration. This is test-launcher/candidate evidence, not a live parent Editor UI/project-switch proof; default self-child restart test separately reran1/1 each.\n\nFinal parity/measurement4/4 native processes after corrections: same immutable64x64 builtin CPU-source scene,8warmup+64samples, capacity3,144accepted and2intentional invalid-export rejections per process; all72capture outputs equal serial RGBA byte-for-byte, CPU images survive worker shutdown. CPU wall/render/queue/export/metadata roundtrip percentiles are recorded; not GPU timestamp or product FPS/display latency. Tiny graph backing requests D3D12 262144->131072 and Vulkan1536->768 bytes do not establish product VRAM savings. Extra alias/resource/state/retirement/frame native regressions24/24. Validation enabled and fixture error counters zero through shutdown. RTX3070,NVIDIA610.88,NRI6998e3fb unchanged. Architecture PASS538source/25CMake; whitespace/schema/artifact/hash/doc checks recorded.\n\nSeparate-context c11_07_final_review inspected source/callers/limits/ownership/cancellation/method/runner/guide/report. No P1/P2. P3 fast-path report copying, symmetric export warmup and artifact flush checks fixed/rechecked. A report lifecycle-coverage overclaim was corrected and actual native Editor candidate cases additionally executed; manual project-switch/live parent UI rows remain NOT RUN. Reviewer ran read-only source/whitespace/artifact inspection, no independent executables/native/window matrix. All executed test results above are Codex implementer evidence; no Gemini review/approval is invented.\n\nOther GPU/vendor/driver, physical reset,sanitizer,unbounded soak,representative game-scene performance,GPU timestamps,end-to-end display latency,GL-resource transfer and manual project/UI acceptance remain NOT RUN or DEFERRED as scoped in the report. End-of-package coordination only; stop at this decision boundary.\n"
+    },
+    {
+      "id": "CG-20261110T082158316860Z-CODEX-47e763",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-11-C11-07",
+      "reply_to": "CG-20261110T081643233629Z-CODEX-6b4bae",
+      "base_commit": "a389b26",
+      "timestamp_utc": "2026-11-10T08:21:58.316860+00:00",
+      "body": "Correction/clarification to the C11-07 delivery wording: the native Editor frame-fault case injects QueuePresent after four completed frames, before readiness acknowledgement; it is not a first-frame fault. The report uses pre-acknowledgement presentation failure. The final 12 native candidate cases were also rerun on a389b26 with an existing crash-report sentinel: Debug/Release each 6/6 PASS, original bytes/mtime preserved, expected diagnostic archives present. Test-launcher/candidate evidence does not establish live parent Editor UI continuity or user-driven project switching; those remain NOT RUN. Production source remains 119123c and the qualified/default-off rollout decision is unchanged.\n"
     }
   ],
   "deferred_tasks": [

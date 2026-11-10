@@ -37,6 +37,8 @@ separate contract; it must not reintroduce retired Vehicle compatibility code.
 | OPT-11 C11-05 delivery | [Transient graph delivery](OPT_11_C11_05_DELIVERY.md) | Native committed/placed generations, interval packing, validated aliasing, diagnostics and backend evidence |
 | OPT-11 C11-06 stress | [Lifetime stress execution plan](OPT_11_C11_06_STRESS_PLAN.md) | Snapshot/module cancellation, worker lifecycle, native resource faults and consolidated verification |
 | OPT-11 C11-06 delivery | [Lifetime stress delivery](OPT_11_C11_06_DELIVERY.md) | Lifetime repairs, real DLL/GPU completion, resize/restart stress and actual verification limits |
+| OPT-11 C11-07 acceptance | [Acceptance execution plan](OPT_11_C11_07_ACCEPTANCE_PLAN.md), [final decision](../reviews/OPT_11_C11_07_ACCEPTANCE.md) | Qualified foundation/synchronous-product acceptance; async/parallel/scene-alias product integrations remain deferred |
+| OPT-11 product flags | [Rendering selection guide](../guides/OPT_11_RENDER_ROLLOUT.md) | Shared startup flags, strict rejection, explicit fallback and remaining integration |
 
 Detailed contracts can include later packages needed to describe an end-to-end
 architecture. Their presence does not advance them ahead of the OPT sequence.

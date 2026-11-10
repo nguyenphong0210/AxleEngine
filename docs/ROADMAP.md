@@ -407,9 +407,15 @@ implemented through slice .6, including native D3D12/Vulkan evidence; see the
 C11-06 lifetime stress is implemented and reviewed through `dc9b90c`, with
 Debug/Release 26/26 CTest and 12/12 additional native regressions per configuration;
 see [C11-06 evidence](design/OPT_11_C11_06_DELIVERY.md).
+C11-07 has delivered a [qualified acceptance/rollout decision](reviews/OPT_11_C11_07_ACCEPTANCE.md)
+through source `119123c`: Debug/Release 91/91 full CTest, 47/47 actual-product
+cases per configuration, native parity/latency and alias/lifetime regression.
+The synchronous product default and tested foundation scope are accepted.
+Product asynchronous ownership, native parallel recording and scene aliasing
+remain DEFERRED/default OFF; full OPT-11 product deployment is not accepted.
 The new executor is opt-in; current scene targets remain persistent/imported.
 C11-04 full hybrid/NRI fork stays deferred. This checkpoint does not close OPT-11
-as a phase or release C11-07 or OPT-12..20.
+as a fully deployed product phase or release OPT-12..20.
 
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features

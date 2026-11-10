@@ -1,6 +1,9 @@
 # OPT-11 C11-07 Acceptance and Rollout Execution
 
 User release: Codex implements C11-07 after C11-06. Baseline `ebc3a79`.
+Execution/decision delivered through source `119123c`; see the
+[final acceptance report](../reviews/OPT_11_C11_07_ACCEPTANCE.md) for measured
+evidence and explicit deferred product integrations.
 Decide readiness per feature/backend/product using actual evidence; do not infer
 whole-product readiness from offscreen fixtures. Full hybrid/NRI fork, vendor
 upgrades and OPT-12 remain outside this package.

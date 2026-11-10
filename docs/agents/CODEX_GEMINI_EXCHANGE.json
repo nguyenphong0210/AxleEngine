@@ -3,29 +3,31 @@
   "current_task": {
     "id": "OPT-11-C11-05",
     "title": "Complete transient graph native allocation and gated VRAM aliasing",
-    "state": "in_progress",
+    "state": "complete",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "reviewer": "Consolidated independent C11-05 review",
+    "reviewer": "Codex separate-context c11_05_final_review; implementer owns native verification",
     "code_baseline": "488123d",
     "user_instruction": "User explicitly authorized completing all remaining C11-05 slices in order, with a local commit per coherent slice; do not stop after only the CPU planner.",
     "user_scope": "C11-05.2 through C11-05.6, necessary repairs to C11-05.1, native D3D12/Vulkan verification, final correction review and delivery. No full hybrid, NRI upgrade/fork, C11-06+ or push.",
     "plan_reference": "docs/design/OPT_11_C11_05_SAFETY_PLAN.md",
-    "next_action": "Implement committed native resource realization/transactional graph execution and native tests, then placed resources, CPU packing, validated alias barriers and metrics.",
-    "implementation_status": "C11-05.1 delivered in 4783c25; C11-05.2 IN_PROGRESS.",
+    "next_action": "C11-05 complete within conservative opt-in contract. Stop; C11-06+, hybrid and vendor upgrade are not released.",
+    "implementation_status": "C11-05.1 through .6 implemented and verified: 4783c25, 73c9340, 8393f64, cf453db, b65af0a, a1b51d5.",
     "expected_files": [
       "Engine/RHI transient resource allocator, texture/buffer placement, command alias barriers and capability reporting",
       "Engine/Renderer transient graph planner/execution",
       "Tests/rendering transient native/CPU fixtures and CMake wiring",
       "C11-05 delivery/design docs and exchange"
     ],
-    "acceptance_status": "pending",
-    "open_gates": [
-      "Committed native generation/rollback/retirement",
-      "Placed resources and queried requirements",
-      "Interval packing and alias events",
-      "Backend-specific alias barriers/readback/VRAM reduction",
-      "Final Debug/Release checks and separate-context correction review"
+    "acceptance_status": "C11-05 package complete after final Debug/Release/native evidence and separate-context source review; not OPT-11 phase acceptance.",
+    "open_gates": [],
+    "delivery_reference": "docs/design/OPT_11_C11_05_DELIVERY.md",
+    "verified_source": "a1b51d5",
+    "limits": [
+      "Opt-in executor currently exercised by native fixtures; current scene targets remain imported/persistent.",
+      "Aliasing only for proven single-queue RGBA8 color/copy and device-buffer classes; unverified devices use committed fallback.",
+      "Fixture allocation requests are not whole-device VRAM or FPS measurements.",
+      "Full hybrid, NRI upgrade/fork and C11-06/C11-07 remain outside this release."
     ]
   },
   "last_read": {
@@ -2309,6 +2311,17 @@
       "base_commit": "4783c25ad0b35870e93537e39368a31b2e83f74c",
       "timestamp_utc": "2026-11-10T02:46:12.203342+00:00",
       "body": "C11-05.1 end-of-slice delivery by Codex; implementation commit 4783c25ad0b35870e93537e39368a31b2e83f74c (base ad58438).\n\nUser priority changed to C11-05 before full hybrid. Hybrid/secondary/bundle and an NRI fork are deferred; existing primary-batch acceptance is preserved.\n\nImplemented RenderTransientGraph as a CPU-only companion planner: imported/transient texture/transient buffer values; deterministic Kahn DAG with explicit and RAW/WAR/WAW edges; closed lifetimes; conservative compatibility; one distinct block per transient; checked byte/alignment statistics; failure preserves output. Existing RenderGraph/native callers and capability flags are unchanged.\n\nVerified locally: rebuilt AxleRenderUnitTests/AxleRHIStateTests in Debug and Release (exit 0); CTest RenderUnitTests/RHIStatePolicy/RenderHarnessFailure 3/3 PASS in each config; focused cases plus 120 generated graphs PASS; architecture PASS (529 files/25 CMake); exchange validation and whitespace PASS. Exact commands/log paths are in docs/design/OPT_11_C11_05_1_DELIVERY.md.\n\nEvidence is implemented/self-verified, not independent acceptance of all C11-05. Native transient realization, GPU retirement, placement/alias barriers, readback parity, measured VRAM savings and consolidated independent review remain open/NOT RUN in this CPU slice. Next bounded slice is C11-05.2 committed native realization. No push.\n"
+    },
+    {
+      "id": "CG-20261110T040232198040Z-CODEX-06abb8",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-11-C11-05",
+      "reply_to": "CG-20261110T024612203342Z-CODEX-921623",
+      "base_commit": "a1b51d5",
+      "timestamp_utc": "2026-11-10T04:02:32.198040+00:00",
+      "body": "C11-05 final delivery, replying to the earlier CPU-planner handoff. The latest user explicitly released all remaining slices in sequence.\n\nCompleted local commits:\n- .1 4783c25 (prior CPU planner; delivery 488123d)\n- .2 73c9340 committed native graph generations/publication/retirement\n- .3 8393f64 query-only probes and transactional texture/buffer placement\n- .4 cf453db deterministic interval packing and alias events\n- .5 b65af0a conservative native alias barriers, real parity probe and capability gate\n- .6 a1b51d5 generation diagnostics, native byte accounting, final fixtures and delivery documentation\n\nFinal source a1b51d5. Report: docs/design/OPT_11_C11_05_DELIVERY.md. Debug and Release built AxleTransientGraphTests, AxleRenderUnitTests, AxleRHIResourceTests, AxleRHIStateTests, AxleRHIRetirementTests, AxleRHIFrameTests. Per configuration: 12/12 native graph modes, 8/8 existing native RHI suites, 6/6 selected CTest PASS; all process exits 0. Final lifecycle assertions rebuilt and all four alias normal/failure modes rerun in both configs. Architecture PASS (534 files, 25 CMake files); whitespace PASS. Logs and exact commands are in the report.\n\nHardware RTX 3070, NVIDIA driver 610.88, pinned NRI 6998e3fb; D3D12 enhanced barriers and Vulkan v1.4. Native API and NRI validation ON; zero graph validation errors through shutdown. Existing D3D12 options22 feature-query warning remains disclosed. Exact all-pixel/all-word parity passes. Actual graph backing requests: D3D12 262144 -> 131072 bytes, Vulkan 1536 -> 768 bytes. These are tiny fixture allocation requests, not whole-app VRAM/FPS gains.\n\nRequired separate-context reviewer c11_05_final_review inspected the complete diff from 488123d and final .6 test/docs changes; no P1/P2 findings and no final recheck findings. It independently ran Debug RenderUnitTests + TransientGraphPolicy 2/2 and whitespace PASS; it did not rebuild or independently run native tests. Native results above are Codex implementer-executed, not Gemini-reviewed evidence. No Gemini response is claimed.\n\nIntegration boundary: functional production Renderer/RHI opt-in API currently called by fixtures. Existing scene RenderGraph/RHIViewTargets remain imported/persistent. Aliasing requires positive startup proof and conservative supported full-clear/copy RGBA8/device-buffer class; unsupported uses stay unaliased. Ambiguous submit quarantines pending generations. No NRI modifications, hybrid, C11-06/C11-07 implementation, or push. User requested end-of-package coordination only; no per-slice Gemini response was required.\n"
     }
   ],
   "deferred_tasks": [

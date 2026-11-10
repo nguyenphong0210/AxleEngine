@@ -1,34 +1,29 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-11-C11-06",
-    "title": "Plugin, render worker and transient resource lifetime stress",
-    "state": "complete",
+    "id": "OPT-11-C11-07",
+    "title": "Consolidated OPT-11 acceptance and evidence-based product rollout decision",
+    "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "reviewer": "Codex separate-context c11_06_final_review; R1-R4 fixed and source rechecked, native verified by implementer",
-    "code_baseline": "7b9db0cd25ad5cfb8c204507427c7b14975d5272",
-    "user_instruction": "User explicitly asks Codex to implement C11-06; continue sequentially, test and commit each coherent group, final package Gemini handoff.",
-    "user_scope": "C11-06 stress fixtures and necessary lifetime/exception/retirement repairs. No C11-07 rollout, hybrid, vendor upgrade or push.",
-    "plan_reference": "docs/design/OPT_11_C11_06_STRESS_PLAN.md",
-    "implementation_status": "C11-06.1-.4 complete; source dc9b90c, preceding slices 4adbdc4 and 57663fd, plan ba6c97e.",
+    "reviewer": "Separate-context consolidated review at final boundary",
+    "code_baseline": "ebc3a79238f15d8e2db7bc50e7380ee7b0f9855f",
+    "user_instruction": "User explicitly asks Codex to carry out C11-07, following C11-06. Continue sequentially with coherent local commits and final Gemini handoff.",
+    "user_scope": "Audit actual products; implement shared rollout flags/diagnostics and necessary repairs; measure serial/worker and alias evidence; Debug/Release native/GL/product acceptance and final review. Keep unproven product paths disabled and distinguish deferred integration from tested APIs. No full hybrid/vendor upgrade/OPT-12/push.",
+    "plan_reference": "docs/design/OPT_11_C11_07_ACCEPTANCE_PLAN.md",
+    "implementation_status": "Source/caller audit confirms product rendering remains synchronous with persistent/imported targets; preparing explicit rollout policy and measured acceptance fixtures.",
     "expected_files": [
-      "Engine/Scene snapshot queue and worker lifetime boundaries if stress exposes faults",
-      "Engine/RHI/Renderer lifecycle repairs if required by native evidence",
-      "Tests/rendering lifetime stress and plugin fixtures/CMake",
-      "C11-06 plan, delivery, roadmap, exchange"
+      "Engine/Scene rollout policy, worker diagnostics and bounded optional CPU image export",
+      "Editor/Runtime startup and rendering diagnostics",
+      "Tests rendering policy/parity/latency/product acceptance and CMake",
+      "Acceptance report, plan, roadmap and exchange"
     ],
-    "acceptance_status": "C11-06 package complete within the finite supported stress matrix; not OPT-11/C11-07 rollout acceptance.",
-    "open_gates": [],
-    "next_action": "Stop at C11-06 boundary. C11-07 rollout/acceptance and full hybrid are not released.",
-    "verified_source": "dc9b90c",
-    "delivery_reference": "docs/design/OPT_11_C11_06_DELIVERY.md",
-    "verification_summary": "Final Debug/Release each: 26/26 CTest including 16 native/window stress cases; 12/12 additional native regressions. Architecture/whitespace/exchange validation PASS.",
-    "limits": [
-      "Finite deterministic stress on RTX 3070 / driver 610.88; multi-vendor, other-driver, sanitizer, physical GPU reset and unbounded soak NOT RUN.",
-      "Loss is simulated before native submission after prior checked completion.",
-      "Existing scene targets remain imported/persistent; no full hybrid/NRI upgrade or C11-07 rollout.",
-      "Unresolved native shutdown remains quarantined/Failed rather than claiming a clean restart; no whole-process sustained OOM guarantee."
+    "acceptance_status": "pending",
+    "open_gates": [
+      "Shared product feature selection and explicit fallback reasons",
+      "Frozen serial/worker image and latency measurements",
+      "Product/native/GL/preview/export verification",
+      "Consolidated review and final per-feature rollout decision"
     ]
   },
   "last_read": {
@@ -3659,6 +3654,37 @@
         "Aliasing only for proven single-queue RGBA8 color/copy and device-buffer classes; unverified devices use committed fallback.",
         "Fixture allocation requests are not whole-device VRAM or FPS measurements.",
         "Full hybrid, NRI upgrade/fork and C11-06/C11-07 remain outside this release."
+      ]
+    },
+    {
+      "id": "OPT-11-C11-06",
+      "title": "Plugin, render worker and transient resource lifetime stress",
+      "state": "complete",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "reviewer": "Codex separate-context c11_06_final_review; R1-R4 fixed and source rechecked, native verified by implementer",
+      "code_baseline": "7b9db0cd25ad5cfb8c204507427c7b14975d5272",
+      "user_instruction": "User explicitly asks Codex to implement C11-06; continue sequentially, test and commit each coherent group, final package Gemini handoff.",
+      "user_scope": "C11-06 stress fixtures and necessary lifetime/exception/retirement repairs. No C11-07 rollout, hybrid, vendor upgrade or push.",
+      "plan_reference": "docs/design/OPT_11_C11_06_STRESS_PLAN.md",
+      "implementation_status": "C11-06.1-.4 complete; source dc9b90c, preceding slices 4adbdc4 and 57663fd, plan ba6c97e.",
+      "expected_files": [
+        "Engine/Scene snapshot queue and worker lifetime boundaries if stress exposes faults",
+        "Engine/RHI/Renderer lifecycle repairs if required by native evidence",
+        "Tests/rendering lifetime stress and plugin fixtures/CMake",
+        "C11-06 plan, delivery, roadmap, exchange"
+      ],
+      "acceptance_status": "C11-06 package complete within the finite supported stress matrix; not OPT-11/C11-07 rollout acceptance.",
+      "open_gates": [],
+      "next_action": "Stop at C11-06 boundary. C11-07 rollout/acceptance and full hybrid are not released.",
+      "verified_source": "dc9b90c",
+      "delivery_reference": "docs/design/OPT_11_C11_06_DELIVERY.md",
+      "verification_summary": "Final Debug/Release each: 26/26 CTest including 16 native/window stress cases; 12/12 additional native regressions. Architecture/whitespace/exchange validation PASS.",
+      "limits": [
+        "Finite deterministic stress on RTX 3070 / driver 610.88; multi-vendor, other-driver, sanitizer, physical GPU reset and unbounded soak NOT RUN.",
+        "Loss is simulated before native submission after prior checked completion.",
+        "Existing scene targets remain imported/persistent; no full hybrid/NRI upgrade or C11-07 rollout.",
+        "Unresolved native shutdown remains quarantined/Failed rather than claiming a clean restart; no whole-process sustained OOM guarantee."
       ]
     }
   ],

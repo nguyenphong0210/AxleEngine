@@ -301,6 +301,11 @@ add_test(NAME RHIStatePolicy COMMAND $<TARGET_FILE:AxleRHIStateTests> policy)
 set_tests_properties(RHIStatePolicy PROPERTIES LABELS "render;cpu" TIMEOUT 30)
 
 add_executable(AxleRHIFrameTests EXCLUDE_FROM_ALL rendering/RHIFrameMain.cpp)
+add_executable(AxleTransientGraphTests EXCLUDE_FROM_ALL rendering/TransientGraphMain.cpp)
+target_include_directories(AxleTransientGraphTests PRIVATE rendering)
+target_link_libraries(AxleTransientGraphTests PRIVATE Axle::Renderer Axle::RHI)
+add_test(NAME TransientGraphPolicy COMMAND $<TARGET_FILE:AxleTransientGraphTests> policy)
+set_tests_properties(TransientGraphPolicy PROPERTIES LABELS "render;cpu" TIMEOUT 30)
 target_include_directories(AxleRHIFrameTests PRIVATE rendering)
 target_link_libraries(AxleRHIFrameTests PRIVATE Axle::RHI)
 

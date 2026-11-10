@@ -1,47 +1,31 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-11-C11-05.1",
-    "title": "Pure transient graph planner and unaliased allocation plan",
-    "state": "completed",
+    "id": "OPT-11-C11-05",
+    "title": "Complete transient graph native allocation and gated VRAM aliasing",
+    "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "reviewer": "Consolidated C11-05 review at package boundary",
-    "code_baseline": "ad58438",
-    "user_instruction": "User chose C11-05 before full hybrid after discussing its unproven benefit. Continue package-by-package with coherent local commits.",
-    "user_scope": "C11-05.1 pure CPU planner first. Preserve existing imported RenderGraph callers; no native allocation, aliasing enablement, NRI fork/upgrade, C11-06+ or push in this slice.",
-    "next_action": "C11-05.1 is delivered. Next bounded slice is C11-05.2 committed native realization, followed by native placement/aliasing gates; full hybrid remains deferred.",
+    "reviewer": "Consolidated independent C11-05 review",
+    "code_baseline": "488123d",
+    "user_instruction": "User explicitly authorized completing all remaining C11-05 slices in order, with a local commit per coherent slice; do not stop after only the CPU planner.",
+    "user_scope": "C11-05.2 through C11-05.6, necessary repairs to C11-05.1, native D3D12/Vulkan verification, final correction review and delivery. No full hybrid, NRI upgrade/fork, C11-06+ or push.",
     "plan_reference": "docs/design/OPT_11_C11_05_SAFETY_PLAN.md",
+    "next_action": "Implement committed native resource realization/transactional graph execution and native tests, then placed resources, CPU packing, validated alias barriers and metrics.",
+    "implementation_status": "C11-05.1 delivered in 4783c25; C11-05.2 IN_PROGRESS.",
     "expected_files": [
-      "Engine/Renderer/include/Axle/RenderTransientGraph.hpp",
-      "Engine/Renderer/src/RenderTransientGraph.cpp",
-      "Engine/Renderer/CMakeLists.txt",
-      "Tests/rendering/Test_RenderTransientGraphUnit.cpp",
-      "Tests/rendering/RenderUnitTestMain.cpp",
-      "Tests/CMakeLists.txt",
-      "docs/design/OPT_11_C11_05_SAFETY_PLAN.md",
-      "docs/design/OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md",
-      "docs/design/OPT_11_C11_05_1_DELIVERY.md",
-      "docs/design/README.md"
+      "Engine/RHI transient resource allocator, texture/buffer placement, command alias barriers and capability reporting",
+      "Engine/Renderer transient graph planner/execution",
+      "Tests/rendering transient native/CPU fixtures and CMake wiring",
+      "C11-05 delivery/design docs and exchange"
     ],
-    "implementation_status": "C11-05.1 CPU planner implemented and self-verified; no native allocation or aliasing is enabled.",
-    "acceptance_status": "self_verified_C11_05_1_pending_consolidated_C11_05_review",
+    "acceptance_status": "pending",
     "open_gates": [
-      "C11-05.2+ native realization/retirement, placement, alias barriers, readback parity and VRAM measurements",
-      "Consolidated independent C11-05 review"
-    ],
-    "delivery_report": "docs/design/OPT_11_C11_05_1_DELIVERY.md",
-    "verification": {
-      "Debug": "RenderUnitTests + RHIStatePolicy + RenderHarnessFailure 3/3 PASS",
-      "Release": "RenderUnitTests + RHIStatePolicy + RenderHarnessFailure 3/3 PASS",
-      "Planner": "Focused cases plus 120 fixed-seed generated graphs PASS",
-      "Architecture": "PASS: 529 files, 25 CMake files",
-      "NativeTransient": "NOT RUN; not implemented in CPU slice",
-      "IndependentReview": "Pending consolidated C11-05 review"
-    },
-    "source_commit": "4783c25ad0b35870e93537e39368a31b2e83f74c",
-    "implementation_commits": [
-      "4783c25ad0b35870e93537e39368a31b2e83f74c"
+      "Committed native generation/rollback/retirement",
+      "Placed resources and queried requirements",
+      "Interval packing and alias events",
+      "Backend-specific alias barriers/readback/VRAM reduction",
+      "Final Debug/Release checks and separate-context correction review"
     ]
   },
   "last_read": {
@@ -3577,6 +3561,50 @@
         "Existing LNK4098 and documented validation warning classes remain visible."
       ],
       "supplementary_review_status": "Received Gemini supplementary architecture review CG-20261107T100642270327Z-GEMINI-cba260; reviewer reports no findings and passing checks. Codex read the message; this documentation turn does not independently rerun or verify its stated checks."
+    },
+    {
+      "id": "OPT-11-C11-05.1",
+      "title": "Pure transient graph planner and unaliased allocation plan",
+      "state": "completed",
+      "coordinator": "Codex",
+      "implementer": "Codex",
+      "reviewer": "Consolidated C11-05 review at package boundary",
+      "code_baseline": "ad58438",
+      "user_instruction": "User chose C11-05 before full hybrid after discussing its unproven benefit. Continue package-by-package with coherent local commits.",
+      "user_scope": "C11-05.1 pure CPU planner first. Preserve existing imported RenderGraph callers; no native allocation, aliasing enablement, NRI fork/upgrade, C11-06+ or push in this slice.",
+      "next_action": "C11-05.1 is delivered. Next bounded slice is C11-05.2 committed native realization, followed by native placement/aliasing gates; full hybrid remains deferred.",
+      "plan_reference": "docs/design/OPT_11_C11_05_SAFETY_PLAN.md",
+      "expected_files": [
+        "Engine/Renderer/include/Axle/RenderTransientGraph.hpp",
+        "Engine/Renderer/src/RenderTransientGraph.cpp",
+        "Engine/Renderer/CMakeLists.txt",
+        "Tests/rendering/Test_RenderTransientGraphUnit.cpp",
+        "Tests/rendering/RenderUnitTestMain.cpp",
+        "Tests/CMakeLists.txt",
+        "docs/design/OPT_11_C11_05_SAFETY_PLAN.md",
+        "docs/design/OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md",
+        "docs/design/OPT_11_C11_05_1_DELIVERY.md",
+        "docs/design/README.md"
+      ],
+      "implementation_status": "C11-05.1 CPU planner implemented and self-verified; no native allocation or aliasing is enabled.",
+      "acceptance_status": "self_verified_C11_05_1_pending_consolidated_C11_05_review",
+      "open_gates": [
+        "C11-05.2+ native realization/retirement, placement, alias barriers, readback parity and VRAM measurements",
+        "Consolidated independent C11-05 review"
+      ],
+      "delivery_report": "docs/design/OPT_11_C11_05_1_DELIVERY.md",
+      "verification": {
+        "Debug": "RenderUnitTests + RHIStatePolicy + RenderHarnessFailure 3/3 PASS",
+        "Release": "RenderUnitTests + RHIStatePolicy + RenderHarnessFailure 3/3 PASS",
+        "Planner": "Focused cases plus 120 fixed-seed generated graphs PASS",
+        "Architecture": "PASS: 529 files, 25 CMake files",
+        "NativeTransient": "NOT RUN; not implemented in CPU slice",
+        "IndependentReview": "Pending consolidated C11-05 review"
+      },
+      "source_commit": "4783c25ad0b35870e93537e39368a31b2e83f74c",
+      "implementation_commits": [
+        "4783c25ad0b35870e93537e39368a31b2e83f74c"
+      ]
     }
   ],
   "workflow_policy": {

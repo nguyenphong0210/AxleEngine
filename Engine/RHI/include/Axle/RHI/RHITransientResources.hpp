@@ -6,12 +6,18 @@
 #include <variant>
 
 namespace Axle::RHI {
+    class RHICommandBuffer;
     using RHITransientDesc = std::variant<RHITextureDesc, RHIBufferDesc>;
 
     struct RHITransientRequirements {
         uint64_t SizeBytes = 0, Alignment = 1;
         uint32_t MemoryType = 0;
         bool MustBeDedicated = false;
+    };
+    struct RHITransientAliasingProbe {
+        bool Supported = false;
+        uint64_t UnaliasedBytes = 0, AliasedBytes = 0;
+        std::string Diagnostic;
     };
 
     // A snapshot owns its exact generation. No memory handles escape the factory.
@@ -47,6 +53,11 @@ namespace Axle::RHI {
         // and alias-barrier proof. Shared blocks require identical descriptions
         // and native requirements, no dedicated allocations, and device support.
         bool InitPlaced(const std::vector<RHITransientDesc>& descriptions, const std::vector<uint32_t>& blocks = {});
+        bool RecordAlias(RHICommandBuffer& commands, uint32_t previous, uint32_t next, RHIAccess nextAccess);
+        // Explicit startup/diagnostic probe, never an automatic per-frame wait.
+        // Only a successful real copy/clear/readback parity and memory reduction
+        // probe enables the device capability for the conservative resource class.
+        static RHITransientAliasingProbe ProbeAliasing();
         const RHITransientView* Get(uint32_t index) const;
         const RHITransientRequirements* GetRequirements(uint32_t index) const;
         uint64_t GetAllocatedBytes() const;

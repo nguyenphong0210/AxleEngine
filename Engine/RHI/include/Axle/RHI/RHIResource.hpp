@@ -82,6 +82,9 @@ namespace Axle::RHI {
         bool BeginRecording(const void* commands);
         bool EndRecording(const void* commands, bool executable);
         bool IsRecording(const void* commands) const;
+        // Conservative alias activation: previous whole resource must be in
+        // copy-read state; next is unused; neither is inside rendering.
+        bool CanAliasAfterCopySource(const void* commands, const RHIResourceLease& previous, const RHIResourceLease& next) const;
         bool SetRendering(const void* commands, bool rendering);
         bool IsExecutable(const void* commands) const;
         bool RecordUse(const void* commands, const RHIResourceLease& resource);

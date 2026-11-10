@@ -11,7 +11,7 @@ namespace Axle {
     // completion, including after replacement or destruction of this wrapper.
     class RenderTransientFrame {
     public:
-        enum class AllocationMode { Committed, PlacedUnaliased };
+        enum class AllocationMode { Committed, PlacedUnaliased, AliasingIfValidated };
         struct Import { RenderTransientGraph::Resource Id; RHI::RHITransientView View; };
         // Trusted owner callback: record only declared work; do not end, reset,
         // submit or retain the borrowed command wrapper beyond this call.
@@ -25,6 +25,9 @@ namespace Axle {
         bool Record(RenderTransientGraph::PassId pass, const Recorder& recorder);
         bool Submit();
         bool Abandon();
+        // Borrow only for declared work in the current callback. Aliased views
+        // are unavailable outside their declared pass; external outputs must be
+        // imported persistent generations. Never export/capture an aliased view.
         const RHI::RHITransientView* Get(RenderTransientGraph::Resource resource) const;
         const RenderTransientGraph::Plan* GetPlan() const;
         uint64_t GetPublishedGeneration() const { return m_Generation; }

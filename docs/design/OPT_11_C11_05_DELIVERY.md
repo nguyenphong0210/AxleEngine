@@ -101,7 +101,59 @@ maximum-live-interval oracle and pairwise overlap checks.
 Debug and Release RenderUnitTests pass after rebuilding (exit 0). Logs:
 `build/c11_05_4_{debug,release}_{build,tests}.log`.
 
+## C11-05.5 - Validated alias activation
+
+The RHI implements a conservative alias contract through NRI global barriers.
+The previous whole resource must already be in copy-source read state, the next
+must be unused, both must share a factory-owned block, and activation must occur
+outside rendering. A global all-command dependency waits for previous reads
+before the next clear/copy. No layout transition or write flush is added to the
+previous occupant at this alias boundary. Normal next-resource initialization
+then occurs through the transactional state journal.
+
+This path requires Vulkan or D3D12 enhanced barriers. Pinned NRI's legacy D3D12
+global barrier implementation is UAV-only, so that path stays unsupported and
+uses committed fallback. No raw backend escape hatch or NRI modification is used.
+
+An explicit `RHITransientResources::ProbeAliasing()` performs real unaliased and
+aliased texture/buffer recording, checks every pixel/word, checks validation and
+retirement, and proves lower requested native backing size before setting the
+device capability. This is an explicit startup/diagnostic operation, not a
+per-frame GPU wait. Flags reset with the device epoch.
+
+`RenderTransientFrame::AliasingIfValidated` falls back to committed allocation
+before realization when unverified. With positive proof it re-queries requirements,
+filters supported resource uses, recompiles packing and records each alias event
+before the next occupant. Initial native support is identical RGBA8_UNORM,
+single-mip/layer/sample 2D color targets and device-local buffers, with complete
+first clear/copy and final copy-read. Dedicated, imported and other resource/use
+classes stay unaliased. Aliased views cannot escape their declared pass through
+the graph getter; persistent outputs must be imported generations.
+
+Debug and Release `dx12_alias`, `vulkan_alias`, `dx12_alias_fail_submit` and
+`vulkan_alias_fail_submit` all pass with both NRI and native API validation on.
+Tests include failed probe, pre-use activation rejection, unsupported texture
+class, failed alias barrier, failed submit, recovery and exact image/buffer parity.
+
+The startup probe requests 262144 -> 131072 backing bytes on D3D12 and
+1536 -> 768 on Vulkan for its identical workload. Graph planning uses additional
+alignment rounding; its conservative byte estimate must be distinguished from
+the native allocation request totals. Whole-device physical VRAM/budget and
+performance improvements are not inferred from these fixture numbers.
+
+Logs: `build/c11_05_5_{debug,release}_build.log`,
+`build/c11_05_5_{dx12,vulkan}_alias*.log`, and
+`build/c11_05_5_release_{dx12,vulkan}_alias*.log`.
+
+Technical basis:
+
+- [D3D12 enhanced resource aliasing](https://microsoft.github.io/DirectX-Specs/d3d/D3D12EnhancedBarriers.html#resource-aliasing):
+  synchronization, write visibility and subsequent resource initialization.
+- [Vulkan memory aliasing](https://docs.vulkan.org/spec/latest/chapters/resources.html#resources-memory-aliasing):
+  alias binding and access restrictions.
+- Pinned NRI `Source/{D3D12,VK}/CommandBuffer*.hpp` translates global barriers;
+  `Source/VK/DeviceVK.hpp` enables image alias creation flags.
+
 ## Remaining slices
 
-C11-05.5 alias barriers/backend proof, C11-05.6 metrics and consolidated review
-remain open at this checkpoint.
+C11-05.6 metrics, final regression matrix and consolidated review remain open.

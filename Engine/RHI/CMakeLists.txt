@@ -23,6 +23,7 @@ add_library(AxleRHI STATIC
     src/RHILight.cpp
     src/RHIParallelRecording.cpp
     src/RHITransientResources.cpp
+    src/RHITransientAliasing.cpp
 )
 add_library(Axle::RHI ALIAS AxleRHI)
 target_compile_definitions(AxleRHI PRIVATE AXLE_ENABLE_GL_COMPATIBILITY=$<BOOL:${AXLE_ENABLE_GL_COMPATIBILITY}>)

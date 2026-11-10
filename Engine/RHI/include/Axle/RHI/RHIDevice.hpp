@@ -101,6 +101,7 @@ namespace Axle::RHI {
         const nri::WrapperVKInterface& GetNRIWrapperVK() const { return m_NRI.WrapperVK; }
 
     private:
+        friend class RHITransientResources;
         static constexpr uint64_t PackState(RHIDeviceState state, uint64_t epoch) {
             return (epoch << 8u) | (static_cast<uint64_t>(state) & 0xffu);
         }

@@ -237,6 +237,25 @@ namespace Axle::RHI {
         command.m_Generation->InRendering = rendering;
         return true;
     }
+    bool RHIResourceService::CanAliasAfterCopySource(const void* commands, const RHIResourceLease& previous, const RHIResourceLease& next) const {
+        if (!IsOwnerThread() || !IsRecording(commands) || !previous.IsLive() || !next.IsLive() ||
+            previous.GetHandle().Epoch != GetEpoch() || next.GetHandle().Epoch != GetEpoch() || previous.GetHandle() == next.GetHandle()) return false;
+        const auto command = AcquireNative(commands);
+        if (command.m_Generation->InRendering) return false;
+        auto state = [&](const RHIResourceLease& resource) -> const RHITrackedState& {
+            const auto found = command.m_Generation->PendingStates.find(resource.m_Generation.get());
+            return found == command.m_Generation->PendingStates.end() ? resource.m_Generation->State : found->second.State;
+        };
+        const auto& before = state(previous); const auto& after = state(next);
+        if (!before.Defined || !after.Defined || before.Texture != after.Texture) return false;
+        if (!before.Texture) return before.Buffer.access == nri::AccessBits::COPY_SOURCE && after.Buffer.access == nri::AccessBits::NONE;
+        return !before.Textures.empty() && !after.Textures.empty() &&
+            std::all_of(before.Textures.begin(), before.Textures.end(), [](const auto& s) {
+                return s.layout == nri::Layout::COPY_SOURCE && s.access == nri::AccessBits::COPY_SOURCE;
+            }) && std::all_of(after.Textures.begin(), after.Textures.end(), [](const auto& s) {
+                return s.layout == nri::Layout::UNDEFINED && s.access == nri::AccessBits::NONE;
+            });
+    }
     bool RHIResourceService::IsExecutable(const void* commands) const {
         auto lease = AcquireNative(commands);
         return lease.IsLive() && lease.m_Generation->Kind == RHIResourceKind::Commands &&

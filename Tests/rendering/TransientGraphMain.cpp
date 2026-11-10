@@ -150,12 +150,139 @@ static bool PlacementOwnership() {
     return true;
 }
 
-static bool Native(RHIType backend, bool failSubmit, bool placed) {
+static bool GraphAliasParity(bool failSubmit) {
+    auto& device = RHIDevice::Get();
+    auto texture = RHITextureDesc::RenderTarget2D(8, 8); texture.Usage = texture.Usage | RHITextureUsage::CopySource;
+    const auto buffer = RHIBufferDesc::Vertex(256);
+    std::array<uint32_t, 128> pattern{};
+    for (uint32_t i = 0; i < pattern.size(); ++i) pattern[i] = 0xABCD0000 + i;
+    RHIBuffer upload, imageReadback, bufferReadback;
+    RENDER_CHECK(upload.Init(RHIBufferDesc::Vertex(sizeof(pattern), RHIMemoryLocation::HostUpload), pattern.data()), "alias graph upload");
+    const auto alignment = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice()).memoryAlignment;
+    auto align = [](uint32_t n, uint32_t a) { return (n + a - 1) / a * a; };
+    nri::TextureDataLayoutDesc layout{}; layout.rowPitch = align(32, alignment.uploadBufferTextureRow);
+    layout.slicePitch = align(layout.rowPitch * 8, alignment.uploadBufferTextureSlice);
+    RHIBufferDesc readback; readback.MemoryLocation = RHIMemoryLocation::HostReadback; readback.Size = layout.slicePitch * 2;
+    RENDER_CHECK(imageReadback.Init(readback), "alias graph image readback");
+    readback.Size = sizeof(pattern); RENDER_CHECK(bufferReadback.Init(readback), "alias graph buffer readback");
+    Graph graph;
+    for (uint32_t i = 0; i < 4; ++i) {
+        Graph::ResourceDesc resource; resource.Name = "alias resource " + std::to_string(i); resource.AllowAlias = true;
+        resource.Type = i < 2 ? Graph::Kind::TransientTexture : Graph::Kind::TransientBuffer;
+        resource.Description = i < 2 ? RHITransientDesc{texture} : RHITransientDesc{buffer}; resource.Memory = {256, 1}; graph.AddResource(resource);
+    }
+    std::vector<RenderTransientFrame::Import> imports;
+    for (const auto& view : {MakeTransientView(upload), MakeTransientView(imageReadback), MakeTransientView(bufferReadback)}) {
+        Graph::ResourceDesc resource; resource.Name = "import " + std::to_string(imports.size()); resource.Description = view.Description;
+        resource.ContentsDefined = imports.empty(); imports.push_back({graph.AddResource(resource), view});
+    }
+    using U = Graph::Usage; using A = Graph::Access;
+    for (uint32_t i = 0; i < 2; ++i) {
+        graph.AddPass({"clear/copy " + std::to_string(i), {{i, U::ColorAttachment, A::Write, Graph::Load::Clear},
+            {i + 2, U::CopyDest, A::Write}, {4, U::CopySource}}, i ? std::vector<uint32_t>{1} : std::vector<uint32_t>{}});
+        graph.AddPass({"export " + std::to_string(i), {{i, U::CopySource}, {i + 2, U::CopySource},
+            {5, U::CopyDest, A::Write}, {6, U::CopyDest, A::Write}}});
+    }
+    Graph::Plan plan; RENDER_CHECK(graph.Compile(plan), "alias graph plan");
+    auto record = [&](RenderTransientFrame& frame) {
+        for (uint32_t i = 0; i < 2; ++i) {
+            if (!frame.Record(i * 2, [&](RHICommandBuffer& commands) {
+                nri::AttachmentDesc color{}; color.descriptor = frame.Get(i)->RTV;
+                color.loadOp = nri::LoadOp::CLEAR; color.storeOp = nri::StoreOp::STORE;
+                color.clearValue.color.f = i ? nri::Color32f{0, 1, 0, 1} : nri::Color32f{1, 0, 0, 1};
+                nri::RenderingDesc rendering{}; rendering.colors = &color; rendering.colorNum = 1;
+                commands.BeginRendering(rendering); commands.EndRendering();
+                commands.CopyBuffer(*frame.Get(i + 2)->Buffer, 0, *frame.Get(4)->Buffer, i * 256, 256); return true;
+            })) return false;
+            if (!frame.Record(i * 2 + 1, [&](RHICommandBuffer& commands) {
+                nri::TextureRegionDesc region{}; region.width = region.height = 8; region.depth = 1;
+                auto destination = layout; destination.offset = i * layout.slicePitch;
+                commands.ReadbackTextureToBuffer(*frame.Get(5)->Buffer, destination, *frame.Get(i)->Texture, region);
+                commands.CopyBuffer(*frame.Get(6)->Buffer, i * 256, *frame.Get(i + 2)->Buffer, 0, 256); return true;
+            })) return false;
+        }
+        return true;
+    };
+    auto verify = [&] {
+        const auto* pixels = static_cast<const uint8_t*>(imageReadback.Map());
+        if (!pixels) return false;
+        for (uint32_t i = 0; i < 2; ++i) for (uint32_t y = 0; y < 8; ++y) for (uint32_t x = 0; x < 8; ++x) {
+            const auto* p = pixels + i * layout.slicePitch + y * layout.rowPitch + x * 4;
+            if (p[0] != (i ? 0 : 255) || p[1] != (i ? 255 : 0) || p[2] || p[3] != 255) return false;
+        }
+        imageReadback.Unmap();
+        const auto* data = bufferReadback.Map(); const bool match = data && std::memcmp(data, pattern.data(), sizeof(pattern)) == 0;
+        bufferReadback.Unmap(); return match;
+    };
+    using Mode = RenderTransientFrame::AllocationMode;
+    RenderTransientFrame frame;
+    RENDER_CHECK(!device.GetCapabilities().SupportsTransientResourceAliasing && frame.Prepare(plan, imports, Mode::AliasingIfValidated) &&
+        frame.GetPlan()->AliasEvents.empty() && frame.GetPlan()->Diagnostic.find("fallback") != std::string::npos,
+        "unverified alias request chooses committed fallback before allocation");
+    RENDER_CHECK(record(frame) && frame.Submit() && device.WaitForCompletion(frame.GetCompletion()) && verify(), "committed fallback reference pixels/bytes");
+    const auto referenceBytes = frame.GetPlan()->PlannedAllocationBytes;
+    {
+        bool reached = false;
+        ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "AllocateTransientMemory") { reached = true; return nri::Result::FAILURE; } return {};
+        });
+        RENDER_CHECK(!RHITransientResources::ProbeAliasing().Supported && reached &&
+            !device.GetCapabilities().SupportsTransientResourceAliasing && frame.GetPublishedGeneration() == 1,
+            "failed native probe cannot advertise alias capability or change published graph");
+    }
+    const auto probe = RHITransientResources::ProbeAliasing();
+    std::cout << "Aliasing probe: " << probe.Diagnostic << " bytes " << probe.UnaliasedBytes << " -> " << probe.AliasedBytes << '\n';
+    RENDER_CHECK(probe.Supported && probe.AliasedBytes < probe.UnaliasedBytes && device.GetCapabilities().SupportsTransientResourceAliasing,
+        "real backend alias capability proof");
+    RENDER_CHECK(frame.Prepare(plan, imports, Mode::AliasingIfValidated) && frame.GetPlan()->AliasEvents.size() == 2 &&
+        frame.GetPlan()->BlockCount == 2 && frame.GetPlan()->PlannedAllocationBytes < referenceBytes,
+        "native graph uses two queried shared blocks instead of four");
+    const auto aliasedBytes = frame.GetPlan()->PlannedAllocationBytes;
+    RENDER_CHECK(!frame.Get(1), "future aliased occupant cannot escape its declared pass");
+    RENDER_CHECK(record(frame), "record real alias events before next occupants");
+    if (failSubmit) {
+        ScopedRHIFault fault([](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "QueueSubmit") return nri::Result::FAILURE; return {};
+        });
+        RENDER_CHECK(!frame.Submit() && frame.IsPoisoned() && frame.GetPublishedGeneration() == 1 && !frame.Abandon(),
+            "failed aliased submission retains published reference and quarantines candidates");
+        return true;
+    }
+    RENDER_CHECK(frame.Submit() && !frame.Get(0) && device.WaitForCompletion(frame.GetCompletion()) && verify(),
+        "aliased pixels/bytes equal committed reference; transient aliases cannot export after lifetime");
+    const auto published = frame.GetPublishedGeneration();
+    RENDER_CHECK(frame.Prepare(plan, imports, Mode::AliasingIfValidated), "alias barrier failure candidate");
+    bool reached = false;
+    {
+        ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "TransientAliasBarrier") { reached = true; return nri::Result::FAILURE; } return {};
+        });
+        RENDER_CHECK(!record(frame) && reached && !frame.Submit() && frame.GetPublishedGeneration() == published && frame.Abandon(),
+            "failed alias barrier abandons the candidate without partial submit/publication");
+    }
+    RENDER_CHECK(frame.Prepare(plan, imports, Mode::AliasingIfValidated) && record(frame) && frame.Submit() &&
+        device.WaitForCompletion(frame.GetCompletion()) && verify(), "aliased generation recovers after abandoned recording");
+    bool reentrantBlocked = false;
+    RENDER_CHECK(frame.Prepare(plan, imports, Mode::AliasingIfValidated) && !frame.Record(0, [&](auto&) {
+        reentrantBlocked = !frame.Abandon(); return true;
+    }) && reentrantBlocked && frame.Abandon(), "callback cannot destroy its own active recording transaction");
+    auto unsupported = plan;
+    std::get<RHITextureDesc>(unsupported.Resources[0].Description).Format = RHITextureFormat::RGBA8_SRGB;
+    RENDER_CHECK(frame.Prepare(unsupported, imports, Mode::AliasingIfValidated) && frame.GetPlan()->AliasEvents.size() == 1 &&
+        frame.GetPlan()->Allocations[0].Block != frame.GetPlan()->Allocations[1].Block && record(frame) && frame.Submit() &&
+        device.WaitForCompletion(frame.GetCompletion()) && verify(), "unproven texture class stays unaliased while proven buffers may reuse");
+    std::cout << "Graph backing bytes: " << referenceBytes << " -> " << aliasedBytes << '\n';
+    return true;
+}
+
+static bool Native(RHIType backend, bool failSubmit, bool placed, bool alias) {
     const auto allocation = placed ? RenderTransientFrame::AllocationMode::PlacedUnaliased : RenderTransientFrame::AllocationMode::Committed;
     auto& device = RHIDevice::Get();
     RHIDeviceDesc init; init.PreferredBackend = backend; init.AllowFallback = false; init.Headless = true;
     init.EnableNRIValidation = true; init.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(backend);
+    std::cout << "Validation: NRI=on; native API=" << (init.EnableValidation ? "on" : "NOT AVAILABLE") << '\n';
     RENDER_CHECK(device.Init(init) && !device.IsSoftwareAdapter(), "physical transient fixture and validation");
+    if (alias) { const bool ok = GraphAliasParity(failSubmit); return device.WaitIdle() && device.Shutdown() && ok; }
     if (placed) RENDER_CHECK(PlacementOwnership(), "placed resource ownership and rollback proof");
     Fixture fixture; RENDER_CHECK(fixture.Init(), "native graph fixture");
     RenderTransientFrame frame;
@@ -230,7 +357,8 @@ int main(int argc, char** argv) {
             RenderTransientFrame frame; Graph::Plan empty;
             ok = !frame.Prepare(empty) && !frame.Submit() && !frame.Get(0);
         } else ok = Native(mode.find("vulkan") == 0 ? RHIType::Vulkan : RHIType::Direct3D12,
-            mode.find("fail_submit") != std::string::npos, mode.find("placed") != std::string::npos);
+            mode.find("fail_submit") != std::string::npos, mode.find("placed") != std::string::npos,
+            mode.find("alias") != std::string::npos);
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; ok = false; }
     RHIDevice::Get().Shutdown();
     ok = Axle::RenderTests::Check(GetRHIValidationErrorCount() == 0, "native validation including transient teardown", __FILE__, __LINE__) && ok;

@@ -1,5 +1,6 @@
 #include <Axle/RHI/RHITransientResources.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#include <Axle/RHI/RHICommandBuffer.hpp>
 
 namespace Axle::RHI {
     RHITransientView MakeTransientView(const RHITexture& texture) {
@@ -52,6 +53,7 @@ namespace Axle::RHI {
         };
         uint64_t Epoch = 0, AllocatedBytes = 0;
         std::vector<RHIResourceLease> MemoryBlocks;
+        std::vector<uint32_t> BlockIds;
         std::vector<Entry> Entries;
     };
     RHITransientResources::RHITransientResources() = default;
@@ -153,7 +155,31 @@ namespace Axle::RHI {
                 entry.View = MakeTransientView(entry.Buffer);
             }
         }
+        candidate->BlockIds = std::move(assignments);
         m_Storage = std::move(candidate); return true;
+    }
+    bool RHITransientResources::RecordAlias(RHICommandBuffer& commands, uint32_t previous, uint32_t next, RHIAccess nextAccess) {
+        auto& device = RHIDevice::Get();
+        const auto* before = Get(previous); const auto* after = Get(next);
+        if (!before || !after || previous == next || !commands.IsRecording() ||
+            !device.CanSubmit() || !device.GetCapabilities().HasResourceAliasingFeature ||
+            (device.GetBackend() != RHIType::Vulkan &&
+                !(device.GetBackend() == RHIType::Direct3D12 && device.GetCapabilities().IsEnhancedBarriersSupported)) ||
+            m_Storage->BlockIds.size() != m_Storage->Entries.size() ||
+            m_Storage->BlockIds[previous] != m_Storage->BlockIds[next] ||
+            !device.GetResources().CanAliasAfterCopySource(commands.GetNative(), before->Lease, after->Lease) ||
+            (nextAccess != RHIAccess::CopyDest && !(after->Texture && nextAccess == RHIAccess::ColorAttachment)) ||
+            !commands.KeepAlive(before->Lease) || !commands.KeepAlive(after->Lease)) return false;
+        RHIBarrierGroup barriers;
+        // Previous writes have already transitioned to copy-read. This alias
+        // boundary waits for those reads before the next full clear/copy. It
+        // deliberately performs no texture layout transition or write flush.
+        // D3D12 requires enhanced barriers: legacy NRI global barriers are UAV-only.
+        barriers.AddGlobal(RHIAccess::CopySource, nextAccess, RHIPipelineStage::AllCommands, RHIPipelineStage::AllCommands);
+        return ScopedRHIFault::Invoke("TransientAliasBarrier", [&] {
+            commands.PipelineBarrier(barriers);
+            return commands.IsRecording() ? nri::Result::SUCCESS : nri::Result::FAILURE;
+        }) == nri::Result::SUCCESS;
     }
     const RHITransientView* RHITransientResources::Get(uint32_t index) const {
         auto& device = RHIDevice::Get();

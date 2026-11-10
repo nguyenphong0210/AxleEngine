@@ -3,6 +3,8 @@
 Released by the user for Codex implementation after C11-05. Baseline `7b9db0c`.
 This package covers stress fixtures and necessary corrections, not C11-07 rollout,
 full hybrid, vendor upgrades or scene migration to the transient allocator.
+The [delivery record](OPT_11_C11_06_DELIVERY.md) tracks implementation, review
+findings/repairs, final verification and remaining coverage limits.
 
 ## Architecture and invariants
 
@@ -16,6 +18,10 @@ Stop/unload waits for every payload lease.
 RenderWorker owns native rendering on its dedicated thread. Accepted requests
 have exactly one terminal result, with bounded queued/results/in-flight storage.
 Stop rejects further admission, cancels queued requests and joins active work.
+The implemented worker reserves arrays at Start, admits pointer-owned frames
+with prebuilt normal/cancellation result boxes, and transfers pointers during
+cancellation. Avoid constructing/moving STL containers or strings on this path:
+MSVC Debug iterator proxies can allocate even in a noexcept constructor.
 Exceptions must become a failure result/state, never escape a thread entry point.
 CPU task completion is distinct from GPU completion. Native resource dependencies
 and submission pins must outlive wrappers and only retire after checked completion

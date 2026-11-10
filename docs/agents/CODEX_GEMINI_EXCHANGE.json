@@ -3,27 +3,32 @@
   "current_task": {
     "id": "OPT-11-C11-06",
     "title": "Plugin, render worker and transient resource lifetime stress",
-    "state": "in_progress",
+    "state": "complete",
     "coordinator": "Codex",
     "implementer": "Codex",
-    "reviewer": "Separate-context consolidated review at package end",
+    "reviewer": "Codex separate-context c11_06_final_review; R1-R4 fixed and source rechecked, native verified by implementer",
     "code_baseline": "7b9db0cd25ad5cfb8c204507427c7b14975d5272",
     "user_instruction": "User explicitly asks Codex to implement C11-06; continue sequentially, test and commit each coherent group, final package Gemini handoff.",
     "user_scope": "C11-06 stress fixtures and necessary lifetime/exception/retirement repairs. No C11-07 rollout, hybrid, vendor upgrade or push.",
     "plan_reference": "docs/design/OPT_11_C11_06_STRESS_PLAN.md",
-    "implementation_status": "Baseline inspection; preparing deterministic CPU/native stress matrix.",
+    "implementation_status": "C11-06.1-.4 complete; source dc9b90c, preceding slices 4adbdc4 and 57663fd, plan ba6c97e.",
     "expected_files": [
       "Engine/Scene snapshot queue and worker lifetime boundaries if stress exposes faults",
       "Engine/RHI/Renderer lifecycle repairs if required by native evidence",
       "Tests/rendering lifetime stress and plugin fixtures/CMake",
       "C11-06 plan, delivery, roadmap, exchange"
     ],
-    "acceptance_status": "pending",
-    "open_gates": [
-      "Snapshot/module lease cancellation and reentrant cleanup",
-      "Worker stop/restart, producer races and exception boundaries",
-      "Native transient reload/resize/alias/failure/epoch matrix",
-      "Debug/Release D3D12/Vulkan regression and separate-context review"
+    "acceptance_status": "C11-06 package complete within the finite supported stress matrix; not OPT-11/C11-07 rollout acceptance.",
+    "open_gates": [],
+    "next_action": "Stop at C11-06 boundary. C11-07 rollout/acceptance and full hybrid are not released.",
+    "verified_source": "dc9b90c",
+    "delivery_reference": "docs/design/OPT_11_C11_06_DELIVERY.md",
+    "verification_summary": "Final Debug/Release each: 26/26 CTest including 16 native/window stress cases; 12/12 additional native regressions. Architecture/whitespace/exchange validation PASS.",
+    "limits": [
+      "Finite deterministic stress on RTX 3070 / driver 610.88; multi-vendor, other-driver, sanitizer, physical GPU reset and unbounded soak NOT RUN.",
+      "Loss is simulated before native submission after prior checked completion.",
+      "Existing scene targets remain imported/persistent; no full hybrid/NRI upgrade or C11-07 rollout.",
+      "Unresolved native shutdown remains quarantined/Failed rather than claiming a clean restart; no whole-process sustained OOM guarantee."
     ]
   },
   "last_read": {
@@ -2318,6 +2323,17 @@
       "base_commit": "a1b51d5",
       "timestamp_utc": "2026-11-10T04:02:32.198040+00:00",
       "body": "C11-05 final delivery, replying to the earlier CPU-planner handoff. The latest user explicitly released all remaining slices in sequence.\n\nCompleted local commits:\n- .1 4783c25 (prior CPU planner; delivery 488123d)\n- .2 73c9340 committed native graph generations/publication/retirement\n- .3 8393f64 query-only probes and transactional texture/buffer placement\n- .4 cf453db deterministic interval packing and alias events\n- .5 b65af0a conservative native alias barriers, real parity probe and capability gate\n- .6 a1b51d5 generation diagnostics, native byte accounting, final fixtures and delivery documentation\n\nFinal source a1b51d5. Report: docs/design/OPT_11_C11_05_DELIVERY.md. Debug and Release built AxleTransientGraphTests, AxleRenderUnitTests, AxleRHIResourceTests, AxleRHIStateTests, AxleRHIRetirementTests, AxleRHIFrameTests. Per configuration: 12/12 native graph modes, 8/8 existing native RHI suites, 6/6 selected CTest PASS; all process exits 0. Final lifecycle assertions rebuilt and all four alias normal/failure modes rerun in both configs. Architecture PASS (534 files, 25 CMake files); whitespace PASS. Logs and exact commands are in the report.\n\nHardware RTX 3070, NVIDIA driver 610.88, pinned NRI 6998e3fb; D3D12 enhanced barriers and Vulkan v1.4. Native API and NRI validation ON; zero graph validation errors through shutdown. Existing D3D12 options22 feature-query warning remains disclosed. Exact all-pixel/all-word parity passes. Actual graph backing requests: D3D12 262144 -> 131072 bytes, Vulkan 1536 -> 768 bytes. These are tiny fixture allocation requests, not whole-app VRAM/FPS gains.\n\nRequired separate-context reviewer c11_05_final_review inspected the complete diff from 488123d and final .6 test/docs changes; no P1/P2 findings and no final recheck findings. It independently ran Debug RenderUnitTests + TransientGraphPolicy 2/2 and whitespace PASS; it did not rebuild or independently run native tests. Native results above are Codex implementer-executed, not Gemini-reviewed evidence. No Gemini response is claimed.\n\nIntegration boundary: functional production Renderer/RHI opt-in API currently called by fixtures. Existing scene RenderGraph/RHIViewTargets remain imported/persistent. Aliasing requires positive startup proof and conservative supported full-clear/copy RGBA8/device-buffer class; unsupported uses stay unaliased. Ambiguous submit quarantines pending generations. No NRI modifications, hybrid, C11-06/C11-07 implementation, or push. User requested end-of-package coordination only; no per-slice Gemini response was required.\n"
+    },
+    {
+      "id": "CG-20261110T063015844668Z-CODEX-46056e",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-11-C11-06",
+      "reply_to": "CG-20261110T040232198040Z-CODEX-06abb8",
+      "base_commit": "dc9b90c",
+      "timestamp_utc": "2026-11-10T06:30:15.844668+00:00",
+      "body": "C11-06 final package delivery by Codex, following the user's explicit request to implement it after C11-05. No intermediate Gemini response was required.\n\nSource dc9b90c; baseline 7b9db0c. Sequential commits: ba6c97e execution plan/release, 4adbdc4 snapshot cleanup and concurrency stress, 57663fd worker/DLL lifecycle stress, dc9b90c native/window/long-run stress plus consolidated review corrections. Final report: docs/design/OPT_11_C11_06_DELIVERY.md; plan: docs/design/OPT_11_C11_06_STRESS_PLAN.md.\n\nImplemented and repaired: payload destruction outside queue/worker locks; CPU LeaseAnchor distinct from GPU pins; bounded pointer-owned admission/results with prebuilt cancellation results; allocation-free CPU cancellation/stopped-worker/queue teardown (including MSVC Debug proxy behavior); native thread recoverable exception boundary and first-error preservation; synchronous fallback drain outside worker mutex; failure-safe heap DLL observer retained by module lifetime.\n\nFinal verification, all exit 0: ten listed targets built for Debug/Release; 26/26 CTest per configuration (16 native/window stress cases included); 12/12 additional native transient-alias/resource/state/retirement/frame regressions per configuration. Real D3D12 and Vulkan, native/NRI validation enabled, zero observed fixture validation errors through shutdown. RTX 3070, NVIDIA 610.88; NRI remains pinned at 6998e3fbbaed1b132f386a9d49743a2481003487. No vendor edits. Architecture PASS 534 source/25 CMake files; whitespace PASS; exchange validated. Exact commands, logs and warnings are in report.\n\nStress includes 76800 snapshot tickets per CPU run; gated producer/Stop/restart and active-request allocation exceptions; real DLL callback/task/queued-ticket/GPU lifetime with actual owner-thread FreeLibrary; 3072 normal transient frames per backend/config plus 192-frame submit/loss modes (13824 successful graph frames across final native stress matrix); max three outstanding batches; all-pixel/all-word parity, exact retirement markers, stale handle/token rejection; six real window/device resize/minimize/recovery cycles per backend/config. Simulated loss is injected before native work after prior checked drain, not a physical GPU reset.\n\nSeparate-context reviewer c11_06_final_review found R1-R4 (sync lock inversion, allocating retirement/duplicate result, stack observer lifetime, lazy singleton exception boundary). All fixed and focused source rechecks report no remaining P1/P2. Reviewer independently ran CPU/Plugin Debug and Release selections, and Debug again after final boxed-result change (2/2 each executed selection), plus whitespace PASS. Reviewer did not rebuild/run native/window matrix; native results above are Codex implementer evidence, not Gemini-reviewed evidence. Initial failed post-review matrix was retained and superseded only after concrete repairs/rebuild/rerun; no failed gate was waived.\n\nC11-06 complete within declared finite matrix. Multi-vendor/other-driver, physical GPU reset, sanitizer and unbounded soak NOT RUN. Current scenes stay imported/persistent, transient executor stays opt-in, full hybrid/NRI fork and C11-07/OPT-11 rollout not implemented or accepted here. No push and no Gemini response/approval claimed.\n"
     }
   ],
   "deferred_tasks": [

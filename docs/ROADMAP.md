@@ -404,9 +404,12 @@ performance rollout. Every unit has its own evidence and acceptance state.
 **Status, user release 2026-11-10:** C11-05 transient allocation/aliasing is
 implemented through slice .6, including native D3D12/Vulkan evidence; see the
 [delivery record](design/OPT_11_C11_05_DELIVERY.md) for commits, review and limits.
+C11-06 lifetime stress is implemented and reviewed through `dc9b90c`, with
+Debug/Release 26/26 CTest and 12/12 additional native regressions per configuration;
+see [C11-06 evidence](design/OPT_11_C11_06_DELIVERY.md).
 The new executor is opt-in; current scene targets remain persistent/imported.
 C11-04 full hybrid/NRI fork stays deferred. This checkpoint does not close OPT-11
-as a phase or release C11-06, C11-07 or OPT-12..20.
+as a phase or release C11-07 or OPT-12..20.
 
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features

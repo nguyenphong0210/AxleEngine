@@ -33,5 +33,6 @@ AXLE_EXPORT bool ax_plugin_start(const HostApi* host) {
 }
 
 AXLE_EXPORT void ax_fixture_observe_stop(std::thread::id* output) { g_stopThread = output; }
+AXLE_EXPORT void ax_fixture_render_work(void* user, void (*emit)(void*, unsigned)) { emit(user, 0xC1106001u); }
 AXLE_EXPORT void ax_plugin_stop() { if (g_stopThread) *g_stopThread = std::this_thread::get_id(); }
 

@@ -1,8 +1,10 @@
 #include "RenderTestCommon.hpp"
 #include <Axle/RenderSnapshotQueue.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
 #include <atomic>
 #include <barrier>
+#include <filesystem>
 #include <thread>
 #include <vector>
 
@@ -67,11 +69,19 @@ namespace {
         return true;
     }
 }
-int main() {
+bool RunRenderWorkerStress(RHI::RHIType backend, bool exception);
+bool RunRenderPluginStress(const std::filesystem::path& library, const std::string& config);
+int main(int argc, char** argv) {
     RenderTests::ConfigureFailureReporting(); Log::Init();
     bool ok = false;
-    try { ok = SnapshotStress(); }
+    try {
+        const std::string mode = argc > 1 ? argv[1] : "policy";
+        if (mode == "plugin") ok = argc == 4 && RunRenderPluginStress(argv[2], argv[3]);
+        else ok = mode == "policy" ? SnapshotStress() : RunRenderWorkerStress(
+            mode.starts_with("vulkan") ? RHI::RHIType::Vulkan : RHI::RHIType::Direct3D12, mode.ends_with("exception"));
+    }
     catch (const std::exception& e) { std::cerr << e.what() << '\n'; }
+    ok = RenderTests::Check(RHI::GetRHIValidationErrorCount() == 0, "validation including stress teardown", __FILE__, __LINE__) && ok;
     std::cout << "Render lifetime stress: " << (ok ? "PASS" : "FAIL") << '\n';
     return ok ? 0 : 1;
 }

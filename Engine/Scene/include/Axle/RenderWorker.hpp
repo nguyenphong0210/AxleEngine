@@ -23,9 +23,11 @@ namespace Axle {
         RenderWorld World;
         ViewRequest Request;
         uint64_t RequestId = 0;
-        // Raw targets/physics are intentionally rejected by Submit unless the
-        // caller can provide a stable owner-thread lease. ViewTargets is safe
-        // to capture because it is reference counted for the request.
+        // CPU payload/module retention, matching RenderSnapshotTicket::LeaseAnchor.
+        // Ends after recording or cancellation; native uses need independent GPU
+        // submission leases (e.g. RenderDebugLine::OwnerLease).
+        std::shared_ptr<const void> LeaseAnchor;
+        // External targets and physics are rejected; targets are worker-created.
     };
 
     struct RenderWorkerResult {
@@ -61,7 +63,7 @@ namespace Axle {
     private:
         void ThreadMain(RenderWorkerConfig config);
         void SetState(RenderWorkerState state);
-        void CancelPendingLocked(const char* diagnostic);
+        void CancelPendingLocked(const char* diagnostic, std::deque<RenderWorkerFrame>& retired);
 
         mutable std::mutex m_Mutex;
         std::condition_variable m_Condition;

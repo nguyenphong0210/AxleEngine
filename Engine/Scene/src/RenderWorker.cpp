@@ -1,6 +1,7 @@
 #include <Axle/RenderWorker.hpp>
 
 #include <Axle/RHI/RHIDevice.hpp>
+#include <stdexcept>
 
 namespace Axle {
 
@@ -40,7 +41,8 @@ namespace Axle {
 
     bool RenderWorker::Start(const RenderWorkerConfig& config) {
         std::lock_guard lock(m_Mutex);
-        if (m_Thread.joinable() || m_State != RenderWorkerState::Stopped || !config.QueueCapacity || !m_Results.empty()) return false;
+        if (m_Thread.joinable() || m_OwnsDevice || m_State != RenderWorkerState::Stopped || !config.QueueCapacity ||
+            !m_Results.empty() || !m_Frames.empty()) return false;
         m_Config = config;
         m_StopRequested = false;
         m_AcceptedFrames = 0;
@@ -55,7 +57,7 @@ namespace Axle {
         return true;
     }
 
-    void RenderWorker::CancelPendingLocked(const char* diagnostic) {
+    void RenderWorker::CancelPendingLocked(const char* diagnostic, std::deque<RenderWorkerFrame>& retired) {
         while (!m_Frames.empty()) {
             RenderWorkerResult result;
             result.RequestId = m_Frames.front().RequestId;
@@ -63,33 +65,39 @@ namespace Axle {
             result.State = RenderWorkerState::Draining;
             result.StateEpoch = m_StateEpoch;
             result.Diagnostic = diagnostic;
+            m_Results.push_back(std::move(result));
+            retired.push_back(std::move(m_Frames.front()));
             m_Frames.pop_front();
-            if (m_Results.size() < m_Config.QueueCapacity) m_Results.push_back(std::move(result));
-            else if (m_InFlight) --m_InFlight;
         }
     }
 
     void RenderWorker::Stop() {
+        std::deque<RenderWorkerFrame> retired;
         {
             std::lock_guard lock(m_Mutex);
             if (!m_Thread.joinable()) {
                 if (m_OwnsDevice) {
+                    if (!RHI::RHIDevice::Get().IsOwnerThread()) {
+                        m_State = RenderWorkerState::Failed;
+                        return;
+                    }
                     RenderService::Get().Shutdown();
-                    RHI::RHIDevice::Get().Shutdown();
+                    if (!RHI::RHIDevice::Get().Shutdown()) { m_State = RenderWorkerState::Failed; return; }
                     m_OwnsDevice = false;
                 }
                 m_State = RenderWorkerState::Stopped;
                 return;
             }
             m_StopRequested = true;
-            CancelPendingLocked("render worker stopped before frame execution");
+            CancelPendingLocked("render worker stopped before frame execution", retired);
             if (m_State != RenderWorkerState::Draining) ++m_StateEpoch;
             m_State = RenderWorkerState::Draining;
         }
         m_Condition.notify_all();
+        retired.clear();
         m_Thread.join();
         std::lock_guard lock(m_Mutex);
-        m_State = RenderWorkerState::Stopped;
+        m_State = m_OwnsDevice ? RenderWorkerState::Failed : RenderWorkerState::Stopped;
     }
 
     bool RenderWorker::Submit(RenderWorkerFrame frame) {
@@ -97,7 +105,7 @@ namespace Axle {
         if (frame.Request.PhysicsScene || frame.Request.ColorTarget || frame.Request.DepthTarget ||
             frame.Request.GLTargetFBO || frame.Request.ViewTargets) {
             ++m_RejectedFrames;
-            m_LastError = "worker frames require worker-created offscreen targets; external targets and PhysicsScene are rejected";
+            if (m_LastError.empty()) m_LastError = "worker frames require worker-created offscreen targets; external targets and PhysicsScene are rejected";
             return false;
         }
         if (m_State != RenderWorkerState::Running || m_StopRequested || m_InFlight >= m_Config.QueueCapacity) {
@@ -149,82 +157,87 @@ namespace Axle {
 
     void RenderWorker::ThreadMain(RenderWorkerConfig config) {
         auto& device = RHI::RHIDevice::Get();
-        if (!config.InitializeDevice) {
-            std::lock_guard lock(m_Mutex);
-            m_LastError = "RenderWorker requires InitializeDevice=true to establish worker-thread RHI ownership";
-            m_State = RenderWorkerState::Failed;
-            ++m_StateEpoch;
-            return;
-        }
-        if (device.IsInitialized()) {
-            std::lock_guard lock(m_Mutex);
-            m_LastError = "RenderWorker cannot attach to an RHI initialized by another thread";
-            m_State = RenderWorkerState::Failed;
-            ++m_StateEpoch;
-            return;
-        }
-        if (!device.Init(config.Device)) {
-            std::lock_guard lock(m_Mutex);
-            m_LastError = "worker-thread RHI initialization failed";
-            m_State = RenderWorkerState::Failed;
-            ++m_StateEpoch;
-            return;
-        }
-        m_OwnsDevice = true;
-
         auto& service = RenderService::Get();
-        if (!service.Init()) {
-            device.Shutdown();
-            m_OwnsDevice = false;
-            std::lock_guard lock(m_Mutex);
-            m_LastError = "RenderService initialization failed on worker thread";
-            m_State = RenderWorkerState::Failed;
-            ++m_StateEpoch;
-            return;
-        }
-        SetState(RenderWorkerState::Running);
-
-        for (;;) {
-            RenderWorkerFrame frame;
-            {
-                std::unique_lock lock(m_Mutex);
-                m_Condition.wait(lock, [&] { return m_StopRequested || !m_Frames.empty(); });
-                if (m_StopRequested) {
-                    CancelPendingLocked("render worker stopped before frame execution");
-                    break;
-                }
-                frame = std::move(m_Frames.front());
-                m_Frames.pop_front();
-            }
-
-            RenderWorkerResult result;
-            result.RequestId = frame.RequestId;
-            result.Result = service.RenderView(frame.World, frame.Request);
-            const auto ownership = service.GetOwnershipReport();
-            if (ownership.RHIState.State == RHI::RHIDeviceState::Lost) SetState(RenderWorkerState::DeviceLost);
-            else if (ownership.RHIState.State == RHI::RHIDeviceState::SurfaceRebuildRequired) SetState(RenderWorkerState::SurfaceRebuildRequired);
-            else if (ownership.RHIState.State == RHI::RHIDeviceState::Stopping) SetState(RenderWorkerState::Draining);
-            else SetState(RenderWorkerState::Running);
-            result.State = GetState();
-            result.StateEpoch = GetStateEpoch();
-            result.Diagnostic = result.Result.ErrorMessage;
-            const bool successfulProbe = result.Result.Success;
-            {
+        std::optional<RenderWorkerFrame> active;
+        bool terminalPublished = false;
+        try {
+            if (!config.InitializeDevice || device.IsInitialized()) {
                 std::lock_guard lock(m_Mutex);
-                if (!result.Result.Success) m_LastError = result.Result.ErrorMessage;
-                if (m_Results.size() < m_Config.QueueCapacity) m_Results.push_back(std::move(result));
-                if (successfulProbe) device.MarkRenderWorkerOwnershipSupported();
-                if (m_State == RenderWorkerState::DeviceLost || m_State == RenderWorkerState::SurfaceRebuildRequired ||
-                    m_State == RenderWorkerState::Draining) {
-                    CancelPendingLocked("render worker cancelled pending frames after device state transition");
-                    break;
-                }
+                m_LastError = !config.InitializeDevice ? "RenderWorker requires InitializeDevice=true to establish worker-thread RHI ownership" :
+                    "RenderWorker cannot attach to an RHI initialized by another thread";
+                m_State = RenderWorkerState::Failed; ++m_StateEpoch;
+                return;
             }
+            if (!device.Init(config.Device)) {
+                std::lock_guard lock(m_Mutex);
+                m_LastError = "worker-thread RHI initialization failed";
+                m_State = RenderWorkerState::Failed; ++m_StateEpoch;
+                return;
+            }
+            m_OwnsDevice = true;
+            if (!service.Init()) throw std::runtime_error("RenderService initialization failed on worker thread");
+            SetState(RenderWorkerState::Running);
+            for (;;) {
+                std::deque<RenderWorkerFrame> retired;
+                {
+                    std::unique_lock lock(m_Mutex);
+                    m_Condition.wait(lock, [&] { return m_StopRequested || !m_Frames.empty(); });
+                    if (m_StopRequested) {
+                        CancelPendingLocked("render worker stopped before frame execution", retired);
+                        break;
+                    }
+                    active.emplace(std::move(m_Frames.front())); m_Frames.pop_front();
+                    terminalPublished = false;
+                }
+                RenderWorkerResult result;
+                result.RequestId = active->RequestId;
+                result.Result = service.RenderView(active->World, active->Request);
+                const auto ownership = service.GetOwnershipReport();
+                if (ownership.RHIState.State == RHI::RHIDeviceState::Lost) SetState(RenderWorkerState::DeviceLost);
+                else if (ownership.RHIState.State == RHI::RHIDeviceState::SurfaceRebuildRequired) SetState(RenderWorkerState::SurfaceRebuildRequired);
+                else if (ownership.RHIState.State == RHI::RHIDeviceState::Stopping) SetState(RenderWorkerState::Draining);
+                else SetState(RenderWorkerState::Running);
+                result.State = GetState(); result.StateEpoch = GetStateEpoch();
+                result.Diagnostic = result.Result.ErrorMessage;
+                const bool successfulProbe = result.Result.Success;
+                bool stop = false;
+                {
+                    std::lock_guard lock(m_Mutex);
+                    if (!result.Result.Success && m_LastError.empty()) m_LastError = result.Result.ErrorMessage;
+                    m_Results.push_back(std::move(result)); terminalPublished = true;
+                    if (successfulProbe) device.MarkRenderWorkerOwnershipSupported();
+                    stop = m_State == RenderWorkerState::DeviceLost || m_State == RenderWorkerState::SurfaceRebuildRequired ||
+                        m_State == RenderWorkerState::Draining;
+                    if (stop) CancelPendingLocked("render worker cancelled pending frames after device state transition", retired);
+                }
+                // Payloads (including plugin code leases) may query the worker.
+                active.reset();
+                if (stop) break;
+            }
+        } catch (...) {
+            std::deque<RenderWorkerFrame> retired;
+            std::lock_guard lock(m_Mutex);
+            if (m_LastError.empty()) m_LastError = "render worker exception; pending work cancelled";
+            m_State = RenderWorkerState::Failed; ++m_StateEpoch;
+            if (active && !terminalPublished) {
+                RenderWorkerResult failed; failed.RequestId = active->RequestId;
+                failed.State = m_State; failed.StateEpoch = m_StateEpoch;
+                failed.Diagnostic = failed.Result.ErrorMessage = m_LastError;
+                m_Results.push_back(std::move(failed));
+            }
+            CancelPendingLocked("render worker cancelled pending frames after exception", retired);
         }
-
+        active.reset();
         service.Shutdown();
-        if (m_OwnsDevice) device.Shutdown();
-        m_OwnsDevice = false;
+        if (m_OwnsDevice) {
+            if (!device.Shutdown()) {
+                std::lock_guard lock(m_Mutex);
+                if (m_LastError.empty()) m_LastError = "render worker shutdown retained unresolved native owners";
+                m_State = RenderWorkerState::Failed; ++m_StateEpoch;
+                return;
+            }
+            m_OwnsDevice = false;
+        }
         SetState(RenderWorkerState::Stopped);
     }
 

@@ -322,6 +322,9 @@ static bool Particles(const std::string& mode) {
 
 int main(int argc,char** argv) {
     Axle::RenderTests::ConfigureFailureReporting();Log::Init();JobSystem::Init(2);bool passed=false;
+    char name[]="preview", worker[]="--render-thread=worker", alias[]="--render-transient-aliasing=on";
+    char* policyArgs[]{name,worker,alias};std::string policyError;
+    if(!RenderService::Get().ConfigureProductArguments(3,policyArgs,policyError)) {std::cerr<<policyError<<'\n';JobSystem::Shutdown();return 1;}
     try{passed=argc>2&&std::string(argv[2])=="particles"?Particles(argv[1]):argc>2&&std::string(argv[2])=="surfaces"?Surfaces(argv[1]):argc>2&&std::string(argv[2])=="physics"?Physics(argv[1]):Run(argc>1?argv[1]:"dx12");}catch(const std::exception& error){std::cerr<<"OPT05 preview FAIL: "<<error.what()<<'\n';}
     RenderService::Get().Shutdown();RHIMeshRegistry::Get().Shutdown();RHIDevice::Get().Shutdown();PhysicsEngine::Shutdown();JobSystem::Shutdown();
     if(GetRHIValidationErrorCount())passed=false;std::cout<<"OPT05 preview "<<(passed?"PASS":"FAIL")<<'\n';return passed?0:1;

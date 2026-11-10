@@ -31,9 +31,10 @@ namespace {
         auto rank = [&](size_t percentile) { return values[(values.size() * percentile + 99) / 100 - 1]; };
         out << '"' << name << "\":{\"p50\":" << rank(50) << ",\"p95\":" << rank(95) << ",\"p99\":" << rank(99) << '}' << (comma ? ",\n" : "\n");
     }
-    void Ppm(const std::filesystem::path& path, const std::vector<uint8_t>& pixels) {
+    bool Ppm(const std::filesystem::path& path, const std::vector<uint8_t>& pixels) {
         std::ofstream f(path, std::ios::binary); f << "P6\n64 64\n255\n";
         for (size_t i = 0; i < pixels.size(); i += 4) f.write(reinterpret_cast<const char*>(pixels.data() + i), 3);
+        f.flush(); return f.good();
     }
 }
 bool RunRenderAcceptanceMeasure(RHIType backend, const std::filesystem::path& output) {
@@ -61,9 +62,9 @@ bool RunRenderAcceptanceMeasure(RHIType backend, const std::filesystem::path& ou
             RENDER_CHECK(result.Success && result.CompletionToken && result.RenderedEntityCount, "serial fixture actually renders immutable geometry");
             if (n >= 8) serialRender.push_back(elapsed);
         }
-        for (unsigned n = 0; n < 64; ++n) {
+        for (unsigned n = 0; n < 72; ++n) {
             const auto begin = Now(); auto pixels = RenderTests::ReadTexture(*service.GetDefaultMainColorTarget());
-            serialExport.push_back(Now() - begin);
+            if (n >= 8) serialExport.push_back(Now() - begin);
             RENDER_CHECK(pixels.size() == 64 * 64 * 4 && (golden.empty() || pixels == golden), "serial golden is complete and stable");
             golden = std::move(pixels);
         }
@@ -116,13 +117,14 @@ bool RunRenderAcceptanceMeasure(RHIType backend, const std::filesystem::path& ou
     RENDER_CHECK(accepted == 144 && rejected == 2 && !device.IsInitialized() && result.Image.Rgba8 == golden,
         "CPU output survives worker shutdown without a native pointer or lost request");
     std::filesystem::create_directories(output);
-    Ppm(output / "serial.ppm", golden); Ppm(output / "worker.ppm", result.Image.Rgba8);
+    RENDER_CHECK(Ppm(output / "serial.ppm", golden) && Ppm(output / "worker.ppm", result.Image.Rgba8), "golden and worker image artifacts write and flush successfully");
     std::ofstream json(output / "measurements.json");
     json << "{\n\"backend\":\"" << (backend == RHIType::Vulkan ? "vulkan" : "dx12") << "\",\n\"clock\":\"cpu_steady_nanoseconds\",\n\"warmup\":8,\"samples\":64,\"capacity\":3,\n\"accepted\":" << accepted << ",\"rejected\":" << rejected << ",\"image_differing_bytes\":0,\n";
     Distribution(json, "serial_render_wall", serialRender); Distribution(json, "worker_render_wall", workerRender);
     Distribution(json, "worker_queue_age", workerQueue); Distribution(json, "worker_roundtrip", workerRoundtrip);
     Distribution(json, "serial_export_wall", serialExport); Distribution(json, "worker_export_wall", workerExport, false);
     json << "}\n";
+    json.flush();
     RENDER_CHECK(json.good(), "actual measurements artifact writes successfully");
     std::cout << "Acceptance measurements: " << (output / "measurements.json") << '\n';
     return true;

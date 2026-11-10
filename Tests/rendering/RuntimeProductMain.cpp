@@ -142,6 +142,11 @@ class FailedPresent final : public ApplicationRenderContext {
 public: bool Present(const Window&) override{return false;}void Shutdown() override{}
 };
 static bool Run(const std::string& mode,bool cooked) {
+    char name[]="runtime", worker[]="--render-thread=worker", alias[]="--render-transient-aliasing=on";
+    char* policyArgs[]{name,worker,alias}; std::string policyError;
+    Require(RenderService::Get().ConfigureProductArguments(3,policyArgs,policyError) &&
+        RenderService::Get().GetProductRollout().FellBack && !RenderService::Get().GetProductRollout().Worker &&
+        !RenderService::Get().GetProductRollout().TransientAliasing,"actual Runtime consumers retain explicit safe product fallback");
     const auto root=Fixture(mode,cooked);std::cout<<"OPT05_RUNTIME_FIXTURE="<<root.generic_string()<<'\n';
     const auto priorDirectory=std::filesystem::current_path();std::filesystem::current_path(root);
     auto inherited=PrepareRuntimeStartup(root/"Project.axleproj",{});
@@ -174,6 +179,8 @@ static bool Run(const std::string& mode,bool cooked) {
     }),"Runtime product initializes");
     fallback.reset();
     Require(app->Run(8)&&verifier->Frames==8&&verifier->Clicks==2,"actual bounded Application loop, UI input and player frames");
+    Require(RenderService::Get().GetProductRollout().FellBack && RenderService::Get().GetOwnershipReport().OwnershipAligned,
+        "Runtime scene/UI rendering uses the accepted synchronous owner policy");
     if(presenter)Require(presenter->GetPresentCount()==8,"all Runtime frames actually presented");
     app->SetRenderContext(std::make_unique<FailedPresent>());
     Require(!app->Run(1),"presentation failure is reported to the Runtime host");

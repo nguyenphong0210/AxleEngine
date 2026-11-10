@@ -49,16 +49,18 @@ namespace Axle {
     }
 
     bool RenderService::Init() {
-        if (!GetProductRollout().CanStart) { SetState(RenderServiceState::Failed); return false; }
-        auto& device = RHI::RHIDevice::Get();
-        void* context = Window::HasActiveContext() ? glfwGetCurrentContext() : nullptr;
         bool initialized = false;
+        bool canStart = false;
         std::thread::id owner;
         {
             std::lock_guard lock(m_OwnerMutex);
             initialized = m_Initialized.load(std::memory_order_acquire);
             owner = m_Owner;
+            canStart = m_ProductRollout.CanStart;
         }
+        if (!canStart) { SetState(RenderServiceState::Failed); return false; }
+        auto& device = RHI::RHIDevice::Get();
+        void* context = Window::HasActiveContext() ? glfwGetCurrentContext() : nullptr;
         if (initialized && owner == std::this_thread::get_id() &&
             ((m_RHIRenderer && m_Epoch == device.GetEpoch() && device.CanCreateResources()) ||
              (m_GLRenderer && m_GLContext == context && context))) return true;

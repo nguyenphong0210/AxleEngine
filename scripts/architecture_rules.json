@@ -80,7 +80,9 @@
     "RHI": [
       "Axle::Core",
       "Axle::Platform",
-      "NRI"
+      "NRI",
+      "Slang::Compiler",
+      "delayimp"
     ],
     "Renderer": [
       "Axle::Core",

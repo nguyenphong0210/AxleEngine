@@ -116,7 +116,10 @@ reflection/layout, pipeline identities and last-known-good reload; see the
 [C12-03 delivery](../reviews/OPT_12_C12_03_DELIVERY.md) for current verification.
 The user then released C12-04 directly to Codex for texture/sampler/fallback and
 authored dependency semantics; see the [C12-04 delivery](../reviews/OPT_12_C12_04_DELIVERY.md)
-for the current implementation and verification boundary. C12-05 onward remain unreleased.
+for its implementation and verification boundary. The user subsequently released
+C12-05 directly to Codex for an optional Slang compiler evaluation; see the
+[C12-05 delivery](../reviews/OPT_12_C12_05_DELIVERY.md). DXC remains the default;
+C12-06 onward remain unreleased.
 
 Packages:
 
@@ -133,8 +136,10 @@ Packages:
 - **C12-04 / 12.4 Resource semantics (complete):** rooted raw/descriptor/VFS image
   dependencies, explicit color/sampler/fallback and normal contracts, resource-aware
   transactional native generations and authored node/path diagnostics.
-- **C12-05 / 12.5 Optional Slang evaluation:** prototype Slang as a backend; it must not
-  be required by existing materials.
+- **C12-05 / 12.5 Optional Slang evaluation:** explicit optional compiler prototype
+  for generated graph HLSL, actual DXIL/SPIR-V output/reflection and native DXC
+  equivalence. Build option defaults OFF; existing materials keep DXC. The bounded
+  evaluation does not establish full Slang authoring or default compiler migration.
 - **C12-06 / 12.6 OpenGL policy:** define a separate lowering path or explicit unsupported
   feature diagnostic; never claim HLSL works on OpenGL automatically.
 

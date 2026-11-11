@@ -1,11 +1,20 @@
 ﻿# Post-OPT-10 feasibility assessment
 
-Updated: **2026-11-09**
+Updated: **2026-11-11** (C12-05 evaluation checkpoint).
 
 This review compares the three Post-OPT-10 roadmaps with the current source
 contracts. It is a feasibility assessment, not an implementation release.
-OPT-10 remains open and the Post-OPT-10 work must stay deferred until that
-acceptance boundary is closed.
+The live exchange and direct user assignments own current releases; this assessment
+does not activate later work. The original baseline below predates OPT-11/12 delivery.
+
+The directly released C12-01..04 packages now establish graph documents, registry
+lowering, strict reflection/reload and resource semantics. C12-05 adds a bounded,
+optional Slang evaluation for the same generated HLSL. Actual DXIL/SPIR-V layouts
+and native output match DXC in the tested fixtures; local warm graph compilation
+costs support retaining DXC as the default. See the
+[C12-05 report](../reviews/OPT_12_C12_05_DELIVERY.md) for final gates, measurements
+and deployment/profile limits. Graph UI, full Slang authoring and C12-06 OpenGL
+policy remain separate work.
 
 ## Overall decision
 
@@ -26,7 +35,7 @@ A future package should publish a representative scene, hardware tier,
 resolution, quality preset, frame-time percentile and image-quality threshold
 before any of those numbers can be accepted.
 
-## What the current engine already provides
+## Original assessment baseline (2026-11-09)
 
 | Foundation | Current evidence | Consequence |
 | --- | --- | --- |
@@ -49,7 +58,7 @@ before any of those numbers can be accepted.
 | Volumetric Fog (Froxel) & Post-Processing | **Medium** | Requires a measured frustum voxel resolution, temporal reprojection and ACES tone mapping pass | Candidate packages in OPT-13.4 and 13.6; validate cost and quality before fixing a grid or budget |
 | Render-thread & Parallel Recording | **Medium, high risk** | `RenderService` is owner-thread bound; `RHIDevice::CanSubmit` and `RHIResourceService` require owner thread | OPT-11.3/11.4 are ownership and backend experiments, not a promise that worker submission is available |
 | VRAM aliasing | **Medium** | Current graph imports borrowed physical textures; `RHITexture` allocates own memory without heap suballocation | OPT-11.5 evaluates lifetime analysis and backend-specific heap strategies before enabling aliasing |
-| Material node editor + Slang | **Medium-low** | Existing compiler is DXC/HLSL with DXIL/SPIR-V reflection; no Slang compiler, graph IR or GLSL path | Start with versioned material IR (OPT-12.1) and existing compiler; Slang evaluated in OPT-12.5 |
+| Material node editor + Slang | **Medium-low at original baseline** | Graph IR and optional Slang are now bounded implementations; graph UI, full Slang source authoring and GLSL remain separate | Retain DXC default after C12-05 evaluation; consult its measured report before any broader adoption |
 | Offline autoLOD | **High-medium** | `AssetCooker` exists, but meshoptimizer integration, source provenance, LOD schema and cook cache invalidation are absent | Good early package (OPT-16); deterministic CPU tests and fallback LOD first |
 | Meshlet DAG virtual geometry | **Medium-low** | NRI/vendor capability plumbing exists, but requires task/mesh pipeline wrapper and cluster DAG builder | OPT-14 defines a measured flat-meshlet experiment first; a DAG remains optional and fallback-gated |
 | GPU-driven culling / Hi-Z | **Medium** | Requires GPU instance buffer, indirect argument ownership, depth pyramid and synchronization rules | Specified in OPT-14.1 and 14.2; benchmarked against CPU culling |

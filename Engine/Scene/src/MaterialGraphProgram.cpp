@@ -2,6 +2,7 @@
 #include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/CustomShaderInterface.hpp>
 #include <Axle/MaterialBindingPlan.hpp>
+#include <Axle/RHI/RHISlangCompiler.hpp>
 #include <algorithm>
 #include <charconv>
 
@@ -53,28 +54,37 @@ namespace {
 
     bool MaterialGraphProgram::Compile(const MaterialGraphDocument& document, RHI::RHIShaderFormat format,
                                       CompiledMaterialGraphProgram& outProgram, MaterialGraphDiagnostic* error,
-                                      const MaterialNodeRegistry& definitions, const MaterialHLSLRegistry& lowerings) {
+                                      const MaterialNodeRegistry& definitions, const MaterialHLSLRegistry& lowerings, MaterialGraphCompilerBackend backend) {
         CompiledMaterialGraphProgram candidate;
-        if (!Prepare(document,format,candidate,error,definitions,lowerings) ||
+        if (!Prepare(document,format,candidate,error,definitions,lowerings,backend) ||
             !CompilePrepared(document,candidate,error) || !Finalize(candidate,error)) return false;
         outProgram=std::move(candidate); return true;
     }
 
     bool MaterialGraphProgram::Prepare(const MaterialGraphDocument& document, RHI::RHIShaderFormat format,
                                      CompiledMaterialGraphProgram& candidate, MaterialGraphDiagnostic* error,
-                                     const MaterialNodeRegistry& definitions, const MaterialHLSLRegistry& lowerings) {
+                                     const MaterialNodeRegistry& definitions, const MaterialHLSLRegistry& lowerings, MaterialGraphCompilerBackend backend) {
         if(error) *error={};
         auto fail=[&](std::string message,const char* code) {if(error)*error=CompileError(document,std::move(message),code);return false;};
         if(format!=RHI::RHIShaderFormat::DXIL && format!=RHI::RHIShaderFormat::SPIRV)
             return fail("Material graphs require the DXIL or SPIR-V compiler backend","MG_SHADER_FORMAT");
+        if(backend!=MaterialGraphCompilerBackend::DXC && backend!=MaterialGraphCompilerBackend::Slang)
+            return fail("Unknown material graph compiler backend","MG_SHADER_COMPILER");
         if(!MaterialGraphHLSL::Lower(document,candidate.Graph,error,definitions,lowerings)) return false;
         candidate.HLSL=AssembleMaterialSurfaceShader(candidate.Graph.Declarations,candidate.Graph.SurfaceFunction);
         candidate.ParameterSchema=document.Parameters;
         candidate.CullMode=document.CullMode; candidate.DepthWrite=document.DepthWrite;
         candidate.Vertex.Format=candidate.Fragment.Format=format;
+        candidate.Compiler=backend;
+        std::string compilerIdentity="DXC:graph-contract-1";
+        if(backend==MaterialGraphCompilerBackend::Slang) {
+            std::string unavailable;
+            if(!RHI::RHISlangCompiler::Get().IsAvailable(&unavailable))return fail(unavailable,"MG_COMPILER_UNAVAILABLE");
+            compilerIdentity=RHI::RHISlangCompiler::Get().Identity();
+        }
         // Collision-free, process-local content identity. The fixed compiler contract
         // is part of this version: SM6_0, HLSL2021, O3, VSMain/PSMain, Vulkan1.3 DX layout.
-        candidate.ShaderKey="MaterialGraphShader:1:"+std::to_string(static_cast<unsigned>(format))+":"+
+        candidate.ShaderKey="MaterialGraphShader:2:"+std::to_string(compilerIdentity.size())+":"+compilerIdentity+":"+std::to_string(static_cast<unsigned>(format))+":"+
             std::to_string(candidate.Graph.CompilerKey.size())+":"+candidate.Graph.CompilerKey+candidate.HLSL;
         return true;
     }
@@ -83,15 +93,17 @@ namespace {
                                              MaterialGraphDiagnostic* error) {
         auto fail=[&](std::string message,const char* code) {if(error)*error=CompileError(document,std::move(message),code);return false;};
         auto& compiler=RHI::RHIShaderCompiler::Get();
-        if(!compiler.IsInitialized() && !compiler.Init()) return fail("DXC initialization failed","MG_DXC_INIT");
+        const bool slang=candidate.Compiler==MaterialGraphCompilerBackend::Slang;
+        if(!slang && !compiler.IsInitialized() && !compiler.Init()) return fail("DXC initialization failed","MG_DXC_INIT");
         RHI::RHIShaderCompileDesc description; description.Source=candidate.HLSL;
         description.SourcePath="mg_generated_material.hlsl"; description.Format=candidate.Vertex.Format;
         description.Stage=RHI::RHIShaderStage::Vertex; description.EntryPoint="VSMain";
-        auto vertex=compiler.Compile(description);
-        if(!vertex.Success || !vertex.Bytecode.IsValid()) return fail("Vertex compilation failed: "+vertex.ErrorMessage,"MG_DXC_VERTEX");
+        auto compile=[&](){return slang?RHI::RHISlangCompiler::Get().Compile(description):compiler.Compile(description);};
+        auto vertex=compile();
+        if(!vertex.Success || !vertex.Bytecode.IsValid()) return fail("Vertex compilation failed: "+vertex.ErrorMessage,slang?"MG_SLANG_VERTEX":"MG_DXC_VERTEX");
         description.Stage=RHI::RHIShaderStage::Fragment; description.EntryPoint="PSMain";
-        auto fragment=compiler.Compile(description);
-        if(!fragment.Success || !fragment.Bytecode.IsValid()) return fail("Fragment compilation failed: "+fragment.ErrorMessage,"MG_DXC_FRAGMENT");
+        auto fragment=compile();
+        if(!fragment.Success || !fragment.Bytecode.IsValid()) return fail("Fragment compilation failed: "+fragment.ErrorMessage,slang?"MG_SLANG_FRAGMENT":"MG_DXC_FRAGMENT");
         candidate.Vertex=std::move(vertex.Bytecode); candidate.Fragment=std::move(fragment.Bytecode);
         candidate.Reflection=RHI::RHIShaderReflection::Merge({vertex.Reflection,fragment.Reflection});
         return true;

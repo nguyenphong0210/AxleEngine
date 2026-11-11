@@ -450,7 +450,14 @@ fallback and authored dependency semantics. Rooted raw/descriptor/VFS resolution
 four sampler modes, normal unpacking and resource-aware native generations are
 complete, with Debug **101/101**, focused Release **11/11**, architecture and
 independent correction rechecks passing. See the
-[C12-04 delivery](reviews/OPT_12_C12_04_DELIVERY.md). C12-05 onward remain unreleased.
+[C12-04 delivery](reviews/OPT_12_C12_04_DELIVERY.md).
+
+**C12-05 completed under direct user assignment, 2026-11-11:** optional Slang
+graph compilation is implemented as an explicit Windows/MSVC evaluation backend.
+Real DXIL/SPIR-V output, strict layout/reflection comparison, transactional errors,
+and physical D3D12/Vulkan equivalence are recorded in the
+[C12-05 delivery](reviews/OPT_12_C12_05_DELIVERY.md). DXC remains the default;
+C12-06 onward remain unreleased.
 
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features

@@ -101,7 +101,7 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
         auto candidate=std::make_shared<MaterialGraphReadyGeneration>();
         candidate->Target=m_Target;
         auto& program=candidate->Program;
-        if(!MaterialGraphProgram::Prepare(document,m_Target.Format,program,&m_Diagnostic,definitions,lowerings))return false;
+        if(!MaterialGraphProgram::Prepare(document,m_Target.Format,program,&m_Diagnostic,definitions,lowerings,m_Target.Compiler))return false;
         const auto code=m_Shaders.find(program.ShaderKey);
         if(code!=m_Shaders.end()) {
             ++m_Stats.ShaderCacheHits;

@@ -30,6 +30,7 @@ namespace Axle {
         nri::Format Color = nri::Format::RGBA8_UNORM;
         nri::Format Depth = nri::Format::D32_SFLOAT;
         uint8_t Samples = 1;
+        MaterialGraphCompilerBackend Compiler = MaterialGraphCompilerBackend::DXC;
     };
 
     struct MaterialGraphNativeTexture {

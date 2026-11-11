@@ -18,6 +18,10 @@ target_compile_definitions(AxleMaterialGraphCompilerTests PRIVATE AXLE_TEST_WORK
 add_test(NAME MaterialGraphCompilerTests COMMAND $<TARGET_FILE:AxleMaterialGraphCompilerTests> policy
     "${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/MaterialGraph/M_RustMetal.axleasset" "${CMAKE_CURRENT_BINARY_DIR}/MaterialGraphCompiler/$<CONFIG>/policy")
 set_tests_properties(MaterialGraphCompilerTests PROPERTIES LABELS "material;compiler;cpu" TIMEOUT 60)
+add_executable(AxleMaterialGraphOpenGLPolicyTests EXCLUDE_FROM_ALL src/Test_MaterialGraphOpenGLPolicy.cpp)
+target_link_libraries(AxleMaterialGraphOpenGLPolicyTests PRIVATE Axle::Scene)
+add_test(NAME MaterialGraphOpenGLPolicyTests COMMAND $<TARGET_FILE:AxleMaterialGraphOpenGLPolicyTests>)
+set_tests_properties(MaterialGraphOpenGLPolicyTests PROPERTIES LABELS "material;opengl;cpu" TIMEOUT 60)
 option(AXLE_ENABLE_MATERIAL_GRAPH_GPU_TESTS "Register physical DX12/Vulkan graph compiler image tests" OFF)
 add_executable(AxleMaterialGraphSlangTests EXCLUDE_FROM_ALL src/Test_MaterialGraphSlang.cpp)
 target_link_libraries(AxleMaterialGraphSlangTests PRIVATE Axle::Scene)
@@ -70,6 +74,9 @@ if(WIN32)
     add_custom_command(TARGET AxleMaterialGraphSlangTests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll" "$<TARGET_FILE_DIR:AxleMaterialGraphSlangTests>/dxcompiler.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll" "$<TARGET_FILE_DIR:AxleMaterialGraphSlangTests>/dxil.dll")
+    add_custom_command(TARGET AxleMaterialGraphOpenGLPolicyTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll" "$<TARGET_FILE_DIR:AxleMaterialGraphOpenGLPolicyTests>/dxcompiler.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll" "$<TARGET_FILE_DIR:AxleMaterialGraphOpenGLPolicyTests>/dxil.dll")
     add_custom_command(TARGET AxleMaterialGraphResourceTests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll" "$<TARGET_FILE_DIR:AxleMaterialGraphResourceTests>/dxcompiler.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll" "$<TARGET_FILE_DIR:AxleMaterialGraphResourceTests>/dxil.dll")
@@ -85,7 +92,7 @@ if(NOT AXLE_BUILD_EDITOR)
     add_executable(AxlePluginFoundationTests EXCLUDE_FROM_ALL src/Test_PluginFoundation.cpp)
     target_link_libraries(AxlePluginFoundationTests PRIVATE Axle::Plugin Axle::Project)
     add_test(NAME PluginFoundationTests COMMAND $<TARGET_FILE:AxlePluginFoundationTests>)
-    add_custom_target(AxleAllTests DEPENDS AxlePluginFoundationTests AxleStaticPluginLifetimeTests AxleArchitectureStressTests AxleMaterialGraphTests AxleMaterialGraphCompilerTests AxleMaterialGraphRuntimeTests AxleMaterialGraphResourceTests AxleMaterialGraphSlangTests)
+    add_custom_target(AxleAllTests DEPENDS AxlePluginFoundationTests AxleStaticPluginLifetimeTests AxleArchitectureStressTests AxleMaterialGraphTests AxleMaterialGraphCompilerTests AxleMaterialGraphRuntimeTests AxleMaterialGraphResourceTests AxleMaterialGraphSlangTests AxleMaterialGraphOpenGLPolicyTests)
     return()
 endif()
 
@@ -720,7 +727,7 @@ list(APPEND AXLE_TEST_TARGETS AxlePluginFoundationTests AxlePluginSelectionTests
 list(APPEND AXLE_TEST_TARGETS AxlePrimitiveTests AxleRHIIdentityTests AxleRHIRetirementTests AxleRHIStateTests AxleRHIFrameTests AxleRHIPresentationTests AxleImageSourceTests)
 list(APPEND AXLE_TEST_TARGETS AxleTransientGraphTests)
 list(APPEND AXLE_TEST_TARGETS AxleMaterialGraphTests)
-list(APPEND AXLE_TEST_TARGETS AxleMaterialGraphCompilerTests AxleMaterialGraphRuntimeTests AxleMaterialGraphResourceTests AxleMaterialGraphSlangTests)
+list(APPEND AXLE_TEST_TARGETS AxleMaterialGraphCompilerTests AxleMaterialGraphRuntimeTests AxleMaterialGraphResourceTests AxleMaterialGraphSlangTests AxleMaterialGraphOpenGLPolicyTests)
 list(APPEND AXLE_TEST_TARGETS AxleRenderLifetimeStressTests)
 list(APPEND AXLE_TEST_TARGETS AxleRenderAcceptanceTests)
 if(WIN32)

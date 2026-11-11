@@ -32,9 +32,10 @@ namespace {
     std::string PipelineKey(const CompiledMaterialGraphProgram& program, const MaterialGraphTarget& target) {
         // Length prefixes make even adversarial registered source unambiguous.
         auto field=[](std::string_view s){return std::to_string(s.size())+":"+std::string(s);};
-        return "MaterialGraphPipeline:1"+field(program.ShaderKey)+field(program.LayoutKey)+field(program.CullMode)+
+        return "MaterialGraphPipeline:2"+field(program.ShaderKey)+field(program.LayoutKey)+field(program.CullMode)+
             field(std::to_string(program.DepthWrite))+field(std::to_string(static_cast<unsigned>(target.Color)))+
-            field(std::to_string(static_cast<unsigned>(target.Depth)))+field(std::to_string(target.Samples));
+            field(std::to_string(static_cast<unsigned>(target.Depth)))+field(std::to_string(target.Samples))+
+            field(std::to_string(static_cast<unsigned>(target.Backend)));
     }
 }
 
@@ -101,7 +102,7 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
         auto candidate=std::make_shared<MaterialGraphReadyGeneration>();
         candidate->Target=m_Target;
         auto& program=candidate->Program;
-        if(!MaterialGraphProgram::Prepare(document,m_Target.Format,program,&m_Diagnostic,definitions,lowerings,m_Target.Compiler))return false;
+        if(!MaterialGraphProgram::Prepare(document,m_Target.Format,program,&m_Diagnostic,definitions,lowerings,m_Target.Compiler,m_Target.Backend))return false;
         const auto code=m_Shaders.find(program.ShaderKey);
         if(code!=m_Shaders.end()) {
             ++m_Stats.ShaderCacheHits;
@@ -117,6 +118,7 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
             auto& device=RHI::RHIDevice::Get();
             const auto backend=device.GetBackend();
             if(!device.CanCreateResources() || (backend!=RHI::RHIType::Direct3D12 && backend!=RHI::RHIType::Vulkan) ||
+                (m_Target.Backend!=RHI::RHIType::None && m_Target.Backend!=backend) ||
                 (backend==RHI::RHIType::Vulkan)!=(m_Target.Format==RHI::RHIShaderFormat::SPIRV))
                 return Fail(&m_Diagnostic,"MG_RELOAD_DEVICE","Native material target requires the matching active backend");
             candidate->DeviceEpoch=device.GetEpoch();

@@ -54,30 +54,34 @@ namespace {
 
     bool MaterialGraphProgram::Compile(const MaterialGraphDocument& document, RHI::RHIShaderFormat format,
                                       CompiledMaterialGraphProgram& outProgram, MaterialGraphDiagnostic* error,
-                                      const MaterialNodeRegistry& definitions, const MaterialHLSLRegistry& lowerings, MaterialGraphCompilerBackend backend) {
+                                      const MaterialNodeRegistry& definitions, const MaterialHLSLRegistry& lowerings,
+                                      MaterialGraphCompilerBackend compiler, RHI::RHIType backend) {
         CompiledMaterialGraphProgram candidate;
-        if (!Prepare(document,format,candidate,error,definitions,lowerings,backend) ||
+        if (!Prepare(document,format,candidate,error,definitions,lowerings,compiler,backend) ||
             !CompilePrepared(document,candidate,error) || !Finalize(candidate,error)) return false;
         outProgram=std::move(candidate); return true;
     }
 
     bool MaterialGraphProgram::Prepare(const MaterialGraphDocument& document, RHI::RHIShaderFormat format,
                                      CompiledMaterialGraphProgram& candidate, MaterialGraphDiagnostic* error,
-                                     const MaterialNodeRegistry& definitions, const MaterialHLSLRegistry& lowerings, MaterialGraphCompilerBackend backend) {
+                                     const MaterialNodeRegistry& definitions, const MaterialHLSLRegistry& lowerings,
+                                     MaterialGraphCompilerBackend compiler, RHI::RHIType backend) {
         if(error) *error={};
         auto fail=[&](std::string message,const char* code) {if(error)*error=CompileError(document,std::move(message),code);return false;};
         if(format!=RHI::RHIShaderFormat::DXIL && format!=RHI::RHIShaderFormat::SPIRV)
             return fail("Material graphs require the DXIL or SPIR-V compiler backend","MG_SHADER_FORMAT");
-        if(backend!=MaterialGraphCompilerBackend::DXC && backend!=MaterialGraphCompilerBackend::Slang)
+        if(backend==RHI::RHIType::OpenGL)
+            return fail("Material graphs have no OpenGL/GLSL lowering; select a DX12/Vulkan target or provide a dedicated GLSL backend","MG_OPENGL_UNSUPPORTED");
+        if(compiler!=MaterialGraphCompilerBackend::DXC && compiler!=MaterialGraphCompilerBackend::Slang)
             return fail("Unknown material graph compiler backend","MG_SHADER_COMPILER");
         if(!MaterialGraphHLSL::Lower(document,candidate.Graph,error,definitions,lowerings)) return false;
         candidate.HLSL=AssembleMaterialSurfaceShader(candidate.Graph.Declarations,candidate.Graph.SurfaceFunction);
         candidate.ParameterSchema=document.Parameters;
         candidate.CullMode=document.CullMode; candidate.DepthWrite=document.DepthWrite;
         candidate.Vertex.Format=candidate.Fragment.Format=format;
-        candidate.Compiler=backend;
+        candidate.Compiler=compiler;
         std::string compilerIdentity="DXC:graph-contract-1";
-        if(backend==MaterialGraphCompilerBackend::Slang) {
+        if(compiler==MaterialGraphCompilerBackend::Slang) {
             std::string unavailable;
             if(!RHI::RHISlangCompiler::Get().IsAvailable(&unavailable))return fail(unavailable,"MG_COMPILER_UNAVAILABLE");
             compilerIdentity=RHI::RHISlangCompiler::Get().Identity();

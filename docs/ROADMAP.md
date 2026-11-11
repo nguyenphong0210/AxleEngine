@@ -457,7 +457,13 @@ graph compilation is implemented as an explicit Windows/MSVC evaluation backend.
 Real DXIL/SPIR-V output, strict layout/reflection comparison, transactional errors,
 and physical D3D12/Vulkan equivalence are recorded in the
 [C12-05 delivery](reviews/OPT_12_C12_05_DELIVERY.md). DXC remains the default;
-C12-06 onward remain unreleased.
+C12-06 is now complete; OPT-13 onward remain unreleased.
+
+**C12-06 completed under direct user assignment, 2026-11-11:** material graph
+targets carry an explicit RHI backend policy. OpenGL/GLSL graph lowering is not
+claimed automatically; selecting OpenGL returns transactional `MG_OPENGL_UNSUPPORTED`
+while CPU, D3D12 and Vulkan paths remain available. See the
+[C12-06 delivery](reviews/OPT_12_C12_06_DELIVERY.md).
 
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features

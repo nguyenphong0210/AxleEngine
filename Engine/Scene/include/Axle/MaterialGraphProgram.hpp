@@ -31,7 +31,8 @@ namespace Axle {
                             CompiledMaterialGraphProgram& outProgram, MaterialGraphDiagnostic* error = nullptr,
                             const MaterialNodeRegistry& definitions = MaterialNodeRegistry::Builtins(),
                             const MaterialHLSLRegistry& lowerings = MaterialHLSLRegistry::Builtins(),
-                            MaterialGraphCompilerBackend compiler = MaterialGraphCompilerBackend::DXC);
+                            MaterialGraphCompilerBackend compiler = MaterialGraphCompilerBackend::DXC,
+                            RHI::RHIType backend = RHI::RHIType::None);
         // Validates graph-specific reflected storage/resources, returning a canonical
         // backend-independent descriptor/storage compatibility key and packing plan.
         // All outputs remain unchanged on failure. No synthetic legacy metadata.
@@ -40,7 +41,8 @@ namespace Axle {
     private:
         friend class MaterialGraphRuntime;
         static bool Prepare(const MaterialGraphDocument&, RHI::RHIShaderFormat, CompiledMaterialGraphProgram&,
-                            MaterialGraphDiagnostic*, const MaterialNodeRegistry&, const MaterialHLSLRegistry&, MaterialGraphCompilerBackend);
+                            MaterialGraphDiagnostic*, const MaterialNodeRegistry&, const MaterialHLSLRegistry&,
+                            MaterialGraphCompilerBackend, RHI::RHIType);
         static bool CompilePrepared(const MaterialGraphDocument&, CompiledMaterialGraphProgram&, MaterialGraphDiagnostic*);
         static bool Finalize(CompiledMaterialGraphProgram&, MaterialGraphDiagnostic*);
     };

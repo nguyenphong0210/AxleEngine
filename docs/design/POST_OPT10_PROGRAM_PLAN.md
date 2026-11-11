@@ -119,7 +119,7 @@ authored dependency semantics; see the [C12-04 delivery](../reviews/OPT_12_C12_0
 for its implementation and verification boundary. The user subsequently released
 C12-05 directly to Codex for an optional Slang compiler evaluation; see the
 [C12-05 delivery](../reviews/OPT_12_C12_05_DELIVERY.md). DXC remains the default;
-C12-06 onward remain unreleased.
+C12-06 is now the final remaining package in OPT-12.
 
 Packages:
 
@@ -140,8 +140,11 @@ Packages:
   for generated graph HLSL, actual DXIL/SPIR-V output/reflection and native DXC
   equivalence. Build option defaults OFF; existing materials keep DXC. The bounded
   evaluation does not establish full Slang authoring or default compiler migration.
-- **C12-06 / 12.6 OpenGL policy:** define a separate lowering path or explicit unsupported
-  feature diagnostic; never claim HLSL works on OpenGL automatically.
+- **C12-06 / 12.6 OpenGL policy (complete):** material graph compilation now carries
+  an explicit RHI target policy. OpenGL targets fail transactionally with
+  `MG_OPENGL_UNSUPPORTED` until a dedicated GLSL lowering exists; DXIL/SPIR-V and
+  CPU targets retain their existing behavior. HLSL is never claimed to run through
+  the OpenGL compatibility renderer.
 
 Acceptance requires cross-backend shader/layout tests, invalid-graph rollback and
 stable authored asset round-trips.

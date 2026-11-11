@@ -31,6 +31,9 @@ namespace Axle {
         nri::Format Depth = nri::Format::D32_SFLOAT;
         uint8_t Samples = 1;
         MaterialGraphCompilerBackend Compiler = MaterialGraphCompilerBackend::DXC;
+        // None means a device-independent CPU target. OpenGL is deliberately
+        // rejected until a dedicated GLSL graph lowering exists.
+        RHI::RHIType Backend = RHI::RHIType::None;
     };
 
     struct MaterialGraphNativeTexture {

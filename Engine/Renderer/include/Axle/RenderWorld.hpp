@@ -118,6 +118,8 @@ namespace Axle {
     struct RenderSkyboxData {
         bool Authored = false;
         bool Enabled = false;
+        // Background sky visibility is independent from environment lighting.
+        bool EnvironmentLighting = false;
         bool SyncWithSun = true;
         float CustomAzimuth = 45, CustomElevation = 50;
         bool HemisphereAmbient = true;

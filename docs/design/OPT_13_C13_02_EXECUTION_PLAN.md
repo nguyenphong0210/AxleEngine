@@ -67,3 +67,18 @@ sky images, exposure/cache hits, source reload, descriptor redirect, diffuse-onl
 fallback, upload failure/retry and tone-map/FXAA/MSAA execution pass.
 Final product regression, nonconstant orientation/roughness images, lifetime,
 backend parity and separate-context review remain in checkpoint .3.
+
+## Runtime lighting semantics correction
+
+The corrective C13-02 slice adopts UE-style runtime ownership with an explicit
+Editor preview convenience path. A `SkyboxComponent` may render an atmosphere or
+HDR background while `EnvironmentLighting` remains false. In that state the sky
+does not contribute ambient, diffuse hemisphere light, IBL or specular reflection
+to scene geometry. A directional light owns the procedural sun direction/color
+and sun disk; a sky environment contributes to receivers only after the explicit
+lighting opt-in. Legacy scene files without the new field load conservatively with
+lighting disabled; the Editor exposes the opt-in beside the Skybox toggle.
+
+This checkpoint changes the contract and extraction/serialization paths only. The
+following checkpoints update native sky/PBR shader bindings and add physical tests
+for background-only, directional-sun and explicit-environment cases.

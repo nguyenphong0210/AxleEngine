@@ -174,6 +174,7 @@ namespace Axle {
         for (auto entity : skyboxView) {
             const auto& sc = skyboxView.get<SkyboxComponent>(entity);
             world.Skybox.Authored = true;
+            world.Skybox.EnvironmentLighting = sc.EnvironmentLighting;
             world.Skybox.SyncWithSun = sc.SyncWithSun;
             world.Skybox.CustomAzimuth = sc.CustomAzimuth;
             world.Skybox.CustomElevation = sc.CustomElevation;

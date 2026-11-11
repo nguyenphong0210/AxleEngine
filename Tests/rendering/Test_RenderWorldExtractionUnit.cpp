@@ -4,6 +4,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/DataComponents.hpp>
+#include <Axle/SceneLighting.hpp>
 
 namespace Axle::RenderTests {
 
@@ -113,6 +114,7 @@ namespace Axle::RenderTests {
         Entity sky = scene.CreateEntity("Sky");
         auto& sc = sky.AddComponent<SkyboxComponent>();
         sc.Type = SkyboxType::HDRCubemap;
+        sc.EnvironmentLighting = true;
         sc.HDRPath = "assets/textures/sky.hdr";
         sc.Intensity = 1.8f;
 
@@ -130,10 +132,28 @@ namespace Axle::RenderTests {
         RENDER_CHECK(world.SpotLights[0].Range == 40.0f, "Spot light range matches");
 
         RENDER_CHECK(world.Skybox.Enabled, "Skybox enabled");
+        RENDER_CHECK(world.Skybox.EnvironmentLighting, "Skybox environment lighting opt-in extracted");
         RENDER_CHECK(world.Skybox.Type == static_cast<int>(SkyboxType::HDRCubemap), "Skybox type matches");
         RENDER_CHECK(world.Skybox.HDRPath == "assets/textures/sky.hdr", "Skybox HDR path matches");
         RENDER_CHECK(world.Skybox.Intensity == 1.8f, "Skybox intensity matches");
 
+        return true;
+    }
+
+    static bool Test_SkyBackgroundDoesNotImplyLighting() {
+        RenderWorld world;
+        world.Skybox.Authored = true;
+        world.Skybox.Enabled = true;
+        world.Skybox.EnvironmentLighting = false;
+        const auto lighting = ResolveSceneLighting(world);
+        RENDER_CHECK(lighting.Environment, "Sky background remains visible when authored");
+        RENDER_CHECK(!lighting.EnvironmentLighting, "Sky background does not opt into environment lighting");
+        RENDER_CHECK(lighting.AmbientIntensity == 0.0f, "Sky background does not illuminate receivers by default");
+
+        world.Skybox.EnvironmentLighting = true;
+        const auto enabled = ResolveSceneLighting(world);
+        RENDER_CHECK(enabled.EnvironmentLighting && enabled.AmbientIntensity > 0.0f,
+                     "Explicit sky environment lighting contributes ambient energy");
         return true;
     }
 
@@ -205,6 +225,7 @@ bool RunRenderWorldExtractionUnitTests() {
     if (!Axle::RenderTests::Test_RenderWorldMeshAndMaterialExtraction()) return false;
     if (!Axle::RenderTests::Test_RenderWorldNestedTransforms()) return false;
     if (!Axle::RenderTests::Test_RenderWorldLightsAndSkyboxExtraction()) return false;
+    if (!Axle::RenderTests::Test_SkyBackgroundDoesNotImplyLighting()) return false;
     if (!Axle::RenderTests::Test_RenderWorldImmutabilityAndIsolation()) return false;
     std::cout << "  [RenderWorld] All RenderWorld extraction unit tests passed.\n";
     return true;

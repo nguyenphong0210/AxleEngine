@@ -101,7 +101,7 @@ bool Native(RHIType backend) {
     auto material=std::make_shared<RHIMaterial>(materialDesc);
     RenderWorld world; RenderMeshInstance mesh; mesh.EntityID=1; mesh.NativeView=sphere->CaptureView();
     mesh.Material.RHIMaterialAsset=material; world.Meshes.push_back(mesh);
-    world.Skybox.Authored=world.Skybox.Enabled=true; world.Skybox.Type=1; world.Skybox.HDRPath="sky.axleasset";
+    world.Skybox.Authored=world.Skybox.Enabled=world.Skybox.EnvironmentLighting=true; world.Skybox.Type=1; world.Skybox.HDRPath="sky.axleasset";
     PerspectiveCamera camera(55,1,.1f,100);
     camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0,0,5),glm::vec3(0),glm::vec3(0,1,0)),glm::vec3(0,0,5));
     SceneRenderSettings settings; settings.EnableSkybox=true; settings.EnableShadows=false;

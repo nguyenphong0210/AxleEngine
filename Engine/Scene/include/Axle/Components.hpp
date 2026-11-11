@@ -944,6 +944,8 @@ namespace Axle {
     struct SkyboxComponent {
 
         bool Enabled = true;
+        // A SkyLight/IBL-style contribution must be explicitly enabled.
+        bool EnvironmentLighting = false;
         SkyboxType Type = SkyboxType::ProceduralAtmospheric;
         std::string HDRPath;
         float Intensity = 1.0f;

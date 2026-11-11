@@ -1180,9 +1180,9 @@ namespace Axle {
         }
         lightData.LightCounts.y = spotIndex;
 
-        bool useIBL = m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.Environment && world.Skybox.Type==1;
+        bool useIBL = m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.EnvironmentLighting && world.Skybox.Type==1;
         lightData.ReservedHeader[0].y = lighting.AmbientIntensity*m_Environment.SourceExposure();
-        lightData.ReservedHeader[0].z = lighting.Environment && world.Skybox.Type==1 && !useIBL ? 1.f : 0.f;
+        lightData.ReservedHeader[0].z = lighting.EnvironmentLighting && world.Skybox.Type==1 && !useIBL ? 1.f : 0.f;
         lightData.LightCounts.w = useIBL ? 1u : 0u;
 
         m_LightBuffer.Update(lightData);

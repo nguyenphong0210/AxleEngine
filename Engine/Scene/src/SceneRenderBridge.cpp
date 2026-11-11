@@ -123,7 +123,7 @@ namespace Axle {
         // 3. Query active atmospheric skybox for hemisphere ambient irradiance
         SkyboxComponent skybox;
         bool hasSkybox = GetPrimarySkyboxInternal(scene, skybox);
-        int useHemisphereAmbient = (hasSkybox && skybox.Enabled && skybox.HemisphereAmbient) ? 1 : 0;
+        int useHemisphereAmbient = (hasSkybox && skybox.Enabled && skybox.EnvironmentLighting && skybox.HemisphereAmbient) ? 1 : 0;
         glm::vec3 skyZenith = hasSkybox ? skybox.ZenithColor : glm::vec3(0.18f, 0.42f, 0.78f);
         glm::vec3 skyHorizon = hasSkybox ? skybox.HorizonColor : glm::vec3(0.70f, 0.82f, 0.95f);
         glm::vec3 skyGround = hasSkybox ? skybox.GroundColor : glm::vec3(0.18f, 0.16f, 0.14f);

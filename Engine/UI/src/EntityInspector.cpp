@@ -877,6 +877,10 @@ namespace Axle {
         // Skybox Component (Procedural Atmospheric vs HDR Cubemap IBL)
         DrawComponent<SkyboxComponent>("Skybox & Environment", entity, [&](SkyboxComponent& sbc) {
             ImGui::Checkbox("Enable Skybox", &sbc.Enabled);
+            ImGui::Checkbox("Environment Lighting", &sbc.EnvironmentLighting);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Allow this sky to provide ambient and image-based lighting to scene geometry.");
+            }
 
             const char* skyboxTypes[] = { "Procedural Atmospheric", "HDR Cubemap (IBL)" };
             int currentType = (sbc.Type == SkyboxType::HDRCubemap) ? 1 : 0;

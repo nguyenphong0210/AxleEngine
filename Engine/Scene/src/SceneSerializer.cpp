@@ -272,6 +272,7 @@ namespace Axle {
                 auto& sbc = entity.GetComponent<SkyboxComponent>();
                 ss << "    SkyboxComponent:\n";
                 ss << "      Enabled: " << (sbc.Enabled ? "true" : "false") << "\n";
+                ss << "      EnvironmentLighting: " << (sbc.EnvironmentLighting ? "true" : "false") << "\n";
                 ss << "      SkyboxType: " << (int)sbc.Type << "\n";
                 ss << "      HDRPath: " << sbc.HDRPath << "\n";
                 ss << "      Intensity: " << sbc.Intensity << "\n";
@@ -990,6 +991,8 @@ namespace Axle {
                         auto& sbc = currentEntity.GetComponent<SkyboxComponent>();
                         if (trimmed.rfind("Enabled:", 0) == 0) {
                             sbc.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("EnvironmentLighting:", 0) == 0) {
+                            sbc.EnvironmentLighting = (Trim(trimmed.substr(20)) == "true");
                         } else if (trimmed.rfind("SkyboxType:", 0) == 0) {
                             sbc.Type = static_cast<SkyboxType>(std::stoi(Trim(trimmed.substr(11))));
                         } else if (trimmed.rfind("HDRPath:", 0) == 0) {

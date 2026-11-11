@@ -10,6 +10,7 @@ namespace Axle::RHI {
         view->m_Vertices=m_VertexBuffer.AcquireLease();view->m_Indices=m_IndexBuffer.AcquireLease();
         view->m_VertexBuffer=m_VertexBuffer.GetNative();view->m_IndexBuffer=m_IndexBuffer.GetNative();
         view->m_IndexCount=m_IndexCount;view->m_SubmeshCount=m_Submeshes.size();
+        view->m_BoundingMin=m_BoundingMin;view->m_BoundingMax=m_BoundingMax;
         return view;
     }
     void RHIMeshView::Bind(RHICommandBuffer& commands) const {

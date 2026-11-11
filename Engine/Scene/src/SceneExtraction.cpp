@@ -142,6 +142,7 @@ namespace Axle {
             const auto& pl = pointLightView.get<PointLightComponent>(entity);
             glm::mat4 worldMat = scene.GetWorldTransform(entity);
             RenderPointLight rpl;
+            rpl.Shadows = pl.Shadows;
             rpl.EntityID = static_cast<uint32_t>(entity);
             rpl.Position = glm::vec3(worldMat[3]);
             rpl.Color = pl.Color;
@@ -158,6 +159,7 @@ namespace Axle {
             if (!sl.Enabled) continue;
             glm::mat4 worldMat = scene.GetWorldTransform(entity);
             RenderSpotLight rsl;
+            rsl.Shadows = sl.Shadows;
             rsl.EntityID = static_cast<uint32_t>(entity);
             rsl.Position = glm::vec3(worldMat[3]);
             rsl.Direction = glm::normalize(glm::mat3(worldMat) * glm::vec3(0.0f, 0.0f, -1.0f));

@@ -108,6 +108,27 @@ namespace Axle {
         } catch (const std::exception& exception) { error = exception.what(); return false; }
     }
 
+    static void WriteLocalShadows(std::ostream& out,const LocalShadowSettings& s) {
+        out << "      CastShadows: " << (s.CastShadows?"true":"false") << "\n";
+        out << "      ShadowBias: " << s.Bias << "\n";
+        out << "      ShadowSlopeBias: " << s.SlopeBias << "\n";
+        out << "      ShadowNormalBias: " << s.NormalBias << "\n";
+        out << "      ShadowFilterRadius: " << s.FilterRadius << "\n";
+        out << "      ShadowNearPlane: " << s.NearPlane << "\n";
+    }
+    static bool ReadLocalShadows(const std::string& text,LocalShadowSettings& s) {
+        const auto colon=text.find(':');if(colon==std::string::npos)return false;
+        const auto key=text.substr(0,colon),value=Trim(text.substr(colon+1));
+        if(key=="CastShadows")s.CastShadows=value=="true";
+        else if(key=="ShadowBias")s.Bias=std::stof(value);
+        else if(key=="ShadowSlopeBias")s.SlopeBias=std::stof(value);
+        else if(key=="ShadowNormalBias")s.NormalBias=std::stof(value);
+        else if(key=="ShadowFilterRadius")s.FilterRadius=std::stof(value);
+        else if(key=="ShadowNearPlane")s.NearPlane=std::stof(value);
+        else return false;
+        return true;
+    }
+
     std::string SceneSerializer::SerializeToString() {
         if (!m_Scene) return "";
 
@@ -297,6 +318,7 @@ namespace Axle {
                 ss << "      Intensity: " << plc.Intensity << "\n";
                 ss << "      Radius: " << plc.Radius << "\n";
                 ss << "      Falloff: " << plc.Falloff << "\n";
+                WriteLocalShadows(ss,plc.Shadows);
             }
 
             // SpotLightComponent
@@ -309,6 +331,7 @@ namespace Axle {
                 ss << "      Range: " << slc.Range << "\n";
                 ss << "      InnerConeAngle: " << slc.InnerConeAngle << "\n";
                 ss << "      OuterConeAngle: " << slc.OuterConeAngle << "\n";
+                WriteLocalShadows(ss,slc.Shadows);
             }
 
             // CameraComponent
@@ -949,6 +972,7 @@ namespace Axle {
                             currentEntity.AddComponent<PointLightComponent>();
                         }
                         auto& plc = currentEntity.GetComponent<PointLightComponent>();
+                        if(ReadLocalShadows(trimmed,plc.Shadows))break;
                         if (trimmed.rfind("Color:", 0) == 0) {
                             float r = 1, g = 1, b = 1;
                             sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
@@ -967,6 +991,7 @@ namespace Axle {
                             currentEntity.AddComponent<SpotLightComponent>();
                         }
                         auto& slc = currentEntity.GetComponent<SpotLightComponent>();
+                        if(ReadLocalShadows(trimmed,slc.Shadows))break;
                         if (trimmed.rfind("Enabled:", 0) == 0) {
                             slc.Enabled = (Trim(trimmed.substr(8)) == "true");
                         } else if (trimmed.rfind("Color:", 0) == 0) {

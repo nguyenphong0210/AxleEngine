@@ -91,7 +91,7 @@ namespace Axle {
         // Initialize mesh registry
         if (!RHIMeshRegistry::Get().Init()) return false;
 
-        if (!m_Frame.Init() || !m_CascadedShadows.Init()) return false;
+        if (!m_Frame.Init() || !m_CascadedShadows.Init() || !m_LocalShadows.Init()) return false;
 
         // Compile Forward Shaders
         if (!CompileShaders(device)) {
@@ -152,6 +152,7 @@ namespace Axle {
                     defaultSRVs.push_back(blackTex->GetSRV());
                     defaultSRVs.push_back(whiteTex->GetSRV());
                     defaultSRVs.push_back(m_CascadedShadows.GetSRV());
+                    defaultSRVs.push_back(m_LocalShadows.GetSRV());
                     m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 0, defaultSRVs);
                 }
             }
@@ -327,6 +328,7 @@ namespace Axle {
 
         m_BoundCascadeAtlas={};
         m_CascadedShadows.Shutdown();
+        m_LocalShadows.Shutdown();m_BoundLocalAtlas={};
         m_Environment.Clear();m_BoundIBL={};m_PreparedManualIBL=false;m_SkyboxDescriptorSet=nullptr;
         m_LightBuffer.Shutdown();
         m_SceneConstantBuffer.Shutdown();
@@ -376,7 +378,7 @@ namespace Axle {
             }
         }
 
-        if (shaderSource.empty() || shaderSource.find("cbuffer CascadeReceiver")==std::string::npos || shaderSource.find("AXLE_FORWARD_ENVIRONMENT_IBL")==std::string::npos) {
+        if (shaderSource.empty() || shaderSource.find("cbuffer CascadeReceiver")==std::string::npos || shaderSource.find("AXLE_FORWARD_LOCAL_SHADOWS")==std::string::npos) {
             AXLE_CORE_WARN("RHISceneRenderer: Using canonical embedded forward shader (missing/current-interface resource).");
             shaderSource = kNativeForwardSource;
             shaderPath.clear();
@@ -425,7 +427,7 @@ namespace Axle {
         // Root Descriptors (space 0):
         // [0] b1, space 0: 256-byte Scene Constants
         // [1] b2, space 0: 2304-byte Forward+ Multi-Light Buffer
-        nri::RootDescriptorDesc rootDescs[4] = {};
+        nri::RootDescriptorDesc rootDescs[5] = {};
         rootDescs[0].registerIndex = ConstantBufferContract::FrameConstantsRegister;
         rootDescs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[0].shaderStages = nri::StageBits::ALL;
@@ -442,10 +444,14 @@ namespace Axle {
         rootDescs[3].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
 
+        rootDescs[4].registerIndex = 5;
+        rootDescs[4].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDescs[4].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
         // Descriptor Set (space 1): 6 PBR textures (t0..t5) + 3 IBL textures (t6..t8) and 1 Sampler (s0)
         nri::DescriptorRangeDesc ranges[2] = {};
         ranges[0].baseRegisterIndex = 0;
-        ranges[0].descriptorNum = static_cast<uint32_t>(RHITextureSlot::Count)+6; // t0..t5 PBR + t6 Irradiance + t7 Prefilter + t8 BRDF LUT
+        ranges[0].descriptorNum = static_cast<uint32_t>(RHITextureSlot::Count)+7; // t0..t5 PBR + t6 Irradiance + t7 Prefilter + t8 BRDF LUT
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
@@ -478,7 +484,7 @@ namespace Axle {
         layoutDesc.rootConstants = &rootConst;
         layoutDesc.rootConstantNum = 1;
         layoutDesc.rootDescriptors = rootDescs;
-        layoutDesc.rootDescriptorNum = 4;
+        layoutDesc.rootDescriptorNum = 5;
         layoutDesc.rootSamplers = samplers;
         layoutDesc.rootSamplerNum = 4;
         layoutDesc.descriptorSets = &descSet;
@@ -1088,6 +1094,13 @@ namespace Axle {
         if (!m_CascadedShadows.Prepare(world,camera,settings,m_MaterialTextures)) {
             AXLE_CORE_ERROR("Shadow preparation failed: {0}",m_CascadedShadows.GetDiagnostic()); return;
         }
+        if (!m_LocalShadows.Prepare(world,camera,settings,m_MaterialTextures)) {AXLE_CORE_ERROR("Local shadow preparation failed: {0}",m_LocalShadows.GetDiagnostic());return;}
+        const auto localIdentity=m_Device->GetResources().AcquireNative(m_LocalShadows.GetSRV()).GetHandle();
+        if(localIdentity!=m_BoundLocalAtlas) {
+            if(!m_DescriptorPool.UpdateTexture(m_DefaultDescriptorSet,0,16,m_LocalShadows.GetSRV()))return;
+            for(auto& draw:m_MaterialDraws)if(!m_DescriptorPool.UpdateTexture(draw->Set,0,16,m_LocalShadows.GetSRV()))return;
+            m_BoundLocalAtlas=localIdentity;
+        }
         if (!m_Environment.Prepare(world.Skybox)) return;
         m_PreparedManualIBL=m_UseIBL && world.Skybox.HDRPath.empty();
         const std::array<std::shared_ptr<RHITexture>,3> ibl={ActiveIrradiance(),ActivePrefilter(),ActiveBRDF()};
@@ -1305,13 +1318,18 @@ namespace Axle {
         auto* shadowAtlas=m_CascadedShadows.GetSampledAtlas();
         const auto shadows=graph.Import("CascadeAtlas",shadowAtlas?shadowAtlas->GetNative():nullptr,!m_CascadedShadows.IsActive());
         if (m_CascadedShadows.IsActive()) graph.AddPass("CascadedShadows", {{shadows,Layout::DepthStencilWrite,Access::Write,Load::Clear}});
+        auto* localAtlas=m_LocalShadows.GetSampledAtlas();
+        const auto localShadows=graph.Import("LocalShadowAtlas",localAtlas?localAtlas->GetNative():nullptr,!m_LocalShadows.NeedsRender());
+        if(m_LocalShadows.NeedsRender())graph.AddPass("LocalShadows",{{localShadows,Layout::DepthStencilWrite,Access::Write,Load::Clear}});
         auto opaqueUses=attachments(Load::Clear);
+        if(localAtlas)opaqueUses.push_back({localShadows,Layout::ShaderResource});
         if (shadowAtlas) opaqueUses.push_back({shadows,Layout::ShaderResource});
         graph.AddPass("OpaqueAndSky", std::move(opaqueUses));
         if (copyRefraction) graph.AddPass("RefractionCopy", {
             {sceneColor,Layout::CopySource}, {sceneDepth,Layout::CopySource},
             {opaqueColor,Layout::CopyDest,Access::Write}, {opaqueDepth,Layout::CopyDest,Access::Write}});
         auto transparentUses = attachments(Load::Load);
+        if(localAtlas)transparentUses.push_back({localShadows,Layout::ShaderResource});
         if (shadowAtlas) transparentUses.push_back({shadows,Layout::ShaderResource});
         if (copyRefraction) {
             transparentUses.push_back({opaqueColor,Layout::ShaderResource});
@@ -1343,6 +1361,8 @@ namespace Axle {
 
         if (m_CascadedShadows.IsActive() && (!beginPass("CascadedShadows") || !m_CascadedShadows.Record(Commands()))) return;
         m_LastDrawCallCount+=m_CascadedShadows.GetDrawCount();
+        if(m_LocalShadows.NeedsRender()&&(!beginPass("LocalShadows")||!m_LocalShadows.Record(Commands())))return;
+        m_LastDrawCallCount+=m_LocalShadows.GetDrawCount();
         if (!beginPass("OpaqueAndSky")) return;
 
         // 3. Begin Rendering Pass
@@ -1396,6 +1416,7 @@ namespace Axle {
         }
 
         Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
+        Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
 
         // Bind Descriptor Pool & Material Descriptor Set (Space 1: 6 PBR textures + 16x Aniso Sampler)
         if (m_DescriptorPool.IsValid()) {
@@ -1654,6 +1675,7 @@ namespace Axle {
                     Commands().SetRootDescriptor(0,m_SceneConstantBuffer.GetCBV());
                     Commands().SetRootDescriptor(1,m_LightBuffer.GetCBV());
                     Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
+        Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
                     currentPipeline=nullptr;
                     if (drawn) return;
                     m_MaterialDiagnostics[static_cast<uint32_t>(item.DiagnosticEntity)] = "Custom draw pipeline or resource preparation failed; using built-in material.";
@@ -1683,7 +1705,7 @@ namespace Axle {
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
                 RHIMaterialConstants materialData;
                 if (item.Material) materialData = item.Material->BuildConstants();
-                std::vector<nri::Descriptor*> srvs(static_cast<size_t>(RHITextureSlot::Count)+6);
+                std::vector<nri::Descriptor*> srvs(static_cast<size_t>(RHITextureSlot::Count)+7);
                 for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
                     auto textureSlot = static_cast<RHITextureSlot>(slot);
                     std::shared_ptr<RHITexture> texture;
@@ -1710,6 +1732,7 @@ namespace Axle {
                 srvs[13]=refractionReady?m_OpaqueSceneColor->GetSRV():RHIMaterial::GetDefaultBlackTexture()->GetSRV();
                 srvs[14]=refractionReady?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                 srvs[15]=m_CascadedShadows.GetSRV();
+                srvs[16]=m_LocalShadows.GetSRV();
                 materialData.RefractionFrame=glm::vec4(width,height,refractionReady?1.0f:0.0f,0.0f);
                 m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs);
                 if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) { drawFailed = true; return; }
@@ -1755,6 +1778,7 @@ namespace Axle {
             Commands().SetRootDescriptor(0,m_SceneConstantBuffer.GetCBV());
             Commands().SetRootDescriptor(1,m_LightBuffer.GetCBV());
             Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
+        Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
             currentPipeline=nullptr;
 
             // 4b. Render Transparent & Additive Queue (Sorted Back-to-Front)
@@ -1885,6 +1909,7 @@ namespace Axle {
 
         if (!beginPass("Export") || !graph.IsComplete()) return;
         if (!m_Frame.End() || !m_Frame.Submit()) { AXLE_CORE_ERROR("View command finalization or submit failed"); return; }
+        m_LocalShadows.OnSubmitted();
         m_LastCompletion = m_Frame.GetCompletion();
         m_LastRenderSucceeded = static_cast<bool>(m_LastCompletion);
     }

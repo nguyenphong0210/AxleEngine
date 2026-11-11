@@ -6,6 +6,9 @@
 namespace Axle {
     struct SceneRenderSettings {
         bool EnableShadows = true;
+        uint32_t LocalShadowResolution = 512; // One tile; bounded 4x4 atlas.
+        uint8_t MaxShadowedSpotLights = 4, MaxShadowedPointLights = 2;
+        float LocalShadowDistance = 60.f;
         uint8_t ShadowCascadeCount = 4; // Modern RHI: 3 or 4 cascades.
         bool EnableSkybox = true;
         bool EnableStudioLightLobes = false; // Compatibility option; previews author explicit studio lights.

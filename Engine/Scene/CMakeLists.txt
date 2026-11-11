@@ -5,11 +5,14 @@ string(REPLACE "\n" "\n)AXLESKY\"\nR\"AXLESKY(" AXLE_NATIVE_SKY "${AXLE_NATIVE_S
 configure_file(src/NativeSkySource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/NativeSkySource.hpp" @ONLY)
 
 set(native_forward_source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ForwardPBR.hlsl")
+set(native_local_shadow "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/LocalShadows.hlsli")
 set(native_forward_common "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/PBRCommon.hlsli")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${native_forward_source}" "${native_forward_common}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${native_forward_source}" "${native_forward_common}" "${native_local_shadow}")
 file(READ "${native_forward_source}" AXLE_NATIVE_FORWARD)
+file(READ "${native_local_shadow}" AXLE_NATIVE_LOCAL_SHADOW)
 file(READ "${native_forward_common}" AXLE_NATIVE_FORWARD_COMMON)
 string(REPLACE "#include \"PBRCommon.hlsli\"" "${AXLE_NATIVE_FORWARD_COMMON}" AXLE_NATIVE_FORWARD "${AXLE_NATIVE_FORWARD}")
+string(REPLACE "#include \"LocalShadows.hlsli\"" "${AXLE_NATIVE_LOCAL_SHADOW}" AXLE_NATIVE_FORWARD "${AXLE_NATIVE_FORWARD}")
 string(REPLACE "\n" "\n)AXLEFORWARD\"\nR\"AXLEFORWARD(" AXLE_NATIVE_FORWARD "${AXLE_NATIVE_FORWARD}")
 configure_file(src/NativeForwardSource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/NativeForwardSource.hpp" @ONLY)
 
@@ -44,6 +47,8 @@ add_library(AxleScene STATIC
     src/SceneRenderer.cpp
     src/MaterialTextureCache.cpp
     src/RHISceneRenderer.cpp
+    src/RHILocalShadows.cpp
+    src/RHIShadowDepthAtlas.cpp
     src/RHICascadedShadows.cpp
     src/RHIEnvironment.cpp
     src/RHIObjectPicker.cpp

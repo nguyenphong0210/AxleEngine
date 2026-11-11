@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/Types.hpp>
+#include <Axle/LocalShadowSettings.hpp>
 #include <Axle/UUID.hpp>
 #include <Axle/BuiltinMesh.hpp>
 #include <Axle/ShaderPropertyReflection.hpp>
@@ -96,6 +97,7 @@ namespace Axle {
     };
 
     struct RenderPointLight {
+        LocalShadowSettings Shadows;
         uint32_t EntityID = 0;
         glm::vec3 Position{ 0.0f };
         glm::vec3 Color{ 1.0f };
@@ -105,6 +107,7 @@ namespace Axle {
     };
 
     struct RenderSpotLight {
+        LocalShadowSettings Shadows;
         uint32_t EntityID = 0;
         glm::vec3 Position{ 0.0f };
         glm::vec3 Direction{ 0.0f, -1.0f, 0.0f };

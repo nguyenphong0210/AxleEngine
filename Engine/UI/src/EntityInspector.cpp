@@ -980,11 +980,21 @@ namespace Axle {
         }, /*canRemove=*/ true);
 
         // Point Light Component
+        auto drawLocalShadows=[](LocalShadowSettings& s) {
+            ImGui::Checkbox("Cast Shadows",&s.CastShadows);
+            if(!s.CastShadows)return;
+            ImGui::DragFloat("Shadow Bias (m)",&s.Bias,.0001f,0.f,1.f,"%.4f");
+            ImGui::DragFloat("Shadow Slope Bias (m)",&s.SlopeBias,.0001f,0.f,1.f,"%.4f");
+            ImGui::DragFloat("Shadow Normal Bias (m)",&s.NormalBias,.0001f,0.f,1.f,"%.4f");
+            ImGui::SliderFloat("Shadow Filter Radius",&s.FilterRadius,0.f,2.f);
+            ImGui::DragFloat("Shadow Near Clip (m)",&s.NearPlane,.005f,.001f,1.f,"%.3f");
+        };
         DrawComponent<PointLightComponent>("Point Light", entity, [&](PointLightComponent& plc) {
             ImGui::ColorEdit3("Light Color", glm::value_ptr(plc.Color));
             ImGui::DragFloat("Intensity", &plc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f");
             ImGui::DragFloat("Radius", &plc.Radius, 0.5f, 0.1f, 500.0f, "%.1f m");
             ImGui::DragFloat("Falloff", &plc.Falloff, 0.05f, 0.1f, 10.0f, "%.2f");
+            drawLocalShadows(plc.Shadows);
         }, /*canRemove=*/ true);
 
         // Spot Light Component
@@ -994,7 +1004,8 @@ namespace Axle {
             ImGui::DragFloat("Intensity", &slc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f");
             ImGui::DragFloat("Range", &slc.Range, 0.5f, 0.1f, 500.0f, "%.1f m");
             ImGui::DragFloat("Inner Cone Angle", &slc.InnerConeAngle, 0.5f, 1.0f, 89.0f, "%.1f deg");
-            ImGui::DragFloat("Outer Cone Angle", &slc.OuterConeAngle, 0.5f, slc.InnerConeAngle, 89.9f, "%.1f deg");
+            ImGui::DragFloat("Outer Cone Angle", &slc.OuterConeAngle, 0.5f, slc.InnerConeAngle, 89.0f, "%.1f deg");
+            drawLocalShadows(slc.Shadows);
         }, /*canRemove=*/ true);
 
         // Camera Component

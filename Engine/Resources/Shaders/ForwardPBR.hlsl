@@ -1,3 +1,4 @@
+#define AXLE_FORWARD_LOCAL_SHADOWS 1
 #define AXLE_FORWARD_ENVIRONMENT_IBL 1
 // =============================================================================
 // ForwardPBR.hlsl - Unified D3D12 (DXIL) & Vulkan 1.3 (SPIR-V) PBR Forward+ Pipeline
@@ -174,6 +175,7 @@ float SunShadowVisibility(float3 world,float3 normal,float3 sun) {
     if(blend>0) value=lerp(value,cascade+1<count?CascadeVisibility(cascade+1,world,normal,sun):1,blend);
     return value;
 }
+#include "LocalShadows.hlsli"
 SamplerState u_EnvironmentSampler : register(s3,space0);
 SamplerState u_ScreenSampler : register(s1, space0);
 SamplerState u_Sampler      : register(s0, space0);
@@ -547,7 +549,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float distAtten = (1.0 / distSq) * (window * window);
 
         float totalAtten = distAtten * spotAtten;
-        float3 radiance = sLight.ColorAndInnerAngle.rgb * (sLight.DirectionAndIntensity.w * totalAtten * 0.05);
+        float3 radiance = sLight.ColorAndInnerAngle.rgb * (sLight.DirectionAndIntensity.w * totalAtten * 0.05) * LocalShadowVisibility(u_LocalShadowViews[4+s/4][s%4],input.WorldPos,N,L);
 
         float3 H = normalize(V + L);
         float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness, coatAnisotropy.z);

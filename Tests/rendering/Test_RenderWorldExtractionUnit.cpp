@@ -102,6 +102,7 @@ namespace Axle::RenderTests {
         auto& plc = lamp.AddComponent<PointLightComponent>();
         plc.Color = glm::vec3(0.0f, 1.0f, 1.0f);
         plc.Radius = 15.0f;
+        plc.Shadows.CastShadows=false;plc.Shadows.Bias=.004f;
 
         // Spot Light
         Entity spot = scene.CreateEntity("Spot");
@@ -110,6 +111,7 @@ namespace Axle::RenderTests {
         auto& slc = spot.AddComponent<SpotLightComponent>();
         slc.Intensity = 12.0f;
         slc.Range = 40.0f;
+        slc.Shadows.NearPlane=.15f;slc.Shadows.FilterRadius=2;
 
         // Skybox
         Entity sky = scene.CreateEntity("Sky");
@@ -131,6 +133,11 @@ namespace Axle::RenderTests {
         RENDER_CHECK(world.GetSpotLightCount() == 1, "Spot light extracted");
         RENDER_CHECK(glm::distance(world.SpotLights[0].Position, glm::vec3(5.0f, 10.0f, 5.0f)) < 0.001f, "Spot light position matches world transform");
         RENDER_CHECK(world.SpotLights[0].Range == 40.0f, "Spot light range matches");
+        RENDER_CHECK(!world.PointLights[0].Shadows.CastShadows&&world.PointLights[0].Shadows.Bias==.004f,"Point shadow controls extracted");
+        RENDER_CHECK(world.SpotLights[0].Shadows.NearPlane==.15f&&world.SpotLights[0].Shadows.FilterRadius==2,"Spot shadow controls extracted");
+        Scene reopened;RENDER_CHECK(SceneSerializer(&reopened).DeserializeFromString(SceneSerializer(&scene).SerializeToString()),"Local light shadow controls reopen");
+        const auto restored=ExtractRenderWorld(reopened);
+        RENDER_CHECK(!restored.PointLights[0].Shadows.CastShadows&&restored.PointLights[0].Shadows.Bias==.004f&&restored.SpotLights[0].Shadows.NearPlane==.15f&&restored.SpotLights[0].Shadows.FilterRadius==2,"Local light shadow controls survive scene persistence");
 
         RENDER_CHECK(world.Skybox.Enabled, "Skybox enabled");
         RENDER_CHECK(world.Skybox.EnvironmentLighting, "Skybox environment lighting opt-in extracted");

@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/CascadedShadowMap.hpp>
+#include <Axle/RHIShadowDepthAtlas.hpp>
 #include <Axle/RenderWorld.hpp>
 #include <Axle/SceneRenderSettings.hpp>
 #include <Axle/PerspectiveCamera.hpp>
@@ -32,36 +33,19 @@ namespace Axle {
         bool Record(RHI::RHICommandBuffer&);
         bool IsSupported() const { return m_Supported; }
         bool IsActive() const { return m_CPU.GetFrame().Valid && m_Constants.Atlas.x>0; }
-        RHI::RHITexture* GetAtlas() { return m_Atlas.get(); }
-        RHI::RHITexture* GetSampledAtlas() { return IsActive()?m_Atlas.get():m_DisabledAtlas.get(); }
+        RHI::RHITexture* GetAtlas() { return m_Depth.GetAtlas(); }
+        RHI::RHITexture* GetSampledAtlas() { return m_Depth.GetSampledAtlas(); }
         nri::Descriptor* GetSRV() const;
         nri::Descriptor* GetConstantsCBV() const { return m_Receiver.GetCBV(); }
         const RHICascadeConstants& GetConstants() const { return m_Constants; }
         const std::string& GetDiagnostic() const { return m_Diagnostic; }
-        uint32_t GetDrawCount() const { return m_DrawCount; }
+        uint32_t GetDrawCount() const { return m_Depth.GetDrawCount(); }
     private:
-        bool ReleaseUnusedOwners();
-        struct Draw {
-            std::shared_ptr<const RHI::RHIMeshView> Mesh;
-            RHI::RHIObjectPushConstants Object;
-            RHI::RHIBuffer Material;
-            std::shared_ptr<RHI::RHITexture> Albedo;
-            nri::DescriptorSet* Set=nullptr;
-            RHI::RHIResourceRef<nri::Pipeline> Pipeline;
-        };
         CascadedShadowMap m_CPU;
         RHICascadeConstants m_Constants;
+        RHIShadowDepthAtlas m_Depth;
         RHI::RHIBuffer m_Receiver;
-        std::array<RHI::RHIBuffer,4> m_Cameras;
-        std::unique_ptr<RHI::RHITexture> m_Atlas;
-        std::unique_ptr<RHI::RHITexture> m_DisabledAtlas;
-        RHI::RHIPipelineLayout m_Layout;
-        RHI::RHIDescriptorPool m_Pool;
-        std::array<RHI::RHIResourceRef<nri::Pipeline>,3> m_Pipelines;
-        std::vector<Draw> m_Draws;
         std::string m_Diagnostic;
         bool m_Supported=false;
-        uint32_t m_DrawCount=0;
-        size_t m_CasterCount=0;
     };
 }

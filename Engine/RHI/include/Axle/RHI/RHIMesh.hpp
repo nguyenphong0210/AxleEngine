@@ -31,6 +31,10 @@ namespace Axle::RHI {
         void Bind(RHICommandBuffer& commands) const;
         void Draw(RHICommandBuffer& commands, uint32_t instances = 1) const;
         size_t GetSubmeshCount() const { return m_SubmeshCount; }
+        const glm::vec3& GetBoundingMin() const {return m_BoundingMin;}
+        const glm::vec3& GetBoundingMax() const {return m_BoundingMax;}
+        RHIResourceHandle GetVertexHandle() const {return m_Vertices.GetHandle();}
+        RHIResourceHandle GetIndexHandle() const {return m_Indices.GetHandle();}
     private:
         friend class RHIMesh;
         RHIResourceLease m_Vertices, m_Indices;
@@ -38,6 +42,7 @@ namespace Axle::RHI {
         nri::Buffer* m_IndexBuffer = nullptr;
         uint32_t m_IndexCount = 0;
         size_t m_SubmeshCount = 0;
+        glm::vec3 m_BoundingMin{0},m_BoundingMax{0};
     };
 
     class RHIMesh {

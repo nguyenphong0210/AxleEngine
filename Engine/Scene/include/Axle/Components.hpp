@@ -1,4 +1,5 @@
 #pragma once
+#include <Axle/LocalShadowSettings.hpp>
 #include <Axle/DataComponents.hpp>
 #include <Axle/Types.hpp>
 #include <Axle/UUID.hpp>
@@ -900,6 +901,7 @@ namespace Axle {
     };
 
     struct PointLightComponent {
+        LocalShadowSettings Shadows;
         glm::vec3 Color{ 1.0f, 1.0f, 1.0f };
         float Intensity = 1.0f;
         float Radius = 10.0f;
@@ -911,6 +913,7 @@ namespace Axle {
     };
 
     struct SpotLightComponent {
+        LocalShadowSettings Shadows;
         glm::vec3 Color{ 1.0f, 0.98f, 0.92f };
         float Intensity = 8.0f;
         float Range = 35.0f;

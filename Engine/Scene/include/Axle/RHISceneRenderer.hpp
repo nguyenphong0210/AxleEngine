@@ -8,6 +8,7 @@
 #include <Axle/RenderWorld.hpp>
 #include <Axle/RHICascadedShadows.hpp>
 #include <Axle/RHIEnvironment.hpp>
+#include <Axle/RHILocalShadows.hpp>
 
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
@@ -163,6 +164,7 @@ namespace Axle {
                         const std::shared_ptr<RHI::RHITexture>& brdfLUT);
         void SetUseIBL(bool useIBL) { m_UseIBL = useIBL; m_IBLAllowed=useIBL; }
         bool IsIBLEnabled() const { return m_IBLAllowed && (m_UseIBL || bool(m_Environment.Ready())); }
+        RHILocalShadows& GetLocalShadows() {return m_LocalShadows;}
         RHIEnvironment& GetEnvironment() { return m_Environment; }
         const RHIEnvironment& GetEnvironment() const { return m_Environment; }
         std::shared_ptr<RHI::RHITexture> GetIrradianceMap() const { return m_IrradianceMap; }
@@ -348,6 +350,8 @@ namespace Axle {
         std::shared_ptr<RHI::RHITexture> ActivePrefilter() const;
         std::shared_ptr<RHI::RHITexture> ActiveBRDF() const;
 
+        RHILocalShadows m_LocalShadows;
+        RHI::RHIResourceHandle m_BoundLocalAtlas;
         RHICascadedShadows m_CascadedShadows;
         RHI::RHIResourceHandle m_BoundCascadeAtlas;
         RHI::RHIBuffer m_SceneConstantBuffer;

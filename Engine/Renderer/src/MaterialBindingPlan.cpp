@@ -242,6 +242,18 @@ namespace Axle {
                     tb.Role = TextureRole::LinearData;
                 }
 
+                for (const auto& desc : declaredUserProperties) if (desc.Name == res.Name && desc.Type == ShaderPropertyType::Texture2D) {
+                    switch (desc.TextureColorSpace) {
+                        case ShaderTextureColorSpace::Automatic: break;
+                        case ShaderTextureColorSpace::Linear: tb.Role=TextureRole::LinearData; break;
+                        case ShaderTextureColorSpace::SRGB: tb.Role=TextureRole::Color; break;
+                        default: return MaterialBindingError{"TextureColorSpace",res.Name,"","Unsupported explicit texture color space."};
+                    }
+                    if (desc.SamplerPolicy != ShaderSamplerPolicy::Default &&
+                        std::none_of(mergedReflection.Resources.begin(),mergedReflection.Resources.end(),[&](const auto& r){return r.Type==RHI::RHIResourceType::Sampler&&r.Name==desc.SamplerName;}))
+                        return MaterialBindingError{"SamplerAssociation",res.Name,desc.SamplerName,"Explicit texture sampler is missing from reflection."};
+                }
+
                 plan.Textures.push_back(tb);
                 if (lower != "u_basemap" && lower != "basemap" && lower != "albedomap") {
                     ShaderPropertyDesc schema;
@@ -250,6 +262,16 @@ namespace Axle {
                     plan.PropertySchema.push_back(schema);
                 }
             }
+        }
+
+        for (const auto& resource : mergedReflection.Resources) if (resource.Type == RHI::RHIResourceType::Sampler) {
+            SamplerBinding sampler{resource.Name,{resource.Space,resource.BindPoint},ShaderSamplerPolicy::Default};
+            for (const auto& desc : declaredUserProperties) if (desc.Type==ShaderPropertyType::Texture2D && desc.SamplerName==resource.Name && desc.SamplerPolicy!=ShaderSamplerPolicy::Default) {
+                if (desc.SamplerPolicy!=ShaderSamplerPolicy::LinearRepeat)
+                    return MaterialBindingError{"SamplerPolicy",resource.Name,"","Unsupported explicit sampler policy."};
+                sampler.Policy=desc.SamplerPolicy;
+            }
+            plan.Samplers.push_back(std::move(sampler));
         }
 
         // Process Vertex Inputs

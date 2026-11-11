@@ -28,6 +28,7 @@ add_library(AxleScene STATIC
     src/RHIMeshRegistry.cpp
     src/CharacterVFX.cpp
     src/CustomMaterialProgram.cpp
+    src/MaterialGraphProgram.cpp
     src/SimulationClock.cpp
     src/SimulationInput.cpp
     src/SimulationDriver.cpp

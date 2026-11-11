@@ -314,6 +314,7 @@ namespace Axle {
 
         RHI::RHIDescriptorPool m_CustomDescriptorPool;
         RHI::RHISampler m_CustomSampler;
+        RHI::RHISampler m_CustomLinearRepeatSampler;
 
         nri::Pipeline* GetOrCreateCustomPipeline(
             const CustomReadyGeneration& generation,

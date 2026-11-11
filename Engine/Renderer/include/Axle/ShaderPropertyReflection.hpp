@@ -9,6 +9,9 @@
 
 namespace Axle {
 
+    enum class ShaderTextureColorSpace : uint8_t { Automatic, Linear, SRGB };
+    enum class ShaderSamplerPolicy : uint8_t { Default, LinearRepeat };
+
     enum class ShaderPropertyType : uint8_t {
         Float = 0,
         Float2,
@@ -39,6 +42,9 @@ namespace Axle {
         int DefaultInt = 0;
         bool DefaultBool = false;
         std::string DefaultTexturePath;
+        ShaderTextureColorSpace TextureColorSpace = ShaderTextureColorSpace::Automatic;
+        std::string SamplerName;
+        ShaderSamplerPolicy SamplerPolicy = ShaderSamplerPolicy::Default;
 
         // Reflection metadata from DXC
         uint32_t Offset = 0;

@@ -26,10 +26,23 @@ foreach(stage HLSL VERTEX FRAGMENT)
 endforeach()
 configure_file(src/CanvasShaderSource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/CanvasShaderSource.hpp" @ONLY)
 
+foreach(part COMMON TEMPLATE)
+    if(part STREQUAL "COMMON")
+        set(source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/PBRCommon.hlsli")
+    else()
+        set(source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/MaterialSurface.hlsl")
+    endif()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
+    file(READ "${source}" AXLE_MATERIAL_${part})
+    string(REPLACE "\n" "\n)AXLEMATERIAL\"\nR\"AXLEMATERIAL(" AXLE_MATERIAL_${part} "${AXLE_MATERIAL_${part}}")
+endforeach()
+configure_file(src/MaterialSurfaceSource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/MaterialSurfaceSource.hpp" @ONLY)
+
 add_library(AxleRenderer STATIC
     src/RenderCommand.cpp
     src/Shader.cpp
     src/BuiltinSceneShader.cpp
+    src/MaterialSurfaceShader.cpp
     src/Buffer.cpp
     src/VertexArray.cpp
     src/PerspectiveCamera.cpp

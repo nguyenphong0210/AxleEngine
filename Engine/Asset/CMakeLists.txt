@@ -7,6 +7,8 @@ add_library(AxleAsset STATIC
     src/MaterialGraph.cpp
     src/MaterialNodeRegistry.cpp
     src/BuiltinMaterialNodes.cpp
+    src/MaterialGraphHLSL.cpp
+    src/BuiltinMaterialLowerings.cpp
     src/TextureDescriptor.cpp
     src/ImageSource.cpp
     src/TerrainAsset.cpp

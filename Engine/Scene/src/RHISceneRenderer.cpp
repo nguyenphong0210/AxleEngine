@@ -265,7 +265,8 @@ namespace Axle {
         RHIDescriptorPoolDesc customPool;
         customPool.MaxDescriptorSets=4096; customPool.MaxConstantBuffers=16384;
         customPool.MaxTextures=16384; customPool.MaxSamplers=1024;
-        if (!m_CustomDescriptorPool.Init(customPool) || !m_CustomSampler.Init(RHISamplerDesc::Anisotropic16x())) return false;
+        if (!m_CustomDescriptorPool.Init(customPool) || !m_CustomSampler.Init(RHISamplerDesc::Anisotropic16x()) ||
+            !m_CustomLinearRepeatSampler.Init(RHISamplerDesc::Trilinear())) return false;
 
         // Create Graphics Pipeline
         if (!CreateGraphicsPipeline(device)) {
@@ -433,6 +434,7 @@ namespace Axle {
         m_CustomDraws.clear();
         m_CustomDescriptorPool.Shutdown();
         m_CustomSampler.Shutdown();
+        m_CustomLinearRepeatSampler.Shutdown();
         m_CustomProgramCache.Clear();
         m_OpaqueSceneColor = nullptr;
         m_OpaqueSceneDepth = nullptr;
@@ -1642,7 +1644,11 @@ namespace Axle {
                                     for(size_t i=0;i<buffers.size();++i) if(buffers[i].Address==address) descriptor=resource.ConstantBuffers[i].GetCBV();
                                 } else if(range.descriptorType==nri::DescriptorType::TEXTURE) {
                                     for(size_t i=0;i<item.TextureRequests.size();++i) if(item.TextureRequests[i].Address==address) descriptor=resource.Textures[i]->GetSRV();
-                                } else if(range.descriptorType==nri::DescriptorType::SAMPLER) descriptor=m_CustomSampler.GetNative();
+                                } else if(range.descriptorType==nri::DescriptorType::SAMPLER) {
+                                    descriptor=m_CustomSampler.GetNative();
+                                    for (const auto& sampler:generation.BindingPlan.Samplers) if(sampler.Address==address && sampler.Policy==ShaderSamplerPolicy::LinearRepeat)
+                                        descriptor=m_CustomLinearRepeatSampler.GetNative();
+                                }
                                 if (!descriptor || range.descriptorNum!=1) return false;
                                 m_CustomDescriptorPool.UpdateTexture(set,static_cast<uint32_t>(rangeIndex),0,descriptor);
                             }

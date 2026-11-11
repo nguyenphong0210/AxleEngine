@@ -88,6 +88,13 @@ namespace Axle {
         bool operator==(const VertexAttributeBinding& other) const = default;
     };
 
+    struct SamplerBinding {
+        std::string ResourceName;
+        ShaderAddress Address;
+        ShaderSamplerPolicy Policy = ShaderSamplerPolicy::Default;
+        bool operator==(const SamplerBinding&) const = default;
+    };
+
     struct VertexInputPlan {
         uint32_t Stride = 64;
         std::vector<VertexAttributeBinding> Attributes;
@@ -98,6 +105,7 @@ namespace Axle {
         std::vector<ConstantBufferPlan> Buffers;
         std::vector<UniformBinding> Uniforms;
         std::vector<TextureBinding> Textures;
+        std::vector<SamplerBinding> Samplers;
         VertexInputPlan VertexInput;
         uint32_t InterfaceRevision = 1;
         bool IsLegacyTemplate = false;

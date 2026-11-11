@@ -98,11 +98,15 @@ namespace Axle {
         static const std::regex rangeRegex(R"(\[\s*Range\s*\(\s*([^,]+),\s*([^\)]+)\)\s*\])");
         static const std::regex defaultRegex(R"(\[\s*Default\s*\(([^\)]*)\)\s*\])");
         static const std::regex colorRegex(R"(\[\s*Color\s*\])");
+        static const std::regex textureSpaceRegex(R"(\[\s*TextureColorSpace\s*\(\s*(sRGB|Linear)\s*\)\s*\])");
+        static const std::regex textureSamplerRegex(R"(\[\s*TextureSampler\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*LinearRepeat\s*\)\s*\])");
         static const std::regex declRegex(R"(\b(float4|float3|float2|float|int|uint|bool|Texture2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*[^=;]+)?\s*(?:=\s*([^;]+))?;)");
         static const std::regex numberRegex(R"([+-]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][+-]?\d+)?)");
         std::istringstream original(hlslSource), codeStream(clean);
         std::string line,code,header,tooltip,defaultValue;
         bool hasRange=false,color=false,cbufferPending=false;
+        ShaderTextureColorSpace textureSpace=ShaderTextureColorSpace::Automatic;
+        std::string samplerName;
         float rangeMin=0,rangeMax=1;
         std::vector<bool> scopes;
         while(std::getline(original,line) && std::getline(codeStream,code)) {
@@ -110,6 +114,8 @@ namespace Axle {
             if(std::regex_search(line,annotation,headerRegex))header=annotation[1];
             if(std::regex_search(line,annotation,tooltipRegex))tooltip=annotation[1];
             if(std::regex_search(line,annotation,colorRegex))color=true;
+            if(std::regex_search(line,annotation,textureSpaceRegex))textureSpace=annotation[1]=="sRGB"?ShaderTextureColorSpace::SRGB:ShaderTextureColorSpace::Linear;
+            if(std::regex_search(line,annotation,textureSamplerRegex))samplerName=annotation[1];
             if(std::regex_search(line,annotation,defaultRegex))defaultValue=annotation[1];
             if(std::regex_search(line,annotation,rangeRegex)) {
                 try {rangeMin=std::stof(annotation[1]);rangeMax=std::stof(annotation[2]);hasRange=true;}catch(...) {hasRange=false;}
@@ -131,12 +137,16 @@ namespace Axle {
                 if(!scopes.empty() && !scopes.back())continue;
                 const std::string type=match[1],name=match[2];
                 if(IsEngineUniform(name) || name=="Reserved" || name=="u_BaseMap") {
-                    hasRange=false;color=false;tooltip.clear();defaultValue.clear();continue;
+                    hasRange=false;color=false;tooltip.clear();defaultValue.clear();textureSpace=ShaderTextureColorSpace::Automatic;samplerName.clear();continue;
                 }
                 ShaderPropertyDesc desc;
                 desc.Name=name;desc.DisplayName=FormatDisplayName(name);desc.Header=header;desc.Tooltip=tooltip;
                 desc.HasRange=hasRange;desc.MinValue=rangeMin;desc.MaxValue=rangeMax;
-                if(type=="Texture2D")desc.Type=ShaderPropertyType::Texture2D;
+                if(type=="Texture2D") {
+                    desc.Type=ShaderPropertyType::Texture2D;desc.TextureColorSpace=textureSpace;
+                    desc.SamplerName=samplerName;
+                    if(!samplerName.empty())desc.SamplerPolicy=ShaderSamplerPolicy::LinearRepeat;
+                }
                 else if(type=="float4" && (color || name.find("Color")!=name.npos || name.find("Tint")!=name.npos)) {
                     desc.Type=ShaderPropertyType::Color;desc.DefaultVec4=glm::vec4(1);
                 } else if(type=="float4")desc.Type=ShaderPropertyType::Float4;
@@ -161,7 +171,7 @@ namespace Axle {
                     }
                 }catch(...) {}
                 if(!propIndices.contains(name)) {propIndices[name]=properties.size();properties.push_back(desc);}
-                hasRange=false;color=false;tooltip.clear();defaultValue.clear();
+                hasRange=false;color=false;tooltip.clear();defaultValue.clear();textureSpace=ShaderTextureColorSpace::Automatic;samplerName.clear();
             }
             advance(code.size());
         }

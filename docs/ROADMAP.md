@@ -425,6 +425,18 @@ Debug/Release evidence and the corrected current-format fixture. This accepts
 the C12-01 CPU boundary only. Shader generation, material rendering, Slang and
 node-editor integration remain separate packages; C11-07 deferrals are unchanged.
 
+**C12-02 completed under direct user assignment, 2026-11-11:** extensible
+registry-driven HLSL lowering and the existing DXC bridge produce real DXIL and
+SPIR-V. Physical D3D12/Vulkan fixtures verify generated source through the existing
+custom-material renderer, including hardware sRGB filtering and explicit
+LinearRepeat sampling. Final Debug build covers all tests, Editor and Runtime;
+Debug CTest **95/95**, focused Release CTest **5/5** and architecture checks pass.
+See the [C12-02 delivery](reviews/OPT_12_C12_02_DELIVERY.md) for review provenance,
+native artifacts, exact commands and limits. This accepts the released compiler
+and bounded native baseline. Automatic product graph loading, managed
+layout/cache/reload, full resource policy and graph UI remain later work;
+C12-03 onward are unreleased and C11-07 deferrals are unchanged.
+
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features
 remain deferred.

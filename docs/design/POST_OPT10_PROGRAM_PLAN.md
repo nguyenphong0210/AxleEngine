@@ -108,15 +108,19 @@ parameter `name` as its sole key, and one-line/two-line/multiline parameter
 declarations. The user subsequently released C12-01 directly to Codex for CPU
 document parsing, validation, IR and persistence; see the
 [C12-01 delivery](../reviews/OPT_12_C12_01_DELIVERY.md) for current evidence.
-Shader generation and later packages remain unreleased.
+The user then directly released C12-02 for the existing HLSL/DXIL/SPIR-V compiler
+backend; see the [C12-02 delivery](../reviews/OPT_12_C12_02_DELIVERY.md) for the
+completed registry-driven lowering, bounded native baseline and exact verification state.
+C12-03 and later packages remain unreleased.
 
 Packages:
 
 - **C12-01 / 12.1 Material IR:** implement the approved authoring schema, stable node
   IDs and parameter-name keys, schema version, parsing, validation and serialization;
   keep authored graph data distinct from compiler IR.
-- **C12-02 / 12.2 Existing compiler backend:** lower a minimal graph to current HLSL,
-  DXIL and SPIR-V compilation.
+- **C12-02 / 12.2 Existing compiler backend (complete):** registry-driven graph
+  lowering to HLSL, real DXIL/SPIR-V compilation and bounded native D3D12/Vulkan
+  graph rendering, including explicit sRGB/LinearRepeat baseline semantics.
 - **C12-03 / 12.3 Reflection/layout:** descriptor compatibility, pipeline cache keys and
   last-known-good reload.
 - **C12-04 / 12.4 Resource semantics:** texture color space, sampler, fallback and

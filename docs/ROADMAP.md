@@ -457,13 +457,24 @@ graph compilation is implemented as an explicit Windows/MSVC evaluation backend.
 Real DXIL/SPIR-V output, strict layout/reflection comparison, transactional errors,
 and physical D3D12/Vulkan equivalence are recorded in the
 [C12-05 delivery](reviews/OPT_12_C12_05_DELIVERY.md). DXC remains the default;
-C12-06 is now complete; OPT-13 onward remain unreleased.
+C12-06 is now complete. C13-01 was subsequently released as recorded below.
 
 **C12-06 completed under direct user assignment, 2026-11-11:** material graph
 targets carry an explicit RHI backend policy. OpenGL/GLSL graph lowering is not
 claimed automatically; selecting OpenGL returns transactional `MG_OPENGL_UNSUPPORTED`
 while CPU, D3D12 and Vulkan paths remain available. See the
 [C12-06 delivery](reviews/OPT_12_C12_06_DELIVERY.md).
+
+**C13-01 direct user release, 2026-11-11:** execute in small checkpoints with
+quality prioritized. C13-01.1 CPU cascade contracts are implemented and verified:
+three/four camera-space splits, fixed-world texel stabilization, ZO light
+transforms and validated failure/numeric behavior. Focused Debug/Release CTest
+**1/1 per configuration**, architecture check and separate-context correction
+recheck pass. See [execution checkpoints](design/OPT_13_C13_01_EXECUTION_PLAN.md)
+and [CPU delivery](reviews/OPT_13_C13_01_CPU_DELIVERY.md). Native depth/receiver
+passes, PCF 5x5, actual bias application and product acceptance are pending;
+modern CSM capability remains false. C13-01 stays in progress, and C13-02 onward
+remain unreleased. C11-07 product deferrals are unchanged.
 
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features

@@ -1,30 +1,35 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "OPT-12-C12-06",
-    "title": "OpenGL material graph policy and explicit unsupported diagnostic",
-    "state": "complete",
+    "id": "OPT-13-C13-01",
+    "title": "Cascaded shadow contract and modern RHI implementation",
+    "state": "in_progress",
     "coordinator": "Codex",
     "implementer": "Codex (direct user assignment)",
-    "code_baseline": "094fb8c",
-    "user_instruction": "User directly requested completing the remaining OPT-12 work.",
-    "user_scope": "Complete OPT-12 at C12-06. Preserve C12-01..05 behavior. Define an explicit material graph OpenGL policy: no automatic HLSL/DXIL/SPIR-V claim on OpenGL; reject unsupported OpenGL graph targets transactionally with a stable diagnostic, while keeping existing CPU/D3D12/Vulkan paths. Add focused tests, docs, architecture checks and local commits. No OPT-13/later work or push.",
-    "plan_reference": "docs/design/POST_OPT10_PROGRAM_PLAN.md#opt-12--shader-and-material-pipeline",
+    "code_baseline": "3095780b397644c6f174df156f5c2dde34148bde",
+    "user_instruction": "User directly requested C13-01, then requested smaller execution steps with highest quality prioritized.",
+    "user_scope": "Implement C13-01 in small verified checkpoints: CPU cascade contract, modern RHI depth/receiver integration and native/product acceptance. Preserve OpenGL compatibility, existing authored data and C12 behavior. No C13-02+ or OPT-14+ work and no push.",
+    "plan_reference": "docs/design/POST_OPT10_PROGRAM_PLAN.md#opt-13--performance-first-lighting-volumetric-atmosphere-ddgi-and-post-processing",
     "expected_files": [
-      "Engine/Scene/include/Axle/MaterialGraphRuntime.hpp",
-      "Engine/Scene/src/MaterialGraphRuntime.cpp",
-      "Tests/src/Test_MaterialGraphOpenGLPolicy.cpp",
+      "Engine/Renderer/include/Axle/CascadedShadowMap.hpp",
+      "Engine/Renderer/src/CascadedShadowMap.cpp",
+      "Engine/Renderer/CMakeLists.txt",
+      "Tests/src/Test_CascadedShadowMap.cpp",
       "Tests/CMakeLists.txt",
+      "docs/design/OPT_13_C13_01_EXECUTION_PLAN.md",
       "docs/design/POST_OPT10_PROGRAM_PLAN.md",
       "docs/design/README.md",
       "docs/ROADMAP.md",
-      "docs/reviews/OPT_12_C12_06_DELIVERY.md",
+      "docs/reviews/OPT_13_C13_01_CPU_DELIVERY.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "C12-06 explicit OpenGL graph policy implemented and separately reviewed; OPT-12 complete.",
-    "acceptance_status": "Complete: enabled/disabled Debug and Release focused regressions, full enabled Debug CTest and architecture checks pass.",
-    "open_gates": [],
-    "next_action": "Stop at OPT-12; OPT-13 onward unreleased."
+    "implementation_status": "C13-01.1 CPU checkpoint implemented and verified. C13-01.2 native depth/receiver/PCF and C13-01.3 product acceptance are pending. Existing OpenGL ShadowMap and modern CSM capability=false are unchanged.",
+    "acceptance_status": "CPU checkpoint only: focused Debug/Release CTest 1/1 each, architecture PASS and separate-context corrections rechecked. Full C13-01 is not accepted.",
+    "open_gates": [
+      "C13-01.2 modern RHI shadow depth/receiver integration, PCF 5x5 and bias application",
+      "C13-01.3 D3D12/Vulkan image evidence, product behavior, resize/failure/lifetime and relevant regressions"
+    ],
+    "next_action": "Continue authorized C13-01 work from the CPU checkpoint into C13-01.2; full C13-01 remains in_progress. C13-02 onward unreleased."
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",
@@ -2549,6 +2554,28 @@
       "base_commit": "38ca489aa0339e47a321dbbf5d751a326a945c39",
       "timestamp_utc": "2026-11-11T05:33:53.462386+00:00",
       "body": "DELIVERY: C12-06 and OPT-12 complete.\n\nImplementation:\n- Added explicit MaterialGraphTarget::Backend policy and public compile target parameter. OpenGL graph targets fail before lowering/compiler work with MG_OPENGL_UNSUPPORTED; output and ready generations remain unchanged. CPU, D3D12, Vulkan and C12-05 optional Slang behavior remain available.\n- Included backend policy in MaterialGraphPipeline:2 identity and validated requested native backend against the active device.\n- Added MaterialGraphOpenGLPolicyTests and updated OPT-12 plan/roadmap/README/report. No GLSL lowering, UI, OPT-13 work or push.\n\nFinal verification:\n- Enabled Debug full CTest: 106/106 PASS, including Editor/Runtime, native/architecture/plugin suites. Log: build/agent-runs/c12_06_debug_ctest_full.log.\n- Enabled Debug focused Material Graph/MaterialUnit: 16/16 PASS. Log: build/agent-runs/c12_06_debug_tests_final.log.\n- Enabled Release focused Material Graph/MaterialUnit: 16/16 PASS after final pipeline-key correction. Log: build/agent-runs/c12_06_release_tests_final.log.\n- Disabled Debug focused Material Graph/MaterialUnit: 13/13 PASS after final source. Log: build/agent-runs/c12_06_disabled_tests_final.log.\n- Architecture: 560 sources/25 CMake PASS; git diff --check PASS.\n- Separate-context reviewer /root/c12_06_review found no blocking findings. Its pipeline-key version suggestion was applied and rechecked.\n\nFinal commit: 38ca489aa0339e47a321dbbf5d751a326a945c39. Report: docs/reviews/OPT_12_C12_06_DELIVERY.md. OPT-13 onward remain unreleased."
+    },
+    {
+      "id": "CG-20261111T065605856987Z-CODEX-664476",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "C13-01",
+      "reply_to": null,
+      "base_commit": "3095780b397644c6f174df156f5c2dde34148bde",
+      "timestamp_utc": "2026-11-11T06:56:05.856987+00:00",
+      "body": "IN_PROGRESS: User directly released OPT-13 package C13-01 (Cascade contract & implementation) on 2026-11-11.\n\nBase commit: 3095780b397644c6f174df156f5c2dde34148bde.\nScope: modern RHI CSM contract and implementation only. Preserve the existing OpenGL compatibility renderer and existing authored light/serialization behavior. Add camera-space cascade split/stabilization/depth-bias contracts for the modern D3D12/Vulkan path, capability-gated fallback, focused tests/docs, and required build/architecture verification.\nExpected files are limited to relevant Engine/Renderer, Engine/RHI/Scene render seams, Tests, and OPT-13 delivery/roadmap coordination docs as needed. No C13-02+ work, no OPT-14+, no push.\n\nCodex owns implementation and final verification for this direct user assignment. Current task is bounded at C13-01.\n"
+    },
+    {
+      "id": "CG-20261111T080437162598Z-CODEX-293b86",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "C13-01",
+      "reply_to": "CG-20261111T065605856987Z-CODEX-664476",
+      "base_commit": "3095780b397644c6f174df156f5c2dde34148bde",
+      "timestamp_utc": "2026-11-11T08:04:37.162598+00:00",
+      "body": "DELIVERY CHECKPOINT: C13-01.1 CPU cascade contract implemented and verified at the user-requested small-step boundary. Full C13-01 remains IN_PROGRESS; this message does not claim native shadows or package completion.\n\nBase: 3095780. Source: Engine/Renderer/include/Axle/CascadedShadowMap.hpp and src/CascadedShadowMap.cpp. New focused test: Tests/src/Test_CascadedShadowMap.cpp, wired into both AxleAllTests branches.\n\nEvidence executed against final code: Debug and Release builds of AxleCascadedShadowMapTests exit 0; focused CTest passes 1/1 per configuration; python scripts/check_architecture.py exit 0 (562 source / 25 CMake); git diff --check exit 0. Separate-context read-only Codex reviewer c13_contract_review found/rechecked R1 collapsed float splits and R2 large far/near precision; both FIXED with regressions and final recheck PASS. This is not Gemini verification.\n\nDelivery report: docs/reviews/OPT_13_C13_01_CPU_DELIVERY.md. Execution breakdown: docs/design/OPT_13_C13_01_EXECUTION_PLAN.md. No Scene/RHI/shader/OpenGL source changes, no native capability enablement, no C13-02+ or push. Next authorized checkpoint: C13-01.2 shadow depth resources, caster/receiver pass, PCF 5x5 and bias application. Native/product acceptance remains required afterward.\n"
     }
   ],
   "deferred_tasks": [

@@ -160,6 +160,9 @@ Packages:
 - **C13-01 / 13.1 Cascade contract & implementation:** camera-space split, texel
   stabilization, depth bias, 3–4 cascades with PCF 5x5 sampling across D3D12
   and Vulkan, preserving the OpenGL compatibility fallback.
+  Directly released 2026-11-11 and divided into [execution checkpoints](OPT_13_C13_01_EXECUTION_PLAN.md).
+  CPU checkpoint C13-01.1 is implemented/verified; native CSM and full package
+  acceptance remain pending. See [CPU delivery](../reviews/OPT_13_C13_01_CPU_DELIVERY.md).
 - **C13-02 / 13.2 HDR Environment & IBL:** authored HDR skyboxes, pre-filtered
   radiance/irradiance cubemaps, split-sum 2D BRDF LUT integration, and diffuse
   ambient fallback.

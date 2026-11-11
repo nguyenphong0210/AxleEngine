@@ -7,6 +7,7 @@
 #include <Axle/SceneRenderer.hpp>
 #include <Axle/RenderWorld.hpp>
 #include <Axle/RHICascadedShadows.hpp>
+#include <Axle/RHIEnvironment.hpp>
 
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
@@ -160,8 +161,10 @@ namespace Axle {
         void SetIBLMaps(const std::shared_ptr<RHI::RHITexture>& irradiance,
                         const std::shared_ptr<RHI::RHITexture>& prefilter,
                         const std::shared_ptr<RHI::RHITexture>& brdfLUT);
-        void SetUseIBL(bool useIBL) { m_UseIBL = useIBL; }
-        bool IsIBLEnabled() const { return m_UseIBL; }
+        void SetUseIBL(bool useIBL) { m_UseIBL = useIBL; m_IBLAllowed=useIBL; }
+        bool IsIBLEnabled() const { return m_IBLAllowed && (m_UseIBL || bool(m_Environment.Ready())); }
+        RHIEnvironment& GetEnvironment() { return m_Environment; }
+        const RHIEnvironment& GetEnvironment() const { return m_Environment; }
         std::shared_ptr<RHI::RHITexture> GetIrradianceMap() const { return m_IrradianceMap; }
         std::shared_ptr<RHI::RHITexture> GetPrefilterMap() const { return m_PrefilterMap; }
         std::shared_ptr<RHI::RHITexture> GetBRDFLUT() const { return m_BRDFLUT; }
@@ -338,7 +341,12 @@ namespace Axle {
         std::shared_ptr<RHI::RHITexture> m_IrradianceMap;
         std::shared_ptr<RHI::RHITexture> m_PrefilterMap;
         std::shared_ptr<RHI::RHITexture> m_BRDFLUT;
-        bool m_UseIBL = false;
+        bool m_UseIBL = false, m_IBLAllowed=true, m_PreparedManualIBL=false;
+        RHIEnvironment m_Environment;
+        std::array<RHI::RHIResourceHandle,3> m_BoundIBL{};
+        std::shared_ptr<RHI::RHITexture> ActiveIrradiance() const;
+        std::shared_ptr<RHI::RHITexture> ActivePrefilter() const;
+        std::shared_ptr<RHI::RHITexture> ActiveBRDF() const;
 
         RHICascadedShadows m_CascadedShadows;
         RHI::RHIResourceHandle m_BoundCascadeAtlas;
@@ -353,6 +361,7 @@ namespace Axle {
         RHI::RHIResourceRef<nri::Pipeline> m_SkyboxPipeline;
         RHI::RHIResourceRef<nri::Pipeline> m_SkyboxPipelineHDR;
         RHI::RHIBuffer m_SkyboxConstantBuffer;
+        nri::DescriptorSet* m_SkyboxDescriptorSet=nullptr;
         RHI::RHIShaderBytecode m_SkyboxVertexShader;
         RHI::RHIShaderBytecode m_SkyboxPixelShader;
         SkyboxComponent m_SkyboxParams;

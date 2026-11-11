@@ -20,6 +20,7 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include "NativeForwardSource.hpp"
+#include "NativeSkySource.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -184,6 +185,8 @@ namespace Axle {
                 return false;
             }
         }
+        m_SkyboxDescriptorSet=m_DescriptorPool.AllocateDescriptorSet(m_SkyboxPipelineLayout,0);
+        if (!m_SkyboxDescriptorSet || !m_DescriptorPool.UpdateTexture(m_SkyboxDescriptorSet,0,0,RHIMaterial::GetDefaultIrradianceCubemap()->GetSRV())) return false;
         if (!m_SkyboxConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISkyboxConstants), RHIMemoryLocation::HostUpload, "SkyboxConstantsBuffer"))) return false;
 
         // Initialize Film-Grade Tone Mapping Post-Processing Pipeline & Resources
@@ -324,6 +327,7 @@ namespace Axle {
 
         m_BoundCascadeAtlas={};
         m_CascadedShadows.Shutdown();
+        m_Environment.Clear();m_BoundIBL={};m_PreparedManualIBL=false;m_SkyboxDescriptorSet=nullptr;
         m_LightBuffer.Shutdown();
         m_SceneConstantBuffer.Shutdown();
 
@@ -372,7 +376,7 @@ namespace Axle {
             }
         }
 
-        if (shaderSource.empty() || shaderSource.find("cbuffer CascadeReceiver")==std::string::npos) {
+        if (shaderSource.empty() || shaderSource.find("cbuffer CascadeReceiver")==std::string::npos || shaderSource.find("AXLE_FORWARD_ENVIRONMENT_IBL")==std::string::npos) {
             AXLE_CORE_WARN("RHISceneRenderer: Using canonical embedded forward shader (missing/current-interface resource).");
             shaderSource = kNativeForwardSource;
             shaderPath.clear();
@@ -446,7 +450,7 @@ namespace Axle {
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        nri::RootSamplerDesc samplers[3]{};
+        nri::RootSamplerDesc samplers[4]{};
         auto& sampler=samplers[0];
         sampler.registerIndex = 0;
         sampler.desc = RHISamplerDesc::Anisotropic16x().ToNRIDesc();
@@ -460,6 +464,10 @@ namespace Axle {
         samplers[2].desc=RHISamplerDesc::ShadowPCF().ToNRIDesc();
         samplers[2].shaderStages=nri::StageBits::FRAGMENT_SHADER;
 
+        samplers[3].registerIndex=3;
+        samplers[3].desc=RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge).ToNRIDesc();
+        samplers[3].shaderStages=nri::StageBits::FRAGMENT_SHADER;
+
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
         descSet.ranges = ranges;
@@ -472,7 +480,7 @@ namespace Axle {
         layoutDesc.rootDescriptors = rootDescs;
         layoutDesc.rootDescriptorNum = 4;
         layoutDesc.rootSamplers = samplers;
-        layoutDesc.rootSamplerNum = 3;
+        layoutDesc.rootSamplerNum = 4;
         layoutDesc.descriptorSets = &descSet;
         layoutDesc.descriptorSetNum = 1;
         layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
@@ -483,10 +491,12 @@ namespace Axle {
     void RHISceneRenderer::SetIBLMaps(const std::shared_ptr<RHI::RHITexture>& irradiance,
                                       const std::shared_ptr<RHI::RHITexture>& prefilter,
                                       const std::shared_ptr<RHI::RHITexture>& brdfLUT) {
+        m_IBLAllowed = true;
         m_IrradianceMap = irradiance;
         m_PrefilterMap = prefilter;
         m_BRDFLUT = brdfLUT;
-        m_UseIBL = (irradiance != nullptr || prefilter != nullptr || brdfLUT != nullptr);
+        m_UseIBL = (irradiance && prefilter && brdfLUT);
+        m_BoundIBL = {};
 
         if (m_DefaultDescriptorSet && m_DescriptorPool.IsValid()) {
             auto irrTex = m_IrradianceMap ? m_IrradianceMap : RHIMaterial::GetDefaultIrradianceCubemap();
@@ -502,6 +512,19 @@ namespace Axle {
                 m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 6, iblSRVs);
             }
         }
+    }
+
+    std::shared_ptr<RHITexture> RHISceneRenderer::ActiveIrradiance() const {
+        auto ready=m_Environment.Ready();auto texture=ready?ready->Irradiance:(m_PreparedManualIBL?m_IrradianceMap:nullptr);
+        return texture&&texture->IsValid()?texture:RHIMaterial::GetDefaultIrradianceCubemap();
+    }
+    std::shared_ptr<RHITexture> RHISceneRenderer::ActivePrefilter() const {
+        auto ready=m_Environment.Ready();auto texture=ready?ready->Prefilter:(m_PreparedManualIBL?m_PrefilterMap:nullptr);
+        return texture&&texture->IsValid()?texture:RHIMaterial::GetDefaultPrefilterCubemap();
+    }
+    std::shared_ptr<RHITexture> RHISceneRenderer::ActiveBRDF() const {
+        auto ready=m_Environment.Ready();auto texture=ready?ready->BRDF:(m_PreparedManualIBL?m_BRDFLUT:nullptr);
+        return texture&&texture->IsValid()?texture:RHIMaterial::GetDefaultBRDFLUT();
     }
 
     nri::Pipeline* RHISceneRenderer::GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount,
@@ -573,9 +596,8 @@ namespace Axle {
             }
         }
 
-        if (shaderSource.empty()) {
-            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate AtmosphericSkybox.hlsl!");
-            return false;
+        if (shaderSource.empty() || shaderSource.find("u_EnvironmentCube")==std::string::npos) {
+            shaderSource=kNativeSkySource;shaderPath.clear();
         }
 
         RHIShaderCompileDesc vsDesc;
@@ -616,10 +638,16 @@ namespace Axle {
         rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDesc.shaderStages = nri::StageBits::ALL;
 
+        nri::DescriptorRangeDesc range{};range.baseRegisterIndex=0;range.descriptorNum=1;
+        range.descriptorType=nri::DescriptorType::TEXTURE;range.shaderStages=nri::StageBits::FRAGMENT_SHADER;
+        nri::DescriptorSetDesc set{};set.registerSpace=1;set.ranges=&range;set.rangeNum=1;
+        nri::RootSamplerDesc sampler{};sampler.registerIndex=0;sampler.shaderStages=nri::StageBits::FRAGMENT_SHADER;
+        sampler.desc=RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge).ToNRIDesc();
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
         layoutDesc.rootDescriptors = &rootDesc;
         layoutDesc.rootDescriptorNum = 1;
+        layoutDesc.descriptorSets=&set;layoutDesc.descriptorSetNum=1;layoutDesc.rootSamplers=&sampler;layoutDesc.rootSamplerNum=1;
         layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_SkyboxPipelineLayout.Init(layoutDesc);
@@ -1060,6 +1088,19 @@ namespace Axle {
         if (!m_CascadedShadows.Prepare(world,camera,settings,m_MaterialTextures)) {
             AXLE_CORE_ERROR("Shadow preparation failed: {0}",m_CascadedShadows.GetDiagnostic()); return;
         }
+        if (!m_Environment.Prepare(world.Skybox)) return;
+        m_PreparedManualIBL=m_UseIBL && world.Skybox.HDRPath.empty();
+        const std::array<std::shared_ptr<RHITexture>,3> ibl={ActiveIrradiance(),ActivePrefilter(),ActiveBRDF()};
+        std::array<RHIResourceHandle,3> identities;
+        std::vector<nri::Descriptor*> descriptors;
+        for(size_t i=0;i<3;++i){if(!ibl[i]||!ibl[i]->GetSRV())return;identities[i]=ibl[i]->GetHandle();descriptors.push_back(ibl[i]->GetSRV());}
+        if(identities!=m_BoundIBL) {
+            if(!m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet,0,6,descriptors))return;
+            for(auto& draw:m_MaterialDraws)if(!m_DescriptorPool.UpdateTextureRange(draw->Set,0,6,descriptors))return;
+            m_BoundIBL=identities;
+        }
+        const auto skyTexture=m_Environment.Ready()?m_Environment.Ready()->Radiance:RHIMaterial::GetDefaultIrradianceCubemap();
+        if(!skyTexture||!m_DescriptorPool.UpdateTexture(m_SkyboxDescriptorSet,0,0,skyTexture->GetSRV()))return;
         const auto shadowIdentity=m_Device->GetResources().AcquireNative(m_CascadedShadows.GetSRV()).GetHandle();
         if (shadowIdentity!=m_BoundCascadeAtlas) {
             // Every cached set owns its last texture dependency. Refresh unused
@@ -1139,8 +1180,9 @@ namespace Axle {
         }
         lightData.LightCounts.y = spotIndex;
 
-        bool useIBL = m_UseIBL && lighting.Environment && world.Skybox.Type==1;
-        lightData.ReservedHeader[0].y = lighting.AmbientIntensity;
+        bool useIBL = m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.Environment && world.Skybox.Type==1;
+        lightData.ReservedHeader[0].y = lighting.AmbientIntensity*m_Environment.SourceExposure();
+        lightData.ReservedHeader[0].z = lighting.Environment && world.Skybox.Type==1 && !useIBL ? 1.f : 0.f;
         lightData.LightCounts.w = useIBL ? 1u : 0u;
 
         m_LightBuffer.Update(lightData);
@@ -1381,7 +1423,8 @@ namespace Axle {
                 activeSkybox.CustomElevation = world.Skybox.CustomElevation;
             }
 
-            if (activeSkybox.Enabled && activeSkybox.Type == SkyboxType::ProceduralAtmospheric) {
+            const bool hdrEnvironment=activeSkybox.Type==SkyboxType::HDRCubemap && bool(m_Environment.Ready());
+            if (activeSkybox.Enabled && (activeSkybox.Type == SkyboxType::ProceduralAtmospheric || hdrEnvironment)) {
                 // 1. Determine normalized Sun direction
                 glm::vec3 sunDir(world.Skybox.SunDirection);
                 if (glm::length(sunDir) > 1e-4f) {
@@ -1408,9 +1451,12 @@ namespace Axle {
                 float skyboxToneMode = settings.EnableToneMapping ? -1.0f : static_cast<float>(settings.ToneMappingMode);
                 skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, skyboxToneMode, settings.EnableToneMapping ? 1.0f : settings.Gamma);
 
-                if (m_SkyboxConstantBuffer.IsValid()) {
-                    m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants));
+                if(hdrEnvironment) {
+                    skyboxConstants.Reserved[0]=glm::vec4(1,lighting.AmbientIntensity*m_Environment.SourceExposure(),0,0);
+                    skyboxConstants.Params.z=settings.EnableToneMapping?-1.f:0.f;
+                    skyboxConstants.Params.w=settings.EnableToneMapping?1.f:2.2f;
                 }
+                if (!m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants))) return;
 
                 // 4. Bind Skybox Graphics Pipeline matching active color & depth formats
                 nri::Pipeline* activeSkyboxPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR && activeSampleCount == 1)
@@ -1424,6 +1470,8 @@ namespace Axle {
                     Commands().SetRootDescriptor(0, m_SkyboxConstantBuffer.GetCBV());
                 }
 
+                m_DescriptorPool.Bind(Commands().GetNative());
+                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(),0,m_SkyboxDescriptorSet);
                 // 5. Draw full-screen triangle on far plane (SV_VertexID unproject)
                 Commands().Draw(3, 1, 0, 0);
                 m_LastDrawCallCount++;
@@ -1651,9 +1699,9 @@ namespace Axle {
                     resource.Textures[slot] = texture;
                     srvs[slot<6?slot:slot+3]=texture->GetSRV();
                 }
-                srvs[6]=(m_IrradianceMap ? m_IrradianceMap : RHIMaterial::GetDefaultIrradianceCubemap())->GetSRV();
-                srvs[7]=(m_PrefilterMap ? m_PrefilterMap : RHIMaterial::GetDefaultPrefilterCubemap())->GetSRV();
-                srvs[8]=(m_BRDFLUT ? m_BRDFLUT : RHIMaterial::GetDefaultBRDFLUT())->GetSRV();
+                srvs[6]=ActiveIrradiance()->GetSRV();
+                srvs[7]=ActivePrefilter()->GetSRV();
+                srvs[8]=ActiveBRDF()->GetSRV();
                 srvs[13]=refractionReady?m_OpaqueSceneColor->GetSRV():RHIMaterial::GetDefaultBlackTexture()->GetSRV();
                 srvs[14]=refractionReady?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                 srvs[15]=m_CascadedShadows.GetSRV();

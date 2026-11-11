@@ -7,7 +7,7 @@ C13-03 and later packages are not released.
 | Checkpoint | Scope | State |
 | --- | --- | --- |
 | C13-02.1 | Pure CPU linear HDR bake, cube convention, cosine diffuse, GGX roughness mips and split-sum DFG | Implemented/self-verified; Debug/Release focused CTest 1/1 each |
-| C13-02.2 | Authored source resolution/cache, transactional native resources, HDR sky and PBR receivers | Pending |
+| C13-02.2 | Authored source resolution/cache, transactional native resources, HDR sky and PBR receivers | Implemented/self-verified; Debug native 2/2, Release environment/CSM 5/5 |
 | C13-02.3 | Physical D3D12/Vulkan images, reload/fallback/ownership, product regression and separate-context acceptance | Pending |
 
 ## CPU contract
@@ -45,3 +45,25 @@ fallback explicitly; switching worlds must not leak a previous environment.
 Cache with actual source identity/revision and bounded lifetime. Preserve C13-01,
 C12 custom layouts and OpenGL compatibility; unsupported source/format failures
 must have diagnostics and an authored ambient fallback.
+
+Native checkpoint: `RHIEnvironment` resolves linear Radiance sources and explicit
+CubemapHDR descriptors through the existing VFS. Four native generations are
+cached by authored request, resolved source identity/content revision, decode
+options and bake settings. Intensity/exposure scale the sky and illumination
+without rebaking. Same-source decode/bake/upload failures retain the last-good
+generation with a diagnostic; different or invalid sources use authored diffuse
+ambient, with no invented specular reflection. Source replacement is transactional.
+Descriptors retain native leases through submission and refresh all cached draw
+sets when the selected generation changes. The sky uses the existing HDR/display
+path and IBL has a separate clamped sampler.
+
+Checkpoint .2 commands (all exit 0): Debug build of
+`AxleEnvironmentRenderingTests`, CTest `^EnvironmentGPU_` (2/2); Release build of
+`AxleEnvironmentRenderingTests AxleEnvironmentBakeTests AxleCascadedShadowRenderingTests`,
+CTest `^(EnvironmentBakeTests|EnvironmentGPU_.*|CascadedShadowGPU_.*)$` (5/5).
+Physical D3D12 and Vulkan used the RTX 3070, with no validation errors. Native
+subresource readbacks preserve (2,.25,.125) in every cube face/mip; receiver and
+sky images, exposure/cache hits, source reload, descriptor redirect, diffuse-only
+fallback, upload failure/retry and tone-map/FXAA/MSAA execution pass.
+Final product regression, nonconstant orientation/roughness images, lifetime,
+backend parity and separate-context review remain in checkpoint .3.

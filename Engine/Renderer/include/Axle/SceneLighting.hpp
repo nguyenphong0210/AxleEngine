@@ -1,6 +1,7 @@
 #pragma once
 #include <Axle/RenderWorld.hpp>
 #include <algorithm>
+#include <cmath>
 namespace Axle {
     // Ordinary views have no implicit lighting. Private previews author their
     // own lights in their private world rather than changing this policy.
@@ -20,7 +21,12 @@ namespace Axle {
         }
         result.Environment=world.Skybox.Authored&&world.Skybox.Enabled;
         if(result.Environment) {
-            result.AmbientIntensity=std::max(0.0f,world.Skybox.Intensity);
+            result.AmbientIntensity=std::isfinite(world.Skybox.Intensity)?std::max(0.0f,world.Skybox.Intensity):0;
+            if(world.Skybox.Type==1) {
+                const double exposure=std::isfinite(world.Skybox.Exposure)?std::max(0.0f,world.Skybox.Exposure):0;
+                const double intensity=result.AmbientIntensity*exposure;
+                result.AmbientIntensity=intensity<=1e12?static_cast<float>(intensity):0;
+            }
             result.AmbientColor=(glm::vec3(world.Skybox.ZenithColor)+glm::vec3(world.Skybox.HorizonColor)+glm::vec3(world.Skybox.GroundColor))/3.0f;
         }
         // Match the native lux-to-radiance convention for artist and physical inputs.

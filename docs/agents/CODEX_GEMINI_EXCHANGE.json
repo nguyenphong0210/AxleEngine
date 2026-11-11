@@ -26,12 +26,11 @@
       "docs/reviews/OPT_13_C13_02_DELIVERY.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "C13-02.1 CPU bake implemented/self-verified in Debug and Release (1/1 each); proceeding to .2 native integration. Final separate-context review remains at .3.",
+    "implementation_status": "C13-02.1 committed in 90036bf. C13-02.2 native HDR/IBL implemented/self-verified: Debug native 2/2 and Release environment/CSM 5/5. Final acceptance remains .3.",
     "acceptance_status": "Pending implementation and actual verification.",
     "open_gates": [
-      "CPU bake and analytic regression",
-      "Native resource/sky/IBL and lifecycle evidence",
-      "Final Debug/Release, backend parity, architecture and separate-context review"
+      "Final native nonconstant orientation/roughness, lifetime and parity evidence",
+      "Product Debug/Release regression and separate-context review"
     ],
     "next_action": "Execute three verified C13-02 checkpoints with separate local commits, then stop at C13-02."
   },

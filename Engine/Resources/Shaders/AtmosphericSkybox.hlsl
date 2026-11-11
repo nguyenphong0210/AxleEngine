@@ -91,7 +91,14 @@ float Hash21(float2 p) {
 // =============================================================================
 // PIXEL SHADER ENTRY POINT - Analytical Rayleigh & Mie Scattering
 // =============================================================================
+TextureCube u_EnvironmentCube : register(t0,space1);
+SamplerState u_EnvironmentSampler : register(s0,space0);
 float4 PSMain(VSOutput input) : SV_Target {
+    if(u_Reserved[0].x>0.5) {
+        float3 radiance=clamp(u_EnvironmentCube.SampleLevel(u_EnvironmentSampler,normalize(input.ViewRay),0).rgb*max(u_Reserved[0].y,0),0,65000);
+        if(u_Params.z<0) return float4(radiance,1);
+        return float4(pow(ToneMapACES(radiance),1.0/2.2),1);
+    }
     float3 dir = normalize(input.ViewRay);
     float3 sunDir = normalize(u_SunDirection.xyz);
 

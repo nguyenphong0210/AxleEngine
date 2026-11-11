@@ -1,3 +1,4 @@
+#define AXLE_FORWARD_ENVIRONMENT_IBL 1
 // =============================================================================
 // ForwardPBR.hlsl - Unified D3D12 (DXIL) & Vulkan 1.3 (SPIR-V) PBR Forward+ Pipeline
 // Standardized HLSL 2021 Codebase for AxleEngine Multi-Backend 3D Viewport Renderer
@@ -107,7 +108,7 @@ cbuffer MultiLightBuffer : register(b2, space0) {
     DirectionalSunLight u_SunLight;
     uint4               u_LightCounts;        // x: NumPointLights (0..16), y: NumSpotLights (0..16), z: HasSunLight, w: LightingMode
     float4              u_CameraPosExposure;  // xyz: Camera Pos, w: Exposure
-    float4              u_LightReserved[2];   // [0].x: Disable analytical studio light lobes; remaining fields reserved
+    float4              u_LightReserved[2];   // [0]: x disables studio lobes, y is environment strength, z selects diffuse-only fallback
     PointLightData      u_PointLights[16];    // 16 * 64 = 1024 bytes
     SpotLightData       u_SpotLights[16];     // 16 * 64 = 1024 bytes
     float4              u_LightTailReserved[8]; // 128 bytes tail padding to 2304 bytes
@@ -173,6 +174,7 @@ float SunShadowVisibility(float3 world,float3 normal,float3 sun) {
     if(blend>0) value=lerp(value,cascade+1<count?CascadeVisibility(cascade+1,world,normal,sun):1,blend);
     return value;
 }
+SamplerState u_EnvironmentSampler : register(s3,space0);
 SamplerState u_ScreenSampler : register(s1, space0);
 SamplerState u_Sampler      : register(s0, space0);
 
@@ -571,20 +573,22 @@ float4 PSMain(PSInput input) : SV_Target0 {
     if (u_LightCounts.w == 1u) {
         // Image-Based Lighting (IBL) via Split-Sum Approximation
         // A. Diffuse Irradiance: Cosine-weighted hemispherical integration
-        float3 irradiance = u_IrradianceMap.Sample(u_Sampler, N).rgb;
+        float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, N).rgb;
         float3 diffuseAmbient = irradiance * albedo.rgb * ambientKD;
 
         // B. Specular Radiance: Pre-filtered environment radiance (roughness-dependent mip level)
         float3 R = reflect(-V, N);
-        const float MAX_REFLECTION_LOD = 4.0;
-        float3 prefilteredColor = u_PrefilterMap.SampleLevel(u_Sampler, R, roughness * MAX_REFLECTION_LOD).rgb;
+        uint envWidth,envHeight,envLevels;
+        u_PrefilterMap.GetDimensions(0,envWidth,envHeight,envLevels);
+        float MAX_REFLECTION_LOD=max(0,int(envLevels)-1);
+        float3 prefilteredColor = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, R, roughness * MAX_REFLECTION_LOD).rgb;
 
         // C. Split-sum BRDF integration 2D LUT: scale (rg.x) and bias (rg.y) for Fresnel reflection
-        float2 envBRDF = u_BRDFLUT.Sample(u_Sampler, float2(max(NdotV, 0.0), roughness)).rg;
+        float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(max(NdotV, 0.0), roughness)).rg;
         float3 specularAmbient = prefilteredColor * (ambientF * envBRDF.x + envBRDF.y);
 
         float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
-        float3 coatEnvironment = u_PrefilterMap.SampleLevel(u_Sampler, R, clamp(coatAnisotropy.y,0.04,1.0) * MAX_REFLECTION_LOD).rgb;
+        float3 coatEnvironment = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, R, clamp(coatAnisotropy.y,0.04,1.0) * MAX_REFLECTION_LOD).rgb;
         diffuseAmbient *= (1.0-coatF) * (1.0-coatF);
         specularAmbient = (specularAmbient * (1.0-coatF) * (1.0-coatF) + coatEnvironment * coatF) * u_MaterialSurface.w;
         float envIntensity = max(u_LightReserved[0].y,0.0);
@@ -596,13 +600,13 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 R=reflect(-V,N);
         float3 diffuseAmbient=ambientColor*albedo.rgb*ambientKD;
         float3 specularAmbient=ambientColor*ambientF*(1.0-roughness*0.5)*u_MaterialSurface.w;
-        ambient=(diffuseAmbient+specularAmbient)*max(u_LightReserved[0].y,0.0)*ao;
+        ambient=(diffuseAmbient+specularAmbient*(1-saturate(u_LightReserved[0].z)))*max(u_LightReserved[0].y,0.0)*ao;
     }
     
     // 10. Total Radiance Accumulation (Linear HDR Radiance)
     float3 color = ambient + Lo + emissive;
     // Preserve finite radiance when an intense, narrow lobe is stored in FP16.
-    if (u_LightCounts.w == 2u) color = clamp(color, 0.0, 65000.0);
+    color = clamp(color, 0.0, 65000.0);
     
     // 11. Tone Mapping & Color Polish (ACES Filmic Operator & Gamma Correction)
     // If u_CameraPosition.w > 0.0 (HDR Post-Processing Mode): Output pure linear HDR radiance

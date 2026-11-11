@@ -1,3 +1,9 @@
+set(native_sky_source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/AtmosphericSkybox.hlsl")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${native_sky_source}")
+file(READ "${native_sky_source}" AXLE_NATIVE_SKY)
+string(REPLACE "\n" "\n)AXLESKY\"\nR\"AXLESKY(" AXLE_NATIVE_SKY "${AXLE_NATIVE_SKY}")
+configure_file(src/NativeSkySource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/NativeSkySource.hpp" @ONLY)
+
 set(native_forward_source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ForwardPBR.hlsl")
 set(native_forward_common "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/PBRCommon.hlsli")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${native_forward_source}" "${native_forward_common}")
@@ -39,6 +45,7 @@ add_library(AxleScene STATIC
     src/MaterialTextureCache.cpp
     src/RHISceneRenderer.cpp
     src/RHICascadedShadows.cpp
+    src/RHIEnvironment.cpp
     src/RHIObjectPicker.cpp
     src/RHIMeshRegistry.cpp
     src/CharacterVFX.cpp

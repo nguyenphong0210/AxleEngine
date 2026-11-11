@@ -5,6 +5,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/DataComponents.hpp>
 #include <Axle/SceneLighting.hpp>
+#include <Axle/SceneSerializer.hpp>
 
 namespace Axle::RenderTests {
 
@@ -149,11 +150,29 @@ namespace Axle::RenderTests {
         RENDER_CHECK(lighting.Environment, "Sky background remains visible when authored");
         RENDER_CHECK(!lighting.EnvironmentLighting, "Sky background does not opt into environment lighting");
         RENDER_CHECK(lighting.AmbientIntensity == 0.0f, "Sky background does not illuminate receivers by default");
+        RenderWorld fill;fill.DirectionalLight=RenderDirectionalLight{};
+        const auto withoutSky=ResolveSceneLighting(fill);
+        fill.Skybox=world.Skybox;fill.Skybox.ZenithColor=fill.Skybox.HorizonColor=fill.Skybox.GroundColor={1,0,0,1};
+        const auto withBackground=ResolveSceneLighting(fill);
+        RENDER_CHECK(withBackground.AmbientColor==withoutSky.AmbientColor&&withBackground.AmbientIntensity==withoutSky.AmbientIntensity,
+                     "Background-only sky does not retint an existing authored directional fill");
 
         world.Skybox.EnvironmentLighting = true;
         const auto enabled = ResolveSceneLighting(world);
         RENDER_CHECK(enabled.EnvironmentLighting && enabled.AmbientIntensity > 0.0f,
                      "Explicit sky environment lighting contributes ambient energy");
+        Scene source;auto sky=source.CreateEntity("Authored sky");
+        auto& component=sky.AddComponent<SkyboxComponent>();
+        RENDER_CHECK(!component.EnvironmentLighting,"A newly authored atmosphere is background-only");
+        component.EnvironmentLighting=true;
+        const auto text=SceneSerializer(&source).SerializeToString();
+        Scene reopened;RENDER_CHECK(SceneSerializer(&reopened).DeserializeFromString(text),"Environment opt-in scene reopens");
+        RENDER_CHECK(ExtractRenderWorld(reopened).Skybox.EnvironmentLighting,"Environment opt-in survives serialization");
+        auto omitted=text;const auto field=omitted.find("      EnvironmentLighting: true\n");
+        RENDER_CHECK(field!=std::string::npos,"Saved scene explicitly records lighting ownership");
+        omitted.erase(field,std::string("      EnvironmentLighting: true\n").size());
+        Scene absent;RENDER_CHECK(SceneSerializer(&absent).DeserializeFromString(omitted),"Scene without opt-in field reopens");
+        RENDER_CHECK(!ExtractRenderWorld(absent).Skybox.EnvironmentLighting,"Absent lighting opt-in remains disabled");
         return true;
     }
 

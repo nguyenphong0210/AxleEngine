@@ -5,6 +5,14 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/JobSystem.hpp>
 #include <Axle/ScriptHotReloadManager.hpp>
+#include <Axle/SceneRenderer.hpp>
+#include <Axle/SceneRenderBridge.hpp>
+#include <Axle/PrimitiveMesh.hpp>
+#include <Axle/Scene.hpp>
+#include <Axle/Window.hpp>
+#include <Axle/RenderCommand.hpp>
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
@@ -75,6 +83,37 @@ uint8_t Display(float radiance) {
     const auto mapped=std::clamp((radiance*(2.51f*radiance+.03f))/(radiance*(2.43f*radiance+.59f)+.14f),0.f,1.f);
     return static_cast<uint8_t>(std::lround(std::pow(mapped,1.f/2.2f)*255));
 }
+bool OpenGL() {
+    WindowProps props;props.Width=props.Height=128;props.Maximized=false;props.GraphicsBackend=GraphicsAPI::OpenGL;
+    Window window(props);CHECK(RenderCommand::Init(reinterpret_cast<GLProcAddressFn>(glfwGetProcAddress)));
+    const auto oldRoot=FileSystem::GetAssetDirectory();FileSystem::SetAssetDirectory(Output);
+    struct Root {std::filesystem::path Value;~Root(){FileSystem::SetAssetDirectory(Value);}} root{oldRoot};
+    CHECK(HDR("gl.hdr",{2,.25f,.125f}));
+    SceneRenderer renderer;renderer.Init();CHECK(renderer.IsReady());
+    auto target=Framebuffer::Create({128,128,1,false});
+    RenderWorld world;world.Skybox.Authored=world.Skybox.Enabled=true;
+    world.Skybox.Type=1;world.Skybox.HDRPath="gl.hdr";
+    RenderMeshInstance mesh;mesh.GLMesh=PrimitiveMesh::CreateSphere();mesh.Material.PatternMode=3;world.Meshes.push_back(mesh);
+    PerspectiveCamera camera(55,1,.1f,100);
+    camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0,0,5),glm::vec3(0),glm::vec3(0,1,0)),glm::vec3(0,0,5));
+    SceneRenderSettings settings;settings.EnableShadows=settings.EnableParticles=false;
+    auto render=[&]{renderer.RenderWorldView(world,camera,target,nullptr,nullptr,settings);target->Bind();
+        std::vector<uint8_t> pixels(128*128*4);glReadPixels(0,0,128,128,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());target->Unbind();return pixels;};
+    auto uniform=[&](const char* name){GLint value=-1;const auto program=renderer.GetShader()->GetRendererID();
+        glGetUniformiv(program,glGetUniformLocation(program,name),&value);return value;};
+    const size_t center=(64*128+64)*4;
+    const auto off=render();CHECK(uniform("u_UseIBL")==0&&off[center]<5&&off[0]>20);
+    world.Skybox.EnvironmentLighting=true;const auto on=render();CHECK(uniform("u_UseIBL")==1&&on[center]>off[center]+20);
+    world.Skybox.EnvironmentLighting=false;CHECK(render()==off&&uniform("u_UseIBL")==0);
+    CHECK(PPM("gl-background.ppm",off,128)&&PPM("gl-environment.ppm",on,128));
+    // Exercise the separate ECS bridge against the actual production shader.
+    Scene scene;auto sky=scene.CreateEntity("Explicit environment");auto& authored=sky.AddComponent<SkyboxComponent>();
+    authored.Type=SkyboxType::HDRCubemap;authored.HDRPath="gl.hdr";
+    SceneRenderBridge::RenderGeometryPass(scene,camera,*renderer.GetShader());CHECK(uniform("u_UseIBL")==0);
+    authored.EnvironmentLighting=true;SceneRenderBridge::RenderGeometryPass(scene,camera,*renderer.GetShader());CHECK(uniform("u_UseIBL")==1);
+    authored.EnvironmentLighting=false;SceneRenderBridge::RenderGeometryPass(scene,camera,*renderer.GetShader());CHECK(uniform("u_UseIBL")==0);
+    CHECK(glGetError()==GL_NO_ERROR);std::cout<<"PASS OpenGL background-only and explicit IBL pixels, snapshot and ECS bridge gates\n";return true;
+}
 bool Native(RHIType backend) {
     JobSystem::Init(1);
     struct Jobs { ~Jobs(){ScriptHotReloadManager::Get().Shutdown();JobSystem::Shutdown();} } jobs;
@@ -122,6 +161,17 @@ bool Native(RHIType backend) {
     // the metallic receiver must not receive ambient/specular energy from it.
     world.Skybox.EnvironmentLighting=false; auto backgroundOnly=render();
     CHECK(!backgroundOnly.empty()&&backgroundOnly[0]>20&&backgroundOnly[center]<5);
+    // Background colors and HDR import exposure must not alter an existing
+    // authored directional fill when sky illumination is disabled.
+    const auto originalSky=world.Skybox;world.DirectionalLight=RenderDirectionalLight{};
+    world.DirectionalLight->Intensity=0;world.DirectionalLight->AmbientIntensity=.25f;
+    const auto fill=render();
+    world.Skybox.ZenithColor=world.Skybox.HorizonColor=world.Skybox.GroundColor={1,0,0,1};
+    authored.Exposure=2;CHECK(TextureDescriptor::Save((Output/"sky.axleasset").string(),authored));
+    const auto changedBackground=render();CHECK(!fill.empty()&&!changedBackground.empty());
+    for(size_t c=0;c<3;++c)CHECK(fill[center+c]==changedBackground[center+c]);
+    world.DirectionalLight.reset();world.Skybox=originalSky;authored.Exposure=1;
+    CHECK(TextureDescriptor::Save((Output/"sky.axleasset").string(),authored));
     world.Skybox.EnvironmentLighting=true; CHECK(render()==red);
     // Exposure affects illumination and sky, without rebuilding immutable maps.
     world.Skybox.Intensity=.25f; auto dim=render(); CHECK(!dim.empty()&&dim[0]<red[0]&&dim[center]<red[center]);
@@ -208,11 +258,23 @@ bool Native(RHIType backend) {
     CHECK(FileSystem::WriteIdentifiedTextFile(unicodePath,TextureDescriptor::Serialize(authored)));
     world.Skybox.HDRPath="sky_\xC4\x91\xE1\xBB\x8F.axleasset";
     CHECK(!render().empty()&&environment.Ready()&&environment.Diagnostic().empty());
+    // A procedural background is not a sun or an ambient source. Raw snapshots
+    // must obey the same ownership rules as snapshots extracted from the ECS.
+    world.Skybox.Type=0;world.Skybox.EnvironmentLighting=false;world.Skybox.HDRPath.clear();world.Meshes={mesh};
+    const auto atmosphereOnly=render();CHECK(!atmosphereOnly.empty()&&atmosphereOnly[center]<5&&atmosphereOnly[0]>20);
+    world.Skybox.SunColor=glm::vec4(0);CHECK(render()==atmosphereOnly);
+    world.DirectionalLight=RenderDirectionalLight{};world.DirectionalLight->AmbientIntensity=0;
+    world.DirectionalLight->Direction={0,0,1};
+    const auto direct=render();CHECK(!direct.empty()&&direct[center]>atmosphereOnly[center]+20);
+    world.Meshes.clear();camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0),glm::vec3(0,0,1),glm::vec3(0,1,0)),glm::vec3(0));
+    const auto sun=render();world.DirectionalLight->Intensity=0;const auto zeroSun=render();
+    CHECK(!sun.empty()&&!zeroSun.empty()&&sun[center]>zeroSun[center]+10);
+    world.DirectionalLight.reset();world.Skybox.SunDirection={0,0,1,0};CHECK(render()==zeroSun);
     CHECK(device.WaitIdle()); renderer.Shutdown(); CHECK(environment.CacheSize()==0);
     CHECK(GetRHIValidationErrorCount()==0);
     // CPU cache metadata may outlive a native device. Stale native generations
     // must become invalid and be recreated under the new owner epoch.
-    RHIEnvironment survivor;CHECK(survivor.SetBakeSettings(bake));world.Skybox.HDRPath="blue.hdr";
+    RHIEnvironment survivor;CHECK(survivor.SetBakeSettings(bake));world.Skybox.Type=1;world.Skybox.HDRPath="blue.hdr";
     CHECK(survivor.Prepare(world.Skybox)&&survivor.Ready());const auto stale=survivor.Ready()->Radiance->GetHandle();
     device.Shutdown();CHECK(!survivor.Ready()->IsValid());CHECK(device.Init(init));
     CHECK(survivor.Prepare(world.Skybox)&&survivor.Ready()&&survivor.UploadCount()==2);
@@ -225,6 +287,6 @@ bool Native(RHIType backend) {
 int main(int argc,char** argv) {
     if(argc!=3)return 2;
     Output=std::filesystem::absolute(argv[2]);std::filesystem::create_directories(Output);
-    try { return Native(std::string(argv[1])=="vulkan"?RHIType::Vulkan:RHIType::Direct3D12)&&GetRHIValidationErrorCount()==0?0:1; }
+    try { return (std::string(argv[1])=="gl"?OpenGL():Native(std::string(argv[1])=="vulkan"?RHIType::Vulkan:RHIType::Direct3D12))&&GetRHIValidationErrorCount()==0?0:1; }
     catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}
 }

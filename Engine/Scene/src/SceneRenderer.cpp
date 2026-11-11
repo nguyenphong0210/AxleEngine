@@ -253,7 +253,7 @@ namespace Axle {
             shader.SetFloat("u_Exposure", settings.Exposure); shader.SetFloat("u_Gamma", settings.Gamma);
             shader.SetInt("u_ToneMappingMode", settings.ToneMappingMode);
             bool useIBL = false;
-            if (lighting.Environment && world.Skybox.Type == 1 && !world.Skybox.HDRPath.empty() && m_Skybox) {
+            if (lighting.EnvironmentLighting && world.Skybox.Type == 1 && !world.Skybox.HDRPath.empty() && m_Skybox) {
                 if (m_Skybox->GetIrradianceMap() && m_Skybox->GetPrefilterMap() && m_Skybox->GetBRDFLUT()) {
                     m_Skybox->GetIrradianceMap()->Bind(5); m_Skybox->GetPrefilterMap()->Bind(6); m_Skybox->GetBRDFLUT()->Bind(7); useIBL = true;
                 }
@@ -379,8 +379,10 @@ namespace Axle {
             spec.HorizonColor = glm::vec3(world.Skybox.HorizonColor);
             spec.GroundColor = glm::vec3(world.Skybox.GroundColor);
             spec.SunSize = world.Skybox.SunSize; spec.SunGlow = world.Skybox.SunGlow; spec.Turbidity = world.Skybox.Turbidity;
-            m_Skybox->SetSunDirection(glm::vec3(world.Skybox.SunDirection));
-            m_Skybox->SetSunColor(glm::vec3(world.Skybox.SunColor));
+            m_Skybox->SetSunDirection(world.DirectionalLight && world.Skybox.SyncWithSun
+                ? lighting.SunDirection : glm::vec3(world.Skybox.SunDirection));
+            m_Skybox->SetSunColor(world.DirectionalLight
+                ? lighting.SunColor * std::max(0.0f,world.DirectionalLight->Intensity) : glm::vec3(0));
             m_Skybox->Render(camera.GetViewMatrix(), camera.GetProjectionMatrix());
         }
 

@@ -29,8 +29,8 @@ namespace Axle {
                     const double intensity=result.AmbientIntensity*exposure;
                     result.AmbientIntensity=intensity<=1e12?static_cast<float>(intensity):0;
                 }
+                result.AmbientColor=(glm::vec3(world.Skybox.ZenithColor)+glm::vec3(world.Skybox.HorizonColor)+glm::vec3(world.Skybox.GroundColor))/3.0f;
             }
-            result.AmbientColor=(glm::vec3(world.Skybox.ZenithColor)+glm::vec3(world.Skybox.HorizonColor)+glm::vec3(world.Skybox.GroundColor))/3.0f;
         }
         // Match the native lux-to-radiance convention for artist and physical inputs.
         result.SunIntensity=(result.SunIntensity>100.0f?result.SunIntensity:result.SunIntensity*100000.0f)*0.000035f;

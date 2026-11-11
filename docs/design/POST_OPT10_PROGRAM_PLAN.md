@@ -165,10 +165,12 @@ Packages:
   scope; see [CPU delivery](../reviews/OPT_13_C13_01_CPU_DELIVERY.md) and
   [native acceptance](../reviews/OPT_13_C13_01_NATIVE_DELIVERY.md).
   Debug 109/109, Release focused 18/18 and native backend parity pass.
-  C13-02 onward remain unreleased.
+  C13-03 onward remain unreleased.
 - **C13-02 / 13.2 HDR Environment & IBL:** authored HDR skyboxes, pre-filtered
   radiance/irradiance cubemaps, split-sum 2D BRDF LUT integration, and diffuse
   ambient fallback.
+  The C13-02 lighting-ownership correction separates visible backgrounds from
+  explicit environment illumination; see the [correction report](../reviews/OPT_13_C13_02_LIGHTING_SEMANTICS.md).
 - **C13-03 / 13.3 Screen-space ambient & reflections:** depth/normal history,
   configurable-resolution GTAO/SSAO compute pass with bilateral depth-aware
   reconstruction, and bounded SSR ray-marching with temporal invalidation.

@@ -96,3 +96,10 @@ Checkpoint .2 correction verification: Debug native `EnvironmentGPU_dx12`,
 `EnvironmentGPU_vulkan`, `CascadedShadowGPU_dx12` and `CascadedShadowGPU_vulkan`
 all pass 4/4. The HDR regression explicitly renders the same metallic receiver
 with background-only and explicit-environment modes.
+
+The final correction also covers snapshot and ECS OpenGL IBL gates, raw-snapshot
+sun ownership, and isolation of existing authored directional fill from background
+colors/HDR exposure. See
+[lighting ownership correction](../reviews/OPT_13_C13_02_LIGHTING_SEMANTICS.md)
+for findings, recheck and final rebuilt evidence. Private preview scenes keep
+their own authored lights; no global preview defaults are added to runtime.

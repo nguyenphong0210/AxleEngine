@@ -1181,7 +1181,7 @@ namespace Axle {
         lightData.LightCounts.y = spotIndex;
 
         bool useIBL = m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.EnvironmentLighting && world.Skybox.Type==1;
-        lightData.ReservedHeader[0].y = lighting.AmbientIntensity*m_Environment.SourceExposure();
+        lightData.ReservedHeader[0].y = lighting.AmbientIntensity*(lighting.EnvironmentLighting ? m_Environment.SourceExposure() : 1.0f);
         lightData.ReservedHeader[0].z = lighting.EnvironmentLighting && world.Skybox.Type==1 && !useIBL ? 1.f : 0.f;
         lightData.LightCounts.w = useIBL ? 1u : 0u;
 
@@ -1426,7 +1426,8 @@ namespace Axle {
             const bool hdrEnvironment=activeSkybox.Type==SkyboxType::HDRCubemap && bool(m_Environment.Ready());
             if (activeSkybox.Enabled && (activeSkybox.Type == SkyboxType::ProceduralAtmospheric || hdrEnvironment)) {
                 // 1. Determine normalized Sun direction
-                glm::vec3 sunDir(world.Skybox.SunDirection);
+                glm::vec3 sunDir = world.DirectionalLight && activeSkybox.SyncWithSun
+                    ? lighting.SunDirection : glm::vec3(world.Skybox.SunDirection);
                 if (glm::length(sunDir) > 1e-4f) {
                     sunDir = glm::normalize(sunDir);
                 } else {

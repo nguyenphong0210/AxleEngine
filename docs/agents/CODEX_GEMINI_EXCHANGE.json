@@ -3,7 +3,7 @@
   "current_task": {
     "id": "OPT-13-C13-02",
     "title": "C13-02 lighting semantics correction",
-    "state": "in_progress",
+    "state": "complete",
     "coordinator": "Codex",
     "implementer": "Codex (direct user assignment)",
     "code_baseline": "2d10db6",
@@ -11,28 +11,26 @@
     "user_scope": "C13-02 corrective slice only: separate visible atmosphere from directional sun and environment illumination; no light means no sun/ambient contribution to meshes; preserve HDR IBL when explicitly available, Editor preview convenience, C13-01, C12 and OpenGL. No C13-03+ and no push.",
     "plan_reference": "docs/design/POST_OPT10_PROGRAM_PLAN.md#opt-13--performance-first-lighting-volumetric-atmosphere-ddgi-and-post-processing",
     "expected_files": [
-      "Engine/Renderer/include/Axle/EnvironmentBake.hpp",
-      "Engine/Renderer/src/EnvironmentBake.cpp",
-      "Engine/Scene/include/Axle/RHIEnvironment.hpp",
-      "Engine/Scene/src/RHIEnvironment.cpp",
+      "Engine/Renderer/include/Axle/RenderWorld.hpp",
+      "Engine/Renderer/include/Axle/SceneLighting.hpp",
+      "Engine/Scene/include/Axle/Components.hpp",
+      "Engine/Scene/src/SceneExtraction.cpp",
+      "Engine/Scene/src/SceneSerializer.cpp",
+      "Engine/Scene/src/SceneRenderBridge.cpp",
+      "Engine/Scene/src/SceneRenderer.cpp",
       "Engine/Scene/src/RHISceneRenderer.cpp",
-      "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
-      "Engine/Resources/Shaders/AtmosphericSkybox.hlsl",
-      "Engine/Resources/Shaders/ForwardPBR.hlsl",
-      "Tests/src/Test_EnvironmentBake.cpp",
+      "Engine/UI/src/EntityInspector.cpp",
       "Tests/src/Test_EnvironmentRendering.cpp",
+      "Tests/rendering/Test_RenderWorldExtractionUnit.cpp",
       "Tests/CMakeLists.txt",
       "docs/design/OPT_13_C13_02_EXECUTION_PLAN.md",
-      "docs/reviews/OPT_13_C13_02_DELIVERY.md",
+      "docs/reviews/OPT_13_C13_02_LIGHTING_SEMANTICS.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Contract checkpoint committed in 8ea95c9. Native renderer/shader checkpoint is implemented and self-verified: Debug EnvironmentGPU + CSM 4/4; final acceptance and Release/OpenGL correction gates remain.",
-    "acceptance_status": "Pending correction checkpoints.",
-    "open_gates": [
-      "Release native and product regression for the correction",
-      "OpenGL explicit/fallback and separate-context review"
-    ],
-    "next_action": "Implement and verify sequential corrective checkpoints, then stop at C13-02."
+    "implementation_status": "Corrective contract committed in 8ea95c9, native ownership in 4f79e51 and legacy ECS GL gate in 77e924c. Final source adds snapshot GL gate, raw-snapshot sun ownership, ambient tint/exposure isolation and physical GL/native plus serialization regression coverage. Final rebuilt Debug products/all tests pass 113/113; Release products/focused tests 9/9; GL compatibility commands 4/4; architecture PASS; native fixture parity max/mean 0.",
+    "acceptance_status": "Accepted after all four review findings (ENV-R1..R4) were fixed and separately rechecked. Recheck by /root/c13_semantics_recheck was source-only; execution evidence belongs to Codex and is recorded in the correction report.",
+    "open_gates": [],
+    "next_action": "Stop at C13-02 correction. C13-03 and later require a new user assignment."
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",

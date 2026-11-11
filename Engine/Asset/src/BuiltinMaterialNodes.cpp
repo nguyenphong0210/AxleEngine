@@ -49,13 +49,19 @@ namespace {
     }
 
     void RegisterTexture(MaterialNodeRegistry& registry) {
-        MaterialNodeDefinition texture; texture.Type = "SampleTexture2D";
+        MaterialNodeDefinition texture; texture.Type = "SampleTexture2D"; texture.Revision = 2;
         auto path = StringProperty("texturePath"); path.AssetPath = true; path.DiagnosticCode = "MG_RESOURCE_PATH";
         auto space = StringProperty("colorSpace", {"sRGB", "Linear"}); space.DiagnosticCode = "MG_RESOURCE";
         auto sampler = StringProperty("sampler", {"LinearRepeat", "LinearClamp", "PointRepeat", "PointClamp"}); sampler.DiagnosticCode = "MG_RESOURCE";
-        texture.Properties = {std::move(path), std::move(space), std::move(sampler)};
+        auto fallback = StringProperty("fallback", {"Error", "White", "FlatNormal", "Magenta"});
+        fallback.Required = false; fallback.Default = std::string("Error"); fallback.DiagnosticCode = "MG_RESOURCE";
+        texture.Properties = {std::move(path), std::move(space), std::move(sampler), std::move(fallback)};
         texture.Signatures = {{{Input("uv", Type::Float2, 0)}, {{"rgba", Type::Float4, {}}, {"rgb", Type::Float3, {}}, {"a", Type::Float, {}}}}};
         Add(registry, std::move(texture));
+        MaterialNodeDefinition unpack; unpack.Type = "UnpackNormal";
+        auto rgb = Input("rgb", Type::Float3, 0); rgb.Default->Components = {0.5f,0.5f,1};
+        unpack.Signatures = {{{std::move(rgb)}, {{"normal",Type::Float3,{}}}}};
+        Add(registry, std::move(unpack));
     }
 
     void RegisterSurface(MaterialNodeRegistry& registry) {

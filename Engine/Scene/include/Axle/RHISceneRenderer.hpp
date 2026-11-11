@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 #include <Axle/RHI/RHIFrameContext.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/Types.hpp>
@@ -314,7 +315,7 @@ namespace Axle {
 
         RHI::RHIDescriptorPool m_CustomDescriptorPool;
         RHI::RHISampler m_CustomSampler;
-        RHI::RHISampler m_CustomLinearRepeatSampler;
+        std::map<ShaderSamplerPolicy,RHI::RHISampler> m_CustomPolicySamplers;
 
         nri::Pipeline* GetOrCreateCustomPipeline(
             const CustomReadyGeneration& generation,

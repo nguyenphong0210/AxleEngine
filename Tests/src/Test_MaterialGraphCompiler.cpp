@@ -107,7 +107,8 @@ namespace {
         CHECK(!MaterialGraphProgram::Compile(Sample(),RHIShaderFormat::DXBC,renamed,&error)&&error.Code=="MG_SHADER_FORMAT");
         CHECK(renamed.HLSL=="previous");
         auto sampler=Sample();Property(sampler.Nodes[3],"sampler")="PointClamp";
-        CHECK(!MaterialGraphProgram::Compile(sampler,RHIShaderFormat::DXIL,renamed,&error)&&error.Code=="MG_HLSL_SAMPLER"&&error.NodeID==4);
+        CHECK(MaterialGraphProgram::Compile(sampler,RHIShaderFormat::DXIL,renamed,&error));
+        CHECK(renamed.Graph.Textures[0].Sampler=="PointClamp");
         auto splat=Sample();splat.Connections[9].From={10,"value"};CHECK(Compile(splat,RHIShaderFormat::SPIRV,renamed));
         std::cout<<"PASS DXIL/SPIR-V compilation, metadata, determinism, hostile names, rollback, sampler rejection and splats\n";
         CHECK(!RHIDevice::Get().IsInitialized());return true;

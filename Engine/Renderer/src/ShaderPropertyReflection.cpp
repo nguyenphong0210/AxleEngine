@@ -5,6 +5,14 @@
 #include <regex>
 
 namespace Axle {
+    bool ParseShaderSamplerPolicy(std::string_view name, ShaderSamplerPolicy& policy) {
+        if(name=="LinearRepeat")policy=ShaderSamplerPolicy::LinearRepeat;
+        else if(name=="LinearClamp")policy=ShaderSamplerPolicy::LinearClamp;
+        else if(name=="PointRepeat")policy=ShaderSamplerPolicy::PointRepeat;
+        else if(name=="PointClamp")policy=ShaderSamplerPolicy::PointClamp;
+        else return false;
+        return true;
+    }
 
     const char* ShaderPropertyTypeToString(ShaderPropertyType type) {
         switch (type) {
@@ -99,7 +107,7 @@ namespace Axle {
         static const std::regex defaultRegex(R"(\[\s*Default\s*\(([^\)]*)\)\s*\])");
         static const std::regex colorRegex(R"(\[\s*Color\s*\])");
         static const std::regex textureSpaceRegex(R"(\[\s*TextureColorSpace\s*\(\s*(sRGB|Linear)\s*\)\s*\])");
-        static const std::regex textureSamplerRegex(R"(\[\s*TextureSampler\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*LinearRepeat\s*\)\s*\])");
+        static const std::regex textureSamplerRegex(R"(\[\s*TextureSampler\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*(LinearRepeat|LinearClamp|PointRepeat|PointClamp)\s*\)\s*\])");
         static const std::regex declRegex(R"(\b(float4|float3|float2|float|int|uint|bool|Texture2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*[^=;]+)?\s*(?:=\s*([^;]+))?;)");
         static const std::regex numberRegex(R"([+-]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][+-]?\d+)?)");
         std::istringstream original(hlslSource), codeStream(clean);
@@ -107,6 +115,7 @@ namespace Axle {
         bool hasRange=false,color=false,cbufferPending=false;
         ShaderTextureColorSpace textureSpace=ShaderTextureColorSpace::Automatic;
         std::string samplerName;
+        ShaderSamplerPolicy samplerPolicy=ShaderSamplerPolicy::Default;
         float rangeMin=0,rangeMax=1;
         std::vector<bool> scopes;
         while(std::getline(original,line) && std::getline(codeStream,code)) {
@@ -115,7 +124,7 @@ namespace Axle {
             if(std::regex_search(line,annotation,tooltipRegex))tooltip=annotation[1];
             if(std::regex_search(line,annotation,colorRegex))color=true;
             if(std::regex_search(line,annotation,textureSpaceRegex))textureSpace=annotation[1]=="sRGB"?ShaderTextureColorSpace::SRGB:ShaderTextureColorSpace::Linear;
-            if(std::regex_search(line,annotation,textureSamplerRegex))samplerName=annotation[1];
+            if(std::regex_search(line,annotation,textureSamplerRegex)) {samplerName=annotation[1];ParseShaderSamplerPolicy(annotation[2].str(),samplerPolicy);}
             if(std::regex_search(line,annotation,defaultRegex))defaultValue=annotation[1];
             if(std::regex_search(line,annotation,rangeRegex)) {
                 try {rangeMin=std::stof(annotation[1]);rangeMax=std::stof(annotation[2]);hasRange=true;}catch(...) {hasRange=false;}
@@ -145,7 +154,7 @@ namespace Axle {
                 if(type=="Texture2D") {
                     desc.Type=ShaderPropertyType::Texture2D;desc.TextureColorSpace=textureSpace;
                     desc.SamplerName=samplerName;
-                    if(!samplerName.empty())desc.SamplerPolicy=ShaderSamplerPolicy::LinearRepeat;
+                    if(!samplerName.empty())desc.SamplerPolicy=samplerPolicy;
                 }
                 else if(type=="float4" && (color || name.find("Color")!=name.npos || name.find("Tint")!=name.npos)) {
                     desc.Type=ShaderPropertyType::Color;desc.DefaultVec4=glm::vec4(1);

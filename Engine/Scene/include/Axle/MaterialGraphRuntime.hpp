@@ -1,6 +1,8 @@
 #pragma once
 #include <Axle/MaterialGraphProgram.hpp>
 #include <Axle/CustomMaterialProgram.hpp>
+#include <Axle/MaterialGraphResources.hpp>
+#include <Axle/RHI/RHIDescriptorPool.hpp>
 #include <deque>
 #include <map>
 #include <span>
@@ -30,6 +32,17 @@ namespace Axle {
         uint8_t Samples = 1;
     };
 
+    struct MaterialGraphNativeTexture {
+        std::string Symbol, Key;
+        ShaderAddress Address;
+        std::shared_ptr<const RHI::RHITexture> Texture;
+    };
+    struct MaterialGraphNativeSampler {
+        std::string Symbol;
+        ShaderAddress Address;
+        ShaderSamplerPolicy Policy = ShaderSamplerPolicy::Default;
+        std::shared_ptr<const RHI::RHISampler> Sampler;
+    };
     struct MaterialGraphReadyGeneration {
         uint64_t ID = 0;
         uint64_t DeviceEpoch = 0;
@@ -37,6 +50,9 @@ namespace Axle {
         MaterialGraphTarget Target;
         std::string PipelineKey;
         std::shared_ptr<const CustomReadyGeneration> Native;
+        MaterialGraphResourceSet Resources;
+        std::vector<MaterialGraphNativeTexture> Textures;
+        std::vector<MaterialGraphNativeSampler> Samplers;
     };
 
     struct MaterialGraphRuntimeStats {
@@ -63,6 +79,10 @@ namespace Axle {
         // Returns an RHI-cache pipeline for immediate recording; never retain the raw
         // pointer across cache eviction/device reset. Commands retain native leases.
         static nri::Pipeline* GetPipeline(const MaterialGraphReadyGeneration& generation);
+        // Populate the texture/sampler ranges of fresh caller-owned descriptor sets.
+        // Caller packs/binds cbuffers and retains the generation while recording.
+        static bool WriteResourceDescriptors(const MaterialGraphReadyGeneration& generation,
+                                             RHI::RHIDescriptorPool& pool, std::span<nri::DescriptorSet*> sets);
     private:
         struct ShaderCode {
             RHI::RHIShaderBytecode Vertex, Fragment;
@@ -76,5 +96,6 @@ namespace Axle {
         std::shared_ptr<const MaterialGraphReadyGeneration> m_Ready;
         MaterialGraphDiagnostic m_Diagnostic;
         MaterialGraphRuntimeStats m_Stats;
+        bool PrepareResources(const MaterialGraphDocument&, MaterialGraphReadyGeneration&);
     };
 }

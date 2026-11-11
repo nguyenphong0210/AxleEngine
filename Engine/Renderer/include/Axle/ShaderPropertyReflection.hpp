@@ -3,6 +3,7 @@
 #include <Axle/RHI/RHIShader.hpp>
 #include <glm/glm.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <unordered_map>
 #include <memory>
@@ -10,7 +11,8 @@
 namespace Axle {
 
     enum class ShaderTextureColorSpace : uint8_t { Automatic, Linear, SRGB };
-    enum class ShaderSamplerPolicy : uint8_t { Default, LinearRepeat };
+    enum class ShaderSamplerPolicy : uint8_t { Default, LinearRepeat, LinearClamp, PointRepeat, PointClamp };
+    bool ParseShaderSamplerPolicy(std::string_view name, ShaderSamplerPolicy& policy);
 
     enum class ShaderPropertyType : uint8_t {
         Float = 0,

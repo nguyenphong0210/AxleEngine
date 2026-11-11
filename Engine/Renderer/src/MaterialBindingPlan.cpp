@@ -5,6 +5,16 @@
 #include <unordered_set>
 
 namespace Axle {
+    std::optional<RHI::RHISamplerDesc> MaterialSamplerDescription(ShaderSamplerPolicy policy) {
+        using namespace RHI;
+        switch(policy) {
+            case ShaderSamplerPolicy::LinearRepeat:return RHISamplerDesc::Trilinear(RHIAddressMode::Repeat);
+            case ShaderSamplerPolicy::LinearClamp:return RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge);
+            case ShaderSamplerPolicy::PointRepeat:return RHISamplerDesc::Point(RHIAddressMode::Repeat);
+            case ShaderSamplerPolicy::PointClamp:return RHISamplerDesc::Point(RHIAddressMode::ClampToEdge);
+            default:return {};
+        }
+    }
 
     namespace {
         std::string ToLower(std::string str) {
@@ -267,8 +277,10 @@ namespace Axle {
         for (const auto& resource : mergedReflection.Resources) if (resource.Type == RHI::RHIResourceType::Sampler) {
             SamplerBinding sampler{resource.Name,{resource.Space,resource.BindPoint},ShaderSamplerPolicy::Default};
             for (const auto& desc : declaredUserProperties) if (desc.Type==ShaderPropertyType::Texture2D && desc.SamplerName==resource.Name && desc.SamplerPolicy!=ShaderSamplerPolicy::Default) {
-                if (desc.SamplerPolicy!=ShaderSamplerPolicy::LinearRepeat)
+                if (!MaterialSamplerDescription(desc.SamplerPolicy))
                     return MaterialBindingError{"SamplerPolicy",resource.Name,"","Unsupported explicit sampler policy."};
+                if (sampler.Policy!=ShaderSamplerPolicy::Default && sampler.Policy!=desc.SamplerPolicy)
+                    return MaterialBindingError{"SamplerPolicy",resource.Name,"","Conflicting policies for the same sampler."};
                 sampler.Policy=desc.SamplerPolicy;
             }
             plan.Samplers.push_back(std::move(sampler));

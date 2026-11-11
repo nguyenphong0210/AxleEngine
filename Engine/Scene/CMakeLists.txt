@@ -30,6 +30,7 @@ add_library(AxleScene STATIC
     src/CustomMaterialProgram.cpp
     src/MaterialGraphProgram.cpp
     src/MaterialGraphLayout.cpp
+    src/MaterialGraphResources.cpp
     src/MaterialGraphRuntime.cpp
     src/SimulationClock.cpp
     src/SimulationInput.cpp

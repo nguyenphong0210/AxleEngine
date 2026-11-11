@@ -18,6 +18,7 @@ namespace Axle {
         std::string TextureSymbol;
         std::string SamplerSymbol;
         uint32_t Binding = 0;
+        std::string Fallback = "Error";
     };
 
     struct MaterialHLSLSource {
@@ -60,6 +61,7 @@ namespace Axle {
         std::optional<std::string> TexturePathProperty;
         std::string ColorSpaceProperty;
         std::string SamplerProperty;
+        std::optional<std::string> FallbackProperty;
     };
 
     // Trusted compiler extensions. Emit callbacks run synchronously; their owning

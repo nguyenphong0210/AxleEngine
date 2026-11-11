@@ -26,8 +26,18 @@ target_compile_definitions(AxleMaterialGraphRuntimeTests PRIVATE AXLE_TEST_WORKS
 add_test(NAME MaterialGraphRuntimeTests COMMAND $<TARGET_FILE:AxleMaterialGraphRuntimeTests> policy
     "${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/MaterialGraph/M_RustMetal.axleasset" "${CMAKE_CURRENT_BINARY_DIR}/MaterialGraphRuntime/$<CONFIG>")
 set_tests_properties(MaterialGraphRuntimeTests PROPERTIES LABELS "material;compiler;cpu" TIMEOUT 60)
+add_executable(AxleMaterialGraphResourceTests EXCLUDE_FROM_ALL src/Test_MaterialGraphResources.cpp)
+target_link_libraries(AxleMaterialGraphResourceTests PRIVATE Axle::Scene)
+target_include_directories(AxleMaterialGraphResourceTests PRIVATE src)
+target_compile_definitions(AxleMaterialGraphResourceTests PRIVATE AXLE_TEST_WORKSPACE_DIR="${CMAKE_CURRENT_BINARY_DIR}/Work/$<CONFIG>")
+add_test(NAME MaterialGraphResourceTests COMMAND $<TARGET_FILE:AxleMaterialGraphResourceTests> policy
+    "${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/MaterialGraph/M_RustMetal.axleasset" "${CMAKE_CURRENT_BINARY_DIR}/MaterialGraphResources/$<CONFIG>")
+set_tests_properties(MaterialGraphResourceTests PROPERTIES LABELS "material;resource;cpu" TIMEOUT 60)
 if(AXLE_ENABLE_MATERIAL_GRAPH_GPU_TESTS)
     foreach(backend dx12 vulkan)
+        add_test(NAME MaterialGraphResourceGPU_${backend} COMMAND $<TARGET_FILE:AxleMaterialGraphResourceTests> ${backend}
+            "${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/MaterialGraph/M_RustMetal.axleasset" "${CMAKE_CURRENT_BINARY_DIR}/MaterialGraphResources/$<CONFIG>")
+        set_tests_properties(MaterialGraphResourceGPU_${backend} PROPERTIES LABELS "material;resource;gpu" RUN_SERIAL TRUE TIMEOUT 120)
         add_test(NAME MaterialGraphRuntimeGPU_${backend} COMMAND $<TARGET_FILE:AxleMaterialGraphRuntimeTests> ${backend}
             "${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/MaterialGraph/M_RustMetal.axleasset" "${CMAKE_CURRENT_BINARY_DIR}/MaterialGraphRuntime/$<CONFIG>")
         set_tests_properties(MaterialGraphRuntimeGPU_${backend} PROPERTIES LABELS "material;gpu" RUN_SERIAL TRUE TIMEOUT 120)
@@ -37,6 +47,9 @@ if(AXLE_ENABLE_MATERIAL_GRAPH_GPU_TESTS)
     endforeach()
 endif()
 if(WIN32)
+    add_custom_command(TARGET AxleMaterialGraphResourceTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll" "$<TARGET_FILE_DIR:AxleMaterialGraphResourceTests>/dxcompiler.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll" "$<TARGET_FILE_DIR:AxleMaterialGraphResourceTests>/dxil.dll")
     add_custom_command(TARGET AxleMaterialGraphRuntimeTests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxcompiler.dll" "$<TARGET_FILE_DIR:AxleMaterialGraphRuntimeTests>/dxcompiler.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/ThirdParty/dxc/bin/x64/dxil.dll" "$<TARGET_FILE_DIR:AxleMaterialGraphRuntimeTests>/dxil.dll")
@@ -49,7 +62,7 @@ if(NOT AXLE_BUILD_EDITOR)
     add_executable(AxlePluginFoundationTests EXCLUDE_FROM_ALL src/Test_PluginFoundation.cpp)
     target_link_libraries(AxlePluginFoundationTests PRIVATE Axle::Plugin Axle::Project)
     add_test(NAME PluginFoundationTests COMMAND $<TARGET_FILE:AxlePluginFoundationTests>)
-    add_custom_target(AxleAllTests DEPENDS AxlePluginFoundationTests AxleStaticPluginLifetimeTests AxleArchitectureStressTests AxleMaterialGraphTests AxleMaterialGraphCompilerTests AxleMaterialGraphRuntimeTests)
+    add_custom_target(AxleAllTests DEPENDS AxlePluginFoundationTests AxleStaticPluginLifetimeTests AxleArchitectureStressTests AxleMaterialGraphTests AxleMaterialGraphCompilerTests AxleMaterialGraphRuntimeTests AxleMaterialGraphResourceTests)
     return()
 endif()
 
@@ -684,7 +697,7 @@ list(APPEND AXLE_TEST_TARGETS AxlePluginFoundationTests AxlePluginSelectionTests
 list(APPEND AXLE_TEST_TARGETS AxlePrimitiveTests AxleRHIIdentityTests AxleRHIRetirementTests AxleRHIStateTests AxleRHIFrameTests AxleRHIPresentationTests AxleImageSourceTests)
 list(APPEND AXLE_TEST_TARGETS AxleTransientGraphTests)
 list(APPEND AXLE_TEST_TARGETS AxleMaterialGraphTests)
-list(APPEND AXLE_TEST_TARGETS AxleMaterialGraphCompilerTests AxleMaterialGraphRuntimeTests)
+list(APPEND AXLE_TEST_TARGETS AxleMaterialGraphCompilerTests AxleMaterialGraphRuntimeTests AxleMaterialGraphResourceTests)
 list(APPEND AXLE_TEST_TARGETS AxleRenderLifetimeStressTests)
 list(APPEND AXLE_TEST_TARGETS AxleRenderAcceptanceTests)
 if(WIN32)

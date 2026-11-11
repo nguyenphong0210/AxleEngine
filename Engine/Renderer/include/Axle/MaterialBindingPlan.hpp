@@ -3,6 +3,7 @@
 #include <Axle/RHI/RHIShader.hpp>
 #include <Axle/RHI/RHIVertexLayout.hpp>
 #include <Axle/ShaderPropertyReflection.hpp>
+#include <Axle/RHI/RHISampler.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -11,6 +12,7 @@
 #include <optional>
 
 namespace Axle {
+    std::optional<RHI::RHISamplerDesc> MaterialSamplerDescription(ShaderSamplerPolicy policy);
 
     enum class UniformKind : uint8_t {
         Float32 = 0,

@@ -88,9 +88,15 @@ namespace {
                     StringProperty(node, lowering->ColorSpaceProperty), StringProperty(node, lowering->SamplerProperty),
                     "mg_t" + std::to_string(binding), "mg_s" + std::to_string(binding), binding};
                 if (!MaterialGraphInternal::CanonicalAssetPath(texture->Path)) Fail("MG_HLSL_RESOURCE", "Texture lowering requires a canonical root-relative path", node.ID, *lowering->TexturePathProperty);
-                if (texture->Sampler != "LinearRepeat") Fail("MG_HLSL_SAMPLER", "C12-02 native baseline supports LinearRepeat sampling", node.ID, lowering->SamplerProperty);
+                if (texture->Sampler != "LinearRepeat" && texture->Sampler != "LinearClamp" && texture->Sampler != "PointRepeat" && texture->Sampler != "PointClamp")
+                    Fail("MG_HLSL_SAMPLER", "Unsupported texture sampler", node.ID, lowering->SamplerProperty);
                 if (texture->ColorSpace != "sRGB" && texture->ColorSpace != "Linear") Fail("MG_HLSL_RESOURCE", "Unsupported sample color space", node.ID);
-                declarations << "// [TextureColorSpace(" << texture->ColorSpace << ")] [TextureSampler(" << texture->SamplerSymbol << ", LinearRepeat)]\n";
+                if (lowering->FallbackProperty) texture->Fallback = StringProperty(node,*lowering->FallbackProperty);
+                if (texture->Fallback!="Error" && texture->Fallback!="White" && texture->Fallback!="FlatNormal" && texture->Fallback!="Magenta")
+                    Fail("MG_HLSL_RESOURCE","Unsupported texture fallback",node.ID);
+                if (texture->Fallback=="FlatNormal" && texture->ColorSpace!="Linear")
+                    Fail("MG_HLSL_RESOURCE","FlatNormal fallback requires Linear color space",node.ID);
+                declarations << "// [TextureColorSpace(" << texture->ColorSpace << ")] [TextureSampler(" << texture->SamplerSymbol << ", " << texture->Sampler << ")]\n";
                 declarations << "Texture2D " << texture->TextureSymbol << " : register(t" << binding << ", space1);\n";
                 declarations << "SamplerState " << texture->SamplerSymbol << " : register(s" << binding << ", space1);\n";
                 source.Textures.push_back(*texture);
@@ -147,6 +153,7 @@ namespace {
         if (error) *error = {};
         if (lowering.Type.empty() || !lowering.DefinitionRevision || !lowering.LoweringRevision || !lowering.Emit ||
             (lowering.TexturePathProperty && (lowering.TexturePathProperty->empty() || lowering.ColorSpaceProperty.empty() || lowering.SamplerProperty.empty())) ||
+            (lowering.FallbackProperty && (lowering.FallbackProperty->empty() || !lowering.TexturePathProperty)) ||
             (!lowering.TexturePathProperty && (!lowering.ColorSpaceProperty.empty() || !lowering.SamplerProperty.empty())) || m_Lowerings.contains(lowering.Type)) {
             if (error) *error = {"MG_HLSL_DEFINITION", "Invalid or duplicate HLSL lowering registration", {}, 0, lowering.Type};
             return false;

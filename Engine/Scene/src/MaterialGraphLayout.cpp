@@ -93,7 +93,8 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
     for(const auto& texture:graph.Textures) {
         ShaderPropertyDesc desc;desc.Name=texture.TextureSymbol;desc.Type=ShaderPropertyType::Texture2D;
         desc.TextureColorSpace=texture.ColorSpace=="sRGB"?ShaderTextureColorSpace::SRGB:ShaderTextureColorSpace::Linear;
-        desc.SamplerName=texture.SamplerSymbol;desc.SamplerPolicy=ShaderSamplerPolicy::LinearRepeat;
+        desc.SamplerName=texture.SamplerSymbol;
+        if(!ParseShaderSamplerPolicy(texture.Sampler,desc.SamplerPolicy))return fail("Unsupported graph sampler: "+texture.Sampler);
         properties.push_back(std::move(desc));
     }
     ValidatedShaderInterface interface;interface.AllowLegacyTemplate=false;

@@ -136,6 +136,7 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
             }
             candidate->Native=native;
             if(!GetPipeline(*candidate))return Fail(&m_Diagnostic,"MG_RELOAD_PIPELINE","Native graph pipeline validation failed");
+            if(!PrepareResources(document,*candidate))return false;
         }
         // Cache only successful complete candidates; stale value/resource metadata is
         // never reused from the code cache. A zero capacity explicitly disables it.
@@ -145,6 +146,7 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
             m_Shaders.emplace(program.ShaderKey,ShaderCode{program.Vertex,program.Fragment,program.Reflection});
         }
         if(m_Ready && m_Ready->PipelineKey==candidate->PipelineKey && m_Ready->DeviceEpoch==candidate->DeviceEpoch &&
+           m_Ready->Resources.Key==candidate->Resources.Key &&
            m_Ready->Program.Graph.SemanticKey==program.Graph.SemanticKey && SameSchema(m_Ready->Program.ParameterSchema,program.ParameterSchema))return true;
         // No candidate is mutable through the published interface.
         m_Ready=std::move(candidate);return true;

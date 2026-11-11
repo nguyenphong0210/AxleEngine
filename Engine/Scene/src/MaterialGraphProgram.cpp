@@ -44,7 +44,7 @@ namespace {
             property.Desc.Type=ShaderPropertyType::Texture2D; property.Desc.DisplayName=texture.Path;
             property.TexturePath=texture.Path; property.Desc.DefaultTexturePath=texture.Path;
             property.Desc.TextureColorSpace=texture.ColorSpace=="sRGB"?ShaderTextureColorSpace::SRGB:ShaderTextureColorSpace::Linear;
-            property.Desc.SamplerName=texture.SamplerSymbol;property.Desc.SamplerPolicy=ShaderSamplerPolicy::LinearRepeat;
+            property.Desc.SamplerName=texture.SamplerSymbol;ParseShaderSamplerPolicy(texture.Sampler,property.Desc.SamplerPolicy);
             properties.push_back(std::move(property));
         }
         return properties;

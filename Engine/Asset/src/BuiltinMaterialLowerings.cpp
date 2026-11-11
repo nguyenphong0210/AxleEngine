@@ -28,6 +28,11 @@ namespace {
     bool Surface(const MaterialHLSLNodeContext& context, MaterialHLSLNodeEmission& output, MaterialGraphDiagnostic&) {
         output.Surface = context.Inputs; return true;
     }
+    bool UnpackNormal(const MaterialHLSLNodeContext& context, MaterialHLSLNodeEmission& output, MaterialGraphDiagnostic&) {
+        output.Statements = "    float3 " + context.Temporary + " = " + context.Inputs.at("rgb") + " * 2.0 - 1.0;\n";
+        output.Outputs["normal"] = "(dot(" + context.Temporary + ", " + context.Temporary + ") > 1e-12 ? normalize(" + context.Temporary + ") : float3(0,0,1))";
+        return true;
+    }
 }
 
     const MaterialHLSLRegistry& MaterialHLSLRegistry::Builtins() {
@@ -41,7 +46,8 @@ namespace {
             add({"ParameterRef", 1, 1, Parameter, {}, {}, {}});
             add({"Multiply", 1, 1, Multiply, {}, {}, {}});
             add({"Lerp", 1, 1, Lerp, {}, {}, {}});
-            add({"SampleTexture2D", 1, 1, Texture, "texturePath", "colorSpace", "sampler"});
+            add({"SampleTexture2D", 2, 2, Texture, "texturePath", "colorSpace", "sampler", "fallback"});
+            add({"UnpackNormal", 1, 1, UnpackNormal, {}, {}, {}});
             add({"PBRMasterOutput", 1, 1, Surface, {}, {}, {}});
             return result;
         }();

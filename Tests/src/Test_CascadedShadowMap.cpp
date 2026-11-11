@@ -43,7 +43,7 @@ namespace {
                     auto nearPoint = inverseProjection * glm::dvec4((i & 1) ? 1 : -1, (i & 2) ? 1 : -1, 0, 1);
                     auto farPoint = inverseProjection * glm::dvec4((i & 1) ? 1 : -1, (i & 2) ? 1 : -1, 1, 1);
                     nearPoint /= nearPoint.w; farPoint /= farPoint.w;
-                    for (double depth : {double(cascade.NearDistance), double(cascade.FarDistance)}) {
+                    for (double depth : {double(cascade.NearDistance), double(cascade.FarDistance), double(cascade.NearDistance)-(c==0?0:(cascade.NearDistance-first.Cascades[c-1].NearDistance)*.1)}) {
                         const auto point = nearPoint + (farPoint - nearPoint) * ((depth + nearPoint.z) / (-farPoint.z + nearPoint.z));
                         auto clip = glm::dmat4(cascade.LightViewProjection) * inverseView * point;
                         clip /= clip.w;

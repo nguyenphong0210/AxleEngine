@@ -120,12 +120,17 @@ namespace {
             const double uniform = m_Settings.NearClip + (m_Settings.MaxDistance - m_Settings.NearClip) * p;
             const double split = index + 1 == candidate.CascadeCount ? m_Settings.MaxDistance :
                 logarithmic * m_Settings.SplitLambda + uniform * (1 - m_Settings.SplitLambda);
+            // The receiver blends over the preceding split's final 10%.
+            // Fit that overlap explicitly so a narrow-FOV camera cannot sample
+            // beyond the next cascade's near edge during blending.
+            const double priorNear = index > 0 ? candidate.Cascades[index-1].NearDistance : previousSplit;
+            const double fitNear = previousSplit - (previousSplit-priorNear)*0.1;
             std::array<glm::dvec3, 8> corners;
             glm::dvec3 center(0);
             for (int i = 0; i < 4; ++i) {
                 const auto delta = interiorCorners[i] - nearCorners[i];
                 const double denominator = -interiorCorners[i].z + nearCorners[i].z;
-                corners[i] = nearCorners[i] + delta * ((previousSplit + nearCorners[i].z) / denominator);
+                corners[i] = nearCorners[i] + delta * ((fitNear + nearCorners[i].z) / denominator);
                 corners[i + 4] = nearCorners[i] + delta * ((split + nearCorners[i].z) / denominator);
                 center += corners[i] + corners[i + 4];
             }

@@ -131,6 +131,48 @@ Texture2D u_DetailNormalMap : register(t11, space1);
 Texture2D u_DetailMaskMap : register(t12, space1);
 Texture2D u_OpaqueSceneColor : register(t13, space1);
 Texture2D<float> u_OpaqueSceneDepth : register(t14, space1);
+// C13-01: matrices map world positions into right-handed ZO light clips.
+cbuffer CascadeReceiver : register(b4,space0) {
+    float4x4 u_CascadeMatrices[4];
+    float4 u_CascadeSplits;
+    float4 u_CascadeAtlas; // count, reciprocal atlas size, tile resolution, near
+    float4 u_CascadeBias; // base, slope, world normal, PCF spacing
+};
+Texture2D<float> u_CascadeDepth : register(t15,space1);
+SamplerComparisonState u_ShadowSampler : register(s2,space0);
+float CascadeVisibility(uint cascade,float3 world,float3 normal,float3 sun) {
+    float ndl=saturate(dot(normal,sun));
+    float3 offset=normal*u_CascadeBias.z*(1-ndl);
+    float4 clipPosition=mul(u_CascadeMatrices[cascade],float4(world+offset,1));
+    float3 clip=clipPosition.xyz/clipPosition.w;
+    if (any(abs(clip.xy)>1) || clip.z<0 || clip.z>1) return 1;
+    float2 local=clip.xy*float2(.5,-.5)+.5;
+    float2 tile=float2(cascade%2,cascade/2)*.5;
+    float2 uv=tile+local*.5;
+    float halfTexel=u_CascadeAtlas.y*.5;
+    float reference=clip.z-u_CascadeBias.x-u_CascadeBias.y*(1-ndl);
+    float visibility=0;
+    [unroll] for(int y=-2;y<=2;++y) [unroll] for(int x=-2;x<=2;++x) {
+        float2 tap=clamp(uv+float2(x,y)*u_CascadeAtlas.y*u_CascadeBias.w,tile+halfTexel,tile+.5-halfTexel);
+        visibility+=u_CascadeDepth.SampleCmpLevelZero(u_ShadowSampler,tap,reference);
+    }
+    return visibility/25;
+}
+float SunShadowVisibility(float3 world,float3 normal,float3 sun) {
+    uint count=(uint)u_CascadeAtlas.x;
+    if(count==0) return 1;
+    float depth=-mul(u_View,float4(world,1)).z;
+    if(depth<u_CascadeAtlas.w || depth>u_CascadeSplits[count-1]) return 1;
+    uint cascade=0;
+    [unroll] for(uint c=0;c<3;++c) if(c+1<count && depth>u_CascadeSplits[c]) cascade=c+1;
+    float value=CascadeVisibility(cascade,world,normal,sun);
+    // Blend the final 10% of a split, and fade out at max shadow distance.
+    float start=cascade==0?u_CascadeAtlas.w:u_CascadeSplits[cascade-1];
+    float end=u_CascadeSplits[cascade];
+    float blend=saturate((depth-lerp(start,end,.9))/max((end-start)*.1,1e-6));
+    if(blend>0) value=lerp(value,cascade+1<count?CascadeVisibility(cascade+1,world,normal,sun):1,blend);
+    return value;
+}
 SamplerState u_ScreenSampler : register(s1, space0);
 SamplerState u_Sampler      : register(s0, space0);
 
@@ -392,7 +434,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
     float sunIntensity = hasMultiLightSun ? max(u_SunLight.DirectionAndIlluminance.w,0.0) * 0.000035 : max(u_SunDirection.w,0.0);
     float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : u_SunColor.rgb;
-    float3 sunRadiance = sunColor * sunIntensity;
+    float3 sunRadiance = sunColor * sunIntensity * SunShadowVisibility(input.WorldPos,N,sunDir);
 
     float NdotL_Sun = max(dot(N, sunDir), 0.0);
     // Photographic Studio Softbox Diffuse Wrap (Area Light Approximation)

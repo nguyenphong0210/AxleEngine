@@ -189,9 +189,12 @@ namespace Axle {
     }
     RendererCapabilities RenderService::GetActiveCapabilities() const {
         const auto& device = RHI::RHIDevice::Get();
-        if (m_RHIRenderer && device.IsNativeReady() && m_Epoch == device.GetEpoch())
-            return QueryRendererCapabilities(device.GetBackend() == RHI::RHIType::Vulkan ?
+        if (m_RHIRenderer && device.IsNativeReady() && m_Epoch == device.GetEpoch()) {
+            auto caps=QueryRendererCapabilities(device.GetBackend() == RHI::RHIType::Vulkan ?
                 RendererBackendType::ModernRHI_Vulkan : RendererBackendType::ModernRHI_D3D12);
+            caps.SupportsCascadedShadows=m_RHIRenderer->GetCascadedShadows().IsSupported();
+            return caps;
+        }
         if (m_GLRenderer && Window::HasActiveContext() && m_GLContext == glfwGetCurrentContext())
             return QueryRendererCapabilities(RendererBackendType::OpenGL_Compatibility);
         return QueryRendererCapabilities(RendererBackendType::None);
@@ -280,12 +283,19 @@ namespace Axle {
                 depth->GetWidth() != request.Width || depth->GetHeight() != request.Height || depth->GetDesc().SampleCount != 1))
                 return fail("Invalid, stale or mismatched view depth target");
             m_RHIRenderer->RenderWorldView(prepared, request.Camera, color, depth, request.Settings, request.PhysicsScene, targets);
-            if (!m_RHIRenderer->WasLastRenderSuccessful()) return fail("View preparation, recording or submission failed");
+            if (!m_RHIRenderer->WasLastRenderSuccessful()) {
+                const auto& diagnostic=m_RHIRenderer->GetCascadedShadows().GetDiagnostic();
+                return fail(diagnostic.empty()?"View preparation, recording or submission failed":diagnostic);
+            }
             result.Success = true; result.CompletionToken = m_RHIRenderer->GetLastCompletion();
             result.DrawCallCount = m_RHIRenderer->GetDrawCallCount(); result.RenderedEntityCount = m_RHIRenderer->GetRenderedEntityCount();
-            if (request.Settings.Wireframe || (request.Settings.EnableShadows && prepared.DirectionalLight && prepared.DirectionalLight->CastsShadows) ||
-                !prepared.Skins.empty() || (prepared.Skybox.Enabled && prepared.Skybox.Type == 1))
+            if (request.Settings.Wireframe || !prepared.Skins.empty() || (prepared.Skybox.Enabled && prepared.Skybox.Type == 1))
                 result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
+            const auto& shadowDiagnostic=m_RHIRenderer->GetCascadedShadows().GetDiagnostic();
+            if (!shadowDiagnostic.empty()) {
+                if (!result.ErrorMessage.empty()) result.ErrorMessage += " ";
+                result.ErrorMessage += shadowDiagnostic;
+            }
             return result;
         }
         if (request.GLTargetFBO && (request.GLTargetFBO->GetSpecification().Width != request.Width || request.GLTargetFBO->GetSpecification().Height != request.Height))

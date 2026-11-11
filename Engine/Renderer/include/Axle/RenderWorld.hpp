@@ -89,7 +89,7 @@ namespace Axle {
         float AmbientIntensity = 0.28f;
         bool CastsShadows = true;
         int ShadowQuality = 1;
-        float ShadowBias = 0.0012f, ShadowSlopeBias = 1, ShadowNormalBias = 0, ShadowFilterRadius = 2;
+        float ShadowBias = 0.0012f, ShadowSlopeBias = 0.0020f, ShadowNormalBias = 0.0150f, ShadowFilterRadius = 2;
         float MaxShadowDistance = 150, CascadeSplitLambda = 0.85f;
         float Exposure = 1, Gamma = 2.2f;
         int ToneMappingMode = 0;

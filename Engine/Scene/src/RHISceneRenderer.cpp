@@ -19,6 +19,7 @@
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
+#include "NativeForwardSource.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -27,114 +28,6 @@
 namespace Axle {
 
     using namespace Axle::RHI;
-
-    // Embedded fallback HLSL shader in case shader file is not on disk
-    static const char* s_FallbackForwardShader = R"(
-        cbuffer ObjectConstants : register(b0, space0) {
-            float4x4 u_Model;
-            float4   u_ColorPrimary;
-            float4   u_ColorSecondary;
-            float4   u_Params;
-            float4   u_SunDirAndIntensity;
-        };
-
-        cbuffer SceneConstants : register(b1, space0) {
-            float4x4 u_ViewProjection;
-            float4x4 u_View;
-            float4x4 u_Projection;
-            float4   u_CameraPosition;
-            float4   u_AmbientLight;
-            float4   u_SunDirection;
-            float4   u_SunColor;
-        };
-
-        struct VSInput {
-            float3 Position   : POSITION;
-            float3 Normal     : NORMAL;
-            float4 Tangent    : TANGENT;
-            float2 TexCoord   : TEXCOORD0;
-            float4 Color      : COLOR0;
-        };
-
-        struct PSInput {
-            float4 PositionCS : SV_Position;
-            float3 WorldPos   : POSITION;
-            float3 NormalWS   : NORMAL;
-            float2 TexCoord   : TEXCOORD0;
-            float4 VertexColor: COLOR0;
-            float3 LocalPos   : TEXCOORD1;
-        };
-
-        PSInput VSMain(VSInput input) {
-            PSInput output;
-            float4 worldPos    = mul(u_Model, float4(input.Position, 1.0));
-            output.PositionCS  = mul(u_ViewProjection, worldPos);
-            output.WorldPos    = worldPos.xyz;
-            output.NormalWS    = normalize(mul((float3x3)u_Model, input.Normal));
-            output.TexCoord    = input.TexCoord;
-            output.VertexColor = input.Color;
-            output.LocalPos    = input.Position;
-            return output;
-        }
-
-        float glsl_mod(float x, float y) {
-            return x - y * floor(x / y);
-        }
-
-        float4 PSMain(PSInput input) : SV_Target0 {
-            int patternMode = (int)u_Params.y;
-            float tileScale = max(0.01, u_Params.x);
-            float4 baseColor = u_ColorPrimary;
-
-            if (patternMode == 0) {
-                float2 coord = floor(input.WorldPos.xz * tileScale);
-                float check = glsl_mod(coord.x + coord.y, 2.0);
-                baseColor = lerp(u_ColorPrimary, u_ColorSecondary, check);
-            } else if (patternMode == 1) {
-                float3 coord = floor((input.LocalPos + float3(0.5, 0.5, 0.5)) * tileScale + float3(0.0001, 0.0001, 0.0001));
-                float check = glsl_mod(coord.x + coord.y + coord.z, 2.0);
-                baseColor = lerp(u_ColorPrimary, u_ColorSecondary, check);
-            } else if (patternMode == 2) {
-                float3 nLocal = normalize(input.LocalPos);
-                float uSph = atan2(nLocal.z, nLocal.x) / (2.0 * 3.14159265) + 0.5;
-                float vSph = asin(clamp(nLocal.y, -1.0, 1.0)) / 3.14159265 + 0.5;
-                float2 coord = floor(float2(uSph * tileScale, vSph * (tileScale * 0.5)));
-                float check = glsl_mod(coord.x + coord.y, 2.0);
-                baseColor = lerp(u_ColorPrimary, u_ColorSecondary, check);
-            } else if (patternMode == 3) {
-                baseColor = u_ColorPrimary;
-            } else if (patternMode == 4) {
-                baseColor = u_ColorPrimary * input.VertexColor;
-            }
-
-            float3 camPos = (length(u_CameraPosition.xyz) > 0.001) ? u_CameraPosition.xyz : float3(0.0, 5.0, 10.0);
-            float3 V = normalize(camPos - input.WorldPos);
-
-            float3 N = normalize(input.NormalWS);
-            if (patternMode == 0 || patternMode == 1) {
-                float3 dX = ddx(input.WorldPos);
-                float3 dY = ddy(input.WorldPos);
-                float3 crossN = cross(dX, dY);
-                if (length(crossN) > 1e-6) {
-                    N = normalize(crossN);
-                }
-            }
-            if (dot(N, V) < 0.0) {
-                N = -N;
-            }
-
-            float3 L = normalize(u_SunDirAndIntensity.xyz);
-            float NdotL = max(0.0, dot(N, L));
-            float sunIntensity = max(0.0, u_SunDirAndIntensity.w);
-            float3 diffuse = baseColor.rgb * (NdotL * sunIntensity);
-            float3 ambient = baseColor.rgb * u_AmbientLight.rgb * u_AmbientLight.w;
-            float3 H = normalize(L + V);
-            float NdotH = max(0.0, dot(N, H));
-            float3 specular = float3(0.9, 0.9, 0.9) * pow(NdotH, 32.0) * (1.0 - u_Params.z) * 0.35 * sunIntensity;
-
-            return float4(ambient + diffuse + specular, baseColor.a);
-        }
-    )";
 
     static std::filesystem::path FindShaderPath(const std::string& shaderFileName) {
         // 1. Try Asset Path resolution
@@ -197,7 +90,7 @@ namespace Axle {
         // Initialize mesh registry
         if (!RHIMeshRegistry::Get().Init()) return false;
 
-        if (!m_Frame.Init()) return false;
+        if (!m_Frame.Init() || !m_CascadedShadows.Init()) return false;
 
         // Compile Forward Shaders
         if (!CompileShaders(device)) {
@@ -257,6 +150,7 @@ namespace Axle {
                     }
                     defaultSRVs.push_back(blackTex->GetSRV());
                     defaultSRVs.push_back(whiteTex->GetSRV());
+                    defaultSRVs.push_back(m_CascadedShadows.GetSRV());
                     m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 0, defaultSRVs);
                 }
             }
@@ -428,6 +322,8 @@ namespace Axle {
         m_SkyboxPipelineLayout.Shutdown();
         m_SkyboxConstantBuffer.Shutdown();
 
+        m_BoundCascadeAtlas={};
+        m_CascadedShadows.Shutdown();
         m_LightBuffer.Shutdown();
         m_SceneConstantBuffer.Shutdown();
 
@@ -476,9 +372,10 @@ namespace Axle {
             }
         }
 
-        if (shaderSource.empty()) {
-            AXLE_CORE_WARN("RHISceneRenderer: Using fallback forward shader!");
-            shaderSource = s_FallbackForwardShader;
+        if (shaderSource.empty() || shaderSource.find("cbuffer CascadeReceiver")==std::string::npos) {
+            AXLE_CORE_WARN("RHISceneRenderer: Using canonical embedded forward shader (missing/current-interface resource).");
+            shaderSource = kNativeForwardSource;
+            shaderPath.clear();
         }
 
         RHIShaderFormat format = (device.GetBackend() == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
@@ -524,7 +421,7 @@ namespace Axle {
         // Root Descriptors (space 0):
         // [0] b1, space 0: 256-byte Scene Constants
         // [1] b2, space 0: 2304-byte Forward+ Multi-Light Buffer
-        nri::RootDescriptorDesc rootDescs[3] = {};
+        nri::RootDescriptorDesc rootDescs[4] = {};
         rootDescs[0].registerIndex = ConstantBufferContract::FrameConstantsRegister;
         rootDescs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[0].shaderStages = nri::StageBits::ALL;
@@ -537,15 +434,19 @@ namespace Axle {
         rootDescs[2].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[2].shaderStages = nri::StageBits::ALL;
 
+        rootDescs[3].registerIndex = 4; // C13 cascade receiver constants
+        rootDescs[3].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDescs[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
         // Descriptor Set (space 1): 6 PBR textures (t0..t5) + 3 IBL textures (t6..t8) and 1 Sampler (s0)
         nri::DescriptorRangeDesc ranges[2] = {};
         ranges[0].baseRegisterIndex = 0;
-        ranges[0].descriptorNum = static_cast<uint32_t>(RHITextureSlot::Count)+5; // t0..t5 PBR + t6 Irradiance + t7 Prefilter + t8 BRDF LUT
+        ranges[0].descriptorNum = static_cast<uint32_t>(RHITextureSlot::Count)+6; // t0..t5 PBR + t6 Irradiance + t7 Prefilter + t8 BRDF LUT
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        nri::RootSamplerDesc samplers[2]{};
+        nri::RootSamplerDesc samplers[3]{};
         auto& sampler=samplers[0];
         sampler.registerIndex = 0;
         sampler.desc = RHISamplerDesc::Anisotropic16x().ToNRIDesc();
@@ -554,6 +455,10 @@ namespace Axle {
         samplers[1].registerIndex=1;
         samplers[1].desc=RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge).ToNRIDesc();
         samplers[1].shaderStages=nri::StageBits::FRAGMENT_SHADER;
+
+        samplers[2].registerIndex=2;
+        samplers[2].desc=RHISamplerDesc::ShadowPCF().ToNRIDesc();
+        samplers[2].shaderStages=nri::StageBits::FRAGMENT_SHADER;
 
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
@@ -565,9 +470,9 @@ namespace Axle {
         layoutDesc.rootConstants = &rootConst;
         layoutDesc.rootConstantNum = 1;
         layoutDesc.rootDescriptors = rootDescs;
-        layoutDesc.rootDescriptorNum = 3;
+        layoutDesc.rootDescriptorNum = 4;
         layoutDesc.rootSamplers = samplers;
-        layoutDesc.rootSamplerNum = 2;
+        layoutDesc.rootSamplerNum = 3;
         layoutDesc.descriptorSets = &descSet;
         layoutDesc.descriptorSetNum = 1;
         layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
@@ -1152,6 +1057,18 @@ namespace Axle {
                 if (!lease || !Commands().KeepAlive(lease)) return;
             }
         }
+        if (!m_CascadedShadows.Prepare(world,camera,settings,m_MaterialTextures)) {
+            AXLE_CORE_ERROR("Shadow preparation failed: {0}",m_CascadedShadows.GetDiagnostic()); return;
+        }
+        const auto shadowIdentity=m_Device->GetResources().AcquireNative(m_CascadedShadows.GetSRV()).GetHandle();
+        if (shadowIdentity!=m_BoundCascadeAtlas) {
+            // Every cached set owns its last texture dependency. Refresh unused
+            // sets too, so a removed mesh cannot retain a retired Ultra atlas.
+            if (!m_DescriptorPool.UpdateTexture(m_DefaultDescriptorSet,0,15,m_CascadedShadows.GetSRV())) return;
+            for (auto& draw:m_MaterialDraws)
+                if (!m_DescriptorPool.UpdateTexture(draw->Set,0,15,m_CascadedShadows.GetSRV())) return;
+            m_BoundCascadeAtlas=shadowIdentity;
+        }
         m_LastDrawCallCount = 0;
         m_CustomDescriptorPool.Reset(); // The preceding RenderScene submission completed before reuse.
         m_LastRenderedEntityCount = 0;
@@ -1343,11 +1260,17 @@ namespace Axle {
             if (sceneDepthDSV) uses.push_back({sceneDepth, Layout::DepthStencilWrite, Access::Write, load});
             return uses;
         };
-        graph.AddPass("OpaqueAndSky", attachments(Load::Clear));
+        auto* shadowAtlas=m_CascadedShadows.GetSampledAtlas();
+        const auto shadows=graph.Import("CascadeAtlas",shadowAtlas?shadowAtlas->GetNative():nullptr,!m_CascadedShadows.IsActive());
+        if (m_CascadedShadows.IsActive()) graph.AddPass("CascadedShadows", {{shadows,Layout::DepthStencilWrite,Access::Write,Load::Clear}});
+        auto opaqueUses=attachments(Load::Clear);
+        if (shadowAtlas) opaqueUses.push_back({shadows,Layout::ShaderResource});
+        graph.AddPass("OpaqueAndSky", std::move(opaqueUses));
         if (copyRefraction) graph.AddPass("RefractionCopy", {
             {sceneColor,Layout::CopySource}, {sceneDepth,Layout::CopySource},
             {opaqueColor,Layout::CopyDest,Access::Write}, {opaqueDepth,Layout::CopyDest,Access::Write}});
         auto transparentUses = attachments(Load::Load);
+        if (shadowAtlas) transparentUses.push_back({shadows,Layout::ShaderResource});
         if (copyRefraction) {
             transparentUses.push_back({opaqueColor,Layout::ShaderResource});
             transparentUses.push_back({opaqueDepth,Layout::ShaderResource});
@@ -1372,9 +1295,13 @@ namespace Axle {
             AXLE_CORE_ERROR("View graph recording failed: {0}", graph.GetError());
             return false;
         };
-        if (!graph.Compile() || !beginPass("OpaqueAndSky")) {
+        if (!graph.Compile()) {
             AXLE_CORE_ERROR("View graph rejected: {0}", graph.GetError()); return;
         }
+
+        if (m_CascadedShadows.IsActive() && (!beginPass("CascadedShadows") || !m_CascadedShadows.Record(Commands()))) return;
+        m_LastDrawCallCount+=m_CascadedShadows.GetDrawCount();
+        if (!beginPass("OpaqueAndSky")) return;
 
         // 3. Begin Rendering Pass
         nri::AttachmentDesc colorAttachment = {};
@@ -1425,6 +1352,8 @@ namespace Axle {
         if (m_LightBuffer.IsValid() && m_LightBuffer.GetCBV()) {
             Commands().SetRootDescriptor(1, m_LightBuffer.GetCBV());
         }
+
+        Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
 
         // Bind Descriptor Pool & Material Descriptor Set (Space 1: 6 PBR textures + 16x Aniso Sampler)
         if (m_DescriptorPool.IsValid()) {
@@ -1671,6 +1600,7 @@ namespace Axle {
                     m_DescriptorPool.Bind(Commands().GetNative());
                     Commands().SetRootDescriptor(0,m_SceneConstantBuffer.GetCBV());
                     Commands().SetRootDescriptor(1,m_LightBuffer.GetCBV());
+                    Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
                     currentPipeline=nullptr;
                     if (drawn) return;
                     m_MaterialDiagnostics[static_cast<uint32_t>(item.DiagnosticEntity)] = "Custom draw pipeline or resource preparation failed; using built-in material.";
@@ -1700,7 +1630,7 @@ namespace Axle {
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
                 RHIMaterialConstants materialData;
                 if (item.Material) materialData = item.Material->BuildConstants();
-                std::vector<nri::Descriptor*> srvs(static_cast<size_t>(RHITextureSlot::Count)+5);
+                std::vector<nri::Descriptor*> srvs(static_cast<size_t>(RHITextureSlot::Count)+6);
                 for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
                     auto textureSlot = static_cast<RHITextureSlot>(slot);
                     std::shared_ptr<RHITexture> texture;
@@ -1726,6 +1656,7 @@ namespace Axle {
                 srvs[8]=(m_BRDFLUT ? m_BRDFLUT : RHIMaterial::GetDefaultBRDFLUT())->GetSRV();
                 srvs[13]=refractionReady?m_OpaqueSceneColor->GetSRV():RHIMaterial::GetDefaultBlackTexture()->GetSRV();
                 srvs[14]=refractionReady?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
+                srvs[15]=m_CascadedShadows.GetSRV();
                 materialData.RefractionFrame=glm::vec4(width,height,refractionReady?1.0f:0.0f,0.0f);
                 m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs);
                 if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) { drawFailed = true; return; }
@@ -1764,6 +1695,13 @@ namespace Axle {
             depthAttachment.loadOp = nri::LoadOp::LOAD;
             if (sceneDepthDSV) renderingDesc.depth = depthAttachment;
             Commands().BeginRendering(renderingDesc);
+            // Skybox changes the entire binding layout. Restore all built-in
+            // receiver state before transparent or custom material draws.
+            Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS,m_PipelineLayout);
+            m_DescriptorPool.Bind(Commands().GetNative());
+            Commands().SetRootDescriptor(0,m_SceneConstantBuffer.GetCBV());
+            Commands().SetRootDescriptor(1,m_LightBuffer.GetCBV());
+            Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
             currentPipeline=nullptr;
 
             // 4b. Render Transparent & Additive Queue (Sorted Back-to-Front)

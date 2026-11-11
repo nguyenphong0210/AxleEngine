@@ -171,7 +171,7 @@ namespace Axle::RenderTests {
         RENDER_CHECK(d3d12Caps.SupportsFXAA, "D3D12 supports FXAA");
         RENDER_CHECK(d3d12Caps.SupportsCustomHLSLShaders, "D3D12 supports custom HLSL shaders");
         RENDER_CHECK(d3d12Caps.SupportsRefractionCopy, "D3D12 supports refraction copy");
-        RENDER_CHECK(!d3d12Caps.SupportsCascadedShadows && !d3d12Caps.SupportsGPUSkinning && !d3d12Caps.SupportsAsyncCompute && !d3d12Caps.AdvancedFeatureDiagnostic.empty(), "D3D12 reports deferred scene passes honestly");
+        RENDER_CHECK(d3d12Caps.SupportsCascadedShadows && !d3d12Caps.SupportsGPUSkinning && !d3d12Caps.SupportsAsyncCompute && !d3d12Caps.AdvancedFeatureDiagnostic.empty(), "D3D12 reports cascaded shadows and remaining deferred scene passes honestly");
 
         auto vkCaps = QueryRendererCapabilities(RendererBackendType::ModernRHI_Vulkan);
         RENDER_CHECK(vkCaps.Backend == RendererBackendType::ModernRHI_Vulkan, "Vulkan backend type");
@@ -179,7 +179,7 @@ namespace Axle::RenderTests {
         RENDER_CHECK(vkCaps.SupportsHDR && vkCaps.SupportsToneMapping, "Vulkan supports HDR & ToneMapping");
         RENDER_CHECK(vkCaps.SupportsFXAA, "Vulkan supports FXAA");
         RENDER_CHECK(vkCaps.SupportsCustomHLSLShaders, "Vulkan supports custom HLSL shaders");
-        RENDER_CHECK(!vkCaps.SupportsCascadedShadows && !vkCaps.SupportsGPUSkinning && !vkCaps.SupportsAsyncCompute && !vkCaps.AdvancedFeatureDiagnostic.empty(), "Vulkan reports deferred scene passes honestly");
+        RENDER_CHECK(vkCaps.SupportsCascadedShadows && !vkCaps.SupportsGPUSkinning && !vkCaps.SupportsAsyncCompute && !vkCaps.AdvancedFeatureDiagnostic.empty(), "Vulkan reports cascaded shadows and remaining deferred scene passes honestly");
 
         auto glCaps = QueryRendererCapabilities(RendererBackendType::OpenGL_Compatibility);
         RENDER_CHECK(glCaps.Backend == RendererBackendType::OpenGL_Compatibility, "OpenGL Compatibility backend type");

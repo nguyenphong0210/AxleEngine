@@ -7,13 +7,13 @@ C13-01 remains released; C13-02 and later packages are not released.
 | Checkpoint | Scope | Evidence required | State |
 | --- | --- | --- | --- |
 | C13-01.1 | Pure CPU cascade settings, camera-space splits, stabilized light transforms and failure contract | Debug/Release CPU regression, architecture check, separate-context review | Implemented and verified; see [delivery](../reviews/OPT_13_C13_01_CPU_DELIVERY.md) |
-| C13-01.2 | Modern RHI depth resources, shadow caster pass, receiver bindings, PCF 5x5 and bias application | Real shader compilation, resource/state/lifetime tests and D3D12/Vulkan readbacks | Pending |
-| C13-01.3 | Product integration, capability reporting and acceptance | Enabled/disabled light/settings, resize/failure, cascade boundaries, image parity and relevant regressions | Pending |
+| C13-01.2 | Modern RHI depth resources, shadow caster pass, receiver bindings, PCF 5x5 and bias application | Real shader compilation, resource/state/lifetime tests and D3D12/Vulkan readbacks | Complete; see [native delivery](../reviews/OPT_13_C13_01_NATIVE_DELIVERY.md) |
+| C13-01.3 | Product integration, capability reporting and acceptance | Enabled/disabled light/settings, resize/failure, cascade boundaries, image parity and relevant regressions | Complete within documented built-in PBR scope; Debug 109/109, Release focused 18/18, separate-context review PASS |
 
-Each checkpoint is a coherent local commit. Completing the CPU checkpoint does
-not claim native shadow execution, image quality, performance or full C13-01
-acceptance. The remaining C13-01 work is still authorized; this breakdown does
-not introduce another approval requirement.
+C13-01 is complete across the CPU and native delivery commits. Native execution,
+image evidence, correction review and acceptance are recorded separately in the
+native delivery. This does not release C13-02 or claim the full OPT-13 stack or
+its performance budget.
 
 ## C13-01.1 CPU contract
 
@@ -41,8 +41,9 @@ direction to include bounded off-frustum casters. This does not guarantee that
 arbitrarily distant casters fit, and does not implement scene-bounds fitting.
 
 Bias settings are finite and non-negative. Base/slope bias is normalized shadow
-depth; normal bias is in world units. This checkpoint validates and carries
-these settings only. Their application and visual tuning belong to C13-01.2.
+depth; normal bias is in world units. The CPU checkpoint carries the settings;
+the native checkpoint applies them in receiver visibility. Cascade matrix fits
+also cover the preceding split's final 10% for receiver blending.
 
 Invalid `Configure` retains the prior configuration/frame. Successful
 configuration invalidates the old frame. Every failed `Update` clears the frame;
@@ -57,7 +58,10 @@ generations through submission completion. Respect mesh shadow flags, authored
 material semantics and supported surface modes. Define explicit policies for
 unsupported custom deformation/skin paths, rather than claiming equivalence.
 
-Modern renderer `SupportsCascadedShadows` remains false until actual execution
-and image verification are delivered. The OpenGL compatibility renderer and its
-existing `ShadowMap` are preserved. C12 shader/material behavior and C11-07
-product deferrals remain unchanged.
+Modern renderer `SupportsCascadedShadows` now reflects the implemented native
+path, with actual D32 format support queried by RenderService. Built-in static
+opaque/cutout meshes cast; built-in transparent/additive receivers are supported.
+Arbitrary custom HLSL and non-positive camera near depth have explicit frame
+diagnostics. An initialized 2x2 fallback is sampled when disabled, with no shadow
+pass recorded. The OpenGL compatibility renderer and its existing `ShadowMap`
+are preserved. C12 behavior and C11-07 product deferrals remain unchanged.

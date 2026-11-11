@@ -465,16 +465,18 @@ claimed automatically; selecting OpenGL returns transactional `MG_OPENGL_UNSUPPO
 while CPU, D3D12 and Vulkan paths remain available. See the
 [C12-06 delivery](reviews/OPT_12_C12_06_DELIVERY.md).
 
-**C13-01 direct user release, 2026-11-11:** execute in small checkpoints with
-quality prioritized. C13-01.1 CPU cascade contracts are implemented and verified:
-three/four camera-space splits, fixed-world texel stabilization, ZO light
-transforms and validated failure/numeric behavior. Focused Debug/Release CTest
-**1/1 per configuration**, architecture check and separate-context correction
-recheck pass. See [execution checkpoints](design/OPT_13_C13_01_EXECUTION_PLAN.md)
-and [CPU delivery](reviews/OPT_13_C13_01_CPU_DELIVERY.md). Native depth/receiver
-passes, PCF 5x5, actual bias application and product acceptance are pending;
-modern CSM capability remains false. C13-01 stays in progress, and C13-02 onward
-remain unreleased. C11-07 product deferrals are unchanged.
+**C13-01 completed under direct user assignment, 2026-11-11:** all three
+checkpoints deliver camera-space cascade contracts and native D3D12/Vulkan CSM
+for built-in PBR, with 3/4 cascades, texel stabilization, bias, PCF 5x5 and split
+blending. Caster flags, alpha-cutout, transparent receivers, disabled fallback,
+resource lifetime and resize/failure behavior are verified. Final Debug build
+covers all tests, Editor and Runtime; CTest **109/109**, focused Release **18/18**,
+architecture checks, native backend image parity and separate-context correction
+rechecks pass. See [execution checkpoints](design/OPT_13_C13_01_EXECUTION_PLAN.md)
+and [native delivery/limits](reviews/OPT_13_C13_01_NATIVE_DELIVERY.md). OpenGL
+compatibility and C12 behavior are preserved. Custom HLSL and non-positive near
+clip cameras have explicit CSM diagnostics. C13-02 onward remain unreleased;
+C11-07 product deferrals and the later OPT-13 performance gate are unchanged.
 
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features

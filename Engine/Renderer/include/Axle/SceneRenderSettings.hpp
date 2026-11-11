@@ -6,6 +6,7 @@
 namespace Axle {
     struct SceneRenderSettings {
         bool EnableShadows = true;
+        uint8_t ShadowCascadeCount = 4; // Modern RHI: 3 or 4 cascades.
         bool EnableSkybox = true;
         bool EnableStudioLightLobes = false; // Compatibility option; previews author explicit studio lights.
         bool EnableParticles = true;

@@ -6,6 +6,7 @@
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/SceneRenderer.hpp>
 #include <Axle/RenderWorld.hpp>
+#include <Axle/RHICascadedShadows.hpp>
 
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
@@ -129,6 +130,8 @@ namespace Axle {
         RHI::RHIPipelineLayout& GetPipelineLayout() { return m_PipelineLayout; }
         nri::Pipeline* GetPipeline() const { return m_Pipeline; }
         nri::Pipeline* GetHDRPipeline() const { return m_PipelineHDR; }
+        const RHICascadedShadows& GetCascadedShadows() const { return m_CascadedShadows; }
+        RHICascadedShadows& GetCascadedShadows() { return m_CascadedShadows; }
         bool WasLastRenderSuccessful() const { return m_LastRenderSucceeded; }
         RHI::RHICompletionToken GetLastCompletion() const { return m_LastCompletion; }
         const auto& GetMaterialDiagnostics() const { return m_MaterialDiagnostics; }
@@ -337,6 +340,8 @@ namespace Axle {
         std::shared_ptr<RHI::RHITexture> m_BRDFLUT;
         bool m_UseIBL = false;
 
+        RHICascadedShadows m_CascadedShadows;
+        RHI::RHIResourceHandle m_BoundCascadeAtlas;
         RHI::RHIBuffer m_SceneConstantBuffer;
         RHI::RHIMultiLightBuffer m_LightBuffer;
 

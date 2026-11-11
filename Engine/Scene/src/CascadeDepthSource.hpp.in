@@ -1,0 +1,2 @@
+#pragma once
+inline constexpr char kCascadeDepthSource[]=R"AXLEDEPTH(@AXLE_CASCADE_DEPTH@)AXLEDEPTH";

@@ -14,7 +14,7 @@ namespace Axle {
                 caps.SupportsHDR = true;
                 caps.SupportsToneMapping = true;
                 caps.SupportsFXAA = true;
-                caps.SupportsCascadedShadows = false;
+                caps.SupportsCascadedShadows = true;
                 caps.SupportsGPUSkinning = false;
                 caps.SupportsCustomHLSLShaders = true;
                 caps.SupportsRefractionCopy = true;
@@ -22,7 +22,7 @@ namespace Axle {
                 caps.SupportsAsyncCompute = false;
                 caps.SupportsRayTracing = false;
                 caps.SupportsWireframeMode = false;
-                caps.AdvancedFeatureDiagnostic = "Modern scene rendering does not yet execute cascaded shadow maps, skeletal skinning, authored HDR skybox/IBL, wireframe or asynchronous compute. Authored data is preserved; these are later rendering packages.";
+                caps.AdvancedFeatureDiagnostic = "Modern scene rendering does not yet execute skeletal skinning, authored HDR skybox/IBL, wireframe or asynchronous compute. Authored data is preserved; these are later rendering packages.";
                 break;
 
             case RendererBackendType::ModernRHI_Vulkan:
@@ -32,7 +32,7 @@ namespace Axle {
                 caps.SupportsHDR = true;
                 caps.SupportsToneMapping = true;
                 caps.SupportsFXAA = true;
-                caps.SupportsCascadedShadows = false;
+                caps.SupportsCascadedShadows = true;
                 caps.SupportsGPUSkinning = false;
                 caps.SupportsCustomHLSLShaders = true;
                 caps.SupportsRefractionCopy = true;
@@ -40,7 +40,7 @@ namespace Axle {
                 caps.SupportsAsyncCompute = false;
                 caps.SupportsRayTracing = false;
                 caps.SupportsWireframeMode = false;
-                caps.AdvancedFeatureDiagnostic = "Modern scene rendering does not yet execute cascaded shadow maps, skeletal skinning, authored HDR skybox/IBL, wireframe or asynchronous compute. Authored data is preserved; these are later rendering packages.";
+                caps.AdvancedFeatureDiagnostic = "Modern scene rendering does not yet execute skeletal skinning, authored HDR skybox/IBL, wireframe or asynchronous compute. Authored data is preserved; these are later rendering packages.";
                 break;
 
             case RendererBackendType::OpenGL_Compatibility:

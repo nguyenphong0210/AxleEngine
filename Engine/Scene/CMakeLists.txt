@@ -1,3 +1,17 @@
+set(native_forward_source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ForwardPBR.hlsl")
+set(native_forward_common "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/PBRCommon.hlsli")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${native_forward_source}" "${native_forward_common}")
+file(READ "${native_forward_source}" AXLE_NATIVE_FORWARD)
+file(READ "${native_forward_common}" AXLE_NATIVE_FORWARD_COMMON)
+string(REPLACE "#include \"PBRCommon.hlsli\"" "${AXLE_NATIVE_FORWARD_COMMON}" AXLE_NATIVE_FORWARD "${AXLE_NATIVE_FORWARD}")
+string(REPLACE "\n" "\n)AXLEFORWARD\"\nR\"AXLEFORWARD(" AXLE_NATIVE_FORWARD "${AXLE_NATIVE_FORWARD}")
+configure_file(src/NativeForwardSource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/NativeForwardSource.hpp" @ONLY)
+
+set(cascade_depth_source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/CascadedShadowDepth.hlsl")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${cascade_depth_source}")
+file(READ "${cascade_depth_source}" AXLE_CASCADE_DEPTH)
+configure_file(src/CascadeDepthSource.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/CascadeDepthSource.hpp" @ONLY)
+
 add_library(AxleScene STATIC
     src/Scene.cpp
     src/RuntimeEntity.cpp
@@ -24,6 +38,7 @@ add_library(AxleScene STATIC
     src/SceneRenderer.cpp
     src/MaterialTextureCache.cpp
     src/RHISceneRenderer.cpp
+    src/RHICascadedShadows.cpp
     src/RHIObjectPicker.cpp
     src/RHIMeshRegistry.cpp
     src/CharacterVFX.cpp
@@ -62,3 +77,5 @@ if (MSVC)
     target_compile_options(AxleScene PRIVATE /FS)
 endif()
 
+
+target_include_directories(AxleScene PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")

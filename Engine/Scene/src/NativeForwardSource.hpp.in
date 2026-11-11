@@ -1,0 +1,2 @@
+#pragma once
+inline constexpr char kNativeForwardSource[]=R"AXLEFORWARD(@AXLE_NATIVE_FORWARD@)AXLEFORWARD";

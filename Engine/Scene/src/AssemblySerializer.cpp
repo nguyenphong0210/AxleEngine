@@ -1,3 +1,4 @@
+#include "LocalShadowPersistence.hpp"
 #include <Axle/Path.hpp>
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/AssemblySerializer.hpp>
@@ -267,6 +268,7 @@ namespace Axle {
                 fout << "      Intensity: " << plc.Intensity << "\n";
                 fout << "      Radius: " << plc.Radius << "\n";
                 fout << "      Falloff: " << plc.Falloff << "\n";
+                WriteLocalShadows(fout,plc.Shadows);
             }
 
             // SpotLightComponent
@@ -279,6 +281,7 @@ namespace Axle {
                 fout << "      Range: " << slc.Range << "\n";
                 fout << "      InnerConeAngle: " << slc.InnerConeAngle << "\n";
                 fout << "      OuterConeAngle: " << slc.OuterConeAngle << "\n";
+                WriteLocalShadows(fout,slc.Shadows);
             }
 
 
@@ -662,6 +665,7 @@ namespace Axle {
                     break;
                 }
                 case AsmSection::PointLight: {
+                    if(ReadLocalShadows(trimmed,current.PointLight.Shadows))break;
                     if (trimmed.rfind("Color:", 0) == 0) {
                         float r = 1, g = 1, b = 1;
                         sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
@@ -676,6 +680,7 @@ namespace Axle {
                     break;
                 }
                 case AsmSection::SpotLight: {
+                    if(ReadLocalShadows(trimmed,current.SpotLight.Shadows))break;
                     if (trimmed.rfind("Enabled:", 0) == 0) {
                         current.SpotLight.Enabled = (Trim(trimmed.substr(8)) == "true");
                     } else if (trimmed.rfind("Color:", 0) == 0) {
@@ -1222,6 +1227,8 @@ namespace Axle {
             node.RigidBody = raw.RigidBody;
             node.HasMaterial = raw.HasMaterial;
             node.Material = raw.Material;
+            node.HasPointLight=raw.HasPointLight;node.PointLight=raw.PointLight;
+            node.HasSpotLight=raw.HasSpotLight;node.SpotLight=raw.SpotLight;
             node.HasSkeletalMesh = raw.HasSkeletalMesh;
             node.SkeletalMesh = raw.SkeletalMesh;
             node.HasAnimator = raw.HasAnimator;
@@ -1304,6 +1311,27 @@ namespace Axle {
             if (node.HasMaterial) {
                 WriteMaterialComponent(out,node.Material);
             }
+
+        if (node.HasPointLight) {
+            const auto& light=node.PointLight;
+            out << "    PointLightComponent:\n";
+            out << "      Color: [ " << light.Color.r << " , " << light.Color.g << " , " << light.Color.b << " ]\n";
+            out << "      Intensity: " << light.Intensity << "\n";
+            out << "      Radius: " << light.Radius << "\n";
+            out << "      Falloff: " << light.Falloff << "\n";
+            WriteLocalShadows(out,light.Shadows);
+        }
+        if (node.HasSpotLight) {
+            const auto& light=node.SpotLight;
+            out << "    SpotLightComponent:\n";
+            out << "      Enabled: " << (light.Enabled?"true":"false") << "\n";
+            out << "      Color: [ " << light.Color.r << " , " << light.Color.g << " , " << light.Color.b << " ]\n";
+            out << "      Intensity: " << light.Intensity << "\n";
+            out << "      Range: " << light.Range << "\n";
+            out << "      InnerConeAngle: " << light.InnerConeAngle << "\n";
+            out << "      OuterConeAngle: " << light.OuterConeAngle << "\n";
+            WriteLocalShadows(out,light.Shadows);
+        }
 
         if (node.HasSkeletalMesh) {
             std::string rigFallback, unusedController;

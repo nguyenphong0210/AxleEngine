@@ -74,10 +74,12 @@ namespace Axle::RHI {
 
         bool IsValid() const { return m_VertexBuffer.IsValid() && m_IndexBuffer.IsValid() && m_IndexCount > 0; }
 
-        RHIBuffer& GetVertexBuffer() { return m_VertexBuffer; }
+        // Published mesh generations are immutable. Replace geometry through
+        // Init/StreamUpload so captured views keep matching bytes and bounds.
+        // Native pointers from these inspection accessors are read-only inputs
+        // for recording; writing them bypasses the mesh publication contract.
         const RHIBuffer& GetVertexBuffer() const { return m_VertexBuffer; }
 
-        RHIBuffer& GetIndexBuffer() { return m_IndexBuffer; }
         const RHIBuffer& GetIndexBuffer() const { return m_IndexBuffer; }
 
         uint32_t GetVertexCount() const { return m_VertexCount; }

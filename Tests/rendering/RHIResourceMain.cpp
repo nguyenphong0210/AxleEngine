@@ -10,6 +10,10 @@
 #include <array>
 #include <cstring>
 #include <limits>
+#include <type_traits>
+
+static_assert(std::is_const_v<std::remove_reference_t<decltype(std::declval<Axle::RHI::RHIMesh&>().GetVertexBuffer())>>);
+static_assert(std::is_const_v<std::remove_reference_t<decltype(std::declval<Axle::RHI::RHIMesh&>().GetIndexBuffer())>>);
 
 using namespace Axle;
 using namespace Axle::RHI;
@@ -237,9 +241,15 @@ static bool HelpersAndMeshes() {
     }
     RENDER_CHECK(commands.End(), "abandoned upload recording can end");
     streamer.EndFrame();
-    auto* mapped = mesh.GetVertexBuffer().Map();
+    RHIBufferDesc readbackDesc;readbackDesc.Size=vertices.size()*sizeof(RHIVertex3D);readbackDesc.MemoryLocation=RHIMemoryLocation::HostReadback;
+    RHIBuffer readback;RHICommandBuffer copy;
+    RENDER_CHECK(readback.Init(readbackDesc)&&copy.Init()&&copy.Begin(),"read-only mesh verification recording");
+    copy.TransitionBuffer(oldVB,RHIAccess::VertexBuffer,RHIAccess::CopySource,RHIPipelineStage::AllCommands,RHIPipelineStage::Copy);
+    copy.CopyBuffer(*readback.GetNative(),0,*oldVB,0,readbackDesc.Size);
+    RENDER_CHECK(copy.End()&&copy.Submit()&&RHIDevice::Get().WaitIdle(),"read-only mesh verification completes");
+    auto* mapped = readback.Map();
     RENDER_CHECK(mapped && std::memcmp(mapped, vertices.data(), vertices.size() * sizeof(RHIVertex3D)) == 0, "old mesh vertex bytes retained");
-    mesh.GetVertexBuffer().Unmap();
+    readback.Unmap();
     return true;
 }
 

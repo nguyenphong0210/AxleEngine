@@ -27,6 +27,10 @@ namespace Axle {
         RigidBody3D RigidBody;
         bool HasMaterial = false;
         MaterialComponent Material;
+        bool HasPointLight = false;
+        PointLightComponent PointLight;
+        bool HasSpotLight = false;
+        SpotLightComponent SpotLight;
         bool HasSkeletalMesh = false;
         SkeletalMeshComponent SkeletalMesh;
         bool HasAnimator = false;

@@ -84,6 +84,11 @@ bool Native(RHIType backend) {
     world.Meshes[1].Material.RHIMaterialAsset=material;CHECK(render()==on);
     // Lights, transforms and submitted generations invalidate the exact cache.
     world.SpotLights[0].Position.x+=1;CHECK(!render().empty()&&renderer.GetLocalShadows().GetDrawCount()>0);world.SpotLights[0]=spot;CHECK(render()==on);
+    std::vector<RHIVertex3D> replacementVertices;std::vector<uint32_t> replacementIndices;
+    RHIMesh::GenerateCube(.3f,replacementVertices,replacementIndices);CHECK(cube->Init(replacementVertices,replacementIndices));
+    world.Meshes[1].NativeView=cube->CaptureView();CHECK(render()!=on&&renderer.GetLocalShadows().GetDrawCount()>0);
+    RHIMesh::GenerateCube(2,replacementVertices,replacementIndices);CHECK(cube->Init(replacementVertices,replacementIndices));
+    world.Meshes[1].NativeView=cube->CaptureView();CHECK(render()==on&&renderer.GetLocalShadows().GetDrawCount()>0);
     settings.LocalShadowResolution=512;bool injected=false;
     {ScopedRHIFault fault([&](std::string_view op)->std::optional<nri::Result>{if(op=="CreateTexture"&&!injected){injected=true;return nri::Result::OUT_OF_MEMORY;}return {};});
         renderer.RenderWorldView(world,camera,&color,&depth,settings);CHECK(injected&&!renderer.WasLastRenderSuccessful());}
@@ -123,6 +128,29 @@ bool Native(RHIType backend) {
     size_t left=0,right=0;for(size_t i=0;i<seamOff.size();i+=4)if(int(seamOff[i])+seamOff[i+1]+seamOff[i+2]>int(seamOn[i])+seamOn[i+1]+seamOn[i+2]+30){if((i/4)%128<64)++left;else ++right;}
     std::cout<<"point seam darkened left="<<left<<" right="<<right<<"\n";CHECK(left>10&&right>10);
     CHECK(PPM("point-seam-off.ppm",seamOff)&&PPM("point-seam-on.ppm",seamOn));
+    // The default/sky sets plus 4096 material sets must fit the forward pool
+    // after adding the seventeenth texture binding. Keep raster work clipped.
+    settings.EnableShadows=false;world.Meshes.assign(4096,floor);
+    for(auto& instance:world.Meshes)instance.WorldTransform=glm::translate(glm::mat4(1),glm::vec3(10000));
+    CHECK(!render().empty()&&renderer.GetRenderedEntityCount()==4096);
+    {
+        // Recording alone must never publish cached contents. Exercise the
+        // real depth pass without invoking its successful-submit callback.
+        RHILocalShadows pass;MaterialTextureCache textures;CHECK(pass.Init());
+        world.Meshes={floor,caster};world.PointLights.clear();world.SpotLights={spot};settings.EnableShadows=true;
+        CHECK(pass.Prepare(world,camera,settings,textures)&&pass.NeedsRender());
+        {RHICommandBuffer abandoned;CHECK(abandoned.Init()&&abandoned.Begin());
+            abandoned.TransitionTexture(pass.GetAtlas()->GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::DepthStencilWrite);
+            CHECK(pass.Record(abandoned)&&abandoned.End());
+            CHECK(abandoned.Reset());} // Drain/release recording pins before Prepare.
+        CHECK(pass.Prepare(world,camera,settings,textures)&&pass.NeedsRender());
+        {RHICommandBuffer submitted;CHECK(submitted.Init()&&submitted.Begin());
+            submitted.TransitionTexture(pass.GetAtlas()->GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::DepthStencilWrite);
+            CHECK(pass.Record(submitted));
+            submitted.TransitionTexture(pass.GetAtlas()->GetNative(),RHIResourceLayout::DepthStencilWrite,RHIResourceLayout::ShaderResource);
+            CHECK(submitted.End()&&submitted.Submit()&&device.WaitIdle());pass.OnSubmitted();}
+        CHECK(pass.Prepare(world,camera,settings,textures)&&!pass.NeedsRender());pass.Shutdown();
+    }
     CHECK(device.WaitIdle());renderer.Shutdown();CHECK(GetRHIValidationErrorCount()==0);
     std::cout<<"PASS Point/Spot pixels, six faces/seams, opt-out, cache, cutout and allocation retry\n";return true;
 }

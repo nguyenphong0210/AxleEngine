@@ -29,6 +29,7 @@
 namespace Axle {
 
     using namespace Axle::RHI;
+    static constexpr uint32_t ForwardTextureCount=static_cast<uint32_t>(RHITextureSlot::Count)+7;
 
     static std::filesystem::path FindShaderPath(const std::string& shaderFileName) {
         // 1. Try Asset Path resolution
@@ -112,7 +113,9 @@ namespace Axle {
         }
 
         // Per-draw resource descriptors; the immutable sampler uses no heap slots.
-        auto materialPoolDesc = RHIDescriptorPoolDesc::Tier2Bindless(65536, 4096);
+        // Reserve the fixed PBR-default and sky sets in addition to 4096 draws.
+        constexpr uint32_t materialSets=4096+2;
+        auto materialPoolDesc = RHIDescriptorPoolDesc::Tier2Bindless(materialSets*ForwardTextureCount,materialSets);
         materialPoolDesc.MaxSamplers = 0;
         if (!m_DescriptorPool.Init(materialPoolDesc)) {
             AXLE_CORE_ERROR("RHISceneRenderer: Failed to initialize material descriptors!");
@@ -448,10 +451,10 @@ namespace Axle {
         rootDescs[4].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[4].shaderStages = nri::StageBits::FRAGMENT_SHADER;
 
-        // Descriptor Set (space 1): 6 PBR textures (t0..t5) + 3 IBL textures (t6..t8) and 1 Sampler (s0)
+        // Space 1 includes PBR, IBL, refraction, cascades and local shadow textures.
         nri::DescriptorRangeDesc ranges[2] = {};
         ranges[0].baseRegisterIndex = 0;
-        ranges[0].descriptorNum = static_cast<uint32_t>(RHITextureSlot::Count)+7; // t0..t5 PBR + t6 Irradiance + t7 Prefilter + t8 BRDF LUT
+        ranges[0].descriptorNum = ForwardTextureCount;
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
@@ -1705,7 +1708,7 @@ namespace Axle {
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
                 RHIMaterialConstants materialData;
                 if (item.Material) materialData = item.Material->BuildConstants();
-                std::vector<nri::Descriptor*> srvs(static_cast<size_t>(RHITextureSlot::Count)+7);
+                std::vector<nri::Descriptor*> srvs(ForwardTextureCount);
                 for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
                     auto textureSlot = static_cast<RHITextureSlot>(slot);
                     std::shared_ptr<RHITexture> texture;

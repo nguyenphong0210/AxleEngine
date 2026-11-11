@@ -6,6 +6,9 @@
 #include <Axle/DataComponents.hpp>
 #include <Axle/SceneLighting.hpp>
 #include <Axle/SceneSerializer.hpp>
+#include <Axle/AssemblySerializer.hpp>
+#include <Axle/FileSystem.hpp>
+#include <chrono>
 
 namespace Axle::RenderTests {
 
@@ -138,6 +141,40 @@ namespace Axle::RenderTests {
         Scene reopened;RENDER_CHECK(SceneSerializer(&reopened).DeserializeFromString(SceneSerializer(&scene).SerializeToString()),"Local light shadow controls reopen");
         const auto restored=ExtractRenderWorld(reopened);
         RENDER_CHECK(!restored.PointLights[0].Shadows.CastShadows&&restored.PointLights[0].Shadows.Bias==.004f&&restored.SpotLights[0].Shadows.NearPlane==.15f&&restored.SpotLights[0].Shadows.FilterRadius==2,"Local light shadow controls survive scene persistence");
+
+        const auto assemblyPath=std::filesystem::temp_directory_path()/
+            ("axle-local-light-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".axle");
+        struct Cleanup {std::filesystem::path Path;~Cleanup(){std::error_code error;std::filesystem::remove(Path,error);}}cleanup{assemblyPath};
+        // Exercise both entity export/import and Assembly Editor data save/load.
+        auto verifyShadows=[](const LocalShadowSettings& a,const LocalShadowSettings& b){return
+            a.CastShadows==b.CastShadows&&Near(a.Bias,b.Bias)&&Near(a.SlopeBias,b.SlopeBias)&&
+            Near(a.NormalBias,b.NormalBias)&&Near(a.FilterRadius,b.FilterRadius)&&Near(a.NearPlane,b.NearPlane);};
+        auto& assemblySpot=lamp.AddComponent<SpotLightComponent>();
+        plc.Shadows={false,.012f,.023f,.034f,1.25f,.15f};
+        assemblySpot.Shadows={true,.045f,.056f,.067f,.75f,.2f};
+        RENDER_CHECK(AssemblySerializer::Serialize(assemblyPath,lamp),"Export local-light assembly");
+        Scene assemblyScene;auto imported=AssemblySerializer::Deserialize(assemblyPath,&assemblyScene);
+        RENDER_CHECK(imported&&verifyShadows(imported.GetComponent<PointLightComponent>().Shadows,plc.Shadows)&&
+            verifyShadows(imported.GetComponent<SpotLightComponent>().Shadows,assemblySpot.Shadows),"Entity assembly round-trip keeps every local-shadow field");
+        auto assembly=AssemblySerializer::LoadAssemblyData(assemblyPath);
+        RENDER_CHECK(assembly.IsValid&&assembly.RootNode.HasPointLight&&assembly.RootNode.HasSpotLight&&
+            verifyShadows(assembly.RootNode.PointLight.Shadows,plc.Shadows)&&verifyShadows(assembly.RootNode.SpotLight.Shadows,assemblySpot.Shadows),"Assembly Editor data keeps local lights and shadows");
+        RENDER_CHECK(AssemblySerializer::SaveAssemblyData(assemblyPath,assembly),"Save local-light assembly data");
+        const auto savedAssembly=AssemblySerializer::LoadAssemblyData(assemblyPath);
+        RENDER_CHECK(savedAssembly.IsValid&&savedAssembly.RootNode.HasPointLight&&savedAssembly.RootNode.HasSpotLight&&
+            verifyShadows(savedAssembly.RootNode.PointLight.Shadows,plc.Shadows)&&verifyShadows(savedAssembly.RootNode.SpotLight.Shadows,assemblySpot.Shadows),"Assembly Editor save preserves shadow fields");
+        const auto validAssembly=FileSystem::ReadTextFile(assemblyPath);
+        for(const auto* invalid:{"invalid","1e9999"}) {
+            auto corrupt=[&](std::string text){const auto start=text.find("ShadowBias:");
+                text.replace(start,text.find('\n',start)-start,std::string("ShadowBias: ")+invalid);return text;};
+            RENDER_CHECK(FileSystem::WriteTextFileAtomically(assemblyPath,corrupt(validAssembly)),"Stage malformed shadow value");
+            auto malformed=AssemblySerializer::LoadAssemblyData(assemblyPath);
+            RENDER_CHECK(malformed.IsValid&&Near(malformed.RootNode.PointLight.Shadows.Bias,LocalShadowSettings{}.Bias),"Malformed assembly shadow float keeps default without throwing");
+            Scene malformedScene;auto malformedEntity=AssemblySerializer::Deserialize(assemblyPath,&malformedScene);
+            RENDER_CHECK(malformedEntity&&Near(malformedEntity.GetComponent<PointLightComponent>().Shadows.Bias,LocalShadowSettings{}.Bias),"Malformed assembly entity shadow value is safe");
+            Scene malformedSceneText;
+            RENDER_CHECK(SceneSerializer(&malformedSceneText).DeserializeFromString(corrupt(SceneSerializer(&scene).SerializeToString())),"Malformed scene shadow float is safe");
+        }
 
         RENDER_CHECK(world.Skybox.Enabled, "Skybox enabled");
         RENDER_CHECK(world.Skybox.EnvironmentLighting, "Skybox environment lighting opt-in extracted");

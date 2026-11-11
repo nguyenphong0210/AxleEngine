@@ -1,3 +1,4 @@
+#include "LocalShadowPersistence.hpp"
 #include <Axle/Path.hpp>
 #include <cwctype>
 #include <map>
@@ -106,27 +107,6 @@ namespace Axle {
             }
             return true;
         } catch (const std::exception& exception) { error = exception.what(); return false; }
-    }
-
-    static void WriteLocalShadows(std::ostream& out,const LocalShadowSettings& s) {
-        out << "      CastShadows: " << (s.CastShadows?"true":"false") << "\n";
-        out << "      ShadowBias: " << s.Bias << "\n";
-        out << "      ShadowSlopeBias: " << s.SlopeBias << "\n";
-        out << "      ShadowNormalBias: " << s.NormalBias << "\n";
-        out << "      ShadowFilterRadius: " << s.FilterRadius << "\n";
-        out << "      ShadowNearPlane: " << s.NearPlane << "\n";
-    }
-    static bool ReadLocalShadows(const std::string& text,LocalShadowSettings& s) {
-        const auto colon=text.find(':');if(colon==std::string::npos)return false;
-        const auto key=text.substr(0,colon),value=Trim(text.substr(colon+1));
-        if(key=="CastShadows")s.CastShadows=value=="true";
-        else if(key=="ShadowBias")s.Bias=std::stof(value);
-        else if(key=="ShadowSlopeBias")s.SlopeBias=std::stof(value);
-        else if(key=="ShadowNormalBias")s.NormalBias=std::stof(value);
-        else if(key=="ShadowFilterRadius")s.FilterRadius=std::stof(value);
-        else if(key=="ShadowNearPlane")s.NearPlane=std::stof(value);
-        else return false;
-        return true;
     }
 
     std::string SceneSerializer::SerializeToString() {

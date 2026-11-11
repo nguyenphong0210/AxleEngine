@@ -25,8 +25,8 @@
       "Samples/Sandbox/assets/materials",
       "docs/design/OPT_13_LOCAL_SHADOWS_PLAN.md"
     ],
-    "implementation_status": "Spot/Point native checkpoints committed in 29a2c52/a2e2ce6. Seven Sandbox starter assets implemented/self-verified through both production material loaders; Debug MaterialUnitTests passes. Final acceptance and separate-context review pending.",
-    "acceptance_status": "Pending actual build, CPU/native tests and separate-context review.",
+    "implementation_status": "Spot/Point and Sandbox checkpoints committed (29a2c52, a2e2ce6, e50c811). Separate-context source review fixes implemented/self-verified: Assembly entity/editor persistence, malformed numbers, capacity for 4096 material draws plus default/sky, const mesh publication. Debug native local 2/2 and RenderUnit/RHIResource both native backends pass. Final product rebuild/Debug full suite/Release gates pending.",
+    "acceptance_status": "Separate-context source rechecks report no remaining actionable findings; final executable verification pending. Review did not independently run GPU tests.",
     "open_gates": [
       "Final budgets/backend/lifetime regression and separate-context review"
     ],

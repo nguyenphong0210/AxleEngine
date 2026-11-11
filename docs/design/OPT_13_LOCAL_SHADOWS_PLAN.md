@@ -76,3 +76,12 @@ writes off and IOR 1.5. Existing MaterialUnitTests load every asset through both
 production material loaders, compare rendering parameters/identity and confirm
 read-only validation. Debug MaterialUnitTests passes (`build/c13_sandbox_materials_ctest_debug.log`).
 See the materials README for lighting and native-refraction limitations.
+
+## Review corrections checkpoint
+
+The separate-context source review found Assembly persistence, descriptor-budget,
+mesh-mutation-contract and malformed-number issues. Corrections and actual
+verification are recorded in [the review](../reviews/OPT_13_LOCAL_SHADOWS_REVIEW.md).
+Native local tests now additionally cover 4096 material draws, complete mesh
+generation replacement and cache validity after abandoned/successful recording.
+All focused repairs pass; final rebuilt product/full-suite/Release gates follow.

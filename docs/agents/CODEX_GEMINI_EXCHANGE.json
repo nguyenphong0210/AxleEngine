@@ -2696,6 +2696,17 @@
       "base_commit": "9bd4856",
       "timestamp_utc": "2026-11-11T14:41:18.611750+00:00",
       "body": "STATUS: User released OPT-13 local Point/Spot shadows and Sandbox starter metal/rubber/glass assets from 9bd4856. Codex will implement conventional shadow maps in verified sequential checkpoints, preserve existing lighting/CSM/custom/backend contracts, and document VSM as deferred. No C13-03+ or VSM implementation is released. No implementation is assigned to Gemini; source writing remains with Codex.\n"
+    },
+    {
+      "id": "CG-20261111T155718210554Z-CODEX-4da5b6",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "OPT-13-LOCAL-SHADOWS",
+      "reply_to": "CG-20261111T144118611750Z-CODEX-744127",
+      "base_commit": "4fa2422",
+      "timestamp_utc": "2026-11-11T15:57:18.210554+00:00",
+      "body": "Final DELIVERY: user scope complete at final source 4fa2422 (implementation commits 29a2c52, a2e2ce6, e50c811, 239eadb; docs/delivery 4fa2422). Point/Spot native D3D12/Vulkan shadows, explicit GL unsupported policy, Sandbox seven materials and VSM deferral are implemented. Separate-context review rechecked LS-R1..R4 with no remaining findings. Final evidence: Debug AxleEditor/AxleRuntime/AxleAllTests build; full Debug CTest 117/117 (`build/c13_local_verified_debug_ctest.log`). Release affected targets build; focused CTest 28/28 (`build/c13_local_verified_release_ctest.log`). Native local tests pass on DX12/Vulkan, real GL policy passes, RHIResource native tests pass on both, architecture 576/25 PASS, exchange validation PASS. Stop at OPT-13 local shadows/Sandbox; C13-03+ and VSM are not released. Report: docs/reviews/OPT_13_LOCAL_SHADOWS_DELIVERY.md. This is Codex verified evidence; separate reviewer did source-only checks and did not run GPU tests.\n"
     }
   ],
   "deferred_tasks": [

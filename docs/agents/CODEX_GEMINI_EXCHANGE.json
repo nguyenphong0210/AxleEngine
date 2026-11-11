@@ -25,12 +25,10 @@
       "Samples/Sandbox/assets/materials",
       "docs/design/OPT_13_LOCAL_SHADOWS_PLAN.md"
     ],
-    "implementation_status": "Spot/Point and Sandbox checkpoints committed (29a2c52, a2e2ce6, e50c811). Separate-context source review fixes implemented/self-verified: Assembly entity/editor persistence, malformed numbers, capacity for 4096 material draws plus default/sky, const mesh publication. Debug native local 2/2 and RenderUnit/RHIResource both native backends pass. Final product rebuild/Debug full suite/Release gates pending.",
-    "acceptance_status": "Separate-context source rechecks report no remaining actionable findings; final executable verification pending. Review did not independently run GPU tests.",
-    "open_gates": [
-      "Final budgets/backend/lifetime regression and separate-context review"
-    ],
-    "next_action": "Implement released scope sequentially, commit each verified checkpoint, then stop."
+    "implementation_status": "Complete: Spot/Point conventional native shadows, explicit OpenGL policy, seven Sandbox materials and review repairs committed in 29a2c52, a2e2ce6, e50c811, 239eadb. Final Debug full CTest 117/117 and Release focused CTest 28/28 pass after rebuild; native D3D12/Vulkan and real GL policy gates pass.",
+    "acceptance_status": "Accepted within user scope after separate-context source review and final executable verification. VSM deferred; C13-03+ unreleased.",
+    "open_gates": [],
+    "next_action": "Stop at OPT-13 local shadows and Sandbox materials; do not implement VSM or C13-03+ without a new user release."
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",

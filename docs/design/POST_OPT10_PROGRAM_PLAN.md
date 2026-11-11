@@ -171,6 +171,14 @@ Packages:
   ambient fallback.
   The C13-02 lighting-ownership correction separates visible backgrounds from
   explicit environment illumination; see the [correction report](../reviews/OPT_13_C13_02_LIGHTING_SEMANTICS.md).
+- **Local shadow extension (direct user release, 2026-11-11):** bounded Point/Spot
+  shadow maps and PCF on D3D12/Vulkan, with explicit unsupported-local-shadow
+  diagnostics on OpenGL. Preserve CSM, material graphs and explicit environment
+  illumination. Sandbox starter metal/rubber/glass assets are included. See the
+  [execution plan](OPT_13_LOCAL_SHADOWS_PLAN.md). Virtual Shadow Maps are deferred
+  to a separately released optimization covering page allocation, requests,
+  invalidation, caching and eviction; this extension does not implement VSM or
+  release C13-03 onward.
 - **C13-03 / 13.3 Screen-space ambient & reflections:** depth/normal history,
   configurable-resolution GTAO/SSAO compute pass with bilateral depth-aware
   reconstruction, and bounded SSR ray-marching with temporal invalidation.

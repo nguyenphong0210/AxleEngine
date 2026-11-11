@@ -21,5 +21,6 @@ Glass uses a transparent surface, depth writes off, queue 3000 and IOR 1.5.
 The native D3D12/Vulkan renderer can use its existing screen-space refraction
 path with a single-sample view and scene depth. Transparency sorting and
 screen-space visibility limitations still apply; these are starter surface
-presets rather than volumetric or ray-traced glass. OpenGL keeps its existing
+presets rather than volumetric or ray-traced glass. Transparent surfaces do not
+cast the conventional depth-map shadows. OpenGL keeps its existing
 transparent compatibility appearance and does not reproduce native refraction.

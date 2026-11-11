@@ -138,6 +138,7 @@ namespace {
         function << "    return surface;\n}\n#line 1 \"mg_surface_template\"\n";
         source.Declarations = declarations.str(); source.SurfaceFunction = function.str();
         source.SemanticKey = "MaterialHLSL:1\n" + ir.SemanticKey + revisionKey.str();
+        source.CompilerKey = revisionKey.str();
         return source;
     }
 }

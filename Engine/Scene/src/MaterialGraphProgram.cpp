@@ -54,17 +54,38 @@ namespace {
     bool MaterialGraphProgram::Compile(const MaterialGraphDocument& document, RHI::RHIShaderFormat format,
                                       CompiledMaterialGraphProgram& outProgram, MaterialGraphDiagnostic* error,
                                       const MaterialNodeRegistry& definitions, const MaterialHLSLRegistry& lowerings) {
+        CompiledMaterialGraphProgram candidate;
+        if (!Prepare(document,format,candidate,error,definitions,lowerings) ||
+            !CompilePrepared(document,candidate,error) || !Finalize(candidate,error)) return false;
+        outProgram=std::move(candidate); return true;
+    }
+
+    bool MaterialGraphProgram::Prepare(const MaterialGraphDocument& document, RHI::RHIShaderFormat format,
+                                     CompiledMaterialGraphProgram& candidate, MaterialGraphDiagnostic* error,
+                                     const MaterialNodeRegistry& definitions, const MaterialHLSLRegistry& lowerings) {
         if(error) *error={};
         auto fail=[&](std::string message,const char* code) {if(error)*error=CompileError(document,std::move(message),code);return false;};
         if(format!=RHI::RHIShaderFormat::DXIL && format!=RHI::RHIShaderFormat::SPIRV)
             return fail("Material graphs require the DXIL or SPIR-V compiler backend","MG_SHADER_FORMAT");
-        CompiledMaterialGraphProgram candidate;
         if(!MaterialGraphHLSL::Lower(document,candidate.Graph,error,definitions,lowerings)) return false;
         candidate.HLSL=AssembleMaterialSurfaceShader(candidate.Graph.Declarations,candidate.Graph.SurfaceFunction);
+        candidate.ParameterSchema=document.Parameters;
+        candidate.CullMode=document.CullMode; candidate.DepthWrite=document.DepthWrite;
+        candidate.Vertex.Format=candidate.Fragment.Format=format;
+        // Collision-free, process-local content identity. The fixed compiler contract
+        // is part of this version: SM6_0, HLSL2021, O3, VSMain/PSMain, Vulkan1.3 DX layout.
+        candidate.ShaderKey="MaterialGraphShader:1:"+std::to_string(static_cast<unsigned>(format))+":"+
+            std::to_string(candidate.Graph.CompilerKey.size())+":"+candidate.Graph.CompilerKey+candidate.HLSL;
+        return true;
+    }
+
+    bool MaterialGraphProgram::CompilePrepared(const MaterialGraphDocument& document, CompiledMaterialGraphProgram& candidate,
+                                             MaterialGraphDiagnostic* error) {
+        auto fail=[&](std::string message,const char* code) {if(error)*error=CompileError(document,std::move(message),code);return false;};
         auto& compiler=RHI::RHIShaderCompiler::Get();
         if(!compiler.IsInitialized() && !compiler.Init()) return fail("DXC initialization failed","MG_DXC_INIT");
         RHI::RHIShaderCompileDesc description; description.Source=candidate.HLSL;
-        description.SourcePath="mg_generated_material.hlsl"; description.Format=format;
+        description.SourcePath="mg_generated_material.hlsl"; description.Format=candidate.Vertex.Format;
         description.Stage=RHI::RHIShaderStage::Vertex; description.EntryPoint="VSMain";
         auto vertex=compiler.Compile(description);
         if(!vertex.Success || !vertex.Bytecode.IsValid()) return fail("Vertex compilation failed: "+vertex.ErrorMessage,"MG_DXC_VERTEX");
@@ -73,16 +94,22 @@ namespace {
         if(!fragment.Success || !fragment.Bytecode.IsValid()) return fail("Fragment compilation failed: "+fragment.ErrorMessage,"MG_DXC_FRAGMENT");
         candidate.Vertex=std::move(vertex.Bytecode); candidate.Fragment=std::move(fragment.Bytecode);
         candidate.Reflection=RHI::RHIShaderReflection::Merge({vertex.Reflection,fragment.Reflection});
-        // Basic compiler-output compatibility; managed layouts/cache/reload are C12-03.
-        const auto validation=CustomShaderInterface::Validate(candidate.Reflection);
-        std::string collision;
-        if(!validation.IsValid || CustomShaderInterface::HasVulkanBindingCollision(candidate.Reflection,collision))
-            return fail(validation.IsValid?collision:validation.Diagnostic,"MG_SHADER_INTERFACE");
+        return true;
+    }
+
+    bool MaterialGraphProgram::Finalize(CompiledMaterialGraphProgram& candidate, MaterialGraphDiagnostic* error) {
+        // Native descriptor range indices must agree when compatible layouts are
+        // reused, even if reflection enumeration order changes after recompilation.
+        std::sort(candidate.Reflection.Resources.begin(),candidate.Reflection.Resources.end(),[](const auto& a,const auto& b){
+            return std::tie(a.Space,a.Type,a.BindPoint,a.Name)<std::tie(b.Space,b.Type,b.BindPoint,b.Name);
+        });
+        std::sort(candidate.Reflection.ConstantBuffers.begin(),candidate.Reflection.ConstantBuffers.end(),[](const auto& a,const auto& b){
+            return std::tie(a.Space,a.BindPoint,a.Name)<std::tie(b.Space,b.BindPoint,b.Name);
+        });
+        if(!BuildLayout(candidate.Graph,candidate.Reflection,candidate.BindingPlan,candidate.LayoutKey,error)) return false;
         candidate.DefaultProperties=Defaults(candidate.Graph,candidate.Reflection);
-        std::vector<ShaderPropertyDesc> properties;
-        for(const auto& value:candidate.DefaultProperties) properties.push_back(value.Desc);
-        const auto plan=BuildMaterialBindingPlan(candidate.Reflection,{},properties);
-        if(const auto* issue=std::get_if<MaterialBindingError>(&plan)) return fail(issue->Code+": "+issue->Message,"MG_SHADER_BINDINGS");
-        outProgram=std::move(candidate); return true;
+        for(auto& schema:candidate.BindingPlan.PropertySchema)
+            for(const auto& property:candidate.DefaultProperties)if(property.Desc.Name==schema.Name) schema=property.Desc;
+        return true;
     }
 }

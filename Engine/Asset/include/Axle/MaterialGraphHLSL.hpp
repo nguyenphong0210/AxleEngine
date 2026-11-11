@@ -26,6 +26,8 @@ namespace Axle {
         std::vector<MaterialHLSLParameter> Parameters;
         std::vector<MaterialHLSLTexture> Textures;
         std::string SemanticKey;
+        // Only participating definition/emitter revisions; excludes values and paths.
+        std::string CompilerKey;
         std::vector<std::pair<uint64_t, std::string>> NodeSources;
     };
 

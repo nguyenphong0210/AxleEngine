@@ -176,6 +176,9 @@ and the consequences of any command against the user's scope.
 - English code/comments/repository docs/commits; communicate with the user in
   their chosen language. One coherent behavior plus relevant tests per local
   commit. No push unless requested.
+- User decision, 2026-11-11: when a released package is split into small
+  checkpoints, verify and commit each completed checkpoint separately; do not
+  batch completed steps into one implementation commit.
 - Check the index before committing. Do not stage the other agent's messages,
   delivery edits or unrelated source changes with `git add -A`.
 - Each author commits its own exchange updates where practical. A final commit

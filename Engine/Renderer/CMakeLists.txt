@@ -51,6 +51,7 @@ add_library(AxleRenderer STATIC
     src/Framebuffer.cpp
     src/ShadowMap.cpp
     src/CascadedShadowMap.cpp
+    src/EnvironmentBake.cpp
     src/Texture2D.cpp
     src/ImageTextureCache.cpp
     src/Skybox.cpp

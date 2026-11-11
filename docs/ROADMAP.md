@@ -437,6 +437,14 @@ and bounded native baseline. Automatic product graph loading, managed
 layout/cache/reload, full resource policy and graph UI remain later work;
 C12-03 onward are unreleased and C11-07 deferrals are unchanged.
 
+**C12-03 completed under direct user assignment, 2026-11-11:** graph reflection/layout
+compatibility, shader/pipeline cache identities and transactional last-known-good
+reload, with typed authored-name overrides and programmatic rename. Implementation
+and native verification are recorded in the [C12-03 delivery](reviews/OPT_12_C12_03_DELIVERY.md);
+Debug CTest **98/98**, focused Release **8/8**, architecture and independent
+review pass. Automatic product graph loading/UI remain separate; C12-04 onward
+remain unreleased.
+
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features
 remain deferred.

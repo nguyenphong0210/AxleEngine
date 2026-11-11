@@ -111,7 +111,10 @@ document parsing, validation, IR and persistence; see the
 The user then directly released C12-02 for the existing HLSL/DXIL/SPIR-V compiler
 backend; see the [C12-02 delivery](../reviews/OPT_12_C12_02_DELIVERY.md) for the
 completed registry-driven lowering, bounded native baseline and exact verification state.
-C12-03 and later packages remain unreleased.
+The user subsequently released C12-03 directly to Codex for strict graph
+reflection/layout, pipeline identities and last-known-good reload; see the
+[C12-03 delivery](../reviews/OPT_12_C12_03_DELIVERY.md) for current verification.
+C12-04 and later packages remain unreleased.
 
 Packages:
 
@@ -121,8 +124,10 @@ Packages:
 - **C12-02 / 12.2 Existing compiler backend (complete):** registry-driven graph
   lowering to HLSL, real DXIL/SPIR-V compilation and bounded native D3D12/Vulkan
   graph rendering, including explicit sRGB/LinearRepeat baseline semantics.
-- **C12-03 / 12.3 Reflection/layout:** descriptor compatibility, pipeline cache keys and
-  last-known-good reload.
+- **C12-03 / 12.3 Reflection/layout (complete):** strict descriptor/storage
+  compatibility, backend-scoped shader and pipeline identities, bounded code cache,
+  immutable native-ready generations, last-known-good reload, named instance
+  overrides and atomic programmatic parameter rename.
 - **C12-04 / 12.4 Resource semantics:** texture color space, sampler, fallback and
   authored dependency diagnostics.
 - **C12-05 / 12.5 Optional Slang evaluation:** prototype Slang as a backend; it must not

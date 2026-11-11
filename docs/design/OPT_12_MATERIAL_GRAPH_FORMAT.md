@@ -293,7 +293,10 @@ implemented CPU behavior from future compiler and Editor behavior.
    names. `ParameterRef` must resolve the exact name and match its declared output
    type. An Editor rename must update supported references and instance overrides;
    a missing key after a manual edit is a diagnostic, not an implicit new identity.
-   Detailed rename transactions and instance storage remain implementation design.
+   C12-03 supplies an atomic in-memory rename for the document and caller-supplied
+   instances, using registry parameter metadata. Project-wide instance discovery,
+   disk persistence and Editor UI remain separate integration work; see the
+   [C12-03 delivery](../reviews/OPT_12_C12_03_DELIVERY.md).
 3. **Node/pin contract:** validate declared pins, direction and types against
    supported definitions, including permitted polymorphic Multiply/Lerp variants.
    Validate connection endpoints, supported conversions, duplicate incoming wires,
@@ -321,3 +324,6 @@ unused data preservation, invalid graphs and failure rollback. Compiler/native
 image evidence is separate from this documentation decision. No source tests or
 native rendering runs were claimed by the original format decision. Current CPU
 verification and implementation limits are recorded in the C12-01 delivery.
+The [C12-02 compiler delivery](../reviews/OPT_12_C12_02_DELIVERY.md) and
+[C12-03 reflection/reload delivery](../reviews/OPT_12_C12_03_DELIVERY.md) record
+their separate compiler/native verification and explicit product integration limits.

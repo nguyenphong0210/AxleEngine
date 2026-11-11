@@ -185,7 +185,8 @@ namespace Axle {
         shader.SetInt("u_PrefilterMap", 6);
         shader.SetInt("u_BRDFLUT", 7);
 
-        int useIBL = (hasSkybox && skybox.Enabled && skybox.Type == SkyboxType::HDRCubemap && !skybox.HDRPath.empty()) ? 1 : 0;
+        int useIBL = (hasSkybox && skybox.Enabled && skybox.EnvironmentLighting &&
+                      skybox.Type == SkyboxType::HDRCubemap && !skybox.HDRPath.empty()) ? 1 : 0;
         shader.SetInt("u_UseIBL", useIBL);
         shader.SetFloat("u_EnvironmentIntensity", hasSkybox ? skybox.Intensity : 1.0f);
 

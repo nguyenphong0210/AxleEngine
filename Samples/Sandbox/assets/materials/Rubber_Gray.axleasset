@@ -1,0 +1,20 @@
+# AxleFileIdentity: 1 13515020920176726135
+Material {
+    name: "Gray Rubber"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    textureMode: "SeparateMaps"
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    depthWrite: true
+    renderQueue: 2000
+    albedoColor: [0.09, 0.095, 0.1, 1]
+    metallic: 0
+    roughness: 0.75
+    ao: 1
+    emissionIntensity: 0
+    specularHighlights: true
+    environmentReflections: true
+    uvTiling: [1, 1]
+    uvOffset: [0, 0]
+}

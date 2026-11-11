@@ -1,0 +1,25 @@
+# AxleFileIdentity: 1 11057955878796107188
+Material {
+    name: "Clear Glass"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    textureMode: "SeparateMaps"
+    surfaceType: "Transparent"
+    cullMode: "Back"
+    depthWrite: false
+    renderQueue: 3000
+    albedoColor: [0.98, 0.995, 1, 0.08]
+    metallic: 0
+    roughness: 0.04
+    ao: 1
+    emissionIntensity: 0
+    specularHighlights: true
+    environmentReflections: true
+    uvTiling: [1, 1]
+    uvOffset: [0, 0]
+    refractionEnabled: true
+    refractionStrength: 1
+    refractionIOR: 1.5
+    refractionThickness: .05
+    refractionTint: [0.98, 0.995, 1]
+}

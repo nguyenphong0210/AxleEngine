@@ -1,0 +1,20 @@
+# AxleFileIdentity: 1 13688133086095612386
+Material {
+    name: "Satin Aluminum"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    textureMode: "SeparateMaps"
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    depthWrite: true
+    renderQueue: 2000
+    albedoColor: [0.91, 0.92, 0.92, 1]
+    metallic: 1
+    roughness: 0.4
+    ao: 1
+    emissionIntensity: 0
+    specularHighlights: true
+    environmentReflections: true
+    uvTiling: [1, 1]
+    uvOffset: [0, 0]
+}

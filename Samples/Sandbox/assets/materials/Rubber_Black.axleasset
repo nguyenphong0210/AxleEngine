@@ -1,0 +1,20 @@
+# AxleFileIdentity: 1 11764960781326244762
+Material {
+    name: "Black Rubber"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    textureMode: "SeparateMaps"
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    depthWrite: true
+    renderQueue: 2000
+    albedoColor: [0.018, 0.02, 0.022, 1]
+    metallic: 0
+    roughness: 0.85
+    ao: 1
+    emissionIntensity: 0
+    specularHighlights: true
+    environmentReflections: true
+    uvTiling: [1, 1]
+    uvOffset: [0, 0]
+}

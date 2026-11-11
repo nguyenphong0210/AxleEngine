@@ -65,3 +65,14 @@ shadow support and reports requested shadows in Inspector/RenderService; ordinar
 Point/Spot lighting remains available. A real GL view verifies warning/reset
 behavior. Debug Editor and affected targets build; focused CTest passes 7/7
 (`build/c13_local_point_checkpoint_ctest_debug.log`). Final acceptance is pending.
+
+## Sandbox material checkpoint self-verification
+
+Seven texture-free ForwardPBR assets are present in
+`Samples/Sandbox/assets/materials`: polished steel, satin aluminum, gold, black
+and gray rubber, clear glass and blue tinted glass. Each has a unique embedded
+identity; no sidecars are generated. Glass uses transparent queue 3000, depth
+writes off and IOR 1.5. Existing MaterialUnitTests load every asset through both
+production material loaders, compare rendering parameters/identity and confirm
+read-only validation. Debug MaterialUnitTests passes (`build/c13_sandbox_materials_ctest_debug.log`).
+See the materials README for lighting and native-refraction limitations.

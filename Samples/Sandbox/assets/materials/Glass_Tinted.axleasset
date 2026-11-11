@@ -1,0 +1,25 @@
+# AxleFileIdentity: 1 13728287354157128385
+Material {
+    name: "Blue Tinted Glass"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    textureMode: "SeparateMaps"
+    surfaceType: "Transparent"
+    cullMode: "Back"
+    depthWrite: false
+    renderQueue: 3000
+    albedoColor: [0.35, 0.75, 0.85, 0.18]
+    metallic: 0
+    roughness: 0.09
+    ao: 1
+    emissionIntensity: 0
+    specularHighlights: true
+    environmentReflections: true
+    uvTiling: [1, 1]
+    uvOffset: [0, 0]
+    refractionEnabled: true
+    refractionStrength: 1
+    refractionIOR: 1.5
+    refractionThickness: .15
+    refractionTint: [0.35, 0.75, 0.85]
+}

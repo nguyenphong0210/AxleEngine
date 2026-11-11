@@ -7,11 +7,51 @@
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <sstream>
 #include <fstream>
+#include <unordered_set>
 
 using namespace Axle;
 using namespace Axle::MaterialTests;
 
 namespace {
+
+    bool TestSandboxStarterMaterials() {
+        struct Preset { const char* File; float Metallic, Roughness; bool Glass; };
+        const Preset presets[]{
+            {"Metal_SteelPolished",1,.16f,false}, {"Metal_AluminumSatin",1,.4f,false},
+            {"Metal_Gold",1,.22f,false}, {"Rubber_Black",0,.85f,false},
+            {"Rubber_Gray",0,.75f,false}, {"Glass_Clear",0,.04f,true}, {"Glass_Tinted",0,.09f,true}};
+        std::unordered_set<uint64_t> identities;
+        for(const auto& preset:presets) {
+            const auto path=std::filesystem::path(AXLE_TEST_SOURCE_DIR)/"Samples/Sandbox/assets/materials"/(std::string(preset.File)+".axleasset");
+            const auto before=FileSystem::ReadBinaryFile(path);
+            uint64_t id=0;
+            MAT_TEST_CHECK(FileSystem::ReadFileIdentity(path,id)&&id&&identities.insert(id).second,"Unique embedded Sandbox material identity");
+            Material material;RHI::RHIMaterial native;
+            MAT_TEST_CHECK(material.Load(path,false)&&native.Load(path),"Both production loaders accept Sandbox material");
+            MAT_TEST_CHECK(uint64_t(material.GetHandle())==id,"Material uses authored identity");
+            MAT_TEST_CHECK(material.GetName()==native.GetName()&&!material.GetUseCustomShader(),"Built-in named PBR material");
+            MAT_TEST_APPROX_EQUAL(material.GetMetallic(),preset.Metallic,1e-6f,"Sandbox metallic");
+            MAT_TEST_APPROX_EQUAL(material.GetRoughness(),preset.Roughness,1e-6f,"Sandbox roughness");
+            MAT_TEST_APPROX_EQUAL(native.GetMetallic(),material.GetMetallic(),1e-6f,"Native metallic parity");
+            MAT_TEST_APPROX_EQUAL(native.GetRoughness(),material.GetRoughness(),1e-6f,"Native roughness parity");
+            MAT_TEST_CHECK(material.GetAlbedoColor()==native.GetDesc().BaseColor,"Native color and alpha parity");
+            const auto surface=preset.Glass?SurfaceType::Transparent:SurfaceType::Opaque;
+            MAT_TEST_CHECK(material.GetSurfaceType()==surface&&native.GetSurfaceType()==surface,"Correct surface");
+            MAT_TEST_CHECK(material.GetDepthWrite()==!preset.Glass&&native.GetDepthWrite()==!preset.Glass,"Correct depth writes");
+            MAT_TEST_CHECK(material.GetRenderQueue()==(preset.Glass?3000:2000)&&native.GetDesc().RenderQueue==material.GetRenderQueue(),"Correct render queue");
+            MAT_TEST_CHECK(material.GetRefractionEnabled()==preset.Glass&&native.GetDesc().RefractionEnabled==preset.Glass,"Glass refraction policy");
+            if(preset.Glass) {
+                MAT_TEST_APPROX_EQUAL(material.GetRefractionIOR(),1.5f,1e-6f,"Glass IOR");
+                MAT_TEST_APPROX_EQUAL(native.GetDesc().RefractionIOR,material.GetRefractionIOR(),1e-6f,"Native IOR parity");
+                MAT_TEST_CHECK(material.GetRefractionTint()==native.GetDesc().RefractionTint,"Native glass tint parity");
+            }
+            MAT_TEST_CHECK(material.GetEmissionIntensity()==0&&native.GetDesc().EmissiveIntensity==0,"No implicit emission");
+            for(uint32_t slot=0;slot<uint32_t(RHI::RHITextureSlot::Count);++slot)
+                MAT_TEST_CHECK(native.GetTexturePath(RHI::RHITextureSlot(slot)).empty(),"No external texture dependency");
+            MAT_TEST_CHECK(FileSystem::ReadBinaryFile(path)==before,"Read-only validation preserves authored assets");
+        }
+        return true;
+    }
 
     bool TestGraphDocumentsCannotBeFlattened() {
         ScopedTempDir temp;
@@ -333,6 +373,8 @@ namespace {
 } // namespace
 
 bool RunMaterialSerializationUnitTests() {
+    std::cout << "  - Running TestSandboxStarterMaterials ...\n";
+    if (!TestSandboxStarterMaterials()) return false;
     std::cout << "  - Running TestGraphDocumentsCannotBeFlattened ...\n";
     if (!TestGraphDocumentsCannotBeFlattened()) return false;
 

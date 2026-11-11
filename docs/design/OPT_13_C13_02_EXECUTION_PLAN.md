@@ -7,8 +7,8 @@ C13-03 and later packages are not released.
 | Checkpoint | Scope | State |
 | --- | --- | --- |
 | C13-02.1 | Pure CPU linear HDR bake, cube convention, cosine diffuse, GGX roughness mips and split-sum DFG | Implemented/self-verified; Debug/Release focused CTest 1/1 each |
-| C13-02.2 | Authored source resolution/cache, transactional native resources, HDR sky and PBR receivers | Implemented/self-verified; Debug native 2/2, Release environment/CSM 5/5 |
-| C13-02.3 | Physical D3D12/Vulkan images, reload/fallback/ownership, product regression and separate-context acceptance | Pending |
+| C13-02.2 | Authored source resolution/cache, transactional native resources, HDR sky and PBR receivers | Implemented/self-verified in b9a8319; native acceptance extended in final checkpoint |
+| C13-02.3 | Physical D3D12/Vulkan images, reload/fallback/ownership, product regression and separate-context acceptance | Accepted in final checkpoint; see delivery report |
 
 ## CPU contract
 

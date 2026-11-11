@@ -6,6 +6,7 @@
 #include <Axle/JobSystem.hpp>
 #include <Axle/ScriptHotReloadManager.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -21,15 +22,21 @@ std::filesystem::path Output;
 
 // Flat RGBE is a legal Radiance encoding. A small generated fixture keeps the
 // authored source, orientation and values above one explicit in this test.
-bool HDR(const char* name, glm::vec3 color) {
+bool HDR(const char* name, glm::vec3 color, int pattern=0) {
     std::ofstream file(Output/name, std::ios::binary);
     file << "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 32 +X 64\n";
-    int exponent = 0;
-    const float scale = std::frexp(std::max({color.x,color.y,color.z}), &exponent) * 256 /
-        std::max({color.x,color.y,color.z});
-    const unsigned char pixel[]{static_cast<unsigned char>(color.x*scale), static_cast<unsigned char>(color.y*scale),
-        static_cast<unsigned char>(color.z*scale), static_cast<unsigned char>(exponent+128)};
-    for (int i=0; i<64*32; ++i) file.write(reinterpret_cast<const char*>(pixel), 4);
+    for (int y=0;y<32;++y) for(int x=0;x<64;++x) {
+        const float theta=(y+.5f)/32*glm::pi<float>(), phi=((x+.5f)/64-.5f)*glm::two_pi<float>();
+        const glm::vec3 direction(std::cos(phi)*std::sin(theta),std::cos(theta),std::sin(phi)*std::sin(theta));
+        const auto value=pattern==1 ? glm::vec3(2)+1.5f*direction : pattern==2 ?
+            glm::vec3(.03f+20*std::pow(std::max(direction.z,0.f),64.f)) : color;
+        int exponent=0;
+        const float maximum=std::max({value.x,value.y,value.z});
+        const float scale=std::frexp(maximum,&exponent)*256/maximum;
+        const unsigned char pixel[]{static_cast<unsigned char>(value.x*scale),static_cast<unsigned char>(value.y*scale),
+            static_cast<unsigned char>(value.z*scale),static_cast<unsigned char>(exponent+128)};
+        file.write(reinterpret_cast<const char*>(pixel),4);
+    }
     return bool(file);
 }
 std::vector<uint8_t> Read(RHITexture& texture, uint32_t bpp=4, uint32_t face=0, uint32_t mip=0) {
@@ -63,6 +70,10 @@ bool ConstantCube(RHITexture& texture,glm::vec3 expected) {
         }
     }
     return true;
+}
+uint8_t Display(float radiance) {
+    const auto mapped=std::clamp((radiance*(2.51f*radiance+.03f))/(radiance*(2.43f*radiance+.59f)+.14f),0.f,1.f);
+    return static_cast<uint8_t>(std::lround(std::pow(mapped,1.f/2.2f)*255));
 }
 bool Native(RHIType backend) {
     JobSystem::Init(1);
@@ -140,8 +151,68 @@ bool Native(RHIType backend) {
     world.Skybox.Enabled=true; CHECK(render()==restored&&environment.UploadCount()==3);
     settings.EnableToneMapping=true; settings.EnableFXAA=true; settings.MSAASamples=2;
     CHECK(!render().empty()&&environment.Ready());
+    settings.EnableToneMapping=false; settings.EnableFXAA=false; settings.MSAASamples=1;
+    // Axis-coded radiance checks the actual native cube sampler and sky view
+    // reconstruction, including both poles, rather than only CPU face centers.
+    CHECK(HDR("axes.hdr",{},1)); world.Skybox.HDRPath="axes.hdr"; world.Meshes.clear();
+    const glm::vec3 axes[]{{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
+    for(uint32_t face=0;face<6;++face) {
+        const auto axis=axes[face], up=std::abs(axis.y)>.5f?glm::vec3(0,0,1):glm::vec3(0,1,0);
+        camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0),axis,up),glm::vec3(0));
+        auto image=render(); CHECK(!image.empty());
+        for(uint32_t c=0;c<3;++c) CHECK(std::abs(int(image[center+c])-Display(2+1.5f*axis[c]))<=2);
+    }
+    const auto lut=Read(*environment.Ready()->BRDF,16); CHECK(lut.size()==16*16*16);
+    for(size_t i=0;i<lut.size();i+=16) {
+        glm::vec4 value;std::memcpy(&value,lut.data()+i,16);
+        CHECK(std::isfinite(value.x)&&std::isfinite(value.y)&&value.x>=0&&value.y>=0&&value.x+value.y<1.1f);
+    }
+    // A narrow HDR lobe produces a sharp metallic highlight, then a lower,
+    // wider reflection as roughness selects the prefiltered mip chain.
+    CHECK(HDR("lobe.hdr",{},2));world.Skybox.HDRPath="lobe.hdr";world.Meshes.push_back(mesh);
+    camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0,0,5),glm::vec3(0),glm::vec3(0,1,0)),glm::vec3(0,0,5));
+    material->GetDesc().Roughness=.05f; auto sharp=render(); CHECK(!sharp.empty());
+    material->GetDesc().Roughness=.9f; auto rough=render(); CHECK(!rough.empty());
+    std::cout<<"reflection center sharp="<<int(sharp[center])<<" rough="<<int(rough[center])<<"\n";
+    CHECK(sharp[center]>rough[center]+30);
+    CHECK(PPM("sharp.ppm",sharp,width)&&PPM("rough.ppm",rough,width));
+    // LRU stays bounded. Switching an environment refreshes even unused draw
+    // descriptors so eviction does not retain the old native texture forever.
+    const auto old=environment.Ready()->Radiance->GetHandle();
+    std::weak_ptr<const RHIEnvironmentGeneration> oldOwner=environment.Ready();
+    world.Meshes.clear();
+    for(int i=0;i<5;++i) {
+        const auto name="cache"+std::to_string(i)+".hdr";CHECK(HDR(name.c_str(),{.1f+float(i),.5f,.25f}));
+        world.Skybox.HDRPath=name;CHECK(!render().empty()&&environment.CacheSize()<=4);
+    }
+    CHECK(!render().empty()&&device.WaitIdle());
+    CHECK(oldOwner.expired()&&!device.GetResources().Acquire(old).IsLive());
+    // LDR sources are rejected instead of silently converted to HDR.
+    const unsigned char ppm[]{'P','6','\n','1',' ','1','\n','2','5','5','\n',255,0,0};
+    CHECK(FileSystem::WriteBinaryFileAtomically(Output/"ldr.ppm",ppm,sizeof(ppm)));
+    world.Skybox.HDRPath="ldr.ppm";CHECK(!render().empty()&&!environment.Ready());
+    CHECK(environment.Diagnostic().find("ENV_FORMAT")!=std::string::npos);
+    world.Skybox.HDRPath="missing.hdr";CHECK(!render().empty()&&!environment.Ready());
+    CHECK(environment.Diagnostic().find("ENV_SOURCE")!=std::string::npos);
+    world.Skybox.HDRPath.clear();CHECK(!render().empty()&&!environment.Ready());
+    CHECK(environment.Diagnostic().find("ENV_SOURCE")!=std::string::npos);
+    // Descriptor resolution uses native filesystem paths through the VFS, not
+    // the Windows narrow codepage, for non-ASCII project/asset names.
+    const auto unicodePath=Output/std::filesystem::path(L"sky_\u0111\u1ecf.axleasset");
+    authored.Source="blue.hdr";
+    CHECK(FileSystem::WriteIdentifiedTextFile(unicodePath,TextureDescriptor::Serialize(authored)));
+    world.Skybox.HDRPath="sky_\xC4\x91\xE1\xBB\x8F.axleasset";
+    CHECK(!render().empty()&&environment.Ready()&&environment.Diagnostic().empty());
     CHECK(device.WaitIdle()); renderer.Shutdown(); CHECK(environment.CacheSize()==0);
     CHECK(GetRHIValidationErrorCount()==0);
+    // CPU cache metadata may outlive a native device. Stale native generations
+    // must become invalid and be recreated under the new owner epoch.
+    RHIEnvironment survivor;CHECK(survivor.SetBakeSettings(bake));world.Skybox.HDRPath="blue.hdr";
+    CHECK(survivor.Prepare(world.Skybox)&&survivor.Ready());const auto stale=survivor.Ready()->Radiance->GetHandle();
+    device.Shutdown();CHECK(!survivor.Ready()->IsValid());CHECK(device.Init(init));
+    CHECK(survivor.Prepare(world.Skybox)&&survivor.Ready()&&survivor.UploadCount()==2);
+    CHECK(survivor.Ready()->Radiance->GetHandle()!=stale&&survivor.CacheSize()==1);
+    survivor.Clear();CHECK(device.WaitIdle()&&GetRHIValidationErrorCount()==0);
     std::cout<<"PASS HDR native subresources, sky/specular/diffuse, cache, exposure, reload, fallback and upload retry\n";
     return true;
 }

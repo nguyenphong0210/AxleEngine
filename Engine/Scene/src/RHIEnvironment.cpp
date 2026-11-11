@@ -59,7 +59,8 @@ bool RHIEnvironment::Fallback(const std::string& request,const std::string& mess
 bool RHIEnvironment::Prepare(const RenderSkyboxData& sky) {
     m_Selected.reset();m_Diagnostic.clear();m_SourceExposure=1;
     std::erase_if(m_Cache,[](const auto& generation){return !generation->IsValid();});
-    if(!sky.Authored||!sky.Enabled||sky.Type!=1||sky.HDRPath.empty())return true;
+    if(!sky.Authored||!sky.Enabled||sky.Type!=1)return true;
+    if(sky.HDRPath.empty()){m_Diagnostic="ENV_SOURCE: empty authored HDR reference; using diffuse ambient";return true;}
     if(!RHIDevice::Get().CanCreateResources()){m_Diagnostic="ENV_DEVICE: native render owner is unavailable";return false;}
     if(!std::isfinite(sky.Intensity)||sky.Intensity<0||!std::isfinite(sky.Exposure)||sky.Exposure<0||double(sky.Intensity)*sky.Exposure>1e12) {
         m_Diagnostic="ENV_SETTINGS: intensity/exposure must be finite, non-negative and bounded";return true;
@@ -71,7 +72,7 @@ bool RHIEnvironment::Prepare(const RenderSkyboxData& sky) {
     auto extension=PathToUtf8(path.extension());std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
     if(extension==".axleasset") {
         TextureDescriptor descriptor;
-        if(!TextureDescriptor::Load(PathToUtf8(path),descriptor)||descriptor.Type!="CubemapHDR"||descriptor.Source.empty()||
+        if(!TextureDescriptor::Deserialize(FileSystem::ReadTextFile(path),descriptor)||descriptor.Type!="CubemapHDR"||descriptor.Source.empty()||
            !std::isfinite(descriptor.Exposure)||descriptor.Exposure<0||double(descriptor.Exposure)*sky.Intensity*sky.Exposure>1e12)
             return Fallback(request,"ENV_DESCRIPTOR: valid CubemapHDR source and exposure required");
         m_SourceExposure=descriptor.Exposure;

@@ -3,7 +3,7 @@
   "current_task": {
     "id": "OPT-13-C13-02",
     "title": "Authored HDR environment and image-based lighting",
-    "state": "in_progress",
+    "state": "complete",
     "coordinator": "Codex",
     "implementer": "Codex (direct user assignment)",
     "code_baseline": "2ad65a10045025d0347ae5db43bdee8195e959de",
@@ -26,13 +26,10 @@
       "docs/reviews/OPT_13_C13_02_DELIVERY.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "C13-02.1 committed in 90036bf. C13-02.2 native HDR/IBL implemented/self-verified: Debug native 2/2 and Release environment/CSM 5/5. Final acceptance remains .3.",
-    "acceptance_status": "Pending implementation and actual verification.",
-    "open_gates": [
-      "Final native nonconstant orientation/roughness, lifetime and parity evidence",
-      "Product Debug/Release regression and separate-context review"
-    ],
-    "next_action": "Execute three verified C13-02 checkpoints with separate local commits, then stop at C13-02."
+    "implementation_status": "C13-02.1 committed in 90036bf; C13-02.2 committed in b9a8319; final acceptance checkpoint committed separately after Debug 112/112, Release focused 24/24 plus native 2/2, OpenGL 4/4, architecture PASS, backend parity max/mean 0, and separate-context review PASS.",
+    "acceptance_status": "Accepted by Codex after source review, native D3D12/Vulkan evidence, OpenGL compatibility and product regressions. C13-03 remains unreleased.",
+    "open_gates": [],
+    "next_action": "Stop at C13-02; await a new explicit user release for C13-03 or later."
   },
   "last_read": {
     "Codex": "CG-20261108T111840814902Z-GEMINI-7e1545",
@@ -2612,6 +2609,17 @@
       "base_commit": "2ad65a10045025d0347ae5db43bdee8195e959de",
       "timestamp_utc": "2026-11-11T09:00:43.481509+00:00",
       "body": "IN_PROGRESS: User released C13-02. Base 2ad65a1. Codex will implement CPU environment convolution, native authored HDR/IBL resources and sky/PBR integration, then final physical backend acceptance, each verified checkpoint in its own local commit. Expected files and exact scope are in the task card. Preserve C13-01, C12, OpenGL compatibility; no C13-03+ and no push."
+    },
+    {
+      "id": "CG-20261111T105406074040Z-CODEX-bd8210",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-13-C13-02",
+      "reply_to": "CG-20261111T090043481509Z-CODEX-f184be",
+      "base_commit": "b9a831913d17eeb7f318dea8fb1ee5ee2030c8f0",
+      "timestamp_utc": "2026-11-11T10:54:06.074040+00:00",
+      "body": "STATUS: C13-02.1 CPU checkpoint committed separately in 90036bf. C13-02.2 native integration committed separately in b9a8319. Codex executed Debug EnvironmentGPU 2/2 and Release EnvironmentBake/EnvironmentGPU/CascadedShadowGPU 5/5, all exit 0 on physical D3D12/Vulkan. Architecture and exchange validation pass. Added RHIEnvironment source/content cache, transactional native maps, authored sky/IBL and explicit diffuse-only fallback. Final C13-02.3 source is now being verified with nonconstant axis/roughness fixtures, LRU release, Unicode descriptors, device recreation and product regression; separate-context final review and acceptance are still pending. No Gemini review or C13-03 release is claimed.\n"
     }
   ],
   "deferred_tasks": [

@@ -1443,7 +1443,9 @@ namespace Axle {
                 skyboxConstants.InvViewProjection = glm::inverse(sceneConstants.ViewProjection);
                 skyboxConstants.CameraPosition = sceneConstants.CameraPosition;
                 skyboxConstants.SunDirection = glm::vec4(sunDir, sunElev);
-                skyboxConstants.SunColor = glm::vec4(glm::vec3(world.Skybox.SunColor) * activeSkybox.Intensity, dayFactor);
+                const float sunIntensity = world.DirectionalLight.has_value()
+                    ? std::max(0.0f, world.DirectionalLight->Intensity) : 0.0f;
+                skyboxConstants.SunColor = glm::vec4(glm::vec3(lighting.SunColor) * sunIntensity * activeSkybox.Intensity, dayFactor);
                 skyboxConstants.ZenithColor = glm::vec4(activeSkybox.ZenithColor, sunsetFactor);
                 skyboxConstants.HorizonColor = glm::vec4(activeSkybox.HorizonColor, activeSkybox.Turbidity);
                 skyboxConstants.GroundColor = glm::vec4(activeSkybox.GroundColor, activeSkybox.Exposure);
@@ -1452,7 +1454,9 @@ namespace Axle {
                 skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, skyboxToneMode, settings.EnableToneMapping ? 1.0f : settings.Gamma);
 
                 if(hdrEnvironment) {
-                    skyboxConstants.Reserved[0]=glm::vec4(1,lighting.AmbientIntensity*m_Environment.SourceExposure(),0,0);
+                    const double authoredScale=std::isfinite(activeSkybox.Intensity)&&std::isfinite(activeSkybox.Exposure)
+                        ? std::clamp(double(activeSkybox.Intensity)*std::max(0.0,double(activeSkybox.Exposure)),0.0,1e12) : 0.0;
+                    skyboxConstants.Reserved[0]=glm::vec4(1,static_cast<float>(authoredScale*m_Environment.SourceExposure()),0,0);
                     skyboxConstants.Params.z=settings.EnableToneMapping?-1.f:0.f;
                     skyboxConstants.Params.w=settings.EnableToneMapping?1.f:2.2f;
                 }

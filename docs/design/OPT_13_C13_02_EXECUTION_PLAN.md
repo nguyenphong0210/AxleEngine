@@ -82,3 +82,17 @@ lighting disabled; the Editor exposes the opt-in beside the Skybox toggle.
 This checkpoint changes the contract and extraction/serialization paths only. The
 following checkpoints update native sky/PBR shader bindings and add physical tests
 for background-only, directional-sun and explicit-environment cases.
+
+## Native renderer semantics correction
+
+The native sky pass now derives sun color from an actual `DirectionalLight`; a
+missing or zero-intensity directional light cannot create a sun disk or halo. HDR
+sky display uses authored intensity/exposure independently from receiver lighting,
+so a visible background does not imply an illuminated mesh. Forward PBR IBL and
+analytical environment fallback require `EnvironmentLighting`; descriptor maps can
+remain prepared for a later opt-in without contributing while the flag is off.
+
+Checkpoint .2 correction verification: Debug native `EnvironmentGPU_dx12`,
+`EnvironmentGPU_vulkan`, `CascadedShadowGPU_dx12` and `CascadedShadowGPU_vulkan`
+all pass 4/4. The HDR regression explicitly renders the same metallic receiver
+with background-only and explicit-environment modes.

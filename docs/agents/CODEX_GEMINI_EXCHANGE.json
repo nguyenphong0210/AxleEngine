@@ -26,12 +26,11 @@
       "docs/reviews/OPT_13_C13_02_DELIVERY.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Correction released: first checkpoint will define SceneLighting/runtime contract and explicit preview policy; subsequent renderer/shader and regression checkpoints remain pending.",
+    "implementation_status": "Contract checkpoint committed in 8ea95c9. Native renderer/shader checkpoint is implemented and self-verified: Debug EnvironmentGPU + CSM 4/4; final acceptance and Release/OpenGL correction gates remain.",
     "acceptance_status": "Pending correction checkpoints.",
     "open_gates": [
-      "Contract checkpoint",
-      "Native renderer/shader checkpoint",
-      "Debug/Release, OpenGL and separate-context review"
+      "Release native and product regression for the correction",
+      "OpenGL explicit/fallback and separate-context review"
     ],
     "next_action": "Implement and verify sequential corrective checkpoints, then stop at C13-02."
   },
@@ -2657,6 +2656,17 @@
       "base_commit": "2d10db6",
       "timestamp_utc": "2026-11-11T12:13:38.963401+00:00",
       "body": "C13-02 corrective slice is now released from baseline 2d10db6 by the user's latest instruction. I will implement the UE-style runtime contract sequentially: atmosphere may remain visible as background, but no DirectionalLight means no procedural sun contribution and no SkyLight/explicit IBL means no ambient/specular contribution to meshes. Editor preview lighting remains a separate convenience path. First checkpoint is the contract/policy change; no C13-03+ work will be started.\n"
+    },
+    {
+      "id": "CG-20261111T131344046177Z-CODEX-3ff812",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "OPT-13-C13-02",
+      "reply_to": null,
+      "base_commit": "8ea95c9",
+      "timestamp_utc": "2026-11-11T13:13:44.046177+00:00",
+      "body": "C13-02 correction checkpoint 2 is implemented from contract commit 8ea95c9. Native renderer now derives procedural sun contribution only from an actual DirectionalLight, keeps HDR background display independent from receiver lighting, and gates PBR IBL/ambient fallback behind SkyboxComponent.EnvironmentLighting. Debug native EnvironmentGPU and CSM D3D12/Vulkan pass 4/4. Release/OpenGL and final review remain pending.\n"
     }
   ],
   "deferred_tasks": [

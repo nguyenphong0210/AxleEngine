@@ -118,6 +118,11 @@ bool Native(RHIType backend) {
     CHECK(red[0]>red[2]+40&&red[center]>red[center+2]+40); // sky and metallic specular receive HDR
     CHECK(PPM("red.ppm",red,width));
     CHECK(render()==red&&environment.BakeCount()==1&&environment.UploadCount()==1);
+    // The HDR background remains visible when environment lighting is opt-out;
+    // the metallic receiver must not receive ambient/specular energy from it.
+    world.Skybox.EnvironmentLighting=false; auto backgroundOnly=render();
+    CHECK(!backgroundOnly.empty()&&backgroundOnly[0]>20&&backgroundOnly[center]<5);
+    world.Skybox.EnvironmentLighting=true; CHECK(render()==red);
     // Exposure affects illumination and sky, without rebuilding immutable maps.
     world.Skybox.Intensity=.25f; auto dim=render(); CHECK(!dim.empty()&&dim[0]<red[0]&&dim[center]<red[center]);
     CHECK(environment.BakeCount()==1); world.Skybox.Intensity=1;

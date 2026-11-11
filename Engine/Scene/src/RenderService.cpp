@@ -193,6 +193,7 @@ namespace Axle {
             auto caps=QueryRendererCapabilities(device.GetBackend() == RHI::RHIType::Vulkan ?
                 RendererBackendType::ModernRHI_Vulkan : RendererBackendType::ModernRHI_D3D12);
             caps.SupportsCascadedShadows=m_RHIRenderer->GetCascadedShadows().IsSupported();
+            caps.SupportsLocalLightShadows=m_RHIRenderer->GetLocalShadows().IsSupported();
             return caps;
         }
         if (m_GLRenderer && Window::HasActiveContext() && m_GLContext == glfwGetCurrentContext())
@@ -289,12 +290,17 @@ namespace Axle {
             }
             result.Success = true; result.CompletionToken = m_RHIRenderer->GetLastCompletion();
             result.DrawCallCount = m_RHIRenderer->GetDrawCallCount(); result.RenderedEntityCount = m_RHIRenderer->GetRenderedEntityCount();
-            if (request.Settings.Wireframe || !prepared.Skins.empty() || (prepared.Skybox.Enabled && prepared.Skybox.Type == 1))
+            if (request.Settings.Wireframe || !prepared.Skins.empty())
                 result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
             const auto& shadowDiagnostic=m_RHIRenderer->GetCascadedShadows().GetDiagnostic();
             if (!shadowDiagnostic.empty()) {
                 if (!result.ErrorMessage.empty()) result.ErrorMessage += " ";
                 result.ErrorMessage += shadowDiagnostic;
+            }
+            const auto& localDiagnostic=m_RHIRenderer->GetLocalShadows().GetDiagnostic();
+            if(!localDiagnostic.empty()) {
+                if(!result.ErrorMessage.empty())result.ErrorMessage+=" ";
+                result.ErrorMessage+=localDiagnostic;
             }
             return result;
         }
@@ -308,6 +314,12 @@ namespace Axle {
         if (request.Settings.EnableFXAA || request.Settings.EnableToneMapping || request.Settings.MSAASamples > 1 ||
             std::any_of(prepared.Meshes.begin(),prepared.Meshes.end(),[](const auto& mesh){return mesh.Material.UseCustomShader;}))
             result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
+        if(request.Settings.EnableShadows&&(
+            std::any_of(prepared.PointLights.begin(),prepared.PointLights.end(),[](const auto& light){return light.Shadows.CastShadows&&light.Intensity>0;})||
+            std::any_of(prepared.SpotLights.begin(),prepared.SpotLights.end(),[](const auto& light){return light.Shadows.CastShadows&&light.Intensity>0;}))) {
+            if(!result.ErrorMessage.empty())result.ErrorMessage+=" ";
+            result.ErrorMessage+="LOCAL_SHADOW_UNSUPPORTED: OpenGL compatibility lights Point/Spot without shadows; use D3D12 or Vulkan for local shadows.";
+        }
         return result;
     }
     RenderResult RenderService::RenderView(Scene& scene, const ViewRequest& request) {

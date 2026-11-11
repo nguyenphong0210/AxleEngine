@@ -20,6 +20,7 @@ namespace Axle {
         bool SupportsToneMapping = false;
         bool SupportsFXAA = false;
         bool SupportsCascadedShadows = false;
+        bool SupportsLocalLightShadows = false;
         bool SupportsGPUSkinning = false;
         bool SupportsCustomHLSLShaders = false;
         bool SupportsRefractionCopy = false;

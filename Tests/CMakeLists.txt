@@ -405,6 +405,11 @@ add_test(NAME RenderAcceptancePolicy COMMAND $<TARGET_FILE:AxleRenderAcceptanceT
 set_tests_properties(RenderAcceptancePolicy PROPERTIES LABELS "render;cpu;acceptance" TIMEOUT 30)
 target_include_directories(AxleRenderServiceTests PRIVATE rendering)
 target_link_libraries(AxleRenderServiceTests PRIVATE Axle::UI Axle::Scene glad glfw)
+if(AXLE_ENABLE_LOCAL_SHADOW_GPU_TESTS)
+    add_test(NAME LocalShadowGLPolicy COMMAND $<TARGET_FILE:AxleRenderServiceTests> gl)
+    set_tests_properties(LocalShadowGLPolicy PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        LABELS "lighting;gpu;opengl" RUN_SERIAL TRUE TIMEOUT 120)
+endif()
 
 add_executable(AxleRuntimeRenderTests EXCLUDE_FROM_ALL rendering/RuntimeProductMain.cpp)
 target_include_directories(AxleRuntimeRenderTests PRIVATE rendering)

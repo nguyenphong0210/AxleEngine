@@ -18,6 +18,7 @@ namespace Axle {
         bool Record(RHI::RHICommandBuffer& commands){return m_Depth.Record(commands);}
         void OnSubmitted(){m_Depth.OnSubmitted();}
         bool NeedsRender() const {return m_Depth.NeedsRender();}
+        bool IsSupported() const {return m_Depth.IsSupported();}
         bool IsActive() const {return m_Depth.IsActive();}
         RHI::RHITexture* GetSampledAtlas() const {return m_Depth.GetSampledAtlas();}
         RHI::RHITexture* GetAtlas() const {return m_Depth.GetAtlas();}

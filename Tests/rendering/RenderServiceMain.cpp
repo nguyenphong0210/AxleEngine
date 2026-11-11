@@ -195,6 +195,27 @@ static bool GLService() {
         manager.InvalidateThumbnail(fixture);
         RENDER_CHECK(glIsTexture(image), "GL invalidation retains attachment through current UI frame");
         ui.End(); RENDER_CHECK(!glIsTexture(image), "completed GL UI releases retired framebuffer attachment");
+        auto& service=RenderService::Get();
+        RenderWorld world;
+        RenderPointLight point;point.Intensity=8;world.PointLights.push_back(point);
+        RenderSpotLight spot;spot.Intensity=8;world.SpotLights.push_back(spot);
+        ViewRequest request;request.Width=request.Height=96;
+        request.GLTargetFBO=Framebuffer::Create({96,96,1,false});
+        request.Settings.EnableShadows=true;request.Settings.EnableSkybox=false;
+        request.Settings.EnableToneMapping=request.Settings.EnableFXAA=false;
+        request.Settings.MSAASamples=1;
+        auto result=service.RenderView(world,request);
+        RENDER_CHECK(result.Success&&!service.GetActiveCapabilities().SupportsLocalLightShadows&&
+            result.ErrorMessage.find("LOCAL_SHADOW_UNSUPPORTED")!=std::string::npos,
+            "real GL view explicitly reports unshadowed Point/Spot compatibility policy");
+        world.PointLights[0].Shadows.CastShadows=world.SpotLights[0].Shadows.CastShadows=false;
+        result=service.RenderView(world,request);
+        RENDER_CHECK(result.Success&&result.ErrorMessage.find("LOCAL_SHADOW_UNSUPPORTED")==std::string::npos,
+            "GL local shadow warning disappears when no local shadows are requested");
+        world.PointLights[0].Shadows.CastShadows=true;request.Settings.EnableShadows=false;
+        result=service.RenderView(world,request);
+        RENDER_CHECK(result.Success&&result.ErrorMessage.find("LOCAL_SHADOW_UNSUPPORTED")==std::string::npos,
+            "global shadow toggle also disables GL unsupported-local-shadow warning");
         RenderService::Get().Shutdown();
     }
     return glGetError() == GL_NO_ERROR;

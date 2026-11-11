@@ -28,7 +28,9 @@ bool RHICascadedShadows::Prepare(const RenderWorld& world,const PerspectiveCamer
     m_Constants.Bias={config.DepthBias,config.SlopeBias,config.NormalBias,std::min(light.ShadowFilterRadius,2.f)};
     for(uint32_t c=0;c<config.CascadeCount;++c){const auto& cascade=m_CPU.GetCascade(c);m_Constants.Matrices[c]=cascade.LightViewProjection;m_Constants.Splits[c]=cascade.FarDistance;views.push_back({cascade.LightViewProjection,(c%2)*config.Resolution,(c/2)*config.Resolution,config.Resolution});}
     if(!m_Receiver.UpdateData(&m_Constants,sizeof(m_Constants)))return false;
-    const bool success=m_Depth.Prepare(world,textures,views,size);m_Diagnostic=m_Depth.GetDiagnostic();return success;
+    const bool success=m_Depth.Prepare(world,textures,views,size);m_Diagnostic=m_Depth.GetDiagnostic();
+    if(m_Diagnostic.starts_with("SHADOW_"))m_Diagnostic.replace(0,7,"CSM_");
+    return success;
 }
 bool RHICascadedShadows::Record(RHICommandBuffer& commands){return m_Depth.Record(commands);}
 }

@@ -110,7 +110,7 @@ using namespace RHI;
         for (const auto& instance:world.Meshes) {
             if (!instance.NativeView || !instance.NativeView->IsValid()) continue;
             if (instance.Material.UseCustomShader) {
-                m_Diagnostic="CSM_CUSTOM_SHADER: arbitrary custom HLSL has no CSM interface; built-in PBR shadows remain active.";continue;
+                m_Diagnostic="SHADOW_CUSTOM_SHADER: arbitrary custom HLSL has no depth-caster interface; built-in PBR shadows remain active.";continue;
             }
             if (!instance.CastsShadows) continue;
             const auto& material=instance.Material.RHIMaterialAsset;

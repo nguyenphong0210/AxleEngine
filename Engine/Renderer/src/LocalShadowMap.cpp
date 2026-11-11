@@ -22,7 +22,6 @@ bool BuildLocalShadowFrame(const RenderWorld& world,const glm::vec3& camera,cons
         output=std::move(frame);output.Diagnostic="LOCAL_SHADOW_SETTINGS: invalid resolution, budget or distance";return false;
     }
     frame.AtlasSize=resolution*4;
-    if(!settings.EnableShadows){output=std::move(frame);return true;}
     struct Candidate {size_t Index;float Distance;uint32_t ID;bool Point;};
     std::vector<Candidate> candidates;
     const auto prefix=std::min<size_t>(16,world.AdditionalDirectionalLights.size());

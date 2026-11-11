@@ -25,13 +25,11 @@
       "Samples/Sandbox/assets/materials",
       "docs/design/OPT_13_LOCAL_SHADOWS_PLAN.md"
     ],
-    "implementation_status": "Spot native checkpoint implemented/self-verified: shared depth caster, CPU projection/budget/culling, native PCF receiver, controls/extraction/persistence and tests. Debug focused 6/6 and architecture PASS. Point receiver, GL policy, Sandbox materials and final gates remain.",
+    "implementation_status": "Spot and Point checkpoints implemented/self-verified. Debug Editor and affected targets build; focused CPU/native local/native CSM/real GL policy/RenderUnit CTest 7/7. Native Point six faces/seams, cutout same-generation updates and cache tested. Sandbox assets and final acceptance pending.",
     "acceptance_status": "Pending actual build, CPU/native tests and separate-context review.",
     "open_gates": [
-      "Spot shadow checkpoint",
-      "Point shadow checkpoint",
       "Sandbox materials",
-      "Final budgets/backend/lifetime regression and independent review"
+      "Final budgets/backend/lifetime regression and separate-context review"
     ],
     "next_action": "Implement released scope sequentially, commit each verified checkpoint, then stop."
   },

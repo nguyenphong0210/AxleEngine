@@ -4,6 +4,8 @@
 #include <Axle/JobSystem.hpp>
 #include <Axle/ScriptHotReloadManager.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/constants.hpp>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -25,6 +27,14 @@ std::vector<uint8_t> Read(RHITexture& texture) {
 }
 size_t Darkened(const std::vector<uint8_t>& off,const std::vector<uint8_t>& on) {
     if(off.size()!=on.size())return 0;size_t n=0;for(size_t i=0;i<off.size();i+=4)if(int(off[i])+off[i+1]+off[i+2]>int(on[i])+on[i+1]+on[i+2]+30)++n;return n;
+}
+bool UploadAlpha(const std::shared_ptr<RHITexture>& texture,bool transparent) {
+    std::vector<uint8_t> pixels(16*16*4,255);
+    if(transparent)for(size_t i=0;i<16*16;++i)pixels[i*4+3]=0;
+    nri::TextureSubresourceUploadDesc sub{};sub.slices=pixels.data();sub.sliceNum=1;sub.rowPitch=64;sub.slicePitch=1024;
+    nri::TextureUploadDesc upload{};upload.texture=texture->GetNative();upload.subresources=&sub;upload.planes=nri::PlaneBits::COLOR;
+    upload.after={nri::AccessBits::SHADER_RESOURCE,nri::Layout::SHADER_RESOURCE,nri::StageBits::FRAGMENT_SHADER};
+    return RHIDevice::Get().UploadData(&upload,1,nullptr,0)==nri::Result::SUCCESS;
 }
 bool PPM(const char* name,const std::vector<uint8_t>& image) {
     std::ofstream file(Output/name,std::ios::binary);file<<"P6\n128 128\n255\n";
@@ -62,6 +72,15 @@ bool Native(RHIType backend) {
     world.Meshes[1].Material.RHIMaterialAsset=std::make_shared<RHIMaterial>(cutoutDesc);CHECK(!render().empty());
     const auto cutoutDepth=Read(*renderer.GetLocalShadows().GetAtlas());CHECK(!cutoutDepth.empty());
     for(size_t i=0;i<cutoutDepth.size();i+=4){float value;std::memcpy(&value,cutoutDepth.data()+i,4);CHECK(value==1);}
+    auto alpha=std::make_shared<RHITexture>();auto alphaDesc=RHITextureDesc::RenderTarget2D(16,16,RHITextureFormat::RGBA8_UNORM);
+    alphaDesc.Usage=RHITextureUsage::ShaderResource;CHECK(alpha->Init(alphaDesc)&&UploadAlpha(alpha,false));
+    auto cutout=std::make_shared<RHIMaterial>(cutoutDesc);world.Meshes[1].Material.RHIMaterialAsset=cutout;
+    cutout->GetDesc().BaseColor.a=1;cutout->SetShadingModel(RHIShadingModel::TexturedPBR);cutout->SetTexture(RHITextureSlot::Albedo,alpha);
+    CHECK(!render().empty()&&renderer.GetLocalShadows().GetDrawCount()>0);
+    const auto solidDepth=Read(*renderer.GetLocalShadows().GetAtlas());CHECK(solidDepth!=cutoutDepth);
+    CHECK(UploadAlpha(alpha,true)); // Same texture generation; cache must still redraw.
+    CHECK(!render().empty()&&renderer.GetLocalShadows().GetDrawCount()>0);
+    CHECK(Read(*renderer.GetLocalShadows().GetAtlas())==cutoutDepth);
     world.Meshes[1].Material.RHIMaterialAsset=material;CHECK(render()==on);
     // Lights, transforms and submitted generations invalidate the exact cache.
     world.SpotLights[0].Position.x+=1;CHECK(!render().empty()&&renderer.GetLocalShadows().GetDrawCount()>0);world.SpotLights[0]=spot;CHECK(render()==on);
@@ -70,8 +89,42 @@ bool Native(RHIType backend) {
         renderer.RenderWorldView(world,camera,&color,&depth,settings);CHECK(injected&&!renderer.WasLastRenderSuccessful());}
     CHECK(renderer.GetLocalShadows().GetAtlas()->GetHandle()==handle);CHECK(!render().empty()&&renderer.GetLocalShadows().GetAtlas()->GetWidth()==2048);
     settings.EnableToneMapping=true;settings.EnableFXAA=true;settings.MSAASamples=2;CHECK(!render().empty());
+    settings.EnableToneMapping=settings.EnableFXAA=false;settings.MSAASamples=1;settings.LocalShadowResolution=256;
+    world.SpotLights.clear();RenderPointLight point;point.EntityID=29;point.Position=spot.Position;point.Intensity=4000;point.Radius=25;world.PointLights={point};
+    settings.EnableShadows=false;const auto pointOff=render();CHECK(!pointOff.empty());
+    settings.EnableShadows=true;const auto pointOn=render();CHECK(!pointOn.empty());
+    CHECK(renderer.GetLocalShadows().GetFrame().Views.size()==6&&renderer.GetLocalShadows().GetFrame().PointViews[0]>=0);
+    const auto pointDark=Darkened(pointOff,pointOn);std::cout<<"point shadow darkened pixels="<<pointDark<<"\n";CHECK(pointDark>20);
+    CHECK(PPM("point-off.ppm",pointOff)&&PPM("point-on.ppm",pointOn));
+    CHECK(render()==pointOn&&renderer.GetLocalShadows().GetDrawCount()==0);
+    world.AdditionalDirectionalLights.resize(2);for(auto& light:world.AdditionalDirectionalLights){light.Intensity=light.AmbientIntensity=0;}
+    CHECK(render()==pointOn&&renderer.GetLocalShadows().GetFrame().PointViews[2]>=0);world.AdditionalDirectionalLights.clear();
+    world.PointLights[0].Shadows.CastShadows=false;CHECK(render()==pointOff);world.PointLights[0].Shadows.CastShadows=true;
+    CHECK(render()==pointOn);
+    // Real depth must be present in every cube projection, including the poles.
+    const glm::vec3 axes[]{{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
+    world.PointLights[0].Position={0,0,0};world.PointLights[0].Radius=10;world.Meshes.clear();
+    auto marker=RHIMesh::CreateCube(.6f);CHECK(marker);
+    for(auto axis:axes){auto instance=caster;instance.NativeView=marker->CaptureView();instance.WorldTransform=glm::translate(glm::mat4(1),axis*2.f);world.Meshes.push_back(instance);}
+    settings.LocalShadowResolution=128;CHECK(!render().empty());
+    const auto allFaces=Read(*renderer.GetLocalShadows().GetAtlas());CHECK(!allFaces.empty());
+    for(const auto& view:renderer.GetLocalShadows().GetFrame().Views) {
+        size_t written=0;for(uint32_t y=0;y<view.Size;++y)for(uint32_t x=0;x<view.Size;++x){float value;
+            std::memcpy(&value,allFaces.data()+((view.Y+y)*512+view.X+x)*4,4);CHECK(std::isfinite(value)&&value>=0&&value<=1);written+=value<.99999f;}
+        std::cout<<"point face depth pixels="<<written<<"\n";CHECK(written>0);
+    }
+    // A receiver straddling the +X/+Z selection boundary must be shadowed on
+    // both sides. Put the camera between caster and receiver to expose the map.
+    const auto diagonal=glm::normalize(glm::vec3(1,0,1));auto receiver=floor;receiver.NativeView=RHIMesh::CreatePlane(4,4,1,1)->CaptureView();
+    receiver.WorldTransform=glm::translate(glm::mat4(1),diagonal*4.f)*glm::rotate(glm::mat4(1),glm::half_pi<float>(),glm::normalize(glm::cross(glm::vec3(0,1,0),-diagonal)));
+    auto seam=caster;seam.NativeView=marker->CaptureView();seam.WorldTransform=glm::translate(glm::mat4(1),diagonal*2.f);world.Meshes={receiver,seam};
+    const auto eye=diagonal*3.f+glm::vec3(0,.3f,0);camera.SetViewMatrix(glm::lookAtRH(eye,diagonal*4.f,glm::vec3(0,1,0)),eye);
+    settings.EnableShadows=false;const auto seamOff=render();settings.EnableShadows=true;const auto seamOn=render();CHECK(!seamOff.empty()&&!seamOn.empty());
+    size_t left=0,right=0;for(size_t i=0;i<seamOff.size();i+=4)if(int(seamOff[i])+seamOff[i+1]+seamOff[i+2]>int(seamOn[i])+seamOn[i+1]+seamOn[i+2]+30){if((i/4)%128<64)++left;else ++right;}
+    std::cout<<"point seam darkened left="<<left<<" right="<<right<<"\n";CHECK(left>10&&right>10);
+    CHECK(PPM("point-seam-off.ppm",seamOff)&&PPM("point-seam-on.ppm",seamOn));
     CHECK(device.WaitIdle());renderer.Shutdown();CHECK(GetRHIValidationErrorCount()==0);
-    std::cout<<"PASS spot shadow pixels, opt-out, cache, invalidation, cutout and allocation retry\n";return true;
+    std::cout<<"PASS Point/Spot pixels, six faces/seams, opt-out, cache, cutout and allocation retry\n";return true;
 }
 }
 int main(int argc,char** argv){if(argc!=3)return 2;Output=std::filesystem::absolute(argv[2]);std::filesystem::create_directories(Output);

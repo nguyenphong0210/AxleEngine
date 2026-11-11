@@ -491,7 +491,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
             if (falloffExp > 0.1 && abs(falloffExp - 1.0) > 0.01) {
                 attenuation = pow(max(attenuation, 0.0), falloffExp);
             }
-            radiance = pLight.ColorAndIntensity.rgb * (pLight.ColorAndIntensity.w * attenuation * 0.05);
+            radiance = pLight.ColorAndIntensity.rgb * (pLight.ColorAndIntensity.w * attenuation * 0.05) * PointShadowVisibility(p,pLight.PositionAndRadius.xyz,input.WorldPos,N,L);
         }
         float NdotL = max(dot(N, L), 0.0);
         float pWrap = 0.0;

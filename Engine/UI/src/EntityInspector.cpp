@@ -982,6 +982,7 @@ namespace Axle {
         // Point Light Component
         auto drawLocalShadows=[](LocalShadowSettings& s) {
             ImGui::Checkbox("Cast Shadows",&s.CastShadows);
+            if(RHI::RHIDevice::Get().GetBackend()==RHI::RHIType::OpenGL)ImGui::TextDisabled("Local shadows require D3D12 or Vulkan.");
             if(!s.CastShadows)return;
             ImGui::DragFloat("Shadow Bias (m)",&s.Bias,.0001f,0.f,1.f,"%.4f");
             ImGui::DragFloat("Shadow Slope Bias (m)",&s.SlopeBias,.0001f,0.f,1.f,"%.4f");

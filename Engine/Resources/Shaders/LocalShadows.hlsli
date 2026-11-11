@@ -26,3 +26,13 @@ float LocalShadowVisibility(int view,float3 world,float3 normal,float3 light) {
     }
     return visibility/9;
 }
+float PointShadowVisibility(uint index,float3 position,float3 world,float3 normal,float3 light) {
+    int first=u_LocalShadowViews[index/4][index%4];
+    if(first<0)return 1;
+    float3 direction=LocalReceiverPosition(first,world,normal,light)-position;
+    float3 axis=abs(direction);int face;
+    if(axis.x>=axis.y&&axis.x>=axis.z)face=direction.x>=0?0:1;
+    else if(axis.y>=axis.z)face=direction.y>=0?2:3;
+    else face=direction.z>=0?4:5;
+    return LocalShadowVisibility(first+face,world,normal,light);
+}

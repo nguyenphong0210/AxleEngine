@@ -53,3 +53,15 @@ pixels on each backend. Opt-out, cache hits/invalidation, caster flags, cutout,
 allocation retry and tone-map/FXAA/MSAA paths pass. Architecture check passes
 575 source / 25 CMake files. Point receiver activation, OpenGL policy, Sandbox
 assets and final independent acceptance remain in the following checkpoints.
+
+## Point and backend-policy checkpoint self-verification
+
+Point receivers now select all six projections, including biased-receiver face
+selection at seams. Physical D3D12/Vulkan fixtures cover depth on all faces,
+shadowed pixels on both sides of a face boundary, per-light opt-out, additional
+directional-light GPU-slot prefixes and cache reuse. In-place textured-cutout
+alpha changes redraw the local maps. OpenGL explicitly advertises no local-light
+shadow support and reports requested shadows in Inspector/RenderService; ordinary
+Point/Spot lighting remains available. A real GL view verifies warning/reset
+behavior. Debug Editor and affected targets build; focused CTest passes 7/7
+(`build/c13_local_point_checkpoint_ctest_debug.log`). Final acceptance is pending.

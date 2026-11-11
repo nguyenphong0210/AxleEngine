@@ -114,7 +114,9 @@ completed registry-driven lowering, bounded native baseline and exact verificati
 The user subsequently released C12-03 directly to Codex for strict graph
 reflection/layout, pipeline identities and last-known-good reload; see the
 [C12-03 delivery](../reviews/OPT_12_C12_03_DELIVERY.md) for current verification.
-C12-04 and later packages remain unreleased.
+The user then released C12-04 directly to Codex for texture/sampler/fallback and
+authored dependency semantics; see the [C12-04 delivery](../reviews/OPT_12_C12_04_DELIVERY.md)
+for the current implementation and verification boundary. C12-05 onward remain unreleased.
 
 Packages:
 
@@ -128,8 +130,9 @@ Packages:
   compatibility, backend-scoped shader and pipeline identities, bounded code cache,
   immutable native-ready generations, last-known-good reload, named instance
   overrides and atomic programmatic parameter rename.
-- **C12-04 / 12.4 Resource semantics:** texture color space, sampler, fallback and
-  authored dependency diagnostics.
+- **C12-04 / 12.4 Resource semantics (complete):** rooted raw/descriptor/VFS image
+  dependencies, explicit color/sampler/fallback and normal contracts, resource-aware
+  transactional native generations and authored node/path diagnostics.
 - **C12-05 / 12.5 Optional Slang evaluation:** prototype Slang as a backend; it must not
   be required by existing materials.
 - **C12-06 / 12.6 OpenGL policy:** define a separate lowering path or explicit unsupported

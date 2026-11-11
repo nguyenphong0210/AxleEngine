@@ -310,8 +310,9 @@ implemented CPU behavior from future compiler and Editor behavior.
 5. **Identity/resources:** use the existing native uint64 identity envelope and
    persistence service. Raw texture references use canonical root-relative paths.
    See the [AF-01 contract](ARCHITECTURE_FOUNDATION_MASTER_PLAN.md#af-01---native-asset-identity-raw-resource-paths-and-safe-persistence).
-   Texture decoding, linear color operations, sampler policy, Normal-space
-   semantics and missing-resource diagnostics require explicit backend contracts.
+   C12-04 defines texture decoding, linear color operations, four sampler policies,
+   normal-space decoding and missing-resource diagnostics; see the
+   [resource delivery](../reviews/OPT_12_C12_04_DELIVERY.md) for exact backend contracts.
    `BaseColorTint` is Float3 here because it affects RGB, not opacity.
 6. **Scope:** the example blends two textures using a uniform RustAmount. It
    does not claim a spatial rust mask, procedural noise, physically varying rust
@@ -327,3 +328,24 @@ verification and implementation limits are recorded in the C12-01 delivery.
 The [C12-02 compiler delivery](../reviews/OPT_12_C12_02_DELIVERY.md) and
 [C12-03 reflection/reload delivery](../reviews/OPT_12_C12_03_DELIVERY.md) record
 their separate compiler/native verification and explicit product integration limits.
+
+## C12-04 resource additions
+
+`SampleTexture2D` retains the approved properties and accepts all four declared
+samplers (`LinearRepeat`, `LinearClamp`, `PointRepeat`, `PointClamp`). An optional
+string `fallback` property defaults to `"Error"`; `"White"`, `"Magenta"` and
+`"FlatNormal"` are explicit opt-ins. FlatNormal requires Linear sampling.
+Fallback resolution produces a diagnostic and never hides a native GPU failure.
+Existing source documents need no schema/version or example changes.
+
+Builtin `UnpackNormal` has input `rgb: Float3` and output `normal: Float3`; it
+converts linearly encoded `[0,1]` XYZ to normalized signed tangent-space XYZ,
+preserving +Y. Connect `SampleTexture2D.rgb` through it to `PBRMasterOutput.Normal`.
+It does not infer roles from filenames or invert the green channel implicitly.
+
+Raw texture references resolve only against the active asset root or an exact
+mounted package entry. An explicit Texture `.axleasset` reference may provide its
+raw source and mip/resolution policy; no neighboring descriptor is discovered.
+Graph color/sampler fields remain authoritative, with Data/NormalMap descriptors
+requiring Linear. See the [C12-04 delivery](../reviews/OPT_12_C12_04_DELIVERY.md)
+for descriptor validation, mip/alpha/HDR, fallback and native publication details.

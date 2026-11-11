@@ -445,6 +445,13 @@ Debug CTest **98/98**, focused Release **8/8**, architecture and independent
 review pass. Automatic product graph loading/UI remain separate; C12-04 onward
 remain unreleased.
 
+**C12-04 completed under direct user assignment, 2026-11-11:** explicit texture color/sampler/
+fallback and authored dependency semantics. Rooted raw/descriptor/VFS resolution,
+four sampler modes, normal unpacking and resource-aware native generations are
+complete, with Debug **101/101**, focused Release **11/11**, architecture and
+independent correction rechecks passing. See the
+[C12-04 delivery](reviews/OPT_12_C12_04_DELIVERY.md). C12-05 onward remain unreleased.
+
 **Exit:** OPT-11..20 are closed independently against measured backend,
 performance, image-quality, reliability and UI evidence. Unsupported features
 remain deferred.

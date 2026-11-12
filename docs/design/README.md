@@ -28,7 +28,8 @@ separate contract; it must not reintroduce retired Vehicle compatibility code.
 | Post-OPT-10 | [Advanced rendering roadmap](POST_OPT10_ADVANCED_RENDERING_ROADMAP.md) | Multi-threading, VRAM aliasing, materials, geometry/culling and GI |
 | Post-OPT-10 | [Logic & Simulation LOD roadmap](POST_OPT10_LOGIC_AND_SIMULATION_LOD_ROADMAP.md) | Staggered tick rates, fast-path math, spatial dormancy and animation URO |
 | Post-OPT-10 | [Feasibility assessment](POST_OPT10_FEASIBILITY.md) | Current-source blockers, confidence levels, measurement requirements and recommended order |
-| Post-OPT-10 | [OPT-11..OPT-20 program plan](POST_OPT10_PROGRAM_PLAN.md) | Independent Render Thread, Shader, Lighting, Nanite, LogicLOD, Animation, VFX and rollout OPTs |
+| Post-OPT-10 | [Master roadmap](POST_OPT10_MASTER_ROADMAP.md) | Single source for Phase/OPT/C-package order, dependencies and acceptance boundaries |
+| Post-OPT-10 detail | [OPT-11..OPT-20 program plan](POST_OPT10_PROGRAM_PLAN.md) | Detailed package contracts and historical execution notes referenced by the master roadmap |
 | OPT-12 C12-01 | [Approved Material Graph format](OPT_12_MATERIAL_GRAPH_FORMAT.md), [CPU document delivery](../reviews/OPT_12_C12_01_DELIVERY.md) | Verified CPU document/IR, extensible node definitions and persistence; shader/render/graph UI work remains separate |
 | OPT-12 C12-02 | [Existing compiler backend delivery](../reviews/OPT_12_C12_02_DELIVERY.md) | Complete compiler/native baseline: extensible HLSL lowering, real DXIL/SPIR-V, Debug 95/95 and Release focused 5/5; later packages remain separate |
 | OPT-12 C12-03 | [Reflection/layout and reload delivery](../reviews/OPT_12_C12_03_DELIVERY.md) | Complete: strict graph ABI, code/pipeline keys, native last-known-good generations and authored-name instances; Debug 98/98, focused Release 8/8, independent review pass |

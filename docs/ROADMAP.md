@@ -396,7 +396,9 @@ rejects unsupported selected composition. See the [foundation review](reviews/OP
 **Purpose:** Execute the independent Post-OPT-10 OPTs only after the OPT-10
 boundary is accepted or explicitly deferred.
 
-**Work:** Follow [POST_OPT10_PROGRAM_PLAN.md](design/POST_OPT10_PROGRAM_PLAN.md).
+**Work:** Follow the [Post-OPT-10 master roadmap](design/POST_OPT10_MASTER_ROADMAP.md).
+The older [program plan](design/POST_OPT10_PROGRAM_PLAN.md) remains a detailed
+package reference linked from the master roadmap.
 The plan separates Render Thread, Shader/Material, Lighting, Nanite/GPU
 Geometry, Logic LOD, offline autoLOD, Animation, VFX, authoring UI and final
 performance rollout. Every unit has its own evidence and acceptance state.

@@ -1967,19 +1967,19 @@ void EditorLayer::OnImGuiRender() {
             ImGui::Separator();
             if (ImGui::BeginMenu("3D Object")) {
                 if (ImGui::MenuItem("Cube")) {
-                    m_SceneHierarchyPanel.CreatePrimitive(0);
+                    m_SceneHierarchyPanel.CreatePrimitive(0, glm::vec3(0.0f, 0.5f, 0.0f));
                 }
                 if (ImGui::MenuItem("Sphere")) {
-                    m_SceneHierarchyPanel.CreatePrimitive(1);
+                    m_SceneHierarchyPanel.CreatePrimitive(1, glm::vec3(0.0f, 1.0f, 0.0f));
                 }
                 if (ImGui::MenuItem("Cylinder")) {
-                    m_SceneHierarchyPanel.CreatePrimitive(2);
+                    m_SceneHierarchyPanel.CreatePrimitive(2, glm::vec3(0.0f, 0.5f, 0.0f));
                 }
                 if (ImGui::MenuItem("Cone")) {
-                    m_SceneHierarchyPanel.CreatePrimitive(3);
+                    m_SceneHierarchyPanel.CreatePrimitive(3, glm::vec3(0.0f, 0.5f, 0.0f));
                 }
                 if (ImGui::MenuItem("Plane")) {
-                    m_SceneHierarchyPanel.CreatePrimitive(4);
+                    m_SceneHierarchyPanel.CreatePrimitive(4, glm::vec3(0.0f, 0.0f, 0.0f));
                 }
                 ImGui::EndMenu();
             }

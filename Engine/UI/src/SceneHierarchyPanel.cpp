@@ -317,19 +317,19 @@ namespace Axle {
 
         if (ImGui::BeginMenu("3D Object")) {
             if (ImGui::MenuItem("Cube")) {
-                CreatePrimitive(0);
+                CreatePrimitive(0, glm::vec3(0.0f, 0.5f, 0.0f));
             }
             if (ImGui::MenuItem("Sphere")) {
-                CreatePrimitive(1);
+                CreatePrimitive(1, glm::vec3(0.0f, 1.0f, 0.0f));
             }
             if (ImGui::MenuItem("Cylinder")) {
-                CreatePrimitive(2);
+                CreatePrimitive(2, glm::vec3(0.0f, 0.5f, 0.0f));
             }
             if (ImGui::MenuItem("Cone")) {
-                CreatePrimitive(3);
+                CreatePrimitive(3, glm::vec3(0.0f, 0.5f, 0.0f));
             }
             if (ImGui::MenuItem("Plane")) {
-                CreatePrimitive(4);
+                CreatePrimitive(4, glm::vec3(0.0f, 0.0f, 0.0f));
             }
             ImGui::EndMenu();
         }
@@ -952,27 +952,27 @@ namespace Axle {
 
             if (ImGui::BeginMenu("3D Object")) {
                 if (ImGui::MenuItem("Cube")) {
-                    auto prim = CreatePrimitive(0);
+                    auto prim = CreatePrimitive(0, glm::vec3(0.0f, 0.5f, 0.0f));
                     prim.SetParent(entity);
                     m_SelectedEntity = prim;
                 }
                 if (ImGui::MenuItem("Sphere")) {
-                    auto prim = CreatePrimitive(1);
+                    auto prim = CreatePrimitive(1, glm::vec3(0.0f, 1.0f, 0.0f));
                     prim.SetParent(entity);
                     m_SelectedEntity = prim;
                 }
                 if (ImGui::MenuItem("Cylinder")) {
-                    auto prim = CreatePrimitive(2);
+                    auto prim = CreatePrimitive(2, glm::vec3(0.0f, 0.5f, 0.0f));
                     prim.SetParent(entity);
                     m_SelectedEntity = prim;
                 }
                 if (ImGui::MenuItem("Cone")) {
-                    auto prim = CreatePrimitive(3);
+                    auto prim = CreatePrimitive(3, glm::vec3(0.0f, 0.5f, 0.0f));
                     prim.SetParent(entity);
                     m_SelectedEntity = prim;
                 }
                 if (ImGui::MenuItem("Plane")) {
-                    auto prim = CreatePrimitive(4);
+                    auto prim = CreatePrimitive(4, glm::vec3(0.0f, 0.0f, 0.0f));
                     prim.SetParent(entity);
                     m_SelectedEntity = prim;
                 }

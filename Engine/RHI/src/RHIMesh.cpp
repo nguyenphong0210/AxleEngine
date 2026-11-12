@@ -328,13 +328,13 @@ namespace Axle::RHI {
             for (uint32_t j = 0; j < sectors; ++j, ++k1, ++k2) {
                 if (i != 0) {
                     outIndices.push_back(k1);
-                    outIndices.push_back(k2);
                     outIndices.push_back(k1 + 1);
+                    outIndices.push_back(k2);
                 }
                 if (i != (stacks - 1)) {
                     outIndices.push_back(k1 + 1);
-                    outIndices.push_back(k2);
                     outIndices.push_back(k2 + 1);
+                    outIndices.push_back(k2);
                 }
             }
         }

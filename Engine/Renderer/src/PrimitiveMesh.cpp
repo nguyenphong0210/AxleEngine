@@ -154,14 +154,14 @@ namespace Axle {
             for (u32 j = 0; j < sectors; ++j) {
                 if (i != 0) {
                     indices.push_back(k1 + j);
-                    indices.push_back(k2 + j);
                     indices.push_back(k1 + j + 1);
+                    indices.push_back(k2 + j);
                 }
 
                 if (i != (stacks - 1)) {
                     indices.push_back(k1 + j + 1);
-                    indices.push_back(k2 + j);
                     indices.push_back(k2 + j + 1);
+                    indices.push_back(k2 + j);
                 }
             }
         }

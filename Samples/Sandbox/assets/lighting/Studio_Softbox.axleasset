@@ -1,0 +1,13 @@
+Texture {
+    name: "Studio_Softbox"
+    source: "lighting/Studio_Softbox.hdr"
+    type: "CubemapHDR"
+    filter: "Linear"
+    wrapU: "Clamp"
+    wrapV: "Clamp"
+    generateMips: true
+    maxResolution: 2048
+    compression: "None"
+    exposure: 1.0
+    generatePrefilter: true
+}

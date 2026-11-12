@@ -1,3 +1,80 @@
 # Axle Scene Definition File
-Scene: Untitled
+Scene: Test
 Entities:
+  - Entity: 100001
+    TagComponent:
+      Tag: Atmospheric Skybox
+    TransformComponent:
+      Translation: [ 0 , 0 , 0 ]
+      Rotation: [ 1 , 0 , 0 , 0 ]
+      Scale: [ 1 , 1 , 1 ]
+    SkyboxComponent:
+      Enabled: true
+      EnvironmentLighting: true
+      SkyboxType: 0
+      HDRPath: 
+      Intensity: 1.000000
+      Exposure: 1.000000
+      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
+      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
+      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
+      SunSize: 0.045000
+      SunGlow: 0.160000
+      Turbidity: 1.000000
+      SyncWithSun: true
+      CustomAzimuth: 45.000000
+      CustomElevation: 50.000000
+      HemisphereAmbient: true
+  - Entity: 100002
+    TagComponent:
+      Tag: Plane
+    TransformComponent:
+      Translation: [ 0 , 0 , 0 ]
+      Rotation: [ 1 , 0 , 0 , 0 ]
+      Scale: [ 20 , 1 , 20 ]
+    MeshInstance3D:
+      AssetPath: builtin://plane
+      PatternMode: 1
+      TileScale: 8.000000
+      Color1: [ 0.350000 , 0.380000 , 0.420000 , 1.000000 ]
+      Color2: [ 0.200000 , 0.220000 , 0.250000 , 1.000000 ]
+  - Entity: 100003
+    TagComponent:
+      Tag: Directional Light
+    TransformComponent:
+      Translation: [ 0 , 25 , 0 ]
+      Rotation: [ 1 , 0 , 0 , 0 ]
+      Scale: [ 1 , 1 , 1 ]
+    DirectionalLightComponent:
+      Color: [ 1.000000 , 0.980000 , 0.920000 ]
+      Intensity: 1.000000
+      AmbientIntensity: 0.220000
+      Azimuth: 45.000000
+      Elevation: 50.000000
+      CastShadows: true
+      ShadowOrthoSize: 20.000000
+      ShadowBias: 0.000500
+      ShadowSlopeBias: 0.001000
+      ShadowNormalBias: 0.000500
+      ShadowFilterRadius: 1.500000
+      ShadowQuality: 2
+      CascadeSplitLambda: 0.850000
+      MaxShadowDistance: 80.000000
+      Exposure: 1.000000
+      ToneMappingMode: 0
+      Gamma: 2.200000
+  - Entity: 100004
+    TagComponent:
+      Tag: Sphere
+    TransformComponent:
+      Translation: [ 0 , 1 , 0 ]
+      Rotation: [ 1 , 0 , 0 , 0 ]
+      Scale: [ 1 , 1 , 1 ]
+    MeshInstance3D:
+      AssetPath: builtin://sphere
+      PatternMode: 2
+      TileScale: 4.000000
+      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+    MaterialComponent:
+      AssetPath: materials/Metal_Gold.axleasset

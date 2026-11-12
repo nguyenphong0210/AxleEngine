@@ -1,0 +1,291 @@
+# Milestone 10 — Complete Visual Tooling Ecosystem Plan
+
+**Status:** Completed Historical Milestone.
+**Parent Document:** [`ROADMAP.md`](../../ROADMAP.md).
+
+---
+
+## Work Breakdown & Historical Checklist
+
+*Design Philosophy: Unity-style Authoring Workflows (PBR Inspector, Shuriken Modules, Animator State Machine) + Godot-style Compact Bottom Docking.*
+
+- [x] **Phase 38: Visual Material Studio & Multi-Pass Surface Pipeline (`Engine/Asset`, `Engine/Renderer`, `Engine/UI`, `Editor`)**
+  - [x] **Step 1 - Core Material Schema & DSL Upgrade (`Engine/Asset`, `Engine/Scene`)**:
+    - [x] Add `SurfaceType` enum: `Opaque`, `Cutout`, `Transparent`, `Additive` in `MaterialComponent` and `AssetDSL`.
+    - [x] Add `CullMode` enum: `Back`, `Front`, `None` (Two-Sided) for foliage, flags, and glass.
+    - [x] Add `AlphaCutoff` slider (0.0 -> 1.0, default 0.5) for cutout alpha testing.
+    - [x] Add `DepthWrite` toggle (true for Opaque, false for Transparent/Additive).
+    - [x] Add UV controls: `UVTiling` (`glm::vec2`), `UVOffset` (`glm::vec2`).
+    - [x] Add `EmissionHDR` (RGB Color + `EmissionIntensity` multiplier 0.0 -> 20.0+) and `OcclusionMap` (Ambient Occlusion texture slot + strength).
+    - [x] Round-trip AST serialization in `.axleasset` format with 100% backward compatibility.
+  - [x] **Step 2 - HLSL Shader & Multi-Pass RHI Forward Pipeline (`Engine/Renderer`, `Engine/RHI`)**:
+    - [x] In `ForwardPBR.hlsl`, apply UV transformations: `uv = inUV * u_UVTiling + u_UVOffset`.
+    - [x] Cutout support: discard fragments below alpha cutoff in pixel shader.
+    - [x] Translucency & Blending: configure RHI pipeline blend states for Alpha Blend and Additive.
+    - [x] Two-Sided rasterizer culling: support `RHICullMode::None` in rasterizer state.
+    - [x] Sorter in `SceneRenderer`: separate opaque queue from back-to-front sorted translucent queue.
+  - [x] **Step 3 - Dedicated Material Studio Panel & Content Browser Integration (`Engine/UI`, `Editor`)**:
+    - [x] Create `MaterialEditorPanel` (dockable or standalone tab).
+    - [x] Double-clicking any `.axleasset` (Material) in Content Browser opens `MaterialEditorPanel`.
+    - [x] 3D Preview Turntable with sample mesh switcher: Sphere, Cube, Cylinder, Plane, Teapot.
+    - [x] HDRI Environment lighting selector: *Studio Neutral*, *Sunny Sky*, *Sunset Glow*, *Night Sky*.
+    - [x] Inspector group accordions (*Surface Options*, *Surface Inputs*, *Advanced Options*).
+    - [x] Toolbar with `Save (.axleasset)`, `Revert`, Shader selector, and Unity-grade 2-column PBR layout.
+  - [x] **Step 4 - Automated Verification Suite Step 101 (`AxleTests.exe --step101`)**:
+    - [x] Step 101 tests verifying: DSL round-trip serialization of new surface properties, Cutout alpha clipping math, Two-sided culling flags, RHI pipeline blend mode configs, and headless Material Studio operations.
+
+- [x] **Phase 38.1: Unity & Godot Parity Phase 1 - Embedded 3D Material Preview & HLSL Studio (`Engine/UI`, `Engine/RHI`, `Editor`)**
+  - [x] **Step 1 - Embedded 3D Interactive Material Preview Viewport**:
+    - [x] Embed live 3D preview viewport directly inside Material Inspector via `AssetPreviewPanel`.
+    - [x] Interactive camera controls: Left-drag Orbit 360°, Scroll-wheel Zoom in/out, Middle-drag Pan.
+    - [x] Seamless mesh switching: Sphere, Cube, Cylinder, Plane.
+  - [x] **Step 2 - Modern Unity-Grade Color Swatch & Compact Texture Slots**:
+    - [x] Replace 4-element numeric RGBA boxes with compact Color Swatch popup picker (`ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar`).
+    - [x] Implement square compact texture slot UI (`24x24 px` preview thumbnail, asset drag-drop target, clear button `[X]`).
+  - [x] **Step 3 - Advanced Surface Options Accordion**:
+    - [x] Add `Specular Highlights` toggle (ON/OFF).
+    - [x] Add `Environment Reflections` toggle (ON/OFF).
+    - [x] Add `Render Queue Offset` (Geometry 2000, Cutout 2450, Transparent 3000).
+    - [x] Add `[ </> Edit HLSL ]` shortcut button adjacent to Shader dropdown.
+  - [x] **Step 4 - In-Editor HLSL Shader Studio Panel & Content Browser Integration**:
+    - [x] Add dockable `HLSLStudioPanel` with multi-line code editor, line numbering, and HLSL syntax highlighting.
+    - [x] Right-click in Content Browser -> `Create > HLSL Shader` in `assets/shaders/` generating standard PBR template.
+    - [x] Zero-downtime hot-reloading: `Ctrl + S` / `F5` compiles via `RHIShaderCompiler` (DXC) to DXIL/SPIR-V and updates live GPU PSOs.
+  - [x] **Step 5 - Automated Verification Suite Step 104 (`AxleTests.exe --step104`)**:
+    - [x] Step 104 tests verifying: Material preview offscreen render targets, orbit camera math, advanced options serialization, and runtime HLSL compilation hot-reload.
+
+- [x] **Phase 38.2: Unity & Godot Parity Phase 2 - Dynamic Shader Reflection & Advanced Shading (`Engine/RHI`, `Engine/Asset`, `Engine/UI`)**
+  - [x] **Step 1 - Dynamic Shader Property Reflection via DXC**:
+    - [x] Extract uniform reflection metadata from DXC bytecode (`IDxcContainerReflection` / `ID3D12ShaderReflection`).
+    - [x] Parse annotation comments (e.g. `// [Range(0, 1)] float Dissolve;`) for UI bounds and formatting.
+    - [x] Dynamically generate Inspector controls (sliders, swatches, texture slots) without hardcoded C++ fields.
+  - [x] **Step 2 - Texture Channel Packing (Packed ORM Map)**:
+    - [x] Add `TextureMode` switch: `Separate Maps` vs `Packed ORM Map (R: Occlusion, G: Roughness, B: Metallic)`.
+    - [x] Update `ForwardPBR.hlsl` to sample ORM map from a single texture sampler.
+  - [x] **Step 3 - Automotive & Advanced PBR Shading**:
+    - [x] Implement two-layer `Clearcoat` (Strength & Roughness) for automotive clear lacquer finish.
+    - [x] Implement `Anisotropy` shading for brushed alloy wheel rims and carbon fiber weaves.
+  - [x] **Step 4 - Multi-Angle Preview Lighting & Custom Mesh Preview**:
+    - [x] Right-click drag in preview viewport to rotate HDRI environment and sun angle.
+    - [x] Support dragging custom game meshes (`.axlemesh`) into preview turntable.
+  - [x] **Step 5 - HLSL Compiler Diagnostics Jump & Autocomplete**:
+    - [x] Double-clicking compile error in console jumps cursor directly to erroneous line in `HLSLStudioPanel`.
+    - [x] Autocomplete suggestions for HLSL intrinsic functions (`saturate`, `lerp`, `mul`, `dot`, `cross`, `normalize`).
+  - [x] **Step 6 - Automated Verification Suite Step 105 (`AxleTests.exe --step105`)**:
+    - [x] Step 105 tests verifying: DXC reflection parser, packed ORM texture sampling, Clearcoat push constants, and error jump navigation.
+
+- [ ] **Phase 38.3: Material Pipeline Completion, Godot-style Inspector & Automotive Materials (`Engine/Scene`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/UI`, `Editor`)**
+  - **Execution Order**: Complete existing material behavior first, reorganize authoring second, then add automotive extensions. DX12/Vulkan GPU acceptance now passes on RTX 3070; the remaining interactive editor checklist keeps the phase open. See [acceptance report](docs/design/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md).
+  - [x] **Step 1 - Complete Existing Inspector -> Asset -> Renderer -> Shader Paths**:
+    - [x] Audit every existing material property across the asset inspector, entity inspector, material component, `.axleasset` serialization, renderer bindings, and shader consumption; record missing or ineffective connections. See [Material Pipeline Audit](docs/design/MATERIAL_PIPELINE_AUDIT.md).
+    - [x] Complete both save/load and live updates for Albedo, Normal Strength, Metallic, Roughness, AO Strength, Emission, Separate Maps / Packed ORM, independent UV X/Y tiling, and UV offset.
+      - [x] Preserve inspector asset and inline scene material values on save/reload, including HDR color, alpha, map paths and enable states, ORM, coat, anisotropy, and shader flags (Step 106).
+    - [x] Verify Surface Type, Alpha Cutoff, Cull Mode, Depth Write, Specular Highlights, Environment Reflections, and Render Queue affect the intended shader or pipeline state, including transparent draw ordering.
+    - [x] Finish existing Clearcoat Strength / Roughness and Anisotropy Strength / Rotation shading through actual BRDF evaluation; ensure every exposed parameter reaches and affects the GPU rather than only being serialized or stored in an unused function.
+    - [x] Define an explicit, matching CPU/GPU material layout without overloading unrelated parameters; keep preview and scene rendering consistent and preserve backward-compatible defaults for existing assets.
+    - [x] Verify texture loading, color space, bindings, fallback textures, replacement, and clearing for every supported map in the active project.
+      - [x] Upload and bind actual textures per draw with initialized fallback pixels; verify distinct materials, map disabling, normal/AO strength, emission masking, Y tiling, and zero alpha cutoff through DX12 GPU readback (Step 106).
+    - [x] Implement typed reflected binding plans with exact scalar/vector storage, duplicate/engine uniform validation, role-correct texture slots and rejection of unsupported layouts (CPU and GPU verified).
+    - [x] Standardize canonical `EngineObject` b0, `EngineScene` b1 and `MaterialParameters` b2 in space0, descriptor-bound textures/samplers in space1, 256-byte aligned CBV allocations and the existing five-attribute mesh stream; retain legacy template compatibility on DX12/Vulkan.
+    - [x] Implement generational custom material caching with last-good retention, deduplicated failures, main/include invalidation (including macro includes), recovery and in-flight ownership (CPU and GPU verified).
+    - [x] Integrate per-draw custom descriptor sets, textures, samplers, resizable constant buffers, pipeline validation, state restoration and diagnosed ForwardPBR fallback (DX12/Vulkan Step 106).
+    - [x] Add serialization and real pixel comparisons for standard/custom properties, per-draw isolation, texture changes, reload errors, HDR and automotive shading; inspect reference-scene captures.
+  - [ ] **Step 2 - Godot-style Material Inspector Organization & Texture Authoring**:
+    - [x] Use shared controls for asset and entity inspectors, organized into collapsible groups: Surface / Transparency, Shading, Albedo, Metallic, Roughness, Emission, Normal Map, Ambient Occlusion, Clearcoat, Anisotropy, UV, and Advanced Options.
+    - [x] Add clear enable toggles where appropriate, consistent defaults and tooltips, and conditional controls for enabled features; expose only features with a working renderer path.
+    - [x] Make texture slots clickable to open a searchable project texture picker while retaining drag/drop, thumbnail previews, replacement, and Clear Texture actions.
+    - [x] Implement robust drag-and-drop shader payload decoding (`ShaderDragDropDecoder`) handling null terminators, non-ASCII UTF-8, and extension validation (100% CPU unit-tested).
+    - [x] Implement custom property synchronization (`SynchronizeCustomProperties`) preserving compatible values across shader reload and filtering out local variables inside function scopes and engine reserved uniforms (100% CPU unit-tested).
+    - [x] Support custom texture properties with the shared searchable picker, thumbnail, validated drag/drop, replacement and clearing; initialize typed scalar/vector/default annotations and publish runtime diagnostics/schema to the shared Inspector/preview material.
+    - [ ] Manual interactive UI verification at varying panel widths (Rubber preview inspected at ~560px; remaining input blocked by Computer Use activation failure, documented in acceptance report).
+  - [x] **Step 3 - Automotive Material Extensions (After Existing Features Work)**:
+    - [x] **Clearcoat**: Extend the validated two-layer shading with texture-driven coat strength and roughness for car paint and carbon fiber; verify direct-light and environment-reflection behavior.
+    - [x] **Anisotropy**: Add texture-driven direction / flow control for brushed wheels and carbon weave; validate tangent orientation, rotation, and strength on imported meshes.
+      - [x] Complete flowmap persistence, texture binding, RG direction and alpha strength; verify direction and mask with GPU readback. Imported OBJ tangent orientation, rotation and strength now pass GPU acceptance.
+    - [x] **Detail Normal**: Add a secondary normal map, strength, independent UV tiling / offset, and optional mask; blend it correctly with the base normal for rubber, leather, paint, and carbon fiber.
+    - [x] **Glass Refraction**: Add refraction enable / strength, IOR, and tint with suitable opaque scene-color / depth inputs, transparent blending, and draw ordering; document the chosen screen-space approximation and provide a fallback when required buffers are unavailable.
+    - [x] Add complete schema, serialization, texture bindings, inspector groups, and preview support for each new feature as its own implementation step.
+  - [ ] **Step 4 - Acceptance Scenes & Backend Verification**:
+    - [x] Maintain reference materials for car paint, brushed metal, carbon fiber, rubber / leather with detail normal, and automotive glass under fixed lighting.
+    - [x] Standalone CPU unit-test executable `AxleMaterialUnitTests` (`ctest -R MaterialUnitTests`) covering all 5 core material test suites (100% PASS).
+    - [x] Wire headless acceptance into Step 106 with strict backend selection, actual-backend checks, protected capture paths, aligned RGBA8/RGBA16F readback, PPM export and report write-failure handling (CPU and real GPU verified).
+    - [x] Check save/reopen pixel equivalence, shared/inline reuse, live parameter changes, missing/replaced textures, old assets and common preview/scene material rendering with automated checks and reference capture inspection.
+    - [ ] Complete interactive preview-versus-scene comparisons and authoring/save/reopen checks listed in the acceptance report.
+    - [x] Run strict DX12 and Vulkan Step 106 on RTX 3070; capture SDR/HDR images and warmed-up baseline/detail-normal/refraction end-to-end timings at 1024x640, 1x MSAA.
+    - [ ] Complete and verify each implementation sub-step before its own commit; mark the phase complete only after its renderer and visual acceptance checks pass.
+
+  - **Phase 38.3 Runtime Acceptance Checklist (2026-11-02; GPU verified, UI partially inspected)**:
+    - **Build and compiler integration**:
+      - [x] Build the editor and full test executable with the supported toolchain.
+      - [x] Compile actual built-in and generated custom VS/PS shaders to DXIL and SPIR-V.
+      - [x] Verify legacy custom shader compatibility and actionable diagnostics.
+      - [x] Run material-related regressions 101, 104, 105, 106 in separate processes.
+      - [x] Record warnings: pre-existing LNK4098 remains; no new material compiler warning observed.
+    - **GPU behavior**:
+      - [x] Run Step 106 on requested DX12 and requested Vulkan with fallback disabled.
+      - [x] Confirm both standard and custom parameters change real rendered pixels.
+      - [x] Check two entities sharing a shader with different values in the same frame.
+      - [x] Confirm texture replacement, disable, clear and missing-file fallback.
+      - [x] Check imported/mirrored/nonuniform-scale normal and anisotropy behavior.
+      - [ ] Check glass over opaque geometry, edge/foreground depth rejection and fallback.
+      - [x] Check SDR/HDR, MSAA, viewport resizing and built-in/custom layout switching after sky rendering.
+      - [x] Capture the automotive scene and record optional-path timings with metadata.
+    - **Actual editor UI**:
+      - [ ] Inspect asset and entity material groups at narrow and wide panel sizes.
+      - [ ] Search, assign, replace, disable and clear real project textures.
+      - [ ] Drag a shader from Content Browser; create one with a chosen name.
+      - [ ] Edit custom numeric and texture properties and observe a live preview change.
+      - [ ] Introduce a shader error; confirm diagnostics and last-good/fallback behavior.
+      - [ ] Save/reopen material and scene; verify edits persist and shared users update.
+      - [ ] Verify camera/lights stay fixed during the intended preview object rotation.
+
+- [ ] **Phase 39: Visual Particle & VFX Studio - End-to-End Editor Completion (`Engine/VFX`, `Engine/UI`, `Engine/Scene`, `Editor`)**
+  - **Status (2026-11-03): Gemini's A1-J4 delivery received a corrective integration review and a neutral modular authoring upgrade. CPU tests and physical DX12/Vulkan rendering checks PASS on NVIDIA GeForce RTX 3070. Interactive editor acceptance and a separate OpenGL regression session remain pending; Phase 39 stays OPEN. Phase 40 planning and its scoped Gemini implementation handoff are tracked separately; they do not close these remaining checks.**
+  - **Current evidence**: [Review and Acceptance Report](docs/design/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md). Commit subjects and historical checklist marks alone are not acceptance evidence.
+  - **Scope/design**: [Completion Plan](docs/design/VFX_PHASE_39_COMPLETION_PLAN.md) and [Gemini Implementation Guide](docs/design/VFX_PHASE_39_GEMINI_IMPLEMENTATION_GUIDE.md). Proposed type names in the guide are blueprints; use actual source names below.
+  - [x] **A - Selection, Ownership & Lifecycle (code/automated coverage)**:
+    - [x] **A1**: Idempotent selection and safe scene detach; preserve dirty work and opened asset documents across unrelated selection changes.
+    - [x] **A2**: Independent panel-owned preview systems; a private scene renders them through the active RHI without advancing user scene simulation.
+    - [x] **A3**: Explicit primary-stack adapters, independent component copies and preserved authored enable/trigger-only states.
+  - [x] **B - Versioned Assets & Scene Persistence (code/automated coverage)**:
+    - [x] **B1**: `ParticleEffectDefinition`, stable string emitter IDs, seed/transforms/resources, graph validation, numeric/range/enum validation and CPU pool limits.
+    - [x] **B2**: One complete module codec for modern effects and legacy flat assets; retain disabled-module values, full curves/keys, force fields, collision geometry and resource flags. Real atomic file replacement preserves the last good asset on failure.
+    - [x] **B3**: Complete canonical inline scene payloads; valid references resolve the current source asset, missing references use a complete fallback, and Make Unique stores an independent definition. No sparse per-emitter overrides.
+  - [x] **C - Playback, Duration & Determinism (code/automated coverage)**:
+    - [x] **C1**: Duration/autoplay/manual start, bounded burst catch-up across several loop windows, and config synchronization that does not rearm elapsed bursts.
+    - [x] **C2**: Instance-local random streams seeded by effect seed and stable emitter ID.
+    - [x] **C3**: Fixed-step transport, pause/step, bounded seek pumping and deterministic seek at the duration boundary.
+  - [x] **D - RHI Preview & Multi-Emitter Draw Safety (code/physical GPU coverage)**:
+    - [x] **D1**: Independent per-draw constants, instance buffers and descriptor pools; buffers grow to actual batch requirements.
+    - [x] **D2**: `VFXEditorPanel` renders its private preview scene through `RHISceneRenderer` into real viewport targets; grid toggle and explicit GPU teardown are implemented. Actual UI presentation remains in J4.
+    - [x] **D3**: Local/world transforms including authored scale, camera-depth alpha sorting and batch-capacity splitting.
+  - [x] **E - Asset Authoring Session (code/CPU coverage; UI acceptance pending)**:
+    - [x] **E1**: `VFXEditorDocument` and panel Open/Save/Save As, diagnostics, dirty state and unsaved-work guards.
+    - [x] **E2**: Stable-ID emitter add/duplicate/remove/reorder/rename, selected-emitter restoration and preview solo/visibility.
+    - [x] **E3**: Module controls update the working document and history; explicit Apply creates an inline copy, saved asset documents can create referenced instances, and the entity inspector supports Make Unique/reload.
+  - [x] **F - Resources, Material Subset & Particle Shading (code/physical GPU coverage)**:
+    - [x] **F1**: Texture search/drag/disable/replace/clear; authored albedo and linear normal resources reach production scene/preview draws, with missing-resource fallback.
+    - [x] **F2**: `ParticleMaterialAdapter` is used by production draws for tint, albedo/normal maps, emission color/intensity, UV transforms, blend mode and cutoff. Unsupported billboard material features have explicit scope/fallback diagnostics.
+    - [x] **F3**: Real cutout, camera fading and soft intersection against an opaque-depth snapshot. MSAA keeps depth testing and disables soft intersections until a compatible depth resolve is available.
+  - [x] **G - History, Curves & Gradients (code/CPU coverage; UI acceptance pending)**:
+    - [x] **G1**: Before/after snapshots, unique save-state revision tokens, selection restoration, grouped module transactions, discard and panel integration.
+    - [x] **G2**: Per-emitter widget identity; full Bezier time/value control points and linear keys; independent gradient color/alpha keys and HDR color input.
+  - [x] **H - Authored Sub-Emitters (code/CPU coverage)**:
+    - [x] **H1**: Stable-ID routing, unambiguous legacy-name fallback, graph cycle rejection and one update owner per authored stack.
+    - [x] **H2**: Bounded queued Birth/Collision/Death spawning; no phantom births on full pools; inherited tint persists through lifetime updates; event coordinates convert between simulation spaces.
+  - [x] **I - Mesh Emission & Collision Workflow (code/CPU coverage)**:
+    - [x] **I1**: OBJ triangle-area CDF sampling, runtime mesh-path binding and defined missing/degenerate geometry fallback.
+    - [x] **I2**: Authored floor/planes/boxes and their controls, actual Jolt service binding with hit normals, and world-space collision resolution for local particles.
+  - [ ] **J - Layered Acceptance**:
+    - [x] **J1**: Eight always-active CPU suites in `AxleVFXUnitTests`; temporary fixtures never overwrite project VFX assets.
+    - [x] **J2**: `AxleVFXGPUTests` executes real offscreen rendering/readback on physical DX12 and Vulkan with fallback disabled. CTest registration is opt-in through `AXLE_ENABLE_VFX_GPU_TESTS=ON`; Step 102 propagates GPU failures.
+    - [x] **J3**: Checked-in Campfire, CollisionSparks and VehicleBackfire effects load, render and reproduce their seeded pixels through production save/reopen adapters on both backends.
+    - [ ] **J4**: Complete interactive editor acceptance and record a separate OpenGL regression result. Automated readbacks do not substitute for these checks.
+  - [x] **K - Neutral Modular Authoring (2026-11-03; automated coverage)**:
+    - [x] New/Content Browser effects start empty; Add uses a neutral emitter, Duplicate is explicit, and deleting the last emitter remains valid through asset/scene round trips.
+    - [x] Independent persisted Emission/Shape/Size/Speed/Color/Alpha/Rotation/Forces/Sub Emitters/Texture Sheet switches affect actual simulation. Old assets retain legacy behavior; inactive settings survive serialization/history. Start Color is independent of the lifetime gradient.
+    - [x] Searchable module groups, enabled-only filter, type-matched Reset/Copy/Paste, generic gradient actions and controls for initial rotation, acceleration, burst scheduling, minimum bounce speed and complete flipbook settings.
+    - [x] Stable row identities/context actions, graph-safe authored target selection, property-versus-structural undo boundaries, project effect search and tab-independent unsaved dialogs.
+    - [x] Resizable wide columns and compact tabs; editable Emit count, background/grid/live-bounds settings, conservative transformed framing and two-axis camera pan.
+    - [x] Tested scene instance placement, clean saved references versus inline working copies, validated explicit Apply and independent simulation ownership.
+    - [x] CPU ImGui wide/narrow layout and hidden-Effect-tab dirty-dialog checks; actual D3D12 panel/preview readbacks and an exported workspace capture. Native input and OpenGL acceptance remain in J4.
+    - **Usage and remaining capability backlog**: [VFX Editor Authoring Guide](docs/design/VFX_EDITOR_AUTHORING_GUIDE.md). This delivery does not claim full Unity Particle System or VFX Graph parity.
+  - **Verified commands/evidence**:
+    - [x] Build `AxleVFXUnitTests`, `AxleVFXGPUTests`, `AxleTests` and `AxleMaterialUnitTests` in Release; dependencies build `AxleEditor` and `AxleRuntime`.
+    - [x] `ctest --test-dir build -C Release --output-on-failure`: Material CPU, VFX CPU, VFX GPU D3D12 and VFX GPU Vulkan pass.
+    - [x] `AxleTests.exe --step102` passes with physical D3D12 VFX acceptance enabled; invalid backend requests produce a failing exit status.
+    - [x] Material Step 106 regression passes on D3D12 and Vulkan. Phase 38.3 manual acceptance remains separately owned by the user.
+    - [x] GPU coverage includes descriptor/order isolation, resource replacement/disable/fallback, material tint/emission/UV/cutout, normal maps, blend/fade behavior, opaque-depth intersection, SDR/HDR, MSAA, odd-sized row-padded readback and reference persistence.
+    - [x] Failed file replacement preserves the old bytes and document dirty state; CPU test destinations are isolated temporary directories.
+  - **Remaining interactive checklist**:
+    - [ ] Create/open/save/reopen assets; test unsaved New/Open/close and failed-save diagnostics.
+    - [ ] Repeatedly select/delete entities and switch scenes; preserve the working document and verify clean teardown/reopen.
+    - [ ] Add/duplicate/rename/reorder/remove/solo/mute emitters in wide and narrow panel layouts.
+    - [ ] Search, drag, disable, replace and clear textures/materials/OBJ meshes; verify visible preview changes.
+    - [ ] Edit Bezier/linear curves and independent gradient color/alpha keys; exercise drag coalescing, Undo/Redo and dirty markers.
+    - [ ] Exercise Play/Pause/Stop/Step/Loop/Speed/Scrub and compare preview with placed scene instances.
+    - [ ] Verify referenced versus unique assets, reload, explicit Apply and missing-source fallback in the actual UI.
+    - [ ] Visually review the reference effects with intended art textures; automated fallback captures do not establish artistic quality.
+    - [ ] Record OpenGL regression evidence separately. Read the report for MSAA soft-depth fallback, OBJ import and particle-material subset limits.
+
+- [ ] **Phase 39.1: Particle Module & Rendering Expansion toward Unity-style Authoring (`Engine/VFX`, `Engine/UI`, `Engine/Scene`, `Engine/RHI`, `Editor`, `Runtime`)**
+  - **Status (2026-11-03): deferred feature backlog only; no implementation claimed.** Extend the current neutral modular editor. Phase 39 interactive/OpenGL acceptance remains separately open; Phase 40 animation scope and numbering are unchanged.
+  - **Detailed packages, current-versus-missing scope, dependencies and acceptance**: [VFX Unity Feature Backlog](docs/design/VFX_UNITY_FEATURE_BACKLOG.md). Official comparison references are linked there.
+  - **Priority/order**: D1 performance baseline -> A0 -> A1/A2 -> A3/A4 -> B1/B2 -> expanded D1 budgets -> B3/C1-C5/D2 as their dependencies become available. E verification accompanies every package. Use a separate implementation/test commit per package.
+  - [ ] **A0 - Shared Parameter Modes (P1)**: Constant/two-constant/curve/two-curve and color/gradient modes; deterministic sampling, validation and migration of existing ranges/curves.
+  - [ ] **A1 - Emission & Initialization (P1)**: Rate over distance with interpolated moving-emitter spawning, start delay, bounded prewarm and explicit teleport/reset behavior.
+  - [ ] **A2 - Main Lifecycle & Spaces (P1)**: Simulation speed/time source, custom simulation transform, scaling modes, stop actions and optional ring-buffer policies; defined pause/drain/culling behavior.
+  - [ ] **A3 - Advanced Motion (P1)**: Per-axis velocity/force over lifetime, orbital/radial motion, velocity limits/damping, emitter-motion inheritance and lifetime by emitter speed. Preserve existing sub-emitter velocity inheritance.
+  - [ ] **A4 - Appearance Modes (P1)**: 3D start size/rotation, per-axis lifetime controls, color/size/rotation by speed and explicit composition with existing gradients/curves.
+  - [ ] **B1 - Trails & Ribbons (P1)**: Stable particle handles, bounded history, width/color curves, lifetime/death behavior, UV modes, sorting and safe GPU resource ownership.
+  - [ ] **B2 - Mesh Particle Output (P1)**: Instanced mesh/submesh/material selection, 3D orientation/scale, correct bounds and sorting in preview/scene; separate from existing mesh-surface emission.
+  - [ ] **B3 - Renderer Extensions (P2)**: Billboard alignment/pivot/stretch controls, sort modes/bias and screen-size limits; lighting/shadows only where the actual RHI supports them.
+  - [ ] **C1 - Custom Data & Particle Shaders (P2)**: Authored attributes, explicit vertex/instance streams, versioned CPU/GPU layouts and a validated particle-compatible shader contract.
+  - [ ] **C2 - Collision, Triggers & Callbacks (P2)**: Extend existing physics with filters/quality modes and trigger volumes; bounded typed gameplay events with safe entity/service lifetime handling.
+  - [ ] **C3 - Particle Lights (P2)**: Light assignment and color/range/intensity modulation with per-effect/global budgets and stable light selection.
+  - [ ] **C4 - Shape, Noise & External Forces (P2)**: Richer shape distribution/masks/mesh sources, per-axis noise/remapping and shared scene force volumes. Skinned-mesh emission depends on Phase 40 pose/skinning support.
+  - [ ] **C5 - Sheet & Sub-Emitter Extensions (P2)**: FPS/speed/lifetime animation, row/sprite/start-frame modes, additional event/inheritance options and bounded graph-safe routing.
+  - [ ] **D1 - Performance & Pooling (P1 baseline, P2 expansion)**: Profiler evidence, bounds/culling policies, LOD/quality tiers, particle/event/trail/light budgets and reusable effect instances.
+  - [ ] **D2 - Authoring & Runtime Integration (P2)**: Exposed per-instance parameters/overrides, multiselection/reusable module settings and sequencing/animation-event integration when the required APIs exist.
+  - [ ] **E - Acceptance per Package**: Complete schema/migration -> inspector/history -> simulation -> rendering -> scene/packaged Runtime paths; CPU tests, real DX12/Vulkan captures and native UI checks. Track OpenGL and MSAA soft-depth support explicitly.
+
+- [ ] **Phase 39.2: GPU Particle Simulation & Visual Effect Graph (`Engine/VFX`, `Engine/RHI`, `Engine/UI`, `Editor`, `Runtime`)**
+  - **Status (2026-11-03): deferred expansion, separate from CPU Particle System parity.** Start after profiling and a compute/platform feasibility decision; Phase 39.1 does not require a node editor. Details: [VFX Unity Feature Backlog](docs/design/VFX_UNITY_FEATURE_BACKLOG.md).
+  - [ ] **G0 - Feasibility**: Target workloads, compute/indirect capabilities, typed data/bounds/event contracts, supported backends and CPU fallback/unsupported behavior.
+  - [ ] **G1 - GPU Runtime**: Spawn/update/compaction, bounded allocation, resource barriers/lifetimes, sorting, indirect rendering and safe resizing/teardown.
+  - [ ] **G2 - Graph Model & Compiler**: Stable typed nodes/ports, spawn/initialize/update/output contexts, persisted parameters, validation, diagnostics and last-good execution.
+  - [ ] **G3 - Graph Editor & Integration**: Node search/connections, undo/redo, reusable subgraphs, instance overrides/events, preview, save/reopen and packaged Runtime.
+  - [ ] **G4 - Acceptance**: Physical DX12/Vulkan rendering/stress evidence, failure/lifetime checks, fallback verification, native UI authoring and measured performance reports.
+
+- [ ] **Phase 40: Skeletal Animation Studio & Visual Animator State Machine (`Engine/Animation`, `Engine/Asset`, `Engine/Renderer`, `Engine/RHI`, `Engine/Scene`, `Engine/UI`, `Editor`, `Runtime`)**
+  - **Status (2026-11-03): A3 publication enforcement and A2 FBX baking review corrections complete.** A3's enforced immutable mesh-resource publication, non-assignability, and validated non-null replacement (R1/R2) are verified. A2's technical baking gaps (rotational Nyquist aliasing R3, transactional output R8, close STEP boundary loss R4, constant-next holds R5, terminal linear key exclusion R6, unskipped budget & nonlinear adaptive refinement R7) are resolved with permanent registered CPU tests. Release/Debug builds, unit tests, and both Animation CTests PASS. A2 remains open for expanded multi-exporter corpus verification. Animation RHI pixels, native authoring UI and standalone packaged playback are pending; Phase 38.3/39 manual checks remain separately open.
+  - **Canonical scope and dependencies**: [Phase 40 Completion Plan](docs/design/ANIMATION_PHASE_40_COMPLETION_PLAN.md). **Code/algorithm/test reference**: [Gemini Implementation Guide](docs/design/ANIMATION_PHASE_40_GEMINI_IMPLEMENTATION_GUIDE.md).
+  - **Current coordination**: G1 was delivered in `7ba4361`/`d4dbb75` and awaits independent review. **Phase 41 rendering foundations now take priority; D1/D2 and new authoring work are deferred.** P41-23/24 reuse the relevant Phase 40 F1-F3 contracts and evidence rather than creating a parallel renderer. Use the [shared exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json); no new implementation is released by this roadmap.
+  - **Execution**: 28 separately committed packages. First deliver A0-A3, B1/B2, C1/C2, B3, F1/F2 and G1/G2 as an executable import -> persist -> independent animator -> RHI preview slice; then complete authoring and acceptance. Package dependencies in the plan take precedence over the display order below.
+  - [ ] **A - CPU Foundations & Instance Safety**:
+    - [x] **A0**: Always-active, device-free `AxleAnimationUnitTests` target and temporary fixtures.
+    - [x] **A1**: Validated skeleton topology, partial-channel bind TRS fallback, quaternion/signed-scale handling and derived lookup rebuilding.
+    - [ ] **A2**: Context-free skeletal import with correct mesh/skin/basis/intermediary-node/interpolation handling and explicit limits. Reviewed S1-S4 defects are corrected: exact constant-next keys/open intervals, float-collision rejection, round-trip asset precision and finite/work-bounded transactional baking are verified. Broader weighted/layered/extrapolated source behavior, accuracy guarantees and multi-exporter corpus remain open. [Final Corrections](docs/design/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md).
+    - [x] **A3**: Immutable authored resources and independent animator clocks/parameters/triggers/poses across entity duplication and Scene::Copy. Private validated factory-only mesh construction, owned immutable rig/geometry snapshots, derived bounds, non-assignability, last-good replacement and migrated legacy callers verified by CPU and integration checks. [Final Corrections](docs/design/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md).
+  - [ ] **B - Versioned Assets, Baking & Persistence**:
+    - [x] **B1**: Stable definitions/IDs for Skeleton, SkeletalMesh, AnimationClip and AnimatorController; append-only asset classifications.
+    - [x] **B2**: Shared complete codecs, atomic saves, validated cooked geometry, FileSystem/VFS loading and last-good reload.
+    - [x] **B3**: Scene and all assembly/editor round trips; referenced/unique controllers, complete fallback, typed defaults and legacy migration.
+  - [ ] **C - Typed Animator Runtime**:
+    - [x] **C1**: Float/Int/Bool/Trigger declarations, typed conditions and script/component accessors.
+    - [x] **C2**: Deterministic priority/exit-time transitions, atomic trigger consumption, independent crossfade clocks and bounded residual-time advancement.
+  - [ ] **D - Locomotion Blend Spaces**:
+    - [ ] **D1**: Robust 1D weights and persistent phase continuity when parameters/durations change.
+    - [ ] **D2**: Deterministic 2D triangulation/barycentric/hull behavior, degenerate cases and normalized N-way local TRS blending.
+  - [ ] **E - Animation Event Markers & Runtime Delivery**:
+    - [ ] **E1**: Persisted typed markers and bounded forward interval/loop/crossfade/blend-leaf event collection; seek suppresses gameplay events.
+    - [ ] **E2**: Queued C++ ScriptableEntity dispatch with scene/entity/DLL lifetime checks; private preview is log-only.
+  - [ ] **F - DX12/Vulkan Skeletal Rendering**:
+    - [ ] **F1**: Reuse `RHISkinnedVertex3D` and upload immutable skeletal mesh/submesh data with validated weights and animated bounds.
+    - [ ] **F2**: Per-draw palette CBVs and a skinned standard-PBR vertex variant in scene/private preview, including color/depth/HDR/MSAA.
+    - [ ] **F3**: Animated silhouette entity picking, safe draw/resource lifetimes and preserved legacy OpenGL skin/shadow paths.
+    - **Boundary**: the inspected RHI renderer has no full shadow-map pass; general RHI shadow implementation is separate work. Do not claim animated RHI shadows from shader compilation alone.
+  - [ ] **G - Bottom Animation Dock & Dopesheet**:
+    - [x] **G1**: Device-free clip/controller documents, saved revision/dirty state, transactional Undo/Redo and guarded open/save/close. Gemini reports implementation/test completion; independent Codex review is pending. [Delivery](docs/design/ANIMATION_G1_GEMINI_DELIVERY.md), [exchange](docs/agents/CODEX_GEMINI_EXCHANGE.json).
+    - [ ] **G2**: Private rendered preview; Play/Pause/Stop/Step/Loop, 24/30/60 FPS display/snap, speed and clip seek; preserve saved docking layouts.
+    - [ ] **G3**: Bone TRS/quaternion tracks, diamonds/box selection/drag/copy/paste/delete, value editing and undoable event markers.
+  - [ ] **H - Skeleton Viewport Authoring**:
+    - [ ] **H1**: Current-pose octahedron/joint overlays through active render adapters.
+    - [ ] **H2**: Bone picking and shared track/hierarchy selection, with camera/gizmo/text/modal input priority.
+  - [ ] **I - Visual Animator Graph**:
+    - [ ] **I1**: State/entry/transition graph and typed parameter inspector; stable IDs, editable layout, history and read-only live telemetry.
+    - [ ] **I2**: 1D/2D point authoring, compatible resource search/drag/drop and real controller preview.
+  - [ ] **J - Editor/Runtime Integration**:
+    - [ ] **J1**: Content Browser import/create/open, editable clip copies, Entity Inspector assignment, Apply/Make Unique/reload and safe scene detach.
+    - [ ] **J2**: Generic pre-cook integration, complete packaged dependencies and standalone runtime loading without source-media/editor services.
+  - [ ] **K - Layered Acceptance & Documentation**:
+    - [ ] **K1**: Consolidated CPU suites, retained legacy Steps 36-41 and actual Step 103 registration/failure propagation in `Editor/src/Test.cpp`.
+    - [ ] **K2**: Real offscreen `AxleAnimationGPUTests`, strict physical DX12/Vulkan opt-in CTests and deterministic reference scenes/captures.
+    - [ ] **K3**: Supported-workflow guide and evidence report; complete interactive UI, packaged Runtime and separate OpenGL checks before closing the phase.
+  - **Scope**: single-layer controllers, Clip/1D/2D motions, in-place locomotion, four influences and a validated 128-joint GPU cap. Root motion, retargeting, foot IK, layers/masks/additive poses and arbitrary custom vertex shaders are not parity claims for this phase. Phase matching alone does not guarantee no foot sliding.
+  - **Historical Step mapping**: original Step 1 -> G, Step 2 -> H, Step 3 -> C/I, Step 4 -> D/E, Step 5 -> K. Step 103 remains the integration entry point; the separate CPU executable is required for Gemini's environment.
+  - **Gemini delivery rule**: code and CPU tests per package/local commit; implement actual renderer/UI/runtime checks, record unavailable physical GPU/UI checks as NOT RUN, and keep acceptance open until externally verified.
+
+---
+
+---

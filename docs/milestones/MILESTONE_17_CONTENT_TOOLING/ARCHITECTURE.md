@@ -1,4 +1,4 @@
-# Milestone 05 — Content and Authoring Tools Architecture
+# Milestone 17 — Content Authoring Studios & Tooling Architecture
 
 ## 1. Target and Scope
 

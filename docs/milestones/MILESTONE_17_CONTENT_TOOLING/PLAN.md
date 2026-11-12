@@ -1,4 +1,4 @@
-# Milestone 05 — Content and Authoring Tools Plan
+# Milestone 17 — Content Authoring Studios & Tooling Plan
 
 **Status:** Proposed; packages released per explicit user instruction.
 **Baseline:** Post-OPT-10 asset registry, transaction-safe document foundations, and RHI preview viewports.
@@ -8,11 +8,7 @@
 
 ## 1. Executive Summary
 
-Phase 05 establishes a production-grade, crash-resilient content authoring pipeline across AxleEditor and the standalone Runtime. It consolidates the historical visual authoring milestones (Historical Phase 38.3 Material Inspector, Phase 39 Visual Particle & VFX Studio, and Phase 40 Skeletal Animation Studio) into four unified, modular packages:
-1. **OPT-17:** Skeletal Animation Studio & Runtime Pipeline.
-2. **OPT-18:** Visual FX Studio & GPU Particle Integration.
-3. **OPT-19:** Material Graph Node Canvas & Scene Authoring Tooling.
-4. **OPT-Tools:** Asset Cooker, Packaging Pipeline (`Data.axlepak`), and Asset Linter.
+Milestone 17 establishes a production-grade, crash-resilient content authoring pipeline across AxleEditor and the standalone Runtime. It consolidates the historical visual authoring milestones (Historical Phase 38.3 Material Inspector, Phase 39 Visual Particle & VFX Studio, and Phase 40 Skeletal Animation Studio) into four unified, modular child phases (Phase 47.1 through 47.4, formerly OPT-17, 18, 19, Tools).
 
 ---
 
@@ -25,9 +21,9 @@ Phase 05 establishes a production-grade, crash-resilient content authoring pipel
 
 ---
 
-## 3. Pending Work Packages
+## 3. Pending Work Packages (Phase 47)
 
-### OPT-17: Skeletal Animation Studio & Runtime Pipeline (Historical Phase 40)
+### Phase 47.1: Skeletal Animation Studio & Runtime Pipeline (formerly OPT-17 / Phase 40)
 - [ ] **C17-01: Rig & Clip Import** — FBX and glTF 2.0 skinned mesh importer; procedural reference rig; retain bind-pose for unkeyed channels; enforce topological joint ordering.
 - [ ] **C17-02: Timeline & Dope Sheet Editor** — Keyframe timeline panel in AxleEditor; local TRS key manipulation; box-selection, copy, paste, delete; transactional undo/redo.
 - [ ] **C17-03: Animator Controller & Blend Spaces** — Visual state machine graph; typed parameters (Float, Int, Bool, Trigger); serializable transition conditions; 1D and 2D blend spaces with phase continuity.
@@ -36,7 +32,7 @@ Phase 05 establishes a production-grade, crash-resilient content authoring pipel
 - [ ] **C17-06: Procedural Foot IK & Ground Snapping** — Two-bone analytical inverse kinematics raymarching against collision geometry to eliminate foot sliding.
 - [ ] **C17-07: Additive Animation & Upper-Body Layering** — Layered animation masks allowing upper-body actions (aiming, shooting, reloading) while lower-body executes locomotion loops.
 
-### OPT-18: Visual FX Studio & GPU Particle Integration (Historical Phase 39, 39.1, 39.2)
+### Phase 47.2: Visual FX Studio & GPU Particle Integration (formerly OPT-18 / Phase 39)
 - [ ] **C18-01: Document Lifecycle & Preview Isolation** — Standalone `.axlevfx` document model with multi-emitter persistence; isolated preview viewport simulation preventing active scene mutations.
 - [ ] **C18-02: Advanced Parameter Modes** — Constant, Two Constants (Random between two constants), Curve, Two Curves, and Color/Alpha gradient modes with deterministic seeds.
 - [ ] **C18-03: Advanced Motion & Emitter Modules** — Rate over distance (vehicle trails), start delay, prewarm, per-axis velocity/force over lifetime, orbital motion, and emitter-motion inheritance.
@@ -46,14 +42,14 @@ Phase 05 establishes a production-grade, crash-resilient content authoring pipel
 - [ ] **C18-07: Flipbook Sub-Frame Motion Blending** — Sprite sheet UV animation with optical-flow or linear sub-frame blending for ultra-smooth smoke/fire effects.
 - [ ] **C18-08: GPU Particle Simulation & Visual Effect Graph** — Compute shader particle simulation pass on modern RHI; bitonic GPU particle sorting; direct indirect draw dispatch (`vkCmdDrawIndirect` / `ExecuteIndirect`).
 
-### OPT-19: Material Graph UI & Advanced Scene Tooling (Historical Phase 38.3)
+### Phase 47.3: Visual Material Graph UI & Advanced Scene Tooling (formerly OPT-19 / Phase 38.3)
 - [ ] **C19-01: Interactive Node Canvas** — Modern node graph editor in AxleEditor (`imnodes` / `ImGui Node Editor`); real-time AST lowering to HLSL with DXC compiler diagnostics.
 - [ ] **C19-02: Advanced Surface Nodes** — Visual nodes for Clearcoat, Anisotropy, Subsurface Scattering, Refraction, and Cauchy Chromatic Dispersion.
 - [ ] **C19-03: Reflection Probe Gizmos & Placement** — Scene-placed box and sphere reflection probe volumes with real-time cubemap capture and octahedral encoding.
 - [ ] **C19-04: Decal Volumes & Projected Textures** — Screen-space or mesh-projected decal volumes for bullet holes, tire marks, and road dirt.
 - [ ] **C19-05: Prefab Variant Authoring** — Nested prefab override tracking, visual property diffing, and revert-to-base workflows.
 
-### OPT-Tools: Packaging Cooker & Diagnostic Pipeline
+### Phase 47.4: Packaging Cooker & Diagnostic Pipeline (formerly OPT-Tools)
 - [ ] **CTools-01: Asset Cooker & Dependency Verification** — Standalone cooker traversing scene dependency trees, compressing textures to BCn formats, and compiling pre-warmed shader caches.
 - [ ] **CTools-02: Monolithic Pak File Packaging** — Pack cooked binary assets into encrypted or compressed `Data.axlepak` containers mounted by the Virtual File System.
 - [ ] **CTools-03: Headless Asset Linter** — Command-line tool verifying zero dangling UUID references, missing textures, uncompressed assets, or oversized textures.

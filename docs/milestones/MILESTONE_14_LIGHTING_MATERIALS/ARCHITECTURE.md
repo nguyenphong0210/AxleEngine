@@ -1,4 +1,4 @@
-# Milestone 02 — Lighting and Material Fidelity Architecture
+# Milestone 14 — Lighting and Material Fidelity Architecture
 
 ## 1. Target and Scope
 

@@ -1,4 +1,4 @@
-# Milestone 04 — Simulation Scale Architecture
+# Milestone 16 — Simulation Scale and Logic LOD Architecture
 
 ## 1. Target and Scope
 

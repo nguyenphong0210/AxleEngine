@@ -1,4 +1,4 @@
-# Milestone 03 — Geometry and Visibility Architecture
+# Milestone 15 — Scalable Geometry and Virtual Geometry Architecture
 
 ## 1. Target and Scope
 

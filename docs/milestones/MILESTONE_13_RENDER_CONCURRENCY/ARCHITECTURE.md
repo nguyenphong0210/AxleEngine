@@ -1,4 +1,4 @@
-# Milestone 01 — Render and Material Foundation Architecture
+# Milestone 13 — Render Concurrency & Shader Pipeline Architecture
 
 ## 1. Target and Scope
 

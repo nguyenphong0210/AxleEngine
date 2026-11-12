@@ -1,162 +1,176 @@
-# AxleEngine Roadmap
+# AxleEngine Master Development Roadmap
 
-Bản lộ trình thực thi tổng thể duy nhất của AxleEngine.
-Toàn bộ dự án được quản lý thống nhất theo các **Milestone (Cột mốc)**. Khái niệm `OPT` và `Phase` đã được gộp làm một: mỗi Milestone quản lý các **Phase** tương ứng. Mỗi Milestone sở hữu cặp tài liệu tiêu chuẩn: `PLAN.md` (kế hoạch thực hiện & checklist) và `ARCHITECTURE.md` (thiết kế kiến trúc) đặt tại `docs/phases/`.
+This is the canonical master execution roadmap for AxleEngine.
+The entire engine lifecycle is governed by a unified **Milestone** architecture spanning **Milestones 01 through 18**. The former `OPT` and `Phase` constructs have been unified: each Milestone manages its sequential **Phases**. Each active technical Milestone (Milestones 12–18) owns exactly one `PLAN.md` (work breakdown & checklist) and one `ARCHITECTURE.md` (technical architecture & specifications) located under [`docs/milestones/`](docs/milestones/README.md).
 
 ---
 
-## 1. Danh Mục Các Milestone Tổng Thể
+## 1. Master Milestones Directory
 
-| Milestone | Tên Milestone | Phạm vi & Trạng thái | Tài liệu Kiến trúc & Kế hoạch |
+| Milestone | Milestone Name | Scope & Status | Technical Documents |
 | :---: | :--- | :--- | :---: |
-| **00** | **Kiến trúc Nền tảng (Architecture Foundation)** | **Đã hoàn thành:** 41 Phase lịch sử (Milestones 1–10) + củng cố kiến trúc lõi (Phase 0.0 – 0.9).<br>**Đang mở:** 3 cổng nghiệm thu cuối của Phase 0.10. | [Kế hoạch](docs/phases/PHASE_00_FOUNDATION/PLAN.md) · [Kiến trúc](docs/phases/PHASE_00_FOUNDATION/ARCHITECTURE.md) |
-| **01** | **Nền tảng Render & Vật liệu (Render & Material Foundation)** | **Đã hoàn thành:** Đa luồng Render Thread, VRAM Aliasing (Phase 1.1) và Material Compiler DXC (Phase 1.2).<br>**Tạm hoãn:** Triển khai render song song mặc định (Phase 1.3). | [Kế hoạch](docs/phases/PHASE_01_RENDER_FOUNDATION/PLAN.md) · [Kiến trúc](docs/phases/PHASE_01_RENDER_FOUNDATION/ARCHITECTURE.md) |
-| **02** | **Chiếu sáng & Vật liệu Điện ảnh (Lighting & Material Fidelity)** | **Đã hoàn thành:** CSM, HDR/IBL, Bóng đổ Point/Spot, Sửa Viewport (Phase 2.1 – 2.3).<br>**Hàng đợi:** GGX Kulla-Conty, GTAO, Froxel Fog, DDGI Probes, LTC, TAA. | [Kế hoạch](docs/phases/PHASE_02_LIGHTING_MATERIALS/PLAN.md) · [Kiến trúc](docs/phases/PHASE_02_LIGHTING_MATERIALS/ARCHITECTURE.md) |
-| **03** | **Hình học & Tầm nhìn (Geometry & Visibility)** | **Đề xuất:** Đường ống autoLOD ngoại tuyến qua `meshoptimizer` (Phase 3.1) và Virtual Geometry Nanite-style với Task/Mesh Shaders (Phase 3.2 – 3.5). | [Kế hoạch](docs/phases/PHASE_03_GEOMETRY_VISIBILITY/PLAN.md) · [Kiến trúc](docs/phases/PHASE_03_GEOMETRY_VISIBILITY/ARCHITECTURE.md) |
-| **04** | **Quy mô Mô phỏng (Simulation Scale)** | **Đề xuất:** Phân tầng tầm quan trọng Significance, lập lịch so le modulo, lưới không gian, vùng ngủ đông 0% CPU, nội suy chuyển động (Phase 4.1 – 4.4). | [Kế hoạch](docs/phases/PHASE_04_SIMULATION_SCALE/PLAN.md) · [Kiến trúc](docs/phases/PHASE_04_SIMULATION_SCALE/ARCHITECTURE.md) |
-| **05** | **Công cụ Studio & Sáng tạo (Content & Authoring Tools)** | **Đề xuất:** Animation Studio (Phase 5.1), VFX Studio & GPU Particles (Phase 5.2), Material Graph UI Canvas (Phase 5.3), Cooker & Pak (Phase 5.4). | [Kế hoạch](docs/phases/PHASE_05_CONTENT_TOOLING/PLAN.md) · [Kiến trúc](docs/phases/PHASE_05_CONTENT_TOOLING/ARCHITECTURE.md) |
-| **06** | **Hiệu năng & Phát hành (Performance & Rollout)** | **Đề xuất:** Ma trận benchmark chuẩn hóa, tương đương hình ảnh đa backend PSNR/SSIM, phục hồi lỗi mất thiết bị GPU và nghiệm thu phát hành (Phase 6.1 – 6.6). | [Kế hoạch](docs/phases/PHASE_06_ROLLOUT/PLAN.md) · [Kiến trúc](docs/phases/PHASE_06_ROLLOUT/ARCHITECTURE.md) |
+| **01** | **Core Foundations & Physics Integration** | **Completed:** Physics engine setup, UI telemetry overlay, scene transforms, vehicle mechanics (Phases 1–4). | Historical Milestone |
+| **02** | **Simulation Lifecycle & Viewport Tooling** | **Completed:** Play/Pause/Stop simulation loop, 3D viewport navigation, transform gizmos, obstacle playground (Phases 5–7). | Historical Milestone |
+| **03** | **Asset Pipeline, Serialization & Scripting** | **Completed:** Assimp asset ingest, JSON serialization, PBR materials, `.axle` assemblies, C++ scripting (Phases 8–13). | Historical Milestone |
+| **04** | **Scene Graph, Hot-Reloading & Multithreading** | **Completed:** EnTT ECS hierarchy, hierarchy tree UI, reflection inspector, script hot-reload DLL, enkiTS jobs (Phases 14–19). | Historical Milestone |
+| **05** | **Component Architecture & Standalone Runtime** | **Completed:** Component vehicle architecture, decoupled renderer, standalone `AxleRuntime.exe`, VFS cooker (Phases 20–23). | Historical Milestone |
+| **06** | **High-Fidelity Rendering, PBR & Audio** | **Completed:** Material flyweight, soft shadows, HDR skybox IBL, miniaudio 3D spatial acoustics (Phases 24–28). | Historical Milestone |
+| **07** | **Terrain, Spline Tracks & Skeletal Systems** | **Completed:** Spline track & terrain modular plugins, skeletal animation CPU evaluation (Phases 29–30). | Historical Milestone |
+| **08** | **Visual Effects, Modern RHI & Cross-Platform** | **Completed:** CPU particle system, NVIDIA NRI modern RHI (D3D12/Vulkan), Forward+ viewport, Canvas2D UI (Phases 31–34). | Historical Milestone |
+| **09** | **Production Hardening & Unified Asset Architecture** | **Completed:** Vulkan 1.3 backend parity, unified `.axleasset` format, raw media ingestion pipeline (Phases 35–37). | Historical Milestone |
+| **10** | **Complete Visual Tooling Ecosystem Foundations** | **Completed:** Visual material studio, embedded 3D material preview, dynamic HLSL shader reflection (Phases 38–40). | Historical Milestone |
+| **11** | **Modern RHI-Primary Rendering Foundation** | **Completed:** RHI-primary rendering architecture, GPU safety, device lifetime management (Phase 41). | Historical Milestone |
+| **12** | **Architecture Foundation & Boundary Hardening** | **Completed:** 0-allowance layer enforcement, enkiTS multithreading, Jolt physics decoupling, NRI device epochs, `RenderWorld` snapshot, Plugin SDK, VFS identity, pak cooker.<br>**Open Gates:** 3 final release acceptance gates (Phase 42.10). | [Plan](docs/milestones/MILESTONE_12_ARCHITECTURE_FOUNDATION/PLAN.md) · [Architecture](docs/milestones/MILESTONE_12_ARCHITECTURE_FOUNDATION/ARCHITECTURE.md) |
+| **13** | **Render Concurrency & Shader Compilation Pipeline** | **Completed:** Decoupled Render Thread, transient VRAM memory aliasing, DXC Material Graph compiler & pipeline caching (Phases 43.1–43.2).<br>**Deferred:** Asynchronous parallel command recording rollout (Phase 43.3). | [Plan](docs/milestones/MILESTONE_13_RENDER_CONCURRENCY/PLAN.md) · [Architecture](docs/milestones/MILESTONE_13_RENDER_CONCURRENCY/ARCHITECTURE.md) |
+| **14** | **Lighting & Material Fidelity** | **Completed:** CSM 4-cascade, HDR/IBL, Point/Spot local shadow atlas, grounded fixtures (Phases 44.1–44.3).<br>**Queued:** Kulla-Conty GGX, GTAO, Froxel Volumetric Fog, DDGI Probes, LTC Area Lights, TAA, SSS (Phases 44.4–44.17). | [Plan](docs/milestones/MILESTONE_14_LIGHTING_MATERIALS/PLAN.md) · [Architecture](docs/milestones/MILESTONE_14_LIGHTING_MATERIALS/ARCHITECTURE.md) |
+| **15** | **Scalable Geometry & Virtual Geometry** | **Proposed:** Offline algorithmic autoLOD pipeline via `meshoptimizer` (Phase 45.1) and Nanite-style continuous virtual geometry with Task/Mesh Shaders (Phase 45.2). | [Plan](docs/milestones/MILESTONE_15_GEOMETRY_VISIBILITY/PLAN.md) · [Architecture](docs/milestones/MILESTONE_15_GEOMETRY_VISIBILITY/ARCHITECTURE.md) |
+| **16** | **Simulation Scale & Logic LOD** | **Proposed:** Significance evaluation tiers, deterministic staggered modulo scheduler, spatial hash grid, 0% CPU spatial dormancy bubble, kinematic physics bypass (Phases 46.1–46.4). | [Plan](docs/milestones/MILESTONE_16_SIMULATION_SCALE/PLAN.md) · [Architecture](docs/milestones/MILESTONE_16_SIMULATION_SCALE/ARCHITECTURE.md) |
+| **17** | **Content Authoring Studios & Tooling** | **Proposed:** Skeletal Animation Studio (Phase 47.1), Visual FX Studio & GPU Particles (Phase 47.2), Material Graph UI Canvas (Phase 47.3), Packaging Cooker & Asset Linter (Phase 47.4). | [Plan](docs/milestones/MILESTONE_17_CONTENT_TOOLING/PLAN.md) · [Architecture](docs/milestones/MILESTONE_17_CONTENT_TOOLING/ARCHITECTURE.md) |
+| **18** | **Performance Profiling, Parity & Master Rollout** | **Proposed:** Standardized benchmark matrix, automated multi-backend image parity (PSNR/SSIM), GPU timestamp telemetry, simulated device-loss recovery, final production scorecard (Phases 48.1–48.6). | [Plan](docs/milestones/MILESTONE_18_PERFORMANCE_ROLLOUT/PLAN.md) · [Architecture](docs/milestones/MILESTONE_18_PERFORMANCE_ROLLOUT/ARCHITECTURE.md) |
 
 ---
 
-## 2. Toàn Bộ Chi Tiết: Những Việc Đã Từng Làm vs Những Việc Chưa Làm
+## 2. Complete Exhaustive Inventory: Completed vs. Pending Work
 
-### Phần A: Những Việc ĐÃ TỪNG LÀM (`[x]` Hoàn thành)
+### Part A: Completed Work (`[x]`)
 
-#### Milestone 00: Kiến trúc Nền tảng
-- [x] **41 Phase lịch sử (Giai đoạn tiền đề Milestones 1 – 10)**:
-  - *Milestone 1*: UI/Telemetry (Phase 1), Jolt Physics (Phase 2), Scene & Transform (Phase 3), Vehicle prototype (Phase 4).
-  - *Milestone 2*: Editor Lifecycle Play/Pause (Phase 5), 3D Viewport & Gizmo (Phase 6), Obstacle Playground (Phase 7).
-  - *Milestone 3*: C++ Scripting (Phase 8), Assimp Asset Ingest (Phase 9), JSON Scene Serializer (Phase 10), Cook-Torrance PBR (Phase 11), Prefab Assembly `.axle` (Phase 12), Mechanical Assembly (Phase 13).
-  - *Milestone 4*: EnTT ECS & Scene Graph (Phase 14), Hierarchy Tree UI (Phase 15), Properties Reflection (Phase 16), Content Browser (Phase 17), Drag-Drop & Script Hot-Reload DLL (Phase 18), enkiTS Multithreaded Job System (Phase 19).
-  - *Milestone 5*: Component-Driven Architecture (Phase 20), Decoupled Scene Renderer (Phase 21), Standalone `AxleRuntime.exe` (Phase 22), Asset Packaging & VFS (Phase 23).
-  - *Milestone 6*: Decoupled Material Flyweight (Phase 24), AAA Soft Shadows (Phase 25), HDR IBL Skybox (Phase 26), miniaudio 3D Spatial Audio (Phase 27), Gameplay Polish (Phase 28).
-  - *Milestone 7*: Spline & Terrain Modular Plugins (Phase 29), Skeletal Animation CPU Evaluation (Phase 30).
-  - *Milestone 8*: Advanced Particle VFX System (Phase 31), NVIDIA NRI Modern RHI (Phase 32), Forward+ Multi-Backend Viewport (Phase 33), Declarative Canvas2D UI (Phase 34).
-  - *Milestone 9*: Vulkan 1.3 Backend Parity (Phase 35), Unified `.axleasset` Architecture (Phase 36), Raw Media Ingestion (Phase 37).
-  - *Milestone 10*: Visual Material Studio & Dynamic HLSL Reflection (Phases 38, 38.1, 38.2).
-- [x] **Phase 0.0 (OPT-00)**: Tách mã nguồn Vehicle cũ thành Plugin độc lập, bảo toàn dữ liệu scene cũ.
-- [x] **Phase 0.1 (OPT-01)**: Bộ kiểm tra kiến trúc nghiêm ngặt `check_architecture.py` (chính sách Zero-Allowance, kiểm tra 576+ file).
-- [x] **Phase 0.2 (OPT-02)**: Chuẩn hóa hệ thống đa luồng `enkiTS` (`JobSystem`), cô lập worker an toàn.
-- [x] **Phase 0.3 (OPT-03)**: Phân định ranh giới Jolt Physics 3D, tách biệt giao diện debug `Axle::PhysicsDebug`.
-- [x] **Phase 0.4 (OPT-04)**: Nền tảng thiết bị Modern RHI (D3D12/Vulkan qua NRI), quản lý epoch và vòng đời tài nguyên GPU.
-- [x] **Phase 0.5 (OPT-05)**: Đường ống render thống nhất: CPU snapshot bất biến `RenderWorld`, `RenderService` và `RenderGraph`.
-- [x] **Phase 0.6 (OPT-06)**: Kiến trúc Plugin SDK, nạp động DLL và lifecycle hooks (`OnLoad`/`OnUnload`).
-- [x] **Phase 0.7 (OPT-07)**: File mô tả dự án `.axleproject`, tự động phát hiện runtime.
-- [x] **Phase 0.8 (OPT-08)**: Quản lý tài sản VFS, định danh nhúng `# AxleFileIdentity: 1 <UUID>` (loại bỏ hoàn toàn file rác `.meta`).
-- [x] **Phase 0.9 (OPT-09)**: Cooker đóng gói độc lập xuất file nén `Data.axlepak`.
+#### Historical Foundations (Milestones 01 through 11)
+- [x] **Milestone 01: Core Foundations & Physics Integration** (Phases 1–4): ImGui debug overlays, Jolt physics initial world setup, transform hierarchies, and vehicle mechanics.
+- [x] **Milestone 02: Simulation Lifecycle & Viewport Tooling** (Phases 5–7): Play/Pause/Stop simulation states, docking workspace, ImGuizmo gizmos, and vehicle test playground.
+- [x] **Milestone 03: Asset Pipeline, Serialization & Scripting** (Phases 8–13): Native C++ game scripts, Assimp mesh loading, JSON serializer, Cook-Torrance PBR, `.axle` prefabs, and mechanical assembly bindings.
+- [x] **Milestone 04: Scene Graph, Hot-Reloading & Multithreading** (Phases 14–19): EnTT ECS parent-child hierarchy, scene tree UI, property reflection, content browser, live-coding C++ hot-reload DLLs, and enkiTS job scheduler.
+- [x] **Milestone 05: Component Architecture & Standalone Runtime** (Phases 20–23): Modular vehicle components, decoupled scene renderer, standalone lightweight `AxleRuntime.exe`, and `.axlepak` VFS cooker.
+- [x] **Milestone 06: High-Fidelity Rendering, PBR & Audio** (Phases 24–28): Flyweight material descriptors, soft shadows (PCSS), HDR skybox cubemap IBL, miniaudio 3D spatial acoustics, and vehicle cockpit HUD.
+- [x] **Milestone 07: Terrain, Spline Tracks & Skeletal Systems** (Phases 29–30): Spline track & terrain modular plugins, basic skeletal bone hierarchy evaluation.
+- [x] **Milestone 08: Visual Effects, Modern RHI & Cross-Platform** (Phases 31–34): CPU particle system, NVIDIA NRI modern RHI (D3D12/Vulkan), Forward+ viewport, and declarative Canvas2D UI.
+- [x] **Milestone 09: Production Hardening & Unified Asset Architecture** (Phases 35–37): High-performance Vulkan 1.3 backend parity, unified `.axleasset` format, and raw media asset ingestion.
+- [x] **Milestone 10: Complete Visual Tooling Ecosystem Foundations** (Phases 38–40): Visual material studio, embedded 3D material preview, and dynamic HLSL shader reflection.
+- [x] **Milestone 11: Modern RHI-Primary Rendering Foundation** (Phase 41): RHI-primary rendering architecture, GPU safety, device epochs, and lifetime management.
 
-#### Milestone 01: Nền tảng Render & Vật liệu
-- [x] **Phase 1.1 (OPT-11)**: Concurrency Render Thread và Transient VRAM Memory Aliasing (gói `C11-01` đến `C11-07`).
-- [x] **Phase 1.2 (OPT-12)**: Trình biên dịch Material Graph DXC (HLSL/DXIL/SPIR-V), Layout Cache và cơ chế dự phòng last-known-good (`C12-01` đến `C12-06`).
-
-#### Milestone 02: Chiếu sáng & Vật liệu Điện ảnh (Baseline)
-- [x] **Phase 2.1**: Bóng đổ phân tầng Cascaded Shadow Mapping (CSM 4-cascade, PCF 5x5 trên D3D12/Vulkan) (`C13-01`).
-- [x] **Phase 2.2**: Môi trường HDR & Ánh sáng gián tiếp Split-Sum IBL (Prefilter cubemap, BRDF LUT 2D) (`C13-02`).
-- [x] **Phase 2.3**: Bóng đổ cục bộ Point/Spot Light và căn chỉnh Viewport Fixture (winding order hình cầu, mặt sàn $Y=0.0$, kết nối `Studio_Softbox.hdr`).
-
----
-
-### Phần B: Những Việc CHƯA LÀM (`[ ]` Đang chờ / Đề xuất)
-
-#### Milestone 00: Củng cố Kiến trúc (3 Cổng nghiệm thu cuối)
-- [ ] **Phase 0.10 (OPT-10 Open Gates)**:
-  - [ ] Nghiệm thu bản build Release sản phẩm đầy đủ (AxleEditor & AxleRuntime không có cờ gỡ lỗi).
-  - [ ] Stress test phiên xuất gói tài sản độc lập thời gian dài (Detached packaging soak).
-  - [ ] Nghiệm thu tương tác UI thực tế trên cửa sổ native.
-
-#### Milestone 01: Nền tảng Render (Mở rộng)
-- [ ] **Phase 1.3**: Kích hoạt đường ống Render đa luồng song song làm mặc định toàn engine.
-- [ ] **Phase 1.4**: Bộ hạ cấp GLSL 4.50 chuyên dụng cho Material Graph trên OpenGL.
-
-#### Milestone 02: Chiếu sáng & Vật liệu Điện ảnh (Fidelity Roadmap)
-- [ ] **Phase 2.4**: Bù năng lượng phản xạ Multi-Bounce GGX (Kulla-Conty) phục hồi độ sáng kim loại thô.
-- [ ] **Phase 2.5**: Nướng thời gian thực Dynamic Procedural Skybox IBL từ bầu trời khí quyển.
-- [ ] **Phase 2.6**: Mở rộng góc specular mặt trời ($0.53^\circ$) làm dịu đốm lóa.
-- [ ] **Phase 2.7**: GTAO (Ground-Truth Ambient Occlusion) nửa độ phân giải với bộ lọc song phương.
-- [ ] **Phase 2.8**: Screen-Space Contact Shadows (bóng đổ tiếp xúc góc hẹp chân tường/vật thể).
-- [ ] **Phase 2.9**: Tạo Hi-Z Depth Pyramid & Screen-Space Reflections (SSR) phản chiếu mặt sàn.
-- [ ] **Phase 2.10**: Reflection Probes cục bộ có bù thị sai (Parallax-corrected local cubemaps).
-- [ ] **Phase 2.11**: Đèn diện tích LTC (Rect & Disk Studio Area Lights).
-- [ ] **Phase 2.12**: Sương mù thể tích Froxel & God Rays ($160 \times 90 \times 64$, trước đây là C13-04).
-- [ ] **Phase 2.13**: Chiếu sáng gián tiếp động DDGI Probes với Chebyshev visibility (trước đây là C13-05).
-- [ ] **Phase 2.14**: Hậu kỳ điện ảnh (Kawase Bloom, Histogram Auto-Exposure, ACES, trước đây là C13-06).
-- [ ] **Phase 2.15**: Khử răng cưa thời gian TAA (Halton jitter, reprojection, YCoCg clamping).
-- [ ] **Phase 2.16**: Mô hình vật liệu phức tạp (SSS xuyên sáng da/sáp, Sheen sợi vải nhung, Beer-Lambert hấp thụ thủy tinh & tán sắc ánh sáng).
-- [ ] **Phase 2.17**: Nghiệm thu ngân sách GPU $3.5\text{ms} - 5.0\text{ms}$ trên GPU phổ thông (trước đây là C13-07).
-
-#### Milestone 03: Hình học & Tầm nhìn (Nanite-style Geometry)
-- **Phase 3.1: Đường ống autoLOD ngoại tuyến qua `meshoptimizer`** (trước đây là OPT-16):
-  - [ ] `C16-01`: Tự động giảm đa giác sinh chuỗi LOD0..LOD3 khi import mesh (LOD0 100%, LOD1 50%, LOD2 25%, LOD3 10%).
-  - [ ] `C16-02`: Ngưỡng tỷ lệ bao phủ màn hình & dither cross-fading tránh pop hình.
-  - [ ] `C16-03`: Chọn LOD tối giản cho bóng đổ shadow caster & cache invalidation.
-- **Phase 3.2: Virtual Geometry & GPU Culling** (trước đây là OPT-14):
-  - [ ] `C14-01`: Bộ đệm GPU Instance Buffer thống nhất (Transform, Bounds, Material ID, Visibility Flags).
-  - [ ] `C14-02`: GPU-driven culling (frustum, cone, Hi-Z occlusion) & lệnh vẽ gián tiếp `ExecuteIndirect` / `vkCmdDrawIndexedIndirect`.
-  - [ ] `C14-03`: Tạo Meshlet asset ($\\le 64$ đỉnh, $\\le 126$ tam giác) & nón bao định hướng qua `meshopt_buildMeshlets`.
-  - [ ] `C14-04`: Phân cấp Cluster DAG & khóa vòng biên chống nứt vỡ hình học 100%.
-  - [ ] `C14-05`: Phần cứng Task & Mesh Shaders trên D3D12/Vulkan.
-  - [ ] `C14-06`: Tự động phát hiện phần cứng & fallback sang GPU culling vẽ chỉ số cổ điển.
-  - [ ] `C14-07`: Nghiệm thu quy mô cảnh dày đặc ($100,000+$ instances, $50\text{M}+$ polygons).
-
-#### Milestone 04: Quy mô Mô phỏng (Simulation Scale & Logic LOD)
-*(Trước đây là OPT-15)*
-- **Phase 4.1: Định danh Tick & Phân tầng tầm quan trọng**:
-  - [ ] `C15-01`: Tick counter đơn điệu trong `SimulationClock`.
-  - [ ] `C15-02`: Phân tầng cự ly camera (Tier 1 `< 20m` @ 60/144 Hz, Tier 2 `20-100m` @ 15-30 Hz, Tier 3 `100-250m` @ 1-2 Hz, Tier 4 `> 250m` Dormant).
-- **Phase 4.2: Lập lịch so le & Chỉ mục không gian**:
-  - [ ] `C15-03`: Lập lịch chia bucket modulo `(Tick + ID) % Interval == 0` giữ ổn định frame-time.
-  - [ ] `C15-04`: Lưới băm không gian động 3D ($64\text{m} \times 64\text{m}$) và chuyển dịch thực thể.
-- **Phase 4.3: Ngủ đông không gian & Nội suy chuyển động**:
-  - [ ] `C15-05`: Vùng ngủ đông `DormantTag` tiêu tốn 0.000% CPU, đánh thức theo sự kiện/va chạm.
-  - [ ] `C15-06`: Nội suy vị trí hiển thị mượt mà cho các thực thể tick chậm khi render.
-- **Phase 4.4: Tối ưu vật lý & hoạt ảnh**:
-  - [ ] `C15-07`: Gợi ý ngủ đông và chuyển sang chuyển động động học (kinematic) cho Jolt Physics.
-  - [ ] `C15-08`: API truy vấn cấp độ quan trọng cho plugin.
-  - [ ] `C15-09`: Tối ưu tần số cập nhật xương (Animation URO) & Bone LOD (LOD0 full, LOD1 chính, LOD2 khớp gốc).
-
-#### Milestone 05: Công cụ Studio & Sáng tạo (Content & Authoring Tools)
-- **Phase 5.1: Skeletal Animation Studio** (trước đây là OPT-17 / Phase 40):
-  - [ ] `C17-01`: Trình import FBX/glTF, rig tham chiếu, giữ nguyên bind pose cho kênh không key.
-  - [ ] `C17-02`: Dope Sheet Timeline, chỉnh sửa key TRS, copy/paste, undo/redo.
-  - [ ] `C17-03`: State Machine Controller, tham số (Float/Int/Bool/Trigger), Blend Space 1D/2D liên tục pha.
-  - [ ] `C17-04`: Đưa 128 ma trận xương lên GPU Structured Buffer trên D3D12/Vulkan.
-  - [ ] `C17-05`: Bone Sockets gắn vũ khí, mũ giáp, đạo cụ vào xương.
-  - [ ] `C17-06`: Foot IK 2 khớp bám mặt đất chống trượt chân.
-  - [ ] `C17-07`: Additive Animation & Upper-body mask cho phép vừa chạy vừa bắn/nạp đạn.
-- **Phase 5.2: Visual FX Studio** (trước đây là OPT-18 / Phase 39):
-  - [ ] `C18-01`: Document đa emitter độc lập `.axlevfx`, viewport preview cô lập hoàn toàn với scene.
-  - [ ] `C18-02`: Chế độ tham số nâng cao (Constant, Two Constants, Curve, Two Curves, Gradient).
-  - [ ] `C18-03`: Module phát sinh theo quãng đường, trễ xuất hiện, prewarm, lực theo trục, chuyển động quỹ đạo.
-  - [ ] `C18-04`: Dải vệt hạt Ribbon & Trail với lịch sử hạt giới hạn.
-  - [ ] `C18-05`: Hạt mô hình 3D (Instanced Mesh Particles).
-  - [ ] `C18-06`: Va chạm mặt sàn/vật cản & kích hoạt sub-emitter khi sinh/chạm/chết.
-  - [ ] `C18-07`: Trộn khung hình phụ Flipbook sub-frame mượt mà.
-  - [ ] `C18-08`: Mô phỏng hạt bằng Compute Shader trên GPU & Visual Effect Graph.
-- **Phase 5.3: Visual Material Graph UI & Công cụ Scene** (trước đây là OPT-19 / Phase 38.3):
-  - [ ] `C19-01`: Canvas nối node trực quan trong Editor (`imnodes`), biên dịch thời gian thực qua DXC.
-  - [ ] `C19-02`: Node vật liệu cao cấp (Clearcoat, Anisotropy, SSS, Refraction & Dispersion).
-  - [ ] `C19-03`: Gizmo trực quan đặt Reflection Probe trong scene & nướng cubemap.
-  - [ ] `C19-04`: Decal Volume chiếu vết đạn, vệt lốp xe, bùn đất.
-  - [ ] `C19-05`: Prefab Variant & so sánh thuộc tính diff trực quan.
-- **Phase 5.4: Bộ công cụ đóng gói & kiểm tra chất lượng** (trước đây là OPT-Tools):
-  - [ ] `CTools-01`: Cooker đóng gói duyệt cây phụ thuộc, nén texture BCn, biên dịch trước shader cache.
-  - [ ] `CTools-02`: Đóng gói toàn bộ tài sản vào file nén nguyên khối `Data.axlepak`.
-  - [ ] `CTools-03`: Asset Linter chạy dòng lệnh kiểm tra UUID mồ côi, texture thiếu hoặc quá khổ.
-
-#### Milestone 06: Hiệu năng & Phát hành (Performance & Rollout)
-*(Trước đây là OPT-20)*
-- [ ] **Phase 6.1**: Ma trận benchmark chuẩn hóa (`MaterialReference`, `CarTest`, `OffRoadTrack`, cảnh đa giác dày).
-- [ ] **Phase 6.2**: Kiểm thử tương đương hình ảnh đa backend PSNR, SSIM, sai số kênh màu cực đại.
-- [ ] **Phase 6.3**: Đo đạc GPU timestamp telemetry (G-Buffer, Shadow, Lighting, Post-Process) & percentiles p50/p95/p99.
-- [ ] **Phase 6.4**: Kiểm thử độ tin cậy, stress resize cửa sổ, phục hồi lỗi mất thiết bị GPU (device loss).
-- [ ] **Phase 6.5**: Dọn dẹp code shim tạm thời, tắt overhead debug trên bản Release.
-- [ ] **Phase 6.6**: Nghiệm thu toàn bộ ma trận (Debug/Release, D3D12/Vulkan/OpenGL) và phát hành chính thức.
+#### Modern Architectural Stabilization (Milestones 12 through 14)
+- [x] **Milestone 12: Architecture Foundation & Boundary Hardening** (Phase 42, formerly OPT-00..OPT-10):
+  - [x] **Phase 42.0**: Decoupled legacy vehicle code into an optional plugin; verified legacy data preservation.
+  - [x] **Phase 42.1**: Automated architectural boundary checker (`scripts/check_architecture.py`) enforcing zero baseline allowances across 576+ source files and 25 CMake targets.
+  - [x] **Phase 42.2**: Threading & enkiTS task scheduler standardization (`JobSystem`) with verified fiber/worker safety.
+  - [x] **Phase 42.3**: Jolt Physics boundary decoupling and `Axle::PhysicsDebug` interface extraction.
+  - [x] **Phase 42.4**: Modern RHI device and GPU epoch lifetime management on Direct3D 12 and Vulkan.
+  - [x] **Phase 42.5**: Unified rendering pipeline: immutable `RenderWorld` CPU snapshot, `RenderService`, and sequential `RenderGraph`.
+  - [x] **Phase 42.6**: Modular Plugin SDK with clean C-ABI boundary and dynamic DLL loading.
+  - [x] **Phase 42.7**: Plugin project descriptor (`.axleproject`) and dynamic runtime discovery.
+  - [x] **Phase 42.8**: Asset management VFS with embedded sidecar-free identity (`# AxleFileIdentity: 1 <UUID>`).
+  - [x] **Phase 42.9**: Standalone asset packaging cooker generating monolithic `Data.axlepak` containers.
+- [x] **Milestone 13: Render Concurrency & Shader Pipeline** (Phase 43, formerly OPT-11 and OPT-12):
+  - [x] **Phase 43.1**: Decoupled Render Thread concurrency (1-frame latency pipeline) and transient VRAM memory aliasing (`ID3D12Heap` placed resources and Vulkan suballocation, reducing transient VRAM by 40%–60%).
+  - [x] **Phase 43.2**: Versioned Material Graph IR (`.axleasset`), DXC compiler backend generating native DXIL and SPIR-V, pipeline layout caching, and transactional last-known-good reload fallback.
+- [x] **Milestone 14: Lighting & Material Fidelity Baseline** (Phase 44 Baseline, formerly OPT-13 Baseline):
+  - [x] **Phase 44.1**: Cascaded Shadow Mapping (CSM 4-cascade, texel stabilization, PCF 5x5 across D3D12 and Vulkan).
+  - [x] **Phase 44.2**: HDR Environment loading, irradiance convolution, prefilter roughness mip chain, and 2D split-sum BRDF LUT integration.
+  - [x] **Phase 44.3**: Local Light Shadow Atlas (Point/Spot lights) and Viewport Grounded Fixtures (corrected Sphere CCW winding order, grounded floor $Y=0.0$, and connected `Studio_Softbox.hdr`).
 
 ---
 
-## 3. Nguyên Tắc Quản Trị & Thực Thi
+### Part B: Pending Work (`[ ]`)
 
-1. **Thẩm quyền Duy nhất**: `ROADMAP.md` là nguồn thẩm quyền duy nhất về thứ tự thực thi. Khái niệm `OPT` được gộp hoàn toàn vào các **Phase** con thuộc từng **Milestone**.
-2. **Quy tắc 2 Tài liệu**: Mỗi Milestone sở hữu duy nhất một file `PLAN.md` và một file `ARCHITECTURE.md` tại `docs/phases/`.
-3. **Bằng chứng Nghiệm thu**: Mọi kết quả nghiệm thu lưu tại `docs/reviews/`. Tài liệu lịch sử tham chiếu tại `docs/archive/`.
+#### Milestone 12: Architecture Foundation (Final Release Gates)
+- [ ] **Phase 42.10 (Open Release Gates)**:
+  - [ ] Full Release standalone product build verification (`AxleEditor.exe` and `AxleRuntime.exe`).
+  - [ ] Detached export packaging soak stress test.
+  - [ ] Physical interactive UI native verification on OS windows.
+
+#### Milestone 13: Render Concurrency (Extended Rollout)
+- [ ] **Phase 43.3**: Engine-wide asynchronous parallel command recording rollout as the default execution pipeline.
+- [ ] **Phase 43.4**: Dedicated GLSL 4.50 lowering backend for Material Graph on OpenGL compatibility path.
+
+#### Milestone 14: Lighting & Material Fidelity (Cinematic Photorealism Roadmap)
+- [ ] **Phase 44.4**: Multi-Bounce GGX Energy Compensation (Kulla-Conty 2D LUT / analytical term) restoring luster to rough metals.
+- [ ] **Phase 44.5**: Real-time Dynamic Procedural Skybox IBL Bake generating real-time irradiance and prefilter mips from atmospheric skies.
+- [ ] **Phase 44.6**: Sun Angular Radius Specular Expansion ($0.53^\circ$) softening directional sun specular reflection lobes.
+- [ ] **Phase 44.7**: GTAO (Ground-Truth Ambient Occlusion) half-resolution compute pass ($960 \times 540$) with bilateral spatial reconstruction denoiser.
+- [ ] **Phase 44.8**: Screen-Space Contact Shadows raymarching micro-shadows along sun light vectors to eliminate Peter Panning.
+- [ ] **Phase 44.9**: Hi-Z Depth Pyramid Generation and Hi-Z Screen-Space Reflections (SSR) with roughness cone-tracing.
+- [ ] **Phase 44.10**: Parallax-Corrected Local Reflection Probes with smooth falloff and seamless SSR fallback.
+- [ ] **Phase 44.11**: Linearly Transformed Cosines (LTC) Area Lights for rectangular and disk softbox lights.
+- [ ] **Phase 44.12**: Froxel Volumetric Fog & God Rays ($160 \times 90 \times 64$) with in-scattering, Mie phase function, and temporal reprojection.
+- [ ] **Phase 44.13**: Dynamic Diffuse Global Illumination Probes (DDGI) with $32 \times 16 \times 32$ probe grid, dual octahedral atlases, and Chebyshev visibility.
+- [ ] **Phase 44.14**: Film-Grade Post-Processing (Kawase 6-tier Pyramid Bloom, compute log-luminance histogram auto-exposure, ACES tonemapping).
+- [ ] **Phase 44.15**: Temporal Anti-Aliasing (TAA) with Halton sub-pixel jittering, history reprojection, and YCoCg neighborhood clamping.
+- [ ] **Phase 44.16**: Complex Shading Models (Screen-Space Subsurface Scattering / SSS, Charlie Sheen/Velvet for cloth, Beer-Lambert volumetric glass absorption, and Cauchy chromatic dispersion).
+- [ ] **Phase 44.17**: Final Lighting Acceptance maintaining strict $3.5\text{ms} - 5.0\text{ms}$ GPU budget on mainstream PCs (1080p/1440p @ 120–144+ FPS).
+
+#### Milestone 15: Scalable Geometry & Virtual Geometry
+*(Formerly OPT-16 and OPT-14)*
+- **Phase 45.1: Offline autoLOD Pipeline via `meshoptimizer`** (formerly OPT-16):
+  - [ ] `C16-01`: Automated mesh decimation via `meshopt_simplify` producing discrete fallback LOD0..LOD3 chains on asset import.
+  - [ ] `C16-02`: Screen-size metric coverage thresholds and temporal dither cross-fading to eliminate popping.
+  - [ ] `C16-03`: Simplified shadow-caster LOD selection and cooker cache invalidation.
+- **Phase 45.2: Virtual Geometry & Hardware Task/Mesh Shaders** (formerly OPT-14):
+  - [ ] `C14-01`: Unified GPU Instance Buffer (Transform, Bounds, Material ID, Visibility Flags).
+  - [ ] `C14-02`: GPU-Driven Culling (frustum, normal cone, two-phase Hi-Z occlusion) and indirect draw dispatch (`ExecuteIndirect` / `vkCmdDrawIndexedIndirect`).
+  - [ ] `C14-03`: Meshlet asset generation ($\\le 64$ verts, $\\le 126$ tris) via `meshopt_buildMeshlets`, bounding cones, and `.axlebin` format.
+  - [ ] `C14-04`: Cluster DAG hierarchy with locked shared boundary loops guaranteeing 100% watertight, crack-free transitions.
+  - [ ] `C14-05`: Hardware Task & Mesh Shaders evaluating projected screen error and direct rasterization on D3D12/Vulkan.
+  - [ ] `C14-06`: Runtime capability detection querying NRI device features with seamless fallback to GPU-culled discrete LOD indexed draws.
+  - [ ] `C14-07`: Dense-scene scale verification ($100,000+$ instances, $50\text{M}+$ polygons) measuring CPU draw submission elimination.
+
+#### Milestone 16: Simulation Scale & Logic LOD
+*(Formerly OPT-15)*
+- **Phase 46.1: Monotonic Tick Identity & Significance Policy**:
+  - [ ] `C15-01`: Public monotonic tick counter in `SimulationClock`.
+  - [ ] `C15-02`: Significance distance tiers (Tier 1 `< 20m` @ 60/144 Hz, Tier 2 `20-100m` @ 15-30 Hz, Tier 3 `100-250m` @ 1-2 Hz, Tier 4 `> 250m` Dormant) with hysteresis.
+- **Phase 46.2: Staggered Scheduling & Spatial Partitioning**:
+  - [ ] `C15-03`: Deterministic staggered scheduler `(SimulationTick + EntityID) % Interval == 0` distributing non-critical entities across ticks.
+  - [ ] `C15-04`: Dynamic 3D spatial hash grid ($64\text{m} \times 64\text{m}$ cells) with fast entity migration and radius queries.
+- **Phase 46.3: Spatial Dormancy Bubble & Interpolation**:
+  - [ ] `C15-05`: Spatial dormancy bubble (`DormantTag`, 0.000% CPU hibernation) with event-driven wake-up triggers for physics impulses and player proximity.
+  - [ ] `C15-06`: Visual transform interpolation for skipped simulation ticks during `RenderWorld` snapshot extraction.
+- **Phase 46.4: Physics Fast-Path & Animation URO**:
+  - [ ] `C15-07`: Jolt Physics sleeping hints, deactivating distant rigid bodies and switching movement to kinematic translation.
+  - [ ] `C15-08`: Read-only significance and tier query API for external gameplay plugins.
+  - [ ] `C15-09`: Animation Update Rate Optimization (URO) & Bone LOD (LOD0 full skeleton, LOD1 primary bones, LOD2 root/limb pivots) with cached matrix reuse.
+
+#### Milestone 17: Content Authoring Studios & Tooling
+*(Formerly OPT-17, 18, 19, Tools & Historical Phases 38.3, 39, 40)*
+- **Phase 47.1: Skeletal Animation Studio** (formerly OPT-17 / Phase 40):
+  - [ ] `C17-01`: Rig and clip importer (FBX/glTF), procedural reference rig, bind-pose preservation for unkeyed channels, topological joint ordering.
+  - [ ] `C17-02`: Keyframe timeline and Dope Sheet panel in AxleEditor; local TRS key manipulation, box-selection, copy/paste, undo/redo.
+  - [ ] `C17-03`: Animator Controller state machine designer; parameters (Float, Int, Bool, Trigger), serializable transition rules, 1D/2D blend spaces with phase continuity.
+  - [ ] `C17-04`: Skeletal runtime and RHI Structured Buffer streaming (128 bones) on Direct3D 12 and Vulkan.
+  - [ ] `C17-05`: Sockets and bone attachments for weapons, helmets, and equipable props.
+  - [ ] `C17-06`: Procedural Foot IK and ground collision snapping to eliminate foot sliding.
+  - [ ] `C17-07`: Additive animation layers and upper-body masks for locomotion + actions.
+- **Phase 47.2: Visual FX Studio** (formerly OPT-18 / Phase 39):
+  - [ ] `C18-01`: Standalone `.axlevfx` document model with multi-emitter persistence; isolated preview viewport simulation.
+  - [ ] `C18-02`: Advanced parameter modes: Constant, Two Constants, Curve, Two Curves, Color/Alpha gradients.
+  - [ ] `C18-03`: Rate over distance (vehicle trails), start delay, prewarm, per-axis velocity/force over lifetime, orbital motion, emitter-motion inheritance.
+  - [ ] `C18-04`: Ribbon & trail emitters with bounded history tracking and dynamic quad strip generation.
+  - [ ] `C18-05`: Instanced 3D mesh particles with material overrides.
+  - [ ] `C18-06`: World collision against ground planes and mesh colliders; sub-emitter event triggers on birth, collision, death.
+  - [ ] `C18-07`: Flipbook sub-frame motion blending for smoke and fire sheets.
+  - [ ] `C18-08`: GPU compute particle simulation and Visual Effect Graph with indirect draws.
+- **Phase 47.3: Visual Material Graph UI & Scene Tooling** (formerly OPT-19 / Phase 38.3):
+  - [ ] `C19-01`: Interactive node canvas in AxleEditor (`imnodes`), real-time AST lowering to HLSL via DXC with live shader compiler error reporting.
+  - [ ] `C19-02`: Advanced surface nodes (Clearcoat, Anisotropy, Subsurface Scattering, Refraction with Cauchy Dispersion).
+  - [ ] `C19-03`: Scene-placed box and sphere Reflection Probe volumes with live cubemap baking.
+  - [ ] `C19-04`: Decal volumes and projected textures for bullet marks, tire tracks, and grime.
+  - [ ] `C19-05`: Prefab variant authoring and visual property diffing.
+- **Phase 47.4: Packaging Cooker & Diagnostic Tooling** (formerly OPT-Tools):
+  - [ ] `CTools-01`: Standalone asset cooker traversing dependency trees, compressing textures to BCn, pre-warming shader caches.
+  - [ ] `CTools-02`: Monolithic and chunked `Data.axlepak` archive generation.
+  - [ ] `CTools-03`: Headless CI asset linter detecting dangling UUIDs, missing textures, and uncompressed assets.
+
+#### Milestone 18: Performance Profiling, Parity & Master Rollout
+*(Formerly OPT-20)*
+- [ ] **Phase 48.1**: Standardized benchmark matrix (`MaterialReference`, `CarTest`, `OffRoadTrack`, dense geometry fixture) at 1080p, 1440p, 4K across quality tiers.
+- [ ] **Phase 48.2**: Cross-backend image parity verification (automated PSNR, SSIM, maximum channel error across D3D12, Vulkan, OpenGL).
+- [ ] **Phase 48.3**: GPU timestamp query telemetry (G-Buffer, Shadow Depth, Lighting, Post-Processing) and CPU frame-time percentiles (p50, p95, p99).
+- [ ] **Phase 48.4**: Reliability, window resize, fullscreen toggle, DPI scaling, and simulated GPU device-loss recovery stress testing.
+- [ ] **Phase 48.5**: Cutover, cleanup of temporary fallback shims, and disabling debug profiling overhead in Release builds.
+- [ ] **Phase 48.6**: Master multi-configuration acceptance (Debug/Release, D3D12/Vulkan/OpenGL) and final production scorecard closure.
+
+---
+
+## 3. Governance & Contribution Principles
+
+1. **Single Source of Truth**: `ROADMAP.md` is the only authoritative execution sequence. The former `OPT` construct has been unified into **Phases** organized under **Milestones 01 through 18**.
+2. **Two-Document Rule**: Each active technical Milestone (Milestones 12–18) owns exactly one `PLAN.md` and one `ARCHITECTURE.md` under [`docs/milestones/`](docs/milestones/README.md).
+3. **Verification Evidence**: All review reports and test evidence are archived under [`docs/reviews/`](docs/reviews/). Historical planning references are archived under [`docs/archive/`](docs/archive/).

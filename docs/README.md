@@ -17,8 +17,8 @@ plan and architecture pair for every active Phase.
 ## Documentation roles
 
 - `ROADMAP.md` at the repository root is the single task system.
-- `docs/phases/*/PLAN.md` tracks progress and review.
-- `docs/phases/*/ARCHITECTURE.md` records target architecture and technical design.
+- `docs/milestones/*/PLAN.md` tracks progress and review.
+- `docs/milestones/*/ARCHITECTURE.md` records target architecture and technical design.
 - `docs/reviews/` records evidence for a specific commit and scope.
 - `docs/archive/` preserves historical context without creating active work.
 

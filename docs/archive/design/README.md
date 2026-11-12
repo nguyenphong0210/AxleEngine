@@ -33,6 +33,21 @@ embedded prompts do not release implementation; recheck current source first. Ag
 | [VFX Editor authoring guide](deferred/VFX_EDITOR_AUTHORING_GUIDE.md) | Deferred feature plan/reference |
 | [Phase 39: VFX Editor Completion Plan](deferred/VFX_PHASE_39_COMPLETION_PLAN.md) | Deferred feature plan/reference |
 | [VFX feature expansion backlog](deferred/VFX_UNITY_FEATURE_BACKLOG.md) | Deferred feature plan/reference |
+| [OPT-11: C11-04 Hybrid Implementation Plan](deferred/OPT_11_C11_04_HYBRID_IMPLEMENTATION_PLAN.md) | Historical task implementation plan |
+| [OPT-11: C11-05 Safety Plan](deferred/OPT_11_C11_05_SAFETY_PLAN.md) | Historical safety and hazard mitigation plan |
+| [OPT-11: C11-06 Stress Plan](deferred/OPT_11_C11_06_STRESS_PLAN.md) | Historical stress test plan |
+| [OPT-11: C11-07 Acceptance Plan](deferred/OPT_11_C11_07_ACCEPTANCE_PLAN.md) | Historical acceptance plan |
+| [OPT-11: Execution Plan](deferred/OPT_11_EXECUTION_PLAN.md) | Historical OPT-11 package execution breakdown |
+| [OPT-13: C13-01 Execution Plan](deferred/OPT_13_C13_01_EXECUTION_PLAN.md) | Historical OPT-13 package execution breakdown |
+| [OPT-13: C13-02 Execution Plan](deferred/OPT_13_C13_02_EXECUTION_PLAN.md) | Historical OPT-13 package execution breakdown |
+| [OPT-13: Local Shadows Plan](deferred/OPT_13_LOCAL_SHADOWS_PLAN.md) | Historical local shadows plan |
+| [EnTT and enkiTS Refactor Plan](deferred/ENTT_ENKITS_REFACTOR_PLAN.md) | Historical ECS and threading refactor plan |
+| [Plugin System Implementation Guide](deferred/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | Historical plugin implementation guide |
+| [Plugin System Implementation Plan](deferred/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | Historical plugin implementation plan |
+| [RHI Primary Renderer Implementation Guide](deferred/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md) | Historical RHI renderer implementation guide |
+| [RHI Primary Renderer Implementation Plan](deferred/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) | Historical RHI renderer implementation plan |
+| [Scripting and Canvas Architecture Plan](deferred/SCRIPTING_AND_CANVAS_ARCHITECTURE_PLAN.md) | Historical visual scripting plan |
+| [Post-OPT10 Feasibility Analysis](deferred/POST_OPT10_FEASIBILITY.md) | Historical feasibility analysis |
 
 ## Delivery and review reports
 
@@ -55,6 +70,11 @@ must not be marked complete merely because their documents moved here.
 | [Material Phase 38.3 acceptance report](reports/MATERIAL_PHASE_38_3_ACCEPTANCE_REPORT.md) | Historical evidence/handoff; consult the report for exact acceptance limits |
 | [VEHICLE-RETIREMENT Delivery Report](reports/VEHICLE_RETIREMENT_DELIVERY.md) | Delivered; [OPT-00 review](../../reviews/OPT_00_VEHICLE_RETIREMENT_REVIEW.md) requires corrections |
 | [Phase 39 follow-up review and acceptance](reports/VFX_PHASE_39_REVIEW_AND_ACCEPTANCE_REPORT.md) | Historical evidence/handoff; consult the report for exact acceptance limits |
+| [OPT-11: C11-04 Delivery Report](reports/OPT_11_C11_04_DELIVERY.md) | Delivered in commit `8d6ec46` |
+| [OPT-11: C11-05.1 Delivery Report](reports/OPT_11_C11_05_1_DELIVERY.md) | Delivered in commit `64cbe39` |
+| [OPT-11: C11-05 Delivery Report](reports/OPT_11_C11_05_DELIVERY.md) | Delivered in commit `26ff581` |
+| [OPT-11: C11-06 Delivery Report](reports/OPT_11_C11_06_DELIVERY.md) | Delivered in commit `5e4b789` |
+| [Sandbox Viewport Rendering Diagnosis](reports/SANDBOX_VIEWPORT_RENDERING_DIAGNOSIS.md) | Diagnosis report for viewport rendering |
 
 ## Relocation and historical paths
 

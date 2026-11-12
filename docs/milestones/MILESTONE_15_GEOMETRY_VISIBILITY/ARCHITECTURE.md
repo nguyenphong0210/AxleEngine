@@ -6,7 +6,7 @@ Phase 03 establishes scalable, high-throughput geometry rendering for AxleEngine
 - **Tier 1 (OPT-16 Offline autoLOD):** Universal algorithmic mesh simplification (meshoptimizer) generating discrete LOD chains for skeletal meshes, transparent foliage, and legacy GPU fallbacks.
 - **Tier 2 (OPT-14 Virtual Geometry):** Real-time GPU-driven culling, meshlet clustering, cluster hierarchy (Nanite-style DAG), and hardware Task/Mesh Shaders for static geometry.
 
-Supporting references: [POST_OPT10_PROGRAM_PLAN.md](../../archive/design/deferred/POST_OPT10_PROGRAM_PLAN.md), [POST_OPT10_FEASIBILITY.md](../../design/POST_OPT10_FEASIBILITY.md).
+Supporting references: [POST_OPT10_PROGRAM_PLAN.md](../../archive/design/deferred/POST_OPT10_PROGRAM_PLAN.md), [POST_OPT10_FEASIBILITY.md](../../archive/design/deferred/POST_OPT10_FEASIBILITY.md).
 
 ---
 

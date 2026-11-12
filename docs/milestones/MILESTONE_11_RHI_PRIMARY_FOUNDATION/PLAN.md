@@ -9,7 +9,7 @@
 
 - [ ] **Phase 41: Shared Rendering Architecture, GPU Safety & Product Integration**
   - **Status (2026-11-03): planning only; highest-priority implementation backlog.** Execute ahead of new Phase 40 authoring and VFX feature expansion. Preserve Phase 38.3/39 acceptance and delivered Phase 40 CPU work.
-  - **Design**: [RHI-Primary Architecture](docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md). **Packages/dependencies/acceptance**: [Implementation Plan](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md). **Coding workflow**: [Implementation Guide](docs/design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md).
+  - **Design**: [RHI-Primary Architecture](docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md). **Packages/dependencies/acceptance**: [Implementation Plan](../../archive/design/deferred/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md). **Coding workflow**: [Implementation Guide](../../archive/design/deferred/RHI_PRIMARY_RENDERER_IMPLEMENTATION_GUIDE.md).
   - **G0 - Safety and visible primitives**:
     - [ ] **P41-00**: Always-active Debug/Release render harness, failure probe and honest backend baseline.
     - [ ] **P41-01**: Backend selection/readiness, explicit and automatic GL fallback equivalence, checked complete startup.

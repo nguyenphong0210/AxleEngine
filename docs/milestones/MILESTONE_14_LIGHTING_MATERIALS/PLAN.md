@@ -67,7 +67,7 @@ flowchart LR
 
 ## 4. Checklist (Fidelity Roadmap)
 
-- [ ] **Phase 44.4: Multi-Bounce GGX Energy Compensation** — Integrate Kulla-Conty 2D LUT / analytical energy compensation term into `ForwardPBR.hlsl` to eliminate darkening on rough metals.
+- [x] **Phase 44.4: Multi-Bounce GGX Energy Compensation** — Integrate Kulla-Conty 2D LUT / analytical energy compensation term into `ForwardPBR.hlsl` to eliminate darkening on rough metals.
 - [ ] **Phase 44.5: Dynamic Procedural Skybox IBL** — Render `Procedural Atmospheric Skybox` to a dynamic $128 \times 128 \times 6$ cubemap and compute Irradiance + Prefilter mips so procedural skies provide real IBL reflections.
 - [ ] **Phase 44.6: Sun Angular Radius Specular Expansion** — Expand Directional Light specular lobe based on actual solar angular size ($0.53^\circ$), softening the sun reflection hot spot.
 - [ ] **Phase 44.7: GTAO (Ground-Truth Ambient Occlusion)** — Implement horizon-based hemispherical integration compute pass at half-resolution ($960 \times 540$) with bilateral spatial reconstruction denoiser.

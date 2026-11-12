@@ -9,22 +9,23 @@ Milestone 01 (Phases 1 through 4) establishes the bedrock infrastructure of Axle
 4. **Rendering Hardware Spike** (Phase 4): Baseline OpenGL context creation, hardware shader compilation, and buffer abstractions (`VertexArray`, `VertexBuffer`, `IndexBuffer`).
 
 ```mermaid
+
 flowchart TD
-    subgraph OSPlatform [Platform & OS Abstraction]
-        OSWindow[GLFW Window & Message Loop]
-        OSEvents[OS Native Input Events: Key, Mouse, Window]
+    subgraph OSPlatform ["Platform & OS Abstraction"]
+        OSWindow["GLFW Window & Message Loop"]
+        OSEvents["OS Native Input Events: Key, Mouse, Window"]
     end
 
-    subgraph CoreApplication [Engine Core & Lifecycle]
-        App[Axle::Application Singleton]
-        LayerStack[LayerStack: Layers & Overlays]
-        EventBus[EventDispatcher: Type-Safe Event Dispatch]
-        Logger[Logging Core: spdlog Multi-Sink Logger]
+    subgraph CoreApplication ["Engine Core & Lifecycle"]
+        App["Axle::Application Singleton"]
+        LayerStack["LayerStack: Layers & Overlays"]
+        EventBus["EventDispatcher: Type-Safe Event Dispatch"]
+        Logger["Logging Core: spdlog Multi-Sink Logger"]
     end
 
-    subgraph GraphicsSpike [Initial Graphics Context]
-        GLContext[OpenGL Hardware Context]
-        PipelineAbstr[Buffer & Shader Abstractions: VAO, VBO, IBO, Shader]
+    subgraph GraphicsSpike ["Initial Graphics Context"]
+        GLContext["OpenGL Hardware Context"]
+        PipelineAbstr["Buffer & Shader Abstractions: VAO, VBO, IBO, Shader"]
     end
 
     OSWindow --> App

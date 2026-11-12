@@ -8,28 +8,29 @@ Milestone 10 (Phases 38 through 40) expands AxleEngine into an extensible author
 3. **Node-Based Visual Scripting & Canvas** (Phase 38): Dataflow node graphs, execution graphs, and visual logic composition.
 
 ```mermaid
+
 flowchart TD
-    subgraph Host [AxleEngine Host Environment]
-        Editor[AxleEditor Tooling Host]
-        Runtime[AxleRuntime Standalone Host]
-        PluginManager[Plugin Registry & Life-Cycle Manager]
+    subgraph Host ["AxleEngine Host Environment"]
+        Editor["AxleEditor Tooling Host"]
+        Runtime["AxleRuntime Standalone Host"]
+        PluginManager["Plugin Registry & Life-Cycle Manager"]
     end
 
-    subgraph PluginSDKLayer [Plugin SDK & Interface Layer]
-        CABI[C-ABI Stable Export Interface: axle_plugin_api.h]
-        Manifest[Plugin Manifest: plugin.json]
-        HostContext[AxleHostContext: Engine Core Services]
+    subgraph PluginSDKLayer ["Plugin SDK & Interface Layer"]
+        CABI["C-ABI Stable Export Interface: axle_plugin_api.h"]
+        Manifest["Plugin Manifest: plugin.json"]
+        HostContext["AxleHostContext: Engine Core Services"]
     end
 
-    subgraph Plugins [Engine & Project Plugins]
-        SplinePlugin[Spline Simulation & Tooling]
-        TerrainPlugin[Terrain Generation & Sculpting]
-        CustomPlugin[User Domain Modules]
+    subgraph Plugins ["Engine & Project Plugins"]
+        SplinePlugin["Spline Simulation & Tooling"]
+        TerrainPlugin["Terrain Generation & Sculpting"]
+        CustomPlugin["User Domain Modules"]
     end
 
-    subgraph ToolingSubsystems [Authoring Subsystems]
-        AssemblySys[Prefab & Assembly Template Engine]
-        CanvasGraph[Visual Scripting & Canvas Graph Engine]
+    subgraph ToolingSubsystems ["Authoring Subsystems"]
+        AssemblySys["Prefab & Assembly Template Engine"]
+        CanvasGraph["Visual Scripting & Canvas Graph Engine"]
     end
 
     Editor --> PluginManager
@@ -96,6 +97,7 @@ The Assembly subsystem provides reusable object templates:
 The Canvas graph architecture provides visual dataflow and logic execution:
 
 ```mermaid
+
 classDiagram
     class CanvasGraph {
         +vector~CanvasNode~ Nodes
@@ -121,6 +123,7 @@ classDiagram
 
     CanvasGraph "1" *-- "*" CanvasNode
     CanvasNode "1" *-- "*" CanvasPin
+
 ```
 
 - **Pin Kinds**:

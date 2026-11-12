@@ -7,21 +7,22 @@ Milestone 07 (Phases 29 through 30) introduces outdoor environment authoring and
 2. **Skeletal Animation Pipeline** (Phase 30): Hierarchical bone transform evaluation, keyframe interpolation, and GPU vertex skinning via bone matrix palettes.
 
 ```mermaid
+
 flowchart TD
-    subgraph TerrainSubsystem [Terrain & Spline Architecture]
-        Heightmap[16-bit Heightfield Source Data]
-        ChunkManager[Chunk Grid & Quadtree LOD Evaluator]
-        Splatting[4-Layer Alpha Texture Splatting]
-        SplineCore[Catmull-Rom Parametric Spline Core]
-        SplineMesh[Spline Extrusion Mesh Generator]
+    subgraph TerrainSubsystem ["Terrain & Spline Architecture"]
+        Heightmap["16-bit Heightfield Source Data"]
+        ChunkManager["Chunk Grid & Quadtree LOD Evaluator"]
+        Splatting["4-Layer Alpha Texture Splatting"]
+        SplineCore["Catmull-Rom Parametric Spline Core"]
+        SplineMesh["Spline Extrusion Mesh Generator"]
     end
 
-    subgraph AnimationSubsystem [Skeletal Animation Pipeline]
-        SkeletonData[Skeleton Hierarchy: Bones & Inverse Bind Matrices]
-        ClipPlayer[AnimationClip Sampler & Keyframe Evaluator]
-        PoseEval[Local Pose -> Model Space Global Pose Accumulator]
-        PaletteUploader[Bone Matrix Palette GPU Constant Buffer]
-        SkinningShader[Vertex Shader: 4-Bone Weighted GPU Skinning]
+    subgraph AnimationSubsystem ["Skeletal Animation Pipeline"]
+        SkeletonData["Skeleton Hierarchy: Bones & Inverse Bind Matrices"]
+        ClipPlayer["AnimationClip Sampler & Keyframe Evaluator"]
+        PoseEval["Local Pose -> Model Space Global Pose Accumulator"]
+        PaletteUploader["Bone Matrix Palette GPU Constant Buffer"]
+        SkinningShader["Vertex Shader: 4-Bone Weighted GPU Skinning"]
     end
 
     Heightmap --> ChunkManager

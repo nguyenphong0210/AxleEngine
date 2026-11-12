@@ -35,34 +35,27 @@ Detailed task checklists, work breakdown packages, and verification criteria liv
 ## 2. High-Level Lifecycle & Strategic Overview
 
 ```mermaid
+
 flowchart LR
-    subgraph Era1 [Foundations: Milestones 01 - 11]
-        M01_11[Historical Milestones 01..11
-Phases 1 - 41
-Core, Physics, ECS, RHI, Tools]
+    subgraph Era1 ["Foundations: Milestones 01 - 11"]
+        M01_11["Historical Milestones 01..11<br/>Phases 1 - 41<br/>Core, Physics, ECS, RHI, Tools"]
     end
 
-    subgraph Era2 [Stabilization: Milestones 12 - 14]
-        M12[M12: Architecture
-Zero Allowance]
-        M13[M13: Concurrency
-Render Thread & DXC]
-        M14[M14: Lighting
-CSM, IBL, Photorealism]
+    subgraph Era2 ["Stabilization: Milestones 12 - 14"]
+        M12["M12: Architecture<br/>Zero Allowance"]
+        M13["M13: Concurrency<br/>Render Thread & DXC"]
+        M14["M14: Lighting<br/>CSM, IBL, Photorealism"]
     end
 
-    subgraph Era3 [Next-Gen Scale: Milestones 15 - 18]
-        M15[M15: Geometry
-autoLOD & Meshlets]
-        M16[M16: Simulation
-Significance & Dormancy]
-        M17[M17: Content
-Anim, VFX & Mat Studios]
-        M18[M18: Rollout
-Benchmarks & Parity]
+    subgraph Era3 ["Next-Gen Scale: Milestones 15 - 18"]
+        M15["M15: Geometry<br/>autoLOD & Meshlets"]
+        M16["M16: Simulation<br/>Significance & Dormancy"]
+        M17["M17: Content<br/>Anim, VFX & Mat Studios"]
+        M18["M18: Rollout<br/>Benchmarks & Parity"]
     end
 
     M01_11 --> M12 --> M13 --> M14 --> M15 --> M16 --> M17 --> M18
+
 ```
 
 ### 2.1. Historical Foundations (Milestones 01 through 11)

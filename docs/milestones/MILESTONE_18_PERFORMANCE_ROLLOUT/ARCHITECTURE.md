@@ -11,14 +11,16 @@ Rollout is an authoritative architectural decision layer: features are promoted 
 ## 2. Architecture and Subsystem Boundaries
 
 ```mermaid
+
 flowchart TD
-    Bench[C20-01: Benchmark & Scene Matrix] --> Metrics[C20-03: Frame-Time & Memory Telemetry]
-    Image[C20-02: Multi-Backend Image Parity] --> QualityGate[Quality & Parity Gating]
-    Stress[C20-04: Device Recovery & Lifetime Stress] --> StabilityGate[Stability & Reliability Gating]
-    Metrics --> Cutover[C20-05 / C20-06: Production Cutover & Feature Promotion]
+    Bench["C20-01: Benchmark & Scene Matrix"] --> Metrics["C20-03: Frame-Time & Memory Telemetry"]
+    Image["C20-02: Multi-Backend Image Parity"] --> QualityGate["Quality & Parity Gating"]
+    Stress["C20-04: Device Recovery & Lifetime Stress"] --> StabilityGate["Stability & Reliability Gating"]
+    Metrics --> Cutover["C20-05 / C20-06: Production Cutover & Feature Promotion"]
     QualityGate --> Cutover
     StabilityGate --> Cutover
-    Cutover --> StableDefaults[Stable Engine & Editor Release Defaults]
+    Cutover --> StableDefaults["Stable Engine & Editor Release Defaults"]
+
 ```
 
 ### 2.1. Telemetry and Benchmarking Framework (`C20-01`, `C20-03`)

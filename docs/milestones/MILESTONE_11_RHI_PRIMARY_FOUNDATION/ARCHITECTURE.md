@@ -7,34 +7,35 @@ Milestone 11 (Phase 41) establishes the modern Hardware Abstraction Layer (RHI) 
 Legacy OpenGL 4.5 is strictly retained as a secondary **compatibility fallback adapter** operating behind the exact same product-level rendering contracts.
 
 ```mermaid
+
 flowchart TD
-    subgraph Products [Client Products]
-        Editor[AxleEditor: Viewports & Scene Previews]
-        Runtime[AxleRuntime: Standalone Game Player]
-        Previews[Material, VFX & Asset Thumbnails]
+    subgraph Products ["Client Products"]
+        Editor["AxleEditor: Viewports & Scene Previews"]
+        Runtime["AxleRuntime: Standalone Game Player"]
+        Previews["Material, VFX & Asset Thumbnails"]
     end
 
-    subgraph ServiceLayer [Render Orchestration Layer]
-        RenderService[Axle::RenderService]
-        Extractor[Scene Render Extractor]
-        Snapshot[Immutable RenderWorld + ViewRequest]
+    subgraph ServiceLayer ["Render Orchestration Layer"]
+        RenderService["Axle::RenderService"]
+        Extractor["Scene Render Extractor"]
+        Snapshot["Immutable RenderWorld + ViewRequest"]
     end
 
-    subgraph PipelinePasses [Modern Render Pipeline]
-        PassManager[Pass Executor & Render Graph]
-        StateTracker[RHIBarrier & State Tracker]
-        EpochRetire[Deferred Resource Retirement & Frame Slots]
+    subgraph PipelinePasses ["Modern Render Pipeline"]
+        PassManager["Pass Executor & Render Graph"]
+        StateTracker["RHIBarrier & State Tracker"]
+        EpochRetire["Deferred Resource Retirement & Frame Slots"]
     end
 
-    subgraph HardwareHAL [Modern RHI via NRI]
-        RHIDevice[RHIDevice: D3D12 & Vulkan]
-        NRI[NVIDIA NRI Abstraction Core]
-        D3D12[Direct3D 12 Backend]
-        Vulkan[Vulkan Backend]
+    subgraph HardwareHAL ["Modern RHI via NRI"]
+        RHIDevice["RHIDevice: D3D12 & Vulkan"]
+        NRI["NVIDIA NRI Abstraction Core"]
+        D3D12["Direct3D 12 Backend"]
+        Vulkan["Vulkan Backend"]
     end
 
-    subgraph FallbackAdapter [Compatibility Subsystem]
-        GLAdapter[OpenGL 4.5 Compatibility Adapter]
+    subgraph FallbackAdapter ["Compatibility Subsystem"]
+        GLAdapter["OpenGL 4.5 Compatibility Adapter"]
     end
 
     %% Flow
@@ -128,6 +129,7 @@ Modern graphics APIs (Direct3D 12 and Vulkan) require strict resource state tran
 - **Pending vs. Submitted State**: State transitions are tracked locally during command list recording and committed to the global state tracker only upon verified command buffer submission.
 
 ```mermaid
+
 stateDiagram-v2
     [*] --> Undefined
     Undefined --> Common : Allocate / Initialize
@@ -135,6 +137,7 @@ stateDiagram-v2
     RenderTarget --> PixelShaderResource : Pass Input Texture (SRV)
     PixelShaderResource --> CopySource : Readback / Blit
     CopySource --> Common : Present / Idle
+
 ```
 
 ### 3.4 Frame Scheduling & Deferred Retirement

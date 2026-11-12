@@ -8,23 +8,24 @@ Milestone 09 (Phases 35 through 37) elevates AxleEngine to commercial-grade runt
 3. **Fault Diagnostics & Crash Breadcrumbs** (Phase 37): Device-loss isolation, GPU breadcrumb ring buffers, and automated crash dump telemetry.
 
 ```mermaid
+
 flowchart TD
-    subgraph DiagnosticsCore [Diagnostics & Profiling Subsystem]
-        Tracy[Tracy Profiler Instrumentation]
-        BreadcrumbMgr[GPU Breadcrumb Ring Buffer]
-        CrashReporter[Crash Dump & Minidump Handler]
+    subgraph DiagnosticsCore ["Diagnostics & Profiling Subsystem"]
+        Tracy["Tracy Profiler Instrumentation"]
+        BreadcrumbMgr["GPU Breadcrumb Ring Buffer"]
+        CrashReporter["Crash Dump & Minidump Handler"]
     end
 
-    subgraph VulkanHAL [Vulkan Backend Core]
-        VkInstance[VkInstance & Physical Device Selection]
-        VkDevice[VkDevice Logical Context]
-        VkQueues[Graphics, Compute & Transfer Queues]
-        Validation[Khronos Validation Layers]
+    subgraph VulkanHAL ["Vulkan Backend Core"]
+        VkInstance["VkInstance & Physical Device Selection"]
+        VkDevice["VkDevice Logical Context"]
+        VkQueues["Graphics, Compute & Transfer Queues"]
+        Validation["Khronos Validation Layers"]
     end
 
-    subgraph HostEngine [Engine Application Runtime]
-        AppLoop[Application Frame Loop]
-        RenderCmd[Render Command Recording]
+    subgraph HostEngine ["Engine Application Runtime"]
+        AppLoop["Application Frame Loop"]
+        RenderCmd["Render Command Recording"]
     end
 
     AppLoop --> Tracy

@@ -12,32 +12,34 @@ Supporting references: [POST_OPT10_PROGRAM_PLAN.md](../../archive/design/deferre
 
 ## 2. Architecture and Pipeline
 
-`mermaid
+```mermaid
+
 flowchart TD
-    RawMesh[Raw 3D Mesh FBX / glTF] --> Cooker[Asset Cooker Import]
+    RawMesh["Raw 3D Mesh FBX / glTF"] --> Cooker["Asset Cooker Import"]
 
-    subgraph Tier1 [Tier 1: Offline autoLOD Pipeline OPT-16]
-        Cooker --> MeshoptSimp[meshopt_simplify: Decimation Engine]
-        MeshoptSimp --> DiscreteLODs[Discrete LOD0..LOD3 Chains]
-        DiscreteLODs --> DitherFade[Screen-Size Coverage & Dither Cross-Fading]
+    subgraph Tier1 ["Tier 1: Offline autoLOD Pipeline OPT-16"]
+        Cooker --> MeshoptSimp["meshopt_simplify: Decimation Engine"]
+        MeshoptSimp --> DiscreteLODs["Discrete LOD0..LOD3 Chains"]
+        DiscreteLODs --> DitherFade["Screen-Size Coverage & Dither Cross-Fading"]
     end
 
-    subgraph Tier2 [Tier 2: Continuous Virtual Geometry OPT-14]
-        Cooker --> MeshoptBuild[meshopt_buildMeshlets: <=64 Verts, <=126 Tris]
-        MeshoptBuild --> ClusterDAG[Cluster DAG Hierarchy & Locked Boundary Loops]
+    subgraph Tier2 ["Tier 2: Continuous Virtual Geometry OPT-14"]
+        Cooker --> MeshoptBuild["meshopt_buildMeshlets: <=64 Verts, <=126 Tris"]
+        MeshoptBuild --> ClusterDAG["Cluster DAG Hierarchy & Locked Boundary Loops"]
     end
 
-    Scene[Scene World Instances] --> GPUInstances[C14-01: GPU Unified Instance Buffer]
-    GPUInstances --> CullingCompute[C14-02: GPU Frustum & Hi-Z Culling Compute]
-    DepthPyramid[Hi-Z Depth Pyramid] --> CullingCompute
+    Scene["Scene World Instances"] --> GPUInstances["C14-01: GPU Unified Instance Buffer"]
+    GPUInstances --> CullingCompute["C14-02: GPU Frustum & Hi-Z Culling Compute"]
+    DepthPyramid["Hi-Z Depth Pyramid"] --> CullingCompute
 
-    CullingCompute -- Modern Hardware Tier --> TaskMesh[C14-05: Task & Mesh Shaders]
-    CullingCompute -- Legacy Hardware Tier --> IndirectDraw[C14-06: ExecuteIndirect Indexed Draw]
+    CullingCompute -->|"Modern Hardware Tier"| TaskMesh["C14-05: Task & Mesh Shaders"]
+    CullingCompute -->|"Legacy Hardware Tier"| IndirectDraw["C14-06: ExecuteIndirect Indexed Draw"]
 
-    TaskMesh --> Rasterizer[Hardware Rasterizer]
+    TaskMesh --> Rasterizer["Hardware Rasterizer"]
     IndirectDraw --> Rasterizer
-    DitherFade -. Skinned / Fallback .-> IndirectDraw
-`
+    DitherFade -.->|"Skinned / Fallback"| IndirectDraw
+
+```
 
 ### 2.1. Tier 1: Automated Offline LOD Pipeline (OPT-16)
 - **Embedded in Cooker:** Automatically executed during .fbx/.gltf asset import.

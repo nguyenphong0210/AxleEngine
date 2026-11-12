@@ -8,23 +8,24 @@ Milestone 02 (Phases 5 through 7) transforms AxleEngine into an interactive 3D s
 3. **Simulation Tick & Input Architecture** (Phase 7): Deterministic fixed timestep accumulator loop and unified input polling.
 
 ```mermaid
+
 flowchart TD
-    subgraph AppLoop [Application Frame Loop]
-        Clock[High-Resolution Frame Clock: std::chrono]
-        TimeStep[Delta Time & Accumulator]
-        InputPoll[Axle::Input Polling Subsystem]
+    subgraph AppLoop ["Application Frame Loop"]
+        Clock["High-Resolution Frame Clock: std::chrono"]
+        TimeStep["Delta Time & Accumulator"]
+        InputPoll["Axle::Input Polling Subsystem"]
     end
 
-    subgraph SimulationTick [Fixed Timestep Loop]
-        FixedAccum[Fixed Timestep Accumulator: dt = 1/60s]
-        PhysicsTick[Physics Step Simulation]
-        CameraTick[Editor Camera Controller: Orbit / Pan / Fly]
+    subgraph SimulationTick ["Fixed Timestep Loop"]
+        FixedAccum["Fixed Timestep Accumulator: dt = 1/60s"]
+        PhysicsTick["Physics Step Simulation"]
+        CameraTick["Editor Camera Controller: Orbit / Pan / Fly"]
     end
 
-    subgraph ViewportPresentation [Offscreen Viewport Pipeline]
-        OffscreenFB[Offscreen Framebuffer: Color + Depth Buffers]
-        RenderDraws[Scene Geometry Render Calls]
-        ImGuiViewport[Dear ImGui Viewport Panel: ImGui::Image]
+    subgraph ViewportPresentation ["Offscreen Viewport Pipeline"]
+        OffscreenFB["Offscreen Framebuffer: Color + Depth Buffers"]
+        RenderDraws["Scene Geometry Render Calls"]
+        ImGuiViewport["Dear ImGui Viewport Panel: ImGui::Image"]
     end
 
     Clock --> TimeStep

@@ -11,23 +11,25 @@ Supporting references: [`POST_OPT10_PROGRAM_PLAN.md`](../../archive/design/defer
 ## 2. Architecture and Subsystems
 
 ```mermaid
+
 flowchart TD
-    AssetRegistry[Central Asset Registry & VFS] --> DocModels[Transactional Document Models: Undo/Redo, Dirty Flags]
+    AssetRegistry["Central Asset Registry & VFS"] --> DocModels["Transactional Document Models: Undo/Redo, Dirty Flags"]
 
-    DocModels --> MatGraphUI[OPT-19: Material Graph Node Editor]
-    DocModels --> VFXStudioUI[OPT-18: Visual FX Particle Editor]
-    DocModels --> AnimStudioUI[OPT-17: Animation State Machine Designer]
-    DocModels --> SceneHierarchy[Prefab Variant & Scene Hierarchy Inspector]
+    DocModels --> MatGraphUI["OPT-19: Material Graph Node Editor"]
+    DocModels --> VFXStudioUI["OPT-18: Visual FX Particle Editor"]
+    DocModels --> AnimStudioUI["OPT-17: Animation State Machine Designer"]
+    DocModels --> SceneHierarchy["Prefab Variant & Scene Hierarchy Inspector"]
 
-    MatGraphUI --> PreviewService[Private Preview RenderService]
+    MatGraphUI --> PreviewService["Private Preview RenderService"]
     VFXStudioUI --> PreviewService
     AnimStudioUI --> PreviewService
 
-    PreviewService --> RHI[Modern RHI Native Viewport D3D12/Vulkan]
+    PreviewService --> RHI["Modern RHI Native Viewport D3D12/Vulkan"]
 
-    DocModels --> Cooker[OPT-Tools: Asset Cooker & Packager]
-    Cooker --> PakFile[Shipping Package Data.axlepak]
-    Cooker --> Linter[Asset Linter & Dependency Verifier]
+    DocModels --> Cooker["OPT-Tools: Asset Cooker & Packager"]
+    Cooker --> PakFile["Shipping Package Data.axlepak"]
+    Cooker --> Linter["Asset Linter & Dependency Verifier"]
+
 ```
 
 ### 2.1. Transactional Document Architecture

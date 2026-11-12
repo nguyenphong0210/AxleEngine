@@ -11,28 +11,30 @@ Supporting references: [`POST_OPT10_PROGRAM_PLAN.md`](../../archive/design/defer
 ## 2. Architecture and Subsystems
 
 ```mermaid
+
 flowchart TD
-    Clock[SimulationClock: Monotonic Tick Index] --> Scheduler[C15-03: Deterministic Staggered Scheduler]
+    Clock["SimulationClock: Monotonic Tick Index"] --> Scheduler["C15-03: Deterministic Staggered Scheduler"]
 
-    SpatialIndex[C15-04: Scene Spatial Index Grid] --> Significance[C15-02: Significance Policy Evaluator]
-    Camera[View / Player Interest Points] --> Significance
+    SpatialIndex["C15-04: Scene Spatial Index Grid"] --> Significance["C15-02: Significance Policy Evaluator"]
+    Camera["View / Player Interest Points"] --> Significance
 
-    Significance --> Tier0[Tier 0: Full Tick Rate 60 Hz - Player/Hero Entities]
-    Significance --> Tier1[Tier 1: Half Rate 30 Hz - Close Entities]
-    Significance --> Tier2[Tier 2: Quarter Rate 15 Hz - Distant Entities]
-    Significance --> Dormant[C15-05: Dormant / Suspended - Far/Occluded Entities]
+    Significance --> Tier0["Tier 0: Full Tick Rate 60 Hz - Player/Hero Entities"]
+    Significance --> Tier1["Tier 1: Half Rate 30 Hz - Close Entities"]
+    Significance --> Tier2["Tier 2: Quarter Rate 15 Hz - Distant Entities"]
+    Significance --> Dormant["C15-05: Dormant / Suspended - Far/Occluded Entities"]
 
-    Scheduler --> Dispatch[Simulation Dispatch]
+    Scheduler --> Dispatch["Simulation Dispatch"]
     Tier0 --> Dispatch
     Tier1 --> Dispatch
     Tier2 --> Dispatch
 
-    Dispatch --> Physics[C15-07: Jolt Physics Sleeping Hints]
-    Dispatch --> Animation[C15-09: Animation Update Rate Optimization URO]
-    Dispatch --> Scripts[Native C++ Scripts OnFixedUpdate]
+    Dispatch --> Physics["C15-07: Jolt Physics Sleeping Hints"]
+    Dispatch --> Animation["C15-09: Animation Update Rate Optimization URO"]
+    Dispatch --> Scripts["Native C++ Scripts OnFixedUpdate"]
 
-    Dispatch --> Interp[C15-06: Transform Interpolation for Skipped Ticks]
-    Interp --> RenderWorld[RenderWorld Snapshot]
+    Dispatch --> Interp["C15-06: Transform Interpolation for Skipped Ticks"]
+    Interp --> RenderWorld["RenderWorld Snapshot"]
+
 ```
 
 ### 2.1. Monotonic Tick Identity & Significance Policy (`C15-01`, `C15-02`)

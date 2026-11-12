@@ -11,29 +11,30 @@ Phase 01 establishes modern rendering execution and material pipeline architectu
 
 ## 2. Concurrency & Memory Architecture
 
-`mermaid
+```mermaid
+
 flowchart TD
-    subgraph MainThread [Main / Simulation Thread]
-        Sim[Simulation & ECS Advance Frame N+1]
-        Extract[ExtractRenderWorld: Sub-ms Immutable POD Snapshot]
+    subgraph MainThread ["Main / Simulation Thread"]
+        Sim["Simulation & ECS Advance Frame N+1"]
+        Extract["ExtractRenderWorld: Sub-ms Immutable POD Snapshot"]
     end
 
-    subgraph ThreadQueue [Thread-Safe Queue]
-        Queue[Bounded Lock-Free RenderWorld Queue]
+    subgraph ThreadQueue ["Thread-Safe Queue"]
+        Queue["Bounded Lock-Free RenderWorld Queue"]
     end
 
-    subgraph RenderWorkerThread [Dedicated Render Thread]
-        Consume[Consume Frame N Snapshot]
-        GraphBuild[RenderGraph Execution & Lifetime Analysis]
-        RecordWorkers[Worker Jobs: Parallel Command Recording]
-        CmdSubmit[Primary Command List Submission]
-        Present[Swapchain Acquire & Present]
+    subgraph RenderWorkerThread ["Dedicated Render Thread"]
+        Consume["Consume Frame N Snapshot"]
+        GraphBuild["RenderGraph Execution & Lifetime Analysis"]
+        RecordWorkers["Worker Jobs: Parallel Command Recording"]
+        CmdSubmit["Primary Command List Submission"]
+        Present["Swapchain Acquire & Present"]
     end
 
-    subgraph MemoryHeap [VRAM Memory Aliasing Heap]
-        Heap[Placed Resource Shared Heap ID3D12Heap / VkDeviceMemory]
-        TargetA[Pass 1: Refraction Buffer Lifetime: T0..T2]
-        TargetB[Pass 4: ToneMap Buffer Lifetime: T3..T5]
+    subgraph MemoryHeap ["VRAM Memory Aliasing Heap"]
+        Heap["Placed Resource Shared Heap ID3D12Heap / VkDeviceMemory"]
+        TargetA["Pass 1: Refraction Buffer Lifetime: T0..T2"]
+        TargetB["Pass 4: ToneMap Buffer Lifetime: T3..T5"]
     end
 
     Sim --> Extract
@@ -44,9 +45,10 @@ flowchart TD
     RecordWorkers --> CmdSubmit
     CmdSubmit --> Present
 
-    TargetA -. Overlapping Offset .-> Heap
-    TargetB -. Overlapping Offset .-> Heap
-`
+    TargetA -.->|"Overlapping Offset"| Heap
+    TargetB -.->|"Overlapping Offset"| Heap
+
+```
 
 ### 2.1. Render Thread Decoupling
 - **1-Frame Latency Pipeline:** While the Render Thread records commands for Frame $, the Main Thread concurrently advances Simulation, ECS, and Physics for Frame +1$.
@@ -62,20 +64,22 @@ flowchart TD
 
 ## 3. Material Graph & Compiler Architecture
 
-`mermaid
-flowchart LR
-    AssetFile[Material Asset .axleasset] --> Parser[Document Parser & AST Validator]
-    Parser --> AST[Abstract Syntax Tree IR]
-    AST --> Lowering[Registry-Driven HLSL Lowering]
-    Lowering --> DXC[DXC Shader Compiler]
-    DXC --> DXIL[DirectX 12 DXIL]
-    DXC --> SPIRV[Vulkan SPIR-V]
-    DXIL --> Cache[Pipeline Layout & Code Cache]
-    SPIRV --> Cache
-    Cache --> RHI[Native RHI Binding]
+```mermaid
 
-    AST -. Target == OpenGL .-> Reject[MG_OPENGL_UNSUPPORTED Diagnostic]
-`
+flowchart LR
+    AssetFile["Material Asset .axleasset"] --> Parser["Document Parser & AST Validator"]
+    Parser --> AST["Abstract Syntax Tree IR"]
+    AST --> Lowering["Registry-Driven HLSL Lowering"]
+    Lowering --> DXC["DXC Shader Compiler"]
+    DXC --> DXIL["DirectX 12 DXIL"]
+    DXC --> SPIRV["Vulkan SPIR-V"]
+    DXIL --> Cache["Pipeline Layout & Code Cache"]
+    SPIRV --> Cache
+    Cache --> RHI["Native RHI Binding"]
+
+    AST -.->|"Target == OpenGL"| Reject["MG_OPENGL_UNSUPPORTED Diagnostic"]
+
+```
 
 ### 3.1. Document Model & AST Representation
 - .axleasset files store graph nodes, explicit pin connections, and named parameter values.

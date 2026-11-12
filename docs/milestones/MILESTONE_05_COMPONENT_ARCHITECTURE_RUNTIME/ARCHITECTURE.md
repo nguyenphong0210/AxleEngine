@@ -11,23 +11,24 @@ Its architectural mandate establishes:
 4. **Standalone Packaging & Cooker Pipeline** (Phase 23): Cooked asset packaging and standalone game executable distribution.
 
 ```mermaid
+
 flowchart TD
-    subgraph Products [Target Executables]
-        Editor[AxleEditor.exe: Interactive Authoring & Tooling]
-        Runtime[AxleRuntime.exe: Standalone Game Client]
-        Headless[AxleHeadless: Automated CTest & CI Runner]
+    subgraph Products ["Target Executables"]
+        Editor["AxleEditor.exe: Interactive Authoring & Tooling"]
+        Runtime["AxleRuntime.exe: Standalone Game Client"]
+        Headless["AxleHeadless: Automated CTest & CI Runner"]
     end
 
-    subgraph ECSCore [EnTT Entity Component Subsystem]
-        Registry[entt::registry: Entity ID & Sparse Set Storage]
-        Views[entt::view / entt::group: Cache-Friendly Iterators]
-        CompPools[Contiguous Component Arrays: Transform, Mesh, Light, Physics]
+    subgraph ECSCore ["EnTT Entity Component Subsystem"]
+        Registry["entt::registry: Entity ID & Sparse Set Storage"]
+        Views["entt::view / entt::group: Cache-Friendly Iterators"]
+        CompPools["Contiguous Component Arrays: Transform, Mesh, Light, Physics"]
     end
 
-    subgraph RuntimeBoundary [Runtime Abstraction Layer]
-        RuntimeLayer[Axle::RuntimeLayer: Scene Lifecycle & Game Logic]
-        CookedLoader[Cooked Asset VFS Loader]
-        Presentation[Direct Window Swapchain Presentation]
+    subgraph RuntimeBoundary ["Runtime Abstraction Layer"]
+        RuntimeLayer["Axle::RuntimeLayer: Scene Lifecycle & Game Logic"]
+        CookedLoader["Cooked Asset VFS Loader"]
+        Presentation["Direct Window Swapchain Presentation"]
     end
 
     Editor --> Registry
@@ -75,6 +76,7 @@ Packed Density:   [ C0  |  C2  |   C4   ]     <- Packed Array (Cache-line friend
 ### 3.2 Runtime Lifecycle
 
 ```mermaid
+
 sequenceDiagram
     autonumber
     participant Main as Runtime::main()
@@ -94,4 +96,5 @@ sequenceDiagram
     end
     App->>Layer: OnDetach()
     Layer->>Scene: Teardown()
+
 ```

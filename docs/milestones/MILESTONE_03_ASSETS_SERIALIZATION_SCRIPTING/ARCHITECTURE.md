@@ -10,23 +10,24 @@ Milestone 03 (Phases 8 through 13) provides AxleEngine with data persistence, as
 5. **Lua Scripting Runtime** (Phases 12 & 13): Sandboxed Lua state machine, C++ reflection bindings, and script lifecycle hooks.
 
 ```mermaid
+
 flowchart TD
-    subgraph VFS [Virtual File System & Registry]
-        AssetReg[AssetRegistry: GUID to Metadata Map]
-        VirtualPath[Virtual Path Resolver: axle://assets/...]
-        DiskWatcher[Directory Watcher & Hot-Reload Listener]
+    subgraph VFS ["Virtual File System & Registry"]
+        AssetReg["AssetRegistry: GUID to Metadata Map"]
+        VirtualPath["Virtual Path Resolver: axle://assets/..."]
+        DiskWatcher["Directory Watcher & Hot-Reload Listener"]
     end
 
-    subgraph Importers [Asset Compilation Pipeline]
-        TexImporter[Texture Importer: stb_image -> Raw Pixel Buffers]
-        MeshImporter[Mesh Importer: Assimp -> Axle Mesh Geometry]
-        MatImporter[Material Importer: PBR Parameter JSON/YAML]
+    subgraph Importers ["Asset Compilation Pipeline"]
+        TexImporter["Texture Importer: stb_image -> Raw Pixel Buffers"]
+        MeshImporter["Mesh Importer: Assimp -> Axle Mesh Geometry"]
+        MatImporter["Material Importer: PBR Parameter JSON/YAML"]
     end
 
-    subgraph ScriptingCore [Lua Gameplay Scripting Runtime]
-        LuaState[Sandboxed lua_State Context]
-        CPPBinder[C++ / Lua API Glue Layer: sol2 / Native C-API]
-        ScriptHooks[Lifecycle Callbacks: OnCreate, OnUpdate, OnDestroy]
+    subgraph ScriptingCore ["Lua Gameplay Scripting Runtime"]
+        LuaState["Sandboxed lua_State Context"]
+        CPPBinder["C++ / Lua API Glue Layer: sol2 / Native C-API"]
+        ScriptHooks["Lifecycle Callbacks: OnCreate, OnUpdate, OnDestroy"]
     end
 
     VirtualPath --> AssetReg
@@ -68,6 +69,7 @@ Asset Handle:         [ AssetHandle { UUID: 7f3b... } ]
 ### 3.1 Script Lifecycle & Sandboxing
 
 ```mermaid
+
 sequenceDiagram
     autonumber
     participant Scene as Axle::Scene
@@ -86,6 +88,7 @@ sequenceDiagram
     Scene->>Comp: OnSceneStop()
     Comp->>VM: Call OnDestroy()
     Comp->>VM: CollectGarbage()
+
 ```
 
 - **Safety & Error Handling**: Lua execution runs within protected `pcall` boundaries, routing Lua script syntax errors and runtime exceptions to the AxleEngine logger (`AXLE_CORE_ERROR`) without crashing the editor or simulation thread.

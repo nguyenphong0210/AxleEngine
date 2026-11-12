@@ -11,24 +11,25 @@ Milestone 04 (Phases 14 through 19) introduces hierarchical spatial structures a
 6. **Pixel-Perfect Entity Picking** (Phase 19): 32-bit integer Entity ID color-buffer picking in viewport frames.
 
 ```mermaid
+
 flowchart TD
-    subgraph SceneHierarchy [Hierarchical Scene Graph]
-        RootEntity[Root Entity: Transform]
-        ChildEntity[Child Entity: Local Transform]
-        Grandchild[Grandchild Entity: Local Transform]
-        DirtyFlag[Dirty State Propagation Flag]
+    subgraph SceneHierarchy ["Hierarchical Scene Graph"]
+        RootEntity["Root Entity: Transform"]
+        ChildEntity["Child Entity: Local Transform"]
+        Grandchild["Grandchild Entity: Local Transform"]
+        DirtyFlag["Dirty State Propagation Flag"]
     end
 
-    subgraph ThreadingCore [Job System & ThreadPool]
-        MasterThread[Main Application Thread]
-        WorkQueue[Thread-Safe Task Queue]
-        WorkerThreads[Worker Thread Pool: std::thread x HardwareConcurrency]
+    subgraph ThreadingCore ["Job System & ThreadPool"]
+        MasterThread["Main Application Thread"]
+        WorkQueue["Thread-Safe Task Queue"]
+        WorkerThreads["Worker Thread Pool: std::thread x HardwareConcurrency"]
     end
 
-    subgraph ViewportPicking [Viewport Selection & Picking]
-        ColorBuffer[Offscreen 32-bit Integer Framebuffer: GL_R32UI]
-        PixelReadback[Pixel Readback at Mouse Cursor X,Y]
-        SelectionMgr[Selection Context: Selected Entity ID]
+    subgraph ViewportPicking ["Viewport Selection & Picking"]
+        ColorBuffer["Offscreen 32-bit Integer Framebuffer: GL_R32UI"]
+        PixelReadback["Pixel Readback at Mouse Cursor X,Y"]
+        SelectionMgr["Selection Context: Selected Entity ID"]
     end
 
     RootEntity --> ChildEntity
@@ -48,12 +49,12 @@ flowchart TD
 ### 2.1 Transform Invariants
 
 - **Component Structure**: `TransformComponent` maintains:
-  - Local state: Translation $(\mathbf{t})$, Rotation quaternion $(\mathbf{q})$, Scale $(\mathbf{s})$.
-  - World matrix: $4 \times 4$ floating-point matrix $(\mathbf{M}_{\text{world}})$.
+  - Local state: Translation $(\mathbf{"t"})$, Rotation quaternion $(\mathbf{"q"})$, Scale $(\mathbf{"s"})$.
+  - World matrix: $4 \times 4$ floating-point matrix $(\mathbf{"M"}_{"\text{world"}})$.
   - Relationship links: `Parent` Entity handle, `FirstChild` Entity handle, `NextSibling` Entity handle.
   - State flags: `bIsDirty` boolean bit.
 - **Propagation Order**: Top-down depth-first traversal ensures parent world matrices are fully recomputed before child world matrices are evaluated:
-  $$\mathbf{M}_{\text{world}}^{\text{child}} = \mathbf{M}_{\text{world}}^{\text{parent}} \cdot \mathbf{M}_{\text{local}}^{\text{child}}$$
+  $$\mathbf{"M"}_{"\text{world"}}^{\text{"child"}} = \mathbf{"M"}_{"\text{world"}}^{\text{"parent"}} \cdot \mathbf{"M"}_{"\text{local"}}^{\text{"child"}}$$
 
 ---
 

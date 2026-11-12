@@ -12,50 +12,51 @@ All subsystems follow the **Single Ownership Principle**: every engine capabilit
 
 AxleEngine is structured into strict, unidirectional layers. A lower layer may never include, link against, or depend upon a higher layer.
 
-`mermaid
+```mermaid
+
 flowchart TD
-    subgraph Products [Layer 7: Shipping Products]
-        Editor[AxleEditor.exe: Authoring & UI]
-        Runtime[AxleRuntime.exe: Standalone Player]
-        Tests[AxleTests.exe: CTest Runner & Suites]
-        Plugins[Optional Plugins: Spline, Terrain, Vehicle]
+    subgraph Products ["Layer 7: Shipping Products"]
+        Editor["AxleEditor.exe: Authoring & UI"]
+        Runtime["AxleRuntime.exe: Standalone Player"]
+        Tests["AxleTests.exe: CTest Runner & Suites"]
+        Plugins["Optional Plugins: Spline, Terrain, Vehicle"]
     end
 
-    subgraph PluginsLayer [Layer 6: Plugin Architecture]
-        PluginSDK[Engine/Plugin: SDK, Host, Dynamic DLL & Static Link]
+    subgraph PluginsLayer ["Layer 6: Plugin Architecture"]
+        PluginSDK["Engine/Plugin: SDK, Host, Dynamic DLL & Static Link"]
     end
 
-    subgraph ContentUI [Layer 5: Content & Presentation]
-        AssetMgr[Engine/Asset: VFS, AssetRegistry, Native Identity]
-        UIEngine[Engine/UI: ImGui Host, Viewports, Canvas2D]
+    subgraph ContentUI ["Layer 5: Content & Presentation"]
+        AssetMgr["Engine/Asset: VFS, AssetRegistry, Native Identity"]
+        UIEngine["Engine/UI: ImGui Host, Viewports, Canvas2D"]
     end
 
-    subgraph Simulation [Layer 4: Scene & Physics]
-        SceneSys[Engine/Scene: EnTT ECS, Transform Hierarchy, Serializer]
-        PhysicsSys[Engine/Physics: Jolt Physics 3D, Collision, Rigidbody]
+    subgraph Simulation ["Layer 4: Scene & Physics"]
+        SceneSys["Engine/Scene: EnTT ECS, Transform Hierarchy, Serializer"]
+        PhysicsSys["Engine/Physics: Jolt Physics 3D, Collision, Rigidbody"]
     end
 
-    subgraph RenderSubsystem [Layer 3: Unified Rendering]
-        RendererCore[Engine/Renderer: RenderWorld Snapshot, RenderGraph, RenderService]
-        PBRForward[Forward+ PBR Pipeline & Shader Compiler]
-        GLCompat[OpenGL 4.5 Compatibility Fallback Adapter]
+    subgraph RenderSubsystem ["Layer 3: Unified Rendering"]
+        RendererCore["Engine/Renderer: RenderWorld Snapshot, RenderGraph, RenderService"]
+        PBRForward["Forward+ PBR Pipeline & Shader Compiler"]
+        GLCompat["OpenGL 4.5 Compatibility Fallback Adapter"]
     end
 
-    subgraph HardwareRHI [Layer 2: Modern RHI Abstraction]
-        RHICore[Engine/RHI: Device, CommandBuffer, Texture, Buffer, Epoch Tracking]
+    subgraph HardwareRHI ["Layer 2: Modern RHI Abstraction"]
+        RHICore["Engine/RHI: Device, CommandBuffer, Texture, Buffer, Epoch Tracking"]
     end
 
-    subgraph CoreFoundation [Layer 1: Engine Core]
-        CoreSys[Engine/Core: Platform, Logging, Math, Clocks, Allocators, UUID, Jobs]
+    subgraph CoreFoundation ["Layer 1: Engine Core"]
+        CoreSys["Engine/Core: Platform, Logging, Math, Clocks, Allocators, UUID, Jobs"]
     end
 
-    subgraph ThirdParty [Layer 0: Pinned Third-Party Foundations]
-        NRI[NVIDIA NRI: D3D12 & Vulkan]
-        Jolt[Jolt Physics 3D]
-        EnTT[EnTT ECS]
-        EnkiTS[enkiTS Task Scheduler]
-        MiniAudio[miniaudio]
-        ImGui[Dear ImGui]
+    subgraph ThirdParty ["Layer 0: Pinned Third-Party Foundations"]
+        NRI["NVIDIA NRI: D3D12 & Vulkan"]
+        Jolt["Jolt Physics 3D"]
+        EnTT["EnTT ECS"]
+        EnkiTS["enkiTS Task Scheduler"]
+        MiniAudio["miniaudio"]
+        ImGui["Dear ImGui"]
     end
 
     %% Dependency flow
@@ -72,7 +73,8 @@ flowchart TD
     CoreSys --> EnkiTS
     ContentUI --> MiniAudio
     UIEngine --> ImGui
-`
+
+```
 
 ---
 
@@ -118,7 +120,7 @@ flowchart TD
 
 - **Automated Verification:** scripts/check_architecture.py analyzes 576+ source files and 25 CMake targets on every build and CI run.
 - **Zero Tolerance:** All historical baseline allowances have been permanently retired. Any upward dependency (e.g. Core including Scene, or Physics linking Renderer) immediately triggers build failure:
-  `
+  ```text
   Files scanned: 576; CMake files: 25
   AXLE_ARCH_CHECK PASS
-  `
+  ```

@@ -1,4 +1,4 @@
-# Phase 00 — Architecture Foundation Plan
+# Milestone 00 — Architecture Foundation Plan
 
 **Status:** Historical foundations (Milestones 1 - 10) completed; OPT-00 through OPT-09 accepted within recorded boundaries; OPT-10 implementation delivered with open acceptance gates.
 **Supporting Architectural Document:** [ARCHITECTURE.md](ARCHITECTURE.md).

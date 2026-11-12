@@ -1,4 +1,4 @@
-# Phase 05 — Content and Authoring Tools Architecture
+# Milestone 05 — Content and Authoring Tools Architecture
 
 ## 1. Target and Scope
 

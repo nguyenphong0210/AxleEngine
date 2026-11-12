@@ -1,4 +1,4 @@
-# Phase 04 — Simulation Scale Architecture
+# Milestone 04 — Simulation Scale Architecture
 
 ## 1. Target and Scope
 

@@ -1,4 +1,4 @@
-# Phase 03 — Geometry and Visibility Plan
+# Milestone 03 — Geometry and Visibility Plan
 
 **Status:** Proposed; packages released per explicit user instruction.
 **Baseline:** Post-OPT-10 architecture foundation, unified RenderService, and Hi-Z depth pyramid infrastructure.
@@ -27,7 +27,8 @@ Phase 03 establishes scalable, high-throughput geometry rendering for AxleEngine
 
 ### OPT-14: Nanite-Style Virtual Geometry & GPU Culling (Tier 2 Continuous Geometry)
 - [ ] **C14-01: Unified GPU Instance Buffer** — Define compact GPU instance structure (Transform, Bounds, Material ID, Visibility Flags) and streaming ring buffer in RHISceneRenderer.
-- [ ] **C14-02: GPU-Driven Culling & Indirect Dispatch** — Frustum culling, normal cone culling, and two-phase Hi-Z occlusion culling compute passes emitting directly to indirect draw buffers (ExecuteIndirect / kCmdDrawIndexedIndirect).
+- [ ] **C14-02: GPU-Driven Culling & Indirect Dispatch** — Frustum culling, normal cone culling, and two-phase Hi-Z occlusion culling compute passes emitting directly to indirect draw buffers (ExecuteIndirect /
+kCmdDrawIndexedIndirect).
 - [ ] **C14-03: Meshlet Asset Generation & Schema** — Partition dense meshes into clusters ($\\le 64$ verts, $\\le 126$ tris) via meshopt_buildMeshlets; serialize bounding cones and cluster debug coloring mode.
 - [ ] **C14-04: Cluster DAG Hierarchy & Locked Seams** — Recursively group clusters into a Directed Acyclic Graph (DAG) with locked shared boundary loops to guarantee watertight, 100% crack-free transitions.
 - [ ] **C14-05: Hardware Task & Mesh Shaders** — Implement Task (Amplification) Shaders evaluating projected screen error for dynamic continuous LOD selection, and Mesh Shaders rasterizing cluster primitives via NRI.

@@ -1,4 +1,4 @@
-# Phase 02 — Lighting and Material Fidelity Plan
+# Milestone 02 — Lighting and Material Fidelity Plan
 
 **Status:** Released OPT-13 scope completed and accepted; future lighting and material fidelity units are queued.
 **Supporting Architectural Document:** [ARCHITECTURE.md](ARCHITECTURE.md).

@@ -1,4 +1,4 @@
-# Phase 05 — Content and Authoring Tools Plan
+# Milestone 05 — Content and Authoring Tools Plan
 
 **Status:** Proposed; packages released per explicit user instruction.
 **Baseline:** Post-OPT-10 asset registry, transaction-safe document foundations, and RHI preview viewports.

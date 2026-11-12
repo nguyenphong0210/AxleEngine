@@ -1,4 +1,4 @@
-# Phase 04 — Simulation Scale Plan
+# Milestone 04 — Simulation Scale Plan
 
 **Status:** Proposed; packages released per explicit user instruction.
 **Baseline:** Post-OPT-10 core simulation clock, Jolt physics integration, and EnTT ECS architecture.

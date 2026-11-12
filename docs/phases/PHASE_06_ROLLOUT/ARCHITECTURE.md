@@ -1,4 +1,4 @@
-# Phase 06 — Performance and Rollout Architecture
+# Milestone 06 — Performance and Rollout Architecture
 
 ## 1. Target and Scope
 

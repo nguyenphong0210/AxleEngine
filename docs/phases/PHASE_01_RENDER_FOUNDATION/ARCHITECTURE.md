@@ -1,4 +1,4 @@
-# Phase 01 — Render and Material Foundation Architecture
+# Milestone 01 — Render and Material Foundation Architecture
 
 ## 1. Target and Scope
 

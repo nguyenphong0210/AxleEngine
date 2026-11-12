@@ -1,4 +1,4 @@
-# Phase 00 — Architecture Foundation Architecture
+# Milestone 00 — Architecture Foundation Architecture
 
 ## 1. Target and Scope
 

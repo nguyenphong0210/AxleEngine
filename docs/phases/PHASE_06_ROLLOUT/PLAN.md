@@ -1,4 +1,4 @@
-# Phase 06 — Performance and Rollout Plan
+# Milestone 06 — Performance and Rollout Plan
 
 **Status:** Proposed; individual packages released per explicit user instruction.
 **Baseline:** Post-OPT-10 stabilized engine code and Phase 00..05 deliverables.

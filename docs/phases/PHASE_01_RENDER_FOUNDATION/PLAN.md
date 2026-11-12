@@ -1,4 +1,4 @@
-# Phase 01 — Render and Material Foundation Plan
+# Milestone 01 — Render and Material Foundation Plan
 
 **Status:** Bounded OPT-11 and OPT-12 packages completed and accepted; full asynchronous product rollout remains deferred to a future dedicated release.
 **Supporting Architectural Document:** [ARCHITECTURE.md](ARCHITECTURE.md).

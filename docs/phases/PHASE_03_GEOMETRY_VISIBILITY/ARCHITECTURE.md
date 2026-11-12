@@ -1,4 +1,4 @@
-# Phase 03 — Geometry and Visibility Architecture
+# Milestone 03 — Geometry and Visibility Architecture
 
 ## 1. Target and Scope
 
@@ -56,7 +56,8 @@ flowchart TD
 - **Frustum Culling:** Fast sphere-frustum intersection in compute shaders.
 - **Orientation & Cone Culling:** Normal cone rejection for backfacing clusters before rasterization.
 - **Two-Phase Hi-Z Occlusion Culling:** Tests bounding boxes against a hierarchical depth buffer (Hi-Z pyramid). Objects occluded by walls, mountains, or foreground structures are discarded immediately on the GPU.
-- **Indirect Argument Generation:** Compute shaders write directly to ExecuteIndirect (D3D12) / kCmdDrawIndexedIndirect (Vulkan) argument buffers.
+- **Indirect Argument Generation:** Compute shaders write directly to ExecuteIndirect (D3D12) /
+kCmdDrawIndexedIndirect (Vulkan) argument buffers.
 
 ### 2.4. Meshlet Asset Pipeline (C14-03)
 - Uses meshoptimizer (meshopt_buildMeshlets) to divide meshes into bounded clusters: $\\le 64$ vertices, $\\le 126$ triangles per cluster.

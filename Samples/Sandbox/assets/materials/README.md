@@ -17,6 +17,10 @@ Colors are linear shader values. Metals need direct light or explicitly enabled
 Skybox Environment Lighting to show reflections; a visible sky alone adds no
 lighting. None of these materials emits light.
 
+The Sandbox scene uses `assets/lighting/Studio_Softbox.hdr` as a small neutral
+studio environment so these materials have readable reflections in both native
+and OpenGL views.
+
 Glass uses a transparent surface, depth writes off, queue 3000 and IOR 1.5.
 The native D3D12/Vulkan renderer can use its existing screen-space refraction
 path with a single-sample view and scene depth. Transparency sorting and

@@ -13,7 +13,6 @@ Supporting references: [POST_OPT10_PROGRAM_PLAN.md](../../archive/design/deferre
 ## 2. Architecture and Pipeline
 
 ```mermaid
-
 flowchart TD
     RawMesh["Raw 3D Mesh FBX / glTF"] --> Cooker["Asset Cooker Import"]
 

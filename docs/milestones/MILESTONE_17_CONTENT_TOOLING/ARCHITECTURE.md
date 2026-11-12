@@ -11,7 +11,6 @@ Supporting references: [`POST_OPT10_PROGRAM_PLAN.md`](../../archive/design/defer
 ## 2. Architecture and Subsystems
 
 ```mermaid
-
 flowchart TD
     AssetRegistry["Central Asset Registry & VFS"] --> DocModels["Transactional Document Models: Undo/Redo, Dirty Flags"]
 

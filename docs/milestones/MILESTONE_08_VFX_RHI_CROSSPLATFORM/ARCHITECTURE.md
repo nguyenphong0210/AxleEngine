@@ -10,23 +10,23 @@ Milestone 08 (Phases 31 through 34) introduces the foundational Hardware Abstrac
 
 ```mermaid
 flowchart TD
-    subgraph VFXEngine [VFX & Particle Subsystem]
-        EmitterMgr[Particle Emitter Manager]
-        CPUPath[CPU Particle Simulation: SoA Data Layout]
-        GPUComputePath[GPU Compute Particle Simulation]
+    subgraph VFXEngine ["VFX & Particle Subsystem"]
+        EmitterMgr["Particle Emitter Manager"]
+        CPUPath["CPU Particle Simulation: SoA Data Layout"]
+        GPUComputePath["GPU Compute Particle Simulation"]
     end
 
-    subgraph RHILayer [RHI Hardware Abstraction Layer]
+    subgraph RHILayer ["RHI Hardware Abstraction Layer"]
         RHIDevice[IRHIDevice]
         RHICommandList[IRHICommandList]
-        RHIBuffer[IRHIBuffer: Vertex, Index, Constant, Structured]
-        RHITexture[IRHITexture: 2D, Cube, Array]
-        RHIPipeline[IRHIPipelineState & Root Signature]
+        RHIBuffer["IRHIBuffer: Vertex, Index, Constant, Structured"]
+        RHITexture["IRHITexture: 2D, Cube, Array"]
+        RHIPipeline["IRHIPipelineState & Root Signature"]
     end
 
-    subgraph Backends [Hardware API Implementations]
-        D3D12Impl[D3D12 Device & Command Context]
-        GLImpl[OpenGL 4.5 Compatibility Driver]
+    subgraph Backends ["Hardware API Implementations"]
+        D3D12Impl["D3D12 Device & Command Context"]
+        GLImpl["OpenGL 4.5 Compatibility Driver"]
     end
 
     EmitterMgr --> CPUPath
@@ -37,6 +37,8 @@ flowchart TD
     RHIDevice --> D3D12Impl
     RHIDevice --> GLImpl
 
+
+```
 
 ---
 

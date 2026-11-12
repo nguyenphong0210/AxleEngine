@@ -13,7 +13,6 @@ All subsystems follow the **Single Ownership Principle**: every engine capabilit
 AxleEngine is structured into strict, unidirectional layers. A lower layer may never include, link against, or depend upon a higher layer.
 
 ```mermaid
-
 flowchart TD
     subgraph Products ["Layer 7: Shipping Products"]
         Editor["AxleEditor.exe: Authoring & UI"]

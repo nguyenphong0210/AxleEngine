@@ -10,7 +10,6 @@ Milestone 03 (Phases 8 through 13) provides AxleEngine with data persistence, as
 5. **Lua Scripting Runtime** (Phases 12 & 13): Sandboxed Lua state machine, C++ reflection bindings, and script lifecycle hooks.
 
 ```mermaid
-
 flowchart TD
     subgraph VFS ["Virtual File System & Registry"]
         AssetReg["AssetRegistry: GUID to Metadata Map"]
@@ -37,6 +36,8 @@ flowchart TD
     CPPBinder --> LuaState
     LuaState --> ScriptHooks
 
+
+```
 
 ---
 
@@ -69,7 +70,6 @@ Asset Handle:         [ AssetHandle { UUID: 7f3b... } ]
 ### 3.1 Script Lifecycle & Sandboxing
 
 ```mermaid
-
 sequenceDiagram
     autonumber
     participant Scene as Axle::Scene

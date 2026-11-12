@@ -11,7 +11,6 @@ Milestone 04 (Phases 14 through 19) introduces hierarchical spatial structures a
 6. **Pixel-Perfect Entity Picking** (Phase 19): 32-bit integer Entity ID color-buffer picking in viewport frames.
 
 ```mermaid
-
 flowchart TD
     subgraph SceneHierarchy ["Hierarchical Scene Graph"]
         RootEntity["Root Entity: Transform"]
@@ -42,6 +41,8 @@ flowchart TD
     ColorBuffer --> SelectionMgr
 
 
+```
+
 ---
 
 ## 2. Hierarchical Transform Propagation
@@ -64,14 +65,15 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    Task1[Async Task A] --> Dispatcher[Job Dispatcher]
-    Task2[Async Task B] --> Dispatcher
-    Task3[Async Task C] --> Dispatcher
-    Dispatcher --> Queue[Central Concurrent Queue]
-    Queue --> W1[Worker Thread 1]
-    Queue --> W2[Worker Thread 2]
-    Queue --> W3[Worker Thread 3]
-    Queue --> W4[Worker Thread 4]
+    Task1["Async Task A"] --> Dispatcher["Job Dispatcher"]
+    Task2["Async Task B"] --> Dispatcher
+    Task3["Async Task C"] --> Dispatcher
+    Dispatcher --> Queue["Central Concurrent Queue"]
+    Queue --> W1["Worker Thread 1"]
+    Queue --> W2["Worker Thread 2"]
+    Queue --> W3["Worker Thread 3"]
+    Queue --> W4["Worker Thread 4"]
+
 ```
 
 - **Thread Allocation**: Default count equals $\max(1, \text{hardware\_concurrency} - 1)$, reserving the main thread for OS event dispatch, input polling, and render submission.

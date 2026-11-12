@@ -11,29 +11,29 @@ Milestone 06 (Phases 24 through 28) establishes the photorealistic visual and sp
 
 ```mermaid
 flowchart TD
-    subgraph PBRSubsystem [PBR Shading Core]
-        DirectLight[Analytic Direct Lighting: Directional, Point, Spot]
-        BRDF[Cook-Torrance BRDF: D_GGX * G_Smith * F_Schlick]
-        IBLDiffuse[Irradiance Cubemap Convolution]
-        IBLSpecular[Prefiltered Specular Cubemap + BRDF LUT]
+    subgraph PBRSubsystem ["PBR Shading Core"]
+        DirectLight["Analytic Direct Lighting: Directional, Point, Spot"]
+        BRDF["Cook-Torrance BRDF: D_GGX * G_Smith * F_Schlick"]
+        IBLDiffuse["Irradiance Cubemap Convolution"]
+        IBLSpecular["Prefiltered Specular Cubemap + BRDF LUT"]
     end
 
-    subgraph ShadowSubsystem [Shadow Mapping Core]
-        CSM[Cascaded Shadow Maps: 4 Frustum Splits]
-        CubeShadow[Omnidirectional Point Light Cubemap Shadows]
-        PCF[Percentage-Closer Filtering: 3x3 / 5x5 Kernel]
+    subgraph ShadowSubsystem ["Shadow Mapping Core"]
+        CSM["Cascaded Shadow Maps: 4 Frustum Splits"]
+        CubeShadow["Omnidirectional Point Light Cubemap Shadows"]
+        PCF["Percentage-Closer Filtering: 3x3 / 5x5 Kernel"]
     end
 
-    subgraph PostProcessSubsystem [HDR & Color Grading]
-        Luminance[HDR Offscreen Buffer]
-        BloomFilter[Dual-Kawase / Downsample-Upsample Bloom]
-        ToneMap[ACES Filmic Tone-Mapping & sRGB Output]
+    subgraph PostProcessSubsystem ["HDR & Color Grading"]
+        Luminance["HDR Offscreen Buffer"]
+        BloomFilter["Dual-Kawase / Downsample-Upsample Bloom"]
+        ToneMap["ACES Filmic Tone-Mapping & sRGB Output"]
     end
 
-    subgraph AudioSubsystem [3D Spatial Audio via miniaudio]
-        AudioEngine[AudioEngine Context]
-        Listener3D[3D Listener: Position, Forward, Up, Velocity]
-        SoundInstances[Spatialized Sound Sources: Inverse Falloff]
+    subgraph AudioSubsystem ["3D Spatial Audio via miniaudio"]
+        AudioEngine["AudioEngine Context"]
+        Listener3D["3D Listener: Position, Forward, Up, Velocity"]
+        SoundInstances["Spatialized Sound Sources: Inverse Falloff"]
     end
 
     DirectLight --> BRDF
@@ -49,6 +49,8 @@ flowchart TD
     AudioEngine --> Listener3D
     Listener3D --> SoundInstances
 
+
+```
 
 ---
 

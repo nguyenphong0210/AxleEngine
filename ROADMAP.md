@@ -35,7 +35,6 @@ Detailed task checklists, work breakdown packages, and verification criteria liv
 ## 2. High-Level Lifecycle & Strategic Overview
 
 ```mermaid
-
 flowchart LR
     subgraph Era1 ["Foundations: Milestones 01 - 11"]
         M01_11["Historical Milestones 01..11<br/>Phases 1 - 41<br/>Core, Physics, ECS, RHI, Tools"]

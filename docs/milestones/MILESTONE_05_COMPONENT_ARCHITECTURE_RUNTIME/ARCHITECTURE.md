@@ -11,7 +11,6 @@ Its architectural mandate establishes:
 4. **Standalone Packaging & Cooker Pipeline** (Phase 23): Cooked asset packaging and standalone game executable distribution.
 
 ```mermaid
-
 flowchart TD
     subgraph Products ["Target Executables"]
         Editor["AxleEditor.exe: Interactive Authoring & Tooling"]
@@ -40,6 +39,8 @@ flowchart TD
     RuntimeLayer --> CookedLoader
     RuntimeLayer --> Presentation
 
+
+```
 
 ---
 
@@ -76,7 +77,6 @@ Packed Density:   [ C0  |  C2  |   C4   ]     <- Packed Array (Cache-line friend
 ### 3.2 Runtime Lifecycle
 
 ```mermaid
-
 sequenceDiagram
     autonumber
     participant Main as Runtime::main()

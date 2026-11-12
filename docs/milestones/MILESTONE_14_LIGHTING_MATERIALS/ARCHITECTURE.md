@@ -11,7 +11,6 @@ Supporting detailed roadmap reference: [docs/archive/design/deferred/ADVANCED_MA
 ## 2. Architectural Layers and Algorithms
 
 ```mermaid
-
 flowchart TD
     Skybox["Procedural / HDR Skybox"] --> DynamicIBL["Dynamic Skybox IBL Bake: Irradiance & Prefilter Mips"]
     DirLight["Directional Sun Light"] --> CSM["Cascaded Shadow Maps PCF 5x5"]

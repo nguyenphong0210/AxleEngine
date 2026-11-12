@@ -11,7 +11,6 @@ Supporting references: [`POST_OPT10_PROGRAM_PLAN.md`](../../archive/design/defer
 ## 2. Architecture and Subsystems
 
 ```mermaid
-
 flowchart TD
     Clock["SimulationClock: Monotonic Tick Index"] --> Scheduler["C15-03: Deterministic Staggered Scheduler"]
 

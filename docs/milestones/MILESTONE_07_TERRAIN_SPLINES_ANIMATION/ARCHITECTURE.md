@@ -7,7 +7,6 @@ Milestone 07 (Phases 29 through 30) introduces outdoor environment authoring and
 2. **Skeletal Animation Pipeline** (Phase 30): Hierarchical bone transform evaluation, keyframe interpolation, and GPU vertex skinning via bone matrix palettes.
 
 ```mermaid
-
 flowchart TD
     subgraph TerrainSubsystem ["Terrain & Spline Architecture"]
         Heightmap["16-bit Heightfield Source Data"]
@@ -33,6 +32,8 @@ flowchart TD
     PoseEval --> PaletteUploader
     PaletteUploader --> SkinningShader
 
+
+```
 
 ---
 
@@ -69,6 +70,7 @@ sequenceDiagram
     Note over Skel: GlobalPose[i] = GlobalPose[Parent] * LocalPose[i]
     Note over Skel: Palette[i] = GlobalPose[i] * InvBindPose[i]
     Skel->>GPU: Upload Palette (Max 128/256 Bones)
+
 ```
 
 ### 3.2 Vertex Shader Skinning Formula

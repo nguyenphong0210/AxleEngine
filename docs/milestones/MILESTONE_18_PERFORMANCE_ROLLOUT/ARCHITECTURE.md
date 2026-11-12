@@ -11,7 +11,6 @@ Rollout is an authoritative architectural decision layer: features are promoted 
 ## 2. Architecture and Subsystem Boundaries
 
 ```mermaid
-
 flowchart TD
     Bench["C20-01: Benchmark & Scene Matrix"] --> Metrics["C20-03: Frame-Time & Memory Telemetry"]
     Image["C20-02: Multi-Backend Image Parity"] --> QualityGate["Quality & Parity Gating"]

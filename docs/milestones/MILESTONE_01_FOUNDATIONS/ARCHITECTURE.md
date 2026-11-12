@@ -9,7 +9,6 @@ Milestone 01 (Phases 1 through 4) establishes the bedrock infrastructure of Axle
 4. **Rendering Hardware Spike** (Phase 4): Baseline OpenGL context creation, hardware shader compilation, and buffer abstractions (`VertexArray`, `VertexBuffer`, `IndexBuffer`).
 
 ```mermaid
-
 flowchart TD
     subgraph OSPlatform ["Platform & OS Abstraction"]
         OSWindow["GLFW Window & Message Loop"]
@@ -37,6 +36,8 @@ flowchart TD
     GLContext --> PipelineAbstr
 
 
+```
+
 ---
 
 ## 2. LayerStack & Application Coordination
@@ -47,18 +48,19 @@ AxleEngine structures execution logic across an ordered `LayerStack`:
 
 ```mermaid
 flowchart TD
-    subgraph ExecutionOrder [LayerStack Memory Layout]
-        L1[Layer 1: Engine Scene]
-        L2[Layer 2: Game Logic]
-        InsertPoint[-- Layer Insert Cursor --]
-        O1[Overlay 1: ImGui Host]
-        O2[Overlay 2: Debug Diagnostics]
+    subgraph ExecutionOrder ["LayerStack Memory Layout"]
+        L1["Layer 1: Engine Scene"]
+        L2["Layer 2: Game Logic"]
+        InsertPoint["-- Layer Insert Cursor --"]
+        O1["Overlay 1: ImGui Host"]
+        O2["Overlay 2: Debug Diagnostics"]
     end
 
     L1 --> L2
     L2 --> InsertPoint
     InsertPoint --> O1
     O1 --> O2
+
 ```
 
 ---

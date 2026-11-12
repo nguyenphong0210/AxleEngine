@@ -8,7 +8,6 @@ Milestone 02 (Phases 5 through 7) transforms AxleEngine into an interactive 3D s
 3. **Simulation Tick & Input Architecture** (Phase 7): Deterministic fixed timestep accumulator loop and unified input polling.
 
 ```mermaid
-
 flowchart TD
     subgraph AppLoop ["Application Frame Loop"]
         Clock["High-Resolution Frame Clock: std::chrono"]
@@ -37,6 +36,8 @@ flowchart TD
     OffscreenFB --> ImGuiViewport
 
 
+```
+
 ---
 
 ## 2. Fixed Timestep Simulation Loop
@@ -45,16 +46,17 @@ To guarantee physics determinism and prevent numerical instability caused by var
 
 ```mermaid
 flowchart TD
-    Start[Frame Start] --> Measure[Measure Frame Delta Time]
-    Measure --> Cap[Cap Delta Time to Max Threshold: e.g. 0.25s]
-    Cap --> Add[Accumulator += DeltaTime]
-    Add --> Check{Accumulator >= FixedDelta?}
-    Check -- Yes --> Tick[Simulate Fixed Physics Step: dt = 1/60s]
-    Tick --> Sub[Accumulator -= FixedDelta]
+    Start["Frame Start"] --> Measure["Measure Frame Delta Time"]
+    Measure --> Cap["Cap Delta Time to Max Threshold: e.g. 0.25s"]
+    Cap --> Add["Accumulator += DeltaTime"]
+    Add --> Check{"Accumulator >= FixedDelta?"}
+    Check -- Yes --> Tick["Simulate Fixed Physics Step: dt = 1/60s"]
+    Tick --> Sub["Accumulator -= FixedDelta"]
     Sub --> Check
-    Check -- No --> Interpolate[Compute Alpha = Accumulator / FixedDelta]
-    Interpolate --> VariableTick[Update Variable Logic & Render Frame]
-    VariableTick --> End[Frame End]
+    Check -- No --> Interpolate["Compute Alpha = Accumulator / FixedDelta"]
+    Interpolate --> VariableTick["Update Variable Logic & Render Frame"]
+    VariableTick --> End["Frame End"]
+
 ```
 
 ---

@@ -12,7 +12,6 @@ Phase 01 establishes modern rendering execution and material pipeline architectu
 ## 2. Concurrency & Memory Architecture
 
 ```mermaid
-
 flowchart TD
     subgraph MainThread ["Main / Simulation Thread"]
         Sim["Simulation & ECS Advance Frame N+1"]
@@ -65,7 +64,6 @@ flowchart TD
 ## 3. Material Graph & Compiler Architecture
 
 ```mermaid
-
 flowchart LR
     AssetFile["Material Asset .axleasset"] --> Parser["Document Parser & AST Validator"]
     Parser --> AST["Abstract Syntax Tree IR"]

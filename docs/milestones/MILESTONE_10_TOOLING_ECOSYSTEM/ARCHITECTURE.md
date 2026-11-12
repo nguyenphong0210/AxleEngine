@@ -8,7 +8,6 @@ Milestone 10 (Phases 38 through 40) expands AxleEngine into an extensible author
 3. **Node-Based Visual Scripting & Canvas** (Phase 38): Dataflow node graphs, execution graphs, and visual logic composition.
 
 ```mermaid
-
 flowchart TD
     subgraph Host ["AxleEngine Host Environment"]
         Editor["AxleEditor Tooling Host"]
@@ -44,6 +43,8 @@ flowchart TD
     Editor --> AssemblySys
     Editor --> CanvasGraph
 
+
+```
 
 ---
 
@@ -97,7 +98,6 @@ The Assembly subsystem provides reusable object templates:
 The Canvas graph architecture provides visual dataflow and logic execution:
 
 ```mermaid
-
 classDiagram
     class CanvasGraph {
         +vector~CanvasNode~ Nodes

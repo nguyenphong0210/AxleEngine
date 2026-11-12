@@ -7,7 +7,6 @@ Milestone 11 (Phase 41) establishes the modern Hardware Abstraction Layer (RHI) 
 Legacy OpenGL 4.5 is strictly retained as a secondary **compatibility fallback adapter** operating behind the exact same product-level rendering contracts.
 
 ```mermaid
-
 flowchart TD
     subgraph Products ["Client Products"]
         Editor["AxleEditor: Viewports & Scene Previews"]
@@ -51,6 +50,8 @@ flowchart TD
     NRI --> Vulkan
     RenderService -.->|Fallback / Explicit GL| GLAdapter
 
+
+```
 
 ---
 
@@ -107,6 +108,7 @@ classDiagram
 
     RenderWorld --> ViewRequest : evaluated with
     ViewRequest --> RenderResult : produces
+
 ```
 
 ### 3.2 Resource Generation and Handle Safety
@@ -129,7 +131,6 @@ Modern graphics APIs (Direct3D 12 and Vulkan) require strict resource state tran
 - **Pending vs. Submitted State**: State transitions are tracked locally during command list recording and committed to the global state tracker only upon verified command buffer submission.
 
 ```mermaid
-
 stateDiagram-v2
     [*] --> Undefined
     Undefined --> Common : Allocate / Initialize

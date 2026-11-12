@@ -135,8 +135,8 @@ Entities:
     SkyboxComponent:
       Enabled: true
       EnvironmentLighting: true
-      SkyboxType: 0
-      HDRPath: 
+      SkyboxType: 1
+      HDRPath: lighting/Studio_Softbox.hdr
       Intensity: 1.000000
       Exposure: 1.000000
       ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]

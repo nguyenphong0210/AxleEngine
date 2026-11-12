@@ -427,6 +427,19 @@ float4 PSMain(PSInput input) : SV_Target0 {
     // 5. Base Reflectivity F0 (Dielectric = 0.04, Metal = Albedo)
     float3 F0 = float3(0.04, 0.04, 0.04);
     F0 = lerp(F0, albedo.rgb, metallic);
+
+    // M14-U1.1: Kulla-Conty/Filament GGX energy compensation.
+    // The existing DFG LUT stores the Fresnel split terms A and B. Their sum
+    // is the directional single-scatter GGX energy r for this view and
+    // roughness. Scaling the single-scatter lobe by
+    //     1 + F0 * (1/r - 1)
+    // restores the energy lost to subsequent microfacet bounces while
+    // preserving the existing LUT, descriptor layout, and fallback paths.
+    // Keep a finite floor for grazing/high-roughness samples and malformed
+    // fallback LUTs; the final HDR clamp remains the last safety boundary.
+    float2 ggxDFG = u_BRDFLUT.SampleLevel(u_EnvironmentSampler, float2(NdotV, roughness), 0.0).rg;
+    float ggxSingleScatterEnergy = max(ggxDFG.x + ggxDFG.y, 0.05);
+    float3 ggxEnergyCompensation = min(1.0 + F0 * (1.0 / ggxSingleScatterEnergy - 1.0), 8.0);
     
     // Direct Radiance Accumulation
     float3 Lo = float3(0.0, 0.0, 0.0);
@@ -454,7 +467,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         float3 numerator   = NDF * G * F;
         float  denominator = 4.0 * NdotV * max(NdotL_Sun, 0.001) + 0.0001;
-        float3 specular    = numerator / denominator * u_MaterialSurface.z;
+        float3 specular    = numerator / denominator * u_MaterialSurface.z * ggxEnergyCompensation;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
@@ -505,7 +518,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         float3 numerator   = NDF * G * F;
         float  denominator = 4.0 * NdotV * max(NdotL, 0.001) + 0.0001;
-        float3 specular    = numerator / denominator * u_MaterialSurface.z;
+        float3 specular    = numerator / denominator * u_MaterialSurface.z * ggxEnergyCompensation;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
@@ -558,7 +571,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         float3 numerator   = NDF * G * F;
         float  denominator = 4.0 * NdotV * NdotL + 0.0001;
-        float3 specular    = numerator / denominator * u_MaterialSurface.z;
+        float3 specular    = numerator / denominator * u_MaterialSurface.z * ggxEnergyCompensation;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
@@ -587,7 +600,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         // C. Split-sum BRDF integration 2D LUT: scale (rg.x) and bias (rg.y) for Fresnel reflection
         float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(max(NdotV, 0.0), roughness)).rg;
-        float3 specularAmbient = prefilteredColor * (ambientF * envBRDF.x + envBRDF.y);
+        float3 specularAmbient = prefilteredColor * (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation;
 
         float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
         float3 coatEnvironment = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, R, clamp(coatAnisotropy.y,0.04,1.0) * MAX_REFLECTION_LOD).rgb;
@@ -601,7 +614,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 ambientColor=u_SunLight.AmbientColor.rgb;
         float3 R=reflect(-V,N);
         float3 diffuseAmbient=ambientColor*albedo.rgb*ambientKD;
-        float3 specularAmbient=ambientColor*ambientF*(1.0-roughness*0.5)*u_MaterialSurface.w;
+        float3 specularAmbient=ambientColor*ambientF*(1.0-roughness*0.5)*u_MaterialSurface.w*ggxEnergyCompensation;
         ambient=(diffuseAmbient+specularAmbient*(1-saturate(u_LightReserved[0].z)))*max(u_LightReserved[0].y,0.0)*ao;
     }
     

@@ -230,6 +230,9 @@ bool Native(RHIType backend) {
     material->GetDesc().Roughness=.9f; auto rough=render(); CHECK(!rough.empty());
     std::cout<<"reflection center sharp="<<int(sharp[center])<<" rough="<<int(rough[center])<<"\n";
     CHECK(sharp[center]>rough[center]+30);
+    // M14-U1.1: the rough metallic lobe must retain materially more energy
+    // than the pre-compensation single-scatter baseline (150 on this fixture).
+    CHECK(rough[center]>=180);
     CHECK(PPM("sharp.ppm",sharp,width)&&PPM("rough.ppm",rough,width));
     // LRU stays bounded. Switching an environment refreshes even unused draw
     // descriptors so eviction does not retain the old native texture forever.

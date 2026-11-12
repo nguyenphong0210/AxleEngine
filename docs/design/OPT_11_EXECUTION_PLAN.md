@@ -1,4 +1,4 @@
-﻿# OPT-11 Execution Plan: Render Thread, Parallel Recording and Transient VRAM Aliasing
+# OPT-11 Execution Plan: Render Thread, Parallel Recording and Transient VRAM Aliasing
 
 **Status:** Technical reference and original planning contract. This document
 does not release implementation.
@@ -8,7 +8,7 @@ records qualified foundation/synchronous-product acceptance and deferred
 asynchronous/native-parallel/scene-alias product integration. This reference does
 not itself release later work or claim full OPT-11 deployment.
 
-**Authority:** `docs/ROADMAP.md`, `docs/design/POST_OPT10_PROGRAM_PLAN.md`,
+**Authority:** `../../ROADMAP.md`, `../phases/PHASE_01_RENDER_FOUNDATION/PLAN.md`,
 `docs/design/RHI_PRIMARY_RENDERER_ARCHITECTURE.md`, and
 `docs/design/NRI_INTEGRATION_CONTRACT.md`.
 

@@ -4,6 +4,19 @@ Reorganized: **2026-11-04**. These documents were removed from the active
 `docs/design` folder to keep the architecture cleanup focused. Return to the
 [active design index](../../design/README.md) or [optimization roadmap](../../ROADMAP.md).
 
+## Deferred roadmap references
+
+These historical roadmaps were consolidated into the Phase documents. They are
+kept here only for traceability and do not define active execution order.
+
+| Document | Role |
+| --- | --- |
+| [Advanced material fidelity roadmap](deferred/ADVANCED_MATERIAL_FIDELITY_ROADMAP.md) | Historical/deferred material direction |
+| [Post-OPT10 advanced rendering roadmap](deferred/POST_OPT10_ADVANCED_RENDERING_ROADMAP.md) | Historical/deferred rendering direction |
+| [Post-OPT10 engine upgrade roadmap](deferred/POST_OPT10_ENGINE_UPGRADE_ROADMAP.md) | Historical/deferred engine direction |
+| [Post-OPT10 logic and simulation LOD roadmap](deferred/POST_OPT10_LOGIC_AND_SIMULATION_LOD_ROADMAP.md) | Historical/deferred simulation direction |
+| [Post-OPT10 master roadmap](deferred/POST_OPT10_MASTER_ROADMAP.md) | Historical master planning reference |
+| [Post-OPT10 program plan](deferred/POST_OPT10_PROGRAM_PLAN.md) | Historical package breakdown and dependencies |
 ## Deferred feature work
 
 These plans/references are outside the current architecture prerequisite path.

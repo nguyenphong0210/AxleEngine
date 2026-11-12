@@ -90,7 +90,7 @@ For in-depth guides, API references, and architectural walk-throughs, start with
 
 | Document | Description |
 | :--- | :--- |
-| **[Optimization Roadmap](docs/ROADMAP.md)** | Active execution sequence, delivered packages, and phase exit criteria. |
+| **[Roadmap](ROADMAP.md)** | Single Phase order, progress, plan links and architecture links. |
 | **[Architecture Overview](docs/architecture/OVERVIEW.md)** | Subsystem structure, lifecycle, and modular boundaries post OPT-03. |
 | **[Architecture & Design Set](docs/architecture/README.md)** | SAD, SDD, UML class relationships, execution flows, and target layered architecture. |
 | **[ECS & Scene Graph Guide](docs/guides/SCENE_AND_ECS.md)** | EnTT component schemas, parent-child transform propagation, and `SceneCommandBuffer`. |
@@ -103,14 +103,9 @@ For in-depth guides, API references, and architectural walk-throughs, start with
 
 ## 🗺️ Project Milestones & Roadmap
 
-Current work follows the **[Architecture Optimization Roadmap](docs/ROADMAP.md)**:
-- **OPT-00**: Vehicle Module Clean Retirement (Delivered).
-- **OPT-01**: Clean Baseline, Threading, Asset Identity & Model (Delivered).
-- **OPT-02**: Jobs & Worker Integrity, Core Leaf Decoupling (Delivered).
-- **OPT-03**: Core, SceneData, Assets & Shared Simulation (Delivered).
-- **OPT-04**: NRI Device & GPU Lifetime Foundation (Accepted).
-- **OPT-05**: Shared rendering for Editor, previews and Runtime ([accepted after review and corrections](docs/reviews/OPT_05_CODEX_REVIEW.md)).
-- **OPT-06**: Plugin framework (Not released).
+Current work follows the single **[Phase roadmap](ROADMAP.md)**. Each Phase owns
+one `PLAN.md` and one `ARCHITECTURE.md`; package identifiers remain inside those
+documents and their review evidence.
 
 ---
 

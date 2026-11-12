@@ -7,7 +7,7 @@
 **Related contracts:** [OPT-11 execution plan](OPT_11_EXECUTION_PLAN.md),
 [RHI primary renderer architecture](RHI_PRIMARY_RENDERER_ARCHITECTURE.md),
 [NRI integration contract](NRI_INTEGRATION_CONTRACT.md), and
-[post-OPT-10 program plan](POST_OPT10_PROGRAM_PLAN.md).
+[Phase 01 architecture](../phases/PHASE_01_RENDER_FOUNDATION/ARCHITECTURE.md).
 
 The execution plan defines package scope and acceptance. This document defines
 how an implementation should be structured and which invariants the code must

@@ -27,30 +27,31 @@ explicitly if the running client/session has not loaded it.
 
 - **OPT-10**: In progress under the explicit user assignment: architecture enforcement, stress/cross-product evidence and maintained documentation. [Current acceptance record](../reviews/OPT_10_ARCHITECTURE_ACCEPTANCE.md) separates implementation, executed tests and open gates.
 
-Read **[docs/ROADMAP.md](../ROADMAP.md)** for OPT-00..11 order/progress and the
-[active design index](../design/README.md) for current phase contracts.
-Historical Phase 41/42/43 and G labels are domain references, not execution order.
+Read the repository **[ROADMAP.md](../../ROADMAP.md)** for the single Phase
+order/progress system and the [Phase documents](../phases/README.md) for current
+plan/architecture pairs. Historical Phase and OPT labels in reports are not a
+second execution queue.
 The live exchange determines the current assignment; no plan releases production work.
 
 ## Reference map
 
 | Topic | Reference | Role |
 | --- | --- | --- |
-| Execution/progress | [Optimization roadmap](../ROADMAP.md) | OPT-00..11, one package checklist and deferred queue |
+| Execution/progress | [Roadmap](../../ROADMAP.md) | Single Phase order and status authority |
 | Architecture contracts | [Master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | External prerequisite graph, AF definitions and bounded architecture exit |
 | Native render integration | [NRI contract](../design/NRI_INTEGRATION_CONTRACT.md) | Source-pinned vendor/service/lifetime rules mapped to P41 |
-| Rendering priority | [Phase 41 plan](../design/RHI_PRIMARY_RENDERER_IMPLEMENTATION_PLAN.md) | Canonical packages and required gates |
+| Rendering priority | [Phase 01/02 plans](../phases/PHASE_01_RENDER_FOUNDATION/PLAN.md) | Current plan and required gates |
 | OPT-02/03 acceptance | [Codex review and corrections](../reviews/OPT_02_03_CODEX_REVIEW.md) | Current-source Debug/Release, native products and verified repairs |
 | ECS/jobs baseline findings | [Integration review](../architecture/ENTT_ENKITS_REVIEW.md) | Historical reproduced faults and risks; use the current acceptance report for correction status |
 | ECS/jobs refactor | [Refactor plan](../design/ENTT_ENKITS_REFACTOR_PLAN.md) | 18 package contracts; EJ-00..EJ-14 delivered |
 | Plugin product/ABI design | [Plugin architecture](../design/PLUGIN_SYSTEM_ARCHITECTURE.md) | Proposed DLL/static products, UX, lifetime and fresh Vehicle scope |
 | Plugin execution | [Plugin plan](../design/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | 26 unreleased packages and acceptance gates |
 | Plugin implementation details | [Plugin coding reference](../design/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | Proposed algorithms, SDK contracts and real-fixture strategy |
-| Feature status | [ROADMAP](../../ROADMAP.md) | Overall plan; not an automatic task queue |
-| Animation requirements/dependencies | [Phase 40 plan](../archive/design/deferred/ANIMATION_PHASE_40_COMPLETION_PLAN.md) | Package contracts |
+| Feature status | [ROADMAP](../../ROADMAP.md) | Overall plan; not an automatic release |
+| Animation requirements/dependencies | [Phase 05 plan](../phases/PHASE_05_CONTENT_TOOLING/PLAN.md) | Current content/tooling boundary |
 | Latest animation foundation | [Verified corrections](../archive/design/reports/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md) | Existing accepted foundation evidence |
 | G1 submission | [Gemini delivery](../archive/design/reports/ANIMATION_G1_GEMINI_DELIVERY.md) | Implementer's report; review still required |
-| VFX requirements | [Phase 39 plan](../archive/design/deferred/VFX_PHASE_39_COMPLETION_PLAN.md) | Historical/scoped feature contracts |
+| VFX requirements | [Phase 05 plan](../phases/PHASE_05_CONTENT_TOOLING/PLAN.md) | Current content/tooling boundary |
 
 ## Historical prompts
 

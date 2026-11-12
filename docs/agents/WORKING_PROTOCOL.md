@@ -22,7 +22,7 @@ The other files here are this project's conventions, not a product guarantee.
 - Latest user instructions define scope. Record them in the task card; never let
   an old file override the user or require repetitive approval for authorized work.
 - Priority checkpoint (2026-11-04): clean architecture before feature expansion.
-  [docs/ROADMAP.md](../ROADMAP.md) owns the single sequential OPT-00..11 queue and
+  [root ROADMAP.md](../../ROADMAP.md) owns the single Phase order and
   progress. The [master contract](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md)
   owns AF/cross-plan dependencies; P41/EJ/PLG are stable domain identifiers.
   Old Vehicle retirement was delivered early; the independent

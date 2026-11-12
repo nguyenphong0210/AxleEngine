@@ -9,7 +9,7 @@ The user subsequently assigned C12-01 directly to Codex: CPU document parsing,
 validation, IR and persistence. Shader generation, a node-editor package,
 MaterialX integration and the remainder of OPT-12 remain separate packages.
 See the [C12-01 delivery](../reviews/OPT_12_C12_01_DELIVERY.md),
-[program plan](POST_OPT10_PROGRAM_PLAN.md#opt-12--shader-and-material-pipeline)
+[Phase 01 plan](../phases/PHASE_01_RENDER_FOUNDATION/PLAN.md)
 for package boundaries and the [exchange](../agents/CODEX_GEMINI_EXCHANGE.json)
 for the current assignment.
 

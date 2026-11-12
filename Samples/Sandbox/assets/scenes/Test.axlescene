@@ -6,7 +6,7 @@ Entities:
     TagComponent:
       Tag: Sphere
     TransformComponent:
-      Translation: [ 0.000000 , 3.455316 , 0.000000 ]
+      Translation: [ 0.000000 , 1.000000 , 0.000000 ]
       Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
       Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:

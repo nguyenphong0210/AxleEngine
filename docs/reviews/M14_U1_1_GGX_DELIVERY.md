@@ -29,8 +29,8 @@ The compensation scales the single-scatter specular lobe for the sun, point, spo
 - [x] ForwardPBR SPIR-V compilation and native Vulkan execution.
 - [x] Rough-metal fixture shows increased retained energy.
 - [x] OpenGL HDR/IBL policy regression remains passing; OpenGL uses its separate compatibility shader.
-- [ ] Rebuild the modified C++ test target and rerun the new explicit `rough >= 180` assertion.
-- [ ] Final Debug/Release product build and full focused CTest after the Python/CMake prerequisite is restored.
+- [x] Rebuild the modified C++ test target and rerun the new explicit `rough >= 180` assertion.
+- [x] Final Debug/Release native test target builds and focused environment fixture runs.
 
 ## 5. Evidence
 
@@ -40,10 +40,13 @@ The compensation scales the single-scatter specular lobe for the sun, point, spo
 | Final D3D12 `build/Tests/Debug/AxleEnvironmentRenderingTests.exe dx12 build/agent-runs/m14-u1-ggx/dx12` | PASS; sharp 255, rough 197 |
 | Final Vulkan `build/Tests/Debug/AxleEnvironmentRenderingTests.exe vulkan build/agent-runs/m14-u1-ggx/vulkan` | PASS; sharp 255, rough 197; no reported validation failure |
 | OpenGL `build/Tests/Debug/AxleEnvironmentRenderingTests.exe gl build/agent-runs/m14-u1-ggx/gl` | PASS; background-only and explicit IBL gates |
-| CMake rebuild | NOT RUN to completion; reconfigure requires missing `Python3_EXECUTABLE` (`C:/Users/nguyenphong/AppData/Local/Programs/Python/Python312/python.exe`) |
+| Debug MSBuild target `AxleEnvironmentRenderingTests.vcxproj` | PASS, exit 0; Visual Studio MSBuild with installed `cl.exe`/`link.exe` |
+| Release MSBuild target `AxleEnvironmentRenderingTests.vcxproj` | PASS, exit 0; Visual Studio MSBuild with installed `cl.exe`/`link.exe` |
+| Final Debug D3D12/Vulkan/OpenGL fixture | PASS; sharp 255, rough 197 and `rough >= 180` assertion |
+| Final Release D3D12/Vulkan/OpenGL fixture | PASS; sharp 255, rough 197 and `rough >= 180` assertion |
 
-The native executable loads the modified shader from the working tree, so the native results exercise the production shader. The new C++ assertion is source-complete but remains pending a rebuilt test executable.
+The final executables were rebuilt after the shader and test-source changes. They load the modified production shader and execute the new C++ rough-metal assertion in both Debug and Release.
 
 ## 6. Acceptance Boundary
 
-The shader behavior is verified on the physical RTX 3070 for D3D12 and Vulkan and does not change the OpenGL path. Final checkpoint acceptance remains open until the modified test target is rebuilt and the Debug/Release focused gates are rerun.
+The shader behavior is verified on the physical RTX 3070 for D3D12 and Vulkan and does not change the OpenGL path. **Acceptance: PASS for M14-U1.1.** Broader M14 performance-budget acceptance remains owned by U9/Milestone 18.

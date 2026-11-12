@@ -18,7 +18,7 @@ Milestone 15 establishes scalable, high-throughput geometry rendering for AxleEn
 
 ---
 
-## 3. Pending Work Packages
+## 3. Checklist
 
 ### Phase 45.1: Offline autoLOD Pipeline via `meshoptimizer` (formerly OPT-16)
 - [ ] **C16-01: Automated Mesh Decimation via `meshoptimizer`** — Integrate `meshopt_simplify` into the Asset Cooker to automatically generate discrete fallback LODs (LOD0 100%, LOD1 50%, LOD2 25%, LOD3 10%) on mesh import without DCC manual modeling.

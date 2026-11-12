@@ -65,7 +65,7 @@ flowchart LR
 
 ---
 
-## 4. Pending Work Packages (Fidelity Roadmap)
+## 4. Checklist (Fidelity Roadmap)
 
 - [ ] **Phase 44.4: Multi-Bounce GGX Energy Compensation** — Integrate Kulla-Conty 2D LUT / analytical energy compensation term into `ForwardPBR.hlsl` to eliminate darkening on rough metals.
 - [ ] **Phase 44.5: Dynamic Procedural Skybox IBL** — Render `Procedural Atmospheric Skybox` to a dynamic $128 \times 128 \times 6$ cubemap and compute Irradiance + Prefilter mips so procedural skies provide real IBL reflections.

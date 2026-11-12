@@ -18,7 +18,7 @@ Milestone 18 consolidates measured performance benchmarks, multi-backend visual 
 
 ---
 
-## 3. Pending Work Packages (Phase 48, formerly OPT-20)
+## 3. Checklist (Phase 48, formerly OPT-20)
 
 - [ ] **Phase 48.1: Benchmark Matrix & Standardized Environments (C20-01)** — Define standardized benchmark scenes: `MaterialReference.axlescene`, `CarTest.axlescene`, `OffRoadTrack.axlescene`, and a dense geometry fixture; deterministic spline camera paths with fixed time-step loops; resolution presets: 1080p, 1440p, 4K across Standard, High, and Ultra quality tiers.
 - [ ] **Phase 48.2: Image Quality & Cross-Backend Parity (C20-02)** — Capture baseline golden images across D3D12, Vulkan, and OpenGL backends; implement automated image comparison tool computing PSNR, SSIM, and maximum channel error; verify fallback image parity on simulated lower-tier capability profiles.

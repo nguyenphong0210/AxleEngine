@@ -18,7 +18,7 @@ Milestone 16 addresses CPU-side simulation scaling for large open worlds and hig
 
 ---
 
-## 3. Pending Work Packages (Phase 46, formerly OPT-15)
+## 3. Checklist (Phase 46, formerly OPT-15)
 
 ### Phase 46.1: Monotonic Tick Identity & Significance Policy
 - [ ] **C15-01: Public Monotonic Tick Identity** — Standardize monotonic tick counter in `SimulationClock`; expose fixed-timestep tick indices to `ScriptableEntity` and native simulation listeners.

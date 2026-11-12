@@ -21,7 +21,7 @@ Milestone 17 establishes a production-grade, crash-resilient content authoring p
 
 ---
 
-## 3. Pending Work Packages (Phase 47)
+## 3. Checklist (Phase 47)
 
 ### Phase 47.1: Skeletal Animation Studio & Runtime Pipeline (formerly OPT-17 / Phase 40)
 - [ ] **C17-01: Rig & Clip Import** — FBX and glTF 2.0 skinned mesh importer; procedural reference rig; retain bind-pose for unkeyed channels; enforce topological joint ordering.

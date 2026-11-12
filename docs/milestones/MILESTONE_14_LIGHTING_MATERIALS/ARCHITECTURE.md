@@ -2,13 +2,57 @@
 
 ## 1. Target and Scope
 
-Phase 02 elevates AxleEngine\'s lighting, shading, and material systems from foundational Cook-Torrance Forward+ PBR to cinematic-grade photorealism (AAA fidelity). All geometry receives physically coherent direct lighting, energy-conserving indirect environment reflection (IBL), tight contact occlusion, volumetric atmospheric scattering, and seamless fallback across modern RHI (Direct3D 12, Vulkan) and legacy OpenGL compatibility paths.
+Milestone 14 (Phase 44) elevates AxleEngine's lighting, shading, and material systems from foundational Cook-Torrance Forward+ PBR to cinematic-grade photorealism (AAA fidelity). The architecture is delivered through independently releasable Units so shader-only improvements, shared RHI infrastructure, authoring contracts, and experimental GI do not share one unbounded acceptance gate.
 
 Supporting detailed roadmap reference: [docs/archive/design/deferred/ADVANCED_MATERIAL_FIDELITY_ROADMAP.md](../../archive/design/deferred/ADVANCED_MATERIAL_FIDELITY_ROADMAP.md).
 
 ---
 
-## 2. Architectural Layers and Algorithms
+## 2. Unit Architecture and Dependency Contracts
+
+```mermaid
+flowchart TD
+    U0["U0 Baseline & Contracts"] --> U1["U1 Direct BRDF Fidelity"]
+    U0 --> U2["U2 Dynamic Environment"]
+    U1 --> U3["U3 Screen-Space Infrastructure"]
+    U2 --> U3
+    U3 --> U4["U4 Occlusion"]
+    U3 --> U5["U5 Reflections & Area Lights"]
+    U3 --> U6["U6 Atmosphere & GI"]
+    U3 --> U7["U7 Post & Temporal"]
+    U7 --> U8["U8 Advanced Materials"]
+    U4 --> U9["U9 Acceptance"]
+    U5 --> U9
+    U6 --> U9
+    U7 --> U9
+    U8 --> U9
+```
+
+### 2.1. Unit Contracts
+
+| Unit | Primary responsibility | Required exit evidence |
+|---|---|---|
+| U0 | Baseline audit, capability matrix, fallback diagnostics, fixture contract | Existing 44.1–44.3 tests remain green; no regression in OpenGL policy |
+| U1 | Kulla-Conty GGX and solar angular-radius lighting | Numeric shader/LUT checks, native image parity, rough-metal fixture |
+| U2 | Procedural sky capture and dynamic IBL generation | Six-face orientation, cache generation/lifetime, native sky/metal response |
+| U3 | Depth/normal targets, UAV/storage views, compute recording, barriers, transient realization, history ownership | Resource lifetime/fault/retry tests, D3D12/Vulkan validation-clean compute fixture |
+| U4 | GTAO and directional contact shadows | Off/on parity, occlusion grounding fixture, capability fallback |
+| U5 | Hi-Z/SSR, reflection probes, LTC area lights | Screen-space miss fallback, probe blending, area-light material fixture |
+| U6 | Froxel fog and opt-in DDGI | Bounded volume memory, temporal reset, no-light/leak fallback, DDGI diagnostic policy |
+| U7 | Bloom, histogram exposure, TAA | Exposure adaptation, history invalidation, camera jitter, transparent/UI policy |
+| U8 | Sheen, Beer-Lambert, SSS and any Material Graph extension | Built-in material serialization, shader parity, explicit graph support decision |
+| U9 | Final quality/performance acceptance | Shared benchmark matrix, GPU timestamps, parity and scorecard evidence |
+
+### 2.2. Production and Experimental Boundaries
+
+- U0–U4 form the minimum grounded-lighting path. U7's stable bloom/exposure portion may join this core after measurement.
+- U5, U6 fog, and U8 remain opt-in until their quality, lifetime, and performance evidence is complete.
+- U6 DDGI is experimental and must fall back to IBL/ambient lighting without changing authored scene behavior.
+- U9 consumes the benchmark and timestamp infrastructure owned by Milestone 18; Milestone 14 must not invent a competing measurement contract.
+
+---
+
+## 3. Architectural Layers and Algorithms
 
 ```mermaid
 flowchart TD
@@ -75,8 +119,10 @@ flowchart TD
 
 ---
 
-## 3. Technology and Compatibility Limits
+## 4. Technology and Compatibility Limits
 
 1. **RHI Ownership:** Direct3D 12 and Vulkan via NRI serve as the primary backends for advanced compute/graphics passes (GTAO, Hi-Z SSR, TAA, Froxel Fog, DDGI).
 2. **OpenGL Fallback Policy:** OpenGL 4.5 retains functional compatibility via analytical ambient and punctual lights, explicitly reporting when compute-driven features (SSR, GTAO, DDGI) are bypassed.
 3. **Hardware Independence:** High-end features remain scalable via quality presets (Low, Medium, High, Ultra).
+4. **Shared Infrastructure First:** U3 must provide storage/UAV views, compute-pass ownership, resource barriers, transient realization, and history lifetime before dependent Units can publish production behavior.
+5. **Authoring Boundary:** New lights, probes, material fields, and graph shading models require synchronized component, extraction, serialization, editor, and runtime contracts; shader-only support is not sufficient for authored features.

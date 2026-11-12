@@ -1,50 +1,91 @@
+# AxleFileIdentity: 1 10647963225098197945
 # Axle Scene Definition File
-Scene: Test
+Scene: Untitled
 Entities:
-  - Entity: 100001
+  - Entity: 100004
     TagComponent:
-      Tag: Atmospheric Skybox
+      Tag: Sphere
     TransformComponent:
-      Translation: [ 0 , 0 , 0 ]
-      Rotation: [ 1 , 0 , 0 , 0 ]
-      Scale: [ 1 , 1 , 1 ]
-    SkyboxComponent:
-      Enabled: true
-      EnvironmentLighting: true
-      SkyboxType: 0
-      HDRPath: 
-      Intensity: 1.000000
-      Exposure: 1.000000
-      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
-      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
-      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
-      SunSize: 0.045000
-      SunGlow: 0.160000
-      Turbidity: 1.000000
-      SyncWithSun: true
-      CustomAzimuth: 45.000000
-      CustomElevation: 50.000000
-      HemisphereAmbient: true
-  - Entity: 100002
-    TagComponent:
-      Tag: Plane
-    TransformComponent:
-      Translation: [ 0 , 0 , 0 ]
-      Rotation: [ 1 , 0 , 0 , 0 ]
-      Scale: [ 20 , 1 , 20 ]
+      Translation: [ 0.000000 , 3.455316 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
     MeshInstance3D:
-      AssetPath: builtin://plane
-      PatternMode: 1
-      TileScale: 8.000000
-      Color1: [ 0.350000 , 0.380000 , 0.420000 , 1.000000 ]
-      Color2: [ 0.200000 , 0.220000 , 0.250000 , 1.000000 ]
+      AssetPath: builtin://sphere
+      PatternMode: 2
+      TileScale: 4.000000
+      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
+      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    MaterialComponent:
+      MaterialHandle: 9468030326175427127
+      AssetPath: materials/Metal_Gold.axleasset
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 1 , 0.766 , 0.336 , 1 ]
+      AOPath: 
+      EmissivePath: 
+      ORMPath: 
+      CustomShaderPath: 
+      TextureMode: SeparateMaps
+      UseAOMap: false
+      UseEmissiveMap: false
+      UseORMMap: false
+      EnableSpecularHighlights: true
+      EnableEnvironmentReflections: true
+      UseCustomShader: false
+      AOStrength: 1
+      DetailNormalStrength: 1
+      DetailUVScale: [ 1 , 1 ]
+      DetailUVOffset: [ 0 , 0 ]
+      RefractionEnabled: false
+      RefractionStrength: 1
+      RefractionIOR: 1.5
+      RefractionThickness: 0.1
+      RefractionTint: [ 1 , 1 , 1 ]
+      ClearcoatStrength: 0
+      ClearcoatRoughness: 0.04
+      AnisotropyStrength: 0
+      AnisotropyRotation: 0
+      RenderQueue: 2000
+      ClearcoatPath: 
+      UseClearcoatMap: false
+      AnisotropyFlowPath: 
+      UseAnisotropyFlowMap: false
+      DetailNormalPath: 
+      UseDetailNormalMap: false
+      DetailMaskPath: 
+      UseDetailMaskMap: false
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.22
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 1
+      EmissionColor: [ 0 , 0 , 0 ]
+      EmissionIntensity: 0
+      UVScale: [ 1 , 1 ]
+      UVOffset: [ 0 , 0 ]
+      SurfaceType: Opaque
+      CullMode: Back
+      AlphaCutoff: 0.5
+      DepthWrite: true
   - Entity: 100003
     TagComponent:
       Tag: Directional Light
     TransformComponent:
-      Translation: [ 0 , 25 , 0 ]
-      Rotation: [ 1 , 0 , 0 , 0 ]
-      Scale: [ 1 , 1 , 1 ]
+      Translation: [ 0.000000 , 25.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
     DirectionalLightComponent:
       Color: [ 1.000000 , 0.980000 , 0.920000 ]
       Intensity: 1.000000
@@ -63,18 +104,48 @@ Entities:
       Exposure: 1.000000
       ToneMappingMode: 0
       Gamma: 2.200000
-  - Entity: 100004
+  - Entity: 100002
     TagComponent:
-      Tag: Sphere
+      Tag: Plane
     TransformComponent:
-      Translation: [ 0 , 1 , 0 ]
-      Rotation: [ 1 , 0 , 0 , 0 ]
-      Scale: [ 1 , 1 , 1 ]
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 20.000000 , 1.000000 , 20.000000 ]
     MeshInstance3D:
-      AssetPath: builtin://sphere
-      PatternMode: 2
-      TileScale: 4.000000
-      Color1: [ 0.880000 , 0.890000 , 0.920000 , 1.000000 ]
-      Color2: [ 0.450000 , 0.480000 , 0.520000 , 1.000000 ]
-    MaterialComponent:
-      AssetPath: materials/Metal_Gold.axleasset
+      AssetPath: builtin://plane
+      PatternMode: 1
+      TileScale: 8.000000
+      Color1: [ 0.350000 , 0.380000 , 0.420000 , 1.000000 ]
+      Color2: [ 0.200000 , 0.220000 , 0.250000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+  - Entity: 100001
+    TagComponent:
+      Tag: Atmospheric Skybox
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    SkyboxComponent:
+      Enabled: true
+      EnvironmentLighting: true
+      SkyboxType: 0
+      HDRPath: 
+      Intensity: 1.000000
+      Exposure: 1.000000
+      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
+      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
+      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
+      SunSize: 0.045000
+      SunGlow: 0.160000
+      Turbidity: 1.000000
+      SyncWithSun: true
+      CustomAzimuth: 45.000000
+      CustomElevation: 50.000000
+      HemisphereAmbient: true

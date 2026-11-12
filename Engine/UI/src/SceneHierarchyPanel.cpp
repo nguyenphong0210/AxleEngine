@@ -437,7 +437,11 @@ namespace Axle {
         if (ImGui::BeginMenu("Environment")) {
             if (ImGui::MenuItem("Atmospheric Skybox")) {
                 auto skyEntity = m_Scene->CreateEntity("Atmospheric Skybox");
-                skyEntity.AddComponent<SkyboxComponent>();
+                // Editor-created environments are intended to be immediately useful for
+                // material authoring. Runtime/serialized defaults remain background-only;
+                // this explicit authoring action opts the new sky into its ambient fallback.
+                auto& skybox = skyEntity.AddComponent<SkyboxComponent>();
+                skybox.EnvironmentLighting = true;
                 m_SelectedEntity = skyEntity;
             }
             ImGui::EndMenu();

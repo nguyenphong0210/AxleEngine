@@ -881,6 +881,10 @@ namespace Axle {
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Allow this sky to provide ambient and image-based lighting to scene geometry.");
             }
+            if (!sbc.EnvironmentLighting) {
+                ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.35f, 1.0f),
+                    "Background only: metallic surfaces need Environment Lighting or a direct light.");
+            }
 
             const char* skyboxTypes[] = { "Procedural Atmospheric", "HDR Cubemap (IBL)" };
             int currentType = (sbc.Type == SkyboxType::HDRCubemap) ? 1 : 0;
@@ -1945,7 +1949,12 @@ namespace Axle {
         items.push_back({
             "Rendering", "SkyboxComponent", "Procedural atmospheric Rayleigh/Mie sky dome",
             entity.HasComponent<SkyboxComponent>(), true,
-            [&]() { entity.AddComponent<SkyboxComponent>(); }
+            [&]() {
+                auto& skybox = entity.AddComponent<SkyboxComponent>();
+                // An explicit Editor authoring action opts the new environment into
+                // ambient fallback so metallic materials are immediately readable.
+                skybox.EnvironmentLighting = true;
+            }
         });
         items.push_back({
             "Rendering", "CameraComponent", "Perspective/Orthographic scene camera",

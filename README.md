@@ -1,38 +1,42 @@
 # AxleEngine
 
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
-[![OpenGL](https://img.shields.io/badge/OpenGL-4.5%20Core-green.svg)](https://www.opengl.org/)
+[![Direct3D 12](https://img.shields.io/badge/D3D12-Primary%20RHI-0078D4.svg)](https://docs.microsoft.com/en-us/windows/win32/direct3d12/direct3d-12-graphics)
+[![Vulkan](https://img.shields.io/badge/Vulkan-1.3%20RHI-red.svg)](https://www.vulkan.org/)
+[![NVIDIA NRI](https://img.shields.io/badge/RHI-NVIDIA%20NRI-76B900.svg)](https://github.com/NVIDIAGameWorks/NRI)
+[![OpenGL](https://img.shields.io/badge/OpenGL-4.5%20Fallback-green.svg)](https://www.opengl.org/)
 [![Jolt Physics](https://img.shields.io/badge/Physics-Jolt%205.2-orange.svg)](https://github.com/jrouwe/JoltPhysics)
 [![EnTT ECS](https://img.shields.io/badge/ECS-EnTT%20v3.14-purple.svg)](https://github.com/skypjack/entt)
 [![miniaudio](https://img.shields.io/badge/Audio-miniaudio-yellow.svg)](https://miniaud.io/)
 [![CMake](https://img.shields.io/badge/CMake-3.22%2B-red.svg)](https://cmake.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)]()
-[![Tests](https://img.shields.io/badge/CTest-50%2F50%20Passing%20(100%25)-brightgreen.svg)]()
+[![Architecture](https://img.shields.io/badge/Architecture-Zero%20Allowance%20(PASS)-brightgreen.svg)](scripts/check_architecture.py)
 
-**AxleEngine** is a modern, modular, high-performance **General-Purpose 3D Game Engine** written in **C++20**. 
+**AxleEngine** is a modern, modular, high-performance **General-Purpose 3D Game Engine** written in **C++20**.
 
-Engineered with a **Data-Oriented Design (DOD)** philosophy, AxleEngine blends the ergonomics, component-driven workflows, and WYSIWYG tooling of commercial game engines (such as Godot and Unity) with native C++ execution speed, lock-free multithreaded task scheduling, and zero bloat.
+Engineered with a **Data-Oriented Design (DOD)** philosophy, AxleEngine blends the ergonomics, component-driven workflows, and WYSIWYG tooling of modern commercial game engines with native C++ execution speed, lock-free multithreaded task scheduling, explicit multi-backend RHI rendering, and zero bloat.
 
 Whether building **3D Action/Adventure titles, First/Third-Person Shooters, Physics Sandboxes, Mechanical Simulators, or Procedural Worlds**, AxleEngine provides a clean, robust, and extensible architectural foundation.
 
-Agent collaboration: [shared Codex/Gemini workflow](docs/agents/README.md).
+Agent collaboration & review tracking: [shared Codex/Gemini protocol](docs/agents/WORKING_PROTOCOL.md).
 
 ---
 
 ## 🌟 Key Architectural Highlights
 
+* **Multi-Backend Hardware Abstraction Layer (Modern RHI via NVIDIA NRI)**:
+  * **Direct3D 12** and **Vulkan 1.3** as the primary, high-performance rendering paths via [NVIDIA NRI](https://github.com/NVIDIAGameWorks/NRI).
+  * **OpenGL 4.5 Core Profile** strictly maintained as a functional compatibility fallback adapter.
+  * **Cook-Torrance Microfacet Specular BRDF** ($D$ GGX/Trowbridge-Reitz, $G$ Smith-Schlick, $F$ Fresnel-Schlick).
+  * **Cascaded Shadow Maps (CSM)**: 4-cascade logarithmic view-frustum splits with sub-texel snapping and 16-tap Vogel spiral / PCF soft filtering.
+  * **Local Shadow Atlas**: Omnidirectional cubemap and spot light shadow atlas with grounded fixture stability.
+  * **Atmospheric Skybox & Image-Based Lighting (IBL)**: Analytical Rayleigh/Mie scattering, dynamic irradiance cubemap convolution, specular prefiltered environment maps, and 2D BRDF integration LUT.
+  * **ACES Filmic Tone Mapping**, exposure adjustment, and automated `.axlebin` flat binary mesh caching.
 * **Data-Oriented Entity Component System (ECS)**:
   * Powered by **[EnTT](https://github.com/skypjack/entt)** for contiguous, cache-friendly component storage with zero virtual function dispatch in bulk updates.
   * Hierarchical **Parent-Child Scene Graph** (`HierarchyComponent`) with world-space matrix propagation and Floyd cycle prevention.
   * Read-only transform evaluation with monotonic revisions (`GetTransformRevision()`) avoiding redundant recalculations.
   * Multithreaded batch processing via `Axle::ParallelECS` with tombstone safety and deferred `SceneCommandBuffer` mutation boundaries.
-* **Modern Physically Based Rendering (PBR) Pipeline**:
-  * **OpenGL 4.5 Core Profile** rendering plus an NRI-based Modern RHI path for Direct3D 12/Vulkan.
-  * **Cook-Torrance Microfacet Specular BRDF** (GGX normal distribution, Smith-Schlick shadowing, Fresnel-Schlick reflectance).
-  * **16-Tap Vogel Spiral / Poisson Disk Soft Shadows** with hardware bilinear PCF and slope-scaled normal bias.
-  * **Atmospheric Skybox** (analytical Rayleigh/Mie scattering) and **HDR Cubemaps with Image-Based Lighting (IBL)** (Irradiance, Pre-filtered Specular, 2D BRDF LUT).
-  * **ACES Filmic Tone Mapping** and linear-to-sRGB gamma correction.
-  * Automated **`.axlebin` Flat Binary Mesh Cache** with microsecond GPU upload times.
 * **Multithreaded 3D Physics Simulation**:
   * Powered by **[Jolt Physics](https://github.com/jrouwe/JoltPhysics)** (v5.2.0).
   * Lock-free task scheduling via **[enkiTS](https://github.com/dougbinks/enkiTS)** (`JobSystemEnkiTS`), eliminating thread oversubscription.
@@ -56,58 +60,73 @@ Agent collaboration: [shared Codex/Gemini workflow](docs/agents/README.md).
 * **Kinematic Character Controller (KCC) & Third-Person Gameplay**:
   * Powered by **Jolt Physics** `JPH::CharacterVirtual` with capsule collision, slope traversal limits, automatic curb/stair step-up (`StepOffset`), ground snapping (`StickToFloor`), and dynamic push impulse transfer.
   * Decoupled `CharacterControllerComponent`, smooth camera-relative `ThirdPersonController.hpp`, and spring-arm chase camera (`ThirdPersonCamera.hpp`).
-* **Modular Plugin Architecture (`Plugins/Spline` & `Plugins/Terrain`)**:
-  * **Spline Curves & Procedural Tracks (`Plugins/Spline`)**: Parametric Catmull-Rom & Cubic Bézier 3D curves with Rotation Minimizing Frames (RMF) to prevent flipping, continuous cross-section extrusion, and auto-generated static Jolt `MeshShape` collision.
-  * **Off-Road Terrain & Sculpting (`Plugins/Terrain`)**: Multithreaded chunked heightfields (`enkiTS`), dynamic Level of Detail (LOD), viewport sculpting brushes, slope-based triplanar splatmap multi-texturing, and native Jolt `HeightFieldShape`.
+* **Modular Plugin Architecture (`Engine/Plugin`, `Plugins/Spline`, `Plugins/Terrain`)**:
+  * Decoupled C-ABI plugin host interface (`axle_plugin_api.h`) with runtime module isolation.
+  * Dynamic DLL loading for the Editor and static compilation linkage for the shipping runtime.
+  * **Spline Curves & Procedural Tracks (`Plugins/Spline`)**: Parametric Catmull-Rom & Cubic Bézier 3D curves with Rotation Minimizing Frames (RMF), continuous cross-section extrusion, and static Jolt `MeshShape` collision.
+  * **Off-Road Terrain & Sculpting (`Plugins/Terrain`)**: Multithreaded chunked heightfields (`enkiTS`), dynamic Level of Detail (LOD), viewport sculpting brushes, triplanar splatmap multi-texturing, and native Jolt `HeightFieldShape`.
 * **Advanced Particle & Visual Effects Subsystem (`Engine/VFX`)**:
   * High-performance Data-Oriented **Struct-of-Arrays (SoA)** particle pool (`ParticlePool`) eliminating dynamic heap allocations.
-  * **GPU Instanced Particle Rendering** (`ParticleRenderer`) streaming 84-byte compact instance vertex buffers (`glDrawElementsInstanced`).
+  * **GPU Instanced Particle Rendering** (`ParticleRenderer`) streaming 84-byte compact instance vertex buffers.
   * Dynamic billboarding orientations with multi-mode blending (Additive, Alpha, Premultiplied) and depth-tested soft particles.
   * Texture sheet flipbook animations with sub-frame blending, curl noise turbulence, and dedicated **Visual FX Editor Panel**.
+* **Zero-Tolerance Architecture Governance**:
+  * Automated enforcement via `python scripts/check_architecture.py` verifying 576+ source files across 25 CMake targets on every commit.
+  * Zero allowances for circular or upward layer violations.
 
 ---
 
 ## 🏛️ Architecture Stack
 
-The engine follows a clean layered dependency architecture:
+The engine follows a strict, unidirectional 7-layer architecture:
 
 ```plaintext
-Level 4:  [ AxleEditor (IDE) ]           [ AxleRuntime (Game Player) ]  [ AxleTests (CI/CD) ]
-Level 3:  [ Engine/Scene (SceneData, SimulationDriver) ]                 [ AxleScripts (DLL) ]
-          [ Plugins/Spline ]             [ Plugins/Terrain ]            [ Engine/Animation ]
-          [ Engine/VFX ]
-Level 2:  [ Engine/Physics (Jolt) ]      [ Engine/Renderer (PBR) ]      [ Engine/Audio (miniaudio) ]
-          [ Engine/Asset (Pure CPU VFS & Registry) ] [ Engine/UI (ImGui) ] [ Engine/Project (.axleproj) ]
-Level 1:  [ Engine/Platform (GLFW, Window, Input, Application, LayerStack) ]
-Level 0:  [ Engine/Core (JobSystem enkiTS, spdlog Log, Timestep, UUID, FileSystem) ]
+Layer 7:  [ AxleEditor (Authoring IDE) ]    [ AxleRuntime (Standalone Player) ]    [ AxleTests (CI/CD) ]
+Layer 6:  [ Engine/Plugin (C-ABI SDK, Host Session, Spline & Terrain Plugins) ]
+Layer 5:  [ Engine/Asset (VFS, Registry, UUID) ]    [ Engine/UI (ImGui Host, Viewports, Canvas2D) ]
+Layer 4:  [ Engine/Scene (EnTT SceneData, Transform DAG) ]    [ Engine/Physics (Jolt 3D, CharacterVirtual) ]
+Layer 3:  [ Engine/Renderer (RenderService, RenderWorld Snapshot, RenderGraph, Shaders) ]
+Layer 2:  [ Engine/RHI (Hardware Abstraction Layer: NRI Direct3D 12, Vulkan, OpenGL Fallback) ]
+Layer 1:  [ Engine/Core (Platform Windowing, GLFW, enkiTS JobSystem, Logging, Clocks, Allocators) ]
+Layer 0:  [ Pinned Foundations: NVIDIA NRI, Jolt Physics, EnTT, enkiTS, miniaudio, Dear ImGui ]
 ```
+
+---
+
+## 🗺️ Project Milestones & Master Roadmap
+
+AxleEngine’s development lifecycle is organized into **18 sequential Milestones** across **6 strategic Eras**, formally tracked in **[ROADMAP.md](ROADMAP.md)**.
+
+Every single milestone (Milestones 01 through 18) maintains the canonical companion pair in [`docs/milestones/`](docs/milestones/):
+- **`ARCHITECTURE.md`**: Subsystem technical architectures, Mermaid dataflow diagrams, data contracts, and technology limits.
+- **`PLAN.md`**: Granular task breakdown, completion status checkboxes, child Phase definitions, and review criteria.
+
+| Era | Milestones | Scope | Status |
+| :--- | :--- | :--- | :---: |
+| **Era I: Core Foundations** | [Milestones 01–05](docs/milestones/) | Core framework, math, simulation viewport, asset VFS, scene graph, EnTT ECS, standalone runtime. | Complete |
+| **Era II: High-Fidelity Rendering** | [Milestones 06–08](docs/milestones/) | Cook-Torrance PBR, IBL, shadow mapping, spatial audio, landscape splines, skeletal animation, GPU particles, foundational RHI. | Complete |
+| **Era III: Production Hardening** | [Milestones 09–11](docs/milestones/) | Vulkan 1.3 backend parity, profiler instrumentation, crash diagnostics, tooling ecosystem, Plugin SDK, RHI-primary foundation via NRI. | Complete |
+| **Era IV: Architecture Stabilization** | [Milestones 12–14](docs/milestones/) | Zero-allowance layer enforcement, decoupled render thread, transient VRAM aliasing, DXC material graph compiler, photorealistic lighting fidelity. | Complete / In Review |
+| **Era V: Next-Gen Scale** | [Milestones 15–16](docs/milestones/) | Scalable geometry (autoLOD & Task/Mesh Shaders), simulation scale (significance evaluation & spatial dormancy). | Planned |
+| **Era VI: Content Studios & Rollout** | [Milestones 17–18](docs/milestones/) | Content authoring studios (Animation, VFX, Material Canvas), multi-backend image parity (PSNR/SSIM), and master release scorecard. | Planned |
 
 ---
 
 ## 📚 Comprehensive Documentation Hub
 
-For in-depth guides, API references, and architectural walk-throughs, start with the [documentation hub](docs/README.md):
+For in-depth guides, API references, and architectural specifications, consult the [documentation hub](docs/README.md):
 
 | Document | Description |
 | :--- | :--- |
-| **[Roadmap](ROADMAP.md)** | Single Phase order, progress, plan links and architecture links. |
-| **[Architecture Overview](docs/architecture/OVERVIEW.md)** | Subsystem structure, lifecycle, and modular boundaries post OPT-03. |
-| **[Architecture & Design Set](docs/architecture/README.md)** | SAD, SDD, UML class relationships, execution flows, and target layered architecture. |
+| **[Master Roadmap](ROADMAP.md)** | Master execution authority, milestone timeline, child phase hierarchy, and links to all technical plans. |
+| **[Milestones Directory](docs/milestones/README.md)** | Directory index of companion `ARCHITECTURE.md` and `PLAN.md` files for all 18 engine milestones. |
+| **[Architecture Hub](docs/architecture/README.md)** | Subsystem SAD, SDD, UML class relationships, and target layered architecture. |
+| **[Agent Working Protocol](docs/agents/WORKING_PROTOCOL.md)** | Collaboration rules, task card scopes, and exchange protocols between Codex and Gemini. |
 | **[ECS & Scene Graph Guide](docs/guides/SCENE_AND_ECS.md)** | EnTT component schemas, parent-child transform propagation, and `SceneCommandBuffer`. |
 | **[C++ Native Scripting Guide](docs/guides/SCRIPTING.md)** | `ScriptableEntity` lifecycle, reflection macros (`AXLE_SCRIPT_FIELDS`), and dynamic DLL hot-reloading (`F9`). |
 | **[Physics & Simulation Guide](docs/guides/PHYSICS.md)** | Unified `SimulationDriver`, 60Hz fixed clock, Jolt Physics, and CharacterVirtual integration. |
 | **[Rendering Pipeline & Shading](docs/guides/RENDERING.md)** | Multi-pass rendering, Cook-Torrance BRDF, Vogel spiral soft shadows, and `.axlebin` caching. |
 | **[AI Agent & Developer Handbook](docs/guides/DEVELOPMENT.md)** | Engineering handbook: non-negotiable rules, extension recipes, and common pitfalls. |
-
----
-
-## 🗺️ Project Milestones & Roadmap
-
-Current work follows the single **[Phase roadmap](ROADMAP.md)**. Each Phase owns
-one `PLAN.md` and one `ARCHITECTURE.md`; package identifiers remain inside those
-documents and their review evidence.
-
----
 
 ## ⚙️ Closed-Loop Scripting Workflow
 

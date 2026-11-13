@@ -1,5 +1,7 @@
 #pragma once
 #include <map>
+#include <string>
+#include <unordered_map>
 #include <Axle/RHI/RHIFrameContext.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/Types.hpp>
@@ -432,6 +434,7 @@ namespace Axle {
 
     private:
         void ConsumePreviousGPUTimestamp();
+        bool PrepareReflectionProbe(const RenderWorld& world, const PerspectiveCamera& camera);
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_Pipeline;
@@ -565,6 +568,10 @@ namespace Axle {
         nri::DescriptorSet* m_SSRComputeTextureSet = nullptr;
         nri::DescriptorSet* m_SSRComputeStorageSet = nullptr;
         nri::DescriptorSet* m_SSRApplyDescriptorSet = nullptr;
+        std::unordered_map<std::string, std::unique_ptr<RHIEnvironment>> m_ReflectionProbeEnvironments;
+        std::shared_ptr<RHI::RHITexture> m_ActiveReflectionProbePrefilter;
+        RenderReflectionProbe m_ActiveReflectionProbe{};
+        bool m_HasActiveReflectionProbe = false;
 
         // Hi-Z depth pyramid resources. The view target owns eight reduction
         // levels; this renderer owns the reduction compute pipeline and sets.

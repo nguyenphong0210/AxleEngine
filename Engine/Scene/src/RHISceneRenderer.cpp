@@ -639,6 +639,9 @@ namespace Axle {
         m_CascadedShadows.Shutdown();
         m_LocalShadows.Shutdown();m_BoundLocalAtlas={};
         m_Environment.Clear();m_BoundIBL={};m_PreparedManualIBL=false;m_SkyboxDescriptorSet=nullptr;
+        m_ReflectionProbeEnvironments.clear();
+        m_ActiveReflectionProbePrefilter.reset();
+        m_HasActiveReflectionProbe = false;
         m_LightBuffer.Shutdown();
         m_SceneConstantBuffer.Shutdown();
 
@@ -1604,7 +1607,7 @@ namespace Axle {
         compTexRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
         compTexRanges[2].baseRegisterIndex = 9;
-        compTexRanges[2].descriptorNum = 1;
+        compTexRanges[2].descriptorNum = 2;
         compTexRanges[2].descriptorType = nri::DescriptorType::TEXTURE;
         compTexRanges[2].shaderStages = nri::StageBits::COMPUTE_SHADER;
         compTexRanges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
@@ -2431,6 +2434,65 @@ namespace Axle {
         entt::entity DiagnosticEntity = entt::null;
     };
 
+    bool RHISceneRenderer::PrepareReflectionProbe(const RenderWorld& world, const PerspectiveCamera& camera) {
+        m_ActiveReflectionProbePrefilter.reset();
+        m_HasActiveReflectionProbe = false;
+        if (world.ReflectionProbes.empty()) return true;
+
+        const glm::vec3 cameraPosition = camera.GetPosition();
+        const RenderReflectionProbe* selected = nullptr;
+        float selectedWeight = 0.0f;
+        for (const auto& probe : world.ReflectionProbes) {
+            if (probe.CubemapPath.empty()) continue;
+            const glm::vec3 local = cameraPosition - probe.Position;
+            float distanceOutside = 0.0f;
+            float influence = 1.0f;
+            if (probe.Shape == 1) {
+                distanceOutside = std::max(glm::length(local) - probe.Radius, 0.0f);
+                influence = std::max(probe.Radius, 0.001f);
+            } else {
+                const glm::vec3 extents = glm::max(probe.BoxExtents * 0.5f, glm::vec3(0.001f));
+                distanceOutside = glm::length(glm::max(glm::abs(local) - extents, glm::vec3(0.0f)));
+                influence = glm::length(extents);
+            }
+            const float weight = 1.0f - std::clamp(distanceOutside / influence, 0.0f, 1.0f);
+            if (weight > selectedWeight) {
+                selectedWeight = weight;
+                selected = &probe;
+            }
+        }
+        if (!selected) return true;
+
+        const std::string path = PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(selected->CubemapPath)).lexically_normal());
+        auto& environment = m_ReflectionProbeEnvironments[path];
+        if (!environment) {
+            environment = std::make_unique<RHIEnvironment>();
+            EnvironmentBakeSettings settings;
+            settings.EnvironmentSize = 128;
+            settings.IrradianceSize = 16;
+            settings.PrefilterSize = 64;
+            settings.PrefilterMips = 5;
+            settings.BRDFSize = 64;
+            settings.Samples = 128;
+            if (!environment->SetBakeSettings(settings)) return false;
+        }
+
+        RenderSkyboxData source;
+        source.Authored = true;
+        source.Enabled = true;
+        source.EnvironmentLighting = true;
+        source.Type = 1;
+        source.HDRPath = selected->CubemapPath;
+        source.Intensity = 1.0f;
+        source.Exposure = 1.0f;
+        if (!environment->Prepare(source) || !environment->Ready() || !environment->Ready()->Prefilter) return false;
+
+        m_ActiveReflectionProbePrefilter = environment->Ready()->Prefilter;
+        m_ActiveReflectionProbe = *selected;
+        m_HasActiveReflectionProbe = m_ActiveReflectionProbePrefilter->IsValid();
+        return m_HasActiveReflectionProbe;
+    }
+
     void RHISceneRenderer::ConsumePreviousGPUTimestamp() {
         const auto previousCompletion = m_LastCompletion;
         if (!previousCompletion || !m_GPUTimestampPool || !m_GPUTimestampReadback.IsValid()) return;
@@ -2556,6 +2618,11 @@ namespace Axle {
         ConsumePreviousGPUTimestamp();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
+        if (!PrepareReflectionProbe(world, camera)) {
+            AXLE_CORE_WARN("Reflection probe preparation failed; falling back to the active environment.");
+            m_ActiveReflectionProbePrefilter.reset();
+            m_HasActiveReflectionProbe = false;
+        }
         m_MaterialDiagnostics.clear(); m_MaterialFeedback.clear();
         if (!world.ErrorMessage.empty() || !m_Frame.Begin()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
         auto rollback = std::unique_ptr<RHISceneRenderer, std::function<void(RHISceneRenderer*)>>(this,
@@ -3738,8 +3805,8 @@ namespace Axle {
                 1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
             ssrConstants.SSRParams = glm::vec4(settings.SSRLengthPixels, 32.0f, settings.SSRStrength, 0.5f);
 
-            if (!world.ReflectionProbes.empty()) {
-                const auto& probe = world.ReflectionProbes[0];
+            if (m_HasActiveReflectionProbe) {
+                const auto& probe = m_ActiveReflectionProbe;
                 ssrConstants.ProbeBoxMin = glm::vec4(probe.Position - probe.BoxExtents * 0.5f, probe.ParallaxCorrected ? 1.0f : 0.0f);
                 ssrConstants.ProbeBoxMax = glm::vec4(probe.Position + probe.BoxExtents * 0.5f, probe.Intensity);
                 ssrConstants.ProbePosition = glm::vec4(probe.Position, 1.0f);
@@ -3757,8 +3824,11 @@ namespace Axle {
                 m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 0, level, hiz->GetSRV());
             }
             nri::Descriptor* ssrNormalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
+            nri::Descriptor* probeSRV = m_ActiveReflectionProbePrefilter && m_ActiveReflectionProbePrefilter->IsValid()
+                ? m_ActiveReflectionProbePrefilter->GetSRV() : RHIMaterial::GetDefaultPrefilterCubemap()->GetSRV();
             m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 1, 0, ssrNormalSRV);
             m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 0, m_OpaqueSceneColor->GetSRV());
+            m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 1, probeSRV);
             m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative());
             m_SSRDescriptorPool.UpdateStorageTexture(m_SSRComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
 

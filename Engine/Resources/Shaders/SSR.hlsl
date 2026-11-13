@@ -51,6 +51,7 @@ Texture2D<float>    u_HiZ6           : register(t6, space1);
 Texture2D<float>    u_HiZ7           : register(t7, space1);
 Texture2D<float4>   u_ComputeNormal  : register(t8, space1);
 Texture2D<float4>   u_ComputeColor   : register(t9, space1);
+TextureCube<float4> u_ProbeCubemap   : register(t10, space1);
 SamplerState        u_ComputeSampler : register(s0, space1);
 RWTexture2D<float4> u_ComputeOutput  : register(u0, space2);
 
@@ -180,7 +181,7 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
                 probeDir = normalize(intersectWS - u_ProbePosition.xyz);
             }
         }
-        float3 probeColor = float3(0.08, 0.08, 0.08) * u_ProbeBoxMax.w;
+        float3 probeColor = u_ProbeCubemap.SampleLevel(u_ComputeSampler, probeDir, 0.0).rgb * u_ProbeBoxMax.w;
         hitColor = lerp(probeColor, hitColor, confidence);
         confidence = max(confidence, 0.25 * saturate(u_ProbeBoxMax.w));
     }

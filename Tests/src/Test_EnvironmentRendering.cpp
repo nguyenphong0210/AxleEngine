@@ -264,9 +264,11 @@ bool Native(RHIType backend) {
     probe.BoxExtents = glm::vec3(20.0f, 20.0f, 20.0f);
     probe.Intensity = 1.5f;
     probe.ParallaxCorrected = true;
+    probe.CubemapPath = "red.hdr";
     world.ReflectionProbes.push_back(probe);
     auto ssrWithProbe = render();
     CHECK(!ssrWithProbe.empty() && ssrWithProbe.size() == red.size());
+    CHECK(ssrWithProbe != ssr);
     world.ReflectionProbes.clear();
     settings.EnableSSR=false;
 

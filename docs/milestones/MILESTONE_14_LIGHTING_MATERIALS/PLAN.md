@@ -2,6 +2,7 @@
 
 **Status:** Implementation reported complete; independent Codex acceptance is **HOLD**. M14-U3/U4 are conditionally verified in the released scope. Full M14-U5–U9 acceptance remains open pending correction of the findings recorded in [`docs/reviews/M14_CODEX_REVIEW.md`](../../reviews/M14_CODEX_REVIEW.md).
 **Supporting Architectural Document:** [`ARCHITECTURE.md`](ARCHITECTURE.md).
+**Proposed correction/completion sequence:** [`REMEDIATION_PLAN.md`](REMEDIATION_PLAN.md) (2026-11-13, inspected baseline `791c344`; planning only, not new implementation or acceptance).
 **Supporting Detailed Plan:** [`docs/archive/design/deferred/ADVANCED_MATERIAL_FIDELITY_ROADMAP.md`](../../archive/design/deferred/ADVANCED_MATERIAL_FIDELITY_ROADMAP.md).
 
 ---

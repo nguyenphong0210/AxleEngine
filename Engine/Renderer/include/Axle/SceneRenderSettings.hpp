@@ -20,6 +20,9 @@ namespace Axle {
         bool EnableSSR = false;
         bool EnableVolumetricFog = false;
         bool EnableDDGI = false;
+        bool EnableBloom = false;
+        bool EnableAutoExposure = false;
+        bool EnableTAA = false;
         uint8_t MSAASamples = 1; // 1 (disabled), 2, 4, 8
         bool Wireframe = false;
         bool ShowPhysicsDebug = false;
@@ -45,6 +48,18 @@ namespace Axle {
         glm::vec3 FogColor{ 0.8f, 0.85f, 0.9f };
         float FogMaxDistance = 100.0f;
         float DDGIMultiplier = 1.0f;
+        float BloomThreshold = 1.0f;
+        float BloomIntensity = 0.8f;
+        float BloomKnee = 0.5f;
+        float BloomRadius = 1.5f;
+        glm::vec3 BloomTint{ 1.0f, 1.0f, 1.0f };
+        float AutoExposureMin = 0.1f;
+        float AutoExposureMax = 10.0f;
+        float AutoExposureSpeed = 3.0f;
+        float AutoExposureKeyValue = 0.18f;
+        float TAAJitterSpread = 1.0f;
+        float TAAFeedbackMin = 0.88f;
+        float TAAFeedbackMax = 0.96f;
         glm::vec4 ClearColor{ 0.0f, 0.0f, 0.0f, 1.0f }; // Configurable background clear color (Supports transparent clear for editor viewports)
     };
 

@@ -109,6 +109,25 @@ namespace Axle {
     };
     static_assert(sizeof(RHIFXAAConstants) == 256, "RHIFXAAConstants must be 256 bytes aligned!");
 
+    // 256-byte CBV aligned constants for Bloom Kawase downsample/upsample pass
+    struct alignas(256) RHIBloomConstants {
+        glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // (width, height, 1/w, 1/h)
+        glm::vec4 BloomParams{ 1.0f, 0.8f, 0.5f, 0.0f };                           // (threshold, intensity, knee, mode)
+        glm::vec4 BloomTint{ 1.0f, 1.0f, 1.0f, 1.5f };                            // (rgb: tint, w: radius)
+        glm::vec4 Reserved[13]{};                                                 // 208 bytes padding -> Total: 256 bytes
+    };
+    static_assert(sizeof(RHIBloomConstants) == 256, "RHIBloomConstants must be 256 bytes aligned!");
+
+    // 256-byte CBV aligned constants for TAA pass
+    struct alignas(256) RHITAAConstants {
+        glm::mat4 InvViewProj{ 1.0f };                                            // 64 bytes
+        glm::mat4 PrevViewProj{ 1.0f };                                           // 64 bytes
+        glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // 16 bytes
+        glm::vec4 TAAParams{ 0.0f, 0.0f, 0.88f, 0.96f };                          // 16 bytes (jitterX, jitterY, feedbackMin, feedbackMax)
+        glm::vec4 Reserved[6]{};                                                  // 96 bytes padding -> Total: 256 bytes
+    };
+    static_assert(sizeof(RHITAAConstants) == 256, "RHITAAConstants must be 256 bytes aligned!");
+
     class RHISceneRenderer {
     public:
         RHISceneRenderer();
@@ -281,7 +300,20 @@ namespace Axle {
         RHI::RHITexture* GetIntermediateFXAATarget() const { return GetActiveTarget(RHI::RHIViewTarget::FXAA); }
         RHI::RHITexture* GetOpaqueNormalTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ScreenNormal); }
         RHI::RHITexture* GetScreenStorageTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ScreenStorage); }
+        RHI::RHITexture* GetHistoryTarget(size_t slot) const { return GetActiveTarget(slot ? RHI::RHIViewTarget::History1 : RHI::RHIViewTarget::History0); }
         uint8_t GetCurrentMSAASamples() const { return m_CurrentMSAASamples; }
+
+        // Physically Based Pyramid / Kawase Bloom Pass
+        bool CompileBloomShaders(RHI::RHIDevice& device);
+        bool CreateBloomPipelineLayout(RHI::RHIDevice& device);
+        bool CreateBloomPipeline(RHI::RHIDevice& device);
+        nri::Pipeline* GetOrCreateBloomApplyPipeline(nri::Format colorFormat);
+
+        // Temporal Anti-Aliasing (TAA) Pass
+        bool CompileTAAShaders(RHI::RHIDevice& device);
+        bool CreateTAAPipelineLayout(RHI::RHIDevice& device);
+        bool CreateTAAPipeline(RHI::RHIDevice& device);
+        nri::Pipeline* GetOrCreateTAAPipeline(nri::Format colorFormat);
 
         // GPU Instanced Particle VFX Renderer
         RHIParticleRenderer* GetParticleRenderer() const { return m_ParticleRenderer.get(); }
@@ -502,6 +534,38 @@ namespace Axle {
         nri::DescriptorSet* m_FogComputeTextureSet = nullptr;
         nri::DescriptorSet* m_FogComputeStorageSet = nullptr;
         nri::DescriptorSet* m_FogApplyDescriptorSet = nullptr;
+
+        // Physically Based Bloom Resources
+        RHI::RHIPipelineLayout m_BloomComputePipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_BloomComputePipeline;
+        RHI::RHIPipelineLayout m_BloomApplyPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_BloomApplyPipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_BloomApplyPipelineHDR;
+        RHI::RHIBuffer m_BloomConstantBuffer;
+        RHI::RHIShaderBytecode m_BloomComputeShader;
+        RHI::RHIShaderBytecode m_BloomApplyVertexShader;
+        RHI::RHIShaderBytecode m_BloomApplyPixelShader;
+        RHI::RHISampler m_BloomSampler;
+        RHI::RHIDescriptorPool m_BloomDescriptorPool;
+        nri::DescriptorSet* m_BloomComputeTextureSet = nullptr;
+        nri::DescriptorSet* m_BloomComputeStorageSet = nullptr;
+        nri::DescriptorSet* m_BloomApplyDescriptorSet = nullptr;
+
+        // Temporal Anti-Aliasing (TAA) Resources
+        RHI::RHIPipelineLayout m_TAAPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_TAAPipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_TAAPipelineHDR;
+        RHI::RHIBuffer m_TAAConstantBuffer;
+        RHI::RHIShaderBytecode m_TAAVertexShader;
+        RHI::RHIShaderBytecode m_TAAPixelShader;
+        RHI::RHISampler m_TAALinearSampler;
+        RHI::RHISampler m_TAAPointSampler;
+        RHI::RHIDescriptorPool m_TAADescriptorPool;
+        nri::DescriptorSet* m_TAADescriptorSet = nullptr;
+        glm::mat4 m_PrevViewProjection{ 1.0f };
+        uint32_t m_FrameIndex = 0;
+        bool m_TAAHistoryValid = false;
+        float m_AdaptedExposure = 1.0f;
 
         // Intermediate Floating-point HDR Target for 2-pass Scene -> ToneMap execution
         RHI::RHITexture* m_IntermediateHDRTarget = nullptr;

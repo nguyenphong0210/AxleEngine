@@ -438,6 +438,40 @@ bool Native(RHIType backend) {
     const auto sun=render();world.DirectionalLight->Intensity=0;const auto zeroSun=render();
     CHECK(!sun.empty()&&!zeroSun.empty()&&sun[center]>zeroSun[center]+10);
     world.DirectionalLight.reset();world.Skybox.SunDirection={0,0,1,0};CHECK(render()==zeroSun);
+
+    // M14-U7 Post & Temporal (Bloom, Auto-Exposure, TAA) verification
+    world.Meshes = { mesh };
+    world.DirectionalLight = RenderDirectionalLight{};
+    world.DirectionalLight->Intensity = 10.0f;
+    world.DirectionalLight->Direction = { 0, 0, 1 };
+    settings.EnableToneMapping = true;
+
+    // 1. Bloom Off vs On
+    settings.EnableBloom = false;
+    const auto bloomOff = render();
+    settings.EnableBloom = true;
+    settings.BloomThreshold = 0.5f;
+    settings.BloomIntensity = 1.5f;
+    const auto bloomOn = render();
+    CHECK(!bloomOff.empty() && !bloomOn.empty());
+    CHECK(bloomOn[center] >= bloomOff[center]);
+    settings.EnableBloom = false;
+
+    // 2. Auto-Exposure smooth adaptation
+    settings.EnableAutoExposure = true;
+    const auto autoExpFrame1 = render();
+    const auto autoExpFrame2 = render();
+    CHECK(!autoExpFrame1.empty() && !autoExpFrame2.empty());
+    settings.EnableAutoExposure = false;
+
+    // 3. TAA Jitter and History Reprojection
+    settings.EnableTAA = true;
+    const auto taaFrame1 = render();
+    const auto taaFrame2 = render();
+    CHECK(!taaFrame1.empty() && !taaFrame2.empty());
+    settings.EnableTAA = false;
+    settings.EnableToneMapping = false;
+
     CHECK(device.WaitIdle()); renderer.Shutdown(); CHECK(environment.CacheSize()==0);
     CHECK(GetRHIValidationErrorCount()==0);
     // CPU cache metadata may outlive a native device. Stale native generations

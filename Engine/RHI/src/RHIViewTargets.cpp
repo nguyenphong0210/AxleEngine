@@ -49,7 +49,7 @@ namespace Axle::RHI {
             candidate.m_Textures[static_cast<size_t>(RHIViewTarget::ScreenStorage)] = std::move(texture);
         }
         for (uint8_t i = 0; i < desc.HistoryCount; ++i)
-            if (!create(i ? RHIViewTarget::History1 : RHIViewTarget::History0, desc.ColorFormat, 1, false)) return false;
+            if (!create(i ? RHIViewTarget::History1 : RHIViewTarget::History0, sceneColor, 1, false)) return false;
         candidate.m_Initialized = true;
         *this = std::move(candidate); return true;
     }

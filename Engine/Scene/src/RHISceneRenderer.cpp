@@ -338,6 +338,64 @@ namespace Axle {
 
         if (!m_FogConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIVolumetricFogConstants), RHIMemoryLocation::HostUpload, "FogConstantsBuffer"))) return false;
 
+        // Initialize Physically Based Pyramid / Kawase Bloom Resources
+        if (!CompileBloomShaders(device) || !CreateBloomPipelineLayout(device) || !CreateBloomPipeline(device)) return false;
+
+        if (!m_BloomSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Linear Clamp Sampler for Bloom.");
+            return false;
+        }
+
+        RHIDescriptorPoolDesc bloomPoolDesc;
+        bloomPoolDesc.MaxDescriptorSets = 16;
+        bloomPoolDesc.MaxTextures = 64;
+        bloomPoolDesc.MaxSamplers = 16;
+        bloomPoolDesc.MaxStorageTextures = 16;
+        bloomPoolDesc.MaxConstantBuffers = 16;
+        if (!m_BloomDescriptorPool.Init(bloomPoolDesc)) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Bloom Descriptor Pool!");
+            return false;
+        } else {
+            m_BloomComputeTextureSet = m_BloomDescriptorPool.AllocateDescriptorSet(m_BloomComputePipelineLayout, 0);
+            m_BloomComputeStorageSet = m_BloomDescriptorPool.AllocateDescriptorSet(m_BloomComputePipelineLayout, 1);
+            m_BloomApplyDescriptorSet = m_BloomDescriptorPool.AllocateDescriptorSet(m_BloomApplyPipelineLayout, 0);
+            if (!m_BloomComputeTextureSet || !m_BloomComputeStorageSet || !m_BloomApplyDescriptorSet) return false;
+            if (m_BloomSampler.IsValid()) {
+                m_BloomDescriptorPool.UpdateSampler(m_BloomComputeTextureSet, 1, 0, m_BloomSampler.GetNative());
+                m_BloomDescriptorPool.UpdateSampler(m_BloomApplyDescriptorSet, 2, 0, m_BloomSampler.GetNative());
+            }
+        }
+
+        if (!m_BloomConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIBloomConstants), RHIMemoryLocation::HostUpload, "BloomConstantsBuffer"))) return false;
+
+        // Initialize Temporal Anti-Aliasing (TAA) Resources
+        if (!CompileTAAShaders(device) || !CreateTAAPipelineLayout(device) || !CreateTAAPipeline(device)) return false;
+
+        if (!m_TAALinearSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge)) ||
+            !m_TAAPointSampler.Init(RHISamplerDesc::Point(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize samplers for TAA.");
+            return false;
+        }
+
+        RHIDescriptorPoolDesc taaPoolDesc;
+        taaPoolDesc.MaxDescriptorSets = 16;
+        taaPoolDesc.MaxTextures = 64;
+        taaPoolDesc.MaxSamplers = 16;
+        taaPoolDesc.MaxConstantBuffers = 16;
+        if (!m_TAADescriptorPool.Init(taaPoolDesc)) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize TAA Descriptor Pool!");
+            return false;
+        } else {
+            m_TAADescriptorSet = m_TAADescriptorPool.AllocateDescriptorSet(m_TAAPipelineLayout, 0);
+            if (!m_TAADescriptorSet) return false;
+            if (m_TAALinearSampler.IsValid() && m_TAAPointSampler.IsValid()) {
+                m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative());
+                m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative());
+            }
+        }
+
+        if (!m_TAAConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHITAAConstants), RHIMemoryLocation::HostUpload, "TAAConstantsBuffer"))) return false;
+
         // Initialize GPU Instanced Particle VFX Renderer
         m_ParticleRenderer = std::make_unique<RHIParticleRenderer>();
         if (!m_ParticleRenderer->Init(device)) {
@@ -435,6 +493,28 @@ namespace Axle {
         m_FogApplyDescriptorSet = nullptr;
         m_FogDescriptorPool.Shutdown();
         m_FogSampler.Shutdown();
+
+        m_BloomComputePipeline = nullptr;
+        m_BloomApplyPipelineSDR = nullptr;
+        m_BloomApplyPipelineHDR = nullptr;
+        m_BloomComputePipelineLayout.Shutdown();
+        m_BloomApplyPipelineLayout.Shutdown();
+        m_BloomConstantBuffer.Shutdown();
+        m_BloomComputeTextureSet = nullptr;
+        m_BloomComputeStorageSet = nullptr;
+        m_BloomApplyDescriptorSet = nullptr;
+        m_BloomDescriptorPool.Shutdown();
+        m_BloomSampler.Shutdown();
+
+        m_TAAPipelineSDR = nullptr;
+        m_TAAPipelineHDR = nullptr;
+        m_TAAPipelineLayout.Shutdown();
+        m_TAAConstantBuffer.Shutdown();
+        m_TAADescriptorSet = nullptr;
+        m_TAADescriptorPool.Shutdown();
+        m_TAALinearSampler.Shutdown();
+        m_TAAPointSampler.Shutdown();
+        m_TAAHistoryValid = false;
         m_MSAAColorTarget = nullptr;
         m_MSAADepthTarget = nullptr;
         m_CurrentMSAASamples = 1;
@@ -1717,6 +1797,313 @@ namespace Axle {
         return m_FogComputePipeline != nullptr && m_FogApplyPipelineSDR != nullptr && m_FogApplyPipelineHDR != nullptr;
     }
 
+    bool RHISceneRenderer::CompileBloomShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        auto shaderPath = FindShaderPath("Bloom.hlsl");
+        if (shaderPath.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate Bloom.hlsl!");
+            return false;
+        }
+
+        std::string shaderSource;
+        std::ifstream file(shaderPath);
+        if (file.is_open()) {
+            std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+        }
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to read Bloom.hlsl!");
+            return false;
+        }
+
+        RHIShaderFormat format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+
+        RHIShaderCompileDesc csDesc;
+        csDesc.SourcePath = shaderPath.string();
+        csDesc.Source = shaderSource;
+        csDesc.EntryPoint = "CSMain";
+        csDesc.Stage = RHIShaderStage::Compute;
+        csDesc.HLSLVersion = "2021";
+        csDesc.ShaderModel = "6_0";
+        csDesc.Format = format;
+        csDesc.Optimization = true;
+        auto csRes = compiler.Compile(csDesc);
+        if (!csRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile Bloom CS: {0}", csRes.ErrorMessage);
+            return false;
+        }
+        m_BloomComputeShader = csRes.Bytecode;
+
+        RHIShaderCompileDesc vsDesc = csDesc;
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile Bloom VS: {0}", vsRes.ErrorMessage);
+            return false;
+        }
+        m_BloomApplyVertexShader = vsRes.Bytecode;
+
+        RHIShaderCompileDesc psDesc = csDesc;
+        psDesc.EntryPoint = "PSApply";
+        psDesc.Stage = RHIShaderStage::Fragment;
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile Bloom PS: {0}", psRes.ErrorMessage);
+            return false;
+        }
+        m_BloomApplyPixelShader = psRes.Bytecode;
+
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateBloomPipelineLayout(RHIDevice& device) {
+        nri::RootDescriptorDesc compRootDesc = {};
+        compRootDesc.registerIndex = 0;
+        compRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        compRootDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        nri::DescriptorRangeDesc compTexRanges[2] = {};
+        compTexRanges[0].baseRegisterIndex = 0;
+        compTexRanges[0].descriptorNum = 1;
+        compTexRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        compTexRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        compTexRanges[1].baseRegisterIndex = 0;
+        compTexRanges[1].descriptorNum = 1;
+        compTexRanges[1].descriptorType = nri::DescriptorType::SAMPLER;
+        compTexRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorRangeDesc compStorageRanges[1] = {};
+        compStorageRanges[0].baseRegisterIndex = 0;
+        compStorageRanges[0].descriptorNum = 1;
+        compStorageRanges[0].descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        compStorageRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compStorageRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc compDescSets[2] = {};
+        compDescSets[0].registerSpace = 1;
+        compDescSets[0].ranges = compTexRanges;
+        compDescSets[0].rangeNum = 2;
+
+        compDescSets[1].registerSpace = 2;
+        compDescSets[1].ranges = compStorageRanges;
+        compDescSets[1].rangeNum = 1;
+
+        nri::PipelineLayoutDesc compLayoutDesc = {};
+        compLayoutDesc.rootRegisterSpace = 0;
+        compLayoutDesc.rootDescriptors = &compRootDesc;
+        compLayoutDesc.rootDescriptorNum = 1;
+        compLayoutDesc.descriptorSets = compDescSets;
+        compLayoutDesc.descriptorSetNum = 2;
+        compLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        if (!m_BloomComputePipelineLayout.Init(compLayoutDesc)) return false;
+
+        nri::RootDescriptorDesc applyRootDesc = {};
+        applyRootDesc.registerIndex = 0;
+        applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        applyRootDesc.shaderStages = nri::StageBits::ALL;
+
+        nri::DescriptorRangeDesc applyRanges[3] = {};
+        applyRanges[0].baseRegisterIndex = 0;
+        applyRanges[0].descriptorNum = 1;
+        applyRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[1].baseRegisterIndex = 1;
+        applyRanges[1].descriptorNum = 1;
+        applyRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[2].baseRegisterIndex = 0;
+        applyRanges[2].descriptorNum = 1;
+        applyRanges[2].descriptorType = nri::DescriptorType::SAMPLER;
+        applyRanges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc applyDescSet = {};
+        applyDescSet.registerSpace = 1;
+        applyDescSet.ranges = applyRanges;
+        applyDescSet.rangeNum = 3;
+
+        nri::PipelineLayoutDesc applyLayoutDesc = {};
+        applyLayoutDesc.rootRegisterSpace = 0;
+        applyLayoutDesc.rootDescriptors = &applyRootDesc;
+        applyLayoutDesc.rootDescriptorNum = 1;
+        applyLayoutDesc.descriptorSets = &applyDescSet;
+        applyLayoutDesc.descriptorSetNum = 1;
+        applyLayoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+
+        return m_BloomApplyPipelineLayout.Init(applyLayoutDesc);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateBloomApplyPipeline(nri::Format colorFormat) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_BloomApplyPipelineLayout;
+        gfxDesc.Shaders = { m_BloomApplyVertexShader, m_BloomApplyPixelShader };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+
+        gfxDesc.DepthStencil.DepthTestEnable = false;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+
+        auto& cache = RHIPipelineCache::Get();
+        return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    bool RHISceneRenderer::CreateBloomPipeline(RHIDevice& device) {
+        auto& cache = RHIPipelineCache::Get();
+        RHIComputePipelineDesc compDesc;
+        compDesc.Layout = &m_BloomComputePipelineLayout;
+        compDesc.ComputeShader = m_BloomComputeShader;
+        m_BloomComputePipeline = cache.GetOrCreateComputePipeline(compDesc);
+
+        m_BloomApplyPipelineSDR = GetOrCreateBloomApplyPipeline(nri::Format::RGBA8_UNORM);
+        m_BloomApplyPipelineHDR = GetOrCreateBloomApplyPipeline(nri::Format::RGBA16_SFLOAT);
+
+        return m_BloomComputePipeline != nullptr && m_BloomApplyPipelineSDR != nullptr && m_BloomApplyPipelineHDR != nullptr;
+    }
+
+    bool RHISceneRenderer::CompileTAAShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        auto shaderPath = FindShaderPath("TAA.hlsl");
+        if (shaderPath.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate TAA.hlsl!");
+            return false;
+        }
+
+        std::string shaderSource;
+        std::ifstream file(shaderPath);
+        if (file.is_open()) {
+            std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+        }
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to read TAA.hlsl!");
+            return false;
+        }
+
+        RHIShaderFormat format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+
+        RHIShaderCompileDesc vsDesc;
+        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.Source = shaderSource;
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        vsDesc.HLSLVersion = "2021";
+        vsDesc.ShaderModel = "6_0";
+        vsDesc.Format = format;
+        vsDesc.Optimization = true;
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile TAA VS: {0}", vsRes.ErrorMessage);
+            return false;
+        }
+        m_TAAVertexShader = vsRes.Bytecode;
+
+        RHIShaderCompileDesc psDesc = vsDesc;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = RHIShaderStage::Fragment;
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile TAA PS: {0}", psRes.ErrorMessage);
+            return false;
+        }
+        m_TAAPixelShader = psRes.Bytecode;
+
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateTAAPipelineLayout(RHIDevice& device) {
+        nri::RootDescriptorDesc rootDesc = {};
+        rootDesc.registerIndex = 0;
+        rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDesc.shaderStages = nri::StageBits::ALL;
+
+        nri::DescriptorRangeDesc ranges[5] = {};
+        ranges[0].baseRegisterIndex = 0;
+        ranges[0].descriptorNum = 1;
+        ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        ranges[1].baseRegisterIndex = 1;
+        ranges[1].descriptorNum = 1;
+        ranges[1].descriptorType = nri::DescriptorType::TEXTURE;
+        ranges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        ranges[2].baseRegisterIndex = 2;
+        ranges[2].descriptorNum = 1;
+        ranges[2].descriptorType = nri::DescriptorType::TEXTURE;
+        ranges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        ranges[3].baseRegisterIndex = 0;
+        ranges[3].descriptorNum = 1;
+        ranges[3].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[3].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        ranges[4].baseRegisterIndex = 1;
+        ranges[4].descriptorNum = 1;
+        ranges[4].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[4].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[4].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc descSet = {};
+        descSet.registerSpace = 1;
+        descSet.ranges = ranges;
+        descSet.rangeNum = 5;
+
+        nri::PipelineLayoutDesc layoutDesc = {};
+        layoutDesc.rootRegisterSpace = 0;
+        layoutDesc.rootDescriptors = &rootDesc;
+        layoutDesc.rootDescriptorNum = 1;
+        layoutDesc.descriptorSets = &descSet;
+        layoutDesc.descriptorSetNum = 1;
+        layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+
+        return m_TAAPipelineLayout.Init(layoutDesc);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateTAAPipeline(nri::Format colorFormat) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_TAAPipelineLayout;
+        gfxDesc.Shaders = { m_TAAVertexShader, m_TAAPixelShader };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+
+        gfxDesc.DepthStencil.DepthTestEnable = false;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+
+        auto& cache = RHIPipelineCache::Get();
+        return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    bool RHISceneRenderer::CreateTAAPipeline(RHIDevice& device) {
+        m_TAAPipelineSDR = GetOrCreateTAAPipeline(nri::Format::RGBA8_UNORM);
+        m_TAAPipelineHDR = GetOrCreateTAAPipeline(nri::Format::RGBA16_SFLOAT);
+        return m_TAAPipelineSDR != nullptr && m_TAAPipelineHDR != nullptr;
+    }
+
     void RHISceneRenderer::SetRenderTargetFormat(RHI::RHITextureFormat colorFormat, RHI::RHITextureFormat depthFormat) {
         m_CurrentColorFormat = RHI::ToNRIFormat(colorFormat);
         m_CurrentDepthFormat = RHI::ToNRIFormat(depthFormat);
@@ -1913,10 +2300,26 @@ namespace Axle {
 
         // 1. Stream Global Scene Constants & Forward+ Multi-Light Buffer
         const auto lighting=ResolveSceneLighting(world);
+        static const float s_Halton2[8] = { 0.5f, 0.25f, 0.75f, 0.125f, 0.625f, 0.375f, 0.875f, 0.0625f };
+        static const float s_Halton3[8] = { 0.333333f, 0.666667f, 0.111111f, 0.444444f, 0.777778f, 0.222222f, 0.555556f, 0.888889f };
+        float jitterX = 0.0f;
+        float jitterY = 0.0f;
+        if (settings.EnableTAA && width > 0 && height > 0) {
+            jitterX = (s_Halton2[m_FrameIndex % 8] - 0.5f) / static_cast<float>(width) * settings.TAAJitterSpread;
+            jitterY = (s_Halton3[m_FrameIndex % 8] - 0.5f) / static_cast<float>(height) * settings.TAAJitterSpread;
+        }
+
+        glm::mat4 projZO = camera.GetProjectionMatrixZO();
+        if (settings.EnableTAA) {
+            projZO[2][0] += 2.0f * jitterX;
+            projZO[2][1] += 2.0f * jitterY;
+        }
+        glm::mat4 viewProjZO = projZO * camera.GetViewMatrix();
+
         RHISceneConstants sceneConstants;
-        sceneConstants.ViewProjection = camera.GetViewProjectionMatrixZO();
+        sceneConstants.ViewProjection = viewProjZO;
         sceneConstants.View = camera.GetViewMatrix();
-        sceneConstants.Projection = camera.GetProjectionMatrixZO();
+        sceneConstants.Projection = projZO;
         sceneConstants.CameraPosition = glm::vec4(camera.GetPosition(), settings.EnableToneMapping ? 1.0f : 0.0f);
         sceneConstants.AmbientLight = glm::vec4(0.22f, 0.25f, 0.32f, lighting.AmbientIntensity);
         sceneConstants.SunDirection = glm::vec4(lighting.SunDirection,0.0f);
@@ -2044,7 +2447,8 @@ namespace Axle {
         targetDesc.EnableDepth = sceneDepthTexture != nullptr; targetDesc.Samples = activeSampleCount;
         targetDesc.HDR = useToneMap; targetDesc.FXAA = useFXAA; targetDesc.OwnPrimary = false;
         targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
-        targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog);
+        targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
+        if (settings.EnableTAA) targetDesc.HistoryCount = 2;
         if (viewTargets) {
             auto expected = targetDesc; expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
             expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
@@ -2132,6 +2536,19 @@ namespace Axle {
         const auto fogInput = useFog ? graph.Import("FogInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto fogDepth = useFog ? graph.Import("FogDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto fogStorage = useFog ? graph.Import("FogStorage", m_ScreenStorageTarget->GetNative()) : output;
+
+        const bool useBloom = settings.EnableBloom && activeSampleCount == 1 &&
+            m_BloomComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
+            m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
+        const auto bloomInput = useBloom ? graph.Import("BloomInput", m_OpaqueSceneColor->GetNative()) : output;
+        const auto bloomStorage = useBloom ? graph.Import("BloomStorage", m_ScreenStorageTarget->GetNative()) : output;
+
+        RHITexture* history0 = viewTargets ? viewTargets->Get(RHIViewTarget::History0) : nullptr;
+        RHITexture* history1 = viewTargets ? viewTargets->Get(RHIViewTarget::History1) : nullptr;
+        const bool useTAA = settings.EnableTAA && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+            m_TAAPipelineSDR && history0 && history0->IsValid() && history1 && history1->IsValid();
+        const auto taaHistory0 = useTAA ? graph.Import("TAAHistory0", history0->GetNative(), true) : output;
+        const auto taaHistory1 = useTAA ? graph.Import("TAAHistory1", history1->GetNative()) : output;
         auto attachments = [&](Load load) {
             std::vector<Graph::Use> uses{{sceneColor, Layout::ColorAttachment, Access::Write, load}};
             if (sceneDepthDSV) uses.push_back({sceneDepth, Layout::DepthStencilWrite, Access::Write, load});
@@ -2200,6 +2617,27 @@ namespace Axle {
                 {fogInput, Layout::ShaderResource},
                 {fogStorage, Layout::ShaderResource},
                 {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
+        }
+        if (useBloom) {
+            graph.AddPass("BloomCopy", {{sceneColor, Layout::CopySource}, {bloomInput, Layout::CopyDest, Access::Write}});
+            graph.AddPass("BloomCompute", {
+                {bloomInput, Layout::ShaderResource},
+                {bloomStorage, Layout::ShaderResourceStorage, Access::Write}});
+            graph.AddPass("BloomApply", {
+                {bloomStorage, Layout::ShaderResource},
+                {bloomInput, Layout::ShaderResource},
+                {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
+        }
+        if (useTAA) {
+            graph.AddPass("TAAResolve", {
+                {sceneColor, Layout::ShaderResource},
+                {sceneDepth, Layout::ShaderResource},
+                {taaHistory0, Layout::ShaderResource},
+                {taaHistory1, Layout::ColorAttachment, Access::Write, Load::Clear}});
+            graph.AddPass("TAACopy", {
+                {taaHistory1, Layout::CopySource},
+                {sceneColor, Layout::CopyDest, Access::Write},
+                {taaHistory0, Layout::CopyDest, Access::Write}});
         }
         if (useToneMap) graph.AddPass("ToneMapping", {
             {hdr,Layout::ShaderResource}, {fxaa,Layout::ColorAttachment,Access::Write,Load::Clear}});
@@ -2959,11 +3397,140 @@ namespace Axle {
             Commands().EndRendering();
         }
 
+        // 7c. Bloom Passes (Downsample, Filter & Apply)
+        if (useBloom && m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid()) {
+            if (!beginPass("BloomCopy")) return;
+            Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
+
+            if (!beginPass("BloomCompute")) return;
+            RHIBloomConstants bloomConstants{};
+            bloomConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
+                                                  1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
+            bloomConstants.BloomParams = glm::vec4(settings.BloomThreshold, settings.BloomIntensity, settings.BloomKnee, 0.0f);
+            bloomConstants.BloomTint = glm::vec4(settings.BloomTint, settings.BloomRadius);
+            m_BloomConstantBuffer.UpdateData(&bloomConstants, sizeof(RHIBloomConstants));
+
+            m_BloomDescriptorPool.UpdateTexture(m_BloomComputeTextureSet, 0, 0, m_OpaqueSceneColor->GetSRV());
+            m_BloomDescriptorPool.UpdateStorageTexture(m_BloomComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
+            if (m_BloomSampler.IsValid()) {
+                m_BloomDescriptorPool.UpdateSampler(m_BloomComputeTextureSet, 1, 0, m_BloomSampler.GetNative());
+            }
+
+            Commands().SetPipeline(m_BloomComputePipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_BloomComputePipelineLayout);
+            Commands().SetRootDescriptor(0, m_BloomConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+            m_BloomDescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_BloomComputeTextureSet, nri::BindPoint::COMPUTE);
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_BloomComputeStorageSet, nri::BindPoint::COMPUTE);
+            Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1);
+
+            if (!beginPass("BloomApply")) return;
+            m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 0, 0, m_ScreenStorageTarget->GetSRV());
+            m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 1, 0, m_OpaqueSceneColor->GetSRV());
+            if (m_BloomSampler.IsValid()) {
+                m_BloomDescriptorPool.UpdateSampler(m_BloomApplyDescriptorSet, 2, 0, m_BloomSampler.GetNative());
+            }
+
+            nri::Pipeline* bloomPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_BloomApplyPipelineHDR)
+                ? m_BloomApplyPipelineHDR : m_BloomApplyPipelineSDR;
+            if (!bloomPipeline) return;
+
+            nri::AttachmentDesc bloomColorAttachment = {};
+            bloomColorAttachment.descriptor = sceneTargetRTV;
+            bloomColorAttachment.loadOp = nri::LoadOp::CLEAR;
+            bloomColorAttachment.storeOp = nri::StoreOp::STORE;
+            bloomColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+            nri::RenderingDesc bloomRenderingDesc = {};
+            bloomRenderingDesc.colors = &bloomColorAttachment;
+            bloomRenderingDesc.colorNum = 1;
+
+            Commands().BeginRendering(bloomRenderingDesc);
+            nri::Viewport bloomVp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+            Commands().SetViewport(bloomVp);
+            nri::Rect bloomScissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
+            Commands().SetScissor(bloomScissor);
+
+            Commands().SetPipeline(bloomPipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_BloomApplyPipelineLayout);
+            Commands().SetRootDescriptor(0, m_BloomConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
+            m_BloomDescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_BloomApplyDescriptorSet, nri::BindPoint::GRAPHICS);
+            Commands().Draw(3, 1, 0, 0);
+            Commands().EndRendering();
+        }
+
+        // 7d. Temporal Anti-Aliasing (TAA) Pass
+        if (useTAA && history0 && history1) {
+            if (!beginPass("TAAResolve")) return;
+            RHITAAConstants taaConstants{};
+            taaConstants.InvViewProj = glm::inverse(viewProjZO);
+            taaConstants.PrevViewProj = m_TAAHistoryValid ? m_PrevViewProjection : viewProjZO;
+            taaConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
+                                                1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
+            taaConstants.TAAParams = glm::vec4(jitterX, jitterY, settings.TAAFeedbackMin, settings.TAAFeedbackMax);
+            m_TAAConstantBuffer.UpdateData(&taaConstants, sizeof(RHITAAConstants));
+
+            nri::Descriptor* currentSRV = m_IntermediateHDRTarget ? m_IntermediateHDRTarget->GetSRV() : m_OpaqueSceneColor->GetSRV();
+            nri::Descriptor* depthSRV = m_OpaqueSceneDepth->GetSRV();
+            m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 0, 0, currentSRV);
+            m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 1, 0, depthSRV);
+            m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 2, 0, history0->GetSRV());
+            if (m_TAALinearSampler.IsValid() && m_TAAPointSampler.IsValid()) {
+                m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative());
+                m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative());
+            }
+
+            nri::Pipeline* taaPipeline = (history1->GetFormat() == RHI::RHITextureFormat::RGBA16_FLOAT && m_TAAPipelineHDR)
+                ? m_TAAPipelineHDR : m_TAAPipelineSDR;
+            if (!taaPipeline) return;
+
+            nri::AttachmentDesc taaColorAttachment = {};
+            taaColorAttachment.descriptor = history1->GetRTV();
+            taaColorAttachment.loadOp = nri::LoadOp::CLEAR;
+            taaColorAttachment.storeOp = nri::StoreOp::STORE;
+            taaColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+            nri::RenderingDesc taaRenderingDesc = {};
+            taaRenderingDesc.colors = &taaColorAttachment;
+            taaRenderingDesc.colorNum = 1;
+
+            Commands().BeginRendering(taaRenderingDesc);
+            nri::Viewport taaVp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+            Commands().SetViewport(taaVp);
+            nri::Rect taaScissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
+            Commands().SetScissor(taaScissor);
+
+            Commands().SetPipeline(taaPipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_TAAPipelineLayout);
+            Commands().SetRootDescriptor(0, m_TAAConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
+            m_TAADescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_TAADescriptorSet, nri::BindPoint::GRAPHICS);
+            Commands().Draw(3, 1, 0, 0);
+            Commands().EndRendering();
+
+            if (!beginPass("TAACopy")) return;
+            Commands().CopyTexture(*sceneTargetTexture, nullptr, *history1->GetNative(), nullptr);
+            Commands().CopyTexture(*history0->GetNative(), nullptr, *history1->GetNative(), nullptr);
+            m_TAAHistoryValid = true;
+        }
+
         // 8. Post-Processing Tone Mapping Pass
         if (useToneMap && m_IntermediateHDRTarget && m_IntermediateHDRTarget->IsValid()) {
             if (!beginPass("ToneMapping")) return;
             RHIToneMappingConstants toneConstants{};
-            toneConstants.Params = glm::vec4(settings.Exposure, settings.Gamma, static_cast<float>(settings.ToneMappingMode), settings.WhitePoint);
+            float effectiveExposure = settings.Exposure;
+            if (settings.EnableAutoExposure) {
+                float dt = 0.016f;
+                float targetExp = std::clamp(settings.AutoExposureKeyValue / std::max(settings.Exposure, 0.001f),
+                                             settings.AutoExposureMin, settings.AutoExposureMax);
+                float blend = 1.0f - std::exp(-dt * std::max(settings.AutoExposureSpeed, 0.1f));
+                m_AdaptedExposure = glm::mix(m_AdaptedExposure, targetExp, blend);
+                effectiveExposure = m_AdaptedExposure;
+            } else {
+                m_AdaptedExposure = settings.Exposure;
+            }
+            toneConstants.Params = glm::vec4(effectiveExposure, settings.Gamma, static_cast<float>(settings.ToneMappingMode), settings.WhitePoint);
             toneConstants.ColorGrading = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
 
             nri::Texture* toneOutTexture = colorTarget;
@@ -3002,6 +3569,9 @@ namespace Axle {
                        m_CurrentColorFormat,
                        fxaaConstants)) return;
         }
+
+        m_PrevViewProjection = viewProjZO;
+        m_FrameIndex++;
 
         if (!beginPass("Export") || !graph.IsComplete()) return;
         if (!m_Frame.End() || !m_Frame.Submit()) { AXLE_CORE_ERROR("View command finalization or submit failed"); return; }

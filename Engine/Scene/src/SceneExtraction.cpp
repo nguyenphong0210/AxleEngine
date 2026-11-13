@@ -210,6 +210,40 @@ namespace Axle {
             world.RectLights.push_back(rrl);
         }
 
+        // 4.3. Volumetric Fog extraction
+        auto fogView = registry.view<VolumetricFogComponent>();
+        for (auto entity : fogView) {
+            const auto& fog = fogView.get<VolumetricFogComponent>(entity);
+            if (!fog.Enabled) continue;
+            RenderVolumetricFog rvf;
+            rvf.Enabled = true;
+            rvf.Density = fog.Density;
+            rvf.HeightFalloff = fog.HeightFalloff;
+            rvf.ScatteringAsymmetry = fog.ScatteringAsymmetry;
+            rvf.Color = fog.Color;
+            rvf.MaxDistance = fog.MaxDistance;
+            rvf.Intensity = fog.Intensity;
+            world.VolumetricFog = rvf;
+            break;
+        }
+
+        // 4.4. DDGI Probe Grid extraction
+        auto ddgiView = registry.view<TransformComponent, DDGIProbeGridComponent>();
+        for (auto entity : ddgiView) {
+            const auto& ddgi = ddgiView.get<DDGIProbeGridComponent>(entity);
+            if (!ddgi.Enabled) continue;
+            glm::mat4 worldMat = scene.GetWorldTransform(entity);
+            RenderDDGIProbeGrid rgrid;
+            rgrid.Enabled = true;
+            rgrid.GridDimensions = ddgi.GridDimensions;
+            rgrid.GridSpacing = ddgi.GridSpacing;
+            rgrid.GridOrigin = glm::vec3(worldMat[3]) + ddgi.GridOrigin;
+            rgrid.EnergyMultiplier = ddgi.EnergyMultiplier;
+            rgrid.RaysPerProbe = ddgi.RaysPerProbe;
+            world.DDGIProbeGrid = rgrid;
+            break;
+        }
+
         // 5. Skybox extraction
         auto skyboxView = registry.view<SkyboxComponent>();
         for (auto entity : skyboxView) {

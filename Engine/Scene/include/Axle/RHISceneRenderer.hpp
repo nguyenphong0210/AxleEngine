@@ -85,6 +85,22 @@ namespace Axle {
     };
     static_assert(sizeof(RHISSRConstants) == 512, "RHISSRConstants must be 512 bytes aligned!");
 
+    // 256-byte CBV aligned constants for Volumetric Fog pass
+    struct alignas(256) RHIVolumetricFogConstants {
+        glm::mat4 View{ 1.0f };                                    // 64 bytes
+        glm::mat4 InvView{ 1.0f };                                 // 64 bytes
+        glm::mat4 Projection{ 1.0f };                              // 64 bytes
+        glm::mat4 InvProjection{ 1.0f };                           // 64 bytes
+        glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // 16 bytes
+        glm::vec4 SunDirectionIntensity{ 0.45f, 0.85f, 0.25f, 1.0f };              // 16 bytes
+        glm::vec4 SunColor{ 1.0f, 0.98f, 0.92f, 1.0f };                            // 16 bytes
+        glm::vec4 FogParams{ 0.02f, 0.1f, 0.7f, 100.0f };                          // 16 bytes
+        glm::vec4 FogColorIntensity{ 0.8f, 0.85f, 0.9f, 1.0f };                    // 16 bytes
+        glm::vec4 DDGIParams{ 1.0f, 0.0f, 0.0f, 0.0f };                            // 16 bytes
+        glm::vec4 Padding[10]{};                                                   // 160 bytes -> 512 bytes total
+    };
+    static_assert(sizeof(RHIVolumetricFogConstants) == 512, "RHIVolumetricFogConstants must be 512 bytes aligned!");
+
     // 256-byte CBV aligned constants for FXAA 3.11 post-processing pass
     struct alignas(256) RHIFXAAConstants {
         glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // (width, height, 1/w, 1/h)
@@ -333,6 +349,11 @@ namespace Axle {
         bool CreateSSRPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateSSRApplyPipeline(nri::Format colorFormat);
 
+        bool CompileFogShaders(RHI::RHIDevice& device);
+        bool CreateFogPipelineLayout(RHI::RHIDevice& device);
+        bool CreateFogPipeline(RHI::RHIDevice& device);
+        nri::Pipeline* GetOrCreateFogApplyPipeline(nri::Format colorFormat);
+
     private:
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
@@ -465,6 +486,22 @@ namespace Axle {
         nri::DescriptorSet* m_SSRComputeTextureSet = nullptr;
         nri::DescriptorSet* m_SSRComputeStorageSet = nullptr;
         nri::DescriptorSet* m_SSRApplyDescriptorSet = nullptr;
+
+        // Volumetric Fog & Atmospheric Media Resources
+        RHI::RHIPipelineLayout m_FogComputePipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_FogComputePipeline;
+        RHI::RHIPipelineLayout m_FogApplyPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_FogApplyPipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_FogApplyPipelineHDR;
+        RHI::RHIBuffer m_FogConstantBuffer;
+        RHI::RHIShaderBytecode m_FogComputeShader;
+        RHI::RHIShaderBytecode m_FogApplyVertexShader;
+        RHI::RHIShaderBytecode m_FogApplyPixelShader;
+        RHI::RHISampler m_FogSampler;
+        RHI::RHIDescriptorPool m_FogDescriptorPool;
+        nri::DescriptorSet* m_FogComputeTextureSet = nullptr;
+        nri::DescriptorSet* m_FogComputeStorageSet = nullptr;
+        nri::DescriptorSet* m_FogApplyDescriptorSet = nullptr;
 
         // Intermediate Floating-point HDR Target for 2-pass Scene -> ToneMap execution
         RHI::RHITexture* m_IntermediateHDRTarget = nullptr;

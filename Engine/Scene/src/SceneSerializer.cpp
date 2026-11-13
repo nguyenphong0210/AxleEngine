@@ -341,6 +341,31 @@ namespace Axle {
                 ss << "      TwoSided: " << (rlc.TwoSided ? "true" : "false") << "\n";
             }
 
+            // VolumetricFogComponent
+            if (entity.HasComponent<VolumetricFogComponent>()) {
+                auto& vfc = entity.GetComponent<VolumetricFogComponent>();
+                ss << "    VolumetricFogComponent:\n";
+                ss << "      Enabled: " << (vfc.Enabled ? "true" : "false") << "\n";
+                ss << "      Density: " << vfc.Density << "\n";
+                ss << "      HeightFalloff: " << vfc.HeightFalloff << "\n";
+                ss << "      ScatteringAsymmetry: " << vfc.ScatteringAsymmetry << "\n";
+                ss << "      Color: [ " << vfc.Color.r << " , " << vfc.Color.g << " , " << vfc.Color.b << " ]\n";
+                ss << "      MaxDistance: " << vfc.MaxDistance << "\n";
+                ss << "      Intensity: " << vfc.Intensity << "\n";
+            }
+
+            // DDGIProbeGridComponent
+            if (entity.HasComponent<DDGIProbeGridComponent>()) {
+                auto& ddgi = entity.GetComponent<DDGIProbeGridComponent>();
+                ss << "    DDGIProbeGridComponent:\n";
+                ss << "      Enabled: " << (ddgi.Enabled ? "true" : "false") << "\n";
+                ss << "      GridDimensions: [ " << ddgi.GridDimensions.x << " , " << ddgi.GridDimensions.y << " , " << ddgi.GridDimensions.z << " ]\n";
+                ss << "      GridSpacing: [ " << ddgi.GridSpacing.x << " , " << ddgi.GridSpacing.y << " , " << ddgi.GridSpacing.z << " ]\n";
+                ss << "      GridOrigin: [ " << ddgi.GridOrigin.x << " , " << ddgi.GridOrigin.y << " , " << ddgi.GridOrigin.z << " ]\n";
+                ss << "      EnergyMultiplier: " << ddgi.EnergyMultiplier << "\n";
+                ss << "      RaysPerProbe: " << ddgi.RaysPerProbe << "\n";
+            }
+
             // CameraComponent
             if (entity.HasComponent<CameraComponent>()) {
                 auto& cam = entity.GetComponent<CameraComponent>();
@@ -615,6 +640,8 @@ namespace Axle {
             SpotLight,
             ReflectionProbe,
             RectLight,
+            VolumetricFog,
+            DDGIProbeGrid,
             Skybox,
             Camera,
             AudioListener,
@@ -712,6 +739,18 @@ namespace Axle {
                 currentSection = ComponentSection::RectLight;
                 if (!currentEntity.HasComponent<RectLightComponent>()) {
                     currentEntity.AddComponent<RectLightComponent>();
+                }
+            } else if (trimmed == "VolumetricFogComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::VolumetricFog;
+                if (!currentEntity.HasComponent<VolumetricFogComponent>()) {
+                    currentEntity.AddComponent<VolumetricFogComponent>();
+                }
+            } else if (trimmed == "DDGIProbeGridComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::DDGIProbeGrid;
+                if (!currentEntity.HasComponent<DDGIProbeGridComponent>()) {
+                    currentEntity.AddComponent<DDGIProbeGridComponent>();
                 }
             } else if (trimmed == "SkyboxComponent:") {
                 flushCustomSection();
@@ -1079,6 +1118,56 @@ namespace Axle {
                             rlc.Range = std::stof(Trim(trimmed.substr(6)));
                         } else if (trimmed.rfind("TwoSided:", 0) == 0) {
                             rlc.TwoSided = (Trim(trimmed.substr(9)) == "true");
+                        }
+                        break;
+                    }
+                    case ComponentSection::VolumetricFog: {
+                        if (!currentEntity.HasComponent<VolumetricFogComponent>()) {
+                            currentEntity.AddComponent<VolumetricFogComponent>();
+                        }
+                        auto& vfc = currentEntity.GetComponent<VolumetricFogComponent>();
+                        if (trimmed.rfind("Enabled:", 0) == 0) {
+                            vfc.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("Density:", 0) == 0) {
+                            vfc.Density = std::stof(Trim(trimmed.substr(8)));
+                        } else if (trimmed.rfind("HeightFalloff:", 0) == 0) {
+                            vfc.HeightFalloff = std::stof(Trim(trimmed.substr(14)));
+                        } else if (trimmed.rfind("ScatteringAsymmetry:", 0) == 0) {
+                            vfc.ScatteringAsymmetry = std::stof(Trim(trimmed.substr(20)));
+                        } else if (trimmed.rfind("Color:", 0) == 0) {
+                            float r = 1, g = 1, b = 1;
+                            sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
+                            vfc.Color = glm::vec3(r, g, b);
+                        } else if (trimmed.rfind("MaxDistance:", 0) == 0) {
+                            vfc.MaxDistance = std::stof(Trim(trimmed.substr(12)));
+                        } else if (trimmed.rfind("Intensity:", 0) == 0) {
+                            vfc.Intensity = std::stof(Trim(trimmed.substr(10)));
+                        }
+                        break;
+                    }
+                    case ComponentSection::DDGIProbeGrid: {
+                        if (!currentEntity.HasComponent<DDGIProbeGridComponent>()) {
+                            currentEntity.AddComponent<DDGIProbeGridComponent>();
+                        }
+                        auto& ddgi = currentEntity.GetComponent<DDGIProbeGridComponent>();
+                        if (trimmed.rfind("Enabled:", 0) == 0) {
+                            ddgi.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("GridDimensions:", 0) == 0) {
+                            int x = 16, y = 8, z = 16;
+                            sscanf(trimmed.c_str(), "GridDimensions: [ %d , %d , %d ]", &x, &y, &z);
+                            ddgi.GridDimensions = glm::ivec3(x, y, z);
+                        } else if (trimmed.rfind("GridSpacing:", 0) == 0) {
+                            float x = 2, y = 2, z = 2;
+                            sscanf(trimmed.c_str(), "GridSpacing: [ %f , %f , %f ]", &x, &y, &z);
+                            ddgi.GridSpacing = glm::vec3(x, y, z);
+                        } else if (trimmed.rfind("GridOrigin:", 0) == 0) {
+                            float x = 0, y = 0, z = 0;
+                            sscanf(trimmed.c_str(), "GridOrigin: [ %f , %f , %f ]", &x, &y, &z);
+                            ddgi.GridOrigin = glm::vec3(x, y, z);
+                        } else if (trimmed.rfind("EnergyMultiplier:", 0) == 0) {
+                            ddgi.EnergyMultiplier = std::stof(Trim(trimmed.substr(17)));
+                        } else if (trimmed.rfind("RaysPerProbe:", 0) == 0) {
+                            ddgi.RaysPerProbe = std::stoi(Trim(trimmed.substr(13)));
                         }
                         break;
                     }

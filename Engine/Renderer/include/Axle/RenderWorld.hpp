@@ -145,6 +145,25 @@ namespace Axle {
         bool TwoSided = false;
     };
 
+    struct RenderVolumetricFog {
+        bool Enabled = false;
+        float Density = 0.02f;
+        float HeightFalloff = 0.1f;
+        float ScatteringAsymmetry = 0.7f;
+        glm::vec3 Color{ 0.8f, 0.85f, 0.9f };
+        float MaxDistance = 100.0f;
+        float Intensity = 1.0f;
+    };
+
+    struct RenderDDGIProbeGrid {
+        bool Enabled = false;
+        glm::ivec3 GridDimensions{ 16, 8, 16 };
+        glm::vec3 GridSpacing{ 2.0f, 2.0f, 2.0f };
+        glm::vec3 GridOrigin{ 0.0f, 0.0f, 0.0f };
+        float EnergyMultiplier = 1.0f;
+        int RaysPerProbe = 128;
+    };
+
     struct RenderSkyboxData {
         bool Authored = false;
         bool Enabled = false;
@@ -202,6 +221,8 @@ namespace Axle {
             SpotLights.clear();
             ReflectionProbes.clear();
             RectLights.clear();
+            VolumetricFog.reset();
+            DDGIProbeGrid.reset();
             EntityToStableUUID.clear();
             Camera = RenderCamera{};
             Skybox = RenderSkyboxData{};
@@ -234,6 +255,8 @@ namespace Axle {
         std::vector<RenderSpotLight> SpotLights;
         std::vector<RenderReflectionProbe> ReflectionProbes;
         std::vector<RenderRectLight> RectLights;
+        std::optional<RenderVolumetricFog> VolumetricFog;
+        std::optional<RenderDDGIProbeGrid> DDGIProbeGrid;
         RenderSkyboxData Skybox;
 
         std::unordered_map<uint32_t, UUID> EntityToStableUUID;

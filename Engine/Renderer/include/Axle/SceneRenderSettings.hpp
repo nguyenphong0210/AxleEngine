@@ -18,6 +18,8 @@ namespace Axle {
         bool EnableGTAO = false;
         bool EnableContactShadows = false;
         bool EnableSSR = false;
+        bool EnableVolumetricFog = false;
+        bool EnableDDGI = false;
         uint8_t MSAASamples = 1; // 1 (disabled), 2, 4, 8
         bool Wireframe = false;
         bool ShowPhysicsDebug = false;
@@ -37,6 +39,12 @@ namespace Axle {
         float ContactShadowStrength = 1.0f;
         float SSRLengthPixels = 64.0f;
         float SSRStrength = 0.5f;
+        float FogDensity = 0.02f;
+        float FogHeightFalloff = 0.1f;
+        float FogScattering = 0.7f;
+        glm::vec3 FogColor{ 0.8f, 0.85f, 0.9f };
+        float FogMaxDistance = 100.0f;
+        float DDGIMultiplier = 1.0f;
         glm::vec4 ClearColor{ 0.0f, 0.0f, 0.0f, 1.0f }; // Configurable background clear color (Supports transparent clear for editor viewports)
     };
 

@@ -962,6 +962,33 @@ namespace Axle {
             : Color(color), Intensity(intensity), Width(width), Height(height), Range(range) {}
     };
 
+    struct VolumetricFogComponent {
+        bool Enabled = true;
+        float Density = 0.02f;
+        float HeightFalloff = 0.1f;
+        float ScatteringAsymmetry = 0.7f; // Henyey-Greenstein g (-1 to 1)
+        glm::vec3 Color{ 0.8f, 0.85f, 0.9f };
+        float MaxDistance = 100.0f;
+        float Intensity = 1.0f;
+
+        VolumetricFogComponent() = default;
+        VolumetricFogComponent(float density, const glm::vec3& color, float maxDist = 100.0f)
+            : Density(density), Color(color), MaxDistance(maxDist) {}
+    };
+
+    struct DDGIProbeGridComponent {
+        bool Enabled = true;
+        glm::ivec3 GridDimensions{ 16, 8, 16 };
+        glm::vec3 GridSpacing{ 2.0f, 2.0f, 2.0f };
+        glm::vec3 GridOrigin{ 0.0f, 0.0f, 0.0f };
+        float EnergyMultiplier = 1.0f;
+        int RaysPerProbe = 128;
+
+        DDGIProbeGridComponent() = default;
+        DDGIProbeGridComponent(const glm::ivec3& dims, const glm::vec3& spacing)
+            : GridDimensions(dims), GridSpacing(spacing) {}
+    };
+
     struct CameraComponent {
         float FOV = 45.0f;
         float NearClip = 0.1f;

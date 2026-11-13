@@ -26,6 +26,8 @@ namespace Axle {
         RegisterSimpleCodec<SpotLightComponent>(m_Codecs, "SpotLightComponent");
         RegisterSimpleCodec<ReflectionProbeComponent>(m_Codecs, "ReflectionProbeComponent");
         RegisterSimpleCodec<RectLightComponent>(m_Codecs, "RectLightComponent");
+        RegisterSimpleCodec<VolumetricFogComponent>(m_Codecs, "VolumetricFogComponent");
+        RegisterSimpleCodec<DDGIProbeGridComponent>(m_Codecs, "DDGIProbeGridComponent");
         RegisterSimpleCodec<CameraComponent>(m_Codecs, "CameraComponent");
         RegisterSimpleCodec<SkyboxComponent>(m_Codecs, "SkyboxComponent");
         RegisterSimpleCodec<AssemblyComponent>(m_Codecs, "AssemblyComponent");

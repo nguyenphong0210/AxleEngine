@@ -192,6 +192,24 @@ bool Native(RHIType backend) {
     auto withRectLight = render();
     CHECK(!withRectLight.empty() && withRectLight.size() == red.size());
     world.RectLights.clear();
+
+    // M14-U6 Volumetric Fog & Participating Media verification
+    settings.EnableVolumetricFog = true;
+    auto fog = render();
+    CHECK(!fog.empty() && fog.size() == red.size());
+    settings.EnableVolumetricFog = false;
+
+    RenderVolumetricFog rvf;
+    rvf.Enabled = true;
+    rvf.Density = 0.05f;
+    rvf.Color = glm::vec3(0.9f, 0.95f, 1.0f);
+    rvf.Intensity = 1.2f;
+    world.VolumetricFog = rvf;
+    settings.EnableVolumetricFog = true;
+    auto fogAuthored = render();
+    CHECK(!fogAuthored.empty() && fogAuthored.size() == red.size());
+    world.VolumetricFog.reset();
+    settings.EnableVolumetricFog = false;
     CHECK(render()==red&&environment.BakeCount()==1&&environment.UploadCount()==1);
 
     // M14-U3 infrastructure verification: Storage/UAV texture views, ScreenNormal,
@@ -238,6 +256,18 @@ bool Native(RHIType backend) {
         rectComp.Intensity = 120.0f;
         rectComp.TwoSided = true;
 
+        auto e3 = testScene->CreateEntity("FogEntity");
+        auto& fogComp = e3.AddComponent<VolumetricFogComponent>();
+        fogComp.Density = 0.04f;
+        fogComp.Color = glm::vec3(0.7f, 0.8f, 0.9f);
+        fogComp.MaxDistance = 150.0f;
+
+        auto e4 = testScene->CreateEntity("DDGIEntity");
+        auto& ddgiComp = e4.AddComponent<DDGIProbeGridComponent>();
+        ddgiComp.GridDimensions = glm::ivec3(32, 16, 32);
+        ddgiComp.GridSpacing = glm::vec3(1.5f, 1.5f, 1.5f);
+        ddgiComp.EnergyMultiplier = 1.25f;
+
         SceneSerializer serializer(testScene.get());
         std::string serialized = serializer.SerializeToString();
         CHECK(!serialized.empty());
@@ -263,6 +293,22 @@ bool Native(RHIType backend) {
             CHECK(r.Height == 2.5f);
             CHECK(r.Intensity == 120.0f);
             CHECK(r.TwoSided == true);
+        }
+
+        auto viewFog = restoredScene->GetRegistry().view<VolumetricFogComponent>();
+        CHECK(viewFog.begin() != viewFog.end());
+        for (auto ent : viewFog) {
+            const auto& f = viewFog.get<VolumetricFogComponent>(ent);
+            CHECK(f.Density == 0.04f);
+            CHECK(f.MaxDistance == 150.0f);
+        }
+
+        auto viewDDGI = restoredScene->GetRegistry().view<DDGIProbeGridComponent>();
+        CHECK(viewDDGI.begin() != viewDDGI.end());
+        for (auto ent : viewDDGI) {
+            const auto& d = viewDDGI.get<DDGIProbeGridComponent>(ent);
+            CHECK(d.GridDimensions.x == 32);
+            CHECK(d.EnergyMultiplier == 1.25f);
         }
     }
     // The HDR background remains visible when environment lighting is opt-out;

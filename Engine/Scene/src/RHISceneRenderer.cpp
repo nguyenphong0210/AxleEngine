@@ -308,6 +308,36 @@ namespace Axle {
 
         if (!m_SSRConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISSRConstants), RHIMemoryLocation::HostUpload, "SSRConstantsBuffer"))) return false;
 
+        // Initialize Volumetric Fog & Atmospheric Participating Media Resources
+        if (!CompileFogShaders(device) || !CreateFogPipelineLayout(device) || !CreateFogPipeline(device)) return false;
+
+        if (!m_FogSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Linear Clamp Sampler for Fog.");
+            return false;
+        }
+
+        RHIDescriptorPoolDesc fogPoolDesc;
+        fogPoolDesc.MaxDescriptorSets = 16;
+        fogPoolDesc.MaxTextures = 64;
+        fogPoolDesc.MaxSamplers = 16;
+        fogPoolDesc.MaxStorageTextures = 16;
+        fogPoolDesc.MaxConstantBuffers = 16;
+        if (!m_FogDescriptorPool.Init(fogPoolDesc)) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Fog Descriptor Pool!");
+            return false;
+        } else {
+            m_FogComputeTextureSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogComputePipelineLayout, 0);
+            m_FogComputeStorageSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogComputePipelineLayout, 1);
+            m_FogApplyDescriptorSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogApplyPipelineLayout, 0);
+            if (!m_FogComputeTextureSet || !m_FogComputeStorageSet || !m_FogApplyDescriptorSet) return false;
+            if (m_FogSampler.IsValid()) {
+                m_FogDescriptorPool.UpdateSampler(m_FogComputeTextureSet, 1, 0, m_FogSampler.GetNative());
+                m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 2, 0, m_FogSampler.GetNative());
+            }
+        }
+
+        if (!m_FogConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIVolumetricFogConstants), RHIMemoryLocation::HostUpload, "FogConstantsBuffer"))) return false;
+
         // Initialize GPU Instanced Particle VFX Renderer
         m_ParticleRenderer = std::make_unique<RHIParticleRenderer>();
         if (!m_ParticleRenderer->Init(device)) {
@@ -393,6 +423,18 @@ namespace Axle {
         m_SSRApplyDescriptorSet = nullptr;
         m_SSRDescriptorPool.Shutdown();
         m_SSRSampler.Shutdown();
+
+        m_FogComputePipeline = nullptr;
+        m_FogApplyPipelineSDR = nullptr;
+        m_FogApplyPipelineHDR = nullptr;
+        m_FogComputePipelineLayout.Shutdown();
+        m_FogApplyPipelineLayout.Shutdown();
+        m_FogConstantBuffer.Shutdown();
+        m_FogComputeTextureSet = nullptr;
+        m_FogComputeStorageSet = nullptr;
+        m_FogApplyDescriptorSet = nullptr;
+        m_FogDescriptorPool.Shutdown();
+        m_FogSampler.Shutdown();
         m_MSAAColorTarget = nullptr;
         m_MSAADepthTarget = nullptr;
         m_CurrentMSAASamples = 1;
@@ -1474,6 +1516,207 @@ namespace Axle {
         return m_SSRComputePipeline != nullptr && m_SSRApplyPipelineSDR != nullptr && m_SSRApplyPipelineHDR != nullptr;
     }
 
+    bool RHISceneRenderer::CompileFogShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        auto shaderPath = std::filesystem::path("Engine/Resources/Shaders/VolumetricFog.hlsl");
+        std::string shaderSource;
+        if (std::filesystem::exists(shaderPath)) {
+            std::ifstream file(shaderPath);
+            if (file.is_open()) {
+                std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+            }
+        }
+        if (shaderSource.empty()) {
+            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "VolumetricFog.hlsl";
+            if (std::filesystem::exists(shaderPath)) {
+                std::ifstream file(shaderPath);
+                if (file.is_open()) {
+                    std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+                }
+            }
+        }
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate VolumetricFog.hlsl!");
+            return false;
+        }
+
+        RHIShaderFormat format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+
+        // 1. Compute Shader: CSMain
+        RHIShaderCompileDesc csDesc;
+        csDesc.Source = shaderSource;
+        csDesc.SourcePath = PathToUtf8(shaderPath);
+        csDesc.EntryPoint = "CSMain";
+        csDesc.Stage = RHIShaderStage::Compute;
+        csDesc.HLSLVersion = "2021";
+        csDesc.ShaderModel = "6_0";
+        csDesc.Format = format;
+        csDesc.Optimization = true;
+
+        auto csRes = compiler.Compile(csDesc);
+        if (!csRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile VolumetricFog CS: {0}", csRes.ErrorMessage);
+            return false;
+        }
+        m_FogComputeShader = csRes.Bytecode;
+
+        // 2. Vertex Shader: VSMain
+        RHIShaderCompileDesc vsDesc = csDesc;
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile VolumetricFog VS: {0}", vsRes.ErrorMessage);
+            return false;
+        }
+        m_FogApplyVertexShader = vsRes.Bytecode;
+
+        // 3. Pixel Shader: PSMain
+        RHIShaderCompileDesc psDesc = csDesc;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = RHIShaderStage::Fragment;
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile VolumetricFog PS: {0}", psRes.ErrorMessage);
+            return false;
+        }
+        m_FogApplyPixelShader = psRes.Bytecode;
+
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateFogPipelineLayout(RHIDevice& device) {
+        // 1. Compute Pipeline Layout:
+        // Root Descriptor [0] b0 space 0: 512-byte RHIVolumetricFogConstants
+        nri::RootDescriptorDesc compRootDesc = {};
+        compRootDesc.registerIndex = 0;
+        compRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        compRootDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        // Set 0 (space 1):
+        // Range 0: t0 (Depth) -> TEXTURE
+        // Range 1: s0 (Linear Sampler) -> SAMPLER
+        nri::DescriptorRangeDesc compTexRanges[2] = {};
+        compTexRanges[0].baseRegisterIndex = 0;
+        compTexRanges[0].descriptorNum = 1;
+        compTexRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        compTexRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        compTexRanges[1].baseRegisterIndex = 0;
+        compTexRanges[1].descriptorNum = 1;
+        compTexRanges[1].descriptorType = nri::DescriptorType::SAMPLER;
+        compTexRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        // Set 1 (space 2):
+        // Range 0: u0 (Storage Output) -> STORAGE_TEXTURE
+        nri::DescriptorRangeDesc compStorageRanges[1] = {};
+        compStorageRanges[0].baseRegisterIndex = 0;
+        compStorageRanges[0].descriptorNum = 1;
+        compStorageRanges[0].descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        compStorageRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compStorageRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc compDescSets[2] = {};
+        compDescSets[0].registerSpace = 1;
+        compDescSets[0].ranges = compTexRanges;
+        compDescSets[0].rangeNum = 2;
+
+        compDescSets[1].registerSpace = 2;
+        compDescSets[1].ranges = compStorageRanges;
+        compDescSets[1].rangeNum = 1;
+
+        nri::PipelineLayoutDesc compLayoutDesc = {};
+        compLayoutDesc.rootRegisterSpace = 0;
+        compLayoutDesc.rootDescriptors = &compRootDesc;
+        compLayoutDesc.rootDescriptorNum = 1;
+        compLayoutDesc.descriptorSets = compDescSets;
+        compLayoutDesc.descriptorSetNum = 2;
+        compLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        if (!m_FogComputePipelineLayout.Init(compLayoutDesc)) return false;
+
+        // 2. Apply Pipeline Layout:
+        // Root Descriptor [0] b0 space 0: 512-byte RHIVolumetricFogConstants
+        nri::RootDescriptorDesc applyRootDesc = {};
+        applyRootDesc.registerIndex = 0;
+        applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        applyRootDesc.shaderStages = nri::StageBits::ALL;
+
+        // Descriptor Set (space 1):
+        // Range 0: t0 (Scene Color) -> TEXTURE
+        // Range 1: t1 (Fog Result) -> TEXTURE
+        // Range 2: s0 (Sampler) -> SAMPLER
+        nri::DescriptorRangeDesc applyRanges[3] = {};
+        applyRanges[0].baseRegisterIndex = 0;
+        applyRanges[0].descriptorNum = 1;
+        applyRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[1].baseRegisterIndex = 1;
+        applyRanges[1].descriptorNum = 1;
+        applyRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[2].baseRegisterIndex = 0;
+        applyRanges[2].descriptorNum = 1;
+        applyRanges[2].descriptorType = nri::DescriptorType::SAMPLER;
+        applyRanges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc applyDescSet = {};
+        applyDescSet.registerSpace = 1;
+        applyDescSet.ranges = applyRanges;
+        applyDescSet.rangeNum = 3;
+
+        nri::PipelineLayoutDesc applyLayoutDesc = {};
+        applyLayoutDesc.rootRegisterSpace = 0;
+        applyLayoutDesc.rootDescriptors = &applyRootDesc;
+        applyLayoutDesc.rootDescriptorNum = 1;
+        applyLayoutDesc.descriptorSets = &applyDescSet;
+        applyLayoutDesc.descriptorSetNum = 1;
+        applyLayoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+
+        return m_FogApplyPipelineLayout.Init(applyLayoutDesc);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateFogApplyPipeline(nri::Format colorFormat) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_FogApplyPipelineLayout;
+        gfxDesc.Shaders = { m_FogApplyVertexShader, m_FogApplyPixelShader };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+
+        gfxDesc.DepthStencil.DepthTestEnable = false;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+
+        auto& cache = RHIPipelineCache::Get();
+        return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    bool RHISceneRenderer::CreateFogPipeline(RHIDevice& device) {
+        auto& cache = RHIPipelineCache::Get();
+        RHIComputePipelineDesc compDesc;
+        compDesc.Layout = &m_FogComputePipelineLayout;
+        compDesc.ComputeShader = m_FogComputeShader;
+        m_FogComputePipeline = cache.GetOrCreateComputePipeline(compDesc);
+
+        m_FogApplyPipelineSDR = GetOrCreateFogApplyPipeline(nri::Format::RGBA8_UNORM);
+        m_FogApplyPipelineHDR = GetOrCreateFogApplyPipeline(nri::Format::RGBA16_SFLOAT);
+
+        return m_FogComputePipeline != nullptr && m_FogApplyPipelineSDR != nullptr && m_FogApplyPipelineHDR != nullptr;
+    }
+
     void RHISceneRenderer::SetRenderTargetFormat(RHI::RHITextureFormat colorFormat, RHI::RHITextureFormat depthFormat) {
         m_CurrentColorFormat = RHI::ToNRIFormat(colorFormat);
         m_CurrentDepthFormat = RHI::ToNRIFormat(depthFormat);
@@ -1801,7 +2044,7 @@ namespace Axle {
         targetDesc.EnableDepth = sceneDepthTexture != nullptr; targetDesc.Samples = activeSampleCount;
         targetDesc.HDR = useToneMap; targetDesc.FXAA = useFXAA; targetDesc.OwnPrimary = false;
         targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
-        targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
+        targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog);
         if (viewTargets) {
             auto expected = targetDesc; expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
             expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
@@ -1881,6 +2124,14 @@ namespace Axle {
         const auto ssrInput = useSSR ? graph.Import("SSRInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto ssrDepth = useSSR ? graph.Import("SSRDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto ssrStorage = useSSR ? graph.Import("SSRStorage", m_ScreenStorageTarget->GetNative()) : output;
+
+        const bool useFog = settings.EnableVolumetricFog && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+            m_FogComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
+            m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
+            m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
+        const auto fogInput = useFog ? graph.Import("FogInput", m_OpaqueSceneColor->GetNative()) : output;
+        const auto fogDepth = useFog ? graph.Import("FogDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
+        const auto fogStorage = useFog ? graph.Import("FogStorage", m_ScreenStorageTarget->GetNative()) : output;
         auto attachments = [&](Load load) {
             std::vector<Graph::Use> uses{{sceneColor, Layout::ColorAttachment, Access::Write, load}};
             if (sceneDepthDSV) uses.push_back({sceneDepth, Layout::DepthStencilWrite, Access::Write, load});
@@ -1937,6 +2188,17 @@ namespace Axle {
                 {ssrDepth, Layout::ShaderResource},
                 {ssrStorage, Layout::ShaderResource},
                 {ssrInput, Layout::ShaderResource},
+                {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
+        }
+        if (useFog) {
+            graph.AddPass("FogCopy", {{sceneColor,Layout::CopySource}, {fogInput,Layout::CopyDest,Access::Write},
+                {sceneDepth,Layout::CopySource}, {fogDepth,Layout::CopyDest,Access::Write}});
+            graph.AddPass("FogCompute", {
+                {fogDepth, Layout::ShaderResource},
+                {fogStorage, Layout::ShaderResourceStorage, Access::Write}});
+            graph.AddPass("FogApply", {
+                {fogInput, Layout::ShaderResource},
+                {fogStorage, Layout::ShaderResource},
                 {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
         }
         if (useToneMap) graph.AddPass("ToneMapping", {
@@ -2610,6 +2872,89 @@ namespace Axle {
             Commands().SetRootDescriptor(0, m_SSRConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
             m_SSRDescriptorPool.Bind(Commands().GetNative());
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_SSRApplyDescriptorSet, nri::BindPoint::GRAPHICS);
+            Commands().Draw(3, 1, 0, 0);
+            Commands().EndRendering();
+        }
+
+        // 7.7. Volumetric Fog & Atmospheric Media Pass
+        if (useFog) {
+            if (!beginPass("FogCopy")) return;
+            Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
+            Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
+
+            if (!beginPass("FogCompute")) return;
+            RHIVolumetricFogConstants fogConstants{};
+            fogConstants.View = camera.GetViewMatrix();
+            fogConstants.InvView = glm::inverse(camera.GetViewMatrix());
+            fogConstants.Projection = camera.GetProjectionMatrix();
+            fogConstants.InvProjection = glm::inverse(camera.GetProjectionMatrix());
+            fogConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
+                1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
+
+            if (world.DirectionalLight) {
+                glm::vec3 sunDir = -glm::normalize(world.DirectionalLight->Direction);
+                float sunIntensity = world.DirectionalLight->Intensity;
+                fogConstants.SunDirectionIntensity = glm::vec4(sunDir, sunIntensity);
+                fogConstants.SunColor = glm::vec4(world.DirectionalLight->Color, 1.0f);
+            } else {
+                fogConstants.SunDirectionIntensity = glm::vec4(0.45f, 0.85f, 0.25f, 1.0f);
+                fogConstants.SunColor = glm::vec4(1.0f, 0.98f, 0.92f, 1.0f);
+            }
+
+            if (world.VolumetricFog && world.VolumetricFog->Enabled) {
+                const auto& vf = *world.VolumetricFog;
+                fogConstants.FogParams = glm::vec4(vf.Density, vf.HeightFalloff, vf.ScatteringAsymmetry, vf.MaxDistance);
+                fogConstants.FogColorIntensity = glm::vec4(vf.Color, vf.Intensity);
+            } else {
+                fogConstants.FogParams = glm::vec4(settings.FogDensity, settings.FogHeightFalloff, settings.FogScattering, settings.FogMaxDistance);
+                fogConstants.FogColorIntensity = glm::vec4(settings.FogColor, 1.0f);
+            }
+            fogConstants.DDGIParams = glm::vec4(settings.DDGIMultiplier, 0.0f, 0.0f, 0.0f);
+
+            if (!m_FogConstantBuffer.UpdateData(&fogConstants, sizeof(RHIVolumetricFogConstants))) return;
+
+            m_FogDescriptorPool.UpdateTexture(m_FogComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
+            m_FogDescriptorPool.UpdateSampler(m_FogComputeTextureSet, 1, 0, m_FogSampler.GetNative());
+            m_FogDescriptorPool.UpdateStorageTexture(m_FogComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
+
+            Commands().SetPipeline(m_FogComputePipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_FogComputePipelineLayout);
+            Commands().SetRootDescriptor(0, m_FogConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+            m_FogDescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_FogComputeTextureSet, nri::BindPoint::COMPUTE);
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_FogComputeStorageSet, nri::BindPoint::COMPUTE);
+            Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1);
+
+            if (!beginPass("FogApply")) return;
+            m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 0, 0, m_OpaqueSceneColor->GetSRV());
+            m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV());
+            m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 2, 0, m_FogSampler.GetNative());
+
+            nri::Pipeline* applyPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_FogApplyPipelineHDR)
+                ? m_FogApplyPipelineHDR : m_FogApplyPipelineSDR;
+            if (!applyPipeline) return;
+
+            nri::AttachmentDesc applyColorAttachment = {};
+            applyColorAttachment.descriptor = sceneTargetRTV;
+            applyColorAttachment.loadOp = nri::LoadOp::CLEAR;
+            applyColorAttachment.storeOp = nri::StoreOp::STORE;
+            applyColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+            nri::RenderingDesc applyRenderingDesc = {};
+            applyRenderingDesc.colors = &applyColorAttachment;
+            applyRenderingDesc.colorNum = 1;
+
+            Commands().BeginRendering(applyRenderingDesc);
+            nri::Viewport applyVp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+            Commands().SetViewport(applyVp);
+            nri::Rect applyScissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
+            Commands().SetScissor(applyScissor);
+
+            Commands().SetPipeline(applyPipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_FogApplyPipelineLayout);
+            Commands().SetRootDescriptor(0, m_FogConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
+            m_FogDescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_FogApplyDescriptorSet, nri::BindPoint::GRAPHICS);
             Commands().Draw(3, 1, 0, 0);
             Commands().EndRendering();
         }

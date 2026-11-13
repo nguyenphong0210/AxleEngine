@@ -15,6 +15,9 @@ Rebuilt and reran after the correction:
 - Debug `AxleEnvironmentRenderingTests`: native D3D12, native Vulkan 1.3, and OpenGL fallback all exit 0 with no recorded RHI validation errors.
 - Debug focused CTest (`EnvironmentBakeTests`, `RenderAcceptancePolicy`, `RenderUnitTests`): 3/3 PASS.
 - The environment fixture now checks that the first TAA frame stays within 32 code values of the non-TAA baseline, exercising the invalid-history path.
+- Release `AxleEnvironmentRenderingTests`: native D3D12, native Vulkan 1.3, and OpenGL fallback all exit 0.
+- Release focused CTest (`EnvironmentBakeTests`, `RenderAcceptancePolicy`, `RenderUnitTests`): 3/3 PASS.
+- `python scripts/check_architecture.py`: PASS, 576 source files and 25 CMake files.
 
 ## Verified evidence
 

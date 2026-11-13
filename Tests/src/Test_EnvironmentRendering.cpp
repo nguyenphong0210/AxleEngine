@@ -161,6 +161,9 @@ bool Native(RHIType backend) {
     settings.EnableGTAO=true; settings.EnableContactShadows=true; auto gtao=render();
     CHECK(!gtao.empty()&&gtao.size()==red.size());
     settings.EnableGTAO=false; settings.EnableContactShadows=false;
+    settings.EnableSSR=true; auto ssr=render();
+    CHECK(!ssr.empty()&&ssr.size()==red.size());
+    settings.EnableSSR=false;
     CHECK(render()==red&&environment.BakeCount()==1&&environment.UploadCount()==1);
     // The HDR background remains visible when environment lighting is opt-out;
     // the metallic receiver must not receive ambient/specular energy from it.

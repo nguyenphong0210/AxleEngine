@@ -17,6 +17,7 @@ namespace Axle {
         bool EnableFXAA = false;
         bool EnableGTAO = false;
         bool EnableContactShadows = false;
+        bool EnableSSR = false;
         uint8_t MSAASamples = 1; // 1 (disabled), 2, 4, 8
         bool Wireframe = false;
         bool ShowPhysicsDebug = false;
@@ -34,6 +35,8 @@ namespace Axle {
         float GTAOStrength = 1.0f;
         float ContactShadowLengthPixels = 32.0f;
         float ContactShadowStrength = 1.0f;
+        float SSRLengthPixels = 64.0f;
+        float SSRStrength = 0.5f;
         glm::vec4 ClearColor{ 0.0f, 0.0f, 0.0f, 1.0f }; // Configurable background clear color (Supports transparent clear for editor viewports)
     };
 

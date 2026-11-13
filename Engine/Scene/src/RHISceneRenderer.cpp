@@ -1321,7 +1321,7 @@ namespace Axle {
         const auto opaqueColor = copyRefraction ? graph.Import("OpaqueColor", m_OpaqueSceneColor->GetNative()) : output;
         const auto opaqueDepth = copyRefraction ? graph.Import("OpaqueDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto particleDepthImage = copyParticleDepth ? graph.Import("ParticleDepth", m_ParticleSceneDepth->GetNative()) : sceneDepth;
-        const bool useGTAO = (settings.EnableGTAO || settings.EnableContactShadows) && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+        const bool useGTAO = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR) && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid();
         const auto gtaoInput = useGTAO ? graph.Import("GTAOInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto gtaoDepth = useGTAO ? graph.Import("GTAODepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
@@ -1895,9 +1895,11 @@ namespace Axle {
             RHIFXAAConstants gtaoConstants{};
             gtaoConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
                 1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
-            const float mode = settings.EnableGTAO ? (settings.EnableContactShadows ? 3.0f : 1.0f) : 2.0f;
+            const float mode = settings.EnableSSR ? 4.0f : (settings.EnableGTAO ? (settings.EnableContactShadows ? 3.0f : 1.0f) : 2.0f);
             gtaoConstants.GTAOParams = glm::vec4(mode, settings.GTAORadiusPixels, settings.GTAOStrength, 0.0025f);
-            gtaoConstants.ContactParams = glm::vec4(0.7071f, -0.7071f, settings.ContactShadowLengthPixels, settings.ContactShadowStrength);
+            gtaoConstants.ContactParams = glm::vec4(0.7071f, -0.7071f,
+                settings.EnableSSR ? settings.SSRLengthPixels : settings.ContactShadowLengthPixels,
+                settings.EnableSSR ? settings.SSRStrength : settings.ContactShadowStrength);
             if (!RenderFXAA(Commands(), m_OpaqueSceneColor->GetSRV(), sceneTargetTexture, sceneTargetRTV,
                 width, height, sceneTargetFormat, gtaoConstants, m_OpaqueSceneDepth->GetSRV())) return;
         }

@@ -64,7 +64,7 @@ float4 PSMain(VSOutput input) : SV_Target {
             }
             ao = 1.0 - saturate(occlusion * (u_GTAOParams.z / 8.0));
         }
-        if (u_GTAOParams.x > 1.5) {
+        if (u_GTAOParams.x > 1.5 && u_GTAOParams.x < 3.5) {
             float2 ray = normalize(u_ContactParams.xy) * rcpFrame * max(u_ContactParams.z, 1.0) / 16.0;
             float blocker = 0.0;
             [unroll]
@@ -73,6 +73,19 @@ float4 PSMain(VSOutput input) : SV_Target {
                 blocker = max(blocker, saturate((depthM - sampleDepth - u_GTAOParams.w) * 220.0));
             }
             ao *= 1.0 - blocker * saturate(u_ContactParams.w);
+        }
+        if (u_GTAOParams.x > 3.5) {
+            float2 ray = normalize(float2(-u_ContactParams.x, u_ContactParams.y)) * rcpFrame * max(u_ContactParams.z, 1.0) / 16.0;
+            float2 hitUV = posM;
+            bool hit = false;
+            [unroll]
+            for (int i=1; i<=16; ++i) {
+                float2 sampleUV = saturate(posM + ray * i);
+                float sampleDepth = u_SceneDepth.SampleLevel(u_LinearSampler, sampleUV, 0.0);
+                if (!hit && sampleDepth < depthM - u_GTAOParams.w) { hitUV = sampleUV; hit = true; }
+            }
+            if (hit) return float4(lerp(colorM.rgb, u_InputTexture.SampleLevel(u_LinearSampler, hitUV, 0.0).rgb,
+                saturate(u_ContactParams.w)), colorM.a);
         }
         return float4(colorM.rgb * ao, colorM.a);
     }

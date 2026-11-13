@@ -27,6 +27,11 @@ namespace Axle {
         targets.Samples = desc.MSAASamples; targets.HDR = desc.IntermediateHDR; targets.FXAA = desc.FXAA; targets.HistoryCount = desc.HistoryCount;
         targets.EnableNormal = desc.EnableNormal;
         targets.EnableScreenStorage = desc.EnableScreenStorage;
+        targets.EnableHiZ = desc.EnableHiZ;
+        targets.EnableBloom = desc.EnableBloom;
+        targets.EnableGTAO = desc.EnableGTAO;
+        targets.EnableAutoExposure = desc.EnableAutoExposure;
+        targets.EnableDDGI = desc.EnableDDGI;
         m_Targets = std::make_shared<RHI::RHIViewTargets>();
         return m_Targets->Configure(targets) && RegisterWithImGui();
     }
@@ -119,6 +124,25 @@ namespace Axle {
             m_Desc.EnableScreenStorage == enableScreenStorage && IsValid()) return true;
         auto desc = m_Desc; desc.MSAASamples = samples; desc.IntermediateHDR = hdr; desc.FXAA = fxaa;
         desc.HistoryCount = historyCount; desc.EnableNormal = enableNormal; desc.EnableScreenStorage = enableScreenStorage;
+        return Recreate(desc);
+    }
+
+    bool RHIViewportDescriptor::SetRenderOptions(const SceneRenderSettings& settings) {
+        if (!m_OwnsColorTexture) return false;
+        auto desc = m_Desc;
+        desc.MSAASamples = settings.MSAASamples;
+        desc.IntermediateHDR = settings.EnableToneMapping;
+        desc.FXAA = settings.EnableFXAA;
+        desc.HistoryCount = settings.EnableTAA ? 2 : 0;
+        desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
+        desc.EnableHiZ = settings.EnableSSR;
+        desc.EnableBloom = settings.EnableBloom;
+        desc.EnableAutoExposure = settings.EnableAutoExposure;
+        desc.EnableDDGI = settings.EnableDDGI;
+        desc.EnableNormal = desc.EnableGTAO || settings.EnableSSR;
+        desc.EnableScreenStorage = desc.EnableNormal || settings.EnableVolumetricFog ||
+            settings.EnableBloom || settings.EnableAutoExposure;
+        if (desc == m_Desc && IsValid()) return true;
         return Recreate(desc);
     }
 

@@ -60,6 +60,8 @@ public:
     size_t GetSceneEntityCount() const {
         return m_Scene ? m_Scene->GetRegistry().view<Axle::TagComponent>().size() : 0;
     }
+    uint64_t GetSuccessfulViewCount() const { return m_SuccessfulViewCount; }
+    uint64_t GetFailedViewCount() const { return m_FailedViewCount; }
     void OnAttach() override;
     void OnDetach() override;
     void OnUpdate(Axle::Timestep ts) override;
@@ -141,6 +143,8 @@ private:
     Axle::u32 m_ViewportHeight = 720;
     bool m_ViewportFocused = false;
     bool m_ViewportHovered = false;
+    uint64_t m_SuccessfulViewCount = 0;
+    uint64_t m_FailedViewCount = 0;
     bool m_CursorCaptured = false;
     glm::vec2 m_PreCaptureMousePos{ 0.0f, 0.0f };
 

@@ -1536,17 +1536,19 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     request.Camera = activeCamera; request.Settings = renderSettings; request.PhysicsScene = m_PhysicsScene.get();
     request.Name = "Editor main view";
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
-        const bool needNormal = (renderSettings.EnableGTAO || renderSettings.EnableContactShadows || renderSettings.EnableSSR);
-        const bool needStorage = (renderSettings.EnableGTAO || renderSettings.EnableContactShadows || renderSettings.EnableSSR ||
-                                  renderSettings.EnableVolumetricFog || renderSettings.EnableBloom || renderSettings.EnableAutoExposure);
-        if (!m_RHIViewport->SetRenderOptions(renderSettings.MSAASamples, renderSettings.EnableToneMapping, renderSettings.EnableFXAA,
-                                            renderSettings.EnableTAA ? std::optional<uint8_t>(2) : std::nullopt,
-                                            needNormal, needStorage)) return;
+        if (!m_RHIViewport->SetRenderOptions(renderSettings)) {
+            ++m_FailedViewCount;
+            AXLE_ERROR("Editor view failed: viewport target configuration failed");
+            return;
+        }
         request.ColorTarget = m_RHIViewport->GetColorTexture(); request.DepthTarget = m_RHIViewport->GetDepthTexture();
         request.ViewTargets = m_RHIViewport->GetTargets();
     } else request.GLTargetFBO = m_Framebuffer;
     const auto result = Axle::RenderService::Get().RenderView(*m_Scene, request);
-    if (!result.Success) AXLE_ERROR("Editor view failed: {0}", result.ErrorMessage);
+    if (!result.Success) {
+        ++m_FailedViewCount;
+        AXLE_ERROR("Editor view failed: {0}", result.ErrorMessage);
+    } else ++m_SuccessfulViewCount;
 
 }
 

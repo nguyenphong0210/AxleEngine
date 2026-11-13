@@ -2706,7 +2706,7 @@ namespace Axle {
         targetDesc.EnableBloom = settings.EnableBloom;
         targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
         targetDesc.EnableAutoExposure = settings.EnableAutoExposure;
-        targetDesc.EnableDDGI = settings.EnableDDGI && world.DDGIProbeGrid.has_value();
+        targetDesc.EnableDDGI = settings.EnableDDGI;
         if (settings.EnableTAA) targetDesc.HistoryCount = 2;
         if (viewTargets) {
             auto expected = targetDesc; expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;

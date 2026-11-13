@@ -423,6 +423,8 @@ int EditorMain(int argc, char** argv) {
                         if (RequireRecovery && (!Editor->GetPluginSession() || !Editor->GetPluginSession()->IsSafeMode() || Editor->GetPluginSession()->HasNativeModules()))
                             throw std::runtime_error("Plugin recovery startup did not disable native modules");
                         if (++Frames == 5) {
+                            if (Editor->GetFailedViewCount() != 0 || Editor->GetSuccessfulViewCount() == 0)
+                                throw std::runtime_error("Editor startup verification failed: scene views were not rendered successfully");
                             if (RequireEmpty)
                                 AXLE_INFO("Editor empty startup verification: PASS (0 entities, 0 assets, no start scene; 5 UI frames)");
                             else

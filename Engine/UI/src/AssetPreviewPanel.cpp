@@ -720,7 +720,7 @@ namespace Axle {
         request.Name = "AssetPreview";
 
         if (RHI::RHIDevice::Get().IsNativeReady() && m_RHIViewport && m_RHIViewport->IsValid()) {
-            if (!m_RHIViewport->SetRenderOptions(settings.MSAASamples, settings.EnableToneMapping, settings.EnableFXAA)) return;
+            if (!m_RHIViewport->SetRenderOptions(settings)) return;
             request.ColorTarget = m_RHIViewport->GetColorTexture();
             request.DepthTarget = m_RHIViewport->GetDepthTexture();
             request.ViewTargets = m_RHIViewport->GetTargets();

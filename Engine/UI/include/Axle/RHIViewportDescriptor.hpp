@@ -2,6 +2,7 @@
 #include <Axle/Types.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
+#include <Axle/SceneRenderSettings.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -20,6 +21,8 @@ namespace Axle {
         uint8_t MSAASamples = 1, HistoryCount = 0;
         bool IntermediateHDR = false, FXAA = false;
         bool EnableNormal = false, EnableScreenStorage = false;
+        bool EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false;
+        bool operator==(const RHIViewportDesc&) const = default;
     };
 
     class RHIViewportDescriptor {
@@ -49,6 +52,7 @@ namespace Axle {
         bool SetDepthFormat(RHI::RHITextureFormat depthFormat);
         bool SetRenderOptions(uint8_t samples, bool hdrIntermediate, bool fxaa, std::optional<uint8_t> historyCount = {},
                               bool enableNormal = false, bool enableScreenStorage = false);
+        bool SetRenderOptions(const SceneRenderSettings& settings);
 
         RHI::RHITextureFormat GetColorFormat() const { return m_Desc.ColorFormat; }
         RHI::RHITextureFormat GetDepthFormat() const { return m_Desc.DepthFormat; }

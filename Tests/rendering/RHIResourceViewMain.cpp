@@ -231,12 +231,30 @@ static bool Run(RHIType backend) {
     settings.EnableSkybox = settings.EnableShadows = settings.EnableToneMapping = settings.EnableFXAA = false;
     settings.EnableParticles = false; settings.MSAASamples = 1; settings.ClearColor = {0, 0, 0, 1};
     auto draw = [&] {
-        if (!view.SetRenderOptions(settings.MSAASamples, settings.EnableToneMapping, settings.EnableFXAA)) return;
+        if (!view.SetRenderOptions(settings)) return false;
         renderer.RenderScene(scene, camera, view.GetColorTexture(), view.GetDepthTexture(), settings, nullptr, view.GetTargets());
+        return renderer.WasLastRenderSuccessful();
     };
-    draw();
+    RENDER_CHECK(draw(), "baseline viewport configuration and render succeed");
     const auto originalPixels = ReadTexture(*view.GetColorTexture());
     RENDER_CHECK(originalPixels.size() == 64 * 64 * 4 && originalPixels[(32 * 64 + 32) * 4] > 20 && renderer.GetDrawCallCount() > 0, "actual mesh produces non-background pixels");
+    // Exercise the Editor-owned target path with the M14 default feature mix;
+    // implicit targets in the environment fixture cannot catch this boundary.
+    settings.EnableToneMapping = settings.EnableFXAA = true;
+    settings.EnableGTAO = settings.EnableContactShadows = settings.EnableSSR = settings.EnableBloom = true;
+    RENDER_CHECK(draw(), "M14 Editor feature mix renders with explicit viewport-owned targets");
+    const auto targets = view.GetTargets();
+    RENDER_CHECK(targets->GetGTAO() && targets->GetGTAO()->GetWidth() == 32 &&
+        targets->GetHiZ(7) && targets->GetBloom(5), "viewport publishes half-resolution GTAO and complete Hi-Z/bloom levels");
+    RENDER_CHECK(!ReadTexture(*view.GetColorTexture()).empty(), "M14 explicit viewport output can be read back");
+    settings.EnableAutoExposure = settings.EnableDDGI = true;
+    RENDER_CHECK(draw() && view.GetTargets()->GetExposure() && view.GetTargets()->GetDDGI(),
+        "optional targets match renderer requirements even without an authored DDGI grid");
+    settings.EnableGTAO = settings.EnableContactShadows = settings.EnableSSR = settings.EnableBloom = false;
+    settings.EnableAutoExposure = settings.EnableDDGI = false;
+    settings.EnableToneMapping = settings.EnableFXAA = false;
+    RENDER_CHECK(draw() && !view.GetTargets()->GetGTAO() && !view.GetTargets()->GetHiZ(0) &&
+        !view.GetTargets()->GetBloom(0), "disabling effects replaces the complete target generation and recovers baseline");
     {
         unsigned count = 0;
         ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {

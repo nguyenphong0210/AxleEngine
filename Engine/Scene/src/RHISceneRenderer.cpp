@@ -2804,7 +2804,9 @@ namespace Axle {
                     item.PushConsts.Model = worldMat;
                     item.PushConsts.ColorPrimary = meshInst.Material.AlbedoColor;
                     item.PushConsts.ColorSecondary = meshInst.Material.SecondaryColor;
-                    item.PushConsts.Params = glm::vec4(meshInst.Material.TileScale.x, static_cast<float>(meshInst.Material.PatternMode), 0.5f, 0.0f);
+                    float defaultRoughness = (meshInst.Material.PatternMode == 1 || meshInst.Material.PatternMode == 0) ? 0.15f : 0.5f;
+                    float defaultMetallic = (meshInst.Material.PatternMode == 1 || meshInst.Material.PatternMode == 0) ? 0.05f : 0.0f;
+                    item.PushConsts.Params = glm::vec4(meshInst.Material.TileScale.x, static_cast<float>(meshInst.Material.PatternMode), defaultRoughness, defaultMetallic);
                     item.PushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
                     glm::vec3 diff = glm::vec3(worldMat[3]) - camPos;
                     item.DistanceSq = glm::dot(diff, diff);
@@ -3504,8 +3506,7 @@ namespace Axle {
             float effectiveExposure = settings.Exposure;
             if (settings.EnableAutoExposure) {
                 float dt = 0.016f;
-                float targetExp = std::clamp(settings.AutoExposureKeyValue / std::max(settings.Exposure, 0.001f),
-                                             settings.AutoExposureMin, settings.AutoExposureMax);
+                float targetExp = std::clamp(settings.Exposure, settings.AutoExposureMin, settings.AutoExposureMax);
                 float blend = 1.0f - std::exp(-dt * std::max(settings.AutoExposureSpeed, 0.1f));
                 m_AdaptedExposure = glm::mix(m_AdaptedExposure, targetExp, blend);
                 effectiveExposure = m_AdaptedExposure;

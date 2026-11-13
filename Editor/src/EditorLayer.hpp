@@ -118,8 +118,8 @@ private:
     bool m_EnableGTAO = true;
     bool m_EnableBloom = true;
     bool m_EnableContactShadows = true;
-    bool m_EnableVolumetricFog = true;
-    bool m_EnableAutoExposure = true;
+    bool m_EnableVolumetricFog = false;
+    bool m_EnableAutoExposure = false;
     bool m_EnableTAA = false;
     bool m_F1KeyWasPressed = false;
     bool m_F9KeyWasPressed = false;

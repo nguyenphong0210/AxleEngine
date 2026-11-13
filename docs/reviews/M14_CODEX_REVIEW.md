@@ -98,3 +98,5 @@ No source repair was made in this review because R1–R3 and R5 require feature 
 - **M14-R2 PARTIAL RUNTIME:** DDGI now allocates a bounded irradiance atlas and dispatches an authored-grid update pass. A full irradiance/visibility feedback loop into ForwardPBR remains open.
 
 Debug native `AxleEnvironmentRenderingTests` passes on D3D12 and Vulkan after these changes with zero recorded RHI validation errors; the focused CPU CTest set remains 3/3 PASS. The U9 scorecard probe records timestamp frequency, but the local command-only probe currently returns a zero delta (`gpu_scope_valid=0`), so the GPU-budget acceptance gate remains **OPEN** until a renderer-integrated timestamp scope produces non-zero measurements.
+
+The renderer now owns a timestamp query/readback scope around each submitted view frame (`ce86df0`). The local D3D12 probe still reports `renderer_gpu_scope_valid=0` because the driver returns identical endpoints for this headless fixture; this is recorded as an environment limitation rather than a fabricated budget pass.

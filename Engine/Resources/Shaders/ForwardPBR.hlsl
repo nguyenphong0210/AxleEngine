@@ -395,15 +395,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
     
     // 3. Normal Vector & Tangent Space Perturbation
     float3 N = normalize(input.NormalWS);
-    if (shadingMode == 0 || shadingMode == 1) {
-        // Geometric screen derivative flat normal for procedural caro & low-poly meshes (Exact OpenGL Parity)
-        float3 dX = ddx(input.WorldPos);
-        float3 dY = ddy(input.WorldPos);
-        float3 crossN = cross(dX, dY);
-        if (length(crossN) > 1e-6) {
-            N = normalize(crossN);
-        }
-    } else if ((HasMaterialMap(1)||HasMaterialMap(8)) && abs(input.TangentWS.w)>0.1) {
+    if ((HasMaterialMap(1)||HasMaterialMap(8)) && abs(input.TangentWS.w)>0.1) {
         float3 T=input.TangentWS.xyz-N*dot(N,input.TangentWS.xyz);
         T=normalize(T);
         float3 B=cross(N,T)*(input.TangentWS.w<0.0?-1.0:1.0);

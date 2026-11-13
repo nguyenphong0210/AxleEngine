@@ -514,6 +514,7 @@ namespace Axle {
         m_TAADescriptorPool.Shutdown();
         m_TAALinearSampler.Shutdown();
         m_TAAPointSampler.Shutdown();
+        m_TAAHistoryIndex = 0;
         m_TAAHistoryValid = false;
         m_MSAAColorTarget = nullptr;
         m_MSAADepthTarget = nullptr;
@@ -2527,10 +2528,14 @@ namespace Axle {
 
         RHITexture* history0 = viewTargets ? viewTargets->Get(RHIViewTarget::History0) : nullptr;
         RHITexture* history1 = viewTargets ? viewTargets->Get(RHIViewTarget::History1) : nullptr;
+        RHITexture* historyRead = (m_TAAHistoryIndex == 0) ? history0 : history1;
+        RHITexture* historyWrite = (m_TAAHistoryIndex == 0) ? history1 : history0;
         const bool useTAA = settings.EnableTAA && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_TAAPipelineSDR && history0 && history0->IsValid() && history1 && history1->IsValid();
-        const auto taaHistory0 = useTAA ? graph.Import("TAAHistory0", history0->GetNative(), true) : output;
-        const auto taaHistory1 = useTAA ? graph.Import("TAAHistory1", history1->GetNative()) : output;
+        // The first frame deliberately reads an uninitialized slot but the
+        // shader bypasses it through the explicit HistoryValid flag below.
+        const auto taaHistoryRead = useTAA ? graph.Import("TAAHistoryRead", historyRead->GetNative(), true) : output;
+        const auto taaHistoryWrite = useTAA ? graph.Import("TAAHistoryWrite", historyWrite->GetNative()) : output;
         auto attachments = [&](Load load) {
             std::vector<Graph::Use> uses{{sceneColor, Layout::ColorAttachment, Access::Write, load}};
             if (sceneDepthDSV) uses.push_back({sceneDepth, Layout::DepthStencilWrite, Access::Write, load});
@@ -2614,12 +2619,11 @@ namespace Axle {
             graph.AddPass("TAAResolve", {
                 {sceneColor, Layout::ShaderResource},
                 {sceneDepth, Layout::ShaderResource},
-                {taaHistory0, Layout::ShaderResource},
-                {taaHistory1, Layout::ColorAttachment, Access::Write, Load::Clear}});
+                {taaHistoryRead, Layout::ShaderResource},
+                {taaHistoryWrite, Layout::ColorAttachment, Access::Write, Load::Clear}});
             graph.AddPass("TAACopy", {
-                {taaHistory1, Layout::CopySource},
-                {sceneColor, Layout::CopyDest, Access::Write},
-                {taaHistory0, Layout::CopyDest, Access::Write}});
+                {taaHistoryWrite, Layout::CopySource},
+                {sceneColor, Layout::CopyDest, Access::Write}});
         }
         if (useToneMap) graph.AddPass("ToneMapping", {
             {hdr,Layout::ShaderResource}, {fxaa,Layout::ColorAttachment,Access::Write,Load::Clear}});
@@ -3445,7 +3449,7 @@ namespace Axle {
         }
 
         // 7d. Temporal Anti-Aliasing (TAA) Pass
-        if (useTAA && history0 && history1) {
+        if (useTAA && historyRead && historyWrite) {
             if (!beginPass("TAAResolve")) return;
             RHITAAConstants taaConstants{};
             taaConstants.InvViewProj = glm::inverse(viewProjZO);
@@ -3453,24 +3457,25 @@ namespace Axle {
             taaConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
                                                 1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
             taaConstants.TAAParams = glm::vec4(jitterX, jitterY, settings.TAAFeedbackMin, settings.TAAFeedbackMax);
+            taaConstants.Reserved[0].x = m_TAAHistoryValid ? 1.0f : 0.0f;
             m_TAAConstantBuffer.UpdateData(&taaConstants, sizeof(RHITAAConstants));
 
             nri::Descriptor* currentSRV = m_IntermediateHDRTarget ? m_IntermediateHDRTarget->GetSRV() : m_OpaqueSceneColor->GetSRV();
             nri::Descriptor* depthSRV = m_OpaqueSceneDepth->GetSRV();
             m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 0, 0, currentSRV);
             m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 1, 0, depthSRV);
-            m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 2, 0, history0->GetSRV());
+            m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 2, 0, historyRead->GetSRV());
             if (m_TAALinearSampler.IsValid() && m_TAAPointSampler.IsValid()) {
                 m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative());
                 m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative());
             }
 
-            nri::Pipeline* taaPipeline = (history1->GetFormat() == RHI::RHITextureFormat::RGBA16_FLOAT && m_TAAPipelineHDR)
+            nri::Pipeline* taaPipeline = (historyWrite->GetFormat() == RHI::RHITextureFormat::RGBA16_FLOAT && m_TAAPipelineHDR)
                 ? m_TAAPipelineHDR : m_TAAPipelineSDR;
             if (!taaPipeline) return;
 
             nri::AttachmentDesc taaColorAttachment = {};
-            taaColorAttachment.descriptor = history1->GetRTV();
+            taaColorAttachment.descriptor = historyWrite->GetRTV();
             taaColorAttachment.loadOp = nri::LoadOp::CLEAR;
             taaColorAttachment.storeOp = nri::StoreOp::STORE;
             taaColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -3494,8 +3499,8 @@ namespace Axle {
             Commands().EndRendering();
 
             if (!beginPass("TAACopy")) return;
-            Commands().CopyTexture(*sceneTargetTexture, nullptr, *history1->GetNative(), nullptr);
-            Commands().CopyTexture(*history0->GetNative(), nullptr, *history1->GetNative(), nullptr);
+            Commands().CopyTexture(*sceneTargetTexture, nullptr, *historyWrite->GetNative(), nullptr);
+            m_TAAHistoryIndex = static_cast<uint8_t>(m_TAAHistoryIndex ^ 1u);
             m_TAAHistoryValid = true;
         }
 

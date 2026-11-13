@@ -465,10 +465,17 @@ bool Native(RHIType backend) {
     settings.EnableAutoExposure = false;
 
     // 3. TAA Jitter and History Reprojection
+    settings.EnableTAA = false;
+    const auto taaBaseline = render();
     settings.EnableTAA = true;
     const auto taaFrame1 = render();
     const auto taaFrame2 = render();
-    CHECK(!taaFrame1.empty() && !taaFrame2.empty());
+    CHECK(!taaBaseline.empty() && !taaFrame1.empty() && !taaFrame2.empty());
+    // The first frame must bypass invalid history, while the second frame must
+    // use the opposite history slot after the resolve copy.
+    for (size_t c = 0; c < 3; ++c) {
+        CHECK(std::abs(int(taaFrame1[center + c]) - int(taaBaseline[center + c])) <= 32);
+    }
     settings.EnableTAA = false;
     settings.EnableToneMapping = false;
 

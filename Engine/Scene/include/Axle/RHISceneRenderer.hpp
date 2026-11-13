@@ -564,6 +564,7 @@ namespace Axle {
         nri::DescriptorSet* m_TAADescriptorSet = nullptr;
         glm::mat4 m_PrevViewProjection{ 1.0f };
         uint32_t m_FrameIndex = 0;
+        uint8_t m_TAAHistoryIndex = 0;
         bool m_TAAHistoryValid = false;
         float m_AdaptedExposure = 1.0f;
 

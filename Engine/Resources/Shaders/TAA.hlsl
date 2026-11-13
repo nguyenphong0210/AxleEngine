@@ -104,6 +104,9 @@ float4 PSMain(VSOutput input) : SV_Target {
 
     // Check if reprojected UV is within screen bounds
     bool validHistory = (prevUV.x >= 0.0 && prevUV.x <= 1.0 && prevUV.y >= 0.0 && prevUV.y <= 1.0);
+    if (u_Reserved[0].x < 0.5) {
+        return float4(c4, 1.0);
+    }
     float feedbackMin = (u_TAAParams.z > 0.0) ? u_TAAParams.z : 0.88;
     float feedbackMax = (u_TAAParams.w > 0.0) ? u_TAAParams.w : 0.96;
 

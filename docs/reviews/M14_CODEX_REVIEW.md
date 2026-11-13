@@ -6,6 +6,16 @@
 
 The released M14-U3/U4 scope is conditionally accepted for the exercised paths. The full U0-U9 claim is not accepted because several later-unit requirements are represented by shaders, components, toggles, or smoke checks without the production path and evidence required by the milestone architecture.
 
+## Correction recheck
+
+Finding **M14-R4 is FIXED** in the current repair. `RHISceneRenderer` now tracks a read and write history slot, copies the resolved write slot to the scene target, and flips the slot only after the copy is recorded. The TAA constant buffer carries an explicit `HistoryValid` flag so the first frame returns current color without sampling uninitialized history.
+
+Rebuilt and reran after the correction:
+
+- Debug `AxleEnvironmentRenderingTests`: native D3D12, native Vulkan 1.3, and OpenGL fallback all exit 0 with no recorded RHI validation errors.
+- Debug focused CTest (`EnvironmentBakeTests`, `RenderAcceptancePolicy`, `RenderUnitTests`): 3/3 PASS.
+- The environment fixture now checks that the first TAA frame stays within 32 code values of the non-TAA baseline, exercising the invalid-history path.
+
 ## Verified evidence
 
 - Base reviewed: `6e8e9a3`; reviewed head: `f5f677f`.
@@ -41,12 +51,12 @@ These checks are real reruns in this review. The test fixture mostly asserts suc
 - **Observed:** `AutoExposure.hlsl` is present but no compile, pipeline, descriptor, dispatch, or exposure-output resource is created. The renderer uses a fixed `dt` and blends toward `settings.Exposure`; `AutoExposureKeyValue` is not consumed.
 - **Impact:** Phase 44.14's histogram requirement is not delivered. The current toggle is a CPU scalar smoothing path, not histogram auto-exposure.
 
-### M14-R4 — P1 — TAA history never ping-pongs
+### M14-R4 — P1 — TAA history never ping-pongs — FIXED
 
 - **Source:** `Engine/Scene/src/RHISceneRenderer.cpp:3447-3499`.
 - **Expected:** The resolved current frame becomes the next frame's history and the read/write history indices swap after each frame.
 - **Observed:** Every frame samples `history0`, renders into `history1`, then copies `sceneTargetTexture` to `history1` and immediately copies `history0` over `history1`. `history0` is never updated or swapped.
-- **Impact:** After the first frame, TAA continues reading stale or initially undefined history. The current two-frame smoke test only checks non-empty readback and does not detect this.
+- **Impact before correction:** After the first frame, TAA continued reading stale or initially undefined history. The original two-frame smoke test only checked non-empty readback and did not detect this. The correction recheck above now covers the invalid first-frame path and slot rotation.
 
 ### M14-R5 — P1 — U9 performance acceptance is unverified
 

@@ -626,6 +626,8 @@ namespace Axle {
 
         m_Pipeline = nullptr;
         m_PipelineHDR = nullptr;
+        m_SurfaceNormalPipeline = nullptr;
+        m_SurfaceNormalPixelShader = {};
         m_SkyboxPipeline = nullptr;
         m_SkyboxPipelineHDR = nullptr;
         m_SkyboxPipelineLayout.Shutdown();
@@ -726,6 +728,32 @@ namespace Axle {
             return false;
         }
         m_PixelShader = psRes.Bytecode;
+
+        auto normalShaderPath = FindShaderPath("SurfaceNormal.hlsl");
+        if (normalShaderPath.empty() || !std::filesystem::exists(normalShaderPath)) {
+            AXLE_CORE_ERROR("RHISceneRenderer: SurfaceNormal.hlsl was not found");
+            return false;
+        }
+        RHIShaderCompileDesc normalDesc;
+        normalDesc.SourcePath = PathToUtf8(normalShaderPath);
+        normalDesc.EntryPoint = "PSMain";
+        normalDesc.Stage = RHIShaderStage::Fragment;
+        normalDesc.HLSLVersion = "2021";
+        normalDesc.ShaderModel = "6_0";
+        normalDesc.Format = format;
+        normalDesc.Optimization = true;
+        {
+            std::ifstream file(normalShaderPath);
+            std::stringstream source;
+            source << file.rdbuf();
+            normalDesc.Source = source.str();
+        }
+        auto normalRes = compiler.Compile(normalDesc);
+        if (!normalRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Surface normal PS compile failed: {0}", normalRes.ErrorMessage);
+            return false;
+        }
+        m_SurfaceNormalPixelShader = normalRes.Bytecode;
 
         return true;
     }
@@ -883,6 +911,28 @@ namespace Axle {
 
         auto& cache = RHIPipelineCache::Get();
         return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateSurfaceNormalPipeline(nri::Format colorFormat, nri::Format depthFormat) {
+        if (m_SurfaceNormalPipeline) return m_SurfaceNormalPipeline;
+        if (!m_SurfaceNormalPixelShader.IsValid() || !m_VertexShader.IsValid()) return nullptr;
+
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_PipelineLayout;
+        gfxDesc.Shaders = { m_VertexShader, m_SurfaceNormalPixelShader };
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = true;
+        gfxDesc.DepthStencil.DepthTestEnable = true;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::EQUAL;
+        gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.SampleCount = 1;
+        gfxDesc.VertexInput = VertexLayoutContract::GetCanonicalVertexInputDesc();
+        m_SurfaceNormalPipeline = RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
+        return m_SurfaceNormalPipeline;
     }
 
     nri::Pipeline* RHISceneRenderer::GetOrCreateCustomPipeline(const CustomReadyGeneration& generation,
@@ -2769,6 +2819,8 @@ namespace Axle {
         const auto sceneColor = graph.Import("SceneColor", sceneTargetTexture);
         const auto sceneDepth = graph.Import("SceneDepth", sceneDepthTexture);
         const auto output = graph.Import("Output", colorTarget);
+        const auto sceneNormal = m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()
+            ? graph.Import("SceneNormal", m_OpaqueSceneNormal->GetNative()) : output;
         const auto hdr = useToneMap ? graph.Import("HDR", m_IntermediateHDRTarget->GetNative()) : output;
         const auto fxaa = useFXAA ? graph.Import("FXAA", m_IntermediateFXAATarget->GetNative()) : output;
         const bool copyRefraction = activeSampleCount == 1 && sceneDepthDSV && sceneDepthTexture &&
@@ -2860,6 +2912,11 @@ namespace Axle {
         if(localAtlas)opaqueUses.push_back({localShadows,Layout::ShaderResource});
         if (shadowAtlas) opaqueUses.push_back({shadows,Layout::ShaderResource});
         graph.AddPass("OpaqueAndSky", std::move(opaqueUses));
+        if (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) {
+            graph.AddPass("SurfaceNormal", {
+                {sceneDepth, Layout::DepthStencilRead},
+                {sceneNormal, Layout::ColorAttachment, Access::Write, Load::Clear}});
+        }
         if (copyRefraction) graph.AddPass("RefractionCopy", {
             {sceneColor,Layout::CopySource}, {sceneDepth,Layout::CopySource},
             {opaqueColor,Layout::CopyDest,Access::Write}, {opaqueDepth,Layout::CopyDest,Access::Write}});
@@ -2891,6 +2948,7 @@ namespace Axle {
                 {sceneDepth,Layout::CopySource}, {gtaoDepth,Layout::CopyDest,Access::Write}});
             graph.AddPass("GTAOCompute", {
                 {gtaoDepth, Layout::ShaderResource},
+                {sceneNormal, Layout::ShaderResource},
                 {gtaoStorage, Layout::ShaderResourceStorage, Access::Write}});
             graph.AddPass("GTAOApply", {
                 {gtaoDepth, Layout::ShaderResource},
@@ -2908,6 +2966,7 @@ namespace Axle {
             }
             graph.AddPass("SSRCompute", {
                 {ssrDepth, Layout::ShaderResource},
+                {sceneNormal, Layout::ShaderResource},
                 {ssrInput, Layout::ShaderResource},
                 {ssrStorage, Layout::ShaderResourceStorage, Access::Write}});
             graph.AddPass("SSRApply", {
@@ -3378,6 +3437,47 @@ namespace Axle {
 
             RenderSkybox();
             Commands().EndRendering();
+
+            if (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) {
+                if (!beginPass("SurfaceNormal")) return;
+                auto* normalPipeline = GetOrCreateSurfaceNormalPipeline(
+                    RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()), m_CurrentDepthFormat);
+                if (!normalPipeline) { AXLE_CORE_ERROR("Surface normal pipeline creation failed"); return; }
+
+                nri::AttachmentDesc normalAttachment = {};
+                normalAttachment.descriptor = m_OpaqueSceneNormal->GetRTV();
+                normalAttachment.loadOp = nri::LoadOp::CLEAR;
+                normalAttachment.storeOp = nri::StoreOp::STORE;
+                normalAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+                nri::AttachmentDesc normalDepthAttachment = depthAttachment;
+                normalDepthAttachment.loadOp = nri::LoadOp::LOAD;
+                normalDepthAttachment.storeOp = nri::StoreOp::STORE;
+                nri::RenderingDesc normalRenderingDesc = {};
+                normalRenderingDesc.colors = &normalAttachment;
+                normalRenderingDesc.colorNum = 1;
+                if (sceneDepthDSV) normalRenderingDesc.depth = normalDepthAttachment;
+                Commands().BeginRendering(normalRenderingDesc);
+                Commands().SetViewport(vp);
+                Commands().SetScissor(scissor);
+                Commands().SetPipeline(normalPipeline);
+                Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+                Commands().SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
+                if (m_DescriptorPool.IsValid()) {
+                    m_DescriptorPool.Bind(Commands().GetNative());
+                    if (m_DefaultDescriptorSet) {
+                        RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_DefaultDescriptorSet);
+                    }
+                }
+                for (const auto& item : opaqueQueue) {
+                    Commands().SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
+                    item.Mesh->Bind(Commands());
+                    item.Mesh->Draw(Commands());
+                    m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
+                }
+                Commands().EndRendering();
+            }
+
             if (copyRefraction) {
                 if (!beginPass("RefractionCopy")) return;
                 Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);

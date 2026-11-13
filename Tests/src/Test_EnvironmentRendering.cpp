@@ -217,6 +217,14 @@ bool Native(RHIType backend) {
     settings.EnableGTAO=true; settings.EnableContactShadows=true; auto gtao=render();
     CHECK(!gtao.empty()&&gtao.size()==red.size());
     CHECK(renderer.GetLastGPUTimestampMilliseconds() > 0.0);
+    auto* normalTarget = renderer.GetOpaqueNormalTarget();
+    CHECK(normalTarget && normalTarget->IsValid());
+    const auto normalReadback = Read(*normalTarget, 8);
+    CHECK(normalReadback.size() == size_t(width) * width * 8);
+    const size_t normalCenter = (size_t(width / 2) * width + width / 2) * 8;
+    bool normalHasData = false;
+    for (size_t i = 0; i < 8; ++i) normalHasData |= normalReadback[normalCenter + i] != 0;
+    CHECK(normalHasData);
     {
         std::ofstream scorecard(Output / "M14_U9_timestamp_scorecard.txt", std::ios::app);
         scorecard << "renderer_gpu_scope_ms=" << renderer.GetLastGPUTimestampMilliseconds() << "\n"

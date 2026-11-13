@@ -1,8 +1,16 @@
 # Milestone 14 — Lighting and Material Fidelity Plan
 
-**Status:** Milestone 14 Complete (Units M14-U0 through M14-U9 fully delivered, verified across Direct3D 12, Vulkan 1.3, and OpenGL fallback with 0 validation errors).
+**Status:** Implementation reported complete; independent Codex acceptance is **HOLD**. M14-U3/U4 are conditionally verified in the released scope. Full M14-U5–U9 acceptance remains open pending correction of the findings recorded in [`docs/reviews/M14_CODEX_REVIEW.md`](../../reviews/M14_CODEX_REVIEW.md).
 **Supporting Architectural Document:** [`ARCHITECTURE.md`](ARCHITECTURE.md).
 **Supporting Detailed Plan:** [`docs/archive/design/deferred/ADVANCED_MATERIAL_FIDELITY_ROADMAP.md`](../../archive/design/deferred/ADVANCED_MATERIAL_FIDELITY_ROADMAP.md).
+
+---
+
+## Independent review status
+
+The current implementation compiles and the focused render contracts pass in Debug and Release. Native environment/rendering fixtures also pass on the physical RTX 3070 for D3D12, Vulkan 1.3, and the OpenGL fallback with zero recorded RHI validation errors. Those results verify the exercised startup, resource-view, shader-compilation, and fallback paths; they do not establish every feature claim below.
+
+Acceptance is held because the independent review found that the delivered source does not implement or verify the required Hi-Z pyramid, DDGI probe update/atlas path, histogram auto-exposure, correct TAA history ping-pong, six-tier bloom, and the U9 GPU-timestamp performance scorecard. See the finding IDs and source evidence in [`M14_CODEX_REVIEW.md`](../../reviews/M14_CODEX_REVIEW.md). The checkboxes below remain the planned feature list; they are not independent acceptance evidence.
 
 ---
 

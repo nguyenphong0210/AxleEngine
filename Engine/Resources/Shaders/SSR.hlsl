@@ -200,7 +200,19 @@ float4 PSMain(VSOutput input) : SV_Target {
     float4 normalSample = u_SceneNormal.SampleLevel(u_LinearSampler, uv, 0.0);
     float3 viewPos = ReconstructViewPos(uv, depth);
     float3 V = normalize(-viewPos);
-    float3 N = normalize(mul((float3x3)u_View, normalSample.xyz));
+    float3 N;
+    if (dot(normalSample.xyz, normalSample.xyz) > 0.01) {
+        N = normalize(mul((float3x3)u_View, normalSample.xyz));
+    } else {
+        float2 rcpFrame = u_ScreenSize.zw;
+        float3 pR = ReconstructViewPos(uv + float2(rcpFrame.x, 0.0), u_SceneDepth.SampleLevel(u_LinearSampler, uv + float2(rcpFrame.x, 0.0), 0.0));
+        float3 pL = ReconstructViewPos(uv - float2(rcpFrame.x, 0.0), u_SceneDepth.SampleLevel(u_LinearSampler, uv - float2(rcpFrame.x, 0.0), 0.0));
+        float3 pD = ReconstructViewPos(uv + float2(0.0, rcpFrame.y), u_SceneDepth.SampleLevel(u_LinearSampler, uv + float2(0.0, rcpFrame.y), 0.0));
+        float3 pU = ReconstructViewPos(uv - float2(0.0, rcpFrame.y), u_SceneDepth.SampleLevel(u_LinearSampler, uv - float2(0.0, rcpFrame.y), 0.0));
+        float3 dx = (abs(pR.z - viewPos.z) < abs(pL.z - viewPos.z)) ? (pR - viewPos) : (viewPos - pL);
+        float3 dy = (abs(pD.z - viewPos.z) < abs(pU.z - viewPos.z)) ? (pD - viewPos) : (viewPos - pU);
+        N = normalize(cross(dx, dy));
+    }
     float NdotV = max(dot(N, V), 0.001);
 
     // Fresnel Schlick dielectric factor (F0 = 0.04)

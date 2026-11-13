@@ -19,6 +19,7 @@ namespace Axle {
         std::string DebugName = "EditorViewport";
         uint8_t MSAASamples = 1, HistoryCount = 0;
         bool IntermediateHDR = false, FXAA = false;
+        bool EnableNormal = false, EnableScreenStorage = false;
     };
 
     class RHIViewportDescriptor {
@@ -46,7 +47,8 @@ namespace Axle {
         bool SetHDR(bool enableHDR);
         bool SetColorFormat(RHI::RHITextureFormat newFormat);
         bool SetDepthFormat(RHI::RHITextureFormat depthFormat);
-        bool SetRenderOptions(uint8_t samples, bool hdrIntermediate, bool fxaa, std::optional<uint8_t> historyCount = {});
+        bool SetRenderOptions(uint8_t samples, bool hdrIntermediate, bool fxaa, std::optional<uint8_t> historyCount = {},
+                              bool enableNormal = false, bool enableScreenStorage = false);
 
         RHI::RHITextureFormat GetColorFormat() const { return m_Desc.ColorFormat; }
         RHI::RHITextureFormat GetDepthFormat() const { return m_Desc.DepthFormat; }

@@ -25,6 +25,8 @@ namespace Axle {
         RHI::RHIViewTargetDesc targets; targets.Width = desc.Width; targets.Height = desc.Height;
         targets.ColorFormat = desc.ColorFormat; targets.DepthFormat = desc.DepthFormat; targets.EnableDepth = desc.EnableDepth;
         targets.Samples = desc.MSAASamples; targets.HDR = desc.IntermediateHDR; targets.FXAA = desc.FXAA; targets.HistoryCount = desc.HistoryCount;
+        targets.EnableNormal = desc.EnableNormal;
+        targets.EnableScreenStorage = desc.EnableScreenStorage;
         m_Targets = std::make_shared<RHI::RHIViewTargets>();
         return m_Targets->Configure(targets) && RegisterWithImGui();
     }
@@ -108,11 +110,15 @@ namespace Axle {
         UnregisterFromImGui(); m_Targets.reset(); m_Registrar = {}; m_OwnsColorTexture = true;
     }
 
-    bool RHIViewportDescriptor::SetRenderOptions(uint8_t samples, bool hdr, bool fxaa, std::optional<uint8_t> requestedHistory) {
+    bool RHIViewportDescriptor::SetRenderOptions(uint8_t samples, bool hdr, bool fxaa, std::optional<uint8_t> requestedHistory,
+                                                 bool enableNormal, bool enableScreenStorage) {
         if (!m_OwnsColorTexture) return false;
         const auto historyCount = requestedHistory.value_or(m_Desc.HistoryCount);
-        if (m_Desc.MSAASamples == samples && m_Desc.IntermediateHDR == hdr && m_Desc.FXAA == fxaa && m_Desc.HistoryCount == historyCount && IsValid()) return true;
-        auto desc = m_Desc; desc.MSAASamples = samples; desc.IntermediateHDR = hdr; desc.FXAA = fxaa; desc.HistoryCount = historyCount;
+        if (m_Desc.MSAASamples == samples && m_Desc.IntermediateHDR == hdr && m_Desc.FXAA == fxaa &&
+            m_Desc.HistoryCount == historyCount && m_Desc.EnableNormal == enableNormal &&
+            m_Desc.EnableScreenStorage == enableScreenStorage && IsValid()) return true;
+        auto desc = m_Desc; desc.MSAASamples = samples; desc.IntermediateHDR = hdr; desc.FXAA = fxaa;
+        desc.HistoryCount = historyCount; desc.EnableNormal = enableNormal; desc.EnableScreenStorage = enableScreenStorage;
         return Recreate(desc);
     }
 

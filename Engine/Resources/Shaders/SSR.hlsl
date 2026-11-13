@@ -72,7 +72,10 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
         float3 pU = ReconstructViewPos(uv - float2(0.0, rcpFrame.y), u_ComputeDepth.SampleLevel(u_ComputeSampler, uv - float2(0.0, rcpFrame.y), 0.0));
         float3 dx = (abs(pR.z - viewPos.z) < abs(pL.z - viewPos.z)) ? (pR - viewPos) : (viewPos - pL);
         float3 dy = (abs(pD.z - viewPos.z) < abs(pU.z - viewPos.z)) ? (pD - viewPos) : (viewPos - pU);
-        viewNormal = normalize(cross(dx, dy));
+        viewNormal = normalize(cross(dy, dx));
+        if (dot(viewNormal, -normalize(viewPos)) < 0.0) {
+            viewNormal = -viewNormal;
+        }
     }
 
     float3 viewDir = normalize(viewPos);
@@ -102,7 +105,7 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
         float sampleDepth = u_ComputeDepth.SampleLevel(u_ComputeSampler, rayUV, 0.0);
         float3 sampleViewPos = ReconstructViewPos(rayUV, sampleDepth);
 
-        float zDiff = rayPos.z - sampleViewPos.z;
+        float zDiff = sampleViewPos.z - rayPos.z;
         if (zDiff > 0.001 && zDiff < thickness) {
             // Binary search refinement (4 steps)
             float3 startPos = rayPos - reflDir * stepSize;
@@ -114,7 +117,7 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
                 float2 midUV = float2(midClip.x / midClip.w * 0.5 + 0.5, 0.5 - midClip.y / midClip.w * 0.5);
                 float midDepth = u_ComputeDepth.SampleLevel(u_ComputeSampler, midUV, 0.0);
                 float3 midView = ReconstructViewPos(midUV, midDepth);
-                if (midPos.z > midView.z) {
+                if (midPos.z < midView.z) {
                     endPos = midPos;
                 } else {
                     startPos = midPos;
@@ -211,7 +214,10 @@ float4 PSMain(VSOutput input) : SV_Target {
         float3 pU = ReconstructViewPos(uv - float2(0.0, rcpFrame.y), u_SceneDepth.SampleLevel(u_LinearSampler, uv - float2(0.0, rcpFrame.y), 0.0));
         float3 dx = (abs(pR.z - viewPos.z) < abs(pL.z - viewPos.z)) ? (pR - viewPos) : (viewPos - pL);
         float3 dy = (abs(pD.z - viewPos.z) < abs(pU.z - viewPos.z)) ? (pD - viewPos) : (viewPos - pU);
-        N = normalize(cross(dx, dy));
+        N = normalize(cross(dy, dx));
+        if (dot(N, V) < 0.0) {
+            N = -N;
+        }
     }
     float NdotV = max(dot(N, V), 0.001);
 

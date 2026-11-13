@@ -70,7 +70,10 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
         float3 pU = ReconstructViewPos(uv - float2(0.0, rcpFrame.y), u_ComputeDepth.SampleLevel(u_ComputeSampler, uv - float2(0.0, rcpFrame.y), 0.0));
         float3 dx = (abs(pR.z - viewPos.z) < abs(pL.z - viewPos.z)) ? (pR - viewPos) : (viewPos - pL);
         float3 dy = (abs(pD.z - viewPos.z) < abs(pU.z - viewPos.z)) ? (pD - viewPos) : (viewPos - pU);
-        viewNormal = normalize(cross(dx, dy));
+        viewNormal = normalize(cross(dy, dx));
+        if (dot(viewNormal, -normalize(viewPos)) < 0.0) {
+            viewNormal = -viewNormal;
+        }
     }
 
     float3 viewDir = -normalize(viewPos);
@@ -169,7 +172,7 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
             float maxDistPx = max(u_ContactParams.x, 4.0);
             int stepCount = max((int)u_ContactParams.y, 8);
             float shadowStrength = u_ContactParams.z;
-            float thickness = max(u_ContactParams.w, 0.005);
+            float thickness = max(u_ContactParams.w, 0.02);
 
             float3 rayStart = viewPos + viewNormal * (depthBias * 2.0);
             float blockerAccum = 0.0;
@@ -179,17 +182,15 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
                 float stepDist = t * (maxDistPx * 0.05); // world-space scale
                 float3 rayPos = rayStart + lightDirView * stepDist;
 
-                // Project rayPos back to screen UV
-                float4 rayClip = mul(u_InvProjection, float4(rayPos, 1.0));
-                // Using View-Projection directly or clip reconstruction
-                float2 rayUV = uv + (lightDirView.xy * t * maxDistPx * rcpFrame);
+                // Project rayPos back to screen UV (Y is inverted between view space and screen UV)
+                float2 rayUV = uv + float2(lightDirView.x, -lightDirView.y) * (t * maxDistPx * rcpFrame);
                 if (any(rayUV < 0.0) || any(rayUV > 1.0)) break;
 
                 float sampleDepth = u_ComputeDepth.SampleLevel(u_ComputeSampler, rayUV, 0.0);
                 if (sampleDepth >= 0.9999) continue;
 
                 float3 samplePos = ReconstructViewPos(rayUV, sampleDepth);
-                float zDiff = rayPos.z - samplePos.z;
+                float zDiff = samplePos.z - rayPos.z;
 
                 if (zDiff > 0.002 && zDiff < thickness) {
                     blockerAccum = max(blockerAccum, 1.0 - (zDiff / thickness));
@@ -266,6 +267,10 @@ float4 PSMain(VSOutput input) : SV_Target {
     float2 filteredOcclusion = weightSum > 1e-4 ? (occlusionSum / weightSum) : u_OcclusionTexture.SampleLevel(u_LinearSampler, uv, 0.0);
     float finalAO = saturate(filteredOcclusion.r);
     float finalContact = saturate(filteredOcclusion.g);
+
+    // Apply soft minimum floor so ambient and contact shadows never crush geometry to solid black
+    finalAO = lerp(0.35, 1.0, finalAO);
+    finalContact = lerp(0.5, 1.0, finalContact);
 
     float combinedOcclusion = finalAO * finalContact;
     return float4(sceneColor.rgb * combinedOcclusion, sceneColor.a);

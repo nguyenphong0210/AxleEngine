@@ -3153,13 +3153,13 @@ namespace Axle {
 
             if (!beginPass("GTAOCompute")) return;
             RHIGTAOConstants gtaoConstants{};
-            gtaoConstants.InvProjection = glm::inverse(camera.GetProjectionMatrix());
+            gtaoConstants.InvProjection = glm::inverse(projZO);
             gtaoConstants.View = camera.GetViewMatrix();
             gtaoConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
                 1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
             gtaoConstants.GTAOParams = glm::vec4(settings.GTAORadiusPixels, settings.EnableGTAO ? settings.GTAOStrength : 0.0f, 0.0025f, 2.0f);
             if (world.DirectionalLight && settings.EnableContactShadows) {
-                glm::vec3 sunDir = -glm::normalize(world.DirectionalLight->Direction);
+                glm::vec3 sunDir = glm::normalize(world.DirectionalLight->Direction);
                 glm::vec3 sunDirView = glm::mat3(camera.GetViewMatrix()) * sunDir;
                 gtaoConstants.SunDirView = glm::vec4(sunDirView, 1.0f);
                 gtaoConstants.ContactParams = glm::vec4(settings.ContactShadowLengthPixels, 16.0f, settings.ContactShadowStrength, 0.02f);
@@ -3170,7 +3170,7 @@ namespace Axle {
             if (!m_GTAOConstantBuffer.UpdateData(&gtaoConstants, sizeof(RHIGTAOConstants))) return;
 
             m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
-            nri::Descriptor* normalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : m_OpaqueSceneDepth->GetSRV();
+            nri::Descriptor* normalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
             m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 1, 0, normalSRV);
             m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative());
             m_GTAODescriptorPool.UpdateStorageTexture(m_GTAOComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
@@ -3228,8 +3228,8 @@ namespace Axle {
             RHISSRConstants ssrConstants{};
             ssrConstants.View = camera.GetViewMatrix();
             ssrConstants.InvView = glm::inverse(camera.GetViewMatrix());
-            ssrConstants.Projection = camera.GetProjectionMatrix();
-            ssrConstants.InvProjection = glm::inverse(camera.GetProjectionMatrix());
+            ssrConstants.Projection = projZO;
+            ssrConstants.InvProjection = glm::inverse(projZO);
             ssrConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
                 1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
             ssrConstants.SSRParams = glm::vec4(settings.SSRLengthPixels, 32.0f, settings.SSRStrength, 0.5f);
@@ -3248,8 +3248,8 @@ namespace Axle {
             if (!m_SSRConstantBuffer.UpdateData(&ssrConstants, sizeof(RHISSRConstants))) return;
 
             m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
-            nri::Descriptor* normalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : m_OpaqueSceneDepth->GetSRV();
-            m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 1, 0, normalSRV);
+            nri::Descriptor* ssrNormalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
+            m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 1, 0, ssrNormalSRV);
             m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 0, m_OpaqueSceneColor->GetSRV());
             m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative());
             m_SSRDescriptorPool.UpdateStorageTexture(m_SSRComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
@@ -3266,7 +3266,7 @@ namespace Axle {
             m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
             m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV());
             m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV());
-            m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 3, 0, normalSRV);
+            m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 3, 0, ssrNormalSRV);
             m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 4, 0, m_SSRSampler.GetNative());
 
             nri::Pipeline* applyPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SSRApplyPipelineHDR)
@@ -3308,8 +3308,8 @@ namespace Axle {
             RHIVolumetricFogConstants fogConstants{};
             fogConstants.View = camera.GetViewMatrix();
             fogConstants.InvView = glm::inverse(camera.GetViewMatrix());
-            fogConstants.Projection = camera.GetProjectionMatrix();
-            fogConstants.InvProjection = glm::inverse(camera.GetProjectionMatrix());
+            fogConstants.Projection = projZO;
+            fogConstants.InvProjection = glm::inverse(projZO);
             fogConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
                 1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
 

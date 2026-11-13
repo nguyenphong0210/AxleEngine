@@ -81,6 +81,7 @@ flowchart LR
 - [x] **Phase 44.15: Temporal Anti-Aliasing (TAA)** — Halton sub-pixel jittering, history reprojection, and YCoCg neighborhood clamping to eliminate specular shimmer.
 - [x] **Phase 44.16: Complex Shading Models** — Screen-Space Subsurface Scattering (SSS) with separable Gaussian diffusion profile, Charlie micro-fiber retro-reflection model for cloth/velvet/suede, and Beer-Lambert volumetric absorption with Cauchy chromatic dispersion for thick glass and liquids.
 - [x] **Phase 44.17: Final Lighting Acceptance & Performance Budget Verification (formerly C13-07)** — Comprehensive budget verification maintaining $3.5 - 5.0\text{ ms}$ GPU lighting time on mainstream PC hardware (1080p/1440p @ 120-144+ FPS).
+- [x] **Phase 44.18: Editor Viewport Post-Processing & Lighting UI Integration** — Expose all Group 1 lighting & post-processing passes (SSR, GTAO, Contact Shadows, Bloom, Volumetric Fog, Auto-Exposure, TAA) with interactive controls in AxleEditor Toolbar popup ("Render FX") and "View -> Rendering Features" menu, defaulting to active (true), backed by dynamic RHI auxiliary target allocation in `RHIViewportDescriptor`.
 
 ---
 

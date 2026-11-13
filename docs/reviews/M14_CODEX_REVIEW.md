@@ -88,3 +88,13 @@ M14-U3/U4: **conditional pass for the rerun paths** (native D3D12/Vulkan/OpenGL 
 M14-U5/U6/U7/U9: **not accepted** pending R1–R5. M14-U8 and the editor controls can remain opt-in/reference code, but the milestone cannot be called complete while the dependent core and final acceptance gates are open.
 
 No source repair was made in this review because R1–R3 and R5 require feature implementation and measurement work beyond the released U3/U4 boundary; R4 is a correctness repair that must be made together with the TAA history contract and its regression fixture.
+
+## Follow-up correction recheck (2026-11-13)
+
+- **M14-R1 FIXED:** SSR now builds eight portable Hi-Z storage levels, performs min-depth reduction passes, and traverses the hierarchy with static bindings on D3D12 and Vulkan.
+- **M14-R3 FIXED:** `AutoExposure.hlsl` is compiled and dispatched against a one-pixel exposure target with authored limits, key value, and adaptation speed.
+- **M14-R6 FIXED:** Bloom now owns six downsample levels plus five reverse upsample passes with per-level dimensions and dedicated descriptor generations.
+- **M14-R7 FIXED:** GTAO writes a half-resolution RGBA16 storage target and dispatches at the half-resolution footprint before bilateral reconstruction.
+- **M14-R2 PARTIAL RUNTIME:** DDGI now allocates a bounded irradiance atlas and dispatches an authored-grid update pass. A full irradiance/visibility feedback loop into ForwardPBR remains open.
+
+Debug native `AxleEnvironmentRenderingTests` passes on D3D12 and Vulkan after these changes with zero recorded RHI validation errors; the focused CPU CTest set remains 3/3 PASS. The U9 scorecard probe records timestamp frequency, but the local command-only probe currently returns a zero delta (`gpu_scope_valid=0`), so the GPU-budget acceptance gate remains **OPEN** until a renderer-integrated timestamp scope produces non-zero measurements.

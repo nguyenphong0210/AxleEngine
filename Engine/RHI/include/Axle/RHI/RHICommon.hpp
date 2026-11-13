@@ -86,6 +86,7 @@ namespace Axle::RHI {
         uint32_t MaxTextureDimension2D = 0;
         uint32_t MaxComputeWorkGroupInvocations = 0;
         uint32_t MaxComputeSharedMemorySize = 0;
+        uint64_t TimestampFrequencyHz = 0;
     };
 
     struct RHIDeviceDesc {

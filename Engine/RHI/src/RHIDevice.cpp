@@ -345,6 +345,8 @@ namespace Axle::RHI {
         m_NRI = interfaces;
         m_GraphicsQueue = queue;
         m_Capabilities.ActiveBackend = backend;
+        const auto& deviceDesc = interfaces.Core.GetDeviceDesc(*device);
+        m_Capabilities.TimestampFrequencyHz = deviceDesc.other.timestampFrequencyHz;
         PopulateCapabilities();
         return true;
     }

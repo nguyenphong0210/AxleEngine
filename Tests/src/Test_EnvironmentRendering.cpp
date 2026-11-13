@@ -1,5 +1,7 @@
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHI/RHIDiagnostics.hpp>
+#include <Axle/RHI/RHICommandBuffer.hpp>
+#include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/TextureDescriptor.hpp>
 #include <Axle/FileSystem.hpp>
@@ -23,12 +25,52 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <chrono>
 
 #define CHECK(x) do { if (!(x)) { std::cerr << "FAIL " << __LINE__ << ": " #x "\n"; return false; } } while (0)
 namespace {
 using namespace Axle;
 using namespace Axle::RHI;
 std::filesystem::path Output;
+
+bool TimestampProbe(uint64_t& ticks, double& milliseconds) {
+    auto& device = RHIDevice::Get();
+    if (!device.GetCapabilities().TimestampFrequencyHz) return false;
+    nri::QueryPoolDesc queryDesc{};
+    queryDesc.queryType = nri::QueryType::TIMESTAMP;
+    queryDesc.capacity = 2;
+    nri::QueryPool* queryPool = nullptr;
+    if (device.GetNRICore().CreateQueryPool(*device.GetNRIDevice(), queryDesc, queryPool) != nri::Result::SUCCESS || !queryPool) return false;
+    RHIBuffer readback;
+    RHIBufferDesc readbackDesc{};
+    readbackDesc.Size = 16;
+    readbackDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
+    readbackDesc.DebugName = "TimestampProbeReadback";
+    if (!readback.Init(readbackDesc)) { device.GetNRICore().DestroyQueryPool(queryPool); return false; }
+    RHIBuffer scratch;
+    if (!scratch.Init(RHIBufferDesc::Structured(1024, 4096, true, RHIMemoryLocation::Device, "TimestampProbeScratch"))) {
+        readback.Shutdown(); device.GetNRICore().DestroyQueryPool(queryPool); return false;
+    }
+    RHICommandBuffer commands;
+    if (!commands.Init(device.GetGraphicsQueue()) || !commands.Begin()) { scratch.Shutdown(); readback.Shutdown(); device.GetNRICore().DestroyQueryPool(queryPool); return false; }
+    auto& core = device.GetNRICore();
+    core.ResetQueries(*queryPool, 0, 2);
+    core.CmdEndQuery(*commands.GetNative(), *queryPool, 0);
+    for (uint32_t i = 0; i < 64; ++i) core.CmdZeroBuffer(*commands.GetNative(), *scratch.GetNative(), 0, scratch.GetSize());
+    core.CmdEndQuery(*commands.GetNative(), *queryPool, 1);
+    core.CmdCopyQueries(*commands.GetNative(), *queryPool, 0, 2, *readback.GetNative(), 0);
+    if (!commands.End()) { commands.Shutdown(); scratch.Shutdown(); readback.Shutdown(); device.GetNRICore().DestroyQueryPool(queryPool); return false; }
+    nri::CommandBuffer* native = commands.GetNative();
+    nri::QueueSubmitDesc submit{}; submit.commandBuffers = &native; submit.commandBufferNum = 1;
+    if (!device.Submit(submit) || !device.WaitIdle()) { commands.Shutdown(); scratch.Shutdown(); readback.Shutdown(); device.GetNRICore().DestroyQueryPool(queryPool); return false; }
+    auto* values = static_cast<uint64_t*>(readback.Map());
+    if (!values) { commands.Shutdown(); scratch.Shutdown(); readback.Shutdown(); device.GetNRICore().DestroyQueryPool(queryPool); return false; }
+    ticks = values[1] > values[0] ? values[1] - values[0] : 0;
+    readback.Unmap();
+    milliseconds = static_cast<double>(ticks) * 1000.0 / static_cast<double>(device.GetCapabilities().TimestampFrequencyHz);
+    commands.Shutdown(); scratch.Shutdown(); readback.Shutdown(); device.GetNRICore().DestroyQueryPool(queryPool);
+    return true;
+}
 
 // Flat RGBE is a legal Radiance encoding. A small generated fixture keeps the
 // authored source, orientation and values above one explicit in this test.
@@ -124,6 +166,18 @@ bool Native(RHIType backend) {
     init.EnableValidation=RHIDevice::IsGraphicsAPIValidationAvailable(backend);
     CHECK(device.Init(init)&&device.GetBackend()==backend&&!device.IsSoftwareAdapter());
     struct Close { ~Close(){RHIDevice::Get().WaitIdle();RHIDevice::Get().Shutdown();} } close;
+    uint64_t timestampTicks = 0; double timestampMilliseconds = 0.0;
+    const bool timestampProbeOk = TimestampProbe(timestampTicks, timestampMilliseconds);
+    CHECK(device.GetCapabilities().TimestampFrequencyHz > 0);
+    {
+        std::ofstream scorecard(Output / "M14_U9_timestamp_scorecard.txt");
+        scorecard << "backend=" << (backend == RHIType::Vulkan ? "Vulkan" : "D3D12") << "\n"
+                  << "timestamp_frequency_hz=" << device.GetCapabilities().TimestampFrequencyHz << "\n"
+                  << "empty_gpu_scope_ticks=" << timestampTicks << "\n"
+                  << "empty_gpu_scope_ms=" << timestampMilliseconds << "\n"
+                  << "gpu_scope_valid=" << (timestampTicks > 0 ? 1 : 0) << "\n"
+                  << "probe_submission_ok=" << (timestampProbeOk ? 1 : 0) << "\n";
+    }
     const auto oldRoot=FileSystem::GetAssetDirectory(); FileSystem::SetAssetDirectory(Output);
     struct Root { std::filesystem::path Value; ~Root(){FileSystem::SetAssetDirectory(Value);} } root{oldRoot};
     CHECK(HDR("red.hdr",{2,.25f,.125f})&&HDR("blue.hdr",{.125f,.25f,2}));

@@ -1105,7 +1105,7 @@ namespace Axle {
             m_BoundLocalAtlas=localIdentity;
         }
         if (!m_Environment.Prepare(world.Skybox)) return;
-        m_PreparedManualIBL=m_UseIBL && world.Skybox.HDRPath.empty();
+        m_PreparedManualIBL=m_UseIBL && world.Skybox.Type==1 && world.Skybox.HDRPath.empty();
         const std::array<std::shared_ptr<RHITexture>,3> ibl={ActiveIrradiance(),ActivePrefilter(),ActiveBRDF()};
         std::array<RHIResourceHandle,3> identities;
         std::vector<nri::Descriptor*> descriptors;
@@ -1196,9 +1196,9 @@ namespace Axle {
         }
         lightData.LightCounts.y = spotIndex;
 
-        bool useIBL = m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.EnvironmentLighting && world.Skybox.Type==1;
+        bool useIBL = m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.EnvironmentLighting;
         lightData.ReservedHeader[0].y = lighting.AmbientIntensity*(lighting.EnvironmentLighting ? m_Environment.SourceExposure() : 1.0f);
-        lightData.ReservedHeader[0].z = lighting.EnvironmentLighting && world.Skybox.Type==1 && !useIBL ? 1.f : 0.f;
+        lightData.ReservedHeader[0].z = lighting.EnvironmentLighting && !useIBL ? 1.f : 0.f;
         lightData.LightCounts.w = useIBL ? 1u : 0u;
 
         m_LightBuffer.Update(lightData);

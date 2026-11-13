@@ -65,5 +65,17 @@ bool Invalid() {
     image=Source();float negative=-1;std::memcpy(image.Mips[0].Pixels.data(),&negative,4);CHECK(!BakeEnvironment(image,s,output));
     return true;
 }
+bool Procedural() {
+    ProceduralSkySettings sky;sky.SunDirection={0,1,0};sky.ZenithColor={.1f,.2f,.8f};sky.HorizonColor={.8f,.6f,.3f};
+    DecodedImage image;std::string error;CHECK(GenerateProceduralSkyImage(sky,32,16,image,&error)&&error.empty());
+    CHECK(image.HDR&&image.Mips.size()==1&&image.Mips[0].Pixels.size()==32u*16u*16u);
+    BakedEnvironment maps;CHECK(BakeEnvironment(image,Small(),maps,&error));
+    const auto top=maps.Radiance.Faces[2][0].Pixels[8*16+8];
+    const auto horizon=maps.Radiance.Faces[0][0].Pixels[8*16+8];
+    CHECK(glm::length(glm::vec3(top)-glm::vec3(horizon))>0.1f);
+    auto changed=sky;changed.HorizonColor={.1f,.8f,.1f};DecodedImage other;CHECK(GenerateProceduralSkyImage(changed,32,16,other));
+    CHECK(other.Mips[0].Pixels!=image.Mips[0].Pixels);
+    return true;
 }
-int main(){if(!Constant()||!Directional()||!Invalid())return 1;std::cout<<"PASS environment constant-energy, analytic diffuse, GGX roughness, cube orientation, DFG and transactional validation\n";return 0;}
+}
+int main(){if(!Constant()||!Directional()||!Invalid()||!Procedural())return 1;std::cout<<"PASS environment constant-energy, analytic diffuse, GGX roughness, cube orientation, DFG, procedural sky and transactional validation\n";return 0;}

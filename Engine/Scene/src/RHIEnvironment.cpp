@@ -8,6 +8,8 @@
 #include <cmath>
 #include <cctype>
 #include <array>
+#include <iomanip>
+#include <sstream>
 
 namespace Axle {
 using namespace RHI;
@@ -15,6 +17,17 @@ namespace {
 std::string SettingsKey(const EnvironmentBakeSettings& s) {
     return std::to_string(s.EnvironmentSize)+":"+std::to_string(s.IrradianceSize)+":"+std::to_string(s.PrefilterSize)+":"+
         std::to_string(s.PrefilterMips)+":"+std::to_string(s.BRDFSize)+":"+std::to_string(s.Samples);
+}
+std::string ProceduralKey(const RenderSkyboxData& sky) {
+    std::ostringstream out;out<<std::setprecision(9)
+        <<sky.SunDirection.x<<','<<sky.SunDirection.y<<','<<sky.SunDirection.z<<'|'
+        <<sky.SunColor.x<<','<<sky.SunColor.y<<','<<sky.SunColor.z<<'|'
+        <<sky.ZenithColor.x<<','<<sky.ZenithColor.y<<','<<sky.ZenithColor.z<<'|'
+        <<sky.HorizonColor.x<<','<<sky.HorizonColor.y<<','<<sky.HorizonColor.z<<'|'
+        <<sky.GroundColor.x<<','<<sky.GroundColor.y<<','<<sky.GroundColor.z<<'|'
+        <<sky.SunSize<<','<<sky.SunGlow<<','<<sky.Turbidity<<'|'
+        <<sky.Intensity<<','<<sky.Exposure;
+    return out.str();
 }
 bool Upload(const BakedEnvironment& data,RHIEnvironmentGeneration& generation) {
     const EnvironmentCube* cubes[]{&data.Radiance,&data.Irradiance,&data.Prefilter};
@@ -59,12 +72,40 @@ bool RHIEnvironment::Fallback(const std::string& request,const std::string& mess
 bool RHIEnvironment::Prepare(const RenderSkyboxData& sky) {
     m_Selected.reset();m_Diagnostic.clear();m_SourceExposure=1;
     std::erase_if(m_Cache,[](const auto& generation){return !generation->IsValid();});
-    if(!sky.Authored||!sky.Enabled||sky.Type!=1)return true;
-    if(sky.HDRPath.empty()){m_Diagnostic="ENV_SOURCE: empty authored HDR reference; using diffuse ambient";return true;}
+    if(!sky.Authored||!sky.Enabled)return true;
+    if(sky.Type!=0&&sky.Type!=1)return true;
+    if(sky.Type==0&&!sky.EnvironmentLighting)return true;
     if(!RHIDevice::Get().CanCreateResources()){m_Diagnostic="ENV_DEVICE: native render owner is unavailable";return false;}
     if(!std::isfinite(sky.Intensity)||sky.Intensity<0||!std::isfinite(sky.Exposure)||sky.Exposure<0||double(sky.Intensity)*sky.Exposure>1e12) {
         m_Diagnostic="ENV_SETTINGS: intensity/exposure must be finite, non-negative and bounded";return true;
     }
+    if(sky.Type==0) {
+        const std::string request="procedural:"+ProceduralKey(sky);
+        const std::string key=request+"|"+SettingsKey(m_Settings);
+        for(const auto& generation:m_Cache)if(generation->Key==key) {
+            m_Selected=generation;generation->Used=++m_Clock;return true;
+        }
+        if(key==m_FailedBakeKey)return Fallback(request,m_FailedBakeDiagnostic);
+        ProceduralSkySettings procedural;
+        procedural.SunDirection=glm::vec3(sky.SunDirection);
+        procedural.SunColor=glm::vec3(sky.SunColor);
+        procedural.ZenithColor=glm::vec3(sky.ZenithColor);
+        procedural.HorizonColor=glm::vec3(sky.HorizonColor);
+        procedural.GroundColor=glm::vec3(sky.GroundColor);
+        procedural.SunSize=sky.SunSize;procedural.SunGlow=sky.SunGlow;procedural.Turbidity=sky.Turbidity;
+        procedural.Intensity=sky.Intensity;procedural.Exposure=sky.Exposure;
+        const uint32_t sourceWidth=std::max(32u,m_Settings.EnvironmentSize*2),sourceHeight=std::max(16u,m_Settings.EnvironmentSize);
+        DecodedImage image;BakedEnvironment baked;std::string error;++m_BakeCount;
+        if(!GenerateProceduralSkyImage(procedural,sourceWidth,sourceHeight,image,&error)||!BakeEnvironment(image,m_Settings,baked,&error)) {
+            m_FailedBakeKey=key;m_FailedBakeDiagnostic=error.empty()?"ENV_PROCEDURAL: bake failed":error;return Fallback(request,m_FailedBakeDiagnostic);
+        }
+        auto candidate=std::make_shared<RHIEnvironmentGeneration>();candidate->Key=key;candidate->Request=request;
+        if(!Upload(baked,*candidate)) {m_FailedBakeKey=key;m_FailedBakeDiagnostic="ENV_UPLOAD: native allocation/upload failed";return Fallback(request,m_FailedBakeDiagnostic);}
+        ++m_UploadCount;candidate->Used=++m_Clock;candidate->Sequence=++m_Sequence;m_Selected=candidate;m_Cache.push_back(std::move(candidate));
+        while(m_Cache.size()>4) {auto oldest=std::min_element(m_Cache.begin(),m_Cache.end(),[](const auto& a,const auto& b){return a->Used<b->Used;});m_Cache.erase(oldest);}
+        return true;
+    }
+    if(sky.HDRPath.empty()){m_Diagnostic="ENV_SOURCE: empty authored HDR reference; using diffuse ambient";return true;}
     const auto path=FileSystem::ResolveAssetPath(PathFromUtf8(sky.HDRPath));
     std::string request=std::to_string(FileSystem::GetSourceGeneration())+":"+PathToUtf8(path.lexically_normal());
     auto sourcePath=path;

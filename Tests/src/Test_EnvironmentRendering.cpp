@@ -265,6 +265,11 @@ bool Native(RHIType backend) {
     // must obey the same ownership rules as snapshots extracted from the ECS.
     world.Skybox.Type=0;world.Skybox.EnvironmentLighting=false;world.Skybox.HDRPath.clear();world.Meshes={mesh};
     const auto atmosphereOnly=render();CHECK(!atmosphereOnly.empty()&&atmosphereOnly[center]<5&&atmosphereOnly[0]>20);
+    world.Skybox.EnvironmentLighting=true;const auto proceduralIBL=render();
+    CHECK(!proceduralIBL.empty()&&environment.Ready()&&environment.Diagnostic().empty()&&proceduralIBL[center]>atmosphereOnly[center]+10);
+    const auto proceduralGeneration=environment.Ready()->Radiance->GetHandle();CHECK(environment.BakeCount()>=1&&environment.UploadCount()>=1);
+    CHECK(render()==proceduralIBL&&environment.Ready()->Radiance->GetHandle()==proceduralGeneration);
+    world.Skybox.EnvironmentLighting=false;
     world.Skybox.SunColor=glm::vec4(0);CHECK(render()==atmosphereOnly);
     world.DirectionalLight=RenderDirectionalLight{};world.DirectionalLight->AmbientIntensity=0;
     world.DirectionalLight->Direction={0,0,1};

@@ -2,6 +2,7 @@
 #include <Axle/RHI/RHICommon.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
 #include <Axle/AssetManager.hpp>
+#include <Axle/BuiltinMesh.hpp>
 #include <glm/gtc/epsilon.hpp>
 
 namespace Axle::RenderTests {
@@ -32,6 +33,11 @@ namespace Axle::RenderTests {
 
         RENDER_CHECK(!AssetManager::IsBuiltin("assets/textures/test.png"), "Regular asset path is not builtin");
         RENDER_CHECK(!AssetManager::IsBuiltin(""), "Empty path is not builtin");
+
+        const auto* sphereDefinition = GetBuiltinMeshDefinition(BuiltinMeshId::Sphere);
+        RENDER_CHECK(sphereDefinition != nullptr, "Builtin sphere definition exists");
+        RENDER_CHECK(sphereDefinition->Stacks >= 64 && sphereDefinition->Segments >= 128,
+                     "Builtin sphere uses the M14 high-fidelity tessellation baseline");
 
         return true;
     }

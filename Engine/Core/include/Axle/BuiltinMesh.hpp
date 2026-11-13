@@ -30,7 +30,9 @@ namespace Axle {
     // defaults and authored transforms are independent and remain unchanged.
     inline constexpr std::array<BuiltinMeshDefinition, 5> BuiltinMeshes{{
         {BuiltinMeshId::Cube, BuiltinAssets::CubeUUID, "cube", "builtin://cube", 0, 0, 1, 0, 0},
-        {BuiltinMeshId::Sphere, BuiltinAssets::SphereUUID, "sphere", "builtin://sphere", 1, 0, 0, 24, 32},
+        // High-fidelity baseline: M14's specular highlights expose coarse
+        // latitude/longitude bands at the editor's normal inspection distance.
+        {BuiltinMeshId::Sphere, BuiltinAssets::SphereUUID, "sphere", "builtin://sphere", 1, 0, 0, 64, 128},
         {BuiltinMeshId::Cylinder, BuiltinAssets::CylinderUUID, "cylinder", "builtin://cylinder", 1, 2, 0, 0, 32},
         {BuiltinMeshId::Cone, BuiltinAssets::ConeUUID, "cone", "builtin://cone", 1, 2, 0, 0, 32},
         {BuiltinMeshId::Plane, BuiltinAssets::PlaneUUID, "plane", "builtin://plane", 0, 0, 1, 1, 1}

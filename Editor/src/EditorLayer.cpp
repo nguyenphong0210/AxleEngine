@@ -101,7 +101,7 @@ void EditorLayer::OnAttach() {
     // 4. Primitive Mesh Data (for legacy OpenGL SceneRenderer)
     if (window.GetGraphicsBackend() == Axle::GraphicsAPI::OpenGL) {
         m_CubeMesh = Axle::PrimitiveMesh::CreateCube();
-        m_SphereMesh = Axle::PrimitiveMesh::CreateSphere(24, 32);
+        m_SphereMesh = Axle::PrimitiveMesh::CreateSphere(64, 128);
         m_CylinderMesh = Axle::PrimitiveMesh::CreateCylinder(32);
         m_ConeMesh = Axle::PrimitiveMesh::CreateCone(32);
         m_PlaneMesh = Axle::PrimitiveMesh::CreatePlane();

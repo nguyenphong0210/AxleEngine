@@ -6,10 +6,12 @@
 cbuffer FXAAConstants : register(b0, space0) {
     float4 u_ScreenSize;      // (width, height, 1.0 / width, 1.0 / height)
     float4 u_FXAAParams;      // (subpixQuality, edgeThreshold, edgeThresholdMin, qualityPreset)
-    float4 u_Padding[14];     // Pad to exactly 256 bytes for hardware CBV alignment
+    float4 u_GTAOParams;      // (enable, radius pixels, strength, depth bias)
+    float4 u_Padding[13];     // Pad to exactly 256 bytes for hardware CBV alignment
 };
 
 Texture2D u_InputTexture : register(t0, space1);
+Texture2D<float> u_SceneDepth : register(t1, space1);
 SamplerState u_LinearSampler : register(s0, space1);
 
 struct VSOutput {
@@ -42,6 +44,25 @@ float4 PSMain(VSOutput input) : SV_Target {
 
     // 1. Center and cardinal samples
     float4 colorM = u_InputTexture.SampleLevel(u_LinearSampler, posM, 0.0);
+    if (u_GTAOParams.x > 0.5) {
+        float depthM = u_SceneDepth.SampleLevel(u_LinearSampler, posM, 0.0);
+        if (depthM >= 0.9999) return colorM;
+        float2 stepUV = rcpFrame * max(u_GTAOParams.y, 1.0);
+        float occlusion = 0.0;
+        const float2 directions[8] = {
+            float2(1,0), float2(-1,0), float2(0,1), float2(0,-1),
+            float2(0.7071,0.7071), float2(-0.7071,0.7071),
+            float2(0.7071,-0.7071), float2(-0.7071,-0.7071)
+        };
+        [unroll]
+        for (int i=0; i<8; ++i) {
+            float sampleDepth = u_SceneDepth.SampleLevel(u_LinearSampler, saturate(posM + directions[i] * stepUV), 0.0);
+            float closer = saturate((depthM - sampleDepth - u_GTAOParams.w) * 180.0);
+            occlusion += closer;
+        }
+        float ao = 1.0 - saturate(occlusion * (u_GTAOParams.z / 8.0));
+        return float4(colorM.rgb * ao, colorM.a);
+    }
     float lumaM = FxaaLuma(colorM.rgb);
 
     float lumaN = FxaaLuma(u_InputTexture.SampleLevel(u_LinearSampler, posM + float2(0.0, -rcpFrame.y), 0.0).rgb);

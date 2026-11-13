@@ -156,6 +156,11 @@ bool Native(RHIType backend) {
     const size_t center=(width/2*width+width/2)*4;
     CHECK(red[0]>red[2]+40&&red[center]>red[center+2]+40); // sky and metallic specular receive HDR
     CHECK(PPM("red.ppm",red,width));
+    // M14-U3 infrastructure smoke gate: depth-backed GTAO pass runs before
+    // tone mapping/FXAA and preserves a valid native frame.
+    settings.EnableGTAO=true; auto gtao=render();
+    CHECK(!gtao.empty()&&gtao.size()==red.size());
+    settings.EnableGTAO=false;
     CHECK(render()==red&&environment.BakeCount()==1&&environment.UploadCount()==1);
     // The HDR background remains visible when environment lighting is opt-out;
     // the metallic receiver must not receive ambient/specular energy from it.

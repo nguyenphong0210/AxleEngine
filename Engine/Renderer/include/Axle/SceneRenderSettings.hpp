@@ -15,6 +15,7 @@ namespace Axle {
         bool EnableParticles = true;
         bool EnableToneMapping = false;
         bool EnableFXAA = false;
+        bool EnableGTAO = false;
         uint8_t MSAASamples = 1; // 1 (disabled), 2, 4, 8
         bool Wireframe = false;
         bool ShowPhysicsDebug = false;
@@ -28,6 +29,8 @@ namespace Axle {
         float FXAASubpixQuality = 0.75f;
         float FXAAEdgeThreshold = 0.166f;
         float FXAAEdgeThresholdMin = 0.0833f;
+        float GTAORadiusPixels = 8.0f;
+        float GTAOStrength = 1.0f;
         glm::vec4 ClearColor{ 0.0f, 0.0f, 0.0f, 1.0f }; // Configurable background clear color (Supports transparent clear for editor viewports)
     };
 

@@ -62,7 +62,8 @@ namespace Axle {
     struct alignas(256) RHIFXAAConstants {
         glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // (width, height, 1/w, 1/h)
         glm::vec4 FXAAParams{ 0.75f, 0.166f, 0.0833f, 0.0f };                     // (subpixQuality, edgeThreshold, edgeThresholdMin, reserved)
-        glm::vec4 Reserved[14]{};                                                 // 224 bytes padding -> Total: 256 bytes
+        glm::vec4 GTAOParams{ 0.0f, 8.0f, 1.0f, 0.0025f };                        // x: enable, y: radius px, z: strength, w: depth bias
+        glm::vec4 Reserved[13]{};                                                 // 208 bytes padding -> Total: 256 bytes
     };
     static_assert(sizeof(RHIFXAAConstants) == 256, "RHIFXAAConstants must be 256 bytes aligned!");
 
@@ -223,7 +224,8 @@ namespace Axle {
                         nri::Descriptor* outputRTV,
                         uint32_t width, uint32_t height,
                         nri::Format outFormat,
-                        const RHIFXAAConstants& constants);
+                        const RHIFXAAConstants& constants,
+                        nri::Descriptor* depthSRV = nullptr);
 
         nri::Pipeline* GetFXAAPipeline() const { return m_FXAAPipelineSDR; }
         nri::Pipeline* GetHDRFXAAPipeline() const { return m_FXAAPipelineHDR; }

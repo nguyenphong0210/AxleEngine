@@ -242,7 +242,7 @@ namespace Axle {
             m_FXAADescriptorSet = m_FXAADescriptorPool.AllocateDescriptorSet(m_FXAAPipelineLayout, 0);
             if (!m_FXAADescriptorSet) return false;
             if (m_FXAASampler.IsValid()) {
-                m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 1, 0, m_FXAASampler.GetNative());
+                m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 2, 0, m_FXAASampler.GetNative());
             }
         }
 
@@ -879,24 +879,30 @@ namespace Axle {
 
         // Descriptor Set (space 1):
         // Range 0: t0 (Input Texture)
-        // Range 1: s0 (Linear Sampler)
-        nri::DescriptorRangeDesc ranges[2] = {};
+        // Range 1: t1 (Scene depth for GTAO; white fallback for FXAA)
+        // Range 2: s0 (Linear Sampler)
+        nri::DescriptorRangeDesc ranges[3] = {};
         ranges[0].baseRegisterIndex = 0;
         ranges[0].descriptorNum = 1;
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        ranges[1].baseRegisterIndex = 0;
+        ranges[1].baseRegisterIndex = 1;
         ranges[1].descriptorNum = 1;
-        ranges[1].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[1].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        ranges[2].baseRegisterIndex = 0;
+        ranges[2].descriptorNum = 1;
+        ranges[2].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
         descSet.ranges = ranges;
-        descSet.rangeNum = 2;
+        descSet.rangeNum = 3;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
@@ -1315,6 +1321,10 @@ namespace Axle {
         const auto opaqueColor = copyRefraction ? graph.Import("OpaqueColor", m_OpaqueSceneColor->GetNative()) : output;
         const auto opaqueDepth = copyRefraction ? graph.Import("OpaqueDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto particleDepthImage = copyParticleDepth ? graph.Import("ParticleDepth", m_ParticleSceneDepth->GetNative()) : sceneDepth;
+        const bool useGTAO = settings.EnableGTAO && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+            m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid();
+        const auto gtaoInput = useGTAO ? graph.Import("GTAOInput", m_OpaqueSceneColor->GetNative()) : output;
+        const auto gtaoDepth = useGTAO ? graph.Import("GTAODepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         auto attachments = [&](Load load) {
             std::vector<Graph::Use> uses{{sceneColor, Layout::ColorAttachment, Access::Write, load}};
             if (sceneDepthDSV) uses.push_back({sceneDepth, Layout::DepthStencilWrite, Access::Write, load});
@@ -1348,6 +1358,12 @@ namespace Axle {
         graph.AddPass("ParticlesAndPhysics", std::move(overlayUses));
         if (useMSAA) graph.AddPass("Resolve", {
             {sceneColor,Layout::ResolveSource}, {useToneMap ? hdr : fxaa,Layout::ResolveDest,Access::Write}});
+        if (useGTAO) {
+            graph.AddPass("GTAOCopy", {{sceneColor,Layout::CopySource}, {gtaoInput,Layout::CopyDest,Access::Write},
+                {sceneDepth,Layout::CopySource}, {gtaoDepth,Layout::CopyDest,Access::Write}});
+            graph.AddPass("GTAO", {{gtaoInput,Layout::ShaderResource}, {sceneColor,Layout::ColorAttachment,Access::Write,Load::Clear},
+                {gtaoDepth,Layout::ShaderResource}});
+        }
         if (useToneMap) graph.AddPass("ToneMapping", {
             {hdr,Layout::ShaderResource}, {fxaa,Layout::ColorAttachment,Access::Write,Load::Clear}});
         if (useFXAA) graph.AddPass("FXAA", {
@@ -1868,6 +1884,22 @@ namespace Axle {
             Commands().ResolveTexture(resolveDstTexture, m_MSAAColorTarget->GetNative(), nri::ResolveOp::AVERAGE);
         }
 
+        // 7.5. Half-resolution-style screen-space GTAO sampling. The shared
+        // fullscreen pass samples a 2x depth footprint and writes the AO
+        // modulation back into the scene color before tone mapping/FXAA.
+        if (useGTAO) {
+            if (!beginPass("GTAOCopy")) return;
+            Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
+            Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
+            if (!beginPass("GTAO")) return;
+            RHIFXAAConstants gtaoConstants{};
+            gtaoConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
+                1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
+            gtaoConstants.GTAOParams = glm::vec4(1.0f, settings.GTAORadiusPixels, settings.GTAOStrength, 0.0025f);
+            if (!RenderFXAA(Commands(), m_OpaqueSceneColor->GetSRV(), sceneTargetTexture, sceneTargetRTV,
+                width, height, sceneTargetFormat, gtaoConstants, m_OpaqueSceneDepth->GetSRV())) return;
+        }
+
         // 8. Post-Processing Tone Mapping Pass
         if (useToneMap && m_IntermediateHDRTarget && m_IntermediateHDRTarget->IsValid()) {
             if (!beginPass("ToneMapping")) return;
@@ -2061,7 +2093,8 @@ namespace Axle {
                                       nri::Descriptor* outputRTV,
                                       uint32_t width, uint32_t height,
                                       nri::Format outFormat,
-                                      const RHIFXAAConstants& constants)
+                                      const RHIFXAAConstants& constants,
+                                      nri::Descriptor* depthSRV)
     {
         if (!m_Initialized || !inputSRV || !outputTarget || !outputRTV || width == 0 || height == 0) return false;
 
@@ -2072,8 +2105,10 @@ namespace Axle {
         // 2. Bind Texture SRV & Sampler in Space 1
         if (m_FXAADescriptorPool.IsValid() && m_FXAADescriptorSet) {
             m_FXAADescriptorPool.UpdateTexture(m_FXAADescriptorSet, 0, 0, inputSRV);
+            m_FXAADescriptorPool.UpdateTexture(m_FXAADescriptorSet, 1, 0,
+                depthSRV ? depthSRV : RHIMaterial::GetDefaultWhiteTexture()->GetSRV());
             if (m_FXAASampler.IsValid()) {
-                m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 1, 0, m_FXAASampler.GetNative());
+                m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 2, 0, m_FXAASampler.GetNative());
             }
         }
 

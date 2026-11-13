@@ -96,6 +96,22 @@ namespace Axle {
 
         if (!m_Frame.Init() || !m_CascadedShadows.Init() || !m_LocalShadows.Init()) return false;
 
+        if (device.GetCapabilities().TimestampFrequencyHz && device.GetNRICore().CreateQueryPool) {
+            nri::QueryPoolDesc timestampDesc{};
+            timestampDesc.queryType = nri::QueryType::TIMESTAMP;
+            timestampDesc.capacity = 2;
+            if (device.GetNRICore().CreateQueryPool(*device.GetNRIDevice(), timestampDesc, m_GPUTimestampPool) == nri::Result::SUCCESS && m_GPUTimestampPool) {
+                RHIBufferDesc readbackDesc{};
+                readbackDesc.Size = 16;
+                readbackDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
+                readbackDesc.DebugName = "RendererGPUTimestampReadback";
+                if (!m_GPUTimestampReadback.Init(readbackDesc)) {
+                    device.GetNRICore().DestroyQueryPool(m_GPUTimestampPool);
+                    m_GPUTimestampPool = nullptr;
+                }
+            }
+        }
+
         // Compile Forward Shaders
         if (!CompileShaders(device)) {
             AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile forward scene shaders!");
@@ -642,6 +658,12 @@ namespace Axle {
         m_AnisoSampler.Shutdown();
 
         m_PipelineLayout.Shutdown();
+        m_GPUTimestampReadback.Shutdown();
+        if (m_GPUTimestampPool && m_Device && m_Device->GetNRICore().DestroyQueryPool) {
+            m_Device->GetNRICore().DestroyQueryPool(m_GPUTimestampPool);
+        }
+        m_GPUTimestampPool = nullptr;
+        m_LastGPUTimestampMilliseconds = 0.0;
         m_Frame = RHIFrameContext{};
         m_Device = nullptr;
         m_Initialized = false;
@@ -2365,6 +2387,16 @@ namespace Axle {
                                        PhysicsScene* physicsScene,
                                        std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
+        const auto previousCompletion = m_LastCompletion;
+        if (previousCompletion && m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
+            m_Device->WaitForCompletion(previousCompletion);
+            if (auto* values = static_cast<uint64_t*>(m_GPUTimestampReadback.Map())) {
+                const uint64_t delta = values[1] > values[0] ? values[1] - values[0] : 0;
+                const uint64_t frequency = m_Device->GetCapabilities().TimestampFrequencyHz;
+                m_LastGPUTimestampMilliseconds = frequency ? static_cast<double>(delta) * 1000.0 / static_cast<double>(frequency) : 0.0;
+                m_GPUTimestampReadback.Unmap();
+            }
+        }
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!colorTarget || !colorTarget->IsValid()) return;
 
@@ -2467,6 +2499,11 @@ namespace Axle {
         if (!world.ErrorMessage.empty() || !m_Frame.Begin()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
         auto rollback = std::unique_ptr<RHISceneRenderer, std::function<void(RHISceneRenderer*)>>(this,
             [&](auto*) { if (!m_LastRenderSucceeded) m_Frame.Abandon(); });
+        if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
+            auto& core = m_Device->GetNRICore();
+            core.ResetQueries(*m_GPUTimestampPool, 0, 2);
+            core.CmdEndQuery(*Commands().GetNative(), *m_GPUTimestampPool, 0);
+        }
         // The extracted CPU snapshot may be released immediately after this
         // call. Record executable owners in the actual submission pin chain.
         if (!world.DebugLines.empty()) {
@@ -3947,6 +3984,12 @@ namespace Axle {
 
         m_PrevViewProjection = viewProjZO;
         m_FrameIndex++;
+
+        if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
+            auto& core = m_Device->GetNRICore();
+            core.CmdEndQuery(*Commands().GetNative(), *m_GPUTimestampPool, 1);
+            core.CmdCopyQueries(*Commands().GetNative(), *m_GPUTimestampPool, 0, 2, *m_GPUTimestampReadback.GetNative(), 0);
+        }
 
         if (!beginPass("Export") || !graph.IsComplete()) return;
         if (!m_Frame.End() || !m_Frame.Submit()) { AXLE_CORE_ERROR("View command finalization or submit failed"); return; }

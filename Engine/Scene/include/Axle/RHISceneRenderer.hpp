@@ -218,6 +218,7 @@ namespace Axle {
         // Performance & Telemetry metrics
         uint32_t GetDrawCallCount() const { return m_LastDrawCallCount; }
         uint32_t GetRenderedEntityCount() const { return m_LastRenderedEntityCount; }
+        double GetLastGPUTimestampMilliseconds() const { return m_LastGPUTimestampMilliseconds; }
         uint64_t GetStreamedTransformBytes() const { return m_LastStreamedTransformBytes; }
 
         RHI::RHIPipelineLayout& GetPipelineLayout() { return m_PipelineLayout; }
@@ -642,6 +643,9 @@ namespace Axle {
         uint8_t m_TAAHistoryIndex = 0;
         bool m_TAAHistoryValid = false;
         float m_AdaptedExposure = 1.0f;
+        nri::QueryPool* m_GPUTimestampPool = nullptr;
+        RHI::RHIBuffer m_GPUTimestampReadback;
+        double m_LastGPUTimestampMilliseconds = 0.0;
 
         // Intermediate Floating-point HDR Target for 2-pass Scene -> ToneMap execution
         RHI::RHITexture* m_IntermediateHDRTarget = nullptr;

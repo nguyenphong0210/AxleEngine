@@ -215,6 +215,11 @@ bool Native(RHIType backend) {
     // M14-U4 Occlusion verification: Dedicated compute GTAO & directional contact shadows
     settings.EnableGTAO=true; settings.EnableContactShadows=true; auto gtao=render();
     CHECK(!gtao.empty()&&gtao.size()==red.size());
+    {
+        std::ofstream scorecard(Output / "M14_U9_timestamp_scorecard.txt", std::ios::app);
+        scorecard << "renderer_gpu_scope_ms=" << renderer.GetLastGPUTimestampMilliseconds() << "\n"
+                  << "renderer_gpu_scope_valid=" << (renderer.GetLastGPUTimestampMilliseconds() > 0.0 ? 1 : 0) << "\n";
+    }
     settings.EnableGTAO=true; settings.EnableContactShadows=false; auto gtaoOnly=render();
     CHECK(!gtaoOnly.empty()&&gtaoOnly.size()==red.size());
     settings.EnableGTAO=false; settings.EnableContactShadows=true; auto contactOnly=render();

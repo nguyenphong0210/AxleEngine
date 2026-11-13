@@ -5,10 +5,10 @@
     "title": "Milestone 14 Lighting and Material Fidelity Restructuring & Implementation",
     "state": "review_hold",
     "coordinator": "User / Codex",
-    "implementer": "Gemini (user assignment)",
+    "implementer": "Codex (user-authorized review and repairs of Gemini delivery)",
     "code_baseline": "6e8e9a3",
-    "user_instruction": "Clean up unauthoritative stub commits and synchronize Milestone 14 state (Phase 0); implement M14-U3 Screen-Space & Compute Infrastructure followed by M14-U4 Occlusion (GTAO & Contact Shadows).",
-    "user_scope": "Phase 0 cleanup completed. Next released scope is M14-U3 (Screen-Space & Compute Infrastructure: Compute Pass runner, Texture UAV/Storage views, depth/normal copy pass, resource transition barriers, history buffer management) followed by M14-U4 (GTAO compute pass + bilateral denoiser and directional contact shadows). Follow docs/milestones/MILESTONE_14_LIGHTING_MATERIALS/ARCHITECTURE.md and PLAN.md.",
+    "user_instruction": "User authorized Codex to complete and verify Milestone 14, then requested repair of repeated Editor view failures and an actual build/windowed Editor run.",
+    "user_scope": "Complete M14-U0 through U9 against ARCHITECTURE.md and PLAN.md. Current correction: propagate all M14 target requirements through explicit Editor viewport ownership and require successful view rendering in startup verification. Preserve user scene edits. Milestone 15 is not released.",
     "expected_files": [
       "Engine/RHI/include/Axle/RHI/RHICommandList.hpp",
       "Engine/Renderer/include/Axle/RenderGraph.hpp",
@@ -29,7 +29,7 @@
       "M14-R6 six-tier bloom missing",
       "M14-R7 GTAO half-resolution contract not met"
     ],
-    "next_action": "Hold full M14 acceptance; implement and reverify M14-R1-R3 and M14-R5-R7 before closing the milestone. M14-R4 is fixed and reverified. Do not release Milestone 15 from this card."
+    "next_action": "Verify and deliver the current windowed Editor target configuration repair; retain full M14 HOLD until algorithm fidelity, DDGI shading feedback, exposure consumption, GPU timing and final acceptance evidence are complete. Earlier smoke PASS and FIXED labels do not establish full feature acceptance."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -2873,6 +2873,61 @@
       "base_commit": "8fd943a5a4ade34df7e41a5e384b21fc6ac2db2a",
       "timestamp_utc": "2026-11-13T12:04:25.964637+00:00",
       "body": "FOLLOW-UP RECHECK for M14-R4 after commit 8fd943a.\n\nRelease verification completed:\n- cmake --build build --config Release --target AxleEnvironmentRenderingTests AxleRenderUnitTests AxleEnvironmentBakeTests AxleRenderAcceptanceTests --parallel 6: exit 0.\n- ctest --test-dir build -C Release -R \"EnvironmentBakeTests|RenderAcceptancePolicy|RenderUnitTests\" --output-on-failure: 3/3 PASS.\n- AxleEnvironmentRenderingTests: Release native D3D12 exit 0, native Vulkan 1.3 exit 0, OpenGL fallback exit 0; no recorded RHI validation errors.\n- python scripts/check_architecture.py: PASS (576 files, 25 CMake files).\n\nM14-R4 is closed as FIXED and reverified in Debug and Release. Full Milestone 14 remains HOLD for M14-R1-R3 and M14-R5-R7. The user's active Sandbox scene file has unrelated uncommitted edits and was intentionally not staged or overwritten.\n"
+    },
+    {
+      "id": "CG-20261113T121638175867Z-CODEX-c363fb",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M14-LIGHTING-FIDELITY",
+      "reply_to": "CG-20261113T053708581519Z-GEMINI-efd8b3",
+      "base_commit": "ad20dcce673eb164f8a4afb3bf3bdd8d7313f982",
+      "timestamp_utc": "2026-11-13T12:16:38.175867+00:00",
+      "body": "IN_PROGRESS: User explicitly asks Codex to complete all remaining Milestone 14 scope. Current checkpoint starts with visual baseline repair: builtin sphere geometry is 24 stacks x 32 sectors, causing visible rings under M14 PBR highlights. Codex will raise the shared builtin/editor sphere tessellation, add focused geometry regression, then proceed through M14-R1/R2/R3/R5/R6/R7 with separate verification checkpoints. Preserve the user's uncommitted Sandbox scene edits.\n"
+    },
+    {
+      "id": "CG-20261113T131734602251Z-CODEX-8f9d37",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M14-LIGHTING-FIDELITY",
+      "reply_to": "CG-20261113T053708581519Z-GEMINI-efd8b3",
+      "base_commit": "ed20e1862b974b6d97d5625879718bd98d0e709f",
+      "timestamp_utc": "2026-11-13T13:17:34.602251+00:00",
+      "body": "Follow-up STATUS/DELIVERY for M14-LIGHTING-FIDELITY (Codex)\n\nImplemented and committed:\n- a9e9fd9 feat(renderer): portable eight-level Hi-Z pyramid and static SSR bindings; native Vulkan validation recheck passes.\n- 53546d4 feat(renderer): six-tier bloom down/up pyramid, half-resolution GTAO target/dispatch, histogram auto-exposure compute target, and bounded DDGI atlas update pass; added DDGI runtime fixture.\n- ed20e18 test(renderer): native timestamp frequency/scorecard probe and review correction recheck.\n\nCurrent verification:\n- Debug build: AxleEnvironmentRenderingTests, AxleRenderUnitTests, AxleEditor built successfully (RHI rebuild used /parallel 1 after transient PDB contention from concurrent compiler processes).\n- Focused CTest: EnvironmentBakeTests, RenderAcceptancePolicy, RenderUnitTests = 3/3 PASS.\n- AxleEnvironmentRenderingTests: native D3D12 and Vulkan exit 0 with zero recorded RHI validation errors after Hi-Z, bloom, GTAO, auto-exposure, and DDGI toggles.\n- python scripts/check_architecture.py: PASS (576 files, 25 CMake files).\n- U9 scorecard writes timestamp frequency, but the command-only timestamp scope currently records zero delta on the local driver; gpu_scope_valid=0 remains an OPEN performance gate.\n\nAcceptance state: R1/R3/R6/R7 fixed and rechecked; R2 has bounded runtime atlas/update but full irradiance/visibility feedback into ForwardPBR remains open; R5 GPU-budget scorecard remains open pending a renderer-integrated non-zero timestamp scope. User scene Test.axlescene remains uncommitted and preserved.\n"
+    },
+    {
+      "id": "CG-20261113T132203365141Z-CODEX-6688dd",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M14-LIGHTING-FIDELITY",
+      "reply_to": "CG-20261113T053708581519Z-GEMINI-efd8b3",
+      "base_commit": "2a77d810bdc78b6d605f71229d065c9730a82e6a",
+      "timestamp_utc": "2026-11-13T13:22:03.365141+00:00",
+      "body": "Additional correction update for M14-LIGHTING-FIDELITY:\n- ce86df0 integrates a renderer-owned GPU timestamp query/readback scope around each submitted view frame.\n- 2a77d81 records the local headless-driver limitation: both command-only and renderer scopes return zero endpoint delta despite a valid 1 GHz timestamp frequency. This remains OPEN evidence, not a claimed budget pass.\n- Focused Debug CTest remains 3/3 PASS and architecture check PASS after the timestamp integration; native D3D12 fixture remains exit 0 with no RHI validation errors.\n"
+    },
+    {
+      "id": "CG-20261113T133642501576Z-CODEX-93bfb5",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M14-LIGHTING-FIDELITY",
+      "reply_to": "CG-20261113T053708581519Z-GEMINI-efd8b3",
+      "base_commit": "2a77d810bdc78b6d605f71229d065c9730a82e6a",
+      "timestamp_utc": "2026-11-13T13:36:42.501576+00:00",
+      "body": "IN_PROGRESS: Reproduced the user-reported Editor view failure using Debug AxleEditor --project Samples/Sandbox/Sandbox.axleproj --rhi=dx12 --verify-startup. The windowed product logs five failed views while its verifier incorrectly reports PASS. Repair viewport target option propagation (Hi-Z, bloom, half-resolution GTAO, exposure, DDGI), add an external-target regression and make startup verification require successful scene views. Base 2a77d81. Expected files: RHIViewportDescriptor.hpp/.cpp, EditorLayer.hpp/.cpp, Main.cpp, RHISceneRenderer.cpp, RHIResourceViewMain.cpp. Preserve user scene edits.\n"
+    },
+    {
+      "id": "CG-20261113T134259111603Z-CODEX-53cd1f",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M14-LIGHTING-FIDELITY",
+      "reply_to": "CG-20261113T133642501576Z-CODEX-93bfb5",
+      "base_commit": "44eb03664762ef441afff718fb0bdf26cc1b894b",
+      "timestamp_utc": "2026-11-13T13:42:59.111603+00:00",
+      "body": "DELIVERY: Repaired the repeated real Editor view failure in commit 44eb036. Root cause: Editor viewport target creation did not propagate Hi-Z/bloom/GTAO/exposure/DDGI flags, so the renderer rejected the explicit target descriptor every frame. Settings-based viewport configuration now publishes all target requirements; asset/VFX previews use the same path, and DDGI missing-grid allocation agrees with RenderService.\n\nReproduced the failure before fixing: Debug windowed --project Samples/Sandbox/Sandbox.axleproj --rhi=dx12 --verify-startup logged five failed views yet falsely reported PASS. Strengthened verifier now requires successful scene renders and zero failed views including target configuration failures. Added explicit viewport-owned M14 regression draws, including effect disable and missing-grid DDGI.\n\nExecuted against final correction:\n- Debug/Release builds of AxleEditor and AxleRHIResourceViewTests: exit 0.\n- Windowed AxleEditor --project Samples/Sandbox/Sandbox.axleproj --rhi=dx12/vulkan --rhi-validation --verify-startup: all four Debug/Release x backend runs exit 0, current Test scene loaded, no view failures or NRI errors.\n- Native AxleRHIResourceViewTests dx12/vulkan: all four Debug/Release x backend runs exit 0, zero recorded validation errors including teardown.\n- Debug focused CTest 3/3 PASS after rebuilding AxleRenderUnitTests; architecture PASS (576 sources, 25 CMake files).\n- Required separate-context read-only correction review: two verification gaps corrected and rechecked; no remaining findings in this patch.\n- Release D3D12 Editor opened normally after checks, PID 17652, title Axle Engine - Sandbox - [Test.axlescene], responding; live logs currently show no repeated view failure.\n\nReport: docs/reviews/M14_EDITOR_VIEW_TARGET_REPAIR.md. Native UI automation is unavailable (pipe not found), so no screenshot/visual inspection is claimed. No user scene edits staged or overwritten. This accepts the viewport repair only; full M14 fidelity/performance remains HOLD and Milestone 15 is not released.\n"
     }
   ],
   "deferred_tasks": [

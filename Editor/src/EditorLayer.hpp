@@ -113,6 +113,14 @@ private:
     std::unique_ptr<Axle::PhysicsScene> m_EditorPhysicsScene;
     Axle::PhysicsDrawSettings m_PhysicsDrawSettings;
     bool m_ShowPhysicsDebug = false;
+    // Advanced Post-Processing & Lighting Features (Group 1)
+    bool m_EnableSSR = true;
+    bool m_EnableGTAO = true;
+    bool m_EnableBloom = true;
+    bool m_EnableContactShadows = true;
+    bool m_EnableVolumetricFog = true;
+    bool m_EnableAutoExposure = true;
+    bool m_EnableTAA = false;
     bool m_F1KeyWasPressed = false;
     bool m_F9KeyWasPressed = false;
     bool m_F11KeyWasPressed = false;

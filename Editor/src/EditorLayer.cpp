@@ -1520,7 +1520,14 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     renderSettings.EnableShadows = true;
     renderSettings.EnableSkybox = true;
     renderSettings.EnableToneMapping = true;
-    renderSettings.EnableFXAA = true;
+    renderSettings.EnableFXAA = !m_EnableTAA;
+    renderSettings.EnableTAA = m_EnableTAA;
+    renderSettings.EnableGTAO = m_EnableGTAO;
+    renderSettings.EnableContactShadows = m_EnableContactShadows;
+    renderSettings.EnableSSR = m_EnableSSR;
+    renderSettings.EnableBloom = m_EnableBloom;
+    renderSettings.EnableVolumetricFog = m_EnableVolumetricFog;
+    renderSettings.EnableAutoExposure = m_EnableAutoExposure;
     renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
     renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
 
@@ -1529,7 +1536,12 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     request.Camera = activeCamera; request.Settings = renderSettings; request.PhysicsScene = m_PhysicsScene.get();
     request.Name = "Editor main view";
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
-        if (!m_RHIViewport->SetRenderOptions(renderSettings.MSAASamples, renderSettings.EnableToneMapping, renderSettings.EnableFXAA)) return;
+        const bool needNormal = (renderSettings.EnableGTAO || renderSettings.EnableContactShadows || renderSettings.EnableSSR);
+        const bool needStorage = (renderSettings.EnableGTAO || renderSettings.EnableContactShadows || renderSettings.EnableSSR ||
+                                  renderSettings.EnableVolumetricFog || renderSettings.EnableBloom || renderSettings.EnableAutoExposure);
+        if (!m_RHIViewport->SetRenderOptions(renderSettings.MSAASamples, renderSettings.EnableToneMapping, renderSettings.EnableFXAA,
+                                            renderSettings.EnableTAA ? std::optional<uint8_t>(2) : std::nullopt,
+                                            needNormal, needStorage)) return;
         request.ColorTarget = m_RHIViewport->GetColorTexture(); request.DepthTarget = m_RHIViewport->GetDepthTexture();
         request.ViewTargets = m_RHIViewport->GetTargets();
     } else request.GLTargetFBO = m_Framebuffer;
@@ -1866,6 +1878,25 @@ void EditorLayer::RenderToolbar() {
         ImGui::SliderFloat("##SimSpeed", &m_SimulationSpeed, 0.1f, 2.0f, "%.1fx");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Simulation Speed Multiplier");
 
+        ImGui::SameLine();
+        if (ImGui::Button("Render FX", ImVec2(75.0f, 26.0f))) {
+            ImGui::OpenPopup("RenderFXPopup");
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Configure Viewport Post-Processing & Lighting FX");
+
+        if (ImGui::BeginPopup("RenderFXPopup")) {
+            ImGui::TextDisabled("Viewport Post-Processing & Lighting");
+            ImGui::Separator();
+            ImGui::Checkbox("Screen-Space Reflections (SSR)", &m_EnableSSR);
+            ImGui::Checkbox("Ambient Occlusion (GTAO)", &m_EnableGTAO);
+            ImGui::Checkbox("Contact Shadows", &m_EnableContactShadows);
+            ImGui::Checkbox("Physically Based Bloom", &m_EnableBloom);
+            ImGui::Checkbox("Volumetric Fog", &m_EnableVolumetricFog);
+            ImGui::Checkbox("Auto-Exposure", &m_EnableAutoExposure);
+            ImGui::Checkbox("Temporal Anti-Aliasing (TAA)", &m_EnableTAA);
+            ImGui::EndPopup();
+        }
+
         ImGui::PopStyleVar();
     }
     ImGui::End();
@@ -2054,6 +2085,16 @@ void EditorLayer::OnImGuiRender() {
                     m_RHIViewport->SetHDR(isHDR);
                     ClearRHIViewport();
                 }
+            }
+            if (ImGui::BeginMenu("Rendering Features")) {
+                ImGui::MenuItem("Screen-Space Reflections (SSR)", nullptr, &m_EnableSSR);
+                ImGui::MenuItem("Ambient Occlusion (GTAO)", nullptr, &m_EnableGTAO);
+                ImGui::MenuItem("Contact Shadows", nullptr, &m_EnableContactShadows);
+                ImGui::MenuItem("Physically Based Bloom", nullptr, &m_EnableBloom);
+                ImGui::MenuItem("Volumetric Fog", nullptr, &m_EnableVolumetricFog);
+                ImGui::MenuItem("Auto-Exposure", nullptr, &m_EnableAutoExposure);
+                ImGui::MenuItem("Temporal Anti-Aliasing (TAA)", nullptr, &m_EnableTAA);
+                ImGui::EndMenu();
             }
             ImGui::Separator();
             bool isMaximized = Axle::Application::Get().GetWindow().IsMaximized();

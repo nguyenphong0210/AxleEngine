@@ -111,6 +111,24 @@ namespace Axle::RHI {
         return true;
     }
 
+    bool RHIMultiLightBuffer::AddRectLight(const RHIRectLight& light) {
+        uint32_t count = static_cast<uint32_t>(m_Data.ReservedHeader[1].x);
+        if (count >= 2) return false;
+
+        float intensity = light.TwoSided ? -std::abs(light.Intensity) : std::abs(light.Intensity);
+        m_Data.RectLights[count].PositionAndWidth = glm::vec4(light.Position, light.Width);
+        m_Data.RectLights[count].DirectionAndHeight = glm::vec4(glm::normalize(light.Direction), light.Height);
+        m_Data.RectLights[count].UpAndRange = glm::vec4(glm::normalize(light.Up), light.Range);
+        m_Data.RectLights[count].ColorAndIntensity = glm::vec4(light.Color, intensity);
+
+        m_Data.ReservedHeader[1].x = static_cast<float>(count + 1);
+
+        if (m_Buffer.IsValid()) {
+            return m_Buffer.UpdateData(&m_Data, sizeof(RHIMultiLightBufferData));
+        }
+        return true;
+    }
+
     void RHIMultiLightBuffer::ClearDynamicLights() {
         for (uint32_t i = 0; i < MAX_POINT_LIGHTS; ++i) {
             m_Data.PointLights[i] = RHIGPUPointLight{};
@@ -118,8 +136,11 @@ namespace Axle::RHI {
         for (uint32_t i = 0; i < MAX_SPOT_LIGHTS; ++i) {
             m_Data.SpotLights[i] = RHIGPUSpotLight{};
         }
+        m_Data.RectLights[0] = RHIGPURectLight{};
+        m_Data.RectLights[1] = RHIGPURectLight{};
         m_Data.LightCounts.x = 0;
         m_Data.LightCounts.y = 0;
+        m_Data.ReservedHeader[1].x = 0.0f;
 
         if (m_Buffer.IsValid()) {
             m_Buffer.UpdateData(&m_Data, sizeof(RHIMultiLightBufferData));

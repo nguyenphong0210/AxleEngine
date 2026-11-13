@@ -120,6 +120,31 @@ namespace Axle {
         float OuterAngle = 32.0f; // degrees
     };
 
+    struct RenderReflectionProbe {
+        uint64_t EntityID = 0;
+        glm::vec3 Position{ 0.0f };
+        glm::vec3 BoxExtents{ 10.0f };
+        glm::vec3 BoxOffset{ 0.0f };
+        float Radius = 10.0f;
+        float Intensity = 1.0f;
+        int Shape = 0; // 0: Box, 1: Sphere
+        bool ParallaxCorrected = true;
+        std::string CubemapPath;
+    };
+
+    struct RenderRectLight {
+        uint64_t EntityID = 0;
+        glm::vec3 Position{ 0.0f };
+        glm::vec3 Direction{ 0.0f, 0.0f, -1.0f };
+        glm::vec3 Up{ 0.0f, 1.0f, 0.0f };
+        glm::vec3 Color{ 1.0f };
+        float Intensity = 10.0f;
+        float Width = 2.0f;
+        float Height = 1.0f;
+        float Range = 20.0f;
+        bool TwoSided = false;
+    };
+
     struct RenderSkyboxData {
         bool Authored = false;
         bool Enabled = false;
@@ -175,6 +200,8 @@ namespace Axle {
             AdditionalDirectionalLights.clear();
             PointLights.clear();
             SpotLights.clear();
+            ReflectionProbes.clear();
+            RectLights.clear();
             EntityToStableUUID.clear();
             Camera = RenderCamera{};
             Skybox = RenderSkyboxData{};
@@ -205,6 +232,8 @@ namespace Axle {
         std::vector<RenderDirectionalLight> AdditionalDirectionalLights;
         std::vector<RenderPointLight> PointLights;
         std::vector<RenderSpotLight> SpotLights;
+        std::vector<RenderReflectionProbe> ReflectionProbes;
+        std::vector<RenderRectLight> RectLights;
         RenderSkyboxData Skybox;
 
         std::unordered_map<uint32_t, UUID> EntityToStableUUID;

@@ -171,6 +171,45 @@ namespace Axle {
             world.SpotLights.push_back(rsl);
         }
 
+        // 4.1. Reflection Probes extraction
+        auto probeView = registry.view<TransformComponent, ReflectionProbeComponent>();
+        for (auto entity : probeView) {
+            const auto& probe = probeView.get<ReflectionProbeComponent>(entity);
+            if (!probe.Enabled) continue;
+            glm::mat4 worldMat = scene.GetWorldTransform(entity);
+            RenderReflectionProbe rprobe;
+            rprobe.EntityID = static_cast<uint32_t>(entity);
+            rprobe.Position = glm::vec3(worldMat[3]) + probe.BoxOffset;
+            rprobe.BoxExtents = probe.BoxExtents;
+            rprobe.BoxOffset = probe.BoxOffset;
+            rprobe.Radius = probe.Radius;
+            rprobe.Intensity = probe.Intensity;
+            rprobe.Shape = static_cast<int>(probe.Shape);
+            rprobe.ParallaxCorrected = probe.ParallaxCorrected;
+            rprobe.CubemapPath = probe.CubemapPath;
+            world.ReflectionProbes.push_back(rprobe);
+        }
+
+        // 4.2. Rect Lights extraction
+        auto rectLightView = registry.view<TransformComponent, RectLightComponent>();
+        for (auto entity : rectLightView) {
+            const auto& rl = rectLightView.get<RectLightComponent>(entity);
+            if (!rl.Enabled) continue;
+            glm::mat4 worldMat = scene.GetWorldTransform(entity);
+            RenderRectLight rrl;
+            rrl.EntityID = static_cast<uint32_t>(entity);
+            rrl.Position = glm::vec3(worldMat[3]);
+            rrl.Direction = glm::normalize(glm::mat3(worldMat) * glm::vec3(0.0f, 0.0f, -1.0f));
+            rrl.Up = glm::normalize(glm::mat3(worldMat) * glm::vec3(0.0f, 1.0f, 0.0f));
+            rrl.Color = rl.Color;
+            rrl.Intensity = rl.Intensity;
+            rrl.Width = rl.Width;
+            rrl.Height = rl.Height;
+            rrl.Range = rl.Range;
+            rrl.TwoSided = rl.TwoSided;
+            world.RectLights.push_back(rrl);
+        }
+
         // 5. Skybox extraction
         auto skyboxView = registry.view<SkyboxComponent>();
         for (auto entity : skyboxView) {

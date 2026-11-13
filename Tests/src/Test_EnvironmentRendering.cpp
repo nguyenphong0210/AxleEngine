@@ -9,6 +9,8 @@
 #include <Axle/SceneRenderBridge.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/Scene.hpp>
+#include <Axle/SceneSerializer.hpp>
+#include <Axle/Components.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/RenderCommand.hpp>
 #include <glad/glad.h>
@@ -166,7 +168,30 @@ bool Native(RHIType backend) {
     settings.EnableGTAO=false; settings.EnableContactShadows=false;
     settings.EnableSSR=true; auto ssr=render();
     CHECK(!ssr.empty()&&ssr.size()==red.size());
+    // M14-U5 Reflection probe & Rect Light verification
+    RenderReflectionProbe probe;
+    probe.Position = glm::vec3(0.0f, 2.0f, 0.0f);
+    probe.BoxExtents = glm::vec3(20.0f, 20.0f, 20.0f);
+    probe.Intensity = 1.5f;
+    probe.ParallaxCorrected = true;
+    world.ReflectionProbes.push_back(probe);
+    auto ssrWithProbe = render();
+    CHECK(!ssrWithProbe.empty() && ssrWithProbe.size() == red.size());
+    world.ReflectionProbes.clear();
     settings.EnableSSR=false;
+
+    RenderRectLight rect;
+    rect.Position = glm::vec3(0.0f, 4.0f, 0.0f);
+    rect.Direction = glm::vec3(0.0f, -1.0f, 0.0f);
+    rect.Up = glm::vec3(0.0f, 0.0f, 1.0f);
+    rect.Width = 3.0f; rect.Height = 1.5f;
+    rect.Color = glm::vec3(1.0f, 0.9f, 0.8f);
+    rect.Intensity = 50.0f; rect.Range = 25.0f;
+    rect.TwoSided = false;
+    world.RectLights.push_back(rect);
+    auto withRectLight = render();
+    CHECK(!withRectLight.empty() && withRectLight.size() == red.size());
+    world.RectLights.clear();
     CHECK(render()==red&&environment.BakeCount()==1&&environment.UploadCount()==1);
 
     // M14-U3 infrastructure verification: Storage/UAV texture views, ScreenNormal,
@@ -193,6 +218,52 @@ bool Native(RHIType backend) {
         CHECK(screenTargets.Get(RHIViewTarget::ScreenStorage)->GetUAV() != nullptr);
         CHECK(screenTargets.Get(RHIViewTarget::History0) != nullptr && screenTargets.Get(RHIViewTarget::History0)->IsValid());
         CHECK(screenTargets.Get(RHIViewTarget::History1) != nullptr && screenTargets.Get(RHIViewTarget::History1)->IsValid());
+    }
+
+    // M14-U5 Serialization & Extraction test
+    {
+        auto testScene = std::make_shared<Scene>();
+        auto e1 = testScene->CreateEntity("ProbeEntity");
+        auto& probeComp = e1.AddComponent<ReflectionProbeComponent>();
+        probeComp.BoxExtents = glm::vec3(15.0f, 12.0f, 18.0f);
+        probeComp.Intensity = 2.0f;
+        probeComp.ParallaxCorrected = true;
+        probeComp.Shape = ProbeShape::Box;
+
+        auto e2 = testScene->CreateEntity("RectLightEntity");
+        auto& rectComp = e2.AddComponent<RectLightComponent>();
+        rectComp.Width = 5.0f;
+        rectComp.Height = 2.5f;
+        rectComp.Color = glm::vec3(1.0f, 0.8f, 0.6f);
+        rectComp.Intensity = 120.0f;
+        rectComp.TwoSided = true;
+
+        SceneSerializer serializer(testScene.get());
+        std::string serialized = serializer.SerializeToString();
+        CHECK(!serialized.empty());
+
+        auto restoredScene = std::make_shared<Scene>();
+        SceneSerializer deserializer(restoredScene.get());
+        CHECK(deserializer.DeserializeFromString(serialized));
+
+        auto viewProbe = restoredScene->GetRegistry().view<ReflectionProbeComponent>();
+        CHECK(viewProbe.begin() != viewProbe.end());
+        for (auto ent : viewProbe) {
+            const auto& p = viewProbe.get<ReflectionProbeComponent>(ent);
+            CHECK(p.Intensity == 2.0f);
+            CHECK(p.BoxExtents.x == 15.0f);
+            CHECK(p.ParallaxCorrected == true);
+        }
+
+        auto viewRect = restoredScene->GetRegistry().view<RectLightComponent>();
+        CHECK(viewRect.begin() != viewRect.end());
+        for (auto ent : viewRect) {
+            const auto& r = viewRect.get<RectLightComponent>(ent);
+            CHECK(r.Width == 5.0f);
+            CHECK(r.Height == 2.5f);
+            CHECK(r.Intensity == 120.0f);
+            CHECK(r.TwoSided == true);
+        }
     }
     // The HDR background remains visible when environment lighting is opt-out;
     // the metallic receiver must not receive ambient/specular energy from it.

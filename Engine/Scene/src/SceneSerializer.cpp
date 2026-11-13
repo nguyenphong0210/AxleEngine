@@ -314,6 +314,33 @@ namespace Axle {
                 WriteLocalShadows(ss,slc.Shadows);
             }
 
+            // ReflectionProbeComponent
+            if (entity.HasComponent<ReflectionProbeComponent>()) {
+                auto& rpc = entity.GetComponent<ReflectionProbeComponent>();
+                ss << "    ReflectionProbeComponent:\n";
+                ss << "      Enabled: " << (rpc.Enabled ? "true" : "false") << "\n";
+                ss << "      Shape: " << (rpc.Shape == ProbeShape::Sphere ? "Sphere" : "Box") << "\n";
+                ss << "      BoxExtents: [ " << rpc.BoxExtents.x << " , " << rpc.BoxExtents.y << " , " << rpc.BoxExtents.z << " ]\n";
+                ss << "      Radius: " << rpc.Radius << "\n";
+                ss << "      BoxOffset: [ " << rpc.BoxOffset.x << " , " << rpc.BoxOffset.y << " , " << rpc.BoxOffset.z << " ]\n";
+                ss << "      Intensity: " << rpc.Intensity << "\n";
+                ss << "      CubemapPath: " << rpc.CubemapPath << "\n";
+                ss << "      ParallaxCorrected: " << (rpc.ParallaxCorrected ? "true" : "false") << "\n";
+            }
+
+            // RectLightComponent
+            if (entity.HasComponent<RectLightComponent>()) {
+                auto& rlc = entity.GetComponent<RectLightComponent>();
+                ss << "    RectLightComponent:\n";
+                ss << "      Enabled: " << (rlc.Enabled ? "true" : "false") << "\n";
+                ss << "      Color: [ " << rlc.Color.r << " , " << rlc.Color.g << " , " << rlc.Color.b << " ]\n";
+                ss << "      Intensity: " << rlc.Intensity << "\n";
+                ss << "      Width: " << rlc.Width << "\n";
+                ss << "      Height: " << rlc.Height << "\n";
+                ss << "      Range: " << rlc.Range << "\n";
+                ss << "      TwoSided: " << (rlc.TwoSided ? "true" : "false") << "\n";
+            }
+
             // CameraComponent
             if (entity.HasComponent<CameraComponent>()) {
                 auto& cam = entity.GetComponent<CameraComponent>();
@@ -586,6 +613,8 @@ namespace Axle {
             DirectionalLight,
             PointLight,
             SpotLight,
+            ReflectionProbe,
+            RectLight,
             Skybox,
             Camera,
             AudioListener,
@@ -671,6 +700,18 @@ namespace Axle {
                 currentSection = ComponentSection::SpotLight;
                 if (!currentEntity.HasComponent<SpotLightComponent>()) {
                     currentEntity.AddComponent<SpotLightComponent>();
+                }
+            } else if (trimmed == "ReflectionProbeComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::ReflectionProbe;
+                if (!currentEntity.HasComponent<ReflectionProbeComponent>()) {
+                    currentEntity.AddComponent<ReflectionProbeComponent>();
+                }
+            } else if (trimmed == "RectLightComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::RectLight;
+                if (!currentEntity.HasComponent<RectLightComponent>()) {
+                    currentEntity.AddComponent<RectLightComponent>();
                 }
             } else if (trimmed == "SkyboxComponent:") {
                 flushCustomSection();
@@ -986,6 +1027,58 @@ namespace Axle {
                             slc.InnerConeAngle = std::stof(Trim(trimmed.substr(15)));
                         } else if (trimmed.rfind("OuterConeAngle:", 0) == 0) {
                             slc.OuterConeAngle = std::stof(Trim(trimmed.substr(15)));
+                        }
+                        break;
+                    }
+                    case ComponentSection::ReflectionProbe: {
+                        if (!currentEntity.HasComponent<ReflectionProbeComponent>()) {
+                            currentEntity.AddComponent<ReflectionProbeComponent>();
+                        }
+                        auto& rpc = currentEntity.GetComponent<ReflectionProbeComponent>();
+                        if (trimmed.rfind("Enabled:", 0) == 0) {
+                            rpc.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("Shape:", 0) == 0) {
+                            rpc.Shape = (Trim(trimmed.substr(6)) == "Sphere") ? ProbeShape::Sphere : ProbeShape::Box;
+                        } else if (trimmed.rfind("BoxExtents:", 0) == 0) {
+                            float x = 10, y = 10, z = 10;
+                            sscanf(trimmed.c_str(), "BoxExtents: [ %f , %f , %f ]", &x, &y, &z);
+                            rpc.BoxExtents = glm::vec3(x, y, z);
+                        } else if (trimmed.rfind("Radius:", 0) == 0) {
+                            rpc.Radius = std::stof(Trim(trimmed.substr(7)));
+                        } else if (trimmed.rfind("BoxOffset:", 0) == 0) {
+                            float x = 0, y = 0, z = 0;
+                            sscanf(trimmed.c_str(), "BoxOffset: [ %f , %f , %f ]", &x, &y, &z);
+                            rpc.BoxOffset = glm::vec3(x, y, z);
+                        } else if (trimmed.rfind("Intensity:", 0) == 0) {
+                            rpc.Intensity = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("CubemapPath:", 0) == 0) {
+                            rpc.CubemapPath = Trim(trimmed.substr(12));
+                        } else if (trimmed.rfind("ParallaxCorrected:", 0) == 0) {
+                            rpc.ParallaxCorrected = (Trim(trimmed.substr(18)) == "true");
+                        }
+                        break;
+                    }
+                    case ComponentSection::RectLight: {
+                        if (!currentEntity.HasComponent<RectLightComponent>()) {
+                            currentEntity.AddComponent<RectLightComponent>();
+                        }
+                        auto& rlc = currentEntity.GetComponent<RectLightComponent>();
+                        if (trimmed.rfind("Enabled:", 0) == 0) {
+                            rlc.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("Color:", 0) == 0) {
+                            float r = 1, g = 1, b = 1;
+                            sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
+                            rlc.Color = glm::vec3(r, g, b);
+                        } else if (trimmed.rfind("Intensity:", 0) == 0) {
+                            rlc.Intensity = std::stof(Trim(trimmed.substr(10)));
+                        } else if (trimmed.rfind("Width:", 0) == 0) {
+                            rlc.Width = std::stof(Trim(trimmed.substr(6)));
+                        } else if (trimmed.rfind("Height:", 0) == 0) {
+                            rlc.Height = std::stof(Trim(trimmed.substr(7)));
+                        } else if (trimmed.rfind("Range:", 0) == 0) {
+                            rlc.Range = std::stof(Trim(trimmed.substr(6)));
+                        } else if (trimmed.rfind("TwoSided:", 0) == 0) {
+                            rlc.TwoSided = (Trim(trimmed.substr(9)) == "true");
                         }
                         break;
                     }

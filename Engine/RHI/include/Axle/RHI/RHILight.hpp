@@ -94,6 +94,18 @@ namespace Axle::RHI {
 
     };
 
+    struct RHIRectLight {
+        glm::vec3 Position{ 0.0f, 0.0f, 0.0f };
+        glm::vec3 Direction{ 0.0f, 0.0f, -1.0f };
+        glm::vec3 Up{ 0.0f, 1.0f, 0.0f };
+        glm::vec3 Color{ 1.0f, 1.0f, 1.0f };
+        float Intensity = 1000.0f;
+        float Width = 2.0f;
+        float Height = 1.0f;
+        float Range = 20.0f;
+        bool TwoSided = false;
+    };
+
     // -------------------------------------------------------------------------
     // GPU-Layout Structures (Hardware 16-byte aligned for HLSL/GLSL Constant Buffers)
     // -------------------------------------------------------------------------
@@ -121,15 +133,23 @@ namespace Axle::RHI {
     }; // 64 bytes
     static_assert(sizeof(RHIGPUSpotLight) == 64, "RHIGPUSpotLight must be 64 bytes!");
 
+    struct alignas(16) RHIGPURectLight {
+        glm::vec4 PositionAndWidth{ 0.0f, 0.0f, 0.0f, 0.0f };      // xyz: Pos, w: Width
+        glm::vec4 DirectionAndHeight{ 0.0f, 0.0f, -1.0f, 0.0f };   // xyz: Normal/Dir, w: Height
+        glm::vec4 UpAndRange{ 0.0f, 1.0f, 0.0f, 0.0f };           // xyz: Up, w: Range
+        glm::vec4 ColorAndIntensity{ 1.0f, 1.0f, 1.0f, 0.0f };    // xyz: Color, w: Intensity (sign: negative if two-sided)
+    }; // 64 bytes
+    static_assert(sizeof(RHIGPURectLight) == 64, "RHIGPURectLight must be 64 bytes!");
+
     struct alignas(256) RHIMultiLightBufferData {
         RHIGPUDirectionalLight SunLight;                            // 64 bytes (Offset 0)
         glm::uvec4 LightCounts{ 0, 0, 1, 0 };                       // 16 bytes (Offset 64) - x: NumPoint, y: NumSpot, z: HasSun, w: Mode
         glm::vec4 CameraPosAndExposure{ 0.0f, 0.0f, 0.0f, 1.0f };   // 16 bytes (Offset 80) - xyz: CamPos, w: Exposure
-        glm::vec4 ReservedHeader[2]{};                              // 32 bytes (Offset 96..128)
+        glm::vec4 ReservedHeader[2]{};                              // 32 bytes (Offset 96..128) - [1].x: NumRectLights
 
         RHIGPUPointLight PointLights[MAX_POINT_LIGHTS];             // 16 * 64 = 1024 bytes (Offset 128..1152)
         RHIGPUSpotLight  SpotLights[MAX_SPOT_LIGHTS];               // 16 * 64 = 1024 bytes (Offset 1152..2176)
-        glm::vec4 ReservedTail[8]{};                                // 128 bytes (Offset 2176..2304) -> 2304 bytes total (9 * 256 bytes)
+        RHIGPURectLight  RectLights[2];                             // 2 * 64 = 128 bytes (Offset 2176..2304) -> 2304 bytes total (9 * 256 bytes)
 
         static constexpr uint32_t GetByteSize() { return sizeof(RHIMultiLightBufferData); }
     };
@@ -159,6 +179,7 @@ namespace Axle::RHI {
         bool SetSunLight(const RHIDirectionalLight& sun);
         bool AddPointLight(const RHIPointLight& light);
         bool AddSpotLight(const RHISpotLight& light);
+        bool AddRectLight(const RHIRectLight& light);
         void ClearDynamicLights();
 
         const RHIMultiLightBufferData& GetData() const { return m_Data; }

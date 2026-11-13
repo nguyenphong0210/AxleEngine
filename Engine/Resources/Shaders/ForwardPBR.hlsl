@@ -105,14 +105,21 @@ struct SpotLightData {
     float4 AngleParams;           // x: cos(OuterConeAngle), y: Falloff exponent, zw: Reserved
 };
 
+struct RectLightData {
+    float4 PositionAndWidth;     // xyz: Pos, w: Width
+    float4 DirectionAndHeight;   // xyz: Normal/Dir, w: Height
+    float4 UpAndRange;           // xyz: Up, w: Range
+    float4 ColorAndIntensity;    // xyz: Color, w: Intensity (sign: negative if two-sided)
+};
+
 cbuffer MultiLightBuffer : register(b2, space0) {
     DirectionalSunLight u_SunLight;
     uint4               u_LightCounts;        // x: NumPointLights (0..16), y: NumSpotLights (0..16), z: HasSunLight, w: LightingMode
     float4              u_CameraPosExposure;  // xyz: Camera Pos, w: Exposure
-    float4              u_LightReserved[2];   // [0]: x disables studio lobes, y is environment strength, z selects diffuse-only fallback
+    float4              u_LightReserved[2];   // [0]: x disables studio lobes, y is env strength, z diffuse-only; [1].x: NumRectLights
     PointLightData      u_PointLights[16];    // 16 * 64 = 1024 bytes
     SpotLightData       u_SpotLights[16];     // 16 * 64 = 1024 bytes
-    float4              u_LightTailReserved[8]; // 128 bytes tail padding to 2304 bytes
+    RectLightData       u_RectLights[2];      // 2 * 64 = 128 bytes tail
 };
 
 // -----------------------------------------------------------------------------
@@ -277,6 +284,14 @@ float3 DecodeMaterialNormal(float2 rg,float strength) {
     float z=sqrt(saturate(1.0-dot(xy,xy)));
     float3 n=float3(xy*max(0.0,strength),max(z,1e-4));
     return normalize(n);
+}
+
+float3 LTC_IntegrateEdge(float3 va, float3 vb) {
+    float3 cr = cross(va, vb);
+    float len = length(cr);
+    if (len < 1e-6) return float3(0.0, 0.0, 0.0);
+    float dt = clamp(dot(va, vb), -1.0, 1.0);
+    return (cr / len) * acos(dt);
 }
 
 float4 PSMain(PSInput input) : SV_Target0 {
@@ -583,6 +598,84 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 diffuse = kD * albedo.rgb / PI;
 
         Lo += ApplyClearcoat((diffuse + specular) * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y) * radiance;
+    }
+
+    // 8b. Rect Area Lights (LTC Polygonal Diffuse & Representative Point Specular)
+    uint numRectLights = min((uint)u_LightReserved[1].x, 2u);
+    for (uint r = 0; r < numRectLights; ++r) {
+        RectLightData rLight = u_RectLights[r];
+        float3 lightPos = rLight.PositionAndWidth.xyz;
+        float  halfWidth = rLight.PositionAndWidth.w * 0.5;
+        float3 lightDir = normalize(rLight.DirectionAndHeight.xyz);
+        float  halfHeight = rLight.DirectionAndHeight.w * 0.5;
+        float3 lightUp = normalize(rLight.UpAndRange.xyz);
+        float  range = rLight.UpAndRange.w;
+        float3 lightColor = rLight.ColorAndIntensity.xyz;
+        float  rawIntensity = rLight.ColorAndIntensity.w;
+        bool   twoSided = (rawIntensity < 0.0);
+        float  intensity = abs(rawIntensity);
+
+        float3 toLight = lightPos - input.WorldPos;
+        float dist = length(toLight);
+        if (dist > range || range <= 0.001) continue;
+
+        // Front-facing test for one-sided rect light
+        float dirDot = dot(-toLight, lightDir);
+        if (!twoSided && dirDot <= 0.0) continue;
+
+        // Tangent space for rect quad
+        float3 lightRight = normalize(cross(lightDir, lightUp));
+        lightUp = cross(lightRight, lightDir);
+
+        // Quad 4 vertices in world space
+        float3 p0 = lightPos - lightRight * halfWidth - lightUp * halfHeight;
+        float3 p1 = lightPos + lightRight * halfWidth - lightUp * halfHeight;
+        float3 p2 = lightPos + lightRight * halfWidth + lightUp * halfHeight;
+        float3 p3 = lightPos - lightRight * halfWidth + lightUp * halfHeight;
+
+        // Spherical polygon irradiance integration (Heitz 2016 LTC diffuse)
+        float3 v0 = normalize(p0 - input.WorldPos);
+        float3 v1 = normalize(p1 - input.WorldPos);
+        float3 v2 = normalize(p2 - input.WorldPos);
+        float3 v3 = normalize(p3 - input.WorldPos);
+
+        float3 F_diff = LTC_IntegrateEdge(v0, v1) + LTC_IntegrateEdge(v1, v2) + LTC_IntegrateEdge(v2, v3) + LTC_IntegrateEdge(v3, v0);
+        float diffuseIrradiance = max(0.0, dot(F_diff, N)) / (2.0 * PI);
+
+        // Specular: Karis representative point on rectangle
+        float3 R_vec = reflect(-V, N);
+        float denom = dot(R_vec, lightDir);
+        float3 specPos = lightPos;
+        if (abs(denom) > 1e-5) {
+            float t = dot(lightPos - input.WorldPos, lightDir) / denom;
+            if (t > 0.0) {
+                float3 hitPoint = input.WorldPos + R_vec * t;
+                float3 diff = hitPoint - lightPos;
+                float px = clamp(dot(diff, lightRight), -halfWidth, halfWidth);
+                float py = clamp(dot(diff, lightUp), -halfHeight, halfHeight);
+                specPos = lightPos + lightRight * px + lightUp * py;
+            }
+        }
+        float3 L_spec = normalize(specPos - input.WorldPos);
+        float3 H_spec = normalize(V + L_spec);
+        float NdotL_spec = max(dot(N, L_spec), 0.0);
+        float NdotH_spec = max(dot(N, H_spec), 0.0);
+        float VdotH_spec = max(dot(V, H_spec), 0.0);
+
+        float NDF_spec = MaterialDistribution(N, H_spec, tangent, bitangent, roughness, coatAnisotropy.z);
+        float G_spec = MaterialGeometry(N, V, L_spec, tangent, bitangent, roughness, coatAnisotropy.z);
+        float3 F_spec = FresnelSchlick(VdotH_spec, F0);
+        float3 specBRDF = (NDF_spec * G_spec * F_spec) / (4.0 * NdotV * max(NdotL_spec, 0.001) + 0.001) * ggxEnergyCompensation;
+
+        float atten = saturate(1.0 - (dist / range)) * saturate(1.0 - (dist / range)) / (dist * dist + 1.0);
+        float3 radiance = lightColor * (intensity * atten * 0.05);
+
+        float3 kS_rect = F_spec;
+        float3 kD_rect = (float3(1.0, 1.0, 1.0) - kS_rect) * (1.0 - metallic);
+        float3 diffContrib = kD_rect * albedo.rgb * diffuseIrradiance;
+        float3 specContrib = specBRDF * NdotL_spec * u_MaterialSurface.z;
+
+        Lo += ApplyClearcoat(diffContrib + specContrib, N, V, L_spec, max(NdotL_spec, 0.001), coatAnisotropy.x, coatAnisotropy.y) * radiance;
     }
 
     // 9. Ambient Lighting: Image-Based Lighting (IBL) or Analytical Approximation

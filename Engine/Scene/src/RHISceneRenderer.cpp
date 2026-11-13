@@ -278,6 +278,36 @@ namespace Axle {
 
         if (!m_GTAOConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIGTAOConstants), RHIMemoryLocation::HostUpload, "GTAOConstantsBuffer"))) return false;
 
+        // Initialize Screen Space Reflections (SSR) & Reflection Probes Pipeline & Resources
+        if (!CompileSSRShaders(device) || !CreateSSRPipelineLayout(device) || !CreateSSRPipeline(device)) return false;
+
+        if (!m_SSRSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Linear Clamp Sampler for SSR.");
+            return false;
+        }
+
+        RHIDescriptorPoolDesc ssrPoolDesc;
+        ssrPoolDesc.MaxDescriptorSets = 16;
+        ssrPoolDesc.MaxTextures = 64;
+        ssrPoolDesc.MaxSamplers = 16;
+        ssrPoolDesc.MaxStorageTextures = 16;
+        ssrPoolDesc.MaxConstantBuffers = 16;
+        if (!m_SSRDescriptorPool.Init(ssrPoolDesc)) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize SSR Descriptor Pool!");
+            return false;
+        } else {
+            m_SSRComputeTextureSet = m_SSRDescriptorPool.AllocateDescriptorSet(m_SSRComputePipelineLayout, 0);
+            m_SSRComputeStorageSet = m_SSRDescriptorPool.AllocateDescriptorSet(m_SSRComputePipelineLayout, 1);
+            m_SSRApplyDescriptorSet = m_SSRDescriptorPool.AllocateDescriptorSet(m_SSRApplyPipelineLayout, 0);
+            if (!m_SSRComputeTextureSet || !m_SSRComputeStorageSet || !m_SSRApplyDescriptorSet) return false;
+            if (m_SSRSampler.IsValid()) {
+                m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative());
+                m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 4, 0, m_SSRSampler.GetNative());
+            }
+        }
+
+        if (!m_SSRConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISSRConstants), RHIMemoryLocation::HostUpload, "SSRConstantsBuffer"))) return false;
+
         // Initialize GPU Instanced Particle VFX Renderer
         m_ParticleRenderer = std::make_unique<RHIParticleRenderer>();
         if (!m_ParticleRenderer->Init(device)) {
@@ -351,6 +381,18 @@ namespace Axle {
         m_GTAOApplyDescriptorSet = nullptr;
         m_GTAODescriptorPool.Shutdown();
         m_GTAOSampler.Shutdown();
+
+        m_SSRComputePipeline = nullptr;
+        m_SSRApplyPipelineSDR = nullptr;
+        m_SSRApplyPipelineHDR = nullptr;
+        m_SSRComputePipelineLayout.Shutdown();
+        m_SSRApplyPipelineLayout.Shutdown();
+        m_SSRConstantBuffer.Shutdown();
+        m_SSRComputeTextureSet = nullptr;
+        m_SSRComputeStorageSet = nullptr;
+        m_SSRApplyDescriptorSet = nullptr;
+        m_SSRDescriptorPool.Shutdown();
+        m_SSRSampler.Shutdown();
         m_MSAAColorTarget = nullptr;
         m_MSAADepthTarget = nullptr;
         m_CurrentMSAASamples = 1;
@@ -1203,6 +1245,235 @@ namespace Axle {
         return m_GTAOComputePipeline != nullptr && m_GTAOApplyPipelineSDR != nullptr && m_GTAOApplyPipelineHDR != nullptr;
     }
 
+    bool RHISceneRenderer::CompileSSRShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        auto shaderPath = std::filesystem::path("Engine/Resources/Shaders/SSR.hlsl");
+        std::string shaderSource;
+        if (std::filesystem::exists(shaderPath)) {
+            std::ifstream file(shaderPath);
+            if (file.is_open()) {
+                std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+            }
+        }
+        if (shaderSource.empty()) {
+            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "SSR.hlsl";
+            if (std::filesystem::exists(shaderPath)) {
+                std::ifstream file(shaderPath);
+                if (file.is_open()) {
+                    std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+                }
+            }
+        }
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate SSR.hlsl!");
+            return false;
+        }
+
+        RHIShaderFormat format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+
+        // 1. Compute Shader: CSMain
+        RHIShaderCompileDesc csDesc;
+        csDesc.Source = shaderSource;
+        csDesc.SourcePath = PathToUtf8(shaderPath);
+        csDesc.EntryPoint = "CSMain";
+        csDesc.Stage = RHIShaderStage::Compute;
+        csDesc.HLSLVersion = "2021";
+        csDesc.ShaderModel = "6_0";
+        csDesc.Format = format;
+        csDesc.Optimization = true;
+
+        auto csRes = compiler.Compile(csDesc);
+        if (!csRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile SSR CS: {0}", csRes.ErrorMessage);
+            return false;
+        }
+        m_SSRComputeShader = csRes.Bytecode;
+
+        // 2. Vertex Shader: VSMain
+        RHIShaderCompileDesc vsDesc = csDesc;
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile SSR VS: {0}", vsRes.ErrorMessage);
+            return false;
+        }
+        m_SSRApplyVertexShader = vsRes.Bytecode;
+
+        // 3. Pixel Shader: PSMain
+        RHIShaderCompileDesc psDesc = csDesc;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = RHIShaderStage::Fragment;
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile SSR PS: {0}", psRes.ErrorMessage);
+            return false;
+        }
+        m_SSRApplyPixelShader = psRes.Bytecode;
+
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateSSRPipelineLayout(RHIDevice& device) {
+        // 1. Compute Pipeline Layout:
+        // Root Descriptor [0] b0 space 0: 512-byte RHISSRConstants
+        nri::RootDescriptorDesc compRootDesc = {};
+        compRootDesc.registerIndex = 0;
+        compRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        compRootDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        // Set 0 (space 1):
+        // Range 0: t0 (Depth) -> TEXTURE
+        // Range 1: t1 (Normal) -> TEXTURE
+        // Range 2: t2 (Color) -> TEXTURE
+        // Range 3: s0 (Linear Sampler) -> SAMPLER
+        nri::DescriptorRangeDesc compTexRanges[4] = {};
+        compTexRanges[0].baseRegisterIndex = 0;
+        compTexRanges[0].descriptorNum = 1;
+        compTexRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        compTexRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        compTexRanges[1].baseRegisterIndex = 1;
+        compTexRanges[1].descriptorNum = 1;
+        compTexRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
+        compTexRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        compTexRanges[2].baseRegisterIndex = 2;
+        compTexRanges[2].descriptorNum = 1;
+        compTexRanges[2].descriptorType = nri::DescriptorType::TEXTURE;
+        compTexRanges[2].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        compTexRanges[3].baseRegisterIndex = 0;
+        compTexRanges[3].descriptorNum = 1;
+        compTexRanges[3].descriptorType = nri::DescriptorType::SAMPLER;
+        compTexRanges[3].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[3].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        // Set 1 (space 2):
+        // Range 0: u0 (Storage Output) -> STORAGE_TEXTURE
+        nri::DescriptorRangeDesc compStorageRanges[1] = {};
+        compStorageRanges[0].baseRegisterIndex = 0;
+        compStorageRanges[0].descriptorNum = 1;
+        compStorageRanges[0].descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        compStorageRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compStorageRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc compDescSets[2] = {};
+        compDescSets[0].registerSpace = 1;
+        compDescSets[0].ranges = compTexRanges;
+        compDescSets[0].rangeNum = 4;
+
+        compDescSets[1].registerSpace = 2;
+        compDescSets[1].ranges = compStorageRanges;
+        compDescSets[1].rangeNum = 1;
+
+        nri::PipelineLayoutDesc compLayoutDesc = {};
+        compLayoutDesc.rootRegisterSpace = 0;
+        compLayoutDesc.rootDescriptors = &compRootDesc;
+        compLayoutDesc.rootDescriptorNum = 1;
+        compLayoutDesc.descriptorSets = compDescSets;
+        compLayoutDesc.descriptorSetNum = 2;
+        compLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        if (!m_SSRComputePipelineLayout.Init(compLayoutDesc)) return false;
+
+        // 2. Apply Pipeline Layout:
+        // Root Descriptor [0] b0 space 0: 512-byte RHISSRConstants
+        nri::RootDescriptorDesc applyRootDesc = {};
+        applyRootDesc.registerIndex = 0;
+        applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        applyRootDesc.shaderStages = nri::StageBits::ALL;
+
+        // Descriptor Set (space 1):
+        // Range 0: t0 (Depth) -> TEXTURE
+        // Range 1: t1 (SSR Result) -> TEXTURE
+        // Range 2: t2 (Scene Color) -> TEXTURE
+        // Range 3: t3 (Scene Normal) -> TEXTURE
+        // Range 4: s0 (Sampler) -> SAMPLER
+        nri::DescriptorRangeDesc applyRanges[5] = {};
+        applyRanges[0].baseRegisterIndex = 0;
+        applyRanges[0].descriptorNum = 1;
+        applyRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[1].baseRegisterIndex = 1;
+        applyRanges[1].descriptorNum = 1;
+        applyRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[2].baseRegisterIndex = 2;
+        applyRanges[2].descriptorNum = 1;
+        applyRanges[2].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[3].baseRegisterIndex = 3;
+        applyRanges[3].descriptorNum = 1;
+        applyRanges[3].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[3].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[4].baseRegisterIndex = 0;
+        applyRanges[4].descriptorNum = 1;
+        applyRanges[4].descriptorType = nri::DescriptorType::SAMPLER;
+        applyRanges[4].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[4].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc applyDescSet = {};
+        applyDescSet.registerSpace = 1;
+        applyDescSet.ranges = applyRanges;
+        applyDescSet.rangeNum = 5;
+
+        nri::PipelineLayoutDesc applyLayoutDesc = {};
+        applyLayoutDesc.rootRegisterSpace = 0;
+        applyLayoutDesc.rootDescriptors = &applyRootDesc;
+        applyLayoutDesc.rootDescriptorNum = 1;
+        applyLayoutDesc.descriptorSets = &applyDescSet;
+        applyLayoutDesc.descriptorSetNum = 1;
+        applyLayoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+
+        return m_SSRApplyPipelineLayout.Init(applyLayoutDesc);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateSSRApplyPipeline(nri::Format colorFormat) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_SSRApplyPipelineLayout;
+        gfxDesc.Shaders = { m_SSRApplyVertexShader, m_SSRApplyPixelShader };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+
+        gfxDesc.DepthStencil.DepthTestEnable = false;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+
+        auto& cache = RHIPipelineCache::Get();
+        return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    bool RHISceneRenderer::CreateSSRPipeline(RHIDevice& device) {
+        auto& cache = RHIPipelineCache::Get();
+        RHIComputePipelineDesc compDesc;
+        compDesc.Layout = &m_SSRComputePipelineLayout;
+        compDesc.ComputeShader = m_SSRComputeShader;
+        m_SSRComputePipeline = cache.GetOrCreateComputePipeline(compDesc);
+
+        m_SSRApplyPipelineSDR = GetOrCreateSSRApplyPipeline(nri::Format::RGBA8_UNORM);
+        m_SSRApplyPipelineHDR = GetOrCreateSSRApplyPipeline(nri::Format::RGBA16_SFLOAT);
+
+        return m_SSRComputePipeline != nullptr && m_SSRApplyPipelineSDR != nullptr && m_SSRApplyPipelineHDR != nullptr;
+    }
+
     void RHISceneRenderer::SetRenderTargetFormat(RHI::RHITextureFormat colorFormat, RHI::RHITextureFormat depthFormat) {
         m_CurrentColorFormat = RHI::ToNRIFormat(colorFormat);
         m_CurrentDepthFormat = RHI::ToNRIFormat(depthFormat);
@@ -1463,6 +1734,18 @@ namespace Axle {
         }
         lightData.LightCounts.y = spotIndex;
 
+        uint32_t rectIndex = 0;
+        for (const auto& rl : world.RectLights) {
+            if (rectIndex >= 2) break;
+            float intensity = rl.TwoSided ? -std::abs(rl.Intensity) : std::abs(rl.Intensity);
+            lightData.RectLights[rectIndex].PositionAndWidth = glm::vec4(rl.Position, rl.Width);
+            lightData.RectLights[rectIndex].DirectionAndHeight = glm::vec4(rl.Direction, rl.Height);
+            lightData.RectLights[rectIndex].UpAndRange = glm::vec4(rl.Up, rl.Range);
+            lightData.RectLights[rectIndex].ColorAndIntensity = glm::vec4(rl.Color, intensity);
+            rectIndex++;
+        }
+        lightData.ReservedHeader[1].x = static_cast<float>(rectIndex);
+
         bool useIBL = m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.EnvironmentLighting;
         lightData.ReservedHeader[0].y = lighting.AmbientIntensity*(lighting.EnvironmentLighting ? m_Environment.SourceExposure() : 1.0f);
         lightData.ReservedHeader[0].z = lighting.EnvironmentLighting && !useIBL ? 1.f : 0.f;
@@ -1590,6 +1873,14 @@ namespace Axle {
         const auto gtaoInput = useGTAO ? graph.Import("GTAOInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto gtaoDepth = useGTAO ? graph.Import("GTAODepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto gtaoStorage = useGTAO ? graph.Import("GTAOStorage", m_ScreenStorageTarget->GetNative()) : output;
+
+        const bool useSSR = settings.EnableSSR && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+            m_SSRComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
+            m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
+            m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
+        const auto ssrInput = useSSR ? graph.Import("SSRInput", m_OpaqueSceneColor->GetNative()) : output;
+        const auto ssrDepth = useSSR ? graph.Import("SSRDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
+        const auto ssrStorage = useSSR ? graph.Import("SSRStorage", m_ScreenStorageTarget->GetNative()) : output;
         auto attachments = [&](Load load) {
             std::vector<Graph::Use> uses{{sceneColor, Layout::ColorAttachment, Access::Write, load}};
             if (sceneDepthDSV) uses.push_back({sceneDepth, Layout::DepthStencilWrite, Access::Write, load});
@@ -1633,6 +1924,19 @@ namespace Axle {
                 {gtaoDepth, Layout::ShaderResource},
                 {gtaoStorage, Layout::ShaderResource},
                 {gtaoInput, Layout::ShaderResource},
+                {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
+        }
+        if (useSSR) {
+            graph.AddPass("SSRCopy", {{sceneColor,Layout::CopySource}, {ssrInput,Layout::CopyDest,Access::Write},
+                {sceneDepth,Layout::CopySource}, {ssrDepth,Layout::CopyDest,Access::Write}});
+            graph.AddPass("SSRCompute", {
+                {ssrDepth, Layout::ShaderResource},
+                {ssrInput, Layout::ShaderResource},
+                {ssrStorage, Layout::ShaderResourceStorage, Access::Write}});
+            graph.AddPass("SSRApply", {
+                {ssrDepth, Layout::ShaderResource},
+                {ssrStorage, Layout::ShaderResource},
+                {ssrInput, Layout::ShaderResource},
                 {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
         }
         if (useToneMap) graph.AddPass("ToneMapping", {
@@ -2226,6 +2530,86 @@ namespace Axle {
             Commands().SetRootDescriptor(0, m_GTAOConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
             m_GTAODescriptorPool.Bind(Commands().GetNative());
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_GTAOApplyDescriptorSet, nri::BindPoint::GRAPHICS);
+            Commands().Draw(3, 1, 0, 0);
+            Commands().EndRendering();
+        }
+
+        // 7.6. Screen-Space Reflections (SSR) with Reflection Probes Fallback
+        if (useSSR) {
+            if (!beginPass("SSRCopy")) return;
+            Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
+            Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
+
+            if (!beginPass("SSRCompute")) return;
+            RHISSRConstants ssrConstants{};
+            ssrConstants.View = camera.GetViewMatrix();
+            ssrConstants.InvView = glm::inverse(camera.GetViewMatrix());
+            ssrConstants.Projection = camera.GetProjectionMatrix();
+            ssrConstants.InvProjection = glm::inverse(camera.GetProjectionMatrix());
+            ssrConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
+                1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
+            ssrConstants.SSRParams = glm::vec4(settings.SSRLengthPixels, 32.0f, settings.SSRStrength, 0.5f);
+
+            if (!world.ReflectionProbes.empty()) {
+                const auto& probe = world.ReflectionProbes[0];
+                ssrConstants.ProbeBoxMin = glm::vec4(probe.Position - probe.BoxExtents * 0.5f, probe.ParallaxCorrected ? 1.0f : 0.0f);
+                ssrConstants.ProbeBoxMax = glm::vec4(probe.Position + probe.BoxExtents * 0.5f, probe.Intensity);
+                ssrConstants.ProbePosition = glm::vec4(probe.Position, 1.0f);
+            } else {
+                ssrConstants.ProbeBoxMin = glm::vec4(-10.0f, -10.0f, -10.0f, 1.0f);
+                ssrConstants.ProbeBoxMax = glm::vec4(10.0f, 10.0f, 10.0f, 1.0f);
+                ssrConstants.ProbePosition = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+            }
+
+            if (!m_SSRConstantBuffer.UpdateData(&ssrConstants, sizeof(RHISSRConstants))) return;
+
+            m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
+            nri::Descriptor* normalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : m_OpaqueSceneDepth->GetSRV();
+            m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 1, 0, normalSRV);
+            m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 0, m_OpaqueSceneColor->GetSRV());
+            m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative());
+            m_SSRDescriptorPool.UpdateStorageTexture(m_SSRComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
+
+            Commands().SetPipeline(m_SSRComputePipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_SSRComputePipelineLayout);
+            Commands().SetRootDescriptor(0, m_SSRConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+            m_SSRDescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_SSRComputeTextureSet, nri::BindPoint::COMPUTE);
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_SSRComputeStorageSet, nri::BindPoint::COMPUTE);
+            Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1);
+
+            if (!beginPass("SSRApply")) return;
+            m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
+            m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV());
+            m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV());
+            m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 3, 0, normalSRV);
+            m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 4, 0, m_SSRSampler.GetNative());
+
+            nri::Pipeline* applyPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SSRApplyPipelineHDR)
+                ? m_SSRApplyPipelineHDR : m_SSRApplyPipelineSDR;
+            if (!applyPipeline) return;
+
+            nri::AttachmentDesc applyColorAttachment = {};
+            applyColorAttachment.descriptor = sceneTargetRTV;
+            applyColorAttachment.loadOp = nri::LoadOp::CLEAR;
+            applyColorAttachment.storeOp = nri::StoreOp::STORE;
+            applyColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+            nri::RenderingDesc applyRenderingDesc = {};
+            applyRenderingDesc.colors = &applyColorAttachment;
+            applyRenderingDesc.colorNum = 1;
+
+            Commands().BeginRendering(applyRenderingDesc);
+            nri::Viewport applyVp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+            Commands().SetViewport(applyVp);
+            nri::Rect applyScissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
+            Commands().SetScissor(applyScissor);
+
+            Commands().SetPipeline(applyPipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SSRApplyPipelineLayout);
+            Commands().SetRootDescriptor(0, m_SSRConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
+            m_SSRDescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_SSRApplyDescriptorSet, nri::BindPoint::GRAPHICS);
             Commands().Draw(3, 1, 0, 0);
             Commands().EndRendering();
         }

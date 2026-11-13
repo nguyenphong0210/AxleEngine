@@ -928,6 +928,40 @@ namespace Axle {
               InnerConeAngle(innerAngle), OuterConeAngle(outerAngle), Enabled(enabled) {}
     };
 
+    enum class ProbeShape {
+        Box = 0,
+        Sphere = 1
+    };
+
+    struct ReflectionProbeComponent {
+        bool Enabled = true;
+        ProbeShape Shape = ProbeShape::Box;
+        glm::vec3 BoxExtents{ 10.0f, 10.0f, 10.0f };
+        float Radius = 10.0f;
+        glm::vec3 BoxOffset{ 0.0f, 0.0f, 0.0f };
+        float Intensity = 1.0f;
+        std::string CubemapPath;
+        bool ParallaxCorrected = true;
+
+        ReflectionProbeComponent() = default;
+        ReflectionProbeComponent(const glm::vec3& extents, float intensity = 1.0f, bool parallax = true)
+            : BoxExtents(extents), Intensity(intensity), ParallaxCorrected(parallax) {}
+    };
+
+    struct RectLightComponent {
+        bool Enabled = true;
+        glm::vec3 Color{ 1.0f, 1.0f, 1.0f };
+        float Intensity = 10.0f;
+        float Width = 2.0f;
+        float Height = 1.0f;
+        float Range = 20.0f;
+        bool TwoSided = false;
+
+        RectLightComponent() = default;
+        RectLightComponent(const glm::vec3& color, float intensity = 10.0f, float width = 2.0f, float height = 1.0f, float range = 20.0f)
+            : Color(color), Intensity(intensity), Width(width), Height(height), Range(range) {}
+    };
+
     struct CameraComponent {
         float FOV = 45.0f;
         float NearClip = 0.1f;

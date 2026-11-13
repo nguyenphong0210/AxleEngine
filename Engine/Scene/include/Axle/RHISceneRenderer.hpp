@@ -70,6 +70,21 @@ namespace Axle {
     };
     static_assert(sizeof(RHIGTAOConstants) == 256, "RHIGTAOConstants must be 256 bytes aligned!");
 
+    // 256-byte CBV aligned constants for SSR & Reflection Probes pass
+    struct alignas(256) RHISSRConstants {
+        glm::mat4 View{ 1.0f };                                    // 64 bytes
+        glm::mat4 InvView{ 1.0f };                                 // 64 bytes
+        glm::mat4 Projection{ 1.0f };                              // 64 bytes
+        glm::mat4 InvProjection{ 1.0f };                           // 64 bytes
+        glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // 16 bytes
+        glm::vec4 SSRParams{ 50.0f, 32.0f, 1.0f, 0.5f };           // 16 bytes: (max dist, steps, strength, thickness)
+        glm::vec4 ProbeBoxMin{ -10.0f, -10.0f, -10.0f, 1.0f };     // 16 bytes: (xyz: min, w: ParallaxCorrected)
+        glm::vec4 ProbeBoxMax{ 10.0f, 10.0f, 10.0f, 1.0f };        // 16 bytes: (xyz: max, w: Intensity)
+        glm::vec4 ProbePosition{ 0.0f, 0.0f, 0.0f, 0.0f };         // 16 bytes: (xyz: center, w: HasProbe)
+        glm::vec4 Padding[11]{};                                   // 176 bytes -> 512 bytes total
+    };
+    static_assert(sizeof(RHISSRConstants) == 512, "RHISSRConstants must be 512 bytes aligned!");
+
     // 256-byte CBV aligned constants for FXAA 3.11 post-processing pass
     struct alignas(256) RHIFXAAConstants {
         glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // (width, height, 1/w, 1/h)
@@ -313,6 +328,11 @@ namespace Axle {
         bool CreateGTAOPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateGTAOApplyPipeline(nri::Format colorFormat);
 
+        bool CompileSSRShaders(RHI::RHIDevice& device);
+        bool CreateSSRPipelineLayout(RHI::RHIDevice& device);
+        bool CreateSSRPipeline(RHI::RHIDevice& device);
+        nri::Pipeline* GetOrCreateSSRApplyPipeline(nri::Format colorFormat);
+
     private:
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
@@ -429,6 +449,22 @@ namespace Axle {
         nri::DescriptorSet* m_GTAOComputeTextureSet = nullptr;
         nri::DescriptorSet* m_GTAOComputeStorageSet = nullptr;
         nri::DescriptorSet* m_GTAOApplyDescriptorSet = nullptr;
+
+        // Screen-Space Reflections (SSR) & Reflection Probes Resources
+        RHI::RHIPipelineLayout m_SSRComputePipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_SSRComputePipeline;
+        RHI::RHIPipelineLayout m_SSRApplyPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_SSRApplyPipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_SSRApplyPipelineHDR;
+        RHI::RHIBuffer m_SSRConstantBuffer;
+        RHI::RHIShaderBytecode m_SSRComputeShader;
+        RHI::RHIShaderBytecode m_SSRApplyVertexShader;
+        RHI::RHIShaderBytecode m_SSRApplyPixelShader;
+        RHI::RHISampler m_SSRSampler;
+        RHI::RHIDescriptorPool m_SSRDescriptorPool;
+        nri::DescriptorSet* m_SSRComputeTextureSet = nullptr;
+        nri::DescriptorSet* m_SSRComputeStorageSet = nullptr;
+        nri::DescriptorSet* m_SSRApplyDescriptorSet = nullptr;
 
         // Intermediate Floating-point HDR Target for 2-pass Scene -> ToneMap execution
         RHI::RHITexture* m_IntermediateHDRTarget = nullptr;

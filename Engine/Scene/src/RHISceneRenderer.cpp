@@ -1154,25 +1154,19 @@ namespace Axle {
 
     bool RHISceneRenderer::CompileGTAOShaders(RHIDevice& device) {
         auto& compiler = RHIShaderCompiler::Get();
-        auto shaderPath = std::filesystem::path("Engine/Resources/Shaders/GTAO.hlsl");
-        std::string shaderSource;
-        if (std::filesystem::exists(shaderPath)) {
-            std::ifstream file(shaderPath);
-            if (file.is_open()) {
-                std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
-            }
-        }
-        if (shaderSource.empty()) {
-            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "GTAO.hlsl";
-            if (std::filesystem::exists(shaderPath)) {
-                std::ifstream file(shaderPath);
-                if (file.is_open()) {
-                    std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
-                }
-            }
-        }
-        if (shaderSource.empty()) {
+        auto shaderPath = FindShaderPath("GTAO.hlsl");
+        if (shaderPath.empty()) {
             AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate GTAO.hlsl!");
+            return false;
+        }
+
+        std::string shaderSource;
+        std::ifstream file(shaderPath);
+        if (file.is_open()) {
+            std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+        }
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to read GTAO.hlsl!");
             return false;
         }
 
@@ -1369,25 +1363,19 @@ namespace Axle {
 
     bool RHISceneRenderer::CompileSSRShaders(RHIDevice& device) {
         auto& compiler = RHIShaderCompiler::Get();
-        auto shaderPath = std::filesystem::path("Engine/Resources/Shaders/SSR.hlsl");
-        std::string shaderSource;
-        if (std::filesystem::exists(shaderPath)) {
-            std::ifstream file(shaderPath);
-            if (file.is_open()) {
-                std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
-            }
-        }
-        if (shaderSource.empty()) {
-            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "SSR.hlsl";
-            if (std::filesystem::exists(shaderPath)) {
-                std::ifstream file(shaderPath);
-                if (file.is_open()) {
-                    std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
-                }
-            }
-        }
-        if (shaderSource.empty()) {
+        auto shaderPath = FindShaderPath("SSR.hlsl");
+        if (shaderPath.empty()) {
             AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate SSR.hlsl!");
+            return false;
+        }
+
+        std::string shaderSource;
+        std::ifstream file(shaderPath);
+        if (file.is_open()) {
+            std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+        }
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to read SSR.hlsl!");
             return false;
         }
 
@@ -1598,25 +1586,19 @@ namespace Axle {
 
     bool RHISceneRenderer::CompileFogShaders(RHIDevice& device) {
         auto& compiler = RHIShaderCompiler::Get();
-        auto shaderPath = std::filesystem::path("Engine/Resources/Shaders/VolumetricFog.hlsl");
-        std::string shaderSource;
-        if (std::filesystem::exists(shaderPath)) {
-            std::ifstream file(shaderPath);
-            if (file.is_open()) {
-                std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
-            }
-        }
-        if (shaderSource.empty()) {
-            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "VolumetricFog.hlsl";
-            if (std::filesystem::exists(shaderPath)) {
-                std::ifstream file(shaderPath);
-                if (file.is_open()) {
-                    std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
-                }
-            }
-        }
-        if (shaderSource.empty()) {
+        auto shaderPath = FindShaderPath("VolumetricFog.hlsl");
+        if (shaderPath.empty()) {
             AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate VolumetricFog.hlsl!");
+            return false;
+        }
+
+        std::string shaderSource;
+        std::ifstream file(shaderPath);
+        if (file.is_open()) {
+            std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+        }
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to read VolumetricFog.hlsl!");
             return false;
         }
 

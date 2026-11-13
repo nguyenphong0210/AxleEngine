@@ -4,4 +4,5 @@ Project:
   Name: Sandbox
   StartScene: scenes/Test.axlescene
   AssetDirectory: assets
+  RHIBackend: Direct3D12
   Plugins:

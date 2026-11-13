@@ -2,6 +2,80 @@
 # Axle Scene Definition File
 Scene: Untitled
 Entities:
+  - Entity: 100001
+    TagComponent:
+      Tag: Atmospheric Skybox
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    SkyboxComponent:
+      Enabled: true
+      EnvironmentLighting: true
+      SkyboxType: 0
+      HDRPath: 
+      Intensity: 1.000000
+      Exposure: 1.000000
+      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
+      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
+      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
+      SunSize: 0.045000
+      SunGlow: 0.160000
+      Turbidity: 1.000000
+      SyncWithSun: true
+      CustomAzimuth: 45.000000
+      CustomElevation: 50.000000
+      HemisphereAmbient: true
+  - Entity: 100002
+    TagComponent:
+      Tag: Plane
+    TransformComponent:
+      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 20.000000 , 1.000000 , 20.000000 ]
+    MeshInstance3D:
+      AssetPath: builtin://plane
+      PatternMode: 1
+      TileScale: 8.000000
+      Color1: [ 0.350000 , 0.380000 , 0.420000 , 1.000000 ]
+      Color2: [ 0.200000 , 0.220000 , 0.250000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+  - Entity: 100003
+    TagComponent:
+      Tag: Directional Light
+    TransformComponent:
+      Translation: [ 0.000000 , 25.000000 , 0.000000 ]
+      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
+      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
+    HierarchyComponent:
+      Parent: 0
+      InheritTransform: true
+      InheritScale: true
+    DirectionalLightComponent:
+      Color: [ 1.000000 , 0.980000 , 0.920000 ]
+      Intensity: 1.000000
+      AmbientIntensity: 0.220000
+      Azimuth: 45.000000
+      Elevation: 50.000000
+      CastShadows: true
+      ShadowOrthoSize: 20.000000
+      ShadowBias: 0.000500
+      ShadowSlopeBias: 0.001000
+      ShadowNormalBias: 0.000500
+      ShadowFilterRadius: 1.500000
+      ShadowQuality: 2
+      CascadeSplitLambda: 0.850000
+      MaxShadowDistance: 80.000000
+      Exposure: 1.000000
+      ToneMappingMode: 0
+      Gamma: 2.200000
   - Entity: 100004
     TagComponent:
       Tag: Sphere
@@ -49,6 +123,15 @@ Entities:
       ClearcoatRoughness: 0.04
       AnisotropyStrength: 0
       AnisotropyRotation: 0
+      SheenEnabled: false
+      SheenColor: [ 1 , 1 , 1 ]
+      SheenRoughness: 0.5
+      SubsurfaceEnabled: false
+      SubsurfaceColor: [ 1 , 0.8 , 0.7 ]
+      SubsurfaceRadius: 1
+      AbsorptionEnabled: false
+      AbsorptionColor: [ 0 , 0 , 0 ]
+      Dispersion: 0
       RenderQueue: 2000
       ClearcoatPath: 
       UseClearcoatMap: false
@@ -75,77 +158,3 @@ Entities:
       CullMode: Back
       AlphaCutoff: 0.5
       DepthWrite: true
-  - Entity: 100003
-    TagComponent:
-      Tag: Directional Light
-    TransformComponent:
-      Translation: [ 0.000000 , 25.000000 , 0.000000 ]
-      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
-    HierarchyComponent:
-      Parent: 0
-      InheritTransform: true
-      InheritScale: true
-    DirectionalLightComponent:
-      Color: [ 1.000000 , 0.980000 , 0.920000 ]
-      Intensity: 1.000000
-      AmbientIntensity: 0.220000
-      Azimuth: 45.000000
-      Elevation: 50.000000
-      CastShadows: true
-      ShadowOrthoSize: 20.000000
-      ShadowBias: 0.000500
-      ShadowSlopeBias: 0.001000
-      ShadowNormalBias: 0.000500
-      ShadowFilterRadius: 1.500000
-      ShadowQuality: 2
-      CascadeSplitLambda: 0.850000
-      MaxShadowDistance: 80.000000
-      Exposure: 1.000000
-      ToneMappingMode: 0
-      Gamma: 2.200000
-  - Entity: 100002
-    TagComponent:
-      Tag: Plane
-    TransformComponent:
-      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
-      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 20.000000 , 1.000000 , 20.000000 ]
-    MeshInstance3D:
-      AssetPath: builtin://plane
-      PatternMode: 1
-      TileScale: 8.000000
-      Color1: [ 0.350000 , 0.380000 , 0.420000 , 1.000000 ]
-      Color2: [ 0.200000 , 0.220000 , 0.250000 , 1.000000 ]
-    HierarchyComponent:
-      Parent: 0
-      InheritTransform: true
-      InheritScale: true
-  - Entity: 100001
-    TagComponent:
-      Tag: Atmospheric Skybox
-    TransformComponent:
-      Translation: [ 0.000000 , 0.000000 , 0.000000 ]
-      Rotation: [ 1.000000 , 0.000000 , 0.000000 , 0.000000 ]
-      Scale: [ 1.000000 , 1.000000 , 1.000000 ]
-    HierarchyComponent:
-      Parent: 0
-      InheritTransform: true
-      InheritScale: true
-    SkyboxComponent:
-      Enabled: true
-      EnvironmentLighting: true
-      SkyboxType: 0
-      HDRPath: 
-      Intensity: 1.000000
-      Exposure: 1.000000
-      ZenithColor: [ 0.180000 , 0.420000 , 0.780000 ]
-      HorizonColor: [ 0.700000 , 0.820000 , 0.950000 ]
-      GroundColor: [ 0.180000 , 0.160000 , 0.140000 ]
-      SunSize: 0.045000
-      SunGlow: 0.160000
-      Turbidity: 1.000000
-      SyncWithSun: true
-      CustomAzimuth: 45.000000
-      CustomElevation: 50.000000
-      HemisphereAmbient: true

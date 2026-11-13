@@ -118,6 +118,16 @@ namespace Axle::RHI {
             return desc;
         }
 
+        static RHITextureDesc StorageTexture2D(uint32_t width, uint32_t height, RHITextureFormat format = RHITextureFormat::RGBA8_UNORM, const std::string& name = "StorageTexture2D") {
+            RHITextureDesc desc;
+            desc.Width = width;
+            desc.Height = height;
+            desc.Format = format;
+            desc.Usage = RHITextureUsage::ShaderResource | RHITextureUsage::Storage;
+            desc.DebugName = name;
+            return desc;
+        }
+
         static RHITextureDesc Cubemap(uint32_t size, uint32_t mipLevels = 1, RHITextureFormat format = RHITextureFormat::RGBA8_UNORM, const std::string& name = "RHICubemap") {
             RHITextureDesc desc;
             desc.Width = size;
@@ -164,11 +174,13 @@ namespace Axle::RHI {
         nri::Descriptor* GetSRV() const { return IsValid() ? m_SRV : nullptr; }
         nri::Descriptor* GetRTV() const { return IsValid() ? m_RTV : nullptr; }
         nri::Descriptor* GetDSV() const { return IsValid() ? m_DSV : nullptr; }
+        nri::Descriptor* GetUAV() const { return IsValid() ? m_UAV : nullptr; }
 
         // Returns native platform descriptor handle (e.g. D3D12_CPU_DESCRIPTOR_HANDLE ptr for SRV)
         uint64_t GetNativeSRVHandle() const;
         uint64_t GetNativeRTVHandle() const;
         uint64_t GetNativeDSVHandle() const;
+        uint64_t GetNativeUAVHandle() const;
 
     private:
         bool Build(const RHITextureDesc& desc, nri::Memory* borrowedMemory = nullptr, uint64_t offset = 0,
@@ -181,6 +193,7 @@ namespace Axle::RHI {
         nri::Descriptor* m_SRV = nullptr;
         nri::Descriptor* m_RTV = nullptr;
         nri::Descriptor* m_DSV = nullptr;
+        nri::Descriptor* m_UAV = nullptr;
     };
 
 }

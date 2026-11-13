@@ -172,6 +172,12 @@ namespace Axle::RHI {
         return UpdateTextureRange(set, rangeIndex, slot, descs);
     }
 
+    bool RHIDescriptorPool::UpdateStorageTexture(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t slot, nri::Descriptor* uav) {
+        if (!set || !uav) return false;
+        std::vector<nri::Descriptor*> descs = { uav };
+        return UpdateTextureRange(set, rangeIndex, slot, descs);
+    }
+
     bool RHIDescriptorPool::UpdateSamplerRange(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t baseSlot, const std::vector<nri::Descriptor*>& samplers) {
         return UpdateTextureRange(set, rangeIndex, baseSlot, samplers);
     }

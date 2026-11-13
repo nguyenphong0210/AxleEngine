@@ -346,6 +346,8 @@ namespace Axle {
         m_OpaqueSceneColor = nullptr;
         m_OpaqueSceneDepth = nullptr;
         m_ParticleSceneDepth = nullptr;
+        m_OpaqueSceneNormal = nullptr;
+        m_ScreenStorageTarget = nullptr;
         m_MaterialTextures.Clear();
         m_DefaultDescriptorSet = nullptr;
         m_IrradianceMap = nullptr;
@@ -1279,6 +1281,8 @@ namespace Axle {
         m_IntermediateHDRTarget = viewTargets->Get(RHIViewTarget::HDR); m_IntermediateFXAATarget = viewTargets->Get(RHIViewTarget::FXAA);
         m_OpaqueSceneColor = viewTargets->Get(RHIViewTarget::OpaqueColor); m_OpaqueSceneDepth = viewTargets->Get(RHIViewTarget::OpaqueDepth);
         m_ParticleSceneDepth = viewTargets->Get(RHIViewTarget::ParticleDepth);
+        m_OpaqueSceneNormal = viewTargets->Get(RHIViewTarget::ScreenNormal);
+        m_ScreenStorageTarget = viewTargets->Get(RHIViewTarget::ScreenStorage);
         if (useMSAA) sceneTargetFormat = useToneMap ? nri::Format::RGBA16_SFLOAT : m_CurrentColorFormat;
         if (useMSAA) {
             m_CurrentMSAASamples = activeSampleCount;

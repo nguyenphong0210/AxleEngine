@@ -41,6 +41,13 @@ namespace Axle::RHI {
         if (!create(RHIViewTarget::OpaqueColor, sceneColor, 1, false)) return false;
         if (desc.EnableDepth && (!create(RHIViewTarget::OpaqueDepth, desc.DepthFormat, 1, true) ||
             !create(RHIViewTarget::ParticleDepth, desc.DepthFormat, 1, true))) return false;
+        if (desc.EnableNormal && !create(RHIViewTarget::ScreenNormal, desc.NormalFormat, 1, false)) return false;
+        if (desc.EnableScreenStorage) {
+            auto texture = std::make_unique<RHITexture>();
+            auto native = RHITextureDesc::StorageTexture2D(desc.Width, desc.Height, desc.HDR ? RHITextureFormat::RGBA16_FLOAT : desc.ColorFormat, "ViewTarget_ScreenStorage");
+            if (!texture->Init(native)) return false;
+            candidate.m_Textures[static_cast<size_t>(RHIViewTarget::ScreenStorage)] = std::move(texture);
+        }
         for (uint8_t i = 0; i < desc.HistoryCount; ++i)
             if (!create(i ? RHIViewTarget::History1 : RHIViewTarget::History0, desc.ColorFormat, 1, false)) return false;
         candidate.m_Initialized = true;

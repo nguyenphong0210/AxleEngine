@@ -165,6 +165,32 @@ bool Native(RHIType backend) {
     CHECK(!ssr.empty()&&ssr.size()==red.size());
     settings.EnableSSR=false;
     CHECK(render()==red&&environment.BakeCount()==1&&environment.UploadCount()==1);
+
+    // M14-U3 infrastructure verification: Storage/UAV texture views, ScreenNormal,
+    // ScreenStorage, and double-buffered history view targets.
+    {
+        RHITexture storageTex;
+        bool inited = storageTex.Init(RHITextureDesc::StorageTexture2D(width, width, RHITextureFormat::RGBA8_UNORM, "TestStorageTex"));
+        CHECK(inited);
+        CHECK(storageTex.IsValid() && storageTex.GetUAV() != nullptr && storageTex.GetSRV() != nullptr);
+        CHECK(storageTex.GetNativeUAVHandle() != 0);
+
+        RHIViewTargets screenTargets;
+        RHIViewTargetDesc targetDesc;
+        targetDesc.Width = width; targetDesc.Height = width;
+        targetDesc.EnableNormal = true;
+        targetDesc.EnableScreenStorage = true;
+        targetDesc.HistoryCount = 2;
+        CHECK(screenTargets.Configure(targetDesc));
+        CHECK(screenTargets.IsValid());
+        CHECK(screenTargets.Get(RHIViewTarget::ScreenNormal) != nullptr);
+        CHECK(screenTargets.Get(RHIViewTarget::ScreenNormal)->IsValid());
+        CHECK(screenTargets.Get(RHIViewTarget::ScreenStorage) != nullptr);
+        CHECK(screenTargets.Get(RHIViewTarget::ScreenStorage)->IsValid());
+        CHECK(screenTargets.Get(RHIViewTarget::ScreenStorage)->GetUAV() != nullptr);
+        CHECK(screenTargets.Get(RHIViewTarget::History0) != nullptr && screenTargets.Get(RHIViewTarget::History0)->IsValid());
+        CHECK(screenTargets.Get(RHIViewTarget::History1) != nullptr && screenTargets.Get(RHIViewTarget::History1)->IsValid());
+    }
     // The HDR background remains visible when environment lighting is opt-out;
     // the metallic receiver must not receive ambient/specular energy from it.
     world.Skybox.EnvironmentLighting=false; auto backgroundOnly=render();

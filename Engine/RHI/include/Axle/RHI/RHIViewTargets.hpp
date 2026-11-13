@@ -6,14 +6,16 @@
 namespace Axle::RHI {
     enum class RHIViewTarget : uint8_t {
         Color, Depth, MSAAColor, MSAADepth, HDR, FXAA,
-        OpaqueColor, OpaqueDepth, ParticleDepth, History0, History1, Count
+        OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1, Count
     };
     struct RHIViewTargetDesc {
         uint32_t Width = 1, Height = 1;
         RHITextureFormat ColorFormat = RHITextureFormat::RGBA8_UNORM;
         RHITextureFormat DepthFormat = RHITextureFormat::D32_FLOAT;
+        RHITextureFormat NormalFormat = RHITextureFormat::RGBA16_FLOAT;
         uint8_t Samples = 1, HistoryCount = 0;
         bool EnableDepth = true, HDR = false, FXAA = false, OwnPrimary = true, RenderAuxiliary = true;
+        bool EnableNormal = false, EnableScreenStorage = false;
         bool operator==(const RHIViewTargetDesc&) const = default;
     };
     // One view owns its complete target generation. Reconfiguration constructs

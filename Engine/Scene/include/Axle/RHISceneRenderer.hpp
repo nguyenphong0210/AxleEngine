@@ -238,6 +238,8 @@ namespace Axle {
         RHI::RHITexture* GetMSAAColorTarget() const { return GetActiveTarget(RHI::RHIViewTarget::MSAAColor); }
         RHI::RHITexture* GetMSAADepthTarget() const { return GetActiveTarget(RHI::RHIViewTarget::MSAADepth); }
         RHI::RHITexture* GetIntermediateFXAATarget() const { return GetActiveTarget(RHI::RHIViewTarget::FXAA); }
+        RHI::RHITexture* GetOpaqueNormalTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ScreenNormal); }
+        RHI::RHITexture* GetScreenStorageTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ScreenStorage); }
         uint8_t GetCurrentMSAASamples() const { return m_CurrentMSAASamples; }
 
         // GPU Instanced Particle VFX Renderer
@@ -341,6 +343,8 @@ namespace Axle {
         RHI::RHITexture* m_OpaqueSceneColor = nullptr;
         RHI::RHITexture* m_OpaqueSceneDepth = nullptr;
         RHI::RHITexture* m_ParticleSceneDepth = nullptr;
+        RHI::RHITexture* m_OpaqueSceneNormal = nullptr;
+        RHI::RHITexture* m_ScreenStorageTarget = nullptr;
 
 
         std::shared_ptr<RHI::RHITexture> m_IrradianceMap;

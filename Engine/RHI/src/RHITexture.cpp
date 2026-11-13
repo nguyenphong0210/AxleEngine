@@ -19,13 +19,15 @@ namespace Axle::RHI {
         , m_OwnsMemory(other.m_OwnsMemory)
         , m_SRV(other.m_SRV)
         , m_RTV(other.m_RTV)
-        , m_DSV(other.m_DSV) {
+        , m_DSV(other.m_DSV)
+        , m_UAV(other.m_UAV) {
         other.m_Texture = nullptr;
         other.m_Memory = nullptr;
         other.m_OwnsMemory = false;
         other.m_SRV = nullptr;
         other.m_RTV = nullptr;
         other.m_DSV = nullptr;
+        other.m_UAV = nullptr;
     }
 
     RHITexture& RHITexture::operator=(RHITexture&& other) noexcept {
@@ -39,12 +41,14 @@ namespace Axle::RHI {
             m_SRV = other.m_SRV;
             m_RTV = other.m_RTV;
             m_DSV = other.m_DSV;
+            m_UAV = other.m_UAV;
             other.m_Texture = nullptr;
             other.m_Memory = nullptr;
             other.m_OwnsMemory = false;
             other.m_SRV = nullptr;
             other.m_RTV = nullptr;
             other.m_DSV = nullptr;
+            other.m_UAV = nullptr;
         }
         return *this;
     }
@@ -223,19 +227,39 @@ namespace Axle::RHI {
             }
         }
 
+        // 4. Create Storage View (UAV) if requested
+        if (desc.Usage & RHITextureUsage::Storage) {
+            nri::TextureViewDesc uavView = {};
+            uavView.texture = m_Texture;
+            uavView.type = (desc.ArrayLayers > 1) ? nri::TextureView::STORAGE_TEXTURE_ARRAY : nri::TextureView::STORAGE_TEXTURE;
+            uavView.format = ToNRIFormat(desc.Format);
+            uavView.mipOffset = 0;
+            uavView.mipNum = 1;
+            uavView.layerOffset = 0;
+            uavView.layerNum = static_cast<nri::Dim_t>(desc.ArrayLayers);
+
+            res = ScopedRHIFault::Invoke("CreateTextureUAV", [&] { return core.CreateTextureView(uavView, m_UAV); });
+            if (res != nri::Result::SUCCESS || !m_UAV) {
+                AXLE_CORE_ERROR("RHITexture::Init failed to create UAV! Result: {0}", static_cast<int>(res));
+                Shutdown();
+                return false;
+            }
+        }
+
         const auto functions = core;
-        auto srv = m_SRV, rtv = m_RTV, dsv = m_DSV;
+        auto srv = m_SRV, rtv = m_RTV, dsv = m_DSV, uav = m_UAV;
         auto texture = m_Texture; auto ownedMemory = m_OwnsMemory ? m_Memory : nullptr;
         std::vector<RHIResourceLease> dependencies;
         if (borrowedMemory) {
             auto lease = rhiDevice.GetResources().AcquireNative(borrowedMemory);
             if (lease.IsLive()) dependencies.push_back(std::move(lease));
         }
-        m_Lease = rhiDevice.GetResources().Publish(RHIResourceKind::Texture, desc.DebugName, {texture, srv, rtv, dsv},
-            [functions, srv, rtv, dsv, texture, ownedMemory] {
+        m_Lease = rhiDevice.GetResources().Publish(RHIResourceKind::Texture, desc.DebugName, {texture, srv, rtv, dsv, uav},
+            [functions, srv, rtv, dsv, uav, texture, ownedMemory] {
                 if (srv) functions.DestroyDescriptor(srv);
                 if (rtv) functions.DestroyDescriptor(rtv);
                 if (dsv) functions.DestroyDescriptor(dsv);
+                if (uav) functions.DestroyDescriptor(uav);
                 functions.DestroyTexture(texture);
                 if (ownedMemory) functions.FreeMemory(ownedMemory);
             }, std::move(dependencies));
@@ -251,7 +275,7 @@ namespace Axle::RHI {
         snapshot.m_Desc = m_Desc; snapshot.m_Lease = m_Lease;
         snapshot.m_Texture = m_Texture; snapshot.m_Memory = m_Memory;
         snapshot.m_OwnsMemory = m_OwnsMemory;
-        snapshot.m_SRV = m_SRV; snapshot.m_RTV = m_RTV; snapshot.m_DSV = m_DSV;
+        snapshot.m_SRV = m_SRV; snapshot.m_RTV = m_RTV; snapshot.m_DSV = m_DSV; snapshot.m_UAV = m_UAV;
         return snapshot;
     }
 
@@ -260,17 +284,18 @@ namespace Axle::RHI {
         if (m_Lease) m_Lease.Reset();
         else if (device.IsNativeReady()) {
             const auto core = device.GetNRICore();
-            auto srv = m_SRV, rtv = m_RTV, dsv = m_DSV;
+            auto srv = m_SRV, rtv = m_RTV, dsv = m_DSV, uav = m_UAV;
             auto texture = m_Texture; auto memory = m_OwnsMemory ? m_Memory : nullptr;
-            device.ReleaseNative([core, srv, rtv, dsv, texture, memory] {
+            device.ReleaseNative([core, srv, rtv, dsv, uav, texture, memory] {
                 if (srv) core.DestroyDescriptor(srv);
                 if (rtv) core.DestroyDescriptor(rtv);
                 if (dsv) core.DestroyDescriptor(dsv);
+                if (uav) core.DestroyDescriptor(uav);
                 if (texture) core.DestroyTexture(texture);
                 if (memory) core.FreeMemory(memory);
             });
         }
-        m_SRV = m_RTV = m_DSV = nullptr;
+        m_SRV = m_RTV = m_DSV = m_UAV = nullptr;
         m_Texture = nullptr;
         m_Memory = nullptr;
         m_OwnsMemory = false;
@@ -293,6 +318,12 @@ namespace Axle::RHI {
         if (!IsValid() || !m_DSV) return 0;
         const auto& core = RHIDevice::Get().GetNRICore();
         return core.GetDescriptorNativeObject(m_DSV);
+    }
+
+    uint64_t RHITexture::GetNativeUAVHandle() const {
+        if (!IsValid() || !m_UAV) return 0;
+        const auto& core = RHIDevice::Get().GetNRICore();
+        return core.GetDescriptorNativeObject(m_UAV);
     }
 
 }

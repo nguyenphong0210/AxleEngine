@@ -71,7 +71,7 @@ flowchart LR
 - [x] **Phase 44.5: Dynamic Procedural Skybox IBL** — Render `Procedural Atmospheric Skybox` to a dynamic $128 \times 128 \times 6$ cubemap and compute Irradiance + Prefilter mips so procedural skies provide real IBL reflections.
 - [x] **Phase 44.6: Sun Angular Radius Specular Expansion** — Expand Directional Light specular lobe based on actual solar angular size ($0.53^\circ$), softening the sun reflection hot spot.
 - [x] **Phase 44.7: GTAO (Ground-Truth Ambient Occlusion)** — Implement horizon-based hemispherical integration compute pass at half-resolution ($960 \times 540$) with bilateral spatial reconstruction denoiser.
-- [ ] **Phase 44.8: Screen-Space Contact Shadows** — Implement short-range raymarched depth contact shadows for directional sun light, eliminating shadow acne and Peter Panning.
+- [x] **Phase 44.8: Screen-Space Contact Shadows** — Implement short-range raymarched depth contact shadows for directional sun light, eliminating shadow acne and Peter Panning.
 - [ ] **Phase 44.9: Hi-Z Depth Pyramid & Screen-Space Reflections (SSR)** — Hierarchical depth buffer generator pass computing min-depth mips for screen-space raymarching and roughness cone-tracing.
 - [ ] **Phase 44.10: Parallax-Corrected Reflection Probes** — Local box and sphere reflection cubemaps with smooth falloff and seamless blending with SSR fallback.
 - [ ] **Phase 44.11: LTC Area Lights** — Linearly Transformed Cosines evaluation for Rectangular and Disk studio area lights.

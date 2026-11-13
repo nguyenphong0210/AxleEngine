@@ -7,7 +7,8 @@ cbuffer FXAAConstants : register(b0, space0) {
     float4 u_ScreenSize;      // (width, height, 1.0 / width, 1.0 / height)
     float4 u_FXAAParams;      // (subpixQuality, edgeThreshold, edgeThresholdMin, qualityPreset)
     float4 u_GTAOParams;      // (enable, radius pixels, strength, depth bias)
-    float4 u_Padding[13];     // Pad to exactly 256 bytes for hardware CBV alignment
+    float4 u_ContactParams;   // (screen ray x/y, length pixels, strength)
+    float4 u_Padding[12];     // Pad to exactly 256 bytes for hardware CBV alignment
 };
 
 Texture2D u_InputTexture : register(t0, space1);
@@ -47,20 +48,32 @@ float4 PSMain(VSOutput input) : SV_Target {
     if (u_GTAOParams.x > 0.5) {
         float depthM = u_SceneDepth.SampleLevel(u_LinearSampler, posM, 0.0);
         if (depthM >= 0.9999) return colorM;
-        float2 stepUV = rcpFrame * max(u_GTAOParams.y, 1.0);
-        float occlusion = 0.0;
-        const float2 directions[8] = {
-            float2(1,0), float2(-1,0), float2(0,1), float2(0,-1),
-            float2(0.7071,0.7071), float2(-0.7071,0.7071),
-            float2(0.7071,-0.7071), float2(-0.7071,-0.7071)
-        };
-        [unroll]
-        for (int i=0; i<8; ++i) {
-            float sampleDepth = u_SceneDepth.SampleLevel(u_LinearSampler, saturate(posM + directions[i] * stepUV), 0.0);
-            float closer = saturate((depthM - sampleDepth - u_GTAOParams.w) * 180.0);
-            occlusion += closer;
+        float ao = 1.0;
+        if (u_GTAOParams.x < 1.5 || u_GTAOParams.x > 2.5) {
+            float2 stepUV = rcpFrame * max(u_GTAOParams.y, 1.0);
+            float occlusion = 0.0;
+            const float2 directions[8] = {
+                float2(1,0), float2(-1,0), float2(0,1), float2(0,-1),
+                float2(0.7071,0.7071), float2(-0.7071,0.7071),
+                float2(0.7071,-0.7071), float2(-0.7071,-0.7071)
+            };
+            [unroll]
+            for (int i=0; i<8; ++i) {
+                float sampleDepth = u_SceneDepth.SampleLevel(u_LinearSampler, saturate(posM + directions[i] * stepUV), 0.0);
+                occlusion += saturate((depthM - sampleDepth - u_GTAOParams.w) * 180.0);
+            }
+            ao = 1.0 - saturate(occlusion * (u_GTAOParams.z / 8.0));
         }
-        float ao = 1.0 - saturate(occlusion * (u_GTAOParams.z / 8.0));
+        if (u_GTAOParams.x > 1.5) {
+            float2 ray = normalize(u_ContactParams.xy) * rcpFrame * max(u_ContactParams.z, 1.0) / 16.0;
+            float blocker = 0.0;
+            [unroll]
+            for (int i=1; i<=16; ++i) {
+                float sampleDepth = u_SceneDepth.SampleLevel(u_LinearSampler, saturate(posM + ray * i), 0.0);
+                blocker = max(blocker, saturate((depthM - sampleDepth - u_GTAOParams.w) * 220.0));
+            }
+            ao *= 1.0 - blocker * saturate(u_ContactParams.w);
+        }
         return float4(colorM.rgb * ao, colorM.a);
     }
     float lumaM = FxaaLuma(colorM.rgb);

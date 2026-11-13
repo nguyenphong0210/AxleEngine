@@ -158,9 +158,9 @@ bool Native(RHIType backend) {
     CHECK(PPM("red.ppm",red,width));
     // M14-U3 infrastructure smoke gate: depth-backed GTAO pass runs before
     // tone mapping/FXAA and preserves a valid native frame.
-    settings.EnableGTAO=true; auto gtao=render();
+    settings.EnableGTAO=true; settings.EnableContactShadows=true; auto gtao=render();
     CHECK(!gtao.empty()&&gtao.size()==red.size());
-    settings.EnableGTAO=false;
+    settings.EnableGTAO=false; settings.EnableContactShadows=false;
     CHECK(render()==red&&environment.BakeCount()==1&&environment.UploadCount()==1);
     // The HDR background remains visible when environment lighting is opt-out;
     // the metallic receiver must not receive ambient/specular energy from it.

@@ -326,6 +326,15 @@ namespace Axle {
                 rmi.Material.Roughness = matComp.Roughness;
                 rmi.Material.Metallic = matComp.Metallic;
                 rmi.Material.Emission = matComp.EmissionIntensity;
+                rmi.Material.SheenEnabled = matComp.SheenEnabled;
+                rmi.Material.SheenColor = matComp.SheenColor;
+                rmi.Material.SheenRoughness = matComp.SheenRoughness;
+                rmi.Material.SubsurfaceEnabled = matComp.SubsurfaceEnabled;
+                rmi.Material.SubsurfaceColor = matComp.SubsurfaceColor;
+                rmi.Material.SubsurfaceRadius = matComp.SubsurfaceRadius;
+                rmi.Material.AbsorptionEnabled = matComp.AbsorptionEnabled;
+                rmi.Material.AbsorptionColor = matComp.AbsorptionColor;
+                rmi.Material.Dispersion = matComp.Dispersion;
                 rmi.Material.TileScale = glm::vec2(mc.TileScale);
                 rmi.Material.PatternMode = mc.PatternMode;
             } else {

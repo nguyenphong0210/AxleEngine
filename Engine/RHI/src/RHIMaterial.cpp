@@ -173,6 +173,21 @@ namespace Axle::RHI {
             m_Desc.EnableSpecularHighlights ? 1.0f : 0.0f, m_Desc.EnableEnvironmentReflections ? 1.0f : 0.0f);
         data.CoatAnisotropy = glm::vec4(m_Desc.ClearcoatStrength, m_Desc.ClearcoatRoughness,
             m_Desc.AnisotropyStrength, m_Desc.AnisotropyRotation);
+        if (m_Desc.SheenEnabled) {
+            data.Sheen = glm::vec4(m_Desc.SheenColor, std::clamp(m_Desc.SheenRoughness, 0.01f, 1.0f));
+        } else {
+            data.Sheen = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
+        }
+        if (m_Desc.SubsurfaceEnabled) {
+            data.Subsurface = glm::vec4(m_Desc.SubsurfaceColor, std::max(0.0f, m_Desc.SubsurfaceRadius));
+        } else {
+            data.Subsurface = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+        if (m_Desc.AbsorptionEnabled) {
+            data.Absorption = glm::vec4(glm::max(glm::vec3(0.0f), m_Desc.AbsorptionColor), std::max(0.0f, m_Desc.Dispersion));
+        } else {
+            data.Absorption = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+        }
         for (uint32_t i = 0; i < static_cast<uint32_t>(RHITextureSlot::Count); ++i) {
             if ((m_Desc.TextureEnableMask & (1u << i)) && (!GetTexturePath(static_cast<RHITextureSlot>(i)).empty() || HasTexture(static_cast<RHITextureSlot>(i))))
                 data.Flags.x |= 1u << i;

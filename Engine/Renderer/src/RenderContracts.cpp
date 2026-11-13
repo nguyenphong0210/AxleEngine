@@ -105,6 +105,9 @@ namespace Axle {
             static_assert(offsetof(RHI::RHIMaterialConstants, DetailParameters) == 80);
             static_assert(offsetof(RHI::RHIMaterialConstants, Refraction) == 96);
             static_assert(offsetof(RHI::RHIMaterialConstants, RefractionFrame) == 128);
+            static_assert(offsetof(RHI::RHIMaterialConstants, Sheen) == 144);
+            static_assert(offsetof(RHI::RHIMaterialConstants, Subsurface) == 160);
+            static_assert(offsetof(RHI::RHIMaterialConstants, Absorption) == 176);
             return true;
         }
 

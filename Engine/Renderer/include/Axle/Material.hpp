@@ -85,6 +85,28 @@ namespace Axle {
         glm::vec3 GetRefractionTint() const { return m_RefractionTint; }
         void SetRefractionTint(glm::vec3 value) { m_RefractionTint=value; }
 
+        // M14-U8 Advanced Materials: Sheen, Subsurface, Absorption
+        bool GetSheenEnabled() const { return m_SheenEnabled; }
+        void SetSheenEnabled(bool value) { m_SheenEnabled = value; }
+        const glm::vec3& GetSheenColor() const { return m_SheenColor; }
+        void SetSheenColor(const glm::vec3& value) { m_SheenColor = value; }
+        float GetSheenRoughness() const { return m_SheenRoughness; }
+        void SetSheenRoughness(float value) { m_SheenRoughness = std::clamp(value, 0.01f, 1.0f); }
+
+        bool GetSubsurfaceEnabled() const { return m_SubsurfaceEnabled; }
+        void SetSubsurfaceEnabled(bool value) { m_SubsurfaceEnabled = value; }
+        const glm::vec3& GetSubsurfaceColor() const { return m_SubsurfaceColor; }
+        void SetSubsurfaceColor(const glm::vec3& value) { m_SubsurfaceColor = value; }
+        float GetSubsurfaceRadius() const { return m_SubsurfaceRadius; }
+        void SetSubsurfaceRadius(float value) { m_SubsurfaceRadius = std::max(0.0f, value); }
+
+        bool GetAbsorptionEnabled() const { return m_AbsorptionEnabled; }
+        void SetAbsorptionEnabled(bool value) { m_AbsorptionEnabled = value; }
+        const glm::vec3& GetAbsorptionColor() const { return m_AbsorptionColor; }
+        void SetAbsorptionColor(const glm::vec3& value) { m_AbsorptionColor = value; }
+        float GetDispersion() const { return m_Dispersion; }
+        void SetDispersion(float value) { m_Dispersion = std::max(0.0f, value); }
+
         // Automotive & Advanced Shading (Clearcoat & Anisotropy)
         float GetClearcoatStrength() const { return m_ClearcoatStrength; }
         float& GetClearcoatStrengthRef() { return m_ClearcoatStrength; }
@@ -311,6 +333,15 @@ namespace Axle {
         float m_RefractionIOR = 1.5f;
         float m_RefractionThickness = 0.1f;
         glm::vec3 m_RefractionTint = {1.0f,1.0f,1.0f};
+        bool m_SheenEnabled = false;
+        glm::vec3 m_SheenColor{ 1.0f, 1.0f, 1.0f };
+        float m_SheenRoughness = 0.5f;
+        bool m_SubsurfaceEnabled = false;
+        glm::vec3 m_SubsurfaceColor{ 1.0f, 0.8f, 0.7f };
+        float m_SubsurfaceRadius = 1.0f;
+        bool m_AbsorptionEnabled = false;
+        glm::vec3 m_AbsorptionColor{ 0.0f, 0.0f, 0.0f };
+        float m_Dispersion = 0.0f;
         float m_ClearcoatStrength = 0.0f;
         float m_ClearcoatRoughness = 0.04f;
         float m_AnisotropyStrength = 0.0f;

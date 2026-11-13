@@ -15,7 +15,10 @@ namespace Axle::RHI {
         glm::vec4 Refraction{1.0f,1.5f,0.1f,0.0f}; // strength, IOR, thickness, enabled
         glm::vec4 RefractionTint{1.0f};
         glm::vec4 RefractionFrame{}; // width, height, color/depth snapshot ready, reserved
-        glm::vec4 Reserved[7]{};
+        glm::vec4 Sheen{0.0f, 0.0f, 0.0f, -1.0f}; // rgb: sheen color, w: sheen roughness (>= 0 enabled)
+        glm::vec4 Subsurface{0.0f, 0.0f, 0.0f, 0.0f}; // rgb: subsurface color, w: scatter radius / scale (> 0 enabled)
+        glm::vec4 Absorption{0.0f, 0.0f, 0.0f, 0.0f}; // rgb: Beer-Lambert absorption coeff, w: Cauchy dispersion
+        glm::vec4 Reserved[4]{};
     };
     static_assert(sizeof(RHIMaterialConstants) == 256);
     static_assert(offsetof(RHIMaterialConstants, Surface) == 16);
@@ -25,4 +28,7 @@ namespace Axle::RHI {
     static_assert(offsetof(RHIMaterialConstants, DetailParameters) == 80);
     static_assert(offsetof(RHIMaterialConstants, Refraction) == 96);
     static_assert(offsetof(RHIMaterialConstants, RefractionFrame) == 128);
+    static_assert(offsetof(RHIMaterialConstants, Sheen) == 144);
+    static_assert(offsetof(RHIMaterialConstants, Subsurface) == 160);
+    static_assert(offsetof(RHIMaterialConstants, Absorption) == 176);
 }

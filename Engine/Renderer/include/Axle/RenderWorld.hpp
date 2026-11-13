@@ -64,6 +64,15 @@ namespace Axle {
         bool UseAlbedoMap = false;
         bool UseCustomShader = false;
         std::string CustomShaderPath;
+        bool SheenEnabled = false;
+        glm::vec3 SheenColor{ 1.0f };
+        float SheenRoughness = 0.5f;
+        bool SubsurfaceEnabled = false;
+        glm::vec3 SubsurfaceColor{ 1.0f, 0.8f, 0.7f };
+        float SubsurfaceRadius = 1.0f;
+        bool AbsorptionEnabled = false;
+        glm::vec3 AbsorptionColor{ 0.0f };
+        float Dispersion = 0.0f;
     };
 
     struct RenderMeshInstance {

@@ -59,7 +59,10 @@ cbuffer MaterialConstants : register(b3, space0) {
     float4 u_Refraction;
     float4 u_RefractionTint;
     float4 u_RefractionFrame;
-    float4 u_MaterialReserved[7];
+    float4 u_Sheen;            // rgb: sheen color, w: sheen roughness (>= 0 enabled)
+    float4 u_Subsurface;       // rgb: subsurface color, w: scatter radius / scale (> 0 enabled)
+    float4 u_Absorption;       // rgb: Beer-Lambert absorption coeff, w: Cauchy dispersion
+    float4 u_MaterialReserved[4];
 };
 bool HasMaterialMap(uint slot) { return (u_MaterialFlags.x & (1u << slot)) != 0; }
 
@@ -265,6 +268,16 @@ float MaterialGeometry(float3 N, float3 V, float3 L, float3 T, float3 B, float r
     float2 axes = AnisotropicAxes(roughness,anisotropy);
     return 1.0 / (1.0 + AnisotropicLambda(N,V,T,B,axes) + AnisotropicLambda(N,L,T,B,axes));
 }
+float D_Charlie(float NdotH, float roughness) {
+    float invAlpha = 1.0 / max(roughness, 0.001);
+    float sin2H = max(1.0 - NdotH * NdotH, 0.0078125);
+    return (2.0 + invAlpha) / (2.0 * PI) * pow(sin2H, 0.5 * invAlpha);
+}
+
+float V_Charlie(float NdotL, float NdotV) {
+    return 1.0 / (4.0 * (NdotL + NdotV - NdotL * NdotV));
+}
+
 float3 ApplyClearcoat(float3 baseLighting, float3 N, float3 V, float3 L, float nl, float coatStrength, float coatRoughness) {
     float coat = saturate(coatStrength) * u_MaterialSurface.z;
     float r = clamp(coatRoughness, 0.04, 1.0);
@@ -494,6 +507,21 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 diffuse = kD * albedo.rgb / PI;
 
         Lo += ApplyClearcoat(diffuse * NdotL_Sun_Diff + specular * NdotL_Sun, N, V, sunDir, NdotL_Sun, coatAnisotropy.x, coatAnisotropy.y) * sunRadiance;
+        if (u_Sheen.w >= 0.0 && NdotL_Sun > 0.0) {
+            float D_sheen = D_Charlie(max(dot(N, H), 0.0), u_Sheen.w);
+            float V_sheen = V_Charlie(NdotL_Sun, NdotV);
+            float3 sheenBRDF = D_sheen * V_sheen * u_Sheen.rgb;
+            Lo += sheenBRDF * NdotL_Sun * sunRadiance;
+        }
+        if (u_Subsurface.w > 0.0) {
+            float wrap = 0.5;
+            float NdotL_wrap = saturate((dot(N, sunDir) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
+            float3 scatterDir = -(sunDir + N * 0.3);
+            float VdotS = max(dot(V, normalize(scatterDir)), 0.0);
+            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
+            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * u_Subsurface.rgb * u_Subsurface.w;
+            Lo += sssLighting * sunRadiance * (1.0 - metallic);
+        }
     }
 
     // 7. Local lights and additional directional lights (up to 16 combined)
@@ -545,6 +573,21 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 diffuse = kD * albedo.rgb / PI;
 
         Lo += ApplyClearcoat(diffuse * NdotL_Diff + specular * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y) * radiance;
+        if (u_Sheen.w >= 0.0 && NdotL > 0.0) {
+            float D_sheen = D_Charlie(max(dot(N, H), 0.0), u_Sheen.w);
+            float V_sheen = V_Charlie(NdotL, NdotV);
+            float3 sheenBRDF = D_sheen * V_sheen * u_Sheen.rgb;
+            Lo += sheenBRDF * NdotL * radiance;
+        }
+        if (u_Subsurface.w > 0.0) {
+            float wrap = 0.5;
+            float NdotL_wrap = saturate((dot(N, L) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
+            float3 scatterDir = -(L + N * 0.3);
+            float VdotS = max(dot(V, normalize(scatterDir)), 0.0);
+            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
+            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * u_Subsurface.rgb * u_Subsurface.w;
+            Lo += sssLighting * radiance * (1.0 - metallic);
+        }
     }
 
     // 8. Spot Lights (up to 16 with inner/outer cone cutoff angles)
@@ -598,6 +641,21 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 diffuse = kD * albedo.rgb / PI;
 
         Lo += ApplyClearcoat((diffuse + specular) * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y) * radiance;
+        if (u_Sheen.w >= 0.0 && NdotL > 0.0) {
+            float D_sheen = D_Charlie(max(dot(N, H), 0.0), u_Sheen.w);
+            float V_sheen = V_Charlie(NdotL, NdotV);
+            float3 sheenBRDF = D_sheen * V_sheen * u_Sheen.rgb;
+            Lo += sheenBRDF * NdotL * radiance;
+        }
+        if (u_Subsurface.w > 0.0) {
+            float wrap = 0.5;
+            float NdotL_wrap = saturate((dot(N, L) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
+            float3 scatterDir = -(L + N * 0.3);
+            float VdotS = max(dot(V, normalize(scatterDir)), 0.0);
+            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
+            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * u_Subsurface.rgb * u_Subsurface.w;
+            Lo += sssLighting * radiance * (1.0 - metallic);
+        }
     }
 
     // 8b. Rect Area Lights (LTC Polygonal Diffuse & Representative Point Specular)
@@ -676,6 +734,9 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 specContrib = specBRDF * NdotL_spec * u_MaterialSurface.z;
 
         Lo += ApplyClearcoat(diffContrib + specContrib, N, V, L_spec, max(NdotL_spec, 0.001), coatAnisotropy.x, coatAnisotropy.y) * radiance;
+        if (u_Subsurface.w > 0.0) {
+            Lo += diffuseIrradiance * u_Subsurface.rgb * u_Subsurface.w * (1.0 - metallic) * lightColor * (intensity * atten * 0.05);
+        }
     }
 
     // 9. Ambient Lighting: Image-Based Lighting (IBL) or Analytical Approximation
@@ -683,7 +744,14 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 ambientKD = (float3(1.0, 1.0, 1.0) - ambientF) * (1.0 - metallic);
     float3 ambient;
 
-    if (u_LightCounts.w == 1u) {
+    bool hasSplitSumIBL = (u_LightCounts.w == 1u);
+    uint envWidth = 0, envHeight = 0, envLevels = 1;
+    if (hasSplitSumIBL) {
+        u_PrefilterMap.GetDimensions(0, envWidth, envHeight, envLevels);
+    }
+    float MAX_REFLECTION_LOD = max(0.0, float(envLevels) - 1.0);
+
+    if (hasSplitSumIBL) {
         // Image-Based Lighting (IBL) via Split-Sum Approximation
         // A. Diffuse Irradiance: Cosine-weighted hemispherical integration
         float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, N).rgb;
@@ -691,9 +759,6 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         // B. Specular Radiance: Pre-filtered environment radiance (roughness-dependent mip level)
         float3 R = reflect(-V, N);
-        uint envWidth,envHeight,envLevels;
-        u_PrefilterMap.GetDimensions(0,envWidth,envHeight,envLevels);
-        float MAX_REFLECTION_LOD=max(0,int(envLevels)-1);
         float3 prefilteredColor = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, R, roughness * MAX_REFLECTION_LOD).rgb;
 
         // C. Split-sum BRDF integration 2D LUT: scale (rg.x) and bias (rg.y) for Fresnel reflection
@@ -714,6 +779,17 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 diffuseAmbient=ambientColor*albedo.rgb*ambientKD;
         float3 specularAmbient=ambientColor*ambientF*(1.0-roughness*0.5)*u_MaterialSurface.w*ggxEnergyCompensation;
         ambient=(diffuseAmbient+specularAmbient*(1-saturate(u_LightReserved[0].z)))*max(u_LightReserved[0].y,0.0)*ao;
+    }
+    
+    if (u_Sheen.w >= 0.0) {
+        float3 sheenEnv = (hasSplitSumIBL ? u_PrefilterMap.SampleLevel(u_EnvironmentSampler, reflect(-V, N), u_Sheen.w * MAX_REFLECTION_LOD).rgb : u_SunLight.AmbientColor.rgb);
+        float3 sheenAmbient = sheenEnv * u_Sheen.rgb * pow(1.0 - NdotV, 4.0) * u_MaterialSurface.w;
+        ambient += sheenAmbient * max(u_LightReserved[0].y, 0.0) * ao;
+    }
+    if (u_Subsurface.w > 0.0) {
+        float3 sssEnv = (hasSplitSumIBL ? u_IrradianceMap.Sample(u_EnvironmentSampler, N).rgb : u_SunLight.AmbientColor.rgb);
+        float3 sssAmbient = sssEnv * albedo.rgb * u_Subsurface.rgb * u_Subsurface.w * 0.5 * (1.0 - metallic);
+        ambient += sssAmbient * max(u_LightReserved[0].y, 0.0) * ao;
     }
     
     // 10. Total Radiance Accumulation (Linear HDR Radiance)
@@ -745,12 +821,34 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float2 sampleUV=clamp(screenUV+offset,halfPixel,1.0-halfPixel);
         // Do not pull an opaque foreground object across the glass silhouette.
         if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler,sampleUV,0)<input.PositionCS.z-1e-5) sampleUV=screenUV;
+        
+        float3 transmitted;
+        if (u_Absorption.w > 0.001) {
+            // Cauchy chromatic dispersion
+            float dispersion = u_Absorption.w;
+            float2 dispOffset = offset * dispersion * 0.15;
+            float2 uvR = clamp(sampleUV - dispOffset, halfPixel, 1.0 - halfPixel);
+            float2 uvG = sampleUV;
+            float2 uvB = clamp(sampleUV + dispOffset, halfPixel, 1.0 - halfPixel);
+            float r = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, uvR, 0).r;
+            float g = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, uvG, 0).g;
+            float b = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, uvB, 0).b;
+            transmitted = float3(r, g, b);
+        } else {
+            transmitted = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, sampleUV, 0).rgb;
+        }
+
+        // Beer-Lambert volumetric absorption
+        float travelDist = u_Refraction.z / max(abs(dot(N, refracted)), 0.1);
+        float3 absorptionCoeff = max(u_Absorption.rgb, float3(0.0, 0.0, 0.0));
+        float3 transmittance = exp(-absorptionCoeff * travelDist);
+        transmitted *= transmittance;
+
         float4 background=u_OpaqueSceneColor.SampleLevel(u_ScreenSampler,sampleUV,0);
         // Transparent editor clear has no rendered checkerboard to refract.
         if (background.a>0.001) {
             float f0=(u_Refraction.y-1.0)/(u_Refraction.y+1.0);
             float fresnel=f0*f0+(1.0-f0*f0)*pow(1.0-NdotV,5.0);
-            float3 transmitted=background.rgb;
             if (u_CameraPosition.w<=0.0) {
                 transmitted=pow(max(transmitted,0.0),2.2);
                 color=pow(max(color,0.0),2.2);

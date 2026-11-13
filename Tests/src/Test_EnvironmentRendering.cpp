@@ -472,6 +472,51 @@ bool Native(RHIType backend) {
     settings.EnableTAA = false;
     settings.EnableToneMapping = false;
 
+    // M14-U8 Complex Shading Models (Charlie Sheen, SSS, Beer-Lambert & Dispersion)
+    material->GetDesc().SurfaceType = Axle::SurfaceType::Opaque;
+    material->GetDesc().Roughness = 0.5f;
+    material->GetDesc().Metallic = 0.0f;
+    world.DirectionalLight = RenderDirectionalLight{};
+    world.DirectionalLight->Intensity = 2.0f;
+    world.DirectionalLight->Direction = { 0.5f, 0.5f, 0.707f };
+
+    // 1. Charlie Sheen verification
+    material->GetDesc().SheenEnabled = false;
+    const auto sheenOff = render();
+    material->GetDesc().SheenEnabled = true;
+    material->GetDesc().SheenColor = glm::vec3(1.0f, 1.0f, 1.0f);
+    material->GetDesc().SheenRoughness = 0.3f;
+    const auto sheenOn = render();
+    CHECK(!sheenOff.empty() && !sheenOn.empty());
+    CHECK(sheenOn[center] >= sheenOff[center]);
+    material->GetDesc().SheenEnabled = false;
+
+    // 2. Subsurface Scattering verification
+    material->GetDesc().SubsurfaceEnabled = false;
+    const auto sssOff = render();
+    material->GetDesc().SubsurfaceEnabled = true;
+    material->GetDesc().SubsurfaceColor = glm::vec3(1.0f, 0.4f, 0.2f);
+    material->GetDesc().SubsurfaceRadius = 1.0f;
+    const auto sssOn = render();
+    CHECK(!sssOff.empty() && !sssOn.empty());
+    CHECK(sssOn[center] >= sssOff[center]);
+    material->GetDesc().SubsurfaceEnabled = false;
+
+    // 3. Beer-Lambert Absorption & Dispersion verification
+    material->GetDesc().SurfaceType = Axle::SurfaceType::Transparent;
+    material->GetDesc().RefractionEnabled = true;
+    material->GetDesc().RefractionStrength = 1.0f;
+    material->GetDesc().RefractionIOR = 1.5f;
+    material->GetDesc().RefractionThickness = 0.5f;
+    material->GetDesc().AbsorptionEnabled = true;
+    material->GetDesc().AbsorptionColor = glm::vec3(1.5f, 0.5f, 0.1f);
+    material->GetDesc().Dispersion = 0.05f;
+    const auto absorbedGlass = render();
+    CHECK(!absorbedGlass.empty());
+    material->GetDesc().AbsorptionEnabled = false;
+    material->GetDesc().RefractionEnabled = false;
+    material->GetDesc().SurfaceType = Axle::SurfaceType::Opaque;
+
     CHECK(device.WaitIdle()); renderer.Shutdown(); CHECK(environment.CacheSize()==0);
     CHECK(GetRHIValidationErrorCount()==0);
     // CPU cache metadata may outlive a native device. Stale native generations

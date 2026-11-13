@@ -122,6 +122,17 @@ namespace Axle {
         float AnisotropyStrength = 0.0f;
         float AnisotropyRotation = 0.0f;
 
+        // M14-U8 Advanced Materials: Sheen, Subsurface, Absorption
+        bool SheenEnabled = false;
+        glm::vec3 SheenColor{ 1.0f, 1.0f, 1.0f };
+        float SheenRoughness = 0.5f;
+        bool SubsurfaceEnabled = false;
+        glm::vec3 SubsurfaceColor{ 1.0f, 0.8f, 0.7f };
+        float SubsurfaceRadius = 1.0f;
+        bool AbsorptionEnabled = false;
+        glm::vec3 AbsorptionColor{ 0.0f, 0.0f, 0.0f };
+        float Dispersion = 0.0f;
+
         // Local instance properties (active when MaterialHandle == 0 or when editing local values)
         std::string AlbedoPath;
         std::shared_ptr<Texture2D> AlbedoMap;
@@ -205,6 +216,15 @@ namespace Axle {
             ClearcoatRoughness = MaterialAsset->GetClearcoatRoughness();
             AnisotropyStrength = MaterialAsset->GetAnisotropyStrength();
             AnisotropyRotation = MaterialAsset->GetAnisotropyRotation();
+            SheenEnabled = MaterialAsset->GetSheenEnabled();
+            SheenColor = MaterialAsset->GetSheenColor();
+            SheenRoughness = MaterialAsset->GetSheenRoughness();
+            SubsurfaceEnabled = MaterialAsset->GetSubsurfaceEnabled();
+            SubsurfaceColor = MaterialAsset->GetSubsurfaceColor();
+            SubsurfaceRadius = MaterialAsset->GetSubsurfaceRadius();
+            AbsorptionEnabled = MaterialAsset->GetAbsorptionEnabled();
+            AbsorptionColor = MaterialAsset->GetAbsorptionColor();
+            Dispersion = MaterialAsset->GetDispersion();
             AlbedoColor = MaterialAsset->GetAlbedoColor();
             AlbedoPath = MaterialAsset->GetAlbedoPath();
             AlbedoMap = MaterialAsset->GetAlbedoMap();
@@ -292,6 +312,15 @@ namespace Axle {
             desc.RefractionIOR=RefractionIOR;
             desc.RefractionThickness=RefractionThickness;
             desc.RefractionTint=RefractionTint;
+            desc.SheenEnabled = SheenEnabled;
+            desc.SheenColor = SheenColor;
+            desc.SheenRoughness = SheenRoughness;
+            desc.SubsurfaceEnabled = SubsurfaceEnabled;
+            desc.SubsurfaceColor = SubsurfaceColor;
+            desc.SubsurfaceRadius = SubsurfaceRadius;
+            desc.AbsorptionEnabled = AbsorptionEnabled;
+            desc.AbsorptionColor = AbsorptionColor;
+            desc.Dispersion = Dispersion;
             desc.RenderQueue = RenderQueue;
             desc.UseORMMap = UseORMMap;
             desc.AlbedoPath = UseAlbedoMap ? AlbedoPath : "";
@@ -334,6 +363,15 @@ namespace Axle {
             MaterialAsset->SetClearcoatRoughness(ClearcoatRoughness);
             MaterialAsset->SetAnisotropyStrength(AnisotropyStrength);
             MaterialAsset->SetAnisotropyRotation(AnisotropyRotation);
+            MaterialAsset->SetSheenEnabled(SheenEnabled);
+            MaterialAsset->SetSheenColor(SheenColor);
+            MaterialAsset->SetSheenRoughness(SheenRoughness);
+            MaterialAsset->SetSubsurfaceEnabled(SubsurfaceEnabled);
+            MaterialAsset->SetSubsurfaceColor(SubsurfaceColor);
+            MaterialAsset->SetSubsurfaceRadius(SubsurfaceRadius);
+            MaterialAsset->SetAbsorptionEnabled(AbsorptionEnabled);
+            MaterialAsset->SetAbsorptionColor(AbsorptionColor);
+            MaterialAsset->SetDispersion(Dispersion);
             MaterialAsset->SetSurfaceType(SurfaceType);
             MaterialAsset->SetCullMode(CullMode);
             MaterialAsset->SetAlphaCutoff(AlphaCutoff);

@@ -78,6 +78,19 @@ namespace Axle::RHI {
         float ClearcoatRoughness = 0.04f;
         float AnisotropyStrength = 0.0f;
         float AnisotropyRotation = 0.0f;
+        // M14-U8 Advanced Materials: Sheen, Subsurface, Absorption
+        bool SheenEnabled = false;
+        glm::vec3 SheenColor{ 1.0f, 1.0f, 1.0f };
+        float SheenRoughness = 0.5f;
+
+        bool SubsurfaceEnabled = false;
+        glm::vec3 SubsurfaceColor{ 1.0f, 0.8f, 0.7f };
+        float SubsurfaceRadius = 1.0f;
+
+        bool AbsorptionEnabled = false;
+        glm::vec3 AbsorptionColor{ 0.0f, 0.0f, 0.0f };
+        float Dispersion = 0.0f;
+
         uint32_t TextureEnableMask = (1u<<static_cast<uint32_t>(RHITextureSlot::Count))-1u;
         bool UseORMMap = true;
         bool EnableSpecularHighlights = true;
@@ -164,6 +177,27 @@ namespace Axle::RHI {
 
         RHIShadingModel GetShadingModel() const { return m_Desc.ShadingModel; }
         void SetShadingModel(RHIShadingModel model) { m_Desc.ShadingModel = model; }
+
+        bool GetSheenEnabled() const { return m_Desc.SheenEnabled; }
+        void SetSheenEnabled(bool val) { m_Desc.SheenEnabled = val; }
+        const glm::vec3& GetSheenColor() const { return m_Desc.SheenColor; }
+        void SetSheenColor(const glm::vec3& val) { m_Desc.SheenColor = val; }
+        float GetSheenRoughness() const { return m_Desc.SheenRoughness; }
+        void SetSheenRoughness(float val) { m_Desc.SheenRoughness = val; }
+
+        bool GetSubsurfaceEnabled() const { return m_Desc.SubsurfaceEnabled; }
+        void SetSubsurfaceEnabled(bool val) { m_Desc.SubsurfaceEnabled = val; }
+        const glm::vec3& GetSubsurfaceColor() const { return m_Desc.SubsurfaceColor; }
+        void SetSubsurfaceColor(const glm::vec3& val) { m_Desc.SubsurfaceColor = val; }
+        float GetSubsurfaceRadius() const { return m_Desc.SubsurfaceRadius; }
+        void SetSubsurfaceRadius(float val) { m_Desc.SubsurfaceRadius = val; }
+
+        bool GetAbsorptionEnabled() const { return m_Desc.AbsorptionEnabled; }
+        void SetAbsorptionEnabled(bool val) { m_Desc.AbsorptionEnabled = val; }
+        const glm::vec3& GetAbsorptionColor() const { return m_Desc.AbsorptionColor; }
+        void SetAbsorptionColor(const glm::vec3& val) { m_Desc.AbsorptionColor = val; }
+        float GetDispersion() const { return m_Desc.Dispersion; }
+        void SetDispersion(float val) { m_Desc.Dispersion = val; }
 
         RHIMaterialDesc& GetDesc() { return m_Desc; }
         const RHIMaterialDesc& GetDesc() const { return m_Desc; }

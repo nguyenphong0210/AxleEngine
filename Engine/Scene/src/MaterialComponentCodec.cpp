@@ -46,6 +46,15 @@ namespace Axle {
         ss << "      ClearcoatRoughness: " << mat.ClearcoatRoughness << "\n";
         ss << "      AnisotropyStrength: " << mat.AnisotropyStrength << "\n";
         ss << "      AnisotropyRotation: " << mat.AnisotropyRotation << "\n";
+        ss << "      SheenEnabled: " << (mat.SheenEnabled ? "true" : "false") << "\n";
+        ss << "      SheenColor: [ " << mat.SheenColor.r << " , " << mat.SheenColor.g << " , " << mat.SheenColor.b << " ]\n";
+        ss << "      SheenRoughness: " << mat.SheenRoughness << "\n";
+        ss << "      SubsurfaceEnabled: " << (mat.SubsurfaceEnabled ? "true" : "false") << "\n";
+        ss << "      SubsurfaceColor: [ " << mat.SubsurfaceColor.r << " , " << mat.SubsurfaceColor.g << " , " << mat.SubsurfaceColor.b << " ]\n";
+        ss << "      SubsurfaceRadius: " << mat.SubsurfaceRadius << "\n";
+        ss << "      AbsorptionEnabled: " << (mat.AbsorptionEnabled ? "true" : "false") << "\n";
+        ss << "      AbsorptionColor: [ " << mat.AbsorptionColor.r << " , " << mat.AbsorptionColor.g << " , " << mat.AbsorptionColor.b << " ]\n";
+        ss << "      Dispersion: " << mat.Dispersion << "\n";
         ss << "      RenderQueue: " << mat.RenderQueue << "\n";
         ss << "      ClearcoatPath: " << mat.ClearcoatPath << "\n";
         ss << "      UseClearcoatMap: " << (mat.UseClearcoatMap?"true":"false") << "\n";
@@ -190,6 +199,30 @@ namespace Axle {
             mat.AnisotropyStrength = std::stof(Trim(trimmed.substr(19)));
         } else if (trimmed.rfind("AnisotropyRotation:", 0) == 0) {
             mat.AnisotropyRotation = std::stof(Trim(trimmed.substr(19)));
+        } else if (trimmed.rfind("SheenEnabled:", 0) == 0) {
+            mat.SheenEnabled = Trim(trimmed.substr(13)) == "true";
+        } else if (trimmed.rfind("SheenColor:", 0) == 0) {
+            float r = 1, g = 1, b = 1;
+            std::sscanf(trimmed.c_str(), "SheenColor: [ %f , %f , %f ]", &r, &g, &b);
+            mat.SheenColor = glm::vec3(r, g, b);
+        } else if (trimmed.rfind("SheenRoughness:", 0) == 0) {
+            mat.SheenRoughness = std::stof(Trim(trimmed.substr(15)));
+        } else if (trimmed.rfind("SubsurfaceEnabled:", 0) == 0) {
+            mat.SubsurfaceEnabled = Trim(trimmed.substr(18)) == "true";
+        } else if (trimmed.rfind("SubsurfaceColor:", 0) == 0) {
+            float r = 1, g = 0.8f, b = 0.7f;
+            std::sscanf(trimmed.c_str(), "SubsurfaceColor: [ %f , %f , %f ]", &r, &g, &b);
+            mat.SubsurfaceColor = glm::vec3(r, g, b);
+        } else if (trimmed.rfind("SubsurfaceRadius:", 0) == 0) {
+            mat.SubsurfaceRadius = std::stof(Trim(trimmed.substr(17)));
+        } else if (trimmed.rfind("AbsorptionEnabled:", 0) == 0) {
+            mat.AbsorptionEnabled = Trim(trimmed.substr(18)) == "true";
+        } else if (trimmed.rfind("AbsorptionColor:", 0) == 0) {
+            float r = 0, g = 0, b = 0;
+            std::sscanf(trimmed.c_str(), "AbsorptionColor: [ %f , %f , %f ]", &r, &g, &b);
+            mat.AbsorptionColor = glm::vec3(r, g, b);
+        } else if (trimmed.rfind("Dispersion:", 0) == 0) {
+            mat.Dispersion = std::stof(Trim(trimmed.substr(11)));
         } else if (trimmed.rfind("RenderQueue:", 0) == 0) {
             mat.RenderQueue = std::stoi(Trim(trimmed.substr(12)));
         } else if (trimmed.rfind("NormalPath:", 0) == 0) {

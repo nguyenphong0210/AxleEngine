@@ -2379,6 +2379,22 @@ namespace Axle {
         entt::entity DiagnosticEntity = entt::null;
     };
 
+    void RHISceneRenderer::ConsumePreviousGPUTimestamp() {
+        const auto previousCompletion = m_LastCompletion;
+        if (!previousCompletion || !m_GPUTimestampPool || !m_GPUTimestampReadback.IsValid()) return;
+
+        m_LastGPUTimestampMilliseconds = 0.0;
+        m_Device->WaitForCompletion(previousCompletion);
+        if (auto* values = static_cast<uint64_t*>(m_GPUTimestampReadback.Map())) {
+            const uint64_t delta = values[1] > values[0] ? values[1] - values[0] : 0;
+            const uint64_t frequency = m_Device->GetCapabilities().TimestampFrequencyHz;
+            m_LastGPUTimestampMilliseconds = frequency
+                ? static_cast<double>(delta) * 1000.0 / static_cast<double>(frequency)
+                : 0.0;
+            m_GPUTimestampReadback.Unmap();
+        }
+    }
+
     void RHISceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene,
                                        const PerspectiveCamera& camera,
                                        RHITexture* colorTarget,
@@ -2387,16 +2403,7 @@ namespace Axle {
                                        PhysicsScene* physicsScene,
                                        std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
-        const auto previousCompletion = m_LastCompletion;
-        if (previousCompletion && m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
-            m_Device->WaitForCompletion(previousCompletion);
-            if (auto* values = static_cast<uint64_t*>(m_GPUTimestampReadback.Map())) {
-                const uint64_t delta = values[1] > values[0] ? values[1] - values[0] : 0;
-                const uint64_t frequency = m_Device->GetCapabilities().TimestampFrequencyHz;
-                m_LastGPUTimestampMilliseconds = frequency ? static_cast<double>(delta) * 1000.0 / static_cast<double>(frequency) : 0.0;
-                m_GPUTimestampReadback.Unmap();
-            }
-        }
+        ConsumePreviousGPUTimestamp();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!colorTarget || !colorTarget->IsValid()) return;
 
@@ -2426,7 +2433,7 @@ namespace Axle {
                                        PhysicsScene* physicsScene,
                                        std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
-
+        ConsumePreviousGPUTimestamp();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!scene) return;
         SceneExtractionOptions options; options.CameraOverride = &camera;
@@ -2464,6 +2471,7 @@ namespace Axle {
                                            PhysicsScene* physicsScene,
                                            std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
+        ConsumePreviousGPUTimestamp();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!colorTarget || !colorTarget->IsValid()) return;
 
@@ -2493,6 +2501,7 @@ namespace Axle {
                                        PhysicsScene* physicsScene,
                                        std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
+        ConsumePreviousGPUTimestamp();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
         m_MaterialDiagnostics.clear(); m_MaterialFeedback.clear();

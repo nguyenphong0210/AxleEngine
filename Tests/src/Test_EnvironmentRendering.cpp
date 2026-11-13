@@ -48,7 +48,7 @@ bool TimestampProbe(uint64_t& ticks, double& milliseconds) {
     readbackDesc.DebugName = "TimestampProbeReadback";
     if (!readback.Init(readbackDesc)) { device.GetNRICore().DestroyQueryPool(queryPool); return false; }
     RHIBuffer scratch;
-    if (!scratch.Init(RHIBufferDesc::Structured(1024, 4096, true, RHIMemoryLocation::Device, "TimestampProbeScratch"))) {
+    if (!scratch.Init(RHIBufferDesc::Structured(1024, 16, true, RHIMemoryLocation::Device, "TimestampProbeScratch"))) {
         readback.Shutdown(); device.GetNRICore().DestroyQueryPool(queryPool); return false;
     }
     RHICommandBuffer commands;
@@ -169,6 +169,7 @@ bool Native(RHIType backend) {
     uint64_t timestampTicks = 0; double timestampMilliseconds = 0.0;
     const bool timestampProbeOk = TimestampProbe(timestampTicks, timestampMilliseconds);
     CHECK(device.GetCapabilities().TimestampFrequencyHz > 0);
+    CHECK(timestampProbeOk && timestampTicks > 0);
     {
         std::ofstream scorecard(Output / "M14_U9_timestamp_scorecard.txt");
         scorecard << "backend=" << (backend == RHIType::Vulkan ? "Vulkan" : "D3D12") << "\n"
@@ -215,6 +216,7 @@ bool Native(RHIType backend) {
     // M14-U4 Occlusion verification: Dedicated compute GTAO & directional contact shadows
     settings.EnableGTAO=true; settings.EnableContactShadows=true; auto gtao=render();
     CHECK(!gtao.empty()&&gtao.size()==red.size());
+    CHECK(renderer.GetLastGPUTimestampMilliseconds() > 0.0);
     {
         std::ofstream scorecard(Output / "M14_U9_timestamp_scorecard.txt", std::ios::app);
         scorecard << "renderer_gpu_scope_ms=" << renderer.GetLastGPUTimestampMilliseconds() << "\n"

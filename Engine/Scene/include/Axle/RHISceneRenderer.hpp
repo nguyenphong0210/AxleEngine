@@ -430,6 +430,7 @@ namespace Axle {
         nri::Pipeline* GetOrCreateFogApplyPipeline(nri::Format colorFormat);
 
     private:
+        void ConsumePreviousGPUTimestamp();
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_Pipeline;

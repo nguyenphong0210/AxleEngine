@@ -47,6 +47,71 @@ Entities:
       Parent: 0
       InheritTransform: true
       InheritScale: true
+    MaterialComponent:
+      MaterialHandle: 0
+      AssetPath: 
+      AlbedoPath: 
+      UseAlbedoMap: false
+      AlbedoColor: [ 0.35 , 0.38 , 0.42 , 1 ]
+      AOPath: 
+      EmissivePath: 
+      ORMPath: 
+      CustomShaderPath: 
+      TextureMode: SeparateMaps
+      UseAOMap: false
+      UseEmissiveMap: false
+      UseORMMap: false
+      EnableSpecularHighlights: true
+      EnableEnvironmentReflections: true
+      UseCustomShader: false
+      AOStrength: 1
+      DetailNormalStrength: 1
+      DetailUVScale: [ 1 , 1 ]
+      DetailUVOffset: [ 0 , 0 ]
+      RefractionEnabled: false
+      RefractionStrength: 1
+      RefractionIOR: 1.5
+      RefractionThickness: 0.1
+      RefractionTint: [ 1 , 1 , 1 ]
+      ClearcoatStrength: 0
+      ClearcoatRoughness: 0.04
+      AnisotropyStrength: 0
+      AnisotropyRotation: 0
+      SheenEnabled: false
+      SheenColor: [ 1 , 1 , 1 ]
+      SheenRoughness: 0.5
+      SubsurfaceEnabled: false
+      SubsurfaceColor: [ 1 , 0.8 , 0.7 ]
+      SubsurfaceRadius: 1
+      AbsorptionEnabled: false
+      AbsorptionColor: [ 0 , 0 , 0 ]
+      Dispersion: 0
+      RenderQueue: 2000
+      ClearcoatPath: 
+      UseClearcoatMap: false
+      AnisotropyFlowPath: 
+      UseAnisotropyFlowMap: false
+      DetailNormalPath: 
+      UseDetailNormalMap: false
+      DetailMaskPath: 
+      UseDetailMaskMap: false
+      NormalPath: 
+      UseNormalMap: false
+      NormalStrength: 1
+      RoughnessPath: 
+      UseRoughnessMap: false
+      Roughness: 0.12
+      MetallicPath: 
+      UseMetallicMap: false
+      Metallic: 0.2
+      EmissionColor: [ 0 , 0 , 0 ]
+      EmissionIntensity: 0
+      UVScale: [ 1 , 1 ]
+      UVOffset: [ 0 , 0 ]
+      SurfaceType: Opaque
+      CullMode: Back
+      AlphaCutoff: 0.5
+      DepthWrite: true
   - Entity: 100003
     TagComponent:
       Tag: Directional Light

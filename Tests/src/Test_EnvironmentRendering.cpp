@@ -237,6 +237,17 @@ bool Native(RHIType backend) {
     settings.EnableGTAO=false; settings.EnableContactShadows=false;
     settings.EnableSSR=true; auto ssr=render();
     CHECK(!ssr.empty()&&ssr.size()==red.size());
+    std::vector<uint8_t> previousHiZ;
+    for (uint32_t level = 0; level < 8; ++level) {
+        auto* hiz = renderer.GetHiZTarget(level);
+        CHECK(hiz && hiz->IsValid());
+        CHECK(hiz->GetWidth() == std::max(1u, width >> level));
+        CHECK(hiz->GetHeight() == std::max(1u, width >> level));
+        auto currentHiZ = Read(*hiz, 4);
+        CHECK(!currentHiZ.empty());
+        if (!previousHiZ.empty()) CHECK(currentHiZ != previousHiZ);
+        previousHiZ = std::move(currentHiZ);
+    }
     // M14-U5 Reflection probe & Rect Light verification
     RenderReflectionProbe probe;
     probe.Position = glm::vec3(0.0f, 2.0f, 0.0f);

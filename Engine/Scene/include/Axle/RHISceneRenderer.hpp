@@ -574,8 +574,8 @@ namespace Axle {
         RHI::RHIShaderBytecode m_HiZComputeShader;
         RHI::RHISampler m_HiZSampler;
         RHI::RHIDescriptorPool m_HiZDescriptorPool;
-        nri::DescriptorSet* m_HiZTextureSet = nullptr;
-        nri::DescriptorSet* m_HiZStorageSet = nullptr;
+        std::array<nri::DescriptorSet*, 8> m_HiZTextureSets{};
+        std::array<nri::DescriptorSet*, 8> m_HiZStorageSets{};
 
         // Volumetric Fog & Atmospheric Media Resources
         RHI::RHIPipelineLayout m_FogComputePipelineLayout;

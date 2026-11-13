@@ -337,10 +337,12 @@ namespace Axle {
         hizPoolDesc.MaxStorageTextures = 16;
         hizPoolDesc.MaxConstantBuffers = 16;
         if (!m_HiZDescriptorPool.Init(hizPoolDesc)) return false;
-        m_HiZTextureSet = m_HiZDescriptorPool.AllocateDescriptorSet(m_HiZPipelineLayout, 0);
-        m_HiZStorageSet = m_HiZDescriptorPool.AllocateDescriptorSet(m_HiZPipelineLayout, 1);
-        if (!m_HiZTextureSet || !m_HiZStorageSet) return false;
-        m_HiZDescriptorPool.UpdateSampler(m_HiZTextureSet, 1, 0, m_HiZSampler.GetNative());
+        for (size_t level = 0; level < m_HiZTextureSets.size(); ++level) {
+            m_HiZTextureSets[level] = m_HiZDescriptorPool.AllocateDescriptorSet(m_HiZPipelineLayout, 0);
+            m_HiZStorageSets[level] = m_HiZDescriptorPool.AllocateDescriptorSet(m_HiZPipelineLayout, 1);
+            if (!m_HiZTextureSets[level] || !m_HiZStorageSets[level]) return false;
+            if (!m_HiZDescriptorPool.UpdateSampler(m_HiZTextureSets[level], 1, 0, m_HiZSampler.GetNative())) return false;
+        }
         if (!m_HiZConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIHiZConstants), RHIMemoryLocation::HostUpload, "HiZConstantsBuffer"))) return false;
 
         // Initialize Volumetric Fog & Atmospheric Participating Media Resources
@@ -555,8 +557,8 @@ namespace Axle {
         m_HiZPipeline = nullptr;
         m_HiZPipelineLayout.Shutdown();
         m_HiZConstantBuffer.Shutdown();
-        m_HiZTextureSet = nullptr;
-        m_HiZStorageSet = nullptr;
+        m_HiZTextureSets.fill(nullptr);
+        m_HiZStorageSets.fill(nullptr);
         m_HiZDescriptorPool.Shutdown();
         m_HiZSampler.Shutdown();
 
@@ -2964,11 +2966,13 @@ namespace Axle {
                     {level == 0 ? ssrDepth : hizResources[level - 1], Layout::ShaderResource},
                     {hizResources[level], Layout::ShaderResourceStorage, Access::Write}});
             }
-            graph.AddPass("SSRCompute", {
+            std::vector<Graph::Use> ssrComputeUses{
                 {ssrDepth, Layout::ShaderResource},
                 {sceneNormal, Layout::ShaderResource},
                 {ssrInput, Layout::ShaderResource},
-                {ssrStorage, Layout::ShaderResourceStorage, Access::Write}});
+                {ssrStorage, Layout::ShaderResourceStorage, Access::Write}};
+            for (const auto& hiz : hizResources) ssrComputeUses.push_back({hiz, Layout::ShaderResource});
+            graph.AddPass("SSRCompute", std::move(ssrComputeUses));
             graph.AddPass("SSRApply", {
                 {ssrDepth, Layout::ShaderResource},
                 {ssrStorage, Layout::ShaderResource},
@@ -3709,15 +3713,18 @@ namespace Axle {
                 hizConstants.Params.x = level == 0 ? 1.0f : 0.0f;
                 hizConstants.Params.y = static_cast<float>(level);
                 if (!m_HiZConstantBuffer.UpdateData(&hizConstants, sizeof(RHIHiZConstants))) return;
-                m_HiZDescriptorPool.UpdateTexture(m_HiZTextureSet, 0, 0, source->GetSRV());
-                m_HiZDescriptorPool.UpdateSampler(m_HiZTextureSet, 1, 0, m_HiZSampler.GetNative());
-                m_HiZDescriptorPool.UpdateStorageTexture(m_HiZStorageSet, 0, 0, destination->GetUAV());
+                auto* textureSet = m_HiZTextureSets[level];
+                auto* storageSet = m_HiZStorageSets[level];
+                if (!textureSet || !storageSet ||
+                    !m_HiZDescriptorPool.UpdateTexture(textureSet, 0, 0, source->GetSRV()) ||
+                    !m_HiZDescriptorPool.UpdateSampler(textureSet, 1, 0, m_HiZSampler.GetNative()) ||
+                    !m_HiZDescriptorPool.UpdateStorageTexture(storageSet, 0, 0, destination->GetUAV())) return;
                 Commands().SetPipeline(m_HiZPipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_HiZPipelineLayout);
                 Commands().SetRootDescriptor(0, m_HiZConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
                 m_HiZDescriptorPool.Bind(Commands().GetNative());
-                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_HiZTextureSet, nri::BindPoint::COMPUTE);
-                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_HiZStorageSet, nri::BindPoint::COMPUTE);
+                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, textureSet, nri::BindPoint::COMPUTE);
+                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, storageSet, nri::BindPoint::COMPUTE);
                 Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1);
             }
 

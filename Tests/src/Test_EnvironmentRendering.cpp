@@ -156,10 +156,13 @@ bool Native(RHIType backend) {
     const size_t center=(width/2*width+width/2)*4;
     CHECK(red[0]>red[2]+40&&red[center]>red[center+2]+40); // sky and metallic specular receive HDR
     CHECK(PPM("red.ppm",red,width));
-    // M14-U3 infrastructure smoke gate: depth-backed GTAO pass runs before
-    // tone mapping/FXAA and preserves a valid native frame.
+    // M14-U4 Occlusion verification: Dedicated compute GTAO & directional contact shadows
     settings.EnableGTAO=true; settings.EnableContactShadows=true; auto gtao=render();
     CHECK(!gtao.empty()&&gtao.size()==red.size());
+    settings.EnableGTAO=true; settings.EnableContactShadows=false; auto gtaoOnly=render();
+    CHECK(!gtaoOnly.empty()&&gtaoOnly.size()==red.size());
+    settings.EnableGTAO=false; settings.EnableContactShadows=true; auto contactOnly=render();
+    CHECK(!contactOnly.empty()&&contactOnly.size()==red.size());
     settings.EnableGTAO=false; settings.EnableContactShadows=false;
     settings.EnableSSR=true; auto ssr=render();
     CHECK(!ssr.empty()&&ssr.size()==red.size());

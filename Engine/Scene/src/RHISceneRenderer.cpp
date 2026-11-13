@@ -248,6 +248,36 @@ namespace Axle {
 
         if (!m_FXAAConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIFXAAConstants), RHIMemoryLocation::HostUpload, "FXAAConstantsBuffer"))) return false;
 
+        // Initialize Ground Truth Ambient Occlusion (GTAO) & Contact Shadows Pipeline & Resources
+        if (!CompileGTAOShaders(device) || !CreateGTAOPipelineLayout(device) || !CreateGTAOPipeline(device)) return false;
+
+        if (!m_GTAOSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Linear Clamp Sampler for GTAO.");
+            return false;
+        }
+
+        RHIDescriptorPoolDesc gtaoPoolDesc;
+        gtaoPoolDesc.MaxDescriptorSets = 16;
+        gtaoPoolDesc.MaxTextures = 64;
+        gtaoPoolDesc.MaxSamplers = 16;
+        gtaoPoolDesc.MaxStorageTextures = 16;
+        gtaoPoolDesc.MaxConstantBuffers = 16;
+        if (!m_GTAODescriptorPool.Init(gtaoPoolDesc)) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize GTAO Descriptor Pool!");
+            return false;
+        } else {
+            m_GTAOComputeTextureSet = m_GTAODescriptorPool.AllocateDescriptorSet(m_GTAOComputePipelineLayout, 0);
+            m_GTAOComputeStorageSet = m_GTAODescriptorPool.AllocateDescriptorSet(m_GTAOComputePipelineLayout, 1);
+            m_GTAOApplyDescriptorSet = m_GTAODescriptorPool.AllocateDescriptorSet(m_GTAOApplyPipelineLayout, 0);
+            if (!m_GTAOComputeTextureSet || !m_GTAOComputeStorageSet || !m_GTAOApplyDescriptorSet) return false;
+            if (m_GTAOSampler.IsValid()) {
+                m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative());
+                m_GTAODescriptorPool.UpdateSampler(m_GTAOApplyDescriptorSet, 3, 0, m_GTAOSampler.GetNative());
+            }
+        }
+
+        if (!m_GTAOConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIGTAOConstants), RHIMemoryLocation::HostUpload, "GTAOConstantsBuffer"))) return false;
+
         // Initialize GPU Instanced Particle VFX Renderer
         m_ParticleRenderer = std::make_unique<RHIParticleRenderer>();
         if (!m_ParticleRenderer->Init(device)) {
@@ -309,6 +339,18 @@ namespace Axle {
         m_FXAADescriptorPool.Shutdown();
         m_FXAASampler.Shutdown();
         m_IntermediateFXAATarget = nullptr;
+
+        m_GTAOComputePipeline = nullptr;
+        m_GTAOApplyPipelineSDR = nullptr;
+        m_GTAOApplyPipelineHDR = nullptr;
+        m_GTAOComputePipelineLayout.Shutdown();
+        m_GTAOApplyPipelineLayout.Shutdown();
+        m_GTAOConstantBuffer.Shutdown();
+        m_GTAOComputeTextureSet = nullptr;
+        m_GTAOComputeStorageSet = nullptr;
+        m_GTAOApplyDescriptorSet = nullptr;
+        m_GTAODescriptorPool.Shutdown();
+        m_GTAOSampler.Shutdown();
         m_MSAAColorTarget = nullptr;
         m_MSAADepthTarget = nullptr;
         m_CurrentMSAASamples = 1;
@@ -946,6 +988,221 @@ namespace Axle {
         return m_FXAAPipelineSDR != nullptr && m_FXAAPipelineHDR != nullptr;
     }
 
+    bool RHISceneRenderer::CompileGTAOShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        auto shaderPath = std::filesystem::path("Engine/Resources/Shaders/GTAO.hlsl");
+        std::string shaderSource;
+        if (std::filesystem::exists(shaderPath)) {
+            std::ifstream file(shaderPath);
+            if (file.is_open()) {
+                std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+            }
+        }
+        if (shaderSource.empty()) {
+            shaderPath = std::filesystem::current_path() / "Engine" / "Resources" / "Shaders" / "GTAO.hlsl";
+            if (std::filesystem::exists(shaderPath)) {
+                std::ifstream file(shaderPath);
+                if (file.is_open()) {
+                    std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+                }
+            }
+        }
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate GTAO.hlsl!");
+            return false;
+        }
+
+        RHIShaderFormat format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+
+        // 1. Compute Shader: CSMain
+        RHIShaderCompileDesc csDesc;
+        csDesc.Source = shaderSource;
+        csDesc.SourcePath = PathToUtf8(shaderPath);
+        csDesc.EntryPoint = "CSMain";
+        csDesc.Stage = RHIShaderStage::Compute;
+        csDesc.HLSLVersion = "2021";
+        csDesc.ShaderModel = "6_0";
+        csDesc.Format = format;
+        csDesc.Optimization = true;
+
+        auto csRes = compiler.Compile(csDesc);
+        if (!csRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile GTAO CS: {0}", csRes.ErrorMessage);
+            return false;
+        }
+        m_GTAOComputeShader = csRes.Bytecode;
+
+        // 2. Vertex Shader: VSMain
+        RHIShaderCompileDesc vsDesc = csDesc;
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile GTAO VS: {0}", vsRes.ErrorMessage);
+            return false;
+        }
+        m_GTAOApplyVertexShader = vsRes.Bytecode;
+
+        // 3. Pixel Shader: PSMain
+        RHIShaderCompileDesc psDesc = csDesc;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = RHIShaderStage::Fragment;
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile GTAO PS: {0}", psRes.ErrorMessage);
+            return false;
+        }
+        m_GTAOApplyPixelShader = psRes.Bytecode;
+
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateGTAOPipelineLayout(RHIDevice& device) {
+        // 1. Compute Pipeline Layout:
+        // Root Descriptor [0] b0 space 0: 256-byte RHIGTAOConstants
+        nri::RootDescriptorDesc compRootDesc = {};
+        compRootDesc.registerIndex = 0;
+        compRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        compRootDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        // Set 0 (space 1):
+        // Range 0: t0 (Depth) -> TEXTURE
+        // Range 1: t1 (Normal) -> TEXTURE
+        // Range 2: s0 (Linear Sampler) -> SAMPLER
+        nri::DescriptorRangeDesc compTexRanges[3] = {};
+        compTexRanges[0].baseRegisterIndex = 0;
+        compTexRanges[0].descriptorNum = 1;
+        compTexRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        compTexRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        compTexRanges[1].baseRegisterIndex = 1;
+        compTexRanges[1].descriptorNum = 1;
+        compTexRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
+        compTexRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        compTexRanges[2].baseRegisterIndex = 0;
+        compTexRanges[2].descriptorNum = 1;
+        compTexRanges[2].descriptorType = nri::DescriptorType::SAMPLER;
+        compTexRanges[2].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compTexRanges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        // Set 1 (space 2):
+        // Range 0: u0 (Storage Output) -> STORAGE_TEXTURE
+        nri::DescriptorRangeDesc compStorageRanges[1] = {};
+        compStorageRanges[0].baseRegisterIndex = 0;
+        compStorageRanges[0].descriptorNum = 1;
+        compStorageRanges[0].descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        compStorageRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        compStorageRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc compDescSets[2] = {};
+        compDescSets[0].registerSpace = 1;
+        compDescSets[0].ranges = compTexRanges;
+        compDescSets[0].rangeNum = 3;
+
+        compDescSets[1].registerSpace = 2;
+        compDescSets[1].ranges = compStorageRanges;
+        compDescSets[1].rangeNum = 1;
+
+        nri::PipelineLayoutDesc compLayoutDesc = {};
+        compLayoutDesc.rootRegisterSpace = 0;
+        compLayoutDesc.rootDescriptors = &compRootDesc;
+        compLayoutDesc.rootDescriptorNum = 1;
+        compLayoutDesc.descriptorSets = compDescSets;
+        compLayoutDesc.descriptorSetNum = 2;
+        compLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        if (!m_GTAOComputePipelineLayout.Init(compLayoutDesc)) return false;
+
+        // 2. Apply Pipeline Layout:
+        // Root Descriptor [0] b0 space 0: 256-byte RHIGTAOConstants
+        nri::RootDescriptorDesc applyRootDesc = {};
+        applyRootDesc.registerIndex = 0;
+        applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        applyRootDesc.shaderStages = nri::StageBits::ALL;
+
+        // Descriptor Set (space 1):
+        // Range 0: t0 (Depth) -> TEXTURE
+        // Range 1: t1 (Occlusion Texture) -> TEXTURE
+        // Range 2: t2 (Scene Color) -> TEXTURE
+        // Range 3: s0 (Sampler) -> SAMPLER
+        nri::DescriptorRangeDesc applyRanges[4] = {};
+        applyRanges[0].baseRegisterIndex = 0;
+        applyRanges[0].descriptorNum = 1;
+        applyRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[1].baseRegisterIndex = 1;
+        applyRanges[1].descriptorNum = 1;
+        applyRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[2].baseRegisterIndex = 2;
+        applyRanges[2].descriptorNum = 1;
+        applyRanges[2].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[3].baseRegisterIndex = 0;
+        applyRanges[3].descriptorNum = 1;
+        applyRanges[3].descriptorType = nri::DescriptorType::SAMPLER;
+        applyRanges[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[3].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc applyDescSet = {};
+        applyDescSet.registerSpace = 1;
+        applyDescSet.ranges = applyRanges;
+        applyDescSet.rangeNum = 4;
+
+        nri::PipelineLayoutDesc applyLayoutDesc = {};
+        applyLayoutDesc.rootRegisterSpace = 0;
+        applyLayoutDesc.rootDescriptors = &applyRootDesc;
+        applyLayoutDesc.rootDescriptorNum = 1;
+        applyLayoutDesc.descriptorSets = &applyDescSet;
+        applyLayoutDesc.descriptorSetNum = 1;
+        applyLayoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+
+        return m_GTAOApplyPipelineLayout.Init(applyLayoutDesc);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateGTAOApplyPipeline(nri::Format colorFormat) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_GTAOApplyPipelineLayout;
+        gfxDesc.Shaders = { m_GTAOApplyVertexShader, m_GTAOApplyPixelShader };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+
+        gfxDesc.DepthStencil.DepthTestEnable = false;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+
+        auto& cache = RHIPipelineCache::Get();
+        return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    bool RHISceneRenderer::CreateGTAOPipeline(RHIDevice& device) {
+        auto& cache = RHIPipelineCache::Get();
+        RHIComputePipelineDesc compDesc;
+        compDesc.Layout = &m_GTAOComputePipelineLayout;
+        compDesc.ComputeShader = m_GTAOComputeShader;
+        m_GTAOComputePipeline = cache.GetOrCreateComputePipeline(compDesc);
+
+        m_GTAOApplyPipelineSDR = GetOrCreateGTAOApplyPipeline(nri::Format::RGBA8_UNORM);
+        m_GTAOApplyPipelineHDR = GetOrCreateGTAOApplyPipeline(nri::Format::RGBA16_SFLOAT);
+
+        return m_GTAOComputePipeline != nullptr && m_GTAOApplyPipelineSDR != nullptr && m_GTAOApplyPipelineHDR != nullptr;
+    }
+
     void RHISceneRenderer::SetRenderTargetFormat(RHI::RHITextureFormat colorFormat, RHI::RHITextureFormat depthFormat) {
         m_CurrentColorFormat = RHI::ToNRIFormat(colorFormat);
         m_CurrentDepthFormat = RHI::ToNRIFormat(depthFormat);
@@ -1260,6 +1517,8 @@ namespace Axle {
         targetDesc.ColorFormat = FromNRIFormat(m_CurrentColorFormat); targetDesc.DepthFormat = FromNRIFormat(m_CurrentDepthFormat);
         targetDesc.EnableDepth = sceneDepthTexture != nullptr; targetDesc.Samples = activeSampleCount;
         targetDesc.HDR = useToneMap; targetDesc.FXAA = useFXAA; targetDesc.OwnPrimary = false;
+        targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
+        targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
         if (viewTargets) {
             auto expected = targetDesc; expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
             expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
@@ -1325,10 +1584,12 @@ namespace Axle {
         const auto opaqueColor = copyRefraction ? graph.Import("OpaqueColor", m_OpaqueSceneColor->GetNative()) : output;
         const auto opaqueDepth = copyRefraction ? graph.Import("OpaqueDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto particleDepthImage = copyParticleDepth ? graph.Import("ParticleDepth", m_ParticleSceneDepth->GetNative()) : sceneDepth;
-        const bool useGTAO = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR) && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
-            m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid();
+        const bool useGTAO = (settings.EnableGTAO || settings.EnableContactShadows) && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+            m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
+            m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
         const auto gtaoInput = useGTAO ? graph.Import("GTAOInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto gtaoDepth = useGTAO ? graph.Import("GTAODepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
+        const auto gtaoStorage = useGTAO ? graph.Import("GTAOStorage", m_ScreenStorageTarget->GetNative()) : output;
         auto attachments = [&](Load load) {
             std::vector<Graph::Use> uses{{sceneColor, Layout::ColorAttachment, Access::Write, load}};
             if (sceneDepthDSV) uses.push_back({sceneDepth, Layout::DepthStencilWrite, Access::Write, load});
@@ -1365,8 +1626,14 @@ namespace Axle {
         if (useGTAO) {
             graph.AddPass("GTAOCopy", {{sceneColor,Layout::CopySource}, {gtaoInput,Layout::CopyDest,Access::Write},
                 {sceneDepth,Layout::CopySource}, {gtaoDepth,Layout::CopyDest,Access::Write}});
-            graph.AddPass("GTAO", {{gtaoInput,Layout::ShaderResource}, {sceneColor,Layout::ColorAttachment,Access::Write,Load::Clear},
-                {gtaoDepth,Layout::ShaderResource}});
+            graph.AddPass("GTAOCompute", {
+                {gtaoDepth, Layout::ShaderResource},
+                {gtaoStorage, Layout::ShaderResourceStorage, Access::Write}});
+            graph.AddPass("GTAOApply", {
+                {gtaoDepth, Layout::ShaderResource},
+                {gtaoStorage, Layout::ShaderResource},
+                {gtaoInput, Layout::ShaderResource},
+                {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
         }
         if (useToneMap) graph.AddPass("ToneMapping", {
             {hdr,Layout::ShaderResource}, {fxaa,Layout::ColorAttachment,Access::Write,Load::Clear}});
@@ -1895,17 +2162,72 @@ namespace Axle {
             if (!beginPass("GTAOCopy")) return;
             Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
             Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
-            if (!beginPass("GTAO")) return;
-            RHIFXAAConstants gtaoConstants{};
+
+            if (!beginPass("GTAOCompute")) return;
+            RHIGTAOConstants gtaoConstants{};
+            gtaoConstants.InvProjection = glm::inverse(camera.GetProjectionMatrix());
+            gtaoConstants.View = camera.GetViewMatrix();
             gtaoConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
                 1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
-            const float mode = settings.EnableSSR ? 4.0f : (settings.EnableGTAO ? (settings.EnableContactShadows ? 3.0f : 1.0f) : 2.0f);
-            gtaoConstants.GTAOParams = glm::vec4(mode, settings.GTAORadiusPixels, settings.GTAOStrength, 0.0025f);
-            gtaoConstants.ContactParams = glm::vec4(0.7071f, -0.7071f,
-                settings.EnableSSR ? settings.SSRLengthPixels : settings.ContactShadowLengthPixels,
-                settings.EnableSSR ? settings.SSRStrength : settings.ContactShadowStrength);
-            if (!RenderFXAA(Commands(), m_OpaqueSceneColor->GetSRV(), sceneTargetTexture, sceneTargetRTV,
-                width, height, sceneTargetFormat, gtaoConstants, m_OpaqueSceneDepth->GetSRV())) return;
+            gtaoConstants.GTAOParams = glm::vec4(settings.GTAORadiusPixels, settings.EnableGTAO ? settings.GTAOStrength : 0.0f, 0.0025f, 2.0f);
+            if (world.DirectionalLight && settings.EnableContactShadows) {
+                glm::vec3 sunDir = -glm::normalize(world.DirectionalLight->Direction);
+                glm::vec3 sunDirView = glm::mat3(camera.GetViewMatrix()) * sunDir;
+                gtaoConstants.SunDirView = glm::vec4(sunDirView, 1.0f);
+                gtaoConstants.ContactParams = glm::vec4(settings.ContactShadowLengthPixels, 16.0f, settings.ContactShadowStrength, 0.02f);
+            } else {
+                gtaoConstants.SunDirView = glm::vec4(0.0f);
+                gtaoConstants.ContactParams = glm::vec4(0.0f);
+            }
+            if (!m_GTAOConstantBuffer.UpdateData(&gtaoConstants, sizeof(RHIGTAOConstants))) return;
+
+            m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
+            nri::Descriptor* normalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : m_OpaqueSceneDepth->GetSRV();
+            m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 1, 0, normalSRV);
+            m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative());
+            m_GTAODescriptorPool.UpdateStorageTexture(m_GTAOComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
+
+            Commands().SetPipeline(m_GTAOComputePipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_GTAOComputePipelineLayout);
+            Commands().SetRootDescriptor(0, m_GTAOConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+            m_GTAODescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_GTAOComputeTextureSet, nri::BindPoint::COMPUTE);
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_GTAOComputeStorageSet, nri::BindPoint::COMPUTE);
+            Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1);
+
+            if (!beginPass("GTAOApply")) return;
+            m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
+            m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV());
+            m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV());
+            m_GTAODescriptorPool.UpdateSampler(m_GTAOApplyDescriptorSet, 3, 0, m_GTAOSampler.GetNative());
+
+            nri::Pipeline* applyPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_GTAOApplyPipelineHDR)
+                ? m_GTAOApplyPipelineHDR : m_GTAOApplyPipelineSDR;
+            if (!applyPipeline) return;
+
+            nri::AttachmentDesc applyColorAttachment = {};
+            applyColorAttachment.descriptor = sceneTargetRTV;
+            applyColorAttachment.loadOp = nri::LoadOp::CLEAR;
+            applyColorAttachment.storeOp = nri::StoreOp::STORE;
+            applyColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+            nri::RenderingDesc applyRenderingDesc = {};
+            applyRenderingDesc.colors = &applyColorAttachment;
+            applyRenderingDesc.colorNum = 1;
+
+            Commands().BeginRendering(applyRenderingDesc);
+            nri::Viewport applyVp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+            Commands().SetViewport(applyVp);
+            nri::Rect applyScissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
+            Commands().SetScissor(applyScissor);
+
+            Commands().SetPipeline(applyPipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_GTAOApplyPipelineLayout);
+            Commands().SetRootDescriptor(0, m_GTAOConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
+            m_GTAODescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_GTAOApplyDescriptorSet, nri::BindPoint::GRAPHICS);
+            Commands().Draw(3, 1, 0, 0);
+            Commands().EndRendering();
         }
 
         // 8. Post-Processing Tone Mapping Pass

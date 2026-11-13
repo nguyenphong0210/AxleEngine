@@ -269,6 +269,8 @@ namespace Axle {
                 RHI::RHIViewTargetDesc desc;
                 desc.Width = request.Width; desc.Height = request.Height;
                 desc.Samples = request.Settings.MSAASamples; desc.HDR = request.Settings.EnableToneMapping; desc.FXAA = request.Settings.EnableFXAA;
+                desc.EnableNormal = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows || request.Settings.EnableSSR);
+                desc.EnableScreenStorage = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows || request.Settings.EnableSSR);
                 if (!m_DefaultMainTargets || !m_DefaultMainTargets->IsValid() || m_DefaultMainTargets->GetDesc() != desc) {
                     auto candidate = std::make_shared<RHI::RHIViewTargets>();
                     if (!candidate->Configure(desc)) return fail("Default view target creation failed; previous generation retained");

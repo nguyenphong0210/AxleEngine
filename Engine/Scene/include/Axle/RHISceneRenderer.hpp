@@ -58,13 +58,23 @@ namespace Axle {
     };
     static_assert(sizeof(RHIToneMappingConstants) == 256, "RHIToneMappingConstants must be 256 bytes aligned!");
 
+    // 256-byte CBV aligned constants for GTAO & Contact Shadows pass
+    struct alignas(256) RHIGTAOConstants {
+        glm::mat4 InvProjection{ 1.0f };                                          // 64 bytes
+        glm::mat4 View{ 1.0f };                                                   // 64 bytes
+        glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // 16 bytes: (width, height, 1/w, 1/h)
+        glm::vec4 GTAOParams{ 8.0f, 1.0f, 0.0025f, 2.0f };                        // 16 bytes: (radius px, strength, depth bias, power)
+        glm::vec4 SunDirView{ 0.0f, 0.0f, 0.0f, 0.0f };                           // 16 bytes: (xyz: view-space dir, w: enabled)
+        glm::vec4 ContactParams{ 16.0f, 16.0f, 1.0f, 0.02f };                     // 16 bytes: (max dist px, steps, strength, thickness)
+        glm::vec4 Reserved[4]{};                                                  // 64 bytes padding -> Total: 256 bytes
+    };
+    static_assert(sizeof(RHIGTAOConstants) == 256, "RHIGTAOConstants must be 256 bytes aligned!");
+
     // 256-byte CBV aligned constants for FXAA 3.11 post-processing pass
     struct alignas(256) RHIFXAAConstants {
         glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // (width, height, 1/w, 1/h)
         glm::vec4 FXAAParams{ 0.75f, 0.166f, 0.0833f, 0.0f };                     // (subpixQuality, edgeThreshold, edgeThresholdMin, reserved)
-        glm::vec4 GTAOParams{ 0.0f, 8.0f, 1.0f, 0.0025f };                        // x: enable, y: radius px, z: strength, w: depth bias
-        glm::vec4 ContactParams{ 0.7071f, -0.7071f, 32.0f, 1.0f };               // xy: screen ray, z: length px, w: strength
-        glm::vec4 Reserved[12]{};                                                 // 192 bytes padding -> Total: 256 bytes
+        glm::vec4 Reserved[14]{};                                                 // 224 bytes padding -> Total: 256 bytes
     };
     static_assert(sizeof(RHIFXAAConstants) == 256, "RHIFXAAConstants must be 256 bytes aligned!");
 
@@ -298,6 +308,11 @@ namespace Axle {
         bool CreateFXAAPipelineLayout(RHI::RHIDevice& device);
         bool CreateFXAAPipeline(RHI::RHIDevice& device);
 
+        bool CompileGTAOShaders(RHI::RHIDevice& device);
+        bool CreateGTAOPipelineLayout(RHI::RHIDevice& device);
+        bool CreateGTAOPipeline(RHI::RHIDevice& device);
+        nri::Pipeline* GetOrCreateGTAOApplyPipeline(nri::Format colorFormat);
+
     private:
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
@@ -398,6 +413,22 @@ namespace Axle {
         RHI::RHISampler m_FXAASampler;
         RHI::RHIDescriptorPool m_FXAADescriptorPool;
         nri::DescriptorSet* m_FXAADescriptorSet = nullptr;
+
+        // Ground Truth Ambient Occlusion (GTAO) & Contact Shadows Resources
+        RHI::RHIPipelineLayout m_GTAOComputePipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_GTAOComputePipeline;
+        RHI::RHIPipelineLayout m_GTAOApplyPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_GTAOApplyPipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_GTAOApplyPipelineHDR;
+        RHI::RHIBuffer m_GTAOConstantBuffer;
+        RHI::RHIShaderBytecode m_GTAOComputeShader;
+        RHI::RHIShaderBytecode m_GTAOApplyVertexShader;
+        RHI::RHIShaderBytecode m_GTAOApplyPixelShader;
+        RHI::RHISampler m_GTAOSampler;
+        RHI::RHIDescriptorPool m_GTAODescriptorPool;
+        nri::DescriptorSet* m_GTAOComputeTextureSet = nullptr;
+        nri::DescriptorSet* m_GTAOComputeStorageSet = nullptr;
+        nri::DescriptorSet* m_GTAOApplyDescriptorSet = nullptr;
 
         // Intermediate Floating-point HDR Target for 2-pass Scene -> ToneMap execution
         RHI::RHITexture* m_IntermediateHDRTarget = nullptr;

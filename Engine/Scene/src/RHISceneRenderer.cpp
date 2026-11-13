@@ -26,6 +26,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <array>
 
 namespace Axle {
 
@@ -308,6 +309,24 @@ namespace Axle {
 
         if (!m_SSRConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISSRConstants), RHIMemoryLocation::HostUpload, "SSRConstantsBuffer"))) return false;
 
+        // Initialize the independently allocated Hi-Z reduction levels used by
+        // SSR. Keeping each level as its own storage texture avoids backend
+        // specific multi-mip UAV view restrictions.
+        if (!CompileHiZShaders(device) || !CreateHiZPipelineLayout(device) || !CreateHiZPipeline(device)) return false;
+        if (!m_HiZSampler.Init(RHISamplerDesc::Point(RHIAddressMode::ClampToEdge))) return false;
+        RHIDescriptorPoolDesc hizPoolDesc;
+        hizPoolDesc.MaxDescriptorSets = 16;
+        hizPoolDesc.MaxTextures = 16;
+        hizPoolDesc.MaxSamplers = 16;
+        hizPoolDesc.MaxStorageTextures = 16;
+        hizPoolDesc.MaxConstantBuffers = 16;
+        if (!m_HiZDescriptorPool.Init(hizPoolDesc)) return false;
+        m_HiZTextureSet = m_HiZDescriptorPool.AllocateDescriptorSet(m_HiZPipelineLayout, 0);
+        m_HiZStorageSet = m_HiZDescriptorPool.AllocateDescriptorSet(m_HiZPipelineLayout, 1);
+        if (!m_HiZTextureSet || !m_HiZStorageSet) return false;
+        m_HiZDescriptorPool.UpdateSampler(m_HiZTextureSet, 1, 0, m_HiZSampler.GetNative());
+        if (!m_HiZConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIHiZConstants), RHIMemoryLocation::HostUpload, "HiZConstantsBuffer"))) return false;
+
         // Initialize Volumetric Fog & Atmospheric Participating Media Resources
         if (!CompileFogShaders(device) || !CreateFogPipelineLayout(device) || !CreateFogPipeline(device)) return false;
 
@@ -481,6 +500,14 @@ namespace Axle {
         m_SSRApplyDescriptorSet = nullptr;
         m_SSRDescriptorPool.Shutdown();
         m_SSRSampler.Shutdown();
+
+        m_HiZPipeline = nullptr;
+        m_HiZPipelineLayout.Shutdown();
+        m_HiZConstantBuffer.Shutdown();
+        m_HiZTextureSet = nullptr;
+        m_HiZStorageSet = nullptr;
+        m_HiZDescriptorPool.Shutdown();
+        m_HiZSampler.Shutdown();
 
         m_FogComputePipeline = nullptr;
         m_FogApplyPipelineSDR = nullptr;
@@ -1434,24 +1461,24 @@ namespace Axle {
         compRootDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
 
         // Set 0 (space 1):
-        // Range 0: t0 (Depth) -> TEXTURE
-        // Range 1: t1 (Normal) -> TEXTURE
-        // Range 2: t2 (Color) -> TEXTURE
+        // Range 0: t0..t7 (Hi-Z depth mips) -> TEXTURE
+        // Range 1: t8 (Normal) -> TEXTURE
+        // Range 2: t9 (Color) -> TEXTURE
         // Range 3: s0 (Linear Sampler) -> SAMPLER
         nri::DescriptorRangeDesc compTexRanges[4] = {};
         compTexRanges[0].baseRegisterIndex = 0;
-        compTexRanges[0].descriptorNum = 1;
+        compTexRanges[0].descriptorNum = 8;
         compTexRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
         compTexRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
         compTexRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        compTexRanges[1].baseRegisterIndex = 1;
+        compTexRanges[1].baseRegisterIndex = 8;
         compTexRanges[1].descriptorNum = 1;
         compTexRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
         compTexRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
         compTexRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        compTexRanges[2].baseRegisterIndex = 2;
+        compTexRanges[2].baseRegisterIndex = 9;
         compTexRanges[2].descriptorNum = 1;
         compTexRanges[2].descriptorType = nri::DescriptorType::TEXTURE;
         compTexRanges[2].shaderStages = nri::StageBits::COMPUTE_SHADER;
@@ -1583,6 +1610,83 @@ namespace Axle {
         m_SSRApplyPipelineHDR = GetOrCreateSSRApplyPipeline(nri::Format::RGBA16_SFLOAT);
 
         return m_SSRComputePipeline != nullptr && m_SSRApplyPipelineSDR != nullptr && m_SSRApplyPipelineHDR != nullptr;
+    }
+
+    bool RHISceneRenderer::CompileHiZShaders(RHIDevice& device) {
+        auto shaderPath = FindShaderPath("HiZ.hlsl");
+        if (shaderPath.empty()) return false;
+        std::ifstream file(shaderPath);
+        std::stringstream sourceStream;
+        sourceStream << file.rdbuf();
+        const auto source = sourceStream.str();
+        if (source.empty()) return false;
+
+        RHIShaderCompileDesc desc;
+        desc.Source = source;
+        desc.SourcePath = PathToUtf8(shaderPath);
+        desc.EntryPoint = "CSMain";
+        desc.Stage = RHIShaderStage::Compute;
+        desc.HLSLVersion = "2021";
+        desc.ShaderModel = "6_0";
+        desc.Format = device.GetCapabilities().ActiveBackend == RHIType::Vulkan ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        desc.Optimization = true;
+        const auto result = RHIShaderCompiler::Get().Compile(desc);
+        if (!result.Success) return false;
+        m_HiZComputeShader = result.Bytecode;
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateHiZPipelineLayout(RHIDevice& device) {
+        (void)device;
+        nri::RootDescriptorDesc root{};
+        root.registerIndex = 0;
+        root.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        root.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        nri::DescriptorRangeDesc textureRanges[2]{};
+        textureRanges[0].baseRegisterIndex = 0;
+        textureRanges[0].descriptorNum = 1;
+        textureRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        textureRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        textureRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        textureRanges[1].baseRegisterIndex = 0;
+        textureRanges[1].descriptorNum = 1;
+        textureRanges[1].descriptorType = nri::DescriptorType::SAMPLER;
+        textureRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        textureRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorRangeDesc storageRange{};
+        storageRange.baseRegisterIndex = 0;
+        storageRange.descriptorNum = 1;
+        storageRange.descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        storageRange.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        storageRange.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc sets[2]{};
+        sets[0].registerSpace = 1;
+        sets[0].ranges = textureRanges;
+        sets[0].rangeNum = 2;
+        sets[1].registerSpace = 2;
+        sets[1].ranges = &storageRange;
+        sets[1].rangeNum = 1;
+
+        nri::PipelineLayoutDesc layout{};
+        layout.rootRegisterSpace = 0;
+        layout.rootDescriptors = &root;
+        layout.rootDescriptorNum = 1;
+        layout.descriptorSets = sets;
+        layout.descriptorSetNum = 2;
+        layout.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        return m_HiZPipelineLayout.Init(layout);
+    }
+
+    bool RHISceneRenderer::CreateHiZPipeline(RHIDevice& device) {
+        (void)device;
+        RHIComputePipelineDesc desc;
+        desc.Layout = &m_HiZPipelineLayout;
+        desc.ComputeShader = m_HiZComputeShader;
+        m_HiZPipeline = RHIPipelineCache::Get().GetOrCreateComputePipeline(desc);
+        return m_HiZPipeline != nullptr;
     }
 
     bool RHISceneRenderer::CompileFogShaders(RHIDevice& device) {
@@ -2431,6 +2535,7 @@ namespace Axle {
         targetDesc.HDR = useToneMap; targetDesc.FXAA = useFXAA; targetDesc.OwnPrimary = false;
         targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
         targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
+        targetDesc.EnableHiZ = settings.EnableSSR;
         if (settings.EnableTAA) targetDesc.HistoryCount = 2;
         if (viewTargets) {
             auto expected = targetDesc; expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
@@ -2511,6 +2616,14 @@ namespace Axle {
         const auto ssrInput = useSSR ? graph.Import("SSRInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto ssrDepth = useSSR ? graph.Import("SSRDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto ssrStorage = useSSR ? graph.Import("SSRStorage", m_ScreenStorageTarget->GetNative()) : output;
+        std::array<Graph::Resource, 8> hizResources{};
+        if (useSSR) {
+            for (uint32_t level = 0; level < hizResources.size(); ++level) {
+                auto* hiz = viewTargets->GetHiZ(level);
+                if (!hiz || !hiz->IsValid()) { rejectTargets(); return; }
+                hizResources[level] = graph.Import("HiZ" + std::to_string(level), hiz->GetNative());
+            }
+        }
 
         const bool useFog = settings.EnableVolumetricFog && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_FogComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
@@ -2584,6 +2697,11 @@ namespace Axle {
         if (useSSR) {
             graph.AddPass("SSRCopy", {{sceneColor,Layout::CopySource}, {ssrInput,Layout::CopyDest,Access::Write},
                 {sceneDepth,Layout::CopySource}, {ssrDepth,Layout::CopyDest,Access::Write}});
+            for (uint32_t level = 0; level < hizResources.size(); ++level) {
+                graph.AddPass("HiZ" + std::to_string(level), {
+                    {level == 0 ? ssrDepth : hizResources[level - 1], Layout::ShaderResource},
+                    {hizResources[level], Layout::ShaderResourceStorage, Access::Write}});
+            }
             graph.AddPass("SSRCompute", {
                 {ssrDepth, Layout::ShaderResource},
                 {ssrInput, Layout::ShaderResource},
@@ -3228,6 +3346,32 @@ namespace Axle {
             Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
             Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
 
+            // Build the conservative min-depth pyramid before SSR traversal.
+            for (uint32_t level = 0; level < 8; ++level) {
+                if (!beginPass("HiZ" + std::to_string(level))) return;
+                auto* source = level == 0 ? m_OpaqueSceneDepth : viewTargets->GetHiZ(level - 1);
+                auto* destination = viewTargets->GetHiZ(level);
+                if (!source || !destination || !source->IsValid() || !destination->IsValid()) return;
+                RHIHiZConstants hizConstants{};
+                hizConstants.SourceSize = glm::vec4(static_cast<float>(source->GetWidth()), static_cast<float>(source->GetHeight()),
+                    1.0f / static_cast<float>(source->GetWidth()), 1.0f / static_cast<float>(source->GetHeight()));
+                hizConstants.DestinationSize = glm::vec4(static_cast<float>(destination->GetWidth()), static_cast<float>(destination->GetHeight()),
+                    1.0f / static_cast<float>(destination->GetWidth()), 1.0f / static_cast<float>(destination->GetHeight()));
+                hizConstants.Params.x = level == 0 ? 1.0f : 0.0f;
+                hizConstants.Params.y = static_cast<float>(level);
+                if (!m_HiZConstantBuffer.UpdateData(&hizConstants, sizeof(RHIHiZConstants))) return;
+                m_HiZDescriptorPool.UpdateTexture(m_HiZTextureSet, 0, 0, source->GetSRV());
+                m_HiZDescriptorPool.UpdateSampler(m_HiZTextureSet, 1, 0, m_HiZSampler.GetNative());
+                m_HiZDescriptorPool.UpdateStorageTexture(m_HiZStorageSet, 0, 0, destination->GetUAV());
+                Commands().SetPipeline(m_HiZPipeline);
+                Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_HiZPipelineLayout);
+                Commands().SetRootDescriptor(0, m_HiZConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+                m_HiZDescriptorPool.Bind(Commands().GetNative());
+                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_HiZTextureSet, nri::BindPoint::COMPUTE);
+                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_HiZStorageSet, nri::BindPoint::COMPUTE);
+                Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1);
+            }
+
             if (!beginPass("SSRCompute")) return;
             RHISSRConstants ssrConstants{};
             ssrConstants.View = camera.GetViewMatrix();
@@ -3251,7 +3395,11 @@ namespace Axle {
 
             if (!m_SSRConstantBuffer.UpdateData(&ssrConstants, sizeof(RHISSRConstants))) return;
 
-            m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
+            for (uint32_t level = 0; level < 8; ++level) {
+                auto* hiz = viewTargets->GetHiZ(level);
+                if (!hiz || !hiz->IsValid()) return;
+                m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 0, level, hiz->GetSRV());
+            }
             nri::Descriptor* ssrNormalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
             m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 1, 0, ssrNormalSRV);
             m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 0, m_OpaqueSceneColor->GetSRV());

@@ -85,6 +85,15 @@ namespace Axle {
     };
     static_assert(sizeof(RHISSRConstants) == 512, "RHISSRConstants must be 512 bytes aligned!");
 
+    // 256-byte CBV aligned constants for one Hi-Z depth reduction level.
+    struct alignas(256) RHIHiZConstants {
+        glm::vec4 SourceSize{ 1.0f, 1.0f, 1.0f, 1.0f }; // source width/height and inverse size
+        glm::vec4 DestinationSize{ 1.0f, 1.0f, 1.0f, 1.0f }; // destination width/height and inverse size
+        glm::vec4 Params{ 0.0f, 0.0f, 0.0f, 0.0f }; // x: source is hardware depth, y: mip level
+        glm::vec4 Reserved[13]{};
+    };
+    static_assert(sizeof(RHIHiZConstants) == 256, "RHIHiZConstants must be 256 bytes aligned!");
+
     // 256-byte CBV aligned constants for Volumetric Fog pass
     struct alignas(256) RHIVolumetricFogConstants {
         glm::mat4 View{ 1.0f };                                    // 64 bytes
@@ -300,6 +309,9 @@ namespace Axle {
         RHI::RHITexture* GetIntermediateFXAATarget() const { return GetActiveTarget(RHI::RHIViewTarget::FXAA); }
         RHI::RHITexture* GetOpaqueNormalTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ScreenNormal); }
         RHI::RHITexture* GetScreenStorageTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ScreenStorage); }
+        RHI::RHITexture* GetHiZTarget(uint32_t level) const {
+            auto targets = m_ActiveViewTargets.lock(); return targets ? targets->GetHiZ(level) : nullptr;
+        }
         RHI::RHITexture* GetHistoryTarget(size_t slot) const { return GetActiveTarget(slot ? RHI::RHIViewTarget::History1 : RHI::RHIViewTarget::History0); }
         uint8_t GetCurrentMSAASamples() const { return m_CurrentMSAASamples; }
 
@@ -380,6 +392,10 @@ namespace Axle {
         bool CreateSSRPipelineLayout(RHI::RHIDevice& device);
         bool CreateSSRPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateSSRApplyPipeline(nri::Format colorFormat);
+
+        bool CompileHiZShaders(RHI::RHIDevice& device);
+        bool CreateHiZPipelineLayout(RHI::RHIDevice& device);
+        bool CreateHiZPipeline(RHI::RHIDevice& device);
 
         bool CompileFogShaders(RHI::RHIDevice& device);
         bool CreateFogPipelineLayout(RHI::RHIDevice& device);
@@ -518,6 +534,17 @@ namespace Axle {
         nri::DescriptorSet* m_SSRComputeTextureSet = nullptr;
         nri::DescriptorSet* m_SSRComputeStorageSet = nullptr;
         nri::DescriptorSet* m_SSRApplyDescriptorSet = nullptr;
+
+        // Hi-Z depth pyramid resources. The view target owns eight reduction
+        // levels; this renderer owns the reduction compute pipeline and sets.
+        RHI::RHIPipelineLayout m_HiZPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_HiZPipeline;
+        RHI::RHIBuffer m_HiZConstantBuffer;
+        RHI::RHIShaderBytecode m_HiZComputeShader;
+        RHI::RHISampler m_HiZSampler;
+        RHI::RHIDescriptorPool m_HiZDescriptorPool;
+        nri::DescriptorSet* m_HiZTextureSet = nullptr;
+        nri::DescriptorSet* m_HiZStorageSet = nullptr;
 
         // Volumetric Fog & Atmospheric Media Resources
         RHI::RHIPipelineLayout m_FogComputePipelineLayout;

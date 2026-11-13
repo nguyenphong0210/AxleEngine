@@ -1,5 +1,6 @@
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
+#include <algorithm>
 
 namespace Axle::RHI {
     bool RHIViewTargets::IsValid() const {
@@ -47,6 +48,20 @@ namespace Axle::RHI {
             auto native = RHITextureDesc::StorageTexture2D(desc.Width, desc.Height, desc.HDR ? RHITextureFormat::RGBA16_FLOAT : desc.ColorFormat, "ViewTarget_ScreenStorage");
             if (!texture->Init(native)) return false;
             candidate.m_Textures[static_cast<size_t>(RHIViewTarget::ScreenStorage)] = std::move(texture);
+        }
+        if (desc.EnableHiZ) {
+            uint32_t mipWidth = desc.Width;
+            uint32_t mipHeight = desc.Height;
+            for (uint32_t level = 0; level < 8; ++level) {
+                auto texture = std::make_unique<RHITexture>();
+                auto native = RHITextureDesc::StorageTexture2D(
+                    std::max(1u, mipWidth), std::max(1u, mipHeight), RHITextureFormat::R32_FLOAT,
+                    "ViewTarget_HiZ" + std::to_string(level));
+                if (!texture->Init(native)) return false;
+                candidate.m_Textures[static_cast<size_t>(RHIViewTarget::HiZ0) + level] = std::move(texture);
+                mipWidth = std::max(1u, mipWidth >> 1);
+                mipHeight = std::max(1u, mipHeight >> 1);
+            }
         }
         for (uint8_t i = 0; i < desc.HistoryCount; ++i)
             if (!create(i ? RHIViewTarget::History1 : RHIViewTarget::History0, sceneColor, 1, false)) return false;

@@ -38,11 +38,34 @@ float SpatialHash(uint2 pixelPos) {
 // Compute Shader (Screen Space Raymarching)
 // =============================================================================
 
-Texture2D<float>    u_ComputeDepth   : register(t0, space1);
-Texture2D<float4>   u_ComputeNormal  : register(t1, space1);
-Texture2D<float4>   u_ComputeColor   : register(t2, space1);
+// Keep each Hi-Z level as a statically bound texture.  Some Vulkan drivers
+// reject descriptor-array reflection unless runtimeDescriptorArray is enabled;
+// the fixed eight-level pyramid is fully portable and still uses one range.
+Texture2D<float>    u_HiZ0           : register(t0, space1);
+Texture2D<float>    u_HiZ1           : register(t1, space1);
+Texture2D<float>    u_HiZ2           : register(t2, space1);
+Texture2D<float>    u_HiZ3           : register(t3, space1);
+Texture2D<float>    u_HiZ4           : register(t4, space1);
+Texture2D<float>    u_HiZ5           : register(t5, space1);
+Texture2D<float>    u_HiZ6           : register(t6, space1);
+Texture2D<float>    u_HiZ7           : register(t7, space1);
+Texture2D<float4>   u_ComputeNormal  : register(t8, space1);
+Texture2D<float4>   u_ComputeColor   : register(t9, space1);
 SamplerState        u_ComputeSampler : register(s0, space1);
 RWTexture2D<float4> u_ComputeOutput  : register(u0, space2);
+
+float SampleHiZ(uint mip, float2 uv) {
+    switch (min(mip, 7u)) {
+        case 0u: return u_HiZ0.SampleLevel(u_ComputeSampler, uv, 0.0);
+        case 1u: return u_HiZ1.SampleLevel(u_ComputeSampler, uv, 0.0);
+        case 2u: return u_HiZ2.SampleLevel(u_ComputeSampler, uv, 0.0);
+        case 3u: return u_HiZ3.SampleLevel(u_ComputeSampler, uv, 0.0);
+        case 4u: return u_HiZ4.SampleLevel(u_ComputeSampler, uv, 0.0);
+        case 5u: return u_HiZ5.SampleLevel(u_ComputeSampler, uv, 0.0);
+        case 6u: return u_HiZ6.SampleLevel(u_ComputeSampler, uv, 0.0);
+        default: return u_HiZ7.SampleLevel(u_ComputeSampler, uv, 0.0);
+    }
+}
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
@@ -52,7 +75,7 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     float2 rcpFrame = u_ScreenSize.zw;
     float2 uv = (float2(pixelPos) + 0.5) * rcpFrame;
 
-    float depth = u_ComputeDepth.SampleLevel(u_ComputeSampler, uv, 0.0);
+    float depth = SampleHiZ(0u, uv);
     if (depth >= 0.9999 || depth <= 0.0) {
         u_ComputeOutput[pixelPos] = float4(0.0, 0.0, 0.0, 0.0);
         return;
@@ -66,10 +89,10 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     if (dot(normalSample.xyz, normalSample.xyz) > 0.01) {
         viewNormal = normalize(mul((float3x3)u_View, normalSample.xyz));
     } else {
-        float3 pR = ReconstructViewPos(uv + float2(rcpFrame.x, 0.0), u_ComputeDepth.SampleLevel(u_ComputeSampler, uv + float2(rcpFrame.x, 0.0), 0.0));
-        float3 pL = ReconstructViewPos(uv - float2(rcpFrame.x, 0.0), u_ComputeDepth.SampleLevel(u_ComputeSampler, uv - float2(rcpFrame.x, 0.0), 0.0));
-        float3 pD = ReconstructViewPos(uv + float2(0.0, rcpFrame.y), u_ComputeDepth.SampleLevel(u_ComputeSampler, uv + float2(0.0, rcpFrame.y), 0.0));
-        float3 pU = ReconstructViewPos(uv - float2(0.0, rcpFrame.y), u_ComputeDepth.SampleLevel(u_ComputeSampler, uv - float2(0.0, rcpFrame.y), 0.0));
+        float3 pR = ReconstructViewPos(uv + float2(rcpFrame.x, 0.0), SampleHiZ(0u, uv + float2(rcpFrame.x, 0.0)));
+        float3 pL = ReconstructViewPos(uv - float2(rcpFrame.x, 0.0), SampleHiZ(0u, uv - float2(rcpFrame.x, 0.0)));
+        float3 pD = ReconstructViewPos(uv + float2(0.0, rcpFrame.y), SampleHiZ(0u, uv + float2(0.0, rcpFrame.y)));
+        float3 pU = ReconstructViewPos(uv - float2(0.0, rcpFrame.y), SampleHiZ(0u, uv - float2(0.0, rcpFrame.y)));
         float3 dx = (abs(pR.z - viewPos.z) < abs(pL.z - viewPos.z)) ? (pR - viewPos) : (viewPos - pL);
         float3 dy = (abs(pD.z - viewPos.z) < abs(pU.z - viewPos.z)) ? (pD - viewPos) : (viewPos - pU);
         viewNormal = normalize(cross(dy, dx));
@@ -102,7 +125,8 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
 
         if (any(rayUV < 0.0) || any(rayUV > 1.0)) break;
 
-        float sampleDepth = u_ComputeDepth.SampleLevel(u_ComputeSampler, rayUV, 0.0);
+        uint hizLevel = min((uint)max(0.0, floor(log2(max(1.0, float(i + 1) / 4.0)))), 7u);
+        float sampleDepth = SampleHiZ(hizLevel, rayUV);
         float3 sampleViewPos = ReconstructViewPos(rayUV, sampleDepth);
 
         float zDiff = sampleViewPos.z - rayPos.z;
@@ -115,7 +139,7 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
                 float3 midPos = (startPos + endPos) * 0.5;
                 float4 midClip = mul(u_Projection, float4(midPos, 1.0));
                 float2 midUV = float2(midClip.x / midClip.w * 0.5 + 0.5, 0.5 - midClip.y / midClip.w * 0.5);
-                float midDepth = u_ComputeDepth.SampleLevel(u_ComputeSampler, midUV, 0.0);
+                float midDepth = SampleHiZ(0u, midUV);
                 float3 midView = ReconstructViewPos(midUV, midDepth);
                 if (midPos.z < midView.z) {
                     endPos = midPos;

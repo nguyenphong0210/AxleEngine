@@ -6,7 +6,8 @@
 namespace Axle::RHI {
     enum class RHIViewTarget : uint8_t {
         Color, Depth, MSAAColor, MSAADepth, HDR, FXAA,
-        OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1, Count
+        OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1,
+        HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, Count
     };
     struct RHIViewTargetDesc {
         uint32_t Width = 1, Height = 1;
@@ -15,7 +16,7 @@ namespace Axle::RHI {
         RHITextureFormat NormalFormat = RHITextureFormat::RGBA16_FLOAT;
         uint8_t Samples = 1, HistoryCount = 0;
         bool EnableDepth = true, HDR = false, FXAA = false, OwnPrimary = true, RenderAuxiliary = true;
-        bool EnableNormal = false, EnableScreenStorage = false;
+        bool EnableNormal = false, EnableScreenStorage = false, EnableHiZ = false;
         bool operator==(const RHIViewTargetDesc&) const = default;
     };
     // One view owns its complete target generation. Reconfiguration constructs
@@ -26,6 +27,9 @@ namespace Axle::RHI {
                        const RHITexture* externalDepth = nullptr);
         RHITexture* Get(RHIViewTarget target) const {
             const auto slot = static_cast<size_t>(target); return slot < m_Textures.size() ? m_Textures[slot].get() : nullptr;
+        }
+        RHITexture* GetHiZ(uint32_t level) const {
+            return level < 8 ? Get(static_cast<RHIViewTarget>(static_cast<uint8_t>(RHIViewTarget::HiZ0) + level)) : nullptr;
         }
         const RHIViewTargetDesc& GetDesc() const { return m_Desc; }
         bool IsValid() const;

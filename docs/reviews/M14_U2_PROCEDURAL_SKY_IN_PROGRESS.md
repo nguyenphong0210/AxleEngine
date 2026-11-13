@@ -34,9 +34,9 @@ Implemented and independently verified. Procedural skies now generate a floating
 - Direct MSVC compile of `Test_EnvironmentBake.cpp`: PASS.
 - Direct MSVC compile of `Test_EnvironmentRendering.cpp`: PASS.
 - Standalone linked procedural bake probe: PASS; generated 32x16 HDR source, baked 16px radiance/irradiance/prefilter products, and verified zenith/horizon color separation.
-- `cmake --build build --config Debug --target AxleEnvironmentBakeTests AxleEnvironmentRenderingTests --parallel 6`: PASS.
-- Debug `AxleEnvironmentBakeTests.exe`: PASS; procedural generation and transactional validation assertions pass.
-- Debug `AxleEnvironmentRenderingTests.exe` on D3D12, Vulkan, and OpenGL: PASS; HDR background-only behavior, procedural IBL response, cache reuse, and readback policy fixtures pass.
-- `cmake --build build --config Release --target AxleEnvironmentBakeTests AxleEnvironmentRenderingTests --parallel 6`: PASS.
-- Release `AxleEnvironmentBakeTests.exe`: PASS.
-- Release `AxleEnvironmentRenderingTests.exe` on D3D12, Vulkan, and OpenGL: PASS.
+- `cmake --build build --config Debug --target AxleEnvironmentBakeTests AxleEnvironmentRenderingTests --parallel 6`: PASS (exit 0).
+- Debug `AxleEnvironmentBakeTests.exe`: PASS (exit 0); procedural generation and transactional validation assertions pass.
+- Debug `AxleEnvironmentRenderingTests.exe` on D3D12, Vulkan, and OpenGL: PASS (exit 0 for each backend); HDR background-only behavior, procedural IBL response, cache reuse, and readback policy fixtures pass.
+- `cmake --build build --config Release --target AxleEnvironmentBakeTests AxleEnvironmentRenderingTests --parallel 6`: PASS (exit 0).
+- Release `AxleEnvironmentBakeTests.exe`: PASS (exit 0).
+- Release `AxleEnvironmentRenderingTests.exe` on D3D12, Vulkan, and OpenGL: PASS (exit 0 for each backend).

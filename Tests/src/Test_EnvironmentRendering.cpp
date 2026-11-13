@@ -274,6 +274,12 @@ bool Native(RHIType backend) {
     world.DirectionalLight=RenderDirectionalLight{};world.DirectionalLight->AmbientIntensity=0;
     world.DirectionalLight->Direction={0,0,1};
     const auto direct=render();CHECK(!direct.empty()&&direct[center]>atmosphereOnly[center]+20);
+    material->GetDesc().Roughness=.02f;
+    world.DirectionalLight->Intensity=.02f;
+    world.DirectionalLight->SolarAngularRadius=.20f;const auto broadSun=render();
+    world.DirectionalLight->SolarAngularRadius=.00462512f;const auto physicalSun=render();
+    CHECK(!broadSun.empty()&&!physicalSun.empty()&&std::abs(int(physicalSun[center])-int(broadSun[center]))>10);
+    world.DirectionalLight->Intensity=1.0f;
     world.Meshes.clear();camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0),glm::vec3(0,0,1),glm::vec3(0,1,0)),glm::vec3(0));
     const auto sun=render();world.DirectionalLight->Intensity=0;const auto zeroSun=render();
     CHECK(!sun.empty()&&!zeroSun.empty()&&sun[center]>zeroSun[center]+10);

@@ -25,6 +25,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
 
 namespace Axle {
 
@@ -1152,13 +1153,14 @@ namespace Axle {
             lightData.SunLight.DirectionAndIlluminance = glm::vec4(dl.Direction, lux);
             lightData.SunLight.ColorAndAmbient = glm::vec4(dl.Color, lighting.AmbientIntensity);
             lightData.SunLight.AmbientColor = glm::vec4(lighting.AmbientColor,1.0f);
-            lightData.SunLight.ShadowParams = glm::vec4(0.0012f, 2.0f, 0.0f, 0.0f);
+            lightData.SunLight.ShadowParams = glm::vec4(dl.ShadowBias, dl.ShadowFilterRadius,
+                std::clamp(dl.SolarAngularRadius, 0.0f, 0.25f), 0.0f);
             lightData.LightCounts.z = 1;
         } else {
             lightData.SunLight.DirectionAndIlluminance = glm::vec4(glm::normalize(lighting.SunDirection),0.0f);
             lightData.SunLight.ColorAndAmbient = glm::vec4(lighting.SunColor,lighting.AmbientIntensity);
             lightData.SunLight.AmbientColor = glm::vec4(lighting.AmbientColor,1.0f);
-            lightData.SunLight.ShadowParams = glm::vec4(0.0012f, 2.0f, 0.0f, 0.0f);
+            lightData.SunLight.ShadowParams = glm::vec4(0.0012f, 2.0f, 0.00462512f, 0.0f);
             lightData.LightCounts.z = 1;
         }
 

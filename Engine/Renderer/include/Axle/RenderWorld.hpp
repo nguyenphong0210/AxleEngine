@@ -88,6 +88,8 @@ namespace Axle {
         glm::vec3 Color{ 1.0f, 0.98f, 0.92f };
         float Intensity = 1.0f;
         float AmbientIntensity = 0.28f;
+        // Physical angular radius of the solar disk in radians (0.53 degrees diameter).
+        float SolarAngularRadius = 0.00462512f;
         bool CastsShadows = true;
         int ShadowQuality = 1;
         float ShadowBias = 0.0012f, ShadowSlopeBias = 0.0020f, ShadowNormalBias = 0.0150f, ShadowFilterRadius = 2;

@@ -101,7 +101,7 @@ namespace Axle::RHI {
         glm::vec4 DirectionAndIlluminance{ 0.45f, 0.85f, 0.25f, 100000.0f }; // xyz: Dir, w: Lux
         glm::vec4 ColorAndAmbient{ 1.0f, 0.98f, 0.92f, 0.25f };               // xyz: Color, w: Ambient
         glm::vec4 AmbientColor{ 0.22f, 0.25f, 0.32f, 1.0f };                  // xyz: Ambient Color, w: 1.0
-        glm::vec4 ShadowParams{ 0.0012f, 2.0f, 0.0f, 0.0f };                  // x: Bias, y: Radius, zw: 0
+        glm::vec4 ShadowParams{ 0.0012f, 2.0f, 0.00462512f, 0.0f };          // x: Bias, y: Filter radius, z: solar angular radius (rad), w: reserved
     }; // 64 bytes
     static_assert(sizeof(RHIGPUDirectionalLight) == 64, "RHIGPUDirectionalLight must be 64 bytes!");
 

@@ -88,7 +88,7 @@ struct DirectionalSunLight {
     float4 DirectionAndIlluminance; // xyz: Normalized Sun Vector, w: Illuminance (Lux)
     float4 ColorAndAmbient;        // xyz: Sun Warm Color, w: Ambient Intensity
     float4 AmbientColor;           // xyz: Ambient Sky/Ground Tint, w: Ground bounce
-    float4 ShadowParams;           // x: Shadow Bias, y: Filter Radius, zw: Reserved
+    float4 ShadowParams;           // x: Shadow Bias, y: Filter Radius, z: solar angular radius (rad), w: Reserved
 };
 
 struct PointLightData {
@@ -461,8 +461,13 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
     if (NdotL_Sun > 0.0 || NdotL_Sun_Diff > 0.0) {
         float3 H = normalize(V + sunDir);
-        float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness, coatAnisotropy.z);
-        float  G   = MaterialGeometry(N, V, sunDir, tangent, bitangent, roughness, coatAnisotropy.z);
+        // Convolve the microfacet lobe with the finite solar disk. The default
+        // radius is the measured 0.53 degree solar diameter; wider authored
+        // radii soften the highlight while remaining energy bounded.
+        float sunAngularRadius = max(u_SunLight.ShadowParams.z, 0.0);
+        float sunConvolvedRoughness = sqrt(saturate(roughness * roughness + sunAngularRadius * sunAngularRadius));
+        float  NDF = MaterialDistribution(N, H, tangent, bitangent, sunConvolvedRoughness, coatAnisotropy.z);
+        float  G   = MaterialGeometry(N, V, sunDir, tangent, bitangent, sunConvolvedRoughness, coatAnisotropy.z);
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;

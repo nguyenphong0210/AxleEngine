@@ -26,6 +26,7 @@
 #include <Axle/CustomMaterialProgram.hpp>
 
 #include <memory>
+#include <array>
 #include <string>
 #include <glm/glm.hpp>
 
@@ -126,6 +127,25 @@ namespace Axle {
         glm::vec4 Reserved[13]{};                                                 // 208 bytes padding -> Total: 256 bytes
     };
     static_assert(sizeof(RHIBloomConstants) == 256, "RHIBloomConstants must be 256 bytes aligned!");
+
+    struct alignas(256) RHIExposureConstants {
+        glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f };
+        glm::vec4 ExposureParams{ -10.0f, 6.0f, 3.0f, 1.0f };
+        glm::vec4 ExposureLimits{ 0.1f, 10.0f, 0.18f, 0.0f };
+        glm::vec4 Reserved[13]{};
+    };
+    static_assert(sizeof(RHIExposureConstants) == 256, "RHIExposureConstants must be 256 bytes aligned!");
+
+    struct alignas(256) RHIDDGIConstants {
+        glm::vec4 ScreenSize{ 1.0f };
+        glm::vec4 AtlasSize{ 256.0f, 128.0f, 1.0f / 256.0f, 1.0f / 128.0f };
+        glm::vec4 GridDimensions{ 32.0f, 16.0f, 32.0f, 0.0f };
+        glm::vec4 GridOrigin{ 0.0f };
+        glm::vec4 GridSpacing{ 1.0f };
+        glm::vec4 Params{ 1.0f };
+        glm::vec4 Reserved[10]{};
+    };
+    static_assert(sizeof(RHIDDGIConstants) == 256, "RHIDDGIConstants must be 256 bytes aligned!");
 
     // 256-byte CBV aligned constants for TAA pass
     struct alignas(256) RHITAAConstants {
@@ -320,6 +340,12 @@ namespace Axle {
         bool CreateBloomPipelineLayout(RHI::RHIDevice& device);
         bool CreateBloomPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateBloomApplyPipeline(nri::Format colorFormat);
+        bool CompileAutoExposureShaders(RHI::RHIDevice& device);
+        bool CreateAutoExposurePipelineLayout(RHI::RHIDevice& device);
+        bool CreateAutoExposurePipeline(RHI::RHIDevice& device);
+        bool CompileDDGIShaders(RHI::RHIDevice& device);
+        bool CreateDDGIPipelineLayout(RHI::RHIDevice& device);
+        bool CreateDDGIPipeline(RHI::RHIDevice& device);
 
         // Temporal Anti-Aliasing (TAA) Pass
         bool CompileTAAShaders(RHI::RHIDevice& device);
@@ -576,7 +602,29 @@ namespace Axle {
         RHI::RHIDescriptorPool m_BloomDescriptorPool;
         nri::DescriptorSet* m_BloomComputeTextureSet = nullptr;
         nri::DescriptorSet* m_BloomComputeStorageSet = nullptr;
+        std::array<nri::DescriptorSet*, 11> m_BloomComputeTextureSets{};
+        std::array<nri::DescriptorSet*, 11> m_BloomComputeStorageSets{};
         nri::DescriptorSet* m_BloomApplyDescriptorSet = nullptr;
+
+        // Histogram-based auto exposure resources
+        RHI::RHIPipelineLayout m_AutoExposurePipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_AutoExposurePipeline;
+        RHI::RHIBuffer m_AutoExposureConstantBuffer;
+        RHI::RHIShaderBytecode m_AutoExposureComputeShader;
+        RHI::RHISampler m_AutoExposureSampler;
+        RHI::RHIDescriptorPool m_AutoExposureDescriptorPool;
+        nri::DescriptorSet* m_AutoExposureTextureSet = nullptr;
+        nri::DescriptorSet* m_AutoExposureStorageSet = nullptr;
+
+        // Bounded DDGI irradiance atlas update resources
+        RHI::RHIPipelineLayout m_DDGIPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_DDGIPipeline;
+        RHI::RHIBuffer m_DDGIConstantBuffer;
+        RHI::RHIShaderBytecode m_DDGIComputeShader;
+        RHI::RHISampler m_DDGISampler;
+        RHI::RHIDescriptorPool m_DDGIDescriptorPool;
+        nri::DescriptorSet* m_DDGITextureSet = nullptr;
+        nri::DescriptorSet* m_DDGIStorageSet = nullptr;
 
         // Temporal Anti-Aliasing (TAA) Resources
         RHI::RHIPipelineLayout m_TAAPipelineLayout;

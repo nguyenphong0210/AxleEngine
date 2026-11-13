@@ -210,6 +210,19 @@ bool Native(RHIType backend) {
     CHECK(!fogAuthored.empty() && fogAuthored.size() == red.size());
     world.VolumetricFog.reset();
     settings.EnableVolumetricFog = false;
+    // M14-U6 DDGI runtime update: the authored probe lattice must allocate and
+    // refresh its bounded irradiance atlas without changing the fallback path.
+    RenderDDGIProbeGrid ddgiRuntime;
+    ddgiRuntime.Enabled = true;
+    ddgiRuntime.GridDimensions = glm::ivec3(32, 16, 32);
+    ddgiRuntime.GridSpacing = glm::vec3(1.5f);
+    ddgiRuntime.EnergyMultiplier = 1.25f;
+    world.DDGIProbeGrid = ddgiRuntime;
+    settings.EnableDDGI = true;
+    auto ddgiFrame = render();
+    CHECK(!ddgiFrame.empty() && ddgiFrame.size() == red.size());
+    settings.EnableDDGI = false;
+    world.DDGIProbeGrid.reset();
     CHECK(render()==red&&environment.BakeCount()==1&&environment.UploadCount()==1);
 
     // M14-U3 infrastructure verification: Storage/UAV texture views, ScreenNormal,

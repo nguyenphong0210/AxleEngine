@@ -49,6 +49,40 @@ namespace Axle::RHI {
             if (!texture->Init(native)) return false;
             candidate.m_Textures[static_cast<size_t>(RHIViewTarget::ScreenStorage)] = std::move(texture);
         }
+        if (desc.EnableGTAO) {
+            auto texture = std::make_unique<RHITexture>();
+            auto native = RHITextureDesc::StorageTexture2D(
+                std::max(1u, desc.Width >> 1), std::max(1u, desc.Height >> 1), RHITextureFormat::RGBA16_FLOAT,
+                "ViewTarget_GTAO_HalfRes");
+            if (!texture->Init(native)) return false;
+            candidate.m_Textures[static_cast<size_t>(RHIViewTarget::GTAO)] = std::move(texture);
+        }
+        if (desc.EnableBloom) {
+            uint32_t bloomWidth = std::max(1u, desc.Width >> 1);
+            uint32_t bloomHeight = std::max(1u, desc.Height >> 1);
+            const auto bloomFormat = desc.HDR ? RHITextureFormat::RGBA16_FLOAT : desc.ColorFormat;
+            for (uint32_t level = 0; level < 6; ++level) {
+                auto texture = std::make_unique<RHITexture>();
+                auto native = RHITextureDesc::StorageTexture2D(
+                    bloomWidth, bloomHeight, bloomFormat, "ViewTarget_Bloom" + std::to_string(level));
+                if (!texture->Init(native)) return false;
+                candidate.m_Textures[static_cast<size_t>(RHIViewTarget::Bloom0) + level] = std::move(texture);
+                bloomWidth = std::max(1u, bloomWidth >> 1);
+                bloomHeight = std::max(1u, bloomHeight >> 1);
+            }
+        }
+        if (desc.EnableAutoExposure) {
+            auto texture = std::make_unique<RHITexture>();
+            auto native = RHITextureDesc::StorageTexture2D(1, 1, RHITextureFormat::RGBA16_FLOAT, "ViewTarget_Exposure");
+            if (!texture->Init(native)) return false;
+            candidate.m_Textures[static_cast<size_t>(RHIViewTarget::Exposure)] = std::move(texture);
+        }
+        if (desc.EnableDDGI) {
+            auto texture = std::make_unique<RHITexture>();
+            auto native = RHITextureDesc::StorageTexture2D(256, 128, RHITextureFormat::RGBA16_FLOAT, "ViewTarget_DDGI_Irradiance");
+            if (!texture->Init(native)) return false;
+            candidate.m_Textures[static_cast<size_t>(RHIViewTarget::DDGI)] = std::move(texture);
+        }
         if (desc.EnableHiZ) {
             uint32_t mipWidth = desc.Width;
             uint32_t mipHeight = desc.Height;

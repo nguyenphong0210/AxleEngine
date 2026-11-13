@@ -366,7 +366,7 @@ namespace Axle {
         }
 
         RHIDescriptorPoolDesc bloomPoolDesc;
-        bloomPoolDesc.MaxDescriptorSets = 16;
+        bloomPoolDesc.MaxDescriptorSets = 32;
         bloomPoolDesc.MaxTextures = 64;
         bloomPoolDesc.MaxSamplers = 16;
         bloomPoolDesc.MaxStorageTextures = 16;
@@ -379,13 +379,48 @@ namespace Axle {
             m_BloomComputeStorageSet = m_BloomDescriptorPool.AllocateDescriptorSet(m_BloomComputePipelineLayout, 1);
             m_BloomApplyDescriptorSet = m_BloomDescriptorPool.AllocateDescriptorSet(m_BloomApplyPipelineLayout, 0);
             if (!m_BloomComputeTextureSet || !m_BloomComputeStorageSet || !m_BloomApplyDescriptorSet) return false;
+            for (size_t i = 0; i < m_BloomComputeTextureSets.size(); ++i) {
+                m_BloomComputeTextureSets[i] = m_BloomDescriptorPool.AllocateDescriptorSet(m_BloomComputePipelineLayout, 0);
+                m_BloomComputeStorageSets[i] = m_BloomDescriptorPool.AllocateDescriptorSet(m_BloomComputePipelineLayout, 1);
+                if (!m_BloomComputeTextureSets[i] || !m_BloomComputeStorageSets[i]) return false;
+            }
             if (m_BloomSampler.IsValid()) {
                 m_BloomDescriptorPool.UpdateSampler(m_BloomComputeTextureSet, 1, 0, m_BloomSampler.GetNative());
                 m_BloomDescriptorPool.UpdateSampler(m_BloomApplyDescriptorSet, 2, 0, m_BloomSampler.GetNative());
+                for (auto* set : m_BloomComputeTextureSets) m_BloomDescriptorPool.UpdateSampler(set, 1, 0, m_BloomSampler.GetNative());
             }
         }
 
         if (!m_BloomConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIBloomConstants), RHIMemoryLocation::HostUpload, "BloomConstantsBuffer"))) return false;
+
+        // Initialize histogram-based auto exposure. The result is kept in a
+        // one-pixel storage target and can be consumed by later post passes.
+        if (!CompileAutoExposureShaders(device) || !CreateAutoExposurePipelineLayout(device) || !CreateAutoExposurePipeline(device)) return false;
+        if (!m_AutoExposureSampler.Init(RHISamplerDesc::Point(RHIAddressMode::ClampToEdge))) return false;
+        RHIDescriptorPoolDesc exposurePoolDesc;
+        exposurePoolDesc.MaxDescriptorSets = 8;
+        exposurePoolDesc.MaxTextures = 8;
+        exposurePoolDesc.MaxSamplers = 8;
+        exposurePoolDesc.MaxStorageTextures = 8;
+        exposurePoolDesc.MaxConstantBuffers = 8;
+        if (!m_AutoExposureDescriptorPool.Init(exposurePoolDesc)) return false;
+        m_AutoExposureTextureSet = m_AutoExposureDescriptorPool.AllocateDescriptorSet(m_AutoExposurePipelineLayout, 0);
+        m_AutoExposureStorageSet = m_AutoExposureDescriptorPool.AllocateDescriptorSet(m_AutoExposurePipelineLayout, 1);
+        if (!m_AutoExposureTextureSet || !m_AutoExposureStorageSet) return false;
+        m_AutoExposureDescriptorPool.UpdateSampler(m_AutoExposureTextureSet, 1, 0, m_AutoExposureSampler.GetNative());
+        if (!m_AutoExposureConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIExposureConstants), RHIMemoryLocation::HostUpload, "AutoExposureConstantsBuffer"))) return false;
+
+        if (!CompileDDGIShaders(device) || !CreateDDGIPipelineLayout(device) || !CreateDDGIPipeline(device)) return false;
+        if (!m_DDGISampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) return false;
+        RHIDescriptorPoolDesc ddgiPoolDesc;
+        ddgiPoolDesc.MaxDescriptorSets = 8; ddgiPoolDesc.MaxTextures = 16; ddgiPoolDesc.MaxSamplers = 8;
+        ddgiPoolDesc.MaxStorageTextures = 8; ddgiPoolDesc.MaxConstantBuffers = 8;
+        if (!m_DDGIDescriptorPool.Init(ddgiPoolDesc)) return false;
+        m_DDGITextureSet = m_DDGIDescriptorPool.AllocateDescriptorSet(m_DDGIPipelineLayout, 0);
+        m_DDGIStorageSet = m_DDGIDescriptorPool.AllocateDescriptorSet(m_DDGIPipelineLayout, 1);
+        if (!m_DDGITextureSet || !m_DDGIStorageSet) return false;
+        m_DDGIDescriptorPool.UpdateSampler(m_DDGITextureSet, 1, 0, m_DDGISampler.GetNative());
+        if (!m_DDGIConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIDDGIConstants), RHIMemoryLocation::HostUpload, "DDGIConstantsBuffer"))) return false;
 
         // Initialize Temporal Anti-Aliasing (TAA) Resources
         if (!CompileTAAShaders(device) || !CreateTAAPipelineLayout(device) || !CreateTAAPipeline(device)) return false;
@@ -532,6 +567,22 @@ namespace Axle {
         m_BloomApplyDescriptorSet = nullptr;
         m_BloomDescriptorPool.Shutdown();
         m_BloomSampler.Shutdown();
+
+        m_AutoExposurePipeline = nullptr;
+        m_AutoExposurePipelineLayout.Shutdown();
+        m_AutoExposureConstantBuffer.Shutdown();
+        m_AutoExposureTextureSet = nullptr;
+        m_AutoExposureStorageSet = nullptr;
+        m_AutoExposureDescriptorPool.Shutdown();
+        m_AutoExposureSampler.Shutdown();
+
+        m_DDGIPipeline = nullptr;
+        m_DDGIPipelineLayout.Shutdown();
+        m_DDGIConstantBuffer.Shutdown();
+        m_DDGITextureSet = nullptr;
+        m_DDGIStorageSet = nullptr;
+        m_DDGIDescriptorPool.Shutdown();
+        m_DDGISampler.Shutdown();
 
         m_TAAPipelineSDR = nullptr;
         m_TAAPipelineHDR = nullptr;
@@ -2062,6 +2113,85 @@ namespace Axle {
         return m_BloomComputePipeline != nullptr && m_BloomApplyPipelineSDR != nullptr && m_BloomApplyPipelineHDR != nullptr;
     }
 
+    bool RHISceneRenderer::CompileAutoExposureShaders(RHIDevice& device) {
+        auto shaderPath = FindShaderPath("AutoExposure.hlsl");
+        if (shaderPath.empty()) return false;
+        std::ifstream file(shaderPath);
+        std::stringstream sourceStream; sourceStream << file.rdbuf();
+        const auto source = sourceStream.str();
+        if (source.empty()) return false;
+        RHIShaderCompileDesc desc;
+        desc.SourcePath = shaderPath.string(); desc.Source = source; desc.EntryPoint = "CSMain";
+        desc.Stage = RHIShaderStage::Compute; desc.HLSLVersion = "2021"; desc.ShaderModel = "6_0";
+        desc.Format = device.GetCapabilities().ActiveBackend == RHIType::Vulkan ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        desc.Optimization = true;
+        auto result = RHIShaderCompiler::Get().Compile(desc);
+        if (!result.Success) { AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile AutoExposure CS: {0}", result.ErrorMessage); return false; }
+        m_AutoExposureComputeShader = result.Bytecode;
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateAutoExposurePipelineLayout(RHIDevice& device) {
+        nri::RootDescriptorDesc root = {};
+        root.registerIndex = 0; root.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        root.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        nri::DescriptorRangeDesc textureRanges[2] = {};
+        textureRanges[0].baseRegisterIndex = 0; textureRanges[0].descriptorNum = 1;
+        textureRanges[0].descriptorType = nri::DescriptorType::TEXTURE; textureRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        textureRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        textureRanges[1].baseRegisterIndex = 0; textureRanges[1].descriptorNum = 1;
+        textureRanges[1].descriptorType = nri::DescriptorType::SAMPLER; textureRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        textureRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::DescriptorRangeDesc storage = {};
+        storage.baseRegisterIndex = 0; storage.descriptorNum = 1; storage.descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        storage.shaderStages = nri::StageBits::COMPUTE_SHADER; storage.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::DescriptorSetDesc sets[2] = {};
+        sets[0].registerSpace = 1; sets[0].ranges = textureRanges; sets[0].rangeNum = 2;
+        sets[1].registerSpace = 2; sets[1].ranges = &storage; sets[1].rangeNum = 1;
+        nri::PipelineLayoutDesc layout = {};
+        layout.rootRegisterSpace = 0; layout.rootDescriptors = &root; layout.rootDescriptorNum = 1;
+        layout.descriptorSets = sets; layout.descriptorSetNum = 2; layout.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        return m_AutoExposurePipelineLayout.Init(layout);
+    }
+
+    bool RHISceneRenderer::CreateAutoExposurePipeline(RHIDevice& device) {
+        RHIComputePipelineDesc desc; desc.Layout = &m_AutoExposurePipelineLayout; desc.ComputeShader = m_AutoExposureComputeShader;
+        m_AutoExposurePipeline = RHIPipelineCache::Get().GetOrCreateComputePipeline(desc);
+        return m_AutoExposurePipeline != nullptr;
+    }
+
+    bool RHISceneRenderer::CompileDDGIShaders(RHIDevice& device) {
+        auto shaderPath = FindShaderPath("DDGI.hlsl");
+        if (shaderPath.empty()) return false;
+        std::ifstream file(shaderPath); std::stringstream stream; stream << file.rdbuf();
+        RHIShaderCompileDesc desc; desc.SourcePath = shaderPath.string(); desc.Source = stream.str(); desc.EntryPoint = "CSMain";
+        desc.Stage = RHIShaderStage::Compute; desc.HLSLVersion = "2021"; desc.ShaderModel = "6_0";
+        desc.Format = device.GetCapabilities().ActiveBackend == RHIType::Vulkan ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        desc.Optimization = true;
+        auto result = RHIShaderCompiler::Get().Compile(desc);
+        if (!result.Success) { AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile DDGI CS: {0}", result.ErrorMessage); return false; }
+        m_DDGIComputeShader = result.Bytecode; return true;
+    }
+
+    bool RHISceneRenderer::CreateDDGIPipelineLayout(RHIDevice& device) {
+        nri::RootDescriptorDesc root = {};
+        root.registerIndex = 0; root.descriptorType = nri::DescriptorType::CONSTANT_BUFFER; root.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        nri::DescriptorRangeDesc ranges[3] = {};
+        ranges[0].baseRegisterIndex = 0; ranges[0].descriptorNum = 2; ranges[0].descriptorType = nri::DescriptorType::TEXTURE; ranges[0].shaderStages = nri::StageBits::COMPUTE_SHADER; ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        ranges[1].baseRegisterIndex = 0; ranges[1].descriptorNum = 1; ranges[1].descriptorType = nri::DescriptorType::SAMPLER; ranges[1].shaderStages = nri::StageBits::COMPUTE_SHADER; ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::DescriptorRangeDesc storage = {}; storage.baseRegisterIndex = 0; storage.descriptorNum = 1; storage.descriptorType = nri::DescriptorType::STORAGE_TEXTURE; storage.shaderStages = nri::StageBits::COMPUTE_SHADER; storage.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::DescriptorSetDesc sets[2] = {};
+        sets[0].registerSpace = 1; sets[0].ranges = ranges; sets[0].rangeNum = 2;
+        sets[1].registerSpace = 2; sets[1].ranges = &storage; sets[1].rangeNum = 1;
+        nri::PipelineLayoutDesc layout = {}; layout.rootRegisterSpace = 0; layout.rootDescriptors = &root; layout.rootDescriptorNum = 1; layout.descriptorSets = sets; layout.descriptorSetNum = 2; layout.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        return m_DDGIPipelineLayout.Init(layout);
+    }
+
+    bool RHISceneRenderer::CreateDDGIPipeline(RHIDevice& device) {
+        RHIComputePipelineDesc desc; desc.Layout = &m_DDGIPipelineLayout; desc.ComputeShader = m_DDGIComputeShader;
+        m_DDGIPipeline = RHIPipelineCache::Get().GetOrCreateComputePipeline(desc); return m_DDGIPipeline != nullptr;
+    }
+
     bool RHISceneRenderer::CompileTAAShaders(RHIDevice& device) {
         auto& compiler = RHIShaderCompiler::Get();
         auto shaderPath = FindShaderPath("TAA.hlsl");
@@ -2536,6 +2666,10 @@ namespace Axle {
         targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
         targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
         targetDesc.EnableHiZ = settings.EnableSSR;
+        targetDesc.EnableBloom = settings.EnableBloom;
+        targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
+        targetDesc.EnableAutoExposure = settings.EnableAutoExposure;
+        targetDesc.EnableDDGI = settings.EnableDDGI && world.DDGIProbeGrid.has_value();
         if (settings.EnableTAA) targetDesc.HistoryCount = 2;
         if (viewTargets) {
             auto expected = targetDesc; expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
@@ -2604,10 +2738,10 @@ namespace Axle {
         const auto particleDepthImage = copyParticleDepth ? graph.Import("ParticleDepth", m_ParticleSceneDepth->GetNative()) : sceneDepth;
         const bool useGTAO = (settings.EnableGTAO || settings.EnableContactShadows) && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
-            m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
+            viewTargets->GetGTAO() && viewTargets->GetGTAO()->IsValid() && viewTargets->GetGTAO()->GetUAV() != nullptr;
         const auto gtaoInput = useGTAO ? graph.Import("GTAOInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto gtaoDepth = useGTAO ? graph.Import("GTAODepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
-        const auto gtaoStorage = useGTAO ? graph.Import("GTAOStorage", m_ScreenStorageTarget->GetNative()) : output;
+        const auto gtaoStorage = useGTAO ? graph.Import("GTAOStorage", viewTargets->GetGTAO()->GetNative()) : output;
 
         const bool useSSR = settings.EnableSSR && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_SSRComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
@@ -2637,7 +2771,23 @@ namespace Axle {
             m_BloomComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
             m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
         const auto bloomInput = useBloom ? graph.Import("BloomInput", m_OpaqueSceneColor->GetNative()) : output;
-        const auto bloomStorage = useBloom ? graph.Import("BloomStorage", m_ScreenStorageTarget->GetNative()) : output;
+        std::array<Graph::Resource, 6> bloomResources{};
+        if (useBloom) {
+            for (uint32_t level = 0; level < bloomResources.size(); ++level) {
+                auto* bloom = viewTargets->GetBloom(level);
+                if (!bloom || !bloom->IsValid()) { rejectTargets(); return; }
+                bloomResources[level] = graph.Import("Bloom" + std::to_string(level), bloom->GetNative());
+            }
+        }
+        const bool useAutoExposure = settings.EnableAutoExposure && activeSampleCount == 1 && m_AutoExposurePipeline &&
+            viewTargets->GetExposure() && viewTargets->GetExposure()->IsValid() && viewTargets->GetExposure()->GetUAV() != nullptr;
+        const bool useDDGI = settings.EnableDDGI && world.DDGIProbeGrid.has_value() && activeSampleCount == 1 && m_DDGIPipeline &&
+            viewTargets->GetDDGI() && viewTargets->GetDDGI()->IsValid() && viewTargets->GetDDGI()->GetUAV() != nullptr;
+        const auto ddgiInput = useDDGI ? graph.Import("DDGIInput", m_OpaqueSceneColor->GetNative()) : output;
+        const auto ddgiDepth = useDDGI ? graph.Import("DDGIDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
+        const auto ddgiOutput = useDDGI ? graph.Import("DDGIOutput", viewTargets->GetDDGI()->GetNative()) : output;
+        const auto exposureInput = useAutoExposure ? graph.Import("ExposureInput", useToneMap ? m_IntermediateHDRTarget->GetNative() : sceneTargetTexture) : output;
+        const auto exposureOutput = useAutoExposure ? graph.Import("ExposureOutput", viewTargets->GetExposure()->GetNative()) : output;
 
         RHITexture* history0 = viewTargets ? viewTargets->Get(RHIViewTarget::History0) : nullptr;
         RHITexture* history1 = viewTargets ? viewTargets->Get(RHIViewTarget::History1) : nullptr;
@@ -2682,6 +2832,14 @@ namespace Axle {
         graph.AddPass("ParticlesAndPhysics", std::move(overlayUses));
         if (useMSAA) graph.AddPass("Resolve", {
             {sceneColor,Layout::ResolveSource}, {useToneMap ? hdr : fxaa,Layout::ResolveDest,Access::Write}});
+        if (useDDGI) {
+            graph.AddPass("DDGICopy", {
+                {sceneColor,Layout::CopySource}, {ddgiInput,Layout::CopyDest,Access::Write},
+                {sceneDepth,Layout::CopySource}, {ddgiDepth,Layout::CopyDest,Access::Write}});
+            graph.AddPass("DDGIUpdate", {
+                {ddgiInput,Layout::ShaderResource}, {ddgiDepth,Layout::ShaderResource},
+                {ddgiOutput,Layout::ShaderResourceStorage,Access::Write}});
+        }
         if (useGTAO) {
             graph.AddPass("GTAOCopy", {{sceneColor,Layout::CopySource}, {gtaoInput,Layout::CopyDest,Access::Write},
                 {sceneDepth,Layout::CopySource}, {gtaoDepth,Layout::CopyDest,Access::Write}});
@@ -2725,13 +2883,25 @@ namespace Axle {
         }
         if (useBloom) {
             graph.AddPass("BloomCopy", {{sceneColor, Layout::CopySource}, {bloomInput, Layout::CopyDest, Access::Write}});
-            graph.AddPass("BloomCompute", {
-                {bloomInput, Layout::ShaderResource},
-                {bloomStorage, Layout::ShaderResourceStorage, Access::Write}});
+            for (uint32_t level = 0; level < bloomResources.size(); ++level) {
+                graph.AddPass("BloomDown" + std::to_string(level), {
+                    {level == 0 ? bloomInput : bloomResources[level - 1], Layout::ShaderResource},
+                    {bloomResources[level], Layout::ShaderResourceStorage, Access::Write}});
+            }
+            for (int level = static_cast<int>(bloomResources.size()) - 2; level >= 0; --level) {
+                graph.AddPass("BloomUp" + std::to_string(level), {
+                    {bloomResources[level + 1], Layout::ShaderResource},
+                    {bloomResources[level], Layout::ShaderResourceStorage, Access::Write}});
+            }
             graph.AddPass("BloomApply", {
-                {bloomStorage, Layout::ShaderResource},
+                {bloomResources[0], Layout::ShaderResource},
                 {bloomInput, Layout::ShaderResource},
                 {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
+        }
+        if (useAutoExposure) {
+            graph.AddPass("AutoExposure", {
+                {exposureInput, Layout::ShaderResource},
+                {exposureOutput, Layout::ShaderResourceStorage, Access::Write}});
         }
         if (useTAA) {
             graph.AddPass("TAAResolve", {
@@ -3200,7 +3370,7 @@ namespace Axle {
         Commands().EndRendering();
         if (copyParticleDepth) {
             if (!beginPass("ParticleDepthCopy")) return;
-            Commands().CopyTexture(*m_ParticleSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
+            Commands().CopyTexture(*sceneDepthTexture, nullptr, *m_ParticleSceneDepth->GetNative(), nullptr);
         }
         if (!beginPass("ParticlesAndPhysics")) return;
         Commands().BeginRendering(renderingDesc);
@@ -3265,6 +3435,36 @@ namespace Axle {
             Commands().ResolveTexture(resolveDstTexture, m_MSAAColorTarget->GetNative(), nri::ResolveOp::AVERAGE);
         }
 
+        if (useDDGI) {
+            if (!beginPass("DDGICopy")) return;
+            Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
+            Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
+            if (!beginPass("DDGIUpdate")) return;
+            RHIDDGIConstants ddgiConstants{};
+            ddgiConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height), 1.0f / width, 1.0f / height);
+            ddgiConstants.Params = glm::vec4(settings.DDGIMultiplier, 1.0f, 0.0f, 0.0f);
+            if (world.DDGIProbeGrid) {
+                const auto& grid = *world.DDGIProbeGrid;
+                ddgiConstants.GridDimensions = glm::vec4(glm::vec3(grid.GridDimensions), 0.0f);
+                ddgiConstants.GridOrigin = glm::vec4(grid.GridOrigin, 0.0f);
+                ddgiConstants.GridSpacing = glm::vec4(grid.GridSpacing, 0.0f);
+                ddgiConstants.Params.x *= grid.EnergyMultiplier;
+            }
+            if (!m_DDGIConstantBuffer.UpdateData(&ddgiConstants, sizeof(RHIDDGIConstants))) return;
+            auto* ddgiTarget = viewTargets->GetDDGI();
+            if (!m_DDGIDescriptorPool.UpdateTexture(m_DDGITextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV()) ||
+                !m_DDGIDescriptorPool.UpdateTexture(m_DDGITextureSet, 0, 1, m_OpaqueSceneColor->GetSRV()) ||
+                !m_DDGIDescriptorPool.UpdateSampler(m_DDGITextureSet, 1, 0, m_DDGISampler.GetNative()) ||
+                !m_DDGIDescriptorPool.UpdateStorageTexture(m_DDGIStorageSet, 0, 0, ddgiTarget->GetUAV())) return;
+            Commands().SetPipeline(m_DDGIPipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_DDGIPipelineLayout);
+            Commands().SetRootDescriptor(0, m_DDGIConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+            m_DDGIDescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_DDGITextureSet, nri::BindPoint::COMPUTE);
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_DDGIStorageSet, nri::BindPoint::COMPUTE);
+            Commands().Dispatch((ddgiTarget->GetWidth() + 7) / 8, (ddgiTarget->GetHeight() + 7) / 8, 1);
+        }
+
         // 7.5. Half-resolution-style screen-space GTAO sampling. The shared
         // fullscreen pass samples a 2x depth footprint and writes the AO
         // modulation back into the scene color before tone mapping/FXAA.
@@ -3277,9 +3477,12 @@ namespace Axle {
             RHIGTAOConstants gtaoConstants{};
             gtaoConstants.InvProjection = glm::inverse(projZO);
             gtaoConstants.View = camera.GetViewMatrix();
-            gtaoConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
-                1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
-            gtaoConstants.GTAOParams = glm::vec4(settings.GTAORadiusPixels, settings.EnableGTAO ? settings.GTAOStrength : 0.0f, 0.0025f, 2.0f);
+            auto* gtaoTarget = viewTargets->GetGTAO();
+            const uint32_t gtaoWidth = gtaoTarget->GetWidth();
+            const uint32_t gtaoHeight = gtaoTarget->GetHeight();
+            gtaoConstants.ScreenSize = glm::vec4(static_cast<float>(gtaoWidth), static_cast<float>(gtaoHeight),
+                1.0f / static_cast<float>(gtaoWidth), 1.0f / static_cast<float>(gtaoHeight));
+            gtaoConstants.GTAOParams = glm::vec4(settings.GTAORadiusPixels * 0.5f, settings.EnableGTAO ? settings.GTAOStrength : 0.0f, 0.0025f, 2.0f);
             if (world.DirectionalLight && settings.EnableContactShadows) {
                 glm::vec3 sunDir = glm::normalize(world.DirectionalLight->Direction);
                 glm::vec3 sunDirView = glm::mat3(camera.GetViewMatrix()) * sunDir;
@@ -3295,7 +3498,7 @@ namespace Axle {
             nri::Descriptor* normalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
             m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 1, 0, normalSRV);
             m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative());
-            m_GTAODescriptorPool.UpdateStorageTexture(m_GTAOComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
+            m_GTAODescriptorPool.UpdateStorageTexture(m_GTAOComputeStorageSet, 0, 0, gtaoTarget->GetUAV());
 
             Commands().SetPipeline(m_GTAOComputePipeline);
             Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_GTAOComputePipelineLayout);
@@ -3303,11 +3506,11 @@ namespace Axle {
             m_GTAODescriptorPool.Bind(Commands().GetNative());
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_GTAOComputeTextureSet, nri::BindPoint::COMPUTE);
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_GTAOComputeStorageSet, nri::BindPoint::COMPUTE);
-            Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1);
+            Commands().Dispatch((gtaoWidth + 7) / 8, (gtaoHeight + 7) / 8, 1);
 
             if (!beginPass("GTAOApply")) return;
             m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
-            m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV());
+            m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 1, 0, gtaoTarget->GetSRV());
             m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV());
             m_GTAODescriptorPool.UpdateSampler(m_GTAOApplyDescriptorSet, 3, 0, m_GTAOSampler.GetNative());
 
@@ -3533,35 +3736,46 @@ namespace Axle {
             Commands().EndRendering();
         }
 
-        // 7c. Bloom Passes (Downsample, Filter & Apply)
-        if (useBloom && m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid()) {
+        // 7c. Bloom: six-tier downsample/upsample pyramid, then composite.
+        if (useBloom && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid()) {
             if (!beginPass("BloomCopy")) return;
             Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
-
-            if (!beginPass("BloomCompute")) return;
-            RHIBloomConstants bloomConstants{};
-            bloomConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
-                                                  1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
-            bloomConstants.BloomParams = glm::vec4(settings.BloomThreshold, settings.BloomIntensity, settings.BloomKnee, 0.0f);
-            bloomConstants.BloomTint = glm::vec4(settings.BloomTint, settings.BloomRadius);
-            m_BloomConstantBuffer.UpdateData(&bloomConstants, sizeof(RHIBloomConstants));
-
-            m_BloomDescriptorPool.UpdateTexture(m_BloomComputeTextureSet, 0, 0, m_OpaqueSceneColor->GetSRV());
-            m_BloomDescriptorPool.UpdateStorageTexture(m_BloomComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
-            if (m_BloomSampler.IsValid()) {
-                m_BloomDescriptorPool.UpdateSampler(m_BloomComputeTextureSet, 1, 0, m_BloomSampler.GetNative());
+            uint32_t bloomPassIndex = 0;
+            auto dispatchBloom = [&](std::string_view passName, RHITexture* source, RHITexture* destination, float mode, uint32_t level) -> bool {
+                if (!source || !destination || !source->IsValid() || !destination->IsValid()) { AXLE_CORE_ERROR("Bloom pass {0}: invalid source/destination", passName); return false; }
+                if (!beginPass(passName)) return false;
+                const float dstWidth = static_cast<float>(destination->GetWidth());
+                const float dstHeight = static_cast<float>(destination->GetHeight());
+                RHIBloomConstants bloomConstants{};
+                bloomConstants.ScreenSize = glm::vec4(dstWidth, dstHeight, 1.0f / dstWidth, 1.0f / dstHeight);
+                bloomConstants.BloomParams = glm::vec4(settings.BloomThreshold, settings.BloomIntensity, settings.BloomKnee, mode);
+                bloomConstants.BloomTint = glm::vec4(settings.BloomTint, settings.BloomRadius * std::pow(1.35f, static_cast<float>(level)));
+                if (!m_BloomConstantBuffer.UpdateData(&bloomConstants, sizeof(RHIBloomConstants))) { AXLE_CORE_ERROR("Bloom pass {0}: constant update failed", passName); return false; }
+                if (bloomPassIndex >= m_BloomComputeTextureSets.size()) return false;
+                auto* textureSet = m_BloomComputeTextureSets[bloomPassIndex];
+                auto* storageSet = m_BloomComputeStorageSets[bloomPassIndex++];
+                if (!m_BloomDescriptorPool.UpdateTexture(textureSet, 0, 0, source->GetSRV()) ||
+                    !m_BloomDescriptorPool.UpdateStorageTexture(storageSet, 0, 0, destination->GetUAV())) { AXLE_CORE_ERROR("Bloom pass {0}: descriptor update failed", passName); return false; }
+                if (m_BloomSampler.IsValid()) m_BloomDescriptorPool.UpdateSampler(textureSet, 1, 0, m_BloomSampler.GetNative());
+                Commands().SetPipeline(m_BloomComputePipeline);
+                Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_BloomComputePipelineLayout);
+                Commands().SetRootDescriptor(0, m_BloomConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+                m_BloomDescriptorPool.Bind(Commands().GetNative());
+                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, textureSet, nri::BindPoint::COMPUTE);
+                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, storageSet, nri::BindPoint::COMPUTE);
+                Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1);
+                return true;
+            };
+            for (uint32_t level = 0; level < 6; ++level) {
+                auto* source = level == 0 ? m_OpaqueSceneColor : viewTargets->GetBloom(level - 1);
+                if (!dispatchBloom("BloomDown" + std::to_string(level), source, viewTargets->GetBloom(level), 0.0f, level)) return;
+            }
+            for (int level = 4; level >= 0; --level) {
+                if (!dispatchBloom("BloomUp" + std::to_string(level), viewTargets->GetBloom(level + 1), viewTargets->GetBloom(level), 1.0f, static_cast<uint32_t>(level))) return;
             }
 
-            Commands().SetPipeline(m_BloomComputePipeline);
-            Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_BloomComputePipelineLayout);
-            Commands().SetRootDescriptor(0, m_BloomConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
-            m_BloomDescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_BloomComputeTextureSet, nri::BindPoint::COMPUTE);
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_BloomComputeStorageSet, nri::BindPoint::COMPUTE);
-            Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1);
-
             if (!beginPass("BloomApply")) return;
-            m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 0, 0, m_ScreenStorageTarget->GetSRV());
+            m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 0, 0, viewTargets->GetBloom(0)->GetSRV());
             m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 1, 0, m_OpaqueSceneColor->GetSRV());
             if (m_BloomSampler.IsValid()) {
                 m_BloomDescriptorPool.UpdateSampler(m_BloomApplyDescriptorSet, 2, 0, m_BloomSampler.GetNative());
@@ -3594,6 +3808,31 @@ namespace Axle {
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_BloomApplyDescriptorSet, nri::BindPoint::GRAPHICS);
             Commands().Draw(3, 1, 0, 0);
             Commands().EndRendering();
+        }
+
+        // 7c.5. Histogram-based eye adaptation on the linear HDR scene.
+        if (useAutoExposure) {
+            if (!beginPass("AutoExposure")) return;
+            const uint32_t exposureWidth = useToneMap && m_IntermediateHDRTarget ? m_IntermediateHDRTarget->GetWidth() : width;
+            const uint32_t exposureHeight = useToneMap && m_IntermediateHDRTarget ? m_IntermediateHDRTarget->GetHeight() : height;
+            RHIExposureConstants exposureConstants{};
+            exposureConstants.ScreenSize = glm::vec4(static_cast<float>(exposureWidth), static_cast<float>(exposureHeight),
+                1.0f / static_cast<float>(exposureWidth), 1.0f / static_cast<float>(exposureHeight));
+            exposureConstants.ExposureParams = glm::vec4(-10.0f, 6.0f, settings.AutoExposureSpeed, 1.0f / 60.0f);
+            exposureConstants.ExposureLimits = glm::vec4(settings.AutoExposureMin, settings.AutoExposureMax, settings.AutoExposureKeyValue, 0.0f);
+            if (!m_AutoExposureConstantBuffer.UpdateData(&exposureConstants, sizeof(RHIExposureConstants))) return;
+            RHITexture* exposureSource = useToneMap && m_IntermediateHDRTarget ? m_IntermediateHDRTarget : m_OpaqueSceneColor;
+            auto* exposureTarget = viewTargets->GetExposure();
+            if (!exposureSource || !exposureTarget || !m_AutoExposureDescriptorPool.UpdateTexture(m_AutoExposureTextureSet, 0, 0, exposureSource->GetSRV()) ||
+                !m_AutoExposureDescriptorPool.UpdateSampler(m_AutoExposureTextureSet, 1, 0, m_AutoExposureSampler.GetNative()) ||
+                !m_AutoExposureDescriptorPool.UpdateStorageTexture(m_AutoExposureStorageSet, 0, 0, exposureTarget->GetUAV())) return;
+            Commands().SetPipeline(m_AutoExposurePipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_AutoExposurePipelineLayout);
+            Commands().SetRootDescriptor(0, m_AutoExposureConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+            m_AutoExposureDescriptorPool.Bind(Commands().GetNative());
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_AutoExposureTextureSet, nri::BindPoint::COMPUTE);
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_AutoExposureStorageSet, nri::BindPoint::COMPUTE);
+            Commands().Dispatch((exposureWidth + 15) / 16, (exposureHeight + 15) / 16, 1);
         }
 
         // 7d. Temporal Anti-Aliasing (TAA) Pass

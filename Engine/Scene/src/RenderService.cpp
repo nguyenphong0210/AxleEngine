@@ -271,6 +271,11 @@ namespace Axle {
                 desc.Samples = request.Settings.MSAASamples; desc.HDR = request.Settings.EnableToneMapping; desc.FXAA = request.Settings.EnableFXAA;
                 desc.EnableNormal = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows || request.Settings.EnableSSR);
                 desc.EnableScreenStorage = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows || request.Settings.EnableSSR || request.Settings.EnableVolumetricFog || request.Settings.EnableBloom || request.Settings.EnableAutoExposure);
+                desc.EnableGTAO = request.Settings.EnableGTAO || request.Settings.EnableContactShadows;
+                desc.EnableBloom = request.Settings.EnableBloom;
+                desc.EnableHiZ = request.Settings.EnableSSR;
+                desc.EnableAutoExposure = request.Settings.EnableAutoExposure;
+                desc.EnableDDGI = request.Settings.EnableDDGI;
                 if (request.Settings.EnableTAA) desc.HistoryCount = 2;
                 if (!m_DefaultMainTargets || !m_DefaultMainTargets->IsValid() || m_DefaultMainTargets->GetDesc() != desc) {
                     auto candidate = std::make_shared<RHI::RHIViewTargets>();

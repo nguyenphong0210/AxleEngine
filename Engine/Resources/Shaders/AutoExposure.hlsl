@@ -12,7 +12,7 @@ cbuffer AutoExposureConstants : register(b0, space0) {
 
 Texture2D<float4>   u_HDRTexture     : register(t0, space1);
 SamplerState        u_LinearSampler  : register(s0, space1);
-RWTexture2D<float4> u_ExposureOutput : register(u0, space0);
+RWTexture2D<float4> u_ExposureOutput : register(u0, space2);
 
 groupshared uint s_Histogram[64];
 

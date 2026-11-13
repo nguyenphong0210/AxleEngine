@@ -272,6 +272,15 @@ float4 PSMain(VSOutput input) : SV_Target {
     finalAO = lerp(0.35, 1.0, finalAO);
     finalContact = lerp(0.5, 1.0, finalContact);
 
-    float combinedOcclusion = finalAO * finalContact;
-    return float4(sceneColor.rgb * combinedOcclusion, sceneColor.a);
+    // GTAO is recorded after the forward color pass in the current renderer.
+    // Keep the screen-space composite conservative: ambient visibility gets a
+    // bounded weight and contact visibility gets its own bounded weight. This
+    // prevents the old full-color multiplication from crushing direct light,
+    // specular highlights and emissive materials. A future pre-lighting AO
+    // path can replace these weights with a true separated indirect term.
+    float ambientWeight = 0.25 * saturate(u_GTAOParams.y);
+    float contactWeight = 0.20 * saturate(u_ContactParams.z);
+    float ambientFactor = lerp(1.0, finalAO, ambientWeight);
+    float contactFactor = lerp(1.0, finalContact, contactWeight);
+    return float4(sceneColor.rgb * ambientFactor * contactFactor, sceneColor.a);
 }

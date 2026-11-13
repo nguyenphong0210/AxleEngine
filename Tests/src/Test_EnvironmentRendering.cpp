@@ -225,6 +225,16 @@ bool Native(RHIType backend) {
     bool normalHasData = false;
     for (size_t i = 0; i < 8; ++i) normalHasData |= normalReadback[normalCenter + i] != 0;
     CHECK(normalHasData);
+    auto averageLuma = [](const std::vector<uint8_t>& image) {
+        double sum = 0.0;
+        for (size_t i = 0; i + 3 < image.size(); i += 4) {
+            sum += 0.2126 * image[i] + 0.7152 * image[i + 1] + 0.0722 * image[i + 2];
+        }
+        return sum / std::max<size_t>(1, image.size() / 4);
+    };
+    const double baseLuma = averageLuma(red);
+    const double gtaoLuma = averageLuma(gtao);
+    CHECK(gtaoLuma >= baseLuma * 0.65 && gtaoLuma <= baseLuma * 1.05);
     {
         std::ofstream scorecard(Output / "M14_U9_timestamp_scorecard.txt", std::ios::app);
         scorecard << "renderer_gpu_scope_ms=" << renderer.GetLastGPUTimestampMilliseconds() << "\n"

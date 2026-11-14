@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `PROPOSED - target architecture and migration contract.`
+**Status:** `ACCEPTED - final source and backend/product gates recorded in U9.`
 **Companion plan:** [PLAN.md](PLAN.md)
 **Purpose:** provide a stable, modular rendering and material foundation for M15 Lighting and Material Fidelity.
 
@@ -33,7 +33,7 @@ flowchart TB
 
     subgraph RenderCore["Renderer core"]
         Context["ViewContext"]
-        Scheduler["RenderScheduler"]
+        Scheduler["RenderPassScheduler"]
         Surface["MaterialResolver / ResolvedSurface"]
         Registry["ViewResourceRegistry"]
         Passes["IRenderPass modules"]
@@ -55,10 +55,10 @@ flowchart TB
         Pipelines["RHIPipelineLayout / cache"]
     end
 
-    Inspector --> Asse
+    Inspector --> Asset
     Asset --> SceneECS
     SceneECS --> Extract --> World
-    World --> Contex
+    World --> Context
     Context --> Scheduler
     Context --> Surface
     Context --> Registry
@@ -86,8 +86,8 @@ classDiagram
     class SceneExtraction
     class RenderWorld
     class RHISceneRenderer
-    class ViewContex
-    class RenderScheduler
+    class ViewContext
+    class RenderPassScheduler
     class IRenderPass
     class MaterialResolver
     class ResolvedSurface
@@ -95,25 +95,25 @@ classDiagram
     class RenderGraph
     class TemporalState
     class RenderDiagnostics
-    class RHIFrameContex
+    class RHIFrameContext
     class RHICommandBuffer
     class RHIDevice
     class RHIViewTargets
     class RHITexture
     class RHIMaterial
 
-    SceneExtraction --> RenderWorld : creates immutable snapsho
-    RenderWorld --> ViewContext : inpu
-    RHISceneRenderer --> RenderScheduler : migrates orchestration
-    RenderScheduler *-- IRenderPass : owns ordered modules
+    SceneExtraction --> RenderWorld : creates immutable snapshot
+    RenderWorld --> ViewContext : input
+    RHISceneRenderer --> RenderPassScheduler : migrates orchestration
+    RenderPassScheduler *-- IRenderPass : owns ordered modules
     ViewContext *-- ViewResourceRegistry
     ViewContext *-- TemporalState
     ViewContext *-- RenderDiagnostics
     ViewResourceRegistry --> RHIViewTargets : publishes generations
-    RenderScheduler --> RenderGraph : compiles declarations
+    RenderPassScheduler --> RenderGraph : compiles declarations
     IRenderPass --> RenderGraph : declares and records
     MaterialResolver --> ResolvedSurface : produces canonical data
-    RenderWorld --> MaterialResolver : supplies material snapsho
+    RenderWorld --> MaterialResolver : supplies material snapshot
     ResolvedSurface --> RHIMaterial : packs GPU constants
     IRenderPass --> ResolvedSurface : consumes
     IRenderPass --> RHIFrameContext : records
@@ -125,7 +125,7 @@ classDiagram
     note for RHISceneRenderer "During migration it remains a facade. New pass logic is not added here."
 ```
 
-During migration, `RHISceneRenderer` remains the public facade used by Editor, Runtime and tests. Internally it delegates to `RenderScheduler` and pass modules. This preserves callers while changing ownership underneath.
+During migration, `RHISceneRenderer` remains the public facade used by Editor, Runtime and tests. Internally it delegates to `RenderPassScheduler` and pass modules. This preserves callers while changing ownership underneath.
 
 Editor, Runtime and preview callers use `RenderService` product seams for viewport sizing, render submission, picking, telemetry and IBL policy. Concrete `RHISceneRenderer` and compatibility `SceneRenderer` headers are restricted to the Scene service boundary; the M14 architecture checker rejects direct product includes.
 
@@ -179,7 +179,7 @@ Record(RenderPassContext)
 Finalize(RenderDiagnostics)
 ```
 
-`Declare` is the only place where resource reads, writes, load/store policy and ordering dependencies are added. `Record` may bind and dispatch only resources declared by the pass.
+`Declare` is the pass-owned logical declaration phase. `Prepare` may add the validated physical declarations required by dynamic view inputs before graph compile; after `Compile`, `Record` may bind and dispatch only resources declared by the sealed graph.
 
 Passes return a structured result:
 
@@ -260,7 +260,7 @@ move persistent pipeline caches out of the existing adapter boundary.
 
 ```mermaid
 flowchart LR
-    Scheduler["RenderScheduler"] --> Pass["IRenderPass"]
+    Scheduler["RenderPassScheduler"] --> Pass["IRenderPass"]
     Pass --> Graph["RenderGraph"]
     Pass --> Frame["RHIFrameContext"]
     Graph --> Cmd["RHICommandBuffer"]
@@ -275,7 +275,7 @@ flowchart LR
 
 Ownership rules:
 
-- `RenderScheduler` owns ordering, not native resources.
+- `RenderPassScheduler` owns ordering, not native resources.
 - Each pass owns its pipeline state and pass-local descriptors, subject to shared caches.
 - `ViewResourceRegistry` owns candidate target generation construction and publication.
 - `RHIViewTargets` owns the textures in one published generation.
@@ -322,11 +322,11 @@ The M14 service seam is implemented by `LightingService`, `ReflectionService` an
 ```mermaid
 sequenceDiagram
     participant Scene
-    participant Scheduler as RenderScheduler
-    participant View as ViewContex
+    participant Scheduler as RenderPassScheduler
+    participant View as ViewContext
     participant Pass as Pass modules
     participant Graph as RenderGraph
-    participant Frame as RHIFrameContex
+    participant Frame as RHIFrameContext
     participant GPU as RHIDevice/GPU
 
     Scene->>Scheduler: immutable RenderWorld
@@ -365,7 +365,7 @@ Fallback selection is part of the frame result and diagnostic report. It is not 
 
 | Current code | Target owner | Migration rule |
 |---|---|---|
-| `RHISceneRenderer::RenderWorldView` | `RenderScheduler` facade | preserve public entry point, delegate internally |
+| `RHISceneRenderer::RenderWorldView` | `RenderPassScheduler` facade | preserve public entry point, delegate internally |
 | renderer-wide pass fields | individual `IRenderPass` modules | move one pass group at a time |
 | `m_ActiveViewTargets` and auxiliary pointers | `ViewResourceRegistry` in `ViewContext` | access through generation handles |
 | material asset/component mirrors | `MaterialResolver` | keep serialization fields, remove duplicate resolution logic |
@@ -394,5 +394,9 @@ M14 acceptance requires:
 - view-generation, graph-dependency, material-parity, temporal-reset and failure-lifetime fixtures;
 - no unowned mutable state in the frame path;
 - an M15 handoff report that lists the final contracts and deferred feature work.
+
+The final U9 review and executed Debug/Release evidence are recorded in
+[U9 final acceptance](U9_FINAL_ACCEPTANCE_AND_M15_HANDOFF.md) and
+[the consolidated review](../../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md).
 
 The architecture is accepted only when the migration is complete enough that M15 can add lighting/material features through pass and service interfaces without adding another monolithic branch to `RHISceneRenderer`.

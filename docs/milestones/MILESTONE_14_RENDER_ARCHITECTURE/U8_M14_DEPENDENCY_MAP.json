@@ -2,13 +2,24 @@
   "milestone": "M14",
   "unit": "U8",
   "generated_by": "scripts/generate_m14_dependency_map.py",
-  "source_files_scanned": 596,
+  "source_files_scanned": 600,
   "cmake_files": 25,
   "contract_owners": {
     "ViewContext": "Engine/Renderer/include/Axle/ViewContext.hpp",
+    "IRenderPass / RenderPassScheduler": "Engine/Renderer/include/Axle/RenderPass.hpp",
     "RenderBackendPolicy": "Engine/Renderer/include/Axle/RenderBackendPolicy.hpp",
     "RenderGraph": "Engine/Renderer/include/Axle/RenderGraph.hpp",
     "ResolvedSurface": "Engine/Renderer/include/Axle/ResolvedSurface.hpp",
+    "ShaderSurface": "Engine/Renderer/include/Axle/ShaderSurface.hpp",
+    "RHIFrameContext": "Engine/RHI/include/Axle/RHI/RHIFrameContext.hpp",
+    "RHIViewTargets": "Engine/RHI/include/Axle/RHI/RHIViewTargets.hpp",
+    "RHIResourceService": "Engine/RHI/include/Axle/RHI/RHIResource.hpp",
+    "LightingService": "Engine/Renderer/include/Axle/LightingService.hpp",
+    "ReflectionService": "Engine/Renderer/include/Axle/ReflectionService.hpp",
+    "GIService": "Engine/Renderer/include/Axle/GIService.hpp",
+    "TemporalService": "Engine/Renderer/include/Axle/TemporalService.hpp",
+    "PostProcessService": "Engine/Renderer/include/Axle/PostProcessService.hpp",
+    "RenderDiagnostics": "Engine/Renderer/include/Axle/RenderDiagnostics.hpp",
     "RenderService": "Engine/Scene/include/Axle/RenderService.hpp",
     "RHISceneRenderer": "Engine/Scene/include/Axle/RHISceneRenderer.hpp (facade/legacy adapter)",
     "SceneRenderer": "Engine/Scene/include/Axle/SceneRenderer.hpp (OpenGL compatibility backend)"
@@ -147,7 +158,7 @@
     {
       "kind": "CMakeLink",
       "file": "Engine/Renderer/CMakeLists.txt",
-      "line": 94,
+      "line": 95,
       "from_module": "Renderer",
       "from_target": "AxleRenderer",
       "to": "Axle::Core",
@@ -157,7 +168,7 @@
     {
       "kind": "CMakeLink",
       "file": "Engine/Renderer/CMakeLists.txt",
-      "line": 94,
+      "line": 95,
       "from_module": "Renderer",
       "from_target": "AxleRenderer",
       "to": "Axle::RHI",
@@ -167,7 +178,7 @@
     {
       "kind": "CMakeLink",
       "file": "Engine/Renderer/CMakeLists.txt",
-      "line": 94,
+      "line": 95,
       "from_module": "Renderer",
       "from_target": "AxleRenderer",
       "to": "glad",
@@ -217,7 +228,7 @@
     {
       "kind": "CMakeLink",
       "file": "Engine/Scene/CMakeLists.txt",
-      "line": 73,
+      "line": 74,
       "from_module": "Scene",
       "from_target": "AxleScene",
       "to": "Axle::Core",
@@ -227,7 +238,7 @@
     {
       "kind": "CMakeLink",
       "file": "Engine/Scene/CMakeLists.txt",
-      "line": 73,
+      "line": 74,
       "from_module": "Scene",
       "from_target": "AxleScene",
       "to": "Axle::RHI",
@@ -237,7 +248,7 @@
     {
       "kind": "CMakeLink",
       "file": "Engine/Scene/CMakeLists.txt",
-      "line": 73,
+      "line": 74,
       "from_module": "Scene",
       "from_target": "AxleScene",
       "to": "Axle::Renderer",
@@ -1143,6 +1154,15 @@
     },
     {
       "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/LightingService.hpp",
+      "line": 5,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIResource.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
       "file": "Engine/Renderer/include/Axle/Material.hpp",
       "line": 2,
       "from_module": "Renderer",
@@ -1265,6 +1285,15 @@
       "from_module": "Renderer",
       "to": "Axle/BuiltinMesh.hpp",
       "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ReflectionService.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIResource.hpp",
+      "to_module": "RHI",
       "allowance": null
     },
     {
@@ -2280,6 +2309,15 @@
       "file": "Engine/Scene/include/Axle/MaterialGraphRuntime.hpp",
       "line": 5,
       "from_module": "Scene",
+      "to": "Axle/ShaderSurface.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/MaterialGraphRuntime.hpp",
+      "line": 6,
+      "from_module": "Scene",
       "to": "Axle/RHI/RHIDescriptorPool.hpp",
       "to_module": "RHI",
       "allowance": null
@@ -2718,6 +2756,33 @@
     },
     {
       "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 32,
+      "from_module": "Scene",
+      "to": "Axle/LightingService.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 33,
+      "from_module": "Scene",
+      "to": "Axle/ReflectionService.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 34,
+      "from_module": "Scene",
+      "to": "Axle/GIService.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
       "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
       "line": 2,
       "from_module": "Scene",
@@ -2728,7 +2793,16 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
-      "line": 4,
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/RenderGraph.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
+      "line": 5,
       "from_module": "Scene",
       "to": "Axle/RHI/RHIMesh.hpp",
       "to_module": "RHI",
@@ -2737,7 +2811,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
-      "line": 5,
+      "line": 6,
       "from_module": "Scene",
       "to": "Axle/RHI/RHIPipeline.hpp",
       "to_module": "RHI",
@@ -2746,7 +2820,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
-      "line": 6,
+      "line": 7,
       "from_module": "Scene",
       "to": "Axle/RHI/RHIDescriptorPool.hpp",
       "to_module": "RHI",
@@ -2755,7 +2829,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
-      "line": 7,
+      "line": 8,
       "from_module": "Scene",
       "to": "Axle/RHI/RHITransform.hpp",
       "to_module": "RHI",
@@ -3475,7 +3549,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/src/RHISceneRenderer.cpp",
-      "line": 2,
+      "line": 3,
       "from_module": "Scene",
       "to": "Axle/Path.hpp",
       "to_module": "Core",
@@ -3484,7 +3558,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/src/RHISceneRenderer.cpp",
-      "line": 3,
+      "line": 4,
       "from_module": "Scene",
       "to": "Axle/RenderGraph.hpp",
       "to_module": "Renderer",
@@ -3493,7 +3567,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/src/RHISceneRenderer.cpp",
-      "line": 4,
+      "line": 5,
       "from_module": "Scene",
       "to": "Axle/SceneLighting.hpp",
       "to_module": "Renderer",
@@ -3502,7 +3576,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/src/RHISceneRenderer.cpp",
-      "line": 5,
+      "line": 6,
       "from_module": "Scene",
       "to": "Axle/RenderContracts.hpp",
       "to_module": "Renderer",
@@ -3511,7 +3585,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/src/RHISceneRenderer.cpp",
-      "line": 6,
+      "line": 7,
       "from_module": "Scene",
       "to": "Axle/RenderBackendPolicy.hpp",
       "to_module": "Renderer",
@@ -3520,7 +3594,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/src/RHISceneRenderer.cpp",
-      "line": 16,
+      "line": 17,
       "from_module": "Scene",
       "to": "Axle/MaterialCache.hpp",
       "to_module": "Renderer",
@@ -3529,7 +3603,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/src/RHISceneRenderer.cpp",
-      "line": 19,
+      "line": 20,
       "from_module": "Scene",
       "to": "Axle/RHI/RHIVertexLayout.hpp",
       "to_module": "RHI",
@@ -3538,7 +3612,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/src/RHISceneRenderer.cpp",
-      "line": 20,
+      "line": 21,
       "from_module": "Scene",
       "to": "Axle/RHI/RHIMaterial.hpp",
       "to_module": "RHI",
@@ -3547,7 +3621,7 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/src/RHISceneRenderer.cpp",
-      "line": 21,
+      "line": 22,
       "from_module": "Scene",
       "to": "Axle/FileSystem.hpp",
       "to_module": "Core",
@@ -3556,10 +3630,55 @@
     {
       "kind": "SourceInclude",
       "file": "Engine/Scene/src/RHISceneRenderer.cpp",
-      "line": 22,
+      "line": 23,
       "from_module": "Scene",
       "to": "Axle/Log.hpp",
       "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/SceneLighting.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/ShaderSurface.hpp",
+      "to_module": "Renderer",
       "allowance": null
     },
     {

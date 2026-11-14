@@ -1,10 +1,18 @@
 # Milestone 15 — Lighting and Material Fidelity
 
-**Status:** `HOLD — implementation is in progress; this document is the canonical execution and acceptance contract.`
-**Current source reference:** `77d6b70` (authored reflection-probe checkpoint). Later uncommitted experiments are not part of the baseline.
+**Status:** `HOLD - M14 architecture prerequisite is accepted; M15 feature implementation is not released.`
+**Current source reference:** `19ac2a1` (M14 final handoff). No M15 feature is promoted by this reference.
 **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
 **Detailed implementation notes:** [REMEDIATION_PLAN.md](REMEDIATION_PLAN.md)
-**Independent review:** [M14_CODEX_REVIEW.md](../../reviews/M14_CODEX_REVIEW.md)
+**M14 prerequisite review:** [M14 U9 final acceptance](../../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md)
+
+M14 supplies the accepted entry contracts for `ViewContext`, `IRenderPass` and
+`RenderPassScheduler`, `ResolvedSurface`, `RenderGraph` and target generations,
+`RenderBackendPolicy`, the lighting/reflection/GI services, temporal/post-process
+services, diagnostics and `RenderService` product ownership. M15 must implement
+fidelity behind these seams and keep every deferred behavior explicitly marked
+until its own released Unit evidence passes. The historical [M14 review](../../reviews/M14_CODEX_REVIEW.md)
+is retained for audit history and is superseded as the current acceptance record.
 
 This plan replaces the previous optimistic checklist. A checkbox is ticked only after the stated source, runtime, and verification evidence exists. A compiled shader, allocated texture, successful dispatch, non-empty image, or UI toggle is not acceptance evidence by itself.
 

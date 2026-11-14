@@ -15,6 +15,8 @@ explicitly if the running client/session has not loaded it.
 
 ## Current checkpoint
 
+- **M14 U9:** Accepted at source `19ac2a1` after the final consolidated review and current Debug/Release 72/72 matrices. Read the [U9 final acceptance review](../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md) and [M15 handoff](../milestones/MILESTONE_14_RENDER_ARCHITECTURE/U9_FINAL_ACCEPTANCE_AND_M15_HANDOFF.md). M15 remains unreleased.
+
 - **OPT-00**: Gemini delivered clean retirement; the separate independent manual/full-product acceptance gap remains open.
 - **OPT-01**: Accepted baseline and verified corrections; see the roadmap evidence.
 - **OPT-02/03**: Accepted after Codex review and verified corrections for EJ-01..EJ-14 and AF-02..AF-04; [acceptance report](../reviews/OPT_02_03_CODEX_REVIEW.md).

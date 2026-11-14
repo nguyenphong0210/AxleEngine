@@ -254,4 +254,27 @@ and [correction recheck](M14_U5_CORRECTION_RECHECK.md) for source anchors and li
   follow-up recheck. No open U4 acceptance gate remains.
 - **PASS:** U5 service ownership, native publication/fallback reconciliation and
   separate-context correction recheck. No open U5 acceptance gate remains.
-- **HOLD:** U9 pending consolidated final acceptance; M15 remains unreleased.
+- **Historical HOLD (superseded below):** U9 pending consolidated final acceptance; M15 remains unreleased.
+
+
+### U9 final acceptance and M15 handoff - source `19ac2a1`
+
+U9-R1 closed the same-wrapper target-generation reset defect in `27e6811`.
+U9-R2 closed strong `ViewContext` retention of retired explicit target wrappers
+in `56931769`; the corrected resource-view fixture passes on D3D12 and Vulkan.
+The historical P0 audit now reads frozen source `769a9f2` and no longer requires
+repaired defects to remain in the current tree (`19ac2a1`).
+
+Fresh current-source gates all pass: tools 6/6; Debug and Release builds; and
+72/72 direct CPU/native/product cases in each Debug and Release matrix. The
+matrix covers D3D12, Vulkan, OpenGL compatibility/fallback, Editor strict empty
+startup, Runtime loose/cooked, Preview, RenderService, target generations,
+RenderGraph, ResolvedSurface/material graph and service policies. See the
+[U9 consolidated review](M14_U9_FINAL_ACCEPTANCE_REVIEW.md) and [U9 handoff](../milestones/MILESTONE_14_RENDER_ARCHITECTURE/U9_FINAL_ACCEPTANCE_AND_M15_HANDOFF.md).
+
+## Current acceptance state
+
+- **PASS:** U0 through U9 at source `19ac2a1`; final review and handoff are current.
+- **DEFERRED:** M15 lighting/material fidelity remains unreleased, including the
+  full dedicated pass-class extraction, final SSR/probe/DDGI/material quality,
+  ray tracing and GPU budget scorecard.

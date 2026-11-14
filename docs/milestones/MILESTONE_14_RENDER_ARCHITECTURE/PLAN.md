@@ -1,8 +1,8 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `REVIEW HOLD - sequential architecture repairs in progress; see docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md. M15 is not released.`
-**Baseline:** `ac4941c` (M14 architecture split and target contract).
-**Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
+**Status:** `ACCEPTED - U0 through U9 closed at source 19ac2a1; M15 remains unreleased.`
+**Baseline:** `ac4941c` (M14 architecture split and target contract). **Final source:** `19ac2a1`.
+**Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith. Final evidence: [U9 handoff](U9_FINAL_ACCEPTANCE_AND_M15_HANDOFF.md) and [consolidated review](../../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md).
 
 This milestone changes ownership and contracts. It does not claim that SSR, dynamic reflection capture, DDGI, advanced materials or other M15 features are complete. Every checkbox below requires source evidence, a build, and the stated regression evidence.
 

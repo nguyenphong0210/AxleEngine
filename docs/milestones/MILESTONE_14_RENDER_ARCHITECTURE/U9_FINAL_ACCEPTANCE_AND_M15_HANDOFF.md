@@ -1,74 +1,109 @@
-# M14-U9 — Final Acceptance and M15 Handoff
+# M14-U9 - Final Acceptance and M15 Handoff
 
-Status: **HOLD - independent review and sequential repairs**
+Status: **ACCEPTED** at source `19ac2a1`.
 
-## Structural scorecard
+This report closes the M14 architecture boundary. It excludes M15 lighting and
+material fidelity implementation. The historical hold report remains preserved
+in `docs/reviews/M14_RENDER_ARCHITECTURE_CODEX_REVIEW.md`; this report and the
+consolidated U9 review are the current acceptance records.
 
-| Gate | Result | Evidence |
+## Acceptance scorecard
+
+| Unit / contract | Result | Source and evidence |
 |---|---|---|
-| View/frame owner | PASS | `ViewContext`, `RHIFrameContext`, temporal/post-process/diagnostics services; U1/U6 evidence |
-| Pass lifecycle owner | PASS (current U2 correction) | `RenderPassScheduler`, `IRenderPass`, named legacy adapters; U2 evidence |
-| Surface/material owner | PASS (U3 correction accepted) | `86feca7`, `f241eb0`; U3 evidence and [final correction recheck](../../reviews/M14_U3_CORRECTION_RECHECK.md) |
-| Resource/graph owner | PASS (U4 follow-up correction accepted) | `4cf8e72`, `171133b`, `da51acf`; U4 evidence and [follow-up recheck](../../reviews/M14_U4_FOLLOWUP_CORRECTION_RECHECK.md) |
-| Lighting/reflection/GI boundaries | PASS (U5 correction accepted) | `3af60f6`; [U5 evidence](U5_SERVICE_BOUNDARIES_EVIDENCE.md) and [correction recheck](../../reviews/M14_U5_CORRECTION_RECHECK.md) |
-| Backend/fallback policy | PASS | `RenderBackendPolicy`, D3D12/Vulkan/OpenGL matrix; U7 evidence |
-| Product caller migration | PASS | RenderService-only product seams and U8 dependency map |
+| U0 baseline and migration contract | PASS | `U0_BASELINE_EVIDENCE.md`; historical P0 audit is pinned to `769a9f2` and reports history only |
+| U1 View/frame ownership | PASS | `ViewContext.hpp:57-120`, `ViewContext.cpp:77-191`; `RHIFrameContext.cpp:54-110` |
+| U2 pass orchestration | PASS at released boundary | `RenderPass.cpp:73-129`; live scheduler groups in `RHISceneRendererPasses.cpp:503-1768`; callback/persistent-cache adapter is explicit and quarantined |
+| U3 canonical surface | PASS | `ResolvedSurface.hpp:34-112`; native built-in/custom/graph and shadow callers in `RHISceneRendererPasses.cpp:391-789` |
+| U4 graph/resource lifetime | PASS | `RenderGraph.cpp:55-238`; `RHIResource.cpp:271-383`; `RHIViewTargets.cpp:57-175`; strict graph and failure/lifetime fixtures |
+| U5 service ownership | PASS | service calls in `RHISceneRendererPasses.cpp:555-568` and renderer publication at `RHISceneRenderer.cpp:2611-2640`; U5 correction evidence |
+| U6 temporal/post/diagnostics | PASS | `TemporalService.cpp:17-66`, `PostProcessService.cpp:30-83`, `RenderDiagnostics.cpp:44-112`, target reset in `ViewContext.cpp:77-191` |
+| U7 backend/fallback policy | PASS | `RenderBackendPolicy.cpp:26-143`; native D3D12/Vulkan and reduced OpenGL/fallback runs |
+| U8 migration/tooling | PASS | `RenderService.cpp:204-330`; product callers; generated owner map with zero architecture/caller violations |
+| U9 final gates and handoff | PASS | This report, [consolidated review](../../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md), and current evidence manifest below |
 
-Persistent pipeline/descriptor caches remain behind the legacy adapter boundary
-recorded by U2. Live orchestration and canonical surface integration are accepted
-at their documented boundaries. U4 resource declarations and exact lifetime are
-implemented, the typed presentation/frame view correction is accepted, and the
-current native/product gates pass. U5 service ownership is accepted after its
-publication/fallback correction and final-source gates. Consolidated U9
-acceptance remains before the M15 handoff.
+## Corrections closed during U9
 
-Current correction evidence and remaining gates are recorded in
-`docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md`. Historical delivery
-checkboxes below do not override this HOLD or release M15.
+### U9-R1 - target generation reset through a reused wrapper (`27e6811`)
 
-## Historical verification scorecard
+`ViewContext::Observe` previously compared only the `RHIViewTargets` pointer. A
+successful in-place `Configure` changed generation and textures while keeping
+the pointer, so TAA history could remain valid across a new target generation.
+Implicit targets also reached observation before the final target was adopted.
+The fix adds a numeric generation snapshot, adopts final targets after frame
+acquisition and before jitter/history imports, and records the generation in
+`RenderDiagnostics`. Native regression coverage proves unchanged wrappers keep
+history, failed Configure keeps the last-good generation, successful same-wrapper
+replacement resets history, and implicit same-size color replacement resets it.
 
-- Debug build: `AxleEditor`, `AxleRuntime`, `AxleRenderUnitTests`, `AxlePreviewRenderTests`, `AxleRHIFoundationTests`, `AxleRenderAcceptanceTests` — PASS.
-- Release build: same renderer/product targets — PASS.
-- Debug `AxleRenderUnitTests` — PASS.
-- Release `AxleRenderUnitTests` — PASS.
-- Native D3D12 foundation validation and injected failure/recovery — PASS.
-- Native Vulkan foundation validation and injected failure/recovery — PASS.
-- OpenGL compatibility/fallback equivalence — PASS.
-- D3D12 and Vulkan render acceptance — PASS.
-- Editor `--verify-empty-startup --rhi=dx12` — PASS (5 UI frames, 0 entities/assets).
-- Runtime cooked D3D12 fixture — PASS (asset package, simulation/input/presentation lifecycle).
-- D3D12 preview surface fixture — PASS.
-- OpenGL preview surface fixture — PASS.
-- Headless renderer contracts, graph/lifetime/history/material tests — PASS.
-- `python scripts/check_architecture.py` — PASS (596 files, 25 CMake files).
-- `python scripts/generate_m14_dependency_map.py` — PASS (0 architecture/caller violations).
-- `python scripts/test_baseline_tools.py` — PASS (23 tests).
-- `git diff --check` — PASS.
+### U9-R2 - retired target wrapper held after submit (`56931769`)
 
-## Published handoff artifacts
+The native resource-view fixture exposed a real ownership leak: `ViewContext`
+kept a strong target-generation wrapper in its input snapshot after submission.
+The fix keeps weak target identity plus numeric generation for reset comparison,
+then releases the strong wrapper after submit or abandon. RHI command/resource
+leases remain completion-owned. The corrected fixture checks exact enabled target
+slots, atomic failed replacement, generation preservation, pixel retention while
+an explicit lease is held, and release after that lease is reset. D3D12 and Vulkan
+both pass.
 
-- Source map: `U8_M14_DEPENDENCY_MAP.md` and `U8_M14_DEPENDENCY_MAP.json`.
-- Migration/tooling report: `U8_MIGRATION_TESTS_TOOLING_EVIDENCE.md`.
-- Final acceptance and M15 handoff: this document.
+## Current verification evidence
 
-The cooked D3D12 runtime fixture also fixed a particle-depth regression: `ParticleDepth` is copied only when a particle requests soft intersection (`SoftnessDistance > 0`), eliminating the NRI uninitialized-resource validation error.
+The runner `build/run_m14_u9_final.py` creates immutable per-phase command logs,
+source identity and binary hash manifests under `build/Tests/Work/M14-u9-final`.
+All five current phases below use source fingerprint
+`924cdeaffff272837890a8205fd1d3724c20aba36db4c684ea775ecb00c8824c` and HEAD
+`19ac2a1a1b7fb3b1684b5e6ad4c618b0e23f50da`:
+
+| Phase | Result | Evidence |
+|---|---|---|
+| Tools | PASS (6/6) | `tools-tools-20261114T145824/results.json` |
+| Debug build | PASS | `Debug-build-20261114T145922/results.json` |
+| Debug tests | PASS (72/72) | `Debug-test-20261114T150258/results.json` |
+| Release build | PASS | `Release-build-20261114T150639/results.json` |
+| Release tests | PASS (72/72) | `Release-test-20261114T151131/results.json` |
+
+The 72-case matrices include CPU/policy contracts; native D3D12 and Vulkan
+foundation, graph, frame, presentation, resource-view, service, environment,
+shadow, material-graph, acceptance, preview and Runtime loose/cooked fixtures;
+OpenGL compatibility/fallback foundation, service, canvas, environment, preview
+and Runtime; and Editor empty-startup verification for `dx12`, `vulkan` and
+`opengl` with strict RHI. Required proof strings were matched for Runtime and
+Editor. The build manifests include hashes for Editor, Runtime and every
+focused test executable.
+
+The generated tracked map is
+`U8_M14_DEPENDENCY_MAP.{json,md}`. It lists 18 contract owners, product caller
+counts, **0 architecture violations**, **0 product caller violations**, and
+617 filtered dependency edges at this source.
 
 ## M15 entry contracts
 
-M15 feature work must enter through:
+M15 work enters through these accepted interfaces:
 
-1. `ViewContext` for view-local state, reset and completion ownership.
-2. `IRenderPass`/`RenderPassScheduler` for pass lifecycle and ordering.
-3. `RenderGraph` and `RHIViewTargets` for declared resources and generations.
-4. `ResolvedSurface` for all material outputs consumed by lighting/visibility.
-5. `RenderBackendPolicy` for capability and fallback decisions.
-6. `LightingService`, `ReflectionService`, `GIService` for lighting/reflection/GI policy.
-7. `TemporalService`, `PostProcessService`, `RenderDiagnostics` for history, output policy and telemetry.
+1. `ViewContext` for view-local state, target-generation reset, temporal state and completion ownership.
+2. `IRenderPass` and `RenderPassScheduler` for Configure/Declare/Prepare/Compile/Record/Finalize ordering and structured fallback results.
+3. `RenderGraph`, `RHIViewTargets` and `RHIResourceService` for declared resources, physical generations, descriptor roles, leases and completion lifetime.
+4. `ResolvedSurface` and `ShaderSurface` for all built-in, custom and Material Graph material inputs consumed by lighting/visibility.
+5. `RenderBackendPolicy` for capability, quality tier and fallback decisions.
+6. `LightingService`, `ReflectionService` and `GIService` for bounded lighting/reflection/GI policy and publication metadata.
+7. `TemporalService`, `PostProcessService` and `RenderDiagnostics` for history, output policy, exposure and telemetry.
+8. `RenderService` for Editor, Runtime and preview product ownership; product callers do not reach through to concrete renderers.
 
-## Deferred scope
+## Explicit boundaries and deferred scope
 
-M14 does not claim final SSR quality, dynamic six-face reflection capture/prefilter, multi-probe blending, DDGI irradiance/visibility feedback, ray-traced reflections, final advanced material fidelity, or a validated GPU budget scorecard. Those are M15+ deliverables and must retain explicit fallback/diagnostic states.
+- The current U2 boundary intentionally retains the callback adapter and shared
+  pipeline/cache ownership in `RHISceneRenderer`. It is a documented migration
+  seam; adding a new M15 feature still requires scheduler ownership, declarations,
+  capability policy and tests. Full per-technique class extraction is M15 scope.
+- OpenGL is a supported compatibility subset with explicit reduced policy. M14
+  does not claim native OpenGL Material Graph/ResolvedSurface parity with the RHI
+  backends.
+- M14 does not claim final SSR quality, dynamic six-face reflection capture or
+  prefilter, multi-probe blending, DDGI irradiance/visibility feedback,
+  ray-traced reflections, advanced material fidelity, or a validated GPU budget.
+  These remain M15 or later and must retain explicit fallback/diagnostic states.
 
-M14 remains on hold until the current architecture repairs and verification
-gates are complete. Stable entry contracts alone do not establish live integration.
+M15 remains **HOLD / unreleased** until a concrete user assignment activates its
+feature scope and its own Unit evidence passes. M14 acceptance does not promote
+any M15 checkbox.

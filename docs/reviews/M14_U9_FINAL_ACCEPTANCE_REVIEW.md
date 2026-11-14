@@ -1,7 +1,7 @@
 # M14 U9 - Final Acceptance Review
 
 Review boundary: M14 Render Architecture U0-U9 only. M15 lighting/material
-fidelity implementation is excluded. Review source: HEAD `19ac2a1`; source
+fidelity implementation is excluded. Review source code boundary: `19ac2a1`; documentation publication commit: `cacc9fd`; source
 fingerprint in the executed manifests:
 `924cdeaffff272837890a8205fd1d3724c20aba36db4c684ea775ecb00c8824c`.
 

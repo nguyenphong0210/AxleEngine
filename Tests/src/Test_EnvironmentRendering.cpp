@@ -629,7 +629,10 @@ bool Native(RHIType backend) {
     material->GetDesc().RefractionEnabled = false;
     material->GetDesc().SurfaceType = Axle::SurfaceType::Opaque;
 
-    CHECK(device.WaitIdle()); renderer.Shutdown(); CHECK(environment.CacheSize()==0);
+    CHECK(device.WaitIdle());
+    const auto baselineDrawCalls = renderer.GetDrawCallCount();
+    const auto baselineEntities = renderer.GetRenderedEntityCount();
+    renderer.Shutdown(); CHECK(environment.CacheSize()==0);
     CHECK(GetRHIValidationErrorCount()==0);
     // CPU cache metadata may outlive a native device. Stale native generations
     // must become invalid and be recreated under the new owner epoch.
@@ -639,6 +642,8 @@ bool Native(RHIType backend) {
     CHECK(survivor.Prepare(world.Skybox)&&survivor.Ready()&&survivor.UploadCount()==2);
     CHECK(survivor.Ready()->Radiance->GetHandle()!=stale&&survivor.CacheSize()==1);
     survivor.Clear();CHECK(device.WaitIdle()&&GetRHIValidationErrorCount()==0);
+    std::cout<<"baseline_width=128 baseline_height=128 color_format=RGBA8_UNORM depth_format=D32_FLOAT "
+             <<"baseline_draw_calls="<<baselineDrawCalls<<" baseline_entities="<<baselineEntities<<"\n";
     std::cout<<"PASS HDR native subresources, sky/specular/diffuse, cache, exposure, reload, fallback and upload retry\n";
     return true;
 }

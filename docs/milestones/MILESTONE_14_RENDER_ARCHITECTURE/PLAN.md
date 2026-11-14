@@ -1,20 +1,20 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `PROPOSED - architecture and migration contract; no runtime implementation is released by this document.`
-**Baseline:** `7265281` (source-grounded Renderer/RHI architecture review).
+**Status:** `U0 ACCEPTED - U1 is the next released Unit.`
+**Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
 This milestone changes ownership and contracts. It does not claim that SSR, dynamic reflection capture, DDGI, advanced materials or other M15 features are complete. Every checkbox below requires source evidence, a build, and the stated regression evidence.
 
 ## 1. Milestone hierarchy
 
-```tex
+```text
 Milestone 14 - Render Architecture Refactor
   `- Phase 44 - Modular renderer and material foundation
-      |- U0 Baseline and migration contrac
+      |- U0 Baseline and migration contract
       |- U1 ViewContext and frame ownership
       |- U2 Pass interface and renderer orchestration
-      |- U3 Canonical material and surface contrac
+      |- U3 Canonical material and surface contract
       |- U4 Resource lifetime and RenderGraph authority
       |- U5 Lighting, reflection and GI service boundaries
       |- U6 Temporal, post-process and diagnostics ownership
@@ -27,7 +27,7 @@ Milestone 14 - Render Architecture Refactor
 
 Dependency order:
 
-```tex
+```text
 U0 -> U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8 -> U9
 ```
 
@@ -41,24 +41,24 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 - **Blocked:** a required dependency is unavailable; it cannot be converted to PASS by omission.
 - **Accepted:** every exit condition of the named Unit passes and the review record identifies the exact commit and evidence.
 
-## 3. Unit and SubUnit checklis
+## 3. Unit and SubUnit checklist
 
-### U0 - Baseline and migration contrac
+### U0 - Baseline and migration contract
 
-**Exit:** the existing RHI path still builds and renders a reference scene, the source map is frozen, and every moved responsibility has an owner.
+**Exit:** the existing RHI path still builds and renders a reference scene, the source map is frozen, and every moved responsibility has an owner. Evidence: [U0_BASELINE_EVIDENCE.md](U0_BASELINE_EVIDENCE.md).
 
-- [ ] **S0.1 Source inventory**
-  - [ ] Record current callers of `SceneRenderer`, `RHISceneRenderer`, `RenderWorld`, `RHIFrameContext` and `RenderGraph`.
-  - [ ] Record current material paths: asset, component, snapshot, `RHIMaterial`, Material Graph and preview.
-  - [ ] Record all active native backends, feature toggles and fallback paths.
-- [ ] **S0.2 Contract freeze**
-  - [ ] Freeze `RenderWorld` as the only scene input while GPU commands are recorded.
-  - [ ] Freeze RHI ownership rules for resource leases, descriptor generations and completion tokens.
-  - [ ] Freeze the M15 feature boundary and list behavior explicitly deferred from M14.
-- [ ] **S0.3 Reference evidence**
-  - [ ] Capture baseline build/configuration and current reference images/readbacks.
-  - [ ] Record baseline draw calls, target formats, backend and device capability snapshot.
-  - [ ] Record known failures separately from accepted baseline behavior.
+- [x] **S0.1 Source inventory**
+  - [x] Record current callers of `SceneRenderer`, `RHISceneRenderer`, `RenderWorld`, `RHIFrameContext` and `RenderGraph`.
+  - [x] Record current material paths: asset, component, snapshot, `RHIMaterial`, Material Graph and preview.
+  - [x] Record all active native backends, feature toggles and fallback paths.
+- [x] **S0.2 Contract freeze**
+  - [x] Freeze `RenderWorld` as the only scene input while GPU commands are recorded.
+  - [x] Freeze RHI ownership rules for resource leases, descriptor generations and completion tokens.
+  - [x] Freeze the M15 feature boundary and list behavior explicitly deferred from M14.
+- [x] **S0.3 Reference evidence**
+  - [x] Capture baseline build/configuration and current reference images/readbacks.
+  - [x] Record baseline draw calls, target formats, backend and device capability snapshot.
+  - [x] Record known failures separately from accepted baseline behavior.
 
 ### U1 - ViewContext and frame ownership
 
@@ -95,7 +95,7 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
   - [ ] Remove pass-specific mutable state from the renderer where the pass can own it safely.
   - [ ] Keep shared RHI caches and device ownership below the pass layer.
 
-### U3 - Canonical material and surface contrac
+### U3 - Canonical material and surface contract
 
 **Exit:** built-in PBR, Material Graph, preview and screen-space consumers use one resolved surface representation.
 

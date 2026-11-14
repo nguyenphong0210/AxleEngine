@@ -95,9 +95,23 @@ namespace Axle {
             "ReflectionAndGI",
             "PostAndTemporal"
         };
-        for (const auto* group : groups) {
-            m_PassScheduler.Add(std::make_unique<CallbackRenderPass>(group));
-        }
+    for (const auto* group : groups) {
+        const std::string name = group;
+        m_PassScheduler.Add(std::make_unique<CallbackRenderPass>(
+            name,
+            [name](const RenderPassContext& context) {
+                if (!context.World || !context.Camera || !context.Settings || !context.View || !context.Commands)
+                    return RenderPassResult::Failed(name + ": missing immutable view/command context");
+                if (!context.Capabilities.NativeRHI)
+                    return RenderPassResult::Fallback(name + ": native RHI capability unavailable");
+                return RenderPassResult{};
+            },
+            [name](const RenderPassContext& context) {
+                if (!context.Commands->IsRecording())
+                    return RenderPassResult::Failed(name + ": command buffer is not recording");
+                return RenderPassResult{};
+            }));
+    }
     }
 
     bool RHISceneRenderer::Init(RHIDevice& device, bool enablePhysicsDebug) {

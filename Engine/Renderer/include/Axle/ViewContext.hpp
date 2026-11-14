@@ -112,6 +112,9 @@ namespace Axle {
         uint64_t m_FrameIndex = 0;
         uint64_t m_DeviceEpoch = 0;
         // Snapshot independently: m_Input.Targets may be reconfigured in place.
+        // The weak identity survives after submission so a caller can replace
+        // its wrapper without this context retaining a retired generation.
+        std::weak_ptr<RHI::RHIViewTargets> m_TargetIdentity;
         uint64_t m_TargetGeneration = 0;
         bool m_HasInput = false;
         ViewContextInput m_Input;

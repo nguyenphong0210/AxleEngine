@@ -50,6 +50,7 @@ namespace Axle {
         m_FrameIndex = 0;
         m_DeviceEpoch = 0;
         m_TargetGeneration = 0;
+        m_TargetIdentity.reset();
         m_HasInput = false;
         m_ResetReasons = ViewResetReason::Initial;
         m_Temporal.Reset();
@@ -66,6 +67,7 @@ namespace Axle {
         m_FrameIndex = 0;
         m_DeviceEpoch = 0;
         m_TargetGeneration = 0;
+        m_TargetIdentity.reset();
         m_HasInput = false;
         m_ResetReasons = ViewResetReason::None;
         m_Input = ViewContextInput{};
@@ -83,12 +85,14 @@ namespace Axle {
             if (input.SceneRevision != m_Input.SceneRevision) reasons |= ViewResetReason::SceneRevision;
             if (input.MaterialGeneration != m_Input.MaterialGeneration) reasons |= ViewResetReason::MaterialGeneration;
             if (input.FeatureGeneration != m_Input.FeatureGeneration) reasons |= ViewResetReason::FeaturePolicy;
-            if (input.Targets != m_Input.Targets || targetGeneration != m_TargetGeneration) reasons |= ViewResetReason::TargetGeneration;
+            const auto priorTargets = m_TargetIdentity.lock();
+            if (priorTargets.get() != input.Targets.get() || targetGeneration != m_TargetGeneration) reasons |= ViewResetReason::TargetGeneration;
         }
         if (input.CameraCut) reasons |= ViewResetReason::CameraCut;
         if (m_HasInput && deviceEpoch != m_DeviceEpoch) reasons |= ViewResetReason::DeviceEpoch;
 
         m_Input = input;
+        m_TargetIdentity = input.Targets;
         m_TargetGeneration = targetGeneration;
         m_DeviceEpoch = deviceEpoch;
         m_HasInput = true;
@@ -105,8 +109,10 @@ namespace Axle {
 
     bool ViewContext::ObserveTargets(std::shared_ptr<RHI::RHIViewTargets> targets) {
         const uint64_t generation=targets ? targets->GetGeneration() : 0;
-        const bool changed=targets != m_Input.Targets || generation != m_TargetGeneration;
+        const auto priorTargets = m_TargetIdentity.lock();
+        const bool changed=priorTargets.get() != targets.get() || generation != m_TargetGeneration;
         m_Input.Targets=std::move(targets);
+        m_TargetIdentity = m_Input.Targets;
         m_TargetGeneration=generation;
         if (changed) RequestReset(ViewResetReason::TargetGeneration);
         m_Diagnostics.SetTargetGeneration(generation);
@@ -158,10 +164,16 @@ namespace Axle {
     bool ViewContext::EndFrameAndSubmit() {
         if (!m_FrameActive || !m_Frame.End() || !m_Frame.Submit()) {
             m_FrameActive = false;
+            m_Input.Targets.reset();
             return false;
         }
         m_FrameActive = false;
         ++m_FrameIndex;
+        // The command buffer and completion token retain every resource used by
+        // the frame. Do not keep the caller's view-generation wrapper alive
+        // between frames; the weak identity/generation snapshot still detects
+        // replacement and in-place reconfiguration on the next Observe call.
+        m_Input.Targets.reset();
         return static_cast<bool>(m_Frame.GetCompletion());
     }
 
@@ -169,6 +181,7 @@ namespace Axle {
         if (!m_FrameActive) return true;
         const bool result = m_Frame.Abandon();
         m_FrameActive = false;
+        m_Input.Targets.reset();
         return result;
     }
 

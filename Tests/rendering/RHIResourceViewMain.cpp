@@ -13,6 +13,7 @@
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <imgui.h>
+#include <algorithm>
 
 using namespace Axle;
 using namespace Axle::RHI;
@@ -335,16 +336,26 @@ static bool TargetSets(RHIType backend) {
     render.EnableSkybox = render.EnableShadows = render.EnableStudioLightLobes = render.EnableParticles = false;
     render.MSAASamples = 2; render.EnableFXAA = true; render.ClearColor = {0.1f, 0.3f, 0.6f, 1};
     renderer.RenderScene(scene, camera, second.GetColorTexture(), second.GetDepthTexture(), render, nullptr, second.GetTargets());
+    RENDER_CHECK(renderer.WasLastRenderSuccessful(), "second explicit view render succeeds");
     const auto secondPixels = ReadTexture(*second.GetColorTexture());
     RENDER_CHECK(!secondPixels.empty(), "second view produced actual GPU pixels");
     render.MSAASamples = 4; render.EnableToneMapping = true; render.ClearColor = {0.6f, 0.2f, 0.1f, 1};
     renderer.RenderScene(scene, camera, first.GetColorTexture(), first.GetDepthTexture(), render, nullptr, first.GetTargets());
+    RENDER_CHECK(renderer.WasLastRenderSuccessful(), "first explicit HDR/MSAA view render succeeds");
     RENDER_CHECK(ReadTexture(*second.GetColorTexture()) == secondPixels, "rendering another sized HDR/MSAA view preserves the first preview's pixels");
+    const std::vector<RHIViewTarget> required = {
+        RHIViewTarget::Color, RHIViewTarget::Depth, RHIViewTarget::MSAAColor, RHIViewTarget::MSAADepth,
+        RHIViewTarget::HDR, RHIViewTarget::FXAA, RHIViewTarget::OpaqueColor, RHIViewTarget::OpaqueDepth,
+        RHIViewTarget::ParticleDepth, RHIViewTarget::History0, RHIViewTarget::History1
+    };
     std::vector<RHIResourceHandle> handles;
     for (unsigned slot = 0; slot < static_cast<unsigned>(RHIViewTarget::Count); ++slot) {
-        auto* texture = first.GetTargets()->Get(static_cast<RHIViewTarget>(slot));
-        RENDER_CHECK(texture && texture->IsValid() && texture->GetWidth() == 8, "all required targets belong to the same view size");
-        handles.push_back(texture->GetHandle());
+        const auto target = static_cast<RHIViewTarget>(slot);
+        auto* texture = first.GetTargets()->Get(target);
+        const bool enabled = std::find(required.begin(), required.end(), target) != required.end();
+        RENDER_CHECK(enabled ? texture && texture->IsValid() && texture->GetWidth() == 8 && texture->GetHeight() == 8 : !texture,
+            "exact enabled target set belongs to the same view size; disabled effects allocate no targets");
+        handles.push_back(texture ? texture->GetHandle() : RHIResourceHandle{});
     }
     RENDER_CHECK(second.GetTargets()->Get(RHIViewTarget::MSAAColor)->GetDesc().SampleCount == 2 &&
         second.GetTargets()->Get(RHIViewTarget::History0)->GetWidth() == 24 && !second.GetTargets()->Get(RHIViewTarget::History1), "views do not share MSAA/history storage");
@@ -354,13 +365,18 @@ static bool TargetSets(RHIType backend) {
     bool reached = false;
     {
         ScopedRHIFault fail([&](std::string_view operation) -> std::optional<nri::Result> {
-            if (operation == "CreateTexture" && ScopedRHIOperation::Resource() == "ViewTarget_10") { reached = true; return nri::Result::OUT_OF_MEMORY; }
+            if (operation == "CreateTexture" && ScopedRHIOperation::Resource() ==
+                "ViewTarget_" + std::to_string(static_cast<unsigned>(RHIViewTarget::History1))) { reached = true; return nri::Result::OUT_OF_MEMORY; }
             return {};
         });
         RENDER_CHECK(!first.SetHDR(true) && reached && first.GetImTextureID() == gui && !first.IsHDR(), "late history allocation failure preserves the complete set and GUI binding");
     }
-    for (unsigned slot = 0; slot < handles.size(); ++slot)
-        RENDER_CHECK(first.GetTargets()->Get(static_cast<RHIViewTarget>(slot))->GetHandle() == handles[slot], "no partial target publication");
+    for (unsigned slot = 0; slot < handles.size(); ++slot) {
+        auto* texture = first.GetTargets()->Get(static_cast<RHIViewTarget>(slot));
+        RENDER_CHECK((texture ? texture->GetHandle() : RHIResourceHandle{}) == handles[slot], "no partial target publication");
+    }
+    RENDER_CHECK(first.GetTargets()->GetGeneration() == firstGeneration && first.GetTargets()->Validate(),
+        "late allocation failure preserves the last-good generation identity and complete contract");
     RENDER_CHECK(!first.Resize(0, 0) && !first.SetRenderOptions(3, true, true, 2) && first.IsValid(), "zero size and unsupported samples preserve last good view");
     std::vector<uint8_t> red(256), blue(256);
     for (unsigned i = 0; i < 64; ++i) { red[i * 4] = red[i * 4 + 3] = 255; blue[i * 4 + 2] = blue[i * 4 + 3] = 255; }
@@ -373,22 +389,28 @@ static bool TargetSets(RHIType backend) {
     RENDER_CHECK(upload(*first.GetColorTexture(), red), "queued view source pixels");
     auto source = std::make_unique<RHITexture>();
     RENDER_CHECK(source->Init(RHITextureDesc::RenderTarget2D(8, 8)) && upload(*source, blue) && external.BindExternalTexture(&ui, source.get()), "explicit external generation snapshot");
-    const auto externalHandle = source->GetHandle(); auto* externalNative = source->GetNative();
+    const auto externalHandle = source->GetHandle(); auto externalLease = external.GetColorTexture()->AcquireLease();
+    auto* externalNative = source->GetNative();
     source.reset();
     RENDER_CHECK(external.GetColorTexture()->IsValid() && external.GetColorTexture()->GetNative() == externalNative && device.WaitIdle(), "external wrapper destruction cannot invalidate the view's retained generation");
     ui.Begin();
     ImGui::GetForegroundDrawList()->AddImage(static_cast<ImTextureID>(first.GetImTextureID()), ImVec2(0, 0), ImVec2(48, 48));
     ImGui::GetForegroundDrawList()->AddImage(static_cast<ImTextureID>(external.GetImTextureID()), ImVec2(48, 0), ImVec2(96, 48));
+    auto oldColorLease = first.GetColorTexture()->AcquireLease();
     auto* oldColor = first.GetColorTexture()->GetNative(); const auto oldHandle = first.GetColorTexture()->GetHandle();
     RENDER_CHECK(first.SetHDR(true) && first.SetRenderOptions(2, true, false) && first.GetDesc().HistoryCount == 2 && first.Resize(12, 12), "rapid HDR/MSAA/size changes publish complete candidates and retain history policy");
     RENDER_CHECK(first.GetTargets()->GetGeneration() != firstGeneration && first.GetTargets()->Validate(), "replacement publishes a new validated target generation");
     first.Shutdown(); external.Shutdown();
     RENDER_CHECK(device.WaitIdle() && ReadPinnedImage(oldColor) == red && ReadPinnedImage(externalNative) == blue,
         "queued images retain original pixels across whole-view replacement/close and external-owner destruction");
+    oldColorLease = {}; externalLease = {};
     RENDER_CHECK(second.GetColorTexture()->GetWidth() == 24 && second.GetTargets()->Get(RHIViewTarget::MSAAColor)->GetDesc().SampleCount == 2,
         "closing another preview cannot resize this view");
     ui.End(); RENDER_CHECK(presentation->Present(window) && device.WaitIdle(), "shared presentation consumes retained view images");
-    RENDER_CHECK(!device.GetResources().Acquire(oldHandle) && !device.GetResources().Acquire(externalHandle), "completed frame releases both retired view generations");
+    const bool oldLive = device.GetResources().Acquire(oldHandle).IsLive();
+    const bool externalLive = device.GetResources().Acquire(externalHandle).IsLive();
+    RENDER_CHECK(!oldLive, "completed frame releases the retired color generation");
+    RENDER_CHECK(!externalLive, "completed frame releases the retired external generation");
     return true;
 }
 

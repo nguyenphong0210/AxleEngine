@@ -3631,12 +3631,15 @@ namespace Axle {
             RenderSkybox();
             Commands().EndRendering();
 
-            if (!m_PassScheduler.RecordOne("ScreenSpace", passContext)) return;
-            if (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) {
-                if (!beginPass("SurfaceNormal")) return;
+            m_PassScheduler.SetRecordCallback("ScreenSpace", [&](const RenderPassContext&) {
+                if (!m_OpaqueSceneNormal || !m_OpaqueSceneNormal->IsValid())
+                    return RenderPassResult{};
+                if (!beginPass("SurfaceNormal"))
+                    return RenderPassResult::Failed("SurfaceNormal: graph begin failed");
                 auto* normalPipeline = GetOrCreateSurfaceNormalPipeline(
                     RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()), m_CurrentDepthFormat);
-                if (!normalPipeline) { AXLE_CORE_ERROR("Surface normal pipeline creation failed"); return; }
+                if (!normalPipeline)
+                    return RenderPassResult::Failed("SurfaceNormal: pipeline creation failed");
 
                 nri::AttachmentDesc normalAttachment = {};
                 normalAttachment.descriptor = m_OpaqueSceneNormal->GetRTV();
@@ -3659,8 +3662,9 @@ namespace Axle {
                 Commands().SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
                 if (m_DescriptorPool.IsValid()) {
                     m_DescriptorPool.Bind(Commands().GetNative());
-                    if (m_DefaultDescriptorSet) {
-            if (!bindDescriptorSet(0, m_DefaultDescriptorSet)) return;
+                    if (m_DefaultDescriptorSet && !bindDescriptorSet(0, m_DefaultDescriptorSet)) {
+                        Commands().EndRendering();
+                        return RenderPassResult::Failed("SurfaceNormal: descriptor binding failed");
                     }
                 }
                 for (const auto& item : opaqueQueue) {
@@ -3670,7 +3674,9 @@ namespace Axle {
                     m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
                 }
                 Commands().EndRendering();
-            }
+                return RenderPassResult{};
+            });
+            if (!m_PassScheduler.RecordOne("ScreenSpace", passContext)) return;
 
             if (copyRefraction) {
                 if (!beginPass("RefractionCopy")) return;

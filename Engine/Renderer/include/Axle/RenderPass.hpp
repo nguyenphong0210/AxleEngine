@@ -67,6 +67,7 @@ namespace Axle {
 
         CallbackRenderPass(std::string name, Callback prepare = {}, Callback record = {}, DeclareCallback declare = {});
         const char* GetName() const override { return m_Name.c_str(); }
+        void SetRecordCallback(Callback record) { m_Record = std::move(record); }
         RenderPassResult Configure(const RenderPassContext&) override { return {}; }
         void Declare(RenderGraph& graph) override { if (m_Declare) m_Declare(graph); }
         RenderPassResult Prepare(const RenderPassContext& context) override { return m_Prepare ? m_Prepare(context) : RenderPassResult{}; }
@@ -94,6 +95,7 @@ namespace Axle {
         // renderer may keep a legacy body behind the adapter while migration
         // proceeds, but ordering/result propagation remains scheduler-owned.
         RenderPassResult RecordOne(std::string_view name, const RenderPassContext& context);
+        bool SetRecordCallback(std::string_view name, CallbackRenderPass::Callback callback);
         void Finalize(const RenderPassContext& context, const RenderPassResult& result);
         const std::string& GetDiagnostic() const { return m_Diagnostic; }
 

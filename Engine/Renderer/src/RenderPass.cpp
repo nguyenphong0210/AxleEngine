@@ -70,6 +70,17 @@ namespace Axle {
         return RenderPassResult::Failed(m_Diagnostic);
     }
 
+    bool RenderPassScheduler::SetRecordCallback(std::string_view name, CallbackRenderPass::Callback callback) {
+        for (const auto& pass : m_Passes) {
+            if (name != pass->GetName()) continue;
+            auto* callbackPass = dynamic_cast<CallbackRenderPass*>(pass.get());
+            if (!callbackPass) return false;
+            callbackPass->SetRecordCallback(std::move(callback));
+            return true;
+        }
+        return false;
+    }
+
     void RenderPassScheduler::Finalize(const RenderPassContext& context, const RenderPassResult& result) {
         for (const auto& pass : m_Passes) pass->Finalize(context, result);
     }

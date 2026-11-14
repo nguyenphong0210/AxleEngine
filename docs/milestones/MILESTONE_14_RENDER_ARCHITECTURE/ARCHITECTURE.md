@@ -246,6 +246,18 @@ commits/flips history. View/model/light uniforms are excluded from material iden
 
 The current migration checkpoint uses `RenderPassScheduler` and `CallbackRenderPass` as an explicit legacy adapter. This keeps the existing renderer body stable while making pass order, lifecycle, capability results and failure propagation testable. Concrete shader, pipeline and descriptor ownership moves behind the named pass groups incrementally; new feature code cannot bypass the scheduler.
 
+The U4 graph boundary now also covers the live physical inputs consumed by those
+legacy adapters. Pass preparation declares exact target generations, mesh vertex/
+index buffers, material/IBL/shadow/particle/physics descriptors, post-process
+constant buffers and timestamp outputs before `RenderGraph::Compile(true)`. The
+graph seals the declaration set and attaches one command-generation validator for
+the full recording. Descriptor and root-binding helpers retain only declared
+generations; changing command buffers, resetting an active command buffer,
+untyped/standalone view aliases, incomplete descriptor ranges or incompatible
+physical usage fails recording. Buffer readers/writers form graph dependencies and
+read-before-write is rejected. This is a resource authority contract; it does not
+move persistent pipeline caches out of the existing adapter boundary.
+
 ```mermaid
 flowchart LR
     Scheduler["RenderScheduler"] --> Pass["IRenderPass"]

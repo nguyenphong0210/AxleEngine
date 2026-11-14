@@ -116,14 +116,14 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U4 - Resource lifetime and RenderGraph authority
 
-**Exit:** resources are allocated by view-generation services, dependencies are declared once, and raw command code cannot silently add undeclared reads. Evidence: [U4_RESOURCE_GRAPH_EVIDENCE.md](U4_RESOURCE_GRAPH_EVIDENCE.md).
+**Exit:** resources are allocated by view-generation services, dependencies are declared once, and raw command code cannot silently add undeclared reads. **U4 PASS:** implemented in `4cf8e72` and `171133b`, with final separate-context correction review PASS. Evidence: [U4_RESOURCE_GRAPH_EVIDENCE.md](U4_RESOURCE_GRAPH_EVIDENCE.md) and [correction recheck](../../reviews/M14_U4_CORRECTION_RECHECK.md).
 
 - [x] **S4.1 Target generation**
   - [x] Define `RHIViewTargets` generation creation, validation, publication and retirement.
   - [x] Validate format, sample count, UAV/SRV/RTV/DSV usage and dimensions before publish.
   - [x] Preserve last-good generation on failed replacement.
-- [ ] **S4.2 Graph contract**
-  - [ ] Make each pass declare every read, write, load/store operation and dependency (descriptor retention is implemented; full access declarations remain partial).
+- [x] **S4.2 Graph contract**
+  - [x] Make each pass declare every read, write, load/store operation and dependency; live material, mesh, shadow, particle, physics, post and temporal inputs are prepared before compile.
   - [x] Reject missing resources, incompatible layouts and undeclared ordering.
   - [x] Retain exact resource generations through queue completion.
 - [x] **S4.3 Descriptor and upload lifetime**

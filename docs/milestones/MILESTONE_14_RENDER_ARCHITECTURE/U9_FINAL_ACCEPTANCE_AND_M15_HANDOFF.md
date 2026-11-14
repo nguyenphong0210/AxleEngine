@@ -9,7 +9,7 @@ Status: **HOLD - independent review and sequential repairs**
 | View/frame owner | PASS | `ViewContext`, `RHIFrameContext`, temporal/post-process/diagnostics services; U1/U6 evidence |
 | Pass lifecycle owner | PASS (current U2 correction) | `RenderPassScheduler`, `IRenderPass`, named legacy adapters; U2 evidence |
 | Surface/material owner | PASS (U3 correction accepted) | `86feca7`, `f241eb0`; U3 evidence and [final correction recheck](../../reviews/M14_U3_CORRECTION_RECHECK.md) |
-| Resource/graph owner | PARTIAL (implemented/self-verified PASS; final correction recheck pending) | `4cf8e72`, `171133b`; U4 evidence |
+| Resource/graph owner | PASS (U4 follow-up correction accepted) | `4cf8e72`, `171133b`; U4 evidence and [follow-up recheck](../../reviews/M14_U4_FOLLOWUP_CORRECTION_RECHECK.md) |
 | Lighting/reflection/GI boundaries | PARTIAL | `LightingService`, `ReflectionService`, `GIService`; U5 evidence |
 | Backend/fallback policy | PASS | `RenderBackendPolicy`, D3D12/Vulkan/OpenGL matrix; U7 evidence |
 | Product caller migration | PASS | RenderService-only product seams and U8 dependency map |
@@ -17,9 +17,9 @@ Status: **HOLD - independent review and sequential repairs**
 Persistent pipeline/descriptor caches remain behind the legacy adapter boundary
 recorded by U2. Live orchestration and canonical surface integration are accepted
 at their documented boundaries. U4 resource declarations and exact lifetime are
-implemented and current native gates pass; the final U4 independent correction
-recheck and U5 service review remain before U9 acceptance. The Runtime product
-bounded loop gate is also not closed.
+implemented, the typed presentation/frame view correction is accepted, and the
+current native/product gates pass. U5 service review and consolidated U9
+acceptance remain before the M15 handoff.
 
 Current correction evidence and remaining gates are recorded in
 `docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md`. Historical delivery

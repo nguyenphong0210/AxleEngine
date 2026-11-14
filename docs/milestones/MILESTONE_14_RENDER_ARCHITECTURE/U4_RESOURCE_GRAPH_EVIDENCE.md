@@ -2,8 +2,8 @@
 
 Updated: 2026-11-14 (Asia/Saigon)
 
-**Implementation / self-verification:** PASS at `4cf8e72` (graph authority API) and `171133b` (live pass integration).
-**Acceptance:** PASS - final separate-context correction recheck completed; no remaining U4 blocker.
+**Implementation / self-verification:** PASS at `4cf8e72` (graph authority API), `171133b` (live pass integration) and `da51acf` (typed external views and bounded temporal lifetime).
+**Acceptance:** PASS - the follow-up correction recheck closed the Runtime presentation and temporal descriptor lifetime regressions; no remaining U4 blocker.
 **Scope:** target generations, exact physical resource declarations, descriptor/buffer access authority, command lifetime and upload failure propagation. U5/M15 are excluded.
 
 ## 1. Contract and ownership
@@ -41,7 +41,8 @@ they do not silently submit stale/missing draws.
 | Descriptor role/range/completeness authority | PASS (self-verified) | `RHIResource.cpp:344`, `:441`; `RHIDescriptorPool.cpp:9` |
 | Live material/mesh/shadow declarations | PASS (self-verified) | `RHISceneRendererPasses.cpp:319`, `:1058`; `RHIShadowDepthAtlas.cpp:167` |
 | Particle/physics upload failure propagation | PASS (self-verified) | `RHIParticleRenderer.cpp:517`; `RHIPhysicsDebugRenderer.cpp:261` |
-| Final separate-context correction recheck | PENDING | Required by working protocol before formal acceptance |
+| Typed external SRV/CBV aliases and bounded temporal descriptor arena | PASS (follow-up correction) | `RHIResource.cpp:383`, `RHIFrameContext.cpp:94`, `RHISceneRendererPasses.cpp:1733`; [follow-up recheck](../../reviews/M14_U4_FOLLOWUP_CORRECTION_RECHECK.md) |
+| Final separate-context correction recheck | PASS | [follow-up recheck](../../reviews/M14_U4_FOLLOWUP_CORRECTION_RECHECK.md) |
 
 ## 3. Verification
 
@@ -65,6 +66,12 @@ usage mismatches, buffer read-before-write and producer dependency, descriptor
 range/type mismatch, untyped and standalone imported view rejection, annotated
 physical SRV acceptance, and completion-time generation retirement.
 
+The follow-up Debug rebuild and current logs are `build/m14-u4-followup-debug-all.log`,
+`build/m14-u4-followup-unit.log`, `build/m14-u4-followup-graph-dx12.log` and
+`build/m14-u4-followup-graph-vulkan.log`. The corresponding Release build is
+`build/m14-u4-followup-release-all.log`; Release unit, graph and RenderService
+canvas runs also returned exit 0.
+
 ### Native renderer and lifetime gates
 
 ```text
@@ -75,9 +82,11 @@ AxleLocalShadowRenderingTests.exe dx12|vulkan         => exit 0
 AxleRHIResourceViewTests.exe dx12|vulkan              => exit 0
 ```
 
-Environment logs: `build/m14-u4-final-environment-{dx12-5,vulkan-5}.log`.
+Environment logs: `build/m14-u4-followup-environment-{dx12,vulkan}.log`.
 They include the existing HDR/specular/diffuse, cache/reload/fallback and upload
-retry checks. Shadow logs are `build/m14-u4-final-Axle{Cascaded,Local}ShadowRenderingTests-{dx12,vulkan}.log`.
+retry checks, 270 successful TAA frames and injected `TemporalDescriptors`
+creation failure followed by a successful retry. Shadow logs are
+`build/m14-u4-final-Axle{Cascaded,Local}ShadowRenderingTests-{dx12,vulkan}.log`.
 Resource-view logs are `build/m14-u4-final-resource-view-{dx12,vulkan}.log`.
 
 ### Product callers
@@ -93,30 +102,31 @@ Logs: `build/m14-u4-final-preview-{dx12,vulkan}-{surfaces,particles}.log` and
 actual dynamic resources and the new failure-aware recording paths.
 
 `AxleRuntimeRenderTests.exe dx12` with the required absolute Debug DLL search
-path reached startup scene load and native presentation setup but failed its
-fixture assertion `actual bounded Application loop, UI input and player frames`.
-No `View pass failed` was emitted. This runtime product gate is **NOT CLOSED** and
-belongs to U9/product acceptance; it is not converted into a U4 PASS.
+path passed both loose and cooked fixtures. The logs show startup scene load,
+native presentation, the bounded application loop, UI input/player frames and
+clean shutdown: `build/m14-u4-followup-runtime-{loose,cooked}.log`.
 
 ### Architecture and migration
 
 ```text
 python scripts/check_architecture.py
-python scripts/generate_m14_dependency_map.py --output-dir build/Tests/Work/M14-u4-final/dependencies
+python scripts/generate_m14_dependency_map.py --output-dir build/Tests/Work/M14-u4-followup/dependencies
 ```
 
-Run after the final documentation commit; both must report zero violations. The
-live graph source no longer relies on descriptor lifetime alone: resources are
-prepared and declared before compile, then record-time helpers can only consume
-those declarations.
+Both report zero violations. The live graph source no longer relies on
+descriptor lifetime alone: resources are prepared and declared before compile,
+then record-time helpers can only consume those declarations.
 
 ## 4. Review and recommendation
 
 The implementation addresses the earlier U4 findings: undeclared material/IBL/
 mesh/descriptor reads, incomplete ScreenStorage-era access coverage, command scope
 lifetime, view metadata bypasses, physical usage mismatches and silent particle/
-physics upload failures. The resumed separate-context reviewer returned **PASS: no
-remaining U4 blocker** after inspecting the corrected source and affected callers.
+physics upload failures. The follow-up additionally typed independent
+presentation/frame views and bounded the temporal descriptor arena after the
+first Runtime gate exposed those lifetime regressions. The resumed
+separate-context reviewer returned **PASS: no remaining U4 blocker** after
+inspecting the corrected source and fresh reported evidence.
 
-Recommendation: accept U4. Keep U9/M14 HOLD for U5 service ownership, the
-unclosed Runtime product fixture and consolidated acceptance. M15 remains excluded.
+Recommendation: accept U4 and clear the Runtime product gate for U9. Keep U9/M14
+HOLD for U5 service ownership and consolidated acceptance. M15 remains excluded.

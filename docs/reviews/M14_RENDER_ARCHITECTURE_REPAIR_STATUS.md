@@ -184,7 +184,7 @@ D3D12/Vulkan and Runtime D3D12 loose/cooked. Architecture check passed (600 file
 [U3 evidence](../milestones/MILESTONE_14_RENDER_ARCHITECTURE/U3_MATERIAL_SURFACE_EVIDENCE.md).
 Release product runs and interactive Editor UI were not rerun in U3.
 
-### U4 resource graph authority - commits `4cf8e72`, `171133b`
+### U4 resource graph authority - commits `4cf8e72`, `171133b`, `da51acf`
 
 `RenderGraph` now seals exact texture/buffer/descriptor declarations before compile,
 validates physical usage/layout/access and producer/read dependencies, and owns one
@@ -195,19 +195,23 @@ preparation freezes material/mesh/shadow/particle/physics/post inputs before com
 recording cannot introduce a new physical generation. Particle and physics upload
 failures return failed passes and retry instead of silently succeeding.
 
-Self-verified gates: Debug render unit suite, the new graph authority fixture on
-D3D12/Vulkan, environment on D3D12/Vulkan, cascaded/local shadows on D3D12/Vulkan,
-resource-view lifetime on D3D12/Vulkan, and preview surfaces/particles/physics.
-Runtime D3D12 startup/presentation reached native setup but its bounded application
-loop assertion remains NOT CLOSED; that is a U9/product gate. Exact commands/logs,
-source anchors and limits are in [U4 evidence](../milestones/MILESTONE_14_RENDER_ARCHITECTURE/U4_RESOURCE_GRAPH_EVIDENCE.md).
+Self-verified gates: Debug render unit suite, the graph authority fixture on
+D3D12/Vulkan, environment on D3D12/Vulkan, RenderService canvas on D3D12/Vulkan,
+and Runtime loose/cooked on D3D12. Environment includes 270 TAA frames and
+injected `TemporalDescriptors` creation failure with a successful retry. Release
+builds and CPU/graph/service suites also pass. Architecture and dependency checks
+report zero violations. Exact commands/logs, source anchors and limits are in
+[U4 evidence](../milestones/MILESTONE_14_RENDER_ARCHITECTURE/U4_RESOURCE_GRAPH_EVIDENCE.md).
 
-The final separate-context correction recheck returned **PASS: no remaining U4
-blocker**. It inspected exact command scope/reset, descriptor range/type/role and
+The first Runtime rerun exposed a U4 regression: presentation published an
+independent source SRV as an opaque descriptor-set resource, and the temporal pass
+grew its descriptor arena indefinitely. Commit `da51acf` adds typed SRV/CBV aliases
+with exact backing leases, transactional descriptor-pool reset and the regression
+fixtures. The follow-up separate-context recheck returned **PASS: no remaining U4
+blocker** after inspecting exact command scope/reset, descriptor range/type/role and
 view metadata authority, strict physical usage/read-before-write checks, live
-prepared pass inputs and upload failure propagation. The reviewer inspected source
-and logs but did not execute the GPU commands. Full anchors and limits are in the
-[final U4 correction recheck](M14_U4_CORRECTION_RECHECK.md).
+prepared pass inputs and upload failure propagation. Full anchors and limits are in
+the [follow-up U4 correction recheck](M14_U4_FOLLOWUP_CORRECTION_RECHECK.md).
 
 ### U3 final correction acceptance - source `b476686`
 
@@ -229,7 +233,8 @@ commands/logs and limits: [final U3 correction recheck](M14_U3_CORRECTION_RECHEC
 - **PASS:** U3 canonical shader/graph integration, its recorded CPU/native/product
   gates and the completed final separate-context correction recheck. No open U3
   acceptance gate remains.
-- **PASS:** U4 graph authority, exact resource lifetime, live pass declarations and
-  final separate-context correction recheck. No open U4 acceptance gate remains.
+- **PASS:** U4 graph authority, exact resource lifetime, live pass declarations,
+  typed external-view/temporal lifetime correction and final separate-context
+  follow-up recheck. No open U4 acceptance gate remains.
 - **PARTIAL:** U5 policy ownership/integration review.
 - **HOLD:** U9 until the remaining integration gaps and their native gates close.

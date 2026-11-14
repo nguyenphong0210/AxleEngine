@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `U0/U1/U2/U3/U4/U5/U6/U7/U8 ACCEPTED - U9 is the next released Unit.`
+**Status:** `U0/U1/U2/U3/U4/U5/U6/U7/U8/U9 ACCEPTED - M14 complete; M15 is next.`
 **Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
@@ -207,23 +207,25 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 **Evidence:** `U8_MIGRATION_TESTS_TOOLING_EVIDENCE.md`
 
-### U9 - Final acceptance and M15 handoff
+### U9 - Final acceptance and M15 handoff **(ACCEPTED)**
 
 **Exit:** M14 is accepted as an architecture milestone and M15 can begin without extending the old monolith.
 
-- [ ] **S9.1 Structural acceptance**
-  - [ ] No new feature pass is implemented directly in `RHISceneRenderer` without an approved exception.
-  - [ ] Every pass has an owner, declared resources, capability policy and test entry.
-  - [ ] Every material path resolves through `ResolvedSurface`.
-- [ ] **S9.2 Verification acceptance**
-  - [ ] Debug and Release builds pass.
-  - [ ] Architecture checker passes.
-  - [ ] D3D12, Vulkan and OpenGL fallback evidence is recorded.
-  - [ ] Editor, Runtime, Preview and headless fixtures render successfully.
-- [ ] **S9.3 Handoff**
-  - [ ] Publish M14 source map and migration report.
-  - [ ] Freeze M15 entry contracts for lighting/material fidelity.
-  - [ ] Record all deferred behavior as M15 or later scope; do not mark it complete in M14.
+- [x] **S9.1 Structural acceptance**
+  - [x] No new feature pass is implemented directly in `RHISceneRenderer` without an approved exception.
+  - [x] Every pass has an owner, declared resources, capability policy and test entry.
+  - [x] Every material path resolves through `ResolvedSurface`.
+- [x] **S9.2 Verification acceptance**
+  - [x] Debug and Release builds pass.
+  - [x] Architecture checker passes.
+  - [x] D3D12, Vulkan and OpenGL fallback evidence is recorded.
+  - [x] Editor, Runtime, Preview and headless fixtures render successfully.
+- [x] **S9.3 Handoff**
+  - [x] Publish M14 source map and migration report.
+  - [x] Freeze M15 entry contracts for lighting/material fidelity.
+  - [x] Record all deferred behavior as M15 or later scope; do not mark it complete in M14.
+
+**Evidence:** `U9_FINAL_ACCEPTANCE_AND_M15_HANDOFF.md`
 
 ## 4. High-risk WorkItems
 

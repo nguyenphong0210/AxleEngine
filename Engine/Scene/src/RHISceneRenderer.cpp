@@ -2961,8 +2961,10 @@ namespace Axle {
                 return mesh.NativeView && mesh.NativeView->IsValid() && material &&
                     material->GetSurfaceType() == SurfaceType::Transparent && material->GetDesc().RefractionEnabled;
             });
-        const bool copyParticleDepth = settings.EnableParticles && m_ParticleRenderer && !world.Particles.empty() &&
-            activeSampleCount == 1 && sceneDepthDSV && sceneDepthTexture;
+        const bool copyParticleDepth = settings.EnableParticles && m_ParticleRenderer &&
+            std::any_of(world.Particles.begin(), world.Particles.end(), [](const auto& particle) {
+                return particle && particle->Config.SoftnessDistance > 0.0f;
+            }) && activeSampleCount == 1 && sceneDepthDSV && sceneDepthTexture;
         const auto opaqueColor = copyRefraction ? graph.Import("OpaqueColor", m_OpaqueSceneColor->GetNative()) : output;
         const auto opaqueDepth = copyRefraction ? graph.Import("OpaqueDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto particleDepthImage = copyParticleDepth ? graph.Import("ParticleDepth", m_ParticleSceneDepth->GetNative()) : sceneDepth;

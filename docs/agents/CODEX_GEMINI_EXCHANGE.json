@@ -3504,6 +3504,17 @@
       "base_commit": "b181d31",
       "timestamp_utc": "2026-11-14T16:18:46.873147+00:00",
       "body": "M15-U0-01.2 re-audit PASS. User scene Samples/Sandbox/assets/scenes/Test.axlescene exists, has no working-tree changes and no diff from the accepted code boundary; recovery history remains available. No scene was staged/rewritten. Evidence appended to docs/reviews/M15_U0_REAUDIT.md and checklist link updated. Next leaf M15-U0-02.1. Commit b181d31.\n"
+    },
+    {
+      "id": "CG-20261114T162839281301Z-CODEX-907090",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T161846873147Z-CODEX-1c95a8",
+      "base_commit": "06edfb3",
+      "timestamp_utc": "2026-11-14T16:28:39.281301+00:00",
+      "body": "M15-U0-02.1 remains OPEN/PARTIAL: fixture manifest and Debug AxleRenderUnitTests pass after rebuild (exit 0), but required Editor visual verification is NOT RUN because Computer Use native pipe is unavailable after recovery retry. No screenshot/readback is claimed, and sequential execution is paused before U0-02.2. Evidence updated in docs/reviews/M15_U0_REAUDIT.md; commit 06edfb3. User must visually confirm the smooth sphere in Editor or restore the Computer Use helper.\n"
     }
   ],
   "deferred_tasks": [

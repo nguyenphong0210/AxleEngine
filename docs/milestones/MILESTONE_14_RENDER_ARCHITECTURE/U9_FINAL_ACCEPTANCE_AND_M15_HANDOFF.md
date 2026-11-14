@@ -7,7 +7,7 @@ Status: **HOLD - independent review and sequential repairs**
 | Gate | Result | Evidence |
 |---|---|---|
 | View/frame owner | PASS | `ViewContext`, `RHIFrameContext`, temporal/post-process/diagnostics services; U1/U6 evidence |
-| Pass lifecycle owner | PARTIAL (implementation repaired, shadow gate pending U3) | `RenderPassScheduler`, `IRenderPass`, named legacy adapters; U2 evidence |
+| Pass lifecycle owner | PASS (current U2 correction) | `RenderPassScheduler`, `IRenderPass`, named legacy adapters; U2 evidence |
 | Surface/material owner | PARTIAL | `ResolvedSurface` and material resolver tests; U3 evidence |
 | Resource/graph owner | PARTIAL | strict `RenderGraph`, target generations, descriptor lease checks; U4 evidence |
 | Lighting/reflection/GI boundaries | PARTIAL | `LightingService`, `ReflectionService`, `GIService`; U5 evidence |

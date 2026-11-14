@@ -113,11 +113,44 @@ shadow gates. Those gates exposed a pre-existing U3 conversion defect (fixed
 shading mode/cutoff); U2 validation stays partial until its sequential U3 repair
 and shadow rerun. See the current U2 evidence for exact commands and limits.
 
+### Canonical material policy preservation - commit `421cc49`
+
+The expanded U2 shadow gates exposed a pre-existing U3 loss of textured shader
+mode and alpha cutoff. The new CPU parity test failed before repair and passed
+afterward. ResolvedSurface now carries shading/PackedORM mode, cutoff, detail
+normal transform/strength and raster/queue policy. Its identity covers omitted
+material policies, source paths and explicitly assigned native generations;
+hashing does not allocate fallback textures. Live draws consume the resolved
+raster/queue state.
+
+Verified after a fresh Debug build: CPU suite; cascaded and local shadows on
+D3D12 and Vulkan; environment on D3D12 and Vulkan; acceptance measurements on
+D3D12 and Vulkan, all exit 0. Both native cascade tests measured 48401 solid vs
+38617 alpha-hole depth pixels. This closes the outstanding U2 native gate.
+Separate-context correction reviews found no remaining U2 blocker or blocker
+in this U3 prerequisite, with the latter explicitly retaining the custom graph
+gap and texture-content revision boundary.
+
+### Particle snapshot direction and product gates - commit `06a6c4d`
+
+The soft-particle product fixture exposed an existing reversed CopyTexture call:
+ParticleDepth was used as an uninitialized source instead of the destination.
+The corrected call matches the declared scene-depth -> snapshot dependency.
+Actual D3D12/Vulkan soft-particle preview fixtures now pass, including soft
+intersection fading. A focused separate-context source check confirmed the
+remaining copy/resolve directions match their declarations.
+
+Fresh Debug product builds and runs passed: surface previews on D3D12, Vulkan
+and OpenGL; particles on D3D12/Vulkan; physics preview on D3D12; Runtime D3D12
+loose/cooked startup/input/simulation/presentation/shutdown. Final Debug and
+Release CPU builds/suites also passed (exit 0); native/product runs were Debug. Exact commands/logs and Runtime
+DLL search paths are recorded in U2 evidence.
+
 ## Current acceptance state
 
-- **PASS:** U0, U1, U6, U7, U8 and the previously rerun runtime evidence gate.
-- **PARTIAL:** U2 implementation is repaired, with native shadow verification
-  pending the U3 material conversion fix. U3 also retains the custom graph
-  canonical lowering gap; U4 retains incomplete graph resource declarations;
-  U5 still needs review of actual policy/service ownership after integration.
-- **HOLD:** U9 until the remaining integration gaps and native gates are closed.
+- **PASS:** U2 live orchestration, including its explicit legacy cache ownership
+  boundary. Previously verified U0, U1, U6, U7, U8 remain accepted.
+- **PARTIAL:** U3 custom shader/graph canonical lowering/status boundary; U4
+  complete graph resource declarations beyond descriptor retention; U5 policy
+  ownership/integration review. This surface prerequisite does not claim full U3.
+- **HOLD:** U9 until the remaining integration gaps and their native gates close.

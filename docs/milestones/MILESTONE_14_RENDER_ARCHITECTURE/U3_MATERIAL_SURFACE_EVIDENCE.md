@@ -1,6 +1,6 @@
 # M14-U3 - Canonical Material and Surface Contract Evidence
 
-**Status:** `ACCEPTED`  
+**Status:** `PARTIAL - built-in policy repaired; custom shader/graph boundary pending`
 **Unit:** M14-U3  
 **Scope:** one resolved CPU surface contract, deterministic GPU packing, material generation identity and Material Graph/preview compatibility.
 
@@ -16,10 +16,10 @@ The canonical contract is defined in:
 ```text
 BaseColor, Metallic, Roughness, AO, Emission
 GeometricNormal, ShadingNormal, Tangent + handedness
-UV scale/offset and normal strength
+UV and detail transforms/strength, shading mode and alpha cutoff
 Clearcoat, anisotropy, sheen
 Subsurface, absorption, IOR, refraction and dispersion
-Surface/cull/depth policy, reflection/specular flags
+Surface/cull/depth/queue policy, reflection/specular flags
 Texture mask, generation identity and validity
 ```
 
@@ -80,6 +80,32 @@ git diff --check                                                                
 
 `RenderMaterialData` and `MaterialComponent` remain compatibility snapshot structures during migration. Their conversion into `RHIMaterial` is now consumed through the canonical resolver at render/shadow use sites, while U8 will remove remaining duplicated authoring mirrors and add explicit generation propagation through the full asset/preview pipeline.
 
-## 5. U3 decision
+## 5. Current correction checkpoint (2026-11-14)
 
-**U3 ACCEPTED.** The canonical surface contract, deterministic GPU packing, generation identity and explicit Material Graph unsupported-field policy are implemented and verified. The next released Unit is **M14-U4 - Resource lifetime and RenderGraph authority**.
+Commit `421cc49` repairs existing built-in lowering losses: textured/PackedORM
+mode, authored alpha cutoff, detail normal transform/strength and raster/queue
+policy now survive the canonical boundary. Its hash covers omitted policies,
+source paths and explicitly assigned native generations. An unassigned slot
+never allocates a fallback during identity calculation.
+
+A new CPU parity fixture failed on the pre-fix canonical conversion
+(`build/m14-u3-repro.log`, exit 1), then passed after repair
+(`build/m14-u3-unit.log`, exit 0). Native fixtures confirm no fallback allocation
+while hashing and a changed identity after assigned texture generation
+replacement. Native cascaded/local shadows and environment fixtures passed on
+D3D12/Vulkan, including alpha cutout and same-generation pixel upload redraw.
+Detailed commands/results are in the current U2 evidence and repair addendum.
+
+This is material assignment/source-policy identity. In-place pixel mutation and
+same-path content reload require consumer invalidation or a separate content
+revision; the hash does not claim to identify every texture pixel change.
+
+## 6. U3 decision
+
+**U3 PARTIAL.** Built-in/shadow policy lowering is repaired and native-verified.
+The custom HLSL draw still packs common engine material inputs from compatibility
+snapshot fields instead of the canonical surface; explicit graph/custom shader
+resolution status and generation must be completed and tested. Generated
+Material Graph advanced fields keep their neutral defaults and FeatureFlags=0;
+adding M15 feature nodes/fidelity remains excluded. Historical fixture claims
+above are retained as history and do not establish full current acceptance.

@@ -79,7 +79,7 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U2 - Pass interface and renderer orchestration
 
-**Exit:** `RHISceneRenderer` delegates all live graph declaration and recording to one frame-scoped lifecycle schedule in `RHISceneRendererPasses.cpp`; persistent pipeline/cache relocation remains an explicit legacy adapter boundary. Implementation repaired in `7f5deb7`; native shadow acceptance is pending the sequential U3 surface correction. Evidence: [U2_PASS_ORCHESTRATION_EVIDENCE.md](U2_PASS_ORCHESTRATION_EVIDENCE.md).
+**Exit:** `RHISceneRenderer` delegates all live graph declaration and recording to one frame-scoped lifecycle schedule in `RHISceneRendererPasses.cpp`; persistent pipeline/cache relocation remains an explicit legacy adapter boundary. Implementation repaired in `7f5deb7`; native shadow gates pass after the canonical surface prerequisite `421cc49`. U2 PASS; full U3/U4/U5 and U9 remain under sequential repair. Evidence: [U2_PASS_ORCHESTRATION_EVIDENCE.md](U2_PASS_ORCHESTRATION_EVIDENCE.md).
 
 - [x] **S2.1 Pass API**
   - [x] Define `IRenderPass` lifecycle: `Configure`, `Declare`, `Prepare`, `Record`, `Finalize`.
@@ -104,14 +104,14 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
   - [x] Define geometric/shading normal, tangent handedness and normal-map convention.
   - [x] Define clearcoat, anisotropy, sheen, subsurface, absorption, IOR and dispersion fields.
   - [x] Define reflection flags, motion data, validity and fallback markers.
-- [x] **S3.2 Material resolution**
+- [ ] **S3.2 Material resolution**
   - [x] Define one conversion path from `Material` to runtime material data.
   - [x] Make `MaterialComponent` synchronization explicit and generation-tracked at the resolver boundary.
-  - [x] Make `RenderMaterialData` a snapshot view rather than a second GPU packing path.
+  - [ ] Make `RenderMaterialData` a snapshot view rather than a second GPU packing path (custom shader common inputs still bypass canonical lowering).
   - [x] Make canonical resolved values consume the existing GPU constant layout.
-- [x] **S3.3 Shader parity**
+- [ ] **S3.3 Shader parity**
   - [x] Make ForwardPBR and Material Graph expose the same surface fields or explicit unsupported flags.
-  - [x] Route preview/runtime GPU material use through the same resolved defaults and color-space contract.
+  - [ ] Route preview/runtime GPU material use through the same resolved defaults and color-space contract (complete the custom shader/graph boundary).
   - [x] Add canonical CPU parity fixtures for smooth/PBR/advanced surface packing and graph template fields.
 
 ### U4 - Resource lifetime and RenderGraph authority
@@ -122,8 +122,8 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
   - [x] Define `RHIViewTargets` generation creation, validation, publication and retirement.
   - [x] Validate format, sample count, UAV/SRV/RTV/DSV usage and dimensions before publish.
   - [x] Preserve last-good generation on failed replacement.
-- [x] **S4.2 Graph contract**
-  - [x] Make each pass declare every read, write, load/store operation and dependency.
+- [ ] **S4.2 Graph contract**
+  - [ ] Make each pass declare every read, write, load/store operation and dependency (descriptor retention is implemented; full access declarations remain partial).
   - [x] Reject missing resources, incompatible layouts and undeclared ordering.
   - [x] Retain exact resource generations through queue completion.
 - [x] **S4.3 Descriptor and upload lifetime**
@@ -135,10 +135,10 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 **Exit:** lighting-related state has stable service boundaries; M14 provides interfaces and migration seams, while M15 owns feature fidelity.
 
-- [x] **S5.1 Lighting service**
+- [ ] **S5.1 Lighting service**
   - [x] Define directional, point, spot and area-light input contracts.
   - [x] Define shadow atlas/cascade publication and sampling interfaces.
-  - [x] Keep light packing and unit conversion independent from pass orchestration.
+  - [ ] Keep light packing and unit conversion independent from pass orchestration (live service calls are integrated; policy ownership review remains open).
 - [x] **S5.2 Reflection service**
   - [x] Define authored probe loading and generation status.
   - [x] Define dynamic capture, prefilter, invalidation, scheduling and multi-probe blend interfaces.

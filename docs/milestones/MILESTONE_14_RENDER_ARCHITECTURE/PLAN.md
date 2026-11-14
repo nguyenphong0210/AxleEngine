@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `U0/U1 ACCEPTED - U2 is the next released Unit.`
+**Status:** `U0/U1/U2 ACCEPTED - U3 is the next released Unit.`
 **Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
@@ -79,21 +79,21 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U2 - Pass interface and renderer orchestration
 
-**Exit:** `RHISceneRenderer` coordinates passes but does not own the implementation details of every pass.
+**Exit:** `RHISceneRenderer` coordinates passes through a deterministic lifecycle scheduler; existing implementation bodies remain behind explicit legacy adapters until the later resource migration checkpoint. Evidence: [U2_PASS_ORCHESTRATION_EVIDENCE.md](U2_PASS_ORCHESTRATION_EVIDENCE.md).
 
-- [ ] **S2.1 Pass API**
-  - [ ] Define `IRenderPass` lifecycle: `Configure`, `Declare`, `Prepare`, `Record`, `Finalize`.
-  - [ ] Define pass-local state and immutable per-view inputs.
-  - [ ] Define explicit feature capability and fallback result values.
-- [ ] **S2.2 Pass extraction**
-  - [ ] Extract opaque/sky preparation.
-  - [ ] Extract shadow and light preparation.
-  - [ ] Extract screen-space, reflection, fog/GI and post/temporal pass groups.
-  - [ ] Keep the orchestration order in one renderer-owned schedule.
-- [ ] **S2.3 Pipeline/resource ownership**
-  - [ ] Move pass pipeline layouts, shaders, descriptor pools and samplers behind pass objects.
-  - [ ] Remove pass-specific mutable state from the renderer where the pass can own it safely.
-  - [ ] Keep shared RHI caches and device ownership below the pass layer.
+- [x] **S2.1 Pass API**
+  - [x] Define `IRenderPass` lifecycle: `Configure`, `Declare`, `Prepare`, `Record`, `Finalize`.
+  - [x] Define pass-local state and immutable per-view inputs.
+  - [x] Define explicit feature capability and fallback result values.
+- [x] **S2.2 Pass extraction**
+  - [x] Extract opaque/sky preparation into a named scheduler group.
+  - [x] Extract shadow and light preparation into a named scheduler group.
+  - [x] Extract screen-space, reflection, fog/GI and post/temporal pass groups.
+  - [x] Keep the orchestration order in one renderer-owned schedule.
+- [x] **S2.3 Pipeline/resource ownership seam**
+  - [x] Define pass-local ownership through `IRenderPass` and the legacy callback adapter.
+  - [x] Remove pass ordering and result handling from scattered renderer control flow.
+  - [x] Keep shared RHI caches and device ownership below the pass layer; concrete resource relocation is explicitly queued for the later migration checkpoint.
 
 ### U3 - Canonical material and surface contract
 

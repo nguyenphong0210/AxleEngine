@@ -8,6 +8,7 @@ bool RunRenderPrimitiveIdentityUnitTests();
 bool RunRenderWorldExtractionUnitTests();
 bool RunRenderServiceUnitTests();
 bool RunViewContextUnitTests();
+bool RunRenderPassUnitTests();
 namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderWorkerUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderParallelRecordingUnitTests(); }
@@ -51,6 +52,11 @@ int main(int argc, char** argv) {
 
     if (!RunViewContextUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunViewContextUnitTests FAILED!\n";
+        return 1;
+    }
+
+    if (!RunRenderPassUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunRenderPassUnitTests FAILED!\n";
         return 1;
     }
 

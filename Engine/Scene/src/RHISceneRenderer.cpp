@@ -82,6 +82,23 @@ namespace Axle {
         Shutdown();
     }
 
+    void RHISceneRenderer::BuildPassSchedule() {
+        m_PassScheduler.Clear();
+        // These named groups are the migration seam for the existing renderer
+        // body. U2 owns their order and lifecycle; later Units move the actual
+        // pipeline/descriptor implementations behind each callback.
+        const char* groups[] = {
+            "OpaqueAndSky",
+            "LightingAndShadows",
+            "ScreenSpace",
+            "ReflectionAndGI",
+            "PostAndTemporal"
+        };
+        for (const auto* group : groups) {
+            m_PassScheduler.Add(std::make_unique<CallbackRenderPass>(group));
+        }
+    }
+
     bool RHISceneRenderer::Init(RHIDevice& device, bool enablePhysicsDebug) {
         if (m_Initialized) return true;
         if (!device.IsNativeReady()) {
@@ -95,6 +112,7 @@ namespace Axle {
         if (!RHIMeshRegistry::Get().Init()) return false;
 
         if (!m_ViewContext.Init() || !m_CascadedShadows.Init() || !m_LocalShadows.Init()) return false;
+        BuildPassSchedule();
 
         if (device.GetCapabilities().TimestampFrequencyHz && device.GetNRICore().CreateQueryPool) {
             nri::QueryPoolDesc timestampDesc{};
@@ -2634,8 +2652,29 @@ namespace Axle {
         viewInput.SceneRevision = world.SceneRevision;
         m_ViewContext.Observe(viewInput, m_Device->GetEpoch());
         if (!world.ErrorMessage.empty() || !m_ViewContext.BeginFrame()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
+        RenderPassContext passContext;
+        passContext.World = &world;
+        passContext.Camera = &camera;
+        passContext.Settings = &settings;
+        passContext.View = &m_ViewContext;
+        passContext.Commands = &Commands();
+        passContext.Capabilities.NativeRHI = true;
+        passContext.Capabilities.Compute = m_Device->GetCapabilities().MaxComputeWorkGroupInvocations > 0;
+        passContext.Capabilities.StorageTextures = passContext.Capabilities.Compute;
+        passContext.Capabilities.Timestamps = m_Device->GetCapabilities().TimestampFrequencyHz > 0;
+        passContext.Capabilities.RayTracing = m_Device->GetCapabilities().IsRayTracingSupported;
+        if (!m_PassScheduler.Configure(passContext) || !m_PassScheduler.Prepare(passContext)) {
+            AXLE_CORE_ERROR("Render pass preparation failed: {0}", m_PassScheduler.GetDiagnostic());
+            m_ViewContext.AbandonFrame();
+            return;
+        }
         auto rollback = std::unique_ptr<RHISceneRenderer, std::function<void(RHISceneRenderer*)>>(this,
-            [&](auto*) { if (!m_LastRenderSucceeded) m_ViewContext.AbandonFrame(); });
+            [&](auto*) {
+                if (!m_LastRenderSucceeded) {
+                    m_PassScheduler.Finalize(passContext, RenderPassResult::Failed("view recording did not complete"));
+                    m_ViewContext.AbandonFrame();
+                }
+            });
         if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
             auto& core = m_Device->GetNRICore();
             core.ResetQueries(*m_GPUTimestampPool, 0, 2);
@@ -2895,6 +2934,7 @@ namespace Axle {
         using Load = Graph::Load;
         using Layout = RHIResourceLayout;
         Graph graph;
+        passContext.Graph = &graph;
         const auto sceneColor = graph.Import("SceneColor", sceneTargetTexture);
         const auto sceneDepth = graph.Import("SceneDepth", sceneDepthTexture);
         const auto output = graph.Import("Output", colorTarget);
@@ -3106,6 +3146,7 @@ namespace Axle {
         std::vector<Graph::Use> exports{{output,Layout::ShaderResource}};
         if (sceneDepthDSV) exports.push_back({sceneDepth,Layout::DepthStencilRead});
         graph.AddPass("Export", std::move(exports));
+        m_PassScheduler.Declare(graph);
         auto beginPass = [&](std::string_view name) {
             if (graph.BeginPass(name, Commands())) return true;
             AXLE_CORE_ERROR("View graph recording failed: {0}", graph.GetError());
@@ -3113,6 +3154,10 @@ namespace Axle {
         };
         if (!graph.Compile()) {
             AXLE_CORE_ERROR("View graph rejected: {0}", graph.GetError()); return;
+        }
+        if (!m_PassScheduler.Record(passContext)) {
+            AXLE_CORE_ERROR("Render pass recording preparation failed: {0}", m_PassScheduler.GetDiagnostic());
+            return;
         }
 
         if (m_CascadedShadows.IsActive() && (!beginPass("CascadedShadows") || !m_CascadedShadows.Record(Commands()))) return;
@@ -4190,6 +4235,7 @@ namespace Axle {
         m_LocalShadows.OnSubmitted();
         m_LastCompletion = m_ViewContext.GetCompletion();
         m_LastRenderSucceeded = static_cast<bool>(m_LastCompletion);
+        m_PassScheduler.Finalize(passContext, {});
     }
 
     bool RHISceneRenderer::RenderToneMapping(RHI::RHICommandBuffer& cmd,

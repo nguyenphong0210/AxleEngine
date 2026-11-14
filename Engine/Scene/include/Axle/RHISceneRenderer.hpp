@@ -27,6 +27,7 @@
 #include <Axle/MaterialTextureCache.hpp>
 #include <Axle/CustomMaterialProgram.hpp>
 #include <Axle/ViewContext.hpp>
+#include <Axle/RenderPass.hpp>
 
 #include <memory>
 #include <array>
@@ -371,6 +372,7 @@ namespace Axle {
         // Custom Material Program Cache
         CustomProgramCache& GetCustomProgramCache() { return m_CustomProgramCache; }
         const CustomProgramCache& GetCustomProgramCache() const { return m_CustomProgramCache; }
+        const RenderPassScheduler& GetPassScheduler() const { return m_PassScheduler; }
 
         struct CustomPipelineKey {
             uint64_t GenerationID = 0;
@@ -398,6 +400,7 @@ namespace Axle {
 
     private:
         bool CompileShaders(RHI::RHIDevice& device);
+        void BuildPassSchedule();
         bool CreatePipelineLayout(RHI::RHIDevice& device);
         bool CreateGraphicsPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateSurfaceNormalPipeline(nri::Format colorFormat, nri::Format depthFormat);
@@ -678,6 +681,7 @@ namespace Axle {
         std::unique_ptr<RHIObjectPicker> m_ObjectPicker;
 
         ViewContext m_ViewContext;
+        RenderPassScheduler m_PassScheduler;
         RHI::RHICommandBuffer& Commands() { return *m_ViewContext.Commands(); }
         bool m_LastRenderSucceeded = false;
         RHI::RHICompletionToken m_LastCompletion;

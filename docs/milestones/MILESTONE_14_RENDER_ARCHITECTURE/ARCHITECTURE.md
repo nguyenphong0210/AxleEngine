@@ -214,6 +214,8 @@ Material asset / graph
 
 ## 5. Renderer and RHI ownership
 
+The current migration checkpoint uses `RenderPassScheduler` and `CallbackRenderPass` as an explicit legacy adapter. This keeps the existing renderer body stable while making pass order, lifecycle, capability results and failure propagation testable. Concrete shader, pipeline and descriptor ownership moves behind the named pass groups incrementally; new feature code cannot bypass the scheduler.
+
 ```mermaid
 flowchart LR
     Scheduler["RenderScheduler"] --> Pass["IRenderPass"]

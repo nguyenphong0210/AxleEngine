@@ -68,13 +68,28 @@ exit=0
 The fixture completed startup-scene load, simulation pause/resume, rendering
 and clean shutdown on native D3D12.
 
+### Canonical custom-material boundary — commit `9bf7da2`
+
+Each live `DrawItem` now resolves and stores one `ResolvedSurface` before the
+custom shader selection branch. Built-in GPU constants and custom-material
+diagnostics therefore share the same validity and generation identity instead
+of silently resolving only the built-in path. Custom graph property lowering
+still owns its graph-specific packed buffers; this checkpoint closes the
+canonical CPU status boundary without claiming advanced graph field parity.
+
+Verified:
+
+- Debug build of `AxleRenderUnitTests` and `AxleEnvironmentRenderingTests`: exit 0.
+- `AxleRenderUnitTests`: exit 0.
+- D3D12 environment fixture: exit 0.
+
 ## Current acceptance state
 
 - **PASS:** U0, U1, U6, U7, U8, runtime evidence gate.
 - **PARTIAL:** U2 remains partial because concrete pass recording still lives in
   `RHISceneRenderer` behind the validated legacy adapters; U3 remains partial
-  for the custom Material Graph CPU path; U4 remains partial for graph resource
-  declarations beyond descriptor lease retention.
+  for graph-specific advanced field lowering; U4 remains partial for graph
+  resource declarations beyond descriptor lease retention.
 - **HOLD:** U9 remains on hold until concrete pass extraction and the custom
   graph `ResolvedSurface` boundary are completed or explicitly re-scoped in the
   milestone contract.

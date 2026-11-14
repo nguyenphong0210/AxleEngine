@@ -2419,17 +2419,11 @@ namespace Axle {
         }
     }
 
-    bool RHISceneRenderer::PrepareReflectionProbe(const RenderWorld& world, const ReflectionFrame& reflectionFrame) {
+    ReflectionPublication RHISceneRenderer::PrepareReflectionProbe(const ReflectionFrame& reflectionFrame) {
         m_ActiveReflectionProbePrefilter.reset();
         m_HasActiveReflectionProbe = false;
-        const RenderReflectionProbe* selected = nullptr;
-        for (const auto& probe : world.ReflectionProbes) {
-            if (probe.EntityID == reflectionFrame.SelectedProbeEntityID && !probe.CubemapPath.empty()) {
-                selected = &probe;
-                break;
-            }
-        }
-        if (!selected) return true;
+        if (!reflectionFrame.SelectedProbe) return {};
+        const auto* selected=&*reflectionFrame.SelectedProbe;
 
         const std::string path = PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(selected->CubemapPath)).lexically_normal());
         auto& environment = m_ReflectionProbeEnvironments[path];
@@ -2442,7 +2436,7 @@ namespace Axle {
             settings.PrefilterMips = 5;
             settings.BRDFSize = 64;
             settings.Samples = 128;
-            if (!environment->SetBakeSettings(settings)) return false;
+            if (!environment->SetBakeSettings(settings)) return {{}, "probe bake settings unavailable"};
         }
 
         RenderSkyboxData source;
@@ -2453,12 +2447,13 @@ namespace Axle {
         source.HDRPath = selected->CubemapPath;
         source.Intensity = 1.0f;
         source.Exposure = 1.0f;
-        if (!environment->Prepare(source) || !environment->Ready() || !environment->Ready()->Prefilter) return false;
+        if (!environment->Prepare(source) || !environment->Ready() || !environment->Ready()->IsValid())
+            return {{}, environment->Diagnostic()};
 
         m_ActiveReflectionProbePrefilter = environment->Ready()->Prefilter;
         m_ActiveReflectionProbe = *selected;
         m_HasActiveReflectionProbe = m_ActiveReflectionProbePrefilter->IsValid();
-        return m_HasActiveReflectionProbe;
+        return {m_HasActiveReflectionProbe ? m_ActiveReflectionProbePrefilter->GetHandle() : RHIResourceHandle{}, environment->Diagnostic()};
     }
 
     void RHISceneRenderer::ConsumePreviousGPUTimestamp() {
@@ -2613,13 +2608,11 @@ namespace Axle {
         m_ViewContext.PostProcess().BeginFrame(settings, m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT);
         const auto reflectionFrame = m_ReflectionService.Prepare(
             world, camera.GetPosition(), settings.EnableSSR, world.SceneRevision);
-        if (!reflectionFrame.Diagnostic.empty()) {
-            if (reflectionFrame.State == ReflectionState::Fallback)
-                m_ViewContext.Diagnostics().AddFallback(reflectionFrame.Diagnostic);
-        }
+        m_LastReflectionFrame=reflectionFrame;
         const auto giFrame = m_GIService.Prepare(
             world, settings, backendPolicy.Supports(BackendFeature::Compute), world.SceneRevision);
-        if (giFrame.Status == GIFrameStatus::Fallback && !giFrame.Diagnostic.empty())
+        m_LastGIFrame=giFrame;
+        if (giFrame.Status != GIFrameStatus::Disabled && giFrame.Fallback != GIFallback::None && !giFrame.Diagnostic.empty())
             m_ViewContext.Diagnostics().AddFallback(giFrame.Diagnostic);
         auto rollback = std::unique_ptr<RHISceneRenderer, std::function<void(RHISceneRenderer*)>>(this,
             [&](auto*) {
@@ -2740,7 +2733,7 @@ namespace Axle {
             activeSampleCount, sceneTargetTexture, sceneTargetRTV, sceneDepthTexture,
             sceneDepthDSV, sceneTargetFormat, activePipeline,
             projZO, viewProjZO, jitterX,
-            jitterY, giFrame.UpdateScheduled, {passCapabilities.NativeRHI, passCapabilities.Compute,
+            jitterY, giFrame, {passCapabilities.NativeRHI, passCapabilities.Compute,
                 passCapabilities.StorageTextures, passCapabilities.Timestamps, passCapabilities.RayTracing}
         });
     }

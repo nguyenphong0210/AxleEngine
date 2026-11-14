@@ -3,6 +3,8 @@
 #include <cmath>
 namespace Axle {
     namespace {
+        // Preserve the existing artist/physical intensity thresholds during
+        // migration. Fidelity/unit redesign belongs to M15.
         constexpr float DirectSunlightIlluminance=100000.0f;
         float DirectionalIlluminance(float intensity) {
             return intensity > 100.0f ? intensity : intensity * DirectSunlightIlluminance;
@@ -29,9 +31,6 @@ namespace Axle {
         frame.Shadows=shadows;
         frame.DirectionalCount=world.DirectionalLight?1u:0u;
         frame.DirectionalCount+=std::min<uint32_t>(static_cast<uint32_t>(world.AdditionalDirectionalLights.size()), MaxLightingPointLights);
-        frame.PointCount=static_cast<uint32_t>(world.PointLights.size());
-        frame.SpotCount=static_cast<uint32_t>(world.SpotLights.size());
-        frame.RectCount=static_cast<uint32_t>(world.RectLights.size());
 
         frame.Sun.Direction=world.DirectionalLight ? world.DirectionalLight->Direction : NormalizedFallbackDirection(frame.Scene.SunDirection);
         frame.Sun.Illuminance=world.DirectionalLight ? DirectionalIlluminance(world.DirectionalLight->Intensity) : 0.0f;
@@ -95,7 +94,17 @@ namespace Axle {
         }
         frame.RectCount=rectIndex;
 
-        if (!settings.EnableShadows) frame.Shadows={}; else if (!frame.Shadows.CascadeGeneration && !frame.Shadows.LocalGeneration) { frame.Status=LightingFrameStatus::Fallback; frame.Diagnostic="shadow_publication_unavailable: direct lighting remains valid without receiver atlases"; }
+        if (!settings.EnableShadows) frame.Shadows={};
+        else {
+            frame.Shadows.CascadedAvailable = shadows.CascadedAvailable && bool(shadows.CascadeGeneration);
+            frame.Shadows.LocalAtlasAvailable = shadows.LocalAtlasAvailable && bool(shadows.LocalGeneration);
+            if (!frame.Shadows.CascadedAvailable) frame.Shadows.CascadeGeneration={};
+            if (!frame.Shadows.LocalAtlasAvailable) frame.Shadows.LocalGeneration={};
+            if (!frame.Shadows.CascadedAvailable && !frame.Shadows.LocalAtlasAvailable) {
+                frame.Status=LightingFrameStatus::Fallback;
+                frame.Diagnostic="shadow_publication_unavailable: direct lighting remains valid without receiver atlases";
+            }
+        }
         return frame;
     }
 }

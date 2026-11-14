@@ -308,6 +308,31 @@ bool Native(RHIType backend) {
     auto ssrWithProbe = render();
     CHECK(!ssrWithProbe.empty() && ssrWithProbe.size() == red.size());
     CHECK(ssrWithProbe != ssr);
+    const auto probeGeneration=renderer.GetReflectionFrame().ProbeGeneration;
+    CHECK(renderer.GetReflectionFrame().State==ReflectionState::AuthoredReady && probeGeneration);
+    CHECK(device.GetResources().Acquire(probeGeneration).IsLive());
+    // Default IDs are valid in private worlds. A nearer probe outside influence
+    // must not displace the exact selected authored snapshot.
+    auto outsideProbe=probe;
+    outsideProbe.Position={0,0,4}; outsideProbe.BoxExtents={0.1f,0.1f,0.1f};
+    outsideProbe.CubemapPath="blue.hdr";
+    world.ReflectionProbes.insert(world.ReflectionProbes.begin(),outsideProbe);
+    CHECK(render()==ssrWithProbe && renderer.GetReflectionFrame().CubemapPath=="red.hdr");
+    world.ReflectionProbes.erase(world.ReflectionProbes.begin());
+    world.ReflectionProbes[0].CubemapPath="missing-probe.hdr";
+    CHECK(render()==ssr && renderer.GetReflectionFrame().State==ReflectionState::Fallback);
+    CHECK(!renderer.GetReflectionFrame().PrefilterReady && !renderer.GetReflectionFrame().ProbeGeneration);
+    CHECK(renderer.GetReflectionFrame().Fallback==ReflectionFallback::SSR);
+    settings.MSAASamples=4;
+    CHECK(!render().empty() && renderer.GetReflectionFrame().Fallback==ReflectionFallback::SkyIBL);
+    const auto msaaNames=passNames();
+    CHECK(std::find(msaaNames.begin(),msaaNames.end(),"SSRCompute")==msaaNames.end());
+    settings.MSAASamples=1;
+    world.ReflectionProbes[0].CubemapPath="red.hdr";
+    CHECK(render()==ssrWithProbe && renderer.GetReflectionFrame().ProbeGeneration==probeGeneration);
+    world.ReflectionProbes[0].CubemapPath="blue.hdr";
+    CHECK(!render().empty() && renderer.GetReflectionFrame().State==ReflectionState::AuthoredReady);
+    CHECK(renderer.GetReflectionFrame().ProbeGeneration!=probeGeneration);
     world.ReflectionProbes.clear();
     settings.EnableSSR=false;
 
@@ -352,6 +377,12 @@ bool Native(RHIType backend) {
     settings.EnableDDGI = true;
     auto ddgiFrame = render();
     CHECK(!ddgiFrame.empty() && ddgiFrame.size() == red.size());
+    CHECK(renderer.GetGIFrame().UpdateScheduled && renderer.GetGIFrame().Fallback==GIFallback::IBL);
+    CHECK(!renderer.GetGIFrame().IrradianceAvailable && !renderer.GetGIFrame().VisibilityAvailable && !renderer.GetGIFrame().SamplingEnabled);
+    world.DDGIProbeGrid->Enabled=false;
+    CHECK(!render().empty() && !renderer.GetGIFrame().UpdateScheduled);
+    const auto disabledGINames=passNames();
+    CHECK(std::find(disabledGINames.begin(),disabledGINames.end(),"DDGIUpdate")==disabledGINames.end());
     settings.EnableDDGI = false;
     world.DDGIProbeGrid.reset();
     CHECK(render()==red&&environment.BakeCount()==1&&environment.UploadCount()==1);

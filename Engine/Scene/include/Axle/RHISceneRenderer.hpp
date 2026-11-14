@@ -380,6 +380,9 @@ namespace Axle {
         const CustomProgramCache& GetCustomProgramCache() const { return m_CustomProgramCache; }
         // Contains only active synchronous work; frame callbacks are released on return.
         const RenderPassScheduler& GetPassScheduler() const { return m_PassScheduler; }
+        const LightingFrame& GetLightingFrame() const { return m_LastLightingFrame; }
+        const ReflectionFrame& GetReflectionFrame() const { return m_LastReflectionFrame; }
+        const GIFrame& GetGIFrame() const { return m_LastGIFrame; }
 
         struct CustomPipelineKey {
             uint64_t GenerationID = 0;
@@ -446,7 +449,7 @@ namespace Axle {
 
     private:
         void ConsumePreviousGPUTimestamp();
-        bool PrepareReflectionProbe(const RenderWorld& world, const ReflectionFrame& reflectionFrame);
+        ReflectionPublication PrepareReflectionProbe(const ReflectionFrame& reflectionFrame);
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_Pipeline;
@@ -692,6 +695,9 @@ namespace Axle {
         LightingService m_LightingService;
         ReflectionService m_ReflectionService;
         GIService m_GIService;
+        LightingFrame m_LastLightingFrame;
+        ReflectionFrame m_LastReflectionFrame;
+        GIFrame m_LastGIFrame;
         RHI::RHICommandBuffer& Commands() { return *m_ViewContext.Commands(); }
         bool m_LastRenderSucceeded = false;
         RHI::RHICompletionToken m_LastCompletion;

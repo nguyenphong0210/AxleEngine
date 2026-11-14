@@ -12,6 +12,8 @@
 
 namespace Axle {
     using namespace RHI;
+    static_assert(MaxLightingPointLights==MAX_POINT_LIGHTS && MaxLightingSpotLights==MAX_SPOT_LIGHTS);
+    static_assert(MaxLightingRectLights==sizeof(RHIMultiLightBufferData{}.RectLights)/sizeof(RHIGPURectLight));
     static constexpr uint32_t ForwardTextureCount = static_cast<uint32_t>(RHITextureSlot::Count) + 7;
 
     struct DrawItem {
@@ -42,7 +44,7 @@ namespace Axle {
             activeSampleCount, sceneTargetTexture, sceneTargetRTV, sceneDepthTexture,
             sceneDepthDSV, sceneTargetFormat, activePipeline,
             projZO, viewProjZO, jitterX,
-            jitterY, giUpdateScheduled, capabilities
+            jitterY, giFrame, capabilities
         ] = inputs;
         uint32_t dispatchCount = 0;
         // Declare the actual sequential passes before recording. Attachments
@@ -84,6 +86,7 @@ namespace Axle {
             m_SSRComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
             m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
             m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
+        const bool useSurfaceNormal=(useGTAO || useSSR) && m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid();
         const auto ssrInput = useSSR ? graph.Import("SSRInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto ssrDepth = useSSR ? graph.Import("SSRDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto ssrStorage = useSSR ? graph.Import("SSRStorage", m_ScreenStorageTarget->GetNative()) : output;
@@ -118,8 +121,14 @@ namespace Axle {
         }
         const bool useAutoExposure = settings.EnableAutoExposure && activeSampleCount == 1 && m_AutoExposurePipeline &&
             viewTargets->GetExposure() && viewTargets->GetExposure()->IsValid() && viewTargets->GetExposure()->GetUAV() != nullptr;
-        const bool useDDGI = giUpdateScheduled && world.DDGIProbeGrid.has_value() && activeSampleCount == 1 && m_DDGIPipeline &&
+        const bool useDDGI = giFrame.UpdateScheduled && activeSampleCount == 1 && m_DDGIPipeline && sceneDepthTexture && sceneDepthDSV &&
             viewTargets->GetDDGI() && viewTargets->GetDDGI()->IsValid() && viewTargets->GetDDGI()->GetUAV() != nullptr;
+        if (giFrame.UpdateScheduled && !useDDGI) {
+            m_LastGIFrame.UpdateScheduled=false;
+            m_LastGIFrame.Status=GIFrameStatus::Fallback;
+            m_LastGIFrame.Diagnostic="ddgi_native_update_unavailable: IBL diffuse fallback";
+            m_ViewContext.Diagnostics().AddFallback(m_LastGIFrame.Diagnostic);
+        }
         const auto ddgiInput = useDDGI ? graph.Import("DDGIInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto ddgiDepth = useDDGI ? graph.Import("DDGIDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto ddgiOutput = useDDGI ? graph.Import("DDGIOutput", viewTargets->GetDDGI()->GetNative()) : output;
@@ -149,6 +158,7 @@ namespace Axle {
         Graph::Resource shadows = output, localShadows = output;
         auto lightingFrame = m_LightingService.BuildFrame(world, settings);
         const auto& lighting = lightingFrame.Scene;
+        ReflectionPublication reflectionPublication;
         RHISceneConstants sceneConstants;
         // 3. Begin Rendering Pass
         nri::AttachmentDesc colorAttachment = {};
@@ -540,9 +550,10 @@ namespace Axle {
         }, [&](const RenderPassContext&) -> RenderPassResult {
             const ShadowPublication shadowPublication{
                 m_CascadedShadows.IsActive(), m_LocalShadows.IsActive(),
-                m_CascadedShadows.IsActive() ? 1u : 0u,
-                m_LocalShadows.IsActive() ? 1u : 0u};
+                shadowAtlas ? shadowAtlas->GetHandle() : RHIResourceHandle{},
+                localAtlas ? localAtlas->GetHandle() : RHIResourceHandle{}};
             lightingFrame = m_LightingService.BuildFrame(world, settings, shadowPublication);
+            m_LastLightingFrame=lightingFrame;
             if (lightingFrame.Status == LightingFrameStatus::Fallback && !lightingFrame.Diagnostic.empty())
                 m_ViewContext.Diagnostics().AddFallback(lightingFrame.Diagnostic);
             const auto localIdentity=m_Device->GetResources().AcquireNative(m_LocalShadows.GetSRV()).GetHandle();
@@ -553,6 +564,10 @@ namespace Axle {
             }
             if (!m_Environment.Prepare(world.Skybox)) return RenderPassResult::Failed("lighting/environment preparation failed");
             m_PreparedManualIBL=m_UseIBL && world.Skybox.Type==1 && world.Skybox.HDRPath.empty();
+            const bool skyIBLAvailable=m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.EnvironmentLighting;
+            m_LastReflectionFrame=m_ReflectionService.ResolvePublication(reflectionFrame, reflectionPublication, useSSR, skyIBLAvailable);
+            if (m_LastReflectionFrame.State==ReflectionState::Fallback || !m_LastReflectionFrame.Diagnostic.empty())
+                m_ViewContext.Diagnostics().AddFallback(m_LastReflectionFrame.Diagnostic);
             const std::array<std::shared_ptr<RHITexture>,3> ibl={ActiveIrradiance(),ActivePrefilter(),ActiveBRDF()};
             std::array<RHIResourceHandle,3> identities;
             std::vector<nri::Descriptor*> descriptors;
@@ -661,20 +676,15 @@ namespace Axle {
                 !m_SceneConstantBuffer.UpdateData(&sceneConstants, sizeof(RHISceneConstants)))
                 return RenderPassResult::Failed("scene uniform update failed");
 
-            return {};
+            return m_LastReflectionFrame.State==ReflectionState::Fallback
+                ? RenderPassResult::Fallback(m_LastReflectionFrame.Diagnostic) : RenderPassResult{};
         }, [&](const RenderPassContext&) -> RenderPassResult {
-            RenderPassResult probeResult;
-            if (!PrepareReflectionProbe(world, reflectionFrame)) {
-                m_ActiveReflectionProbePrefilter.reset();
-                m_HasActiveReflectionProbe = false;
-                probeResult = RenderPassResult::Fallback("reflection probe preparation failed; active environment fallback");
-                m_ViewContext.Diagnostics().AddFallback(probeResult.Diagnostic);
-            }
+            reflectionPublication=PrepareReflectionProbe(reflectionFrame);
             if (!m_CascadedShadows.Prepare(world, camera, settings, m_MaterialTextures))
                 return RenderPassResult::Failed(m_CascadedShadows.GetDiagnostic());
             if (!m_LocalShadows.Prepare(world, camera, settings, m_MaterialTextures))
                 return RenderPassResult::Failed(m_LocalShadows.GetDiagnostic());
-            return probeResult;
+            return {};
         });
 
         addPass("OpaqueAndSky", [&](const RenderPassContext&) -> RenderPassResult {
@@ -827,7 +837,7 @@ namespace Axle {
             if (settings.EnableSkybox && m_SkyboxPipeline && lighting.Environment &&
                 (!graph.DeclareRead("OpaqueAndSky",m_SkyboxDescriptorSet) ||
                  !graph.DeclareRead("OpaqueAndSky",m_SkyboxConstantBuffer.GetCBV()))) return fail();
-            if (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) {
+            if (useSurfaceNormal) {
                 if (!graph.DeclareRead("SurfaceNormal",m_DefaultDescriptorSet) ||
                     !graph.DeclareRead("SurfaceNormal",m_SceneConstantBuffer.GetCBV())) return fail();
                 for (const auto& item : opaqueQueue) if (!declareMesh("SurfaceNormal",*item.Mesh)) return fail();
@@ -836,7 +846,7 @@ namespace Axle {
         });
 
         addPass("ScreenSpace", [&](const RenderPassContext&) -> RenderPassResult {
-            if (!m_OpaqueSceneNormal || !m_OpaqueSceneNormal->IsValid())
+            if (!useSurfaceNormal)
                 return RenderPassResult{};
             if (!beginPass("SurfaceNormal"))
                 return RenderPassResult::Failed("SurfaceNormal: graph begin failed");
@@ -880,7 +890,7 @@ namespace Axle {
             endRendering();
             return RenderPassResult{};
         }, [&](RenderGraph& graph) {
-            if (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) {
+            if (useSurfaceNormal) {
                 graph.AddPass("SurfaceNormal", {
                     {sceneDepth, Layout::DepthStencilWrite, Access::Write, Load::Load},
                     {sceneNormal, Layout::ColorAttachment, Access::Write, Load::Clear}});
@@ -1046,14 +1056,10 @@ namespace Axle {
                 if (!beginPass("DDGIUpdate")) return fail();
                 RHIDDGIConstants ddgiConstants{};
                 ddgiConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height), 1.0f / width, 1.0f / height);
-                ddgiConstants.Params = glm::vec4(settings.DDGIMultiplier, 1.0f, 0.0f, 0.0f);
-                if (world.DDGIProbeGrid) {
-                    const auto& grid = *world.DDGIProbeGrid;
-                    ddgiConstants.GridDimensions = glm::vec4(glm::vec3(grid.GridDimensions), 0.0f);
-                    ddgiConstants.GridOrigin = glm::vec4(grid.GridOrigin, 0.0f);
-                    ddgiConstants.GridSpacing = glm::vec4(grid.GridSpacing, 0.0f);
-                    ddgiConstants.Params.x *= grid.EnergyMultiplier;
-                }
+                ddgiConstants.Params = glm::vec4(giFrame.EnergyMultiplier, 1.0f, 0.0f, 0.0f);
+                ddgiConstants.GridDimensions = glm::vec4(glm::vec3(giFrame.GridDimensions), 0.0f);
+                ddgiConstants.GridOrigin = glm::vec4(giFrame.GridOrigin, 0.0f);
+                ddgiConstants.GridSpacing = glm::vec4(giFrame.GridSpacing, 0.0f);
                 if (!passUniform().UpdateData(&ddgiConstants, sizeof(RHIDDGIConstants))) return fail();
                 auto* ddgiTarget = viewTargets->GetDDGI();
                 if (!m_DDGIDescriptorPool.UpdateTexture(m_DDGITextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV()) ||

@@ -162,11 +162,14 @@ bool Native(RHIType backend) {
     // Transactional atlas replacement failure must reject the view, preserve the
     // previous generation, and permit a later successful retry.
     const auto atlasHandle=renderer.GetCascadedShadows().GetAtlas()->GetHandle();restored.ShadowQuality=1;
+    CHECK(renderer.GetLightingFrame().Shadows.CascadeGeneration==atlasHandle);
     bool injected=false;
     {ScopedRHIFault fault([&](std::string_view op)->std::optional<nri::Result>{if(op=="CreateTexture"&&!injected){injected=true;return nri::Result::OUT_OF_MEMORY;}return {};});
         renderer.RenderWorldView(world,camera,&color,&depth,settings);CHECK(injected&&!renderer.WasLastRenderSuccessful());}
     CHECK(renderer.GetCascadedShadows().GetAtlas()->GetHandle()==atlasHandle);
     CHECK(!render().empty()&&renderer.GetCascadedShadows().GetAtlas()->GetWidth()==4096);
+    CHECK(renderer.GetLightingFrame().Shadows.CascadeGeneration==renderer.GetCascadedShadows().GetAtlas()->GetHandle());
+    CHECK(renderer.GetLightingFrame().Shadows.CascadeGeneration!=atlasHandle);
     restored.ShadowQuality=2;CHECK(!render().empty()&&renderer.GetCascadedShadows().GetAtlas()->GetWidth()==8192);
     const auto ultraHandle=renderer.GetCascadedShadows().GetAtlas()->GetHandle();
     settings.EnableShadows=false;CHECK(!render().empty());

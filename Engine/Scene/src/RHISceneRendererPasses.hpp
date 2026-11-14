@@ -30,7 +30,7 @@ namespace Axle {
         const glm::mat4& viewProjZO;
         float jitterX;
         float jitterY;
-        bool giUpdateScheduled;
+        const GIFrame& giFrame;
         RenderPassCapabilities capabilities;
     };
 }

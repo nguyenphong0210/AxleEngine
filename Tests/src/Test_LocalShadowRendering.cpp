@@ -64,6 +64,7 @@ bool Native(RHIType backend) {
     const auto dark=Darkened(off,on);std::cout<<"spot shadow darkened pixels="<<dark<<"\n";CHECK(dark>20);
     CHECK(PPM("spot-off.ppm",off)&&PPM("spot-on.ppm",on));
     const auto handle=renderer.GetLocalShadows().GetAtlas()->GetHandle();CHECK(render()==on&&renderer.GetLocalShadows().GetDrawCount()==0);
+    CHECK(renderer.GetLightingFrame().Shadows.LocalGeneration==handle);
     CHECK(renderer.GetLocalShadows().GetAtlas()->GetHandle()==handle);
     world.SpotLights[0].Shadows.CastShadows=false;CHECK(render()==off&&!renderer.GetLocalShadows().IsActive());
     world.SpotLights[0].Shadows.CastShadows=true;CHECK(render()==on);

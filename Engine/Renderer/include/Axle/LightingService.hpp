@@ -2,6 +2,7 @@
 #include <Axle/RenderWorld.hpp>
 #include <Axle/SceneLighting.hpp>
 #include <Axle/SceneRenderSettings.hpp>
+#include <Axle/RHI/RHIResource.hpp>
 #include <array>
 #include <cstdint>
 #include <glm/glm.hpp>
@@ -12,7 +13,10 @@ namespace Axle {
     constexpr uint32_t MaxLightingRectLights = 2;
 
     enum class LightingFrameStatus : uint8_t { Supported, Fallback, Failed };
-    struct ShadowPublication { bool CascadedAvailable=false, LocalAtlasAvailable=false; uint64_t CascadeGeneration=0, LocalGeneration=0; };
+    struct ShadowPublication {
+        bool CascadedAvailable=false, LocalAtlasAvailable=false;
+        RHI::RHIResourceHandle CascadeGeneration, LocalGeneration;
+    };
     struct LightingDirectionalFrame {
         glm::vec3 Direction{0.45f, 1.0f, 0.65f};
         float Illuminance=0.0f;
@@ -59,6 +63,8 @@ namespace Axle {
         std::array<LightingPointFrame,MaxLightingPointLights> PointLights{};
         std::array<LightingSpotFrame,MaxLightingSpotLights> SpotLights{};
         std::array<LightingRectFrame,MaxLightingRectLights> RectLights{};
+        // PointCount is the occupied native point-array prefix, including
+        // additional directionals encoded with Directional=true.
         uint32_t DirectionalCount=0, PointCount=0, SpotCount=0, RectCount=0;
         ShadowPublication Shadows;
         std::string Diagnostic;

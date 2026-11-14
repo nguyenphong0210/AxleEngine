@@ -36,3 +36,24 @@ Result: **PASS**.
 The item is complete because the user-authored scene is present, untouched and protected by the active M15 preservation rule.
 
 Next sequential leaf: `M15-U0-02.1 — Create smooth-sphere fixture`.
+
+## M15-U0-02.1 — Create smooth-sphere fixture
+
+Result: **PARTIAL / NOT RUN for the required visual gate**.
+
+- The deterministic fixture `smooth_sphere_surface` exists in
+  `Tests/Fixtures/M14/P0_REFERENCE_FIXTURES.json` with a 64x128 sphere, 128x128
+  capture, untextured material, disabled post effects and checks for defined
+  normal/no triangle banding/finite radiance.
+- `python scripts/test_m14_p0_baseline.py` passed 5/5 and
+  `python scripts/m14_p0_baseline.py --check` passed, confirming manifest schema,
+  fixture identity and diagnostic channels.
+- The focused Debug `AxleRenderUnitTests` binary is not present in the current
+  build tree, so the geometry unit binary was **NOT RUN** in this checkpoint.
+- The required Editor visual confirmation was **NOT RUN**: Computer Use native
+  pipe was unavailable after one retry. No screenshot/readback is claimed.
+
+The fixture definition is present, but the leaf remains open until the Editor is
+built/launched and the smooth sphere is visibly confirmed with no triangle bands
+or invalid pixels. Next action is to restore/build the Editor/test target and run
+the visual gate; do not advance the sequential checklist yet.

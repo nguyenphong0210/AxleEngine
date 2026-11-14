@@ -897,7 +897,7 @@ namespace Axle {
         addPass("ParticlesAndResolve", [&](const RenderPassContext&) -> RenderPassResult {
             if (copyParticleDepth) {
                 if (!beginPass("ParticleDepthCopy")) return fail();
-                Commands().CopyTexture(*sceneDepthTexture, nullptr, *m_ParticleSceneDepth->GetNative(), nullptr);
+                Commands().CopyTexture(*m_ParticleSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
             }
             if (!beginPass("ParticlesAndPhysics")) return fail();
             beginRendering(renderingDesc);

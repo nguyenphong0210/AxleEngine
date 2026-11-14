@@ -12,12 +12,12 @@ consolidated U9 review are the current acceptance records.
 | Unit / contract | Result | Source and evidence |
 |---|---|---|
 | U0 baseline and migration contract | PASS | `U0_BASELINE_EVIDENCE.md`; historical P0 audit is pinned to `769a9f2` and reports history only |
-| U1 View/frame ownership | PASS | `ViewContext.hpp:57-120`, `ViewContext.cpp:77-191`; `RHIFrameContext.cpp:54-110` |
-| U2 pass orchestration | PASS at released boundary | `RenderPass.cpp:73-129`; live scheduler groups in `RHISceneRendererPasses.cpp:503-1768`; callback/persistent-cache adapter is explicit and quarantined |
-| U3 canonical surface | PASS | `ResolvedSurface.hpp:34-112`; native built-in/custom/graph and shadow callers in `RHISceneRendererPasses.cpp:391-789` |
-| U4 graph/resource lifetime | PASS | `RenderGraph.cpp:55-238`; `RHIResource.cpp:271-383`; `RHIViewTargets.cpp:57-175`; strict graph and failure/lifetime fixtures |
+| U1 View/frame ownership | PASS | `ViewContext.hpp:57-120`, `ViewContext.cpp:77-188`; `RHIFrameContext.cpp:54-110` |
+| U2 pass orchestration | PASS at released boundary | `RenderPass.cpp:73-109`; live scheduler groups in `RHISceneRendererPasses.cpp:503-1768`; callback/persistent-cache adapter is explicit and quarantined |
+| U3 canonical surface | PASS | `ResolvedSurface.hpp:34-105`; native built-in/custom/graph and shadow callers in `RHISceneRendererPasses.cpp:391-789` |
+| U4 graph/resource lifetime | PASS | `RenderGraph.cpp:55-238`; `RHIResource.cpp:271-383`; `RHIViewTargets.cpp:57-156`; strict graph and failure/lifetime fixtures |
 | U5 service ownership | PASS | service calls in `RHISceneRendererPasses.cpp:555-568` and renderer publication at `RHISceneRenderer.cpp:2611-2640`; U5 correction evidence |
-| U6 temporal/post/diagnostics | PASS | `TemporalService.cpp:17-66`, `PostProcessService.cpp:30-83`, `RenderDiagnostics.cpp:44-112`, target reset in `ViewContext.cpp:77-191` |
+| U6 temporal/post/diagnostics | PASS | `TemporalService.cpp:17-42`, `PostProcessService.cpp:30-59`, `RenderDiagnostics.cpp:44-58`, target reset in `ViewContext.cpp:77-188` |
 | U7 backend/fallback policy | PASS | `RenderBackendPolicy.cpp:26-143`; native D3D12/Vulkan and reduced OpenGL/fallback runs |
 | U8 migration/tooling | PASS | `RenderService.cpp:204-330`; product callers; generated owner map with zero architecture/caller violations |
 | U9 final gates and handoff | PASS | This report, [consolidated review](../../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md), and current evidence manifest below |

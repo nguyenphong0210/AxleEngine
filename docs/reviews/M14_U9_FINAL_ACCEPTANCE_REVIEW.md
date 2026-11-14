@@ -22,12 +22,12 @@ current acceptance record; it does not rewrite that historical evidence.
 | Unit | Result | Acceptance evidence and source anchors |
 |---|---|---|
 | U0 baseline/migration | PASS | `U0_BASELINE_EVIDENCE.md`; frozen P0 audit `scripts/m14_p0_baseline.py` reads baseline `769a9f2` only and returns `CURRENT_ACCEPTANCE_NOT_ASSESSED` |
-| U1 View/frame ownership | PASS | `ViewContext.hpp:57-120`, `ViewContext.cpp:77-191`; `RHIFrameContext.cpp:54-110`; resize/cut/epoch/abandon tests |
-| U2 pass orchestration | PASS | `RenderPass.cpp:73-129`; `RHISceneRendererPasses.cpp:503-1768`; eight named scheduler groups, complete lifecycle, structured failure/fallback handling |
-| U3 ResolvedSurface | PASS | `ResolvedSurface.hpp:34-112`; built-in/custom/graph/shadow native callers at `RHISceneRendererPasses.cpp:391-789`; CPU and graph policy/native fixtures |
-| U4 RenderGraph/resource lifetime | PASS | `RenderGraph.cpp:55-238`; `RHIResource.cpp:271-383`; `RHIViewTargets.cpp:57-175`; strict physical/binding validation and lease/generation negatives |
+| U1 View/frame ownership | PASS | `ViewContext.hpp:57-120`, `ViewContext.cpp:77-188`; `RHIFrameContext.cpp:54-110`; resize/cut/epoch/abandon tests |
+| U2 pass orchestration | PASS | `RenderPass.cpp:73-109`; `RHISceneRendererPasses.cpp:503-1768`; eight named scheduler groups, complete lifecycle, structured failure/fallback handling |
+| U3 ResolvedSurface | PASS | `ResolvedSurface.hpp:34-105`; built-in/custom/graph/shadow native callers at `RHISceneRendererPasses.cpp:391-789`; CPU and graph policy/native fixtures |
+| U4 RenderGraph/resource lifetime | PASS | `RenderGraph.cpp:55-238`; `RHIResource.cpp:271-383`; `RHIViewTargets.cpp:57-156`; strict physical/binding validation and lease/generation negatives |
 | U5 service ownership | PASS | `RHISceneRendererPasses.cpp:555-568`; `RHISceneRenderer.cpp:2611-2640`; Lighting/Reflection/GI publication and fallback fixtures |
-| U6 temporal/post/diagnostics | PASS | `TemporalService.cpp:17-66`; `PostProcessService.cpp:30-83`; `RenderDiagnostics.cpp:44-112`; target generation and material reset tests |
+| U6 temporal/post/diagnostics | PASS | `TemporalService.cpp:17-42`; `PostProcessService.cpp:30-59`; `RenderDiagnostics.cpp:44-58`; target generation and material reset tests |
 | U7 backend/fallback | PASS | `RenderBackendPolicy.cpp:26-143`; D3D12, Vulkan, OpenGL compatibility and forced fallback evidence |
 | U8 migration/tooling | PASS | `RenderService.cpp:204-330`; product caller migration; generated map with 0/0 violations; architecture tool suite |
 | U9 final acceptance/handoff | PASS | this review, U9 handoff, source/binary manifests and final independent recheck |

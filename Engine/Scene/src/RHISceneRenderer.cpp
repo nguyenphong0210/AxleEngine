@@ -3223,11 +3223,18 @@ namespace Axle {
             return Commands().IsRecording();
         };
 
+        m_PassScheduler.SetRecordCallback("LightingAndShadows", [&](const RenderPassContext&) {
+            if (m_CascadedShadows.IsActive() &&
+                (!beginPass("CascadedShadows") || !m_CascadedShadows.Record(Commands())))
+                return RenderPassResult::Failed("CascadedShadows: recording failed");
+            m_LastDrawCallCount += m_CascadedShadows.GetDrawCount();
+            if (m_LocalShadows.NeedsRender() &&
+                (!beginPass("LocalShadows") || !m_LocalShadows.Record(Commands())))
+                return RenderPassResult::Failed("LocalShadows: recording failed");
+            m_LastDrawCallCount += m_LocalShadows.GetDrawCount();
+            return RenderPassResult{};
+        });
         if (!m_PassScheduler.RecordOne("LightingAndShadows", passContext)) return;
-        if (m_CascadedShadows.IsActive() && (!beginPass("CascadedShadows") || !m_CascadedShadows.Record(Commands()))) return;
-        m_LastDrawCallCount+=m_CascadedShadows.GetDrawCount();
-        if(m_LocalShadows.NeedsRender()&&(!beginPass("LocalShadows")||!m_LocalShadows.Record(Commands())))return;
-        m_LastDrawCallCount+=m_LocalShadows.GetDrawCount();
         if (!m_PassScheduler.RecordOne("OpaqueAndSky", passContext) || !beginPass("OpaqueAndSky")) return;
 
         // 3. Begin Rendering Pass

@@ -1,7 +1,8 @@
-"""Validate and report the Milestone 14 P0 baseline contract.
+"""Validate and report the historical, pre-split lighting P0 baseline contract.
 
-This tool deliberately reports open implementation findings. It does not claim
-that the renderer passes the fixtures and it never edits source or scene files.
+The M14 label predates the architecture/fidelity split. Findings describe source
+at BASELINE, never the working tree or current M14 acceptance. This read-only
+audit must not require historical defects to remain in repaired source.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+BASELINE = "769a9f2"
 MANIFEST = ROOT / "Tests" / "Fixtures" / "M14" / "P0_REFERENCE_FIXTURES.json"
 
 
@@ -84,11 +86,13 @@ def source_contracts(root: Path = ROOT) -> list[dict[str, Any]]:
     ]
     result = []
     for finding in signatures:
-        path = root / finding["path"]
-        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        text = subprocess.check_output(
+            ["git", "show", f"{BASELINE}:{finding['path']}"],
+            cwd=root, text=True, encoding="utf-8")
         missing = [needle for needle in finding["needles"] if needle not in text]
         row = dict(finding)
         row["present"] = not missing
+        row["source_ref"] = BASELINE
         row["missing_signatures"] = missing
         result.append(row)
     return result
@@ -113,7 +117,8 @@ def build_report(root: Path = ROOT, manifest_path: Path = MANIFEST) -> dict[str,
     return {
         "schema": "axle.m14.p0.baseline-report",
         "version": 1,
-        "baseline": "769a9f2",
+        "baseline": BASELINE,
+        "source_scope": "historical_commit_only",
         "manifest": str(manifest_path.relative_to(root)).replace("\\", "/"),
         "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
         "fixture_ids": [fixture["id"] for fixture in manifest["fixtures"]],
@@ -121,7 +126,7 @@ def build_report(root: Path = ROOT, manifest_path: Path = MANIFEST) -> dict[str,
         "source_contracts": contracts,
         "open_findings": [row["id"] for row in contracts if row["status"] == "OPEN_AT_BASELINE" and row["present"]],
         "git": git_snapshot(root),
-        "acceptance": "P0_BASELINE_RECORDED; M14_REMAINS_HOLD",
+        "acceptance": "HISTORICAL_P0_BASELINE_RECORDED; CURRENT_ACCEPTANCE_NOT_ASSESSED",
     }
 
 
@@ -129,7 +134,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--manifest", type=Path, default=None)
-    parser.add_argument("--check", action="store_true", help="validate the manifest and source signatures")
+    parser.add_argument("--check", action="store_true", help="validate the manifest and frozen historical source signatures")
     parser.add_argument("--report", type=Path, help="write a JSON baseline report")
     args = parser.parse_args()
     root = args.root.resolve()

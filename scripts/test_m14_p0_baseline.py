@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,18 +23,29 @@ class M14P0BaselineTests(unittest.TestCase):
         self.assertIn("scene_normal", manifest["capture"]["diagnostics"])
         self.assertIn("hiz_level_7", manifest["capture"]["diagnostics"])
 
-    def test_current_source_contracts_are_recorded_without_claiming_pass(self):
-        findings = MODULE.source_contracts(ROOT)
+    def test_historical_contracts_do_not_read_or_require_working_tree_defects(self):
+        # Source may be moved or corrected after the baseline. The audit must
+        # still inspect the frozen commit, including when these files are absent.
+        with patch.object(Path, "read_text", side_effect=AssertionError("working-tree read")):
+            findings = MODULE.source_contracts(ROOT)
         self.assertEqual(len(findings), 5)
         self.assertTrue(all(row["present"] for row in findings))
         self.assertTrue(all(row["status"] == "OPEN_AT_BASELINE" for row in findings))
+        self.assertTrue(all(row["source_ref"] == "769a9f2" for row in findings))
 
-    def test_report_preserves_dirty_scene_and_holds_acceptance(self):
+    def test_report_records_history_without_assessing_current_acceptance(self):
         report = MODULE.build_report(ROOT)
-        self.assertEqual(report["acceptance"], "P0_BASELINE_RECORDED; M14_REMAINS_HOLD")
+        self.assertEqual(report["acceptance"], "HISTORICAL_P0_BASELINE_RECORDED; CURRENT_ACCEPTANCE_NOT_ASSESSED")
+        self.assertEqual(report["source_scope"], "historical_commit_only")
         self.assertIn("F01_UNWRITTEN_SCENE_NORMAL_BASELINE", report["open_findings"])
         self.assertIn("F05_TIMESTAMP_PROBE_BASELINE", report["open_findings"])
         self.assertIn("git", report)
+
+    def test_unavailable_historical_source_is_a_failure(self):
+        import subprocess
+        with patch.object(MODULE.subprocess, "check_output", side_effect=subprocess.CalledProcessError(128, "git show")):
+            with self.assertRaises(subprocess.CalledProcessError):
+                MODULE.source_contracts(ROOT)
 
     def test_manifest_schema_rejects_duplicate_fixture_ids(self):
         manifest = MODULE.load_manifest()

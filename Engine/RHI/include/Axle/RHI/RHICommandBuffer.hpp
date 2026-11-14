@@ -130,6 +130,9 @@ namespace Axle::RHI {
         bool IsExecutable() const { return IsValid() && m_IsExecutable && RHIDevice::Get().GetResources().IsExecutable(m_CommandBuffer); }
         RHIResourceLease AcquireLease() const { return m_Lease; }
         bool KeepAlive(const RHIResourceLease& resource);
+        // Retain the transitive resources referenced by a descriptor set and
+        // transition them to shader-readable state for graph-backed passes.
+        bool DeclareDescriptorRead(const void* descriptor);
 
         nri::CommandBuffer* GetNative() const { return IsValid() ? m_CommandBuffer : nullptr; }
         operator nri::CommandBuffer*() const { return GetNative(); }
@@ -138,7 +141,6 @@ namespace Axle::RHI {
     private:
         bool CanRecord() const { return IsRecording() && RHIDevice::Get().CanSubmit(); }
         bool RetainNative(const void* native);
-        bool DeclareDescriptorRead(const void* descriptor);
         void TransitionRegion(nri::Texture* texture, RHIResourceLayout layout, const nri::TextureRegionDesc* region);
         bool Publish();
         RHIResourceLease m_Lease;

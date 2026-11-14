@@ -34,6 +34,11 @@ namespace Axle {
         // must already have a native texture and live generation lease.
         bool Compile(bool strictPhysicalResources = false);
         bool BeginPass(std::string_view name, RHI::RHICommandBuffer& commands);
+        // Descriptor-backed texture/buffer reads are declared at the same
+        // recording boundary as graph texture uses.  This keeps the graph
+        // aware of transitive descriptor dependencies even when a material
+        // set is assembled lazily during pass recording.
+        bool DeclareDescriptorRead(const void* descriptor, RHI::RHICommandBuffer& commands);
         bool IsComplete() const { return m_Compiled && m_NextPass == m_Passes.size(); }
         const std::string& GetError() const { return m_Error; }
         const std::vector<uint32_t>& GetDependencies(uint32_t pass) const { return m_Passes.at(pass).Dependencies; }

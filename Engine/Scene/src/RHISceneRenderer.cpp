@@ -3205,6 +3205,13 @@ namespace Axle {
             return;
         }
 
+        auto bindDescriptorSet = [&](uint32_t setIndex, nri::DescriptorSet* set,
+                                     nri::BindPoint bindPoint = nri::BindPoint::GRAPHICS) {
+            if (!graph.DeclareDescriptorRead(set, Commands())) return false;
+            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), setIndex, set, bindPoint);
+            return Commands().IsRecording();
+        };
+
         if (m_CascadedShadows.IsActive() && (!beginPass("CascadedShadows") || !m_CascadedShadows.Record(Commands()))) return;
         m_LastDrawCallCount+=m_CascadedShadows.GetDrawCount();
         if(m_LocalShadows.NeedsRender()&&(!beginPass("LocalShadows")||!m_LocalShadows.Record(Commands())))return;
@@ -3267,9 +3274,7 @@ namespace Axle {
         // Bind Descriptor Pool & Material Descriptor Set (Space 1: 6 PBR textures + 16x Aniso Sampler)
         if (m_DescriptorPool.IsValid()) {
             m_DescriptorPool.Bind(Commands().GetNative());
-            if (m_DefaultDescriptorSet) {
-                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_DefaultDescriptorSet);
-            }
+            if (m_DefaultDescriptorSet && !bindDescriptorSet(0, m_DefaultDescriptorSet)) return;
         }
 
         auto RenderSkybox=[&]() {
@@ -3343,7 +3348,7 @@ namespace Axle {
                 }
 
                 m_DescriptorPool.Bind(Commands().GetNative());
-                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(),0,m_SkyboxDescriptorSet);
+            if (!bindDescriptorSet(0, m_SkyboxDescriptorSet)) return;
                 // 5. Draw full-screen triangle on far plane (SV_VertexID unproject)
                 Commands().Draw(3, 1, 0, 0);
                 m_LastDrawCallCount++;
@@ -3510,7 +3515,8 @@ namespace Axle {
                         }
                         Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS,*generation.PipelineLayout);
                         m_CustomDescriptorPool.Bind(Commands().GetNative());
-                        for(size_t i=0;i<resource.Sets.size();++i) RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(),static_cast<uint32_t>(i),resource.Sets[i]);
+                        for(size_t i=0;i<resource.Sets.size();++i)
+                            if (!bindDescriptorSet(static_cast<uint32_t>(i), resource.Sets[i])) return false;
                         Commands().SetPipeline(pipeline);
                         item.Mesh->Bind(Commands()); item.Mesh->Draw(Commands());
                         m_LastDrawCallCount+=static_cast<uint32_t>(item.Mesh->GetSubmeshCount()); ++m_LastRenderedEntityCount;
@@ -3585,7 +3591,7 @@ namespace Axle {
                 m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs);
                 if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) { drawFailed = true; return; }
                 Commands().SetRootDescriptor(2, resource.Constants.GetCBV());
-                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, resource.Set);
+                if (!bindDescriptorSet(0, resource.Set)) { drawFailed = true; return; }
 
                 Commands().SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
                 m_LastStreamedTransformBytes += sizeof(item.PushConsts);
@@ -3637,7 +3643,7 @@ namespace Axle {
                 if (m_DescriptorPool.IsValid()) {
                     m_DescriptorPool.Bind(Commands().GetNative());
                     if (m_DefaultDescriptorSet) {
-                        RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_DefaultDescriptorSet);
+            if (!bindDescriptorSet(0, m_DefaultDescriptorSet)) return;
                     }
                 }
                 for (const auto& item : opaqueQueue) {
@@ -3777,8 +3783,8 @@ namespace Axle {
             Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_DDGIPipelineLayout);
             Commands().SetRootDescriptor(0, m_DDGIConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
             m_DDGIDescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_DDGITextureSet, nri::BindPoint::COMPUTE);
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_DDGIStorageSet, nri::BindPoint::COMPUTE);
+             if (!bindDescriptorSet(0, m_DDGITextureSet, nri::BindPoint::COMPUTE) ||
+                 !bindDescriptorSet(1, m_DDGIStorageSet, nri::BindPoint::COMPUTE)) return;
             Commands().Dispatch((ddgiTarget->GetWidth() + 7) / 8, (ddgiTarget->GetHeight() + 7) / 8, 1); ++dispatchCount;
         }
 
@@ -3821,8 +3827,8 @@ namespace Axle {
             Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_GTAOComputePipelineLayout);
             Commands().SetRootDescriptor(0, m_GTAOConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
             m_GTAODescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_GTAOComputeTextureSet, nri::BindPoint::COMPUTE);
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_GTAOComputeStorageSet, nri::BindPoint::COMPUTE);
+             if (!bindDescriptorSet(0, m_GTAOComputeTextureSet, nri::BindPoint::COMPUTE) ||
+                 !bindDescriptorSet(1, m_GTAOComputeStorageSet, nri::BindPoint::COMPUTE)) return;
             Commands().Dispatch((gtaoWidth + 7) / 8, (gtaoHeight + 7) / 8, 1); ++dispatchCount;
 
             if (!beginPass("GTAOApply")) return;
@@ -3855,7 +3861,7 @@ namespace Axle {
             Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_GTAOApplyPipelineLayout);
             Commands().SetRootDescriptor(0, m_GTAOConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
             m_GTAODescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_GTAOApplyDescriptorSet, nri::BindPoint::GRAPHICS);
+             if (!bindDescriptorSet(0, m_GTAOApplyDescriptorSet)) return;
             Commands().Draw(3, 1, 0, 0);
             Commands().EndRendering();
         }
@@ -3890,8 +3896,8 @@ namespace Axle {
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_HiZPipelineLayout);
                 Commands().SetRootDescriptor(0, m_HiZConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
                 m_HiZDescriptorPool.Bind(Commands().GetNative());
-                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, textureSet, nri::BindPoint::COMPUTE);
-                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, storageSet, nri::BindPoint::COMPUTE);
+             if (!bindDescriptorSet(0, textureSet, nri::BindPoint::COMPUTE) ||
+                 !bindDescriptorSet(1, storageSet, nri::BindPoint::COMPUTE)) return;
                 Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1); ++dispatchCount;
             }
 
@@ -3936,8 +3942,8 @@ namespace Axle {
             Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_SSRComputePipelineLayout);
             Commands().SetRootDescriptor(0, m_SSRConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
             m_SSRDescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_SSRComputeTextureSet, nri::BindPoint::COMPUTE);
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_SSRComputeStorageSet, nri::BindPoint::COMPUTE);
+             if (!bindDescriptorSet(0, m_SSRComputeTextureSet, nri::BindPoint::COMPUTE) ||
+                 !bindDescriptorSet(1, m_SSRComputeStorageSet, nri::BindPoint::COMPUTE)) return;
             Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1); ++dispatchCount;
 
             if (!beginPass("SSRApply")) return;
@@ -3971,7 +3977,7 @@ namespace Axle {
             Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SSRApplyPipelineLayout);
             Commands().SetRootDescriptor(0, m_SSRConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
             m_SSRDescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_SSRApplyDescriptorSet, nri::BindPoint::GRAPHICS);
+             if (!bindDescriptorSet(0, m_SSRApplyDescriptorSet)) return;
             Commands().Draw(3, 1, 0, 0);
             Commands().EndRendering();
         }
@@ -4021,8 +4027,8 @@ namespace Axle {
             Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_FogComputePipelineLayout);
             Commands().SetRootDescriptor(0, m_FogConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
             m_FogDescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_FogComputeTextureSet, nri::BindPoint::COMPUTE);
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_FogComputeStorageSet, nri::BindPoint::COMPUTE);
+             if (!bindDescriptorSet(0, m_FogComputeTextureSet, nri::BindPoint::COMPUTE) ||
+                 !bindDescriptorSet(1, m_FogComputeStorageSet, nri::BindPoint::COMPUTE)) return;
             Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1); ++dispatchCount;
 
             if (!beginPass("FogApply")) return;
@@ -4054,7 +4060,7 @@ namespace Axle {
             Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_FogApplyPipelineLayout);
             Commands().SetRootDescriptor(0, m_FogConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
             m_FogDescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_FogApplyDescriptorSet, nri::BindPoint::GRAPHICS);
+             if (!bindDescriptorSet(0, m_FogApplyDescriptorSet)) return;
             Commands().Draw(3, 1, 0, 0);
             Commands().EndRendering();
         }
@@ -4084,8 +4090,8 @@ namespace Axle {
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_BloomComputePipelineLayout);
                 Commands().SetRootDescriptor(0, m_BloomConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
                 m_BloomDescriptorPool.Bind(Commands().GetNative());
-                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, textureSet, nri::BindPoint::COMPUTE);
-                RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, storageSet, nri::BindPoint::COMPUTE);
+                 if (!bindDescriptorSet(0, textureSet, nri::BindPoint::COMPUTE) ||
+                     !bindDescriptorSet(1, storageSet, nri::BindPoint::COMPUTE)) return false;
                 Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1); ++dispatchCount;
                 return true;
             };
@@ -4128,7 +4134,7 @@ namespace Axle {
             Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_BloomApplyPipelineLayout);
             Commands().SetRootDescriptor(0, m_BloomConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
             m_BloomDescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_BloomApplyDescriptorSet, nri::BindPoint::GRAPHICS);
+             if (!bindDescriptorSet(0, m_BloomApplyDescriptorSet)) return;
             Commands().Draw(3, 1, 0, 0);
             Commands().EndRendering();
         }
@@ -4153,8 +4159,8 @@ namespace Axle {
             Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_AutoExposurePipelineLayout);
             Commands().SetRootDescriptor(0, m_AutoExposureConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
             m_AutoExposureDescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_AutoExposureTextureSet, nri::BindPoint::COMPUTE);
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_AutoExposureStorageSet, nri::BindPoint::COMPUTE);
+             if (!bindDescriptorSet(0, m_AutoExposureTextureSet, nri::BindPoint::COMPUTE) ||
+                 !bindDescriptorSet(1, m_AutoExposureStorageSet, nri::BindPoint::COMPUTE)) return;
             Commands().Dispatch((exposureWidth + 15) / 16, (exposureHeight + 15) / 16, 1); ++dispatchCount;
         }
 
@@ -4204,7 +4210,7 @@ namespace Axle {
             Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_TAAPipelineLayout);
             Commands().SetRootDescriptor(0, m_TAAConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
             m_TAADescriptorPool.Bind(Commands().GetNative());
-            RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_TAADescriptorSet, nri::BindPoint::GRAPHICS);
+             if (!bindDescriptorSet(0, m_TAADescriptorSet)) return;
             Commands().Draw(3, 1, 0, 0);
             Commands().EndRendering();
 

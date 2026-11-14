@@ -99,4 +99,17 @@ namespace Axle {
         ++m_NextPass;
         return true;
     }
+
+    bool RenderGraph::DeclareDescriptorRead(const void* descriptor, RHI::RHICommandBuffer& commands) {
+        if (!m_Compiled || m_NextPass == 0 || m_NextPass > m_Passes.size() || !descriptor)
+            return Fail("Descriptor read declared outside an active graph pass");
+        // The graph owns the dependency/lifetime edge here.  Descriptor
+        // resources may be declared while a graphics rendering scope is
+        // active, so do not inject an implicit barrier from this helper;
+        // texture layout transitions remain the graph's declared Use entries.
+        auto lease = RHI::RHIDevice::Get().GetResources().AcquireNative(descriptor);
+        if (!lease.IsLive() || !commands.KeepAlive(lease))
+            return Fail("Descriptor read could not retain its transitive resource leases");
+        return true;
+    }
 }

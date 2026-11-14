@@ -26,6 +26,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/MaterialTextureCache.hpp>
 #include <Axle/CustomMaterialProgram.hpp>
+#include <Axle/ViewContext.hpp>
 
 #include <memory>
 #include <array>
@@ -650,7 +651,6 @@ namespace Axle {
         RHI::RHIDescriptorPool m_TAADescriptorPool;
         nri::DescriptorSet* m_TAADescriptorSet = nullptr;
         glm::mat4 m_PrevViewProjection{ 1.0f };
-        uint32_t m_FrameIndex = 0;
         uint8_t m_TAAHistoryIndex = 0;
         bool m_TAAHistoryValid = false;
         float m_AdaptedExposure = 1.0f;
@@ -677,8 +677,8 @@ namespace Axle {
         std::unique_ptr<RHIPhysicsDebugRenderer> m_PhysicsDebugRenderer;
         std::unique_ptr<RHIObjectPicker> m_ObjectPicker;
 
-        RHI::RHIFrameContext m_Frame;
-        RHI::RHICommandBuffer& Commands() { return *m_Frame.GetCommands(); }
+        ViewContext m_ViewContext;
+        RHI::RHICommandBuffer& Commands() { return *m_ViewContext.Commands(); }
         bool m_LastRenderSucceeded = false;
         RHI::RHICompletionToken m_LastCompletion;
         std::unordered_map<uint32_t, std::string> m_MaterialDiagnostics;

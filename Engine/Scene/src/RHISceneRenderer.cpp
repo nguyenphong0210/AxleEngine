@@ -94,7 +94,7 @@ namespace Axle {
         // Initialize mesh registry
         if (!RHIMeshRegistry::Get().Init()) return false;
 
-        if (!m_Frame.Init() || !m_CascadedShadows.Init() || !m_LocalShadows.Init()) return false;
+        if (!m_ViewContext.Init() || !m_CascadedShadows.Init() || !m_LocalShadows.Init()) return false;
 
         if (device.GetCapabilities().TimestampFrequencyHz && device.GetNRICore().CreateQueryPool) {
             nri::QueryPoolDesc timestampDesc{};
@@ -671,7 +671,7 @@ namespace Axle {
         }
         m_GPUTimestampPool = nullptr;
         m_LastGPUTimestampMilliseconds = 0.0;
-        m_Frame = RHIFrameContext{};
+        m_ViewContext.Shutdown();
         m_Device = nullptr;
         m_Initialized = false;
     }
@@ -2624,9 +2624,18 @@ namespace Axle {
             m_HasActiveReflectionProbe = false;
         }
         m_MaterialDiagnostics.clear(); m_MaterialFeedback.clear();
-        if (!world.ErrorMessage.empty() || !m_Frame.Begin()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
+        ViewContextInput viewInput;
+        viewInput.Width = width;
+        viewInput.Height = height;
+        viewInput.Camera = camera;
+        viewInput.Settings = settings;
+        viewInput.Targets = viewTargets;
+        viewInput.FeatureGeneration = HashViewFeaturePolicy(settings);
+        viewInput.SceneRevision = world.SceneRevision;
+        m_ViewContext.Observe(viewInput, m_Device->GetEpoch());
+        if (!world.ErrorMessage.empty() || !m_ViewContext.BeginFrame()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
         auto rollback = std::unique_ptr<RHISceneRenderer, std::function<void(RHISceneRenderer*)>>(this,
-            [&](auto*) { if (!m_LastRenderSucceeded) m_Frame.Abandon(); });
+            [&](auto*) { if (!m_LastRenderSucceeded) m_ViewContext.AbandonFrame(); });
         if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
             auto& core = m_Device->GetNRICore();
             core.ResetQueries(*m_GPUTimestampPool, 0, 2);
@@ -2687,9 +2696,10 @@ namespace Axle {
         float jitterX = 0.0f;
         float jitterY = 0.0f;
         if (settings.EnableTAA && width > 0 && height > 0) {
-            jitterX = (s_Halton2[m_FrameIndex % 8] - 0.5f) / static_cast<float>(width) * settings.TAAJitterSpread;
-            jitterY = (s_Halton3[m_FrameIndex % 8] - 0.5f) / static_cast<float>(height) * settings.TAAJitterSpread;
+            jitterX = (s_Halton2[m_ViewContext.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(width) * settings.TAAJitterSpread;
+            jitterY = (s_Halton3[m_ViewContext.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(height) * settings.TAAJitterSpread;
         }
+        m_ViewContext.SetJitter({ jitterX, jitterY });
 
         glm::mat4 projZO = camera.GetProjectionMatrixZO();
         if (settings.EnableTAA) {
@@ -2823,7 +2833,7 @@ namespace Axle {
         nri::Descriptor* sceneDepthDSV = depthDSV;
         nri::Format sceneTargetFormat = m_CurrentColorFormat;
 
-        auto rejectTargets = [&] { m_Frame.Abandon(); };
+        auto rejectTargets = [&] { m_ViewContext.AbandonFrame(); };
         RHIViewTargetDesc targetDesc; targetDesc.Width = width; targetDesc.Height = height;
         targetDesc.ColorFormat = FromNRIFormat(m_CurrentColorFormat); targetDesc.DepthFormat = FromNRIFormat(m_CurrentDepthFormat);
         targetDesc.EnableDepth = sceneDepthTexture != nullptr; targetDesc.Samples = activeSampleCount;
@@ -3137,7 +3147,7 @@ namespace Axle {
         Commands().BeginRendering(renderingDesc);
         auto abandonRecording = [&] {
             Commands().EndRendering();
-            m_Frame.Abandon();
+            m_ViewContext.AbandonFrame();
             rejectTargets();
         };
 
@@ -4169,8 +4179,6 @@ namespace Axle {
         }
 
         m_PrevViewProjection = viewProjZO;
-        m_FrameIndex++;
-
         if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
             auto& core = m_Device->GetNRICore();
             core.CmdEndQuery(*Commands().GetNative(), *m_GPUTimestampPool, 1);
@@ -4178,9 +4186,9 @@ namespace Axle {
         }
 
         if (!beginPass("Export") || !graph.IsComplete()) return;
-        if (!m_Frame.End() || !m_Frame.Submit()) { AXLE_CORE_ERROR("View command finalization or submit failed"); return; }
+        if (!m_ViewContext.EndFrameAndSubmit()) { AXLE_CORE_ERROR("View command finalization or submit failed"); return; }
         m_LocalShadows.OnSubmitted();
-        m_LastCompletion = m_Frame.GetCompletion();
+        m_LastCompletion = m_ViewContext.GetCompletion();
         m_LastRenderSucceeded = static_cast<bool>(m_LastCompletion);
     }
 

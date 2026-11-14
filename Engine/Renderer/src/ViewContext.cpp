@@ -1,0 +1,132 @@
+#include <Axle/ViewContext.hpp>
+
+namespace Axle {
+
+    uint64_t HashViewFeaturePolicy(const SceneRenderSettings& settings) {
+        uint64_t hash = 1469598103934665603ull;
+        const auto mix = [&hash](const auto& value) {
+            const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
+            for (size_t i = 0; i < sizeof(value); ++i) {
+                hash ^= bytes[i];
+                hash *= 1099511628211ull;
+            }
+        };
+        mix(settings.EnableShadows);
+        mix(settings.LocalShadowResolution);
+        mix(settings.MaxShadowedSpotLights);
+        mix(settings.MaxShadowedPointLights);
+        mix(settings.EnableSkybox);
+        mix(settings.EnableStudioLightLobes);
+        mix(settings.EnableParticles);
+        mix(settings.EnableToneMapping);
+        mix(settings.EnableFXAA);
+        mix(settings.EnableGTAO);
+        mix(settings.EnableContactShadows);
+        mix(settings.EnableSSR);
+        mix(settings.EnableVolumetricFog);
+        mix(settings.EnableDDGI);
+        mix(settings.EnableBloom);
+        mix(settings.EnableAutoExposure);
+        mix(settings.EnableTAA);
+        mix(settings.MSAASamples);
+        mix(settings.Wireframe);
+        mix(settings.ShowPhysicsDebug);
+        mix(settings.ToneMappingMode);
+        mix(settings.Gamma);
+        mix(settings.Exposure);
+        mix(settings.TAAJitterSpread);
+        mix(settings.TAAFeedbackMin);
+        mix(settings.TAAFeedbackMax);
+        return hash;
+    }
+
+    ViewContext::~ViewContext() { Shutdown(); }
+
+    bool ViewContext::Init(uint32_t uniformBytes, uint32_t uploadBytes) {
+        if (m_Initialized) return true;
+        if (!m_Frame.Init(uniformBytes, uploadBytes)) return false;
+        m_Initialized = true;
+        m_FrameActive = false;
+        m_FrameIndex = 0;
+        m_DeviceEpoch = 0;
+        m_HasInput = false;
+        m_ResetReasons = ViewResetReason::Initial;
+        return true;
+    }
+
+    void ViewContext::Shutdown() {
+        if (m_FrameActive) m_Frame.Abandon();
+        m_Frame = RHI::RHIFrameContext{};
+        m_FrameActive = false;
+        m_Initialized = false;
+        m_FrameIndex = 0;
+        m_DeviceEpoch = 0;
+        m_HasInput = false;
+        m_ResetReasons = ViewResetReason::None;
+        m_Input = ViewContextInput{};
+    }
+
+    ViewResetReason ViewContext::Observe(const ViewContextInput& input, uint64_t deviceEpoch) {
+        ViewResetReason reasons = m_HasInput ? ViewResetReason::None : ViewResetReason::Initial;
+        if (m_HasInput) {
+            if (input.Width != m_Input.Width || input.Height != m_Input.Height) reasons |= ViewResetReason::Resize;
+            if (input.Kind != m_Input.Kind) reasons |= ViewResetReason::ViewSwitch;
+            if (input.SceneRevision != m_Input.SceneRevision) reasons |= ViewResetReason::SceneRevision;
+            if (input.MaterialGeneration != m_Input.MaterialGeneration) reasons |= ViewResetReason::MaterialGeneration;
+            if (input.FeatureGeneration != m_Input.FeatureGeneration) reasons |= ViewResetReason::FeaturePolicy;
+            if (input.Targets != m_Input.Targets) reasons |= ViewResetReason::TargetGeneration;
+        }
+        if (input.CameraCut) reasons |= ViewResetReason::CameraCut;
+        if (m_HasInput && deviceEpoch != m_DeviceEpoch) reasons |= ViewResetReason::DeviceEpoch;
+
+        m_Input = input;
+        m_DeviceEpoch = deviceEpoch;
+        m_HasInput = true;
+        m_ResetReasons = reasons;
+        if (Any(reasons & (ViewResetReason::Initial | ViewResetReason::Resize | ViewResetReason::ViewSwitch |
+                           ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
+                           ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
+            m_FrameIndex = 0;
+        }
+        return reasons;
+    }
+
+    void ViewContext::RequestReset(ViewResetReason reason) {
+        m_ResetReasons |= reason;
+        if (Any(reason & (ViewResetReason::Initial | ViewResetReason::Resize | ViewResetReason::ViewSwitch |
+                          ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
+                          ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
+            m_FrameIndex = 0;
+        }
+    }
+
+    ViewResetReason ViewContext::ConsumeResetReasons() {
+        const auto result = m_ResetReasons;
+        m_ResetReasons = ViewResetReason::None;
+        return result;
+    }
+
+    bool ViewContext::BeginFrame(uint32_t timeoutMilliseconds) {
+        if (!m_Initialized || m_FrameActive || !m_Frame.Begin(timeoutMilliseconds)) return false;
+        m_FrameActive = true;
+        return true;
+    }
+
+    bool ViewContext::EndFrameAndSubmit() {
+        if (!m_FrameActive || !m_Frame.End() || !m_Frame.Submit()) {
+            m_FrameActive = false;
+            return false;
+        }
+        m_FrameActive = false;
+        ++m_FrameIndex;
+        return static_cast<bool>(m_Frame.GetCompletion());
+    }
+
+    bool ViewContext::AbandonFrame() {
+        if (!m_FrameActive) return true;
+        const bool result = m_Frame.Abandon();
+        m_FrameActive = false;
+        return result;
+    }
+
+}

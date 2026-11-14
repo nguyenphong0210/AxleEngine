@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `U0 ACCEPTED - U1 is the next released Unit.`
+**Status:** `U0/U1 ACCEPTED - U2 is the next released Unit.`
 **Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
@@ -62,20 +62,20 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U1 - ViewContext and frame ownership
 
-**Exit:** every render view has one explicit context that owns view state and completion lifetime.
+**Exit:** every render view has one explicit context that owns view state and completion lifetime. Evidence: [U1_VIEW_CONTEXT_EVIDENCE.md](U1_VIEW_CONTEXT_EVIDENCE.md).
 
-- [ ] **S1.1 ViewContext data contract**
-  - [ ] Define camera matrices, viewport dimensions, jitter, scene revision and feature policy.
-  - [ ] Define target generation, temporal history generation and exposure state ownership.
-  - [ ] Define completion token and reset reasons: resize, camera cut, device epoch, feature change and material generation.
-- [ ] **S1.2 Frame recording**
-  - [ ] Route command recording through `RHIFrameContext` owned by the view execution.
-  - [ ] Prohibit pass code from owning submission, queue selection or global mutable frame state.
-  - [ ] Make descriptor and upload arena reuse depend on completion, not frame index alone.
-- [ ] **S1.3 View lifecycle tests**
-  - [ ] Add resize and view-switch generation tests.
-  - [ ] Add camera-cut and device-epoch history reset tests.
-  - [ ] Add abandoned-frame and failed-recording cleanup tests.
+- [x] **S1.1 ViewContext data contract**
+  - [x] Define camera matrices, viewport dimensions, jitter, scene revision and feature policy.
+  - [x] Define target generation, temporal history generation and exposure state ownership.
+  - [x] Define completion token and reset reasons: resize, camera cut, device epoch, feature change and material generation.
+- [x] **S1.2 Frame recording**
+  - [x] Route command recording through `RHIFrameContext` owned by the view execution.
+  - [x] Prohibit pass code from owning submission, queue selection or global mutable frame state.
+  - [x] Make descriptor and upload arena reuse depend on completion, not frame index alone.
+- [x] **S1.3 View lifecycle tests**
+  - [x] Add resize and view-switch generation tests.
+  - [x] Add camera-cut and device-epoch history reset tests.
+  - [x] Add abandoned-frame and failed-recording cleanup tests.
 
 ### U2 - Pass interface and renderer orchestration
 

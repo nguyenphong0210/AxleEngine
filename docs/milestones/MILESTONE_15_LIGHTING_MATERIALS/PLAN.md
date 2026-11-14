@@ -77,7 +77,7 @@ High-risk SubUnits are split into WorkItems below. A WorkItem is the smallest pl
 
 | Unit | SubUnit | WorkItems |
 |---|---|---|
-| U3 | S3.1 Resource/graph | W3.1.1 target generation; W3.1.2 descriptor lifetime; W3.1.3 graph declarations; W3.1.4 failure/retry; W3.1.5 timing ring |
+| U3 | S3.1 Resource/graph | W3.1.1 target generation; W3.1.2 descriptor lifetime; W3.1.3 graph declarations; W3.1.4 failure/retry; W3.1.5 timing ring; W3.1.6 modular IRenderPass extraction |
 | U3 | S3.2 Surface/material | W3.2.1 normal producer; W3.2.2 normal-map parity; W3.2.3 material packing; W3.2.4 graph parity; W3.2.5 smooth-sphere metric |
 | U5 | S5.1 Hi-Z | W5.1.1 level allocation; W5.1.2 reduction; W5.1.3 barriers; W5.1.4 odd-size reference; W5.1.5 debug readback |
 | U5 | S5.2 Dynamic Capture | W5.2.1 capture formats; W5.2.2 six camera faces; W5.2.3 recursive suppression; W5.2.4 face copy/lifetime; W5.2.5 red-object fixture |
@@ -95,7 +95,7 @@ High-risk SubUnits are split into WorkItems below. A WorkItem is the smallest pl
 
 The following gates are intentionally separate from the larger SubUnit checkboxes. Tick a WorkItem only when its parent SubUnit's source and runtime evidence exists.
 
-- [ ] **U3/W3.1:** target generations, descriptor lifetime, graph declarations, failure/retry and timing ring each have focused tests.
+- [ ] **U3/W3.1:** target generations, descriptor lifetime, graph declarations, failure/retry, timing ring, and modular IRenderPass extraction pass.
 - [ ] **U3/W3.2:** surface normal, normal maps, material packing, graph parity and smooth-sphere metric pass.
 - [ ] **U5/W5.1:** Hi-Z allocation/reduction/barriers/odd-size/reference/debug checks pass.
 - [ ] **U5/W5.2:** six-face capture formats, orientations, recursive suppression, copies/lifetime and red-object fixture pass.
@@ -110,6 +110,18 @@ The following gates are intentionally separate from the larger SubUnit checkboxe
 - [ ] **U9/W9:** sheen, absorption, dispersion, SSS and graph/asset parity each pass their material fixture.
 - [ ] **U10/W10:** Inspector, graph/preview, probe UI, serialization/runtime and presets/evidence each pass authoring round trips.
 - [ ] **U11/W11:** capability policy, BLAS/TLAS, RT shaders, denoise and fallback pass optional RT acceptance or are explicitly deferred.
+
+### 3.1 Scope allocation boundary: Milestone 15 vs Milestone 16
+
+To prevent scope creep and maintain distinct milestones (M15 Fidelity vs M16 Scalability), the following architectural boundaries are strictly enforced:
+
+| Architectural Item | Target Milestone | Allocation and Execution Contract |
+|---|---|---|
+| **1. Modular `IRenderPass` Extraction** | **M15 (100% Progressive)** | Replace the monolithic lambda adapters in `RHISceneRendererPasses.cpp` by creating dedicated pass classes under `Engine/Renderer/include/Axle/Passes/` and `src/Passes/` as each M15 feature package is delivered. |
+| **2. Hi-Z Depth Pyramid** | **M15 (100% Core)** | Delivered in U5/S5.1 (P4) with full compute downsampling and odd-dimension handling for SSR; reused in M16 for GPU-driven occlusion culling. |
+| **3. Denoising Strategy** | **M15 (Pass-Local) / M16 (Unified)** | M15 uses pass-local spatial/temporal filters: Bilateral reconstruction for GTAO (P3), Roughness cone-filtering for SSR (P6), and Variance-clipped TAA (P8). A unified spatiotemporal denoiser (SVGF) is deferred to M16 or U11 (RT extension). |
+| **4. Clustered / Tiled Light Culling** | **M16 (100% Deferred)** | Formally deferred to Milestone 16 (Phase 46.3 — Scalable Lighting Pipeline). M15 retains Forward+ lighting with a bounded active light capacity managed by `LightingService`. |
+| **5. Bindless Textures for Material Graph** | **M15 (Heap Runtime) / M16 (Full Compiler)** | M15 delivers runtime `Tier2Bindless` heap resource support and standard texture slot mapping. Full HLSL dynamically indexed bindless array emission (`g_Textures[index]`) for indirect draw execution is aligned with M16 Virtual Geometry / Meshlets. |
 
 ### Dependency order
 
@@ -143,8 +155,11 @@ P5A–P5D may reuse authored-probe work, but none may silently depend on unfinis
 - [ ] Add per-view target generation, completion and reset ownership.
 - [ ] Test resize, feature toggle, allocation failure/retry, device epoch and shutdown/reinit.
 - [ ] Add asynchronous per-pass query/readback ring and invalid-measurement state.
+- [ ] Adopt progressive modular `IRenderPass` extraction under `Engine/Renderer/include/Axle/Passes/` and `src/Passes/`.
+- [ ] Replace legacy lambda adapters in `RHISceneRendererPasses.cpp` incrementally with dedicated pass classes (`GTAOPass` in P3, `HiZGenerationPass` in P4, `ScreenSpaceReflectionPass` in P6, `FroxelFogPass` in P9, `PostProcessPass` in P8).
+- [ ] Confine `RHISceneRenderer` to pure pass orchestration via `RenderPassScheduler` and `ViewContext` forwarding.
 
-**Exit:** validation clean; failures retain last-good generation or explicit fallback; timing is valid on tested workloads.
+**Exit:** validation clean; failures retain last-good generation or explicit fallback; timing is valid on tested workloads; pass modularity roadmap is active.
 
 ## 6. U3 / S3.2 — Surface, normal and material data contract
 

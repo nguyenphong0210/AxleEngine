@@ -265,6 +265,44 @@ The pass names above are the current `RHISceneRenderer.cpp` graph declarations. 
 
 **Interpretation:** the current architecture is a valid RHI-primary forward renderer, but it is not yet a fully modular material/lighting framework. The next clean refactor should extract pass objects around a shared `ViewContext` and a canonical `ResolvedSurface` contract, while retaining `RHIDevice`, `RHIFrameContext`, resource leases and `RHIViewTargets` as the lower-level ownership boundary.
 
+### 3B. Target modular pass architecture & progressive extraction
+
+To eliminate the monolithic callback adapter debt in `RHISceneRendererPasses.cpp`, M15 establishes a progressive extraction architecture:
+
+1. **Dedicated Pass Modules**: Each render pass is authored as a standalone C++ class implementing the `Axle::IRenderPass` interface, located under:
+   - Headers: `Engine/Renderer/include/Axle/Passes/<PassName>.hpp`
+   - Implementations: `Engine/Renderer/src/Passes/<PassName>.cpp`
+2. **Standard Pass Lifecycle**:
+   - `Configure(context)`: Evaluates feature flags and device capabilities; returns `Supported` or `Disabled`.
+   - `Declare(graph)`: Strictly declares all physical texture, buffer, and descriptor reads/writes into the `RenderGraph`.
+   - `Prepare(context)`: Updates pass-specific uniform buffers, push constants, and descriptor sets.
+   - `Record(context)`: Binds pipeline state and dispatches draw/compute commands.
+   - `Finalize(context, result)`: Reports timing and diagnostics to `RenderDiagnostics`.
+3. **Progressive Rollout Schedule across M15 Packages**:
+   - `P3 (Occlusion)` $\rightarrow$ `GTAOPass`
+   - `P4 (Hi-Z Foundation)` $\rightarrow$ `HiZGenerationPass`
+   - `P6 (Reflections)` $\rightarrow$ `ScreenSpaceReflectionPass`
+   - `P8 (Post & Temporal)` $\rightarrow$ `PostProcessPass` and `TAAPass`
+   - `P9 (Atmosphere)` $\rightarrow$ `FroxelFogPass`
+   - `U0/U1 (Shadows & Opaque)` $\rightarrow$ `CascadedShadowPass` and `ForwardOpaquePass`
+4. **Renderer Role Transition**: `RHISceneRenderer` transitions into a lightweight facade that instantiates and registers these passes into `RenderPassScheduler` during initialization and dispatches execution via `m_Scheduler.Execute(context)` per frame.
+
+### 3C. Scope boundaries: Milestone 15 vs Milestone 16
+
+To prevent scope creep and maintain milestone focus, technical responsibilities are split as follows:
+
+- **Modular IRenderPass Extraction**: 100% owned by M15 through progressive pass replacement.
+- **Hi-Z Depth Reduction**: 100% owned by M15 (U5/S5.1) for hierarchical SSR raymarching; reused in M16 for GPU occlusion culling.
+- **Denoising Strategy**:
+  - *M15:* Pass-local filtering (Bilateral filter for GTAO, Roughness cone filtering for SSR, Variance clipping for TAA).
+  - *M16 / U11:* Unified spatiotemporal denoising framework (SVGF) if dynamic ray tracing is enabled.
+- **Clustered / Tiled Light Culling**:
+  - Formally assigned to **Milestone 16 (Phase 46.3)** to align with GPU-driven geometry culling and high-throughput scalability ($100{,}000+$ instances, hundreds of dynamic lights).
+  - M15 focuses strictly on lighting fidelity with bounded active light capacity managed by `LightingService`.
+- **Bindless Material Graph**:
+  - *M15:* RHI `Tier2Bindless` heap resource management and canonical surface parameter packing.
+  - *M16:* Complete dynamic HLSL bindless array indexing (`g_Textures[index]`) to support GPU-driven indirect draw execution (`ExecuteIndirect` / Mesh Shaders).
+
 ## 4. Canonical material/surface contract
 
 Every opaque material resolves these values in documented units/color space:

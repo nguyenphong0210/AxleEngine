@@ -34,6 +34,11 @@ Milestone 16 establishes scalable, high-throughput geometry rendering for AxleEn
 - [ ] **C14-06: Capability Detection & Indexed Fallback** — Runtime capability query automatically routing non-mesh-shader hardware to GPU-culled discrete LOD indirect draws.
 - [ ] **C14-07: Dense-Scene Scale Verification** — Benchmark dense scene fixture ($100,000+$ instances, $50\\text{M}+$ polygons) measuring CPU draw submission reduction and frame-time stability.
 
+### Phase 46.3: Clustered Forward Light Culling & Scalable Lighting Pipeline
+- [ ] **C16-08: 3D Frustum Cluster Grid Compute Pass** — Reuse Froxel grid math from M15 to partition view frustum into exponential depth clusters ($16 \times 9 \times 24$ or $16 \times 9 \times 32$ AABBs).
+- [ ] **C16-09: GPU Light Culling & Index List Emission** — Compute shader testing light bounding volumes (point/spot spheres and cones) against cluster AABBs, outputting compact light index list and cluster grid offsets in GPU StructuredBuffers.
+- [ ] **C16-10: ForwardPBR Clustered Shading Integration** — Update ForwardPBR and Material Graph to sample cluster light indices per-pixel, supporting hundreds of active dynamic lights without CPU draw-call or constant-buffer bottlenecks.
+
 ---
 
 ## 4. Review and Evidence Requirements

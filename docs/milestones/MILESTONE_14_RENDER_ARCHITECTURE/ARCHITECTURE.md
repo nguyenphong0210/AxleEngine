@@ -193,7 +193,7 @@ timing validity
 
 ### 4.4 `ResolvedSurface`
 
-`ResolvedSurface` is the canonical material output consumed by all lighting and visibility code:
+`ResolvedSurface` is the canonical CPU material input and policy contract consumed by lighting and visibility code. For custom shaders and Material Graph, its numeric values are engine inputs, not a CPU evaluation of per-pixel shader expressions:
 
 ```tex
 BaseColor (linear)
@@ -214,13 +214,33 @@ The conversion chain is:
 ```tex
 Material asset / graph
     -> MaterialInstance or component state
-    -> RenderMaterialData snapsho
+    -> RenderMaterialData snapshot
     -> MaterialResolver
     -> ResolvedSurface
     -> RHIMaterial constants and texture descriptors
 ```
 
 `RHIMaterial` is a GPU/runtime representation, not an independent authoring model. `MaterialResolver` is the canonical conversion boundary used by built-in draws and shadow depth. Any field that cannot be represented by a path must be reported as unsupported instead of silently dropped; Material Graph currently uses neutral defaults plus an explicit feature mask for advanced fields that M15 has not authored yet.
+
+`MaterialResolver::Resolve(RenderMaterialData)` selects canonical authored values
+or the explicit procedural adapter. `ResolveShaderSurface` lowers those values
+through the reflected custom/graph binding plan; compatibility mirrors cannot
+replace common material uniforms. `MaterialGraphRuntime::ResolveSurface` adds
+typed instance validation and immutable program/device-epoch checks. Evaluation
+domain, program identity, unsupported feature mask, validity, fallback and reason
+are explicit. This boundary preserves the existing built-in GPU ABI.
+
+Canonical texture entries retain paths and optional const native owners. Material
+maps require live single-sample float Texture2D SRVs. Actual cache/fallback
+bindings are folded into a fresh surface identity once after binding selection,
+so same-path reload/recovery is observable without changing authored identity.
+Runtime owners must increment snapshot `ContentRevision` after in-place pixel
+writes; no CPU texture-content hashing or authored sidecar is required.
+
+Before temporal resolve, the live schedule publishes final per-material status
+and observes the aggregate effective identity. A change invalidates history
+contents while preserving the already imported slots. Only successful submission
+commits/flips history. View/model/light uniforms are excluded from material identity.
 
 ## 5. Renderer and RHI ownership
 

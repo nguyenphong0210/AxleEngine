@@ -1,111 +1,190 @@
 # M14-U3 - Canonical Material and Surface Contract Evidence
 
-**Status:** `PARTIAL - built-in policy repaired; custom shader/graph boundary pending`
-**Unit:** M14-U3  
-**Scope:** one resolved CPU surface contract, deterministic GPU packing, material generation identity and Material Graph/preview compatibility.
+Updated: 2026-11-14 (Asia/Saigon)
 
-## 1. Implementation
+**Implementation / self-verification:** PASS at `f241eb0`, following API checkpoint `86feca7`.
+**Acceptance:** PARTIAL - final separate-context correction recheck pending.
+**Scope:** canonical material inputs, GPU packing, effective binding identity,
+explicit shader/graph support status, preview/runtime integration and temporal
+invalidation. M15 lighting/material fidelity is excluded.
 
-The canonical contract is defined in:
+## 1. Contract and ownership
 
-- `Engine/Renderer/include/Axle/ResolvedSurface.hpp`
-- `Engine/Renderer/src/ResolvedSurface.cpp`
+`MaterialResolver::Resolve(RenderMaterialData)` is the snapshot boundary. An
+authored `RHIMaterial` owns common material values; duplicated snapshot mirrors
+cannot override its resolved values. An unmaterialized procedural mesh uses an
+explicit adapter preserving pattern colors and the existing GPU marker. It
+always writes opaque `MaterialExtra`, avoiding the old sun-data union alias.
 
-`ResolvedSurface` contains the shared values required by built-in PBR, shadow depth, preview and later screen-space consumers:
+`ResolveShaderSurface` derives custom HLSL and typed Material Graph packing from
+the same canonical base. It replaces material-owned engine uniforms with
+resolved base color, UVs and roughness/metallic/AO; view/object/light uniforms
+remain caller inputs. Typed graph instances retain transactional named overrides.
+The existing 256-byte built-in GPU material ABI is unchanged.
+
+For custom HLSL/graph evaluation, `ResolvedSurface` numeric fields describe CPU
+engine inputs, **not CPU evaluation of per-pixel shader expressions**. Evaluation
+domain, immutable shader generation, material generation, validity, fallback,
+reason and unsupported feature mask are explicit. Advanced graph fields keep
+neutral defaults and `FeatureFlags=0`. Unsupported base-material controls
+(including emission and non-base maps) are reported instead of silently claimed
+as supported. This does not implement M15 feature nodes or visual fidelity.
+
+| Check | Result | Source anchor |
+|---|---|---|
+| Canonical schema and texture owners | PASS (self-verified) | `Engine/Renderer/include/Axle/ResolvedSurface.hpp:16` |
+| Snapshot/material validation and procedural adapter | PASS (self-verified) | `Engine/Renderer/src/ResolvedSurface.cpp:81`, `:153` |
+| Common shader inputs, effective properties, unsupported status | PASS (self-verified) | `Engine/Renderer/src/ShaderSurface.cpp:37` |
+| Live custom/built-in lowering | PASS (self-verified) | `Engine/Scene/src/RHISceneRendererPasses.cpp:728`, `:765` |
+| Typed graph generation/epoch and binding resolution | PASS (self-verified) | `Engine/Scene/src/MaterialGraphRuntime.cpp:160` |
+| Shadow alpha binding from canonical surface | PASS (self-verified) | `Engine/Scene/src/RHIShadowDepthAtlas.cpp:139` |
+| Actual texture identity and history invalidation | PASS (self-verified) | `Engine/Renderer/src/ShaderSurface.cpp:107`, `Engine/Scene/src/RHISceneRendererPasses.cpp:1352`, `Engine/Renderer/src/ViewContext.cpp:102` |
+| Final independent correction recheck | BLOCKED this session | Reviewer usage limit; see section 4 |
+
+## 2. Effective resource identity and failure behavior
+
+Canonical texture bindings retain authored paths and optional const native
+owners. Native maps must expose a live, single-sample float Texture2D SRV;
+uninitialized/stale, cube, array, multisample and incompatible integer bindings
+cannot be published as a valid surface. Missing source files use explicit
+neutral/last-good fallback diagnostics.
+
+Each fresh draw surface is finalized once after actual cache/fallback binding
+selection. Its generation includes actual native handles and effective texture
+flags. Same-path reloads, fallback recovery, program reloads and effective
+parameter edits therefore change identity. Keeping the same last-good texture
+preserves effective identity while publishing fallback status. Identity excludes
+model/view/light constants.
+
+`RenderMaterialData::ContentRevision` is a runtime owner contract: increment it
+after in-place native pixel writes, which preserve the resource handle. Path
+reload/native replacement is tracked automatically. No asset format, per-asset
+sidecar or content-pixel hash was introduced.
+
+The live frame collects final per-entity identities and diagnostics after draws,
+before temporal resolve. A material change invalidates history contents while
+preserving already imported read/write slots; successful submission remains the
+only history commit/flip point. Invalid canonical inputs fail preparation before
+graph recording. Shader resolution/draw failure reports a built-in fallback
+with shader generation zero rather than claiming custom execution succeeded.
+
+## 3. Verification on the final source
+
+All commands below ran in this Codex implementation session. Every build and
+test invocation returned **exit 0**. Log/output paths are ignored build artifacts.
+
+### Builds
 
 ```text
-BaseColor, Metallic, Roughness, AO, Emission
-GeometricNormal, ShadingNormal, Tangent + handedness
-UV and detail transforms/strength, shading mode and alpha cutoff
-Clearcoat, anisotropy, sheen
-Subsurface, absorption, IOR, refraction and dispersion
-Surface/cull/depth/queue policy, reflection/specular flags
-Texture mask, generation identity and validity
+cmake --build build --config Debug --target AxleRenderUnitTests AxleMaterialGraphRuntimeTests AxleMaterialGraphCompilerTests AxleMaterialGraphResourceTests --parallel 6
+cmake --build build --config Debug --target AxleEnvironmentRenderingTests AxleCascadedShadowRenderingTests AxleLocalShadowRenderingTests AxlePreviewRenderTests AxleRuntimeRenderTests AxleMaterialGraphOpenGLPolicyTests --parallel 6
+cmake --build build --config Release --target AxleRenderUnitTests AxleMaterialGraphRuntimeTests AxleMaterialGraphCompilerTests AxleMaterialGraphResourceTests --parallel 6
+cmake --build build --config Debug --target AxleMaterialUnitTests --parallel 6
 ```
 
-`MaterialResolver` converts `RHI::RHIMaterial` into this contract, clamps values at the boundary and produces a stable generation hash. `RHISceneRenderer` and `RHIShadowDepthAtlas` now consume the resolver for push constants and material constant packing instead of calling `RHIMaterial` packing methods directly.
+Logs: `build/m14-u3-integration-build.log`,
+`build/m14-u3-regression-build.log`, `build/m14-u3-release-build.log`,
+`build/m14-u3-material-build.log`. The last build emitted a non-fatal LNK4098
+default-library warning; linking and all five material suites succeeded.
 
-## 2. GPU and graph contract
-
-- `ResolvedSurface::ToMaterialConstants()` preserves the existing 256-byte `RHIMaterialConstants` layout and shader register contract.
-- `ResolvedSurface::ApplyToPushConstants()` supplies the same base/emission/roughness/metallic policy to the built-in draw path.
-- `MaterialSurface.hlsl` now declares advanced surface fields alongside the original six graph fields.
-- `MaterialGraphHLSL` initializes advanced fields to explicit neutral/unsupported defaults when the graph emits only the currently authored six fields. `FeatureFlags=0` is the explicit unsupported marker; fields are not silently read as enabled advanced features.
-- Material Graph compilation still uses the same template and reflection contract, so preview/runtime can consume the same generated surface structure.
-
-This closes the architecture contract without claiming that M15 advanced graph nodes are implemented. M15 will add graph-authored advanced expressions by replacing explicit defaults and setting the corresponding feature flags.
-
-## 3. Verification
-
-### Canonical surface CPU fixture
-
-Command:
+### CPU and graph fixtures
 
 ```text
-build/Tests/Debug/AxleRenderUnitTests.exe
+build/Tests/{Debug,Release}/AxleRenderUnitTests.exe
+build/Tests/Debug/AxleMaterialUnitTests.exe
+build/Tests/Debug/AxleMaterialGraphOpenGLPolicyTests.exe
+build/Tests/{Debug,Release}/{AxleMaterialGraphCompilerTests,AxleMaterialGraphRuntimeTests,AxleMaterialGraphResourceTests}.exe {policy,dx12,vulkan} <fixture> <output>
 ```
 
-Result: **exit code 0**. The `[ResolvedSurface]` suite verified clamping, advanced-field preservation, 256-byte GPU packing, generation changes after material edits and graph-template field exposure. All existing RenderContracts, ViewContext, RenderPass, RenderWorld, worker and transient-graph suites passed.
+The braces above denote separately executed matrix entries, not literal shell
+syntax. Fixture:
+`D:/WorkSpace/AxleEngine/Tests/Fixtures/MaterialGraph/M_RustMetal.axleasset`.
+An absolute input is required because fixture bootstrap changes the asset root.
+Output is under `build/Tests/Work/M14-u3-final`, with Release runs in its
+`Release` subdirectory. Native GPU runs were sequential.
 
-### Material Graph compiler fixture
+- CPU render contracts passed in Debug/Release, including canonical byte packing,
+  finite/policy validation, property/program/content identity, procedural packing
+  and late history invalidation without slot changes. Material unit tests: 5/5.
+- All three graph executables passed `policy`, D3D12 and Vulkan in both Debug
+  and Release (18 invocations). The compiler's graph/reference image maximum
+  pixel error was zero on both native backends/configurations.
+- New live Scene native cases prove canonical inputs beat stale snapshot mirrors;
+  model changes preserve identity; effective property edits change identity;
+  native base-map binding, in-place upload plus ContentRevision, same-path reload,
+  corrupt-file last-good retention, neutral fallback/recovery, unsupported status,
+  NaN rejection/fallback and incompatible texture rejection behave as declared.
+- Runtime/resource fixtures retain immutable-generation, rollback, device-epoch,
+  sampler/color-space/mip/alpha/orientation and recorded-command lease checks.
+  Resolved wrapper owners are dropped before lifetime callbacks so those checks
+  still exercise native command leases.
+- OpenGL graph policy passed with an explicit unsupported result; native graph
+  execution on OpenGL remains unsupported by design.
 
-Command:
+Logs: `build/m14-u3-final-unit.log`, `build/m14-u3-release-unit.log`,
+`build/m14-u3-material-unit.log`, `build/m14-u3-opengl-policy.log`,
+`build/m14-u3-AxleMaterialGraph*Tests-{policy,dx12,vulkan}.log` and
+`build/m14-u3-release-AxleMaterialGraph*Tests-{policy,dx12,vulkan}.log`.
+Source: `Tests/rendering/Test_ResolvedSurfaceUnit.cpp:105`,
+`Tests/rendering/Test_ViewContextUnit.cpp:64`,
+`Tests/src/Test_MaterialGraphCompiler.cpp:290`,
+`Tests/src/Test_MaterialGraphRuntime.cpp:60`.
+
+### Native and product regressions (Debug)
 
 ```text
-build/Tests/Debug/AxleMaterialGraphCompilerTests.exe policy <absolute-path-to-Tests/Fixtures/MaterialGraph/M_RustMetal.axleasset> build/Tests/MaterialGraphCompiler/Debug/policy
+build/Tests/Debug/AxleEnvironmentRenderingTests.exe {dx12,vulkan,gl} <output>
+build/Tests/Debug/{AxleCascadedShadowRenderingTests,AxleLocalShadowRenderingTests}.exe {dx12,vulkan} <output>
+build/Tests/Debug/AxlePreviewRenderTests.exe {dx12,vulkan,gl} surfaces
+build/Tests/Debug/AxlePreviewRenderTests.exe {dx12,vulkan} particles
+AxleRuntimeRenderTests.exe dx12
+AxleRuntimeRenderTests.exe dx12 cooked
 ```
 
-Result: **exit code 0**. DXIL/SPIR-V compilation, metadata, determinism, hostile names, rollback, sampler rejection and registered-lowering diagnostics passed. The fixture must receive an absolute asset path because its workspace bootstrap changes the asset root before reading the input file.
+Environment, cascade/local shadow cache/cutout/resize/retry, surface preview,
+soft-particle preview and Runtime startup/input/simulation/presentation/shutdown
+passed. Runtime ran from `build/Tests/Debug`; product runs prepend the absolute
+Debug test, Engine/PluginSDK, Runtime and Editor binary directories to PATH.
+Logs: `build/m14-u3-regression-Axle*Tests-*.log`,
+`build/m14-u3-preview-{dx12,vulkan,gl}-surfaces.log`,
+`build/m14-u3-preview-{dx12,vulkan}-particles.log`,
+`build/m14-u3-runtime-dx12.log`, `build/m14-u3-runtime-dx12-cooked.log`.
+Release product/preview runs and interactive Editor UI were **NOT RUN** in U3;
+their historical results are not counted as current verification.
 
-### Native renderer fixture
-
-Command:
+### Architecture and migration
 
 ```text
-build/Tests/Debug/AxleEnvironmentRenderingTests.exe dx12 build/Tests/Work/M14-U3-baseline
+python scripts/check_architecture.py
+  PASS: 600 source files, 25 CMake files
+python scripts/generate_m14_dependency_map.py --output-dir build/Tests/Work/M14-u3-final/dependencies
+  PASS: 0 architecture violations, 0 caller violations
+git diff --check
+  PASS
 ```
 
-Result: **exit code 0**. Native D3D12 ForwardPBR/environment output remained valid with the 128x128 RGBA8/D32 baseline, two draw calls and one rendered entity.
+No production `Engine/Scene` caller packs custom material uniforms or resolves
+texture requests independently of the shared shader surface resolver.
 
-### Build and architecture checks
+## 4. Review and acceptance recommendation
 
-```text
-cmake --build build --config Debug --target AxleRenderUnitTests AxleEnvironmentRenderingTests --parallel 4  => exit 0
-cmake --build build --config Debug --target AxleMaterialGraphCompilerTests --parallel 4                 => exit 0
-python scripts/check_architecture.py                                                                         => PASS
-git diff --check                                                                                              => PASS
-```
+Focused separate-context review found effective texture identity, unsupported
+emission/non-base maps, invalid assigned textures, procedural union packing,
+test-wrapper lifetime and Texture2D/SRV compatibility gaps. These findings were
+corrected before the final builds/native gates. Intermediate rechecks confirmed
+the earlier corrections and temporal ordering; they do not establish a final
+independent PASS for the last texture compatibility correction.
 
-## 4. Known boundary
+The final reviewer invocation failed because its usage limit was reached.
+Per `docs/agents/WORKING_PROTOCOL.md` ("Have a separate-context reviewer recheck
+significant Codex corrections before acceptance"), **formal U3 acceptance stays
+PARTIAL pending that focused final recheck**. No Gemini response or approval is
+inferred. Recommendation: retain the implemented/self-verified checkpoint and
+complete this recheck before accepting U3; M14/U9 remain HOLD for this gate and
+the separate U4 resource-declaration and U5 policy-ownership work. M15 is unreleased.
 
-`RenderMaterialData` and `MaterialComponent` remain compatibility snapshot structures during migration. Their conversion into `RHIMaterial` is now consumed through the canonical resolver at render/shadow use sites, while U8 will remove remaining duplicated authoring mirrors and add explicit generation propagation through the full asset/preview pipeline.
-
-## 5. Current correction checkpoint (2026-11-14)
-
-Commit `421cc49` repairs existing built-in lowering losses: textured/PackedORM
-mode, authored alpha cutoff, detail normal transform/strength and raster/queue
-policy now survive the canonical boundary. Its hash covers omitted policies,
-source paths and explicitly assigned native generations. An unassigned slot
-never allocates a fallback during identity calculation.
-
-A new CPU parity fixture failed on the pre-fix canonical conversion
-(`build/m14-u3-repro.log`, exit 1), then passed after repair
-(`build/m14-u3-unit.log`, exit 0). Native fixtures confirm no fallback allocation
-while hashing and a changed identity after assigned texture generation
-replacement. Native cascaded/local shadows and environment fixtures passed on
-D3D12/Vulkan, including alpha cutout and same-generation pixel upload redraw.
-Detailed commands/results are in the current U2 evidence and repair addendum.
-
-This is material assignment/source-policy identity. In-place pixel mutation and
-same-path content reload require consumer invalidation or a separate content
-revision; the hash does not claim to identify every texture pixel change.
-
-## 6. U3 decision
-
-**U3 PARTIAL.** Built-in/shadow policy lowering is repaired and native-verified.
-The custom HLSL draw still packs common engine material inputs from compatibility
-snapshot fields instead of the canonical surface; explicit graph/custom shader
-resolution status and generation must be completed and tested. Generated
-Material Graph advanced fields keep their neutral defaults and FeatureFlags=0;
-adding M15 feature nodes/fidelity remains excluded. Historical fixture claims
-above are retained as history and do not establish full current acceptance.
+Historical prerequisites: `421cc49` repaired built-in shading/PackedORM/cutoff,
+detail and raster policy; its pre-fix CPU reproduction failed, then passed after
+repair. Those earlier U2/U3 results remain historical and are not substituted
+for the current runs above. Compatibility authoring/snapshot fields remain a
+migration boundary, but they no longer form a second common GPU packing path.

@@ -8,15 +8,17 @@ Status: **HOLD - independent review and sequential repairs**
 |---|---|---|
 | View/frame owner | PASS | `ViewContext`, `RHIFrameContext`, temporal/post-process/diagnostics services; U1/U6 evidence |
 | Pass lifecycle owner | PASS (current U2 correction) | `RenderPassScheduler`, `IRenderPass`, named legacy adapters; U2 evidence |
-| Surface/material owner | PARTIAL | `ResolvedSurface` and material resolver tests; U3 evidence |
+| Surface/material owner | PARTIAL (implemented/self-verified PASS; final correction recheck pending) | `86feca7`, `f241eb0`; current U3 evidence |
 | Resource/graph owner | PARTIAL | strict `RenderGraph`, target generations, descriptor lease checks; U4 evidence |
 | Lighting/reflection/GI boundaries | PARTIAL | `LightingService`, `ReflectionService`, `GIService`; U5 evidence |
 | Backend/fallback policy | PASS | `RenderBackendPolicy`, D3D12/Vulkan/OpenGL matrix; U7 evidence |
 | Product caller migration | PASS | RenderService-only product seams and U8 dependency map |
 
 Persistent pipeline/descriptor caches remain behind the legacy adapter boundary
-recorded by U2. Live orchestration has been repaired; surface conversion,
-complete resource declarations and service integration still require closure.
+recorded by U2. Live orchestration has been repaired. Canonical surface integration
+has passed current CPU/native/product gates; its final independent correction
+recheck is pending because the reviewer reached its usage limit. Complete
+resource declarations and service integration still require closure.
 
 Current correction evidence and remaining gates are recorded in
 `docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md`. Historical delivery

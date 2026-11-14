@@ -146,11 +146,52 @@ loose/cooked startup/input/simulation/presentation/shutdown. Final Debug and
 Release CPU builds/suites also passed (exit 0); native/product runs were Debug. Exact commands/logs and Runtime
 DLL search paths are recorded in U2 evidence.
 
+### Canonical shader surface API - commit `86feca7`
+
+The shared resolver now owns common custom HLSL/graph engine inputs, property
+packing, texture requests, evaluation domain and immutable material/program
+identity. Invalid numeric/policy inputs reject resolution. Unsupported controls
+have an explicit feature mask and diagnostic. Focused CPU contracts passed after
+a fresh Debug build before committing this API checkpoint.
+
+### Live canonical material integration - commit `f241eb0`
+
+Scene built-in/custom draws, shadow alpha binding and typed MaterialGraphRuntime
+now consume canonical surface inputs and texture owners. Snapshot compatibility
+mirrors no longer form a second common GPU packing path. Actual native bindings
+are folded into each fresh effective identity after cache/fallback selection;
+same-path reload and neutral/last-good recovery are observable. Owners increment
+`RenderMaterialData::ContentRevision` for in-place pixel writes. Per-material
+validity/fallback/unsupported/program identity is published to frame diagnostics;
+late material changes invalidate history contents without changing imported slots.
+Custom draw failure reports the built-in fallback with shader generation zero.
+
+Focused separate-context review exposed texture identity, unsupported-map/emission,
+native validation, procedural union-packing and test-wrapper lifetime defects.
+All reported defects were corrected before the final gates. Earlier corrections
+and temporal ordering received intermediate rechecks; the last Texture2D/SRV
+compatibility correction still requires its final independent recheck because
+the reviewer invocation failed at its usage limit. No final independent PASS is
+claimed.
+
+Current verification (all exit 0): Debug/Release render CPU suite; Debug material
+unit suite (5/5); Debug/Release graph compiler/runtime/resource policy and native
+D3D12/Vulkan fixtures (18 runs, graph/reference image max error 0); Debug OpenGL
+graph unsupported policy; Debug environment D3D12/Vulkan/OpenGL, cascade/local
+shadows D3D12/Vulkan, surface preview D3D12/Vulkan/OpenGL, particle preview
+D3D12/Vulkan and Runtime D3D12 loose/cooked. Architecture check passed (600 files,
+25 CMake files), dependency map reported zero architecture/caller violations, and
+`git diff --check` passed. Exact commands/logs/limits and source anchors are in
+[U3 evidence](../milestones/MILESTONE_14_RENDER_ARCHITECTURE/U3_MATERIAL_SURFACE_EVIDENCE.md).
+Release product runs and interactive Editor UI were not rerun in U3.
+
 ## Current acceptance state
 
 - **PASS:** U2 live orchestration, including its explicit legacy cache ownership
   boundary. Previously verified U0, U1, U6, U7, U8 remain accepted.
-- **PARTIAL:** U3 custom shader/graph canonical lowering/status boundary; U4
-  complete graph resource declarations beyond descriptor retention; U5 policy
-  ownership/integration review. This surface prerequisite does not claim full U3.
+- **PASS (implemented/self-verified):** U3 canonical shader/graph integration and
+  its current CPU/native/product gates. **U3 acceptance remains PARTIAL** pending
+  the final separate-context correction recheck required by the working protocol.
+- **PARTIAL:** U4 complete graph resource declarations beyond descriptor
+  retention; U5 policy ownership/integration review.
 - **HOLD:** U9 until the remaining integration gaps and their native gates close.

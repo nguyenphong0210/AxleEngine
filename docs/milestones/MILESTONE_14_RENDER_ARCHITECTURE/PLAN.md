@@ -97,21 +97,21 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U3 - Canonical material and surface contract
 
-**Exit:** built-in PBR, Material Graph, preview and screen-space consumers use one resolved surface representation. Evidence: [U3_MATERIAL_SURFACE_EVIDENCE.md](U3_MATERIAL_SURFACE_EVIDENCE.md).
+**Exit:** built-in PBR, Material Graph, preview and screen-space consumers use one resolved surface representation. Implemented/self-verified in `86feca7` and `f241eb0`; formal U3 acceptance remains PARTIAL pending the final separate-context correction recheck (reviewer usage limit). Evidence: [U3_MATERIAL_SURFACE_EVIDENCE.md](U3_MATERIAL_SURFACE_EVIDENCE.md).
 
 - [x] **S3.1 ResolvedSurface schema**
   - [x] Define linear base color, metallic, roughness, AO and emission units.
   - [x] Define geometric/shading normal, tangent handedness and normal-map convention.
   - [x] Define clearcoat, anisotropy, sheen, subsurface, absorption, IOR and dispersion fields.
   - [x] Define reflection flags, motion data, validity and fallback markers.
-- [ ] **S3.2 Material resolution**
+- [x] **S3.2 Material resolution**
   - [x] Define one conversion path from `Material` to runtime material data.
   - [x] Make `MaterialComponent` synchronization explicit and generation-tracked at the resolver boundary.
-  - [ ] Make `RenderMaterialData` a snapshot view rather than a second GPU packing path (custom shader common inputs still bypass canonical lowering).
+  - [x] Make `RenderMaterialData` a snapshot view rather than a second GPU packing path; canonical authored values supply custom shader common inputs.
   - [x] Make canonical resolved values consume the existing GPU constant layout.
-- [ ] **S3.3 Shader parity**
+- [x] **S3.3 Shader parity**
   - [x] Make ForwardPBR and Material Graph expose the same surface fields or explicit unsupported flags.
-  - [ ] Route preview/runtime GPU material use through the same resolved defaults and color-space contract (complete the custom shader/graph boundary).
+  - [x] Route preview/runtime GPU material use through the same resolved defaults and color-space contract, with explicit graph/custom evaluation and unsupported status.
   - [x] Add canonical CPU parity fixtures for smooth/PBR/advanced surface packing and graph template fields.
 
 ### U4 - Resource lifetime and RenderGraph authority

@@ -9,7 +9,7 @@ Status: **HOLD - independent review and sequential repairs**
 | View/frame owner | PASS | `ViewContext`, `RHIFrameContext`, temporal/post-process/diagnostics services; U1/U6 evidence |
 | Pass lifecycle owner | PASS (current U2 correction) | `RenderPassScheduler`, `IRenderPass`, named legacy adapters; U2 evidence |
 | Surface/material owner | PASS (U3 correction accepted) | `86feca7`, `f241eb0`; U3 evidence and [final correction recheck](../../reviews/M14_U3_CORRECTION_RECHECK.md) |
-| Resource/graph owner | PASS (U4 follow-up correction accepted) | `4cf8e72`, `171133b`; U4 evidence and [follow-up recheck](../../reviews/M14_U4_FOLLOWUP_CORRECTION_RECHECK.md) |
+| Resource/graph owner | PASS (U4 follow-up correction accepted) | `4cf8e72`, `171133b`, `da51acf`; U4 evidence and [follow-up recheck](../../reviews/M14_U4_FOLLOWUP_CORRECTION_RECHECK.md) |
 | Lighting/reflection/GI boundaries | PARTIAL | `LightingService`, `ReflectionService`, `GIService`; U5 evidence |
 | Backend/fallback policy | PASS | `RenderBackendPolicy`, D3D12/Vulkan/OpenGL matrix; U7 evidence |
 | Product caller migration | PASS | RenderService-only product seams and U8 dependency map |

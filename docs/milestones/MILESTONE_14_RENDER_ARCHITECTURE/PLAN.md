@@ -116,7 +116,7 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U4 - Resource lifetime and RenderGraph authority
 
-**Exit:** resources are allocated by view-generation services, dependencies are declared once, and raw command code cannot silently add undeclared reads. **U4 PASS:** implemented in `4cf8e72` and `171133b`, with the typed external-view/temporal-arena follow-up accepted by a separate-context correction review. Evidence: [U4_RESOURCE_GRAPH_EVIDENCE.md](U4_RESOURCE_GRAPH_EVIDENCE.md), [initial correction recheck](../../reviews/M14_U4_CORRECTION_RECHECK.md) and [follow-up recheck](../../reviews/M14_U4_FOLLOWUP_CORRECTION_RECHECK.md).
+**Exit:** resources are allocated by view-generation services, dependencies are declared once, and raw command code cannot silently add undeclared reads. **U4 PASS:** implemented in `4cf8e72`, `171133b` and follow-up correction `da51acf`, with the typed external-view/temporal-arena follow-up accepted by a separate-context correction review. Evidence: [U4_RESOURCE_GRAPH_EVIDENCE.md](U4_RESOURCE_GRAPH_EVIDENCE.md), [initial correction recheck](../../reviews/M14_U4_CORRECTION_RECHECK.md) and [follow-up recheck](../../reviews/M14_U4_FOLLOWUP_CORRECTION_RECHECK.md).
 
 - [x] **S4.1 Target generation**
   - [x] Define `RHIViewTargets` generation creation, validation, publication and retirement.

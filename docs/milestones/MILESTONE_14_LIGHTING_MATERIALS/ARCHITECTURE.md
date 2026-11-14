@@ -81,7 +81,191 @@ Rules:
 - A view context owns target generation, completion, temporal histories, jitter, exposure and capture state.
 - Failure retains a valid last-good generation or selects a named fallback; it never presents an uninitialized resource as success.
 
-## 3. Canonical material/surface contract
+## 3A. Current code topology (verified source map)
+
+The following map describes the code that exists today. It is a topology map, not a completion claim.
+
+```mermaid
+flowchart LR
+    E["Scene ECS / Components.hpp"] --> X["SceneExtraction.cpp"]
+    X --> W["RenderWorld snapshot"]
+    W --> R["RHISceneRenderer::RenderWorldView"]
+    R --> G["RenderGraph: logical uses + ordering"]
+    R --> F["RHIFrameContext / RHICommandBuffer"]
+    G --> F
+    F --> D["RHIDevice::Submit"]
+    D --> N["NRI backend: D3D12 / Vulkan / OpenGL fallback"]
+    R --> T["RHIViewTargets generation"]
+    T --> F
+    R --> M["RHIMaterial + material descriptors"]
+    M --> F
+```
+
+The ownership direction is one-way during a frame: ECS is extracted into an immutable `RenderWorld`; the renderer resolves materials, targets and passes; RHI records and submits native work. `RenderGraph` borrows resources and declares transitions, but it does not allocate them.
+
+### Renderer and RHI class relationships
+
+```mermaid
+classDiagram
+    class Scene {
+      +ExtractRenderWorld()
+    }
+    class RenderWorld {
+      +RenderCamera Camera
+      +vector~RenderMeshInstance~ Meshes
+      +vector~RenderReflectionProbe~ ReflectionProbes
+      +optional~RenderDDGIProbeGrid~ DDGIProbeGrid
+      +uint64 SceneRevision
+    }
+    class RHISceneRenderer {
+      +Init(RHIDevice&)
+      +RenderScene(...)
+      +RenderWorldView(RenderWorld,...)
+      +SetIBLMaps(...)
+      +GetOpaqueNormalTarget()
+      -RHIFrameContext m_Frame
+      -RHIViewTargets m_ActiveViewTargets
+      -RHIDevice* m_Device
+      -many pass pipelines and descriptor pools
+    }
+    class RenderGraph {
+      +Import(name, nativeTexture)
+      +AddPass(name, uses)
+      +Compile()
+      +BeginPass(name, commandBuffer)
+    }
+    class RHIDevice {
+      +Init(desc)
+      +Submit(...)
+      +WaitForCompletion(token)
+      +GetResources()
+      +GetGraphicsQueue()
+    }
+    class RHIFrameContext {
+      +Begin()
+      +GetCommands()
+      +WriteUniform(...)
+      +Submit()
+    }
+    class RHICommandBuffer {
+      +Begin()/End()
+      +TransitionTexture(...)
+      +SetPipeline(...)
+      +SetRootDescriptor(...)
+      +Draw()/Dispatch()
+      +KeepAlive(lease)
+    }
+    class RHIViewTargets {
+      +Configure(desc)
+      +Get(slot)
+      +GetHiZ(level)
+    }
+    class RHITexture {
+      +Init(desc)
+      +GetSRV()/GetRTV()/GetUAV()
+      +RetainGeneration()
+    }
+    class RHIDescriptorPool {
+      +AllocateDescriptorSet(layout)
+      +UpdateTexture(...)
+      +Bind(commandBuffer)
+    }
+    class RHIPipelineLayout
+    class RHIPipelineCache
+    class Material
+    class MaterialComponent
+    class RHIMaterial
+    class RenderMaterialData
+
+    Scene --> RenderWorld : extracts immutable snapshot
+    RenderWorld *-- RenderMaterialData
+    RenderWorld *-- RenderReflectionProbe
+    MaterialComponent --> Material : authoring asset
+    MaterialComponent --> RHIMaterial : SyncToRHI()
+    RenderMaterialData --> Material : shared asset view
+    RenderMaterialData --> RHIMaterial : runtime GPU material
+    RHISceneRenderer --> RenderWorld : consumes
+    RHISceneRenderer --> RenderGraph : builds pass journal
+    RHISceneRenderer --> RHIFrameContext : records one view
+    RHISceneRenderer --> RHIViewTargets : selects generation
+    RHISceneRenderer --> RHIMaterial : BuildConstants()
+    RHISceneRenderer --> RHIPipelineLayout
+    RHISceneRenderer --> RHIPipelineCache
+    RHIFrameContext *-- RHICommandBuffer
+    RHIFrameContext --> RHIDevice : completion token
+    RHICommandBuffer --> RHITexture : transitions/copies/binds
+    RHICommandBuffer --> RHIDescriptorPool : descriptor binding
+    RHIViewTargets *-- RHITexture : owns target generation
+    RHITexture --> RHIDevice : resource service / lease
+    RHIDescriptorPool --> RHIDevice : native descriptors
+    RHIPipelineLayout --> RHIDevice : native pipeline layout
+    RHIPipelineCache --> RHIDevice : native pipelines
+    RenderGraph --> RHICommandBuffer : BeginPass applies barriers
+```
+
+The important boundary is that `RHISceneRenderer` is currently both the pass scheduler and the owner of nearly every pass resource: ForwardPBR, sky, GTAO, SSR, Hi-Z, fog, bloom, exposure, DDGI, TAA, tone mapping and FXAA. This is functional, but it is a large orchestration object rather than a set of independent pass modules.
+
+### Material data path
+
+```mermaid
+sequenceDiagram
+    participant Inspector as Editor / Inspector
+    participant Asset as Material asset
+    participant Comp as MaterialComponent
+    participant Snap as RenderWorld::RenderMaterialData
+    participant RHI as RHI::RHIMaterial
+    participant Draw as RHISceneRenderer draw
+    participant GPU as ForwardPBR.hlsl
+
+    Inspector->>Asset: edit PBR / texture / advanced fields
+    Asset->>Comp: SyncFromAsset()
+    Comp->>RHI: SyncToRHI()
+    Comp->>Snap: SceneExtraction copies asset + runtime handles
+    Snap->>Draw: resolve built-in or custom material path
+    Draw->>RHI: BuildConstants() + texture slots
+    Draw->>GPU: root constants + material CB + descriptor set
+```
+
+There are four material representations in the current path: serialized `Material`, component-local mirrors, snapshot `RenderMaterialData`, and GPU-facing `RHIMaterial`. This gives the editor and renderer clear responsibilities, but synchronization is duplicated and must remain a tracked invariant. The custom Material Graph path is a second shader route: `MaterialSurfaceShader`/`MaterialGraphHLSL` emits a surface function, while built-in materials use `ForwardPBR.hlsl` directly.
+
+### Frame pass and resource flow
+
+```mermaid
+flowchart TD
+    A["Shadow / environment preparation"] --> B["OpaqueAndSky"]
+    B --> C["SurfaceNormal (if enabled)"]
+    C --> D["Transparent / particles"]
+    D --> E["Resolve MSAA"]
+    E --> F["DDGI copy/update (experimental)"]
+    F --> G["GTAOCopy -> GTAOCompute -> GTAOApply"]
+    G --> H["SSRCopy"]
+    H --> I0["HiZ0"]
+    I0 --> I1["HiZ1 ... HiZ7"]
+    I1 --> J["SSRCompute -> SSRApply"]
+    J --> K["FogCopy -> FogCompute -> FogApply"]
+    K --> L["Bloom copy/down/up/apply"]
+    L --> M["AutoExposure"]
+    M --> N["TAA resolve/copy"]
+    N --> O["ToneMapping"]
+    O --> P["FXAA"]
+    P --> Q["Export / presentation target"]
+    Z["RHIViewTargets: color, depth, normal, storage, HiZ, history, AO, bloom, exposure, DDGI"] -. feeds .-> B
+    Z -. feeds .-> G
+    Z -. feeds .-> J
+    Z -. feeds .-> N
+```
+
+The pass names above are the current `RHISceneRenderer.cpp` graph declarations. The graph validates declared texture uses and invokes RHI transitions, while the actual draw/dispatch and descriptor updates are still recorded directly by `RHISceneRenderer`.
+
+### Current architectural assessment
+
+**Sound foundations:** immutable scene extraction, explicit target generations, resource leases/completion tokens, a RenderGraph barrier journal, separate high-level asset and GPU material types, and a single RHI abstraction over native queues/resources.
+
+**Structural risks:** `RHISceneRenderer` is a god-object; material state is duplicated across asset/component/snapshot/RHI forms; built-in ForwardPBR and custom graph materials can diverge in surface outputs; `ScreenNormal` is a separate producer and must stay consistent with deformed/custom geometry; RenderGraph declarations and raw command recording are two places where pass dependencies can drift; dynamic reflection capture and full DDGI feedback are not represented as independent renderer services yet.
+
+**Interpretation:** the current architecture is a valid RHI-primary forward renderer, but it is not yet a fully modular material/lighting framework. The next clean refactor should extract pass objects around a shared `ViewContext` and a canonical `ResolvedSurface` contract, while retaining `RHIDevice`, `RHIFrameContext`, resource leases and `RHIViewTargets` as the lower-level ownership boundary.
+
+## 4. Canonical material/surface contract
 
 Every opaque material resolves these values in documented units/color space:
 
@@ -103,7 +287,7 @@ Normal rules:
 - Background pixels carry a validity marker.
 - Custom/deformed materials either produce the same surface contract or declare a supported fallback.
 
-## 4. Resource and view-generation contract
+## 5. Resource and view-generation contract
 
 A view generation may contain color/depth, opaque copies, `ScreenNormal`, motion/roughness/F0 validity, Hi-Z, GTAO/contact, HDR/bloom/exposure and temporal histories.
 
@@ -115,7 +299,7 @@ A view generation may contain color/depth, opaque copies, `ScreenNormal`, motion
 6. Retire old generations after completion.
 7. Reset state on resize, view switch, camera cut, scene/material generation change, feature/format change and device epoch change.
 
-## 5. Logical pass graph
+## 6. Logical pass graph
 
 ```text
 Shadow/environment/probe preparation
@@ -143,7 +327,7 @@ Tonemap → optional FXAA → output/UI
 
 An implementation may use copies for the current forward renderer, but the data dependencies above must remain true.
 
-## 6. Reflection architecture
+## 7. Reflection architecture
 
 ### Screen-space reflections
 
@@ -166,7 +350,7 @@ Dynamic capture requires six 90-degree views, correct depth/color formats, captu
 
 Fallback order is SSR confidence → valid local probe → sky IBL → neutral ambient.
 
-## 7. Lighting and visibility
+## 8. Lighting and visibility
 
 - Directional/point/spot lights share units, shadows and BRDF inputs.
 - GTAO affects indirect visibility under its declared composition policy.
@@ -175,7 +359,7 @@ Fallback order is SSR confidence → valid local probe → sky IBL → neutral a
 - Fog uses bounded 3D froxels, shadow visibility and temporal state.
 - DDGI obtains spatial probe radiance, stores irradiance/distance variance, applies visibility and samples into diffuse lighting. It remains experimental until leak/bounce/budget fixtures pass.
 
-## 8. Post and temporal ownership
+## 9. Post and temporal ownership
 
 Exposure is per-view with previous/current/target values, metering and reset reason. Histogram reduction is global; tonemapping consumes adapted exposure.
 
@@ -183,7 +367,7 @@ Bloom owns six levels and reconstructs additively. Threshold is applied at extra
 
 TAA owns current/previous transforms, jitter, motion policy, history validity/generation and rejection rules. Transparent/UI behavior is explicit; incompatible generations cannot reuse history.
 
-## 9. Advanced materials
+## 10. Advanced materials
 
 - Sheen, clearcoat and anisotropy use bounded energy with direct/IBL parity.
 - Beer–Lambert uses documented thickness; dispersion is an explicit approximation or wavelength model.
@@ -191,11 +375,11 @@ TAA owns current/previous transforms, jitter, motion policy, history validity/ge
 - Material Graph emits the same advanced fields or reports explicit unsupported scope.
 - Native asset/component/runtime/GPU/Inspector/Preview use matching defaults and clamps.
 
-## 10. Ray-traced extension boundary
+## 11. Ray-traced extension boundary
 
 Capability reporting is not implementation. A real RT extension requires backend policy, BLAS/TLAS ownership/update, RT pipeline stages, ForwardPBR-compatible material evaluation, denoising, temporal rejection and shared geometry with DDGI. Until those exist, M14 promises raster SSR/probes only and labels exact off-screen dynamic mirror reflection deferred.
 
-## 11. Fallback and compatibility policy
+## 12. Fallback and compatibility policy
 
 | Capability | Primary | Fallback |
 |---|---|---|
@@ -206,7 +390,7 @@ Capability reporting is not implementation. A real RT extension requires backend
 | DDGI unavailable | IBL/ambient diffuse | No authored-scene change |
 | RT unavailable | Raster SSR/probes | Documented quality reduction |
 
-## 12. Quality tiers
+## 13. Quality tiers
 
 Every tier specifies resolution, samples, update budget and memory:
 
@@ -217,7 +401,7 @@ Every tier specifies resolution, samples, update budget and memory:
 
 No tier enables a feature whose data/fallback contract is incomplete.
 
-## 13. Acceptance evidence
+## 14. Acceptance evidence
 
 Every checkpoint supplies exact commit/source/configuration, Debug/Release builds, physical D3D12/Vulkan results, applicable OpenGL/fallback results, validation logs, deterministic images/readbacks, failure/lifetime behavior, hardware/driver/resolution measurements and known limitations.
 

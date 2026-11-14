@@ -24,6 +24,7 @@ All local Markdown links in the reviewed documents resolve.
 | M15-DOC-07 | ACCEPTED HOLD | Feature/runtime evidence for SSR fidelity, captures, DDGI, fog, advanced materials, RT and performance is absent because M15 is unreleased. Every related checkbox remains open and the acceptance matrix requires the missing evidence. |
 | M15-DOC-08 | FIXED | The plan had no dedicated Unit checklist for U1 Direct BRDF, U2 Dynamic Environment, or U3 S3.3/S3.4 despite listing them in the hierarchy. Added explicit work, exit criteria, work items and tracking gates. |
 | M15-DOC-09 | FIXED | The WorkItem tracking table still omitted U1/U2 after their Unit sections were added. Added W1/W2 rows and tracking gates so every declared feature Unit has a traceable smallest verification item. |
+| M15-DOC-10 | FIXED | The plan carried SubUnit checkboxes and a second WorkItem checklist, which could drift. Sections 4 onward are now one canonical 160-item atomic checklist; parent status is derived, and visual items carry explicit Editor build/open/expected-display gates. |
 
 ## Files reviewed
 

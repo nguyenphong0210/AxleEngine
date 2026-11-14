@@ -82,53 +82,12 @@ Package aliases in this table follow the recovery plan: P8 is post/temporal, P9 
 
 A Unit closes only when all its SubUnits pass, its dependency Units are accepted, and its Unit exit evidence is recorded. A Phase closes only when every Unit mapped to that Phase passes. M15 closes only when all required Phases and the final U10 gate pass.
 
-### WorkItem granularity rule
+### Canonical checklist policy
 
-High-risk SubUnits are split into WorkItems below. A WorkItem is the smallest planned delivery that should normally have one focused change and one focused verification. WorkItems inherit their parent SubUnit's dependencies and do not create a new roadmap phase.
-
-| Unit | SubUnit | WorkItems |
-|---|---|---|
-| U1 | S1.1–S1.3 Direct BRDF | W1.1.1 BRDF numeric reference; W1.1.2 units/shadows; W1.1.3 light-angle/fallback sweep |
-| U2 | S2.1–S2.3 Dynamic environment | W2.1.1 sky/bake contract; W2.1.2 publication/cache; W2.1.3 failure/fallback readback |
-| U3 | S3.1 Resource/graph | W3.1.1 target generation; W3.1.2 descriptor lifetime; W3.1.3 graph declarations; W3.1.4 failure/retry; W3.1.5 timing ring; W3.1.6 modular IRenderPass extraction |
-| U3 | S3.2 Surface/material | W3.2.1 normal producer; W3.2.2 normal-map parity; W3.2.3 material packing; W3.2.4 graph parity; W3.2.5 smooth-sphere metric |
-| U3 | S3.3 Graph/preview parity | W3.3.1 shared resolver; W3.3.2 unsupported masks; W3.3.3 built-in/graph/preview/runtime fixture |
-| U3 | S3.4 Temporal/measurement integration | W3.4.1 history imports; W3.4.2 reset matrix; W3.4.3 timing/diagnostic validity |
-| U5 | S5.1 Hi-Z | W5.1.1 level allocation; W5.1.2 reduction; W5.1.3 barriers; W5.1.4 odd-size reference; W5.1.5 debug readback |
-| U5 | S5.2 Dynamic Capture | W5.2.1 capture formats; W5.2.2 six camera faces; W5.2.3 recursive suppression; W5.2.4 face copy/lifetime; W5.2.5 red-object fixture |
-| U5 | S5.3 Prefilter | W5.3.1 mip allocation; W5.3.2 cubemap orientation; W5.3.3 roughness convolution; W5.3.4 seam handling; W5.3.5 roughness sweep |
-| U5 | S5.4 Scheduling | W5.4.1 invalidation keys; W5.4.2 manual capture; W5.4.3 automatic budget; W5.4.4 last-good generation; W5.4.5 cache eviction |
-| U5 | S5.5 Multi-Probe | W5.5.1 influence weights; W5.5.2 parallax direction; W5.5.3 multi-probe blend; W5.5.4 stale/missing fallback; W5.5.5 seam fixture |
-| U5 | S5.6 SSR | W5.6.1 Hi-Z cell traversal; W5.6.2 thickness/refinement; W5.6.3 cone filtering; W5.6.4 material Fresnel; W5.6.5 energy resolve |
-| U7 | S7.1–S7.4 DDGI | W7.1.1 radiance acquisition; W7.1.2 atlas packing; W7.1.3 visibility; W7.1.4 temporal scheduling; W7.1.5 ForwardPBR feedback; W7.1.6 leak/bounce fixture |
-| U8 | S8.1–S8.6 Post | W8.1.1 global histogram; W8.1.2 exposure consumer; W8.2.1 bloom extraction; W8.2.2 bloom reconstruction; W8.3.1 motion vectors; W8.3.2 history reset; W8.3.3 disocclusion; W8.3.4 transparent/UI policy |
-| U9 | S9.1–S9.5 Materials | W9.1 sheen; W9.2 absorption; W9.3 dispersion; W9.4 SSS diffusion; W9.5 graph/asset parity |
-| U10 | S10.1–S10.5 Authoring | W10.1 material Inspector; W10.2 graph/preview; W10.3 probe gizmo/capture UI; W10.4 serialization/runtime; W10.5 presets/evidence |
-| U11 | S11.1–S11.4 RT | W11.1 capability policy; W11.2 BLAS; W11.3 TLAS/update; W11.4 RT shaders; W11.5 denoise; W11.6 fallback/fixture |
-
-#### WorkItem tracking checklist
-
-The following gates are intentionally separate from the larger SubUnit checkboxes. Tick a WorkItem only when its parent SubUnit's source and runtime evidence exists.
-
-- [ ] **U1/W1:** BRDF numeric reference, shared light units/shadows, sweeps and fallback behavior pass.
-- [ ] **U2/W2:** sky/bake contract, environment publication/cache and failure/fallback readback pass.
-- [ ] **U3/W3.1:** target generations, descriptor lifetime, graph declarations, failure/retry, timing ring, and modular IRenderPass extraction pass.
-- [ ] **U3/W3.2:** surface normal, normal maps, material packing, graph parity and smooth-sphere metric pass.
-- [ ] **U3/W3.3:** shared material resolver, unsupported masks and built-in/graph/preview/runtime parity pass.
-- [ ] **U3/W3.4:** declared history imports, reset matrix, timing validity and diagnostics pass.
-- [ ] **U5/W5.1:** Hi-Z allocation/reduction/barriers/odd-size/reference/debug checks pass.
-- [ ] **U5/W5.2:** six-face capture formats, orientations, recursive suppression, copies/lifetime and red-object fixture pass.
-- [ ] **U5/W5.3:** cubemap mips, orientation/seams, roughness convolution and sweep pass.
-- [ ] **U5/W5.4:** invalidation, manual/automatic scheduling, budget, last-good generation and eviction pass.
-- [ ] **U5/W5.5:** influence/parallax/multi-probe/fallback/seam checks pass.
-- [ ] **U5/W5.6:** traversal, thickness/refinement, cone filtering, Fresnel and energy resolve pass.
-- [ ] **U7/W7.1:** DDGI acquisition, atlas, visibility, schedule, ForwardPBR feedback and leak/bounce fixture pass.
-- [ ] **U8/W8.1:** global histogram and exposure consumer pass frame-rate/adaptation checks.
-- [ ] **U8/W8.2:** bloom extraction/reconstruction pass impulse/gain checks.
-- [ ] **U8/W8.3:** motion vectors, reset, disocclusion and transparent/UI policy pass temporal checks.
-- [ ] **U9/W9:** sheen, absorption, dispersion, SSS and graph/asset parity each pass their material fixture.
-- [ ] **U10/W10:** Inspector, graph/preview, probe UI, serialization/runtime and presets/evidence each pass authoring round trips.
-- [ ] **U11/W11:** capability policy, BLAS/TLAS, RT shaders, denoise and fallback pass optional RT acceptance or are explicitly deferred.
+All M15 execution state is recorded in the single atomic checklist beginning in
+Section 4. The Unit/SubUnit hierarchy and dependency table describe ownership;
+they do not carry a second checkbox state. Close each item immediately after
+its evidence passes, then continue to the next dependency-ready item.
 
 ### 3.1 Scope allocation boundary: Milestone 15 vs Milestone 16
 
@@ -152,278 +111,619 @@ Within U5: `S5.1 Hi-Z -> S5.2 Dynamic Capture -> S5.3 Prefilter -> S5.4 Invalida
 
 P5A–P5D may reuse authored-probe work, but none may silently depend on unfinished P6. P13 is optional for raster M15 acceptance and mandatory only if exact dynamic off-screen reflections are product requirements.
 
-## 4. U0 / S0.1–S0.2 — Contract, fixtures and baseline normalization
+## 4. Canonical atomic execution and acceptance checklist
 
-- [x] Record dirty-path policy and preserve user scene changes.
-- [x] Add deterministic sphere, reflection, roughness, post, temporal and resource-edge fixtures.
-- [x] Define HDR/display comparison space, backend matrix, warmup/sample frames and diagnostic channels.
-- [x] Add non-mutating baseline manifest/report validation.
-- [x] Record open findings and withdraw unsupported historical FIXED/driver claims.
-- [ ] Add CPU/reference checks for smooth normals, Hi-Z reduction, probe direction and roughness-to-mip mapping.
-- [ ] Add image-difference tooling with frozen thresholds and artifact identity.
+This is the only state-bearing checklist for M15. Each item is one independently
+implementable behavior with its own PASS condition and evidence. A SubUnit is
+PASS only when all its items are PASS; optional U11/P6B/DDGI items may be marked
+DEFERRED with an explicit reason.
+
+**Visual verification rule:** any item marked `EDITOR VISUAL` requires rebuilding
+the affected Editor in Debug and Release, launching
+`build/Editor/<Config>/AxleEditor.exe --rhi=dx12 --strict-rhi` (repeat with
+Vulkan when parity is required), opening the named fixture, and attaching a
+screenshot/readback. The item is PASS only when the expected display stated in
+the item is visible.
+
+
+### U0 — Baseline and contract freeze
+
+- [x] **M15-U0-01 — Record dirty-path policy and preserve user scene changes.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [x] **M15-U0-02 — Add deterministic sphere, reflection, roughness, post, temporal and resource-edge fixtures.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [x] **M15-U0-03 — Define HDR/display comparison space, backend matrix, warmup/sample frames and diagnostic channels.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [x] **M15-U0-04 — Add non-mutating baseline manifest/report validation.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [x] **M15-U0-05 — Record open findings and withdraw unsupported historical FIXED/driver claims.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U0-06 — Add CPU/reference checks for smooth normals, Hi-Z reduction, probe direction and roughness-to-mip mapping.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U0-07 — Add image-difference tooling with frozen thresholds and artifact identity.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **Exit:** known bad behavior is reproducible and rejected; report states `M15 HOLD`.
 
-## 4A. U1 / S1.1–S1.3 — Direct BRDF and primary lighting
+### U1 / S1.1–S1.3 — Direct BRDF and primary lighting
 
-- [ ] Freeze direct-light units, sun angular-radius policy, BRDF normalization and exposure interaction.
-- [ ] Validate GGX visibility/normal-distribution compensation and dielectric/metal F0 behavior against a numeric reference.
-- [ ] Verify directional, point and spot lights share the same `LightingService` units, shadow visibility and material inputs.
-- [ ] Add roughness/view/light-angle sweeps and finite zero/behind-surface cases.
-- [ ] Record direct-light fallback behavior for unsupported capability tiers.
+- [ ] **M15-U1-01 — Freeze direct-light units, sun angular-radius policy, BRDF normalization and exposure interaction.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere has smooth shading with no triangle bands, faceting or invalid pixels.
+- [ ] **M15-U1-02 — Validate GGX visibility/normal-distribution compensation and dielectric/metal F0 behavior against a numeric reference.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U1-03 — Verify directional, point and spot lights share the same `LightingService` units, shadow visibility and material inputs.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U1-04 — Add roughness/view/light-angle sweeps and finite zero/behind-surface cases.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: high roughness broadens the highlight/reflection continuously; low roughness stays sharp.
+- [ ] **M15-U1-05 — Record direct-light fallback behavior for unsupported capability tiers.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **Exit:** direct-light fixtures match the frozen numeric reference within documented tolerance; units, shadows, HDR response and fallback diagnostics are consistent across supported native backends.
 
-## 4B. U2 / S2.1–S2.3 — Dynamic environment and authored environment policy
+### U2 / S2.1–S2.3 — Dynamic environment and authored environment policy
 
-- [ ] Freeze procedural-sky, environment-bake and authored-cubemap color-space/orientation policy.
-- [ ] Define environment generation/publication, cache identity, invalidation and last-good fallback through `ReflectionService`.
-- [ ] Verify sky/direct-light coupling, environment rotation/intensity and missing/failed asset behavior.
-- [ ] Keep local dynamic six-face capture and probe blending in U5; this Unit owns the shared environment input contract.
-- [ ] Add deterministic sky/bake/asset-failure readbacks for D3D12, Vulkan and the documented OpenGL subset.
+- [ ] **M15-U2-01 — Freeze procedural-sky, environment-bake and authored-cubemap color-space/orientation policy.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U2-02 — Define environment generation/publication, cache identity, invalidation and last-good fallback through `ReflectionService`.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U2-03 — Verify sky/direct-light coupling, environment rotation/intensity and missing/failed asset behavior.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U2-04 — Keep local dynamic six-face capture and probe blending in U5; this Unit owns the shared environment input contract.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U2-05 — Add deterministic sky/bake/asset-failure readbacks for D3D12, Vulkan and the documented OpenGL subset.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **Exit:** procedural and authored environments produce the declared HDR/IBL inputs, cache and invalidation are transactional, and failed or unsupported environments select a named fallback without mutating authored data.
 
-## 5. U3 / S3.1 — RHI resource ownership, graph and measurement
+### U3 / S3.1 — RHI resource ownership, graph and measurement
 
-- [x] Make timestamp probe descriptions valid and require successful readback.
-- [x] Read renderer timestamps on all public view submission paths.
-- [ ] Add checked update helpers for every M15 descriptor/storage/constant update.
-- [ ] Never modify a descriptor set after binding in the same submission.
-- [ ] Declare every actual graph read/write, including Hi-Z, normal, probe, history and exposure resources.
-- [ ] Add per-view target generation, completion and reset ownership.
-- [ ] Test resize, feature toggle, allocation failure/retry, device epoch and shutdown/reinit.
-- [ ] Add asynchronous per-pass query/readback ring and invalid-measurement state.
-- [ ] Adopt progressive modular `IRenderPass` extraction under `Engine/Renderer/include/Axle/Passes/` and `src/Passes/`.
-- [ ] Replace legacy lambda adapters in `RHISceneRendererPasses.cpp` incrementally with dedicated pass classes (`GTAOPass` in P3, `HiZGenerationPass` in P4, `ScreenSpaceReflectionPass` in P6, `FroxelFogPass` in P9, `PostProcessPass` in P8).
-- [ ] Confine `RHISceneRenderer` to pure pass orchestration via `RenderPassScheduler` and `ViewContext` forwarding.
+- [x] **M15-U3-01 — Make timestamp probe descriptions valid and require successful readback.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [x] **M15-U3-02 — Read renderer timestamps on all public view submission paths.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-03 — Add checked update helpers for every M15 descriptor/storage/constant update.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-04 — Never modify a descriptor set after binding in the same submission.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-05 — Declare every actual graph read/write, including Hi-Z, normal, probe, history and exposure resources.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U3-06 — Add per-view target generation, completion and reset ownership.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-07 — Test resize, feature toggle, allocation failure/retry, device epoch and shutdown/reinit.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-08 — Add asynchronous per-pass query/readback ring and invalid-measurement state.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-09 — Adopt progressive modular `IRenderPass` extraction under `Engine/Renderer/include/Axle/Passes/` and `src/Passes/`.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-10 — Replace legacy lambda adapters in `RHISceneRendererPasses.cpp` incrementally with dedicated pass classes (`GTAOPass` in P3, `HiZGenerationPass` in P4, `ScreenSpaceReflectionPass` in P6, `FroxelFogPass` in P9, `PostProcessPass` in P8).**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: fog shafts obey blockers; zero density/no-light leaves the image unchanged.
+- [ ] **M15-U3-11 — Confine `RHISceneRenderer` to pure pass orchestration via `RenderPassScheduler` and `ViewContext` forwarding.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **Exit:** validation clean; failures retain last-good generation or explicit fallback; timing is valid on tested workloads; pass modularity roadmap is active.
 
-## 6. U3 / S3.2 — Surface, normal and material data contract
+### U3 / S3.2 — Surface, normal and material data contract
 
-- [x] Remove derivative-flat-normal override from generic ForwardPBR modes.
-- [x] Produce opaque world-space `ScreenNormal` and declare it in the graph.
-- [ ] Match normal producer with normal/detail-normal decoding and strength.
-- [ ] Verify inverse-transpose normals under non-uniform scale and mirrored transforms.
-- [ ] Define alpha-cutout/depth/normal coverage and background validity.
-- [ ] Unify built-in and Material Graph base color, metallic, roughness, AO, emission, normal, clearcoat and reflection inputs.
-- [ ] Verify sRGB/linear texture and packed ORM conventions.
-- [ ] Complete asset -> component -> extraction -> GPU round-trip tests.
-- [ ] Add smooth-sphere normal-field and anti-faceting metric.
+- [x] **M15-U3-12 — Remove derivative-flat-normal override from generic ForwardPBR modes.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [x] **M15-U3-13 — Produce opaque world-space `ScreenNormal` and declare it in the graph.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-14 — Match normal producer with normal/detail-normal decoding and strength.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-15 — Verify inverse-transpose normals under non-uniform scale and mirrored transforms.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-16 — Define alpha-cutout/depth/normal coverage and background validity.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-17 — Unify built-in and Material Graph base color, metallic, roughness, AO, emission, normal, clearcoat and reflection inputs.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U3-18 — Verify sRGB/linear texture and packed ORM conventions.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-19 — Complete asset -> component -> extraction -> GPU round-trip tests.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-20 — Add smooth-sphere normal-field and anti-faceting metric.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere has smooth shading with no triangle bands, faceting or invalid pixels.
 
 **Exit:** smooth sphere has no triangle bands; built-in/graph materials match in supported scope; save/reopen preserves fields.
 
-### S3.3 — Material Graph, preview and runtime parity
+#### S3.3 — Material Graph, preview and runtime parity
 
-- [ ] Resolve built-in, Material Graph, Preview and Runtime materials through the same supported `ResolvedSurface` fields and defaults.
-- [ ] Record explicit unsupported feature masks and fallback diagnostics for graph/custom paths.
-- [ ] Compare equivalent built-in/graph fixtures under identical lights, shadows, IBL and output policy.
+- [ ] **M15-U3-21 — Resolve built-in, Material Graph, Preview and Runtime materials through the same supported `ResolvedSurface` fields and defaults.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen, and matches Runtime/Preview.
+- [ ] **M15-U3-22 — Record explicit unsupported feature masks and fallback diagnostics for graph/custom paths.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-23 — Compare equivalent built-in/graph fixtures under identical lights, shadows, IBL and output policy.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
 
-### S3.4 — Temporal, diagnostics and measurement integration
+#### S3.4 — Temporal, diagnostics and measurement integration
 
-- [ ] Bind motion/depth/history/exposure resources through the declared graph contract.
-- [ ] Verify target-generation, camera-cut, feature-toggle and device-epoch resets before temporal consumers import history.
-- [ ] Record per-pass timing validity, fallback reasons and resource generations; invalid measurements remain `Unknown`.
+- [ ] **M15-U3-24 — Bind motion/depth/history/exposure resources through the declared graph contract.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: motion reduces shimmer without persistent ghosts, UI jitter or black gaps.
+- [ ] **M15-U3-25 — Verify target-generation, camera-cut, feature-toggle and device-epoch resets before temporal consumers import history.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U3-26 — Record per-pass timing validity, fallback reasons and resource generations; invalid measurements remain `Unknown`.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **S3.3/S3.4 exit:** parity, reset and diagnostics fixtures pass on supported native paths, with unsupported paths explicitly reported.
 
-## 7. U4 / S4.1–S4.3 — GTAO and directional contact shadows
+### U4 / S4.1–S4.3 — GTAO and directional contact shadows
 
-- [x] Use valid `ScreenNormal` input.
-- [x] Remove full-scene `AO * contact` multiplication and use bounded independent weights.
-- [ ] Move AO before lighting or expose a true indirect-light target.
-- [ ] Apply contact visibility only to its directional-light contribution and avoid CSM/local double attenuation.
-- [ ] Validate half-resolution sampling, bilateral reconstruction, depth edges and odd resolutions.
-- [ ] Test no-sun, no-AO, no-contact, emissive, mirror and unoccluded-sphere fixtures.
-- [ ] Test normal-map and animated/deformed mesh behavior.
+- [x] **M15-U4-01 — Use valid `ScreenNormal` input.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [x] **M15-U4-02 — Remove full-scene `AO * contact` multiplication and use bounded independent weights.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U4-03 — Move AO before lighting or expose a true indirect-light target.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U4-04 — Apply contact visibility only to its directional-light contribution and avoid CSM/local double attenuation.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U4-05 — Validate half-resolution sampling, bilateral reconstruction, depth edges and odd resolutions.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U4-06 — Test no-sun, no-AO, no-contact, emissive, mirror and unoccluded-sphere fixtures.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere has smooth shading with no triangle bands, faceting or invalid pixels.
+- [ ] **M15-U4-07 — Test normal-map and animated/deformed mesh behavior.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **Exit:** occlusion is stable and finite; unoccluded specular/emission is preserved; no new faceting/halos.
 
-## 8. U5 / S5.1 — Hi-Z depth pyramid
+### U5 / S5.1 — Hi-Z depth pyramid
 
-- [x] Use immutable per-level descriptor generations.
-- [x] Check every update and bind failure.
-- [x] Declare all eight levels as SSR reads.
-- [x] Validate dimensions and non-identical readback for all levels.
-- [ ] Validate min reduction against CPU reference for odd dimensions and 1x1/3x5/1919x1079.
-- [ ] Define depth convention, edge policy and useful level count.
-- [ ] Add per-level visualization and barrier validation.
+- [x] **M15-U5-01 — Use immutable per-level descriptor generations.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [x] **M15-U5-02 — Check every update and bind failure.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [x] **M15-U5-03 — Declare all eight levels as SSR reads.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [x] **M15-U5-04 — Validate dimensions and non-identical readback for all levels.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-05 — Validate min reduction against CPU reference for odd dimensions and 1x1/3x5/1919x1079.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-06 — Define depth convention, edge policy and useful level count.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-07 — Add per-level visualization and barrier validation.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior is visible in the named fixture and matches the frozen reference.
 
 **Exit:** every level matches reference reduction and transitions correctly into SSR.
 
-## 9. U5 / S5.2–S5.5 — Reflection Captures and local probes
+### U5 / S5.2–S5.5 — Reflection Captures and local probes
 
-### S5.2 — Dynamic six-face capture
+#### S5.2 — Dynamic six-face capture
 
-- [ ] Allocate capture color/depth targets with matching pipeline formats.
-- [ ] Render six 90-degree views with correct directions/up vectors.
-- [ ] Disable recursive SSR/probe sampling, TAA history, Editor/UI and feedback during capture.
-- [ ] Render opaque/cutout scene and selected shadows under the capture policy.
-- [ ] Copy each face into the cubemap with correct layer offsets and transitions.
-- [ ] Retain resources through completion and publish generation transactionally.
-- [ ] Prove the red reference object appears in the captured cubemap.
-- [ ] Retain last-good generation when a face/copy fails.
+- [ ] **M15-U5-08 — Allocate capture color/depth targets with matching pipeline formats.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-09 — Render six 90-degree views with correct directions/up vectors.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-10 — Disable recursive SSR/probe sampling, TAA history, Editor/UI and feedback during capture.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: motion reduces shimmer without persistent ghosts, UI jitter or black gaps.
+- [ ] **M15-U5-11 — Render opaque/cutout scene and selected shadows under the capture policy.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U5-12 — Copy each face into the cubemap with correct layer offsets and transitions.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-13 — Retain resources through completion and publish generation transactionally.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-14 — Prove the red reference object appears in the captured cubemap.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-15 — Retain last-good generation when a face/copy fails.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
-### S5.3 — Cubemap prefilter
+#### S5.3 — Cubemap prefilter
 
-- [ ] Allocate mip-capable cubemap/destination UAV/SRV views.
-- [ ] Implement cubemap-aware roughness prefilter preserving face orientation/seams.
-- [ ] Use sharp mip for mirror materials and progressively blurred mips for rough materials.
-- [ ] Validate output with controlled environment/roughness sweep.
-- [ ] Do not route cubemap data through equirectangular assumptions.
+- [ ] **M15-U5-16 — Allocate mip-capable cubemap/destination UAV/SRV views.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-17 — Implement cubemap-aware roughness prefilter preserving face orientation/seams.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: high roughness broadens the highlight/reflection continuously; low roughness stays sharp.
+- [ ] **M15-U5-18 — Use sharp mip for mirror materials and progressively blurred mips for rough materials.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U5-19 — Validate output with controlled environment/roughness sweep.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: high roughness broadens the highlight/reflection continuously; low roughness stays sharp.
+- [ ] **M15-U5-20 — Do not route cubemap data through equirectangular assumptions.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
-### S5.4 — Invalidation and scheduling
+#### S5.4 — Invalidation and scheduling
 
-- [ ] Track probe transform, scene revision, geometry/material, light/shadow and asset generations.
-- [ ] Support manual and automatic capture.
-- [ ] Bound faces/probes per frame and expose pending/stale/failed diagnostics.
-- [ ] Retain last-good generation on rebuild failure.
-- [ ] Add capture cache key, memory budget and eviction.
-- [ ] Test repeated capture, resize, device reset and scene replacement.
+- [ ] **M15-U5-21 — Track probe transform, scene revision, geometry/material, light/shadow and asset generations.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U5-22 — Support manual and automatic capture.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-23 — Bound faces/probes per frame and expose pending/stale/failed diagnostics.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-24 — Retain last-good generation on rebuild failure.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-25 — Add capture cache key, memory budget and eviction.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-26 — Test repeated capture, resize, device reset and scene replacement.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
-### S5.5 — Multi-probe selection and blend
+#### S5.5 — Multi-probe selection and blend
 
-- [ ] Compute continuous box/sphere influence weights.
-- [ ] Blend multiple valid probes without hard seams.
-- [ ] Apply parallax correction per probe before blending.
-- [ ] Blend probe with SSR confidence and sky IBL under one energy policy.
-- [ ] Test overlap, boundary movement, missing/stale probe and SSR miss.
+- [ ] **M15-U5-27 — Compute continuous box/sphere influence weights.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere has smooth shading with no triangle bands, faceting or invalid pixels.
+- [ ] **M15-U5-28 — Blend multiple valid probes without hard seams.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U5-29 — Apply parallax correction per probe before blending.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U5-30 — Blend probe with SSR confidence and sky IBL under one energy policy.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U5-31 — Test overlap, boundary movement, missing/stale probe and SSR miss.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
 
 **P5 exit:** with SSR disabled, a captured cubemap contains the red object and the sphere samples it; roughness changes sharpness; invalidation/scheduling/blending/fallback pass.
 
-## 10. U5 / S5.6 — Material-aware SSR and reflection resolve
+### U5 / S5.6 — Material-aware SSR and reflection resolve
 
-- [ ] Advance through Hi-Z cells hierarchically.
-- [ ] Add thickness, hit refinement and edge/disocclusion rejection.
-- [ ] Add roughness cone/footprint filtering over HDR color mips.
-- [ ] Pass roughness, metallic/base color and reflection flags into resolve.
-- [ ] Compute Fresnel/F0 for dielectric and conductor materials.
-- [ ] Replace/blend indirect specular instead of blindly adding a second reflection over IBL.
-- [ ] Blend SSR, local probe and sky fallback by confidence/influence.
-- [ ] Test hit, miss, moving object, roughness sweep, gold/chrome/dielectric and camera motion.
+- [ ] **M15-U5-32 — Advance through Hi-Z cells hierarchically.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-33 — Add thickness, hit refinement and edge/disocclusion rejection.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-34 — Add roughness cone/footprint filtering over HDR color mips.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: high roughness broadens the highlight/reflection continuously; low roughness stays sharp.
+- [ ] **M15-U5-35 — Pass roughness, metallic/base color and reflection flags into resolve.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U5-36 — Compute Fresnel/F0 for dielectric and conductor materials.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U5-37 — Replace/blend indirect specular instead of blindly adding a second reflection over IBL.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U5-38 — Blend SSR, local probe and sky fallback by confidence/influence.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U5-39 — Test hit, miss, moving object, roughness sweep, gold/chrome/dielectric and camera motion.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: motion reduces shimmer without persistent ghosts, UI jitter or black gaps.
 
 **Exit:** colored geometry appears in the expected reflection; roughness varies continuously; no black edge, ghost or energy spike.
 
-## 11. U5 / S5.7 — LTC rectangular and disk area lights
+### U5 / S5.7 — LTC rectangular and disk area lights
 
-- [ ] Add validated LTC transform/amplitude tables or reproducible generation.
-- [ ] Implement rectangle/disk emitters with units, orientation, sidedness and range.
-- [ ] Integrate diffuse/specular area response consistently.
-- [ ] Define area-light shadow policy separately.
-- [ ] Complete component/extraction/serialization/runtime/Inspector paths.
-- [ ] Compare against numerical reference across roughness/view/emitter angles.
+- [ ] **M15-U5-40 — Add validated LTC transform/amplitude tables or reproducible generation.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-41 — Implement rectangle/disk emitters with units, orientation, sidedness and range.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-42 — Integrate diffuse/specular area response consistently.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U5-43 — Define area-light shadow policy separately.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U5-44 — Complete component/extraction/serialization/runtime/Inspector paths.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen, and matches Runtime/Preview.
+- [ ] **M15-U5-45 — Compare against numerical reference across roughness/view/emitter angles.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: high roughness broadens the highlight/reflection continuously; low roughness stays sharp.
 
 **Exit:** shape/roughness-correct, finite highlights without duplicate emitter energy.
 
-## 12. U6 / S6.1–S6.3 — Volumetric fog and atmosphere
+### U6 / S6.1–S6.3 — Volumetric fog and atmosphere
 
-- [ ] Allocate bounded 3D froxels with documented quality scaling (`160×90×64` reference).
-- [ ] Inject density/media and supported light/shadow visibility.
-- [ ] Integrate scattering/extinction with defined units.
-- [ ] Add temporal reprojection/rejection and invalidation.
-- [ ] Define transparent/depth interaction and no-light/zero-density behavior.
-- [ ] Remove invented sun fallback and emit diagnostics.
-- [ ] Test wall occlusion, shafts, camera motion, resize, memory and cost.
+- [ ] **M15-U6-01 — Allocate bounded 3D froxels with documented quality scaling (`160×90×64` reference).**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U6-02 — Inject density/media and supported light/shadow visibility.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U6-03 — Integrate scattering/extinction with defined units.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U6-04 — Add temporal reprojection/rejection and invalidation.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U6-05 — Define transparent/depth interaction and no-light/zero-density behavior.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U6-06 — Remove invented sun fallback and emit diagnostics.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U6-07 — Test wall occlusion, shafts, camera motion, resize, memory and cost.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **Exit:** fog respects blockers/lights, zero density preserves the image, trails are bounded, cost is reported.
 
-## 13. U7 / S7.1–S7.4 — Experimental DDGI
+### U7 / S7.1–S7.4 — Experimental DDGI
 
-- [ ] Choose/document spatial radiance acquisition (shared tracing or bounded raster probe capture).
-- [ ] Implement probe indexing/origin/spacing and bounded allocation.
-- [ ] Implement octahedral irradiance and distance/variance atlases.
-- [ ] Implement visibility moments/Chebyshev weighting and bias.
-- [ ] Implement temporal accumulation and staggered updates.
-- [ ] Feed irradiance into diffuse ForwardPBR lighting.
-- [ ] Add scene/probe invalidation, no-valid-probe fallback and budgets.
-- [ ] Test indirect bounce, wall leakage, grid settings and disabled fallback.
+- [ ] **M15-U7-01 — Choose/document spatial radiance acquisition (shared tracing or bounded raster probe capture).**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U7-02 — Implement probe indexing/origin/spacing and bounded allocation.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U7-03 — Implement octahedral irradiance and distance/variance atlases.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U7-04 — Implement visibility moments/Chebyshev weighting and bias.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U7-05 — Implement temporal accumulation and staggered updates.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U7-06 — Feed irradiance into diffuse ForwardPBR lighting.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U7-07 — Add scene/probe invalidation, no-valid-probe fallback and budgets.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U7-08 — Test indirect bounce, wall leakage, grid settings and disabled fallback.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **Exit:** bounce follows world probes rather than camera pixels; walls suppress leakage; experimental status/cost explicit.
 
-## 14. U8 / S8.1–S8.6 — HDR post and temporal pipeline
+### U8 / S8.1–S8.6 — HDR post and temporal pipeline
 
 ### Exposure
 
-- [ ] Build one global log-luminance histogram and reduction.
-- [ ] Adapt previous exposure with real delta time and per-view state.
-- [ ] Feed adapted exposure into tonemapping; define first frame/black frame/camera cut.
-- [ ] Exclude UI/bloom from metering by policy.
-- [ ] Test mixed tiles, 30/60/120 Hz and exposure limits.
+- [ ] **M15-U8-01 — Build one global log-luminance histogram and reduction.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U8-02 — Adapt previous exposure with real delta time and per-view state.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U8-03 — Feed adapted exposure into tonemapping; define first frame/black frame/camera cut.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U8-04 — Exclude UI/bloom from metering by policy.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: a bounded multiscale halo appears without repeated tint/gain.
+- [ ] **M15-U8-05 — Test mixed tiles, 30/60/120 Hz and exposure limits.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
 
 ### Bloom
 
-- [ ] Threshold HDR source once.
-- [ ] Build six downsample levels with correct dimensions.
-- [ ] Reconstruct additively without discarding finer contributions.
-- [ ] Apply intensity/tint once.
-- [ ] Test impulse halo, gain, odd/small resolution and HDR/SDR.
+- [ ] **M15-U8-06 — Threshold HDR source once.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U8-07 — Build six downsample levels with correct dimensions.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U8-08 — Reconstruct additively without discarding finer contributions.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U8-09 — Apply intensity/tint once.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U8-10 — Test impulse halo, gain, odd/small resolution and HDR/SDR.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 ### TAA
 
-- [ ] Generate camera/object motion vectors with consistent jitter.
-- [ ] Reject disoccluded/invalid history.
-- [ ] Reset on resize, view switch, camera cut, settings/format/scene generation change.
-- [ ] Define transparent/reactive/UI policy.
-- [ ] Test static shimmer, moving object, disocclusion, resize and ghosting.
+- [ ] **M15-U8-11 — Generate camera/object motion vectors with consistent jitter.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U8-12 — Reject disoccluded/invalid history.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U8-13 — Reset on resize, view switch, camera cut, settings/format/scene generation change.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U8-14 — Define transparent/reactive/UI policy.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U8-15 — Test static shimmer, moving object, disocclusion, resize and ghosting.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **Exit:** exposure, bloom and TAA have behavior tests and no stale-history/gain artifacts.
 
-## 15. U9 / S9.1–S9.5 — Advanced material models
+### U9 / S9.1–S9.5 — Advanced material models
 
-- [ ] Charlie sheen direct/IBL response with energy checks.
-- [ ] Beer–Lambert absorption with documented thickness/path policy.
-- [ ] Cauchy/wavelength dispersion within documented scope.
-- [ ] Screen-space separable Gaussian SSS with depth/normal/material rejection.
-- [ ] Preserve specular while diffusing intended diffuse data.
-- [ ] Complete native asset/component/GPU/Inspector/Preview/Runtime paths.
-- [ ] Extend Material Graph outputs/lowering or explicitly defer unsupported fields.
-- [ ] Test sheen, absorption, SSS and built-in/graph parity.
+- [ ] **M15-U9-01 — Charlie sheen direct/IBL response with energy checks.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U9-02 — Beer–Lambert absorption with documented thickness/path policy.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U9-03 — Cauchy/wavelength dispersion within documented scope.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U9-04 — Screen-space separable Gaussian SSS with depth/normal/material rejection.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere has smooth shading with no triangle bands, faceting or invalid pixels.
+- [ ] **M15-U9-05 — Preserve specular while diffusing intended diffuse data.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U9-06 — Complete native asset/component/GPU/Inspector/Preview/Runtime paths.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen, and matches Runtime/Preview.
+- [ ] **M15-U9-07 — Extend Material Graph outputs/lowering or explicitly defer unsupported fields.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U9-08 — Test sheen, absorption, SSS and built-in/graph parity.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **Exit:** models are bounded, authorable, serializable and pass controlled fixtures.
 
-## 16. U10 / S10.1–S10.4 — Editor and authoring integration
+### U10 / S10.1–S10.4 — Editor and authoring integration
 
-- [ ] Add controls for all accepted material fields with clamps/tooltips/defaults.
-- [ ] Add probe placement, shape, capture, scheduling and stale/failed diagnostics.
-- [ ] Add Preview controls matching Scene environment/exposure/AA/reflection policy.
-- [ ] Complete scene/assembly/runtime codec round trips.
-- [ ] Add Low/Medium/High/Ultra presets with explicit budgets.
-- [ ] Diagnose unsupported OpenGL/capability paths with valid fallback.
-- [ ] Test Editor create/edit/save/reopen and Runtime parity.
+- [ ] **M15-U10-01 — Add controls for all accepted material fields with clamps/tooltips/defaults.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U10-02 — Add probe placement, shape, capture, scheduling and stale/failed diagnostics.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U10-03 — Add Preview controls matching Scene environment/exposure/AA/reflection policy.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U10-04 — Complete scene/assembly/runtime codec round trips.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-05 — Add Low/Medium/High/Ultra presets with explicit budgets.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-06 — Diagnose unsupported OpenGL/capability paths with valid fallback.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-07 — Test Editor create/edit/save/reopen and Runtime parity.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen, and matches Runtime/Preview.
 
 **Exit:** every accepted runtime feature is authorable and survives save/reload.
 
-## 17. U11 / S11.1–S11.4 — Optional ray-traced extension
+### U11 / S11.1–S11.4 — Optional ray-traced extension
 
-- [ ] Freeze backend/capability policy and fallback.
-- [ ] Build/refit BLAS for supported geometry.
-- [ ] Build/update TLAS per scene/geometry changes.
-- [ ] Add RT pipeline and ray-generation/miss/closest-hit shaders.
-- [ ] Match ForwardPBR material/lighting evaluation.
-- [ ] Add denoising and temporal rejection.
-- [ ] Share geometry data with DDGI.
-- [ ] Test off-screen dynamic reflection, self-intersection and fallback.
+- [ ] **M15-U11-01 — Freeze backend/capability policy and fallback.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U11-02 — Build/refit BLAS for supported geometry.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U11-03 — Build/update TLAS per scene/geometry changes.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U11-04 — Add RT pipeline and ray-generation/miss/closest-hit shaders.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U11-05 — Match ForwardPBR material/lighting evaluation.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U11-06 — Add denoising and temporal rejection.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U11-07 — Share geometry data with DDGI.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: colored indirect bounce follows world probes and walls suppress leakage.
+- [ ] **M15-U11-08 — Test off-screen dynamic reflection, self-intersection and fallback.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
 
 **Exit:** off-screen reflection works within documented limits, or P13 is explicitly deferred.
 
-## 18. U10 / S10.5 — Final acceptance and rollout
+### U10 / S10.5 — Final acceptance and rollout
 
-- [ ] Rebuild affected Editor/Runtime/tests Debug and Release.
-- [ ] Run D3D12/Vulkan physical-GPU fixtures with validation.
-- [ ] Run OpenGL and unsupported-capability fallback fixtures.
-- [ ] Inspect windowed Editor output for smooth sphere, roughness sweep and red-object reflection.
-- [ ] Run resize/minimize/restore, view switch, device reinit and >=1,000-frame soak.
-- [ ] Capture deterministic parity artifacts and report thresholds.
-- [ ] Run 1080p/1440p Release benchmark with p50/p95/p99/max timings and memory.
-- [ ] Report named lighting budget on named GPU/preset.
-- [ ] Record hardware/driver/OS/backend/commit for measurements.
-- [ ] Complete independent source review and correction recheck.
-- [ ] Update every completed checkbox with commit and evidence.
-- [ ] Promote only features whose exit conditions pass.
+- [ ] **M15-U10-08 — Rebuild affected Editor/Runtime/tests Debug and Release.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen, and matches Runtime/Preview.
+- [ ] **M15-U10-09 — Run D3D12/Vulkan physical-GPU fixtures with validation.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-10 — Run OpenGL and unsupported-capability fallback fixtures.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-11 — Inspect windowed Editor output for smooth sphere, roughness sweep and red-object reflection.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [ ] **M15-U10-12 — Run resize/minimize/restore, view switch, device reinit and >=1,000-frame soak.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-13 — Capture deterministic parity artifacts and report thresholds.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-14 — Run 1080p/1440p Release benchmark with p50/p95/p99/max timings and memory.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-15 — Report named lighting budget on named GPU/preset.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
+- [ ] **M15-U10-16 — Record hardware/driver/OS/backend/commit for measurements.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-17 — Complete independent source review and correction recheck.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-18 — Update every completed checkbox with commit and evidence.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+- [ ] **M15-U10-19 — Promote only features whose exit conditions pass.**
+  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
+  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
 
 **M15 final acceptance:** core items are accepted, optional items are accepted or explicitly deferred, and no required check is silently waived.
 
-## 19. Work tracking
+## 5. M15 completion rule
 
-Each checkpoint leaves the tree buildable/testable. Use one coherent commit per completed checkpoint, record exact commands/configurations/exit codes, preserve unrelated user changes, and never stage the exchange file or scene with implementation work.
+M15 is accepted only when all required U0-U10 atomic items are PASS, optional
+U11/P6B/DDGI items are PASS or explicitly DEFERRED, and the final acceptance
+items record Debug/Release builds, native backend evidence, Editor visual review,
+parity artifacts, soak/performance measurements and an independent review. A
+compile, non-empty image or parent heading never substitutes for an item PASS.
+
+**Status:** HOLD — this checklist is the execution contract; no M15 implementation is released by this document.

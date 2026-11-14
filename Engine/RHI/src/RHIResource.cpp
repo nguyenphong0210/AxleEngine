@@ -54,6 +54,10 @@ namespace Axle::RHI {
         CommandState Recording = CommandState::Empty;
         bool InRendering = false;
         RHIRecordingLease RecordedUses;
+        std::unordered_map<const void*, std::pair<nri::AccessBits, nri::Layout>> Views;
+        std::unordered_map<uint64_t, std::vector<RHIResourceAccess>> RangeAccesses;
+        const void* ValidatorOwner = nullptr;
+        std::function<bool(const RHIResourceAccess&)> AccessValidator;
         RHITrackedState State;
         nri::Texture* NativeTexture = nullptr;
         nri::Buffer* NativeBuffer = nullptr;
@@ -267,6 +271,13 @@ namespace Axle::RHI {
             lease.m_Generation->Recording != RHIResourceGeneration::CommandState::Recording) return false;
         if (!resource.IsLive()) { lease.m_Generation->Recording = RHIResourceGeneration::CommandState::Abandoned; return false; }
         if (lease.GetHandle() == resource.GetHandle()) return false;
+        if (lease.m_Generation->AccessValidator) {
+            for (const auto& access : GetAccesses(resource))
+                if (!lease.m_Generation->AccessValidator(access)) {
+                    lease.m_Generation->Recording = RHIResourceGeneration::CommandState::Abandoned;
+                    return false;
+                }
+        }
         auto& uses = lease.m_Generation->RecordedUses;
         if (!uses.m_State) { uses.m_State = std::make_shared<RHIRecordingState>(); uses.m_State->Excluded = lease.m_Generation.get(); }
         if (!AppendPin(uses, resource)) {
@@ -286,7 +297,62 @@ namespace Axle::RHI {
             command.m_Generation->Recording = RHIResourceGeneration::CommandState::Abandoned;
             return false;
         }
+        if (command.m_Generation->AccessValidator && !resource) {
+            command.m_Generation->Recording = RHIResourceGeneration::CommandState::Abandoned;
+            return false;
+        }
+        if (resource && resource.m_Generation->Views.contains(alias)) {
+            const auto [access, layout] = resource.m_Generation->Views.at(alias);
+            if (!ValidateAccess(commands, alias, access, layout)) return false;
+        }
         return !resource || RecordUse(commands, resource);
+    }
+    void RHIResourceService::DefineViewAccess(const void* alias, nri::AccessBits access, nri::Layout layout) {
+        auto resource = AcquireNative(alias);
+        if (IsOwnerThread() && resource.IsLive()) resource.m_Generation->Views[alias] = {access, layout};
+    }
+    std::vector<RHIResourceAccess> RHIResourceService::GetAccesses(const RHIResourceLease& resource) const {
+        std::vector<RHIResourceAccess> result;
+        const auto pins = Pin(resource);
+        if (!pins.IsLive()) return result;
+        for (const auto& lease : pins.m_State->Resources) {
+            const auto& generation = *lease.m_Generation;
+            if (generation.NativeTexture || generation.NativeBuffer)
+                result.push_back({lease, generation.NativeTexture, generation.NativeBuffer});
+            for (const auto& [slot, accesses] : generation.RangeAccesses)
+                result.insert(result.end(), accesses.begin(), accesses.end());
+        }
+        return result;
+    }
+    bool RHIResourceService::SetAccessValidator(const void* commands, const void* owner,
+        std::function<bool(const RHIResourceAccess&)> validator) {
+        auto command = AcquireNative(commands);
+        if (!owner || !validator || !IsRecording(commands) ||
+            (command.m_Generation->ValidatorOwner && command.m_Generation->ValidatorOwner != owner)) return false;
+        command.m_Generation->ValidatorOwner = owner;
+        command.m_Generation->AccessValidator = std::move(validator);
+        return true;
+    }
+    void RHIResourceService::ClearAccessValidator(const void* commands, const void* owner) {
+        auto command = AcquireNative(commands);
+        if (command.IsLive() && command.m_Generation->ValidatorOwner == owner) {
+            command.m_Generation->AccessValidator = {};
+            command.m_Generation->ValidatorOwner = nullptr;
+        }
+    }
+    bool RHIResourceService::HasAccessValidator(const void* commands) const {
+        auto command = AcquireNative(commands);
+        return command.IsLive() && bool(command.m_Generation->AccessValidator);
+    }
+    bool RHIResourceService::ValidateAccess(const void* commands, const void* alias, nri::AccessBits access, nri::Layout layout) {
+        auto command = AcquireNative(commands);
+        if (!IsRecording(commands)) return false;
+        if (!command.m_Generation->AccessValidator) return true;
+        auto resource = AcquireNative(alias);
+        if (resource.IsLive() && command.m_Generation->AccessValidator({resource,
+            resource.m_Generation->NativeTexture, resource.m_Generation->NativeBuffer, access, layout})) return true;
+        command.m_Generation->Recording = RHIResourceGeneration::CommandState::Abandoned;
+        return false;
     }
     bool RHIResourceService::RecordUses(const void* commands, const RHIRecordingLease& resources) {
         if (resources.Empty()) return true;
@@ -327,15 +393,25 @@ namespace Axle::RHI {
             lease.m_Generation->PendingStates.clear();
         }
     }
-    bool RHIResourceService::ReplaceDescriptorRange(const RHIResourceLease& lease, uint32_t range, uint32_t baseSlot, std::vector<RHIResourceLease> resources) {
+    bool RHIResourceService::ReplaceDescriptorRange(const RHIResourceLease& lease, uint32_t range, uint32_t baseSlot, std::vector<RHIResourceLease> resources, const std::vector<const void*>& aliases) {
+        if (resources.size() != aliases.size()) return false;
         if (!IsOwnerThread() || !lease.IsLive() || lease.GetHandle().Epoch != GetEpoch() ||
             lease.m_Generation->Kind != RHIResourceKind::DescriptorSet || IsInUse(lease)) return false;
         for (const auto& resource : resources) if (!resource.IsLive() || resource.GetHandle().Epoch != GetEpoch()) return false;
         if (resources.size() > UINT32_MAX - baseSlot) return false;
         auto replacement = lease.m_Generation->Ranges;
-        for (uint32_t i = 0; i < resources.size(); ++i)
-            replacement[(static_cast<uint64_t>(range) << 32) | (baseSlot + i)] = {std::move(resources[i])};
+        auto accessReplacement = lease.m_Generation->RangeAccesses;
+        for (uint32_t i = 0; i < resources.size(); ++i) {
+            const auto key = (static_cast<uint64_t>(range) << 32) | (baseSlot + i);
+            auto accesses = GetAccesses(resources[i]);
+            if (const auto view = resources[i].m_Generation->Views.find(aliases[i]); view != resources[i].m_Generation->Views.end())
+                accesses.push_back({resources[i], resources[i].m_Generation->NativeTexture,
+                    resources[i].m_Generation->NativeBuffer, view->second.first, view->second.second});
+            accessReplacement[key] = std::move(accesses);
+            replacement[key] = {std::move(resources[i])};
+        }
         lease.m_Generation->Ranges.swap(replacement);
+        lease.m_Generation->RangeAccesses.swap(accessReplacement);
         return true;
     }
     void RHIResourceService::CollectAfterDrain() {
@@ -464,6 +540,7 @@ bool RHIResourceService::BuildTextureBarriers(const void* commands, const nri::T
     std::vector<nri::TextureBarrierDesc>& barriers) {
     auto command = AcquireNative(commands), resource = AcquireNative(request.texture);
     if (!IsRecording(commands) || !resource.IsLive() || !resource.m_Generation->State.Defined || request.srcQueue || request.dstQueue) return false;
+    if (!ValidateAccess(commands, request.texture, request.after.access, request.after.layout)) return false;
     auto* target = resource.m_Generation.get();
     std::vector<size_t> indices;
     if (!TextureRange(target->State, request.mipOffset, request.mipNum, request.layerOffset, request.layerNum, request.planes, indices)) return false;
@@ -519,6 +596,7 @@ bool RHIResourceService::BuildBufferBarrier(const void* commands, const nri::Buf
     std::vector<nri::BufferBarrierDesc>& barriers) {
     auto command = AcquireNative(commands), resource = AcquireNative(request.buffer);
     if (!IsRecording(commands) || !resource.IsLive() || !resource.m_Generation->State.Defined || resource.m_Generation->State.Texture) return false;
+    if (!ValidateAccess(commands, request.buffer, request.after.access)) return false;
     auto* target = resource.m_Generation.get();
     auto& pending = command.m_Generation->PendingStates;
     auto found = pending.find(target);

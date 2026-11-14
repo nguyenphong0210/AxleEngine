@@ -97,7 +97,8 @@ namespace Axle {
         void Finalize(const RenderPassContext& context, const RenderPassResult& result);
         // Execute a frame's complete lifecycle and release all pass callbacks
         // before returning, including failure paths. Submission belongs to ViewContext.
-        RenderPassResult Execute(const RenderPassContext& context, bool strictPhysicalResources = false);
+        RenderPassResult Execute(const RenderPassContext& context, bool strictPhysicalResources = false,
+                                 bool validateBindings = true);
         const std::string& GetDiagnostic() const { return m_Diagnostic; }
 
     private:

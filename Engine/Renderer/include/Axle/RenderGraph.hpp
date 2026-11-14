@@ -15,6 +15,11 @@ namespace Axle {
     // command journal owns first-use/native state across views and submissions.
     class RenderGraph {
     public:
+        RenderGraph() = default;
+        RenderGraph(const RenderGraph&) = delete;
+        RenderGraph& operator=(const RenderGraph&) = delete;
+        ~RenderGraph();
+        void Reset();
         using Resource = uint32_t;
         enum class Access { Read, Write, ReadWrite };
         enum class Load { None, Load, Clear, Discard };
@@ -30,15 +35,19 @@ namespace Axle {
         Resource Import(std::string name, nri::Texture* texture, bool contentsDefined = false);
         void AddPass(std::string name, std::vector<Use> uses,
                      std::vector<std::string> dependencies = {});
+        // Prepare may add exact immutable external inputs before Compile. Record
+        // only consumes them; binding never expands the declared resource set.
+        bool DeclareRead(std::string_view pass, const void* alias);
+        bool DeclareBuffer(std::string_view pass, RHI::RHIResourceLease buffer,
+            RHI::RHIAccess access, Access mode = Access::Read);
         // When strictPhysicalResources is true, every resource used by a pass
         // must already have a native texture and live generation lease.
-        bool Compile(bool strictPhysicalResources = false);
+        bool Compile(bool strictPhysicalResources = false, bool validateBindings = true);
         bool BeginPass(std::string_view name, RHI::RHICommandBuffer& commands);
-        // Descriptor-backed texture/buffer reads are declared at the same
-        // recording boundary as graph texture uses.  This keeps the graph
-        // aware of transitive descriptor dependencies even when a material
-        // set is assembled lazily during pass recording.
+        // Validate and retain a descriptor's actual transitive inputs against
+        // the compiled pass. This never adds inputs or injects a late barrier.
         bool DeclareDescriptorRead(const void* descriptor, RHI::RHICommandBuffer& commands);
+        void EndRecording();
         bool IsComplete() const { return m_Compiled && m_NextPass == m_Passes.size(); }
         const std::string& GetError() const { return m_Error; }
         const std::vector<uint32_t>& GetDependencies(uint32_t pass) const { return m_Passes.at(pass).Dependencies; }
@@ -50,12 +59,19 @@ namespace Axle {
             std::vector<Use> Uses;
             std::vector<std::string> Required;
             std::vector<uint32_t> Dependencies;
+            struct BufferUse { RHI::RHIResourceLease Lease; RHI::RHIAccess Access; RenderGraph::Access Mode; };
+            std::vector<BufferUse> Buffers;
         };
+        bool Validate(const RHI::RHIResourceAccess& access);
         bool Fail(std::string error);
         std::vector<Texture> m_Textures;
         std::vector<Pass> m_Passes;
         std::string m_Error;
         size_t m_NextPass = 0;
         bool m_Compiled = false;
+        bool m_Sealed = false;
+        bool m_ValidateBindings = true;
+        const void* m_Commands = nullptr;
+        size_t m_ActivePass = 0;
     };
 }

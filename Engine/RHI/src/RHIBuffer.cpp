@@ -206,6 +206,7 @@ namespace Axle::RHI {
                 core.DestroyBuffer(buffer);
                 if (memory) core.FreeMemory(memory);
             }, std::move(dependencies));
+        device.GetResources().DefineViewAccess(cbv, nri::AccessBits::CONSTANT_BUFFER);
         const auto host = m_Desc.MemoryLocation == RHIMemoryLocation::HostReadback ? nri::AccessBits::HOST_READ :
             m_Desc.MemoryLocation == RHIMemoryLocation::Device ? nri::AccessBits::NONE : nri::AccessBits::HOST_WRITE;
         return m_Lease.IsLive() && device.GetResources().DefineBufferState(m_Lease,

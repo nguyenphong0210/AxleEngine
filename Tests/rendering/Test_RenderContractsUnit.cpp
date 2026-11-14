@@ -222,6 +222,14 @@ namespace Axle::RenderTests {
         Graph missing;
         missing.AddPass("bad resource",{{99,Layout::ShaderResource}});
         RENDER_CHECK(!missing.Compile(), "undefined resource rejected");
+        Graph storageRead; auto storage = storageRead.Import("storage", nullptr, true);
+        storageRead.AddPass("implicit write", {{storage, Layout::ShaderResourceStorage}});
+        RENDER_CHECK(!storageRead.Compile(), "UAV view cannot hide writable access behind a read declaration");
+        Graph immutable; immutable.AddPass("sealed", {});
+        RENDER_CHECK(immutable.Compile(), "complete declarations compile");
+        immutable.AddPass("late", {});
+        RENDER_CHECK(!immutable.Compile() && immutable.GetError().find("after graph compile") != std::string::npos,
+            "recording cannot silently expand a compiled graph");
         Graph duplicateNames; duplicateNames.AddPass("same",{});duplicateNames.AddPass("same",{});
         RENDER_CHECK(!duplicateNames.Compile(), "ambiguous pass names rejected");
         return true;

@@ -70,7 +70,7 @@ namespace Axle {
         for (const auto& pass : m_Passes) pass->Finalize(context, result);
     }
 
-    RenderPassResult RenderPassScheduler::Execute(const RenderPassContext& context, bool strictPhysicalResources) {
+    RenderPassResult RenderPassScheduler::Execute(const RenderPassContext& context, bool strictPhysicalResources, bool validateBindings) {
         RenderPassResult result = RenderPassResult::Failed("pass execution did not complete");
         auto finish = [&](RenderPassScheduler*) {
             Finalize(context, result);
@@ -93,11 +93,12 @@ namespace Axle {
         if (!runPhase([&] { return Configure(context); })) return result;
         result = RenderPassResult::Failed("graph declaration interrupted");
         Declare(*context.Graph);
-        if (!context.Graph->Compile(strictPhysicalResources)) {
+        if (!runPhase([&] { return Prepare(context); })) return result;
+        if (!context.Graph->Compile(strictPhysicalResources, validateBindings)) {
             m_Diagnostic = "graph compile: " + context.Graph->GetError();
             return result = RenderPassResult::Failed(m_Diagnostic);
         }
-        if (!runPhase([&] { return Prepare(context); }) || !runPhase([&] { return Record(context); })) return result;
+        if (!runPhase([&] { return Record(context); })) return result;
         if (context.Commands && !context.Graph->IsComplete()) {
             m_Diagnostic = "recording did not consume the complete render graph";
             return result = RenderPassResult::Failed(m_Diagnostic);

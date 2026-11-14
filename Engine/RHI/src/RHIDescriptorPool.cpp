@@ -157,7 +157,7 @@ namespace Axle::RHI {
             if (!lease.IsLive()) return false;
             resources.push_back(std::move(lease));
         }
-        if (!rhiDevice.GetResources().ReplaceDescriptorRange(setLease, rangeIndex, baseSlot, std::move(resources))) return false;
+        if (!rhiDevice.GetResources().ReplaceDescriptorRange(setLease, rangeIndex, baseSlot, std::move(resources), std::vector<const void*>(descriptors.begin(), descriptors.end()))) return false;
 
         nri::UpdateDescriptorRangeDesc updateDesc = {};
         updateDesc.descriptorSet = set;

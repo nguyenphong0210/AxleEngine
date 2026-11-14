@@ -158,8 +158,9 @@ namespace Axle::RHI {
         auto resource = resources.AcquireNative(descriptor);
         if (!resource) return true; // explicitly borrowed native adapter
         const auto pins = resources.Pin(resource);
-        for (auto* texture : resources.GetPinnedTextures(pins))
-            TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResource);
+        if (!resources.HasAccessValidator(m_CommandBuffer))
+            for (auto* texture : resources.GetPinnedTextures(pins))
+                TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResource);
         for (auto* buffer : resources.GetPinnedBuffers(pins))
             TransitionBuffer(buffer, RHIAccess::None, RHIAccess::ConstantBuffer, RHIPipelineStage::None, RHIPipelineStage::AllShaders);
         return CanRecord();

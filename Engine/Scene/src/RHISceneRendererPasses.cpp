@@ -1638,7 +1638,8 @@ namespace Axle {
         passContext.Graph = &graph;
         passContext.Commands = &Commands();
         passContext.Capabilities = capabilities;
-        const auto frameResult = m_PassScheduler.Execute(passContext, true);
+        // U4 migration: enable binding checks after exact pass inputs are prepared.
+        const auto frameResult = m_PassScheduler.Execute(passContext, true, false);
         if (!frameResult) {
             endRendering();
             if (diagnosticsPassActive) m_ViewContext.Diagnostics().EndPass(DiagnosticStatus::Failed);

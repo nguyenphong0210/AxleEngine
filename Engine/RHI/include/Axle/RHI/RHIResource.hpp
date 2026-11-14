@@ -53,6 +53,16 @@ namespace Axle::RHI {
         std::shared_ptr<RHIRecordingState> m_State;
     };
 
+    // Exact-generation access metadata. Views carry their actual access/layout;
+    // bare generations with NONE request membership/lifetime validation only.
+    struct RHIResourceAccess {
+        RHIResourceLease Resource;
+        nri::Texture* Texture = nullptr;
+        nri::Buffer* Buffer = nullptr;
+        nri::AccessBits Access = nri::AccessBits::NONE;
+        nri::Layout Layout = nri::Layout::UNDEFINED;
+    };
+
     // Owner-thread publication/lookup; releasing a lease from another thread only
     // queues cleanup. Native destruction occurs on the render owner after a drain.
     class RHIResourceService {
@@ -92,6 +102,14 @@ namespace Axle::RHI {
         // Raw migration bindings may borrow external native objects; their owner
         // must retain them through completion. Managed aliases acquire a pin.
         bool RecordNativeUse(const void* commands, const void* alias);
+        void DefineViewAccess(const void* alias, nri::AccessBits access, nri::Layout layout = nri::Layout::UNDEFINED);
+        std::vector<RHIResourceAccess> GetAccesses(const RHIResourceLease& resource) const;
+        bool SetAccessValidator(const void* commands, const void* owner,
+            std::function<bool(const RHIResourceAccess&)> validator);
+        void ClearAccessValidator(const void* commands, const void* owner);
+        bool HasAccessValidator(const void* commands) const;
+        bool ValidateAccess(const void* commands, const void* alias, nri::AccessBits access,
+            nri::Layout layout = nri::Layout::UNDEFINED);
         bool SnapshotSubmission(const void* const* commands, uint32_t count, RHIRecordingLease& pins) const;
         void MarkSubmitted(const void* const* commands, uint32_t count);
         void AbandonRecording(const void* commands);
@@ -123,7 +141,8 @@ namespace Axle::RHI {
         void CloseAfterDrain();
     private:
         friend class RHIDescriptorPool;
-        bool ReplaceDescriptorRange(const RHIResourceLease& lease, uint32_t range, uint32_t baseSlot, std::vector<RHIResourceLease> resources);
+        bool ReplaceDescriptorRange(const RHIResourceLease& lease, uint32_t range, uint32_t baseSlot,
+            std::vector<RHIResourceLease> resources, const std::vector<const void*>& aliases);
         std::shared_ptr<RHIResourceOwner> m_Owner;
     };
 

@@ -70,7 +70,7 @@ bool RunRenderPassUnitTests() {
         "all lifecycle phases use the same order and finalize once");
 
     for (int phase = 0; phase < 4; ++phase) {
-        events.clear(); graph = RenderGraph{};
+        events.clear(); graph.Reset();
         owner = std::make_shared<int>(phase); lifetime = owner;
         auto first = std::make_unique<TracedPass>("Failing", events, owner);
         if (phase == 0) first->ConfigureResult = RenderPassResult::Failed("configure failure");
@@ -92,7 +92,7 @@ bool RunRenderPassUnitTests() {
     }
 
     for (int phase = 0; phase < 4; ++phase) {
-        events.clear(); graph = RenderGraph{};
+        events.clear(); graph.Reset();
         owner = std::make_shared<int>(phase); lifetime = owner;
         auto throwing = std::make_unique<TracedPass>("Throwing", events, owner);
         throwing->ThrowAt = phase;
@@ -104,7 +104,7 @@ bool RunRenderPassUnitTests() {
             "exceptions in every lifecycle phase finalize as failed and release captures");
     }
     for (bool inPrepare : {false, true}) {
-        events.clear(); graph = RenderGraph{};
+        events.clear(); graph.Reset();
         auto lateDisabled = std::make_unique<TracedPass>("LateDisabled", events);
         (inPrepare ? lateDisabled->PrepareResult : lateDisabled->RecordResult) = {RenderPassStatus::Disabled, "too late"};
         scheduler.Add(std::move(lateDisabled));
@@ -112,7 +112,7 @@ bool RunRenderPassUnitTests() {
             events.back() == "LateDisabled:finalize:3", "late disabling cannot skip already-declared graph work");
     }
 
-    events.clear(); graph = RenderGraph{};
+    events.clear(); graph.Reset();
     auto disabled = std::make_unique<TracedPass>("Disabled", events);
     disabled->ConfigureResult = {RenderPassStatus::Disabled, "feature disabled"};
     disabled->InvalidRead = true;
@@ -128,13 +128,24 @@ bool RunRenderPassUnitTests() {
         "Disabled:finalize:2", "Fallback:finalize:2"}),
         "disabled passes skip declare/prepare/record, while fallback remains executable");
 
-    graph = RenderGraph{}; owner = std::make_shared<int>(7); lifetime = owner;
+    graph.Reset(); owner = std::make_shared<int>(7); lifetime = owner;
     scheduler.Add(std::make_unique<CallbackRenderPass>("Adapter", CallbackRenderPass::Callback{},
         [owner](const RenderPassContext&) { return RenderPassResult{}; },
         [](RenderGraph& g) { g.AddPass("Adapter", {}); }));
     owner.reset();
     RENDER_CHECK(static_cast<bool>(scheduler.Execute(context)) && lifetime.expired(),
         "legacy callback adapter releases borrowed frame owners after execution");
+    graph.Reset();
+    bool recordedInvalidInputs = false;
+    scheduler.Add(std::make_unique<CallbackRenderPass>("PreparedInputs",
+        [](const RenderPassContext& ctx) {
+            ctx.Graph->DeclareRead("declared", nullptr);
+            return RenderPassResult{};
+        },
+        [&](const RenderPassContext&) { recordedInvalidInputs = true; return RenderPassResult{}; },
+        [](RenderGraph& g) { g.AddPass("declared", {}); }));
+    RENDER_CHECK(!scheduler.Execute(context) && !recordedInvalidInputs,
+        "preparation input errors are compiled and rejected before any recording");
     context.Graph = nullptr;
     scheduler.Add(std::make_unique<CallbackRenderPass>("MissingGraph"));
     RENDER_CHECK(!scheduler.Execute(context) && scheduler.Size() == 0 &&

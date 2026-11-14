@@ -6,7 +6,71 @@
 #include <unordered_set>
 
 namespace Axle {
+    RenderGraph::~RenderGraph() { EndRecording(); }
+    void RenderGraph::Reset() {
+        EndRecording();
+        m_Textures.clear(); m_Passes.clear(); m_Error.clear();
+        m_NextPass = m_ActivePass = 0;
+        m_Compiled = m_Sealed = false;
+    }
+    void RenderGraph::EndRecording() {
+        if (m_Commands) RHI::RHIDevice::Get().GetResources().ClearAccessValidator(m_Commands, this);
+        m_Commands = nullptr;
+    }
+    bool RenderGraph::DeclareBuffer(std::string_view name, RHI::RHIResourceLease lease, RHI::RHIAccess access, Access mode) {
+        if (m_Sealed) return Fail("Buffer declaration after graph compile");
+        auto pass = std::find_if(m_Passes.begin(), m_Passes.end(), [&](const auto& p) { return p.Name == name; });
+        if (pass == m_Passes.end() || !lease.IsLive() || access == RHI::RHIAccess::None)
+            return Fail(std::string(name) + ": invalid buffer input");
+        for (auto& use : pass->Buffers) if (use.Lease.GetHandle() == lease.GetHandle()) {
+            if (use.Mode != mode) return Fail(std::string(name) + ": conflicting buffer access");
+            use.Access |= access;
+            return true;
+        }
+        pass->Buffers.push_back({std::move(lease), access, mode});
+        return true;
+    }
+    bool RenderGraph::DeclareRead(std::string_view name, const void* alias) {
+        if (m_Sealed) return Fail("Input declaration after graph compile");
+        auto& resources = RHI::RHIDevice::Get().GetResources();
+        auto lease = resources.AcquireNative(alias);
+        if (!lease.IsLive() || !resources.Pin(lease).IsLive()) return Fail(std::string(name) + ": input has no live generation");
+        auto pass = std::find_if(m_Passes.begin(), m_Passes.end(), [&](const auto& p) { return p.Name == name; });
+        if (pass == m_Passes.end()) return Fail(std::string(name) + ": input has no pass");
+        for (const auto& input : resources.GetAccesses(lease)) {
+            if (input.Texture) {
+                const auto id = Import("ExternalInput", input.Texture, true);
+                const auto existing = std::find_if(pass->Uses.begin(), pass->Uses.end(), [&](const auto& use) { return use.Texture == id; });
+                if (existing == pass->Uses.end()) pass->Uses.push_back({id, RHI::RHIResourceLayout::ShaderResource});
+                else if (existing->Layout != RHI::RHIResourceLayout::ShaderResource)
+                    return Fail(std::string(name) + ": sampled input conflicts with declared texture use");
+            } else if (input.Buffer && !DeclareBuffer(name, input.Resource, RHI::RHIAccess::ConstantBuffer)) return false;
+        }
+        return true;
+    }
+    bool RenderGraph::Validate(const RHI::RHIResourceAccess& input) {
+        if (!m_Compiled || m_ActivePass >= m_Passes.size()) return Fail("Resource access outside a compiled pass");
+        const auto& pass = m_Passes[m_ActivePass];
+        if (input.Texture) {
+            for (const auto& use : pass.Uses) {
+                const auto& texture = m_Textures[use.Texture];
+                if (texture.Lease.GetHandle() != input.Resource.GetHandle()) continue;
+                if (input.Layout != nri::Layout::UNDEFINED && input.Layout != RHI::ToNRILayout(use.Layout))
+                    return Fail(pass.Name + ": texture layout differs from declaration: " + texture.Name);
+                return true;
+            }
+        } else if (input.Buffer) {
+            for (const auto& use : pass.Buffers) if (use.Lease.GetHandle() == input.Resource.GetHandle()) {
+                if ((static_cast<uint32_t>(input.Access) & ~static_cast<uint32_t>(RHI::ToNRIAccessBits(use.Access))) != 0)
+                    return Fail(pass.Name + ": buffer access differs from declaration");
+                return true;
+            }
+        } else return true; // pipeline/layout/pool/sampler lifetime has no physical access
+        return Fail(pass.Name + ": undeclared physical resource generation");
+    }
+
     RenderGraph::Resource RenderGraph::Import(std::string name, nri::Texture* texture, bool defined) {
+        if (m_Sealed) { Fail("Import after graph compile"); return UINT32_MAX; }
         m_Compiled = false;
         // Different roles may alias the same external output (no HDR/FXAA/MSAA).
         if (texture) for (Resource i = 0; i < m_Textures.size(); ++i)
@@ -17,6 +81,7 @@ namespace Axle {
     }
 
     void RenderGraph::AddPass(std::string name, std::vector<Use> uses, std::vector<std::string> dependencies) {
+        if (m_Sealed) { Fail("Pass declaration after graph compile"); return; }
         m_Compiled = false;
         m_Passes.push_back({std::move(name), std::move(uses), std::move(dependencies), {}});
     }
@@ -27,8 +92,12 @@ namespace Axle {
         return false;
     }
 
-    bool RenderGraph::Compile(bool strictPhysicalResources) {
-        m_Compiled = false; m_Error.clear(); m_NextPass = 0;
+    bool RenderGraph::Compile(bool strictPhysicalResources, bool validateBindings) {
+        m_ValidateBindings = validateBindings;
+        if (!m_Error.empty()) return false;
+        m_Compiled = false; m_NextPass = 0;
+        struct BufferState { RHI::RHIResourceHandle Handle; int64_t Writer = -1; std::vector<uint32_t> Readers; };
+        std::vector<BufferState> buffers;
         std::vector<bool> defined;
         std::vector<std::vector<uint32_t>> users(m_Textures.size());
         std::vector<int64_t> writers(m_Textures.size(), -1);
@@ -62,6 +131,8 @@ namespace Axle {
                     use.Layout == RHI::RHIResourceLayout::CopySource || use.Layout == RHI::RHIResourceLayout::ResolveSource ||
                     use.Layout == RHI::RHIResourceLayout::DepthStencilRead;
                 const bool writeLayout = use.Layout == RHI::RHIResourceLayout::CopyDest || use.Layout == RHI::RHIResourceLayout::ResolveDest;
+                if ((attachment || use.Layout == RHI::RHIResourceLayout::ShaderResourceStorage) && use.Mode == Access::Read)
+                    return Fail(pass.Name + ": writable view requires explicit write access: " + texture.Name);
                 if ((readLayout && use.Mode != Access::Read) || (writeLayout && use.Mode != Access::Write))
                     return Fail(pass.Name + ": layout/access mismatch: " + texture.Name);
                 if ((use.LoadOp != Load::None && (!writes || !attachment)) ||
@@ -76,15 +147,34 @@ namespace Axle {
                     defined[use.Texture] = use.StoreOp == Store::Preserve;
                 } else users[use.Texture].push_back(p);
             }
+            for (const auto& use : pass.Buffers) {
+                auto& resources = RHI::RHIDevice::Get().GetResources();
+                bool physical = false;
+                for (const auto& input : resources.GetAccesses(use.Lease)) if (input.Buffer) physical = true;
+                if (!use.Lease.IsLive() || (strictPhysicalResources && !physical)) return Fail(pass.Name + ": missing buffer generation");
+                const auto writes = RHI::RHIAccess::CopyDest | RHI::RHIAccess::ShaderResourceStorage;
+                if ((use.Mode == Access::Read) == ((use.Access & writes) != RHI::RHIAccess::None))
+                    return Fail(pass.Name + ": buffer layout/access mismatch");
+                auto state = std::find_if(buffers.begin(), buffers.end(), [&](const auto& b) { return b.Handle == use.Lease.GetHandle(); });
+                if (state == buffers.end()) { buffers.push_back({use.Lease.GetHandle()}); state = buffers.end() - 1; }
+                if (state->Writer >= 0) depend(static_cast<uint32_t>(state->Writer));
+                if (use.Mode == Access::Read) state->Readers.push_back(p);
+                else { for (auto reader : state->Readers) depend(reader); state->Readers.clear(); state->Writer = p; }
+            }
             names.emplace(pass.Name, p);
         }
-        m_Compiled = true;
+        m_Compiled = true; m_Sealed = true;
         return true;
     }
 
     bool RenderGraph::BeginPass(std::string_view name, RHI::RHICommandBuffer& commands) {
         if (!m_Compiled || m_NextPass >= m_Passes.size() || m_Passes[m_NextPass].Name != name)
             return Fail("Pass recording differs from compiled order: " + std::string(name));
+        m_ActivePass = m_NextPass;
+        m_Commands = commands.GetNative();
+        if (m_ValidateBindings && !RHI::RHIDevice::Get().GetResources().SetAccessValidator(m_Commands, this,
+            [this](const RHI::RHIResourceAccess& input) { return Validate(input); }))
+            return Fail(std::string(name) + ": command access scope unavailable");
         for (const auto& use : m_Passes[m_NextPass].Uses) {
             auto& texture = m_Textures[use.Texture];
             if (!texture.Native) return Fail(std::string(name) + ": missing physical texture: " + texture.Name);

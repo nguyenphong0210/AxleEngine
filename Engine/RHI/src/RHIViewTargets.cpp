@@ -31,7 +31,10 @@ namespace Axle::RHI {
         if (m_Desc.HDR && !check2D(RHIViewTarget::HDR, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT)) return false;
         if (m_Desc.FXAA && !check2D(RHIViewTarget::FXAA, m_Desc.Width, m_Desc.Height, m_Desc.ColorFormat)) return false;
         if (m_Desc.EnableNormal && !check2D(RHIViewTarget::ScreenNormal, m_Desc.Width, m_Desc.Height, m_Desc.NormalFormat)) return false;
-        if (m_Desc.EnableScreenStorage && (!require(RHIViewTarget::ScreenStorage) || !Get(RHIViewTarget::ScreenStorage)->GetUAV())) return false;
+        if (m_Desc.EnableScreenStorage &&
+            (!check2D(RHIViewTarget::ScreenStorage, m_Desc.Width, m_Desc.Height,
+                      m_Desc.HDR ? RHITextureFormat::RGBA16_FLOAT : m_Desc.ColorFormat) ||
+             !Get(RHIViewTarget::ScreenStorage)->GetUAV())) return false;
         if (m_Desc.EnableGTAO && (!check2D(RHIViewTarget::GTAO, std::max(1u, m_Desc.Width >> 1), std::max(1u, m_Desc.Height >> 1), RHITextureFormat::RGBA16_FLOAT) || !Get(RHIViewTarget::GTAO)->GetUAV())) return false;
         for (uint32_t level = 0; m_Desc.EnableBloom && level < 6; ++level) {
             uint32_t width = std::max(1u, m_Desc.Width >> (level + 1));

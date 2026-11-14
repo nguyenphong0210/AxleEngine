@@ -2663,6 +2663,16 @@ namespace Axle {
         for (const auto& fallback : backendPolicy.CollectFallbacks(requestedSettings))
             m_ViewContext.Diagnostics().AddFallback(fallback);
         m_ViewContext.PostProcess().BeginFrame(settings, m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT);
+        const auto reflectionFrame = m_ReflectionService.Prepare(
+            world, camera.GetPosition(), settings.EnableSSR, world.SceneRevision);
+        if (!reflectionFrame.Diagnostic.empty()) {
+            if (reflectionFrame.State == ReflectionState::Fallback)
+                m_ViewContext.Diagnostics().AddFallback(reflectionFrame.Diagnostic);
+        }
+        const auto giFrame = m_GIService.Prepare(
+            world, settings, backendPolicy.Supports(BackendFeature::Compute), world.SceneRevision);
+        if (giFrame.Status == GIFrameStatus::Fallback && !giFrame.Diagnostic.empty())
+            m_ViewContext.Diagnostics().AddFallback(giFrame.Diagnostic);
         RenderPassContext passContext;
         passContext.World = &world;
         passContext.Camera = &camera;
@@ -2707,6 +2717,13 @@ namespace Axle {
             AXLE_CORE_ERROR("Shadow preparation failed: {0}",m_CascadedShadows.GetDiagnostic()); return;
         }
         if (!m_LocalShadows.Prepare(world,camera,settings,m_MaterialTextures)) {AXLE_CORE_ERROR("Local shadow preparation failed: {0}",m_LocalShadows.GetDiagnostic());return;}
+        const ShadowPublication shadowPublication{
+            m_CascadedShadows.IsActive(), m_LocalShadows.IsActive(),
+            m_CascadedShadows.IsActive() ? 1u : 0u,
+            m_LocalShadows.IsActive() ? 1u : 0u};
+        const auto lightingFrame = m_LightingService.BuildFrame(world, settings, shadowPublication);
+        if (lightingFrame.Status == LightingFrameStatus::Fallback && !lightingFrame.Diagnostic.empty())
+            m_ViewContext.Diagnostics().AddFallback(lightingFrame.Diagnostic);
         const auto localIdentity=m_Device->GetResources().AcquireNative(m_LocalShadows.GetSRV()).GetHandle();
         if(localIdentity!=m_BoundLocalAtlas) {
             if(!m_DescriptorPool.UpdateTexture(m_DefaultDescriptorSet,0,16,m_LocalShadows.GetSRV()))return;
@@ -3013,7 +3030,7 @@ namespace Axle {
         }
         const bool useAutoExposure = settings.EnableAutoExposure && activeSampleCount == 1 && m_AutoExposurePipeline &&
             viewTargets->GetExposure() && viewTargets->GetExposure()->IsValid() && viewTargets->GetExposure()->GetUAV() != nullptr;
-        const bool useDDGI = settings.EnableDDGI && world.DDGIProbeGrid.has_value() && activeSampleCount == 1 && m_DDGIPipeline &&
+        const bool useDDGI = giFrame.UpdateScheduled && world.DDGIProbeGrid.has_value() && activeSampleCount == 1 && m_DDGIPipeline &&
             viewTargets->GetDDGI() && viewTargets->GetDDGI()->IsValid() && viewTargets->GetDDGI()->GetUAV() != nullptr;
         const auto ddgiInput = useDDGI ? graph.Import("DDGIInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto ddgiDepth = useDDGI ? graph.Import("DDGIDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;

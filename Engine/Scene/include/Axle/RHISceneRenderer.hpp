@@ -29,6 +29,9 @@
 #include <Axle/ViewContext.hpp>
 #include <Axle/RenderPass.hpp>
 #include <Axle/ResolvedSurface.hpp>
+#include <Axle/LightingService.hpp>
+#include <Axle/ReflectionService.hpp>
+#include <Axle/GIService.hpp>
 
 #include <memory>
 #include <array>
@@ -681,6 +684,12 @@ namespace Axle {
 
         ViewContext m_ViewContext;
         RenderPassScheduler m_PassScheduler;
+        // Policy services are view execution collaborators.  The renderer
+        // keeps the facade for compatibility, while policy and fallback state
+        // are produced through these immutable-snapshot seams.
+        LightingService m_LightingService;
+        ReflectionService m_ReflectionService;
+        GIService m_GIService;
         RHI::RHICommandBuffer& Commands() { return *m_ViewContext.Commands(); }
         bool m_LastRenderSucceeded = false;
         RHI::RHICompletionToken m_LastCompletion;

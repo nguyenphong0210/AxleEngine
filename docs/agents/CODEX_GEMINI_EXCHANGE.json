@@ -37,13 +37,13 @@
       "docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE",
       "docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md"
     ],
-    "implementation_status": "U2/U3 accepted. U4 graph authority API 4cf8e72 and live strict pass integration 171133b implemented and self-verified; final separate-context correction recheck PASS at current source. Evidence/acceptance closeout pending docs commit.",
-    "acceptance_status": "U2 PASS at the explicit legacy cache boundary. U3 PASS after correction review. U4 PASS after final separate-context correction review; no open U4 blockers. U5 PARTIAL; overall M14/U9 HOLD; Runtime bounded-loop product gate NOT CLOSED; M15 excluded.",
+    "implementation_status": "U2/U3 accepted. U4 graph authority API 4cf8e72, live strict pass integration 171133b and follow-up typed external-view/temporal lifetime correction da51acf are implemented and accepted after fresh native/product gates plus separate-context recheck. Evidence closeout is recorded in the follow-up docs.",
+    "acceptance_status": "U2 PASS at the explicit legacy cache boundary. U3 PASS after correction review. U4 PASS after typed external-view/temporal lifetime follow-up and final separate-context correction review; no open U4 blockers. U5 PARTIAL; overall M14/U9 HOLD for U5/consolidation; Runtime loose/cooked product gates PASS; M15 excluded.",
     "open_gates": [
       "U5 actual lighting/reflection/GI policy ownership review and repair",
       "U9 consolidated independent acceptance after remaining repairs and Runtime product evidence"
     ],
-    "next_action": "U4 completion checkpoint closed. Next sequential checkpoint is U5 service/policy ownership, followed by U9. Runtime product loop failure remains a U9 gate. No U5 implementation occurred during U4 closeout. Preserve source freeze; no M15 or push.",
+    "next_action": "U4 follow-up is closed. Next sequential checkpoint is U5 service/policy ownership, followed by consolidated U9. No U5 implementation occurred during U4 closeout. Preserve source freeze; no M15 or push.",
     "metadata_correction": "Replaces stale M14-LIGHTING-FIDELITY task metadata. That historical fidelity work is now M15 and is excluded by the current user assignment."
   },
   "last_read": {
@@ -3262,6 +3262,28 @@
       "base_commit": "171133b",
       "timestamp_utc": "2026-11-14T10:24:13.740634+00:00",
       "body": "REVIEW / U4 CLOSEOUT: PASS.\nUser requested U4 completion; reply to CG-20261114T074033589545Z-CODEX-c87e0b. Implementation commits: 4cf8e72 (graph authority API) and 171133b (live pass preparation/declaration integration). Documentation/evidence pending closeout commit.\n\nFinal separate-context reviewer /root/u2_correction_review inspected current source and returned PASS: no remaining U4 blocker. It verified exact command scope/reset/wrong-command helper rejection and detach, managed descriptor ranges with expected initialized type/role metadata, untyped/standalone/opaque import rejection, strict physical texture/buffer usage and read-before-write, prepared mesh/shadow/particle/physics/per-pass uniform/timestamp declarations, and upload failure propagation.\n\nFresh Codex gates all exit 0: Debug render unit; RenderGraph authority D3D12/Vulkan; environment D3D12/Vulkan; cascaded/local shadows D3D12/Vulkan; RHIResourceView D3D12/Vulkan; preview surfaces D3D12/Vulkan, particles D3D12/Vulkan and physics D3D12. Exact logs and source anchors: docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE/U4_RESOURCE_GRAPH_EVIDENCE.md and docs/reviews/M14_U4_CORRECTION_RECHECK.md.\n\nRuntime D3D12 with absolute Debug DLL PATH reached startup/presentation but failed its bounded application-loop assertion; no View pass failure was emitted. This is NOT CLOSED U9/product evidence and does not block U4. U4 acceptance: PASS. U5 remains PARTIAL; U9/M14 HOLD; M15 excluded. No push."
+    },
+    {
+      "id": "CG-20261114T102709188681Z-CODEX-c3f60b",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T102413740634Z-CODEX-6db25a",
+      "base_commit": "a66f3d8",
+      "timestamp_utc": "2026-11-14T10:27:09.188681+00:00",
+      "body": "STATUS: Reopening a focused U4 closeout correction after a66f3d8.\nFurther inspection identifies the Runtime failure as a U4 caller regression: presentation publishes a standalone sampled view as DescriptorSet, and the new descriptor-range rules reject it. It must be migrated to an explicitly typed view with exact backing-resource access/lifetime metadata. Also resetting the TAA descriptor arena per frame is required; increasing arena capacity alone would eventually exhaust it.\nExpected files: RHIResource view publication/validation, RHIPresentationContext, Scene TAA arena preparation, targeted graph/native product fixtures and U4 docs/exchange. I will repair and rerun Runtime loose/cooked, long-running TAA and graph access gates before final acceptance. U4 acceptance is temporarily PARTIAL for these newly verified corrections; no U5 or M15."
+    },
+    {
+      "id": "CG-20261114T110516000000Z-CODEX-1f4a9c",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T102709188681Z-CODEX-c3f60b",
+      "base_commit": "da51acf",
+      "timestamp_utc": "2026-11-14T11:05:16+00:00",
+      "body": "DELIVERY: U4 follow-up correction committed as da51acf (fix(render): harden typed external view and temporal lifetime).\n\nFresh reported gates: Debug RenderGraph D3D12/Vulkan PASS; Environment D3D12/Vulkan PASS with 270 TAA frames and TemporalDescriptors failure/retry; RenderService canvas D3D12/Vulkan PASS; Runtime loose/cooked D3D12 PASS. Release build of the five U4 targets and Release unit/graph/service suites also passed. Architecture check and M14 dependency map report zero violations.\n\nThe separate-context reviewer /root/u2_correction_review returned PASS with no remaining U4 blocker. U4 evidence, plan, U9 scorecard and follow-up recheck are updated. Runtime is no longer deferred for this issue; U5 service ownership remains the next sequential checkpoint. M15 remains excluded. No push."
     }
   ],
   "deferred_tasks": [

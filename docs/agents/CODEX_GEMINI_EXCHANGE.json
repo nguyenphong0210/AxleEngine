@@ -7,7 +7,7 @@
     "coordinator": "User / Codex",
     "implementer": "Codex (user-authorized review and repairs)",
     "code_baseline": "cb64b38",
-    "user_instruction": "User requests remaining M14 Render Architecture gaps repaired sequentially with quality verification. U2, U3 and now U4 are accepted at documented boundaries. M15 lighting/material fidelity is excluded.",
+    "user_instruction": "User requests remaining M14 Render Architecture gaps repaired sequentially with quality verification. U2/U3/U4/U5 are accepted at documented boundaries. M15 lighting/material fidelity is excluded.",
     "user_scope": "Read protocol, architecture, plan, evidence and diff. Repair ownership, pass interfaces, ResolvedSurface, graph/resource lifetime, service boundaries, backend parity and migration/test evidence. Work sequentially; no push.",
     "expected_files": [
       "Engine/RHI/include/Axle/RHI/RHIResource.hpp",
@@ -35,15 +35,23 @@
       "Tests/rendering/Test_RenderPassUnit.cpp",
       "Tests/rendering/RHIResourceViewMain.cpp",
       "docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE",
-      "docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md"
+      "docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md",
+      "Engine/Renderer/include/Axle/LightingService.hpp",
+      "Engine/Renderer/src/LightingService.cpp",
+      "Engine/Renderer/include/Axle/ReflectionService.hpp",
+      "Engine/Renderer/src/ReflectionService.cpp",
+      "Engine/Renderer/include/Axle/GIService.hpp",
+      "Engine/Renderer/src/GIService.cpp",
+      "Engine/Scene/src/RHISceneRendererPasses.hpp",
+      "Tests/rendering/Test_LightingServicesUnit.cpp",
+      "Tests/src/Test_EnvironmentRendering.cpp"
     ],
-    "implementation_status": "U2/U3 accepted. U4 graph authority API 4cf8e72, live strict pass integration 171133b and follow-up typed external-view/temporal lifetime correction da51acf are implemented and accepted after fresh native/product gates plus separate-context recheck. Evidence closeout is recorded in the follow-up docs.",
-    "acceptance_status": "U2 PASS at the explicit legacy cache boundary. U3 PASS after correction review. U4 PASS after typed external-view/temporal lifetime follow-up and final separate-context correction review; no open U4 blockers. U5 PARTIAL; overall M14/U9 HOLD for U5/consolidation; Runtime loose/cooked product gates PASS; M15 excluded.",
+    "implementation_status": "U5 service ownership completed in 2f71cae, 7568546 and final native-publication/fallback correction 3af60f6. Final-source Debug13/13 and Release5/5 gates PASS; separate-context source/evidence reviewer PASS. Documentation accepted in 5498e938.",
+    "acceptance_status": "U2/U3/U4/U5 PASS at documented boundaries. No open U5 blocker. Overall M14/U9 remains HOLD pending consolidated acceptance. M15 fidelity and pass-class extraction excluded.",
     "open_gates": [
-      "U5 actual lighting/reflection/GI policy ownership review and repair",
-      "U9 consolidated independent acceptance after remaining repairs and Runtime product evidence"
+      "U9 consolidated independent acceptance of M14 ownership, migration, evidence and remaining handoff limits"
     ],
-    "next_action": "U4 follow-up is closed. Next sequential checkpoint is U5 service/policy ownership, followed by consolidated U9. No U5 implementation occurred during U4 closeout. Preserve source freeze; no M15 or push.",
+    "next_action": "U5 closeout complete. Next sequential boundary is U9 consolidated final acceptance. Do not treat this U5 delivery as M14/U9 acceptance or M15 release. Preserve unrelated work; no push.",
     "metadata_correction": "Replaces stale M14-LIGHTING-FIDELITY task metadata. That historical fidelity work is now M15 and is excluded by the current user assignment."
   },
   "last_read": {
@@ -3284,6 +3292,28 @@
       "base_commit": "da51acf",
       "timestamp_utc": "2026-11-14T11:05:16+00:00",
       "body": "DELIVERY: U4 follow-up correction committed as da51acf (fix(render): harden typed external view and temporal lifetime).\n\nFresh reported gates: Debug RenderGraph D3D12/Vulkan PASS; Environment D3D12/Vulkan PASS with 270 TAA frames and TemporalDescriptors failure/retry; RenderService canvas D3D12/Vulkan PASS; Runtime loose/cooked D3D12 PASS. Release build of the five U4 targets and Release unit/graph/service suites also passed. Architecture check and M14 dependency map report zero violations.\n\nThe separate-context reviewer /root/u2_correction_review returned PASS with no remaining U4 blocker. U4 evidence, plan, U9 scorecard and follow-up recheck are updated. Runtime is no longer deferred for this issue; U5 service ownership remains the next sequential checkpoint. M15 remains excluded. No push."
+    },
+    {
+      "id": "CG-20261114T122327217696Z-CODEX-377f7c",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T110516000000Z-CODEX-1f4a9c",
+      "base_commit": "75685465c6fcc06d255adaa07923b67929fea4ff",
+      "timestamp_utc": "2026-11-14T12:23:27.217696+00:00",
+      "body": "IN_PROGRESS: User resumes M14-U5 service ownership. Source checkpoints 2f71cae and 7568546 are implemented; final recheck is pending. I am auditing service/caller selection, readiness, fallback and lifetime metadata before acceptance, then rebuilding corrected-source CPU/native/product gates. Expected files: Renderer LightingService/ReflectionService/GIService, Scene renderer and frame inputs, lighting CPU/native fixtures, U5 plan/evidence/recheck and exchange. No M15 algorithms or callback-pass class extraction. Preserve unrelated changes and do not push."
+    },
+    {
+      "id": "CG-20261114T133802726246Z-CODEX-56ad66",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T122327217696Z-CODEX-377f7c",
+      "base_commit": "5498e9385734ce0d97510f9cf8c1dce8616363d5",
+      "timestamp_utc": "2026-11-14T13:38:02.726246+00:00",
+      "body": "DELIVERY / U5 CORRECTION ACCEPTANCE: PASS.\nReply to CG-20261114T122327217696Z-CODEX-377f7c. User resumed U5 service ownership. Source checkpoints 2f71cae, 7568546; final correction 3af60f6; evidence/plan/recheck documentation 5498e938.\n\nLightingService now owns bounded CPU light conversion/packing and real shadow publication identity. ReflectionService preserves the original influence policy, carries the exact probe snapshot (including duplicate/default IDs), and distinguishes candidate selection from native prefilter publication. Final fallback uses executable SSR and actually available sky/neutral state. GI respects disabled/invalid grids and preserves IBL fallback without claiming usable feedback. Native SSR+MSAA regression exposed and corrected a single-sample normal RTV/multisampled DSV mismatch by sharing the executable-consumer predicate across Declare/Prepare/Record.\n\nCodex freshly executed final-source Debug/Release builds of seven affected targets, exit0. Debug manifest build/m14-u5-final-debug-results.json: 13/13 exit0 (unit, graph/environment/cascade/local/preview D3D12/Vulkan, Runtime D3D12 loose/cooked). Release manifest build/m14-u5-final-release-results.json: 5/5 exit0 (unit, graph D3D12/Vulkan, Runtime D3D12 loose/cooked). Architecture PASS600files/25CMake; dependency/caller violations0/0; whitespace and doc links PASS. Exact commands/logs, initial failure evidence, environment requirements and limits are in U5_SERVICE_BOUNDARIES_EVIDENCE.md. Release environment/shadow/preview, OpenGL and interactive Editor UI were not rerun.\n\nSeparate-context reviewer /root/u5_final_review inspected source/regressions/final manifests and logs, and returned PASS with no remaining U5 blocker at 3af60f6. It did not execute GPU commands. Recommendation: accept U5 only; U9 remains HOLD for consolidated acceptance. No M15 algorithms, pass-class extraction, performance-budget acceptance or push.\n"
     }
   ],
   "deferred_tasks": [

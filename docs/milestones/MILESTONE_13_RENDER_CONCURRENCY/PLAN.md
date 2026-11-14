@@ -36,7 +36,7 @@ Milestone 13 delivers low-level rendering concurrency and shader compilation pip
 
 ## 3. Pending / Deferred Work Packages
 
-- [ ] **Phase 43.3: Asynchronous / Parallel Product Rollout** — Reopen full asynchronous multithreaded rendering as the engine-wide default only with a dedicated release following Milestone 18 performance verification.
+- [ ] **Phase 43.3: Asynchronous / Parallel Product Rollout** — Reopen full asynchronous multithreaded rendering as the engine-wide default only with a dedicated release following Milestone 19 performance verification.
 - [ ] **Phase 43.4: Dedicated GLSL Lowering for Material Graph** — Direct compilation from graph AST to GLSL 4.50 for full OpenGL parity (currently explicitly diagnosed as unsupported).
 
 ---

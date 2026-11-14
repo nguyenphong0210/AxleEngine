@@ -155,6 +155,14 @@ RHIFrameContext and completion token
 RenderDiagnostics
 ```
 
+The U6 services make these ownership boundaries concrete:
+
+- `TemporalService` owns history read/write slot selection, previous view-projection and jitter, motion/disocclusion validity, and commit-time flipping. A reset reason invalidates history before a new frame can sample it.
+- `PostProcessService` owns the view-local exposure adaptation state and the immutable per-frame policy for HDR/SDR output, tone mapping, bloom, and AA selection. It does not own persistent RHI targets.
+- `RenderDiagnostics` owns pass records, frame counters, fallback/error reasons, target generation and GPU timing validity. A zero timestamp delta is `Unknown`; it is never treated as a valid zero-cost measurement.
+
+`RHISceneRenderer` remains the facade and low-level RHI recorder. It borrows these services through `ViewContext`; it no longer owns temporal history indices, previous-frame matrices, or adapted exposure state.
+
 Reset reasons are explicit: resize, view switch, camera cut, scene/material generation change, feature or format change, and RHI device epoch change.
 
 ### 4.3 `IRenderPass`

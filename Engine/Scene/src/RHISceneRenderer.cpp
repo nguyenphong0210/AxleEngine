@@ -628,8 +628,6 @@ namespace Axle {
         m_TAADescriptorPool.Shutdown();
         m_TAALinearSampler.Shutdown();
         m_TAAPointSampler.Shutdown();
-        m_TAAHistoryIndex = 0;
-        m_TAAHistoryValid = false;
         m_MSAAColorTarget = nullptr;
         m_MSAADepthTarget = nullptr;
         m_CurrentMSAASamples = 1;
@@ -2513,17 +2511,24 @@ namespace Axle {
 
     void RHISceneRenderer::ConsumePreviousGPUTimestamp() {
         const auto previousCompletion = m_LastCompletion;
-        if (!previousCompletion || !m_GPUTimestampPool || !m_GPUTimestampReadback.IsValid()) return;
+        if (!previousCompletion || !m_GPUTimestampPool || !m_GPUTimestampReadback.IsValid()) {
+            m_ViewContext.Diagnostics().SetFrameGPUTime(0.0, DiagnosticValidity::Unavailable);
+            return;
+        }
 
         m_LastGPUTimestampMilliseconds = 0.0;
         m_Device->WaitForCompletion(previousCompletion);
         if (auto* values = static_cast<uint64_t*>(m_GPUTimestampReadback.Map())) {
             const uint64_t delta = values[1] > values[0] ? values[1] - values[0] : 0;
             const uint64_t frequency = m_Device->GetCapabilities().TimestampFrequencyHz;
-            m_LastGPUTimestampMilliseconds = frequency
-                ? static_cast<double>(delta) * 1000.0 / static_cast<double>(frequency)
-                : 0.0;
+            const bool valid = frequency != 0 && delta != 0;
+            m_LastGPUTimestampMilliseconds = valid
+                ? static_cast<double>(delta) * 1000.0 / static_cast<double>(frequency) : 0.0;
+            m_ViewContext.Diagnostics().SetFrameGPUTime(m_LastGPUTimestampMilliseconds,
+                valid ? DiagnosticValidity::Valid : DiagnosticValidity::Unknown);
             m_GPUTimestampReadback.Unmap();
+        } else {
+            m_ViewContext.Diagnostics().SetFrameGPUTime(0.0, DiagnosticValidity::Invalid);
         }
     }
 
@@ -2652,6 +2657,7 @@ namespace Axle {
         viewInput.SceneRevision = world.SceneRevision;
         m_ViewContext.Observe(viewInput, m_Device->GetEpoch());
         if (!world.ErrorMessage.empty() || !m_ViewContext.BeginFrame()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
+        m_ViewContext.PostProcess().BeginFrame(settings, m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT);
         RenderPassContext passContext;
         passContext.World = &world;
         passContext.Camera = &camera;
@@ -2724,6 +2730,7 @@ namespace Axle {
             m_BoundCascadeAtlas=shadowIdentity;
         }
         m_LastDrawCallCount = 0;
+        uint32_t dispatchCount = 0;
         m_CustomDescriptorPool.Reset(); // The preceding RenderScene submission completed before reuse.
         m_LastRenderedEntityCount = 0;
         m_LastStreamedTransformBytes = 0;
@@ -3008,10 +3015,13 @@ namespace Axle {
 
         RHITexture* history0 = viewTargets ? viewTargets->Get(RHIViewTarget::History0) : nullptr;
         RHITexture* history1 = viewTargets ? viewTargets->Get(RHIViewTarget::History1) : nullptr;
-        RHITexture* historyRead = (m_TAAHistoryIndex == 0) ? history0 : history1;
-        RHITexture* historyWrite = (m_TAAHistoryIndex == 0) ? history1 : history0;
+        RHITexture* historyRead = nullptr;
+        RHITexture* historyWrite = nullptr;
         const bool useTAA = settings.EnableTAA && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_TAAPipelineSDR && history0 && history0->IsValid() && history1 && history1->IsValid();
+        const auto temporalSelection = m_ViewContext.Temporal().Begin(useTAA ? 2 : 0, { jitterX, jitterY });
+        historyRead = (temporalSelection.ReadSlot == 0) ? history0 : history1;
+        historyWrite = (temporalSelection.WriteSlot == 0) ? history0 : history1;
         // The first frame deliberately reads an uninitialized slot but the
         // shader bypasses it through the explicit HistoryValid flag below.
         const auto taaHistoryRead = useTAA ? graph.Import("TAAHistoryRead", historyRead->GetNative(), true) : output;
@@ -3147,9 +3157,19 @@ namespace Axle {
         if (sceneDepthDSV) exports.push_back({sceneDepth,Layout::DepthStencilRead});
         graph.AddPass("Export", std::move(exports));
         m_PassScheduler.Declare(graph);
+        bool diagnosticsPassActive = false;
         auto beginPass = [&](std::string_view name) {
-            if (graph.BeginPass(name, Commands())) return true;
+            if (diagnosticsPassActive) {
+                m_ViewContext.Diagnostics().EndPass();
+                diagnosticsPassActive = false;
+            }
+            if (graph.BeginPass(name, Commands())) {
+                m_ViewContext.Diagnostics().BeginPass(std::string(name));
+                diagnosticsPassActive = true;
+                return true;
+            }
             AXLE_CORE_ERROR("View graph recording failed: {0}", graph.GetError());
+            m_ViewContext.Diagnostics().AddError("graph_begin_failed:" + std::string(name));
             return false;
         };
         if (!graph.Compile(true)) {
@@ -3734,7 +3754,7 @@ namespace Axle {
             m_DDGIDescriptorPool.Bind(Commands().GetNative());
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_DDGITextureSet, nri::BindPoint::COMPUTE);
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_DDGIStorageSet, nri::BindPoint::COMPUTE);
-            Commands().Dispatch((ddgiTarget->GetWidth() + 7) / 8, (ddgiTarget->GetHeight() + 7) / 8, 1);
+            Commands().Dispatch((ddgiTarget->GetWidth() + 7) / 8, (ddgiTarget->GetHeight() + 7) / 8, 1); ++dispatchCount;
         }
 
         // 7.5. Half-resolution-style screen-space GTAO sampling. The shared
@@ -3778,7 +3798,7 @@ namespace Axle {
             m_GTAODescriptorPool.Bind(Commands().GetNative());
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_GTAOComputeTextureSet, nri::BindPoint::COMPUTE);
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_GTAOComputeStorageSet, nri::BindPoint::COMPUTE);
-            Commands().Dispatch((gtaoWidth + 7) / 8, (gtaoHeight + 7) / 8, 1);
+            Commands().Dispatch((gtaoWidth + 7) / 8, (gtaoHeight + 7) / 8, 1); ++dispatchCount;
 
             if (!beginPass("GTAOApply")) return;
             m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
@@ -3847,7 +3867,7 @@ namespace Axle {
                 m_HiZDescriptorPool.Bind(Commands().GetNative());
                 RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, textureSet, nri::BindPoint::COMPUTE);
                 RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, storageSet, nri::BindPoint::COMPUTE);
-                Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1);
+                Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1); ++dispatchCount;
             }
 
             if (!beginPass("SSRCompute")) return;
@@ -3893,7 +3913,7 @@ namespace Axle {
             m_SSRDescriptorPool.Bind(Commands().GetNative());
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_SSRComputeTextureSet, nri::BindPoint::COMPUTE);
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_SSRComputeStorageSet, nri::BindPoint::COMPUTE);
-            Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1);
+            Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1); ++dispatchCount;
 
             if (!beginPass("SSRApply")) return;
             m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
@@ -3978,7 +3998,7 @@ namespace Axle {
             m_FogDescriptorPool.Bind(Commands().GetNative());
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_FogComputeTextureSet, nri::BindPoint::COMPUTE);
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_FogComputeStorageSet, nri::BindPoint::COMPUTE);
-            Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1);
+            Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1); ++dispatchCount;
 
             if (!beginPass("FogApply")) return;
             m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 0, 0, m_OpaqueSceneColor->GetSRV());
@@ -4041,7 +4061,7 @@ namespace Axle {
                 m_BloomDescriptorPool.Bind(Commands().GetNative());
                 RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, textureSet, nri::BindPoint::COMPUTE);
                 RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, storageSet, nri::BindPoint::COMPUTE);
-                Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1);
+                Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1); ++dispatchCount;
                 return true;
             };
             for (uint32_t level = 0; level < 6; ++level) {
@@ -4110,7 +4130,7 @@ namespace Axle {
             m_AutoExposureDescriptorPool.Bind(Commands().GetNative());
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 0, m_AutoExposureTextureSet, nri::BindPoint::COMPUTE);
             RHIDescriptorPool::BindDescriptorSet(Commands().GetNative(), 1, m_AutoExposureStorageSet, nri::BindPoint::COMPUTE);
-            Commands().Dispatch((exposureWidth + 15) / 16, (exposureHeight + 15) / 16, 1);
+            Commands().Dispatch((exposureWidth + 15) / 16, (exposureHeight + 15) / 16, 1); ++dispatchCount;
         }
 
         // 7d. Temporal Anti-Aliasing (TAA) Pass
@@ -4118,11 +4138,11 @@ namespace Axle {
             if (!beginPass("TAAResolve")) return;
             RHITAAConstants taaConstants{};
             taaConstants.InvViewProj = glm::inverse(viewProjZO);
-            taaConstants.PrevViewProj = m_TAAHistoryValid ? m_PrevViewProjection : viewProjZO;
+            taaConstants.PrevViewProj = temporalSelection.HistoryValid ? m_ViewContext.Temporal().GetPreviousViewProjection() : viewProjZO;
             taaConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
                                                 1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
             taaConstants.TAAParams = glm::vec4(jitterX, jitterY, settings.TAAFeedbackMin, settings.TAAFeedbackMax);
-            taaConstants.Reserved[0].x = m_TAAHistoryValid ? 1.0f : 0.0f;
+            taaConstants.Reserved[0].x = temporalSelection.HistoryValid ? 1.0f : 0.0f;
             m_TAAConstantBuffer.UpdateData(&taaConstants, sizeof(RHITAAConstants));
 
             nri::Descriptor* currentSRV = m_IntermediateHDRTarget ? m_IntermediateHDRTarget->GetSRV() : m_OpaqueSceneColor->GetSRV();
@@ -4165,8 +4185,6 @@ namespace Axle {
 
             if (!beginPass("TAACopy")) return;
             Commands().CopyTexture(*sceneTargetTexture, nullptr, *historyWrite->GetNative(), nullptr);
-            m_TAAHistoryIndex = static_cast<uint8_t>(m_TAAHistoryIndex ^ 1u);
-            m_TAAHistoryValid = true;
         }
 
         // 8. Post-Processing Tone Mapping Pass
@@ -4175,13 +4193,11 @@ namespace Axle {
             RHIToneMappingConstants toneConstants{};
             float effectiveExposure = settings.Exposure;
             if (settings.EnableAutoExposure) {
-                float dt = 0.016f;
-                float targetExp = std::clamp(settings.Exposure, settings.AutoExposureMin, settings.AutoExposureMax);
-                float blend = 1.0f - std::exp(-dt * std::max(settings.AutoExposureSpeed, 0.1f));
-                m_AdaptedExposure = glm::mix(m_AdaptedExposure, targetExp, blend);
-                effectiveExposure = m_AdaptedExposure;
+                const float targetExp = std::clamp(settings.Exposure, settings.AutoExposureMin, settings.AutoExposureMax);
+                const float luminance = settings.AutoExposureKeyValue / std::max(targetExp, 0.0001f);
+                effectiveExposure = m_ViewContext.PostProcess().UpdateExposure(luminance, 1.0f / 60.0f);
             } else {
-                m_AdaptedExposure = settings.Exposure;
+                effectiveExposure = m_ViewContext.PostProcess().UpdateExposure(1.0f, 0.0f);
             }
             toneConstants.Params = glm::vec4(effectiveExposure, settings.Gamma, static_cast<float>(settings.ToneMappingMode), settings.WhitePoint);
             toneConstants.ColorGrading = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
@@ -4223,7 +4239,6 @@ namespace Axle {
                        fxaaConstants)) return;
         }
 
-        m_PrevViewProjection = viewProjZO;
         if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
             auto& core = m_Device->GetNRICore();
             core.CmdEndQuery(*Commands().GetNative(), *m_GPUTimestampPool, 1);
@@ -4231,10 +4246,13 @@ namespace Axle {
         }
 
         if (!beginPass("Export") || !graph.IsComplete()) return;
+        if (diagnosticsPassActive) m_ViewContext.Diagnostics().EndPass();
         if (!m_ViewContext.EndFrameAndSubmit()) { AXLE_CORE_ERROR("View command finalization or submit failed"); return; }
+        m_ViewContext.Temporal().Commit(viewProjZO, useTAA);
         m_LocalShadows.OnSubmitted();
         m_LastCompletion = m_ViewContext.GetCompletion();
         m_LastRenderSucceeded = static_cast<bool>(m_LastCompletion);
+        m_ViewContext.Diagnostics().SetCounters(m_LastDrawCallCount, dispatchCount);
         m_PassScheduler.Finalize(passContext, {});
     }
 

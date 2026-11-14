@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `U0/U1/U2/U3/U4/U5 ACCEPTED - U6 is the next released Unit.`
+**Status:** `U0/U1/U2/U3/U4/U5/U6 ACCEPTED - U7 is the next released Unit.`
 **Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
@@ -148,22 +148,24 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
   - [x] Mark experimental capability and fallback to IBL/ambient diffuse.
   - [x] Prevent DDGI state from leaking into the core material contract when disabled.
 
-### U6 - Temporal, post-process and diagnostics ownership
+### U6 - Temporal, post-process and diagnostics ownership **(ACCEPTED)**
 
 **Exit:** temporal history, exposure, post-process state and GPU telemetry have explicit owners and reset rules.
 
-- [ ] **S6.1 Temporal state**
-  - [ ] Define history read/write slots and flip timing.
-  - [ ] Define motion/disocclusion validity and first-frame behavior.
-  - [ ] Define reset behavior for camera cut, target generation and scene revision.
-- [ ] **S6.2 Post-process services**
-  - [ ] Define exposure, bloom, tone mapping and anti-aliasing interfaces.
-  - [ ] Define HDR/SDR color-space and output ownership.
-  - [ ] Keep post-process resources view-local.
-- [ ] **S6.3 Diagnostics**
-  - [ ] Define per-pass CPU/GPU timing scope and validity status.
-  - [ ] Expose draw calls, dispatches, target generation, feature fallback and error reason.
-  - [ ] Ensure zero or unavailable GPU timestamps are reported as unknown, not as a valid zero budget.
+- [x] **S6.1 Temporal state**
+  - [x] Define history read/write slots and flip timing.
+  - [x] Define motion/disocclusion validity and first-frame behavior.
+  - [x] Define reset behavior for camera cut, target generation and scene revision.
+- [x] **S6.2 Post-process services**
+  - [x] Define exposure, bloom, tone mapping and anti-aliasing interfaces.
+  - [x] Define HDR/SDR color-space and output ownership.
+  - [x] Keep post-process resources view-local.
+- [x] **S6.3 Diagnostics**
+  - [x] Define per-pass CPU/GPU timing scope and validity status.
+  - [x] Expose draw calls, dispatches, target generation, feature fallback and error reason.
+  - [x] Ensure zero or unavailable GPU timestamps are reported as unknown, not as a valid zero budget.
+
+**Evidence:** `U6_TEMPORAL_POST_DIAGNOSTICS_EVIDENCE.md`
 
 ### U7 - Backend and fallback parity
 

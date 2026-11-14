@@ -488,6 +488,7 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_RenderPassUnit.cpp
     rendering/Test_ResolvedSurfaceUnit.cpp
     rendering/Test_LightingServicesUnit.cpp
+    rendering/Test_TemporalPostDiagnosticsUnit.cpp
     rendering/Test_RenderSnapshotQueueUnit.cpp
     rendering/Test_RenderWorkerUnit.cpp
     rendering/Test_RenderParallelRecordingUnit.cpp

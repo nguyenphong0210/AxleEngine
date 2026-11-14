@@ -51,6 +51,9 @@ namespace Axle {
         m_DeviceEpoch = 0;
         m_HasInput = false;
         m_ResetReasons = ViewResetReason::Initial;
+        m_Temporal.Reset();
+        m_PostProcess.Reset();
+        m_Diagnostics.BeginFrame(0);
         return true;
     }
 
@@ -64,6 +67,9 @@ namespace Axle {
         m_HasInput = false;
         m_ResetReasons = ViewResetReason::None;
         m_Input = ViewContextInput{};
+        m_Temporal.Reset();
+        m_PostProcess.Reset();
+        m_Diagnostics.BeginFrame(0);
     }
 
     ViewResetReason ViewContext::Observe(const ViewContextInput& input, uint64_t deviceEpoch) {
@@ -87,6 +93,8 @@ namespace Axle {
                            ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
                            ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
             m_FrameIndex = 0;
+            m_Temporal.Reset(static_cast<uint32_t>(reasons));
+            m_PostProcess.Reset();
         }
         return reasons;
     }
@@ -97,6 +105,8 @@ namespace Axle {
                           ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
                           ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
             m_FrameIndex = 0;
+            m_Temporal.Reset(static_cast<uint32_t>(reason));
+            m_PostProcess.Reset();
         }
     }
 
@@ -109,6 +119,8 @@ namespace Axle {
     bool ViewContext::BeginFrame(uint32_t timeoutMilliseconds) {
         if (!m_Initialized || m_FrameActive || !m_Frame.Begin(timeoutMilliseconds)) return false;
         m_FrameActive = true;
+        const auto targets = m_Input.Targets;
+        m_Diagnostics.BeginFrame(m_FrameIndex, targets ? targets->GetGeneration() : 0);
         return true;
     }
 

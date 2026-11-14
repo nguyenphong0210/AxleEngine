@@ -3,6 +3,9 @@
 #include <Axle/RHI/RHIFrameContext.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/ViewRequest.hpp>
+#include <Axle/TemporalService.hpp>
+#include <Axle/PostProcessService.hpp>
+#include <Axle/RenderDiagnostics.hpp>
 #include <cstdint>
 #include <memory>
 
@@ -92,6 +95,13 @@ namespace Axle {
         std::shared_ptr<RHI::RHIViewTargets> GetTargets() const { return m_Input.Targets; }
         uint64_t GetDeviceEpoch() const { return m_DeviceEpoch; }
 
+        TemporalService& Temporal() { return m_Temporal; }
+        const TemporalService& Temporal() const { return m_Temporal; }
+        PostProcessService& PostProcess() { return m_PostProcess; }
+        const PostProcessService& PostProcess() const { return m_PostProcess; }
+        RenderDiagnostics& Diagnostics() { return m_Diagnostics; }
+        const RenderDiagnostics& Diagnostics() const { return m_Diagnostics; }
+
     private:
         bool m_Initialized = false;
         bool m_FrameActive = false;
@@ -101,6 +111,9 @@ namespace Axle {
         ViewContextInput m_Input;
         ViewResetReason m_ResetReasons = ViewResetReason::None;
         RHI::RHIFrameContext m_Frame;
+        TemporalService m_Temporal;
+        PostProcessService m_PostProcess;
+        RenderDiagnostics m_Diagnostics;
     };
 
 }

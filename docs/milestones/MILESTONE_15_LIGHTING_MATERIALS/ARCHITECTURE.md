@@ -3,6 +3,8 @@
 **Status:** `HOLD — authoritative technical contract; this document does not claim implementation completion.`
 **Companion execution plan:** [PLAN.md](PLAN.md)
 
+**M14 prerequisite source boundary:** `19ac2a1`; this document remains an M15 target contract and does not claim M15 implementation.
+
 This architecture separates stable core lighting from opt-in and experimental features. It defines data ownership, pass dependencies, resource lifetime, fallbacks and evidence required for promotion.
 
 ## 0. Milestone hierarchy
@@ -123,8 +125,9 @@ classDiagram
       +RenderWorldView(RenderWorld,...)
       +SetIBLMaps(...)
       +GetOpaqueNormalTarget()
-      -RHIFrameContext m_Frame
-      -RHIViewTargets m_ActiveViewTargets
+      -ViewContext m_ViewContext
+      -RenderPassScheduler m_PassScheduler
+      -weak_ptr<RHIViewTargets> m_ActiveViewTargets
       -RHIDevice* m_Device
       -many pass pipelines and descriptor pools
     }
@@ -255,7 +258,7 @@ flowchart TD
     Z -. feeds .-> N
 ```
 
-The pass names above are the current `RHISceneRenderer.cpp` graph declarations. The graph validates declared texture uses and invokes RHI transitions, while the actual draw/dispatch and descriptor updates are still recorded directly by `RHISceneRenderer`.
+The pass names above are the current `RHISceneRendererPasses.cpp` scheduler groups. The graph validates declared texture uses and invokes RHI transitions, while the actual draw/dispatch and descriptor updates are still recorded directly by `RHISceneRenderer`.
 
 ### Current architectural assessment
 
@@ -285,7 +288,7 @@ To eliminate the monolithic callback adapter debt in `RHISceneRendererPasses.cpp
    - `P8 (Post & Temporal)` $\rightarrow$ `PostProcessPass` and `TAAPass`
    - `P9 (Atmosphere)` $\rightarrow$ `FroxelFogPass`
    - `U0/U1 (Shadows & Opaque)` $\rightarrow$ `CascadedShadowPass` and `ForwardOpaquePass`
-4. **Renderer Role Transition**: `RHISceneRenderer` transitions into a lightweight facade that instantiates and registers these passes into `RenderPassScheduler` during initialization and dispatches execution via `m_Scheduler.Execute(context)` per frame.
+4. **Renderer Role Transition**: `RHISceneRenderer` transitions into a lightweight facade that instantiates and registers these passes into `RenderPassScheduler` during initialization and dispatches execution via `m_PassScheduler.Execute(context)` per frame.
 
 ### 3C. Scope boundaries: Milestone 15 vs Milestone 16
 

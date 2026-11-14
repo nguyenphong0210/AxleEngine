@@ -5,6 +5,7 @@
 **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
 **Detailed implementation notes:** [REMEDIATION_PLAN.md](REMEDIATION_PLAN.md)
 **M14 prerequisite review:** [M14 U9 final acceptance](../../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md)
+**Documentation review:** [M15 documentation review](../../reviews/M15_DOCUMENTATION_REVIEW.md)
 
 M14 supplies the accepted entry contracts for `ViewContext`, `IRenderPass` and
 `RenderPassScheduler`, `ResolvedSurface`, `RenderGraph` and target generations,
@@ -30,11 +31,11 @@ Use these states in reports:
 
 ## 2. Current baseline (not the completion checklist)
 
-| Area | Current state at `77d6b70` | Classification |
+| Area | Historical state at `77d6b70` (not the current M14 source) | Classification |
 |---|---|---|
 | CSM, HDR/Split-Sum IBL, local shadows, procedural sky | Existing implementation and earlier native evidence | Baseline to protect |
 | P0 baseline fixtures and audit | 6 deterministic fixtures, 19 diagnostic channels, 5 open source findings | Verified checkpoint |
-| GPU timestamps | Valid probe and renderer scope on RTX 3070 D3D12/Vulkan Debug/Release | Verified checkpoint; full M18 matrix open |
+| GPU timestamps | Valid probe and renderer scope on RTX 3070 D3D12/Vulkan Debug/Release | Verified checkpoint; full M19 rollout matrix open |
 | Smooth ForwardPBR normal | Derivative-flat-normal override removed | Verified partial checkpoint |
 | `ScreenNormal` producer | Opaque normal pass exists and is consumed by GTAO/SSR | Verified partial checkpoint |
 | GTAO/contact composite | Conservative bounded post-lighting composite | Verified partial checkpoint; true indirect separation open |
@@ -56,24 +57,26 @@ Milestone 15 — Lighting and Material Fidelity
           └─ SubUnit Sx.y — one independently buildable/checkable implementation package
 ```
 
-The detailed execution sections below use `P0..P14` as historical package labels. In the canonical hierarchy they are **SubUnits**, not additional Milestones or Phases. Each SubUnit maps to one Unit and must leave the tree buildable.
+The detailed execution sections below use `P0..P13` plus the separately gated `P6B` as historical package labels. In the canonical hierarchy they are **SubUnits**, not additional Milestones or Phases. Each SubUnit maps to one Unit and must leave the tree buildable.
 
 | Milestone | Phase | Unit | SubUnits in this plan | Scope |
 |---|---|---|---|---|
-| M15 | 44.1–44.3 | U0 Baseline | S0.1–S0.2 (`P0`) | Existing lighting baseline, contracts and fixtures |
-| M15 | 44.4, 44.6 | U1 Direct BRDF | S1.1–S1.3 | GGX compensation, sun angular radius and direct-light numeric fixtures |
-| M15 | 44.5 | U2 Dynamic Environment | S2.1–S2.3 | Procedural sky, environment bake/cache and publication |
-| M15 | shared infrastructure | U3 Screen-Space Infrastructure | S3.1–S3.4 (`P1`, `P2`) | Targets, graph, descriptors, surface data, timing and histories |
-| M15 | 44.7–44.8 | U4 Occlusion | S4.1–S4.3 (`P3`) | GTAO, bilateral reconstruction and directional contact shadows |
-| M15 | 44.9–44.11 | U5 Reflections and Area Lights | S5.1–S5.8 (`P4`, `P5A–P5D`, `P6`, `P7`) | Hi-Z, captures, probes, SSR and LTC |
-| M15 | 44.12 | U6 Atmosphere | S6.1–S6.3 (`P8`) | Froxel fog, shadows and temporal fog state |
-| M15 | 44.13 | U7 Experimental GI | S7.1–S7.4 (`P9`) | DDGI acquisition, atlases, visibility and feedback |
-| M15 | 44.14–44.15 | U8 Post and Temporal | S8.1–S8.6 (`P10`) | Exposure, bloom and TAA |
-| M15 | 44.16 | U9 Advanced Materials | S9.1–S9.5 (`P11`) | Sheen, absorption, dispersion, SSS and graph parity |
-| M15 | 44.18 | U10 Authoring and Rollout | S10.1–S10.5 (`P12`, `P14`) | Editor, presets, evidence and final acceptance |
-| M15 | optional 44.19 extension | U11 Ray-Traced Extension | S11.1–S11.4 (`P13`) | BLAS/TLAS, RT reflections and RT-assisted GI |
+| M15 | 45.1–45.3 | U0 Baseline | S0.1–S0.2 (`P0`) | Existing lighting baseline, contracts and fixtures |
+| M15 | 45.4, 45.6 | U1 Direct BRDF | S1.1–S1.3 | GGX compensation, sun angular radius and direct-light numeric fixtures |
+| M15 | 45.5 | U2 Dynamic Environment | S2.1–S2.3 | Procedural sky, environment bake/cache and publication |
+| M15 | 45.3 / shared infrastructure | U3 Screen-Space Infrastructure | S3.1–S3.4 (`P1`, `P2`) | Targets, graph, descriptors, surface data, timing and histories |
+| M15 | 45.7–45.8 | U4 Occlusion | S4.1–S4.3 (`P3`) | GTAO, bilateral reconstruction and directional contact shadows |
+| M15 | 45.9–45.11 | U5 Reflections and Area Lights | S5.1–S5.8 (`P4`, `P5A–P5D`, `P6`, `P7`) | Hi-Z, captures, probes, SSR and LTC |
+| M15 | 45.12 | U6 Atmosphere | S6.1–S6.3 (`P9`) | Froxel fog, shadows and temporal fog state |
+| M15 | 45.13 | U7 Experimental GI | S7.1–S7.4 (`P11`) | DDGI acquisition, atlases, visibility and feedback |
+| M15 | 45.14–45.15 | U8 Post and Temporal | S8.1–S8.6 (`P8`) | Exposure, bloom and TAA |
+| M15 | 45.16 | U9 Advanced Materials | S9.1–S9.5 (`P10`) | Sheen, absorption, dispersion, SSS and graph parity |
+| M15 | 45.18 | U10 Authoring and Rollout | S10.1–S10.5 (`P12`) | Editor, presets, evidence and final acceptance |
+| M15 | optional 45.19 extension | U11 Ray-Traced Extension | S11.1–S11.4 (`P13`) | BLAS/TLAS, RT reflections and RT-assisted GI |
 
 Phase 45.17 is the final performance/quality gate inside U10; it is not a separate implementation Unit. U11 is optional and cannot be claimed as part of core M15 unless its SubUnits pass.
+
+Package aliases in this table follow the recovery plan: P8 is post/temporal, P9 is atmosphere, P10 is advanced materials, P11 is experimental DDGI, and P12 is authoring/final acceptance. P6B and P13 remain separately gated extensions.
 
 ### Unit closure rule
 

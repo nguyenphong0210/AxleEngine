@@ -2,11 +2,12 @@
 
 **Status:** Proposed execution plan; no rendering implementation is released by this document.
 **Prepared by:** Codex, 2026-11-13.
-**Inspected source baseline:** `791c344`.
+**Historical inspected source baseline:** `791c344`.
+**M14 code boundary for future M15 work:** `19ac2a1`; no M15 implementation is released at this boundary.
 **User objective:** Smooth, believable surfaces; reflective materials that show surrounding scene geometry; a complete, usable material system and an honestly verified Milestone 15.
 **Authority:** The latest user request is detailed planning. Do not start implementation merely because this plan exists.
 
-This is a correction and completion plan for the existing [PLAN.md](PLAN.md) and [ARCHITECTURE.md](ARCHITECTURE.md). Package IDs below are implementation checkpoints, not new roadmap phases. Preserve the canonical Phase 45 numbering and U0-U9 ownership. Shared measurement work must follow Milestone 19 contracts without treating the whole of Milestone 19 as released.
+This is a correction and completion plan for the existing [PLAN.md](PLAN.md) and [ARCHITECTURE.md](ARCHITECTURE.md). Package IDs below are implementation checkpoints, not new roadmap phases. Preserve the canonical Phase 45 numbering and U0-U10 ownership. Shared measurement work must follow Milestone 19 contracts without treating the whole of Milestone 19 as released.
 
 ## 1. Scope, preservation, and acceptance boundaries
 
@@ -35,7 +36,7 @@ This is a correction and completion plan for the existing [PLAN.md](PLAN.md) and
 | F11 Advanced lighting/materials | Representative-point rect specular; no disk LTC; wrap SSS rather than diffusion; incomplete authoring. | Required algorithms plus complete asset/scene/Editor/runtime contracts. |
 | F12 Timing/evidence | Invalid probe buffer stride; direct view path does not read query results; smoke assertions. | Shared valid GPU measurements and tests that reject incorrect behavior. |
 
-Detailed source locations are in the current audit and `docs/reviews/M14_CODEX_REVIEW.md`. That report's historical FIXED labels and driver explanation must be corrected in P0, without rewriting historical messages.
+Detailed source locations are in the historical `docs/reviews/M14_CODEX_REVIEW.md`. Its FIXED labels and driver explanation are historical evidence, not current M15 status; P0 must re-audit each finding against code boundary `19ac2a1` without rewriting historical messages.
 
 ## 3. Target architecture and invariants
 
@@ -63,7 +64,7 @@ Bloom/exposure sourcing, transparency/fog interaction and motion/jitter conventi
 
 ## 4. Ordered implementation packages
 
-### P0 - Freeze the contract and reproducible baseline (U0, U9)
+### P0 - Freeze the contract and reproducible baseline (U0; feeds U10 acceptance)
 
 **Work:**
 
@@ -77,7 +78,7 @@ Bloom/exposure sourcing, transparency/fog interaction and motion/jitter conventi
 
 **Exit:** A known bad result can be reproduced and rejected by the relevant fixture. No all-green acceptance based on image size. This documentation/fixture checkpoint does not claim a rendering fix.
 
-### P1 - Repair resource recording and establish valid GPU timing (U3, shared U9/M18)
+### P1 - Repair resource recording and establish valid GPU timing (U3, shared U10/M19)
 
 **Depends on:** P0.
 
@@ -204,7 +205,7 @@ Bloom/exposure sourcing, transparency/fog interaction and motion/jitter conventi
 
 **Exit:** A colored indirect bounce illuminates a region without direct light; a separating wall suppresses leakage within frozen tolerance. Results follow world probes rather than the current camera image. Grid origin/spacing/energy/update settings have tested effects. Probe memory/update count stay bounded; disabled or unavailable DDGI returns to valid IBL/ambient behavior. Record experimental status independently of core acceptance, without claiming full M15 completion while promised GI work remains absent.
 
-### P12 - Integrate Editor quality controls and perform final acceptance (U0-U9, 44.18)
+### P12 - Integrate Editor quality controls and perform final acceptance (U10/S10.5, Phase 45.18)
 
 **Depends on:** All packages in the declared M15 delivery; report P6B separately.
 
@@ -219,10 +220,10 @@ Bloom/exposure sourcing, transparency/fog interaction and motion/jitter conventi
 | Compatibility | OpenGL and unsupported capability profiles exercise their documented fallback; no false parity claim against unavailable effects. |
 | Material quality | Smooth sphere; roughness/metallic sweep; graph/built-in matching; local reflection hit/miss/fallback; authored save/reopen. |
 | Temporal/reliability | Camera/object motion, cuts, toggle combinations, resize/minimize/restore, separate views, resource failure/retry, shutdown/reinit and a >=1,000-frame soak. |
-| Parity | For deterministic equivalent outputs, shared M18 thresholds: PSNR >=40 dB, SSIM >=0.985 and channel error <=4/255; specify the comparison space and separately justify temporal/statistical cases. |
+| Parity | For deterministic equivalent outputs, M19 rollout thresholds: PSNR >=40 dB, SSIM >=0.985 and channel error <=4/255; specify the comparison space and separately justify temporal/statistical cases. |
 | Performance | Release 1080p/1440p, fixed scene/camera/settings, proposed 120 warm-up +1,000 measured frames; valid per-pass/aggregate GPU timing, CPU/GPU p50/p95/p99/max, memory and update workloads. |
 | Budget | Report which named lighting passes satisfy the original 3.5-5.0 ms target on the named GPU/preset; report total frame time separately. An FPS goal cannot be inferred from lighting time alone. |
-| Portability | Record GPU/driver/CPU/OS/commit. One available vendor cannot substantiate M18's multi-vendor production-promotion gate. Mark missing hardware runs NOT RUN. |
+| Portability | Record GPU/driver/CPU/OS/commit. One available vendor cannot substantiate M19's multi-vendor production-promotion gate. Mark missing hardware runs NOT RUN. |
 | Independent review | One consolidated final source review and focused separate-context recheck of significant Codex corrections under the shared protocol. |
 
 Do not make a blanket performance claim for maximum DDGI/fog/reflection settings if only a lower preset meets budget. Tune quality/cost transparently; do not hide regressions by disabling an effect in the benchmark.

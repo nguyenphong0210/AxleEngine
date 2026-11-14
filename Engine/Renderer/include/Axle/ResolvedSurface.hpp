@@ -6,8 +6,23 @@
 #include <Axle/Types.hpp>
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <array>
+#include <memory>
+#include <string>
 
 namespace Axle {
+
+    enum class SurfaceEvaluation : uint8_t { BuiltIn, CustomShader, MaterialGraph };
+    enum class SurfaceFeature : uint32_t {
+        Clearcoat = 1u << 0, Anisotropy = 1u << 1, Sheen = 1u << 2,
+        Subsurface = 1u << 3, Absorption = 1u << 4, Refraction = 1u << 5,
+        DetailNormal = 1u << 6, NormalStrength = 1u << 7,
+        SpecularPolicy = 1u << 8, ReflectionPolicy = 1u << 9, Cutout = 1u << 10
+    };
+    struct ResolvedSurfaceTexture {
+        std::string Path;
+        std::shared_ptr<const RHI::RHITexture> Native;
+    };
 
     // Canonical CPU material result shared by built-in PBR, preview, graph
     // validation and screen-space consumers. Units are documented in the M14
@@ -59,8 +74,15 @@ namespace Axle {
         bool EnableSpecularHighlights = true;
         bool EnableEnvironmentReflections = true;
         uint32_t TextureFlags = 0;
+        std::array<ResolvedSurfaceTexture, static_cast<size_t>(RHI::RHITextureSlot::Count)> Textures;
+        // For shader paths these numeric values are canonical engine inputs,
+        // not a CPU evaluation of the per-pixel graph/custom shader output.
+        SurfaceEvaluation Evaluation = SurfaceEvaluation::BuiltIn;
+        uint64_t ShaderGeneration = 0;
+        uint32_t UnsupportedFeatures = 0;
         uint64_t Generation = 0;
         bool Valid = true;
+        std::string Diagnostic;
 
         RHI::RHIMaterialConstants ToMaterialConstants() const;
         void ApplyToPushConstants(RHI::RHIObjectPushConstants& constants) const;

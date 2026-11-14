@@ -10,8 +10,10 @@
 #include <variant>
 #include <span>
 #include <optional>
+#include <memory>
 
 namespace Axle {
+    namespace RHI { class RHITexture; }
     std::optional<RHI::RHISamplerDesc> MaterialSamplerDescription(ShaderSamplerPolicy policy);
 
     enum class UniformKind : uint8_t {
@@ -167,6 +169,7 @@ namespace Axle {
         ShaderAddress Address;
         TextureRole Role = TextureRole::LinearData;
         std::string ResolvedPath;
+        std::shared_ptr<const RHI::RHITexture> Native;
     };
 
     struct TextureRequestResultData {

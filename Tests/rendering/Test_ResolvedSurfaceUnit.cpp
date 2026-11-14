@@ -1,6 +1,9 @@
 #include "RenderTestCommon.hpp"
 #include <Axle/ResolvedSurface.hpp>
 #include <Axle/MaterialSurfaceShader.hpp>
+#include <Axle/ShaderSurface.hpp>
+#include <cstring>
+#include <limits>
 
 bool RunResolvedSurfaceUnitTests() {
     using namespace Axle;
@@ -96,6 +99,64 @@ bool RunResolvedSurfaceUnitTests() {
     const auto assembled = AssembleMaterialSurfaceShader("", "MaterialSurface AxleEvaluateMaterial(float2 uv) { MaterialSurface s; return s; }");
     RENDER_CHECK(assembled.find("Clearcoat") != std::string::npos && assembled.find("FeatureFlags") != std::string::npos,
         "Material Graph template exposes the canonical advanced surface fields");
+
+    RHI::RHIMaterialDesc shaderDesc;
+    shaderDesc.BaseColor = {0.2f, 0.4f, 0.6f, 1};
+    shaderDesc.Roughness = -3; shaderDesc.Metallic = 7; shaderDesc.AO = 2;
+    shaderDesc.UVScale = {2, 3}; shaderDesc.UVOffset = {0.1f, 0.2f};
+    shaderDesc.AlbedoPath = "canonical-base.png";
+    const auto base = MaterialResolver::Resolve(RHI::RHIMaterial(shaderDesc));
+    RENDER_CHECK(base.Textures[0].Path == shaderDesc.AlbedoPath && (base.TextureFlags & 1u),
+        "canonical surface owns texture assignment requests as well as scalar values");
+    MaterialBindingPlan plan;
+    plan.Buffers.push_back({"Material", {0, 0}, 128});
+    plan.Uniforms = {{0, 0, 16, UniformKind::Float4, EngineUniform::BaseColor},
+        {0, 16, 16, UniformKind::Float4, EngineUniform::BaseUVTransform},
+        {0, 32, 16, UniformKind::Float4, EngineUniform::LegacySurfaceParams},
+        {0, 48, 4, UniformKind::Float32, PropertyKey{"Material", "Gain"}},
+        {0, 64, 64, UniformKind::Matrix4x4, EngineUniform::Model}};
+    plan.Textures.push_back({"u_BaseMap", {1, 0}, TextureRole::Color});
+    ShaderPropertyInstance gain; gain.Desc.Name = "Gain"; gain.FloatVal = 0.7f;
+    EngineMaterialValues view;
+    view.BaseColor = glm::vec4(99); view.BaseUVTransform = glm::vec4(99); view.LegacySurfaceParams = glm::vec4(99);
+    const auto shader = ResolveShaderSurface(base, SurfaceEvaluation::CustomShader, 17, plan, view, {&gain, 1});
+    RENDER_CHECK(std::holds_alternative<ResolvedShaderSurface>(shader), "custom material resolves through canonical shader boundary");
+    const auto& binding = std::get<ResolvedShaderSurface>(shader);
+    glm::vec4 packedColor, packedUV, packedSurface;
+    const auto& bytes = binding.Constants.Buffers[0].Bytes;
+    std::memcpy(&packedColor, bytes.data(), 16); std::memcpy(&packedUV, bytes.data()+16, 16);
+    std::memcpy(&packedSurface, bytes.data()+32, 16);
+    RENDER_CHECK(packedColor == base.BaseColor && packedUV == glm::vec4(base.UVScale, base.UVOffset) &&
+        packedSurface == glm::vec4(0.04f, 1, 1, 2),
+        "custom common uniforms use canonical clamping and UV policy instead of snapshot/view mirrors");
+    RENDER_CHECK(binding.Surface.Evaluation == SurfaceEvaluation::CustomShader && binding.Surface.ShaderGeneration == 17 &&
+        binding.Surface.Generation != base.Generation && binding.Textures[0].ResolvedPath == shaderDesc.AlbedoPath,
+        "shader result carries evaluation domain, program/material identity and canonical texture request");
+    view.Model[3].x = 42;
+    auto movedShader = ResolveShaderSurface(base, SurfaceEvaluation::CustomShader, 17, plan, view, {&gain, 1});
+    RENDER_CHECK(std::get<ResolvedShaderSurface>(movedShader).Surface.Generation == binding.Surface.Generation,
+        "camera/object view state does not change material identity");
+    gain.FloatVal = 0.3f;
+    auto changedShader = ResolveShaderSurface(base, SurfaceEvaluation::CustomShader, 17, plan, view, {&gain, 1});
+    RENDER_CHECK(std::get<ResolvedShaderSurface>(changedShader).Surface.Generation != binding.Surface.Generation,
+        "effective shader parameter changes invalidate canonical material identity");
+    auto reloadedShader = ResolveShaderSurface(base, SurfaceEvaluation::CustomShader, 18, plan, view, {&gain, 1});
+    RENDER_CHECK(std::get<ResolvedShaderSurface>(reloadedShader).Surface.Generation != std::get<ResolvedShaderSurface>(changedShader).Surface.Generation,
+        "shader reload invalidates canonical identity");
+    shaderDesc.ClearcoatStrength = 0.5f;
+    const auto advancedBase = MaterialResolver::Resolve(RHI::RHIMaterial(shaderDesc));
+    const auto unsupported = ResolveShaderSurface(advancedBase, SurfaceEvaluation::MaterialGraph, 19, plan, view, {&gain, 1});
+    RENDER_CHECK(std::get<ResolvedShaderSurface>(unsupported).Surface.UnsupportedFeatures == static_cast<uint32_t>(SurfaceFeature::Clearcoat) &&
+        !std::get<ResolvedShaderSurface>(unsupported).Surface.Diagnostic.empty(),
+        "unsupported canonical shader controls have an explicit feature mask and diagnostic");
+    gain.FloatVal = std::numeric_limits<float>::quiet_NaN();
+    RENDER_CHECK(std::holds_alternative<MaterialBindingError>(ResolveShaderSurface(base, SurfaceEvaluation::CustomShader, 17, plan, view, {&gain, 1})),
+        "non-finite effective shader properties reject the transaction");
+    shaderDesc.BaseColor.x = std::numeric_limits<float>::infinity();
+    const auto invalidBase = MaterialResolver::Resolve(RHI::RHIMaterial(shaderDesc));
+    RENDER_CHECK(!invalidBase.Valid && !invalidBase.Diagnostic.empty(), "invalid canonical input cannot be reported ready");
+    RENDER_CHECK(std::holds_alternative<MaterialBindingError>(ResolveShaderSurface(invalidBase, SurfaceEvaluation::CustomShader, 17, plan, view, {})),
+        "invalid base surface cannot publish a shader binding");
 
     std::cout << "  [ResolvedSurface] Canonical material contract tests passed.\n";
     return true;

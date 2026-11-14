@@ -77,6 +77,7 @@ add_library(AxleRenderer STATIC
     src/ReflectionService.cpp
     src/GIService.cpp
     src/ResolvedSurface.cpp
+    src/ShaderSurface.cpp
     src/TemporalService.cpp
     src/PostProcessService.cpp
     src/RenderDiagnostics.cpp

@@ -1,5 +1,7 @@
 #include <Axle/ResolvedSurface.hpp>
 #include <algorithm>
+#include <cmath>
+#include <type_traits>
 
 namespace Axle {
 
@@ -72,6 +74,32 @@ namespace Axle {
     ResolvedSurface MaterialResolver::Resolve(const RHI::RHIMaterial& material, uint64_t generation) {
         const auto& desc = material.GetDesc();
         ResolvedSurface result;
+        result.Generation = generation ? generation : ComputeGeneration(material);
+        auto finite = [](const auto& value) {
+            if constexpr (std::is_floating_point_v<std::decay_t<decltype(value)>>) return std::isfinite(value);
+            else { for (glm::length_t i = 0; i < value.length(); ++i) if (!std::isfinite(value[i])) return false; }
+            return true;
+        };
+        if (!finite(desc.BaseColor) || !finite(desc.Roughness) || !finite(desc.Metallic) || !finite(desc.AO) ||
+            !finite(desc.NormalStrength) || !finite(desc.EmissiveColor) || !finite(desc.EmissiveIntensity) ||
+            !finite(desc.UVScale) || !finite(desc.UVOffset) || !finite(desc.DetailUVScale) || !finite(desc.DetailUVOffset) ||
+            !finite(desc.DetailNormalStrength) || !finite(desc.ClearcoatStrength) || !finite(desc.ClearcoatRoughness) ||
+            !finite(desc.AnisotropyStrength) || !finite(desc.AnisotropyRotation) || !finite(desc.AlphaCutoff) ||
+            !finite(desc.SheenColor) || !finite(desc.SheenRoughness) || !finite(desc.SubsurfaceColor) ||
+            !finite(desc.SubsurfaceRadius) || !finite(desc.AbsorptionColor) || !finite(desc.Dispersion) ||
+            !finite(desc.RefractionStrength) || !finite(desc.RefractionIOR) || !finite(desc.RefractionThickness) || !finite(desc.RefractionTint)) {
+            result.Valid = false;
+            result.Diagnostic = "SURFACE_NONFINITE_INPUT: canonical material values must be finite";
+            return result;
+        }
+        if (static_cast<uint32_t>(desc.SurfaceType) > static_cast<uint32_t>(SurfaceType::Additive) ||
+            static_cast<uint32_t>(desc.CullMode) > static_cast<uint32_t>(CullMode::None) ||
+            static_cast<uint32_t>(desc.TextureMode) > static_cast<uint32_t>(TextureMode::PackedORM) ||
+            static_cast<uint32_t>(desc.ShadingModel) > static_cast<uint32_t>(RHI::RHIShadingModel::PackedORMTexturedPBR)) {
+            result.Valid = false;
+            result.Diagnostic = "SURFACE_INVALID_POLICY: invalid surface, cull or shading policy";
+            return result;
+        }
         result.BaseColor = desc.BaseColor;
         result.Metallic = std::clamp(desc.Metallic, 0.0f, 1.0f);
         result.Roughness = std::clamp(desc.Roughness, 0.04f, 1.0f);
@@ -98,7 +126,12 @@ namespace Axle {
         result.AlphaCutoff = std::clamp(desc.AlphaCutoff, 0.0f, 1.0f);
         result.EnableSpecularHighlights = desc.EnableSpecularHighlights; result.EnableEnvironmentReflections = desc.EnableEnvironmentReflections;
         result.TextureFlags = material.BuildConstants().Flags.x;
-        result.Generation = generation ? generation : ComputeGeneration(material);
+        for (size_t i = 0; i < result.Textures.size(); ++i) {
+            const auto slot = static_cast<RHI::RHITextureSlot>(i);
+            result.Textures[i].Path = (i == 2 && desc.TextureMode == TextureMode::PackedORM)
+                ? desc.ORMPath : material.GetTexturePath(slot);
+            if (material.HasTexture(slot)) result.Textures[i].Native = material.GetTexture(slot);
+        }
         result.Valid = true;
         return result;
     }

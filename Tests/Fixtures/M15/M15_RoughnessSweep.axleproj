@@ -1,0 +1,8 @@
+# Axle Engine Project Configuration File
+Project:
+  SchemaVersion: 1
+  Name: M15_RoughnessSweep
+  StartScene: M15_RoughnessSweep.axlescene
+  AssetDirectory: ../../../Samples/Sandbox/assets
+  RHIBackend: Direct3D12
+  Plugins:

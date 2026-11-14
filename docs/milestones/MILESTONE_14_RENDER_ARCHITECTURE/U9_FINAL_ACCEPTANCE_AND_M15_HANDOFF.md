@@ -1,22 +1,28 @@
 # M14-U9 — Final Acceptance and M15 Handoff
 
-Status: **Accepted**
+Status: **HOLD - independent review and sequential repairs**
 
 ## Structural scorecard
 
 | Gate | Result | Evidence |
 |---|---|---|
 | View/frame owner | PASS | `ViewContext`, `RHIFrameContext`, temporal/post-process/diagnostics services; U1/U6 evidence |
-| Pass lifecycle owner | PASS | `RenderPassScheduler`, `IRenderPass`, named legacy adapters; U2 evidence |
-| Surface/material owner | PASS | `ResolvedSurface` and material resolver tests; U3 evidence |
-| Resource/graph owner | PASS | strict `RenderGraph`, target generations, descriptor lease checks; U4 evidence |
-| Lighting/reflection/GI boundaries | PASS | `LightingService`, `ReflectionService`, `GIService`; U5 evidence |
+| Pass lifecycle owner | PARTIAL (implementation repaired, shadow gate pending U3) | `RenderPassScheduler`, `IRenderPass`, named legacy adapters; U2 evidence |
+| Surface/material owner | PARTIAL | `ResolvedSurface` and material resolver tests; U3 evidence |
+| Resource/graph owner | PARTIAL | strict `RenderGraph`, target generations, descriptor lease checks; U4 evidence |
+| Lighting/reflection/GI boundaries | PARTIAL | `LightingService`, `ReflectionService`, `GIService`; U5 evidence |
 | Backend/fallback policy | PASS | `RenderBackendPolicy`, D3D12/Vulkan/OpenGL matrix; U7 evidence |
 | Product caller migration | PASS | RenderService-only product seams and U8 dependency map |
 
-The remaining direct implementation body in `RHISceneRenderer` is the approved migration facade/legacy adapter recorded by U2. No new M14 feature pass was added outside the scheduler contract during U8/U9.
+Persistent pipeline/descriptor caches remain behind the legacy adapter boundary
+recorded by U2. Live orchestration has been repaired; surface conversion,
+complete resource declarations and service integration still require closure.
 
-## Verification scorecard
+Current correction evidence and remaining gates are recorded in
+`docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md`. Historical delivery
+checkboxes below do not override this HOLD or release M15.
+
+## Historical verification scorecard
 
 - Debug build: `AxleEditor`, `AxleRuntime`, `AxleRenderUnitTests`, `AxlePreviewRenderTests`, `AxleRHIFoundationTests`, `AxleRenderAcceptanceTests` — PASS.
 - Release build: same renderer/product targets — PASS.
@@ -60,4 +66,5 @@ M15 feature work must enter through:
 
 M14 does not claim final SSR quality, dynamic six-face reflection capture/prefilter, multi-probe blending, DDGI irradiance/visibility feedback, ray-traced reflections, final advanced material fidelity, or a validated GPU budget scorecard. Those are M15+ deliverables and must retain explicit fallback/diagnostic states.
 
-M14 is complete as an architecture milestone because these future features have stable entry contracts and no longer require expanding the product caller surface or adding unowned global renderer state.
+M14 remains on hold until the current architecture repairs and verification
+gates are complete. Stable entry contracts alone do not establish live integration.

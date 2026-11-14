@@ -96,15 +96,28 @@ Verified:
 - `AxleRenderUnitTests`: exit 0, including named `RecordOne` dispatch coverage.
 - D3D12 environment fixture: exit 0.
 
+### Complete live pass schedule - commit `7f5deb7`
+
+All eight groups now own their live Configure/Declare/Prepare/Record path in
+`RHISceneRendererPasses.cpp`; the facade no longer manually declares/records
+these bodies. The scheduler runs one ordered frame lifecycle, finalizes on
+failure/exception and destroys all borrowed callbacks before return. Shadow and
+probe setup happens before atlas imports, while light/environment and material
+queue preparation happen before recording. Disabled is restricted to Configure;
+fallback is retained across phases.
+
+Debug CPU tests, D3D12/Vulkan/OpenGL environment fixtures and D3D12/Vulkan
+acceptance measurements passed. Architecture/dependency checks passed. A focused
+separate-context review accepted the U2 migration seam conditional on native
+shadow gates. Those gates exposed a pre-existing U3 conversion defect (fixed
+shading mode/cutoff); U2 validation stays partial until its sequential U3 repair
+and shadow rerun. See the current U2 evidence for exact commands and limits.
+
 ## Current acceptance state
 
-- **PASS:** U0, U1, U6, U7, U8, runtime evidence gate.
-- **PARTIAL:** U2 remains partial because most concrete pass recording still
-  lives in `RHISceneRenderer` behind adapters; one concrete `SurfaceNormal`
-  body has migrated. U3 remains partial
-  for graph-specific advanced field lowering; U4 remains partial for graph
-  resource declarations beyond descriptor lease retention.
-- **HOLD:** U9 remains on hold until concrete pass extraction and the custom
-  graph `ResolvedSurface` boundary are completed or explicitly re-scoped in the
-  milestone contract.
-
+- **PASS:** U0, U1, U6, U7, U8 and the previously rerun runtime evidence gate.
+- **PARTIAL:** U2 implementation is repaired, with native shadow verification
+  pending the U3 material conversion fix. U3 also retains the custom graph
+  canonical lowering gap; U4 retains incomplete graph resource declarations;
+  U5 still needs review of actual policy/service ownership after integration.
+- **HOLD:** U9 until the remaining integration gaps and native gates are closed.

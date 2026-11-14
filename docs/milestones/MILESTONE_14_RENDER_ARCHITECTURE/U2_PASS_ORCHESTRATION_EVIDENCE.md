@@ -1,86 +1,88 @@
 # M14-U2 - Pass Interface and Renderer Orchestration Evidence
 
-**Status:** `ACCEPTED`  
-**Unit:** M14-U2  
-**Scope:** pass lifecycle contract, deterministic scheduler, named pass groups, failure propagation and renderer integration.
+Updated: 2026-11-14 (Asia/Saigon)
 
-## 1. Implementation
+**Status: implementation repaired; native shadow validation remains PARTIAL pending U3.**
+Implementation commit: `7f5deb7`. Supersedes the original no-op adapter acceptance.
+M15 lighting/material fidelity is excluded.
 
-The pass contract is defined in:
+## Live ownership
 
-- `Engine/Renderer/include/Axle/RenderPass.hpp`
-- `Engine/Renderer/src/RenderPass.cpp`
+`RenderPassScheduler::Execute` now runs Configure, Declare, strict graph compile,
+Prepare, Record and Finalize in one deterministic order. Every actual graph
+node is declared by its adapter and every live recording body executes through
+that adapter. The synchronous frame schedule is:
 
-The new API provides:
+1. LightingAndShadows
+2. OpaqueAndSky
+3. ScreenSpace (surface normal)
+4. Transparent (refraction snapshot and transparent queue)
+5. ParticlesAndResolve
+6. ReflectionAndGI (DDGI, GTAO, Hi-Z/SSR and fog)
+7. PostAndTemporal (bloom, exposure, TAA, tone mapping and FXAA)
+8. Export
 
-```text
-IRenderPass
-  Configure(ViewContext, capabilities)
-  Declare(RenderGraph)
-  Prepare(RenderPassContext)
-  Record(RenderPassContext)
-  Finalize(RenderPassContext, result)
-```
+The implementation is in `Engine/Scene/src/RHISceneRendererPasses.cpp`.
+`RHISceneRenderer.cpp` retains view acquisition, target selection, policy
+resolution and immutable camera/jitter input construction. Probe/shadow setup
+runs in LightingAndShadows Configure, before atlas generations are imported in
+Declare. Light/environment preparation, descriptor publication and uniform
+uploads run in Prepare; opaque material queues are also built in Prepare.
 
-`RenderPassResult` distinguishes `Supported`, `Disabled`, `Fallback` and `Failed`. A failed pass stops the scheduler and preserves a pass-qualified diagnostic. `RenderPassContext` carries immutable `RenderWorld`, camera/settings snapshots, `ViewContext`, graph/command handles and capability policy.
+`FramePassInputs` explicitly borrows synchronous view inputs. Execute finalizes
+and destroys all adapters before returning, on explicit failures and exceptions.
+An outer frame guard also covers registration failure and closes open rendering
+scopes. GPU dependencies remain retained by the command journal through queue
+completion. ViewContext owns submission and temporal commit after successful
+recording; Finalize receives the recording outcome before submission.
 
-`RenderPassScheduler` owns deterministic ordering and phase dispatch. `CallbackRenderPass` is the migration adapter for existing renderer code while the pass internals move out of `RHISceneRenderer` incrementally.
+Disabled is valid only during Configure, before graph declarations. Late
+Disabled is rejected. Fallback survives later successful phases. Failure stops
+subsequent work with a pass-qualified diagnostic. Native execution also rejects
+an incompletely consumed graph.
 
-## 2. Current renderer integration
+Persistent shader/pipeline/descriptor cache relocation remains the explicit
+legacy adapter boundary in PLAN S2.3. This checkpoint establishes live pass
+orchestration, not independent ownership of every cached RHI object.
 
-`RHISceneRenderer` now owns one scheduler with these named groups:
+## Verification at this checkpoint
 
-```text
-OpaqueAndSky
-LightingAndShadows
-ScreenSpace
-ReflectionAndGI
-PostAndTemporal
-```
+Fresh Debug builds passed for AxleRenderUnitTests,
+AxleEnvironmentRenderingTests, AxleRenderAcceptanceTests,
+AxleCascadedShadowRenderingTests, AxleLocalShadowRenderingTests,
+AxlePreviewRenderTests and AxleRuntimeRenderTests.
 
-Every native view executes scheduler `Configure` and `Prepare` before recording, declares the scheduler groups at the graph boundary, executes `Record` after graph compilation, and calls `Finalize` after submission or failure. The public renderer remains a facade; the order and result handling are no longer implicit in scattered pass code.
+- `AxleRenderUnitTests.exe`: exit 0. Covers full phase order, Configure/compile/
+  Prepare/Record failure, exception finalization, capture release, disabled and
+  fallback policy. Separate-context correction review independently reran it:
+  exit 0 (`build/m14-u2-review-cpu.log`).
+- `AxleEnvironmentRenderingTests.exe dx12 build/Tests/Work/M14-u2-final/dx12`:
+  exit 0, including exact graph diagnostic order, injected preparation failure,
+  no-recording/no-completion rejection and recovery in the same renderer.
+- Same environment fixture on Vulkan and OpenGL: exit 0.
+- `AxleRenderAcceptanceTests.exe` on D3D12 and Vulkan: exit 0.
+- `python scripts/check_architecture.py`: PASS, 598 files / 25 CMake files.
+- `python scripts/generate_m14_dependency_map.py --output-dir build/Tests/Work/M14-u2-architecture`:
+  exit 0, no architecture or product caller violations.
+- `git diff --check`: exit 0.
 
-The existing shader/pipeline bodies are deliberately kept behind `CallbackRenderPass` for this checkpoint. This preserves the current image and lifetime behavior while making each group independently replaceable. Moving the concrete pipeline layouts, shaders, descriptor pools and samplers into the group objects is the next implementation step in the migration plan; no new feature may bypass the scheduler.
+The GPU CTest options are disabled in this build configuration; binaries above
+were invoked directly. A CTest invocation that found no tests is not evidence.
 
-## 3. Verification
+## Open native gate
 
-### CPU pass contract fixture
+Broadened shadow fixtures exposed an existing canonical material conversion
+fault: ResolvedSurface hardcodes shading mode 3 and alpha cutoff 0.5. The shadow
+consumer only samples cutout alpha for modes 5/6, so textured alpha edits are
+ignored and local shadow caching incorrectly remains enabled. Both source paths
+predate this U2 repair (introduced in `b1f9a97`); no source-baseline native rerun
+was performed, so this attribution is based on source comparison.
 
-Command:
+Observed failures: CascadedShadowRendering dx12 at the alpha-hole depth
+assertion; LocalShadowRendering dx12/vulkan at the same-generation alpha redraw
+assertion. Logs: `build/m14-u2-cascades-dx12.log` and
+`build/m14-u2-local-{dx12,vulkan}.log`.
 
-```text
-build/Tests/Debug/AxleRenderUnitTests.exe
-```
-
-Result: **exit code 0**. The `[RenderPass]` suite verified deterministic group order, Configure/Prepare/Declare/Record/Finalize lifecycle, graph declaration boundary and failure diagnostics. Existing RenderWorld, ViewContext, worker, parallel-recording and transient-graph suites also passed.
-
-### Native renderer integration fixture
-
-Command:
-
-```text
-build/Tests/Debug/AxleEnvironmentRenderingTests.exe dx12 build/Tests/Work/M14-U2-baseline
-```
-
-Result: **exit code 0**. Native D3D12 ForwardPBR/environment rendering passed with the unchanged 128x128 baseline, two draw calls and one rendered entity.
-
-### Build and architecture checks
-
-```text
-cmake --build build --config Debug --target AxleRenderUnitTests AxleEnvironmentRenderingTests --parallel 4  => exit 0
-python scripts/check_architecture.py                                                                         => PASS
-git diff --check                                                                                              => PASS
-```
-
-## 4. Ownership boundary after U2
-
-- `RenderPassScheduler` owns ordering and lifecycle dispatch.
-- `IRenderPass` owns the future location of pass-local state and capability policy.
-- `RenderGraph` remains the resource declaration/transition authority.
-- `ViewContext` owns frame recording and completion.
-- `RHIDevice` and shared RHI caches remain below pass modules.
-- `RHISceneRenderer` remains a facade plus legacy implementation adapter; it is forbidden to add new feature pass logic directly to the monolith.
-
-## 5. U2 decision
-
-**U2 ACCEPTED.** The pass lifecycle and orchestration seam is implemented and integrated without changing the reference render. Concrete shader/pipeline relocation proceeds through the established adapter boundary in later migration work.
+Separate-context review found no remaining U2 structural blocker, conditional on
+the native gates. Acceptance remains PARTIAL until U3 preserves these material
+fields and both shadow fixtures pass again. Overall M14 remains HOLD.

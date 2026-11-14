@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `U0/U1/U2/U3/U4/U5/U6/U7/U8/U9 ACCEPTED - M14 complete; M15 is next.`
+**Status:** `REVIEW HOLD - sequential architecture repairs in progress; see docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md. M15 is not released.`
 **Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
@@ -79,7 +79,7 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U2 - Pass interface and renderer orchestration
 
-**Exit:** `RHISceneRenderer` coordinates passes through a deterministic lifecycle scheduler; existing implementation bodies remain behind explicit legacy adapters until the later resource migration checkpoint. Evidence: [U2_PASS_ORCHESTRATION_EVIDENCE.md](U2_PASS_ORCHESTRATION_EVIDENCE.md).
+**Exit:** `RHISceneRenderer` delegates all live graph declaration and recording to one frame-scoped lifecycle schedule in `RHISceneRendererPasses.cpp`; persistent pipeline/cache relocation remains an explicit legacy adapter boundary. Implementation repaired in `7f5deb7`; native shadow acceptance is pending the sequential U3 surface correction. Evidence: [U2_PASS_ORCHESTRATION_EVIDENCE.md](U2_PASS_ORCHESTRATION_EVIDENCE.md).
 
 - [x] **S2.1 Pass API**
   - [x] Define `IRenderPass` lifecycle: `Configure`, `Declare`, `Prepare`, `Record`, `Finalize`.

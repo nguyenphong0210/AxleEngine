@@ -15,6 +15,12 @@ namespace Axle {
         float SpotIntensity(float intensity) {
             return intensity > 10.0f ? intensity : intensity * 500.0f;
         }
+
+        glm::vec3 NormalizedFallbackDirection(const glm::vec3& direction) {
+            const float length=glm::length(direction);
+            if (std::isfinite(length) && length > 1e-4f) return direction / length;
+            return {0.0f, 1.0f, 0.0f};
+        }
     }
 
     LightingFrame LightingService::BuildFrame(const RenderWorld& world, const SceneRenderSettings& settings, const ShadowPublication& shadows) const {
@@ -22,12 +28,12 @@ namespace Axle {
         frame.Scene=ResolveSceneLighting(world);
         frame.Shadows=shadows;
         frame.DirectionalCount=world.DirectionalLight?1u:0u;
-        frame.DirectionalCount+=static_cast<uint32_t>(world.AdditionalDirectionalLights.size());
+        frame.DirectionalCount+=std::min<uint32_t>(static_cast<uint32_t>(world.AdditionalDirectionalLights.size()), MaxLightingPointLights);
         frame.PointCount=static_cast<uint32_t>(world.PointLights.size());
         frame.SpotCount=static_cast<uint32_t>(world.SpotLights.size());
         frame.RectCount=static_cast<uint32_t>(world.RectLights.size());
 
-        frame.Sun.Direction=world.DirectionalLight ? world.DirectionalLight->Direction : frame.Scene.SunDirection;
+        frame.Sun.Direction=world.DirectionalLight ? world.DirectionalLight->Direction : NormalizedFallbackDirection(frame.Scene.SunDirection);
         frame.Sun.Illuminance=world.DirectionalLight ? DirectionalIlluminance(world.DirectionalLight->Intensity) : 0.0f;
         frame.Sun.Color=world.DirectionalLight ? world.DirectionalLight->Color : frame.Scene.SunColor;
         frame.Sun.AmbientIntensity=frame.Scene.AmbientIntensity;

@@ -33,6 +33,17 @@ bool RunLightingServiceUnitTests() {
     RENDER_CHECK(additional.PointCount == 2 && additional.PointLights[0].Directional &&
                  additional.PointLights[0].Intensity == 7.0f,
         "additional directional lights use the service-owned directional packing contract");
+    RenderWorld noSun;
+    const auto fallbackSun = lighting.BuildFrame(noSun, settings);
+    RENDER_CHECK(std::abs(glm::length(fallbackSun.Sun.Direction) - 1.0f) < 0.001f &&
+                 fallbackSun.Sun.Illuminance == 0.0f,
+        "lighting service preserves normalized fallback sun direction");
+    RenderWorld capped;
+    capped.AdditionalDirectionalLights.resize(MaxLightingPointLights + 1);
+    const auto cappedFrame = lighting.BuildFrame(capped, settings);
+    RENDER_CHECK(cappedFrame.DirectionalCount == MaxLightingPointLights &&
+                 cappedFrame.PointCount == MaxLightingPointLights,
+        "lighting service reports representable directional and point capacity");
 
     ReflectionService reflection;
     auto authored = reflection.Prepare(world, {3,0,0}, true, 7);
@@ -44,6 +55,12 @@ bool RunLightingServiceUnitTests() {
     auto fallback = reflection.Prepare(noProbe, {}, true, 8);
     RENDER_CHECK(fallback.State == ReflectionState::Fallback && fallback.Fallback == ReflectionFallback::SSR,
         "reflection service exposes SSR fallback when no local probe exists");
+    RenderWorld emptyNearest;
+    emptyNearest.ReflectionProbes.push_back(RenderReflectionProbe{3, {1,0,0}, {1,1,1}, {}, 5.0f, 1.0f, 0, true, ""});
+    emptyNearest.ReflectionProbes.push_back(RenderReflectionProbe{4, {8,0,0}, {1,1,1}, {}, 5.0f, 1.0f, 0, true, "far_authored.axleasset"});
+    const auto authoredPastEmpty = reflection.Prepare(emptyNearest, {0,0,0}, true, 8);
+    RENDER_CHECK(authoredPastEmpty.State == ReflectionState::AuthoredReady && authoredPastEmpty.SelectedProbeEntityID == 4,
+        "reflection service ignores unauthored probes when selecting an authored generation");
     auto invalidation = reflection.EvaluateInvalidation({false, true, false, false, true, false});
     RENDER_CHECK(invalidation.Any() && invalidation.SceneRevisionChanged && invalidation.LightingChanged,
         "reflection invalidation tracks scene and lighting changes independently");

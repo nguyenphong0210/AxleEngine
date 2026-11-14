@@ -3438,6 +3438,28 @@
       "base_commit": "fb15cd7",
       "timestamp_utc": "2026-11-14T16:01:39.140586+00:00",
       "body": "The M15 PLAN now contains one canonical atomic checklist with 160 items. SubUnit/WorkItem duplicate checkboxes were removed; parent status is derived from child items. Each item has a PASS condition and evidence requirement. Items needing image confirmation include explicit Editor Debug/Release build/open instructions and expected display criteria. Documentation review updated with M15-DOC-10. Commit: latest docs commit.\n"
+    },
+    {
+      "id": "CG-20261114T160643899689Z-CODEX-0d62b2",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T160139140586Z-CODEX-0d3f78",
+      "base_commit": "878bcc4",
+      "timestamp_utc": "2026-11-14T16:06:43.899689+00:00",
+      "body": "The user requested a second granularity pass: split every remaining compound M15 checklist item into leaf behaviors with independent PASS/evidence. Keep one canonical checklist in PLAN.md only; no code changes. The previous 160-item checklist is being refined. Compound items will become hierarchical leaf IDs (for example M15-U5-32.1..32.7), with parent rollups uncheckable.\n"
+    },
+    {
+      "id": "CG-20261114T160931919373Z-CODEX-b64238",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T160643899689Z-CODEX-0d62b2",
+      "base_commit": "53ab2ab",
+      "timestamp_utc": "2026-11-14T16:09:31.919373+00:00",
+      "body": "Second granularity pass complete. The single PLAN.md checklist now has 408 leaf items. Compound behaviors such as Hi-Z traversal, SSR resolve, probe capture, post/temporal, authoring and final rollout are split into hierarchical IDs (for example M15-U5-32.1..32.7); parent IDs no longer carry checkboxes. Every leaf has an independent PASS condition/evidence requirement, and visual leaves include Editor build/open/expected-display guidance. Documentation review count updated.\n"
     }
   ],
   "deferred_tasks": [

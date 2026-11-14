@@ -50,6 +50,8 @@ namespace Axle {
     public:
         virtual ~IRenderPass() = default;
         virtual const char* GetName() const = 0;
+        // Disabled is a Configure decision, before this pass declares graph work.
+        // Later phases must execute the declared work or return Failed/Fallback.
         virtual RenderPassResult Configure(const RenderPassContext& context) = 0;
         virtual void Declare(RenderGraph& graph) = 0;
         virtual RenderPassResult Prepare(const RenderPassContext& context) = 0;
@@ -65,10 +67,10 @@ namespace Axle {
         using Callback = std::function<RenderPassResult(const RenderPassContext&)>;
         using DeclareCallback = std::function<void(RenderGraph&)>;
 
-        CallbackRenderPass(std::string name, Callback prepare = {}, Callback record = {}, DeclareCallback declare = {});
+        CallbackRenderPass(std::string name, Callback prepare = {}, Callback record = {},
+                           DeclareCallback declare = {}, Callback configure = {});
         const char* GetName() const override { return m_Name.c_str(); }
-        void SetRecordCallback(Callback record) { m_Record = std::move(record); }
-        RenderPassResult Configure(const RenderPassContext&) override { return {}; }
+        RenderPassResult Configure(const RenderPassContext& context) override { return m_Configure ? m_Configure(context) : RenderPassResult{}; }
         void Declare(RenderGraph& graph) override { if (m_Declare) m_Declare(graph); }
         RenderPassResult Prepare(const RenderPassContext& context) override { return m_Prepare ? m_Prepare(context) : RenderPassResult{}; }
         RenderPassResult Record(const RenderPassContext& context) override { return m_Record ? m_Record(context) : RenderPassResult{}; }
@@ -76,6 +78,7 @@ namespace Axle {
 
     private:
         std::string m_Name;
+        Callback m_Configure;
         Callback m_Prepare;
         Callback m_Record;
         DeclareCallback m_Declare;
@@ -91,17 +94,16 @@ namespace Axle {
         void Declare(RenderGraph& graph);
         RenderPassResult Prepare(const RenderPassContext& context);
         RenderPassResult Record(const RenderPassContext& context);
-        // Execute one named group at its real recording boundary.  The
-        // renderer may keep a legacy body behind the adapter while migration
-        // proceeds, but ordering/result propagation remains scheduler-owned.
-        RenderPassResult RecordOne(std::string_view name, const RenderPassContext& context);
-        bool SetRecordCallback(std::string_view name, CallbackRenderPass::Callback callback);
         void Finalize(const RenderPassContext& context, const RenderPassResult& result);
+        // Execute a frame's complete lifecycle and release all pass callbacks
+        // before returning, including failure paths. Submission belongs to ViewContext.
+        RenderPassResult Execute(const RenderPassContext& context, bool strictPhysicalResources = false);
         const std::string& GetDiagnostic() const { return m_Diagnostic; }
 
     private:
-        template<class Fn> RenderPassResult Run(Fn&& fn, const RenderPassContext& context);
+        template<class Fn> RenderPassResult Run(Fn&& fn, const RenderPassContext& context, bool configuring = false);
         std::vector<std::unique_ptr<IRenderPass>> m_Passes;
+        std::vector<bool> m_Disabled;
         std::string m_Diagnostic;
     };
 

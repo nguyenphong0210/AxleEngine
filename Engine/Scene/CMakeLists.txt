@@ -47,6 +47,7 @@ add_library(AxleScene STATIC
     src/SceneRenderer.cpp
     src/MaterialTextureCache.cpp
     src/RHISceneRenderer.cpp
+    src/RHISceneRendererPasses.cpp
     src/RHILocalShadows.cpp
     src/RHIShadowDepthAtlas.cpp
     src/RHICascadedShadows.cpp

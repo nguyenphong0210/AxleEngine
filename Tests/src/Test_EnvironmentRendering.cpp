@@ -203,8 +203,26 @@ bool Native(RHIType backend) {
     SceneRenderSettings settings; settings.EnableSkybox=true; settings.EnableShadows=false;
     settings.EnableParticles=false; settings.EnableToneMapping=false; settings.EnableStudioLightLobes=false;
     auto render=[&]{renderer.RenderWorldView(world,camera,&color,&depth,settings);
-        return renderer.WasLastRenderSuccessful()?Read(color):std::vector<uint8_t>{};};
+        return renderer.WasLastRenderSuccessful() && renderer.GetPassScheduler().Size()==0 && !renderer.GetDiagnostics().HasErrors()
+            ?Read(color):std::vector<uint8_t>{};};
+    auto passNames=[&]{std::vector<std::string> names;
+        for(const auto& pass:renderer.GetDiagnostics().GetFrame().Passes) names.push_back(pass.Name);
+        return names;};
     auto red=render(); CHECK(red.size()==width*width*4&&environment.Ready());
+    CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","Transparent","ParticlesAndPhysics","Export"}));
+    // Fail a real pass preparation operation. No graph pass may record and no
+    // stack-backed callbacks may survive; the same renderer must recover.
+    bool preparationFault=false, recordingStarted=false;
+    { ScopedRHIFault fault([&](std::string_view op)->std::optional<nri::Result>{
+        // Previous-frame timestamp readback happens before the new view begins.
+        if(op=="BeginCommandBuffer") recordingStarted=true;
+        if(recordingStarted&&(op=="MapBuffer"||op=="CreateBuffer")&&!preparationFault){
+            preparationFault=true;return nri::Result::OUT_OF_MEMORY;} return {};});
+      const auto failedFrame=render();
+      CHECK(failedFrame.empty()&&preparationFault&&!renderer.GetLastCompletion());
+      CHECK(renderer.GetPassScheduler().Size()==0&&passNames().empty()&&renderer.GetDiagnostics().HasErrors());
+      CHECK(renderer.GetDiagnostics().GetFrame().Errors.back().find("LightingAndShadows")!=std::string::npos); }
+    CHECK(render()==red);
     CHECK(environment.BakeCount()==1&&environment.UploadCount()==1&&environment.Diagnostic().empty());
     const auto first=environment.Ready()->Radiance->GetHandle();
     CHECK(ConstantCube(*environment.Ready()->Radiance,{2,.25f,.125f}));
@@ -216,6 +234,8 @@ bool Native(RHIType backend) {
     // M14-U4 Occlusion verification: Dedicated compute GTAO & directional contact shadows
     settings.EnableGTAO=true; settings.EnableContactShadows=true; auto gtao=render();
     CHECK(!gtao.empty()&&gtao.size()==red.size());
+    CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","SurfaceNormal","Transparent","ParticlesAndPhysics",
+        "GTAOCopy","GTAOCompute","GTAOApply","Export"}));
     CHECK(renderer.GetLastGPUTimestampMilliseconds() > 0.0);
     auto* normalTarget = renderer.GetOpaqueNormalTarget();
     CHECK(normalTarget && normalTarget->IsValid());

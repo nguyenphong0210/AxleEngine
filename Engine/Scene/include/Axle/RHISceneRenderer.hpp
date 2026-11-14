@@ -378,6 +378,7 @@ namespace Axle {
         // Custom Material Program Cache
         CustomProgramCache& GetCustomProgramCache() { return m_CustomProgramCache; }
         const CustomProgramCache& GetCustomProgramCache() const { return m_CustomProgramCache; }
+        // Contains only active synchronous work; frame callbacks are released on return.
         const RenderPassScheduler& GetPassScheduler() const { return m_PassScheduler; }
 
         struct CustomPipelineKey {
@@ -406,7 +407,8 @@ namespace Axle {
 
     private:
         bool CompileShaders(RHI::RHIDevice& device);
-        void BuildPassSchedule();
+        struct FramePassInputs;
+        bool RecordFramePasses(const FramePassInputs& inputs);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
         bool CreateGraphicsPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateSurfaceNormalPipeline(nri::Format colorFormat, nri::Format depthFormat);

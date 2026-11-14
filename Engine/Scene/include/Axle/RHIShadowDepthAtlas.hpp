@@ -1,5 +1,6 @@
 #pragma once
 #include <Axle/LocalShadowMap.hpp>
+#include <Axle/RenderGraph.hpp>
 #include <Axle/MaterialTextureCache.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
@@ -15,6 +16,7 @@ namespace Axle {
         bool Prepare(const RenderWorld&,MaterialTextureCache&,const std::vector<ShadowDepthView>&,
                      uint32_t atlasSize,bool cull=false,bool cache=false);
         bool Record(RHI::RHICommandBuffer&);
+        bool DeclareInputs(RenderGraph&, std::string_view pass) const;
         void OnSubmitted(){if(m_NeedsRender)m_LastKey=m_PendingKey;}
         bool IsSupported() const {return m_Supported;}
         bool IsActive() const {return !m_Views.empty();}

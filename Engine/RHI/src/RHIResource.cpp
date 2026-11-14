@@ -56,6 +56,8 @@ namespace Axle::RHI {
         RHIRecordingLease RecordedUses;
         std::unordered_map<const void*, std::pair<nri::AccessBits, nri::Layout>> Views;
         std::unordered_map<uint64_t, std::vector<RHIResourceAccess>> RangeAccesses;
+        bool ManagedDescriptorSet = false;
+        std::vector<std::pair<nri::DescriptorType,uint32_t>> DescriptorRanges;
         const void* ValidatorOwner = nullptr;
         std::function<bool(const RHIResourceAccess&)> AccessValidator;
         RHITrackedState State;
@@ -218,7 +220,7 @@ namespace Axle::RHI {
     }
     bool RHIResourceService::BeginRecording(const void* commands) {
         auto lease = AcquireNative(commands);
-        if (!lease.IsLive() || lease.m_Generation->Kind != RHIResourceKind::Commands || IsInUse(lease) ||
+        if (!lease.IsLive() || lease.m_Generation->Kind != RHIResourceKind::Commands || IsInUse(lease) || lease.m_Generation->AccessValidator ||
             lease.m_Generation->Recording != RHIResourceGeneration::CommandState::Empty) return false;
         lease.m_Generation->Recording = RHIResourceGeneration::CommandState::Recording;
         return true;
@@ -226,7 +228,7 @@ namespace Axle::RHI {
     bool RHIResourceService::EndRecording(const void* commands, bool executable) {
         auto lease = AcquireNative(commands);
         if (!lease.IsLive() || lease.m_Generation->Kind != RHIResourceKind::Commands) return false;
-        executable = executable && !lease.m_Generation->InRendering && lease.m_Generation->Recording == RHIResourceGeneration::CommandState::Recording;
+        executable = executable && !lease.m_Generation->AccessValidator && !lease.m_Generation->InRendering && lease.m_Generation->Recording == RHIResourceGeneration::CommandState::Recording;
         lease.m_Generation->Recording = executable ? RHIResourceGeneration::CommandState::Executable : RHIResourceGeneration::CommandState::Abandoned;
         return executable;
     }
@@ -301,15 +303,79 @@ namespace Axle::RHI {
             command.m_Generation->Recording = RHIResourceGeneration::CommandState::Abandoned;
             return false;
         }
+        if (command.m_Generation->AccessValidator && resource) {
+            const auto& generation=*resource.m_Generation;
+            bool typed=generation.Kind==RHIResourceKind::Texture || generation.Kind==RHIResourceKind::Buffer ||
+                generation.Kind==RHIResourceKind::Sampler || generation.Kind==RHIResourceKind::Layout ||
+                generation.Kind==RHIResourceKind::Pool || generation.Kind==RHIResourceKind::Pipeline ||
+                (generation.Kind==RHIResourceKind::DescriptorSet && generation.ManagedDescriptorSet);
+            if (generation.NativeTexture || generation.NativeBuffer)
+                typed=typed && (alias==generation.NativeTexture || alias==generation.NativeBuffer || generation.Views.contains(alias));
+            else {
+                const auto inputs=GetAccesses(resource);
+                for (const auto& input : inputs) if (input.Texture || input.Buffer) {
+                    const bool annotated=std::any_of(inputs.begin(),inputs.end(),[&](const auto& candidate) {
+                        return candidate.Resource.GetHandle()==input.Resource.GetHandle() &&
+                            (candidate.Access!=nri::AccessBits::NONE || candidate.Layout!=nri::Layout::UNDEFINED);
+                    });
+                    if (generation.Kind!=RHIResourceKind::DescriptorSet || !annotated) typed=false;
+                }
+            }
+            if (generation.Kind==RHIResourceKind::DescriptorSet && generation.ManagedDescriptorSet) {
+                for (uint32_t range=0; range<generation.DescriptorRanges.size(); ++range)
+                    for (uint32_t slot=0; slot<generation.DescriptorRanges[range].second; ++slot) {
+                        const auto key=(static_cast<uint64_t>(range)<<32)|slot;
+                        const auto found=generation.Ranges.find(key);
+                        if (found==generation.Ranges.end() || found->second.empty() ||
+                            !found->second.front().IsLive() || !generation.RangeAccesses.contains(key)) typed=false;
+                    }
+            }
+            if (!typed) {
+                command.m_Generation->Recording=RHIResourceGeneration::CommandState::Abandoned;
+                return false;
+            }
+        }
         if (resource && resource.m_Generation->Views.contains(alias)) {
             const auto [access, layout] = resource.m_Generation->Views.at(alias);
             if (!ValidateAccess(commands, alias, access, layout)) return false;
         }
         return !resource || RecordUse(commands, resource);
     }
+    bool RHIResourceService::MarkDescriptorSet(const RHIResourceLease& lease, std::vector<std::pair<nri::DescriptorType,uint32_t>> ranges) {
+        if (!IsOwnerThread() || !lease.IsLive() || lease.m_Generation->Kind!=RHIResourceKind::DescriptorSet) return false;
+        lease.m_Generation->ManagedDescriptorSet=true;
+        lease.m_Generation->DescriptorRanges=std::move(ranges);
+        return true;
+    }
+    bool RHIResourceService::RecordDescriptorUse(const void* commands, const void* alias) {
+        const auto resource=AcquireNative(alias);
+        if (HasAccessValidator(commands) && (!resource.IsLive() ||
+            (resource.m_Generation->Kind!=RHIResourceKind::Texture && resource.m_Generation->Kind!=RHIResourceKind::Buffer) ||
+            !resource.m_Generation->Views.contains(alias))) {
+            EndRecording(commands,false); return false;
+        }
+        return RecordNativeUse(commands,alias);
+    }
+    bool RHIResourceService::RecordDescriptorSetUse(const void* commands, const void* alias) {
+        const auto resource=AcquireNative(alias);
+        if (HasAccessValidator(commands) && (!resource.IsLive() ||
+            resource.m_Generation->Kind!=RHIResourceKind::DescriptorSet || !resource.m_Generation->ManagedDescriptorSet)) {
+            EndRecording(commands,false); return false;
+        }
+        return RecordNativeUse(commands,alias);
+    }
     void RHIResourceService::DefineViewAccess(const void* alias, nri::AccessBits access, nri::Layout layout) {
         auto resource = AcquireNative(alias);
-        if (IsOwnerThread() && resource.IsLive()) resource.m_Generation->Views[alias] = {access, layout};
+        if (!IsOwnerThread() || !resource.IsLive() || alias==resource.m_Generation->NativeTexture || alias==resource.m_Generation->NativeBuffer) return;
+        const bool texture=resource.m_Generation->NativeTexture && (
+            (access==nri::AccessBits::SHADER_RESOURCE && layout==nri::Layout::SHADER_RESOURCE) ||
+            (access==nri::AccessBits::SHADER_RESOURCE_STORAGE && layout==nri::Layout::SHADER_RESOURCE_STORAGE) ||
+            (access==nri::AccessBits::COLOR_ATTACHMENT && layout==nri::Layout::COLOR_ATTACHMENT) ||
+            (access==nri::AccessBits::DEPTH_STENCIL_ATTACHMENT_WRITE && layout==nri::Layout::DEPTH_STENCIL_ATTACHMENT) ||
+            (access==nri::AccessBits::DEPTH_STENCIL_ATTACHMENT_READ && layout==nri::Layout::DEPTH_STENCIL_READONLY));
+        const bool buffer=resource.m_Generation->NativeBuffer && layout==nri::Layout::UNDEFINED &&
+            (access==nri::AccessBits::CONSTANT_BUFFER || access==nri::AccessBits::SHADER_RESOURCE || access==nri::AccessBits::SHADER_RESOURCE_STORAGE);
+        if (texture || buffer) resource.m_Generation->Views.emplace(alias,std::pair{access,layout});
     }
     std::vector<RHIResourceAccess> RHIResourceService::GetAccesses(const RHIResourceLease& resource) const {
         std::vector<RHIResourceAccess> result;
@@ -399,11 +465,36 @@ namespace Axle::RHI {
             lease.m_Generation->Kind != RHIResourceKind::DescriptorSet || IsInUse(lease)) return false;
         for (const auto& resource : resources) if (!resource.IsLive() || resource.GetHandle().Epoch != GetEpoch()) return false;
         if (resources.size() > UINT32_MAX - baseSlot) return false;
+        if (!lease.m_Generation->ManagedDescriptorSet || range>=lease.m_Generation->DescriptorRanges.size()) return false;
+        const auto [expected,count]=lease.m_Generation->DescriptorRanges[range];
+        if (baseSlot>count || resources.size()>count-baseSlot) return false;
         auto replacement = lease.m_Generation->Ranges;
         auto accessReplacement = lease.m_Generation->RangeAccesses;
         for (uint32_t i = 0; i < resources.size(); ++i) {
             const auto key = (static_cast<uint64_t>(range) << 32) | (baseSlot + i);
+            const auto kind=resources[i].m_Generation->Kind;
+            if (kind!=RHIResourceKind::Texture && kind!=RHIResourceKind::Buffer && kind!=RHIResourceKind::Sampler) return false;
             auto accesses = GetAccesses(resources[i]);
+            const bool physical=std::any_of(accesses.begin(),accesses.end(),[](const auto& input){return input.Texture || input.Buffer;});
+            if ((kind==RHIResourceKind::Sampler && physical) || (kind!=RHIResourceKind::Sampler && !physical)) return false;
+            if (physical &&
+                (!(resources[i].m_Generation->NativeTexture || resources[i].m_Generation->NativeBuffer) ||
+                    !resources[i].m_Generation->Views.contains(aliases[i]))) return false;
+            bool compatible=false;
+            if (expected==nri::DescriptorType::SAMPLER) compatible=kind==RHIResourceKind::Sampler && !physical;
+            else if (physical) {
+                const auto role=resources[i].m_Generation->Views.at(aliases[i]);
+                if (expected==nri::DescriptorType::TEXTURE) compatible=kind==RHIResourceKind::Texture && role.second==nri::Layout::SHADER_RESOURCE;
+                else if (expected==nri::DescriptorType::STORAGE_TEXTURE) compatible=kind==RHIResourceKind::Texture && role.second==nri::Layout::SHADER_RESOURCE_STORAGE;
+                else if (expected==nri::DescriptorType::CONSTANT_BUFFER) compatible=kind==RHIResourceKind::Buffer && role.first==nri::AccessBits::CONSTANT_BUFFER;
+                else if (expected==nri::DescriptorType::BUFFER || expected==nri::DescriptorType::STRUCTURED_BUFFER)
+                    compatible=kind==RHIResourceKind::Buffer && role.first==nri::AccessBits::SHADER_RESOURCE;
+                else if (expected==nri::DescriptorType::STORAGE_BUFFER || expected==nri::DescriptorType::STORAGE_STRUCTURED_BUFFER)
+                    compatible=kind==RHIResourceKind::Buffer && role.first==nri::AccessBits::SHADER_RESOURCE_STORAGE;
+                else if (expected==nri::DescriptorType::MUTABLE)
+                    compatible=(kind==RHIResourceKind::Buffer) || role.second==nri::Layout::SHADER_RESOURCE || role.second==nri::Layout::SHADER_RESOURCE_STORAGE;
+            }
+            if (!compatible) return false;
             if (const auto view = resources[i].m_Generation->Views.find(aliases[i]); view != resources[i].m_Generation->Views.end())
                 accesses.push_back({resources[i], resources[i].m_Generation->NativeTexture,
                     resources[i].m_Generation->NativeBuffer, view->second.first, view->second.second});

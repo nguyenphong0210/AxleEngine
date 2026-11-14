@@ -102,6 +102,8 @@ namespace Axle::RHI {
         // Raw migration bindings may borrow external native objects; their owner
         // must retain them through completion. Managed aliases acquire a pin.
         bool RecordNativeUse(const void* commands, const void* alias);
+        bool RecordDescriptorUse(const void* commands, const void* descriptor);
+        bool RecordDescriptorSetUse(const void* commands, const void* set);
         void DefineViewAccess(const void* alias, nri::AccessBits access, nri::Layout layout = nri::Layout::UNDEFINED);
         std::vector<RHIResourceAccess> GetAccesses(const RHIResourceLease& resource) const;
         bool SetAccessValidator(const void* commands, const void* owner,
@@ -141,6 +143,8 @@ namespace Axle::RHI {
         void CloseAfterDrain();
     private:
         friend class RHIDescriptorPool;
+        bool MarkDescriptorSet(const RHIResourceLease& lease,
+            std::vector<std::pair<nri::DescriptorType, uint32_t>> ranges);
         bool ReplaceDescriptorRange(const RHIResourceLease& lease, uint32_t range, uint32_t baseSlot,
             std::vector<RHIResourceLease> resources, const std::vector<const void*>& aliases);
         std::shared_ptr<RHIResourceOwner> m_Owner;

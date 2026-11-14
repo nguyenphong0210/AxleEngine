@@ -14,10 +14,12 @@ namespace Axle {
         m_Compiled = m_Sealed = false;
     }
     void RenderGraph::EndRecording() {
+        if (m_Commands && !IsComplete()) Fail("Incomplete graph recording cannot become executable");
         if (m_Commands) RHI::RHIDevice::Get().GetResources().ClearAccessValidator(m_Commands, this);
         m_Commands = nullptr;
+        m_CommandLease.Reset();
     }
-    bool RenderGraph::DeclareBuffer(std::string_view name, RHI::RHIResourceLease lease, RHI::RHIAccess access, Access mode) {
+    bool RenderGraph::DeclareBuffer(std::string_view name, RHI::RHIResourceLease lease, RHI::RHIAccess access, Access mode, bool defined) {
         if (m_Sealed) return Fail("Buffer declaration after graph compile");
         auto pass = std::find_if(m_Passes.begin(), m_Passes.end(), [&](const auto& p) { return p.Name == name; });
         if (pass == m_Passes.end() || !lease.IsLive() || access == RHI::RHIAccess::None)
@@ -27,7 +29,7 @@ namespace Axle {
             use.Access |= access;
             return true;
         }
-        pass->Buffers.push_back({std::move(lease), access, mode});
+        pass->Buffers.push_back({std::move(lease), access, mode, defined});
         return true;
     }
     bool RenderGraph::DeclareRead(std::string_view name, const void* alias) {
@@ -43,7 +45,9 @@ namespace Axle {
                 const auto existing = std::find_if(pass->Uses.begin(), pass->Uses.end(), [&](const auto& use) { return use.Texture == id; });
                 if (existing == pass->Uses.end()) pass->Uses.push_back({id, RHI::RHIResourceLayout::ShaderResource});
                 else if (existing->Layout != RHI::RHIResourceLayout::ShaderResource)
-                    return Fail(std::string(name) + ": sampled input conflicts with declared texture use");
+                    return Fail(std::string(name) + ": sampled input conflicts with declared texture use " +
+                        m_Textures[id].Name + " layout=" + std::to_string(static_cast<int>(existing->Layout)) +
+                        " handle=" + std::to_string(lease.GetHandle().Slot));
             } else if (input.Buffer && !DeclareBuffer(name, input.Resource, RHI::RHIAccess::ConstantBuffer)) return false;
         }
         return true;
@@ -57,6 +61,9 @@ namespace Axle {
                 if (texture.Lease.GetHandle() != input.Resource.GetHandle()) continue;
                 if (input.Layout != nri::Layout::UNDEFINED && input.Layout != RHI::ToNRILayout(use.Layout))
                     return Fail(pass.Name + ": texture layout differs from declaration: " + texture.Name);
+                const auto allowed = RHI::ToNRIAccessBits(RHI::GetDefaultAccessForLayout(use.Layout));
+                if ((static_cast<uint32_t>(input.Access) & ~static_cast<uint32_t>(allowed)) != 0)
+                    return Fail(pass.Name + ": texture access differs from declaration: " + texture.Name);
                 return true;
             }
         } else if (input.Buffer) {
@@ -66,7 +73,9 @@ namespace Axle {
                 return true;
             }
         } else return true; // pipeline/layout/pool/sampler lifetime has no physical access
-        return Fail(pass.Name + ": undeclared physical resource generation");
+        const auto handle = input.Resource.GetHandle();
+        return Fail(pass.Name + ": undeclared physical resource generation " + std::to_string(handle.Epoch) + ":" +
+            std::to_string(handle.Slot) + ":" + std::to_string(handle.Generation));
     }
 
     RenderGraph::Resource RenderGraph::Import(std::string name, nri::Texture* texture, bool defined) {
@@ -87,8 +96,9 @@ namespace Axle {
     }
 
     bool RenderGraph::Fail(std::string error) {
-        m_Error = std::move(error);
+        if (m_Error.empty()) m_Error = std::move(error);
         m_Compiled = false;
+        if (m_Commands) RHI::RHIDevice::Get().GetResources().EndRecording(m_Commands, false);
         return false;
     }
 
@@ -96,7 +106,7 @@ namespace Axle {
         m_ValidateBindings = validateBindings;
         if (!m_Error.empty()) return false;
         m_Compiled = false; m_NextPass = 0;
-        struct BufferState { RHI::RHIResourceHandle Handle; int64_t Writer = -1; std::vector<uint32_t> Readers; };
+        struct BufferState { RHI::RHIResourceHandle Handle; bool Defined; int64_t Writer = -1; std::vector<uint32_t> Readers; };
         std::vector<BufferState> buffers;
         std::vector<bool> defined;
         std::vector<std::vector<uint32_t>> users(m_Textures.size());
@@ -122,6 +132,15 @@ namespace Axle {
                 const auto& texture = m_Textures[use.Texture];
                 if (strictPhysicalResources && (!texture.Native || !texture.Lease.IsLive()))
                     return Fail(pass.Name + ": resource has no live physical generation: " + texture.Name);
+                if (strictPhysicalResources) {
+                    const auto usage=RHI::RHIDevice::Get().GetNRICore().GetTextureDesc(*texture.Native).usage;
+                    const bool supported=
+                        (use.Layout!=RHI::RHIResourceLayout::ShaderResource || bool(usage & nri::TextureUsageBits::SHADER_RESOURCE)) &&
+                        (use.Layout!=RHI::RHIResourceLayout::ShaderResourceStorage || bool(usage & nri::TextureUsageBits::SHADER_RESOURCE_STORAGE)) &&
+                        (use.Layout!=RHI::RHIResourceLayout::ColorAttachment || bool(usage & nri::TextureUsageBits::COLOR_ATTACHMENT)) &&
+                        ((use.Layout!=RHI::RHIResourceLayout::DepthStencilWrite && use.Layout!=RHI::RHIResourceLayout::DepthStencilRead) || bool(usage & nri::TextureUsageBits::DEPTH_STENCIL_ATTACHMENT));
+                    if (!supported) return Fail(pass.Name + ": physical texture usage does not support declaration: " + texture.Name);
+                }
                 const bool reads = use.Mode != Access::Write || use.LoadOp == Load::Load;
                 const bool writes = use.Mode != Access::Read;
                 const bool attachment = use.Layout == RHI::RHIResourceLayout::ColorAttachment ||
@@ -150,16 +169,32 @@ namespace Axle {
             for (const auto& use : pass.Buffers) {
                 auto& resources = RHI::RHIDevice::Get().GetResources();
                 bool physical = false;
-                for (const auto& input : resources.GetAccesses(use.Lease)) if (input.Buffer) physical = true;
+                for (const auto& input : resources.GetAccesses(use.Lease)) if (input.Buffer) {
+                    physical = true;
+                    if (strictPhysicalResources) {
+                        const auto usage=RHI::RHIDevice::Get().GetNRICore().GetBufferDesc(*input.Buffer).usage;
+                        const auto supports=[&](RHI::RHIAccess access, nri::BufferUsageBits flag) {
+                            return (use.Access & access)==RHI::RHIAccess::None || bool(usage & flag);
+                        };
+                        if (!supports(RHI::RHIAccess::VertexBuffer,nri::BufferUsageBits::VERTEX) ||
+                            !supports(RHI::RHIAccess::IndexBuffer,nri::BufferUsageBits::INDEX) ||
+                            !supports(RHI::RHIAccess::ConstantBuffer,nri::BufferUsageBits::CONSTANT) ||
+                            !supports(RHI::RHIAccess::ShaderResourceRead,nri::BufferUsageBits::SHADER_RESOURCE) ||
+                            !supports(RHI::RHIAccess::ShaderResourceStorage,nri::BufferUsageBits::SHADER_RESOURCE_STORAGE) ||
+                            !supports(RHI::RHIAccess::ArgumentBuffer,nri::BufferUsageBits::ARGUMENT))
+                            return Fail(pass.Name + ": physical buffer usage does not support declaration");
+                    }
+                }
                 if (!use.Lease.IsLive() || (strictPhysicalResources && !physical)) return Fail(pass.Name + ": missing buffer generation");
                 const auto writes = RHI::RHIAccess::CopyDest | RHI::RHIAccess::ShaderResourceStorage;
                 if ((use.Mode == Access::Read) == ((use.Access & writes) != RHI::RHIAccess::None))
                     return Fail(pass.Name + ": buffer layout/access mismatch");
                 auto state = std::find_if(buffers.begin(), buffers.end(), [&](const auto& b) { return b.Handle == use.Lease.GetHandle(); });
-                if (state == buffers.end()) { buffers.push_back({use.Lease.GetHandle()}); state = buffers.end() - 1; }
+                if (state == buffers.end()) { buffers.push_back({use.Lease.GetHandle(), use.Defined}); state = buffers.end() - 1; }
+                if (use.Mode != Access::Write && !state->Defined) return Fail(pass.Name + ": buffer read before stored write");
                 if (state->Writer >= 0) depend(static_cast<uint32_t>(state->Writer));
                 if (use.Mode == Access::Read) state->Readers.push_back(p);
-                else { for (auto reader : state->Readers) depend(reader); state->Readers.clear(); state->Writer = p; }
+                else { for (auto reader : state->Readers) depend(reader); state->Readers.clear(); state->Writer = p; state->Defined = true; }
             }
             names.emplace(pass.Name, p);
         }
@@ -170,11 +205,16 @@ namespace Axle {
     bool RenderGraph::BeginPass(std::string_view name, RHI::RHICommandBuffer& commands) {
         if (!m_Compiled || m_NextPass >= m_Passes.size() || m_Passes[m_NextPass].Name != name)
             return Fail("Pass recording differs from compiled order: " + std::string(name));
+        const auto commandLease = commands.AcquireLease();
+        if (m_CommandLease && m_CommandLease.GetHandle() != commandLease.GetHandle())
+            return Fail(std::string(name) + ": graph recording cannot switch command generations");
         m_ActivePass = m_NextPass;
-        m_Commands = commands.GetNative();
-        if (m_ValidateBindings && !RHI::RHIDevice::Get().GetResources().SetAccessValidator(m_Commands, this,
+        const auto* native = commands.GetNative();
+        if (m_ValidateBindings && !RHI::RHIDevice::Get().GetResources().SetAccessValidator(native, this,
             [this](const RHI::RHIResourceAccess& input) { return Validate(input); }))
             return Fail(std::string(name) + ": command access scope unavailable");
+        m_Commands = native;
+        m_CommandLease = commandLease;
         for (const auto& use : m_Passes[m_NextPass].Uses) {
             auto& texture = m_Textures[use.Texture];
             if (!texture.Native) return Fail(std::string(name) + ": missing physical texture: " + texture.Name);
@@ -191,7 +231,8 @@ namespace Axle {
     }
 
     bool RenderGraph::DeclareDescriptorRead(const void* descriptor, RHI::RHICommandBuffer& commands) {
-        if (!m_Compiled || m_NextPass == 0 || m_NextPass > m_Passes.size() || !descriptor)
+        if (!m_Compiled || m_NextPass == 0 || m_NextPass > m_Passes.size() || !descriptor ||
+            !m_CommandLease || m_CommandLease.GetHandle()!=commands.AcquireLease().GetHandle())
             return Fail("Descriptor read declared outside an active graph pass");
         // The graph owns the dependency/lifetime edge here.  Descriptor
         // resources may be declared while a graphics rendering scope is

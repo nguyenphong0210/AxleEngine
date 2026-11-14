@@ -39,7 +39,7 @@ namespace Axle {
         // only consumes them; binding never expands the declared resource set.
         bool DeclareRead(std::string_view pass, const void* alias);
         bool DeclareBuffer(std::string_view pass, RHI::RHIResourceLease buffer,
-            RHI::RHIAccess access, Access mode = Access::Read);
+            RHI::RHIAccess access, Access mode = Access::Read, bool contentsDefined = true);
         // When strictPhysicalResources is true, every resource used by a pass
         // must already have a native texture and live generation lease.
         bool Compile(bool strictPhysicalResources = false, bool validateBindings = true);
@@ -59,7 +59,7 @@ namespace Axle {
             std::vector<Use> Uses;
             std::vector<std::string> Required;
             std::vector<uint32_t> Dependencies;
-            struct BufferUse { RHI::RHIResourceLease Lease; RHI::RHIAccess Access; RenderGraph::Access Mode; };
+            struct BufferUse { RHI::RHIResourceLease Lease; RHI::RHIAccess Access; RenderGraph::Access Mode; bool Defined; };
             std::vector<BufferUse> Buffers;
         };
         bool Validate(const RHI::RHIResourceAccess& access);
@@ -72,6 +72,7 @@ namespace Axle {
         bool m_Sealed = false;
         bool m_ValidateBindings = true;
         const void* m_Commands = nullptr;
+        RHI::RHIResourceLease m_CommandLease;
         size_t m_ActivePass = 0;
     };
 }

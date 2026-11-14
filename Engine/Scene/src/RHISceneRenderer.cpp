@@ -452,7 +452,9 @@ namespace Axle {
         }
 
         RHIDescriptorPoolDesc taaPoolDesc;
-        taaPoolDesc.MaxDescriptorSets = 16;
+        // TAA descriptors are frame generations; old sets remain leased until
+        // queue completion and must not be rewritten in place.
+        taaPoolDesc.MaxDescriptorSets = 256;
         taaPoolDesc.MaxTextures = 64;
         taaPoolDesc.MaxSamplers = 16;
         taaPoolDesc.MaxConstantBuffers = 16;
@@ -2795,12 +2797,13 @@ namespace Axle {
                                             nri::Descriptor* outputRTV,
                                             uint32_t width, uint32_t height,
                                             nri::Format outFormat,
-                                            const RHIToneMappingConstants& constants)
+                                            const RHIToneMappingConstants& constants, RHI::RHIBuffer* frameConstants)
     {
         if (!m_Initialized || !inputHDR_SRV || !outputTarget || !outputRTV || width == 0 || height == 0) return false;
 
+        auto& constantBuffer = frameConstants ? *frameConstants : m_ToneMappingConstantBuffer;
         // 1. Update 256-byte Tone Mapping Constants
-        if (!m_ToneMappingConstantBuffer.UpdateData(&constants, sizeof(RHIToneMappingConstants)) ||
+        if (!constantBuffer.UpdateData(&constants, sizeof(RHIToneMappingConstants)) ||
             !m_ToneMappingDescriptorPool.IsValid() || !m_ToneMappingDescriptorSet) return false;
 
         // 2. Bind HDR Texture SRV & Sampler in Space 1
@@ -2842,8 +2845,8 @@ namespace Axle {
         cmd.SetPipeline(activePipeline);
         cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_ToneMappingPipelineLayout);
 
-        if (m_ToneMappingConstantBuffer.IsValid() && m_ToneMappingConstantBuffer.GetCBV()) {
-            cmd.SetRootDescriptor(0, m_ToneMappingConstantBuffer.GetCBV());
+        if (constantBuffer.IsValid() && constantBuffer.GetCBV()) {
+            cmd.SetRootDescriptor(0, constantBuffer.GetCBV());
         }
 
         if (m_ToneMappingDescriptorPool.IsValid() && m_ToneMappingDescriptorSet) {
@@ -2857,7 +2860,8 @@ namespace Axle {
         cmd.EndRendering();
 
         // Transition back to ShaderResource for presentation
-        cmd.TransitionTexture(outputTarget, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
+        if (!m_Device->GetResources().HasAccessValidator(cmd.GetNative()))
+            cmd.TransitionTexture(outputTarget, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
 
         m_LastDrawCallCount++;
         return true;
@@ -2904,12 +2908,13 @@ namespace Axle {
                                       uint32_t width, uint32_t height,
                                       nri::Format outFormat,
                                       const RHIFXAAConstants& constants,
-                                      nri::Descriptor* depthSRV)
+                                      nri::Descriptor* depthSRV, RHI::RHIBuffer* frameConstants)
     {
         if (!m_Initialized || !inputSRV || !outputTarget || !outputRTV || width == 0 || height == 0) return false;
 
+        auto& constantBuffer = frameConstants ? *frameConstants : m_FXAAConstantBuffer;
         // 1. Update 256-byte FXAA Constants
-        if (!m_FXAAConstantBuffer.UpdateData(&constants, sizeof(RHIFXAAConstants)) ||
+        if (!constantBuffer.UpdateData(&constants, sizeof(RHIFXAAConstants)) ||
             !m_FXAADescriptorPool.IsValid() || !m_FXAADescriptorSet) return false;
 
         // 2. Bind Texture SRV & Sampler in Space 1
@@ -2953,8 +2958,8 @@ namespace Axle {
         cmd.SetPipeline(activePipeline);
         cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_FXAAPipelineLayout);
 
-        if (m_FXAAConstantBuffer.IsValid() && m_FXAAConstantBuffer.GetCBV()) {
-            cmd.SetRootDescriptor(0, m_FXAAConstantBuffer.GetCBV());
+        if (constantBuffer.IsValid() && constantBuffer.GetCBV()) {
+            cmd.SetRootDescriptor(0, constantBuffer.GetCBV());
         }
 
         if (m_FXAADescriptorPool.IsValid() && m_FXAADescriptorSet) {
@@ -2968,7 +2973,8 @@ namespace Axle {
         cmd.EndRendering();
 
         // Transition back to ShaderResource for presentation
-        cmd.TransitionTexture(outputTarget, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
+        if (!m_Device->GetResources().HasAccessValidator(cmd.GetNative()))
+            cmd.TransitionTexture(outputTarget, RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
 
         m_LastDrawCallCount++;
         return true;

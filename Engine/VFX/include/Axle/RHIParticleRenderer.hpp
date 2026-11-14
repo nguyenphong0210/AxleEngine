@@ -1,4 +1,5 @@
 #pragma once
+#include <Axle/RenderGraph.hpp>
 
 #include <Axle/Types.hpp>
 #include <Axle/PerspectiveCamera.hpp>
@@ -125,7 +126,7 @@ namespace Axle {
         void End();
 
         // Render an active ParticleSystem
-        void Render(RHI::RHICommandBuffer& cmd,
+        bool Render(RHI::RHICommandBuffer& cmd,
                     const ParticleSystem& system,
                     RHI::RHITexture* texture = nullptr,
                     RHI::RHITexture* normalMap = nullptr,
@@ -136,7 +137,7 @@ namespace Axle {
                     const EffectiveParticleRenderSettings* material = nullptr);
 
         // Render directly from ParticlePool & ParticleEmitterConfig
-        void Render(RHI::RHICommandBuffer& cmd,
+        bool Render(RHI::RHICommandBuffer& cmd,
                     const ParticlePool& pool,
                     const ParticleEmitterConfig& config,
                     RHI::RHITexture* texture = nullptr,
@@ -148,7 +149,7 @@ namespace Axle {
                     const EffectiveParticleRenderSettings* material = nullptr);
 
         // Render with native NRI descriptors (for bindless / shared textures)
-        void Render(RHI::RHICommandBuffer& cmd,
+        bool Render(RHI::RHICommandBuffer& cmd,
                     const ParticlePool& pool,
                     const ParticleEmitterConfig& config,
                     nri::Descriptor* textureSRV,
@@ -158,6 +159,10 @@ namespace Axle {
                     const glm::quat& emitterWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
                     const glm::vec3& emitterWorldScale = glm::vec3(1),
                     const EffectiveParticleRenderSettings* material = nullptr);
+
+        void BeginPreparation() { m_DrawResourceCursor = 0; }
+        bool PrepareInputs(RenderGraph&, std::string_view pass, const ParticlePool&,
+            nri::Descriptor* texture, nri::Descriptor* normal, nri::Descriptor* depth);
 
         // Environment lighting
         void SetLightEnvironment(const ParticleLightEnvironment& env) { m_LightEnvironment = env; }

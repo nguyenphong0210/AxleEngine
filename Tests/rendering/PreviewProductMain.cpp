@@ -4,6 +4,7 @@
 #include <Axle/AssemblyEditorPanel.hpp>
 #include <Axle/VFXEditorPanel.hpp>
 #include <Axle/RenderParticleData.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/AssetThumbnailManager.hpp>
 #include <Axle/ImGuiLayer.hpp>
 #include <Axle/Window.hpp>
@@ -144,6 +145,18 @@ static bool Physics(const std::string& mode) {
         auto blank=render(nullptr,1),edited=render(&edit,1),played=render(&play,1),paused=render(&play,1),faded=render(&play,0),stopped=render(&edit,1),closed=render(nullptr,1);
         Require(edited!=blank&&played!=blank&&edited!=played,"active edit/play PhysicsScene changes actual debug line pixels without GL meshes");
         Require(paused==played&&stopped==edited&&closed==blank&&faded==blank,"physics pause/stop/scene close and alpha isolation");
+        if (native) for (const auto resource : {"PhysicsDebug_CBV", "PhysicsDebug_LineVB"}) {
+            bool reached=false;
+            view.PhysicsScene=&edit; view.Settings.PhysicsAlphaMultiplier=1;
+            {
+                ScopedRHIFault fault([&](std::string_view operation)->std::optional<nri::Result> {
+                    if (operation=="MapBuffer" && ScopedRHIOperation::Resource()==resource) { reached=true; return nri::Result::FAILURE; }
+                    return {};
+                });
+                Require(!service.RenderView(empty,view).Success,"physics upload failure rejects the frame");
+            }
+            Require(reached && render(&edit,1)==edited,"physics upload failure retries with original pixels");
+        }
         service.Shutdown();
     }
     RHIMeshRegistry::Get().Shutdown();Require(RHIDevice::Get().Shutdown(),"physics view shutdown");return true;
@@ -284,6 +297,17 @@ static bool Particles(const std::string& mode) {
         auto render=[&](){Require(service.RenderView(scene,view).Success,"particle production service");return native?Axle::RenderTests::ReadTexture(*service.GetDefaultMainColorTarget()):ReadGL(view.GLTargetFBO);};
         auto greenCount=[](const auto& pixels){size_t n=0;for(size_t i=0;i+3<pixels.size();i+=4)if(pixels[i+1]>pixels[i]+30&&pixels[i+1]>pixels[i+2]+30)++n;return n;};
         auto pixels=render();Require(Red(pixels)>100&&greenCount(pixels)>100,"local multi-emitter texture and referenced material pixels");
+        if (native) for (const auto prefix : {"Particle_VBO_", "Particle_CBV_"}) {
+            bool reached=false;
+            {
+                ScopedRHIFault fault([&](std::string_view operation)->std::optional<nri::Result> {
+                    if (operation=="MapBuffer" && ScopedRHIOperation::Resource().starts_with(prefix)) { reached=true; return nri::Result::FAILURE; }
+                    return {};
+                });
+                Require(!service.RenderView(scene,view).Success,"particle upload failure rejects the frame");
+            }
+            Require(reached && render()==pixels,"particle upload failure recovers identical pixels");
+        }
         auto authored=MaterialCache::GetMaterial(materialPath);Require(bool(authored),"loaded editable particle material");
         const auto frozen=ExtractRenderWorld(scene);authored->SetAlbedoColor({1,0.25f,1,1});
         const auto edited=ExtractRenderWorld(scene);

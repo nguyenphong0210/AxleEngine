@@ -5,6 +5,18 @@
 #include <algorithm>
 
 namespace Axle::RHI {
+    namespace {
+        std::vector<std::pair<nri::DescriptorType,uint32_t>> SetRanges(const RHIPipelineLayout& layout,uint32_t index,uint32_t variableNum) {
+            std::vector<std::pair<nri::DescriptorType,uint32_t>> ranges;
+            const auto& set=layout.GetDescriptorSets()[index];
+            for(uint32_t i=0;i<set.rangeNum;++i) {
+                const auto& range=set.ranges[i];
+                ranges.emplace_back(range.descriptorType,(range.flags & nri::DescriptorRangeBits::VARIABLE_SIZED_ARRAY)?variableNum:range.descriptorNum);
+            }
+            return ranges;
+        }
+    }
+
 
     RHIDescriptorPool::~RHIDescriptorPool() {
         Shutdown();
@@ -108,7 +120,7 @@ namespace Axle::RHI {
 
         m_AllocatedSets++;
         auto lease = rhiDevice.GetResources().Publish(RHIResourceKind::DescriptorSet, "DescriptorSet", {set}, {}, {m_Lease, layout.AcquireLease()});
-        if (!lease.IsLive()) return nullptr;
+        if (!lease.IsLive() || !rhiDevice.GetResources().MarkDescriptorSet(lease,SetRanges(layout,setIndex,variableNum))) return nullptr;
         m_Sets.push_back(std::move(lease));
         return set;
     }
@@ -131,7 +143,7 @@ namespace Axle::RHI {
         m_AllocatedSets += count;
         for (auto* set : sets) {
             auto lease = rhiDevice.GetResources().Publish(RHIResourceKind::DescriptorSet, "DescriptorSet", {set}, {}, {m_Lease, layout.AcquireLease()});
-            if (!lease.IsLive()) return {};
+            if (!lease.IsLive() || !rhiDevice.GetResources().MarkDescriptorSet(lease,SetRanges(layout,setIndex,variableNum))) return {};
             m_Sets.push_back(std::move(lease));
         }
         return sets;
@@ -210,7 +222,7 @@ namespace Axle::RHI {
     void RHIDescriptorPool::BindDescriptorSet(nri::CommandBuffer* cmdBuffer, uint32_t setIndex, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
         if (cmdBuffer && set) {
             auto& rhiDevice = RHIDevice::Get();
-            if (rhiDevice.CanSubmit() && rhiDevice.GetResources().RecordNativeUse(cmdBuffer, set)) {
+            if (rhiDevice.CanSubmit() && rhiDevice.GetResources().RecordDescriptorSetUse(cmdBuffer, set)) {
                 nri::SetDescriptorSetDesc setDesc = {};
                 setDesc.setIndex = setIndex;
                 setDesc.descriptorSet = set;

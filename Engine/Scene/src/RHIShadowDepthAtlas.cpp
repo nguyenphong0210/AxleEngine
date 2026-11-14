@@ -164,6 +164,18 @@ using namespace RHI;
         if(!ReleaseUnusedOwners())return false;
         m_NeedsRender=!cacheable||m_PendingKey!=m_LastKey;return true;
     }
+    bool RHIShadowDepthAtlas::DeclareInputs(RenderGraph& graph, std::string_view pass) const {
+        auto& resources = RHI::RHIDevice::Get().GetResources();
+        for (size_t i=0; i<m_Views.size(); ++i)
+            if (!graph.DeclareRead(pass, m_Cameras[i].GetCBV())) return false;
+        for (size_t i=0; i<m_CasterCount; ++i) {
+            const auto& draw=m_Draws[i];
+            if (!graph.DeclareRead(pass, draw.Material.GetCBV()) || !graph.DeclareRead(pass, draw.Set) ||
+                !graph.DeclareBuffer(pass, resources.Acquire(draw.Mesh->GetVertexHandle()), RHI::RHIAccess::VertexBuffer) ||
+                !graph.DeclareBuffer(pass, resources.Acquire(draw.Mesh->GetIndexHandle()), RHI::RHIAccess::IndexBuffer)) return false;
+        }
+        return true;
+    }
     bool RHIShadowDepthAtlas::Record(RHICommandBuffer& commands) {
         if(!NeedsRender())return true;
         nri::RenderingDesc rendering{};rendering.depth.descriptor=m_Atlas->GetDSV();

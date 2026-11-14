@@ -206,11 +206,12 @@ namespace Axle::RHI {
                 core.DestroyBuffer(buffer);
                 if (memory) core.FreeMemory(memory);
             }, std::move(dependencies));
-        device.GetResources().DefineViewAccess(cbv, nri::AccessBits::CONSTANT_BUFFER);
         const auto host = m_Desc.MemoryLocation == RHIMemoryLocation::HostReadback ? nri::AccessBits::HOST_READ :
             m_Desc.MemoryLocation == RHIMemoryLocation::Device ? nri::AccessBits::NONE : nri::AccessBits::HOST_WRITE;
-        return m_Lease.IsLive() && device.GetResources().DefineBufferState(m_Lease,
-            {host, host == nri::AccessBits::NONE ? nri::StageBits::NONE : nri::StageBits::HOST});
+        if (!m_Lease.IsLive() || !device.GetResources().DefineBufferState(m_Lease,
+            {host, host == nri::AccessBits::NONE ? nri::StageBits::NONE : nri::StageBits::HOST})) return false;
+        device.GetResources().DefineViewAccess(cbv, nri::AccessBits::CONSTANT_BUFFER);
+        return true;
     }
 
     void RHIBuffer::Shutdown() {
@@ -234,6 +235,7 @@ namespace Axle::RHI {
     }
 
     void* RHIBuffer::Map(uint64_t offset, uint64_t size) {
+        ScopedRHIOperation operation(m_Desc.DebugName);
         if (!RHIDevice::Get().CanCreateResources() || !IsValid() || RHIDevice::Get().GetResources().IsInUse(m_Lease) ||
             m_Desc.MemoryLocation == RHIMemoryLocation::Device || offset >= m_Desc.Size) return nullptr;
         const uint64_t count = size ? size : m_Desc.Size - offset;

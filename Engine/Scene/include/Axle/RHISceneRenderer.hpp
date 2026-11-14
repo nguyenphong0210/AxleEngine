@@ -299,7 +299,7 @@ namespace Axle {
                                nri::Descriptor* outputRTV,
                                uint32_t width, uint32_t height,
                                nri::Format outFormat,
-                               const RHIToneMappingConstants& constants);
+                               const RHIToneMappingConstants& constants, RHI::RHIBuffer* frameConstants = nullptr);
 
         nri::Pipeline* GetToneMappingPipeline() const { return m_ToneMappingPipelineSDR; }
         nri::Pipeline* GetHDRToneMappingPipeline() const { return m_ToneMappingPipelineHDR; }
@@ -326,7 +326,7 @@ namespace Axle {
                         uint32_t width, uint32_t height,
                         nri::Format outFormat,
                         const RHIFXAAConstants& constants,
-                        nri::Descriptor* depthSRV = nullptr);
+                        nri::Descriptor* depthSRV = nullptr, RHI::RHIBuffer* frameConstants = nullptr);
 
         nri::Pipeline* GetFXAAPipeline() const { return m_FXAAPipelineSDR; }
         nri::Pipeline* GetHDRFXAAPipeline() const { return m_FXAAPipelineHDR; }

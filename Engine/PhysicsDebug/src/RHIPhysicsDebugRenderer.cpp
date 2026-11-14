@@ -248,18 +248,20 @@ namespace Axle {
         NextFrame();
     }
 
-    void RHIPhysicsDebugRenderer::Flush(RHI::RHICommandBuffer& cmd) {
-        if (!m_Initialized || m_LineVertices.empty()) return;
+    bool RHIPhysicsDebugRenderer::Flush(RHI::RHICommandBuffer& cmd) {
+        if (!m_Initialized) return false;
+        if (m_LineVertices.empty()) return true;
 
         uint32_t totalVertices = static_cast<uint32_t>(m_LineVertices.size());
         uint32_t verticesToRender = std::min(totalVertices, MAX_VERTICES_PER_BATCH);
         // Ensure even number of vertices for LINE_LIST
         verticesToRender = (verticesToRender / 2) * 2;
-        if (verticesToRender == 0) return;
+        if (verticesToRender == 0) return true;
 
         // 1. Upload Constant Buffer
         void* cbData = m_ConstantBuffer.Map(0, sizeof(RHIPhysicsDebugConstants));
-        if (cbData) {
+        if (!cbData) return false;
+        {
             std::memcpy(cbData, &m_ActiveConstants, sizeof(RHIPhysicsDebugConstants));
             m_ConstantBuffer.Unmap();
         }
@@ -267,14 +269,15 @@ namespace Axle {
         // 2. Upload Dynamic Vertex Buffer
         uint64_t uploadBytes = verticesToRender * sizeof(RHIDebugLineVertex);
         void* vbData = m_VertexBuffer.Map(0, uploadBytes);
-        if (vbData) {
+        if (!vbData) return false;
+        {
             std::memcpy(vbData, m_LineVertices.data(), uploadBytes);
             m_VertexBuffer.Unmap();
         }
 
         // 3. Pipeline State Binding
         nri::Pipeline* pso = GetOrCreatePipeline(m_ActiveColorFormat, m_ActiveDepthFormat, m_ActiveSampleCount, m_ActiveDepthTest);
-        if (!pso) return;
+        if (!pso) return false;
 
         cmd.SetPipeline(pso);
         cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
@@ -289,15 +292,18 @@ namespace Axle {
         // 6. Draw Line List
         cmd.Draw(verticesToRender, 1, 0, 0);
 
+        if (!cmd.IsRecording()) return false;
         m_DrawCallCount++;
         m_FlushedVertexCount += verticesToRender;
         m_LineVertices.clear();
+        return true;
     }
 
-    void RHIPhysicsDebugRenderer::End(RHI::RHICommandBuffer& cmd) {
-        if (!m_InBatch) return;
-        Flush(cmd);
+    bool RHIPhysicsDebugRenderer::End(RHI::RHICommandBuffer& cmd) {
+        if (!m_InBatch) return false;
+        const bool result=Flush(cmd);
         m_InBatch = false;
+        return result;
     }
 
     void RHIPhysicsDebugRenderer::Clear() {

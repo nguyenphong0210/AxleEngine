@@ -264,14 +264,15 @@ namespace Axle::RHI {
                 if (ownedMemory) functions.FreeMemory(ownedMemory);
             }, std::move(dependencies));
         auto& resources = rhiDevice.GetResources();
+        const auto planes = desc.Format == RHITextureFormat::D24_UNORM_S8_UINT ? nri::PlaneBits::DEPTH | nri::PlaneBits::STENCIL :
+            desc.Format == RHITextureFormat::D32_FLOAT ? nri::PlaneBits::DEPTH : nri::PlaneBits::COLOR;
+        if (!m_Lease.IsLive() || !resources.DefineTextureState(m_Lease,
+            static_cast<uint16_t>(desc.MipLevels), static_cast<uint16_t>(desc.ArrayLayers), planes)) return false;
         resources.DefineViewAccess(srv, nri::AccessBits::SHADER_RESOURCE, nri::Layout::SHADER_RESOURCE);
         resources.DefineViewAccess(uav, nri::AccessBits::SHADER_RESOURCE_STORAGE, nri::Layout::SHADER_RESOURCE_STORAGE);
         resources.DefineViewAccess(rtv, nri::AccessBits::COLOR_ATTACHMENT, nri::Layout::COLOR_ATTACHMENT);
         resources.DefineViewAccess(dsv, nri::AccessBits::DEPTH_STENCIL_ATTACHMENT_WRITE, nri::Layout::DEPTH_STENCIL_ATTACHMENT);
-        const auto planes = desc.Format == RHITextureFormat::D24_UNORM_S8_UINT ? nri::PlaneBits::DEPTH | nri::PlaneBits::STENCIL :
-            desc.Format == RHITextureFormat::D32_FLOAT ? nri::PlaneBits::DEPTH : nri::PlaneBits::COLOR;
-        return m_Lease.IsLive() && rhiDevice.GetResources().DefineTextureState(m_Lease,
-            static_cast<uint16_t>(desc.MipLevels), static_cast<uint16_t>(desc.ArrayLayers), planes);
+        return true;
     }
 
     RHITexture RHITexture::RetainGeneration() const {

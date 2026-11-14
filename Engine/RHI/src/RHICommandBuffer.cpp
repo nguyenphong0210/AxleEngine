@@ -134,6 +134,11 @@ namespace Axle::RHI {
         if (!CanRecord()) return false;
 
         auto& rhiDevice = RHIDevice::Get();
+        if (rhiDevice.GetResources().HasAccessValidator(m_CommandBuffer)) {
+            rhiDevice.GetResources().EndRecording(m_CommandBuffer,false);
+            m_NeedsRecreation=true;
+            return false;
+        }
         const auto& core = rhiDevice.GetNRICore();
 
         nri::Result res = ScopedRHIFault::Invoke("EndCommandBuffer", [&] { return core.EndCommandBuffer(*m_CommandBuffer); });
@@ -324,7 +329,7 @@ namespace Axle::RHI {
 
     void RHICommandBuffer::SetDescriptorSet(nri::BindPoint bindPoint, uint32_t setIndex, nri::DescriptorSet* descriptorSet) {
         if (!CanRecord() || !descriptorSet) return;
-        if (!RetainNative(descriptorSet)) return;
+        if (!RHIDevice::Get().GetResources().RecordDescriptorSetUse(m_CommandBuffer,descriptorSet)) return;
         if (!DeclareDescriptorRead(descriptorSet)) return;
         nri::SetDescriptorSetDesc desc = {};
         desc.bindPoint = bindPoint;
@@ -346,7 +351,7 @@ namespace Axle::RHI {
 
     void RHICommandBuffer::SetRootDescriptor(uint32_t rootDescriptorIndex, nri::Descriptor* descriptor, uint32_t offset, nri::BindPoint bindPoint) {
         if (!CanRecord() || !descriptor) return;
-        if (!RetainNative(descriptor)) return;
+        if (!RHIDevice::Get().GetResources().RecordDescriptorUse(m_CommandBuffer,descriptor)) return;
         if (!DeclareDescriptorRead(descriptor)) return;
         auto& rhiDevice = RHIDevice::Get();
         const auto& core = rhiDevice.GetNRICore();
@@ -639,6 +644,7 @@ namespace Axle::RHI {
     bool RHICommandBuffer::Reset() {
         if (!IsValid() || !m_CommandAllocator) return false;
         auto& rhiDevice = RHIDevice::Get();
+        if (rhiDevice.GetResources().HasAccessValidator(m_CommandBuffer)) return false;
         if (!rhiDevice.CanSubmit()) return false;
 
         const auto& core = rhiDevice.GetNRICore();

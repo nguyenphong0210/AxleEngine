@@ -73,8 +73,8 @@ namespace Axle {
                    float depthBias = 0.0001f,
                    float alphaMultiplier = 1.0f);
 
-        void Flush(RHI::RHICommandBuffer& cmd);
-        void End(RHI::RHICommandBuffer& cmd);
+        bool Flush(RHI::RHICommandBuffer& cmd);
+        bool End(RHI::RHICommandBuffer& cmd);
 
         void Clear();
 

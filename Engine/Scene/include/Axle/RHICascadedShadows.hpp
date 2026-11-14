@@ -31,6 +31,7 @@ namespace Axle {
         void Shutdown();
         bool Prepare(const RenderWorld&, const PerspectiveCamera&, const SceneRenderSettings&, MaterialTextureCache&);
         bool Record(RHI::RHICommandBuffer&);
+        bool DeclareInputs(RenderGraph& graph, std::string_view pass) const { return m_Depth.DeclareInputs(graph, pass); }
         bool IsSupported() const { return m_Supported; }
         bool IsActive() const { return m_CPU.GetFrame().Valid && m_Constants.Atlas.x>0; }
         RHI::RHITexture* GetAtlas() { return m_Depth.GetAtlas(); }

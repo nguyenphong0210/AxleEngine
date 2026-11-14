@@ -24,6 +24,9 @@ namespace Axle {
         int RenderQueue = 2000;
         uint64_t BaseSurfaceGeneration = 0;
         ResolvedSurface Surface;
+        uint32_t DrawResourceIndex = 0;
+        nri::Pipeline* PreparedPipeline = nullptr;
+        RHIResourceLease PipelineLease;
         bool UseCustomShader = false;
         std::shared_ptr<const CustomReadyGeneration> CustomGeneration;
         PackedMaterialResultData PackedConstants;
@@ -120,7 +123,7 @@ namespace Axle {
         const auto ddgiInput = useDDGI ? graph.Import("DDGIInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto ddgiDepth = useDDGI ? graph.Import("DDGIDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto ddgiOutput = useDDGI ? graph.Import("DDGIOutput", viewTargets->GetDDGI()->GetNative()) : output;
-        const auto exposureInput = useAutoExposure ? graph.Import("ExposureInput", useToneMap ? m_IntermediateHDRTarget->GetNative() : sceneTargetTexture) : output;
+        const auto exposureInput = useAutoExposure ? graph.Import("ExposureInput", useToneMap ? m_IntermediateHDRTarget->GetNative() : m_OpaqueSceneColor->GetNative()) : output;
         const auto exposureOutput = useAutoExposure ? graph.Import("ExposureOutput", viewTargets->GetExposure()->GetNative()) : output;
 
         RHITexture* history0 = viewTargets ? viewTargets->Get(RHIViewTarget::History0) : nullptr;
@@ -177,6 +180,21 @@ namespace Axle {
 
         bool diagnosticsPassActive = false;
         std::string activePass;
+        struct PreparedParticle {
+            std::shared_ptr<const RenderParticleData> Batch;
+            EffectiveParticleRenderSettings Material;
+            std::shared_ptr<RHITexture> Texture, Normal;
+        };
+        std::vector<PreparedParticle> preparedParticles;
+        std::string activeGraphPass;
+        std::unordered_map<std::string, std::unique_ptr<RHIBuffer>> passUniforms;
+        auto passUniform = [&]() -> RHIBuffer& { return *passUniforms.at(activeGraphPass); };
+            auto uniform = [&](const std::string& name, size_t size) {
+                auto buffer=std::make_unique<RHIBuffer>();
+                if (!buffer->Init(RHIBufferDesc::Constant(size,RHIMemoryLocation::HostUpload,name+"Constants")) ||
+                    !graph.DeclareRead(name,buffer->GetCBV())) return false;
+                passUniforms.emplace(name,std::move(buffer)); return true;
+            };
         auto beginPass = [&](std::string_view name) {
             if (diagnosticsPassActive) {
                 m_ViewContext.Diagnostics().EndPass();
@@ -184,6 +202,7 @@ namespace Axle {
             }
             activePass = name;
             if (graph.BeginPass(name, Commands())) {
+                activeGraphPass = name;
                 m_ViewContext.Diagnostics().BeginPass(std::string(name));
                 diagnosticsPassActive = true;
                 return true;
@@ -293,19 +312,23 @@ namespace Axle {
         return true;
         };
 
-            nri::Pipeline* currentPipeline = activePipeline;
-
-            bool refractionReady=false;
-            size_t materialDrawIndex = 0;
-            size_t customDrawIndex = 0;
-            bool drawFailed = false;
-            auto RenderDrawItem = [&](DrawItem& item) {
-                if (item.UseCustomShader && item.CustomGeneration) {
-                    auto drawCustom=[&]() -> bool {
+        size_t materialDrawIndex = 0, customDrawIndex = 0;
+        bool drawFailed = false;
+        auto declareMesh = [&](std::string_view pass, const RHIMeshView& mesh) {
+            auto& resources = m_Device->GetResources();
+            return graph.DeclareBuffer(pass, resources.Acquire(mesh.GetVertexHandle()), RHIAccess::VertexBuffer) &&
+                graph.DeclareBuffer(pass, resources.Acquire(mesh.GetIndexHandle()), RHIAccess::IndexBuffer);
+        };
+        // Resolve resources and freeze descriptor inputs before graph compilation.
+        auto PrepareDrawItem = [&](DrawItem& item, std::string_view pass, bool refractionReady) {
+            if (!declareMesh(pass, *item.Mesh)) { drawFailed = true; return; }
+            if (item.UseCustomShader && item.CustomGeneration) {
+                auto prepareCustom = [&]() -> bool {
                         const auto& generation=*item.CustomGeneration;
                         auto* pipeline=GetOrCreateCustomPipeline(generation,sceneTargetFormat,m_CurrentDepthFormat,activeSampleCount,item.SurfaceType,item.CullMode,item.DepthWrite);
                         if (!pipeline || !generation.PipelineLayout || !generation.PipelineLayout->IsValid()) return false;
                         if (customDrawIndex==m_CustomDraws.size()) m_CustomDraws.push_back(std::make_unique<CustomDrawResources>());
+                        item.DrawResourceIndex = static_cast<uint32_t>(customDrawIndex);
                         auto& resource=*m_CustomDraws[customDrawIndex++];
                         resource.Generation=item.CustomGeneration;
                         resource.Textures.clear(); resource.Sets.clear();
@@ -351,29 +374,19 @@ namespace Axle {
                                     }
                                 }
                                 if (!descriptor || range.descriptorNum!=1) return false;
-                                m_CustomDescriptorPool.UpdateTexture(set,static_cast<uint32_t>(rangeIndex),0,descriptor);
+                                if (!m_CustomDescriptorPool.UpdateTexture(set,static_cast<uint32_t>(rangeIndex),0,descriptor)) return false;
                             }
                         }
-                        Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS,*generation.PipelineLayout);
-                        m_CustomDescriptorPool.Bind(Commands().GetNative());
-                        for(size_t i=0;i<resource.Sets.size();++i)
-                            if (!bindDescriptorSet(static_cast<uint32_t>(i), resource.Sets[i])) return false;
-                        if (!FinalizeSurfaceTextureBindings(item.Surface, resource.Textures, item.Surface.TextureFlags)) return false;
-                        Commands().SetPipeline(pipeline);
-                        item.Mesh->Bind(Commands()); item.Mesh->Draw(Commands());
-                        m_LastDrawCallCount+=static_cast<uint32_t>(item.Mesh->GetSubmeshCount()); ++m_LastRenderedEntityCount;
-                        return true;
-                    };
-                    bool drawn=drawCustom();
-                    // Restore the complete built-in binding context, even on preparation failure.
-                    Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS,m_PipelineLayout);
-                    m_DescriptorPool.Bind(Commands().GetNative());
-                    Commands().SetRootDescriptor(0,m_SceneConstantBuffer.GetCBV());
-                    Commands().SetRootDescriptor(1,m_LightBuffer.GetCBV());
-                    Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
-        Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
-                    currentPipeline=nullptr;
-                    if (drawn) return;
+                    if (!FinalizeSurfaceTextureBindings(item.Surface, resource.Textures, item.Surface.TextureFlags)) return false;
+                    item.PreparedPipeline = pipeline;
+                    item.PipelineLease = m_Device->GetResources().AcquireNative(pipeline);
+                    for (const auto& buffer : resource.ConstantBuffers)
+                        if (!graph.DeclareRead(pass, buffer.GetCBV())) return false;
+                    for (auto* set : resource.Sets) if (!graph.DeclareRead(pass, set)) return false;
+                    return item.PipelineLease.IsLive();
+                };
+                if (prepareCustom()) return;
+                if (!graph.GetError().empty()) { drawFailed = true; return; }
                     item.UseCustomShader = false;
                     item.Surface.Valid = true;
                     item.Surface.Fallback = true;
@@ -393,11 +406,6 @@ namespace Axle {
                         : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode, item.DepthWrite);
 
                 if (!needed) { drawFailed = true; return; }
-                if (needed != currentPipeline) {
-                    Commands().SetPipeline(needed);
-                    currentPipeline = needed;
-                }
-
                 if (materialDrawIndex == m_MaterialDraws.size()) {
                     auto resource = std::make_unique<MaterialDrawResources>();
                     if (!resource->Constants.Init(RHIBufferDesc::Constant(sizeof(RHIMaterialConstants), RHIMemoryLocation::HostUpload, "MaterialConstants"))) { drawFailed = true; return; }
@@ -408,6 +416,7 @@ namespace Axle {
                     }
                     m_MaterialDraws.push_back(std::move(resource));
                 }
+                item.DrawResourceIndex = static_cast<uint32_t>(materialDrawIndex);
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
                 RHIMaterialConstants materialData = item.Surface.ToMaterialConstants();
                 std::vector<nri::Descriptor*> srvs(ForwardTextureCount);
@@ -440,21 +449,42 @@ namespace Axle {
                 srvs[16]=m_LocalShadows.GetSRV();
                 materialData.RefractionFrame=glm::vec4(width,height,refractionReady?1.0f:0.0f,0.0f);
                 if (!FinalizeSurfaceTextureBindings(item.Surface, resource.Textures, materialData.Flags.x)) { drawFailed = true; return; }
-                m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs);
+                if (!m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs)) { drawFailed = true; return; }
                 if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) { drawFailed = true; return; }
+                item.PreparedPipeline = needed;
+                item.PipelineLease = m_Device->GetResources().AcquireNative(needed);
+                if (!item.PipelineLease.IsLive() || !graph.DeclareRead(pass, resource.Constants.GetCBV()) ||
+                    !graph.DeclareRead(pass, resource.Set)) drawFailed = true;
+        };
+        auto RenderDrawItem = [&](const DrawItem& item) {
+            if (item.UseCustomShader) {
+                const auto& generation = *item.CustomGeneration;
+                const auto& resource = *m_CustomDraws[item.DrawResourceIndex];
+                Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, *generation.PipelineLayout);
+                m_CustomDescriptorPool.Bind(Commands().GetNative());
+                for (size_t i=0; i<resource.Sets.size(); ++i)
+                    if (!bindDescriptorSet(static_cast<uint32_t>(i), resource.Sets[i])) { drawFailed = true; return; }
+                Commands().SetPipeline(item.PreparedPipeline);
+                item.Mesh->Bind(Commands()); item.Mesh->Draw(Commands());
+                Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+                m_DescriptorPool.Bind(Commands().GetNative());
+                Commands().SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
+                Commands().SetRootDescriptor(1, m_LightBuffer.GetCBV());
+                Commands().SetRootDescriptor(3, m_CascadedShadows.GetConstantsCBV());
+                Commands().SetRootDescriptor(4, m_LocalShadows.GetConstantsCBV());
+            } else {
+                const auto& resource = *m_MaterialDraws[item.DrawResourceIndex];
+                Commands().SetPipeline(item.PreparedPipeline);
                 Commands().SetRootDescriptor(2, resource.Constants.GetCBV());
                 if (!bindDescriptorSet(0, resource.Set)) { drawFailed = true; return; }
-
                 Commands().SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
                 m_LastStreamedTransformBytes += sizeof(item.PushConsts);
-
-                item.Mesh->Bind(Commands());
-                item.Mesh->Draw(Commands());
-
-                m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
-                m_LastRenderedEntityCount++;
-            };
-
+                item.Mesh->Bind(Commands()); item.Mesh->Draw(Commands());
+            }
+            if (!Commands().IsRecording()) { drawFailed = true; return; }
+            m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
+            ++m_LastRenderedEntityCount;
+        };
 
         // All adapters borrow this frame's inputs. Registration order is shared
         // by declaration, preparation and recording, including interleaved
@@ -484,11 +514,13 @@ namespace Axle {
         addPass("LightingAndShadows", [&](const RenderPassContext&) -> RenderPassResult {
             if (m_CascadedShadows.IsActive() &&
                 (!beginPass("CascadedShadows") || !m_CascadedShadows.Record(Commands())))
-                return RenderPassResult::Failed("CascadedShadows: recording failed");
+                return RenderPassResult::Failed("CascadedShadows: recording failed" +
+                    (m_CascadedShadows.GetDiagnostic().empty() ? std::string{} : " (" + m_CascadedShadows.GetDiagnostic() + ")"));
             m_LastDrawCallCount += m_CascadedShadows.GetDrawCount();
             if (m_LocalShadows.NeedsRender() &&
                 (!beginPass("LocalShadows") || !m_LocalShadows.Record(Commands())))
-                return RenderPassResult::Failed("LocalShadows: recording failed");
+                return RenderPassResult::Failed("LocalShadows: recording failed" +
+                    (m_LocalShadows.GetDiagnostic().empty() ? std::string{} : " (" + m_LocalShadows.GetDiagnostic() + ")"));
             m_LastDrawCallCount += m_LocalShadows.GetDrawCount();
             return RenderPassResult{};
         }, [&](RenderGraph& graph) {
@@ -496,8 +528,14 @@ namespace Axle {
             localAtlas = m_LocalShadows.GetSampledAtlas();
             shadows = graph.Import("CascadeAtlas", shadowAtlas ? shadowAtlas->GetNative() : nullptr, !m_CascadedShadows.IsActive());
             localShadows = graph.Import("LocalShadowAtlas", localAtlas ? localAtlas->GetNative() : nullptr, !m_LocalShadows.NeedsRender());
-            if (m_CascadedShadows.IsActive()) graph.AddPass("CascadedShadows", {{shadows,Layout::DepthStencilWrite,Access::Write,Load::Clear}});
-            if (m_LocalShadows.NeedsRender()) graph.AddPass("LocalShadows", {{localShadows,Layout::DepthStencilWrite,Access::Write,Load::Clear}});
+            if (m_CascadedShadows.IsActive()) {
+                graph.AddPass("CascadedShadows", {{shadows,Layout::DepthStencilWrite,Access::Write,Load::Clear}});
+                m_CascadedShadows.DeclareInputs(graph,"CascadedShadows");
+            }
+            if (m_LocalShadows.NeedsRender()) {
+                graph.AddPass("LocalShadows", {{localShadows,Layout::DepthStencilWrite,Access::Write,Load::Clear}});
+                m_LocalShadows.DeclareInputs(graph,"LocalShadows");
+            }
         }, [&](const RenderPassContext&) -> RenderPassResult {
             const ShadowPublication shadowPublication{
                 m_CascadedShadows.IsActive(), m_LocalShadows.IsActive(),
@@ -801,6 +839,23 @@ namespace Axle {
                 }
             }
 
+            for (auto& item : opaqueQueue) PrepareDrawItem(item,"OpaqueAndSky",false);
+            for (auto& item : transparentQueue) PrepareDrawItem(item,"Transparent",copyRefraction);
+            if (drawFailed) return RenderPassResult::Failed("material input preparation failed: " + graph.GetError());
+            for (const auto pass : {"OpaqueAndSky", "Transparent"}) {
+                for (auto* cbv : {m_SceneConstantBuffer.GetCBV(), m_LightBuffer.GetCBV(),
+                    m_CascadedShadows.GetConstantsCBV(), m_LocalShadows.GetConstantsCBV()})
+                    if (!graph.DeclareRead(pass,cbv)) return fail();
+            }
+            if (!graph.DeclareRead("OpaqueAndSky",m_DefaultDescriptorSet)) return fail();
+            if (settings.EnableSkybox && m_SkyboxPipeline && lighting.Environment &&
+                (!graph.DeclareRead("OpaqueAndSky",m_SkyboxDescriptorSet) ||
+                 !graph.DeclareRead("OpaqueAndSky",m_SkyboxConstantBuffer.GetCBV()))) return fail();
+            if (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) {
+                if (!graph.DeclareRead("SurfaceNormal",m_DefaultDescriptorSet) ||
+                    !graph.DeclareRead("SurfaceNormal",m_SceneConstantBuffer.GetCBV())) return fail();
+                for (const auto& item : opaqueQueue) if (!declareMesh("SurfaceNormal",*item.Mesh)) return fail();
+            }
             return {};
         });
 
@@ -851,7 +906,7 @@ namespace Axle {
         }, [&](RenderGraph& graph) {
             if (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) {
                 graph.AddPass("SurfaceNormal", {
-                    {sceneDepth, Layout::DepthStencilRead},
+                    {sceneDepth, Layout::DepthStencilWrite, Access::Write, Load::Load},
                     {sceneNormal, Layout::ColorAttachment, Access::Write, Load::Clear}});
             }
         });
@@ -861,7 +916,6 @@ namespace Axle {
                 if (!beginPass("RefractionCopy")) return fail();
                 Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
                 Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
-                refractionReady = true;
             }
             if (!beginPass("Transparent")) return fail();
             colorAttachment.loadOp = nri::LoadOp::LOAD;
@@ -876,7 +930,6 @@ namespace Axle {
             Commands().SetRootDescriptor(1,m_LightBuffer.GetCBV());
             Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
             Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
-            currentPipeline=nullptr;
 
             // 4b. Render Transparent & Additive Queue (Sorted Back-to-Front)
             if (!transparentQueue.empty()) {
@@ -920,16 +973,20 @@ namespace Axle {
                 // MSAA uses depth testing with soft intersections disabled until a compatible depth resolve exists.
                 m_ParticleRenderer->Begin(Commands(), camera, sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
                 m_ParticleRenderer->SetSceneDepth(particleDepth, width, height);
-                for (const auto& batch : world.Particles) {
-                    auto effective=batch->MaterialResolved?batch->Material:ParticleMaterialAdapter::Resolve(batch->Config,batch->Resources);
-                    auto texture = effective.UseTexture ? m_MaterialTextures.Get(effective.TexturePath, true) : nullptr;
-                    auto normal = effective.UseNormalMap ? m_MaterialTextures.Get(effective.NormalMapPath, false) : nullptr;
+                for (const auto& prepared : preparedParticles) {
+                    const auto& batch=prepared.Batch;
+                    const auto& effective=prepared.Material;
+                    const auto& texture=prepared.Texture;
+                    const auto& normal=prepared.Normal;
                     auto config = batch->Config;
                     config.BlendMode = effective.BlendMode; config.LightingEnabled = effective.LightingEnabled;
                     config.WrapLighting = effective.WrapLighting; config.ScatteringFactor = effective.ScatteringFactor;
                     config.NormalMapStrength = effective.NormalMapStrength;
-                    m_ParticleRenderer->Render(Commands(), batch->Pool, config, texture.get(), normal.get(), config.SoftnessDistance,
-                        batch->Position, batch->Rotation, batch->Scale, &effective);
+                    if (!m_ParticleRenderer->Render(Commands(), batch->Pool, config, texture.get(), normal.get(), config.SoftnessDistance,
+                        batch->Position, batch->Rotation, batch->Scale, &effective)) {
+                        m_ParticleRenderer->End(); endRendering();
+                        return RenderPassResult::Failed("particle upload or recording failed");
+                    }
                 }
                 m_ParticleRenderer->End();
                 m_LastDrawCallCount += m_ParticleRenderer->GetDrawCallCount();
@@ -952,7 +1009,9 @@ namespace Axle {
                     for (const auto& line : world.DebugLines) m_PhysicsDebugRenderer->DrawLineSegment(line.From, line.To, line.Color);
 
 
-                    m_PhysicsDebugRenderer->End(Commands());
+                    if (!m_PhysicsDebugRenderer->End(Commands())) {
+                        endRendering(); return RenderPassResult::Failed("physics debug upload or recording failed");
+                    }
                     m_LastDrawCallCount += m_PhysicsDebugRenderer->GetDrawCallCount();
                 }
             }
@@ -982,6 +1041,25 @@ namespace Axle {
             graph.AddPass("ParticlesAndPhysics", std::move(overlayUses));
             if (useMSAA) graph.AddPass("Resolve", {
                 {sceneColor,Layout::ResolveSource}, {useToneMap ? hdr : fxaa,Layout::ResolveDest,Access::Write}});
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (settings.EnableParticles && m_ParticleRenderer) {
+                m_ParticleRenderer->BeginPreparation();
+                for (const auto& batch : world.Particles) {
+                    if (!batch) return RenderPassResult::Failed("null particle snapshot");
+                    auto effective=batch->MaterialResolved?batch->Material:ParticleMaterialAdapter::Resolve(batch->Config,batch->Resources);
+                    auto texture=effective.UseTexture?m_MaterialTextures.Get(effective.TexturePath,true):nullptr;
+                    auto normal=effective.UseNormalMap?m_MaterialTextures.Get(effective.NormalMapPath,false):nullptr;
+                    if (!m_ParticleRenderer->PrepareInputs(graph,"ParticlesAndPhysics",batch->Pool,
+                        texture?texture->GetSRV():nullptr,normal?normal->GetSRV():nullptr,
+                        copyParticleDepth?m_ParticleSceneDepth->GetSRV():nullptr)) return fail();
+                    preparedParticles.push_back({batch,std::move(effective),std::move(texture),std::move(normal)});
+                }
+            }
+            if (m_PhysicsDebugRenderer && ((settings.ShowPhysicsDebug && physicsScene) || !world.DebugLines.empty())) {
+                if (!graph.DeclareRead("ParticlesAndPhysics",m_PhysicsDebugRenderer->GetConstantBuffer().GetCBV()) ||
+                    !graph.DeclareBuffer("ParticlesAndPhysics",m_PhysicsDebugRenderer->GetVertexBuffer().AcquireLease(),RHIAccess::VertexBuffer)) return fail();
+            }
+            return {};
         });
 
         addPass("ReflectionAndGI", [&](const RenderPassContext&) -> RenderPassResult {
@@ -1000,7 +1078,7 @@ namespace Axle {
                     ddgiConstants.GridSpacing = glm::vec4(grid.GridSpacing, 0.0f);
                     ddgiConstants.Params.x *= grid.EnergyMultiplier;
                 }
-                if (!m_DDGIConstantBuffer.UpdateData(&ddgiConstants, sizeof(RHIDDGIConstants))) return fail();
+                if (!passUniform().UpdateData(&ddgiConstants, sizeof(RHIDDGIConstants))) return fail();
                 auto* ddgiTarget = viewTargets->GetDDGI();
                 if (!m_DDGIDescriptorPool.UpdateTexture(m_DDGITextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV()) ||
                     !m_DDGIDescriptorPool.UpdateTexture(m_DDGITextureSet, 0, 1, m_OpaqueSceneColor->GetSRV()) ||
@@ -1008,7 +1086,7 @@ namespace Axle {
                     !m_DDGIDescriptorPool.UpdateStorageTexture(m_DDGIStorageSet, 0, 0, ddgiTarget->GetUAV())) return fail();
                 Commands().SetPipeline(m_DDGIPipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_DDGIPipelineLayout);
-                Commands().SetRootDescriptor(0, m_DDGIConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
                 m_DDGIDescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_DDGITextureSet, nri::BindPoint::COMPUTE) ||
                      !bindDescriptorSet(1, m_DDGIStorageSet, nri::BindPoint::COMPUTE)) return fail();
@@ -1042,7 +1120,7 @@ namespace Axle {
                     gtaoConstants.SunDirView = glm::vec4(0.0f);
                     gtaoConstants.ContactParams = glm::vec4(0.0f);
                 }
-                if (!m_GTAOConstantBuffer.UpdateData(&gtaoConstants, sizeof(RHIGTAOConstants))) return fail();
+                if (!passUniform().UpdateData(&gtaoConstants, sizeof(RHIGTAOConstants))) return fail();
 
                 m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
                 nri::Descriptor* normalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
@@ -1052,13 +1130,14 @@ namespace Axle {
 
                 Commands().SetPipeline(m_GTAOComputePipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_GTAOComputePipelineLayout);
-                Commands().SetRootDescriptor(0, m_GTAOConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
                 m_GTAODescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_GTAOComputeTextureSet, nri::BindPoint::COMPUTE) ||
                      !bindDescriptorSet(1, m_GTAOComputeStorageSet, nri::BindPoint::COMPUTE)) return fail();
                 Commands().Dispatch((gtaoWidth + 7) / 8, (gtaoHeight + 7) / 8, 1); ++dispatchCount;
 
                 if (!beginPass("GTAOApply")) return fail();
+                if (!passUniform().UpdateData(&gtaoConstants, sizeof(RHIGTAOConstants))) return fail();
                 m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
                 m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 1, 0, gtaoTarget->GetSRV());
                 m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV());
@@ -1086,7 +1165,7 @@ namespace Axle {
 
                 Commands().SetPipeline(applyPipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_GTAOApplyPipelineLayout);
-                Commands().SetRootDescriptor(0, m_GTAOConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::GRAPHICS);
                 m_GTAODescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_GTAOApplyDescriptorSet)) return fail();
                 Commands().Draw(3, 1, 0, 0);
@@ -1112,7 +1191,7 @@ namespace Axle {
                         1.0f / static_cast<float>(destination->GetWidth()), 1.0f / static_cast<float>(destination->GetHeight()));
                     hizConstants.Params.x = level == 0 ? 1.0f : 0.0f;
                     hizConstants.Params.y = static_cast<float>(level);
-                    if (!m_HiZConstantBuffer.UpdateData(&hizConstants, sizeof(RHIHiZConstants))) return fail();
+                    if (!passUniform().UpdateData(&hizConstants, sizeof(RHIHiZConstants))) return fail();
                     auto* textureSet = m_HiZTextureSets[level];
                     auto* storageSet = m_HiZStorageSets[level];
                     if (!textureSet || !storageSet ||
@@ -1121,7 +1200,7 @@ namespace Axle {
                         !m_HiZDescriptorPool.UpdateStorageTexture(storageSet, 0, 0, destination->GetUAV())) return fail();
                     Commands().SetPipeline(m_HiZPipeline);
                     Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_HiZPipelineLayout);
-                    Commands().SetRootDescriptor(0, m_HiZConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+                    Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
                     m_HiZDescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, textureSet, nri::BindPoint::COMPUTE) ||
                      !bindDescriptorSet(1, storageSet, nri::BindPoint::COMPUTE)) return fail();
@@ -1149,7 +1228,7 @@ namespace Axle {
                     ssrConstants.ProbePosition = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
                 }
 
-                if (!m_SSRConstantBuffer.UpdateData(&ssrConstants, sizeof(RHISSRConstants))) return fail();
+                if (!passUniform().UpdateData(&ssrConstants, sizeof(RHISSRConstants))) return fail();
 
                 for (uint32_t level = 0; level < 8; ++level) {
                     auto* hiz = viewTargets->GetHiZ(level);
@@ -1167,13 +1246,14 @@ namespace Axle {
 
                 Commands().SetPipeline(m_SSRComputePipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_SSRComputePipelineLayout);
-                Commands().SetRootDescriptor(0, m_SSRConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
                 m_SSRDescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_SSRComputeTextureSet, nri::BindPoint::COMPUTE) ||
                      !bindDescriptorSet(1, m_SSRComputeStorageSet, nri::BindPoint::COMPUTE)) return fail();
                 Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1); ++dispatchCount;
 
                 if (!beginPass("SSRApply")) return fail();
+                if (!passUniform().UpdateData(&ssrConstants, sizeof(RHISSRConstants))) return fail();
                 m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
                 m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV());
                 m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV());
@@ -1202,7 +1282,7 @@ namespace Axle {
 
                 Commands().SetPipeline(applyPipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SSRApplyPipelineLayout);
-                Commands().SetRootDescriptor(0, m_SSRConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::GRAPHICS);
                 m_SSRDescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_SSRApplyDescriptorSet)) return fail();
                 Commands().Draw(3, 1, 0, 0);
@@ -1244,7 +1324,7 @@ namespace Axle {
                 }
                 fogConstants.DDGIParams = glm::vec4(settings.DDGIMultiplier, 0.0f, 0.0f, 0.0f);
 
-                if (!m_FogConstantBuffer.UpdateData(&fogConstants, sizeof(RHIVolumetricFogConstants))) return fail();
+                if (!passUniform().UpdateData(&fogConstants, sizeof(RHIVolumetricFogConstants))) return fail();
 
                 m_FogDescriptorPool.UpdateTexture(m_FogComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
                 m_FogDescriptorPool.UpdateSampler(m_FogComputeTextureSet, 1, 0, m_FogSampler.GetNative());
@@ -1252,13 +1332,14 @@ namespace Axle {
 
                 Commands().SetPipeline(m_FogComputePipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_FogComputePipelineLayout);
-                Commands().SetRootDescriptor(0, m_FogConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
                 m_FogDescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_FogComputeTextureSet, nri::BindPoint::COMPUTE) ||
                      !bindDescriptorSet(1, m_FogComputeStorageSet, nri::BindPoint::COMPUTE)) return fail();
                 Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1); ++dispatchCount;
 
                 if (!beginPass("FogApply")) return fail();
+                if (!passUniform().UpdateData(&fogConstants, sizeof(RHIVolumetricFogConstants))) return fail();
                 m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 0, 0, m_OpaqueSceneColor->GetSRV());
                 m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV());
                 m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 2, 0, m_FogSampler.GetNative());
@@ -1285,7 +1366,7 @@ namespace Axle {
 
                 Commands().SetPipeline(applyPipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_FogApplyPipelineLayout);
-                Commands().SetRootDescriptor(0, m_FogConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::GRAPHICS);
                 m_FogDescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_FogApplyDescriptorSet)) return fail();
                 Commands().Draw(3, 1, 0, 0);
@@ -1331,6 +1412,7 @@ namespace Axle {
                 for (const auto& hiz : hizResources) ssrComputeUses.push_back({hiz, Layout::ShaderResource});
                 graph.AddPass("SSRCompute", std::move(ssrComputeUses));
                 graph.AddPass("SSRApply", {
+                    {sceneNormal, Layout::ShaderResource},
                     {ssrDepth, Layout::ShaderResource},
                     {ssrStorage, Layout::ShaderResource},
                     {ssrInput, Layout::ShaderResource},
@@ -1347,6 +1429,20 @@ namespace Axle {
                     {fogStorage, Layout::ShaderResource},
                     {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
             }
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (useDDGI && !uniform("DDGIUpdate",sizeof(RHIDDGIConstants))) return fail();
+            if (useGTAO && (!uniform("GTAOCompute",sizeof(RHIGTAOConstants)) ||
+                !uniform("GTAOApply",sizeof(RHIGTAOConstants)))) return fail();
+            if (useSSR) {
+                if (!uniform("SSRCompute",sizeof(RHISSRConstants)) || !uniform("SSRApply",sizeof(RHISSRConstants))) return fail();
+                for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
+                auto probe = m_ActiveReflectionProbePrefilter && m_ActiveReflectionProbePrefilter->IsValid()
+                    ? m_ActiveReflectionProbePrefilter : RHIMaterial::GetDefaultPrefilterCubemap();
+                if (!probe || !graph.DeclareRead("SSRCompute",probe->GetSRV())) return fail();
+            }
+            if (useFog && (!uniform("FogCompute",sizeof(RHIVolumetricFogConstants)) ||
+                !uniform("FogApply",sizeof(RHIVolumetricFogConstants)))) return fail();
+            return {};
         });
 
         addPass("PostAndTemporal", [&](const RenderPassContext&) -> RenderPassResult {
@@ -1375,6 +1471,7 @@ namespace Axle {
                 if (!beginPass("BloomCopy")) return fail();
                 Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
                 uint32_t bloomPassIndex = 0;
+                RHIBloomConstants lastBloomConstants{};
                 auto dispatchBloom = [&](std::string_view passName, RHITexture* source, RHITexture* destination, float mode, uint32_t level) -> bool {
                     if (!source || !destination || !source->IsValid() || !destination->IsValid()) { AXLE_CORE_ERROR("Bloom pass {0}: invalid source/destination", passName); return false; }
                     if (!beginPass(passName)) return false;
@@ -1384,7 +1481,8 @@ namespace Axle {
                     bloomConstants.ScreenSize = glm::vec4(dstWidth, dstHeight, 1.0f / dstWidth, 1.0f / dstHeight);
                     bloomConstants.BloomParams = glm::vec4(settings.BloomThreshold, settings.BloomIntensity, settings.BloomKnee, mode);
                     bloomConstants.BloomTint = glm::vec4(settings.BloomTint, settings.BloomRadius * std::pow(1.35f, static_cast<float>(level)));
-                    if (!m_BloomConstantBuffer.UpdateData(&bloomConstants, sizeof(RHIBloomConstants))) { AXLE_CORE_ERROR("Bloom pass {0}: constant update failed", passName); return false; }
+                    if (!passUniform().UpdateData(&bloomConstants, sizeof(RHIBloomConstants))) { AXLE_CORE_ERROR("Bloom pass {0}: constant update failed", passName); return false; }
+                    lastBloomConstants = bloomConstants;
                     if (bloomPassIndex >= m_BloomComputeTextureSets.size()) return false;
                     auto* textureSet = m_BloomComputeTextureSets[bloomPassIndex];
                     auto* storageSet = m_BloomComputeStorageSets[bloomPassIndex++];
@@ -1393,7 +1491,7 @@ namespace Axle {
                     if (m_BloomSampler.IsValid()) m_BloomDescriptorPool.UpdateSampler(textureSet, 1, 0, m_BloomSampler.GetNative());
                     Commands().SetPipeline(m_BloomComputePipeline);
                     Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_BloomComputePipelineLayout);
-                    Commands().SetRootDescriptor(0, m_BloomConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+                    Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
                     m_BloomDescriptorPool.Bind(Commands().GetNative());
                      if (!bindDescriptorSet(0, textureSet, nri::BindPoint::COMPUTE) ||
                          !bindDescriptorSet(1, storageSet, nri::BindPoint::COMPUTE)) return false;
@@ -1409,6 +1507,7 @@ namespace Axle {
                 }
 
                 if (!beginPass("BloomApply")) return fail();
+                if (!passUniform().UpdateData(&lastBloomConstants, sizeof(lastBloomConstants))) return fail();
                 m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 0, 0, viewTargets->GetBloom(0)->GetSRV());
                 m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 1, 0, m_OpaqueSceneColor->GetSRV());
                 if (m_BloomSampler.IsValid()) {
@@ -1437,7 +1536,7 @@ namespace Axle {
 
                 Commands().SetPipeline(bloomPipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_BloomApplyPipelineLayout);
-                Commands().SetRootDescriptor(0, m_BloomConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::GRAPHICS);
                 m_BloomDescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_BloomApplyDescriptorSet)) return fail();
                 Commands().Draw(3, 1, 0, 0);
@@ -1446,6 +1545,10 @@ namespace Axle {
 
             // 7c.5. Histogram-based eye adaptation on the linear HDR scene.
             if (useAutoExposure) {
+                if (!useToneMap) {
+                    if (!beginPass("AutoExposureCopy")) return fail();
+                    Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
+                }
                 if (!beginPass("AutoExposure")) return fail();
                 const uint32_t exposureWidth = useToneMap && m_IntermediateHDRTarget ? m_IntermediateHDRTarget->GetWidth() : width;
                 const uint32_t exposureHeight = useToneMap && m_IntermediateHDRTarget ? m_IntermediateHDRTarget->GetHeight() : height;
@@ -1454,7 +1557,7 @@ namespace Axle {
                     1.0f / static_cast<float>(exposureWidth), 1.0f / static_cast<float>(exposureHeight));
                 exposureConstants.ExposureParams = glm::vec4(-10.0f, 6.0f, settings.AutoExposureSpeed, 1.0f / 60.0f);
                 exposureConstants.ExposureLimits = glm::vec4(settings.AutoExposureMin, settings.AutoExposureMax, settings.AutoExposureKeyValue, 0.0f);
-                if (!m_AutoExposureConstantBuffer.UpdateData(&exposureConstants, sizeof(RHIExposureConstants))) return fail();
+                if (!passUniform().UpdateData(&exposureConstants, sizeof(RHIExposureConstants))) return fail();
                 RHITexture* exposureSource = useToneMap && m_IntermediateHDRTarget ? m_IntermediateHDRTarget : m_OpaqueSceneColor;
                 auto* exposureTarget = viewTargets->GetExposure();
                 if (!exposureSource || !exposureTarget || !m_AutoExposureDescriptorPool.UpdateTexture(m_AutoExposureTextureSet, 0, 0, exposureSource->GetSRV()) ||
@@ -1462,7 +1565,7 @@ namespace Axle {
                     !m_AutoExposureDescriptorPool.UpdateStorageTexture(m_AutoExposureStorageSet, 0, 0, exposureTarget->GetUAV())) return fail();
                 Commands().SetPipeline(m_AutoExposurePipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_AutoExposurePipelineLayout);
-                Commands().SetRootDescriptor(0, m_AutoExposureConstantBuffer.GetCBV(), 0, nri::BindPoint::COMPUTE);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
                 m_AutoExposureDescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_AutoExposureTextureSet, nri::BindPoint::COMPUTE) ||
                      !bindDescriptorSet(1, m_AutoExposureStorageSet, nri::BindPoint::COMPUTE)) return fail();
@@ -1479,13 +1582,13 @@ namespace Axle {
                                                     1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
                 taaConstants.TAAParams = glm::vec4(jitterX, jitterY, settings.TAAFeedbackMin, settings.TAAFeedbackMax);
                 taaConstants.Reserved[0].x = temporalSelection.HistoryValid ? 1.0f : 0.0f;
-                m_TAAConstantBuffer.UpdateData(&taaConstants, sizeof(RHITAAConstants));
+                if (!passUniform().UpdateData(&taaConstants, sizeof(RHITAAConstants))) return fail();
 
                 nri::Descriptor* currentSRV = m_IntermediateHDRTarget ? m_IntermediateHDRTarget->GetSRV() : m_OpaqueSceneColor->GetSRV();
                 nri::Descriptor* depthSRV = m_OpaqueSceneDepth->GetSRV();
-                m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 0, 0, currentSRV);
-                m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 1, 0, depthSRV);
-                m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 2, 0, historyRead->GetSRV());
+                if (!m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 0, 0, currentSRV) ||
+                    !m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 1, 0, depthSRV) ||
+                    !m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 2, 0, historyRead->GetSRV())) return fail();
                 if (m_TAALinearSampler.IsValid() && m_TAAPointSampler.IsValid()) {
                     m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative());
                     m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative());
@@ -1513,7 +1616,7 @@ namespace Axle {
 
                 Commands().SetPipeline(taaPipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_TAAPipelineLayout);
-                Commands().SetRootDescriptor(0, m_TAAConstantBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::GRAPHICS);
                 m_TAADescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_TAADescriptorSet)) return fail();
                 Commands().Draw(3, 1, 0, 0);
@@ -1551,7 +1654,7 @@ namespace Axle {
                                   toneOutRTV,
                                   width, height,
                                   m_CurrentColorFormat,
-                                  toneConstants)) return fail();
+                                  toneConstants, &passUniform())) return fail();
             }
 
             // 9. Post-Processing FXAA Pass
@@ -1572,7 +1675,7 @@ namespace Axle {
                            colorRTV,
                            width, height,
                            m_CurrentColorFormat,
-                           fxaaConstants)) return fail();
+                           fxaaConstants, nullptr, &passUniform())) return fail();
             }
 
             return {};
@@ -1595,39 +1698,72 @@ namespace Axle {
                     {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
             }
             if (useAutoExposure) {
+                if (!useToneMap) graph.AddPass("AutoExposureCopy", {
+                    {sceneColor,Layout::CopySource}, {exposureInput,Layout::CopyDest,Access::Write}});
                 graph.AddPass("AutoExposure", {
                     {exposureInput, Layout::ShaderResource},
                     {exposureOutput, Layout::ShaderResourceStorage, Access::Write}});
             }
             if (useTAA) {
+                const auto taaSource = useToneMap ? hdr : sceneColor;
                 graph.AddPass("TAAResolve", {
-                    {sceneColor, Layout::ShaderResource},
+                    {taaSource, Layout::ShaderResource},
                     {sceneDepth, Layout::ShaderResource},
                     {taaHistoryRead, Layout::ShaderResource},
                     {taaHistoryWrite, Layout::ColorAttachment, Access::Write, Load::Clear}});
                 graph.AddPass("TAACopy", {
                     {taaHistoryWrite, Layout::CopySource},
-                    {sceneColor, Layout::CopyDest, Access::Write}});
+                    {taaSource, Layout::CopyDest, Access::Write}});
             }
             if (useToneMap) graph.AddPass("ToneMapping", {
                 {hdr,Layout::ShaderResource}, {fxaa,Layout::ColorAttachment,Access::Write,Load::Clear}});
             if (useFXAA) graph.AddPass("FXAA", {
                 {fxaa,Layout::ShaderResource}, {output,Layout::ColorAttachment,Access::Write,Load::Clear}});
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (useBloom) {
+                if (!uniform("BloomApply",sizeof(RHIBloomConstants))) return fail();
+                for (uint32_t i=0; i<bloomResources.size(); ++i) if (!uniform("BloomDown"+std::to_string(i),sizeof(RHIBloomConstants))) return fail();
+                for (int i=static_cast<int>(bloomResources.size())-2; i>=0; --i)
+                    if (!uniform("BloomUp"+std::to_string(i),sizeof(RHIBloomConstants))) return fail();
+            }
+            if (useAutoExposure && !uniform("AutoExposure",sizeof(RHIExposureConstants))) return fail();
+            if (useTAA) {
+                m_TAADescriptorSet = m_TAADescriptorPool.AllocateDescriptorSet(m_TAAPipelineLayout, 0);
+                if (!m_TAADescriptorSet ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative()) ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative()) ||
+                    !uniform("TAAResolve",sizeof(RHITAAConstants)) ||
+                    !graph.DeclareRead("TAAResolve",m_TAADescriptorSet) ||
+                    !graph.DeclareRead("TAAResolve",m_IntermediateHDRTarget ? m_IntermediateHDRTarget->GetSRV() : m_OpaqueSceneColor->GetSRV()) ||
+                    !graph.DeclareRead("TAAResolve",m_OpaqueSceneDepth->GetSRV()) ||
+                    !graph.DeclareRead("TAAResolve",historyRead->GetSRV())) return fail();
+            }
+            if (useToneMap && !uniform("ToneMapping",sizeof(RHIToneMappingConstants))) return fail();
+            if (useFXAA && (!uniform("FXAA",sizeof(RHIFXAAConstants)) ||
+                !graph.DeclareRead("FXAA",RHIMaterial::GetDefaultWhiteTexture()->GetSRV()))) return fail();
+            return {};
         });
 
         addPass("Export", [&](const RenderPassContext&) -> RenderPassResult {
+            if (!beginPass("Export")) return fail();
             if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
                 auto& core = m_Device->GetNRICore();
                 core.CmdEndQuery(*Commands().GetNative(), *m_GPUTimestampPool, 1);
+                Commands().TransitionBuffer(m_GPUTimestampReadback.GetNative(), RHIAccess::None, RHIAccess::CopyDest);
+                if (!Commands().IsRecording()) return fail();
                 core.CmdCopyQueries(*Commands().GetNative(), *m_GPUTimestampPool, 0, 2, *m_GPUTimestampReadback.GetNative(), 0);
             }
 
-            if (!beginPass("Export") || !graph.IsComplete()) return fail();
+            if (!graph.IsComplete()) return fail();
             return {};
         }, [&](RenderGraph& graph) {
             std::vector<Graph::Use> exports{{output,Layout::ShaderResource}};
             if (sceneDepthDSV) exports.push_back({sceneDepth,Layout::DepthStencilRead});
             graph.AddPass("Export", std::move(exports));
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid() &&
+                !graph.DeclareBuffer("Export",m_GPUTimestampReadback.AcquireLease(),RHIAccess::CopyDest,Access::Write)) return fail();
+            return {};
         });
 
         RenderPassContext passContext;
@@ -1638,8 +1774,7 @@ namespace Axle {
         passContext.Graph = &graph;
         passContext.Commands = &Commands();
         passContext.Capabilities = capabilities;
-        // U4 migration: enable binding checks after exact pass inputs are prepared.
-        const auto frameResult = m_PassScheduler.Execute(passContext, true, false);
+        const auto frameResult = m_PassScheduler.Execute(passContext, true);
         if (!frameResult) {
             endRendering();
             if (diagnosticsPassActive) m_ViewContext.Diagnostics().EndPass(DiagnosticStatus::Failed);
@@ -1648,6 +1783,7 @@ namespace Axle {
             return false;
         }
         if (diagnosticsPassActive) m_ViewContext.Diagnostics().EndPass();
+        graph.EndRecording();
         if (!m_ViewContext.EndFrameAndSubmit()) {
             AXLE_CORE_ERROR("View command finalization or submit failed");
             return false;

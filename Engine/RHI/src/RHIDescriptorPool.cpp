@@ -147,6 +147,10 @@ namespace Axle::RHI {
         if (!setLease.IsLive() || std::none_of(m_Sets.begin(), m_Sets.end(), [&](const auto& owned) {
             return owned.GetHandle() == setLease.GetHandle();
         })) return false;
+        // A descriptor set becomes immutable for the lifetime of a recording as
+        // soon as the command buffer binds it. Reconfiguration must happen
+        // after completion/Reset, never against an in-flight generation.
+        if (rhiDevice.GetResources().IsInUse(setLease)) return false;
         std::vector<RHIResourceLease> resources;
         for (auto* descriptor : descriptors) {
             auto lease = rhiDevice.GetResources().AcquireNative(descriptor);

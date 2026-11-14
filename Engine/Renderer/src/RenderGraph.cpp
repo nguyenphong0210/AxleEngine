@@ -27,7 +27,7 @@ namespace Axle {
         return false;
     }
 
-    bool RenderGraph::Compile() {
+    bool RenderGraph::Compile(bool strictPhysicalResources) {
         m_Compiled = false; m_Error.clear(); m_NextPass = 0;
         std::vector<bool> defined;
         std::vector<std::vector<uint32_t>> users(m_Textures.size());
@@ -51,6 +51,8 @@ namespace Axle {
                 if (use.Texture >= m_Textures.size()) return Fail(pass.Name + ": undefined resource");
                 if (!used.insert(use.Texture).second) return Fail(pass.Name + ": aliased or duplicate resource use");
                 const auto& texture = m_Textures[use.Texture];
+                if (strictPhysicalResources && (!texture.Native || !texture.Lease.IsLive()))
+                    return Fail(pass.Name + ": resource has no live physical generation: " + texture.Name);
                 const bool reads = use.Mode != Access::Write || use.LoadOp == Load::Load;
                 const bool writes = use.Mode != Access::Read;
                 const bool attachment = use.Layout == RHI::RHIResourceLayout::ColorAttachment ||

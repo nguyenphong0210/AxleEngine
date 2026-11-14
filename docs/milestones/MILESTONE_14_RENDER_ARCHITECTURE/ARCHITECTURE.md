@@ -237,6 +237,7 @@ Ownership rules:
 - Each pass owns its pipeline state and pass-local descriptors, subject to shared caches.
 - `ViewResourceRegistry` owns candidate target generation construction and publication.
 - `RHIViewTargets` owns the textures in one published generation.
+- Each published `RHIViewTargets` carries a monotonic generation ID for diagnostics; native handles and leases remain the lifetime authority.
 - `RHIFrameContext` owns per-frame upload/uniform arenas and command recording.
 - `RHIDevice` owns queues, native device state, submission and completion.
 - A resource generation remains alive until the completion token that used it retires.
@@ -256,7 +257,7 @@ flowchart TD
     F --> G["Retain leases until completion"]
 ```
 
-The migration removes the current dual authority where graph declarations and direct renderer code can independently imply dependencies. A graph validation error is a render failure or named fallback, never a silent skip.
+The migration removes the current dual authority where graph declarations and direct renderer code can independently imply dependencies. Renderer execution uses strict graph compilation: every resource used by a pass must have a live physical generation lease before recording. A graph validation error is a render failure or named fallback, never a silent skip. Descriptor-set updates are rejected after the set has been bound in the active recording and resume only after completion/reset.
 
 ## 7. Service boundaries for M15
 

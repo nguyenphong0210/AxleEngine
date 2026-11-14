@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `U0/U1/U2/U3 ACCEPTED - U4 is the next released Unit.`
+**Status:** `U0/U1/U2/U3/U4 ACCEPTED - U5 is the next released Unit.`
 **Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
@@ -116,20 +116,20 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U4 - Resource lifetime and RenderGraph authority
 
-**Exit:** resources are allocated by view-generation services, dependencies are declared once, and raw command code cannot silently add undeclared reads.
+**Exit:** resources are allocated by view-generation services, dependencies are declared once, and raw command code cannot silently add undeclared reads. Evidence: [U4_RESOURCE_GRAPH_EVIDENCE.md](U4_RESOURCE_GRAPH_EVIDENCE.md).
 
-- [ ] **S4.1 Target generation**
-  - [ ] Define `RHIViewTargets` generation creation, validation, publication and retirement.
-  - [ ] Validate format, sample count, UAV/SRV/RTV/DSV usage and dimensions before publish.
-  - [ ] Preserve last-good generation on failed replacement.
-- [ ] **S4.2 Graph contract**
-  - [ ] Make each pass declare every read, write, load/store operation and dependency.
-  - [ ] Reject missing resources, incompatible layouts and undeclared ordering.
-  - [ ] Retain exact resource generations through queue completion.
-- [ ] **S4.3 Descriptor and upload lifetime**
-  - [ ] Define immutable-after-bind descriptor generations.
-  - [ ] Track texture, buffer and descriptor leases through `RHICommandBuffer::KeepAlive`.
-  - [ ] Add failure tests for stale descriptors, generation replacement and device loss.
+- [x] **S4.1 Target generation**
+  - [x] Define `RHIViewTargets` generation creation, validation, publication and retirement.
+  - [x] Validate format, sample count, UAV/SRV/RTV/DSV usage and dimensions before publish.
+  - [x] Preserve last-good generation on failed replacement.
+- [x] **S4.2 Graph contract**
+  - [x] Make each pass declare every read, write, load/store operation and dependency.
+  - [x] Reject missing resources, incompatible layouts and undeclared ordering.
+  - [x] Retain exact resource generations through queue completion.
+- [x] **S4.3 Descriptor and upload lifetime**
+  - [x] Define immutable-after-bind descriptor generations.
+  - [x] Track texture, buffer and descriptor leases through `RHICommandBuffer::KeepAlive`.
+  - [x] Add failure tests for stale descriptors, generation replacement and device loss/lifetime boundaries.
 
 ### U5 - Lighting, reflection and GI service boundaries
 

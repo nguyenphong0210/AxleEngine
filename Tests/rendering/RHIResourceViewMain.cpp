@@ -238,6 +238,17 @@ static bool Run(RHIType backend) {
     RENDER_CHECK(draw(), "baseline viewport configuration and render succeed");
     const auto originalPixels = ReadTexture(*view.GetColorTexture());
     RENDER_CHECK(originalPixels.size() == 64 * 64 * 4 && originalPixels[(32 * 64 + 32) * 4] > 20 && renderer.GetDrawCallCount() > 0, "actual mesh produces non-background pixels");
+    {
+        RENDER_CHECK(device.WaitIdle(), "drain baseline view before descriptor immutability probe");
+        RHIFrameContext descriptorFrame;
+        RENDER_CHECK(descriptorFrame.Init() && descriptorFrame.Begin(), "descriptor immutability probe frame begins");
+        descriptorFrame.GetCommands()->SetPipelineLayout(nri::BindPoint::GRAPHICS, renderer.GetPipelineLayout());
+        renderer.GetDescriptorPool().Bind(descriptorFrame.GetCommands()->GetNative());
+        RHIDescriptorPool::BindDescriptorSet(descriptorFrame.GetCommands()->GetNative(), 0, renderer.GetDefaultDescriptorSet());
+        RENDER_CHECK(!renderer.GetDescriptorPool().UpdateTexture(renderer.GetDefaultDescriptorSet(), 0, 0,
+            RHIMaterial::GetDefaultIrradianceCubemap()->GetSRV()), "bound descriptor generation rejects in-flight mutation");
+        RENDER_CHECK(descriptorFrame.End() && descriptorFrame.Submit() && device.WaitIdle(), "descriptor probe frame retires cleanly");
+    }
     // Exercise the Editor-owned target path with the M14 default feature mix;
     // implicit targets in the environment fixture cannot catch this boundary.
     settings.EnableToneMapping = settings.EnableFXAA = true;
@@ -338,6 +349,8 @@ static bool TargetSets(RHIType backend) {
     RENDER_CHECK(second.GetTargets()->Get(RHIViewTarget::MSAAColor)->GetDesc().SampleCount == 2 &&
         second.GetTargets()->Get(RHIViewTarget::History0)->GetWidth() == 24 && !second.GetTargets()->Get(RHIViewTarget::History1), "views do not share MSAA/history storage");
     const auto gui = first.GetImTextureID();
+    const auto firstGeneration = first.GetTargets()->GetGeneration();
+    RENDER_CHECK(firstGeneration != 0 && first.GetTargets()->Validate(), "published target generation validates its complete resource contract");
     bool reached = false;
     {
         ScopedRHIFault fail([&](std::string_view operation) -> std::optional<nri::Result> {
@@ -368,6 +381,7 @@ static bool TargetSets(RHIType backend) {
     ImGui::GetForegroundDrawList()->AddImage(static_cast<ImTextureID>(external.GetImTextureID()), ImVec2(48, 0), ImVec2(96, 48));
     auto* oldColor = first.GetColorTexture()->GetNative(); const auto oldHandle = first.GetColorTexture()->GetHandle();
     RENDER_CHECK(first.SetHDR(true) && first.SetRenderOptions(2, true, false) && first.GetDesc().HistoryCount == 2 && first.Resize(12, 12), "rapid HDR/MSAA/size changes publish complete candidates and retain history policy");
+    RENDER_CHECK(first.GetTargets()->GetGeneration() != firstGeneration && first.GetTargets()->Validate(), "replacement publishes a new validated target generation");
     first.Shutdown(); external.Shutdown();
     RENDER_CHECK(device.WaitIdle() && ReadPinnedImage(oldColor) == red && ReadPinnedImage(externalNative) == blue,
         "queued images retain original pixels across whole-view replacement/close and external-owner destruction");

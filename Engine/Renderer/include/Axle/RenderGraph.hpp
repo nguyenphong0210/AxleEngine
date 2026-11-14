@@ -30,7 +30,9 @@ namespace Axle {
         Resource Import(std::string name, nri::Texture* texture, bool contentsDefined = false);
         void AddPass(std::string name, std::vector<Use> uses,
                      std::vector<std::string> dependencies = {});
-        bool Compile();
+        // When strictPhysicalResources is true, every resource used by a pass
+        // must already have a native texture and live generation lease.
+        bool Compile(bool strictPhysicalResources = false);
         bool BeginPass(std::string_view name, RHI::RHICommandBuffer& commands);
         bool IsComplete() const { return m_Compiled && m_NextPass == m_Passes.size(); }
         const std::string& GetError() const { return m_Error; }

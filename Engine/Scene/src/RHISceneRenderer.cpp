@@ -3152,7 +3152,7 @@ namespace Axle {
             AXLE_CORE_ERROR("View graph recording failed: {0}", graph.GetError());
             return false;
         };
-        if (!graph.Compile()) {
+        if (!graph.Compile(true)) {
             AXLE_CORE_ERROR("View graph rejected: {0}", graph.GetError()); return;
         }
         if (!m_PassScheduler.Record(passContext)) {

@@ -190,6 +190,10 @@ namespace Axle::RenderTests {
         valid.AddPass("blend", {{image,Layout::ColorAttachment,Access::Write,Load::Load},{copy,Layout::ShaderResource}});
         valid.AddPass("export", {{image,Layout::ShaderResource}});
         RENDER_CHECK(valid.Compile(), "sequential clear/copy/LOAD/export is a valid graph");
+        Graph strictPhysical;
+        auto missingPhysical = strictPhysical.Import("missing physical", nullptr);
+        strictPhysical.AddPass("strict", {{missingPhysical, Layout::ColorAttachment, Access::Write, Load::Clear}});
+        RENDER_CHECK(!strictPhysical.Compile(true), "strict graph rejects a pass without a live physical generation");
         const auto& blendDeps = valid.GetDependencies(2);
         RENDER_CHECK(std::find(blendDeps.begin(),blendDeps.end(),0) != blendDeps.end() &&
                      std::find(blendDeps.begin(),blendDeps.end(),1) != blendDeps.end(), "graph derives RAW, WAW and WAR dependencies");

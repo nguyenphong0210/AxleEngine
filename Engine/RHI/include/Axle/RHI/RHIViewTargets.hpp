@@ -2,6 +2,7 @@
 #include <Axle/RHI/RHITexture.hpp>
 #include <array>
 #include <memory>
+#include <cstdint>
 
 namespace Axle::RHI {
     enum class RHIViewTarget : uint8_t {
@@ -39,10 +40,14 @@ namespace Axle::RHI {
             return level < 6 ? Get(static_cast<RHIViewTarget>(static_cast<uint8_t>(RHIViewTarget::Bloom0) + level)) : nullptr;
         }
         const RHIViewTargetDesc& GetDesc() const { return m_Desc; }
+        uint64_t GetGeneration() const { return m_Generation; }
         bool IsValid() const;
+        // Validates the published generation against its descriptor contract.
+        bool Validate() const;
     private:
         RHIViewTargetDesc m_Desc;
         std::array<std::unique_ptr<RHITexture>, static_cast<size_t>(RHIViewTarget::Count)> m_Textures;
         bool m_Initialized = false;
+        uint64_t m_Generation = 0;
     };
 }

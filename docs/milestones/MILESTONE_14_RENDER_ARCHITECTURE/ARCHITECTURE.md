@@ -325,6 +325,8 @@ The renderer facade returns a structured frame result containing success, fallba
 
 Fallback selection is part of the frame result and diagnostic report. It is not hidden from the editor or acceptance tests.
 
+`RenderBackendPolicy` is the single translation layer from `RHIDeviceCapabilities` to pass capabilities and effective settings. It records a quality tier (`None`, `Compatibility`, `Standard`, `Advanced`) and explicit states for compute, storage textures, timestamps, descriptor sets, HDR formats, MSAA, FXAA and ray tracing. `ResolveSettings` returns a fallback-safe copy; authored settings are never mutated. The renderer publishes each disabled feature reason through `RenderDiagnostics`.
+
 ## 10. Migration map
 
 | Current code | Target owner | Migration rule |

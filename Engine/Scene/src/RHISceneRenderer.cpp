@@ -3,6 +3,7 @@
 #include <Axle/RenderGraph.hpp>
 #include <Axle/SceneLighting.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
 #include <Axle/MeshResourceResolver.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/RHIPhysicsDebugRenderer.hpp>
@@ -2634,13 +2635,15 @@ namespace Axle {
                                        nri::Texture* depthTarget,
                                        nri::Descriptor* depthDSV,
                                        uint32_t width, uint32_t height,
-                                       const SceneRenderSettings& settings,
+                                       const SceneRenderSettings& requestedSettings,
                                        PhysicsScene* physicsScene,
                                        std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
         ConsumePreviousGPUTimestamp();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
+        const auto backendPolicy = RenderBackendPolicy::FromDevice(m_Device->GetCapabilities());
+        const SceneRenderSettings settings = backendPolicy.ResolveSettings(requestedSettings);
         if (!PrepareReflectionProbe(world, camera)) {
             AXLE_CORE_WARN("Reflection probe preparation failed; falling back to the active environment.");
             m_ActiveReflectionProbePrefilter.reset();
@@ -2657,6 +2660,8 @@ namespace Axle {
         viewInput.SceneRevision = world.SceneRevision;
         m_ViewContext.Observe(viewInput, m_Device->GetEpoch());
         if (!world.ErrorMessage.empty() || !m_ViewContext.BeginFrame()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
+        for (const auto& fallback : backendPolicy.CollectFallbacks(requestedSettings))
+            m_ViewContext.Diagnostics().AddFallback(fallback);
         m_ViewContext.PostProcess().BeginFrame(settings, m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT);
         RenderPassContext passContext;
         passContext.World = &world;
@@ -2664,11 +2669,12 @@ namespace Axle {
         passContext.Settings = &settings;
         passContext.View = &m_ViewContext;
         passContext.Commands = &Commands();
-        passContext.Capabilities.NativeRHI = true;
-        passContext.Capabilities.Compute = m_Device->GetCapabilities().MaxComputeWorkGroupInvocations > 0;
-        passContext.Capabilities.StorageTextures = passContext.Capabilities.Compute;
-        passContext.Capabilities.Timestamps = m_Device->GetCapabilities().TimestampFrequencyHz > 0;
-        passContext.Capabilities.RayTracing = m_Device->GetCapabilities().IsRayTracingSupported;
+        const auto passCapabilities = backendPolicy.GetPassCapabilities();
+        passContext.Capabilities.NativeRHI = passCapabilities.NativeRHI;
+        passContext.Capabilities.Compute = passCapabilities.Compute;
+        passContext.Capabilities.StorageTextures = passCapabilities.StorageTextures;
+        passContext.Capabilities.Timestamps = passCapabilities.Timestamps;
+        passContext.Capabilities.RayTracing = passCapabilities.RayTracing;
         if (!m_PassScheduler.Configure(passContext) || !m_PassScheduler.Prepare(passContext)) {
             AXLE_CORE_ERROR("Render pass preparation failed: {0}", m_PassScheduler.GetDiagnostic());
             m_ViewContext.AbandonFrame();

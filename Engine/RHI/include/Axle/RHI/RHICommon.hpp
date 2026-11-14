@@ -82,6 +82,15 @@ namespace Axle::RHI {
         bool IsEnhancedBarriersSupported = false;
         bool IsDescriptorHeapSupported = false;
 
+        // Backend-neutral renderer capability facts. These are explicit so
+        // policy code does not infer support from an unrelated hardware limit.
+        bool SupportsComputeShaders = false;
+        bool SupportsStorageTextures = false;
+        bool SupportsTimestampQueries = false;
+        bool SupportsDescriptorSets = false;
+        bool SupportsHDRFormats = false;
+        bool SupportsMSAATargets = false;
+
         // Resource & Compute Limits
         uint32_t MaxTextureDimension2D = 0;
         uint32_t MaxComputeWorkGroupInvocations = 0;

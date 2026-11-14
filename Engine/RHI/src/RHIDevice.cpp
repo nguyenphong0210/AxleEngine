@@ -376,6 +376,12 @@ namespace Axle::RHI {
         m_Capabilities.ConservativeRasterTier = 0;
         m_Capabilities.IsEnhancedBarriersSupported = false;
         m_Capabilities.IsDescriptorHeapSupported = false;
+        m_Capabilities.SupportsComputeShaders = false;
+        m_Capabilities.SupportsStorageTextures = false;
+        m_Capabilities.SupportsTimestampQueries = false;
+        m_Capabilities.SupportsDescriptorSets = false;
+        m_Capabilities.SupportsHDRFormats = false;
+        m_Capabilities.SupportsMSAATargets = false;
 
         m_Capabilities.MaxTextureDimension2D = 16384;
         m_Capabilities.MaxComputeWorkGroupInvocations = 1024;
@@ -429,6 +435,13 @@ namespace Axle::RHI {
         m_Capabilities.MaxTextureDimension2D = desc.dimensions.texture2DMaxDim;
         m_Capabilities.MaxComputeWorkGroupInvocations = desc.shaderStage.compute.workGroupInvocationMaxNum;
         m_Capabilities.MaxComputeSharedMemorySize = desc.shaderStage.compute.sharedMemoryMaxSize;
+        const bool modernBackend = m_Capabilities.ActiveBackend == RHIType::Direct3D12 || m_Capabilities.ActiveBackend == RHIType::Vulkan;
+        m_Capabilities.SupportsComputeShaders = modernBackend && m_Capabilities.MaxComputeWorkGroupInvocations > 0;
+        m_Capabilities.SupportsStorageTextures = m_Capabilities.SupportsComputeShaders;
+        m_Capabilities.SupportsTimestampQueries = modernBackend && desc.features.timestamp && m_Capabilities.TimestampFrequencyHz > 0;
+        m_Capabilities.SupportsDescriptorSets = modernBackend;
+        m_Capabilities.SupportsHDRFormats = modernBackend;
+        m_Capabilities.SupportsMSAATargets = modernBackend;
 
         AXLE_CORE_INFO("==================================================");
         AXLE_CORE_INFO(" RHI Active Backend: {0}", RHITypeToString(m_Capabilities.ActiveBackend));

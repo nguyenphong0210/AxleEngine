@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `U0/U1/U2/U3/U4/U5/U6 ACCEPTED - U7 is the next released Unit.`
+**Status:** `U0/U1/U2/U3/U4/U5/U6/U7 ACCEPTED - U8 is the next released Unit.`
 **Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
@@ -167,22 +167,24 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 **Evidence:** `U6_TEMPORAL_POST_DIAGNOSTICS_EVIDENCE.md`
 
-### U7 - Backend and fallback parity
+### U7 - Backend and fallback parity **(ACCEPTED)**
 
 **Exit:** D3D12, Vulkan and OpenGL fallback have explicit supported behavior and no false parity claims.
 
-- [ ] **S7.1 Capability policy**
-  - [ ] Map device capabilities to pass support and quality tier.
-  - [ ] Define compute, UAV, timestamp, descriptor and format fallbacks.
-  - [ ] Ensure unsupported features leave a stable direct/IBL image.
-- [ ] **S7.2 Native validation**
-  - [ ] Run Debug and Release builds for the renderer and unit tests.
-  - [ ] Run native D3D12 and Vulkan validation paths.
-  - [ ] Run OpenGL fallback tests and record intentionally reduced behavior.
-- [ ] **S7.3 Failure behavior**
-  - [ ] Test failed shader/pipeline creation.
-  - [ ] Test failed target generation and failed pass recording.
-  - [ ] Test device epoch change and recovery boundary.
+- [x] **S7.1 Capability policy**
+  - [x] Map device capabilities to pass support and quality tier.
+  - [x] Define compute, UAV, timestamp, descriptor and format fallbacks.
+  - [x] Ensure unsupported features leave a stable direct/IBL image.
+- [x] **S7.2 Native validation**
+  - [x] Run Debug and Release builds for the renderer and unit tests.
+  - [x] Run native D3D12 and Vulkan validation paths.
+  - [x] Run OpenGL fallback tests and record intentionally reduced behavior.
+- [x] **S7.3 Failure behavior**
+  - [x] Test failed shader/pipeline creation.
+  - [x] Test failed target generation and failed pass recording.
+  - [x] Test device epoch change and recovery boundary.
+
+**Evidence:** `U7_BACKEND_FALLBACK_PARITY_EVIDENCE.md`
 
 ### U8 - Migration, tests and tooling
 

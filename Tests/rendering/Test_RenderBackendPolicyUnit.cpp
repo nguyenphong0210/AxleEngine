@@ -1,6 +1,7 @@
 #include "RenderTestCommon.hpp"
 #include <Axle/RHI/RHICommon.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
 
 namespace Axle::RenderTests {
 
@@ -101,6 +102,65 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_RenderBackendFeaturePolicy() {
+        auto gl = RenderBackendPolicy::FromBackend(RendererBackendType::OpenGL_Compatibility);
+        RENDER_CHECK(gl.GetQualityTier() == BackendQualityTier::Compatibility &&
+                     !gl.Supports(BackendFeature::Compute) &&
+                     gl.GetDecision(BackendFeature::TimestampQueries).State == BackendFeatureState::Unavailable,
+                     "OpenGL compatibility policy exposes an intentionally reduced feature set");
+        SceneRenderSettings authored;
+        authored.EnableToneMapping = true;
+        authored.EnableBloom = true;
+        authored.EnableAutoExposure = true;
+        authored.EnableTAA = true;
+        authored.EnableGTAO = true;
+        authored.EnableContactShadows = true;
+        authored.EnableSSR = true;
+        authored.EnableVolumetricFog = true;
+        authored.EnableDDGI = true;
+        authored.EnableFXAA = true;
+        authored.MSAASamples = 4;
+        const auto resolvedGL = gl.ResolveSettings(authored);
+        RENDER_CHECK(resolvedGL.MSAASamples == 1 && !resolvedGL.EnableToneMapping && !resolvedGL.EnableBloom &&
+                     !resolvedGL.EnableAutoExposure && !resolvedGL.EnableTAA && !resolvedGL.EnableFXAA &&
+                     !resolvedGL.EnableGTAO && !resolvedGL.EnableSSR && !resolvedGL.EnableDDGI,
+                     "OpenGL fallback resolves unsupported post and compute features without mutating authored settings");
+        RENDER_CHECK(gl.CollectFallbacks(authored).size() >= 7, "OpenGL fallback reports explicit feature reasons");
+
+        RHI::RHIDeviceCapabilities native;
+        native.ActiveBackend = RHI::RHIType::Vulkan;
+        native.MaxComputeWorkGroupInvocations = 1024;
+        native.TimestampFrequencyHz = 1000000;
+        native.SupportsComputeShaders = true;
+        native.SupportsStorageTextures = true;
+        native.SupportsTimestampQueries = true;
+        native.SupportsDescriptorSets = true;
+        native.SupportsHDRFormats = true;
+        native.SupportsMSAATargets = true;
+        native.IsRayTracingSupported = true;
+        const auto vk = RenderBackendPolicy::FromDevice(native);
+        RENDER_CHECK(vk.GetQualityTier() == BackendQualityTier::Standard &&
+                     vk.Supports(BackendFeature::Compute) && vk.Supports(BackendFeature::StorageTextures) &&
+                     vk.Supports(BackendFeature::TimestampQueries) &&
+                     vk.GetDecision(BackendFeature::RayTracing).State == BackendFeatureState::Fallback &&
+                     vk.GetPassCapabilities().NativeRHI && !vk.GetPassCapabilities().RayTracing,
+                     "native Vulkan device facts enable supported pass capabilities without falsely enabling deferred RT");
+
+        native.MaxComputeWorkGroupInvocations = 0;
+        native.TimestampFrequencyHz = 0;
+        native.SupportsComputeShaders = false;
+        native.SupportsStorageTextures = false;
+        native.SupportsTimestampQueries = false;
+        native.IsRayTracingSupported = false;
+        const auto degraded = RenderBackendPolicy::FromDevice(native);
+        const auto resolvedDegraded = degraded.ResolveSettings(authored);
+        RENDER_CHECK(!degraded.Supports(BackendFeature::Compute) &&
+                     degraded.GetDecision(BackendFeature::TimestampQueries).State == BackendFeatureState::Unavailable &&
+                     !resolvedDegraded.EnableGTAO && !resolvedDegraded.EnableSSR,
+                     "partial native capability loss disables only dependent passes and reports unavailable telemetry");
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderBackendPolicyUnitTests() {
@@ -108,6 +168,7 @@ bool RunRenderBackendPolicyUnitTests() {
     if (!Axle::RenderTests::Test_ParseArgumentCLI()) return false;
     if (!Axle::RenderTests::Test_ParseCommandLine()) return false;
     if (!Axle::RenderTests::Test_DeviceDescPolicyContracts()) return false;
+    if (!Axle::RenderTests::Test_RenderBackendFeaturePolicy()) return false;
     std::cout << "  [RenderPolicy] All backend policy unit tests passed.\n";
     return true;
 }

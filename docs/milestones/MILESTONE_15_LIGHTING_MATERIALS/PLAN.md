@@ -133,7 +133,7 @@ the item is visible.
   - **Evidence:** [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#M15-U0-01.1--freeze-dirty-path-policy-and-source-commit) records source boundary `19ac2a1`, current HEAD, dirty paths, preservation policy and source diff check.
 - [x] **M15-U0-01.2 — Preserve user-authored scene changes.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#M15-U0-01.2--preserve-user-authored-scene-changes) records scene existence, clean scene status/diff and the no-overwrite policy.
 - [x] **M15-U0-02.1 — Create smooth-sphere fixture.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere is smooth with no triangle bands or invalid pixels.

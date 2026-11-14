@@ -22,3 +22,17 @@ scope and preservation rule are all recorded and no implementation source is
 mixed into the re-audit.
 
 Next sequential leaf: `M15-U0-01.2 — Preserve user-authored scene changes`.
+
+## M15-U0-01.2 — Preserve user-authored scene changes
+
+Result: **PASS**.
+
+- `Samples/Sandbox/assets/scenes/Test.axlescene` exists and was not modified by this checkpoint.
+- `git status --porcelain -- Samples/Sandbox/assets/scenes/Test.axlescene` is empty.
+- `git diff --name-status 19ac2a1..HEAD -- Samples/Sandbox/assets/scenes/Test.axlescene` is empty.
+- The recovery plan explicitly prohibits hard reset, overwrite, staging or commit of this user-authored scene.
+- Existing scene history remains available for recovery; no scene file was staged or rewritten.
+
+The item is complete because the user-authored scene is present, untouched and protected by the active M15 preservation rule.
+
+Next sequential leaf: `M15-U0-02.1 — Create smooth-sphere fixture`.

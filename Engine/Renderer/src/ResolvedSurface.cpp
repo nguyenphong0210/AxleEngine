@@ -1,12 +1,19 @@
 #include <Axle/ResolvedSurface.hpp>
+#include <Axle/RenderWorld.hpp>
 #include <algorithm>
 #include <cmath>
 #include <type_traits>
 
 namespace Axle {
+    bool IsSurfaceTextureBinding(const RHI::RHITexture& texture) {
+        const auto& desc = texture.GetDesc();
+        return texture.IsValid() && texture.GetSRV() && desc.Depth == 1 && desc.ArrayLayers == 1 &&
+            desc.SampleCount == 1 && !desc.IsCubeMap && desc.Format != RHI::RHITextureFormat::R32_UINT;
+    }
 
     RHI::RHIMaterialConstants ResolvedSurface::ToMaterialConstants() const {
         RHI::RHIMaterialConstants data;
+        if (!AuthoredMaterial) return data;
         data.UVTransform = glm::vec4(UVScale, UVOffset);
         data.DetailUVTransform = glm::vec4(DetailUVScale, DetailUVOffset);
         data.DetailParameters.x = std::max(0.0f, DetailNormalStrength);
@@ -30,7 +37,7 @@ namespace Axle {
 
     void ResolvedSurface::ApplyToPushConstants(RHI::RHIObjectPushConstants& constants) const {
         constants.ColorPrimary = BaseColor;
-        constants.ColorSecondary = glm::vec4(EmissionColor, EmissionIntensity);
+        constants.ColorSecondary = AuthoredMaterial ? glm::vec4(EmissionColor, EmissionIntensity) : PatternSecondary;
         constants.Params = glm::vec4(UVScale.x, static_cast<float>(ShadingModel), Roughness, Metallic);
         constants.MaterialExtra = glm::vec4(UVOffset, AlphaCutoff, static_cast<float>(Surface));
     }
@@ -68,7 +75,7 @@ namespace Axle {
             const auto handle = texture ? texture->GetHandle() : RHI::RHIResourceHandle{};
             mix(handle.Epoch); mix(handle.Slot); mix(handle.Generation);
         }
-        return hash;
+        return hash ? hash : 1;
     }
 
     ResolvedSurface MaterialResolver::Resolve(const RHI::RHIMaterial& material, uint64_t generation) {
@@ -130,10 +137,50 @@ namespace Axle {
             const auto slot = static_cast<RHI::RHITextureSlot>(i);
             result.Textures[i].Path = (i == 2 && desc.TextureMode == TextureMode::PackedORM)
                 ? desc.ORMPath : material.GetTexturePath(slot);
-            if (material.HasTexture(slot)) result.Textures[i].Native = material.GetTexture(slot);
+            if (material.HasTexture(slot)) {
+                result.Textures[i].Native = material.GetTexture(slot);
+                if (!IsSurfaceTextureBinding(*result.Textures[i].Native)) {
+                    result.Valid = false;
+                    result.Diagnostic = "SURFACE_TEXTURE_INVALID: assigned map requires a live single-sample float Texture2D SRV";
+                    return result;
+                }
+            }
         }
         result.Valid = true;
         return result;
     }
 
+    ResolvedSurface MaterialResolver::Resolve(const RenderMaterialData& snapshot) {
+        if (snapshot.RHIMaterialAsset) {
+            auto result = Resolve(*snapshot.RHIMaterialAsset);
+            if (snapshot.ContentRevision) {
+                result.Generation ^= snapshot.ContentRevision;
+                result.Generation *= 1099511628211ull;
+                if (!result.Generation) result.Generation = 1;
+            }
+            return result;
+        }
+        ResolvedSurface result;
+        result.AuthoredMaterial = false;
+        result.BaseColor = snapshot.AlbedoColor;
+        result.PatternSecondary = snapshot.SecondaryColor;
+        result.UVScale = snapshot.TileScale;
+        result.ShadingModel = static_cast<RHI::RHIShadingModel>(snapshot.PatternMode);
+        result.Roughness = snapshot.PatternMode == 0 || snapshot.PatternMode == 1 ? 0.15f : 0.5f;
+        result.Metallic = snapshot.PatternMode == 0 || snapshot.PatternMode == 1 ? 0.05f : 0.0f;
+        result.Cull = CullMode::None;
+        uint64_t hash = 1469598103934665603ull;
+        auto mix = [&](const auto& value) {
+            const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
+            for (size_t i = 0; i < sizeof(value); ++i) { hash ^= bytes[i]; hash *= 1099511628211ull; }
+        };
+        mix(result.BaseColor); mix(result.PatternSecondary); mix(result.UVScale); mix(result.ShadingModel); mix(snapshot.ContentRevision);
+        result.Generation = hash ? hash : 1;
+        result.Valid = snapshot.PatternMode >= 0 && snapshot.PatternMode <= static_cast<int>(RHI::RHIShadingModel::PackedORMTexturedPBR);
+        for (glm::length_t i = 0; i < 4; ++i)
+            result.Valid &= std::isfinite(result.BaseColor[i]) && std::isfinite(result.PatternSecondary[i]);
+        result.Valid &= std::isfinite(result.UVScale.x) && std::isfinite(result.UVScale.y);
+        if (!result.Valid) result.Diagnostic = "SURFACE_LEGACY_INVALID: invalid procedural snapshot inputs";
+        return result;
+    }
 }

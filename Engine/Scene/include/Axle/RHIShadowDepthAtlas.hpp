@@ -30,7 +30,7 @@ namespace Axle {
             std::shared_ptr<const RHI::RHIMeshView> Mesh;
             RHI::RHIObjectPushConstants Object;
             RHI::RHIBuffer Material;
-            std::shared_ptr<RHI::RHITexture> Albedo;
+            std::shared_ptr<const RHI::RHITexture> Albedo;
             nri::DescriptorSet* Set=nullptr;
             RHI::RHIResourceRef<nri::Pipeline> Pipeline;
         };

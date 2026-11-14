@@ -57,6 +57,27 @@ bool RunViewContextUnitTests() {
     RENDER_CHECK(!context.BeginFrame(), "uninitialized context cannot begin a frame");
     RENDER_CHECK(context.AbandonFrame(), "abandoning an inactive frame is idempotent");
 
+    resized.CameraCut = false;
+    resized.Settings.EnableToneMapping = true; resized.Settings.Exposure = 2;
+    context.Observe(resized, 8);
+    context.PostProcess().BeginFrame(resized.Settings, true);
+    context.Temporal().Begin(2, {0.1f,0.2f}); context.Temporal().Commit(glm::mat4(1), true);
+    const auto imported = context.Temporal().Begin(2, {0.2f,0.3f});
+    RENDER_CHECK(imported.HistoryValid && context.ObserveMaterialGeneration(99),
+        "live effective material identity changes invalidate prior history");
+    const auto invalidated = context.Temporal().Begin(2, {0.2f,0.3f});
+    RENDER_CHECK(!invalidated.HistoryValid && !invalidated.MotionValid && !invalidated.DisocclusionValid &&
+        invalidated.ReadSlot == imported.ReadSlot && invalidated.WriteSlot == imported.WriteSlot,
+        "late material invalidation retains already-imported graph slot identities");
+    RENDER_CHECK(context.GetInput().MaterialGeneration == 99 && context.Diagnostics().GetFrame().MaterialGeneration == 99,
+        "effective material generation is published to view input and diagnostics");
+    RENDER_CHECK(context.PostProcess().IsConfigured() && context.PostProcess().GetPolicy().Output == Axle::PostProcessOutput::HDR &&
+        context.PostProcess().GetPolicy().ToneMapping && context.PostProcess().GetAdaptedExposure() == 2,
+        "material reset preserves active output policy while restarting exposure");
+    context.Temporal().Commit(glm::mat4(1), true);
+    RENDER_CHECK(!context.ObserveMaterialGeneration(99) && context.Temporal().IsHistoryValid(),
+        "unchanged effective material identity preserves committed history");
+
     std::cout << "  [ViewContext] View identity and frame ownership tests passed.\n";
     return true;
 }

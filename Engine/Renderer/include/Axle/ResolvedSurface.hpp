@@ -11,23 +11,29 @@
 #include <string>
 
 namespace Axle {
+    struct RenderMaterialData;
 
     enum class SurfaceEvaluation : uint8_t { BuiltIn, CustomShader, MaterialGraph };
     enum class SurfaceFeature : uint32_t {
         Clearcoat = 1u << 0, Anisotropy = 1u << 1, Sheen = 1u << 2,
         Subsurface = 1u << 3, Absorption = 1u << 4, Refraction = 1u << 5,
         DetailNormal = 1u << 6, NormalStrength = 1u << 7,
-        SpecularPolicy = 1u << 8, ReflectionPolicy = 1u << 9, Cutout = 1u << 10
+        SpecularPolicy = 1u << 8, ReflectionPolicy = 1u << 9, Cutout = 1u << 10,
+        Emission = 1u << 11, NonBaseTextures = 1u << 12
     };
     struct ResolvedSurfaceTexture {
         std::string Path;
         std::shared_ptr<const RHI::RHITexture> Native;
     };
+    // Canonical material maps are individual, single-sample float Texture2D SRVs.
+    bool IsSurfaceTextureBinding(const RHI::RHITexture& texture);
 
     // Canonical CPU material result shared by built-in PBR, preview, graph
     // validation and screen-space consumers. Units are documented in the M14
     // architecture contract; GPU packing is deterministic and 256-byte aligned.
     struct ResolvedSurface {
+        bool AuthoredMaterial = true;
+        glm::vec4 PatternSecondary{1.0f}; // Explicit adapter for unmaterialized procedural meshes.
         glm::vec4 BaseColor{1.0f};
         float Metallic = 0.0f;
         float Roughness = 0.5f;
@@ -82,6 +88,7 @@ namespace Axle {
         uint32_t UnsupportedFeatures = 0;
         uint64_t Generation = 0;
         bool Valid = true;
+        bool Fallback = false;
         std::string Diagnostic;
 
         RHI::RHIMaterialConstants ToMaterialConstants() const;
@@ -91,6 +98,7 @@ namespace Axle {
     class MaterialResolver {
     public:
         static ResolvedSurface Resolve(const RHI::RHIMaterial& material, uint64_t generation = 0);
+        static ResolvedSurface Resolve(const RenderMaterialData& snapshot);
         static uint64_t ComputeGeneration(const RHI::RHIMaterial& material);
     };
 

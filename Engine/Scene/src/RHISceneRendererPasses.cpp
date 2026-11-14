@@ -3,6 +3,7 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/SceneLighting.hpp>
+#include <Axle/ShaderSurface.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/RHIPhysicsDebugRenderer.hpp>
 #include <Axle/PhysicsScene.hpp>
@@ -21,9 +22,8 @@ namespace Axle {
         bool DepthWrite = true;
         float DistanceSq = 0.0f;
         int RenderQueue = 2000;
-        std::shared_ptr<const RHIMaterial> Material;
+        uint64_t BaseSurfaceGeneration = 0;
         ResolvedSurface Surface;
-        bool HasResolvedSurface = false;
         bool UseCustomShader = false;
         std::shared_ptr<const CustomReadyGeneration> CustomGeneration;
         PackedMaterialResultData PackedConstants;
@@ -129,7 +129,7 @@ namespace Axle {
         RHITexture* historyWrite = nullptr;
         const bool useTAA = settings.EnableTAA && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_TAAPipelineSDR && history0 && history0->IsValid() && history1 && history1->IsValid();
-        const auto temporalSelection = m_ViewContext.Temporal().Begin(useTAA ? 2 : 0, { jitterX, jitterY });
+        auto temporalSelection = m_ViewContext.Temporal().Begin(useTAA ? 2 : 0, { jitterX, jitterY });
         historyRead = (temporalSelection.ReadSlot == 0) ? history0 : history1;
         historyWrite = (temporalSelection.WriteSlot == 0) ? history0 : history1;
         // The first frame deliberately reads an uninitialized slot but the
@@ -299,7 +299,7 @@ namespace Axle {
             size_t materialDrawIndex = 0;
             size_t customDrawIndex = 0;
             bool drawFailed = false;
-            auto RenderDrawItem = [&](const DrawItem& item) {
+            auto RenderDrawItem = [&](DrawItem& item) {
                 if (item.UseCustomShader && item.CustomGeneration) {
                     auto drawCustom=[&]() -> bool {
                         const auto& generation=*item.CustomGeneration;
@@ -319,7 +319,12 @@ namespace Axle {
                             if (!buffer.UpdateData(buffers[i].Bytes.data(),buffers[i].Bytes.size())) return false;
                         }
                         for(const auto& request:item.TextureRequests) {
-                            auto texture=m_MaterialTextures.Get(request.ResolvedPath,request.Role==TextureRole::Color);
+                            std::shared_ptr<const RHITexture> texture = request.Native;
+                            if (!texture) {
+                                std::string diagnostic;
+                                texture=m_MaterialTextures.Get(request.ResolvedPath,request.Role==TextureRole::Color,&diagnostic);
+                                if (!diagnostic.empty()) { item.Surface.Fallback=true; item.Surface.Diagnostic=std::move(diagnostic); }
+                            }
                             if (!texture) texture=request.Role==TextureRole::TangentNormal?RHIMaterial::GetDefaultFlatNormalTexture():RHIMaterial::GetDefaultWhiteTexture();
                             if (!texture || !texture->GetSRV()) return false;
                             resource.Textures.push_back(std::move(texture));
@@ -353,6 +358,7 @@ namespace Axle {
                         m_CustomDescriptorPool.Bind(Commands().GetNative());
                         for(size_t i=0;i<resource.Sets.size();++i)
                             if (!bindDescriptorSet(static_cast<uint32_t>(i), resource.Sets[i])) return false;
+                        if (!FinalizeSurfaceTextureBindings(item.Surface, resource.Textures, item.Surface.TextureFlags)) return false;
                         Commands().SetPipeline(pipeline);
                         item.Mesh->Bind(Commands()); item.Mesh->Draw(Commands());
                         m_LastDrawCallCount+=static_cast<uint32_t>(item.Mesh->GetSubmeshCount()); ++m_LastRenderedEntityCount;
@@ -368,7 +374,17 @@ namespace Axle {
         Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
                     currentPipeline=nullptr;
                     if (drawn) return;
-                    m_MaterialDiagnostics[static_cast<uint32_t>(item.DiagnosticEntity)] = "Custom draw pipeline or resource preparation failed; using built-in material.";
+                    item.UseCustomShader = false;
+                    item.Surface.Valid = true;
+                    item.Surface.Fallback = true;
+                    item.Surface.Evaluation = SurfaceEvaluation::BuiltIn;
+                    item.Surface.ShaderGeneration = 0;
+                    item.Surface.UnsupportedFeatures = 0;
+                    item.Surface.Generation = item.BaseSurfaceGeneration;
+                    item.Surface.Diagnostic = "CUSTOM_DRAW_FALLBACK: pipeline/resource preparation failed; using built-in material";
+                    const auto entity = static_cast<uint32_t>(item.DiagnosticEntity);
+                    m_MaterialDiagnostics[entity] = item.Surface.Diagnostic;
+                    if (auto feedback = m_MaterialFeedback.find(entity); feedback != m_MaterialFeedback.end()) feedback->second.Generation = 0;
                 }
                 nri::Pipeline* needed = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
                     ? m_PipelineHDR
@@ -393,27 +409,26 @@ namespace Axle {
                     m_MaterialDraws.push_back(std::move(resource));
                 }
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
-                RHIMaterialConstants materialData;
-                if (item.HasResolvedSurface) materialData = item.Surface.ToMaterialConstants();
+                RHIMaterialConstants materialData = item.Surface.ToMaterialConstants();
                 std::vector<nri::Descriptor*> srvs(ForwardTextureCount);
                 for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
-                    auto textureSlot = static_cast<RHITextureSlot>(slot);
-                    std::shared_ptr<RHITexture> texture;
-                    if (item.Material && (materialData.Flags.x & (1u << slot))) {
-                        if (item.Material->HasTexture(textureSlot)) texture = item.Material->GetTexture(textureSlot);
-                        else {
-                            const auto& desc = item.Material->GetDesc();
-                            auto path = slot == 2 && desc.TextureMode == TextureMode::PackedORM
-                                ? desc.ORMPath : item.Material->GetTexturePath(textureSlot);
-                            texture = m_MaterialTextures.Get(path, slot == 0 || slot == 5);
+                    std::shared_ptr<const RHITexture> texture;
+                    if (materialData.Flags.x & (1u << slot)) {
+                        const auto& binding = item.Surface.Textures[slot];
+                        texture = binding.Native;
+                        if (!texture) {
+                            std::string diagnostic;
+                            texture = m_MaterialTextures.Get(binding.Path, slot == 0 || slot == 5, &diagnostic);
+                            if (!diagnostic.empty()) { item.Surface.Fallback=true; item.Surface.Diagnostic=std::move(diagnostic); }
                         }
                     }
                     if (!texture) {
                         materialData.Flags.x &= ~(1u << slot);
-                        texture = RHIMaterial::GetFallbackTexture(textureSlot);
+                        texture = RHIMaterial::GetFallbackTexture(static_cast<RHITextureSlot>(slot));
                     }
                     if (!texture || !texture->GetSRV()) { drawFailed = true; return; }
                     resource.Textures[slot] = texture;
+                    item.Surface.Textures[slot].Native = texture;
                     srvs[slot<6?slot:slot+3]=texture->GetSRV();
                 }
                 srvs[6]=ActiveIrradiance()->GetSRV();
@@ -424,6 +439,7 @@ namespace Axle {
                 srvs[15]=m_CascadedShadows.GetSRV();
                 srvs[16]=m_LocalShadows.GetSRV();
                 materialData.RefractionFrame=glm::vec4(width,height,refractionReady?1.0f:0.0f,0.0f);
+                if (!FinalizeSurfaceTextureBindings(item.Surface, resource.Textures, materialData.Flags.x)) { drawFailed = true; return; }
                 m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs);
                 if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) { drawFailed = true; return; }
                 Commands().SetRootDescriptor(2, resource.Constants.GetCBV());
@@ -680,7 +696,7 @@ namespace Axle {
                 return a.RenderQueue < b.RenderQueue;
             });
             // 4a. Render Opaque & Cutout Queue
-            for (const auto& item : opaqueQueue) {
+            for (auto& item : opaqueQueue) {
                 RenderDrawItem(item);
                 if (drawFailed) { endRendering(); return fail(); }
             }
@@ -709,12 +725,13 @@ namespace Axle {
                     item.DiagnosticEntity=entityID;
                     item.Mesh = mesh;
                     item.PushConsts.Model = worldMat;
-                    item.PushConsts.ColorPrimary = meshInst.Material.AlbedoColor;
-                    item.PushConsts.ColorSecondary = meshInst.Material.SecondaryColor;
-                    float defaultRoughness = (meshInst.Material.PatternMode == 1 || meshInst.Material.PatternMode == 0) ? 0.15f : 0.5f;
-                    float defaultMetallic = (meshInst.Material.PatternMode == 1 || meshInst.Material.PatternMode == 0) ? 0.05f : 0.0f;
-                    item.PushConsts.Params = glm::vec4(meshInst.Material.TileScale.x, static_cast<float>(meshInst.Material.PatternMode), defaultRoughness, defaultMetallic);
-                    item.PushConsts.SunDirAndIntensity = sceneConstants.SunDirection;
+                    item.Surface = MaterialResolver::Resolve(meshInst.Material);
+                    item.BaseSurfaceGeneration = item.Surface.Generation;
+                    if (!item.Surface.Valid) {
+                        m_MaterialDiagnostics[meshInst.EntityID] = item.Surface.Diagnostic;
+                        m_ViewContext.Diagnostics().AddMaterial(meshInst.EntityID, item.Surface);
+                        return RenderPassResult::Failed(item.Surface.Diagnostic);
+                    }
                     glm::vec3 diff = glm::vec3(worldMat[3]) - camPos;
                     item.DistanceSq = glm::dot(diff, diff);
 
@@ -722,11 +739,6 @@ namespace Axle {
                     // Entity material overrides the mesh resource material.
                     if (meshInst.Material.RHIMaterialAsset) {
                         auto mat = meshInst.Material;
-                        item.Material = mat.RHIMaterialAsset;
-                        item.Surface = MaterialResolver::Resolve(*item.Material);
-                        item.HasResolvedSurface = item.Surface.Valid;
-                        if (!item.HasResolvedSurface)
-                            m_MaterialDiagnostics[meshInst.EntityID] = "Material resolver returned an invalid ResolvedSurface";
                         auto diagnostic=[&](std::string message) {
                             m_MaterialDiagnostics[meshInst.EntityID] = std::move(message);
                         };
@@ -750,30 +762,29 @@ namespace Axle {
                                 engine.View=sceneConstants.View; engine.Projection=sceneConstants.Projection;
                                 engine.CameraPosition=sceneConstants.CameraPosition;
                                 engine.SunDirection=sceneConstants.SunDirection; engine.SunColor=sceneConstants.SunColor;
-                                engine.BaseColor=mat.AlbedoColor; engine.BaseUVTransform=glm::vec4(mat.UVScale,mat.UVOffset);
-                                engine.LegacySurfaceParams=glm::vec4(mat.Roughness,mat.Metallic,mat.AO,mat.UVScale.x);
-                                auto resolved=ResolveMaterialProperties(plan,mat.CustomProperties);
-                                if (auto* properties=std::get_if<ResolvedMaterialProperties>(&resolved)) {
-                                    auto packed=PackMaterialUniforms(plan,engine,*properties);
-                                    if (auto* buffers=std::get_if<PackedMaterialResultData>(&packed)) {
-                                        EffectiveMaterialValues values;
-                                        values.BaseMapPath=mat.AlbedoPath; values.UseBaseMap=mat.UseAlbedoMap;
-                                        values.Properties=mat.CustomProperties;
-                                        auto textures=ResolveMaterialTextureRequests(plan,values);
-                                        if (auto* requests=std::get_if<TextureRequestResultData>(&textures)) {
-                                            item.PackedConstants=std::move(*buffers);
-                                            item.TextureRequests=std::move(requests->Requests);
-                                            item.CustomGeneration=selected.Generation;
-                                            item.UseCustomShader=true;
-                                        } else diagnostic(std::get<MaterialBindingError>(textures).Message);
-                                    } else diagnostic(std::get<MaterialBindingError>(packed).Message);
-                                } else diagnostic(std::get<MaterialBindingError>(resolved).Message);
+                                auto resolved = ResolveShaderSurface(item.Surface, SurfaceEvaluation::CustomShader,
+                                    selected.Generation->GenerationID, plan, engine, mat.CustomProperties);
+                                if (auto* surface = std::get_if<ResolvedShaderSurface>(&resolved)) {
+                                    item.Surface = std::move(surface->Surface);
+                                    item.PackedConstants = std::move(surface->Constants);
+                                    item.TextureRequests = std::move(surface->Textures);
+                                    item.CustomGeneration = selected.Generation;
+                                    item.UseCustomShader = true;
+                                    if (!item.Surface.Diagnostic.empty()) diagnostic(item.Surface.Diagnostic);
+                                } else {
+                                    const auto& error = std::get<MaterialBindingError>(resolved);
+                                    diagnostic(error.Code + ": " + error.Message);
+                                    m_MaterialFeedback[meshInst.EntityID].Generation = 0;
+                                }
                             }
                         }
-                    } else {
-                        item.Material = meshInst.Material.RHIMaterialAsset;
+                    } else if (meshInst.Material.UseCustomShader) {
+                        m_MaterialDiagnostics[meshInst.EntityID] = "CUSTOM_SURFACE_INPUT_MISSING: native material input unavailable; using procedural adapter";
                     }
-                    if (item.Material) {
+                    if (const auto diagnostic = m_MaterialDiagnostics.find(meshInst.EntityID); diagnostic != m_MaterialDiagnostics.end())
+                        item.Surface.Diagnostic = diagnostic->second;
+                    if (!item.Surface.Diagnostic.empty()) item.Surface.Fallback=true;
+                    {
                         item.Surface.ApplyToPushConstants(item.PushConsts);
                         item.PushConsts.Model = worldMat;
                         item.SurfaceType = item.Surface.Surface;
@@ -872,7 +883,7 @@ namespace Axle {
                 std::sort(transparentQueue.begin(), transparentQueue.end(), [](const DrawItem& a, const DrawItem& b) {
                     return a.RenderQueue == b.RenderQueue ? a.DistanceSq > b.DistanceSq : a.RenderQueue < b.RenderQueue;
                 });
-                for (const auto& item : transparentQueue) {
+                for (auto& item : transparentQueue) {
                     RenderDrawItem(item);
                     if (drawFailed) { endRendering(); return fail(); }
                 }
@@ -1339,6 +1350,27 @@ namespace Axle {
         });
 
         addPass("PostAndTemporal", [&](const RenderPassContext&) -> RenderPassResult {
+            std::vector<std::pair<uint32_t, uint64_t>> identities;
+            auto collect = [&](const auto& queue) {
+                for (const auto& item : queue) {
+                    const auto entity = static_cast<uint32_t>(item.DiagnosticEntity);
+                    identities.emplace_back(entity, item.Surface.Generation);
+                    m_ViewContext.Diagnostics().AddMaterial(entity, item.Surface);
+                    if (item.Surface.Fallback) {
+                        m_ViewContext.Diagnostics().AddFallback(item.Surface.Diagnostic);
+                        m_MaterialDiagnostics[entity] = item.Surface.Diagnostic;
+                    }
+                }
+            };
+            collect(opaqueQueue); collect(transparentQueue);
+            std::sort(identities.begin(), identities.end());
+            uint64_t materialGeneration = 1469598103934665603ull;
+            for (const auto& [entity, generation] : identities) {
+                materialGeneration ^= entity; materialGeneration *= 1099511628211ull;
+                materialGeneration ^= generation; materialGeneration *= 1099511628211ull;
+            }
+            if (m_ViewContext.ObserveMaterialGeneration(materialGeneration))
+                temporalSelection = m_ViewContext.Temporal().Begin(useTAA ? 2 : 0, {jitterX, jitterY});
             if (useBloom && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid()) {
                 if (!beginPass("BloomCopy")) return fail();
                 Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);

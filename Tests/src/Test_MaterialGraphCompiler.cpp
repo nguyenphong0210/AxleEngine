@@ -19,6 +19,8 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <limits>
+#include <cmath>
 
 #define CHECK(value) do { if(!(value)) {std::cerr<<"FAIL "<<__LINE__<<": " #value "\n";return false;} } while(0)
 namespace {
@@ -285,6 +287,133 @@ namespace {
         const auto linearGray=render("filter.hlsl");CHECK(!linearGray.empty()&&std::abs(int(linearGray[center])-128)<=1);
         CHECK(WritePNG(Workspace/"linear_gray.png",width,width,linearGray));
         std::ofstream measurements(Workspace/"measurements.txt");measurements<<"backend="<<RHITypeToString(backend)<<"\nsize=128x128\nreference_max_error="<<maximumError<<"\nrgb_energy="<<energy<<"\nparameter_changes=6\nsurface_changes=3\nsrgb_midpoint="<<int(filtered[center])<<"\nsrgb_gray="<<int(srgbGray[center])<<"\nlinear_gray="<<int(linearGray[center])<<"\n";measurements.close();CHECK(bool(measurements));
+        // A stale compatibility mirror must not override the native material's
+        // canonical engine inputs. Verify actual bytes at the shader output.
+        const std::string canonicalSource=R"(
+cbuffer EngineObject : register(b0, space0) {
+    column_major float4x4 u_Model; float4 u_BaseColor; float4 u_BaseUV; float4 u_Params;
+};
+cbuffer EngineScene : register(b1, space0) { column_major float4x4 u_ViewProjection; float4 u_CameraPosition; };
+cbuffer MaterialParameters : register(b2, space0) {
+    // [Default(1)]
+    float Gain;
+};
+Texture2D u_BaseMap : register(t0, space1); SamplerState u_Sampler : register(s0, space1);
+struct Input {float3 Position:POSITION; float2 UV:TEXCOORD0;};
+struct Pixel {float4 Position:SV_Position; float2 UV:TEXCOORD0;};
+Pixel VSMain(Input i) {Pixel p;p.Position=mul(u_ViewProjection,mul(u_Model,float4(i.Position,1)));p.UV=i.UV*u_BaseUV.xy+u_BaseUV.zw;return p;}
+float4 PSMain(Pixel p):SV_Target0 {return float4(u_BaseColor.r,u_Params.x,u_Params.y,1)*float4(Gain,Gain,Gain,1);}
+)";
+        const auto canonicalPath=assets/"canonical-inputs.hlsl";
+        CHECK(FileSystem::WriteTextFileAtomically(canonicalPath,canonicalSource));
+        RHIMaterialDesc canonicalDesc;canonicalDesc.CullMode=CullMode::None;
+        canonicalDesc.BaseColor={0.2f,0.4f,0.6f,1};canonicalDesc.Roughness=-2;canonicalDesc.Metallic=3;
+        auto canonicalMaterial=std::make_shared<RHIMaterial>(canonicalDesc);
+        {
+            auto incompatible=std::make_shared<RHITexture>();
+            CHECK(incompatible->Init(RHITextureDesc::Cubemap(1)));
+            RHIMaterial invalidMap;invalidMap.SetTexture(RHITextureSlot::Albedo,incompatible);
+            CHECK(!MaterialResolver::Resolve(invalidMap).Valid);
+            auto attachmentOnly=RHITextureDesc::RenderTarget2D(1,1);attachmentOnly.Usage=RHITextureUsage::ColorAttachment;
+            CHECK(incompatible->Init(attachmentOnly));
+            CHECK(!MaterialResolver::Resolve(invalidMap).Valid);
+        }
+        RenderWorld rawWorld;RenderMeshInstance rawMesh;rawMesh.EntityID=123;
+        rawMesh.NativeView=RHIMeshRegistry::Get().GetSphere()->CaptureView();
+        rawMesh.Material.RHIMaterialAsset=canonicalMaterial;rawMesh.Material.UseCustomShader=true;
+        rawMesh.Material.CustomShaderPath=canonicalPath.string();
+        rawMesh.Material.AlbedoColor={1,0,1,1};rawMesh.Material.Roughness=1;rawMesh.Material.Metallic=0;
+        rawWorld.Meshes={rawMesh};
+        auto rawRender=[&]()->std::vector<uint8_t>{
+            renderer.RenderWorldView(rawWorld,camera,&color,&depth,settings);
+            if(!renderer.WasLastRenderSuccessful())return {};
+            if(!copy.Reset()||!copy.Begin())return {};
+            nri::TextureDataLayoutDesc layout{};layout.rowPitch=width*4;layout.slicePitch=width*width*4;
+            nri::TextureRegionDesc region{};region.width=region.height=width;region.depth=1;
+            copy.ReadbackTextureToBuffer(*readback.GetNative(),layout,*color.GetNative(),region);
+            if(!copy.End()||!copy.Submit()||!device.WaitIdle())return {};
+            const auto* data=readback.Map();if(!data)return {};
+            std::vector<uint8_t> result(read.Size);std::memcpy(result.data(),data,result.size());readback.Unmap();return result;
+        };
+        auto canonicalPixels=rawRender();CHECK(!canonicalPixels.empty());
+        CHECK(std::abs(int(canonicalPixels[center])-51)<=1 && std::abs(int(canonicalPixels[center+1])-10)<=1 && canonicalPixels[center+2]==255);
+        const auto firstMaterial=renderer.GetDiagnostics().GetFrame().MaterialGeneration;
+        CHECK(renderer.GetDiagnostics().GetFrame().Materials.size()==1);
+        CHECK(renderer.GetDiagnostics().GetFrame().Materials[0].Evaluation==SurfaceEvaluation::CustomShader &&
+            renderer.GetDiagnostics().GetFrame().Materials[0].ShaderGeneration!=0);
+        rawWorld.Meshes[0].WorldTransform[3].x=0.05f;CHECK(!rawRender().empty());
+        CHECK(renderer.GetDiagnostics().GetFrame().MaterialGeneration==firstMaterial);
+        ShaderPropertyInstance gain;gain.Desc.Name="Gain";gain.FloatVal=0.5f;
+        rawWorld.Meshes[0].Material.CustomProperties={gain};
+        canonicalPixels=rawRender();CHECK(!canonicalPixels.empty()&&std::abs(int(canonicalPixels[center])-26)<=1);
+        CHECK(renderer.GetDiagnostics().GetFrame().MaterialGeneration!=firstMaterial);
+        const auto parameterMaterial=renderer.GetDiagnostics().GetFrame().MaterialGeneration;
+        CHECK(!rawRender().empty()&&renderer.GetDiagnostics().GetFrame().MaterialGeneration==parameterMaterial);
+        // Bind an explicitly assigned native base texture with no source path.
+        auto nativeBase=std::make_shared<RHITexture>();auto nativeDesc=RHITextureDesc::RenderTarget2D(1,1);
+        nativeDesc.Usage=RHITextureUsage::ShaderResource;CHECK(nativeBase->Init(nativeDesc));
+        const std::array<uint8_t,4> nativePixel{32,96,160,255};
+        nri::TextureSubresourceUploadDesc sub{};sub.slices=nativePixel.data();sub.sliceNum=1;sub.rowPitch=sub.slicePitch=4;
+        nri::TextureUploadDesc upload{};upload.texture=nativeBase->GetNative();upload.subresources=&sub;upload.planes=nri::PlaneBits::COLOR;
+        upload.after={nri::AccessBits::SHADER_RESOURCE,nri::Layout::SHADER_RESOURCE,nri::StageBits::FRAGMENT_SHADER};
+        CHECK(device.UploadData(&upload,1,nullptr,0)==nri::Result::SUCCESS);
+        canonicalMaterial->SetTexture(RHITextureSlot::Albedo,nativeBase);
+        auto textureSource=canonicalSource;
+        const std::string oldOutput="return float4(u_BaseColor.r,u_Params.x,u_Params.y,1)*float4(Gain,Gain,Gain,1);";
+        textureSource.replace(textureSource.find(oldOutput),oldOutput.size(),"return u_BaseMap.Sample(u_Sampler,p.UV);");
+        CHECK(FileSystem::WriteTextFileAtomically(canonicalPath,textureSource));
+        auto nativePixels=rawRender();CHECK(!nativePixels.empty());
+        for(size_t c=0;c<3;++c)CHECK(std::abs(int(nativePixels[center+c])-int(nativePixel[c]))<=1);
+        CHECK(renderer.GetDiagnostics().GetFrame().MaterialGeneration!=parameterMaterial);
+        const auto inPlaceGeneration=renderer.GetDiagnostics().GetFrame().MaterialGeneration;
+        const std::array<uint8_t,4> inPlacePixel{16,112,208,255};sub.slices=inPlacePixel.data();
+        CHECK(device.UploadData(&upload,1,nullptr,0)==nri::Result::SUCCESS);
+        rawWorld.Meshes[0].Material.ContentRevision++;
+        const auto inPlacePixels=rawRender();CHECK(!inPlacePixels.empty());
+        for(size_t c=0;c<3;++c)CHECK(std::abs(int(inPlacePixels[center+c])-int(inPlacePixel[c]))<=1);
+        CHECK(renderer.GetDiagnostics().GetFrame().MaterialGeneration!=inPlaceGeneration);
+        // Path-cache reload and neutral/last-good fallbacks participate in the
+        // effective material identity, even when the authored path is unchanged.
+        const auto pathTexture=assets/"textures/canonical-reload.png";
+        CHECK(WritePNG(pathTexture,1,1,{160,40,24,255}));
+        canonicalMaterial->SetTexture(RHITextureSlot::Albedo,{},"textures/canonical-reload.png");
+        auto pathPixels=rawRender();CHECK(!pathPixels.empty());
+        auto decoded=[](int value){const double x=value/255.0;return int(std::lround(255*(x<=0.04045?x/12.92:std::pow((x+0.055)/1.055,2.4))));};
+        CHECK(std::abs(int(pathPixels[center])-decoded(160))<=1);
+        const auto pathGeneration=renderer.GetDiagnostics().GetFrame().MaterialGeneration;
+        const auto pathProgram=renderer.GetDiagnostics().GetFrame().Materials[0].ShaderGeneration;
+        CHECK(WritePNG(pathTexture,1,1,{24,180,50,255}));
+        auto reloadedPixels=rawRender();CHECK(!reloadedPixels.empty()&&std::abs(int(reloadedPixels[center+1])-decoded(180))<=1);
+        CHECK(renderer.GetDiagnostics().GetFrame().MaterialGeneration!=pathGeneration &&
+            renderer.GetDiagnostics().GetFrame().Materials[0].ShaderGeneration==pathProgram);
+        const auto lastGoodGeneration=renderer.GetDiagnostics().GetFrame().MaterialGeneration;
+        CHECK(FileSystem::WriteTextFileAtomically(pathTexture,"broken"));
+        CHECK(rawRender()==reloadedPixels && renderer.GetDiagnostics().GetFrame().Materials[0].Fallback);
+        CHECK(renderer.GetDiagnostics().GetFrame().MaterialGeneration==lastGoodGeneration);
+        canonicalMaterial->SetTexture(RHITextureSlot::Albedo,{},"textures/created-after-fallback.png");
+        auto neutralPixels=rawRender();CHECK(!neutralPixels.empty()&&neutralPixels[center]==255);
+        CHECK(renderer.GetDiagnostics().GetFrame().Materials[0].Fallback);
+        const auto fallbackGeneration=renderer.GetDiagnostics().GetFrame().MaterialGeneration;
+        CHECK(WritePNG(assets/"textures/created-after-fallback.png",1,1,{64,128,192,255}));
+        auto recoveredPixels=rawRender();CHECK(!recoveredPixels.empty()&&std::abs(int(recoveredPixels[center])-decoded(64))<=1);
+        CHECK(renderer.GetDiagnostics().GetFrame().MaterialGeneration!=fallbackGeneration &&
+            !renderer.GetDiagnostics().GetFrame().Materials[0].Fallback);
+        canonicalMaterial->GetDesc().ClearcoatStrength=0.5f;CHECK(!rawRender().empty());
+        CHECK(renderer.GetDiagnostics().GetFrame().Materials[0].UnsupportedFeatures & static_cast<uint32_t>(SurfaceFeature::Clearcoat));
+        CHECK(!renderer.GetDiagnostics().GetFrame().Fallbacks.empty());
+        canonicalMaterial->GetDesc().Roughness=std::numeric_limits<float>::quiet_NaN();
+        CHECK(rawRender().empty()&&!renderer.WasLastRenderSuccessful());
+        CHECK(renderer.GetDiagnostics().GetFrame().Materials.size()==1&&!renderer.GetDiagnostics().GetFrame().Materials[0].Valid);
+        CHECK(renderer.GetDiagnostics().GetFrame().Passes.empty());
+        canonicalMaterial->GetDesc().Roughness=0.5f;canonicalMaterial->GetDesc().ClearcoatStrength=0;
+        CHECK(!rawRender().empty());
+        // Parameter rejection falls back to the same canonical built-in surface.
+        CHECK(FileSystem::WriteTextFileAtomically(canonicalPath,canonicalSource));
+        gain.FloatVal=std::numeric_limits<float>::quiet_NaN();rawWorld.Meshes[0].Material.CustomProperties={gain};
+        CHECK(!rawRender().empty());
+        CHECK(renderer.GetDiagnostics().GetFrame().Materials[0].Evaluation==SurfaceEvaluation::BuiltIn &&
+            renderer.GetDiagnostics().GetFrame().Materials[0].ShaderGeneration==0);
+        CHECK(renderer.GetMaterialDiagnostics().at(123).find("SurfacePropertyFinite")!=std::string::npos);
         CHECK(device.WaitIdle());renderer.Shutdown();scene.reset();RHIMeshRegistry::Get().Shutdown();MaterialCache::ClearAll();
         CHECK(GetRHIValidationErrorCount()==initialErrors);
         std::cout<<"PASS native "<<RHITypeToString(backend)<<" reference image max error "<<maximumError<<", all five parameters and three surface defaults, no fallback\n";

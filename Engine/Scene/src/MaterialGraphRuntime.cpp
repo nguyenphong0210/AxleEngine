@@ -157,6 +157,40 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
     }
 }
 
+ShaderSurfaceResult MaterialGraphRuntime::ResolveSurface(const MaterialGraphReadyGeneration& generation,
+    const MaterialGraphInstance& instance, const EngineMaterialValues& view) {
+    if (!generation.ID || generation.Program.ShaderKey.empty())
+        return MaterialBindingError{"GraphSurfaceGeneration", {}, {}, "Graph surface requires a published program generation"};
+    if (generation.Target.Native && (!generation.Native || !RHI::RHIDevice::Get().CanSubmit() ||
+        generation.DeviceEpoch != RHI::RHIDevice::Get().GetEpoch()))
+        return MaterialBindingError{"GraphSurfaceEpoch", {}, {}, "Graph surface belongs to an unavailable native device epoch"};
+    std::vector<ShaderPropertyInstance> properties;
+    MaterialGraphDiagnostic error;
+    if (!instance.Resolve(generation.Program, properties, &error))
+        return MaterialBindingError{error.Code, {}, error.Field, error.Message};
+    RHI::RHIMaterialDesc desc;
+    desc.CullMode = Cull(generation.Program.CullMode);
+    desc.DepthWrite = generation.Program.DepthWrite;
+    auto result = ResolveShaderSurface(MaterialResolver::Resolve(RHI::RHIMaterial(desc)),
+        SurfaceEvaluation::MaterialGraph, generation.ID, generation.Program.BindingPlan, view, properties);
+    if (auto* surface = std::get_if<ResolvedShaderSurface>(&result)) {
+        if (!generation.Resources.Warnings.empty()) {
+            surface->Surface.Fallback = true;
+            surface->Surface.Diagnostic = generation.Resources.Warnings.front().Code + ": " + generation.Resources.Warnings.front().Message;
+        }
+        std::vector<std::shared_ptr<const RHI::RHITexture>> textures;
+        for (auto& texture : surface->Textures)
+            for (const auto& native : generation.Textures)
+                if (texture.Address == native.Address) texture.Native = native.Texture;
+        if (generation.Target.Native) {
+            for (const auto& texture : surface->Textures) textures.push_back(texture.Native);
+            if (!FinalizeSurfaceTextureBindings(surface->Surface, textures, surface->Surface.TextureFlags))
+                return MaterialBindingError{"GraphSurfaceTexture", {}, {}, surface->Surface.Diagnostic};
+        }
+    }
+    return result;
+}
+
 nri::Pipeline* MaterialGraphRuntime::GetPipeline(const MaterialGraphReadyGeneration& generation) {
     const auto& device=RHI::RHIDevice::Get();
     if(!generation.Native || !device.CanSubmit() || generation.DeviceEpoch!=device.GetEpoch())return nullptr;

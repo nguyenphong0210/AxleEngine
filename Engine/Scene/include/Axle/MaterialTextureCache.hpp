@@ -10,7 +10,7 @@ namespace Axle {
     // Color maps use sRGB views; normal/ORM/roughness/metallic/AO maps stay linear.
     class MaterialTextureCache {
     public:
-        std::shared_ptr<RHI::RHITexture> Get(const std::string& path, bool color);
+        std::shared_ptr<RHI::RHITexture> Get(const std::string& path, bool color, std::string* diagnostic = nullptr);
         void Clear() { m_Entries.clear(); }
     private:
         struct Entry {

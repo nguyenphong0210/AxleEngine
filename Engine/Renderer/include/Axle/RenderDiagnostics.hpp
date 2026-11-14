@@ -5,6 +5,17 @@
 #include <vector>
 
 namespace Axle {
+    struct ResolvedSurface;
+    enum class SurfaceEvaluation : uint8_t;
+    struct MaterialSurfaceDiagnostic {
+        uint32_t EntityID = 0;
+        uint64_t Generation = 0, ShaderGeneration = 0;
+        SurfaceEvaluation Evaluation{};
+        uint32_t UnsupportedFeatures = 0;
+        bool Valid = false;
+        bool Fallback = false;
+        std::string Reason;
+    };
 
     enum class DiagnosticStatus : uint8_t { NotRun, Success, Fallback, Failed };
     enum class DiagnosticValidity : uint8_t { Unknown, Valid, Unavailable, Invalid };
@@ -23,11 +34,13 @@ namespace Axle {
     struct RenderFrameDiagnostics {
         uint64_t FrameIndex = 0;
         uint64_t TargetGeneration = 0;
+        uint64_t MaterialGeneration = 0;
         DiagnosticValidity GPUValidity = DiagnosticValidity::Unknown;
         double GPUTimeMilliseconds = 0.0;
         uint32_t DrawCalls = 0;
         uint32_t Dispatches = 0;
         std::vector<RenderPassDiagnostic> Passes;
+        std::vector<MaterialSurfaceDiagnostic> Materials;
         std::vector<std::string> Fallbacks;
         std::vector<std::string> Errors;
     };
@@ -47,6 +60,9 @@ namespace Axle {
         void AddFallback(std::string reason);
         void AddError(std::string reason);
         void SetCounters(uint32_t drawCalls, uint32_t dispatches);
+        void AddMaterial(uint32_t entityID, const ResolvedSurface& surface);
+        void SetMaterialGeneration(uint64_t generation) { m_Frame.MaterialGeneration = generation; }
+        void SetFrameIndex(uint64_t frameIndex) { m_Frame.FrameIndex = frameIndex; }
 
         const RenderFrameDiagnostics& GetFrame() const { return m_Frame; }
         bool HasErrors() const { return !m_Frame.Errors.empty(); }

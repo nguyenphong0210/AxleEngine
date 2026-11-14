@@ -2,6 +2,7 @@
 #include <Axle/ResolvedSurface.hpp>
 #include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/ShaderSurface.hpp>
+#include <Axle/RenderWorld.hpp>
 #include <cstring>
 #include <limits>
 
@@ -149,6 +150,13 @@ bool RunResolvedSurfaceUnitTests() {
     RENDER_CHECK(std::get<ResolvedShaderSurface>(unsupported).Surface.UnsupportedFeatures == static_cast<uint32_t>(SurfaceFeature::Clearcoat) &&
         !std::get<ResolvedShaderSurface>(unsupported).Surface.Diagnostic.empty(),
         "unsupported canonical shader controls have an explicit feature mask and diagnostic");
+    shaderDesc.ClearcoatStrength = 0; shaderDesc.EmissiveColor = glm::vec3(1); shaderDesc.EmissiveIntensity = 2;
+    shaderDesc.NormalPath = "normal.png";
+    const auto unmapped = ResolveShaderSurface(MaterialResolver::Resolve(RHI::RHIMaterial(shaderDesc)),
+        SurfaceEvaluation::CustomShader, 20, plan, view, {&gain,1});
+    RENDER_CHECK(std::get<ResolvedShaderSurface>(unmapped).Surface.UnsupportedFeatures ==
+        (static_cast<uint32_t>(SurfaceFeature::Emission) | static_cast<uint32_t>(SurfaceFeature::NonBaseTextures)),
+        "unrepresented emission and non-base texture controls cannot be silently dropped");
     gain.FloatVal = std::numeric_limits<float>::quiet_NaN();
     RENDER_CHECK(std::holds_alternative<MaterialBindingError>(ResolveShaderSurface(base, SurfaceEvaluation::CustomShader, 17, plan, view, {&gain, 1})),
         "non-finite effective shader properties reject the transaction");
@@ -157,6 +165,34 @@ bool RunResolvedSurfaceUnitTests() {
     RENDER_CHECK(!invalidBase.Valid && !invalidBase.Diagnostic.empty(), "invalid canonical input cannot be reported ready");
     RENDER_CHECK(std::holds_alternative<MaterialBindingError>(ResolveShaderSurface(invalidBase, SurfaceEvaluation::CustomShader, 17, plan, view, {})),
         "invalid base surface cannot publish a shader binding");
+    RHI::RHIMaterial staleMaterial;
+    staleMaterial.SetTexture(RHI::RHITextureSlot::Albedo,std::make_shared<RHI::RHITexture>());
+    RENDER_CHECK(!MaterialResolver::Resolve(staleMaterial).Valid,
+        "explicitly assigned native textures without a live generation reject canonical publication");
+    RHI::RHIMaterialDesc invalidPolicy;
+    invalidPolicy.CullMode = CullMode::None;
+    RENDER_CHECK(MaterialResolver::Resolve(RHI::RHIMaterial(invalidPolicy)).Valid, "two-sided culling is valid canonical policy");
+    invalidPolicy.SurfaceType = static_cast<SurfaceType>(256);
+    RENDER_CHECK(!MaterialResolver::Resolve(RHI::RHIMaterial(invalidPolicy)).Valid, "invalid enum values cannot alias valid policy through truncation");
+    RenderMaterialData snapshot;
+    snapshot.AlbedoColor = glm::vec4(99);
+    snapshot.RHIMaterialAsset = std::make_shared<RHI::RHIMaterial>(textured);
+    RENDER_CHECK(MaterialResolver::Resolve(snapshot).BaseColor == textured.BaseColor,
+        "compatibility snapshot mirrors cannot override the canonical authored material");
+    const auto snapshotGeneration=MaterialResolver::Resolve(snapshot).Generation;
+    snapshot.ContentRevision++;
+    RENDER_CHECK(MaterialResolver::Resolve(snapshot).Generation!=snapshotGeneration,
+        "runtime content revision invalidates in-place native material updates");
+    snapshot.RHIMaterialAsset.reset(); snapshot.AlbedoColor = {0.2f,0.3f,0.4f,1};
+    snapshot.SecondaryColor = {0.6f,0.7f,0.8f,1}; snapshot.TileScale = {3,3}; snapshot.PatternMode = 1;
+    auto procedural = MaterialResolver::Resolve(snapshot);
+    RHI::RHIObjectPushConstants proceduralPush;
+    proceduralPush.SunDirAndIntensity = {0,0,1,1}; // Former union alias looked like cutout policy.
+    procedural.ApplyToPushConstants(proceduralPush);
+    RENDER_CHECK(procedural.Valid && !procedural.AuthoredMaterial && proceduralPush.ColorPrimary == snapshot.AlbedoColor &&
+        proceduralPush.ColorSecondary == snapshot.SecondaryColor && proceduralPush.Params == glm::vec4(3,1,0.15f,0.05f) &&
+        proceduralPush.MaterialExtra == glm::vec4(0,0,0.5f,0) && procedural.ToMaterialConstants().Flags.y == 0,
+        "procedural adapter preserves pattern data and writes explicit opaque policy rather than the legacy sun alias");
 
     std::cout << "  [ResolvedSurface] Canonical material contract tests passed.\n";
     return true;

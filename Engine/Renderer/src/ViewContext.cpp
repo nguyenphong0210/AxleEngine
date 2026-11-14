@@ -99,6 +99,22 @@ namespace Axle {
         return reasons;
     }
 
+    bool ViewContext::ObserveMaterialGeneration(uint64_t generation) {
+        m_Diagnostics.SetMaterialGeneration(generation);
+        if (m_Input.MaterialGeneration == generation) return false;
+        m_Input.MaterialGeneration = generation;
+        m_ResetReasons |= ViewResetReason::MaterialGeneration;
+        m_FrameIndex = 0;
+        m_Temporal.InvalidateContents();
+        m_Diagnostics.SetFrameIndex(m_FrameIndex);
+        // Keep the frame's selected output/AA policy while restarting adaptation.
+        const bool configured = m_PostProcess.IsConfigured();
+        const bool hdr = m_PostProcess.GetPolicy().Output == PostProcessOutput::HDR;
+        m_PostProcess.Reset();
+        if (configured) m_PostProcess.BeginFrame(m_Input.Settings, hdr);
+        return true;
+    }
+
     void ViewContext::RequestReset(ViewResetReason reason) {
         m_ResetReasons |= reason;
         if (Any(reason & (ViewResetReason::Initial | ViewResetReason::Resize | ViewResetReason::ViewSwitch |

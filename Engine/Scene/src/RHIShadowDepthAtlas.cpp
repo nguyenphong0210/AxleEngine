@@ -134,12 +134,17 @@ using namespace RHI;
             draw.Object.MaterialExtra=glm::vec4(0,0,.5f,float(SurfaceType::Opaque));
             RHIMaterialConstants constants;
             auto cull=CullMode::None;
-            if (material) {auto surface=MaterialResolver::Resolve(*material);surface.ApplyToPushConstants(draw.Object);constants=surface.ToMaterialConstants();cull=surface.Cull;}
+            ResolvedSurface surface;
+            if (material) {
+                surface=MaterialResolver::Resolve(*material);
+                if (!surface.Valid) {m_Diagnostic="SHADOW_MATERIAL_INVALID: "+surface.Diagnostic;return false;}
+                surface.ApplyToPushConstants(draw.Object);constants=surface.ToMaterialConstants();cull=surface.Cull;
+            }
             // ForwardPBR samples albedo only for its textured shading modes.
             const bool textured=(int(draw.Object.Params.y)==5 || int(draw.Object.Params.y)==6) && (constants.Flags.x&1u);
             if (textured) {
-                draw.Albedo=material->GetTexture(RHITextureSlot::Albedo);
-                if (!draw.Albedo) draw.Albedo=textures.Get(material->GetTexturePath(RHITextureSlot::Albedo),true);
+                draw.Albedo=surface.Textures[0].Native;
+                if (!draw.Albedo) draw.Albedo=textures.Get(surface.Textures[0].Path,true);
             }
             if (!draw.Albedo) {constants.Flags.x&=~1u;draw.Albedo=RHIMaterial::GetDefaultWhiteTexture();}
             if (!draw.Albedo || !draw.Albedo->GetSRV() ||

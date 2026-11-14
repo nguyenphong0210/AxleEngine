@@ -25,6 +25,9 @@ namespace Axle {
         TemporalHistorySelection Begin(uint8_t historyCount, const glm::vec2& currentJitter = {});
         void Commit(const glm::mat4& currentViewProjection, bool historyWritten);
         void Invalidate() { Reset(); }
+        // Late material resolution may invalidate contents after the graph has
+        // imported history slots. Preserve those slot identities until commit.
+        void InvalidateContents() { m_HistoryValid = m_MotionValid = m_DisocclusionValid = false; }
 
         bool IsHistoryValid() const { return m_HistoryValid; }
         bool IsMotionValid() const { return m_MotionValid; }

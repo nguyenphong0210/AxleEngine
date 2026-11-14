@@ -17,4 +17,8 @@ namespace Axle {
         SurfaceEvaluation evaluation, uint64_t shaderGeneration,
         const MaterialBindingPlan& plan, const EngineMaterialValues& view,
         std::span<const ShaderPropertyInstance> savedValues);
+    // Fold actual path-cache/fallback generations into identity only after
+    // resource preparation succeeds. This detects same-path texture reloads.
+    bool FinalizeSurfaceTextureBindings(ResolvedSurface& surface,
+        std::span<const std::shared_ptr<const RHI::RHITexture>> textures, uint32_t effectiveTextureFlags);
 }

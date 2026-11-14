@@ -1,4 +1,5 @@
 #include <Axle/RenderDiagnostics.hpp>
+#include <Axle/ResolvedSurface.hpp>
 #include <utility>
 
 namespace Axle {
@@ -49,5 +50,9 @@ namespace Axle {
     void RenderDiagnostics::SetCounters(uint32_t drawCalls, uint32_t dispatches) {
         m_Frame.DrawCalls = drawCalls;
         m_Frame.Dispatches = dispatches;
+    }
+    void RenderDiagnostics::AddMaterial(uint32_t entityID, const ResolvedSurface& surface) {
+        m_Frame.Materials.push_back({entityID, surface.Generation, surface.ShaderGeneration,
+            surface.Evaluation, surface.UnsupportedFeatures, surface.Valid, surface.Fallback, surface.Diagnostic});
     }
 }

@@ -75,6 +75,7 @@ namespace Axle {
         // latched until the next Observe call and reset temporal/frame index
         // state where the identity changed.
         ViewResetReason Observe(const ViewContextInput& input, uint64_t deviceEpoch);
+        bool ObserveMaterialGeneration(uint64_t generation);
         void RequestReset(ViewResetReason reason);
         ViewResetReason GetResetReasons() const { return m_ResetReasons; }
         ViewResetReason ConsumeResetReasons();

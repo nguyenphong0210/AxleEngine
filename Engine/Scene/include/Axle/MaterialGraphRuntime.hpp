@@ -2,6 +2,7 @@
 #include <Axle/MaterialGraphProgram.hpp>
 #include <Axle/CustomMaterialProgram.hpp>
 #include <Axle/MaterialGraphResources.hpp>
+#include <Axle/ShaderSurface.hpp>
 #include <Axle/RHI/RHIDescriptorPool.hpp>
 #include <deque>
 #include <map>
@@ -83,6 +84,10 @@ namespace Axle {
         // Returns an RHI-cache pipeline for immediate recording; never retain the raw
         // pointer across cache eviction/device reset. Commands retain native leases.
         static nri::Pipeline* GetPipeline(const MaterialGraphReadyGeneration& generation);
+        // Canonical CPU inputs/bindings and explicit GPU-evaluation identity.
+        // Surface numeric fields are not a CPU evaluation of graph expressions.
+        static ShaderSurfaceResult ResolveSurface(const MaterialGraphReadyGeneration& generation,
+            const MaterialGraphInstance& instance = {}, const EngineMaterialValues& view = {});
         // Populate the texture/sampler ranges of fresh caller-owned descriptor sets.
         // Caller packs/binds cbuffers and retains the generation while recording.
         static bool WriteResourceDescriptors(const MaterialGraphReadyGeneration& generation,

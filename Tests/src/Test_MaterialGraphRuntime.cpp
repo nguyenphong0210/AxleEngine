@@ -58,6 +58,22 @@ bool CPU() {
     CHECK(dx.Ready()->Program.ShaderKey!=vk.Ready()->Program.ShaderKey);
     CHECK(dx.Ready()->PipelineKey!=vk.Ready()->PipelineKey);
     const auto initial=dx.Ready();
+    const auto surface = MaterialGraphRuntime::ResolveSurface(*initial);
+    CHECK(std::holds_alternative<ResolvedShaderSurface>(surface));
+    const auto& canonical = std::get<ResolvedShaderSurface>(surface).Surface;
+    CHECK(canonical.Valid && canonical.Evaluation == SurfaceEvaluation::MaterialGraph &&
+        canonical.ShaderGeneration == initial->ID && canonical.Generation != 0 && canonical.UnsupportedFeatures == 0);
+    MaterialGraphInstance surfaceOverride;
+    surfaceOverride.Overrides["RustAmount"]={MaterialValueType::Float,{0.25f}};
+    auto changedSurface=MaterialGraphRuntime::ResolveSurface(*initial,surfaceOverride);
+    CHECK(std::holds_alternative<ResolvedShaderSurface>(changedSurface));
+    CHECK(std::get<ResolvedShaderSurface>(changedSurface).Surface.Generation != canonical.Generation);
+    EngineMaterialValues movedView; movedView.Model[3].x=42;
+    auto movedSurface=MaterialGraphRuntime::ResolveSurface(*initial,{},movedView);
+    CHECK(std::get<ResolvedShaderSurface>(movedSurface).Surface.Generation == canonical.Generation);
+    surfaceOverride.Overrides["RustAmount"]={MaterialValueType::Float,{std::numeric_limits<float>::infinity()}};
+    CHECK(std::holds_alternative<MaterialBindingError>(MaterialGraphRuntime::ResolveSurface(*initial,surfaceOverride)));
+    CHECK(dx.Ready()==initial); // Failed resolution never mutates the published program.
     auto moved=sample;for(auto& node:moved.Nodes)node.EditorPosition={10,20};moved.Name="Different display name";
     std::reverse(moved.Nodes.begin(),moved.Nodes.end());std::reverse(moved.Connections.begin(),moved.Connections.end());
     CHECK(Reload(dx,moved)&&dx.Ready()==initial&&dx.Stats().ShaderCompiles==1&&dx.Stats().ShaderCacheHits==1);
@@ -192,13 +208,10 @@ bool CPU() {
 std::vector<uint8_t> Draw(std::shared_ptr<const MaterialGraphReadyGeneration> generation,
                           const MaterialGraphInstance& instance={},std::function<void()> beforeSubmit={}) {
     auto& device=RHIDevice::Get();
-    std::vector<ShaderPropertyInstance> properties;
-    if(!instance.Resolve(generation->Program,properties))return {};
-    const auto resolved=ResolveMaterialProperties(generation->Program.BindingPlan,properties);
-    const auto* values=std::get_if<ResolvedMaterialProperties>(&resolved);if(!values)return {};
     EngineMaterialValues engine;engine.CameraPosition={0,0,4,1};engine.SunDirection.w=0;engine.SunColor=glm::vec4(0);
-    const auto packed=PackMaterialUniforms(generation->Program.BindingPlan,engine,*values);
-    const auto* buffers=std::get_if<PackedMaterialResultData>(&packed);if(!buffers)return {};
+    auto resolved=MaterialGraphRuntime::ResolveSurface(*generation,instance,engine);
+    auto* surface=std::get_if<ResolvedShaderSurface>(&resolved);if(!surface)return {};
+    const auto* buffers=&surface->Constants;
     constexpr uint32_t width=64;
     RHITexture color,depth;RHIBuffer readback;RHIBufferDesc read;read.Size=width*width*4;read.MemoryLocation=RHIMemoryLocation::HostReadback;
     if(!color.Init(RHITextureDesc::RenderTarget2D(width,width))||!depth.Init(RHITextureDesc::DepthStencil2D(width,width))||!readback.Init(read))return {};
@@ -238,6 +251,7 @@ std::vector<uint8_t> Draw(std::shared_ptr<const MaterialGraphReadyGeneration> ge
     nri::TextureRegionDesc region{};region.width=region.height=width;region.depth=1;
     commands.ReadbackTextureToBuffer(*readback.GetNative(),layout,*color.GetNative(),region);
     if(!commands.End())return {};
+    resolved=MaterialBindingError{};
     generation.reset();if(beforeSubmit)beforeSubmit();
     if(!commands.Submit()||!device.WaitIdle())return {};
     const auto* memory=readback.Map();if(!memory)return {};

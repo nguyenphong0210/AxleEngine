@@ -10,14 +10,11 @@ using namespace RHI;
 inline std::vector<uint8_t> DrawMaterialGraph(std::shared_ptr<const MaterialGraphReadyGeneration> generation,
                           const MaterialGraphInstance& instance={},std::function<void()> beforeSubmit={}, const EngineMaterialValues* lighting=nullptr, bool minify=false) {
     auto& device=RHIDevice::Get();
-    std::vector<ShaderPropertyInstance> properties;
-    if(!instance.Resolve(generation->Program,properties))return {};
-    const auto resolved=ResolveMaterialProperties(generation->Program.BindingPlan,properties);
-    const auto* values=std::get_if<ResolvedMaterialProperties>(&resolved);if(!values)return {};
     EngineMaterialValues engine;engine.CameraPosition={0,0,4,1};engine.SunDirection.w=0;engine.SunColor=glm::vec4(0);
     if(lighting)engine=*lighting;
-    const auto packed=PackMaterialUniforms(generation->Program.BindingPlan,engine,*values);
-    const auto* buffers=std::get_if<PackedMaterialResultData>(&packed);if(!buffers)return {};
+    auto resolved=MaterialGraphRuntime::ResolveSurface(*generation,instance,engine);
+    auto* surface=std::get_if<ResolvedShaderSurface>(&resolved);if(!surface)return {};
+    const auto* buffers=&surface->Constants;
     constexpr uint32_t width=64;
     RHITexture color,depth;RHIBuffer readback;RHIBufferDesc read;read.Size=width*width*4;read.MemoryLocation=RHIMemoryLocation::HostReadback;
     if(!color.Init(RHITextureDesc::RenderTarget2D(width,width))||!depth.Init(RHITextureDesc::DepthStencil2D(width,width))||!readback.Init(read))return {};
@@ -59,6 +56,7 @@ inline std::vector<uint8_t> DrawMaterialGraph(std::shared_ptr<const MaterialGrap
     nri::TextureRegionDesc region{};region.width=region.height=width;region.depth=1;
     commands.ReadbackTextureToBuffer(*readback.GetNative(),layout,*color.GetNative(),region);
     if(!commands.End())return {};
+    resolved=MaterialBindingError{}; // Drop wrapper owners; recorded command leases must be sufficient.
     generation.reset();if(beforeSubmit)beforeSubmit();
     if(!commands.Submit()||!device.WaitIdle())return {};
     const auto* memory=readback.Map();if(!memory)return {};

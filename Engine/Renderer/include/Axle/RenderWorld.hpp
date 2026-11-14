@@ -41,6 +41,9 @@ namespace Axle {
     };
 
     struct RenderMaterialData {
+        // Runtime owners increment this after in-place native texture writes.
+        // Path reloads and native generation replacement are tracked automatically.
+        uint64_t ContentRevision = 0;
         UUID MaterialUUID = 0;
         std::string MaterialPath;
         std::shared_ptr<const Material> MaterialAsset;

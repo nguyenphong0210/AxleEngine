@@ -463,14 +463,14 @@ namespace Axle {
         struct MaterialDrawResources {
             RHI::RHIBuffer Constants;
             nri::DescriptorSet* Set = nullptr;
-            std::array<std::shared_ptr<RHI::RHITexture>, static_cast<size_t>(RHI::RHITextureSlot::Count)> Textures;
+            std::array<std::shared_ptr<const RHI::RHITexture>, static_cast<size_t>(RHI::RHITextureSlot::Count)> Textures;
         };
         // Render() waits for queue completion before reusing these resources.
         std::vector<std::unique_ptr<MaterialDrawResources>> m_MaterialDraws;
         struct CustomDrawResources {
             std::vector<RHI::RHIBuffer> ConstantBuffers;
             std::vector<nri::DescriptorSet*> Sets;
-            std::vector<std::shared_ptr<RHI::RHITexture>> Textures;
+            std::vector<std::shared_ptr<const RHI::RHITexture>> Textures;
             std::shared_ptr<const CustomReadyGeneration> Generation;
         };
         std::vector<std::unique_ptr<CustomDrawResources>> m_CustomDraws;

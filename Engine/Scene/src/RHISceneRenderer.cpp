@@ -2620,6 +2620,8 @@ namespace Axle {
         viewInput.Targets = viewTargets;
         viewInput.FeatureGeneration = HashViewFeaturePolicy(settings);
         viewInput.SceneRevision = world.SceneRevision;
+        // Effective material identity is published by the live pass schedule.
+        viewInput.MaterialGeneration = m_ViewContext.GetInput().MaterialGeneration;
         m_ViewContext.Observe(viewInput, m_Device->GetEpoch());
         if (!world.ErrorMessage.empty() || !m_ViewContext.BeginFrame()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
         for (const auto& fallback : backendPolicy.CollectFallbacks(requestedSettings))

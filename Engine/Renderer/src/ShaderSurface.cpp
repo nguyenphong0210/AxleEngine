@@ -19,6 +19,8 @@ namespace {
         add(!surface.EnableSpecularHighlights, SurfaceFeature::SpecularPolicy);
         add(!surface.EnableEnvironmentReflections, SurfaceFeature::ReflectionPolicy);
         add(surface.Surface == SurfaceType::Cutout, SurfaceFeature::Cutout);
+        add(surface.EmissionIntensity != 0 && surface.EmissionColor != glm::vec3(0), SurfaceFeature::Emission);
+        add(surface.TextureFlags & ~1u, SurfaceFeature::NonBaseTextures);
         return mask;
     }
     bool Finite(const ResolvedMaterialProperty& property) {
@@ -65,6 +67,7 @@ namespace {
         result.Surface.Evaluation = evaluation;
         result.Surface.ShaderGeneration = shaderGeneration;
         result.Surface.UnsupportedFeatures = Unsupported(base);
+        result.Surface.Fallback = result.Surface.UnsupportedFeatures != 0;
         if (result.Surface.UnsupportedFeatures)
             result.Surface.Diagnostic = "SURFACE_UNSUPPORTED_FEATURES: canonical material controls are not exposed by this shader interface (mask=" +
                 std::to_string(result.Surface.UnsupportedFeatures) + ")";
@@ -100,5 +103,26 @@ namespace {
         }
         result.Surface.Generation = hash ? hash : 1;
         return result;
+    }
+    bool FinalizeSurfaceTextureBindings(ResolvedSurface& surface,
+        std::span<const std::shared_ptr<const RHI::RHITexture>> textures, uint32_t effectiveTextureFlags) {
+        uint64_t hash = surface.Generation;
+        auto mix = [&](const auto& value) {
+            const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
+            for (size_t i = 0; i < sizeof(value); ++i) { hash ^= bytes[i]; hash *= 1099511628211ull; }
+        };
+        mix(effectiveTextureFlags); mix(textures.size());
+        for (const auto& texture : textures) {
+            if (!texture || !IsSurfaceTextureBinding(*texture)) {
+                surface.Valid = false;
+                surface.Diagnostic = "SURFACE_TEXTURE_INVALID: effective binding requires a live float Texture2D SRV";
+                return false;
+            }
+            const auto handle = texture->GetHandle();
+            mix(handle.Epoch); mix(handle.Slot); mix(handle.Generation);
+        }
+        surface.TextureFlags = effectiveTextureFlags;
+        surface.Generation = hash ? hash : 1;
+        return surface.Valid;
     }
 }

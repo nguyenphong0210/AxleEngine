@@ -79,7 +79,7 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U2 - Pass interface and renderer orchestration
 
-**Exit:** `RHISceneRenderer` delegates all live graph declaration and recording to one frame-scoped lifecycle schedule in `RHISceneRendererPasses.cpp`; persistent pipeline/cache relocation remains an explicit legacy adapter boundary. Implementation repaired in `7f5deb7`; native shadow gates pass after the canonical surface prerequisite `421cc49`. U2 PASS; full U3/U4/U5 and U9 remain under sequential repair. Evidence: [U2_PASS_ORCHESTRATION_EVIDENCE.md](U2_PASS_ORCHESTRATION_EVIDENCE.md).
+**Exit:** `RHISceneRenderer` delegates all live graph declaration and recording to one frame-scoped lifecycle schedule in `RHISceneRendererPasses.cpp`; persistent pipeline/cache relocation remains an explicit legacy adapter boundary. Implementation repaired in `7f5deb7`; native shadow gates pass after the canonical surface prerequisite `421cc49`. U2/U3 PASS; U4/U5 and U9 remain under sequential repair. Evidence: [U2_PASS_ORCHESTRATION_EVIDENCE.md](U2_PASS_ORCHESTRATION_EVIDENCE.md).
 
 - [x] **S2.1 Pass API**
   - [x] Define `IRenderPass` lifecycle: `Configure`, `Declare`, `Prepare`, `Record`, `Finalize`.
@@ -97,7 +97,7 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U3 - Canonical material and surface contract
 
-**Exit:** built-in PBR, Material Graph, preview and screen-space consumers use one resolved surface representation. Implemented/self-verified in `86feca7` and `f241eb0`; formal U3 acceptance remains PARTIAL pending the final separate-context correction recheck (reviewer usage limit). Evidence: [U3_MATERIAL_SURFACE_EVIDENCE.md](U3_MATERIAL_SURFACE_EVIDENCE.md).
+**Exit:** built-in PBR, Material Graph, preview and screen-space consumers use one resolved surface representation. **U3 PASS:** implemented in `86feca7` and `f241eb0`, with final separate-context correction review at `b476686` and fresh CPU/native closeout gates. Evidence: [U3_MATERIAL_SURFACE_EVIDENCE.md](U3_MATERIAL_SURFACE_EVIDENCE.md) and [correction recheck](../../reviews/M14_U3_CORRECTION_RECHECK.md).
 
 - [x] **S3.1 ResolvedSurface schema**
   - [x] Define linear base color, metallic, roughness, AO and emission units.

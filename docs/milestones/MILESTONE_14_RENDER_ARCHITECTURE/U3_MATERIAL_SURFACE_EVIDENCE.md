@@ -3,7 +3,7 @@
 Updated: 2026-11-14 (Asia/Saigon)
 
 **Implementation / self-verification:** PASS at `f241eb0`, following API checkpoint `86feca7`.
-**Acceptance:** PARTIAL - final separate-context correction recheck pending.
+**Acceptance:** PASS - final separate-context correction recheck completed at `b476686`; no remaining U3 blocker.
 **Scope:** canonical material inputs, GPU packing, effective binding identity,
 explicit shader/graph support status, preview/runtime integration and temporal
 invalidation. M15 lighting/material fidelity is excluded.
@@ -39,7 +39,7 @@ as supported. This does not implement M15 feature nodes or visual fidelity.
 | Typed graph generation/epoch and binding resolution | PASS (self-verified) | `Engine/Scene/src/MaterialGraphRuntime.cpp:160` |
 | Shadow alpha binding from canonical surface | PASS (self-verified) | `Engine/Scene/src/RHIShadowDepthAtlas.cpp:139` |
 | Actual texture identity and history invalidation | PASS (self-verified) | `Engine/Renderer/src/ShaderSurface.cpp:107`, `Engine/Scene/src/RHISceneRendererPasses.cpp:1352`, `Engine/Renderer/src/ViewContext.cpp:102` |
-| Final independent correction recheck | BLOCKED this session | Reviewer usage limit; see section 4 |
+| Final independent correction recheck | PASS | [Correction recheck report](../../reviews/M14_U3_CORRECTION_RECHECK.md); see section 4 |
 
 ## 2. Effective resource identity and failure behavior
 
@@ -70,8 +70,9 @@ with shader generation zero rather than claiming custom execution succeeded.
 
 ## 3. Verification on the final source
 
-All commands below ran in this Codex implementation session. Every build and
-test invocation returned **exit 0**. Log/output paths are ignored build artifacts.
+The commands below ran in the original Codex U3 implementation session before
+`b476686`. Every build and test invocation returned **exit 0**. Log/output paths
+are ignored build artifacts. Fresh closeout runs are recorded in section 4.
 
 ### Builds
 
@@ -172,16 +173,29 @@ Focused separate-context review found effective texture identity, unsupported
 emission/non-base maps, invalid assigned textures, procedural union packing,
 test-wrapper lifetime and Texture2D/SRV compatibility gaps. These findings were
 corrected before the final builds/native gates. Intermediate rechecks confirmed
-the earlier corrections and temporal ordering; they do not establish a final
-independent PASS for the last texture compatibility correction.
+the earlier corrections and temporal ordering. The final texture compatibility
+correction and affected callers have now passed the resumed independent recheck.
 
-The final reviewer invocation failed because its usage limit was reached.
-Per `docs/agents/WORKING_PROTOCOL.md` ("Have a separate-context reviewer recheck
-significant Codex corrections before acceptance"), **formal U3 acceptance stays
-PARTIAL pending that focused final recheck**. No Gemini response or approval is
-inferred. Recommendation: retain the implemented/self-verified checkpoint and
-complete this recheck before accepting U3; M14/U9 remain HOLD for this gate and
-the separate U4 resource-declaration and U5 policy-ownership work. M15 is unreleased.
+The original delivery was PARTIAL because the reviewer reached its usage limit.
+On user-requested closeout, the same separate-context reviewer resumed, inspected
+the final guard, live/custom/typed graph/shadow callers, temporal behavior and
+lifetime/negative fixtures at `b476686`, and explicitly returned **PASS: no
+remaining U3 blocker; the pending correction gate may close**. This satisfies the
+working protocol's final correction recheck. No Gemini approval is inferred.
+
+Fresh Debug build of `AxleRenderUnitTests` and `AxleMaterialGraphCompilerTests`,
+the CPU suite and native compiler fixtures on D3D12/Vulkan all returned exit 0.
+Both native image comparisons had maximum error zero; cube/no-SRV negative cases
+and the unchanged validation-error-count assertion passed. Logs are
+`build/m14-u3-close-{build,unit}.log` and
+`build/m14-u3-close-compiler-{dx12,vulkan}.log`. The reviewer inspected source and
+these logs, but did not execute those commands. No source/test edits were needed.
+Exact commands, source anchors and review limits are recorded in the
+[final correction recheck](../../reviews/M14_U3_CORRECTION_RECHECK.md).
+
+**Recommendation: accept U3.** No open U3 gate remains. Overall M14/U9 stay HOLD
+for U4 resource-declaration and U5 policy-ownership work and consolidated final
+acceptance. M15 is unreleased.
 
 Historical prerequisites: `421cc49` repaired built-in shading/PackedORM/cutoff,
 detail and raster policy; its pre-fix CPU reproduction failed, then passed after

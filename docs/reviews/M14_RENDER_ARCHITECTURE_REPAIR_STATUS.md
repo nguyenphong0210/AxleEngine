@@ -169,10 +169,9 @@ Custom draw failure reports the built-in fallback with shader generation zero.
 Focused separate-context review exposed texture identity, unsupported-map/emission,
 native validation, procedural union-packing and test-wrapper lifetime defects.
 All reported defects were corrected before the final gates. Earlier corrections
-and temporal ordering received intermediate rechecks; the last Texture2D/SRV
-compatibility correction still requires its final independent recheck because
-the reviewer invocation failed at its usage limit. No final independent PASS is
-claimed.
+and temporal ordering received intermediate rechecks. At the original delivery,
+the reviewer hit its usage limit before the final Texture2D/SRV recheck; that
+historical acceptance hold is closed by the completion checkpoint below.
 
 Current verification (all exit 0): Debug/Release render CPU suite; Debug material
 unit suite (5/5); Debug/Release graph compiler/runtime/resource policy and native
@@ -185,13 +184,26 @@ D3D12/Vulkan and Runtime D3D12 loose/cooked. Architecture check passed (600 file
 [U3 evidence](../milestones/MILESTONE_14_RENDER_ARCHITECTURE/U3_MATERIAL_SURFACE_EVIDENCE.md).
 Release product runs and interactive Editor UI were not rerun in U3.
 
+### U3 final correction acceptance - source `b476686`
+
+The user requested completing U3. The same separate-context reviewer resumed
+the final guard/caller recheck and returned **PASS: no remaining U3 blocker; the
+pending correction gate may close**. It inspected texture compatibility/liveness,
+live custom/built-in finalization, typed graph and shadow callers, temporal slot
+preservation and lifetime/negative fixtures. Codex freshly rebuilt Debug
+`AxleRenderUnitTests` and `AxleMaterialGraphCompilerTests`, then ran the CPU suite
+and compiler native D3D12/Vulkan fixtures: all exit 0, both native image maximum
+errors zero. No source/test correction was needed. The reviewer inspected source
+and closeout logs but did not execute these commands. Full source anchors,
+commands/logs and limits: [final U3 correction recheck](M14_U3_CORRECTION_RECHECK.md).
+
 ## Current acceptance state
 
 - **PASS:** U2 live orchestration, including its explicit legacy cache ownership
   boundary. Previously verified U0, U1, U6, U7, U8 remain accepted.
-- **PASS (implemented/self-verified):** U3 canonical shader/graph integration and
-  its current CPU/native/product gates. **U3 acceptance remains PARTIAL** pending
-  the final separate-context correction recheck required by the working protocol.
+- **PASS:** U3 canonical shader/graph integration, its recorded CPU/native/product
+  gates and the completed final separate-context correction recheck. No open U3
+  acceptance gate remains.
 - **PARTIAL:** U4 complete graph resource declarations beyond descriptor
   retention; U5 policy ownership/integration review.
 - **HOLD:** U9 until the remaining integration gaps and their native gates close.

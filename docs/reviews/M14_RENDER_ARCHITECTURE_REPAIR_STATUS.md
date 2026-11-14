@@ -1,4 +1,4 @@
-# M14 Render Architecture Repair Status
+﻿# M14 Render Architecture Repair Status
 
 Updated: 2026-11-14 (Asia/Saigon)
 
@@ -7,7 +7,7 @@ This addendum records sequential repairs after the independent review in
 
 ## Completed checkpoints
 
-### Policy service integration — commit `9c08a3a`
+### Policy service integration â€” commit `9c08a3a`
 
 `RHISceneRenderer` now owns `LightingService`, `ReflectionService` and
 `GIService` collaborators and invokes them from the live frame path. Their
@@ -21,7 +21,7 @@ Verified:
 - `AxleRenderUnitTests`: exit 0.
 - D3D12 environment fixture: exit 0.
 
-### Graph descriptor lifetime — commit `a9c2a04`
+### Graph descriptor lifetime â€” commit `a9c2a04`
 
 `RenderGraph::DeclareDescriptorRead` retains descriptor transitive leases, and
 the live renderer routes graphics/compute descriptor-set binds through this
@@ -36,7 +36,7 @@ Verified:
 - `AxleRenderUnitTests`: exit 0.
 - D3D12 environment fixture: exit 0.
 
-### Live adapter lifecycle — commit `9626aaf`
+### Live adapter lifecycle â€” commit `9626aaf`
 
 The five legacy pass adapters now validate immutable world/camera/settings/view
 context, native capability and active command recording during Configure/Prepare
@@ -51,7 +51,7 @@ Verified:
 - `AxleRenderUnitTests`: exit 0.
 - D3D12 environment fixture: exit 0.
 
-### Runtime evidence — current rerun
+### Runtime evidence â€” current rerun
 
 The previous runtime launch failure (`0xC0000135`) was an execution-environment
 issue: the test binary requires the Debug test/runtime/plugin DLL directories
@@ -68,7 +68,7 @@ exit=0
 The fixture completed startup-scene load, simulation pause/resume, rendering
 and clean shutdown on native D3D12.
 
-### Canonical custom-material boundary — commit `9bf7da2`
+### Canonical custom-material boundary â€” commit `9bf7da2`
 
 Each live `DrawItem` now resolves and stores one `ResolvedSurface` before the
 custom shader selection branch. Built-in GPU constants and custom-material
@@ -83,15 +83,12 @@ Verified:
 - `AxleRenderUnitTests`: exit 0.
 - D3D12 environment fixture: exit 0.
 
-### Live scheduler group dispatch — commits `92d149a` and `00ad942`
+### Live scheduler group dispatch â€” commits `92d149a`, `00ad942` and `115dfb2`
 
 `RenderPassScheduler::RecordOne` now dispatches named groups at their actual
 recording boundaries instead of running all adapters before the renderer body.
 The renderer invokes `LightingAndShadows`, `OpaqueAndSky`, `ScreenSpace`,
-`ReflectionAndGI` and `PostAndTemporal` in the live sequence. The first
-concrete migrated body, `SurfaceNormal`, is now owned by the `ScreenSpace`
-adapter callback; the remaining large legacy bodies are still being migrated
-group by group.
+`ReflectionAndGI` and `PostAndTemporal` in the live sequence. The concrete `SurfaceNormal` body is owned by the `ScreenSpace` adapter callback and shadow recording is owned by the `LightingAndShadows` adapter callback; the remaining large legacy bodies are still being migrated group by group.
 
 Verified:
 
@@ -110,3 +107,4 @@ Verified:
 - **HOLD:** U9 remains on hold until concrete pass extraction and the custom
   graph `ResolvedSurface` boundary are completed or explicitly re-scoped in the
   milestone contract.
+

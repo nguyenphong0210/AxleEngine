@@ -22,6 +22,7 @@ All local Markdown links in the reviewed documents resolve.
 | M15-DOC-05 | FIXED | Recovery plan final acceptance said U0-U9 / Phase 44.18. It now points to U10/S10.5 / Phase 45.18. |
 | M15-DOC-06 | FIXED | M15 architecture topology listed removed `RHISceneRenderer::m_Frame`, used the old `m_Scheduler` spelling, and attributed scheduler groups to the wrong source file. It now reflects `ViewContext`, `RenderPassScheduler`, the weak active-target identity and `RHISceneRendererPasses.cpp`. |
 | M15-DOC-07 | ACCEPTED HOLD | Feature/runtime evidence for SSR fidelity, captures, DDGI, fog, advanced materials, RT and performance is absent because M15 is unreleased. Every related checkbox remains open and the acceptance matrix requires the missing evidence. |
+| M15-DOC-08 | FIXED | The plan had no dedicated Unit checklist for U1 Direct BRDF, U2 Dynamic Environment, or U3 S3.3/S3.4 despite listing them in the hierarchy. Added explicit work, exit criteria, work items and tracking gates. |
 
 ## Files reviewed
 

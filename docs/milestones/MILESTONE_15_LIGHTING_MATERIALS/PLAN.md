@@ -90,6 +90,8 @@ High-risk SubUnits are split into WorkItems below. A WorkItem is the smallest pl
 |---|---|---|
 | U3 | S3.1 Resource/graph | W3.1.1 target generation; W3.1.2 descriptor lifetime; W3.1.3 graph declarations; W3.1.4 failure/retry; W3.1.5 timing ring; W3.1.6 modular IRenderPass extraction |
 | U3 | S3.2 Surface/material | W3.2.1 normal producer; W3.2.2 normal-map parity; W3.2.3 material packing; W3.2.4 graph parity; W3.2.5 smooth-sphere metric |
+| U3 | S3.3 Graph/preview parity | W3.3.1 shared resolver; W3.3.2 unsupported masks; W3.3.3 built-in/graph/preview/runtime fixture |
+| U3 | S3.4 Temporal/measurement integration | W3.4.1 history imports; W3.4.2 reset matrix; W3.4.3 timing/diagnostic validity |
 | U5 | S5.1 Hi-Z | W5.1.1 level allocation; W5.1.2 reduction; W5.1.3 barriers; W5.1.4 odd-size reference; W5.1.5 debug readback |
 | U5 | S5.2 Dynamic Capture | W5.2.1 capture formats; W5.2.2 six camera faces; W5.2.3 recursive suppression; W5.2.4 face copy/lifetime; W5.2.5 red-object fixture |
 | U5 | S5.3 Prefilter | W5.3.1 mip allocation; W5.3.2 cubemap orientation; W5.3.3 roughness convolution; W5.3.4 seam handling; W5.3.5 roughness sweep |
@@ -108,6 +110,8 @@ The following gates are intentionally separate from the larger SubUnit checkboxe
 
 - [ ] **U3/W3.1:** target generations, descriptor lifetime, graph declarations, failure/retry, timing ring, and modular IRenderPass extraction pass.
 - [ ] **U3/W3.2:** surface normal, normal maps, material packing, graph parity and smooth-sphere metric pass.
+- [ ] **U3/W3.3:** shared material resolver, unsupported masks and built-in/graph/preview/runtime parity pass.
+- [ ] **U3/W3.4:** declared history imports, reset matrix, timing validity and diagnostics pass.
 - [ ] **U5/W5.1:** Hi-Z allocation/reduction/barriers/odd-size/reference/debug checks pass.
 - [ ] **U5/W5.2:** six-face capture formats, orientations, recursive suppression, copies/lifetime and red-object fixture pass.
 - [ ] **U5/W5.3:** cubemap mips, orientation/seams, roughness convolution and sweep pass.
@@ -156,6 +160,26 @@ P5A–P5D may reuse authored-probe work, but none may silently depend on unfinis
 
 **Exit:** known bad behavior is reproducible and rejected; report states `M15 HOLD`.
 
+## 4A. U1 / S1.1–S1.3 — Direct BRDF and primary lighting
+
+- [ ] Freeze direct-light units, sun angular-radius policy, BRDF normalization and exposure interaction.
+- [ ] Validate GGX visibility/normal-distribution compensation and dielectric/metal F0 behavior against a numeric reference.
+- [ ] Verify directional, point and spot lights share the same `LightingService` units, shadow visibility and material inputs.
+- [ ] Add roughness/view/light-angle sweeps and finite zero/behind-surface cases.
+- [ ] Record direct-light fallback behavior for unsupported capability tiers.
+
+**Exit:** direct-light fixtures match the frozen numeric reference within documented tolerance; units, shadows, HDR response and fallback diagnostics are consistent across supported native backends.
+
+## 4B. U2 / S2.1–S2.3 — Dynamic environment and authored environment policy
+
+- [ ] Freeze procedural-sky, environment-bake and authored-cubemap color-space/orientation policy.
+- [ ] Define environment generation/publication, cache identity, invalidation and last-good fallback through `ReflectionService`.
+- [ ] Verify sky/direct-light coupling, environment rotation/intensity and missing/failed asset behavior.
+- [ ] Keep local dynamic six-face capture and probe blending in U5; this Unit owns the shared environment input contract.
+- [ ] Add deterministic sky/bake/asset-failure readbacks for D3D12, Vulkan and the documented OpenGL subset.
+
+**Exit:** procedural and authored environments produce the declared HDR/IBL inputs, cache and invalidation are transactional, and failed or unsupported environments select a named fallback without mutating authored data.
+
 ## 5. U3 / S3.1 — RHI resource ownership, graph and measurement
 
 - [x] Make timestamp probe descriptions valid and require successful readback.
@@ -185,6 +209,20 @@ P5A–P5D may reuse authored-probe work, but none may silently depend on unfinis
 - [ ] Add smooth-sphere normal-field and anti-faceting metric.
 
 **Exit:** smooth sphere has no triangle bands; built-in/graph materials match in supported scope; save/reopen preserves fields.
+
+### S3.3 — Material Graph, preview and runtime parity
+
+- [ ] Resolve built-in, Material Graph, Preview and Runtime materials through the same supported `ResolvedSurface` fields and defaults.
+- [ ] Record explicit unsupported feature masks and fallback diagnostics for graph/custom paths.
+- [ ] Compare equivalent built-in/graph fixtures under identical lights, shadows, IBL and output policy.
+
+### S3.4 — Temporal, diagnostics and measurement integration
+
+- [ ] Bind motion/depth/history/exposure resources through the declared graph contract.
+- [ ] Verify target-generation, camera-cut, feature-toggle and device-epoch resets before temporal consumers import history.
+- [ ] Record per-pass timing validity, fallback reasons and resource generations; invalid measurements remain `Unknown`.
+
+**S3.3/S3.4 exit:** parity, reset and diagnostics fixtures pass on supported native paths, with unsupported paths explicitly reported.
 
 ## 7. U4 / S4.1–S4.3 — GTAO and directional contact shadows
 

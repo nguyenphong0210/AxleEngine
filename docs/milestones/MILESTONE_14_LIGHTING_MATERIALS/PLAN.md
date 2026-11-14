@@ -71,6 +71,46 @@ Phase 44.17 is the final performance/quality gate inside U10; it is not a separa
 
 A Unit closes only when all its SubUnits pass, its dependency Units are accepted, and its Unit exit evidence is recorded. A Phase closes only when every Unit mapped to that Phase passes. M14 closes only when all required Phases and the final U10 gate pass.
 
+### WorkItem granularity rule
+
+High-risk SubUnits are split into WorkItems below. A WorkItem is the smallest planned delivery that should normally have one focused change and one focused verification. WorkItems inherit their parent SubUnit's dependencies and do not create a new roadmap phase.
+
+| Unit | SubUnit | WorkItems |
+|---|---|---|
+| U3 | S3.1 Resource/graph | W3.1.1 target generation; W3.1.2 descriptor lifetime; W3.1.3 graph declarations; W3.1.4 failure/retry; W3.1.5 timing ring |
+| U3 | S3.2 Surface/material | W3.2.1 normal producer; W3.2.2 normal-map parity; W3.2.3 material packing; W3.2.4 graph parity; W3.2.5 smooth-sphere metric |
+| U5 | S5.1 Hi-Z | W5.1.1 level allocation; W5.1.2 reduction; W5.1.3 barriers; W5.1.4 odd-size reference; W5.1.5 debug readback |
+| U5 | S5.2 Dynamic Capture | W5.2.1 capture formats; W5.2.2 six camera faces; W5.2.3 recursive suppression; W5.2.4 face copy/lifetime; W5.2.5 red-object fixture |
+| U5 | S5.3 Prefilter | W5.3.1 mip allocation; W5.3.2 cubemap orientation; W5.3.3 roughness convolution; W5.3.4 seam handling; W5.3.5 roughness sweep |
+| U5 | S5.4 Scheduling | W5.4.1 invalidation keys; W5.4.2 manual capture; W5.4.3 automatic budget; W5.4.4 last-good generation; W5.4.5 cache eviction |
+| U5 | S5.5 Multi-Probe | W5.5.1 influence weights; W5.5.2 parallax direction; W5.5.3 multi-probe blend; W5.5.4 stale/missing fallback; W5.5.5 seam fixture |
+| U5 | S5.6 SSR | W5.6.1 Hi-Z cell traversal; W5.6.2 thickness/refinement; W5.6.3 cone filtering; W5.6.4 material Fresnel; W5.6.5 energy resolve |
+| U7 | S7.1–S7.4 DDGI | W7.1.1 radiance acquisition; W7.1.2 atlas packing; W7.1.3 visibility; W7.1.4 temporal scheduling; W7.1.5 ForwardPBR feedback; W7.1.6 leak/bounce fixture |
+| U8 | S8.1–S8.6 Post | W8.1.1 global histogram; W8.1.2 exposure consumer; W8.2.1 bloom extraction; W8.2.2 bloom reconstruction; W8.3.1 motion vectors; W8.3.2 history reset; W8.3.3 disocclusion; W8.3.4 transparent/UI policy |
+| U9 | S9.1–S9.5 Materials | W9.1 sheen; W9.2 absorption; W9.3 dispersion; W9.4 SSS diffusion; W9.5 graph/asset parity |
+| U10 | S10.1–S10.5 Authoring | W10.1 material Inspector; W10.2 graph/preview; W10.3 probe gizmo/capture UI; W10.4 serialization/runtime; W10.5 presets/evidence |
+| U11 | S11.1–S11.4 RT | W11.1 capability policy; W11.2 BLAS; W11.3 TLAS/update; W11.4 RT shaders; W11.5 denoise; W11.6 fallback/fixture |
+
+#### WorkItem tracking checklist
+
+The following gates are intentionally separate from the larger SubUnit checkboxes. Tick a WorkItem only when its parent SubUnit's source and runtime evidence exists.
+
+- [ ] **U3/W3.1:** target generations, descriptor lifetime, graph declarations, failure/retry and timing ring each have focused tests.
+- [ ] **U3/W3.2:** surface normal, normal maps, material packing, graph parity and smooth-sphere metric pass.
+- [ ] **U5/W5.1:** Hi-Z allocation/reduction/barriers/odd-size/reference/debug checks pass.
+- [ ] **U5/W5.2:** six-face capture formats, orientations, recursive suppression, copies/lifetime and red-object fixture pass.
+- [ ] **U5/W5.3:** cubemap mips, orientation/seams, roughness convolution and sweep pass.
+- [ ] **U5/W5.4:** invalidation, manual/automatic scheduling, budget, last-good generation and eviction pass.
+- [ ] **U5/W5.5:** influence/parallax/multi-probe/fallback/seam checks pass.
+- [ ] **U5/W5.6:** traversal, thickness/refinement, cone filtering, Fresnel and energy resolve pass.
+- [ ] **U7/W7.1:** DDGI acquisition, atlas, visibility, schedule, ForwardPBR feedback and leak/bounce fixture pass.
+- [ ] **U8/W8.1:** global histogram and exposure consumer pass frame-rate/adaptation checks.
+- [ ] **U8/W8.2:** bloom extraction/reconstruction pass impulse/gain checks.
+- [ ] **U8/W8.3:** motion vectors, reset, disocclusion and transparent/UI policy pass temporal checks.
+- [ ] **U9/W9:** sheen, absorption, dispersion, SSS and graph/asset parity each pass their material fixture.
+- [ ] **U10/W10:** Inspector, graph/preview, probe UI, serialization/runtime and presets/evidence each pass authoring round trips.
+- [ ] **U11/W11:** capability policy, BLAS/TLAS, RT shaders, denoise and fallback pass optional RT acceptance or are explicitly deferred.
+
 ### Dependency order
 
 ```text

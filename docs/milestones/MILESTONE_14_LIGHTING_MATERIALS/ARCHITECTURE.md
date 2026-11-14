@@ -23,9 +23,10 @@ M14 Lighting and Material Fidelity
       ├─ U10 Authoring and acceptance
       └─ U11 Optional ray-traced extension
           └─ each Unit contains independently buildable/checkable SubUnits
+              └─ high-risk SubUnits contain focused WorkItems with their own evidence
 ```
 
-The architecture owns the Unit contracts. [PLAN.md](PLAN.md) owns the tickable SubUnit checklist and evidence. A SubUnit cannot bypass its Unit dependency or promote a later Phase.
+The architecture owns the Unit contracts. [PLAN.md](PLAN.md) owns the tickable SubUnit and WorkItem checklist/evidence. A WorkItem cannot bypass its SubUnit dependency; a SubUnit cannot bypass its Unit dependency or promote a later Phase.
 
 ## 1. Product boundaries
 

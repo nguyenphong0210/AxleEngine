@@ -88,6 +88,8 @@ High-risk SubUnits are split into WorkItems below. A WorkItem is the smallest pl
 
 | Unit | SubUnit | WorkItems |
 |---|---|---|
+| U1 | S1.1–S1.3 Direct BRDF | W1.1.1 BRDF numeric reference; W1.1.2 units/shadows; W1.1.3 light-angle/fallback sweep |
+| U2 | S2.1–S2.3 Dynamic environment | W2.1.1 sky/bake contract; W2.1.2 publication/cache; W2.1.3 failure/fallback readback |
 | U3 | S3.1 Resource/graph | W3.1.1 target generation; W3.1.2 descriptor lifetime; W3.1.3 graph declarations; W3.1.4 failure/retry; W3.1.5 timing ring; W3.1.6 modular IRenderPass extraction |
 | U3 | S3.2 Surface/material | W3.2.1 normal producer; W3.2.2 normal-map parity; W3.2.3 material packing; W3.2.4 graph parity; W3.2.5 smooth-sphere metric |
 | U3 | S3.3 Graph/preview parity | W3.3.1 shared resolver; W3.3.2 unsupported masks; W3.3.3 built-in/graph/preview/runtime fixture |
@@ -108,6 +110,8 @@ High-risk SubUnits are split into WorkItems below. A WorkItem is the smallest pl
 
 The following gates are intentionally separate from the larger SubUnit checkboxes. Tick a WorkItem only when its parent SubUnit's source and runtime evidence exists.
 
+- [ ] **U1/W1:** BRDF numeric reference, shared light units/shadows, sweeps and fallback behavior pass.
+- [ ] **U2/W2:** sky/bake contract, environment publication/cache and failure/fallback readback pass.
 - [ ] **U3/W3.1:** target generations, descriptor lifetime, graph declarations, failure/retry, timing ring, and modular IRenderPass extraction pass.
 - [ ] **U3/W3.2:** surface normal, normal maps, material packing, graph parity and smooth-sphere metric pass.
 - [ ] **U3/W3.3:** shared material resolver, unsupported masks and built-in/graph/preview/runtime parity pass.

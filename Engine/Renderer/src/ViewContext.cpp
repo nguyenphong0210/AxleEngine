@@ -49,6 +49,7 @@ namespace Axle {
         m_FrameActive = false;
         m_FrameIndex = 0;
         m_DeviceEpoch = 0;
+        m_TargetGeneration = 0;
         m_HasInput = false;
         m_ResetReasons = ViewResetReason::Initial;
         m_Temporal.Reset();
@@ -64,6 +65,7 @@ namespace Axle {
         m_Initialized = false;
         m_FrameIndex = 0;
         m_DeviceEpoch = 0;
+        m_TargetGeneration = 0;
         m_HasInput = false;
         m_ResetReasons = ViewResetReason::None;
         m_Input = ViewContextInput{};
@@ -73,6 +75,7 @@ namespace Axle {
     }
 
     ViewResetReason ViewContext::Observe(const ViewContextInput& input, uint64_t deviceEpoch) {
+        const uint64_t targetGeneration=input.Targets ? input.Targets->GetGeneration() : 0;
         ViewResetReason reasons = m_HasInput ? ViewResetReason::None : ViewResetReason::Initial;
         if (m_HasInput) {
             if (input.Width != m_Input.Width || input.Height != m_Input.Height) reasons |= ViewResetReason::Resize;
@@ -80,12 +83,13 @@ namespace Axle {
             if (input.SceneRevision != m_Input.SceneRevision) reasons |= ViewResetReason::SceneRevision;
             if (input.MaterialGeneration != m_Input.MaterialGeneration) reasons |= ViewResetReason::MaterialGeneration;
             if (input.FeatureGeneration != m_Input.FeatureGeneration) reasons |= ViewResetReason::FeaturePolicy;
-            if (input.Targets != m_Input.Targets) reasons |= ViewResetReason::TargetGeneration;
+            if (input.Targets != m_Input.Targets || targetGeneration != m_TargetGeneration) reasons |= ViewResetReason::TargetGeneration;
         }
         if (input.CameraCut) reasons |= ViewResetReason::CameraCut;
         if (m_HasInput && deviceEpoch != m_DeviceEpoch) reasons |= ViewResetReason::DeviceEpoch;
 
         m_Input = input;
+        m_TargetGeneration = targetGeneration;
         m_DeviceEpoch = deviceEpoch;
         m_HasInput = true;
         m_ResetReasons = reasons;
@@ -97,6 +101,17 @@ namespace Axle {
             m_PostProcess.Reset();
         }
         return reasons;
+    }
+
+    bool ViewContext::ObserveTargets(std::shared_ptr<RHI::RHIViewTargets> targets) {
+        const uint64_t generation=targets ? targets->GetGeneration() : 0;
+        const bool changed=targets != m_Input.Targets || generation != m_TargetGeneration;
+        m_Input.Targets=std::move(targets);
+        m_TargetGeneration=generation;
+        if (changed) RequestReset(ViewResetReason::TargetGeneration);
+        m_Diagnostics.SetTargetGeneration(generation);
+        m_Diagnostics.SetFrameIndex(m_FrameIndex);
+        return changed;
     }
 
     bool ViewContext::ObserveMaterialGeneration(uint64_t generation) {

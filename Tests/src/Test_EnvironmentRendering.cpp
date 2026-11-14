@@ -221,7 +221,7 @@ bool Native(RHIType backend) {
     camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0,0,5),glm::vec3(0),glm::vec3(0,1,0)),glm::vec3(0,0,5));
     SceneRenderSettings settings; settings.EnableSkybox=true; settings.EnableShadows=false;
     settings.EnableParticles=false; settings.EnableToneMapping=false; settings.EnableStudioLightLobes=false;
-    auto render=[&]{renderer.RenderWorldView(world,camera,&color,&depth,settings);
+    auto render=[&](const std::shared_ptr<RHIViewTargets>& targets = {}){renderer.RenderWorldView(world,camera,&color,&depth,settings,nullptr,targets);
         return renderer.WasLastRenderSuccessful() && renderer.GetPassScheduler().Size()==0 && !renderer.GetDiagnostics().HasErrors()
             ?Read(color):std::vector<uint8_t>{};};
     auto passNames=[&]{std::vector<std::string> names;
@@ -653,6 +653,37 @@ bool Native(RHIType backend) {
     }
     // A frame-owned descriptor arena must stay bounded beyond its old 256-set cap.
     for (unsigned frame=0; frame<270; ++frame) CHECK(!render().empty());
+    {
+        // Replacing a generation must invalidate history even when its owner
+        // wrapper, dimensions, camera, scene and material inputs are unchanged.
+        auto targets=std::make_shared<RHIViewTargets>();
+        RHIViewTargetDesc targetDesc;
+        targetDesc.Width=targetDesc.Height=width; targetDesc.OwnPrimary=false;
+        targetDesc.HDR=settings.EnableToneMapping; targetDesc.FXAA=settings.EnableFXAA; targetDesc.HistoryCount=2;
+        CHECK(targets->Configure(targetDesc));
+        CHECK(!render(targets).empty() && !render(targets).empty());
+        CHECK(renderer.GetDiagnostics().GetFrame().FrameIndex==1);
+        const auto generation=targets->GetGeneration();
+        {
+            ScopedRHIFault fault([](std::string_view op)->std::optional<nri::Result> {
+                if (op=="CreateTexture") return nri::Result::OUT_OF_MEMORY;
+                return {};
+            });
+            CHECK(!targets->Configure(targetDesc) && targets->GetGeneration()==generation);
+        }
+        CHECK(!render(targets).empty() && renderer.GetDiagnostics().GetFrame().FrameIndex==2);
+        CHECK(targets->Configure(targetDesc) && targets->GetGeneration()!=generation);
+        CHECK(!render(targets).empty());
+        CHECK(renderer.GetDiagnostics().GetFrame().FrameIndex==0);
+        CHECK(renderer.GetDiagnostics().GetFrame().TargetGeneration==targets->GetGeneration());
+        CHECK(!render(targets).empty() && renderer.GetDiagnostics().GetFrame().FrameIndex==1);
+        CHECK(!render().empty() && !render().empty());
+        CHECK(renderer.GetDiagnostics().GetFrame().FrameIndex==1);
+        CHECK(color.Init(RHITextureDesc::RenderTarget2D(width,width)));
+        CHECK(!render().empty() && renderer.GetDiagnostics().GetFrame().FrameIndex==0);
+        CHECK(!render().empty() && renderer.GetDiagnostics().GetFrame().FrameIndex==1);
+        std::cout << "PASS target generation reset for same-wrapper and implicit replacement\n";
+    }
     {
         bool reached=false;
         ScopedRHIFault fault([&](std::string_view op)->std::optional<nri::Result> {

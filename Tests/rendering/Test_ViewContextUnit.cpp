@@ -77,6 +77,16 @@ bool RunViewContextUnitTests() {
     context.Temporal().Commit(glm::mat4(1), true);
     RENDER_CHECK(!context.ObserveMaterialGeneration(99) && context.Temporal().IsHistoryValid(),
         "unchanged effective material identity preserves committed history");
+    const auto priorTargets=context.GetTargets();
+    RENDER_CHECK(!context.ObserveTargets(priorTargets) && context.Temporal().IsHistoryValid(),
+        "adopting the same target identity preserves committed history");
+    const auto replacement=std::make_shared<Axle::RHI::RHIViewTargets>();
+    RENDER_CHECK(context.ObserveTargets(replacement) && context.GetTargets()==replacement &&
+        !context.Temporal().IsHistoryValid() && context.Temporal().GetReadSlot()==0 && context.Temporal().GetWriteSlot()==1,
+        "late target adoption resets temporal contents and slots before graph imports");
+    RENDER_CHECK((context.GetResetReasons() & ViewResetReason::TargetGeneration)!=ViewResetReason::None &&
+        context.Diagnostics().GetFrame().FrameIndex==0,
+        "target adoption latches reset reason and diagnostic frame index");
 
     std::cout << "  [ViewContext] View identity and frame ownership tests passed.\n";
     return true;

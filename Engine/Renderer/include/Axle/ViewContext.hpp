@@ -75,6 +75,9 @@ namespace Axle {
         // latched until the next Observe call and reset temporal/frame index
         // state where the identity changed.
         ViewResetReason Observe(const ViewContextInput& input, uint64_t deviceEpoch);
+        // Adopt final targets after frame acquisition has waited for prior GPU
+        // work, but before jitter/history selection or graph resource imports.
+        bool ObserveTargets(std::shared_ptr<RHI::RHIViewTargets> targets);
         bool ObserveMaterialGeneration(uint64_t generation);
         void RequestReset(ViewResetReason reason);
         ViewResetReason GetResetReasons() const { return m_ResetReasons; }
@@ -108,6 +111,8 @@ namespace Axle {
         bool m_FrameActive = false;
         uint64_t m_FrameIndex = 0;
         uint64_t m_DeviceEpoch = 0;
+        // Snapshot independently: m_Input.Targets may be reconfigured in place.
+        uint64_t m_TargetGeneration = 0;
         bool m_HasInput = false;
         ViewContextInput m_Input;
         ViewResetReason m_ResetReasons = ViewResetReason::None;

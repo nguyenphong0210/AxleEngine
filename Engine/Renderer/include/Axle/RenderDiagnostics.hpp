@@ -63,6 +63,7 @@ namespace Axle {
         void AddMaterial(uint32_t entityID, const ResolvedSurface& surface);
         void SetMaterialGeneration(uint64_t generation) { m_Frame.MaterialGeneration = generation; }
         void SetFrameIndex(uint64_t frameIndex) { m_Frame.FrameIndex = frameIndex; }
+        void SetTargetGeneration(uint64_t generation) { m_Frame.TargetGeneration = generation; }
 
         const RenderFrameDiagnostics& GetFrame() const { return m_Frame; }
         bool HasErrors() const { return !m_Frame.Errors.empty(); }

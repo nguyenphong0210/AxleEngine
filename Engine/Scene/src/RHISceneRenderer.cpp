@@ -2596,7 +2596,7 @@ namespace Axle {
         viewInput.Height = height;
         viewInput.Camera = camera;
         viewInput.Settings = settings;
-        viewInput.Targets = viewTargets;
+        viewInput.Targets = viewTargets ? viewTargets : m_ImplicitViewTargets;
         viewInput.FeatureGeneration = HashViewFeaturePolicy(settings);
         viewInput.SceneRevision = world.SceneRevision;
         // Effective material identity is published by the live pass schedule.
@@ -2605,7 +2605,6 @@ namespace Axle {
         if (!world.ErrorMessage.empty() || !m_ViewContext.BeginFrame()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
         for (const auto& fallback : backendPolicy.CollectFallbacks(requestedSettings))
             m_ViewContext.Diagnostics().AddFallback(fallback);
-        m_ViewContext.PostProcess().BeginFrame(settings, m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT);
         const auto reflectionFrame = m_ReflectionService.Prepare(
             world, camera.GetPosition(), settings.EnableSSR, world.SceneRevision);
         m_LastReflectionFrame=reflectionFrame;
@@ -2640,24 +2639,6 @@ namespace Axle {
         m_CustomDescriptorPool.Reset(); // The preceding RenderScene submission completed before reuse.
         m_LastRenderedEntityCount = 0;
         m_LastStreamedTransformBytes = 0;
-
-        // View-local jitter and matrices are immutable inputs to the pass schedule.
-        static const float s_Halton2[8] = { 0.5f, 0.25f, 0.75f, 0.125f, 0.625f, 0.375f, 0.875f, 0.0625f };
-        static const float s_Halton3[8] = { 0.333333f, 0.666667f, 0.111111f, 0.444444f, 0.777778f, 0.222222f, 0.555556f, 0.888889f };
-        float jitterX = 0.0f;
-        float jitterY = 0.0f;
-        if (settings.EnableTAA && width > 0 && height > 0) {
-            jitterX = (s_Halton2[m_ViewContext.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(width) * settings.TAAJitterSpread;
-            jitterY = (s_Halton3[m_ViewContext.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(height) * settings.TAAJitterSpread;
-        }
-        m_ViewContext.SetJitter({ jitterX, jitterY });
-
-        glm::mat4 projZO = camera.GetProjectionMatrixZO();
-        if (settings.EnableTAA) {
-            projZO[2][0] += 2.0f * jitterX;
-            projZO[2][1] += 2.0f * jitterY;
-        }
-        glm::mat4 viewProjZO = projZO * camera.GetViewMatrix();
 
         // Determine whether intermediate targets are used for MSAA, Tone Mapping & FXAA
         bool useMSAA = (settings.MSAASamples > 1);
@@ -2707,6 +2688,26 @@ namespace Axle {
         m_ParticleSceneDepth = viewTargets->Get(RHIViewTarget::ParticleDepth);
         m_OpaqueSceneNormal = viewTargets->Get(RHIViewTarget::ScreenNormal);
         m_ScreenStorageTarget = viewTargets->Get(RHIViewTarget::ScreenStorage);
+        m_ViewContext.ObserveTargets(viewTargets);
+        m_ViewContext.PostProcess().BeginFrame(settings, m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT);
+
+        // Final target identity must reset histories before choosing jitter or
+        // importing temporal slots. Frame acquisition already waited for reuse.
+        static const float s_Halton2[8] = { 0.5f, 0.25f, 0.75f, 0.125f, 0.625f, 0.375f, 0.875f, 0.0625f };
+        static const float s_Halton3[8] = { 0.333333f, 0.666667f, 0.111111f, 0.444444f, 0.777778f, 0.222222f, 0.555556f, 0.888889f };
+        float jitterX = 0.0f;
+        float jitterY = 0.0f;
+        if (settings.EnableTAA) {
+            jitterX = (s_Halton2[m_ViewContext.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(width) * settings.TAAJitterSpread;
+            jitterY = (s_Halton3[m_ViewContext.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(height) * settings.TAAJitterSpread;
+        }
+        m_ViewContext.SetJitter({ jitterX, jitterY });
+        glm::mat4 projZO = camera.GetProjectionMatrixZO();
+        if (settings.EnableTAA) {
+            projZO[2][0] += 2.0f * jitterX;
+            projZO[2][1] += 2.0f * jitterY;
+        }
+        const glm::mat4 viewProjZO = projZO * camera.GetViewMatrix();
         if (useMSAA) sceneTargetFormat = useToneMap ? nri::Format::RGBA16_SFLOAT : m_CurrentColorFormat;
         if (useMSAA) {
             m_CurrentMSAASamples = activeSampleCount;

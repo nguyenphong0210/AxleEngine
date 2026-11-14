@@ -58,8 +58,9 @@ namespace Axle::RHI {
             view.format=device.GetNRICore().GetTextureDesc(*source).format;view.mipNum=view.layerNum=1;
             nri::Descriptor* descriptor=nullptr;auto core=device.GetNRICore();
             if(core.CreateTextureView(view,descriptor)!=nri::Result::SUCCESS)return false;
-            auto lease=device.GetResources().Publish(RHIResourceKind::DescriptorSet,"Present source view",{descriptor},
-                [core,descriptor]{core.DestroyDescriptor(descriptor);},{owner});
+            auto lease=device.GetResources().PublishTextureSRV("Present source view",descriptor,owner,
+                [core,descriptor]{core.DestroyDescriptor(descriptor);});
+            if (!lease.IsLive()) { core.DestroyDescriptor(descriptor); return false; }
             auto* set=ImagePool.AllocateDescriptorSet(ImageLayout,0);
             if(!lease || !set || !ImagePool.UpdateTextureRange(set,0,0,{descriptor}) || !commands.KeepAlive(lease))return false;
             ImageSet=set; commands.TransitionTexture(source,RHIResourceLayout::Undefined,RHIResourceLayout::ShaderResource);

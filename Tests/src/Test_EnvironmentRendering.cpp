@@ -620,6 +620,19 @@ bool Native(RHIType backend) {
     for (size_t c = 0; c < 3; ++c) {
         CHECK(std::abs(int(taaFrame1[center + c]) - int(taaBaseline[center + c])) <= 32);
     }
+    // A frame-owned descriptor arena must stay bounded beyond its old 256-set cap.
+    for (unsigned frame=0; frame<270; ++frame) CHECK(!render().empty());
+    {
+        bool reached=false;
+        ScopedRHIFault fault([&](std::string_view op)->std::optional<nri::Result> {
+            if (op=="CreateDescriptorPool" && ScopedRHIOperation::Resource()=="TemporalDescriptors") {
+                reached=true; return nri::Result::OUT_OF_MEMORY;
+            }
+            return {};
+        });
+        CHECK(render().empty() && reached && passNames().empty());
+    }
+    CHECK(!render().empty()); // Checked arena replacement failure remains retryable.
     settings.EnableTAA = false;
     settings.EnableToneMapping = false;
 

@@ -91,8 +91,8 @@ namespace Axle::RHI {
         auto& device = RHIDevice::Get(); const auto core = device.GetNRICore();
         nri::Descriptor* view = nullptr;
         if (ScopedRHIFault::Invoke("CreateFrameUniformView", [&] { return core.CreateBufferView(desc, view); }) != nri::Result::SUCCESS || !view) return {};
-        auto lease = device.GetResources().Publish(RHIResourceKind::DescriptorSet, "Frame uniform range", {view},
-            [core, view] { core.DestroyDescriptor(view); }, {frame.Uniform.AcquireLease()});
+        auto lease = device.GetResources().PublishBufferCBV("Frame uniform range",view,frame.Uniform.AcquireLease(),
+            [core, view] { core.DestroyDescriptor(view); });
         if (!lease) { core.DestroyDescriptor(view); return {}; }
         frame.UniformViews.push_back(std::move(lease)); range.Descriptor = view; return range;
     }

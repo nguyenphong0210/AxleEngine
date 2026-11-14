@@ -19,7 +19,7 @@ namespace Axle::RHI {
     };
 
     enum class RHIResourceKind : uint8_t {
-        Memory, Surface, Streamer, Buffer, Texture, Sampler, Layout, Pool, DescriptorSet, Pipeline, UIBackend, Commands
+        Memory, Surface, Streamer, Buffer, Texture, Sampler, Layout, Pool, DescriptorSet, Pipeline, UIBackend, Commands, View
     };
     struct RHIResourceGeneration;
     struct RHIResourceOwner;
@@ -105,6 +105,12 @@ namespace Axle::RHI {
         bool RecordDescriptorUse(const void* commands, const void* descriptor);
         bool RecordDescriptorSetUse(const void* commands, const void* set);
         void DefineViewAccess(const void* alias, nri::AccessBits access, nri::Layout layout = nri::Layout::UNDEFINED);
+        // Own an independently created SRV with immutable access to one exact
+        // backing generation. The cleanup and backing lease travel together.
+        RHIResourceLease PublishTextureSRV(std::string name, nri::Descriptor* descriptor,
+            const RHIResourceLease& backing, std::function<void()> cleanup);
+        RHIResourceLease PublishBufferCBV(std::string name, nri::Descriptor* descriptor,
+            const RHIResourceLease& backing, std::function<void()> cleanup);
         std::vector<RHIResourceAccess> GetAccesses(const RHIResourceLease& resource) const;
         bool SetAccessValidator(const void* commands, const void* owner,
             std::function<bool(const RHIResourceAccess&)> validator);

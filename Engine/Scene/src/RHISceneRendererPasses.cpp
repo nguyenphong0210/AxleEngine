@@ -1728,6 +1728,9 @@ namespace Axle {
             }
             if (useAutoExposure && !uniform("AutoExposure",sizeof(RHIExposureConstants))) return fail();
             if (useTAA) {
+                // A fresh frame arena bounds memory and removes the preceding
+                // frame's history dependencies before declaring current slots.
+                if (!m_TAADescriptorPool.Init(m_TAADescriptorPool.GetDesc())) return fail();
                 m_TAADescriptorSet = m_TAADescriptorPool.AllocateDescriptorSet(m_TAAPipelineLayout, 0);
                 if (!m_TAADescriptorSet ||
                     !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative()) ||

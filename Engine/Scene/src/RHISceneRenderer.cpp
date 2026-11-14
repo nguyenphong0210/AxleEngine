@@ -452,9 +452,8 @@ namespace Axle {
         }
 
         RHIDescriptorPoolDesc taaPoolDesc;
-        // TAA descriptors are frame generations; old sets remain leased until
-        // queue completion and must not be rewritten in place.
-        taaPoolDesc.MaxDescriptorSets = 256;
+        taaPoolDesc.DebugName = "TemporalDescriptors";
+        taaPoolDesc.MaxDescriptorSets = 16;
         taaPoolDesc.MaxTextures = 64;
         taaPoolDesc.MaxSamplers = 16;
         taaPoolDesc.MaxConstantBuffers = 16;

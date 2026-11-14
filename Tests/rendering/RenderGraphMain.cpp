@@ -5,6 +5,8 @@
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHIDescriptorPool.hpp>
+#include <Axle/RHI/RHIFrameContext.hpp>
+#include <array>
 
 using namespace Axle;
 using namespace Axle::RHI;
@@ -113,6 +115,82 @@ static bool Run() {
     RENDER_CHECK(layout.Init(layoutDesc) && pool.Init(RHIDescriptorPoolDesc::Tier2Bindless(4,4)), "real descriptor arena");
     auto* set=pool.AllocateDescriptorSet(layout,0);
     RENDER_CHECK(set && pool.UpdateTexture(set,0,0,image.GetSRV()), "real descriptor dependency");
+    RENDER_CHECK(!pool.UpdateTexture(set,0,0,constants.GetCBV()) &&
+        !pool.UpdateStorageTexture(set,0,0,image.GetUAV()) &&
+        !pool.UpdateTexture(set,1,0,image.GetSRV()) && !pool.UpdateTexture(set,0,1,image.GetSRV()),
+        "wrong descriptor types and range bounds reject before native update");
+    {
+        RHIFrameContext frame;
+        RENDER_CHECK(frame.Init()&&frame.Begin(),"frame-owned uniform arena");
+        const std::array<float,4> values{1,2,3,4};
+        const auto uniform=frame.WriteUniform(values.data(),sizeof(values));
+        RENDER_CHECK(uniform.Descriptor && !pool.UpdateTexture(set,0,0,uniform.Descriptor),
+            "typed frame CBV cannot enter a sampled texture range");
+        RHIPipelineLayout rootLayout;
+        nri::RootDescriptorDesc root{}; root.descriptorType=nri::DescriptorType::CONSTANT_BUFFER;
+        root.shaderStages=nri::StageBits::VERTEX_SHADER;
+        nri::PipelineLayoutDesc desc{}; desc.rootDescriptors=&root; desc.rootDescriptorNum=1;
+        desc.shaderStages=nri::StageBits::VERTEX_SHADER;
+        RENDER_CHECK(rootLayout.Init(desc),"uniform root layout");
+        auto& c=*frame.GetCommands();
+        {
+            RenderGraph g; g.AddPass("uniform",{});
+            RENDER_CHECK(g.DeclareRead("uniform",uniform.Descriptor)&&g.Compile(true)&&g.BeginPass("uniform",c),
+                "frame uniform exposes exact buffer backing to strict graph");
+            c.SetPipelineLayout(nri::BindPoint::GRAPHICS,rootLayout);
+            c.SetRootDescriptor(0,uniform.Descriptor);
+            RENDER_CHECK(c.IsRecording(),"typed frame uniform root binding succeeds");
+        }
+        RENDER_CHECK(frame.End()&&frame.Submit()&&device.WaitIdle(),"strict frame uniform submission completes");
+    }
+    {
+        auto* incomplete=pool.AllocateDescriptorSet(layout,0);
+        RENDER_CHECK(incomplete,"allocate a genuine managed but uninitialized set");
+        RHICommandBuffer c; RENDER_CHECK(c.Init()&&c.Begin(),"incomplete set recording");
+        RenderGraph g; g.AddPass("incomplete",{});
+        RENDER_CHECK(g.Compile(true)&&g.BeginPass("incomplete",c),"compile without physical inputs");
+        RHIDescriptorPool::BindDescriptorSet(c.GetNative(),0,incomplete);
+        RENDER_CHECK(!c.IsRecording()&&!c.End()&&!c.Submit(),"allocation alone cannot validate uninitialized ranges");
+    }
+    {
+        RHICommandBuffer a,b; RENDER_CHECK(a.Init()&&b.Init()&&a.Begin()&&b.Begin(),"helper command scopes");
+        RenderGraph g; g.AddPass("scope",{});
+        RENDER_CHECK(g.DeclareRead("scope",set)&&g.Compile(true)&&g.BeginPass("scope",a),"descriptor helper scope");
+        RENDER_CHECK(!g.DeclareDescriptorRead(set,b)&&!a.IsRecording()&&b.IsRecording(),
+            "wrong-command helper fails original graph and leaves other recording untouched");
+    }
+    {
+        RHITexture backing; RENDER_CHECK(backing.Init(desc),"independent sampled-view backing");
+        const auto backingHandle=backing.GetHandle();
+        const auto& core=device.GetNRICore();
+        nri::TextureViewDesc view{}; view.texture=backing.GetNative(); view.format=nri::Format::RGBA8_UNORM;
+        view.type=nri::TextureView::TEXTURE; view.mipNum=view.layerNum=1;
+        nri::Descriptor* srv=nullptr;
+        RENDER_CHECK(core.CreateTextureView(view,srv)==nri::Result::SUCCESS,"independent native SRV");
+        auto owner=device.GetResources().PublishTextureSRV("Independent SRV",srv,backing.AcquireLease(),
+            [core,srv]{core.DestroyDescriptor(srv);});
+        RENDER_CHECK(owner.IsLive(),"typed SRV retains exact backing access and lifetime");
+        const auto viewHandle=owner.GetHandle();
+        RHIDescriptorPool viewPool;
+        RENDER_CHECK(viewPool.Init(RHIDescriptorPoolDesc::Tier2Bindless(2,2)),"independent view pool");
+        auto* viewSet=viewPool.AllocateDescriptorSet(layout,0);
+        RENDER_CHECK(viewSet&&viewPool.UpdateTexture(viewSet,0,0,srv),"typed imported view is a sampled descriptor");
+        RHICommandBuffer c; RENDER_CHECK(c.Init()&&c.Begin(),"typed view graph recording");
+        {
+            RenderGraph g; g.AddPass("import",{});
+            RENDER_CHECK(g.DeclareRead("import",viewSet)&&g.Compile(true)&&g.BeginPass("import",c),"graph sees imported SRV backing generation");
+            c.SetPipelineLayout(nri::BindPoint::GRAPHICS,layout); viewPool.Bind(c.GetNative());
+            RHIDescriptorPool::BindDescriptorSet(c.GetNative(),0,viewSet);
+            RENDER_CHECK(c.IsRecording(),"typed imported SRV passes strict recording");
+        }
+        RENDER_CHECK(c.End(),"typed view recording completes");
+        owner.Reset(); viewPool.Shutdown(); backing.Shutdown();
+        // Wrapper shutdown retires the generation immediately, while the
+        // command recording lease keeps native cleanup deferred until submit.
+        RENDER_CHECK(c.Submit()&&device.WaitIdle(),"view and backing survive graph and wrapper destruction through completion");
+        RENDER_CHECK(!device.GetResources().Acquire(backingHandle)&&!device.GetResources().Acquire(viewHandle),
+            "submission retirement releases typed view and backing together");
+    }
     {
         RHICommandBuffer commands;
         RENDER_CHECK(commands.Init() && commands.Begin(), "descriptor negative begins");
@@ -158,10 +236,11 @@ static bool Run() {
             RENDER_CHECK(g.DeclareRead("untyped",backing.GetSRV())&&g.Compile(true)&&g.BeginPass("untyped",c),"declare backing without alias role");
             RENDER_CHECK(!resources.RecordNativeUse(c.GetNative(),alias)&&!c.End()&&!c.Submit(),"direct untyped view binding cannot bypass metadata");
         }
-        for(auto kind : {RHIResourceKind::Surface,RHIResourceKind::DescriptorSet}) {
+        for(bool hasBacking : {false,true}) for(auto kind : {RHIResourceKind::Surface,RHIResourceKind::DescriptorSet}) {
             nri::Descriptor* standalone=nullptr; view.type=nri::TextureView::TEXTURE;
             RENDER_CHECK(core.CreateTextureView(view,standalone)==nri::Result::SUCCESS,"separate imported view");
-            auto owner=resources.Publish(kind,"standalone view",{standalone},[core,standalone]{core.DestroyDescriptor(standalone);},{backing.AcquireLease()});
+            auto owner=resources.Publish(kind,"standalone view",{standalone},[core,standalone]{core.DestroyDescriptor(standalone);},
+                hasBacking ? std::vector<RHIResourceLease>{backing.AcquireLease()} : std::vector<RHIResourceLease>{});
             RENDER_CHECK(owner.IsLive(),"standalone view publication");
             resources.DefineViewAccess(standalone,nri::AccessBits::SHADER_RESOURCE,nri::Layout::SHADER_RESOURCE);
             RENDER_CHECK(!pool.UpdateTexture(set,0,0,standalone),"standalone view without exact backing association is rejected");

@@ -48,6 +48,7 @@ namespace Axle::RHI {
     }
 
     bool RHIDescriptorPool::Init(const RHIDescriptorPoolDesc& desc) {
+        ScopedRHIOperation operation(desc.DebugName);
         if (!desc.MaxDescriptorSets) return false;
         RHIDescriptorPool candidate;
 

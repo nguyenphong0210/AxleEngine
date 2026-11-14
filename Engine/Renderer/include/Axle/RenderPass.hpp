@@ -90,6 +90,10 @@ namespace Axle {
         void Declare(RenderGraph& graph);
         RenderPassResult Prepare(const RenderPassContext& context);
         RenderPassResult Record(const RenderPassContext& context);
+        // Execute one named group at its real recording boundary.  The
+        // renderer may keep a legacy body behind the adapter while migration
+        // proceeds, but ordering/result propagation remains scheduler-owned.
+        RenderPassResult RecordOne(std::string_view name, const RenderPassContext& context);
         void Finalize(const RenderPassContext& context, const RenderPassResult& result);
         const std::string& GetDiagnostic() const { return m_Diagnostic; }
 

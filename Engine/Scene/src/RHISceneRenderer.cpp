@@ -3216,11 +3216,6 @@ namespace Axle {
         if (!graph.Compile(true)) {
             AXLE_CORE_ERROR("View graph rejected: {0}", graph.GetError()); return;
         }
-        if (!m_PassScheduler.Record(passContext)) {
-            AXLE_CORE_ERROR("Render pass recording preparation failed: {0}", m_PassScheduler.GetDiagnostic());
-            return;
-        }
-
         auto bindDescriptorSet = [&](uint32_t setIndex, nri::DescriptorSet* set,
                                      nri::BindPoint bindPoint = nri::BindPoint::GRAPHICS) {
             if (!graph.DeclareDescriptorRead(set, Commands())) return false;
@@ -3228,11 +3223,12 @@ namespace Axle {
             return Commands().IsRecording();
         };
 
+        if (!m_PassScheduler.RecordOne("LightingAndShadows", passContext)) return;
         if (m_CascadedShadows.IsActive() && (!beginPass("CascadedShadows") || !m_CascadedShadows.Record(Commands()))) return;
         m_LastDrawCallCount+=m_CascadedShadows.GetDrawCount();
         if(m_LocalShadows.NeedsRender()&&(!beginPass("LocalShadows")||!m_LocalShadows.Record(Commands())))return;
         m_LastDrawCallCount+=m_LocalShadows.GetDrawCount();
-        if (!beginPass("OpaqueAndSky")) return;
+        if (!m_PassScheduler.RecordOne("OpaqueAndSky", passContext) || !beginPass("OpaqueAndSky")) return;
 
         // 3. Begin Rendering Pass
         nri::AttachmentDesc colorAttachment = {};
@@ -3635,6 +3631,7 @@ namespace Axle {
             RenderSkybox();
             Commands().EndRendering();
 
+            if (!m_PassScheduler.RecordOne("ScreenSpace", passContext)) return;
             if (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) {
                 if (!beginPass("SurfaceNormal")) return;
                 auto* normalPipeline = GetOrCreateSurfaceNormalPipeline(
@@ -3778,6 +3775,7 @@ namespace Axle {
             Commands().ResolveTexture(resolveDstTexture, m_MSAAColorTarget->GetNative(), nri::ResolveOp::AVERAGE);
         }
 
+        if (!m_PassScheduler.RecordOne("ReflectionAndGI", passContext)) return;
         if (useDDGI) {
             if (!beginPass("DDGICopy")) return;
             Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
@@ -4086,6 +4084,7 @@ namespace Axle {
         }
 
         // 7c. Bloom: six-tier downsample/upsample pyramid, then composite.
+        if (!m_PassScheduler.RecordOne("PostAndTemporal", passContext)) return;
         if (useBloom && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid()) {
             if (!beginPass("BloomCopy")) return;
             Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);

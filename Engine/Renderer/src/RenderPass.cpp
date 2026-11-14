@@ -58,6 +58,18 @@ namespace Axle {
         return Run([](IRenderPass& pass, const RenderPassContext& ctx) { return pass.Record(ctx); }, context);
     }
 
+    RenderPassResult RenderPassScheduler::RecordOne(std::string_view name, const RenderPassContext& context) {
+        m_Diagnostic.clear();
+        for (const auto& pass : m_Passes) {
+            if (name != pass->GetName()) continue;
+            const auto result = pass->Record(context);
+            if (!result) m_Diagnostic = std::string(pass->GetName()) + ": " + result.Diagnostic;
+            return result;
+        }
+        m_Diagnostic = "unknown pass group: " + std::string(name);
+        return RenderPassResult::Failed(m_Diagnostic);
+    }
+
     void RenderPassScheduler::Finalize(const RenderPassContext& context, const RenderPassResult& result) {
         for (const auto& pass : m_Passes) pass->Finalize(context, result);
     }

@@ -33,6 +33,11 @@ bool RunRenderPassUnitTests() {
                  events[2] == "Opaque:record" && events[3] == "Post:record",
         "prepare and record phases follow the same deterministic order");
 
+    events.clear();
+    RENDER_CHECK(static_cast<bool>(scheduler.RecordOne("Post", context)) &&
+                 events.size() == 1 && events[0] == "Post:record",
+        "named group recording can be dispatched at the live renderer boundary");
+
     RenderPassScheduler failing;
     failing.Add(std::make_unique<CallbackRenderPass>("Failing", [](const RenderPassContext&) {
         return RenderPassResult::Failed("synthetic failure");

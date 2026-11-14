@@ -83,11 +83,28 @@ Verified:
 - `AxleRenderUnitTests`: exit 0.
 - D3D12 environment fixture: exit 0.
 
+### Live scheduler group dispatch — commits `92d149a` and `00ad942`
+
+`RenderPassScheduler::RecordOne` now dispatches named groups at their actual
+recording boundaries instead of running all adapters before the renderer body.
+The renderer invokes `LightingAndShadows`, `OpaqueAndSky`, `ScreenSpace`,
+`ReflectionAndGI` and `PostAndTemporal` in the live sequence. The first
+concrete migrated body, `SurfaceNormal`, is now owned by the `ScreenSpace`
+adapter callback; the remaining large legacy bodies are still being migrated
+group by group.
+
+Verified:
+
+- Debug build of `AxleRenderUnitTests` and `AxleEnvironmentRenderingTests`: exit 0.
+- `AxleRenderUnitTests`: exit 0, including named `RecordOne` dispatch coverage.
+- D3D12 environment fixture: exit 0.
+
 ## Current acceptance state
 
 - **PASS:** U0, U1, U6, U7, U8, runtime evidence gate.
-- **PARTIAL:** U2 remains partial because concrete pass recording still lives in
-  `RHISceneRenderer` behind the validated legacy adapters; U3 remains partial
+- **PARTIAL:** U2 remains partial because most concrete pass recording still
+  lives in `RHISceneRenderer` behind adapters; one concrete `SurfaceNormal`
+  body has migrated. U3 remains partial
   for graph-specific advanced field lowering; U4 remains partial for graph
   resource declarations beyond descriptor lease retention.
 - **HOLD:** U9 remains on hold until concrete pass extraction and the custom

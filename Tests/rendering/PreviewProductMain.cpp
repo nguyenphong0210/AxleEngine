@@ -202,7 +202,7 @@ static bool Surfaces(const std::string& mode) {
         Require(!darkCenter(render()),"point light works without a hidden directional sun");scene.DestroyEntity(point);Require(darkCenter(render()),"point removal returns to darkness");
         auto spot=scene.CreateEntity("Authored spot");spot.GetComponent<TransformComponent>().Translation={0,0,2};spot.AddComponent<SpotLightComponent>().Intensity=3;
         Require(!darkCenter(render()),"spot light works without a hidden directional sun");scene.DestroyEntity(spot);
-        auto sky=scene.CreateEntity("Authored environment");auto& environment=sky.AddComponent<SkyboxComponent>();environment.Enabled=true;environment.Intensity=1;
+        auto sky=scene.CreateEntity("Authored environment");auto& environment=sky.AddComponent<SkyboxComponent>();environment.Enabled=true;environment.EnvironmentLighting=true;environment.Intensity=1;
         Require(!darkCenter(render()),"explicit environment can light a scene without direct lights");
         view.Settings.EnableSkybox=true;environment.SyncWithSun=false;environment.CustomAzimuth=180;environment.CustomElevation=20;
         const auto skyWithoutSun=render();auto skySun=scene.CreateEntity("Sky sun");auto& sunComponent=skySun.AddComponent<DirectionalLightComponent>();sunComponent.Intensity=sunComponent.AmbientIntensity=0;
@@ -210,15 +210,15 @@ static bool Surfaces(const std::string& mode) {
         size_t changedSky=0;for(size_t i=0;i<skyWithSun.size();i+=4){const auto row=i/(128*4);if((row<24||row>103)&&(skyWithSun[i]!=skyWithoutSun[i]||skyWithSun[i+1]!=skyWithoutSun[i+1]||skyWithSun[i+2]!=skyWithoutSun[i+2]))++changedSky;}
         Require(changedSky>0,"authored sun changes actual sky pixels");scene.DestroyEntity(skySun);Require(render()==skyWithoutSun,"sun removal restores no-sun sky pixels");
         view.Settings.EnableSkybox=false;
-        if(native){service.GetRHIRenderer()->SetUseIBL(true);environment.Type=SkyboxType::HDRCubemap;render();}
+        if(native){service.SetUseIBL(true);environment.Type=SkyboxType::HDRCubemap;render();}
         environment.Intensity=0;
-        Require(darkCenter(render()),"zero environment intensity stays dark");environment.Enabled=false;Require(darkCenter(render()),"disabled environment adds no light");if(native){service.GetRHIRenderer()->SetUseIBL(true);Require(darkCenter(render()),"cached IBL cannot light a view with disabled environment");}scene.DestroyEntity(sky);
+        Require(darkCenter(render()),"zero environment intensity stays dark");environment.Enabled=false;Require(darkCenter(render()),"disabled environment adds no light");if(native){service.SetUseIBL(true);Require(darkCenter(render()),"cached IBL cannot light a view with disabled environment");}scene.DestroyEntity(sky);
         view.Settings.EnableSkybox=true;const auto noSky=render();
         Require(darkCenter(noSky)&&noSky[0]==darkScene[0]&&noSky[1]==darkScene[1],"no authored sky leaves clear background even when sky rendering is enabled");
         if(!native) {
             const auto hdr=std::filesystem::absolute("build/agent-runs/scene-lighting/first-environment.hdr");std::filesystem::create_directories(hdr.parent_path());
             {std::ofstream file(hdr,std::ios::binary);file<<"#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 2 +X 2\n";const unsigned char pixel[4]={128,128,128,129};for(int i=0;i<4;++i)file.write(reinterpret_cast<const char*>(pixel),4);}
-            auto hdrEntity=scene.CreateEntity("First HDR environment");auto& hdrSky=hdrEntity.AddComponent<SkyboxComponent>();hdrSky.Type=SkyboxType::HDRCubemap;hdrSky.HDRPath=hdr.generic_string();
+            auto hdrEntity=scene.CreateEntity("First HDR environment");auto& hdrSky=hdrEntity.AddComponent<SkyboxComponent>();hdrSky.Type=SkyboxType::HDRCubemap;hdrSky.HDRPath=hdr.generic_string();hdrSky.EnvironmentLighting=true;
             glEnable(GL_CULL_FACE);
             view.Settings.EnableSkybox=false;Require(!darkCenter(render()),"first HDR load lights the requested GL framebuffer");scene.DestroyEntity(hdrEntity);Require(darkCenter(render()),"cached GL IBL cannot leak to a later no-environment view");
         }

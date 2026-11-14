@@ -127,6 +127,8 @@ classDiagram
 
 During migration, `RHISceneRenderer` remains the public facade used by Editor, Runtime and tests. Internally it delegates to `RenderScheduler` and pass modules. This preserves callers while changing ownership underneath.
 
+Editor, Runtime and preview callers use `RenderService` product seams for viewport sizing, render submission, picking, telemetry and IBL policy. Concrete `RHISceneRenderer` and compatibility `SceneRenderer` headers are restricted to the Scene service boundary; the M14 architecture checker rejects direct product includes.
+
 ## 4. Core contracts
 
 ### 4.1 `RenderWorld`

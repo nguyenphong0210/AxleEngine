@@ -20,7 +20,7 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/PhysicsDebugRenderer.hpp>
 #include <Axle/Scene.hpp>
-#include <Axle/SceneRenderer.hpp>
+#include <Axle/RenderService.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/PrimitiveMesh.hpp>
@@ -29,7 +29,6 @@
 #include <Axle/ScriptHotReloadManager.hpp>
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/RHI/RHIBarrier.hpp>
-#include <Axle/RHISceneRenderer.hpp>
 #include <Axle/SimulationDriver.hpp>
 #include <imgui.h>
 #include <ImGuizmo.h>
@@ -95,7 +94,6 @@ public:
     const std::filesystem::path& GetCurrentScenePath() const { return m_CurrentScenePath; }
     const std::filesystem::path& GetCurrentProjectPath() const { return m_CurrentProjectPath; }
     Axle::RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
-    Axle::RHISceneRenderer* GetRHISceneRenderer() const { return m_RHISceneRenderer; }
 
     // Viewport 2D UI Edit Mode & Grid Snapping (Phase 34 Step 7.3)
     void Set2DViewMode(bool enabled);
@@ -194,8 +192,6 @@ private:
     std::shared_ptr<Axle::VertexArray> m_CylinderMesh;
     std::shared_ptr<Axle::VertexArray> m_ConeMesh;
     std::shared_ptr<Axle::VertexArray> m_PlaneMesh;
-    Axle::SceneRenderer* m_SceneRenderer = nullptr; // Owned by RenderService.
-    Axle::RHISceneRenderer* m_RHISceneRenderer = nullptr; // Owned by RenderService.
     Axle::SceneSerializerContext m_SerializerContext;
 
     // Editor Panels

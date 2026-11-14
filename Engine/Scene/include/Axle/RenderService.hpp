@@ -77,9 +77,14 @@ namespace Axle {
         RenderResult RenderView(const RenderWorld& world, const ViewRequest& request);
         RenderResult RenderView(Scene& scene, const ViewRequest& request);
 
-        // Access underlying renderer backends
-        RHISceneRenderer* GetRHIRenderer() { return m_RHIRenderer.get(); }
-        SceneRenderer* GetGLRenderer() { return m_GLRenderer.get(); }
+        // Product-facing viewport and interaction seams. Applications do not
+        // reach through to a concrete backend renderer for these operations.
+        void SetViewportSize(uint32_t width, uint32_t height);
+        uint32_t GetPhysicsDebugLineCount() const;
+        bool CanPickEntity() const;
+        uint32_t PickEntity(const std::shared_ptr<Scene>& scene, const PerspectiveCamera& camera,
+                            uint32_t width, uint32_t height, uint32_t x, uint32_t y) const;
+        void SetUseIBL(bool enabled);
 
         // Capabilities and honest diagnostics
         RendererCapabilities GetActiveCapabilities() const;

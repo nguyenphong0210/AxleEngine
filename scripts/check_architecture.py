@@ -249,6 +249,10 @@ def scan_includes(root, config, reference_root):
                     errors.append(dict(kind="CoverageError", file=rel, line=line, details="macro include requires explicit support"))
                 continue
             spelling = match[1].replace("\\", "/")
+            for rule in config.get("m14_boundary_rules", []):
+                if module in rule.get("modules", []) and spelling in rule.get("forbidden_spellings", []):
+                    errors.append(dict(kind="M14Boundary", file=rel, line=line, from_module=module,
+                                       to=spelling, details=rule.get("reason", "M14 boundary violation")))
             relative_header = (path.parent/spelling).resolve()
             vendor_spellings = [spelling]
             for directory, prefix in config.get("vendor_include_roots", {}).items():

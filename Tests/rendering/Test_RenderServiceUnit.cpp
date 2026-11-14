@@ -2,6 +2,7 @@
 #include <Axle/RenderWorld.hpp>
 #include <Axle/ViewRequest.hpp>
 #include <Axle/RenderService.hpp>
+#include <Axle/RHIObjectPicker.hpp>
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/MeshResourceResolver.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
@@ -200,6 +201,13 @@ namespace Axle::RenderTests {
         RenderService service;
         RendererCapabilities caps = service.GetActiveCapabilities();
         RENDER_CHECK(!caps.BackendName.empty(), "Active backend name is reported");
+        service.SetViewportSize(640, 360);
+        service.SetUseIBL(true);
+        RENDER_CHECK(!service.CanPickEntity() && service.GetPhysicsDebugLineCount() == 0,
+                     "product-facing viewport/telemetry seams remain safe before backend initialization");
+        PerspectiveCamera camera;
+        RENDER_CHECK(service.PickEntity({}, camera, 64, 64, 0, 0) == RHIObjectPicker::InvalidEntityID,
+                     "product-facing picking seam returns the explicit invalid ID without a native picker");
         return true;
     }
 

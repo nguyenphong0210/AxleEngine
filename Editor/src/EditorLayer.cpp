@@ -94,8 +94,6 @@ void EditorLayer::OnAttach() {
 
     // 3. Decoupled Multi-Pass Scene Renderer (Phase 21)
     if (!Axle::RenderService::Get().Init()) throw std::runtime_error("Editor render service initialization failed");
-    m_SceneRenderer = Axle::RenderService::Get().GetGLRenderer();
-    m_RHISceneRenderer = Axle::RenderService::Get().GetRHIRenderer();
 
 
     // 4. Primitive Mesh Data (for legacy OpenGL SceneRenderer)
@@ -134,9 +132,7 @@ void EditorLayer::OnAttach() {
             ClearRHIViewport();
         }
     }
-    if (m_SceneRenderer) {
-        m_SceneRenderer->SetViewportSize(m_ViewportWidth, m_ViewportHeight);
-    }
+    Axle::RenderService::Get().SetViewportSize(m_ViewportWidth, m_ViewportHeight);
 
     // Physics debug rendering is owned by the shared view service.
 
@@ -443,7 +439,6 @@ void EditorLayer::OnDetach() {
         m_RHIViewport->Shutdown();
         m_RHIViewport.reset();
     }
-    m_RHISceneRenderer = nullptr; m_SceneRenderer = nullptr;
     Axle::RenderService::Get().Shutdown();
     m_Framebuffer.reset();
     if (m_PluginSession) { m_PluginSession->Shutdown(); m_PluginSession.reset(); }
@@ -466,9 +461,7 @@ void EditorLayer::OnWindowResize(Axle::u32 width, Axle::u32 height) {
     if (m_CameraController) {
         m_CameraController->OnResize(width, height);
     }
-    if (m_SceneRenderer) {
-        m_SceneRenderer->SetViewportSize(width, height);
-    }
+    Axle::RenderService::Get().SetViewportSize(width, height);
 }
 
 void EditorLayer::OnFileDrop(const std::vector<std::string>& filepaths) {
@@ -2224,9 +2217,7 @@ void EditorLayer::OnImGuiRender() {
             ClearRHIViewport();
         }
         m_CameraController->OnResize(m_ViewportWidth, m_ViewportHeight);
-        if (m_SceneRenderer) {
-            m_SceneRenderer->SetViewportSize(m_ViewportWidth, m_ViewportHeight);
-        }
+        Axle::RenderService::Get().SetViewportSize(m_ViewportWidth, m_ViewportHeight);
     }
 
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
@@ -2865,10 +2856,10 @@ void EditorLayer::OnImGuiRender() {
 
             if (mouseX >= 0.0f && mouseX < viewportBounds.x && mouseY >= 0.0f && mouseY < viewportBounds.y) {
                 bool handledByGPU = false;
-                if (m_RHISceneRenderer && m_RHISceneRenderer->GetObjectPicker() && m_RHISceneRenderer->GetObjectPicker()->IsInitialized()) {
+                if (Axle::RenderService::Get().CanPickEntity()) {
                     uint32_t px = static_cast<uint32_t>(glm::clamp(mouseX, 0.0f, viewportBounds.x - 1.0f));
                     uint32_t py = static_cast<uint32_t>(glm::clamp(mouseY, 0.0f, viewportBounds.y - 1.0f));
-                    uint32_t pickedID = m_RHISceneRenderer->PickEntity(
+                    uint32_t pickedID = Axle::RenderService::Get().PickEntity(
                         m_Scene,
                         m_CameraController->GetCamera(),
                         static_cast<uint32_t>(viewportBounds.x),
@@ -3142,7 +3133,7 @@ void EditorLayer::OnImGuiRender() {
             .DrawBoundingBoxes = m_PhysicsDrawSettings.DrawBoundingBoxes,
             .DrawVelocity = m_PhysicsDrawSettings.DrawVelocity,
             .DrawCenterOfMass = m_PhysicsDrawSettings.DrawCenterOfMass,
-            .DebugLineCount = m_SceneRenderer ? m_SceneRenderer->GetPhysicsDebugLineCount() : 0,
+            .DebugLineCount = Axle::RenderService::Get().GetPhysicsDebugLineCount(),
             .IsChaseCamera = (m_SceneState == SceneState::Play && !m_UseEditorCameraInPlay)
         };
 

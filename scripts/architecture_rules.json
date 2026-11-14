@@ -2,6 +2,13 @@
   "version": "3.0.0",
   "baseline_commit": "842cf7de6fac8368eb76fbf6a027b934681166e2",
   "description": "Enforced architecture boundaries after baseline migration; no baseline allowances.",
+  "m14_boundary_rules": [
+    {
+      "modules": ["Editor", "Runtime", "UI"],
+      "forbidden_spellings": ["Axle/RHISceneRenderer.hpp", "Axle/SceneRenderer.hpp"],
+      "reason": "product callers must use RenderService rather than concrete backend renderer headers"
+    }
+  ],
   "module_roots": {
     "Core": "Engine/Core",
     "Platform": "Engine/Platform",

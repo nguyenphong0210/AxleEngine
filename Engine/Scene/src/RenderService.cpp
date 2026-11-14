@@ -1,4 +1,5 @@
 #include <Axle/RenderService.hpp>
+#include <Axle/RHIObjectPicker.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/MeshResourceResolver.hpp>
@@ -337,6 +338,28 @@ namespace Axle {
         if (result.Success && m_RHIRenderer) m_RHIRenderer->PublishMaterialFeedback(scene, world);
         return result;
     }
+
+    void RenderService::SetViewportSize(uint32_t width, uint32_t height) {
+        if (m_GLRenderer) m_GLRenderer->SetViewportSize(width, height);
+    }
+
+    uint32_t RenderService::GetPhysicsDebugLineCount() const {
+        return m_GLRenderer ? m_GLRenderer->GetPhysicsDebugLineCount() : 0;
+    }
+
+    bool RenderService::CanPickEntity() const {
+        return m_RHIRenderer && m_RHIRenderer->GetObjectPicker() && m_RHIRenderer->GetObjectPicker()->IsInitialized();
+    }
+
+    uint32_t RenderService::PickEntity(const std::shared_ptr<Scene>& scene, const PerspectiveCamera& camera,
+                                       uint32_t width, uint32_t height, uint32_t x, uint32_t y) const {
+        return CanPickEntity() ? m_RHIRenderer->PickEntity(scene, camera, width, height, x, y) : RHIObjectPicker::InvalidEntityID;
+    }
+
+    void RenderService::SetUseIBL(bool enabled) {
+        if (m_RHIRenderer) m_RHIRenderer->SetUseIBL(enabled);
+    }
+
     RHI::RHITexture* RenderService::GetDefaultMainColorTarget() const {
         return m_DefaultMainTargets && m_DefaultMainTargets->IsValid() ? m_DefaultMainTargets->Get(RHI::RHIViewTarget::Color) : nullptr;
     }

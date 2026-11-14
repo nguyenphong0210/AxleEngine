@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `U0/U1/U2/U3/U4/U5/U6/U7 ACCEPTED - U8 is the next released Unit.`
+**Status:** `U0/U1/U2/U3/U4/U5/U6/U7/U8 ACCEPTED - U9 is the next released Unit.`
 **Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
@@ -186,24 +186,26 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 **Evidence:** `U7_BACKEND_FALLBACK_PARITY_EVIDENCE.md`
 
-### U8 - Migration, tests and tooling
+### U8 - Migration, tests and tooling **(ACCEPTED)**
 
 **Exit:** all current callers use the new contracts, old paths are removed or explicitly quarantined, and the architecture is guarded by tests.
 
-- [ ] **S8.1 Caller migration**
-  - [ ] Migrate Editor viewport rendering.
-  - [ ] Migrate Runtime rendering.
-  - [ ] Migrate material preview rendering.
-  - [ ] Migrate headless/native render fixtures.
-- [ ] **S8.2 Regression suite**
-  - [ ] Add compile-time ownership and interface checks.
-  - [ ] Add RenderWorld extraction and material synchronization tests.
-  - [ ] Add graph dependency, resource lifetime and history reset tests.
-  - [ ] Add visual parity fixtures for built-in and graph materials.
-- [ ] **S8.3 Architecture tooling**
-  - [ ] Update `scripts/check_architecture.py` rules for pass/module boundaries.
-  - [ ] Add a report listing pass owners, resource owners and fallback policies.
-  - [ ] Add a generated dependency map to the milestone evidence.
+- [x] **S8.1 Caller migration**
+  - [x] Migrate Editor viewport rendering.
+  - [x] Migrate Runtime rendering.
+  - [x] Migrate material preview rendering.
+  - [x] Migrate headless/native render fixtures.
+- [x] **S8.2 Regression suite**
+  - [x] Add compile-time ownership and interface checks.
+  - [x] Add RenderWorld extraction and material synchronization tests.
+  - [x] Add graph dependency, resource lifetime and history reset tests.
+  - [x] Add visual parity fixtures for built-in and graph materials.
+- [x] **S8.3 Architecture tooling**
+  - [x] Update `scripts/check_architecture.py` rules for pass/module boundaries.
+  - [x] Add a report listing pass owners, resource owners and fallback policies.
+  - [x] Add a generated dependency map to the milestone evidence.
+
+**Evidence:** `U8_MIGRATION_TESTS_TOOLING_EVIDENCE.md`
 
 ### U9 - Final acceptance and M15 handoff
 

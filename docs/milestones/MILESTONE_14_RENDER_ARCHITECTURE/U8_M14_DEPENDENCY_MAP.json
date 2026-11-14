@@ -1,0 +1,5520 @@
+{
+  "milestone": "M14",
+  "unit": "U8",
+  "generated_by": "scripts/generate_m14_dependency_map.py",
+  "source_files_scanned": 596,
+  "cmake_files": 25,
+  "contract_owners": {
+    "ViewContext": "Engine/Renderer/include/Axle/ViewContext.hpp",
+    "RenderBackendPolicy": "Engine/Renderer/include/Axle/RenderBackendPolicy.hpp",
+    "RenderGraph": "Engine/Renderer/include/Axle/RenderGraph.hpp",
+    "ResolvedSurface": "Engine/Renderer/include/Axle/ResolvedSurface.hpp",
+    "RenderService": "Engine/Scene/include/Axle/RenderService.hpp",
+    "RHISceneRenderer": "Engine/Scene/include/Axle/RHISceneRenderer.hpp (facade/legacy adapter)",
+    "SceneRenderer": "Engine/Scene/include/Axle/SceneRenderer.hpp (OpenGL compatibility backend)"
+  },
+  "product_caller_audit": {
+    "product_roots": {
+      "Editor": [
+        "Editor/src/EditorLayer.cpp",
+        "Editor/src/Main.cpp"
+      ],
+      "Runtime": [
+        "Runtime/src/Main.cpp",
+        "Runtime/src/RuntimeLayer.cpp",
+        "Runtime/src/RuntimeRenderContext.cpp"
+      ],
+      "Engine/UI": [
+        "Engine/UI/src/AssemblyEditorPanel.cpp",
+        "Engine/UI/src/AssetPreviewPanel.cpp",
+        "Engine/UI/src/AssetThumbnailManager.cpp",
+        "Engine/UI/src/VFXEditorPanel.cpp"
+      ]
+    },
+    "violations": []
+  },
+  "dependency_edges": [
+    {
+      "kind": "CMakeLink",
+      "file": "Editor/CMakeLists.txt",
+      "line": 22,
+      "from_module": "Editor",
+      "from_target": "AxleEditor",
+      "to": "Axle::Core",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Editor/CMakeLists.txt",
+      "line": 22,
+      "from_module": "Editor",
+      "from_target": "AxleEditor",
+      "to": "Axle::RHI",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Editor/CMakeLists.txt",
+      "line": 22,
+      "from_module": "Editor",
+      "from_target": "AxleEditor",
+      "to": "Axle::Renderer",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Editor/CMakeLists.txt",
+      "line": 22,
+      "from_module": "Editor",
+      "from_target": "AxleEditor",
+      "to": "Axle::UI",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Editor/CMakeLists.txt",
+      "line": 22,
+      "from_module": "Editor",
+      "from_target": "AxleEditor",
+      "to": "Axle::Scene",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Editor/CMakeLists.txt",
+      "line": 84,
+      "from_module": "Editor",
+      "from_target": "AxleScripts",
+      "to": "Axle::Core",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Editor/CMakeLists.txt",
+      "line": 84,
+      "from_module": "Editor",
+      "from_target": "AxleScripts",
+      "to": "Axle::Renderer",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Editor/CMakeLists.txt",
+      "line": 84,
+      "from_module": "Editor",
+      "from_target": "AxleScripts",
+      "to": "Axle::Scene",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Editor/CMakeLists.txt",
+      "line": 84,
+      "from_module": "Editor",
+      "from_target": "AxleScripts",
+      "to": "Axle::UI",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/Core/CMakeLists.txt",
+      "line": 20,
+      "from_module": "Core",
+      "from_target": "AxleCore",
+      "to": "spdlog::spdlog",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/Core/CMakeLists.txt",
+      "line": 20,
+      "from_module": "Core",
+      "from_target": "AxleCore",
+      "to": "enkiTS",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/Renderer/CMakeLists.txt",
+      "line": 94,
+      "from_module": "Renderer",
+      "from_target": "AxleRenderer",
+      "to": "Axle::Core",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/Renderer/CMakeLists.txt",
+      "line": 94,
+      "from_module": "Renderer",
+      "from_target": "AxleRenderer",
+      "to": "Axle::RHI",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/Renderer/CMakeLists.txt",
+      "line": 94,
+      "from_module": "Renderer",
+      "from_target": "AxleRenderer",
+      "to": "glad",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/RHI/CMakeLists.txt",
+      "line": 55,
+      "from_module": "RHI",
+      "from_target": "AxleRHI",
+      "to": "Slang::Compiler",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/RHI/CMakeLists.txt",
+      "line": 55,
+      "from_module": "RHI",
+      "from_target": "AxleRHI",
+      "to": "delayimp",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/RHI/CMakeLists.txt",
+      "line": 74,
+      "from_module": "RHI",
+      "from_target": "AxleRHI",
+      "to": "Axle::Core",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/RHI/CMakeLists.txt",
+      "line": 74,
+      "from_module": "RHI",
+      "from_target": "AxleRHI",
+      "to": "NRI",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/Scene/CMakeLists.txt",
+      "line": 73,
+      "from_module": "Scene",
+      "from_target": "AxleScene",
+      "to": "Axle::Core",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/Scene/CMakeLists.txt",
+      "line": 73,
+      "from_module": "Scene",
+      "from_target": "AxleScene",
+      "to": "Axle::RHI",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/Scene/CMakeLists.txt",
+      "line": 73,
+      "from_module": "Scene",
+      "from_target": "AxleScene",
+      "to": "Axle::Renderer",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/UI/CMakeLists.txt",
+      "line": 73,
+      "from_module": "UI",
+      "from_target": "AxleUI",
+      "to": "Axle::Core",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/UI/CMakeLists.txt",
+      "line": 73,
+      "from_module": "UI",
+      "from_target": "AxleUI",
+      "to": "Axle::Renderer",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/UI/CMakeLists.txt",
+      "line": 73,
+      "from_module": "UI",
+      "from_target": "AxleUI",
+      "to": "Axle::Scene",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/UI/CMakeLists.txt",
+      "line": 73,
+      "from_module": "UI",
+      "from_target": "AxleUI",
+      "to": "Axle::RHI",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/UI/CMakeLists.txt",
+      "line": 73,
+      "from_module": "UI",
+      "from_target": "AxleUI",
+      "to": "glfw",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/UI/CMakeLists.txt",
+      "line": 73,
+      "from_module": "UI",
+      "from_target": "AxleUI",
+      "to": "glad",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/UI/CMakeLists.txt",
+      "line": 94,
+      "from_module": "UI",
+      "from_target": "AxleUI",
+      "to": "d3d12",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/UI/CMakeLists.txt",
+      "line": 94,
+      "from_module": "UI",
+      "from_target": "AxleUI",
+      "to": "dxgi",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/UI/CMakeLists.txt",
+      "line": 94,
+      "from_module": "UI",
+      "from_target": "AxleUI",
+      "to": "d3dcompiler",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Engine/UI/CMakeLists.txt",
+      "line": 107,
+      "from_module": "UI",
+      "from_target": "AxleUI",
+      "to": "Vulkan::Vulkan",
+      "to_module": null,
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Runtime/CMakeLists.txt",
+      "line": 26,
+      "from_module": "Runtime",
+      "from_target": "AxleRuntime",
+      "to": "Axle::RuntimePlayer",
+      "to_module": "Runtime",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Runtime/CMakeLists.txt",
+      "line": 33,
+      "from_module": "Runtime",
+      "from_target": "AxleRuntimePlayer",
+      "to": "Axle::Core",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Runtime/CMakeLists.txt",
+      "line": 33,
+      "from_module": "Runtime",
+      "from_target": "AxleRuntimePlayer",
+      "to": "Axle::RHI",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Runtime/CMakeLists.txt",
+      "line": 33,
+      "from_module": "Runtime",
+      "from_target": "AxleRuntimePlayer",
+      "to": "Axle::Renderer",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "CMakeLink",
+      "file": "Runtime/CMakeLists.txt",
+      "line": 33,
+      "from_module": "Runtime",
+      "from_target": "AxleRuntimePlayer",
+      "to": "Axle::Scene",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 1,
+      "from_module": "Editor",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 8,
+      "from_module": "Editor",
+      "to": "Axle/RenderCommand.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 9,
+      "from_module": "Editor",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 10,
+      "from_module": "Editor",
+      "to": "Axle/ScriptableEntity.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 11,
+      "from_module": "Editor",
+      "to": "Axle/ScriptRegistry.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 12,
+      "from_module": "Editor",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 14,
+      "from_module": "Editor",
+      "to": "Axle/AssemblySerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 16,
+      "from_module": "Editor",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 17,
+      "from_module": "Editor",
+      "to": "Axle/SceneRenderBridge.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 22,
+      "from_module": "Editor",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 23,
+      "from_module": "Editor",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 25,
+      "from_module": "Editor",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 26,
+      "from_module": "Editor",
+      "to": "Axle/RHI/RHICommandBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 27,
+      "from_module": "Editor",
+      "to": "Axle/RHIObjectPicker.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 28,
+      "from_module": "Editor",
+      "to": "Axle/RHI/RHISwitcher.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 29,
+      "from_module": "Editor",
+      "to": "Axle/RHI/RHIMesh.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 32,
+      "from_module": "Editor",
+      "to": "Axle/UICanvasImGuiRenderer.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.cpp",
+      "line": 33,
+      "from_module": "Editor",
+      "to": "Axle/UIVectorIcons.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 3,
+      "from_module": "Editor",
+      "to": "Axle/PerspectiveCameraController.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 4,
+      "from_module": "Editor",
+      "to": "Axle/Shader.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 5,
+      "from_module": "Editor",
+      "to": "Axle/Buffer.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 6,
+      "from_module": "Editor",
+      "to": "Axle/VertexArray.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 7,
+      "from_module": "Editor",
+      "to": "Axle/Framebuffer.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 8,
+      "from_module": "Editor",
+      "to": "Axle/ShadowMap.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 9,
+      "from_module": "Editor",
+      "to": "Axle/Skybox.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 10,
+      "from_module": "Editor",
+      "to": "Axle/DebugPanel.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 11,
+      "from_module": "Editor",
+      "to": "Axle/SceneHierarchyPanel.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 12,
+      "from_module": "Editor",
+      "to": "Axle/ConsolePanel.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 13,
+      "from_module": "Editor",
+      "to": "Axle/ContentBrowserPanel.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 14,
+      "from_module": "Editor",
+      "to": "Axle/AssetPreviewPanel.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 15,
+      "from_module": "Editor",
+      "to": "Axle/AssemblyEditorPanel.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 16,
+      "from_module": "Editor",
+      "to": "Axle/VFXEditorPanel.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 17,
+      "from_module": "Editor",
+      "to": "Axle/UIPalettePanel.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 18,
+      "from_module": "Editor",
+      "to": "Axle/UICanvasDesignerPanel.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 19,
+      "from_module": "Editor",
+      "to": "Axle/HLSLStudioPanel.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 22,
+      "from_module": "Editor",
+      "to": "Axle/Scene.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 23,
+      "from_module": "Editor",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 24,
+      "from_module": "Editor",
+      "to": "Axle/SceneSerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 26,
+      "from_module": "Editor",
+      "to": "Axle/PrimitiveMesh.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 27,
+      "from_module": "Editor",
+      "to": "Axle/Texture2D.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 28,
+      "from_module": "Editor",
+      "to": "Axle/ScriptCompiler.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 29,
+      "from_module": "Editor",
+      "to": "Axle/ScriptHotReloadManager.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 30,
+      "from_module": "Editor",
+      "to": "Axle/RHIViewportDescriptor.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 31,
+      "from_module": "Editor",
+      "to": "Axle/RHI/RHIBarrier.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/EditorLayer.hpp",
+      "line": 32,
+      "from_module": "Editor",
+      "to": "Axle/SimulationDriver.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/Main.cpp",
+      "line": 4,
+      "from_module": "Editor",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/Main.cpp",
+      "line": 5,
+      "from_module": "Editor",
+      "to": "Axle/ImGuiLayer.hpp",
+      "to_module": "UI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/Main.cpp",
+      "line": 9,
+      "from_module": "Editor",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/Main.cpp",
+      "line": 10,
+      "from_module": "Editor",
+      "to": "Axle/RHI/RHISwitcher.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/Main.cpp",
+      "line": 11,
+      "from_module": "Editor",
+      "to": "Axle/RHI/RHIFaultInjection.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/Main.cpp",
+      "line": 12,
+      "from_module": "Editor",
+      "to": "Axle/RHIMeshRegistry.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/Main.cpp",
+      "line": 13,
+      "from_module": "Editor",
+      "to": "Axle/RenderCommand.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/Main.cpp",
+      "line": 14,
+      "from_module": "Editor",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginBuild.cpp",
+      "line": 4,
+      "from_module": "Editor",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginBuild.cpp",
+      "line": 5,
+      "from_module": "Editor",
+      "to": "Axle/UUID.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginEditorServices.cpp",
+      "line": 3,
+      "from_module": "Editor",
+      "to": "Axle/JobSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginSession.cpp",
+      "line": 3,
+      "from_module": "Editor",
+      "to": "Axle/UUID.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginSession.cpp",
+      "line": 4,
+      "from_module": "Editor",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginsPanel.cpp",
+      "line": 3,
+      "from_module": "Editor",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginsPanel.cpp",
+      "line": 5,
+      "from_module": "Editor",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginWorkflow.cpp",
+      "line": 5,
+      "from_module": "Editor",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginWorkflow.cpp",
+      "line": 6,
+      "from_module": "Editor",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginWorkflow.cpp",
+      "line": 11,
+      "from_module": "Editor",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginWorkflow.cpp",
+      "line": 12,
+      "from_module": "Editor",
+      "to": "Axle/ScriptCompiler.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginWorkflowProbe.cpp",
+      "line": 4,
+      "from_module": "Editor",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginWorkflowProbe.cpp",
+      "line": 5,
+      "from_module": "Editor",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/PluginWorkflowProbe.cpp",
+      "line": 7,
+      "from_module": "Editor",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/ProjectPluginCreator.cpp",
+      "line": 4,
+      "from_module": "Editor",
+      "to": "Axle/UUID.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/RuntimeBuild.cpp",
+      "line": 5,
+      "from_module": "Editor",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/RuntimeBuild.cpp",
+      "line": 9,
+      "from_module": "Editor",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/RuntimeBuild.cpp",
+      "line": 10,
+      "from_module": "Editor",
+      "to": "Axle/UUID.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/Scripts/ScriptsModule.cpp",
+      "line": 1,
+      "from_module": "Editor",
+      "to": "Axle/ScriptModule.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Editor/src/Scripts/ScriptsModule.cpp",
+      "line": 3,
+      "from_module": "Editor",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/Buffer.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/CanvasRenderer.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/DecodedImage.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/CascadedShadowMap.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/Cubemap.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/CustomShaderInterface.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/CustomShaderInterface.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIShader.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/EnvironmentBake.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/DecodedImage.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/Framebuffer.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ImageTextureCache.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/DecodedImage.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ImageTextureCache.hpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/Material.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/Material.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/UUID.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/MaterialBindingPlan.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/MaterialBindingPlan.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIShader.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/MaterialBindingPlan.hpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIVertexLayout.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/MaterialBindingPlan.hpp",
+      "line": 6,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHISampler.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/MaterialCache.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/MaterialCache.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/UUID.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/MaterialCache.hpp",
+      "line": 6,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIMaterial.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/PerspectiveCamera.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/PerspectiveCameraController.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/PerspectiveCameraController.hpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/Timestep.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/PrimitiveMesh.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/PrimitiveMesh.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/BuiltinMesh.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderBackendPolicy.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHICommon.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderCapabilities.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderCommand.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderContracts.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderContracts.hpp",
+      "line": 5,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHICommon.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderContracts.hpp",
+      "line": 6,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIPipeline.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderContracts.hpp",
+      "line": 7,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIMaterial.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderContracts.hpp",
+      "line": 8,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIMaterialConstants.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderContracts.hpp",
+      "line": 9,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIVertexLayout.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderGraph.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIBarrier.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderGraph.hpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIResource.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderPass.hpp",
+      "line": 8,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHICommandBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderTransientFrame.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHICommandBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderTransientFrame.hpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHITransientResources.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderTransientGraph.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderTransientGraph.hpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderWorld.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderWorld.hpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/UUID.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RenderWorld.hpp",
+      "line": 5,
+      "from_module": "Renderer",
+      "to": "Axle/BuiltinMesh.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ResolvedSurface.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIMaterial.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ResolvedSurface.hpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIMaterialConstants.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ResolvedSurface.hpp",
+      "line": 5,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHITransform.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ResolvedSurface.hpp",
+      "line": 6,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RHIECSStreamer.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHICommon.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RHIECSStreamer.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RHIECSStreamer.hpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/RHIECSStreamer.hpp",
+      "line": 5,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIStreamer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/SceneRenderSettings.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/PhysicsDrawSettings.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/Shader.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ShaderPropertyReflection.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ShaderPropertyReflection.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIShader.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ShadowMap.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/SkinningPipeline.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/Skybox.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/Texture2D.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ViewContext.hpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIFrameContext.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ViewContext.hpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIViewTargets.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ViewRequest.hpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ViewRequest.hpp",
+      "line": 5,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIViewTargets.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/include/Axle/ViewRequest.hpp",
+      "line": 6,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/CanvasRenderer.cpp",
+      "line": 5,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIFrameContext.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/CanvasRenderer.cpp",
+      "line": 6,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/CanvasRenderer.cpp",
+      "line": 7,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIMaterial.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/CanvasRenderer.cpp",
+      "line": 8,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHISampler.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/CanvasRenderer.cpp",
+      "line": 9,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIPipeline.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/CanvasRenderer.cpp",
+      "line": 10,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Cubemap.cpp",
+      "line": 5,
+      "from_module": "Renderer",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Cubemap.cpp",
+      "line": 7,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/EnvironmentBake.cpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/JobSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Framebuffer.cpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/ImageTextureCache.cpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/ImageTextureCache.cpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Material.cpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Material.cpp",
+      "line": 5,
+      "from_module": "Renderer",
+      "to": "Axle/BlockText.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Material.cpp",
+      "line": 6,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/MaterialCache.cpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/MaterialCache.cpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/PrimitiveMesh.cpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/RenderCommand.cpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/RenderGraph.cpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHICommandBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/RenderGraph.cpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/RHIECSStreamer.cpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Shader.cpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/ShadowMap.cpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/SkinningPipeline.cpp",
+      "line": 3,
+      "from_module": "Renderer",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/SkinningPipeline.cpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Skybox.cpp",
+      "line": 5,
+      "from_module": "Renderer",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Skybox.cpp",
+      "line": 6,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Texture2D.cpp",
+      "line": 2,
+      "from_module": "Renderer",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Texture2D.cpp",
+      "line": 4,
+      "from_module": "Renderer",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Renderer/src/Texture2D.cpp",
+      "line": 7,
+      "from_module": "Renderer",
+      "to": "Axle/DecodedImage.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/include/Axle/RHI/RHICommon.hpp",
+      "line": 2,
+      "from_module": "RHI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/include/Axle/RHI/RHISwitcher.hpp",
+      "line": 5,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIBarrier.cpp",
+      "line": 2,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIBindless.cpp",
+      "line": 4,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIBuffer.cpp",
+      "line": 2,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHICommandBuffer.cpp",
+      "line": 4,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIDescriptorPool.cpp",
+      "line": 3,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIDevice.cpp",
+      "line": 6,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHILight.cpp",
+      "line": 2,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIMaterial.cpp",
+      "line": 4,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIMaterial.cpp",
+      "line": 5,
+      "from_module": "RHI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIMaterial.cpp",
+      "line": 6,
+      "from_module": "RHI",
+      "to": "Axle/BlockText.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIMesh.cpp",
+      "line": 2,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIPipeline.cpp",
+      "line": 2,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHISampler.cpp",
+      "line": 3,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIShader.cpp",
+      "line": 2,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIShader.cpp",
+      "line": 3,
+      "from_module": "RHI",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHISlangCompiler.cpp",
+      "line": 2,
+      "from_module": "RHI",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHIStreamer.cpp",
+      "line": 3,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHISurface.cpp",
+      "line": 2,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHISwapChain.cpp",
+      "line": 2,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/RHI/src/RHITexture.cpp",
+      "line": 3,
+      "from_module": "RHI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/AssemblySerializer.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/CharacterVFX.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/CharacterVFX.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/Timestep.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Components.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/LocalShadowSettings.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Components.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Components.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/UUID.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Components.hpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/VertexArray.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Components.hpp",
+      "line": 7,
+      "from_module": "Scene",
+      "to": "Axle/Texture2D.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Components.hpp",
+      "line": 8,
+      "from_module": "Scene",
+      "to": "Axle/Material.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Components.hpp",
+      "line": 9,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Components.hpp",
+      "line": 33,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIMaterial.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/CustomMaterialProgram.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/CustomMaterialProgram.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/MaterialBindingPlan.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/CustomMaterialProgram.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/CustomShaderInterface.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/CustomMaterialProgram.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIShader.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/CustomMaterialProgram.hpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIPipeline.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/MaterialGraphProgram.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIShader.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/MaterialGraphProgram.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/ShaderPropertyReflection.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/MaterialGraphProgram.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/MaterialBindingPlan.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/MaterialGraphRuntime.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIDescriptorPool.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/MaterialTextureCache.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/MeshResourceResolver.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/BuiltinMesh.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RenderService.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/RenderWorld.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RenderService.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/ViewRequest.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RenderService.hpp",
+      "line": 8,
+      "from_module": "Scene",
+      "to": "Axle/RenderCapabilities.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RenderService.hpp",
+      "line": 10,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIViewTargets.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RenderSnapshotQueue.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/RenderWorld.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHICascadedShadows.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/CascadedShadowMap.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHICascadedShadows.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/RenderWorld.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHICascadedShadows.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/SceneRenderSettings.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHICascadedShadows.hpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/PerspectiveCamera.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHICascadedShadows.hpp",
+      "line": 8,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHICascadedShadows.hpp",
+      "line": 9,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHITransform.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHICascadedShadows.hpp",
+      "line": 10,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIMesh.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHICascadedShadows.hpp",
+      "line": 11,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHICommandBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHICascadedShadows.hpp",
+      "line": 12,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIPipeline.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHICascadedShadows.hpp",
+      "line": 13,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIDescriptorPool.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIEnvironment.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/EnvironmentBake.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIEnvironment.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/RenderWorld.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIEnvironment.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHILocalShadows.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/PerspectiveCamera.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIMeshRegistry.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIMeshRegistry.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIMesh.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIObjectPicker.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIObjectPicker.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/PerspectiveCamera.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIObjectPicker.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIObjectPicker.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHICommandBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIObjectPicker.hpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIPipeline.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIObjectPicker.hpp",
+      "line": 7,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIShader.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIObjectPicker.hpp",
+      "line": 8,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIFrameContext.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIViewTargets.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 7,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 8,
+      "from_module": "Scene",
+      "to": "Axle/PerspectiveCamera.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 10,
+      "from_module": "Scene",
+      "to": "Axle/RenderWorld.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 15,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 16,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHICommandBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 17,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIPipeline.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 18,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIShader.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 19,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIStreamer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 20,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHITransform.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 21,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 22,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHISampler.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 23,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIDescriptorPool.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 24,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHILight.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 29,
+      "from_module": "Scene",
+      "to": "Axle/ViewContext.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 30,
+      "from_module": "Scene",
+      "to": "Axle/RenderPass.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "line": 31,
+      "from_module": "Scene",
+      "to": "Axle/ResolvedSurface.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/LocalShadowMap.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIMesh.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIPipeline.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIDescriptorPool.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/RHIShadowDepthAtlas.hpp",
+      "line": 7,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHITransform.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Scene.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Scene.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/UUID.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Scene.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/Timestep.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Scene.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/Shader.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/Scene.hpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/PerspectiveCamera.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneAudioBridge.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneAudioBridge.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/Timestep.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneCharacterBridge.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneCharacterBridge.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/Timestep.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneExtraction.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/RenderWorld.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneExtraction.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/PerspectiveCamera.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/ScenePhase.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/ScenePhysicsBridge.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderBridge.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderBridge.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/Shader.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderBridge.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/PerspectiveCamera.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderer.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/SceneRenderSettings.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderer.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderer.hpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/PerspectiveCamera.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderer.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/Framebuffer.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderer.hpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/Shader.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderer.hpp",
+      "line": 7,
+      "from_module": "Scene",
+      "to": "Axle/ShadowMap.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderer.hpp",
+      "line": 8,
+      "from_module": "Scene",
+      "to": "Axle/Skybox.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderer.hpp",
+      "line": 11,
+      "from_module": "Scene",
+      "to": "Axle/SkinningPipeline.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneRenderer.hpp",
+      "line": 12,
+      "from_module": "Scene",
+      "to": "Axle/RenderWorld.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneScriptBridge.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneScriptBridge.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/Timestep.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneSerializer.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SceneSerializer.hpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/VertexArray.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/ScriptableEntity.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/Timestep.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/ScriptCompiler.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/ScriptCompiler.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/JobSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/ScriptField.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/ScriptField.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/UUID.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/ScriptHotReloadManager.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/ScriptModule.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/ScriptRegistry.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SimulationClock.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SimulationClock.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/Timestep.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SimulationDriver.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SimulationDriver.hpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/Timestep.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/include/Axle/SimulationInput.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/AssemblySerializer.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/AssemblySerializer.cpp",
+      "line": 12,
+      "from_module": "Scene",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/AssemblySerializer.cpp",
+      "line": 14,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/AssemblySerializer.cpp",
+      "line": 15,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/CustomMaterialProgram.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/RenderContracts.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/CustomMaterialProgram.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/CustomMaterialProgram.cpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/LocalShadowPersistence.hpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/LocalShadowSettings.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MaterialComponentCodec.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MaterialComponentCodec.cpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/ShaderPropertyPersistence.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MaterialGraphLayout.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/CustomShaderInterface.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MaterialGraphProgram.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/MaterialSurfaceShader.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MaterialGraphProgram.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/CustomShaderInterface.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MaterialGraphProgram.cpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/MaterialBindingPlan.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MaterialGraphProgram.cpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHISlangCompiler.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MaterialTextureCache.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/ImageTextureCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MaterialTextureCache.cpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MeshResourceResolver.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/PrimitiveMesh.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MeshResourceResolver.cpp",
+      "line": 7,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/MeshResourceResolver.cpp",
+      "line": 8,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RenderService.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RenderService.cpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/ImageTextureCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RenderWorker.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RenderWorkerCapture.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RenderWorkerCapture.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHICommandBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIEnvironment.cpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIEnvironment.cpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIEnvironment.cpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIMeshRegistry.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/BuiltinMesh.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIMeshRegistry.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIMeshRegistry.cpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIMeshRegistry.cpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIObjectPicker.cpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIObjectPicker.cpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIObjectPicker.cpp",
+      "line": 7,
+      "from_module": "Scene",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIObjectPicker.cpp",
+      "line": 8,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIBarrier.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIObjectPicker.cpp",
+      "line": 9,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIVertexLayout.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRenderer.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRenderer.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/RenderGraph.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRenderer.cpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/SceneLighting.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRenderer.cpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/RenderContracts.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRenderer.cpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/RenderBackendPolicy.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRenderer.cpp",
+      "line": 16,
+      "from_module": "Scene",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRenderer.cpp",
+      "line": 19,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIVertexLayout.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRenderer.cpp",
+      "line": 20,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIMaterial.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRenderer.cpp",
+      "line": 21,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHISceneRenderer.cpp",
+      "line": 22,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIShadowDepthAtlas.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/ResolvedSurface.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIShadowDepthAtlas.cpp",
+      "line": 3,
+      "from_module": "Scene",
+      "to": "Axle/RenderContracts.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIShadowDepthAtlas.cpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIMaterial.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/RHIShadowDepthAtlas.cpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/Scene.cpp",
+      "line": 10,
+      "from_module": "Scene",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/Scene.cpp",
+      "line": 15,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneExtraction.cpp",
+      "line": 5,
+      "from_module": "Scene",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneExtraction.cpp",
+      "line": 10,
+      "from_module": "Scene",
+      "to": "Axle/ImageTextureCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneExtraction.cpp",
+      "line": 11,
+      "from_module": "Scene",
+      "to": "Axle/RHI/RHIMesh.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderBridge.cpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/RenderCommand.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderBridge.cpp",
+      "line": 7,
+      "from_module": "Scene",
+      "to": "Axle/VertexArray.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderBridge.cpp",
+      "line": 8,
+      "from_module": "Scene",
+      "to": "Axle/Buffer.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderBridge.cpp",
+      "line": 9,
+      "from_module": "Scene",
+      "to": "Axle/SkinningPipeline.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderBridge.cpp",
+      "line": 13,
+      "from_module": "Scene",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderBridge.cpp",
+      "line": 16,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderer.cpp",
+      "line": 4,
+      "from_module": "Scene",
+      "to": "Axle/RenderCommand.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderer.cpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderer.cpp",
+      "line": 7,
+      "from_module": "Scene",
+      "to": "Axle/Texture2D.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderer.cpp",
+      "line": 8,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderer.cpp",
+      "line": 11,
+      "from_module": "Scene",
+      "to": "Axle/SceneLighting.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneRenderer.cpp",
+      "line": 12,
+      "from_module": "Scene",
+      "to": "Axle/BuiltinSceneShader.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneSerializer.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneSerializer.cpp",
+      "line": 6,
+      "from_module": "Scene",
+      "to": "Axle/ShaderPropertyPersistence.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneSerializer.cpp",
+      "line": 13,
+      "from_module": "Scene",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneSerializer.cpp",
+      "line": 15,
+      "from_module": "Scene",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/SceneSerializer.cpp",
+      "line": 16,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/ScriptCompiler.cpp",
+      "line": 2,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/ScriptHotReloadManager.cpp",
+      "line": 7,
+      "from_module": "Scene",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/Scene/src/ScriptHotReloadManager.cpp",
+      "line": 12,
+      "from_module": "Scene",
+      "to": "Axle/JobSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssemblyEditorPanel.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssemblyEditorPanel.hpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/AssemblySerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssemblyEditorPanel.hpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/Framebuffer.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssemblyEditorPanel.hpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/Scene.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssemblyEditorPanel.hpp",
+      "line": 7,
+      "from_module": "UI",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetPreviewPanel.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetPreviewPanel.hpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/AssemblySerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetPreviewPanel.hpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/SceneSerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetPreviewPanel.hpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/Framebuffer.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetPreviewPanel.hpp",
+      "line": 7,
+      "from_module": "UI",
+      "to": "Axle/Scene.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetPreviewPanel.hpp",
+      "line": 11,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetPreviewPanel.hpp",
+      "line": 12,
+      "from_module": "UI",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetThumbnailManager.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetThumbnailManager.hpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/Shader.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetThumbnailManager.hpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/Texture2D.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/AssetThumbnailManager.hpp",
+      "line": 7,
+      "from_module": "UI",
+      "to": "Axle/VertexArray.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/ConsolePanel.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/ContentBrowserPanel.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/DebugPanel.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/HLSLStudioPanel.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/HLSLStudioPanel.hpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIShader.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/ImGuiLayer.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/ImGuiLayer.hpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIResource.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/RHIViewportDescriptor.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/RHIViewportDescriptor.hpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/RHIViewportDescriptor.hpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIViewTargets.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/RHIViewportDescriptor.hpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/SceneRenderSettings.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/SceneHierarchyPanel.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/SceneHierarchyPanel.hpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/Scene.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/SceneHierarchyPanel.hpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/UICanvasDesignerPanel.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/UIPalettePanel.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/UIPalettePanel.hpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/Scene.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/UIVectorIcons.hpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/VFXEditorPanel.hpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Types.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/VFXEditorPanel.hpp",
+      "line": 9,
+      "from_module": "UI",
+      "to": "Axle/Framebuffer.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/VFXEditorPanel.hpp",
+      "line": 12,
+      "from_module": "UI",
+      "to": "Axle/PerspectiveCamera.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/VFXEditorPanel.hpp",
+      "line": 13,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/include/Axle/VFXEditorPanel.hpp",
+      "line": 14,
+      "from_module": "UI",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssemblyEditorPanel.cpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssemblyEditorPanel.cpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/SceneRenderBridge.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssemblyEditorPanel.cpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/MeshResourceResolver.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssemblyEditorPanel.cpp",
+      "line": 7,
+      "from_module": "UI",
+      "to": "Axle/SceneExtraction.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssemblyEditorPanel.cpp",
+      "line": 8,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssemblyEditorPanel.cpp",
+      "line": 9,
+      "from_module": "UI",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssemblyEditorPanel.cpp",
+      "line": 11,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetInspector.cpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetInspector.cpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetInspector.cpp",
+      "line": 7,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetInspector.cpp",
+      "line": 8,
+      "from_module": "UI",
+      "to": "Axle/Texture2D.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetInspector.cpp",
+      "line": 11,
+      "from_module": "UI",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetInspector.cpp",
+      "line": 16,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetInspector.cpp",
+      "line": 17,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetInspector.cpp",
+      "line": 19,
+      "from_module": "UI",
+      "to": "Axle/ShaderPropertyReflection.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetInspector.cpp",
+      "line": 22,
+      "from_module": "UI",
+      "to": "Axle/ImageTextureCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 1,
+      "from_module": "UI",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 12,
+      "from_module": "UI",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 13,
+      "from_module": "UI",
+      "to": "Axle/RHIMeshRegistry.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 14,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIMaterial.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 15,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 16,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 17,
+      "from_module": "UI",
+      "to": "Axle/Texture2D.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 20,
+      "from_module": "UI",
+      "to": "Axle/ImageTextureCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 23,
+      "from_module": "UI",
+      "to": "Axle/RenderCommand.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 25,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 27,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 29,
+      "from_module": "UI",
+      "to": "Axle/SceneRenderBridge.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 30,
+      "from_module": "UI",
+      "to": "Axle/PrimitiveMesh.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetPreviewPanel.cpp",
+      "line": 31,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 1,
+      "from_module": "UI",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/SceneExtraction.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 8,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 9,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 10,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIMesh.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 11,
+      "from_module": "UI",
+      "to": "Axle/RHIMeshRegistry.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 12,
+      "from_module": "UI",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 13,
+      "from_module": "UI",
+      "to": "Axle/RenderWorld.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 14,
+      "from_module": "UI",
+      "to": "Axle/ViewRequest.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 15,
+      "from_module": "UI",
+      "to": "Axle/Framebuffer.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 18,
+      "from_module": "UI",
+      "to": "Axle/ImageTextureCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 19,
+      "from_module": "UI",
+      "to": "Axle/RenderCommand.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 21,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 22,
+      "from_module": "UI",
+      "to": "Axle/PrimitiveMesh.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 23,
+      "from_module": "UI",
+      "to": "Axle/AssemblySerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 25,
+      "from_module": "UI",
+      "to": "Axle/SceneRenderBridge.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/AssetThumbnailManager.cpp",
+      "line": 26,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ConsolePanel.cpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ContentBrowserPanel.cpp",
+      "line": 1,
+      "from_module": "UI",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ContentBrowserPanel.cpp",
+      "line": 14,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ContentBrowserPanel.cpp",
+      "line": 15,
+      "from_module": "UI",
+      "to": "Axle/AssemblySerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ContentBrowserPanel.cpp",
+      "line": 21,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/CustomShaderPicker.cpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/CustomShaderPicker.cpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/CustomShaderPicker.cpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/ShaderPropertyReflection.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/CustomShaderPicker.cpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/ShaderDragDropDecoder.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/ScriptableEntity.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/ScriptRegistry.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/PrimitiveMesh.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 8,
+      "from_module": "UI",
+      "to": "Axle/AssemblySerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 9,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 10,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 11,
+      "from_module": "UI",
+      "to": "Axle/Texture2D.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 14,
+      "from_module": "UI",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 15,
+      "from_module": "UI",
+      "to": "Axle/SceneRenderBridge.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 23,
+      "from_module": "UI",
+      "to": "Axle/CharacterVFX.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/EntityInspector.cpp",
+      "line": 26,
+      "from_module": "UI",
+      "to": "Axle/ShaderPropertyReflection.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/HLSLStudioPanel.cpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIShader.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/HLSLStudioPanel.cpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/HLSLStudioPanel.cpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/HLSLStudioPanel.cpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/CustomShaderInterface.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/HLSLStudioPanel.cpp",
+      "line": 7,
+      "from_module": "UI",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ImGuiLayer.cpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ImGuiLayer.cpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ImGuiLayer.cpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIFaultInjection.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ImGuiLayer.cpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHITexture.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ImGuiLayer.cpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIPresentationContext.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ImGuiLayer.cpp",
+      "line": 8,
+      "from_module": "UI",
+      "to": "Axle/ImageTextureCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ImGuiLayer.cpp",
+      "line": 45,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/ImGuiLayer.cpp",
+      "line": 46,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHICommandBuffer.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/MaterialInspectorControls.cpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/MaterialInspectorControls.cpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/MaterialCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/MaterialInspectorControls.cpp",
+      "line": 7,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/MaterialInspectorControls.cpp",
+      "line": 9,
+      "from_module": "UI",
+      "to": "Axle/ShaderDragDropDecoder.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/RHIViewportDescriptor.cpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/RHIViewportDescriptor.cpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIFaultInjection.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 2,
+      "from_module": "UI",
+      "to": "Axle/MeshResourceResolver.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/ScriptableEntity.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 7,
+      "from_module": "UI",
+      "to": "Axle/ScriptRegistry.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 8,
+      "from_module": "UI",
+      "to": "Axle/PrimitiveMesh.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 10,
+      "from_module": "UI",
+      "to": "Axle/SceneRenderBridge.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 11,
+      "from_module": "UI",
+      "to": "Axle/AssemblySerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 12,
+      "from_module": "UI",
+      "to": "Axle/SceneSerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 13,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 14,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 15,
+      "from_module": "UI",
+      "to": "Axle/Texture2D.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 33,
+      "from_module": "UI",
+      "to": "Axle/VertexArray.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "line": 34,
+      "from_module": "UI",
+      "to": "Axle/RHIMeshRegistry.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/UICanvasDesignerPanel.cpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/UICanvasDesignerPanel.cpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/UICanvasDesignerPanel.cpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/UIPalettePanel.cpp",
+      "line": 3,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/UIPalettePanel.cpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VFXEditorPanel.cpp",
+      "line": 1,
+      "from_module": "UI",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VFXEditorPanel.cpp",
+      "line": 4,
+      "from_module": "UI",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VFXEditorPanel.cpp",
+      "line": 6,
+      "from_module": "UI",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VFXEditorPanel.cpp",
+      "line": 7,
+      "from_module": "UI",
+      "to": "Axle/RenderCommand.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VFXEditorPanel.cpp",
+      "line": 9,
+      "from_module": "UI",
+      "to": "Axle/Shader.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VFXEditorPanel.cpp",
+      "line": 10,
+      "from_module": "UI",
+      "to": "Axle/Texture2D.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VFXEditorPanel.cpp",
+      "line": 11,
+      "from_module": "UI",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VFXEditorPanel.cpp",
+      "line": 12,
+      "from_module": "UI",
+      "to": "Axle/Scene.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VFXEditorPanel.cpp",
+      "line": 13,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIDevice.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VFXEditorPanel.cpp",
+      "line": 16,
+      "from_module": "UI",
+      "to": "Axle/ShaderDragDropDecoder.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Engine/UI/src/VulkanWindowBridge.hpp",
+      "line": 5,
+      "from_module": "UI",
+      "to": "Axle/RHI/RHIFaultInjection.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/Main.cpp",
+      "line": 3,
+      "from_module": "Runtime",
+      "to": "Axle/ImageTextureCache.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/Main.cpp",
+      "line": 4,
+      "from_module": "Runtime",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/Main.cpp",
+      "line": 5,
+      "from_module": "Runtime",
+      "to": "Axle/JobSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/Main.cpp",
+      "line": 6,
+      "from_module": "Runtime",
+      "to": "Axle/RenderCommand.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/Main.cpp",
+      "line": 8,
+      "from_module": "Runtime",
+      "to": "Axle/RHI/RHISwitcher.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/Main.cpp",
+      "line": 9,
+      "from_module": "Runtime",
+      "to": "Axle/RHI/RHIPresentationContext.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/Main.cpp",
+      "line": 10,
+      "from_module": "Runtime",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/Main.cpp",
+      "line": 13,
+      "from_module": "Runtime",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeComposition.cpp",
+      "line": 7,
+      "from_module": "Runtime",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeComposition.cpp",
+      "line": 8,
+      "from_module": "Runtime",
+      "to": "Axle/Package.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeComposition.cpp",
+      "line": 9,
+      "from_module": "Runtime",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeComposition.cpp",
+      "line": 10,
+      "from_module": "Runtime",
+      "to": "Axle/AssemblySerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeComposition.cpp",
+      "line": 11,
+      "from_module": "Runtime",
+      "to": "Axle/ScriptRegistry.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.cpp",
+      "line": 4,
+      "from_module": "Runtime",
+      "to": "Axle/Package.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.cpp",
+      "line": 5,
+      "from_module": "Runtime",
+      "to": "Axle/SceneSerializer.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.cpp",
+      "line": 6,
+      "from_module": "Runtime",
+      "to": "Axle/PrimitiveMesh.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.cpp",
+      "line": 8,
+      "from_module": "Runtime",
+      "to": "Axle/Components.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.cpp",
+      "line": 9,
+      "from_module": "Runtime",
+      "to": "Axle/ScriptableEntity.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.cpp",
+      "line": 10,
+      "from_module": "Runtime",
+      "to": "Axle/ScriptRegistry.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.cpp",
+      "line": 11,
+      "from_module": "Runtime",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.cpp",
+      "line": 13,
+      "from_module": "Runtime",
+      "to": "Axle/RenderCommand.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.hpp",
+      "line": 3,
+      "from_module": "Runtime",
+      "to": "Axle/Scene.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.hpp",
+      "line": 5,
+      "from_module": "Runtime",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.hpp",
+      "line": 7,
+      "from_module": "Runtime",
+      "to": "Axle/PerspectiveCamera.hpp",
+      "to_module": "Renderer",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.hpp",
+      "line": 9,
+      "from_module": "Runtime",
+      "to": "Axle/ScriptHotReloadManager.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.hpp",
+      "line": 10,
+      "from_module": "Runtime",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.hpp",
+      "line": 11,
+      "from_module": "Runtime",
+      "to": "Axle/Log.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeLayer.hpp",
+      "line": 16,
+      "from_module": "Runtime",
+      "to": "Axle/SimulationDriver.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeRenderContext.cpp",
+      "line": 2,
+      "from_module": "Runtime",
+      "to": "Axle/RenderService.hpp",
+      "to_module": "Scene",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeRenderContext.hpp",
+      "line": 3,
+      "from_module": "Runtime",
+      "to": "Axle/RHI/RHIPresentationContext.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeStartup.cpp",
+      "line": 3,
+      "from_module": "Runtime",
+      "to": "Axle/FileSystem.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeStartup.cpp",
+      "line": 5,
+      "from_module": "Runtime",
+      "to": "Axle/Path.hpp",
+      "to_module": "Core",
+      "allowance": null
+    },
+    {
+      "kind": "SourceInclude",
+      "file": "Runtime/src/RuntimeStartup.hpp",
+      "line": 3,
+      "from_module": "Runtime",
+      "to": "Axle/RHI/RHISwitcher.hpp",
+      "to_module": "RHI",
+      "allowance": null
+    }
+  ],
+  "architecture_violations": []
+}

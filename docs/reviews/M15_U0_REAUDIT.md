@@ -48,12 +48,11 @@ Result: **PARTIAL / NOT RUN for the required visual gate**.
 - `python scripts/test_m14_p0_baseline.py` passed 5/5 and
   `python scripts/m14_p0_baseline.py --check` passed, confirming manifest schema,
   fixture identity and diagnostic channels.
-- The focused Debug `AxleRenderUnitTests` binary is not present in the current
-  build tree, so the geometry unit binary was **NOT RUN** in this checkpoint.
+- The Debug `AxleRenderUnitTests` target was rebuilt from the current tree and
+  passed (exit 0); the log is `build/m15-u0-02-1-unit.log`.
 - The required Editor visual confirmation was **NOT RUN**: Computer Use native
   pipe was unavailable after one retry. No screenshot/readback is claimed.
 
-The fixture definition is present, but the leaf remains open until the Editor is
-built/launched and the smooth sphere is visibly confirmed with no triangle bands
-or invalid pixels. Next action is to restore/build the Editor/test target and run
-the visual gate; do not advance the sequential checklist yet.
+The fixture definition and geometry unit gate pass, but the leaf remains open
+until the Editor is launched and the smooth sphere is visibly confirmed with no
+triangle bands or invalid pixels. Do not advance the sequential checklist yet.

@@ -1,7 +1,7 @@
 # M14 U9 - Final Acceptance Review
 
 Review boundary: M14 Render Architecture U0-U9 only. M15 lighting/material
-fidelity implementation is excluded. Review source code boundary: `19ac2a1`; documentation publication commit: `cacc9fd`; source
+fidelity implementation is excluded. Review source code boundary: `19ac2a1`; documentation publication commits: `cacc9fd`, `88a757d` and `47b43fe`; source
 fingerprint in the executed manifests:
 `924cdeaffff272837890a8205fd1d3724c20aba36db4c684ea775ecb00c8824c`.
 
@@ -68,7 +68,9 @@ test binary SHA-256 values and confirms source unchanged during each phase.
 The separate-context source reviewer inspected the current contracts, callers,
 pass lifecycle, resource graph, service calls, backend policy, migration map and
 both U9 corrections. The Codex execution context built the binaries and ran the
-current Debug/Release matrices. A final separate-context recheck must inspect
-this review, the U9 handoff, tracked owner map and all five manifests before the
-repository status is changed from U9 pending to accepted. After that recheck,
-recommend accepting M14 at `19ac2a1` and releasing no M15 implementation.
+current Debug/Release matrices. The separate-context recheck inspected this review, the U9 handoff, tracked
+owner map and all five manifests after the anchor correction. It confirmed every
+source anchor, manifest/source identity and scope boundary, with no remaining
+`PARTIAL`, `MISSING` or `BLOCKED` item. Final recommendation: accept M14 at code
+source `19ac2a1`; publish the documentation commits above; release no M15
+implementation.

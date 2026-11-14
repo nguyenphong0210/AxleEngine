@@ -1,12 +1,13 @@
 #include <Axle/ResolvedSurface.hpp>
 #include <algorithm>
-#include <functional>
 
 namespace Axle {
 
     RHI::RHIMaterialConstants ResolvedSurface::ToMaterialConstants() const {
         RHI::RHIMaterialConstants data;
         data.UVTransform = glm::vec4(UVScale, UVOffset);
+        data.DetailUVTransform = glm::vec4(DetailUVScale, DetailUVOffset);
+        data.DetailParameters.x = std::max(0.0f, DetailNormalStrength);
         data.Surface = glm::vec4(std::clamp(NormalStrength, 0.0f, 4.0f), std::clamp(AO, 0.0f, 1.0f),
             EnableSpecularHighlights ? 1.0f : 0.0f, EnableEnvironmentReflections ? 1.0f : 0.0f);
         data.CoatAnisotropy = glm::vec4(std::clamp(ClearcoatStrength, 0.0f, 1.0f),
@@ -28,8 +29,8 @@ namespace Axle {
     void ResolvedSurface::ApplyToPushConstants(RHI::RHIObjectPushConstants& constants) const {
         constants.ColorPrimary = BaseColor;
         constants.ColorSecondary = glm::vec4(EmissionColor, EmissionIntensity);
-        constants.Params = glm::vec4(UVScale.x, 3.0f, Roughness, Metallic);
-        constants.MaterialExtra = glm::vec4(UVOffset, 0.5f, static_cast<float>(Surface));
+        constants.Params = glm::vec4(UVScale.x, static_cast<float>(ShadingModel), Roughness, Metallic);
+        constants.MaterialExtra = glm::vec4(UVOffset, AlphaCutoff, static_cast<float>(Surface));
     }
 
     uint64_t MaterialResolver::ComputeGeneration(const RHI::RHIMaterial& material) {
@@ -46,6 +47,25 @@ namespace Axle {
         mix(desc.SheenEnabled); mix(desc.SheenColor); mix(desc.SheenRoughness);
         mix(desc.SubsurfaceEnabled); mix(desc.SubsurfaceColor); mix(desc.SubsurfaceRadius);
         mix(desc.AbsorptionEnabled); mix(desc.AbsorptionColor); mix(desc.Dispersion); mix(desc.TextureEnableMask);
+        mix(desc.SurfaceType); mix(desc.CullMode); mix(desc.DepthWrite); mix(desc.RenderQueue);
+        mix(desc.ShadingModel); mix(desc.AlphaCutoff); mix(desc.TextureMode); mix(desc.UseORMMap);
+        mix(desc.DetailUVScale); mix(desc.DetailUVOffset); mix(desc.DetailNormalStrength);
+        mix(desc.RefractionTint); mix(desc.EnableSpecularHighlights); mix(desc.EnableEnvironmentReflections);
+        const auto mixPath = [&](const std::string& path) {
+            const auto size = path.size();
+            mix(size);
+            for (const auto character : path) mix(character);
+        };
+        mixPath(desc.ORMPath);
+        for (uint32_t i = 0; i < static_cast<uint32_t>(RHI::RHITextureSlot::Count); ++i) {
+            const auto slot = static_cast<RHI::RHITextureSlot>(i);
+            mixPath(material.GetTexturePath(slot));
+            // GetTexture creates a fallback for unassigned slots. Generation
+            // hashing must remain CPU-only and reflect authored bindings only.
+            const auto texture = material.HasTexture(slot) ? material.GetTexture(slot) : nullptr;
+            const auto handle = texture ? texture->GetHandle() : RHI::RHIResourceHandle{};
+            mix(handle.Epoch); mix(handle.Slot); mix(handle.Generation);
+        }
         return hash;
     }
 
@@ -60,6 +80,8 @@ namespace Axle {
         result.EmissionColor = glm::max(desc.EmissiveColor, glm::vec3(0.0f));
         result.EmissionIntensity = std::max(0.0f, desc.EmissiveIntensity);
         result.UVScale = desc.UVScale; result.UVOffset = desc.UVOffset;
+        result.DetailUVScale = desc.DetailUVScale; result.DetailUVOffset = desc.DetailUVOffset;
+        result.DetailNormalStrength = std::max(0.0f, desc.DetailNormalStrength);
         result.ClearcoatStrength = std::clamp(desc.ClearcoatStrength, 0.0f, 1.0f);
         result.ClearcoatRoughness = std::clamp(desc.ClearcoatRoughness, 0.001f, 1.0f);
         result.AnisotropyStrength = std::clamp(desc.AnisotropyStrength, -1.0f, 1.0f);
@@ -70,6 +92,10 @@ namespace Axle {
         result.RefractionEnabled = desc.RefractionEnabled; result.RefractionStrength = desc.RefractionStrength; result.RefractionIOR = desc.RefractionIOR;
         result.RefractionThickness = desc.RefractionThickness; result.RefractionTint = glm::clamp(desc.RefractionTint, glm::vec3(0.0f), glm::vec3(1.0f));
         result.Surface = desc.SurfaceType; result.Cull = desc.CullMode; result.DepthWrite = desc.DepthWrite;
+        result.RenderQueue = desc.RenderQueue;
+        result.ShadingModel = desc.TextureMode == TextureMode::PackedORM
+            ? RHI::RHIShadingModel::PackedORMTexturedPBR : desc.ShadingModel;
+        result.AlphaCutoff = std::clamp(desc.AlphaCutoff, 0.0f, 1.0f);
         result.EnableSpecularHighlights = desc.EnableSpecularHighlights; result.EnableEnvironmentReflections = desc.EnableEnvironmentReflections;
         result.TextureFlags = material.BuildConstants().Flags.x;
         result.Generation = generation ? generation : ComputeGeneration(material);

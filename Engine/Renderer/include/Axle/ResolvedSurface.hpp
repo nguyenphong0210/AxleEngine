@@ -22,6 +22,9 @@ namespace Axle {
         float EmissionIntensity = 0.0f;
         glm::vec2 UVScale{1.0f};
         glm::vec2 UVOffset{0.0f};
+        glm::vec2 DetailUVScale{1.0f};
+        glm::vec2 DetailUVOffset{0.0f};
+        float DetailNormalStrength = 1.0f;
 
         glm::vec3 GeometricNormal{0.0f, 0.0f, 1.0f};
         glm::vec3 ShadingNormal{0.0f, 0.0f, 1.0f};
@@ -50,6 +53,9 @@ namespace Axle {
         SurfaceType Surface = SurfaceType::Opaque;
         CullMode Cull = CullMode::Back;
         bool DepthWrite = true;
+        int RenderQueue = 2000;
+        RHI::RHIShadingModel ShadingModel = RHI::RHIShadingModel::MetallicRoughness;
+        float AlphaCutoff = 0.5f;
         bool EnableSpecularHighlights = true;
         bool EnableEnvironmentReflections = true;
         uint32_t TextureFlags = 0;

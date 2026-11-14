@@ -166,6 +166,25 @@ bool Native(RHIType backend) {
     init.EnableValidation=RHIDevice::IsGraphicsAPIValidationAvailable(backend);
     CHECK(device.Init(init)&&device.GetBackend()==backend&&!device.IsSoftwareAdapter());
     struct Close { ~Close(){RHIDevice::Get().WaitIdle();RHIDevice::Get().Shutdown();} } close;
+    {
+        RHIMaterial untextured;
+        bool allocatedFallback=false;
+        uint64_t plainGeneration=0;
+        { ScopedRHIFault observe([&](std::string_view op)->std::optional<nri::Result>{
+            if(op=="CreateTexture") allocatedFallback=true;
+            return {}; });
+          plainGeneration=MaterialResolver::ComputeGeneration(untextured); }
+        CHECK(plainGeneration!=0&&!allocatedFallback);
+        auto assigned=std::make_shared<RHITexture>();
+        auto desc=RHITextureDesc::RenderTarget2D(1,1);
+        desc.Usage=RHITextureUsage::ShaderResource;
+        CHECK(assigned->Init(desc));
+        RHIMaterial textured; textured.SetTexture(RHITextureSlot::Albedo,assigned);
+        const auto oldGeneration=MaterialResolver::ComputeGeneration(textured);
+        CHECK(assigned->Init(desc));
+        CHECK(MaterialResolver::ComputeGeneration(textured)!=oldGeneration);
+        CHECK(MaterialResolver::ComputeGeneration(untextured)==plainGeneration);
+    }
     uint64_t timestampTicks = 0; double timestampMilliseconds = 0.0;
     const bool timestampProbeOk = TimestampProbe(timestampTicks, timestampMilliseconds);
     CHECK(device.GetCapabilities().TimestampFrequencyHz > 0);

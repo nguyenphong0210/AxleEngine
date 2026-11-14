@@ -47,6 +47,52 @@ bool RunResolvedSurfaceUnitTests() {
     RENDER_CHECK(MaterialResolver::ComputeGeneration(changed) != firstGeneration,
         "material edits produce a new generation identity");
 
+    RHI::RHIMaterialDesc textured;
+    textured.ShadingModel = RHI::RHIShadingModel::TexturedPBR;
+    textured.SurfaceType = SurfaceType::Cutout;
+    textured.AlphaCutoff = 0.27f;
+    textured.UVScale = {2.0f, 3.0f}; textured.UVOffset = {0.1f, 0.2f};
+    RHI::RHIMaterial texturedMaterial(textured);
+    RHI::RHIObjectPushConstants referencePush, resolvedPush;
+    texturedMaterial.ApplyToPushConstants(referencePush);
+    MaterialResolver::Resolve(texturedMaterial).ApplyToPushConstants(resolvedPush);
+    RENDER_CHECK(resolvedPush.Params == referencePush.Params && resolvedPush.MaterialExtra == referencePush.MaterialExtra,
+        "canonical lowering preserves textured cutout mode, authored UVs and alpha cutoff");
+    textured.TextureMode = TextureMode::PackedORM;
+    RHI::RHIMaterial packedMaterial(textured);
+    packedMaterial.ApplyToPushConstants(referencePush);
+    MaterialResolver::Resolve(packedMaterial).ApplyToPushConstants(resolvedPush);
+    RENDER_CHECK(resolvedPush.Params == referencePush.Params,
+        "packed ORM selects the same textured shader path through canonical lowering");
+
+    textured.DetailUVScale = {4.0f, 5.0f}; textured.DetailUVOffset = {0.3f, 0.4f};
+    textured.DetailNormalStrength = 1.5f;
+    RHI::RHIMaterial detailMaterial(textured);
+    const auto detailConstants = MaterialResolver::Resolve(detailMaterial).ToMaterialConstants();
+    const auto nativeDetail = detailMaterial.BuildConstants();
+    RENDER_CHECK(detailConstants.DetailUVTransform == nativeDetail.DetailUVTransform &&
+        detailConstants.DetailParameters == nativeDetail.DetailParameters,
+        "canonical GPU packing retains authored detail normal transform and strength");
+
+    auto generation = [&](const RHI::RHIMaterialDesc& value) {
+        return MaterialResolver::ComputeGeneration(RHI::RHIMaterial(value));
+    };
+    const auto texturedGeneration = generation(textured);
+    auto edited = textured; edited.AlphaCutoff = 0.7f;
+    RENDER_CHECK(generation(edited) != texturedGeneration, "cutout threshold invalidates canonical identity");
+    edited = textured; edited.CullMode = CullMode::Front;
+    RENDER_CHECK(generation(edited) != texturedGeneration, "raster policy invalidates canonical identity");
+    edited = textured; edited.DepthWrite = false;
+    RENDER_CHECK(generation(edited) != texturedGeneration, "depth write policy invalidates canonical identity");
+    edited = textured; edited.SurfaceType = SurfaceType::Transparent;
+    RENDER_CHECK(generation(edited) != texturedGeneration, "surface classification invalidates canonical identity");
+    edited = textured; edited.AlbedoPath = "changed-albedo.png";
+    RENDER_CHECK(generation(edited) != texturedGeneration, "texture source invalidates canonical identity");
+    edited = textured; edited.RefractionTint = {0.7f, 0.2f, 0.1f};
+    RENDER_CHECK(generation(edited) != texturedGeneration, "refraction tint invalidates canonical identity");
+    edited = textured; edited.EnableEnvironmentReflections = false;
+    RENDER_CHECK(generation(edited) != texturedGeneration, "reflection policy invalidates canonical identity");
+
     const auto assembled = AssembleMaterialSurfaceShader("", "MaterialSurface AxleEvaluateMaterial(float2 uv) { MaterialSurface s; return s; }");
     RENDER_CHECK(assembled.find("Clearcoat") != std::string::npos && assembled.find("FeatureFlags") != std::string::npos,
         "Material Graph template exposes the canonical advanced surface fields");

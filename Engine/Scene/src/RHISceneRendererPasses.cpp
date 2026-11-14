@@ -776,10 +776,10 @@ namespace Axle {
                     if (item.Material) {
                         item.Surface.ApplyToPushConstants(item.PushConsts);
                         item.PushConsts.Model = worldMat;
-                        item.SurfaceType = item.Material->GetSurfaceType();
-                        item.CullMode = item.Material->GetCullMode();
-                        item.DepthWrite = item.Material->GetDepthWrite();
-                        item.RenderQueue = item.Material->GetDesc().RenderQueue;
+                        item.SurfaceType = item.Surface.Surface;
+                        item.CullMode = item.Surface.Cull;
+                        item.DepthWrite = item.Surface.DepthWrite;
+                        item.RenderQueue = item.Surface.RenderQueue;
                     }
 
                     if (item.SurfaceType == Axle::SurfaceType::Transparent || item.SurfaceType == Axle::SurfaceType::Additive) {

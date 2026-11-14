@@ -10,6 +10,7 @@ bool RunRenderServiceUnitTests();
 bool RunViewContextUnitTests();
 bool RunRenderPassUnitTests();
 bool RunResolvedSurfaceUnitTests();
+bool RunLightingServiceUnitTests();
 namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderWorkerUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderParallelRecordingUnitTests(); }
@@ -63,6 +64,11 @@ int main(int argc, char** argv) {
 
     if (!RunResolvedSurfaceUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunResolvedSurfaceUnitTests FAILED!\n";
+        return 1;
+    }
+
+    if (!RunLightingServiceUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunLightingServiceUnitTests FAILED!\n";
         return 1;
     }
 

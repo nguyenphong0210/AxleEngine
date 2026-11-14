@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `U0/U1/U2/U3/U4 ACCEPTED - U5 is the next released Unit.`
+**Status:** `U0/U1/U2/U3/U4/U5 ACCEPTED - U6 is the next released Unit.`
 **Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
@@ -135,18 +135,18 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 **Exit:** lighting-related state has stable service boundaries; M14 provides interfaces and migration seams, while M15 owns feature fidelity.
 
-- [ ] **S5.1 Lighting service**
-  - [ ] Define directional, point, spot and area-light input contracts.
-  - [ ] Define shadow atlas/cascade publication and sampling interfaces.
-  - [ ] Keep light packing and unit conversion independent from pass orchestration.
-- [ ] **S5.2 Reflection service**
-  - [ ] Define authored probe loading and generation status.
-  - [ ] Define dynamic capture, prefilter, invalidation, scheduling and multi-probe blend interfaces.
-  - [ ] Define SSR/probe/sky fallback policy without implementing the full M15 algorithm here.
-- [ ] **S5.3 GI service**
-  - [ ] Define DDGI update, irradiance, visibility and sampling interfaces.
-  - [ ] Mark experimental capability and fallback to IBL/ambient diffuse.
-  - [ ] Prevent DDGI state from leaking into the core material contract when disabled.
+- [x] **S5.1 Lighting service**
+  - [x] Define directional, point, spot and area-light input contracts.
+  - [x] Define shadow atlas/cascade publication and sampling interfaces.
+  - [x] Keep light packing and unit conversion independent from pass orchestration.
+- [x] **S5.2 Reflection service**
+  - [x] Define authored probe loading and generation status.
+  - [x] Define dynamic capture, prefilter, invalidation, scheduling and multi-probe blend interfaces.
+  - [x] Define SSR/probe/sky fallback policy without implementing the full M15 algorithm here.
+- [x] **S5.3 GI service**
+  - [x] Define DDGI update, irradiance, visibility and sampling interfaces.
+  - [x] Mark experimental capability and fallback to IBL/ambient diffuse.
+  - [x] Prevent DDGI state from leaking into the core material contract when disabled.
 
 ### U6 - Temporal, post-process and diagnostics ownership
 

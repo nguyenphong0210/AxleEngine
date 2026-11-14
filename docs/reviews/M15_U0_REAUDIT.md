@@ -53,3 +53,20 @@ Result: **PASS**.
 - The user supplied an Editor screenshot showing `Axle Engine - Sandbox - [Test.axlescene]` with the sphere rendered in the Scene viewport.
 - Visual result: the sphere appears smooth without visible triangle bands/faceting, black pixels or invalid radiance; the scene renders stably with the plane and light.
 - This screenshot is the required visual evidence for the leaf; no Computer Use claim is made.
+
+## M15-U0-02.2 — Create roughness/metal sweep fixture
+
+Result: **PARTIAL / NOT RUN for the required visual gate**.
+
+- Added tracked Editor fixture `Tests/Fixtures/M15/M15_RoughnessSweep.axlescene`
+  and project `M15_RoughnessSweep.axleproj` in commit `93c44c3`.
+- Fixture contains five builtin spheres tagged `roughness_004`, `roughness_012`,
+  `roughness_025`, `roughness_050` and `roughness_080`, with a shared metallic
+  material policy and roughness values 0.04/0.12/0.25/0.50/0.80.
+- Fixture schema/content check passed.
+- Editor visual confirmation is **NOT RUN** because the Computer Use native pipe
+  remains unavailable. Expected display: five spheres in order with progressively
+  broader highlights/reflections and no intensity jump.
+
+Next action: open the fixture project in Editor and confirm the visual sweep; do
+not advance the sequential checklist until the screenshot/readback is recorded.

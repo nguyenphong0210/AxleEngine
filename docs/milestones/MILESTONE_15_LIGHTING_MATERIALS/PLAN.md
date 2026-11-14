@@ -138,9 +138,10 @@ the item is visible.
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere is smooth with no triangle bands or invalid pixels.
   - **Evidence:** manifest/schema checks, Debug `AxleRenderUnitTests` exit 0, and user-supplied Editor screenshot of `Test.axlescene` showing a smooth sphere; see [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#M15-U0-02.1--create-smooth-sphere-fixture).
-- [x] **M15-U0-02.2 — Create roughness/metal sweep fixture.**
+- [ ] **M15-U0-02.2 — Create roughness/metal sweep fixture.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
+  - **Evidence:** fixture committed in `93c44c3`; schema/content check passes; Editor visual sweep remains NOT RUN. See [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#M15-U0-02.2--create-roughnessmetal-sweep-fixture).
 - [x] **M15-U0-02.3 — Create numbered reflection-box fixture.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.

@@ -2458,6 +2458,8 @@ namespace Axle {
         float DistanceSq = 0.0f;
         int RenderQueue = 2000;
         std::shared_ptr<const RHIMaterial> Material;
+        ResolvedSurface Surface;
+        bool HasResolvedSurface = false;
         bool UseCustomShader = false;
         std::shared_ptr<const CustomReadyGeneration> CustomGeneration;
         PackedMaterialResultData PackedConstants;
@@ -3403,6 +3405,10 @@ namespace Axle {
                     if (meshInst.Material.RHIMaterialAsset) {
                         auto mat = meshInst.Material;
                         item.Material = mat.RHIMaterialAsset;
+                        item.Surface = MaterialResolver::Resolve(*item.Material);
+                        item.HasResolvedSurface = item.Surface.Valid;
+                        if (!item.HasResolvedSurface)
+                            m_MaterialDiagnostics[meshInst.EntityID] = "Material resolver returned an invalid ResolvedSurface";
                         auto diagnostic=[&](std::string message) {
                             m_MaterialDiagnostics[meshInst.EntityID] = std::move(message);
                         };
@@ -3455,7 +3461,7 @@ namespace Axle {
                         item.Material = meshInst.Material.RHIMaterialAsset;
                     }
                     if (item.Material) {
-                        MaterialResolver::Resolve(*item.Material).ApplyToPushConstants(item.PushConsts);
+                        item.Surface.ApplyToPushConstants(item.PushConsts);
                         item.PushConsts.Model = worldMat;
                         item.SurfaceType = item.Material->GetSurfaceType();
                         item.CullMode = item.Material->GetCullMode();
@@ -3572,7 +3578,7 @@ namespace Axle {
                 }
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
                 RHIMaterialConstants materialData;
-                if (item.Material) materialData = MaterialResolver::Resolve(*item.Material).ToMaterialConstants();
+                if (item.HasResolvedSurface) materialData = item.Surface.ToMaterialConstants();
                 std::vector<nri::Descriptor*> srvs(ForwardTextureCount);
                 for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
                     auto textureSlot = static_cast<RHITextureSlot>(slot);

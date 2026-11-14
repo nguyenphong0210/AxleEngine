@@ -7,7 +7,7 @@
     "coordinator": "User / Codex",
     "implementer": "Codex (user-authorized review and repairs)",
     "code_baseline": "cb64b38",
-    "user_instruction": "User requests remaining M14 Render Architecture gaps repaired sequentially with quality verification. U2 is delivered; the current explicitly requested checkpoint is U3 canonical material/surface integration. M15 lighting/material fidelity is excluded.",
+    "user_instruction": "User requests remaining M14 Render Architecture gaps repaired sequentially with quality verification, and explicitly requests finishing U3. U2 and U3 are now accepted at their documented boundaries. M15 lighting/material fidelity is excluded.",
     "user_scope": "Read protocol, architecture, plan, evidence and diff. Repair ownership, pass interfaces, ResolvedSurface, graph/resource lifetime, service boundaries, backend parity and migration/test evidence. Work sequentially; no push.",
     "expected_files": [
       "Engine/Renderer/include/Axle/ResolvedSurface.hpp",
@@ -39,15 +39,14 @@
       "docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE",
       "docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md"
     ],
-    "implementation_status": "U2 repaired/verified (7f5deb7, 421cc49, 06a6c4d). U3 API checkpoint 86feca7 and live integration f241eb0 implemented/self-verified; current source anchors, exact gate results and review limits recorded in 7972142.",
-    "acceptance_status": "U2 PASS at the explicit legacy cache boundary. U3 implementation/self-verification PASS; formal acceptance PARTIAL pending the final separate-context correction recheck (reviewer usage limit). U4/U5 remain PARTIAL; overall M14/U9 HOLD; M15 excluded.",
+    "implementation_status": "U2 repaired/verified (7f5deb7, 421cc49, 06a6c4d). U3 API 86feca7 and live integration f241eb0 implemented/verified; final separate-context correction recheck PASS at b476686 source, with fresh Debug CPU and D3D12/Vulkan compiler fixtures. Acceptance/evidence recorded in f68ea58; no closeout source changes required.",
+    "acceptance_status": "U2 PASS at the explicit legacy cache boundary. U3 PASS after the required final separate-context correction recheck; no open U3 blockers. U4/U5 remain PARTIAL; overall M14/U9 HOLD; M15 excluded.",
     "open_gates": [
-      "U3 final focused separate-context correction recheck of the final Texture2D/SRV validation and affected callers; intermediate rechecks and final implementer CPU/native/product gates passed",
       "U4 complete graph access declarations beyond descriptor retention",
       "U5 actual lighting/reflection/GI policy ownership review and repair",
       "U9 consolidated independent acceptance after all remaining repairs"
     ],
-    "next_action": "Complete the pending final U3 correction recheck when available, then proceed sequentially to U4 graph access authority. U3 implementation and required self-verification are delivered. Preserve Gemini source freeze; no M15 or push.",
+    "next_action": "U3 completion checkpoint closed. Next sequential checkpoint is U4 graph access authority, followed by U5 and consolidated U9 acceptance. No U4 implementation occurred during U3 closeout. Preserve Gemini source freeze; no M15 or push.",
     "metadata_correction": "Replaces stale M14-LIGHTING-FIDELITY task metadata. That historical fidelity work is now M15 and is excluded by the current user assignment."
   },
   "last_read": {
@@ -3222,6 +3221,28 @@
       "base_commit": "f241eb0",
       "timestamp_utc": "2026-11-14T07:32:04.003076+00:00",
       "body": "DELIVERY: U3 canonical material/surface integration implemented and self-verified.\nReply to CG-20261114T065013601403Z-CODEX-fd2221. Base 4d6006e; checkpoints 86feca7 (shared resolver/API), f241eb0 (live callers, bindings, diagnostics/history and native fixtures), 7972142 (architecture/plan/evidence/acceptance limits).\n\nImplemented:\n- Canonical authored/procedural snapshot conversion; common custom HLSL engine uniforms and reserved base-map bindings derive from the resolved surface instead of compatibility mirrors.\n- Typed MaterialGraphRuntime.ResolveSurface shares property/packing/status/identity resolution, validates immutable generation/device epoch and retains transactional instance overrides. Numeric CPU fields are canonical inputs, not evaluation of per-pixel shader expressions.\n- Explicit evaluation/program/material identity, unsupported feature mask, validity/fallback/reason. No M15 shading/lighting algorithms or advanced graph nodes.\n- Effective native texture identity after cache/fallback resolution; invalid/stale or incompatible native Texture2D/SRV bindings rejected; same-path reload/recovery observed; explicit ContentRevision contract for in-place writes.\n- Final per-entity material diagnostics and late temporal content invalidation preserving already imported slots. Built-in fallback clears custom shader generation. Shadow alpha uses canonical native/path binding.\n\nCurrent verification (all build/test invocations exit 0):\n- Fresh Debug core graph/render targets, Debug environment/shadow/preview/runtime/OpenGL-policy targets, Release core graph/render targets, Debug MaterialUnit target.\n- Debug and Release AxleRenderUnitTests; Debug AxleMaterialUnitTests (5/5).\n- Compiler/runtime/resource graph fixtures each ran policy, dx12 and vulkan in both Debug and Release (18 entries); graph/reference image maximum error 0.\n- Debug environment dx12/vulkan/gl; cascade/local shadows dx12/vulkan; preview surfaces dx12/vulkan/gl; preview particles dx12/vulkan; Runtime dx12 loose/cooked; explicit OpenGL unsupported graph policy.\n- check_architecture.py PASS (600 files, 25 CMake files); generate_m14_dependency_map.py zero architecture/caller violations; git diff --check PASS.\n- GPU runs sequential. Product runs used Debug DLL directories on PATH; Runtime cwd build/Tests/Debug. Release product and interactive Editor UI NOT RUN in U3.\nExact commands, source anchors, log/output paths and non-fatal MaterialUnit LNK4098 warning: docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE/U3_MATERIAL_SURFACE_EVIDENCE.md. Repair status: docs/reviews/M14_RENDER_ARCHITECTURE_REPAIR_STATUS.md.\n\nReview/acceptance distinction:\nFocused separate-context review found and prompted corrections for effective native identity, unsupported maps/emission, assigned-texture validation, procedural union packing, lifetime fixture owner retention and Texture2D/SRV compatibility. Earlier corrections and temporal ordering received intermediate rechecks. The final reviewer invocation failed at its usage limit, so the final Texture2D/SRV correction and affected callers still need the required final independent recheck. No final independent PASS or Gemini approval is claimed.\nU3 implementation/self-verification PASS; formal U3 acceptance PARTIAL pending that focused recheck. U2 remains PASS. U4 graph access authority and U5 policy ownership remain PARTIAL; U9/M14 HOLD. Next: finish U3 correction recheck, then U4 sequentially. Gemini source freeze retained; no M15 or push."
+    },
+    {
+      "id": "CG-20261114T073334895388Z-CODEX-0359f7",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T073204003076Z-CODEX-f81497",
+      "base_commit": "b476686",
+      "timestamp_utc": "2026-11-14T07:33:34.895388+00:00",
+      "body": "STATUS: User explicitly requests completing the remaining U3 work.\nReply to CG-20261114T073204003076Z-CODEX-f81497. Base b476686; working tree clean.\nU3 implementation/self-verification is delivered in 86feca7/f241eb0; final separate-context recheck remains the acceptance gate. Resuming the same focused reviewer per WORKING_PROTOCOL, inspecting final Texture2D/SRV validation and affected live/typed graph/shadow callers. I will address any findings, run relevant rebuilt CPU/native gates, and update U3 acceptance only from actual evidence.\nExpected edits: U3 evidence, PLAN, U9 scorecard, repair status and this exchange; source/tests only if the review exposes a concrete remaining U3 defect. U4/U5 and M15 are not part of this completion checkpoint; no push."
+    },
+    {
+      "id": "CG-20261114T073813099222Z-CODEX-5cd7cc",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T073334895388Z-CODEX-0359f7",
+      "base_commit": "f68ea58",
+      "timestamp_utc": "2026-11-14T07:38:13.099222+00:00",
+      "body": "REVIEW / U3 CLOSEOUT: PASS. The remaining final correction gate is closed.\nReply to CG-20261114T073334895388Z-CODEX-0359f7. Reviewed unchanged source at b476686 (implementation 86feca7/f241eb0); acceptance report/docs commit f68ea58.\n\nActual separate-context result:\nThe reused /root/u2_correction_review reviewer resumed and explicitly returned: Final U3 correction review PASS; no remaining U3 blocker at b476686; the pending correction gate may close.\nInspected final texture liveness/SRV/dimension/sample/format validation (ResolvedSurface.cpp:8, :142), final actual binding identity before GPU Draw (RHISceneRendererPasses.cpp:361, :442; MaterialGraphRuntime.cpp:187), shadow validation before descriptor prep, temporal imported-slot preservation (ViewContext.cpp:102), wrapper-owner release before command lease checks (MaterialGraphTestDraw.hpp:59) and native cubemap/no-SRV rejection (Test_MaterialGraphCompiler.cpp:313).\nRaw custom finalization follows table binding but precedes Draw; upstream canonical validation/cache producers and final rejection/fallback prevent invalid accesses. No further code/test correction was needed.\n\nFresh Codex-run closeout gates, all exit 0:\ncmake --build build --config Debug --target AxleRenderUnitTests AxleMaterialGraphCompilerTests --parallel 6\nbuild/Tests/Debug/AxleRenderUnitTests.exe\nbuild/Tests/Debug/AxleMaterialGraphCompilerTests.exe dx12 <absolute fixture> <absolute closeout output>\nbuild/Tests/Debug/AxleMaterialGraphCompilerTests.exe vulkan <absolute fixture> <absolute closeout output>\nBoth native image max errors zero; cube/no-SRV negative cases and unchanged RHI validation-error count assertions passed.\nLogs: build/m14-u3-close-build.log, build/m14-u3-close-unit.log, build/m14-u3-close-compiler-dx12.log, build/m14-u3-close-compiler-vulkan.log.\nThe independent reviewer inspected source and these fresh logs, but did not execute the commands. Earlier broad Debug/Release + product gates remain separately recorded implementer evidence. Exact commands, source anchors and scope limits: docs/reviews/M14_U3_CORRECTION_RECHECK.md and current U3 evidence.\nDocumentation links and git diff --check PASS.\n\nAcceptance: U3 PASS, no open U3 gate. U2 stays PASS; U4/U5 PARTIAL and overall M14/U9 HOLD. In-place native pixel writes still require ContentRevision; canonical CPU shader inputs are distinct from per-pixel GPU evaluation; OpenGL typed graph execution remains explicitly unsupported. These are documented contracts, not newly waived gates. No Gemini response/approval inferred. Stop at U3 closeout; next sequential checkpoint U4. No M15, source edits or push during this closeout."
     }
   ],
   "deferred_tasks": [

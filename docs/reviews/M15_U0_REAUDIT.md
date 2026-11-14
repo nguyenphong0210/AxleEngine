@@ -39,7 +39,7 @@ Next sequential leaf: `M15-U0-02.1 — Create smooth-sphere fixture`.
 
 ## M15-U0-02.1 — Create smooth-sphere fixture
 
-Result: **PARTIAL / NOT RUN for the required visual gate**.
+Result: **PASS**.
 
 - The deterministic fixture `smooth_sphere_surface` exists in
   `Tests/Fixtures/M14/P0_REFERENCE_FIXTURES.json` with a 64x128 sphere, 128x128
@@ -50,9 +50,6 @@ Result: **PARTIAL / NOT RUN for the required visual gate**.
   fixture identity and diagnostic channels.
 - The Debug `AxleRenderUnitTests` target was rebuilt from the current tree and
   passed (exit 0); the log is `build/m15-u0-02-1-unit.log`.
-- The required Editor visual confirmation was **NOT RUN**: Computer Use native
-  pipe was unavailable after one retry. No screenshot/readback is claimed.
-
-The fixture definition and geometry unit gate pass, but the leaf remains open
-until the Editor is launched and the smooth sphere is visibly confirmed with no
-triangle bands or invalid pixels. Do not advance the sequential checklist yet.
+- The user supplied an Editor screenshot showing `Axle Engine - Sandbox - [Test.axlescene]` with the sphere rendered in the Scene viewport.
+- Visual result: the sphere appears smooth without visible triangle bands/faceting, black pixels or invalid radiance; the scene renders stably with the plane and light.
+- This screenshot is the required visual evidence for the leaf; no Computer Use claim is made.

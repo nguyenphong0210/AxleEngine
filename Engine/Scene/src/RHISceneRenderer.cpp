@@ -2419,31 +2419,14 @@ namespace Axle {
         }
     }
 
-    bool RHISceneRenderer::PrepareReflectionProbe(const RenderWorld& world, const PerspectiveCamera& camera) {
+    bool RHISceneRenderer::PrepareReflectionProbe(const RenderWorld& world, const ReflectionFrame& reflectionFrame) {
         m_ActiveReflectionProbePrefilter.reset();
         m_HasActiveReflectionProbe = false;
-        if (world.ReflectionProbes.empty()) return true;
-
-        const glm::vec3 cameraPosition = camera.GetPosition();
         const RenderReflectionProbe* selected = nullptr;
-        float selectedWeight = 0.0f;
         for (const auto& probe : world.ReflectionProbes) {
-            if (probe.CubemapPath.empty()) continue;
-            const glm::vec3 local = cameraPosition - probe.Position;
-            float distanceOutside = 0.0f;
-            float influence = 1.0f;
-            if (probe.Shape == 1) {
-                distanceOutside = std::max(glm::length(local) - probe.Radius, 0.0f);
-                influence = std::max(probe.Radius, 0.001f);
-            } else {
-                const glm::vec3 extents = glm::max(probe.BoxExtents * 0.5f, glm::vec3(0.001f));
-                distanceOutside = glm::length(glm::max(glm::abs(local) - extents, glm::vec3(0.0f)));
-                influence = glm::length(extents);
-            }
-            const float weight = 1.0f - std::clamp(distanceOutside / influence, 0.0f, 1.0f);
-            if (weight > selectedWeight) {
-                selectedWeight = weight;
+            if (probe.EntityID == reflectionFrame.SelectedProbeEntityID && !probe.CubemapPath.empty()) {
                 selected = &probe;
+                break;
             }
         }
         if (!selected) return true;
@@ -2751,7 +2734,7 @@ namespace Axle {
 
         const auto passCapabilities = backendPolicy.GetPassCapabilities();
         RecordFramePasses({
-            world, camera, settings, physicsScene,
+            world, reflectionFrame, camera, settings, physicsScene,
             viewTargets, colorTarget, colorRTV, width,
             height, useMSAA, useToneMap, useFXAA,
             activeSampleCount, sceneTargetTexture, sceneTargetRTV, sceneDepthTexture,

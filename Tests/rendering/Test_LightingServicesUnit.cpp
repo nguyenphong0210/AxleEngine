@@ -20,14 +20,24 @@ bool RunLightingServiceUnitTests() {
     RENDER_CHECK(frame && frame.Status == LightingFrameStatus::Supported && frame.DirectionalCount == 1 &&
                  frame.PointCount == 1 && frame.SpotCount == 1 && frame.RectCount == 1 &&
                  frame.Shadows.CascadeGeneration == 11, "lighting service owns light counts and shadow publication metadata");
+    RENDER_CHECK(frame.Sun.Illuminance == 100000.0f && frame.PointLights[0].Intensity == 1000.0f &&
+                 frame.SpotLights[0].Intensity == 4000.0f && frame.RectLights[0].SignedIntensity == 10.0f,
+        "lighting service owns physical unit conversion and CPU light packing");
     settings.EnableShadows = false;
     auto noShadows = lighting.BuildFrame(world, settings, ShadowPublication{true, true, 11, 22});
     RENDER_CHECK(!noShadows.Shadows.CascadeGeneration && noShadows.DirectionalCount == 1,
         "disabling shadows does not remove direct-light inputs");
+    world.AdditionalDirectionalLights.push_back(RenderDirectionalLight{});
+    world.AdditionalDirectionalLights.back().Intensity = 2.0f;
+    const auto additional = lighting.BuildFrame(world, settings, ShadowPublication{true, true, 11, 22});
+    RENDER_CHECK(additional.PointCount == 2 && additional.PointLights[0].Directional &&
+                 additional.PointLights[0].Intensity == 7.0f,
+        "additional directional lights use the service-owned directional packing contract");
 
     ReflectionService reflection;
     auto authored = reflection.Prepare(world, {3,0,0}, true, 7);
-    RENDER_CHECK(authored.State == ReflectionState::AuthoredReady && authored.CubemapPath == "near_probe.axleasset" &&
+    RENDER_CHECK(authored.State == ReflectionState::AuthoredReady && authored.SelectedProbeEntityID == 1 &&
+                 authored.CubemapPath == "near_probe.axleasset" &&
                  authored.PrefilterReady && authored.ParallaxCorrected,
         "reflection service selects nearest authored probe and reports ready state");
     RenderWorld noProbe;

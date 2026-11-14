@@ -7,6 +7,7 @@ namespace Axle {
     // outlive this call; GPU dependencies are retained by the command journal.
     struct RHISceneRenderer::FramePassInputs {
         const RenderWorld& world;
+        const ReflectionFrame& reflectionFrame;
         const PerspectiveCamera& camera;
         const SceneRenderSettings& settings;
         PhysicsScene* physicsScene;

@@ -446,7 +446,7 @@ namespace Axle {
 
     private:
         void ConsumePreviousGPUTimestamp();
-        bool PrepareReflectionProbe(const RenderWorld& world, const PerspectiveCamera& camera);
+        bool PrepareReflectionProbe(const RenderWorld& world, const ReflectionFrame& reflectionFrame);
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_Pipeline;

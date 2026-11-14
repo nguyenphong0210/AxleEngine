@@ -36,7 +36,7 @@ namespace Axle {
 
     bool RHISceneRenderer::RecordFramePasses(const FramePassInputs& inputs) {
         const auto& [
-            world, camera, settings, physicsScene,
+            world, reflectionFrame, camera, settings, physicsScene,
             viewTargets, colorTarget, colorRTV, width,
             height, useMSAA, useToneMap, useFXAA,
             activeSampleCount, sceneTargetTexture, sceneTargetRTV, sceneDepthTexture,
@@ -147,7 +147,8 @@ namespace Axle {
         RHITexture* shadowAtlas = nullptr;
         RHITexture* localAtlas = nullptr;
         Graph::Resource shadows = output, localShadows = output;
-        const auto lighting = ResolveSceneLighting(world);
+        auto lightingFrame = m_LightingService.BuildFrame(world, settings);
+        const auto& lighting = lightingFrame.Scene;
         RHISceneConstants sceneConstants;
         // 3. Begin Rendering Pass
         nri::AttachmentDesc colorAttachment = {};
@@ -541,7 +542,7 @@ namespace Axle {
                 m_CascadedShadows.IsActive(), m_LocalShadows.IsActive(),
                 m_CascadedShadows.IsActive() ? 1u : 0u,
                 m_LocalShadows.IsActive() ? 1u : 0u};
-            const auto lightingFrame = m_LightingService.BuildFrame(world, settings, shadowPublication);
+            lightingFrame = m_LightingService.BuildFrame(world, settings, shadowPublication);
             if (lightingFrame.Status == LightingFrameStatus::Fallback && !lightingFrame.Diagnostic.empty())
                 m_ViewContext.Diagnostics().AddFallback(lightingFrame.Diagnostic);
             const auto localIdentity=m_Device->GetResources().AcquireNative(m_LocalShadows.GetSRV()).GetHandle();
@@ -584,68 +585,43 @@ namespace Axle {
             lightData.CameraPosAndExposure = glm::vec4(camera.GetPosition(), 1.0f);
             lightData.ReservedHeader[0].x = settings.EnableStudioLightLobes ? 0.0f : 1.0f;
 
-            if (world.DirectionalLight.has_value()) {
-                const auto& dl = *world.DirectionalLight;
-                float lux = (dl.Intensity > 100.0f) ? dl.Intensity : (dl.Intensity * PhysicalIlluminance::DirectSunlight);
-                lightData.SunLight.DirectionAndIlluminance = glm::vec4(dl.Direction, lux);
-                lightData.SunLight.ColorAndAmbient = glm::vec4(dl.Color, lighting.AmbientIntensity);
-                lightData.SunLight.AmbientColor = glm::vec4(lighting.AmbientColor,1.0f);
-                lightData.SunLight.ShadowParams = glm::vec4(dl.ShadowBias, dl.ShadowFilterRadius,
-                    std::clamp(dl.SolarAngularRadius, 0.0f, 0.25f), 0.0f);
-                lightData.LightCounts.z = 1;
-            } else {
-                lightData.SunLight.DirectionAndIlluminance = glm::vec4(glm::normalize(lighting.SunDirection),0.0f);
-                lightData.SunLight.ColorAndAmbient = glm::vec4(lighting.SunColor,lighting.AmbientIntensity);
-                lightData.SunLight.AmbientColor = glm::vec4(lighting.AmbientColor,1.0f);
-                lightData.SunLight.ShadowParams = glm::vec4(0.0012f, 2.0f, 0.00462512f, 0.0f);
-                lightData.LightCounts.z = 1;
-            }
+            const auto& lightingSun=lightingFrame.Sun;
+            lightData.SunLight.DirectionAndIlluminance = glm::vec4(lightingSun.Direction, lightingSun.Illuminance);
+            lightData.SunLight.ColorAndAmbient = glm::vec4(lightingSun.Color, lightingSun.AmbientIntensity);
+            lightData.SunLight.AmbientColor = glm::vec4(lightingSun.AmbientColor, 1.0f);
+            lightData.SunLight.ShadowParams = glm::vec4(lightingSun.ShadowBias, lightingSun.ShadowFilterRadius,
+                lightingSun.SolarAngularRadius, 0.0f);
+            lightData.LightCounts.z = 1;
 
-            uint32_t pointIndex = 0;
-            for (const auto& dl : world.AdditionalDirectionalLights) {
-                if (pointIndex >= MAX_POINT_LIGHTS) break;
-                float lux = dl.Intensity > 100.0f ? dl.Intensity : dl.Intensity * PhysicalIlluminance::DirectSunlight;
-                auto& light = lightData.PointLights[pointIndex++];
-                light.PositionAndRadius = glm::vec4(dl.Direction, 0.0f);
-                light.ColorAndIntensity = glm::vec4(dl.Color, lux * 0.000035f);
-                light.Params = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+            for (uint32_t i=0; i<lightingFrame.PointCount; ++i) {
+                const auto& source=lightingFrame.PointLights[i];
+                auto& target=lightData.PointLights[i];
+                target.PositionAndRadius = glm::vec4(source.Position, source.Radius);
+                target.ColorAndIntensity = glm::vec4(source.Color, source.Intensity);
+                target.Params = glm::vec4(source.Falloff, source.MinRadius * source.MinRadius,
+                    source.Directional ? 1.0f : 0.0f, 0.0f);
             }
+            lightData.LightCounts.x = lightingFrame.PointCount;
 
-            for (const auto& pl : world.PointLights) {
-                if (pointIndex >= MAX_POINT_LIGHTS) break;
-                float intensity = (pl.Intensity > 10.0f) ? pl.Intensity : (pl.Intensity * 1000.0f);
-                lightData.PointLights[pointIndex].PositionAndRadius = glm::vec4(pl.Position, pl.Radius);
-                lightData.PointLights[pointIndex].ColorAndIntensity = glm::vec4(pl.Color, intensity);
-                lightData.PointLights[pointIndex].Params = glm::vec4(pl.Falloff, 0.05f * 0.05f, 0.0f, 0.0f);
-                pointIndex++;
+            for (uint32_t i=0; i<lightingFrame.SpotCount; ++i) {
+                const auto& source=lightingFrame.SpotLights[i];
+                auto& target=lightData.SpotLights[i];
+                target.PositionAndRange = glm::vec4(source.Position, source.Range);
+                target.DirectionAndIntensity = glm::vec4(source.Direction, source.Intensity);
+                target.ColorAndInnerAngle = glm::vec4(source.Color, source.CosInnerAngle);
+                target.AngleParams = glm::vec4(source.CosOuterAngle, source.Falloff, 0.0f, 0.0f);
             }
-            lightData.LightCounts.x = pointIndex;
+            lightData.LightCounts.y = lightingFrame.SpotCount;
 
-            uint32_t spotIndex = 0;
-            for (const auto& sl : world.SpotLights) {
-                if (spotIndex >= MAX_SPOT_LIGHTS) break;
-                float intensity = (sl.Intensity > 10.0f) ? sl.Intensity : (sl.Intensity * 500.0f);
-                float cosInner = std::cos(glm::radians(sl.InnerAngle));
-                float cosOuter = std::cos(glm::radians(sl.OuterAngle));
-                lightData.SpotLights[spotIndex].PositionAndRange = glm::vec4(sl.Position, sl.Range);
-                lightData.SpotLights[spotIndex].DirectionAndIntensity = glm::vec4(sl.Direction, intensity);
-                lightData.SpotLights[spotIndex].ColorAndInnerAngle = glm::vec4(sl.Color, cosInner);
-                lightData.SpotLights[spotIndex].AngleParams = glm::vec4(cosOuter, 1.0f, 0.0f, 0.0f);
-                spotIndex++;
+            for (uint32_t i=0; i<lightingFrame.RectCount; ++i) {
+                const auto& source=lightingFrame.RectLights[i];
+                auto& target=lightData.RectLights[i];
+                target.PositionAndWidth = glm::vec4(source.Position, source.Width);
+                target.DirectionAndHeight = glm::vec4(source.Direction, source.Height);
+                target.UpAndRange = glm::vec4(source.Up, source.Range);
+                target.ColorAndIntensity = glm::vec4(source.Color, source.SignedIntensity);
             }
-            lightData.LightCounts.y = spotIndex;
-
-            uint32_t rectIndex = 0;
-            for (const auto& rl : world.RectLights) {
-                if (rectIndex >= 2) break;
-                float intensity = rl.TwoSided ? -std::abs(rl.Intensity) : std::abs(rl.Intensity);
-                lightData.RectLights[rectIndex].PositionAndWidth = glm::vec4(rl.Position, rl.Width);
-                lightData.RectLights[rectIndex].DirectionAndHeight = glm::vec4(rl.Direction, rl.Height);
-                lightData.RectLights[rectIndex].UpAndRange = glm::vec4(rl.Up, rl.Range);
-                lightData.RectLights[rectIndex].ColorAndIntensity = glm::vec4(rl.Color, intensity);
-                rectIndex++;
-            }
-            lightData.ReservedHeader[1].x = static_cast<float>(rectIndex);
+            lightData.ReservedHeader[1].x = static_cast<float>(lightingFrame.RectCount);
 
             bool useIBL = m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.EnvironmentLighting;
             lightData.ReservedHeader[0].y = lighting.AmbientIntensity*(lighting.EnvironmentLighting ? m_Environment.SourceExposure() : 1.0f);
@@ -688,7 +664,7 @@ namespace Axle {
             return {};
         }, [&](const RenderPassContext&) -> RenderPassResult {
             RenderPassResult probeResult;
-            if (!PrepareReflectionProbe(world, camera)) {
+            if (!PrepareReflectionProbe(world, reflectionFrame)) {
                 m_ActiveReflectionProbePrefilter.reset();
                 m_HasActiveReflectionProbe = false;
                 probeResult = RenderPassResult::Fallback("reflection probe preparation failed; active environment fallback");

@@ -28,6 +28,7 @@
 #include <Axle/CustomMaterialProgram.hpp>
 #include <Axle/ViewContext.hpp>
 #include <Axle/RenderPass.hpp>
+#include <Axle/ResolvedSurface.hpp>
 
 #include <memory>
 #include <array>

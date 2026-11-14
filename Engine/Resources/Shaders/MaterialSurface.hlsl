@@ -18,6 +18,18 @@ struct MaterialSurface {
     float3 Normal; // Tangent-space direction; default (0, 0, 1).
     float3 Emission;
     float AO;
+    float Clearcoat;
+    float ClearcoatRoughness;
+    float Anisotropy;
+    float AnisotropyRotation;
+    float3 SheenColor;
+    float SheenRoughness;
+    float3 SubsurfaceColor;
+    float SubsurfaceRadius;
+    float3 AbsorptionColor;
+    float IOR;
+    float Dispersion;
+    uint FeatureFlags;
 };
 
 // @AXLE_GRAPH_FUNCTION@

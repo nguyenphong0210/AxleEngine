@@ -210,7 +210,7 @@ Material asset / graph
     -> RHIMaterial constants and texture descriptors
 ```
 
-`RHIMaterial` is a GPU/runtime representation, not an independent authoring model. Any field that cannot be represented by a path must be reported as unsupported instead of silently dropped.
+`RHIMaterial` is a GPU/runtime representation, not an independent authoring model. `MaterialResolver` is the canonical conversion boundary used by built-in draws and shadow depth. Any field that cannot be represented by a path must be reported as unsupported instead of silently dropped; Material Graph currently uses neutral defaults plus an explicit feature mask for advanced fields that M15 has not authored yet.
 
 ## 5. Renderer and RHI ownership
 

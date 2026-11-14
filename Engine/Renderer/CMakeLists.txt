@@ -73,6 +73,7 @@ add_library(AxleRenderer STATIC
     src/RenderTransientGraph.cpp
     src/RenderTransientFrame.cpp
     src/RenderPass.cpp
+    src/ResolvedSurface.cpp
     src/ViewContext.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)

@@ -132,6 +132,11 @@ namespace {
                 const std::vector<std::string> fields{"BaseColor", "Metallic", "Roughness", "Normal", "Emission", "AO"};
                 if (emission.Surface.size() != fields.size()) Fail("MG_HLSL_SURFACE", "Surface lowering requires all six surface fields", node.ID);
                 function << "    MaterialSurface surface;\n";
+                function << "    surface.Clearcoat = 0.0; surface.ClearcoatRoughness = 0.04;\n";
+                function << "    surface.Anisotropy = 0.0; surface.AnisotropyRotation = 0.0;\n";
+                function << "    surface.SheenColor = float3(0.0, 0.0, 0.0); surface.SheenRoughness = -1.0;\n";
+                function << "    surface.SubsurfaceColor = float3(0.0, 0.0, 0.0); surface.SubsurfaceRadius = 0.0;\n";
+                function << "    surface.AbsorptionColor = float3(0.0, 0.0, 0.0); surface.IOR = 1.5; surface.Dispersion = 0.0; surface.FeatureFlags = 0u;\n";
                 for (const auto& field : fields) {
                     const auto expression = emission.Surface.find(field);
                     if (expression == emission.Surface.end() || expression->second.empty()) Fail("MG_HLSL_SURFACE", "Missing surface field", node.ID, field);

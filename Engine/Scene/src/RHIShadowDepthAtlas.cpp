@@ -1,4 +1,5 @@
 #include <Axle/RHIShadowDepthAtlas.hpp>
+#include <Axle/ResolvedSurface.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/Log.hpp>
@@ -133,7 +134,7 @@ using namespace RHI;
             draw.Object.MaterialExtra=glm::vec4(0,0,.5f,float(SurfaceType::Opaque));
             RHIMaterialConstants constants;
             auto cull=CullMode::None;
-            if (material) {material->ApplyToPushConstants(draw.Object);constants=material->BuildConstants();cull=material->GetCullMode();}
+            if (material) {auto surface=MaterialResolver::Resolve(*material);surface.ApplyToPushConstants(draw.Object);constants=surface.ToMaterialConstants();cull=surface.Cull;}
             // ForwardPBR samples albedo only for its textured shading modes.
             const bool textured=(int(draw.Object.Params.y)==5 || int(draw.Object.Params.y)==6) && (constants.Flags.x&1u);
             if (textured) {

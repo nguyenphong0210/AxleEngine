@@ -3391,7 +3391,7 @@ namespace Axle {
                         item.Material = meshInst.Material.RHIMaterialAsset;
                     }
                     if (item.Material) {
-                        item.Material->ApplyToPushConstants(item.PushConsts);
+                        MaterialResolver::Resolve(*item.Material).ApplyToPushConstants(item.PushConsts);
                         item.PushConsts.Model = worldMat;
                         item.SurfaceType = item.Material->GetSurfaceType();
                         item.CullMode = item.Material->GetCullMode();
@@ -3507,7 +3507,7 @@ namespace Axle {
                 }
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
                 RHIMaterialConstants materialData;
-                if (item.Material) materialData = item.Material->BuildConstants();
+                if (item.Material) materialData = MaterialResolver::Resolve(*item.Material).ToMaterialConstants();
                 std::vector<nri::Descriptor*> srvs(ForwardTextureCount);
                 for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
                     auto textureSlot = static_cast<RHITextureSlot>(slot);

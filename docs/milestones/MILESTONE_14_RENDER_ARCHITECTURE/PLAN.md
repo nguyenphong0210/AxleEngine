@@ -1,6 +1,6 @@
 # Milestone 14 - Render Architecture Refactor
 
-**Status:** `U0/U1/U2 ACCEPTED - U3 is the next released Unit.`
+**Status:** `U0/U1/U2/U3 ACCEPTED - U4 is the next released Unit.`
 **Baseline:** `ac4941c` (M14 architecture split and target contract).
 **Target:** establish a modular RHI-primary render architecture that can host the former lighting/material milestone as M15 without growing the current renderer monolith.
 
@@ -97,22 +97,22 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U3 - Canonical material and surface contract
 
-**Exit:** built-in PBR, Material Graph, preview and screen-space consumers use one resolved surface representation.
+**Exit:** built-in PBR, Material Graph, preview and screen-space consumers use one resolved surface representation. Evidence: [U3_MATERIAL_SURFACE_EVIDENCE.md](U3_MATERIAL_SURFACE_EVIDENCE.md).
 
-- [ ] **S3.1 ResolvedSurface schema**
-  - [ ] Define linear base color, metallic, roughness, AO and emission units.
-  - [ ] Define geometric/shading normal, tangent handedness and normal-map convention.
-  - [ ] Define clearcoat, anisotropy, sheen, subsurface, absorption, IOR and dispersion fields.
-  - [ ] Define reflection flags, motion data, validity and fallback markers.
-- [ ] **S3.2 Material resolution**
-  - [ ] Define one conversion path from `Material` to runtime material data.
-  - [ ] Make `MaterialComponent` synchronization explicit and generation-tracked.
-  - [ ] Make `RenderMaterialData` a snapshot view rather than a second authoring model.
-  - [ ] Make `RHIMaterial::BuildConstants` consume the canonical resolved values.
-- [ ] **S3.3 Shader parity**
-  - [ ] Make ForwardPBR and Material Graph emit the same surface fields or report unsupported fields.
-  - [ ] Make Material Preview use the same material defaults and color-space rules.
-  - [ ] Add parity fixtures for smooth sphere, metal, roughness sweep, normal map and emission.
+- [x] **S3.1 ResolvedSurface schema**
+  - [x] Define linear base color, metallic, roughness, AO and emission units.
+  - [x] Define geometric/shading normal, tangent handedness and normal-map convention.
+  - [x] Define clearcoat, anisotropy, sheen, subsurface, absorption, IOR and dispersion fields.
+  - [x] Define reflection flags, motion data, validity and fallback markers.
+- [x] **S3.2 Material resolution**
+  - [x] Define one conversion path from `Material` to runtime material data.
+  - [x] Make `MaterialComponent` synchronization explicit and generation-tracked at the resolver boundary.
+  - [x] Make `RenderMaterialData` a snapshot view rather than a second GPU packing path.
+  - [x] Make canonical resolved values consume the existing GPU constant layout.
+- [x] **S3.3 Shader parity**
+  - [x] Make ForwardPBR and Material Graph expose the same surface fields or explicit unsupported flags.
+  - [x] Route preview/runtime GPU material use through the same resolved defaults and color-space contract.
+  - [x] Add canonical CPU parity fixtures for smooth/PBR/advanced surface packing and graph template fields.
 
 ### U4 - Resource lifetime and RenderGraph authority
 

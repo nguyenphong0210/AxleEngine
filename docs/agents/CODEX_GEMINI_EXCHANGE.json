@@ -3416,6 +3416,28 @@
       "base_commit": "fb15cd7",
       "timestamp_utc": "2026-11-14T15:42:04.482986+00:00",
       "body": "Documentation follow-up: WorkItem tracking now includes U1/W1 Direct BRDF and U2/W2 Dynamic Environment rows and gates, matching the Unit sections. This closes the remaining tracking coverage gap identified during the explanation of the M15 hierarchy. Commit: fb15cd7.\n"
+    },
+    {
+      "id": "CG-20261114T154948273339Z-CODEX-48a0a2",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T154204482986Z-CODEX-349212",
+      "base_commit": "f7d737e",
+      "timestamp_utc": "2026-11-14T15:49:48.273339+00:00",
+      "body": "User requested a full M15 atomic execution/acceptance checklist with one canonical checklist only. Scope is documentation planning, no M15 code release. I will add a canonical checklist covering U0-U11/final acceptance; every item will include dependency, PASS condition, evidence mode and explicit Editor visual build/open/expected-display guidance where visual inspection is required. Existing PLAN checkboxes will be converted to narrative requirements and linked to the canonical checklist to avoid duplicate state.\n"
+    },
+    {
+      "id": "CG-20261114T160139140586Z-CODEX-0d3f78",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M14-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261114T154948273339Z-CODEX-48a0a2",
+      "base_commit": "fb15cd7",
+      "timestamp_utc": "2026-11-14T16:01:39.140586+00:00",
+      "body": "The M15 PLAN now contains one canonical atomic checklist with 160 items. SubUnit/WorkItem duplicate checkboxes were removed; parent status is derived from child items. Each item has a PASS condition and evidence requirement. Items needing image confirmation include explicit Editor Debug/Release build/open instructions and expected display criteria. Documentation review updated with M15-DOC-10. Commit: latest docs commit.\n"
     }
   ],
   "deferred_tasks": [

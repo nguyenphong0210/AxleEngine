@@ -315,7 +315,7 @@ M14 defines interfaces; M15 implements fidelity features behind them.
 
 No service may reach directly into another service's mutable state. Shared data crosses through `ViewContext`, immutable snapshots or declared graph resources.
 
-The M14 service seam is implemented by `LightingService`, `ReflectionService` and `GIService` in the Renderer layer. Their results are status/fallback metadata over immutable snapshots; they do not own RHI command recording. M15 may replace the authored-probe and experimental-DDGI implementations behind these interfaces without changing the material or pass contracts.
+The M14 service seam is implemented by `LightingService`, `ReflectionService` and `GIService` in the Renderer layer. Results include bounded CPU light frames, exact probe candidates/native publication receipts, validated GI inputs and fallback metadata. Native owners supply live generation identities; services do not own RHI command recording or GPU resource leases. M15 may replace the authored-probe and experimental-DDGI implementations behind these interfaces without changing the material or pass contracts. Current U5 source and verification are recorded in [U5 evidence](U5_SERVICE_BOUNDARIES_EVIDENCE.md).
 
 ## 8. Frame lifecycle
 

@@ -226,6 +226,22 @@ errors zero. No source/test correction was needed. The reviewer inspected source
 and closeout logs but did not execute these commands. Full source anchors,
 commands/logs and limits: [final U3 correction recheck](M14_U3_CORRECTION_RECHECK.md).
 
+### U5 service ownership correction - source `3af60f6`
+
+`LightingService` owns bounded CPU packing, unit conversion and real shadow atlas
+publication metadata. `ReflectionService` preserves the existing influence policy,
+carries the exact probe snapshot and reconciles native prefilter receipts with
+actual SSR/sky/neutral availability. `GIService` respects disabled/invalid grids and
+keeps explicit diffuse fallback while experimental feedback is unavailable.
+
+The SSR+MSAA regression also exposed a single-sample normal target bound with
+multisampled depth. Declare, Prepare and Record now share the executable-consumer
+predicate. Final Debug gates pass 13/13 and Release gates 5/5, including Runtime
+loose/cooked in both configurations. Builds, architecture and dependency checks
+pass. The separate-context reviewer returned **PASS: no remaining U5 blocker** at
+`3af60f6`. See [U5 evidence](../milestones/MILESTONE_14_RENDER_ARCHITECTURE/U5_SERVICE_BOUNDARIES_EVIDENCE.md)
+and [correction recheck](M14_U5_CORRECTION_RECHECK.md) for source anchors and limits.
+
 ## Current acceptance state
 
 - **PASS:** U2 live orchestration, including its explicit legacy cache ownership
@@ -236,5 +252,6 @@ commands/logs and limits: [final U3 correction recheck](M14_U3_CORRECTION_RECHEC
 - **PASS:** U4 graph authority, exact resource lifetime, live pass declarations,
   typed external-view/temporal lifetime correction and final separate-context
   follow-up recheck. No open U4 acceptance gate remains.
-- **PARTIAL:** U5 policy ownership/integration review.
-- **HOLD:** U9 until the remaining integration gaps and their native gates close.
+- **PASS:** U5 service ownership, native publication/fallback reconciliation and
+  separate-context correction recheck. No open U5 acceptance gate remains.
+- **HOLD:** U9 pending consolidated final acceptance; M15 remains unreleased.

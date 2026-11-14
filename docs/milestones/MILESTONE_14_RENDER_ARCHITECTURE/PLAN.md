@@ -79,7 +79,7 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U2 - Pass interface and renderer orchestration
 
-**Exit:** `RHISceneRenderer` delegates all live graph declaration and recording to one frame-scoped lifecycle schedule in `RHISceneRendererPasses.cpp`; persistent pipeline/cache relocation remains an explicit legacy adapter boundary. Implementation repaired in `7f5deb7`; native shadow gates pass after the canonical surface prerequisite `421cc49`. U2/U3 PASS; U4/U5 and U9 remain under sequential repair. Evidence: [U2_PASS_ORCHESTRATION_EVIDENCE.md](U2_PASS_ORCHESTRATION_EVIDENCE.md).
+**Exit:** `RHISceneRenderer` delegates all live graph declaration and recording to one frame-scoped lifecycle schedule in `RHISceneRendererPasses.cpp`; persistent pipeline/cache relocation remains an explicit legacy adapter boundary. Implementation repaired in `7f5deb7`; native shadow gates pass after the canonical surface prerequisite `421cc49`. U2/U3/U4/U5 are accepted at their documented boundaries; consolidated U9 remains on hold. Evidence: [U2_PASS_ORCHESTRATION_EVIDENCE.md](U2_PASS_ORCHESTRATION_EVIDENCE.md).
 
 - [x] **S2.1 Pass API**
   - [x] Define `IRenderPass` lifecycle: `Configure`, `Declare`, `Prepare`, `Record`, `Finalize`.
@@ -133,12 +133,12 @@ U1 and U3 may be designed in parallel, but neither is accepted until U0 is close
 
 ### U5 - Lighting, reflection and GI service boundaries
 
-**Exit:** lighting-related state has stable service boundaries; M14 provides interfaces and migration seams, while M15 owns feature fidelity.
+**Exit:** lighting-related state has stable service boundaries; M14 provides interfaces and migration seams, while M15 owns feature fidelity. **U5 PASS:** CPU light packing, exact shadow publications, authoritative probe selection/readiness/fallback and GI scheduling are accepted at `3af60f6`. Evidence: [U5_SERVICE_BOUNDARIES_EVIDENCE.md](U5_SERVICE_BOUNDARIES_EVIDENCE.md) and [correction recheck](../../reviews/M14_U5_CORRECTION_RECHECK.md).
 
-- [ ] **S5.1 Lighting service**
+- [x] **S5.1 Lighting service**
   - [x] Define directional, point, spot and area-light input contracts.
   - [x] Define shadow atlas/cascade publication and sampling interfaces.
-  - [ ] Keep light packing and unit conversion independent from pass orchestration (live service calls are integrated; policy ownership review remains open).
+  - [x] Keep light packing and unit conversion independent from pass orchestration; native mapping consumes the bounded service frame and exact shadow identity.
 - [x] **S5.2 Reflection service**
   - [x] Define authored probe loading and generation status.
   - [x] Define dynamic capture, prefilter, invalidation, scheduling and multi-probe blend interfaces.

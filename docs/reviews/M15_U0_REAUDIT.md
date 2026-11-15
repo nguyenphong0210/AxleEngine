@@ -145,6 +145,20 @@ Result: **PASS**.
 - No Editor visual evidence is required for this contract-freeze leaf. The CPU
   reference and edge/identity tests remain separate sequential leaves.
 
+## M15-U0-06.2.2 — Independent CPU Hi-Z reference
+
+Result: **PASS**.
+
+- Added `scripts/test_m15_hiz_reference.py`, which independently builds a complete
+  Hi-Z pyramid from arbitrary depth arrays without importing production shader or
+  renderer reduction code.
+- Canonical fixture: `4x4 -> 2x2 -> 1x1`, with explicit expected min-reduction
+  values and finite-sample validation.
+- Registered CTest `M15HiZReference`.
+- `python scripts/test_m15_hiz_reference.py`: exit 0.
+- Debug and Release `M15HiZReference` CTest: exit 0.
+- No Editor evidence is required for this CPU-only leaf.
+
 ## M15-U0-06.1 — Smooth-normal reference implementation
 
 Result: **PARTIAL / NOT RUN for the required Editor visual gate**.

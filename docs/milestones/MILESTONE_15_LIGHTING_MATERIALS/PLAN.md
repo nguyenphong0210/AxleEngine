@@ -180,9 +180,9 @@ the item is visible.
   - [x] **M15-U0-06.2.1 — Freeze Hi-Z depth convention and reduction operator.**
     - **PASS when:** the convention is recorded from the current renderer contract and agrees with the production shader/resource dimensions.
     - **Evidence:** zero-to-one depth, minimum-depth nearest-blocker policy, clamp-to-edge sampling, and `max(1, floor(size / 2^level))` dimensions are recorded in [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#m15-u0-06-2-1--freeze-hiz-depth-convention-and-reduction-operator).
-  - [ ] **M15-U0-06.2.2 — Create independent CPU Hi-Z reference.**
+  - [x] **M15-U0-06.2.2 — Create independent CPU Hi-Z reference.**
     - **PASS when:** a CPU reference accepts arbitrary depth arrays and produces the complete pyramid without reusing production shader/reduction code.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+    - **Evidence:** `scripts/test_m15_hiz_reference.py` implements an independent 4x4 → 2x2 → 1x1 min-reduction reference; Debug/Release `M15HiZReference` CTest pass. No Editor evidence is required for this CPU-only leaf.
   - [ ] **M15-U0-06.2.3 — Validate Hi-Z reference edge cases.**
     - **PASS when:** reference outputs match expected dimensions and edge values for `1x1`, `3x5` and `1919x1079` inputs.
     - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

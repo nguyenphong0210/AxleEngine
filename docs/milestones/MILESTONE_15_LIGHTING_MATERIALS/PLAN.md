@@ -211,7 +211,7 @@ the item is visible.
 
 ### U1 / S1.1–S1.3 — Direct BRDF and primary lighting
 
-- [ ] **M15-U1 / S1.1 — Freeze direct-light reference contracts.** Derived status: PASS only when all four children pass independent review.
+- [x] **M15-U1 / S1.1 — Freeze direct-light reference contracts.** All four children passed independent review at source `c5b9f82f`; see `docs/reviews/M15_U1_S1_1_INDEPENDENT_REVIEW.md`.
   - [x] **M15-U1-01.1 — Freeze direct-light units.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
     - **Evidence:** Authored intensity is a finite dimensionless multiplier clamped to `[0, 100]`: directional `1 = 100,000 lx`, point `1 = 1,000` and spot `1 = 500` calibrated local scene units. Invalid/negative inputs produce zero. Regression covers both sides of the former 100/10 discontinuities and Debug/Release `RenderUnitTests` pass. Repair commit: `4af042b2`; review finding S1.1-R2 resolved.
@@ -221,10 +221,10 @@ the item is visible.
   - [x] **M15-U1-01.3 — Freeze BRDF normalization.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
     - **Evidence:** Diffuse `1/PI` and specular denominator factor `4` are used by sun, point and spot shader paths; the numeric CPU reference and Debug/Release `RenderUnitTests` pass. GPU image/energy validation remains in later U1 leaves. Source commit: `35905c6`.
-  - [ ] **M15-U1-01.4 — Freeze exposure interaction.**
+  - [x] **M15-U1-01.4 — Freeze exposure interaction.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
     - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-    - **Evidence:** The GPU frame histogram now has one writer and tone mapping samples its 1x1 adapted exposure. Native readback at fixed authored exposure confirms bright scenes darken and dark scenes lift on D3D12 and Vulkan in Debug and Release. Debug/Release `AxleEditor` builds pass. Repair commit: `c5b9f82f`; review finding S1.1-R1 is resolved in source. Editor visual evidence remains required before this leaf and S1.1 can be checked.
+    - **Evidence:** The GPU frame histogram has one writer and tone mapping samples its 1x1 adapted exposure. Native readback at fixed authored exposure confirms bright scenes darken and dark scenes lift on D3D12 and Vulkan in Debug and Release; Debug/Release `AxleEditor` builds pass. Two user-supplied Editor screenshots of the same D3D12 fixture at intensity `5.00` and authored exposure `1.00` show the scene darken with Auto-Exposure enabled, without invalid output (`Error 0`). The screenshot does not label its binary configuration; the native matrix covers both configurations. Repair commit: `c5b9f82f`; review finding S1.1-R1 resolved.
 - [ ] **M15-U1-02.1 — Validate GGX visibility/normal-distribution compensation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

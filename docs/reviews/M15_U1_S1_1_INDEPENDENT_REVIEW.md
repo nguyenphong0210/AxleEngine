@@ -1,9 +1,10 @@
 # M15 U1 / S1.1 independent review
 
-**Result: HOLD.** Reviewed source at `dc6e2ccf` (2026-11-15). S1.1 comprises
+**Initial result: HOLD; final result: PASS after repairs and Editor evidence.** Reviewed source at `dc6e2ccf` (2026-11-15). S1.1 comprises
 M15-U1-01.1 through M15-U1-01.4. The sun-radius default/clamp and the direct
-BRDF normalization contracts are acceptable at their stated CPU/shader-source
-boundary. The direct-light unit and exposure contracts are not accepted.
+BRDF normalization contracts were acceptable at their stated CPU/shader-source
+boundary. The direct-light unit and exposure contracts were not accepted at
+the initial review boundary; their repairs and final evidence are recorded below.
 
 ## Findings
 
@@ -89,7 +90,7 @@ pass in Debug and Release `RenderUnitTests` (1/1 each). No sampled fixture in
 `Tests` or `Samples` uses the old high-valued physical-input branch; external
 scenes that authored such values require an explicit migration review.
 
-### S1.1-R1 — source repaired in `c5b9f82f`, acceptance pending visual evidence
+### S1.1-R1 — fixed in `c5b9f82f`
 
 `AutoExposure.hlsl` now uses one compute group for a bounded whole-viewport
 sampling grid and one writer for the 1x1 exposure value. The tone-mapping
@@ -104,6 +105,21 @@ compares actual output pixels at fixed authored exposure 1.0:
 | Vulkan Release | 245 → 147 | 32 → 142 |
 
 All four native runs exited 0 with validation enabled. Debug and Release
-`AxleEditor` builds exited 0. The PLAN's Editor visual gate is still open:
-Computer Use returned `native pipe is unavailable`, so no Editor screenshot was
-captured in this session. S1.1 remains HOLD until that gate finishes.
+`AxleEditor` builds exited 0. Computer Use returned `native pipe is unavailable`,
+so the user supplied Editor screenshots directly in the conversation.
+
+## Final Editor evidence and acceptance
+
+Two screenshots supplied by the user on 2026-11-15 show the same D3D12 Editor
+session and M15 RoughnessSweep fixture, with the five spheres and camera framing
+held fixed. Both show directional intensity `5.00`, authored exposure `1.00`,
+and console `Error 0`. In the first screenshot Auto-Exposure is checked and the
+sky, plane and spheres are darker; in the second it is unchecked and the bright
+surfaces approach white. There are no black frames or visibly invalid pixels.
+The screenshots do not identify whether the Editor binary was Debug or Release;
+both binaries were built, and the D3D12/Vulkan native readback matrix above
+passes in both configurations. This combination satisfies the U1-01.4 visual
+gate without claiming that two separate Editor configurations were pictured.
+
+M15-U1-01.1 through 01.4 and derived S1.1 are **PASS** at source `c5b9f82f`.
+Later U1 numeric light/shadow/backend fixtures remain separate work.

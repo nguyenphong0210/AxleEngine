@@ -3,7 +3,7 @@
   "current_task": {
     "id": "M15-U1-S1.1",
     "title": "M15 U1 S1.1 direct-light reference contracts independent review",
-    "state": "visual_evidence_pending",
+    "state": "accepted",
     "coordinator": "User / Codex",
     "implementer": "Codex (user-authorized S1.1 repairs after independent review)",
     "code_baseline": "06a5dfc9",
@@ -24,11 +24,9 @@
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
     "implementation_status": "R2 repaired in 4af042b2; R1 repaired in c5b9f82f. Debug/Release RenderUnitTests, D3D12/Vulkan native readback tests and Debug/Release AxleEditor builds pass.",
-    "acceptance_status": "U1-01.1, 01.2 and 01.3 PASS at their stated boundaries. U1-01.4 and S1.1 remain open for Editor visual evidence.",
-    "open_gates": [
-      "Editor visual evidence for U1-01.4 in Debug and Release"
-    ],
-    "next_action": "Collect Editor visual evidence for manual and automatic exposure on the updated builds, then close U1-01.4 and derived S1.1 if the result matches the native reference.",
+    "acceptance_status": "M15-U1-01.1 through 01.4 and derived S1.1 PASS at source c5b9f82f after Debug/Release builds/tests, D3D12/Vulkan native readback, and two user-supplied D3D12 Editor screenshots showing Auto-Exposure on/off at fixed intensity/exposure. Screenshot binary configuration is not identified; do not claim both Editor configurations were pictured.",
+    "open_gates": [],
+    "next_action": "Stop at the accepted S1.1 boundary. Later U1 leaves remain unreleased until separately requested.",
     "metadata_correction": "Replaces stale M14 accepted task card; that acceptance remains in history and its own review report. Current user instruction releases only the M15 S1.1 review."
   },
   "last_read": {
@@ -3742,6 +3740,17 @@
       "base_commit": "c5b9f82f",
       "timestamp_utc": "2026-11-15T08:44:04.578449+00:00",
       "body": "REVIEW FOLLOW-UP: S1.1-R2 FIXED in 4af042b2. Directional/point/spot authored intensity is a finite, nonnegative dimensionless multiplier clamped at 100. The old 100/10 unit-switch branches are removed. Boundary and invalid-input tests pass in Debug/Release RenderUnitTests (build exit 0, ctest 1/1 each).\n\nS1.1-R1 FIXED in source commit c5b9f82f. AutoExposure now uses one compute group / one writer for its 1x1 output, and ToneMapping samples that output via a declared graph read and descriptor. Native AxleRHIResourceViewTests on RTX 3070, D3D12 and Vulkan, Debug and Release, all exit 0 with validation. At authored exposure 1.0, bright manual/auto pixel 245/147 and dark manual/auto pixel 32/142 on all four runs. Debug and Release AxleEditor builds exit 0. Independent review record and PLAN were updated.\n\nS1.1 remains PARTIAL: U1-01.1/01.2/01.3 are checked; U1-01.4 and the derived S1.1 parent wait for Editor visual evidence. Computer Use list_apps failed with 'native pipe is unavailable', so Editor screenshot is NOT RUN. No Gemini action is requested; this is a Codex repair/delivery record. No push.\n"
+    },
+    {
+      "id": "CG-20261115T085221236464Z-CODEX-f81fb7",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-U1-S1.1",
+      "reply_to": "CG-20261115T084404578449Z-CODEX-84d42a",
+      "base_commit": "c5b9f82f",
+      "timestamp_utc": "2026-11-15T08:52:21.236464+00:00",
+      "body": "FINAL REVIEW / ACCEPTANCE: M15 U1 S1.1 PASS at source c5b9f82f. Findings S1.1-R2 and R1 were repaired in 4af042b2 and c5b9f82f respectively. Independent Debug/Release RenderUnitTests and AxleEditor builds passed. Native RTX 3070 readback on D3D12 and Vulkan, Debug and Release, passed with validation: bright manual/auto 245/147 and dark manual/auto 32/142 at fixed authored exposure 1.0.\n\nUser supplied two Editor screenshots in the active conversation on 2026-11-15. I inspected them: same D3D12 M15_RoughnessSweep scene/camera, directional intensity 5.00, authored exposure 1.00, console Error 0. Auto-Exposure checked in the first image darkens sky/plane/spheres relative to the second unchecked image; no black frame or invalid output visible. This closes the U1-01.4 Editor visual gate. The screenshots do not identify Debug vs Release; both Editor builds and both-config native readback were independently run, and I do not claim both Editor configurations were pictured.\n\nPLAN now checks U1-01.4 and derived S1.1. Remaining U1 leaves are outside this acceptance. No push and no Gemini action requested.\n"
     }
   ],
   "deferred_tasks": [

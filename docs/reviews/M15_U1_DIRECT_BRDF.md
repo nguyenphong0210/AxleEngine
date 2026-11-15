@@ -3,7 +3,8 @@
 > Independent S1.1 review supersedes the earlier U1-01.1 and U1-01.4
 > self-verification claims below. See `M15_U1_S1_1_INDEPENDENT_REVIEW.md`:
 > intensity mapping was repaired in `4af042b2`; GPU auto exposure now feeds
-> tone mapping in `c5b9f82f`. S1.1 remains open for Editor visual evidence.
+> tone mapping in `c5b9f82f`. User-supplied Editor screenshots subsequently
+> closed the visual gate; S1.1 is accepted in the independent review record.
 
 ## M15-U1-01.1 — Freeze direct-light units
 

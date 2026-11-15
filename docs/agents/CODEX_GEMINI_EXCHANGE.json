@@ -1,34 +1,51 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U3-03.2",
-    "title": "M15 U3 storage descriptor update helpers",
-    "state": "accepted",
+    "id": "M15-U3-03.3-08",
+    "title": "M15 U3 S3.1 batches 1-2",
+    "state": "awaiting_editor_visual",
     "coordinator": "User / Codex",
     "implementer": "Codex (explicit user continuation)",
-    "code_baseline": "babe17d5",
-    "user_instruction": "Continue U3 from the selected M15-U3-03.2 storage update helpers checkpoint.",
-    "user_scope": "Check storage descriptor helper behavior and all immediate scene pass callers; add native failure/retry fixture; stop before U3-03.3 and U3-04.",
+    "code_baseline": "2fa66863",
+    "user_instruction": "Implement U3 batches 1 and 2 sequentially through M15-U3-08.",
+    "user_scope": "M15-U3-03.3, 04, 05.1-05.3, 06, 07.1-07.5 and 08; verify and commit each completed checkpoint separately; Editor visual gate for 05.3 remains pending until evidence is captured.",
     "expected_files": [
       "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "Engine/Scene/src/RHISceneRenderer.cpp",
+      "Tests/rendering/RHIResourceViewMain.cpp",
       "Tests/rendering/RenderGraphMain.cpp",
+      "Tests/src/Test_EnvironmentRendering.cpp",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U3_03_2_STORAGE_HELPERS_REVIEW.md",
+      "docs/reviews/M15_U3_BATCH_1_2_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Complete: GTAO, SSR and Fog storage descriptor update results checked; native failure/retry fixture added.",
-    "acceptance_status": "Self-reviewed and accepted: Debug/Release RenderGraph and environment fixtures pass on D3D12/Vulkan.",
-    "open_gates": [],
-    "next_action": "Stop at U3-03.2; U3-03.3 and U3-04 require separate release.",
-    "metadata_correction": "Supersedes accepted U2-05 card because the user explicitly continued to the selected U3-03.2 checkpoint; U2-05 acceptance remains in history.",
+    "implementation_status": "All U3-03.3 through U3-08 source/fixture work complete in sequential local commits.",
+    "acceptance_status": "Self-reviewed 11/12 checkpoints; U3-05.3 automated PASS, Editor visual pending.",
+    "open_gates": [
+      "U3-05.3 Editor visual evidence"
+    ],
+    "next_action": "Inspect user-provided Editor Auto-Exposure/TAA screenshots and tick U3-05.3 only if visual gate passes; stop before U3-09.1.",
+    "metadata_correction": "Supersedes accepted U3-03.2 card under the user's explicit U3 batches 1-2 assignment; prior acceptance remains in history.",
     "implementation_commits": [
-      "5210156f"
+      "f32abcec",
+      "63341216",
+      "8cc159ca",
+      "2a281c50",
+      "2141df80",
+      "6299737f",
+      "b44cf24d",
+      "c0c317b2",
+      "bf727f54",
+      "15e6a102",
+      "4eba2b07"
     ],
     "documentation_commits": [
-      "48bc6c41"
+      "8a0aa009",
+      "23a7d388"
     ],
-    "evidence_report": "docs/reviews/M15_U3_03_2_STORAGE_HELPERS_REVIEW.md",
-    "verification": "Debug/Release builds exit 0; RenderGraph and environment fixtures x D3D12/Vulkan: 8/8 exit 0. Logs/artifacts under build/agent-runs/M15-U3-03.2/."
+    "evidence_report": "docs/reviews/M15_U3_BATCH_1_2_REVIEW.md",
+    "verification": "Debug/Release native D3D12/Vulkan checkpoints pass; final U3-08 environment 4/4, resource-view 4/4, RenderUnit 2/2 and Editor Debug/Release builds exit 0. Logs/artifacts under build/agent-runs/M15-U3-batches-1-2/. U3-05.3 Editor screenshots pending."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -3994,6 +4011,28 @@
       "base_commit": "babe17d5",
       "timestamp_utc": "2026-11-15T14:06:58.777902+00:00",
       "body": "DELIVERY: M15-U3-03.2 accepted. Source commit 5210156f; PLAN/review commit 48bc6c41. The existing transactional UpdateStorageTexture path now has checked GTAO, SSR and Fog callers; DDGI, Hi-Z, Bloom and Auto-Exposure were already checked. A native RenderGraph fixture tests real UAV publication, SRV-role/bounds rejection, injected pre-native update failure preserving the exact storage access/layout, and successful retry/restoration.\n\nBuilds: cmake --build build --config Debug --target AxleRenderGraphTests AxleEnvironmentRenderingTests --parallel 4; same with Release, both exit 0. Final RenderGraph test source was rebuilt in both configs, exit 0. Direct fixtures: Debug/Release x D3D12/Vulkan for AxleRenderGraphTests and AxleEnvironmentRenderingTests, 8/8 exit 0. Logs and environment output assets: build/agent-runs/M15-U3-03.2/. Exact commands and results: docs/reviews/M15_U3_03_2_STORAGE_HELPERS_REVIEW.md. NRI UpdateDescriptorRanges is void; injected failure is before native mutation. U3-03.3 and U3-04 remain open. No Editor screenshot or push.\n"
+    },
+    {
+      "id": "CG-20261115T141241702560Z-CODEX-80a2f1",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U3-03.3-08",
+      "reply_to": "CG-20261115T140658777902Z-CODEX-75e1c0",
+      "base_commit": "2fa66863dd406a8751dbea420c6c567049f8458a",
+      "timestamp_utc": "2026-11-15T14:12:41.702560+00:00",
+      "body": "IN_PROGRESS: User assigned M15-U3 batches 1 and 2, sequentially U3-03.3 through U3-08. Base 2fa66863, clean tree. Codex owns relevant RHI/Scene source, RenderGraph/native fixtures, PLAN and review evidence. U3-05.3 Editor visual gate will remain pending until observed evidence. Prior U3-03.2 acceptance remains historical."
+    },
+    {
+      "id": "CG-20261115T144716183198Z-CODEX-b709ad",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M15-U3-03.3-08",
+      "reply_to": "CG-20261115T141241702560Z-CODEX-80a2f1",
+      "base_commit": "23a7d388e2a6ffa825d3055dc6a8a289048adda8",
+      "timestamp_utc": "2026-11-15T14:47:16.183198+00:00",
+      "body": "DELIVERY: M15-U3 batches 1-2 implemented sequentially from 03.3 through 08. Base 2fa66863; source head 4eba2b07, evidence docs 23a7d388. 11/12 PLAN leaves are self-verified and ticked. U3-05.3 automated graph/renderer fixture passes, but its required Editor visual gate is PENDING; no visual acceptance claimed. Stop before U3-09.1.\n\nCheckpoints: 03.3 f32abcec; 04 63341216; 05.1 8cc159ca; 05.2 2a281c50; 05.3 automated 2141df80; 06 6299737f; 07.1 b44cf24d; 07.2 c0c317b2; 07.3 docs 8a0aa009; 07.4 bf727f54; 07.5 15e6a102; 08 source 4eba2b07 and evidence 23a7d388.\n\nFinal U3-08 verification: Debug/Release AxleEnvironmentRenderingTests x D3D12/Vulkan 4/4 exit 0, AxleRHIResourceViewTests targets 4/4 exit 0, RenderUnitTests 2/2 exit 0, Debug/Release AxleEditor builds exit 0. Exact commands, logs and artifact paths are in docs/reviews/M15_U3_BATCH_1_2_REVIEW.md; all outputs are under build/agent-runs/M15-U3-batches-1-2/. U3-08 has per-pass query/readback ring, valid timings, injected Invalid readback and Unknown query-pool fallback.\n\nUser was given specific Editor steps for U3-05.3 Auto-Exposure/TAA comparison and plans to send screenshots. Do not mark the visual gate PASS until those screenshots are reviewed. No independent reviewer was invoked or claimed."
     }
   ],
   "deferred_tasks": [

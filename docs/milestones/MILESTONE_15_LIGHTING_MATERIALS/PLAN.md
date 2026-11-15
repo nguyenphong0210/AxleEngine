@@ -211,19 +211,20 @@ the item is visible.
 
 ### U1 / S1.1–S1.3 — Direct BRDF and primary lighting
 
-- [x] **M15-U1-01.1 — Freeze direct-light units.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** `DIRECT_LUX_TO_RADIANCE` (0.000035) and `LOCAL_INTENSITY_SCALE` (0.05) frozen in `Engine/Resources/Shaders/ForwardPBR.hlsl`; `Test_LightingServicesUnit.cpp` validates directional Lux scaling, additional directional pre-scaling, point/spot intensity factors, and canonical shader token usage; Debug/Release `RenderUnitTests` CTest pass. Source commit: `ab776a4`.
-- [x] **M15-U1-01.2 — Freeze sun angular-radius policy.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** `SUN_DEFAULT_ANGULAR_RADIUS` (0.00462512 rad, matching 0.53° diameter) and `SUN_MAX_ANGULAR_RADIUS` (0.25 rad) frozen in `ForwardPBR.hlsl`; `Test_LightingServicesUnit.cpp` validates 0.53° physical angle, directional default, [0.0, 0.25] clamping in `LightingService`, zero-roughness finite specular floor, monotonic bounded roughness convolution, and canonical shader token usage; Debug/Release `RenderUnitTests` CTest pass. Source commit: `7ff495a`.
-- [x] **M15-U1-01.3 — Freeze BRDF normalization.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** `BRDF_DIFFUSE_NORMALIZATION` (0.318309886... matching 1/PI) and `BRDF_SPECULAR_DENOMINATOR_SCALE` (4.0) frozen in `ForwardPBR.hlsl` and `PBRCommon.hlsli`; `Test_LightingServicesUnit.cpp` validates 1/PI precision, GGX NDF numerical hemispherical integration across multiple roughnesses (1.000 ± 0.002), Lambertian hemispherical integral (1.0000 ± 1e-4), dielectric and metallic energy partition (kD = 0 for metals, kD + kS = 1 for dielectrics), and canonical shader tokens across sun, point, and spot lights; Debug/Release `RenderUnitTests` CTest pass. Source commit: `35905c6`.
-- [ ] **M15-U1-01.4 — Freeze exposure interaction.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-  - **Evidence:** Automated tests PASS in Debug/Release `RenderUnitTests` (source commit `6615896`); validates direct sunlight reference radiance (~1.114), 1:1 scaling at exposure 1.0, linear doubling at exposure 2.0, non-positive fallback to 1.0, auto-exposure luminance adaptation clamped to [0.1, 10.0], and `ToneMapping.hlsl` positive exposure fallback and pre-tonemap scaling tokens; Debug/Release `AxleEditor` build exit 0. Editor visual gate remains open pending visual inspection.
+- [ ] **M15-U1 / S1.1 — Freeze direct-light reference contracts.** Derived status: PASS only when all four children pass independent review.
+  - [ ] **M15-U1-01.1 — Freeze direct-light units.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Review:** HOLD. `LightingService` changes units discontinuously at directional intensity 100 and point/spot intensity 10; see `M15_U1_S1_1_INDEPENDENT_REVIEW.md` finding S1.1-R2. Existing Debug/Release tests pass but do not cover the boundary. Source commit: `ab776a4`.
+  - [x] **M15-U1-01.2 — Freeze sun angular-radius policy.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** Default `0.00462512` rad and clamp `[0, 0.25]` are present in the render-world/CPU/shader path; Debug/Release `RenderUnitTests` pass. This accepts the default and clamp contract, not authored-component controls or a GPU image comparison. Source commit: `7ff495a`.
+  - [x] **M15-U1-01.3 — Freeze BRDF normalization.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** Diffuse `1/PI` and specular denominator factor `4` are used by sun, point and spot shader paths; the numeric CPU reference and Debug/Release `RenderUnitTests` pass. GPU image/energy validation remains in later U1 leaves. Source commit: `35905c6`.
+  - [ ] **M15-U1-01.4 — Freeze exposure interaction.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
+    - **Review:** HOLD. The GPU auto-exposure output is not consumed by tone mapping; CPU tone mapping instead derives luminance from the authored exposure. See `M15_U1_S1_1_INDEPENDENT_REVIEW.md` finding S1.1-R1. Existing Debug/Release tests pass but do not exercise this path. Source commit: `6615896`. Editor evidence remains open after the runtime correction.
 - [ ] **M15-U1-02.1 — Validate GGX visibility/normal-distribution compensation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

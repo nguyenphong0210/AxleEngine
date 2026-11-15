@@ -242,9 +242,10 @@ the item is visible.
   - [x] **M15-U1-03.3 — Validate spot-light units/shadows.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
     - **Evidence:** The fixture validates spot unit packing, cone-center zero-to-one projection and shared PCF receiver path. Native local-shadow tests verify spot shadow darkening, opt-out and cache behavior on D3D12/Vulkan Debug/Release. User-supplied Editor screenshot shows the selected Spot Light, `Enabled`, `Cast Shadows`, visible cone lighting/shadow and `Error 0`. See [S1.3 verification](../../reviews/M15_U1_S1_3_PRIMARY_LIGHTING_REVIEW.md).
-- [ ] **M15-U1-04.1 — Run roughness/view/light-angle sweep.**
+- [ ] **M15-U1-04.1 — Run roughness/view/light-angle sweep.** *(implementation verified in `cc0623d9`; Editor visual gate open)*
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
+  - **Evidence:** Independent `M15RoughnessSweepReference` checks the five roughness samples, monotonic highlight peak reduction, half-power lobe broadening, finite view/light-angle sweeps and shader roughness clamping. Debug/Release `RenderUnitTests`, `M15BRDFReference`, `M15PrimaryLightingReference` and `M15RoughnessSweepReference` pass. See [U1-04.1 verification](../../reviews/M15_U1_04_1_ROUGHNESS_SWEEP_REVIEW.md).
+  - **EDITOR VISUAL:** build Debug/Release Editor, open `Tests/Fixtures/M15/M15_RoughnessSweep.axleproj`, and capture the five spheres. Expected: roughness broadens highlights/reflections continuously from `roughness_004` through `roughness_080`; Console `Error 0`.
 - [ ] **M15-U1-04.2 — Run zero/behind-surface finite cases.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

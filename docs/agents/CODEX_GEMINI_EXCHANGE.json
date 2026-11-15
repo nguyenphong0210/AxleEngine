@@ -3,7 +3,7 @@
   "current_task": {
     "id": "M15-U1-04.1",
     "title": "M15 U1 04.1 roughness/view/light-angle sweep",
-    "state": "in_progress",
+    "state": "implemented_pending_editor_gate",
     "coordinator": "User / Codex",
     "implementer": "Codex (explicit user continuation after accepted S1.3)",
     "code_baseline": "fde09d9b",
@@ -18,10 +18,12 @@
       "docs/reviews/M15_U1_04_1_ROUGHNESS_SWEEP_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Not started. Accepted S1.3 remains recorded in the review report and history; this task is the next released leaf.",
-    "acceptance_status": "Not started.",
-    "open_gates": [],
-    "next_action": "Implement an independent CPU roughness/view/light-angle reference and wire Debug/Release CTest; then collect the required Editor visual evidence.",
+    "implementation_status": "Source commit cc0623d9 adds an independent CPU roughness/view/light-angle reference and CTest wiring. Debug/Release AxleRenderUnitTests builds, focused M15RoughnessSweepReference, and the combined RenderUnitTests/M15BRDFReference/M15PrimaryLightingReference gates pass.",
+    "acceptance_status": "Implementation is verified; Editor visual evidence is still pending. The CPU reference reports monotonic peak reduction and half-power lobe broadening for roughness 0.04, 0.12, 0.25, 0.50 and 0.80, with finite view/light-angle sweeps.",
+    "open_gates": [
+      "User Editor visual evidence for M15_RoughnessSweep showing continuous roughness highlight/reflection broadening with Console Error 0"
+    ],
+    "next_action": "Collect the required Debug/Release Editor visual evidence, then accept U1-04.1 and stop before U1-04.2.",
     "metadata_correction": "Supersedes the accepted S1.3 task card because the user explicitly continued to the next PLAN leaf. S1.3 acceptance remains recorded in history and its review report."
   },
   "last_read": {

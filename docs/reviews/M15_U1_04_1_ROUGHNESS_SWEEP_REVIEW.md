@@ -1,0 +1,49 @@
+# M15 U1-04.1 roughness/view/light-angle sweep
+
+Status: **implementation verified; Editor visual gate open**. The independent CPU reference and Debug/Release CTest gates pass. The required Editor screenshot still needs to show the M15 roughness fixture with the roughness progression visible.
+
+## Scope and source
+
+- Source commit: `cc0623d9`
+- Base: `fde09d9b` (accepted S1.3)
+- Scope: M15-U1-04.1 only. U1-04.2 and later leaves remain outside this release.
+
+## Implementation
+
+`Tests/rendering/Test_M15_RoughnessSweepReferenceUnit.cpp` is an independent direct-light reference. It does not call the production shader helpers or the environment LUT baker. It checks:
+
+- roughness input clamping in the direct, textured and packed ORM shader paths;
+- the five fixture values `0.04`, `0.12`, `0.25`, `0.50` and `0.80`;
+- finite non-zero mirror responses;
+- monotonic peak reduction and half-power lobe broadening;
+- view/light-angle samples around the mirror direction, with finite non-negative values and the mirror direction remaining the local maximum;
+- a denser valid-hemisphere light-angle sweep with no finite-range discontinuity.
+
+The runner exposes `--m15-roughness-sweep-reference` and CTest registers `M15RoughnessSweepReference`.
+
+## Verification
+
+All commands ran from `D:\WorkSpace\AxleEngine`.
+
+| Check | Debug | Release |
+|---|---:|---:|
+| `cmake --build build --config <config> --target AxleRenderUnitTests --parallel 6` | exit 0 | exit 0 |
+| `ctest --test-dir build -C <config> -R '^M15RoughnessSweepReference$' --output-on-failure` | 1/1 PASS | 1/1 PASS |
+| `ctest --test-dir build -C <config> -R '^(M15RoughnessSweepReference|M15BRDFReference|M15PrimaryLightingReference|RenderUnitTests)$' --output-on-failure` | 4/4 PASS | 4/4 PASS |
+| `AxleRenderUnitTests.exe --m15-roughness-sweep-reference` | exit 0 | exit 0 |
+
+Reference output is stable in both configurations:
+
+| Roughness | Peak response | Half-power width |
+|---:|---:|---:|
+| 0.04 | 1524.96 | 0.25° |
+| 0.12 | 18.8257 | 1.25° |
+| 0.25 | 0.99844 | 4.75° |
+| 0.50 | 0.0615266 | 19.25° |
+| 0.80 | 0.00869757 | 65.5° |
+
+## Editor gate
+
+The PLAN requires an Editor visual check for this leaf. Capture the `M15_RoughnessSweep` fixture with the five spheres visible and the same light/view setup. The expected result is a continuous progression: the `0.04` sphere has the narrowest, strongest highlight and the `0.80` sphere has the broadest, weakest highlight/reflection. Console errors must remain zero. The local shadow banding observed while testing point/spot lights is a separate quality finding and is not claimed as fixed by this sweep.
+
+Until that screenshot is supplied, U1-04.1 remains **IMPLEMENTED / VERIFIED / PENDING EDITOR VISUAL EVIDENCE**.

@@ -3,7 +3,7 @@
   "current_task": {
     "id": "M15-U1-S1.3",
     "title": "M15 U1 S1.3 primary light units and shadows",
-    "state": "implemented_pending_editor_gate",
+    "state": "accepted",
     "coordinator": "User / Codex",
     "implementer": "Codex (explicit user assignment for S1.3)",
     "code_baseline": "d92ce53a",
@@ -20,11 +20,9 @@
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
     "implementation_status": "Source commit c6245e2e adds the independent primary-light fixture and CTest wiring. Debug/Release RenderUnitTests, M15PrimaryLightingReference, CSM/local CPU tests, native D3D12/Vulkan cascade/local shadow tests and Debug/Release AxleEditor builds pass.",
-    "acceptance_status": "Separate read-only recheck completed on c6245e2e with no P0/P1/P2 findings; CPU/native evidence accepts 03.1/03.2/03.3. PLAN parent and leaves remain unchecked only for the declared Editor visual gate.",
-    "open_gates": [
-      "User Editor visual evidence for directional/point/spot shadow fixtures"
-    ],
-    "next_action": "Collect the required Editor screenshots, then accept S1.3 and stop before U1-04.",
+    "acceptance_status": "Accepted at c6245e2e after the separate read-only recheck found no P0/P1/P2 findings and the user supplied Editor screenshots for directional, point and spot shadows. PLAN parent and leaves are checked.",
+    "open_gates": [],
+    "next_action": "Stop at accepted S1.3. U1-04 remains outside this release boundary and has not started.",
     "metadata_correction": "Supersedes accepted S1.2 task card because the latest user instruction releases S1.3. S1.2 acceptance remains recorded in history and its review report."
   },
   "last_read": {
@@ -3804,6 +3802,17 @@
       "base_commit": "c6245e2e",
       "timestamp_utc": "2026-11-15T09:37:01.134026+00:00",
       "body": "REVIEW: Separate read-only reviewer completed S1.3 recheck of c6245e2e against d92ce53a. No P0/P1/P2 findings. It inspected LightingService, CSM/local shadow CPU/RHI paths, ForwardPBR/LocalShadows receivers, fixture and wiring. It reran Debug/Release RenderUnitTests + M15BRDFReference + M15PrimaryLightingReference (3/3 each), CSM/local CPU tests, and native D3D12/Vulkan cascade/local tests in both configurations; all exit 0/PASS with validation count 0. Evidence summaries: cascade 54 darkened pixels and depth in all four cascades; local spot 196, point 179 darkened pixels, six faces 484 depth pixels each, seam 7927 per side. CPU/native acceptance is reported for 03.1/03.2/03.3. Editor visual gate remains open; no screenshots/UI inspection claimed. Source/docs report commit: 560eed1e. Stop before U1-04.\n"
+    },
+    {
+      "id": "CG-20261115T095240779423Z-CODEX-021208",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-U1-S1.3",
+      "reply_to": "CG-20261115T093701134026Z-CODEX-c50c48",
+      "base_commit": "c6245e2e",
+      "timestamp_utc": "2026-11-15T09:52:40.779423+00:00",
+      "body": "REVIEW / ACCEPTANCE: M15-U1-S1.3 is accepted at source c6245e2e after the required independent recheck and user Editor visual evidence.\n\nVerified independently:\n- No P0/P1/P2 findings in the separate-context source review.\n- Debug and Release focused CPU/CTest gates pass, including M15PrimaryLightingReference.\n- Debug and Release native D3D12 and Vulkan cascade/local-shadow tests pass for directional, point and spot paths.\n- Debug and Release AxleEditor builds pass.\n\nEditor evidence supplied by the user closes the visual gate:\n- Directional Light: Cast Real-Time Shadows enabled, four-split CSM settings visible, plane/sphere shadows visible, Console Error 0.\n- Point Light: Cast Shadows enabled, point shadow visible, Console Error 0.\n- Spot Light: Enabled and Cast Shadows enabled, range/cone controls visible, cone lighting/shadow visible, Console Error 0.\n\nAcceptance is recorded in docs/reviews/M15_U1_S1_3_PRIMARY_LIGHTING_REVIEW.md and docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md. Stop at S1.3; U1-04 remains outside this release boundary and has not started.\n"
     }
   ],
   "deferred_tasks": [

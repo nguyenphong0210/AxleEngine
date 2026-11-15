@@ -300,9 +300,10 @@ the item is visible.
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
     - **Evidence:** Native fixture covers missing, corrupt and injected upload-failure inputs, retaining last-good or neutral fallback with diagnostics; all six Debug/Release backend runs exit 0.
 
-- [ ] **M15-U2-04 — Keep local dynamic six-face capture and probe blending in U5; this Unit owns the shared environment input contract.**
-  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
+- [x] **M15-U2-04 — Keep local dynamic six-face capture and probe blending in U5; this Unit owns the shared environment input contract.**
+  - **PASS when:** U2 defines and verifies the shared procedural/authored environment input, publication, consumer and fallback contract while the dynamic local capture and multi-probe implementation remains assigned to U5.
+  - **Evidence:** [S2.1 contract](../../reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md), [S2.2 generation](../../reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md) and [S2.3 consumers](../../reviews/M15_U2_S2_3_ENVIRONMENT_CONSUMERS_REVIEW.md) are accepted. The current renderer consumes one selected authored cubemap probe; U5-08–U5-31 remain open for dynamic capture and blending.
+
 - [ ] **M15-U2-05.1 — Run D3D12 environment readback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
@@ -689,6 +690,7 @@ the item is visible.
 - [ ] **M15-U5-14 — Prove the red reference object appears in the captured cubemap.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+  - **EDITOR VISUAL:** build Debug/Release Editor and capture the dynamic six-face fixture. Expected: the red reference object appears at the correct reflected location; misses fall back smoothly with no black edge.
 - [ ] **M15-U5-15 — Retain last-good generation when a face/copy fails.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.

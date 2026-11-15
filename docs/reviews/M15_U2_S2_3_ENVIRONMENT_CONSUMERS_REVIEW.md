@@ -63,3 +63,11 @@ not committed.
 ACCEPTED. U2-03.1, U2-03.2, U2-03.3 and U2-03.4 pass in Debug and Release on
 D3D12, Vulkan and the OpenGL fallback path. The implementation stops before
 U2-04 and U2-05 as released by the task scope.
+
+## Scope-boundary follow-up (2026-11-15)
+
+U2-04 is now checked as the completed U2/U5 ownership boundary. The shared
+environment input contract is covered by the accepted S2.1, S2.2 and S2.3
+reports. The renderer currently consumes one selected authored cubemap probe;
+dynamic six-face capture and multi-probe blending remain open in U5. The
+original acceptance statement above records the status at the S2.3 handoff.

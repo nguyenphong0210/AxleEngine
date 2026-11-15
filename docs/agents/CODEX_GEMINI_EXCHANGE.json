@@ -18,7 +18,9 @@
     ],
     "implementation_status": "Source commit 5c65cd84 aligns baked DFG visibility with ForwardPBR correlated Smith, adds finite neutral LUT fallback, and adds independent GGX/F0 reference fixture. Debug/Release RenderUnitTests and dedicated M15BRDFReference pass; DXC DXIL/SPIR-V compilation and D3D12/Vulkan native surface readbacks pass in both configurations.",
     "acceptance_status": "Implementation self-verified; S1.2 parent and leaves remain unchecked pending separate-context recheck required by WORKING_PROTOCOL.md.",
-    "open_gates": ["Separate-context source recheck NOT RUN: reviewer agent authentication failed before inspection (refresh token revoked)"],
+    "open_gates": [
+      "Separate-context source recheck NOT RUN: reviewer agent authentication failed before inspection (refresh token revoked)"
+    ],
     "next_action": "Obtain independent recheck of 5c65cd84, resolve any findings, then accept S1.2 and stop before S1.3.",
     "metadata_correction": "Supersedes accepted S1.1 task card because the latest user instruction releases S1.2. S1.1 acceptance remains recorded in history and its review report."
   },
@@ -3755,6 +3757,17 @@
       "base_commit": "551fd4b7",
       "timestamp_utc": "2026-11-15T08:56:32.717425+00:00",
       "body": "IN_PROGRESS: The user explicitly assigned Codex SubUnit S1.2, limited to M15-U1-02.1 GGX visibility/normal-distribution compensation and M15-U1-02.2 dielectric/metal F0 reference. I will inspect the production shader paths, add independent numeric and shader-boundary verification, repair any mismatch, run Debug/Release gates, document measured evidence, and commit coherent checkpoints. No later S1.3/U1 packages are released. Expected files: Engine/Resources/Shaders/ForwardPBR.hlsl if a correction is needed; Tests/rendering/ dedicated BRDF fixture and its CMake wiring as needed; docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md; docs/reviews/M15_U1_S1_2_REFERENCE_REVIEW.md; docs/agents/CODEX_GEMINI_EXCHANGE.json. Base 551fd4b7. No Editor visual gate is declared for these two leaves.\n"
+    },
+    {
+      "id": "CG-20261115T090836958706Z-CODEX-cf3e53",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M15-U1-S1.2",
+      "reply_to": "CG-20261115T085632717425Z-CODEX-72d84d",
+      "base_commit": "551fd4b7",
+      "timestamp_utc": "2026-11-15T09:08:36.958706+00:00",
+      "body": "DELIVERY (self-verified, pending independent review): User-assigned M15 U1 SubUnit S1.2 implementation is in 5c65cd84; evidence and pending-gate report in 34b380cb. Baseline 551fd4b7. Only M15-U1-02.1 and 02.2 were touched.\n\nThe new independent light-direction quadrature fixture failed against the prior BRDF LUT Schlick visibility. EnvironmentBake now uses isotropic correlated Smith matching ForwardPBR; ForwardPBR uses a finite neutral fallback for invalid/nonpositive LUT energy. Dedicated M15BRDFReference checks anisotropic GGX NDF normalization, three DFG scale/bias pairs within 0.002 of an independent quadrature, energy compensation bounds/fallback, dielectric/metal/mixed RGB F0, resolved material packing, and shader consumer coverage.\n\nExecuted: Debug/Release AxleRenderUnitTests builds exit 0; Debug/Release ctest RenderUnitTests + M15BRDFReference each 2/2 exit 0; DXC DXIL and SPIR-V PSMain compilation exit 0; Debug/Release AxlePreviewRenderTests builds exit 0; native surfaces fixture on D3D12/Vulkan in both configurations exit 0/PASS with logs under build/agent-runs/m15-s12. No Editor screenshot gate is declared for these numeric reference leaves. See docs/reviews/M15_U1_S1_2_REFERENCE_REVIEW.md for measurements, commands and limitations.\n\nAcceptance remains OPEN: separate-context reviewer invoked for 5c65cd84, but the reviewer session failed before inspection because its refresh token was revoked. No Gemini or other reviewer result is claimed. PLAN parent and children remain unchecked; do not start S1.3 from this report.\n"
     }
   ],
   "deferred_tasks": [

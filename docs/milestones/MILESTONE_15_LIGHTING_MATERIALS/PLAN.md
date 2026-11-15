@@ -214,9 +214,9 @@ the item is visible.
 - [x] **M15-U1-01.1 — Freeze direct-light units.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** `DIRECT_LUX_TO_RADIANCE` (0.000035) and `LOCAL_INTENSITY_SCALE` (0.05) frozen in `Engine/Resources/Shaders/ForwardPBR.hlsl`; `Test_LightingServicesUnit.cpp` validates directional Lux scaling, additional directional pre-scaling, point/spot intensity factors, and canonical shader token usage; Debug/Release `RenderUnitTests` CTest pass. Source commit: `ab776a4`.
-- [ ] **M15-U1-01.2 — Freeze sun angular-radius policy.**
+- [x] **M15-U1-01.2 — Freeze sun angular-radius policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** `SUN_DEFAULT_ANGULAR_RADIUS` (0.00462512 rad, matching 0.53° diameter) and `SUN_MAX_ANGULAR_RADIUS` (0.25 rad) frozen in `ForwardPBR.hlsl`; `Test_LightingServicesUnit.cpp` validates 0.53° physical angle, directional default, [0.0, 0.25] clamping in `LightingService`, zero-roughness finite specular floor, monotonic bounded roughness convolution, and canonical shader token usage; Debug/Release `RenderUnitTests` CTest pass. Source commit: `7ff495a`.
 - [ ] **M15-U1-01.3 — Freeze BRDF normalization.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

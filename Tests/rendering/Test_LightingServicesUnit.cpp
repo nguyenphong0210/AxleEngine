@@ -2,6 +2,9 @@
 #include <Axle/LightingService.hpp>
 #include <Axle/ReflectionService.hpp>
 #include <Axle/GIService.hpp>
+#include <fstream>
+#include <iterator>
+#include <string>
 
 bool RunLightingServiceUnitTests() {
     using namespace Axle;
@@ -126,6 +129,44 @@ bool RunLightingServiceUnitTests() {
     const auto invalidGI=gi.Prepare(world, settings, true, 10);
     RENDER_CHECK(invalidGI.Status==GIFrameStatus::Fallback && !invalidGI.UpdateScheduled && invalidGI.Fallback==GIFallback::IBL,
         "invalid GI grid spacing cannot schedule native work");
+
+    // M15-U1-01.1: frozen direct-light unit contract. These expectations mirror
+    // DIRECT_LUX_TO_RADIANCE and LOCAL_INTENSITY_SCALE in ForwardPBR.hlsl.
+    constexpr float FrozenDirectLuxToRadiance=0.000035f;
+    RenderWorld units;
+    units.DirectionalLight=RenderDirectionalLight{};
+    units.DirectionalLight->Intensity=0.5f;
+    units.PointLights.push_back(RenderPointLight{});
+    units.PointLights[0].Intensity=2.0f;
+    units.SpotLights.push_back(RenderSpotLight{});
+    units.SpotLights[0].Intensity=2.0f;
+    units.AdditionalDirectionalLights.push_back(RenderDirectionalLight{});
+    units.AdditionalDirectionalLights[0].Intensity=1.0f;
+    const auto artistUnits=lighting.BuildFrame(units, settings);
+    RENDER_CHECK(artistUnits.Sun.Illuminance==50000.0f,
+        "artist directional intensity scales to Lux against 100,000 lx direct sunlight");
+    RENDER_CHECK(artistUnits.PointLights[0].Directional &&
+                 Axle::RenderTests::Near(artistUnits.PointLights[0].Intensity, 100000.0f*FrozenDirectLuxToRadiance, 1e-5f),
+        "additional directionals are pre-scaled once on the CPU by the frozen Lux-to-radiance factor");
+    RENDER_CHECK(artistUnits.PointLights[1].Intensity==2000.0f && artistUnits.SpotLights[0].Intensity==1000.0f,
+        "artist point/spot intensities use the frozen 1000/500 local scales");
+    units.DirectionalLight->Intensity=120000.0f;
+    RENDER_CHECK(lighting.BuildFrame(units, settings).Sun.Illuminance==120000.0f,
+        "physical directional illuminance above 100 lx passes through unchanged");
+
+    std::ifstream forwardShader(AXLE_FORWARD_PBR_SHADER_PATH);
+    const std::string forwardSource{std::istreambuf_iterator<char>(forwardShader), std::istreambuf_iterator<char>()};
+    RENDER_CHECK(!forwardSource.empty(), "ForwardPBR.hlsl is readable for the frozen-unit contract");
+    RENDER_CHECK(forwardSource.find("static const float DIRECT_LUX_TO_RADIANCE = 0.000035;")!=std::string::npos &&
+                 forwardSource.find("static const float LOCAL_INTENSITY_SCALE = 0.05;")!=std::string::npos,
+        "ForwardPBR.hlsl declares the frozen direct/local unit constants");
+    RENDER_CHECK(forwardSource.find("DirectionAndIlluminance.w,0.0) * DIRECT_LUX_TO_RADIANCE")!=std::string::npos,
+        "ForwardPBR.hlsl directional term uses DIRECT_LUX_TO_RADIANCE");
+    RENDER_CHECK(forwardSource.find("DirectionAndIlluminance.w,0.0) * 0.000035")==std::string::npos,
+        "ForwardPBR.hlsl does not bypass DIRECT_LUX_TO_RADIANCE with a literal factor");
+    RENDER_CHECK(forwardSource.find("attenuation * LOCAL_INTENSITY_SCALE")!=std::string::npos &&
+                 forwardSource.find("totalAtten * LOCAL_INTENSITY_SCALE")!=std::string::npos,
+        "ForwardPBR.hlsl point/spot terms use LOCAL_INTENSITY_SCALE");
 
     std::cout << "  [LightingServices] Lighting/reflection/GI boundary tests passed.\n";
     return true;

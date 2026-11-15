@@ -12,6 +12,26 @@ T ClampZeroOne(T value) {
 }
 
 // -----------------------------------------------------------------------------
+// Physical Unit Conversion (M15-U1-01.1: Frozen)
+// -----------------------------------------------------------------------------
+// Directional light illuminance (Lux) to scene radiance scale.
+// Display-referred calibration: direct sunlight (PhysicalIlluminance::DirectSunlight
+// = 100,000 Lux) on a white Lambertian surface yields ~1.0 scene-linear radiance
+// after the 1/PI diffuse normalization (100000 * 0.000035 / PI ~= 1.11), i.e. a
+// near-white surface before tonemapping. This is an engine calibration constant,
+// NOT a photometric-to-radiometric conversion; Lux is not converted to W/m^2 here.
+// Frozen: any change requires M15 review, reference image update and test adjustment.
+// Mirrored by the frozen-unit test in Test_LightingServicesUnit.cpp.
+static const float DIRECT_LUX_TO_RADIANCE = 0.000035;
+
+// Local light (point/spot/rect) intensity scale. Windowed inverse-square attenuation
+// is applied first, then this factor produces scene-linear radiance. Historical
+// calibration value with no recorded derivation; frozen as-is by M15-U1-01.1.
+// Must be revised together with DIRECT_LUX_TO_RADIANCE to keep directional/local
+// perceptual parity.
+static const float LOCAL_INTENSITY_SCALE = 0.05;
+
+// -----------------------------------------------------------------------------
 // Root Constants / Push Constants (Register b0, Space 0)
 // Size: EXACTLY 128 bytes (32 DWORDs) - Guaranteed hardware limit across Vulkan & D3D12
 // In Vulkan (SPIR-V), DXC compiles [[vk::push_constant]] to physical push constant range
@@ -469,7 +489,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 sunDir = hasMultiLightSun ? normalize(u_SunLight.DirectionAndIlluminance.xyz) 
                                      : (length(u_SunDirection.xyz) > 0.01 ? normalize(u_SunDirection.xyz) : normalize(float3(0.45, 0.85, 0.25)));
 
-    float sunIntensity = hasMultiLightSun ? max(u_SunLight.DirectionAndIlluminance.w,0.0) * 0.000035 : max(u_SunDirection.w,0.0);
+    float sunIntensity = hasMultiLightSun ? max(u_SunLight.DirectionAndIlluminance.w,0.0) * DIRECT_LUX_TO_RADIANCE : max(u_SunDirection.w,0.0);
     float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : u_SunColor.rgb;
     float3 sunRadiance = sunColor * sunIntensity * SunShadowVisibility(input.WorldPos,N,sunDir);
 
@@ -544,7 +564,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
             if (falloffExp > 0.1 && abs(falloffExp - 1.0) > 0.01) {
                 attenuation = pow(max(attenuation, 0.0), falloffExp);
             }
-            radiance = pLight.ColorAndIntensity.rgb * (pLight.ColorAndIntensity.w * attenuation * 0.05) * PointShadowVisibility(p,pLight.PositionAndRadius.xyz,input.WorldPos,N,L);
+            radiance = pLight.ColorAndIntensity.rgb * (pLight.ColorAndIntensity.w * attenuation * LOCAL_INTENSITY_SCALE) * PointShadowVisibility(p,pLight.PositionAndRadius.xyz,input.WorldPos,N,L);
         }
         float NdotL = max(dot(N, L), 0.0);
         float pWrap = 0.0;
@@ -617,7 +637,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float distAtten = (1.0 / distSq) * (window * window);
 
         float totalAtten = distAtten * spotAtten;
-        float3 radiance = sLight.ColorAndInnerAngle.rgb * (sLight.DirectionAndIntensity.w * totalAtten * 0.05) * LocalShadowVisibility(u_LocalShadowViews[4+s/4][s%4],input.WorldPos,N,L);
+        float3 radiance = sLight.ColorAndInnerAngle.rgb * (sLight.DirectionAndIntensity.w * totalAtten * LOCAL_INTENSITY_SCALE) * LocalShadowVisibility(u_LocalShadowViews[4+s/4][s%4],input.WorldPos,N,L);
 
         float3 H = normalize(V + L);
         float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness, coatAnisotropy.z);
@@ -718,7 +738,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 specBRDF = (NDF_spec * G_spec * F_spec) / (4.0 * NdotV * max(NdotL_spec, 0.001) + 0.001) * ggxEnergyCompensation;
 
         float atten = saturate(1.0 - (dist / range)) * saturate(1.0 - (dist / range)) / (dist * dist + 1.0);
-        float3 radiance = lightColor * (intensity * atten * 0.05);
+        float3 radiance = lightColor * (intensity * atten * LOCAL_INTENSITY_SCALE);
 
         float3 kS_rect = F_spec;
         float3 kD_rect = (float3(1.0, 1.0, 1.0) - kS_rect) * (1.0 - metallic);
@@ -727,7 +747,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
         Lo += ApplyClearcoat(diffContrib + specContrib, N, V, L_spec, max(NdotL_spec, 0.001), coatAnisotropy.x, coatAnisotropy.y) * radiance;
         if (u_Subsurface.w > 0.0) {
-            Lo += diffuseIrradiance * u_Subsurface.rgb * u_Subsurface.w * (1.0 - metallic) * lightColor * (intensity * atten * 0.05);
+            Lo += diffuseIrradiance * u_Subsurface.rgb * u_Subsurface.w * (1.0 - metallic) * lightColor * (intensity * atten * LOCAL_INTENSITY_SCALE);
         }
     }
 

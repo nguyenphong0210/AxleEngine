@@ -3581,6 +3581,17 @@
       "base_commit": "7294457",
       "timestamp_utc": "2026-11-15T02:55:54.287092+00:00",
       "body": "REVIEW: M15-U0-06.1 visual gate PASS after user-supplied Debug Editor screenshot.\n\nEvidence:\n- Screenshot shows all five smooth spheres in the M15 fixture.\n- Surface shading is continuous with no visible triangle bands, faceting, black pixels or invalid regions.\n- Analytic reference test metrics and Debug/Release RenderUnitTests already pass from 161ea81.\n- PLAN and M15_U0_REAUDIT updated in 7294457; U0-06.1 is now checked PASS.\n\nLimit: screenshot supplied in user conversation; native Computer Use remains unavailable, so no local screenshot path exists.\n"
+    },
+    {
+      "id": "CG-20261115T030308726831Z-CODEX-04f58b",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261115T025554287092Z-CODEX-f3c759",
+      "base_commit": "75b737a",
+      "timestamp_utc": "2026-11-15T03:03:08.726831+00:00",
+      "body": "REVIEW: Split M15-U0-06.2 into four sequential leaves in PLAN. M15-U0-06.2.1 (freeze Hi-Z depth convention/operator) PASS in commit 75b737a.\n\nFrozen contract:\n- zero-to-one depth;\n- min over 2x2 samples for nearest-blocker reduction;\n- clamp-to-edge source sampling for odd dimensions;\n- independent R32_FLOAT levels with max(1, floor(size / 2^level)) dimensions.\n\nNo Editor evidence is required for this contract-only leaf. U0-06.2.2 CPU reference, U0-06.2.3 edge cases and U0-06.2.4 nontrivial identity remain open and will be implemented/verified separately.\n"
     }
   ],
   "deferred_tasks": [

@@ -2,6 +2,7 @@
 #define AXLE_PBR_COMMON_INCLUDED
 
 static const float PI = 3.14159265358979323846;
+static const float INV_PI = 0.31830988618379067154;
 
 // 1. Trowbridge-Reitz GGX Normal Distribution Function (NDF)
 float DistributionGGX(float3 N, float3 H, float roughness) {

@@ -213,6 +213,79 @@ bool RunLightingServiceUnitTests() {
     RENDER_CHECK(forwardSource.find("sunConvolvedRoughness = sqrt(saturate(roughness * roughness + sunAngularRadius * sunAngularRadius));")!=std::string::npos,
         "ForwardPBR.hlsl uses canonical sun roughness convolution formula");
 
+    // M15-U1-01.3: frozen BRDF normalization contract.
+    constexpr float Pi = 3.14159265358979323846f;
+    constexpr float InvPi = 0.31830988618379067154f;
+    RENDER_CHECK(std::abs(InvPi - (1.0f / Pi)) < 1e-7f,
+        "diffuse normalization InvPi matches 1/PI within 1e-7");
+
+    // 1. GGX NDF numerical integration normalization:
+    // int_0^{pi/2} D(theta) * cos(theta) * sin(theta) * 2*pi dtheta == 1.0
+    auto integrateGGX = [&](float roughness) {
+        float a = roughness * roughness;
+        float a2 = a * a;
+        constexpr int steps = 20000;
+        constexpr float dTheta = (0.5f * Pi) / steps;
+        double sum = 0.0;
+        for (int i = 0; i < steps; ++i) {
+            float theta = (i + 0.5f) * dTheta;
+            float cosTheta = std::cos(theta);
+            float sinTheta = std::sin(theta);
+            float cosTheta2 = cosTheta * cosTheta;
+            float denom = (1.0f - cosTheta2) + a2 * cosTheta2;
+            denom = Pi * denom * denom;
+            float D = a2 / denom;
+            sum += D * cosTheta * sinTheta * 2.0 * Pi * dTheta;
+        }
+        return static_cast<float>(sum);
+    };
+    for (float r : {0.05f, 0.15f, 0.35f, 0.6f, 0.85f, 1.0f}) {
+        float integral = integrateGGX(r);
+        RENDER_CHECK(Axle::RenderTests::Near(integral, 1.0f, 0.002f),
+            "GGX NDF integrates to 1.0 over hemisphere for roughness");
+    }
+
+    // 2. Diffuse hemispherical integral: int_0^{pi/2} (1/PI) * cos(theta) * sin(theta) * 2*pi dtheta == 1.0
+    {
+        constexpr int steps = 5000;
+        constexpr float dTheta = (0.5f * Pi) / steps;
+        double diffSum = 0.0;
+        for (int i = 0; i < steps; ++i) {
+            float theta = (i + 0.5f) * dTheta;
+            diffSum += InvPi * std::cos(theta) * std::sin(theta) * 2.0 * Pi * dTheta;
+        }
+        RENDER_CHECK(Axle::RenderTests::Near(static_cast<float>(diffSum), 1.0f, 1e-4f),
+            "Lambertian diffuse BRDF integrates to 1.0 for unit albedo");
+    }
+
+    // 3. Energy partition contract: kD = (1 - kS) * (1 - metallic)
+    for (float metallic : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f}) {
+        for (float f0 : {0.04f, 0.5f, 1.0f}) {
+            for (float cosTheta : {0.0f, 0.5f, 1.0f}) {
+                float kS = f0 + (1.0f - f0) * std::pow(1.0f - cosTheta, 5.0f);
+                float kD = (1.0f - kS) * (1.0f - metallic);
+                if (metallic == 1.0f) {
+                    RENDER_CHECK(kD == 0.0f, "metal has strictly zero diffuse component");
+                }
+                if (metallic == 0.0f) {
+                    RENDER_CHECK(Axle::RenderTests::Near(kD + kS, 1.0f, 1e-6f),
+                        "pure dielectric conserves 100% direct energy before absorption");
+                }
+                RENDER_CHECK(kD + kS <= 1.0f + 1e-6f, "total partition kD + kS never exceeds 1.0");
+            }
+        }
+    }
+
+    // 4. Canonical shader token checks
+    RENDER_CHECK(forwardSource.find("static const float BRDF_DIFFUSE_NORMALIZATION = 0.31830988618379067154;")!=std::string::npos &&
+                 forwardSource.find("static const float BRDF_SPECULAR_DENOMINATOR_SCALE = 4.0;")!=std::string::npos,
+        "ForwardPBR.hlsl declares frozen BRDF normalization constants");
+    RENDER_CHECK(forwardSource.find("diffuse = kD * albedo.rgb * BRDF_DIFFUSE_NORMALIZATION;")!=std::string::npos,
+        "ForwardPBR.hlsl uses canonical diffuse normalization across light evaluations");
+    RENDER_CHECK(forwardSource.find("denominator = BRDF_SPECULAR_DENOMINATOR_SCALE * NdotV * max(NdotL_Sun, 0.001) + 0.0001;")!=std::string::npos &&
+                 forwardSource.find("denominator = BRDF_SPECULAR_DENOMINATOR_SCALE * NdotV * max(NdotL, 0.001) + 0.0001;")!=std::string::npos,
+        "ForwardPBR.hlsl uses canonical Cook-Torrance specular denominator scale 4.0");
+
     std::cout << "  [LightingServices] Lighting/reflection/GI boundary tests passed.\n";
     return true;
 }

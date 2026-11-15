@@ -42,6 +42,17 @@ static const float SUN_DEFAULT_ANGULAR_RADIUS = 0.00462512;
 static const float SUN_MAX_ANGULAR_RADIUS = 0.25;
 
 // -----------------------------------------------------------------------------
+// BRDF Normalization Contract (M15-U1-01.3: Frozen)
+// -----------------------------------------------------------------------------
+// 1. Diffuse Normalization: Lambertian BRDF f_diffuse = albedo / PI (or albedo * INV_PI).
+//    Hemispherical integral of cos(theta) dOmega is PI, ensuring 100% reflectance for white albedo.
+// 2. Specular Denominator: Cook-Torrance microfacet normalization denominator 4 * (N.V) * (N.L).
+// 3. Energy Conservation: kD = (1 - kS) * (1 - metallic) with kS = FresnelSchlick.
+//    Metals (metallic=1) have zero diffuse (kD = 0); dielectrics partition energy such that kD + kS = 1.
+static const float BRDF_DIFFUSE_NORMALIZATION = 0.31830988618379067154; // 1.0 / PI
+static const float BRDF_SPECULAR_DENOMINATOR_SCALE = 4.0;
+
+// -----------------------------------------------------------------------------
 // Root Constants / Push Constants (Register b0, Space 0)
 // Size: EXACTLY 128 bytes (32 DWORDs) - Guaranteed hardware limit across Vulkan & D3D12
 // In Vulkan (SPIR-V), DXC compiles [[vk::push_constant]] to physical push constant range
@@ -521,12 +532,12 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;
-        float  denominator = 4.0 * NdotV * max(NdotL_Sun, 0.001) + 0.0001;
+        float  denominator = BRDF_SPECULAR_DENOMINATOR_SCALE * NdotV * max(NdotL_Sun, 0.001) + 0.0001;
         float3 specular    = numerator / denominator * u_MaterialSurface.z * ggxEnergyCompensation;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
-        float3 diffuse = kD * albedo.rgb / PI;
+        float3 diffuse = kD * albedo.rgb * BRDF_DIFFUSE_NORMALIZATION;
 
         Lo += ApplyClearcoat(diffuse * NdotL_Sun_Diff + specular * NdotL_Sun, N, V, sunDir, NdotL_Sun, coatAnisotropy.x, coatAnisotropy.y) * sunRadiance;
         if (u_Sheen.w >= 0.0 && NdotL_Sun > 0.0) {
@@ -587,12 +598,12 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;
-        float  denominator = 4.0 * NdotV * max(NdotL, 0.001) + 0.0001;
+        float  denominator = BRDF_SPECULAR_DENOMINATOR_SCALE * NdotV * max(NdotL, 0.001) + 0.0001;
         float3 specular    = numerator / denominator * u_MaterialSurface.z * ggxEnergyCompensation;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
-        float3 diffuse = kD * albedo.rgb / PI;
+        float3 diffuse = kD * albedo.rgb * BRDF_DIFFUSE_NORMALIZATION;
 
         Lo += ApplyClearcoat(diffuse * NdotL_Diff + specular * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y) * radiance;
         if (u_Sheen.w >= 0.0 && NdotL > 0.0) {
@@ -655,12 +666,12 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
 
         float3 numerator   = NDF * G * F;
-        float  denominator = 4.0 * NdotV * NdotL + 0.0001;
+        float  denominator = BRDF_SPECULAR_DENOMINATOR_SCALE * NdotV * max(NdotL, 0.001) + 0.0001;
         float3 specular    = numerator / denominator * u_MaterialSurface.z * ggxEnergyCompensation;
 
         float3 kS = F;
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
-        float3 diffuse = kD * albedo.rgb / PI;
+        float3 diffuse = kD * albedo.rgb * BRDF_DIFFUSE_NORMALIZATION;
 
         Lo += ApplyClearcoat((diffuse + specular) * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y) * radiance;
         if (u_Sheen.w >= 0.0 && NdotL > 0.0) {

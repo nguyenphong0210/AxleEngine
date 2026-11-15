@@ -111,6 +111,48 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_HighFidelitySmoothSphereNormalReference() {
+        std::vector<RHI::RHIVertex3D> vertices;
+        std::vector<uint32_t> indices;
+        constexpr float radius = 1.0f;
+        constexpr uint32_t stacks = 64;
+        constexpr uint32_t sectors = 128;
+        RHI::RHIMesh::GenerateSphere(radius, stacks, sectors, vertices, indices);
+
+        float maxPositionNormalError = 0.0f;
+        float maxEdgeAngleDegrees = 0.0f;
+        bool finite = true;
+        for (const auto& vertex : vertices) {
+            const glm::vec3 expected = glm::normalize(vertex.Position);
+            const float length = glm::length(vertex.Normal);
+            const float positionError = glm::length(vertex.Normal - expected);
+            finite = finite && std::isfinite(vertex.Position.x) && std::isfinite(vertex.Position.y)
+                && std::isfinite(vertex.Position.z) && std::isfinite(vertex.Normal.x)
+                && std::isfinite(vertex.Normal.y) && std::isfinite(vertex.Normal.z);
+            maxPositionNormalError = std::max(maxPositionNormalError, positionError);
+            RENDER_CHECK(std::abs(length - 1.0f) <= 1.0e-3f, "High-fidelity sphere normals remain unit length");
+        }
+        for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+            const auto& a = vertices[indices[i + 0]].Normal;
+            const auto& b = vertices[indices[i + 1]].Normal;
+            const auto& c = vertices[indices[i + 2]].Normal;
+            for (const auto& pair : {std::pair{a, b}, std::pair{b, c}, std::pair{c, a}}) {
+                const float angle = glm::degrees(std::acos(glm::clamp(glm::dot(pair.first, pair.second), -1.0f, 1.0f)));
+                maxEdgeAngleDegrees = std::max(maxEdgeAngleDegrees, angle);
+            }
+        }
+
+        std::cout << "  [RenderPrimitives] smooth_sphere_normal_reference vertices=" << vertices.size()
+                  << " max_position_normal_error=" << maxPositionNormalError
+                  << " max_edge_angle_degrees=" << maxEdgeAngleDegrees << "\n";
+        RENDER_CHECK(finite, "High-fidelity sphere normal reference contains only finite values");
+        RENDER_CHECK(maxPositionNormalError <= 1.0e-2f,
+                     "High-fidelity sphere normals match the analytic radial reference");
+        RENDER_CHECK(maxEdgeAngleDegrees <= 4.1f,
+                     "High-fidelity sphere adjacent normals change smoothly without triangle-band steps");
+        return true;
+    }
+
     static bool Test_ProceduralPlaneGeometryContracts() {
         std::vector<RHI::RHIVertex3D> vertices;
         std::vector<uint32_t> indices;
@@ -159,6 +201,7 @@ bool RunRenderPrimitiveIdentityUnitTests() {
     std::cout << "  [RenderPrimitives] Running primitive identity & geometry contracts...\n";
     if (!Axle::RenderTests::Test_BuiltinPrimitiveURIsAndUUIDs()) return false;
     if (!Axle::RenderTests::Test_ProceduralCubeGeometryContracts()) return false;
+    if (!Axle::RenderTests::Test_HighFidelitySmoothSphereNormalReference()) return false;
     if (!Axle::RenderTests::Test_ProceduralSphereGeometryContracts()) return false;
     if (!Axle::RenderTests::Test_ProceduralPlaneGeometryContracts()) return false;
     if (!Axle::RenderTests::Test_ProceduralCylinderAndConeContracts()) return false;

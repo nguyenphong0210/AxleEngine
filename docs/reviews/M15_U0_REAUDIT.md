@@ -130,3 +130,19 @@ Result: **PASS**.
 
 The supplied screenshot is the visual artifact for this leaf; no local artifact path
 was available from the native Computer Use pipe.
+
+## M15-U0-06.1 — Smooth-normal reference implementation
+
+Result: **PARTIAL / NOT RUN for the required Editor visual gate**.
+
+- Extended `Test_RenderPrimitiveIdentityUnit.cpp` with a high-fidelity sphere
+  reference using radius `1.0`, `64` stacks and `128` sectors.
+- The reference checks finite values, unit normal length, analytic radial normal
+  error and the maximum adjacent triangle-edge normal angle.
+- Current measured reference: `8385` vertices, maximum position/normal error
+  `1.46001e-07`, maximum adjacent normal angle `3.97675` degrees.
+- Debug and Release `AxleRenderUnitTests` builds pass; Debug and Release
+  `RenderUnitTests` CTest pass.
+- The Editor visual gate is still open. The user must open the smooth sphere fixture
+  and supply a screenshot showing a smooth sphere without triangle bands or invalid
+  pixels before this leaf can be checked PASS.

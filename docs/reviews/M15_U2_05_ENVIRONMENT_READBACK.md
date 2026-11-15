@@ -60,3 +60,32 @@ scene hashes. Each corresponding image has the same SHA-256 across Vulkan
 Debug/Release and D3D12 Debug/Release. Vulkan `red.identity.json` manifests
 pass `python scripts/validate_artifact_identity.py` (exit 0); validation
 reports are `red.identity.report.json` in each Vulkan artifact directory.
+
+## U2-05.3 - OpenGL subset
+
+The same Debug and Release builds also produced the OpenGL fixture (both exit
+0). This branch verifies the OpenGL background and explicit IBL consumer using
+`glReadPixels`; it does not claim the native HDR cubemap bake/subresource tests.
+
+| Configuration | Direct command | Exit | Log | Artifact directory |
+|---|---|---:|---|---|
+| Debug | `build/Tests/Debug/AxleEnvironmentRenderingTests.exe gl build/agent-runs/M15-U2-05/debug-gl` | 0 | `build/agent-runs/M15-U2-05/debug-gl.log` | `build/agent-runs/M15-U2-05/debug-gl/` |
+| Release | `build/Tests/Release/AxleEnvironmentRenderingTests.exe gl build/agent-runs/M15-U2-05/release-gl` | 0 | `build/agent-runs/M15-U2-05/release-gl.log` | `build/agent-runs/M15-U2-05/release-gl/` |
+
+Both logs end in `PASS OpenGL background-only and explicit IBL pixels, snapshot
+and ECS bridge gates`. `gl-background.ppm` and `gl-environment.ppm` are valid
+128x128 P6 images with 49,152 RGB bytes and distinct hashes; corresponding
+Debug/Release hashes match. The `gl-environment.identity.json` manifests pass
+`python scripts/validate_artifact_identity.py` (exit 0), producing
+`gl-environment.identity.report.json` in each output directory. The fixture
+also checks `glGetError() == GL_NO_ERROR`. A shader warning says the unused
+`u_SkyGroundColor` uniform was stripped; it did not fail the readback gate.
+
+## Acceptance
+
+**U2-05.1, U2-05.2 and U2-05.3 PASS.** Six direct runs on the current source
+tree exited 0. D3D12/Vulkan validated native cubemap subresources and rendered
+environment pixels; OpenGL validated the declared background/IBL subset.
+Artifact manifests bind each captured image to its backend, configuration,
+fixture, resolution, source baseline and SHA-256. This closes the U2-05
+readback checkpoints without claiming U5 dynamic capture or probe blending.

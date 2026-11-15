@@ -256,39 +256,50 @@ the item is visible.
 
 ### U2 / S2.1–S2.3 — Dynamic environment and authored environment policy
 
-- [ ] **M15-U2-01.1 — Freeze procedural-sky convention.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U2-01.2 — Freeze environment-bake convention.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U2-01.3 — Freeze authored-cubemap color/orientation.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U2-02.1 — Publish environment generation.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U2-02.2 — Define cache identity.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U2-02.3 — Define invalidation.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U2-02.4 — Define last-good fallback.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U2-03.1 — Verify sky/direct-light coupling.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U2-03.2 — Verify environment rotation.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U2-03.3 — Verify environment intensity.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U2-03.4 — Verify missing/failed asset behavior.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+- [ ] **M15-U2-S2.1 — Freeze environment input contract.** *(roll-up: tick when U2-01.1–U2-01.3 are complete)*
+  - **Scope:** freeze procedural-sky parameters, bake input/output conventions, authored cubemap color space, face orientation and explicit environment-lighting opt-in.
+  - [ ] **M15-U2-01.1 — Freeze procedural-sky convention.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [ ] **M15-U2-01.2 — Freeze environment-bake convention.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [ ] **M15-U2-01.3 — Freeze authored-cubemap color/orientation.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+
+- [ ] **M15-U2-S2.2 — Publish, cache and recover environment generations.** *(roll-up: tick when U2-02.1–U2-02.4 are complete)*
+  - **Scope:** publish only complete generations, define cache identity, invalidate stale generations transactionally and retain a named last-good or neutral fallback on failure.
+  - **Implementation order:** U2-02.1 → U2-02.2 → U2-02.3 → U2-02.4. Keep publication/cache identity separate from invalidation/fallback changes.
+  - [ ] **M15-U2-02.1 — Publish environment generation.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [ ] **M15-U2-02.2 — Define cache identity.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [ ] **M15-U2-02.3 — Define invalidation.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [ ] **M15-U2-02.4 — Define last-good fallback.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+
+- [ ] **M15-U2-S2.3 — Verify environment consumers and failure behavior.** *(roll-up: tick when U2-03.1–U2-03.4 are complete)*
+  - **Scope:** verify sky/direct-light coupling, independent environment rotation and intensity, plus missing/failed asset behavior without mutating authored data.
+  - **Contract note:** `CustomAzimuth` and `CustomElevation` remain procedural sun controls. Authored HDR rotation must use a dedicated environment-rotation field before U2-03.2 is implemented; it must not silently reuse the sun controls.
+  - [ ] **M15-U2-03.1 — Verify sky/direct-light coupling.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [ ] **M15-U2-03.2 — Verify environment rotation.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [ ] **M15-U2-03.3 — Verify environment intensity.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [ ] **M15-U2-03.4 — Verify missing/failed asset behavior.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+
 - [ ] **M15-U2-04 — Keep local dynamic six-face capture and probe blending in U5; this Unit owns the shared environment input contract.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.

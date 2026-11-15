@@ -14,6 +14,8 @@ the ECS bridge toggle. Readback artifacts are emitted as 128x128 P6 PPM files.
 
 The fixture has a required output-directory argument. Build and direct-run
 commands, exit codes and artifact paths are recorded per backend below.
+PowerShell captured the `.log` files as UTF-16LE text; the PPM and identity
+artifacts retain their native binary/UTF-8 formats.
 
 ## U2-05.1 - D3D12
 
@@ -86,6 +88,7 @@ also checks `glGetError() == GL_NO_ERROR`. A shader warning says the unused
 **U2-05.1, U2-05.2 and U2-05.3 PASS.** Six direct runs on the current source
 tree exited 0. D3D12/Vulkan validated native cubemap subresources and rendered
 environment pixels; OpenGL validated the declared background/IBL subset.
-Artifact manifests bind each captured image to its backend, configuration,
-fixture, resolution, source baseline and SHA-256. This closes the U2-05
-readback checkpoints without claiming U5 dynamic capture or probe blending.
+Artifact manifests bind one representative capture from each run to its
+backend, configuration, fixture, resolution, source baseline and SHA-256. This
+closes the U2-05 readback checkpoints without claiming U5 dynamic capture or
+probe blending.

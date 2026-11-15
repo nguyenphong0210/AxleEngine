@@ -199,6 +199,7 @@ the item is visible.
 - [ ] **M15-U0-06.4 — Reference roughness-to-mip mapping.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
+  - **Evidence:** `M15RoughnessMipReference` validates the independent 5-mip mapping, monotonicity, endpoints and clamping; Debug/Release CTest pass. Editor visual evidence remains required.
 - [ ] **M15-U0-07.1 — Create deterministic image comparison.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

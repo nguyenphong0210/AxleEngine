@@ -197,6 +197,19 @@ Result: **PASS**.
 
 Both U0-06.3 child leaves now pass; the derived parent may be checked PASS.
 
+## M15-U0-06.4 — Roughness-to-mip reference implementation
+
+Result: **PARTIAL / NOT RUN for the required Editor visual gate**.
+
+- Added `scripts/test_m15_roughness_mip_reference.py` with an independent five-mip
+  mapping: `mip = clamp(roughness, 0, 1) * (mipCount - 1)`.
+- The reference checks exact sweep values, monotonicity, endpoints, clamping and
+  the single-mip case.
+- `python scripts/test_m15_roughness_mip_reference.py`: exit 0.
+- Debug and Release `M15RoughnessMipReference` CTest: exit 0.
+- Editor visual evidence is still required: the roughness sweep must show a
+  continuous widening/softening reflection response.
+
 ## M15-U0-06.2.3 — Hi-Z reference edge cases
 
 Result: **PASS**.

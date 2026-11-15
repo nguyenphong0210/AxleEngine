@@ -766,7 +766,9 @@ add_test(NAME M15RoughnessFixture COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_SOURCE_DIR}/scripts/test_m15_roughness_fixture.py")
 add_test(NAME M15HiZReference COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_SOURCE_DIR}/scripts/test_m15_hiz_reference.py")
-set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture BaselineToolRegressions AcceptanceEvidenceRegressions M14P0BaselineManifest M14P0BaselineRegressions M15RoughnessFixture M15HiZReference
+add_test(NAME M15RoughnessMipReference COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_SOURCE_DIR}/scripts/test_m15_roughness_mip_reference.py")
+set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture BaselineToolRegressions AcceptanceEvidenceRegressions M14P0BaselineManifest M14P0BaselineRegressions M15RoughnessFixture M15HiZReference M15RoughnessMipReference
     PROPERTIES LABELS "architecture;cpu" TIMEOUT 60)
 
 # Explicit developer/test build. Neither this target nor its executables are in ALL.

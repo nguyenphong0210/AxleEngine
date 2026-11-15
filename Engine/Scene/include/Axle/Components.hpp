@@ -1059,6 +1059,10 @@ namespace Axle {
         std::string HDRPath;
         float Intensity = 1.0f;
         float Exposure = 1.0f;
+        // Authored HDR environment rotation in degrees around world +Y. This
+        // is independent from CustomAzimuth/CustomElevation, which control the
+        // procedural sun only.
+        float EnvironmentRotation = 0.0f;
 
         glm::vec3 ZenithColor{ 0.18f, 0.42f, 0.78f };    // Deep sky blue at zenith
         glm::vec3 HorizonColor{ 0.70f, 0.82f, 0.95f };   // Soft atmospheric haze at horizon

@@ -259,6 +259,7 @@ namespace Axle {
             world.Skybox.HDRPath = sc.HDRPath;
             world.Skybox.Intensity = sc.Intensity;
             world.Skybox.Exposure = sc.Exposure;
+            world.Skybox.EnvironmentRotation = sc.EnvironmentRotation;
             world.Skybox.SunSize = sc.SunSize; world.Skybox.SunGlow = sc.SunGlow; world.Skybox.Turbidity = sc.Turbidity;
             world.Skybox.ZenithColor = glm::vec4(sc.ZenithColor, 1.0f);
             world.Skybox.HorizonColor = glm::vec4(sc.HorizonColor, 1.0f);

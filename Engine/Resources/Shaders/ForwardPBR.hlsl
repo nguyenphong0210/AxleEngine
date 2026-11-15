@@ -160,7 +160,7 @@ cbuffer MultiLightBuffer : register(b2, space0) {
     DirectionalSunLight u_SunLight;
     uint4               u_LightCounts;        // x: NumPointLights (0..16), y: NumSpotLights (0..16), z: HasSunLight, w: LightingMode
     float4              u_CameraPosExposure;  // xyz: Camera Pos, w: Exposure
-    float4              u_LightReserved[2];   // [0]: x disables studio lobes, y is env strength, z diffuse-only; [1].x: NumRectLights
+    float4              u_LightReserved[2];   // [0]: x disables studio lobes, y is env strength, z diffuse-only, w authored env rotation (rad); [1].x: NumRectLights
     PointLightData      u_PointLights[16];    // 16 * 64 = 1024 bytes
     SpotLightData       u_SpotLights[16];     // 16 * 64 = 1024 bytes
     RectLightData       u_RectLights[2];      // 2 * 64 = 128 bytes tail
@@ -230,6 +230,12 @@ float SunShadowVisibility(float3 world,float3 normal,float3 sun) {
 SamplerState u_EnvironmentSampler : register(s3,space0);
 SamplerState u_ScreenSampler : register(s1, space0);
 SamplerState u_Sampler      : register(s0, space0);
+
+float3 RotateEnvironmentDirection(float3 direction) {
+    float angle=u_LightReserved[0].w;
+    float s=sin(angle), c=cos(angle);
+    return float3(c*direction.x-s*direction.z,direction.y,s*direction.x+c*direction.z);
+}
 
 // -----------------------------------------------------------------------------
 // Vertex Input Layout (Matches 64-byte RHIVertex3D)
@@ -792,19 +798,19 @@ float4 PSMain(PSInput input) : SV_Target0 {
     if (hasSplitSumIBL) {
         // Image-Based Lighting (IBL) via Split-Sum Approximation
         // A. Diffuse Irradiance: Cosine-weighted hemispherical integration
-        float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, N).rgb;
+        float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, RotateEnvironmentDirection(N)).rgb;
         float3 diffuseAmbient = irradiance * albedo.rgb * ambientKD;
 
         // B. Specular Radiance: Pre-filtered environment radiance (roughness-dependent mip level)
         float3 R = reflect(-V, N);
-        float3 prefilteredColor = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, R, roughness * MAX_REFLECTION_LOD).rgb;
+        float3 prefilteredColor = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), roughness * MAX_REFLECTION_LOD).rgb;
 
         // C. Split-sum BRDF integration 2D LUT: scale (rg.x) and bias (rg.y) for Fresnel reflection
         float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(max(NdotV, 0.0), roughness)).rg;
         float3 specularAmbient = prefilteredColor * (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation;
 
         float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
-        float3 coatEnvironment = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, R, clamp(coatAnisotropy.y,0.04,1.0) * MAX_REFLECTION_LOD).rgb;
+        float3 coatEnvironment = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), clamp(coatAnisotropy.y,0.04,1.0) * MAX_REFLECTION_LOD).rgb;
         diffuseAmbient *= (1.0-coatF) * (1.0-coatF);
         specularAmbient = (specularAmbient * (1.0-coatF) * (1.0-coatF) + coatEnvironment * coatF) * u_MaterialSurface.w;
         float envIntensity = max(u_LightReserved[0].y,0.0);
@@ -820,12 +826,12 @@ float4 PSMain(PSInput input) : SV_Target0 {
     }
     
     if (u_Sheen.w >= 0.0) {
-        float3 sheenEnv = (hasSplitSumIBL ? u_PrefilterMap.SampleLevel(u_EnvironmentSampler, reflect(-V, N), u_Sheen.w * MAX_REFLECTION_LOD).rgb : u_SunLight.AmbientColor.rgb);
+        float3 sheenEnv = (hasSplitSumIBL ? u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(reflect(-V, N)), u_Sheen.w * MAX_REFLECTION_LOD).rgb : u_SunLight.AmbientColor.rgb);
         float3 sheenAmbient = sheenEnv * u_Sheen.rgb * pow(1.0 - NdotV, 4.0) * u_MaterialSurface.w;
         ambient += sheenAmbient * max(u_LightReserved[0].y, 0.0) * ao;
     }
     if (u_Subsurface.w > 0.0) {
-        float3 sssEnv = (hasSplitSumIBL ? u_IrradianceMap.Sample(u_EnvironmentSampler, N).rgb : u_SunLight.AmbientColor.rgb);
+        float3 sssEnv = (hasSplitSumIBL ? u_IrradianceMap.Sample(u_EnvironmentSampler, RotateEnvironmentDirection(N)).rgb : u_SunLight.AmbientColor.rgb);
         float3 sssAmbient = sssEnv * albedo.rgb * u_Subsurface.rgb * u_Subsurface.w * 0.5 * (1.0 - metallic);
         ambient += sssAmbient * max(u_LightReserved[0].y, 0.0) * ao;
     }

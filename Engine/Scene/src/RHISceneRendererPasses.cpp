@@ -259,6 +259,7 @@ namespace Axle {
                 activeSkybox.SyncWithSun = world.Skybox.SyncWithSun;
                 activeSkybox.CustomAzimuth = world.Skybox.CustomAzimuth;
                 activeSkybox.CustomElevation = world.Skybox.CustomElevation;
+                activeSkybox.EnvironmentRotation = world.Skybox.EnvironmentRotation;
             }
 
             const bool hdrEnvironment=activeSkybox.Type==SkyboxType::HDRCubemap && bool(m_Environment.Ready());
@@ -295,7 +296,9 @@ namespace Axle {
                 if(hdrEnvironment) {
                     const double authoredScale=std::isfinite(activeSkybox.Intensity)&&std::isfinite(activeSkybox.Exposure)
                         ? std::clamp(double(activeSkybox.Intensity)*std::max(0.0,double(activeSkybox.Exposure)),0.0,1e12) : 0.0;
-                    skyboxConstants.Reserved[0]=glm::vec4(1,static_cast<float>(authoredScale*m_Environment.SourceExposure()),0,0);
+                    const float rotation=std::isfinite(activeSkybox.EnvironmentRotation)
+                        ? glm::radians(activeSkybox.EnvironmentRotation) : 0.0f;
+                    skyboxConstants.Reserved[0]=glm::vec4(1,static_cast<float>(authoredScale*m_Environment.SourceExposure()),rotation,0);
                     skyboxConstants.Params.z=settings.EnableToneMapping?-1.f:0.f;
                     skyboxConstants.Params.w=settings.EnableToneMapping?1.f:2.2f;
                 }
@@ -642,6 +645,8 @@ namespace Axle {
             bool useIBL = m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.EnvironmentLighting;
             lightData.ReservedHeader[0].y = lighting.AmbientIntensity*(lighting.EnvironmentLighting ? m_Environment.SourceExposure() : 1.0f);
             lightData.ReservedHeader[0].z = lighting.EnvironmentLighting && !useIBL ? 1.f : 0.f;
+            lightData.ReservedHeader[0].w = lighting.EnvironmentLighting && useIBL && world.Skybox.Type==1 && std::isfinite(world.Skybox.EnvironmentRotation)
+                ? glm::radians(world.Skybox.EnvironmentRotation) : 0.0f;
             lightData.LightCounts.w = useIBL ? 1u : 0u;
 
             if (!m_LightBuffer.Update(lightData))

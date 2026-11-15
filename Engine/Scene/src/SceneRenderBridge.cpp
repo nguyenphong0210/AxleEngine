@@ -189,6 +189,7 @@ namespace Axle {
                       skybox.Type == SkyboxType::HDRCubemap && !skybox.HDRPath.empty()) ? 1 : 0;
         shader.SetInt("u_UseIBL", useIBL);
         shader.SetFloat("u_EnvironmentIntensity", hasSkybox ? skybox.Intensity : 1.0f);
+        shader.SetFloat("u_EnvironmentRotation", useIBL ? skybox.EnvironmentRotation : 0.0f);
 
         // Default texture & material parameters
         shader.SetInt("u_UseAlbedoMap", 0);

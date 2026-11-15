@@ -197,6 +197,9 @@ namespace Axle {
         std::string HDRPath;
         float Intensity = 1.0f;
         float Exposure = 1.0f;
+        // Authored HDR environment rotation in degrees around world +Y. This
+        // does not alter the procedural sun direction controls.
+        float EnvironmentRotation = 0.0f;
     };
 
     struct RenderSkinInstance {

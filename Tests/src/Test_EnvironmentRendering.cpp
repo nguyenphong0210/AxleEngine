@@ -81,7 +81,8 @@ bool HDR(const char* name, glm::vec3 color, int pattern=0) {
         const float theta=(y+.5f)/32*glm::pi<float>(), phi=((x+.5f)/64-.5f)*glm::two_pi<float>();
         const glm::vec3 direction(std::cos(phi)*std::sin(theta),std::cos(theta),std::sin(phi)*std::sin(theta));
         const auto value=pattern==1 ? glm::vec3(2)+1.5f*direction : pattern==2 ?
-            glm::vec3(.03f+20*std::pow(std::max(direction.z,0.f),64.f)) : color;
+            glm::vec3(.03f+20*std::pow(std::max(direction.z,0.f),64.f)) : pattern==3 ?
+            glm::vec3(.03f)+glm::vec3(.15f,.35f,1.0f)*20.0f*std::pow(std::max(direction.z,0.f),32.f) : color;
         int exponent=0;
         const float maximum=std::max({value.x,value.y,value.z});
         const float scale=std::frexp(maximum,&exponent)*256/maximum;
@@ -546,6 +547,17 @@ bool Native(RHIType backend) {
         auto image=render(); CHECK(!image.empty());
         for(uint32_t c=0;c<3;++c) CHECK(std::abs(int(image[center+c])-Display(2+1.5f*axis[c]))<=2);
     }
+    // Authored HDR rotation is a dedicated environment control. The colored
+    // +Z lobe must move into the +X view after a +90 degree world-Y rotation;
+    // procedural sun azimuth/elevation controls are not reused for this path.
+    CHECK(HDR("rotation.hdr",{},3)); world.Skybox.HDRPath="rotation.hdr";
+    world.Skybox.EnvironmentRotation=0.0f;
+    camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0),glm::vec3(1,0,0),glm::vec3(0,1,0)),glm::vec3(0));
+    const auto unrotatedX=render(); CHECK(!unrotatedX.empty());
+    world.Skybox.EnvironmentRotation=90.0f;
+    camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0),glm::vec3(1,0,0),glm::vec3(0,1,0)),glm::vec3(0));
+    const auto rotatedX=render(); CHECK(!rotatedX.empty()&&rotatedX[center+2]>unrotatedX[center+2]+40);
+    world.Skybox.EnvironmentRotation=0.0f;
     const auto lut=Read(*environment.Ready()->BRDF,16); CHECK(lut.size()==16*16*16);
     for(size_t i=0;i<lut.size();i+=16) {
         glm::vec4 value;std::memcpy(&value,lut.data()+i,16);

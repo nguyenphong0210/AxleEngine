@@ -259,6 +259,7 @@ namespace Axle {
                 }
             }
             shader.SetInt("u_UseIBL", useIBL); shader.SetFloat("u_EnvironmentIntensity", lighting.AmbientIntensity);
+            shader.SetFloat("u_EnvironmentRotation", useIBL ? world.Skybox.EnvironmentRotation : 0.0f);
 
             const auto extraLights=std::min<size_t>(4,world.AdditionalDirectionalLights.size());
             shader.SetInt("u_NumExtraDirectionalLights",static_cast<int>(extraLights));
@@ -379,6 +380,7 @@ namespace Axle {
             spec.HorizonColor = glm::vec3(world.Skybox.HorizonColor);
             spec.GroundColor = glm::vec3(world.Skybox.GroundColor);
             spec.SunSize = world.Skybox.SunSize; spec.SunGlow = world.Skybox.SunGlow; spec.Turbidity = world.Skybox.Turbidity;
+            spec.EnvironmentRotation = world.Skybox.EnvironmentRotation;
             m_Skybox->SetSunDirection(world.DirectionalLight && world.Skybox.SyncWithSun
                 ? lighting.SunDirection : glm::vec3(world.Skybox.SunDirection));
             m_Skybox->SetSunColor(world.DirectionalLight

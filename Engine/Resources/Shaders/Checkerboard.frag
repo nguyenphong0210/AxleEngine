@@ -39,6 +39,13 @@ uniform samplerCube u_PrefilterMap;  // Slot 6: Specular Prefiltered Cubemap
 uniform sampler2D u_BRDFLUT;         // Slot 7: BRDF Integration 2D LUT
 uniform int u_UseIBL;                // 1: Enable HDR Image-Based Lighting, 0: Analytical
 uniform float u_EnvironmentIntensity;// Multiplier for IBL radiance
+uniform float u_EnvironmentRotation;// Authored HDRI rotation around world +Y (degrees)
+
+vec3 RotateEnvironmentDirection(vec3 direction) {
+    float angle=radians(u_EnvironmentRotation);
+    float s=sin(angle), c=cos(angle);
+    return vec3(c*direction.x-s*direction.z,direction.y,s*direction.x+c*direction.z);
+}
 
 // 4-Cascade CSM Uniforms & Anti-Acne Biasing
 uniform mat4 u_CascadeLightSpaceMatrices[4];
@@ -477,12 +484,12 @@ void main() {
         vec3 kS_ibl = F_ibl;
         vec3 kD_ibl = (vec3(1.0) - kS_ibl) * (1.0 - metallic);
 
-        vec3 irradiance = texture(u_IrradianceMap, N).rgb;
+        vec3 irradiance = texture(u_IrradianceMap, RotateEnvironmentDirection(N)).rgb;
         vec3 diffuseAmbient = irradiance * baseColor.rgb * kD_ibl;
 
         vec3 R = reflect(-V, N);
         const float MAX_REFLECTION_LOD = 4.0;
-        vec3 prefilteredColor = textureLod(u_PrefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+        vec3 prefilteredColor = textureLod(u_PrefilterMap, RotateEnvironmentDirection(R), roughness * MAX_REFLECTION_LOD).rgb;
         vec2 envBRDF = texture(u_BRDFLUT, vec2(max(NdotV, 0.0), roughness)).rg;
         vec3 specularAmbient = prefilteredColor * (F_ibl * envBRDF.x + envBRDF.y);
 

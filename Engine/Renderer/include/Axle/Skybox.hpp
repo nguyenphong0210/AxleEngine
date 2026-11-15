@@ -29,6 +29,7 @@ namespace Axle {
         float SunGlow = 0.16f;                            // Forward Mie scattering halo falloff
         float Turbidity = 1.0f;                           // Atmospheric thickness / haze
         float Exposure = 1.0f;                            // Photometric exposure multiplier
+        float EnvironmentRotation = 0.0f;                 // Authored HDRI rotation around world +Y (degrees)
         int ToneMappingMode = 0;                          // 0: ACES, 1: Reinhard, 2: Uncharted 2, 3: Linear
         float Gamma = 2.2f;                               // Display gamma exponent
     };

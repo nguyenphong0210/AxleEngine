@@ -278,6 +278,7 @@ namespace Axle {
                 ss << "      HDRPath: " << sbc.HDRPath << "\n";
                 ss << "      Intensity: " << sbc.Intensity << "\n";
                 ss << "      Exposure: " << sbc.Exposure << "\n";
+                ss << "      EnvironmentRotation: " << sbc.EnvironmentRotation << "\n";
                 ss << "      ZenithColor: [ " << sbc.ZenithColor.r << " , " << sbc.ZenithColor.g << " , " << sbc.ZenithColor.b << " ]\n";
                 ss << "      HorizonColor: [ " << sbc.HorizonColor.r << " , " << sbc.HorizonColor.g << " , " << sbc.HorizonColor.b << " ]\n";
                 ss << "      GroundColor: [ " << sbc.GroundColor.r << " , " << sbc.GroundColor.g << " , " << sbc.GroundColor.b << " ]\n";
@@ -1188,6 +1189,8 @@ namespace Axle {
                             sbc.Intensity = std::stof(Trim(trimmed.substr(10)));
                         } else if (trimmed.rfind("Exposure:", 0) == 0) {
                             sbc.Exposure = std::stof(Trim(trimmed.substr(9)));
+                        } else if (trimmed.rfind("EnvironmentRotation:", 0) == 0) {
+                            sbc.EnvironmentRotation = std::stof(Trim(trimmed.substr(20)));
                         } else if (trimmed.rfind("ZenithColor:", 0) == 0) {
                             float r = 0.18f, g = 0.42f, b = 0.78f;
                             sscanf(trimmed.c_str(), "ZenithColor: [ %f , %f , %f ]", &r, &g, &b);

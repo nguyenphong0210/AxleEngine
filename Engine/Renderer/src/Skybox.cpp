@@ -114,6 +114,7 @@ namespace Axle {
             uniform samplerCube u_SkyboxCubemap;
             uniform float u_Exposure;
             uniform float u_Intensity;
+            uniform float u_EnvironmentRotation;
             uniform int u_ToneMappingMode;
             uniform float u_Gamma;
 
@@ -123,7 +124,10 @@ namespace Axle {
             }
 
             void main() {
-                vec3 envColor = texture(u_SkyboxCubemap, v_TexCoord).rgb;
+                float angle=radians(u_EnvironmentRotation);
+                float s=sin(angle), c=cos(angle);
+                vec3 direction=vec3(c*v_TexCoord.x-s*v_TexCoord.z,v_TexCoord.y,s*v_TexCoord.x+c*v_TexCoord.z);
+                vec3 envColor = texture(u_SkyboxCubemap, direction).rgb;
                 envColor *= max(u_Intensity, 0.0);
                 float exposure = (u_Exposure > 0.0) ? u_Exposure : 1.0;
                 vec3 exposed = envColor * exposure;
@@ -187,6 +191,7 @@ namespace Axle {
             m_CubemapShader->SetMat4("u_Projection", projectionMatrix);
             m_CubemapShader->SetFloat("u_Exposure", m_Spec.Exposure);
             m_CubemapShader->SetFloat("u_Intensity", m_Spec.HDRIntensity);
+            m_CubemapShader->SetFloat("u_EnvironmentRotation", m_Spec.EnvironmentRotation);
             m_CubemapShader->SetInt("u_ToneMappingMode", m_Spec.ToneMappingMode);
             m_CubemapShader->SetFloat("u_Gamma", m_Spec.Gamma);
 

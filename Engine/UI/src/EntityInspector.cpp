@@ -928,6 +928,10 @@ namespace Axle {
 
                 ImGui::SliderFloat("Radiance / Intensity", &sbc.Intensity, 0.0f, 5.0f, "%.2f");
                 ImGui::SliderFloat("Exposure", &sbc.Exposure, 0.1f, 5.0f, "%.2f");
+                ImGui::SliderFloat("Environment Rotation", &sbc.EnvironmentRotation, -360.0f, 360.0f, "%.1f deg");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Rotate authored HDRI around world up; procedural sun azimuth/elevation remain independent.");
+                }
 
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("Image-Based Lighting provides real-time diffuse irradiance and pre-filtered GGX specular reflections.");

@@ -376,6 +376,15 @@ static bool TargetSets(RHIType backend) {
     renderer.RenderScene(scene, camera, first.GetColorTexture(), first.GetDepthTexture(), render, nullptr, first.GetTargets());
     RENDER_CHECK(renderer.WasLastRenderSuccessful(), "first explicit HDR/MSAA view render succeeds");
     RENDER_CHECK(ReadTexture(*second.GetColorTexture()) == secondPixels, "rendering another sized HDR/MSAA view preserves the first preview's pixels");
+    const auto beforeResize = first.GetTargets()->GetGeneration();
+    RENDER_CHECK(first.Resize(12, 10) && first.GetTargets()->GetGeneration() != beforeResize &&
+        first.GetTargets()->Validate() && first.GetTargets()->Get(RHIViewTarget::OpaqueColor)->GetWidth() == 12 &&
+        first.GetTargets()->Get(RHIViewTarget::OpaqueColor)->GetHeight() == 10,
+        "resize publishes a complete new per-view target generation");
+    RENDER_CHECK(first.Resize(8, 8) && first.GetTargets()->Validate() &&
+        first.GetTargets()->GetGeneration() != beforeResize &&
+        ReadTexture(*second.GetColorTexture()) == secondPixels,
+        "restoring size keeps independent view pixels and a valid generation");
     const std::vector<RHIViewTarget> required = {
         RHIViewTarget::Color, RHIViewTarget::Depth, RHIViewTarget::MSAAColor, RHIViewTarget::MSAADepth,
         RHIViewTarget::HDR, RHIViewTarget::FXAA, RHIViewTarget::OpaqueColor, RHIViewTarget::OpaqueDepth,

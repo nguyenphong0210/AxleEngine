@@ -351,9 +351,9 @@ the item is visible.
 - [x] **M15-U3-06 — Add per-view target generation, completion and reset ownership.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** Native fixture verifies target generation diagnostics, completion token epoch/value and wait, replacement reset and failed allocation preservation. Debug/Release D3D12/Vulkan 4/4 exit 0; [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
-- [ ] **M15-U3-07.1 — Test resize.**
+- [x] **M15-U3-07.1 — Test resize.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Native two-view fixture resizes one target generation to 12×10 and back, validates its complete set and preserves the other view's pixels; Debug/Release D3D12/Vulkan 4/4 exit 0. [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
 - [ ] **M15-U3-07.2 — Test feature toggle.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

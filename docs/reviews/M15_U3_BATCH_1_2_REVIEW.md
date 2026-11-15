@@ -53,3 +53,9 @@ Commands: `cmake --build build --config {Debug,Release} --target AxleEnvironment
 **PASS (self-review).** `ViewContext` owns recording, target identity, reset reasons and completion. The renderer adopts final targets after frame acquisition and before temporal slot selection; submission publishes a completion token. The native environment fixture now checks the target generation in diagnostics, a waitable completion token with current device epoch, a later token after same-wrapper target replacement, and frame-index reset to zero. Its existing fault injection checks failed target reconfiguration retains the old generation and successful retry publishes a new one.
 
 Builds: `cmake --build build --config {Debug,Release} --target AxleEnvironmentRenderingTests --parallel 4`, both exit 0. Runs: `build/Tests/{Debug,Release}/AxleEnvironmentRenderingTests.exe {dx12,vulkan} build/agent-runs/M15-U3-batches-1-2/06-{config}-{backend}-artifacts`, four exits 0. Logs and native artifacts: `build/agent-runs/M15-U3-batches-1-2/06-*`. No Editor image is required for this checkpoint.
+
+## U3-07.1 — Resize
+
+**PASS (self-review).** The native two-view fixture resizes an explicitly owned HDR/MSAA view from 8×8 to 12×10 and back, checks a new generation and complete validation at each size, and checks the independent second view's pixels remain unchanged. Invalid zero extent and partial allocation failure are already rejected by the same fixture.
+
+Builds: `cmake --build build --config {Debug,Release} --target AxleRHIResourceViewTests --parallel 4`, both exit 0. Runs: `build/Tests/{Debug,Release}/AxleRHIResourceViewTests.exe {dx12,vulkan} targets`, four exits 0. Logs: `build/agent-runs/M15-U3-batches-1-2/07.1-*`. No Editor image is required.

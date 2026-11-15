@@ -112,3 +112,21 @@ other four spheres through the shared material identity.
 Result remains **PARTIAL / NOT RUN for the visual gate** until the user reopens the
 repaired fixture, edits one sphere, and confirms the other four retain their own
 roughness values and highlights.
+
+## M15-U0-02.2 — Visual gate pass
+
+Result: **PASS**.
+
+- The user supplied an Editor screenshot after reopening the repaired fixture.
+- Hierarchy shows all five sweep entities: `roughness_004`, `roughness_012`,
+  `roughness_025`, `roughness_050` and `roughness_080`.
+- The viewport shows smooth spheres with a continuous roughness response: the
+  low-roughness sphere has a sharp, narrow highlight and the high-roughness sphere
+  has a broad, soft highlight.
+- No visible black pixels, triangle faceting or abrupt intensity jump is present in
+  the supplied image.
+- Combined with the inline-material isolation correction and the automated fixture
+  validator, the U0-02.2 visual gate is closed.
+
+The supplied screenshot is the visual artifact for this leaf; no local artifact path
+was available from the native Computer Use pipe.

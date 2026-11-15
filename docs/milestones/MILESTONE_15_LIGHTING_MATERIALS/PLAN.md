@@ -138,10 +138,10 @@ the item is visible.
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere is smooth with no triangle bands or invalid pixels.
   - **Evidence:** manifest/schema checks, Debug `AxleRenderUnitTests` exit 0, and user-supplied Editor screenshot of `Test.axlescene` showing a smooth sphere; see [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#M15-U0-02.1--create-smooth-sphere-fixture).
-- [ ] **M15-U0-02.2 — Create roughness/metal sweep fixture.**
+- [x] **M15-U0-02.2 — Create roughness/metal sweep fixture.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
-  - **Evidence:** fixture introduced in `93c44c3`, repaired entity/project structure and inline material isolation, and validated by `M15RoughnessFixture`; Debug/Release strict startup loads eight entities. Editor visual sweep remains NOT RUN. See [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#M15-U0-02.2--inline-material-isolation-correction).
+  - **Evidence:** fixture introduced in `93c44c3`, repaired entity/project structure and inline material isolation in `a09cba7`, and validated by `M15RoughnessFixture`; Debug/Release strict startup loads eight entities. User-supplied Editor screenshot confirms five smooth spheres with progressively broader highlights from roughness 0.04 through 0.80, with no visible black pixels, faceting or intensity jump. See [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#M15-U0-02.2--visual-gate-pass).
 - [x] **M15-U0-02.3 — Create numbered reflection-box fixture.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.

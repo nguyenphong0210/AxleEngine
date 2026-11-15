@@ -59,3 +59,9 @@ Builds: `cmake --build build --config {Debug,Release} --target AxleEnvironmentRe
 **PASS (self-review).** The native two-view fixture resizes an explicitly owned HDR/MSAA view from 8×8 to 12×10 and back, checks a new generation and complete validation at each size, and checks the independent second view's pixels remain unchanged. Invalid zero extent and partial allocation failure are already rejected by the same fixture.
 
 Builds: `cmake --build build --config {Debug,Release} --target AxleRHIResourceViewTests --parallel 4`, both exit 0. Runs: `build/Tests/{Debug,Release}/AxleRHIResourceViewTests.exe {dx12,vulkan} targets`, four exits 0. Logs: `build/agent-runs/M15-U3-batches-1-2/07.1-*`. No Editor image is required.
+
+## U3-07.2 — Feature toggle
+
+**PASS (self-review).** The native environment fixture enables GTAO/contact, disables both, then enables SSR. It checks that target generation changes, ScreenNormal exists only when required and Hi-Z exists only for SSR. All render outputs remain readable.
+
+Builds: `cmake --build build --config {Debug,Release} --target AxleEnvironmentRenderingTests --parallel 4`, both exit 0. Runs: `build/Tests/{Debug,Release}/AxleEnvironmentRenderingTests.exe {dx12,vulkan} build/agent-runs/M15-U3-batches-1-2/07.2-{config}-{backend}-artifacts`, four exits 0. Logs and native images: `build/agent-runs/M15-U3-batches-1-2/07.2-*`.

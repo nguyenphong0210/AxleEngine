@@ -254,6 +254,8 @@ bool Native(RHIType backend) {
     // M14-U4 Occlusion verification: Dedicated compute GTAO & directional contact shadows
     settings.EnableGTAO=true; settings.EnableContactShadows=true; auto gtao=render();
     CHECK(!gtao.empty()&&gtao.size()==red.size());
+    const auto gtaoGeneration = renderer.GetDiagnostics().GetFrame().TargetGeneration;
+    CHECK(gtaoGeneration && renderer.GetOpaqueNormalTarget() && renderer.GetHiZTarget(0) == nullptr);
     CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","SurfaceNormal","Transparent","ParticlesAndPhysics",
         "GTAOCopy","GTAOCompute","GTAOApply","Export"}));
     CHECK(renderer.GetLastGPUTimestampMilliseconds() > 0.0);
@@ -285,8 +287,12 @@ bool Native(RHIType backend) {
     settings.EnableGTAO=false; settings.EnableContactShadows=true; auto contactOnly=render();
     CHECK(!contactOnly.empty()&&contactOnly.size()==red.size());
     settings.EnableGTAO=false; settings.EnableContactShadows=false;
+    CHECK(!render().empty() && renderer.GetDiagnostics().GetFrame().TargetGeneration != gtaoGeneration &&
+        renderer.GetOpaqueNormalTarget() == nullptr && renderer.GetHiZTarget(0) == nullptr);
     settings.EnableSSR=true; auto ssr=render();
     CHECK(!ssr.empty()&&ssr.size()==red.size());
+    CHECK(renderer.GetDiagnostics().GetFrame().TargetGeneration != gtaoGeneration &&
+        renderer.GetOpaqueNormalTarget() && renderer.GetHiZTarget(0));
     CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","SurfaceNormal","Transparent","ParticlesAndPhysics",
         "SSRCopy","HiZ0","HiZ1","HiZ2","HiZ3","HiZ4","HiZ5","HiZ6","HiZ7", "SSRCompute","SSRApply","Export"}));
     std::vector<uint8_t> previousHiZ;

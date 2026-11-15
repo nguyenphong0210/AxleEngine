@@ -245,12 +245,12 @@ the item is visible.
 - [x] **M15-U1-04.1 — Run roughness/view/light-angle sweep.** *(accepted after independent CPU verification and Editor evidence; source `cc0623d9`)*
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Independent `M15RoughnessSweepReference` checks the five roughness samples, monotonic highlight peak reduction, half-power lobe broadening, finite view/light-angle sweeps and shader roughness clamping. Debug/Release `RenderUnitTests`, `M15BRDFReference`, `M15PrimaryLightingReference` and `M15RoughnessSweepReference` pass. User-supplied Editor screenshot shows all five spheres with a continuous roughness highlight progression, Directional Light `Cast Real-Time Shadows` enabled and Console `Error 0`. See [U1-04.1 verification](../../reviews/M15_U1_04_1_ROUGHNESS_SWEEP_REVIEW.md).
-- [ ] **M15-U1-04.2 — Run zero/behind-surface finite cases.**
+- [x] **M15-U1-04.2 — Run zero/behind-surface finite cases.** *(implemented and verified in `034f07e7`)*
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U1-05 — Record direct-light fallback behavior for unsupported capability tiers.**
+  - **Evidence:** `M15DirectLightEdgeReference` checks independent zero, tangent and behind-surface vectors across roughness/metallic values, verifies bounded zero output and shader finite guards. Debug/Release builds and focused CTest pass. See [U1-04.2/U1-05 verification](../../reviews/M15_U1_04_2_05_DIRECT_LIGHT_EDGE_AND_FALLBACK_REVIEW.md).
+- [x] **M15-U1-05 — Record direct-light fallback behavior for unsupported capability tiers.** *(implemented and verified in `034f07e7`)*
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+  - **Evidence:** `M15DirectLightFallbackReference` verifies D3D12/Vulkan local-shadow support, OpenGL/None fallback capabilities and the explicit `LOCAL_SHADOW_UNSUPPORTED` gate. The existing OpenGL runtime fixture passes in Debug and Release on the RTX 3070, with `OPT05 RenderService PASS`. See [U1-04.2/U1-05 verification](../../reviews/M15_U1_04_2_05_DIRECT_LIGHT_EDGE_AND_FALLBACK_REVIEW.md).
 
 **Exit:** direct-light fixtures match the frozen numeric reference within documented tolerance; units, shadows, HDR response and fallback diagnostics are consistent across supported native backends.
 

@@ -6,11 +6,17 @@
 #include <vector>
 namespace Axle {
     struct EnvironmentBakeSettings {
+        // M15-S2.1 contract: all dimensions are power-of-two; input/output
+        // maps are linear floating-point data and the bake is deterministic for
+        // an identical source image, settings and sample count.
         uint32_t EnvironmentSize=256, IrradianceSize=32, PrefilterSize=128;
         uint32_t PrefilterMips=5, BRDFSize=128, Samples=256;
         bool operator==(const EnvironmentBakeSettings&) const = default;
     };
     struct ProceduralSkySettings {
+        // SunDirection is a world-space direction toward the sun. Generated
+        // equirectangular images use the top row for +Y (north/zenith), with
+        // linear RGBA32F radiance after Intensity * Exposure scaling.
         glm::vec3 SunDirection{0.45f,1.0f,0.65f};
         glm::vec3 SunColor{1.0f,0.98f,0.92f};
         glm::vec3 ZenithColor{0.2f,0.35f,0.6f};
@@ -24,6 +30,9 @@ namespace Axle {
         std::vector<glm::vec4> Pixels; // linear RGBA32F, row zero at cube v=0
     };
     struct EnvironmentCube {
+        // Face order is fixed: +X, -X, +Y, -Y, +Z, -Z. Face v=0 follows the
+        // canonical EnvironmentCubeDirection mapping and is never vertically
+        // flipped during authoring or upload.
         std::array<std::vector<EnvironmentMip>,6> Faces; // +X,-X,+Y,-Y,+Z,-Z; face-major/mip-minor
     };
     struct BakedEnvironment {
@@ -35,6 +44,7 @@ namespace Axle {
     // radiance C remains C, matching the Lambert factor in the PBR receiver.
     bool BakeEnvironment(const DecodedImage&, const EnvironmentBakeSettings&, BakedEnvironment& output, std::string* error=nullptr);
     // Generates one linear floating-point equirectangular procedural sky mip.
+    // The horizontal coordinate wraps; the first row points toward +Y.
     // The result is CPU-only and can be passed to BakeEnvironment.
     bool GenerateProceduralSkyImage(const ProceduralSkySettings&, uint32_t width, uint32_t height,
         DecodedImage& output, std::string* error=nullptr);

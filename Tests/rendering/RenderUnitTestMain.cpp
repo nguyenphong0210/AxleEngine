@@ -16,6 +16,7 @@ bool RunM15PrimaryLightingReferenceUnitTests();
 bool RunM15RoughnessSweepReferenceUnitTests();
 bool RunM15DirectLightEdgeReferenceUnitTests();
 bool RunM15DirectLightFallbackReferenceUnitTests();
+bool RunM15EnvironmentContractReferenceUnitTests();
 bool RunTemporalPostDiagnosticsUnitTests();
 namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderWorkerUnitTests(); }
@@ -42,6 +43,9 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string_view(argv[1]) == "--m15-direct-light-fallback-reference") {
         return RunM15DirectLightFallbackReferenceUnitTests() ? 0 : 1;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--m15-environment-contract-reference") {
+        return RunM15EnvironmentContractReferenceUnitTests() ? 0 : 1;
     }
 
     std::cout << "========================================================\n";
@@ -110,6 +114,10 @@ int main(int argc, char** argv) {
     }
     if (!RunM15DirectLightFallbackReferenceUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunM15DirectLightFallbackReferenceUnitTests FAILED!\n";
+        return 1;
+    }
+    if (!RunM15EnvironmentContractReferenceUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunM15EnvironmentContractReferenceUnitTests FAILED!\n";
         return 1;
     }
 

@@ -505,6 +505,7 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_M15_PrimaryLightingReferenceUnit.cpp
     rendering/Test_M15_RoughnessSweepReferenceUnit.cpp
     rendering/Test_M15_DirectLightEdgeAndFallbackReferenceUnit.cpp
+    rendering/Test_M15_EnvironmentContractReferenceUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
 # M15-U1-01.1 & M15-U1-01.4: inspect canonical shader sources for lighting & exposure contracts.
@@ -536,6 +537,8 @@ add_test(NAME M15DirectLightEdgeReference COMMAND $<TARGET_FILE:AxleRenderUnitTe
 set_tests_properties(M15DirectLightEdgeReference PROPERTIES LABELS "render;lighting;cpu;m15" TIMEOUT 30)
 add_test(NAME M15DirectLightFallbackReference COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-direct-light-fallback-reference)
 set_tests_properties(M15DirectLightFallbackReference PROPERTIES LABELS "render;lighting;cpu;m15" TIMEOUT 30)
+add_test(NAME M15EnvironmentContractReference COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-environment-contract-reference)
+set_tests_properties(M15EnvironmentContractReference PROPERTIES LABELS "render;environment;lighting;cpu;m15" TIMEOUT 90)
 add_test(NAME RenderHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleRenderUnitTests> --case render-probe)
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES LABELS "render;cpu")
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES TIMEOUT 30)

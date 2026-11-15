@@ -3515,6 +3515,17 @@
       "base_commit": "06edfb3",
       "timestamp_utc": "2026-11-14T16:28:39.281301+00:00",
       "body": "M15-U0-02.1 remains OPEN/PARTIAL: fixture manifest and Debug AxleRenderUnitTests pass after rebuild (exit 0), but required Editor visual verification is NOT RUN because Computer Use native pipe is unavailable after recovery retry. No screenshot/readback is claimed, and sequential execution is paused before U0-02.2. Evidence updated in docs/reviews/M15_U0_REAUDIT.md; commit 06edfb3. User must visually confirm the smooth sphere in Editor or restore the Computer Use helper.\n"
+    },
+    {
+      "id": "CG-20261115T022518462431Z-CODEX-a1b558",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": null,
+      "base_commit": "bd61ef44",
+      "timestamp_utc": "2026-11-15T02:25:18.462431+00:00",
+      "body": "IN_PROGRESS: M15-U0-02.2 roughness/metal sweep. User explicitly released this checkpoint. Found and repairing fixture defects before visual acceptance: project StartScene pointed to an empty/nonexistent resolved path, and five roughness sphere blocks lacked Entity records. Expected files: Tests/Fixtures/M15/M15_RoughnessSweep.axleproj, Tests/Fixtures/M15/M15_RoughnessSweep.axlescene, docs/reviews/M15_U0_REAUDIT.md, and a focused fixture validation if needed. Base: bd61ef44. Native Computer Use visual inspection remains unavailable; do not claim screenshot evidence.\n"
     }
   ],
   "deferred_tasks": [

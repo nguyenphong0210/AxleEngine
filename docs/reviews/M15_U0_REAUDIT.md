@@ -70,3 +70,28 @@ Result: **PARTIAL / NOT RUN for the required visual gate**.
 
 Next action: open the fixture project in Editor and confirm the visual sweep; do
 not advance the sequential checklist until the screenshot/readback is recorded.
+
+## M15-U0-02.2 — Follow-up fixture repair and automated verification
+
+Result: **PARTIAL / NOT RUN for the required visual gate**.
+
+- Repaired the fixture project `Tests/Fixtures/M15/M15_RoughnessSweep.axleproj` so
+  its `StartScene` resolves to the tracked roughness scene while retaining the
+  Sandbox asset root required by the renderer's shader/material resources.
+- Repaired the scene structure: the five sweep spheres now have distinct entity
+  records `100004` through `100008`. The previous file nested them under the
+  directional-light entity, so the Editor loaded only three entities.
+- Added `scripts/test_m15_roughness_fixture.py` and registered CTest
+  `M15RoughnessFixture`. It validates eight entities and the exact metallic
+  roughness values `0.04, 0.12, 0.25, 0.50, 0.80`.
+- Fixture validation passed: `python scripts/test_m15_roughness_fixture.py`,
+  exit 0; `ctest --test-dir build -C Debug -R ^M15RoughnessFixture$`, exit 0.
+- Rebuilt `AxleEditor` Debug and Release, exit 0. D3D12 strict startup verification
+  loaded the fixture scene and rendered five UI frames in both configurations;
+  both runs reported eight scene entities and exit 0.
+- Native Computer Use was retried twice and remains unavailable, so the required
+  Editor screenshot/readback confirming monotonic highlight broadening and no
+  intensity jump is still **NOT RUN**. The checklist remains open.
+
+Next action: capture the Editor visual result after the native Computer Use pipe is
+available; do not mark this leaf PASS from startup or schema evidence alone.

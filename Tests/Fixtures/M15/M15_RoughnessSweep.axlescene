@@ -76,6 +76,7 @@ Entities:
       Exposure: 1.000000
       ToneMappingMode: 0
       Gamma: 2.200000
+  - Entity: 100004
     TagComponent:
       Tag: roughness_004
     TransformComponent:
@@ -157,6 +158,7 @@ Entities:
       CullMode: Back
       AlphaCutoff: 0.5
       DepthWrite: true
+  - Entity: 100005
     TagComponent:
       Tag: roughness_012
     TransformComponent:
@@ -238,6 +240,7 @@ Entities:
       CullMode: Back
       AlphaCutoff: 0.5
       DepthWrite: true
+  - Entity: 100006
     TagComponent:
       Tag: roughness_025
     TransformComponent:
@@ -319,6 +322,7 @@ Entities:
       CullMode: Back
       AlphaCutoff: 0.5
       DepthWrite: true
+  - Entity: 100007
     TagComponent:
       Tag: roughness_050
     TransformComponent:
@@ -400,6 +404,7 @@ Entities:
       CullMode: Back
       AlphaCutoff: 0.5
       DepthWrite: true
+  - Entity: 100008
     TagComponent:
       Tag: roughness_080
     TransformComponent:

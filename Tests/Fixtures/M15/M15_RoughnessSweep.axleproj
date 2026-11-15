@@ -2,7 +2,7 @@
 Project:
   SchemaVersion: 1
   Name: M15_RoughnessSweep
-  StartScene: M15_RoughnessSweep.axlescene
+  StartScene: ../../../Tests/Fixtures/M15/M15_RoughnessSweep.axlescene
   AssetDirectory: ../../../Samples/Sandbox/assets
   RHIBackend: Direct3D12
   Plugins:

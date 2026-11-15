@@ -1116,88 +1116,17 @@ namespace Axle {
                     return fail();
             }
 
-            // 7.7. Volumetric Fog & Atmospheric Media Pass
+            // 7.7. Volumetric fog and atmospheric media.
             if (useFog) {
-                if (!beginPass("FogCopy")) return fail();
-                Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
-                Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
-
-                if (!beginPass("FogCompute")) return fail();
-                RHIVolumetricFogConstants fogConstants{};
-                fogConstants.View = camera.GetViewMatrix();
-                fogConstants.InvView = glm::inverse(camera.GetViewMatrix());
-                fogConstants.Projection = projZO;
-                fogConstants.InvProjection = glm::inverse(projZO);
-                fogConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
-                    1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
-
-                if (world.DirectionalLight) {
-                    glm::vec3 sunDir = -glm::normalize(world.DirectionalLight->Direction);
-                    float sunIntensity = world.DirectionalLight->Intensity;
-                    fogConstants.SunDirectionIntensity = glm::vec4(sunDir, sunIntensity);
-                    fogConstants.SunColor = glm::vec4(world.DirectionalLight->Color, 1.0f);
-                } else {
-                    fogConstants.SunDirectionIntensity = glm::vec4(0.45f, 0.85f, 0.25f, 1.0f);
-                    fogConstants.SunColor = glm::vec4(1.0f, 0.98f, 0.92f, 1.0f);
-                }
-
-                if (world.VolumetricFog && world.VolumetricFog->Enabled) {
-                    const auto& vf = *world.VolumetricFog;
-                    fogConstants.FogParams = glm::vec4(vf.Density, vf.HeightFalloff, vf.ScatteringAsymmetry, vf.MaxDistance);
-                    fogConstants.FogColorIntensity = glm::vec4(vf.Color, vf.Intensity);
-                } else {
-                    fogConstants.FogParams = glm::vec4(settings.FogDensity, settings.FogHeightFalloff, settings.FogScattering, settings.FogMaxDistance);
-                    fogConstants.FogColorIntensity = glm::vec4(settings.FogColor, 1.0f);
-                }
-                fogConstants.DDGIParams = glm::vec4(settings.DDGIMultiplier, 0.0f, 0.0f, 0.0f);
-
-                if (!passUniform().UpdateData(&fogConstants, sizeof(RHIVolumetricFogConstants))) return fail();
-
-                if (!m_FogDescriptorPool.UpdateTexture(m_FogComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV())) return fail();
-                if (!m_FogDescriptorPool.UpdateSampler(m_FogComputeTextureSet, 1, 0, m_FogSampler.GetNative())) return fail();
-                if (!m_FogDescriptorPool.UpdateStorageTexture(m_FogComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV())) return fail();
-
-                Commands().SetPipeline(m_FogComputePipeline);
-                Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_FogComputePipelineLayout);
-                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
-                m_FogDescriptorPool.Bind(Commands().GetNative());
-                 if (!bindDescriptorSet(0, m_FogComputeTextureSet, nri::BindPoint::COMPUTE) ||
-                     !bindDescriptorSet(1, m_FogComputeStorageSet, nri::BindPoint::COMPUTE)) return fail();
-                Commands().Dispatch((width + 7) / 8, (height + 7) / 8, 1); ++dispatchCount;
-
-                if (!beginPass("FogApply")) return fail();
-                if (!passUniform().UpdateData(&fogConstants, sizeof(RHIVolumetricFogConstants))) return fail();
-                if (!m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 0, 0, m_OpaqueSceneColor->GetSRV())) return fail();
-                if (!m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV())) return fail();
-                if (!m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 2, 0, m_FogSampler.GetNative())) return fail();
-
-                nri::Pipeline* applyPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_FogApplyPipelineHDR)
-                    ? m_FogApplyPipelineHDR : m_FogApplyPipelineSDR;
-                if (!applyPipeline) return fail();
-
-                nri::AttachmentDesc applyColorAttachment = {};
-                applyColorAttachment.descriptor = sceneTargetRTV;
-                applyColorAttachment.loadOp = nri::LoadOp::CLEAR;
-                applyColorAttachment.storeOp = nri::StoreOp::STORE;
-                applyColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 1.0f };
-
-                nri::RenderingDesc applyRenderingDesc = {};
-                applyRenderingDesc.colors = &applyColorAttachment;
-                applyRenderingDesc.colorNum = 1;
-
-                beginRendering(applyRenderingDesc);
-                nri::Viewport applyVp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
-                Commands().SetViewport(applyVp);
-                nri::Rect applyScissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
-                Commands().SetScissor(applyScissor);
-
-                Commands().SetPipeline(applyPipeline);
-                Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_FogApplyPipelineLayout);
-                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::GRAPHICS);
-                m_FogDescriptorPool.Bind(Commands().GetNative());
-                 if (!bindDescriptorSet(0, m_FogApplyDescriptorSet)) return fail();
-                Commands().Draw(3, 1, 0, 0);
-                endRendering();
+                const Passes::PassRecordOps ops{
+                    beginPass, passUniform,
+                    [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                        return bindDescriptorSet(index, set, bindPoint);
+                    }, beginRendering, endRendering};
+                if (!Passes::FroxelFogPass::Record(*this,
+                    {world, camera, settings, projZO, sceneTargetTexture, sceneDepthTexture,
+                     sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
+                    return fail();
             }
 
             return {};

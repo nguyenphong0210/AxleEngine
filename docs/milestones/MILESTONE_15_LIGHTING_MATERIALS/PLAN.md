@@ -86,8 +86,10 @@ A Unit closes only when all its SubUnits pass, its dependency Units are accepted
 
 All M15 execution state is recorded in the single atomic checklist beginning in
 Section 4. The Unit/SubUnit hierarchy and dependency table describe ownership;
-they do not carry a second checkbox state. Close each item immediately after
-its evidence passes, then continue to the next dependency-ready item.
+they do not carry a second independent checkbox state. A parent group checkbox is
+allowed only as a derived summary: it remains unchecked until every child leaf is
+PASS, and it carries no evidence separate from its children. Close each leaf
+immediately after its evidence passes, then update the derived parent summary.
 
 ### 3.1 Scope allocation boundary: Milestone 15 vs Milestone 16
 
@@ -173,20 +175,20 @@ the item is visible.
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere is smooth with no triangle bands or invalid pixels.
   - **Evidence:** `AxleRenderUnitTests` runs a 64x128 analytic radial-normal reference with finite/unit/position-error and adjacent-edge-angle metrics; Debug/Release `RenderUnitTests` pass. User-supplied Debug Editor screenshot shows smooth shading without triangle bands or invalid pixels. See [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#M15-u0-06-1--visual-gate-pass).
-#### M15-U0-06.2 — Reference Hi-Z reduction
+- [ ] **M15-U0-06.2 — Reference Hi-Z reduction.** *(derived parent; tick only when all four children PASS)*
 
-- [x] **M15-U0-06.2.1 — Freeze Hi-Z depth convention and reduction operator.**
-  - **PASS when:** the convention is recorded from the current renderer contract and agrees with the production shader/resource dimensions.
-  - **Evidence:** zero-to-one depth, minimum-depth nearest-blocker policy, clamp-to-edge sampling, and `max(1, floor(size / 2^level))` dimensions are recorded in [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#m15-u0-06-2-1--freeze-hiz-depth-convention-and-reduction-operator).
-- [ ] **M15-U0-06.2.2 — Create independent CPU Hi-Z reference.**
-  - **PASS when:** a CPU reference accepts arbitrary depth arrays and produces the complete pyramid without reusing production shader/reduction code.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U0-06.2.3 — Validate Hi-Z reference edge cases.**
-  - **PASS when:** reference outputs match expected dimensions and edge values for `1x1`, `3x5` and `1919x1079` inputs.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U0-06.2.4 — Validate nontrivial Hi-Z level identity.**
-  - **PASS when:** tests fail if only level zero is written or all levels contain the same data, and pass for the independent reference pyramid.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [x] **M15-U0-06.2.1 — Freeze Hi-Z depth convention and reduction operator.**
+    - **PASS when:** the convention is recorded from the current renderer contract and agrees with the production shader/resource dimensions.
+    - **Evidence:** zero-to-one depth, minimum-depth nearest-blocker policy, clamp-to-edge sampling, and `max(1, floor(size / 2^level))` dimensions are recorded in [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#m15-u0-06-2-1--freeze-hiz-depth-convention-and-reduction-operator).
+  - [ ] **M15-U0-06.2.2 — Create independent CPU Hi-Z reference.**
+    - **PASS when:** a CPU reference accepts arbitrary depth arrays and produces the complete pyramid without reusing production shader/reduction code.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [ ] **M15-U0-06.2.3 — Validate Hi-Z reference edge cases.**
+    - **PASS when:** reference outputs match expected dimensions and edge values for `1x1`, `3x5` and `1919x1079` inputs.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - [ ] **M15-U0-06.2.4 — Validate nontrivial Hi-Z level identity.**
+    - **PASS when:** tests fail if only level zero is written or all levels contain the same data, and pass for the independent reference pyramid.
+    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
 - [ ] **M15-U0-06.3 — Reference probe direction.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

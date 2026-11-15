@@ -287,6 +287,8 @@ bool Native(RHIType backend) {
     settings.EnableGTAO=false; settings.EnableContactShadows=false;
     settings.EnableSSR=true; auto ssr=render();
     CHECK(!ssr.empty()&&ssr.size()==red.size());
+    CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","SurfaceNormal","Transparent","ParticlesAndPhysics",
+        "SSRCopy","HiZ0","HiZ1","HiZ2","HiZ3","HiZ4","HiZ5","HiZ6","HiZ7", "SSRCompute","SSRApply","Export"}));
     std::vector<uint8_t> previousHiZ;
     for (uint32_t level = 0; level < 8; ++level) {
         auto* hiz = renderer.GetHiZTarget(level);

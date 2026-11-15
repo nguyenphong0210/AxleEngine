@@ -29,3 +29,9 @@ Logs: `build/agent-runs/M15-U3-batches-1-2/03.3-build-*.log` and `03.3-*-*.log`.
 **PASS (self-review).** `RHIDescriptorPool::UpdateTextureRange` already rejects a pinned descriptor set, and `RHIResourceService::ReplaceDescriptorRange` repeats the guard. A new native fixture binds a real set, tries to replace its texture while the command is recording, executable and submitted, checks the original backing dependency remains published, then waits for completion and verifies that replacement and restoration work. No native update is attempted on rejected paths.
 
 The same Debug/Release build commands above were run after this fixture was added; both exit 0. The same four native fixture commands above were rerun with exit 0. Logs: `build/agent-runs/M15-U3-batches-1-2/04-build-*.log` and `04-*-*.log`; each native log ends `RenderGraph authority PASS`. No Editor image is required.
+
+## U3-05.1 — Hi-Z graph reads and writes
+
+**PASS (self-review).** The production graph declares each `HiZ0..7` pass as an SRV read of the copied depth or previous level and a storage write to its own level. `SSRCompute` declares all levels as SRV reads. The strict native environment fixture now asserts the complete pass sequence, and its existing readback asserts each level has data distinct from its predecessor.
+
+Builds: `cmake --build build --config Debug --target AxleEnvironmentRenderingTests --parallel 4` and the same Release command, both exit 0. Runs: `build/Tests/{Debug,Release}/AxleEnvironmentRenderingTests.exe {dx12,vulkan} build/agent-runs/M15-U3-batches-1-2/05.1-{config}-{backend}-artifacts`, all four exit 0. Logs: `build/agent-runs/M15-U3-batches-1-2/05.1-build-*.log` and `05.1-*.log`; generated native images and scorecards are in the corresponding `05.1-*-*-artifacts` directories. No Editor image is required for this checkpoint.

@@ -339,9 +339,9 @@ the item is visible.
 - [x] **M15-U3-04 — Never modify a descriptor set after binding in the same submission.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** Existing `IsInUse` rejection is exercised by a native fixture across recording, executable and submitted states; completion permits reuse. Debug/Release D3D12/Vulkan 4/4 exit 0; [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
-- [ ] **M15-U3-05.1 — Declare Hi-Z reads/writes.**
+- [x] **M15-U3-05.1 — Declare Hi-Z reads/writes.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Strict native environment fixture asserts all eight Hi-Z pass recordings and reads back distinct level data. Debug/Release D3D12/Vulkan 4/4 exit 0; [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
 - [ ] **M15-U3-05.2 — Declare normal/probe reads.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

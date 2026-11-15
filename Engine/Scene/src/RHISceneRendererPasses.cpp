@@ -1379,50 +1379,15 @@ namespace Axle {
                     {ddgiOutput,Layout::ShaderResourceStorage,Access::Write}});
             }
             if (useGTAO) {
-                graph.AddPass("GTAOCopy", {{sceneColor,Layout::CopySource}, {gtaoInput,Layout::CopyDest,Access::Write},
-                    {sceneDepth,Layout::CopySource}, {gtaoDepth,Layout::CopyDest,Access::Write}});
-                graph.AddPass("GTAOCompute", {
-                    {gtaoDepth, Layout::ShaderResource},
-                    {sceneNormal, Layout::ShaderResource},
-                    {gtaoStorage, Layout::ShaderResourceStorage, Access::Write}});
-                graph.AddPass("GTAOApply", {
-                    {gtaoDepth, Layout::ShaderResource},
-                    {gtaoStorage, Layout::ShaderResource},
-                    {gtaoInput, Layout::ShaderResource},
-                    {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
+                Passes::GTAOPass::Declare(graph, {sceneColor, gtaoInput, sceneDepth, gtaoDepth,
+                    sceneNormal, gtaoStorage});
             }
             if (useSSR) {
-                graph.AddPass("SSRCopy", {{sceneColor,Layout::CopySource}, {ssrInput,Layout::CopyDest,Access::Write},
-                    {sceneDepth,Layout::CopySource}, {ssrDepth,Layout::CopyDest,Access::Write}});
-                for (uint32_t level = 0; level < hizResources.size(); ++level) {
-                    graph.AddPass("HiZ" + std::to_string(level), {
-                        {level == 0 ? ssrDepth : hizResources[level - 1], Layout::ShaderResource},
-                        {hizResources[level], Layout::ShaderResourceStorage, Access::Write}});
-                }
-                std::vector<Graph::Use> ssrComputeUses{
-                    {ssrDepth, Layout::ShaderResource},
-                    {sceneNormal, Layout::ShaderResource},
-                    {ssrInput, Layout::ShaderResource},
-                    {ssrStorage, Layout::ShaderResourceStorage, Access::Write}};
-                for (const auto& hiz : hizResources) ssrComputeUses.push_back({hiz, Layout::ShaderResource});
-                graph.AddPass("SSRCompute", std::move(ssrComputeUses));
-                graph.AddPass("SSRApply", {
-                    {sceneNormal, Layout::ShaderResource},
-                    {ssrDepth, Layout::ShaderResource},
-                    {ssrStorage, Layout::ShaderResource},
-                    {ssrInput, Layout::ShaderResource},
-                    {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
+                Passes::ScreenSpaceReflectionPass::Declare(graph, {sceneColor, ssrInput, sceneDepth,
+                    ssrDepth, sceneNormal, ssrStorage, hizResources});
             }
             if (useFog) {
-                graph.AddPass("FogCopy", {{sceneColor,Layout::CopySource}, {fogInput,Layout::CopyDest,Access::Write},
-                    {sceneDepth,Layout::CopySource}, {fogDepth,Layout::CopyDest,Access::Write}});
-                graph.AddPass("FogCompute", {
-                    {fogDepth, Layout::ShaderResource},
-                    {fogStorage, Layout::ShaderResourceStorage, Access::Write}});
-                graph.AddPass("FogApply", {
-                    {fogInput, Layout::ShaderResource},
-                    {fogStorage, Layout::ShaderResource},
-                    {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
+                Passes::FroxelFogPass::Declare(graph, {sceneColor, fogInput, sceneDepth, fogDepth, fogStorage});
             }
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useDDGI && !uniform("DDGIUpdate",sizeof(RHIDDGIConstants))) return fail();
@@ -1672,50 +1637,9 @@ namespace Axle {
 
             return {};
         }, [&](RenderGraph& graph) {
-            if (useBloom) {
-                graph.AddPass("BloomCopy", {{sceneColor, Layout::CopySource}, {bloomInput, Layout::CopyDest, Access::Write}});
-                for (uint32_t level = 0; level < bloomResources.size(); ++level) {
-                    graph.AddPass("BloomDown" + std::to_string(level), {
-                        {level == 0 ? bloomInput : bloomResources[level - 1], Layout::ShaderResource},
-                        {bloomResources[level], Layout::ShaderResourceStorage, Access::Write}});
-                }
-                for (int level = static_cast<int>(bloomResources.size()) - 2; level >= 0; --level) {
-                    graph.AddPass("BloomUp" + std::to_string(level), {
-                        {bloomResources[level + 1], Layout::ShaderResource},
-                        {bloomResources[level], Layout::ShaderResourceStorage, Access::Write}});
-                }
-                graph.AddPass("BloomApply", {
-                    {bloomResources[0], Layout::ShaderResource},
-                    {bloomInput, Layout::ShaderResource},
-                    {sceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
-            }
-            if (useAutoExposure) {
-                if (!useToneMap) graph.AddPass("AutoExposureCopy", {
-                    {sceneColor,Layout::CopySource}, {exposureInput,Layout::CopyDest,Access::Write}});
-                graph.AddPass("AutoExposure", {
-                    {exposureInput, Layout::ShaderResource},
-                    {exposureOutput, Layout::ShaderResourceStorage, Access::Write}});
-            }
-            if (useTAA) {
-                const auto taaSource = useToneMap ? hdr : sceneColor;
-                graph.AddPass("TAAResolve", {
-                    {taaSource, Layout::ShaderResource},
-                    {sceneDepth, Layout::ShaderResource},
-                    {taaHistoryRead, Layout::ShaderResource},
-                    {taaHistoryWrite, Layout::ColorAttachment, Access::Write, Load::Clear}});
-                graph.AddPass("TAACopy", {
-                    {taaHistoryWrite, Layout::CopySource},
-                    {taaSource, Layout::CopyDest, Access::Write}});
-            }
-            if (useToneMap) {
-                if (useAutoExposure) graph.AddPass("ToneMapping", {
-                    {hdr,Layout::ShaderResource}, {exposureOutput,Layout::ShaderResource},
-                    {fxaa,Layout::ColorAttachment,Access::Write,Load::Clear}});
-                else graph.AddPass("ToneMapping", {
-                    {hdr,Layout::ShaderResource}, {fxaa,Layout::ColorAttachment,Access::Write,Load::Clear}});
-            }
-            if (useFXAA) graph.AddPass("FXAA", {
-                {fxaa,Layout::ShaderResource}, {output,Layout::ColorAttachment,Access::Write,Load::Clear}});
+            Passes::PostProcessPass::Declare(graph, {sceneColor, sceneDepth, output, hdr, fxaa,
+                bloomInput, exposureInput, exposureOutput, taaHistoryRead, taaHistoryWrite,
+                bloomResources, useBloom, useAutoExposure, useTAA, useToneMap, useFXAA});
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useBloom) {
                 if (!uniform("BloomApply",sizeof(RHIBloomConstants))) return fail();

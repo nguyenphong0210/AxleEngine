@@ -48,6 +48,11 @@ add_library(AxleScene STATIC
     src/MaterialTextureCache.cpp
     src/RHISceneRenderer.cpp
     src/RHISceneRendererPasses.cpp
+    src/Passes/GTAOPass.cpp
+    src/Passes/HiZGenerationPass.cpp
+    src/Passes/ScreenSpaceReflectionPass.cpp
+    src/Passes/FroxelFogPass.cpp
+    src/Passes/PostProcessPass.cpp
     src/RHILocalShadows.cpp
     src/RHIShadowDepthAtlas.cpp
     src/RHICascadedShadows.cpp

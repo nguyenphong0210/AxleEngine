@@ -373,9 +373,9 @@ the item is visible.
 - [x] **M15-U3-09.1 — Create pass headers under Passes.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** GTAO, Hi-Z, SSR, fog and post graph/record contracts plus borrowed frame operations compile in Debug/Release `AxleScene` (both exit 0). See [U3 batch 3 review](../../reviews/M15_U3_BATCH_3_REVIEW.md).
-- [ ] **M15-U3-09.2 — Create pass implementations under Passes.**
+- [x] **M15-U3-09.2 — Create pass implementations under Passes.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Five pass modules now own the GTAO, Hi-Z/SSR, fog and post RenderGraph declarations; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 after rewiring. Recording extraction continues in U3-10. [U3 batch 3 review](../../reviews/M15_U3_BATCH_3_REVIEW.md).
 - [ ] **M15-U3-10.1 — Extract GTAOPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

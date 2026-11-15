@@ -304,9 +304,9 @@ the item is visible.
   - **PASS when:** U2 defines and verifies the shared procedural/authored environment input, publication, consumer and fallback contract while the dynamic local capture and multi-probe implementation remains assigned to U5.
   - **Evidence:** [S2.1 contract](../../reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md), [S2.2 generation](../../reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md) and [S2.3 consumers](../../reviews/M15_U2_S2_3_ENVIRONMENT_CONSUMERS_REVIEW.md) are accepted. The current renderer consumes one selected authored cubemap probe; U5-08–U5-31 remain open for dynamic capture and blending.
 
-- [ ] **M15-U2-05.1 — Run D3D12 environment readback.**
+- [x] **M15-U2-05.1 — Run D3D12 environment readback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Debug/Release D3D12 native environment readback PASS (2/2, exit 0); 128x128 PPM output and SHA-256 manifests validated. Exact commands, logs and artifact directories: [U2-05 readback report](../../reviews/M15_U2_05_ENVIRONMENT_READBACK.md).
 - [ ] **M15-U2-05.2 — Run Vulkan environment readback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

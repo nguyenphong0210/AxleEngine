@@ -393,9 +393,9 @@ the item is visible.
 - [x] **M15-U3-10.5 — Extract PostProcessPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** `PostProcessPass::Record` owns bloom, auto exposure, TAA, tone mapping and FXAA recording; Debug/Release native environment fixture passes D3D12/Vulkan 4/4. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
-- [ ] **M15-U3-11.1 — Forward orchestration through RenderPassScheduler.**
+- [x] **M15-U3-11.1 — Forward orchestration through RenderPassScheduler.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** DDGI, GTAO, SSR, fog and post/temporal now register as separately named scheduler nodes in their original order, with individual graph declaration, prepare and recording callbacks. Debug/Release native environment fixture passes D3D12/Vulkan 4/4, including graph order and output checks. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
 - [ ] **M15-U3-11.2 — Forward view state through ViewContext.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

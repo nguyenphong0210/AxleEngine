@@ -19,3 +19,9 @@ Debug/Release `AxleEnvironmentRenderingTests` builds exit 0. Four native runs on
 **PASS (self-verification).** `PostProcessPass::Record` now owns the bloom down/up pyramid and apply, auto-exposure compute, TAA resolve/copy, tone mapping and FXAA recording. Material-generation observation remains in the invoking adapter until the view-state forwarding checkpoint. The graph declarations remain in `PostProcessPass::Declare` and use the original order; failures return through the renderer's diagnostic path.
 
 Debug/Release `AxleEnvironmentRenderingTests` builds exit 0. Native D3D12/Vulkan runs exit 0 in all four combinations with `10.5-` log/artifact prefixes under `build/agent-runs/M15-U3-batch-4/`. The fixture exercises bloom, exposure and TAA ordering and output, including first/second history frames. No Editor visual gate is specified for this leaf.
+
+## U3-11.1 — Scheduler orchestration
+
+**PASS (self-verification).** The previous combined reflection/GI callback is split into ordered `DDGIUpdate`, `GTAOPass`, `ScreenSpaceReflectionPass` and `FroxelFogPass` scheduler nodes. The post node is named `PostProcessPass`. Each node supplies its own graph declaration, preparation and recording callback; a failed callback stops execution and propagates the scheduler diagnostic. The current `CallbackRenderPass` remains the `IRenderPass` adapter for each node. This checkpoint does not claim the later migration of every pass class into Engine/Renderer.
+
+Debug/Release `AxleEnvironmentRenderingTests` builds exit 0. Native D3D12/Vulkan runs exit 0 in all four combinations with `11.1-` log/artifact prefixes under `build/agent-runs/M15-U3-batch-4/`. The fixture checks graph pass order for enabled DDGI/GTAO/SSR/fog/post paths and rendered outputs. The logs also contain intentional negative-path errors from fixture cases; the test process exits 0 and ends with its `PASS` summary.

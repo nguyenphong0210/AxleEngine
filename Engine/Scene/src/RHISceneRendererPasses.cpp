@@ -1061,7 +1061,7 @@ namespace Axle {
             return {};
         });
 
-        addPass("ReflectionAndGI", [&](const RenderPassContext&) -> RenderPassResult {
+        addPass("DDGIUpdate", [&](const RenderPassContext&) -> RenderPassResult {
             if (useDDGI) {
                 if (!beginPass("DDGICopy")) return fail();
                 Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
@@ -1088,6 +1088,22 @@ namespace Axle {
                 Commands().Dispatch((ddgiTarget->GetWidth() + 7) / 8, (ddgiTarget->GetHeight() + 7) / 8, 1); ++dispatchCount;
             }
 
+            return {};
+        }, [&](RenderGraph& graph) {
+            if (useDDGI) {
+                graph.AddPass("DDGICopy", {
+                    {sceneColor,Layout::CopySource}, {ddgiInput,Layout::CopyDest,Access::Write},
+                    {sceneDepth,Layout::CopySource}, {ddgiDepth,Layout::CopyDest,Access::Write}});
+                graph.AddPass("DDGIUpdate", {
+                    {ddgiInput,Layout::ShaderResource}, {ddgiDepth,Layout::ShaderResource},
+                    {ddgiOutput,Layout::ShaderResourceStorage,Access::Write}});
+            }
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (useDDGI && !uniform("DDGIUpdate",sizeof(RHIDDGIConstants))) return fail();
+            return {};
+        });
+
+        addPass("GTAOPass", [&](const RenderPassContext&) -> RenderPassResult {
             // 7.5. Half-resolution-style screen-space GTAO sampling. The shared
             // fullscreen pass samples a 2x depth footprint and writes the AO
             // modulation back into the scene color before tone mapping/FXAA.
@@ -1103,6 +1119,19 @@ namespace Axle {
                     return fail();
             }
 
+            return {};
+        }, [&](RenderGraph& graph) {
+            if (useGTAO) {
+                Passes::GTAOPass::Declare(graph, {sceneColor, gtaoInput, sceneDepth, gtaoDepth,
+                    sceneNormal, gtaoStorage});
+            }
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (useGTAO && (!uniform("GTAOCompute",sizeof(RHIGTAOConstants)) ||
+                !uniform("GTAOApply",sizeof(RHIGTAOConstants)))) return fail();
+            return {};
+        });
+
+        addPass("ScreenSpaceReflectionPass", [&](const RenderPassContext&) -> RenderPassResult {
             // 7.6. Screen-Space Reflections with probe fallback.
             if (useSSR) {
                 const Passes::PassRecordOps ops{
@@ -1116,6 +1145,24 @@ namespace Axle {
                     return fail();
             }
 
+            return {};
+        }, [&](RenderGraph& graph) {
+            if (useSSR) {
+                Passes::ScreenSpaceReflectionPass::Declare(graph, {sceneColor, ssrInput, sceneDepth,
+                    ssrDepth, sceneNormal, ssrStorage, hizResources});
+            }
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (useSSR) {
+                if (!uniform("SSRCompute",sizeof(RHISSRConstants)) || !uniform("SSRApply",sizeof(RHISSRConstants))) return fail();
+                for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
+                auto probe = m_ActiveReflectionProbePrefilter && m_ActiveReflectionProbePrefilter->IsValid()
+                    ? m_ActiveReflectionProbePrefilter : RHIMaterial::GetDefaultPrefilterCubemap();
+                if (!probe || !graph.DeclareRead("SSRCompute",probe->GetSRV())) return fail();
+            }
+            return {};
+        });
+
+        addPass("FroxelFogPass", [&](const RenderPassContext&) -> RenderPassResult {
             // 7.7. Volumetric fog and atmospheric media.
             if (useFog) {
                 const Passes::PassRecordOps ops{
@@ -1131,42 +1178,16 @@ namespace Axle {
 
             return {};
         }, [&](RenderGraph& graph) {
-            if (useDDGI) {
-                graph.AddPass("DDGICopy", {
-                    {sceneColor,Layout::CopySource}, {ddgiInput,Layout::CopyDest,Access::Write},
-                    {sceneDepth,Layout::CopySource}, {ddgiDepth,Layout::CopyDest,Access::Write}});
-                graph.AddPass("DDGIUpdate", {
-                    {ddgiInput,Layout::ShaderResource}, {ddgiDepth,Layout::ShaderResource},
-                    {ddgiOutput,Layout::ShaderResourceStorage,Access::Write}});
-            }
-            if (useGTAO) {
-                Passes::GTAOPass::Declare(graph, {sceneColor, gtaoInput, sceneDepth, gtaoDepth,
-                    sceneNormal, gtaoStorage});
-            }
-            if (useSSR) {
-                Passes::ScreenSpaceReflectionPass::Declare(graph, {sceneColor, ssrInput, sceneDepth,
-                    ssrDepth, sceneNormal, ssrStorage, hizResources});
-            }
             if (useFog) {
                 Passes::FroxelFogPass::Declare(graph, {sceneColor, fogInput, sceneDepth, fogDepth, fogStorage});
             }
         }, [&](const RenderPassContext&) -> RenderPassResult {
-            if (useDDGI && !uniform("DDGIUpdate",sizeof(RHIDDGIConstants))) return fail();
-            if (useGTAO && (!uniform("GTAOCompute",sizeof(RHIGTAOConstants)) ||
-                !uniform("GTAOApply",sizeof(RHIGTAOConstants)))) return fail();
-            if (useSSR) {
-                if (!uniform("SSRCompute",sizeof(RHISSRConstants)) || !uniform("SSRApply",sizeof(RHISSRConstants))) return fail();
-                for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
-                auto probe = m_ActiveReflectionProbePrefilter && m_ActiveReflectionProbePrefilter->IsValid()
-                    ? m_ActiveReflectionProbePrefilter : RHIMaterial::GetDefaultPrefilterCubemap();
-                if (!probe || !graph.DeclareRead("SSRCompute",probe->GetSRV())) return fail();
-            }
             if (useFog && (!uniform("FogCompute",sizeof(RHIVolumetricFogConstants)) ||
                 !uniform("FogApply",sizeof(RHIVolumetricFogConstants)))) return fail();
             return {};
         });
 
-        addPass("PostAndTemporal", [&](const RenderPassContext&) -> RenderPassResult {
+        addPass("PostProcessPass", [&](const RenderPassContext&) -> RenderPassResult {
             std::vector<std::pair<uint32_t, uint64_t>> identities;
             auto collect = [&](const auto& queue) {
                 for (const auto& item : queue) {

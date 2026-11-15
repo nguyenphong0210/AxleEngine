@@ -1110,33 +1110,13 @@ namespace Axle {
                 Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
 
                 // Build the conservative min-depth pyramid before SSR traversal.
-                for (uint32_t level = 0; level < 8; ++level) {
-                    if (!beginPass("HiZ" + std::to_string(level))) return fail();
-                    auto* source = level == 0 ? m_OpaqueSceneDepth : viewTargets->GetHiZ(level - 1);
-                    auto* destination = viewTargets->GetHiZ(level);
-                    if (!source || !destination || !source->IsValid() || !destination->IsValid()) return fail();
-                    RHIHiZConstants hizConstants{};
-                    hizConstants.SourceSize = glm::vec4(static_cast<float>(source->GetWidth()), static_cast<float>(source->GetHeight()),
-                        1.0f / static_cast<float>(source->GetWidth()), 1.0f / static_cast<float>(source->GetHeight()));
-                    hizConstants.DestinationSize = glm::vec4(static_cast<float>(destination->GetWidth()), static_cast<float>(destination->GetHeight()),
-                        1.0f / static_cast<float>(destination->GetWidth()), 1.0f / static_cast<float>(destination->GetHeight()));
-                    hizConstants.Params.x = level == 0 ? 1.0f : 0.0f;
-                    hizConstants.Params.y = static_cast<float>(level);
-                    if (!passUniform().UpdateData(&hizConstants, sizeof(RHIHiZConstants))) return fail();
-                    auto* textureSet = m_HiZTextureSets[level];
-                    auto* storageSet = m_HiZStorageSets[level];
-                    if (!textureSet || !storageSet ||
-                        !m_HiZDescriptorPool.UpdateTexture(textureSet, 0, 0, source->GetSRV()) ||
-                        !m_HiZDescriptorPool.UpdateSampler(textureSet, 1, 0, m_HiZSampler.GetNative()) ||
-                        !m_HiZDescriptorPool.UpdateStorageTexture(storageSet, 0, 0, destination->GetUAV())) return fail();
-                    Commands().SetPipeline(m_HiZPipeline);
-                    Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_HiZPipelineLayout);
-                    Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
-                    m_HiZDescriptorPool.Bind(Commands().GetNative());
-                 if (!bindDescriptorSet(0, textureSet, nri::BindPoint::COMPUTE) ||
-                     !bindDescriptorSet(1, storageSet, nri::BindPoint::COMPUTE)) return fail();
-                    Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1); ++dispatchCount;
-                }
+                const Passes::PassRecordOps hizOps{
+                    beginPass, passUniform,
+                    [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                        return bindDescriptorSet(index, set, bindPoint);
+                    }, beginRendering, endRendering};
+                if (!Passes::HiZGenerationPass::Record(*this, viewTargets, hizOps, dispatchCount))
+                    return fail();
 
                 if (!beginPass("SSRCompute")) return fail();
                 RHISSRConstants ssrConstants{};

@@ -379,9 +379,9 @@ the item is visible.
 - [x] **M15-U3-10.1 — Extract GTAOPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** `GTAOPass::Record` owns copy, compute and apply recording through borrowed frame operations; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 with strict GTAO pass sequence. [U3 batch 3 review](../../reviews/M15_U3_BATCH_3_REVIEW.md).
-- [ ] **M15-U3-10.2 — Extract HiZGenerationPass.**
+- [x] **M15-U3-10.2 — Extract HiZGenerationPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** `HiZGenerationPass::Record` owns all eight reduction levels, source/destination constants, descriptor updates and dispatch; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 with level identity/readback checks. [U3 batch 3 review](../../reviews/M15_U3_BATCH_3_REVIEW.md).
 - [ ] **M15-U3-10.3 — Extract ScreenSpaceReflectionPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.

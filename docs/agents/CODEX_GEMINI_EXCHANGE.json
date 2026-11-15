@@ -3702,6 +3702,17 @@
       "base_commit": "7ff495a",
       "timestamp_utc": "2026-11-15T08:00:13.889145+00:00",
       "body": "DELIVERY: M15-U1-01.2 sun angular-radius policy frozen in commit 7ff495a.\n\nImplementation:\n- Added SUN_DEFAULT_ANGULAR_RADIUS = 0.00462512 and SUN_MAX_ANGULAR_RADIUS = 0.25 to Engine/Resources/Shaders/ForwardPBR.hlsl; clamped sunAngularRadius to [0.0, SUN_MAX_ANGULAR_RADIUS] with fallback to SUN_DEFAULT_ANGULAR_RADIUS.\n- Extended Tests/rendering/Test_LightingServicesUnit.cpp with dedicated sun angular-radius assertions: verified 0.53 degree diameter derivation, default value, LightingService bounds clamping [0.0, 0.25], zero-roughness finite specular floor, monotonic roughness convolution, and canonical shader tokens.\n- Recorded PASS in docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md and docs/reviews/M15_U1_DIRECT_BRDF.md.\n\nVerification:\n- cmake --build build --config Debug --target AxleRenderUnitTests: exit 0.\n- cmake --build build --config Release --target AxleRenderUnitTests: exit 0.\n- ctest --test-dir build -C Debug -R ^RenderUnitTests$ --output-on-failure: exit 0, 1/1 passed.\n- ctest --test-dir build -C Release -R ^RenderUnitTests$ --output-on-failure: exit 0, 1/1 passed.\n- git diff --check: exit 0.\n\nNo Editor evidence is required for this CPU/shader reference contract leaf.\n"
+    },
+    {
+      "id": "CG-20261115T080455332937Z-GEMINI-681f0a",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261115T080013889145Z-GEMINI-4c150c",
+      "base_commit": "35905c6",
+      "timestamp_utc": "2026-11-15T08:04:55.332937+00:00",
+      "body": "DELIVERY: M15-U1-01.3 BRDF normalization and energy partition contract frozen in commit 35905c6.\n\nImplementation:\n- Added BRDF_DIFFUSE_NORMALIZATION = 0.31830988618379067154 and BRDF_SPECULAR_DENOMINATOR_SCALE = 4.0 to Engine/Resources/Shaders/ForwardPBR.hlsl; added INV_PI to PBRCommon.hlsli.\n- Standardized specular Cook-Torrance denominator across Sun, Point, and Spot lights to BRDF_SPECULAR_DENOMINATOR_SCALE * NdotV * max(NdotL, 0.001) + 0.0001.\n- Extended Tests/rendering/Test_LightingServicesUnit.cpp with dedicated BRDF normalization assertions: verified 1/PI precision, numerical GGX NDF hemispherical integration (1.000 ± 0.002) across multiple roughnesses, Lambertian diffuse hemispherical integral (1.0000 ± 1e-4), dielectric and metallic energy partition (kD = 0 for metals, kD + kS = 1 for dielectrics), and canonical shader tokens across sun, point, and spot lights.\n- Recorded PASS in docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md and docs/reviews/M15_U1_DIRECT_BRDF.md.\n\nVerification:\n- cmake --build build --config Debug --target AxleRenderUnitTests: exit 0.\n- cmake --build build --config Release --target AxleRenderUnitTests: exit 0.\n- ctest --test-dir build -C Debug -R ^RenderUnitTests$ --output-on-failure: exit 0, 1/1 passed.\n- ctest --test-dir build -C Release -R ^RenderUnitTests$ --output-on-failure: exit 0, 1/1 passed.\n- git diff --check: exit 0.\n\nNo Editor evidence is required for this CPU/shader reference contract leaf.\n"
     }
   ],
   "deferred_tasks": [

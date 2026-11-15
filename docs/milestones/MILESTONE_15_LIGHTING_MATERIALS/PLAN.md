@@ -217,9 +217,9 @@ the item is visible.
 - [x] **M15-U1-01.2 — Freeze sun angular-radius policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** `SUN_DEFAULT_ANGULAR_RADIUS` (0.00462512 rad, matching 0.53° diameter) and `SUN_MAX_ANGULAR_RADIUS` (0.25 rad) frozen in `ForwardPBR.hlsl`; `Test_LightingServicesUnit.cpp` validates 0.53° physical angle, directional default, [0.0, 0.25] clamping in `LightingService`, zero-roughness finite specular floor, monotonic bounded roughness convolution, and canonical shader token usage; Debug/Release `RenderUnitTests` CTest pass. Source commit: `7ff495a`.
-- [ ] **M15-U1-01.3 — Freeze BRDF normalization.**
+- [x] **M15-U1-01.3 — Freeze BRDF normalization.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** `BRDF_DIFFUSE_NORMALIZATION` (0.318309886... matching 1/PI) and `BRDF_SPECULAR_DENOMINATOR_SCALE` (4.0) frozen in `ForwardPBR.hlsl` and `PBRCommon.hlsli`; `Test_LightingServicesUnit.cpp` validates 1/PI precision, GGX NDF numerical hemispherical integration across multiple roughnesses (1.000 ± 0.002), Lambertian hemispherical integral (1.0000 ± 1e-4), dielectric and metallic energy partition (kD = 0 for metals, kD + kS = 1 for dielectrics), and canonical shader tokens across sun, point, and spot lights; Debug/Release `RenderUnitTests` CTest pass. Source commit: `35905c6`.
 - [ ] **M15-U1-01.4 — Freeze exposure interaction.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.

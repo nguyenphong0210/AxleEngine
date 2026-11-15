@@ -46,3 +46,26 @@ Result: **PASS**.
 - Source commit: `7ff495a`.
 
 Next sequential leaf: `M15-U1-01.3 — Freeze BRDF normalization`.
+
+## M15-U1-01.3 — Freeze BRDF normalization
+
+Result: **PASS**.
+
+- Frozen constants in `Engine/Resources/Shaders/ForwardPBR.hlsl` and `Engine/Resources/Shaders/PBRCommon.hlsli`:
+  - `BRDF_DIFFUSE_NORMALIZATION = 0.31830988618379067154` (exact $1/\pi$ diffuse normalization).
+  - `BRDF_SPECULAR_DENOMINATOR_SCALE = 4.0` (Cook-Torrance $4 (N\cdot V)(N\cdot L)$ specular normalization).
+  - Spot light specular denominator aligned to `BRDF_SPECULAR_DENOMINATOR_SCALE * NdotV * max(NdotL, 0.001) + 0.0001` matching Sun and Point lights.
+- `Tests/rendering/Test_LightingServicesUnit.cpp` verifies:
+  - Exact match of `InvPi` with $1/\pi$ within $10^{-7}$.
+  - GGX NDF numerical hemispherical integration $\int_0^{\pi/2} D(\theta) \cos\theta \sin\theta 2\pi d\theta = 1.000 \pm 0.002$ across roughnesses $[0.05, 1.0]$.
+  - Lambertian diffuse hemispherical integration $\int_0^{\pi/2} \frac{1}{\pi} \cos\theta \sin\theta 2\pi d\theta = 1.0000 \pm 10^{-4}$ for unit albedo.
+  - Direct energy partition: $k_D = (1 - k_S)(1 - \text{metallic})$; pure metals have $k_D = 0$ strictly; pure dielectrics conserve $k_D + k_S = 1.0$; total partition never exceeds 1.0.
+  - Canonical shader token check across all direct light paths (Sun, Point, Spot).
+- Verification:
+  - `cmake --build build --config Debug --target AxleRenderUnitTests`: exit 0.
+  - `cmake --build build --config Release --target AxleRenderUnitTests`: exit 0.
+  - `ctest --test-dir build -C Debug -R '^RenderUnitTests$' --output-on-failure`: exit 0 (1/1 passed).
+  - `ctest --test-dir build -C Release -R '^RenderUnitTests$' --output-on-failure`: exit 0 (1/1 passed).
+- Source commit: `35905c6`.
+
+Next sequential leaf: `M15-U1-01.4 — Freeze exposure interaction`.

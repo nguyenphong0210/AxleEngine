@@ -1114,7 +1114,7 @@ namespace Axle {
                 nri::Descriptor* normalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
                 if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 1, 0, normalSRV)) return fail();
                 if (!m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative())) return fail();
-                m_GTAODescriptorPool.UpdateStorageTexture(m_GTAOComputeStorageSet, 0, 0, gtaoTarget->GetUAV());
+                if (!m_GTAODescriptorPool.UpdateStorageTexture(m_GTAOComputeStorageSet, 0, 0, gtaoTarget->GetUAV())) return fail();
 
                 Commands().SetPipeline(m_GTAOComputePipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_GTAOComputePipelineLayout);
@@ -1230,7 +1230,7 @@ namespace Axle {
                 if (!m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 0, m_OpaqueSceneColor->GetSRV())) return fail();
                 if (!m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 1, probeSRV)) return fail();
                 if (!m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative())) return fail();
-                m_SSRDescriptorPool.UpdateStorageTexture(m_SSRComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
+                if (!m_SSRDescriptorPool.UpdateStorageTexture(m_SSRComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV())) return fail();
 
                 Commands().SetPipeline(m_SSRComputePipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_SSRComputePipelineLayout);
@@ -1316,7 +1316,7 @@ namespace Axle {
 
                 if (!m_FogDescriptorPool.UpdateTexture(m_FogComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV())) return fail();
                 if (!m_FogDescriptorPool.UpdateSampler(m_FogComputeTextureSet, 1, 0, m_FogSampler.GetNative())) return fail();
-                m_FogDescriptorPool.UpdateStorageTexture(m_FogComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
+                if (!m_FogDescriptorPool.UpdateStorageTexture(m_FogComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV())) return fail();
 
                 Commands().SetPipeline(m_FogComputePipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_FogComputePipelineLayout);

@@ -188,6 +188,58 @@ static bool Run() {
             "sampler range retry and single helper restore the descriptor");
     }
     {
+        nri::DescriptorRangeDesc storageRange{};
+        storageRange.descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        storageRange.descriptorNum = 1;
+        storageRange.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        nri::DescriptorSetDesc storageSetDesc{};
+        storageSetDesc.ranges = &storageRange;
+        storageSetDesc.rangeNum = 1;
+        nri::PipelineLayoutDesc storageLayoutDesc{};
+        storageLayoutDesc.descriptorSets = &storageSetDesc;
+        storageLayoutDesc.descriptorSetNum = 1;
+        storageLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        RHIPipelineLayout storageLayout;
+        RENDER_CHECK(storageLayout.Init(storageLayoutDesc), "storage descriptor layout");
+        auto* storageSet = pool.AllocateDescriptorSet(storageLayout, 0);
+        RENDER_CHECK(storageSet && pool.UpdateStorageTexture(storageSet, 0, 0, image.GetUAV()),
+            "storage helper publishes a real UAV descriptor");
+        RENDER_CHECK(!pool.UpdateStorageTexture(storageSet, 0, 0, image.GetSRV()) &&
+            !pool.UpdateTexture(storageSet, 0, 0, image.GetSRV()) &&
+            !pool.UpdateStorageTexture(storageSet, 0, 1, image.GetUAV()),
+            "storage helper rejects SRV role and out-of-range slot");
+
+        RHITexture replacement;
+        RENDER_CHECK(replacement.Init(desc), "replacement storage source exists");
+        const auto beforeUpdate = device.GetResources().GetAccesses(device.GetResources().AcquireNative(storageSet));
+        bool storageUpdateInjected = false;
+        {
+            ScopedRHIFault fault([&](std::string_view operation)->std::optional<nri::Result> {
+                if (operation == "UpdateDescriptorRanges" && !storageUpdateInjected) {
+                    storageUpdateInjected = true;
+                    return nri::Result::OUT_OF_MEMORY;
+                }
+                return {};
+            });
+            RENDER_CHECK(!pool.UpdateStorageTexture(storageSet, 0, 0, replacement.GetUAV()) && storageUpdateInjected,
+                "injected storage descriptor update rejection is reported");
+        }
+        const auto afterUpdate = device.GetResources().GetAccesses(device.GetResources().AcquireNative(storageSet));
+        auto hasTexture = [](const auto& accesses, nri::Texture* texture) {
+            return std::any_of(accesses.begin(), accesses.end(), [texture](const auto& access) {
+                return access.Texture == texture &&
+                    access.Access == nri::AccessBits::SHADER_RESOURCE_STORAGE &&
+                    access.Layout == nri::Layout::SHADER_RESOURCE_STORAGE;
+            });
+        };
+        RENDER_CHECK(hasTexture(beforeUpdate, image.GetNative()) && hasTexture(afterUpdate, image.GetNative()) &&
+            !hasTexture(afterUpdate, replacement.GetNative()),
+            "failed storage update preserves the published resource access");
+        RENDER_CHECK(pool.UpdateStorageTexture(storageSet, 0, 0, replacement.GetUAV()) &&
+            pool.UpdateStorageTexture(storageSet, 0, 0, image.GetUAV()),
+            "storage helper retries and restores the original UAV");
+    }
+    {
         RHIFrameContext frame;
         RENDER_CHECK(frame.Init()&&frame.Begin(),"frame-owned uniform arena");
         const std::array<float,4> values{1,2,3,4};

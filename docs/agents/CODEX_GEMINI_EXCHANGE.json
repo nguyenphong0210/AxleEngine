@@ -1,40 +1,29 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U3-03.1",
-    "title": "M15 U3 descriptor update helpers",
+    "id": "M15-U2-04",
+    "title": "M15 U2/U5 environment scope boundary correction",
     "state": "accepted",
     "coordinator": "User / Codex",
-    "implementer": "Codex (explicit user assignment)",
-    "code_baseline": "2a8befcd",
-    "user_instruction": "Implement M15-U3-03.1 descriptor update helpers and continue the same work.",
-    "user_scope": "Validate texture and sampler descriptor update helpers, propagate checked failures through their callers, add a native failure fixture, and stop before U3-03.2/.3 or U3-04.",
+    "implementer": "Codex (user question and status correction)",
+    "code_baseline": "e3bf496e",
+    "user_instruction": "Clarify whether M15-U2-04 remains incomplete.",
+    "user_scope": "Reconcile the U2-04 checkbox and evidence with the accepted U2 contract and deferred U5 dynamic capture/probe blending; documentation only.",
     "expected_files": [
-      "Engine/RHI/include/Axle/RHI/RHIResource.hpp",
-      "Engine/RHI/src/RHIDescriptorPool.cpp",
-      "Engine/RHI/src/RHIMaterial.cpp",
-      "Engine/RHI/src/RHIResource.cpp",
-      "Engine/Scene/src/RHISceneRenderer.cpp",
-      "Engine/Scene/src/RHISceneRendererPasses.cpp",
-      "Engine/VFX/src/RHIParticleRenderer.cpp",
-      "Tests/rendering/RenderGraphMain.cpp",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U3_03_1_DESCRIPTOR_HELPERS_REVIEW.md",
+      "docs/reviews/M15_U2_S2_3_ENVIRONMENT_CONSUMERS_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Complete: checked texture/sampler descriptor updates and callers; transactional dependency publication with injected pre-native failure boundary.",
-    "acceptance_status": "Self-reviewed and accepted: Debug/Release RenderGraph and environment native fixtures pass on D3D12/Vulkan.",
+    "implementation_status": "Documentation corrected; no rendering source change.",
+    "acceptance_status": "U2-04 scope boundary checked using accepted S2.1-S2.3 evidence; U5 dynamic capture/blending still open.",
     "open_gates": [],
-    "next_action": "Stop at M15-U3-03.1; U3-03.2/.3 and U3-04 await separate user release.",
-    "metadata_correction": "Supersedes accepted S2.3 card because the user explicitly released M15-U3-03.1; S2.3 acceptance remains in history.",
-    "implementation_commits": [
-      "1cb3a8b7"
-    ],
+    "next_action": "Stop at documentation correction; U2-05 and U5 feature work require separate assignment.",
+    "metadata_correction": "Supersedes accepted U3-03.1 card for this user-requested status correction; U3 acceptance remains in history and report.",
     "documentation_commits": [
-      "8b279cb7"
+      "6e7e4385"
     ],
-    "evidence_report": "docs/reviews/M15_U3_03_1_DESCRIPTOR_HELPERS_REVIEW.md",
-    "verification": "Debug/Release RenderGraph and environment native fixtures x D3D12/Vulkan: 8/8 exit 0; Debug AxleEditor build exit 0. Logs/artifacts: build/agent-runs/M15-U3-03.1/."
+    "evidence_report": "docs/reviews/M15_U2_S2_3_ENVIRONMENT_CONSUMERS_REVIEW.md",
+    "verification": "Read-only source and accepted reports reviewed; PLAN diff checked. No new GPU run or Editor visual claimed."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -3934,6 +3923,28 @@
       "base_commit": "2a8befcd",
       "timestamp_utc": "2026-11-15T12:49:23.919549+00:00",
       "body": "DELIVERY: M15-U3-03.1 is self-verified and accepted within the user-released checkpoint. Source commit 1cb3a8b7; PLAN/review commit 8b279cb7. The RHI helper validates and prepares descriptor dependencies before native update and publishes them only after the call. Texture/sampler caller failures now propagate through material creation, renderer initialization/view passes and VFX; SetIBLMaps logs and disables IBL on its void API failure path.\n\nVerification on final source: Debug AxleRenderGraphTests/AxleEditor and Debug/Release AxleRenderGraphTests/AxleEnvironmentRenderingTests builds exit 0. RenderGraph and environment native fixtures run on Debug/Release x D3D12/Vulkan (8/8 exit 0), with logs and output artifacts under build/agent-runs/M15-U3-03.1. Exact commands/results: docs/reviews/M15_U3_03_1_DESCRIPTOR_HELPERS_REVIEW.md. NRI UpdateDescriptorRanges returns void, so injected rejection is tested before the native call; no driver-returned error can be observed. U3-03.2, U3-03.3 and U3-04 remain open. No Editor screenshot is required for this code/fixture checkpoint; no push performed.\n"
+    },
+    {
+      "id": "CG-20261115T131852746644Z-CODEX-5efbe8",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U2-04",
+      "reply_to": null,
+      "base_commit": "e3bf496e",
+      "timestamp_utc": "2026-11-15T13:18:52.746644+00:00",
+      "body": "IN_PROGRESS: User asked whether M15-U2-04 is unfinished. Baseline e3bf496e. Source and accepted S2.1-S2.3 reports show the U2 shared environment input contract is complete; current renderer selects an authored cubemap probe, while six-face dynamic capture and multi-probe blending remain explicitly assigned to unchecked U5 items. I am correcting only PLAN.md and the S2.3 review status note: mark the U2 scope boundary complete, place its misplaced Editor visual gate at U5-14, and keep U5 implementation unchecked. No rendering source change or new GPU claim.\n"
+    },
+    {
+      "id": "CG-20261115T131946382236Z-CODEX-447713",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M15-U2-04",
+      "reply_to": "CG-20261115T131852746644Z-CODEX-5efbe8",
+      "base_commit": "e3bf496e",
+      "timestamp_utc": "2026-11-15T13:19:46.382236+00:00",
+      "body": "DELIVERY: Corrected stale M15-U2-04 scope status in commit 6e7e4385. U2-04 is checked because accepted S2.1-S2.3 establish the shared environment input/publication/consumer/fallback contract. The previous Editor visual criterion described dynamic six-face capture and is now attached to U5-14. Current renderer loads one selected authored cubemap probe; dynamic six-face capture and multi-probe blending remain unchecked in U5. No rendering source changed, no new GPU test claimed; git diff --cached --check and exchange validation passed. Historical S2.3 report has an explicit follow-up note. No push.\n"
     }
   ],
   "deferred_tasks": [

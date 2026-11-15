@@ -1,6 +1,6 @@
 # M15 U1 S1.2 GGX and F0 reference verification
 
-Status: **implementation self-verified; independent recheck NOT RUN**. The derived S1.2 parent and its two children remain unchecked in the PLAN until that review gate is satisfied.
+Status: **accepted after independent recheck**. The derived S1.2 parent and both children are checked in the PLAN.
 
 ## Scope and source
 
@@ -50,6 +50,8 @@ All commands below were run from `D:\WorkSpace\AxleEngine` against the source re
 
 The native surface fixture exercises shader compilation, valid material pixels, light and environment behavior, and GPU validation on D3D12/Vulkan. It is a pipeline smoke/readback gate, not a per-pixel quantitative BRDF sweep. That broader image gate belongs to M15-U1-04.1. Neither U1-02 leaf declares an Editor visual gate, so no Editor screenshot is requested for S1.2. OpenGL fallback behavior is reserved for U1-05.
 
-## Open review gate
+## Independent recheck and acceptance
 
-The repository protocol requests a separate-context recheck for significant Codex corrections before acceptance. A reviewer was invoked read-only on `5c65cd84`, but its session failed before inspection because its refresh token was revoked. No reviewer result is claimed. The implementation and verification above are complete; independent acceptance remains **NOT RUN**.
+A separate read-only reviewer inspected `5c65cd84`, `EnvironmentBake::IntegrateEnvironmentBRDF`, `ForwardPBR.hlsl`, the RHI BRDF binding/default, the independent fixture, and the documentation. It reported no P0, P1 or P2 findings and confirmed that both M15-U1-02.1 and M15-U1-02.2 meet the source and test evidence requirements.
+
+The reviewer reran Debug and Release `AxleRenderUnitTests` with `M15BRDFReference` (2/2 in each configuration), native D3D12 and Vulkan surface fixtures (PASS in both configurations), and `git diff --check`. Therefore S1.2 is accepted at source `5c65cd84`; no Editor visual evidence is required for these two numeric reference leaves.

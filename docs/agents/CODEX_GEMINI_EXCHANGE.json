@@ -3,7 +3,7 @@
   "current_task": {
     "id": "M15-U1-S1.2",
     "title": "M15 U1 S1.2 GGX visibility and dielectric/metal F0 reference",
-    "state": "implemented_pending_review",
+    "state": "accepted",
     "coordinator": "User / Codex",
     "implementer": "Codex (explicit user assignment for S1.2)",
     "code_baseline": "551fd4b7",
@@ -17,11 +17,9 @@
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
     "implementation_status": "Source commit 5c65cd84 aligns baked DFG visibility with ForwardPBR correlated Smith, adds finite neutral LUT fallback, and adds independent GGX/F0 reference fixture. Debug/Release RenderUnitTests and dedicated M15BRDFReference pass; DXC DXIL/SPIR-V compilation and D3D12/Vulkan native surface readbacks pass in both configurations.",
-    "acceptance_status": "Implementation self-verified; S1.2 parent and leaves remain unchecked pending separate-context recheck required by WORKING_PROTOCOL.md.",
-    "open_gates": [
-      "Separate-context source recheck NOT RUN: reviewer agent authentication failed before inspection (refresh token revoked)"
-    ],
-    "next_action": "Obtain independent recheck of 5c65cd84, resolve any findings, then accept S1.2 and stop before S1.3.",
+    "acceptance_status": "M15-U1-02.1, M15-U1-02.2 and derived S1.2 accepted at source 5c65cd84 after separate read-only recheck. Reviewer found no P0/P1/P2 findings and reran Debug/Release CPU tests plus D3D12/Vulkan native surfaces.",
+    "open_gates": [],
+    "next_action": "Stop at accepted S1.2 boundary; later U1 leaves remain unreleased until separately requested.",
     "metadata_correction": "Supersedes accepted S1.1 task card because the latest user instruction releases S1.2. S1.1 acceptance remains recorded in history and its review report."
   },
   "last_read": {

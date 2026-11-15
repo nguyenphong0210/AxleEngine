@@ -32,6 +32,24 @@ def build_hiz(depth: list[float], width: int, height: int) -> list[tuple[int, in
     return levels
 
 
+def validate_nontrivial_level_identity(levels: list[tuple[int, int, list[float]]]) -> None:
+    expected_dimensions = [(4, 4), (2, 2), (1, 1)]
+    assert [(width, height) for width, height, _ in levels] == expected_dimensions
+    signatures = []
+    for _, _, samples in levels:
+        assert samples
+        signatures.append((min(samples), max(samples), sum(samples) / len(samples)))
+    assert any(signatures[index] != signatures[index - 1] for index in range(1, len(signatures)))
+
+
+def expect_identity_rejection(levels: list[tuple[int, int, list[float]]]) -> None:
+    try:
+        validate_nontrivial_level_identity(levels)
+    except AssertionError:
+        return
+    raise AssertionError("faulty Hi-Z level identity was accepted")
+
+
 def main() -> int:
     # Canonical even-dimension fixture. Odd dimensions are a separate leaf.
     depth = [
@@ -46,6 +64,9 @@ def main() -> int:
     assert levels[1][2] == [0.40, 0.20, 0.05, 0.35]
     assert levels[2][2] == [0.05]
     assert all(isfinite(value) for _, _, samples in levels for value in samples)
+    validate_nontrivial_level_identity(levels)
+    expect_identity_rejection(levels[:1])
+    expect_identity_rejection([(4, 4, [0.5] * 16), (2, 2, [0.5] * 4), (1, 1, [0.5])])
     # U0-06.2.3 edge fixtures. These intentionally remain in the reference
     # script so their expected dimensions and edge values are explicit.
     one = build_hiz([0.37], 1, 1)

@@ -159,6 +159,20 @@ Result: **PASS**.
 - Debug and Release `M15HiZReference` CTest: exit 0.
 - No Editor evidence is required for this CPU-only leaf.
 
+## M15-U0-06.2.4 — Nontrivial Hi-Z level identity
+
+Result: **PASS**.
+
+- Added a level-identity validator that checks expected level dimensions and
+  changing min/max/mean signatures across the canonical pyramid.
+- Added negative sentinels for a pyramid containing only level zero and for levels
+  with identical data signatures; both are rejected by the validator.
+- `python scripts/test_m15_hiz_reference.py`: exit 0.
+- Debug and Release `M15HiZReference` CTest: exit 0.
+- No Editor evidence is required for this CPU-only leaf.
+
+All four U0-06.2 child leaves now pass; the derived parent may be checked PASS.
+
 ## M15-U0-06.2.3 — Hi-Z reference edge cases
 
 Result: **PASS**.

@@ -503,9 +503,10 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_RenderTransientGraphUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
-# M15-U1-01.1: the frozen direct-light unit contract inspects the canonical shader source.
+# M15-U1-01.1 & M15-U1-01.4: inspect canonical shader sources for lighting & exposure contracts.
 target_compile_definitions(AxleRenderUnitTests PRIVATE
-    AXLE_FORWARD_PBR_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ForwardPBR.hlsl")
+    AXLE_FORWARD_PBR_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ForwardPBR.hlsl"
+    AXLE_TONEMAPPING_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ToneMapping.hlsl")
 target_link_libraries(AxleRenderUnitTests PRIVATE
     Axle::Core
     Axle::Platform

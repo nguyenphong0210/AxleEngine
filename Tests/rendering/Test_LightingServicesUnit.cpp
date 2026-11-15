@@ -2,6 +2,7 @@
 #include <Axle/LightingService.hpp>
 #include <Axle/ReflectionService.hpp>
 #include <Axle/GIService.hpp>
+#include <Axle/PostProcessService.hpp>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -285,6 +286,55 @@ bool RunLightingServiceUnitTests() {
     RENDER_CHECK(forwardSource.find("denominator = BRDF_SPECULAR_DENOMINATOR_SCALE * NdotV * max(NdotL_Sun, 0.001) + 0.0001;")!=std::string::npos &&
                  forwardSource.find("denominator = BRDF_SPECULAR_DENOMINATOR_SCALE * NdotV * max(NdotL, 0.001) + 0.0001;")!=std::string::npos,
         "ForwardPBR.hlsl uses canonical Cook-Torrance specular denominator scale 4.0");
+
+    // M15-U1-01.4: frozen exposure interaction contract.
+    // 1. Direct daylight Lambertian radiance and exposure scaling:
+    // Pure sunlight (100,000 lx) on 100% white surface yields:
+    // Lo = 100000 * DIRECT_LUX_TO_RADIANCE / PI ~= 1.1140846
+    constexpr float ReferenceSunlightLux = 100000.0f;
+    constexpr float DirectSceneRadiance = (ReferenceSunlightLux * FrozenDirectLuxToRadiance) * InvPi;
+    RENDER_CHECK(Axle::RenderTests::Near(DirectSceneRadiance, 1.1140846f, 1e-5f),
+        "reference direct sunlight on white Lambertian surface yields ~1.114 scene radiance");
+
+    auto applyExposure = [](float radiance, float exposure) {
+        float effectiveExp = (exposure > 0.0f && std::isfinite(exposure)) ? exposure : 1.0f;
+        return radiance * effectiveExp;
+    };
+    RENDER_CHECK(Axle::RenderTests::Near(applyExposure(DirectSceneRadiance, 1.0f), DirectSceneRadiance, 1e-6f),
+        "standard exposure 1.0 preserves scene radiance 1:1");
+    RENDER_CHECK(Axle::RenderTests::Near(applyExposure(DirectSceneRadiance, 2.0f), DirectSceneRadiance * 2.0f, 1e-6f),
+        "exposure doubles scene radiance linearly");
+    RENDER_CHECK(Axle::RenderTests::Near(applyExposure(DirectSceneRadiance, -1.0f), DirectSceneRadiance, 1e-6f) &&
+                 Axle::RenderTests::Near(applyExposure(DirectSceneRadiance, 0.0f), DirectSceneRadiance, 1e-6f),
+        "non-positive exposure falls back to 1.0 safely without invalid black/negative output");
+
+    // 2. PostProcessService auto-exposure interaction with direct lighting scene luminance
+    PostProcessService postProcess;
+    SceneRenderSettings postSettings;
+    postSettings.EnableAutoExposure = true;
+    postSettings.AutoExposureMin = 0.1f;
+    postSettings.AutoExposureMax = 10.0f;
+    postSettings.AutoExposureKeyValue = 0.18f;
+    postProcess.BeginFrame(postSettings, true);
+
+    // Extreme bright direct scene (e.g. direct sun facing specular):
+    float brightExposure = postProcess.UpdateExposure(1000.0f, 10.0f);
+    RENDER_CHECK(Axle::RenderTests::Near(brightExposure, postSettings.AutoExposureMin, 1e-4f),
+        "extreme bright direct scene luminance clamps exposure to AutoExposureMin (0.1)");
+
+    // Extreme dark direct scene:
+    float darkExposure = postProcess.UpdateExposure(0.0001f, 10.0f);
+    RENDER_CHECK(Axle::RenderTests::Near(darkExposure, postSettings.AutoExposureMax, 1e-4f),
+        "extreme dark scene luminance clamps exposure to AutoExposureMax (10.0)");
+
+    // Canonical ToneMapping shader source inspection
+    std::ifstream toneShader(AXLE_TONEMAPPING_SHADER_PATH);
+    const std::string toneSource{std::istreambuf_iterator<char>(toneShader), std::istreambuf_iterator<char>()};
+    RENDER_CHECK(!toneSource.empty(), "ToneMapping.hlsl is readable for the exposure contract");
+    RENDER_CHECK(toneSource.find("float exposure = (u_Params.x > 0.0) ? u_Params.x : 1.0;")!=std::string::npos,
+        "ToneMapping.hlsl enforces positive exposure fallback to 1.0");
+    RENDER_CHECK(toneSource.find("float3 exposed = hdrColor * exposure;")!=std::string::npos,
+        "ToneMapping.hlsl applies linear radiometric exposure scaling before tonemapping");
 
     std::cout << "  [LightingServices] Lighting/reflection/GI boundary tests passed.\n";
     return true;

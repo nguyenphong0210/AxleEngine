@@ -232,15 +232,16 @@ the item is visible.
   - [x] **M15-U1-02.2 — Validate dielectric/metal F0 reference.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
     - **Evidence:** The same dedicated fixture checks neutral dielectric F0 `0.04`, RGB metal F0 from base color, half-metal interpolation, metallic clamping and resolved material-to-shader constants; shader source checks cover sun, point, spot, rect and ambient consumers. Debug/Release `M15BRDFReference` pass. Independent recheck found no P0/P1/P2 findings. See [S1.2 verification](../../reviews/M15_U1_S1_2_REFERENCE_REVIEW.md). No Editor visual is required for this numeric-reference leaf.
-- [ ] **M15-U1-03.1 — Validate directional-light units/shadows.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U1-03.2 — Validate point-light units/shadows.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U1-03.3 — Validate spot-light units/shadows.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
+- [ ] **M15-U1 / S1.3 — Validate primary-light units and shadows.** *(derived parent; implementation self-verified, independent recheck pending)*
+  - [ ] **M15-U1-03.1 — Validate directional-light units/shadows.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Implementation evidence:** `M15PrimaryLightingReference` validates the frozen 100,000-lux directional calibration, four-cascade split/coverage/finite-matrix policy, invalid-direction clearing, and shader receiver path. Existing CSM CPU and native rendering fixtures validate real cascade depth, receiver darkening, cutout behavior and fallback on D3D12/Vulkan Debug/Release. See [S1.3 verification](../../reviews/M15_U1_S1_3_PRIMARY_LIGHTING_REVIEW.md). Independent recheck is pending.
+  - [ ] **M15-U1-03.2 — Validate point-light units/shadows.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Implementation evidence:** The fixture validates the point-light unit packing, six cubemap face projections, atlas bounds, deterministic local-shadow selection and invalid-resolution diagnostic. Native local-shadow tests verify point shadow pixels, all six face depth tiles, seam coverage, cache and allocation fallback on D3D12/Vulkan Debug/Release. See [S1.3 verification](../../reviews/M15_U1_S1_3_PRIMARY_LIGHTING_REVIEW.md). Independent recheck is pending.
+  - [ ] **M15-U1-03.3 — Validate spot-light units/shadows.**
+    - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+    - **Implementation evidence:** The fixture validates spot unit packing, cone-center zero-to-one projection and shared PCF receiver path. Native local-shadow tests verify spot shadow darkening, opt-out and cache behavior on D3D12/Vulkan Debug/Release. See [S1.3 verification](../../reviews/M15_U1_S1_3_PRIMARY_LIGHTING_REVIEW.md). Independent recheck is pending.
 - [ ] **M15-U1-04.1 — Run roughness/view/light-angle sweep.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.

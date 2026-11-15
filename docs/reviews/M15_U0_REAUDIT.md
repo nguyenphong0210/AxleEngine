@@ -146,3 +146,17 @@ Result: **PARTIAL / NOT RUN for the required Editor visual gate**.
 - The Editor visual gate is still open. The user must open the smooth sphere fixture
   and supply a screenshot showing a smooth sphere without triangle bands or invalid
   pixels before this leaf can be checked PASS.
+
+## M15-U0-06.1 — Visual gate pass
+
+Result: **PASS**.
+
+- The user supplied a Debug Editor screenshot of the roughness sweep fixture after
+  the smooth-normal reference test was installed.
+- All five spheres show continuous smooth shading with no visible triangle bands,
+  faceting, black pixels or invalid regions.
+- Combined with the analytic reference metrics and Debug/Release RenderUnitTests,
+  the U0-06.1 gate is closed.
+
+The supplied screenshot is the visual artifact for this leaf; no local artifact path
+was available from the native Computer Use pipe.

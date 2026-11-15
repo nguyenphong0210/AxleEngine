@@ -366,9 +366,9 @@ the item is visible.
 - [x] **M15-U3-07.5 — Test shutdown/reinit.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Native environment fixture shuts renderer down, reinitializes, renders a fresh frame with valid completion, then shuts down cleanly; Debug/Release D3D12/Vulkan 4/4 exit 0. [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
-- [ ] **M15-U3-08 — Add asynchronous per-pass query/readback ring and invalid-measurement state.**
+- [x] **M15-U3-08 — Add asynchronous per-pass query/readback ring and invalid-measurement state.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+  - **Evidence:** Source `4eba2b07` adds a three-slot frame/pass timestamp query ring with completion-keyed readback and explicit Unknown/Invalid states. Debug/Release native environment fixture passes on D3D12/Vulkan (4/4, exit 0), including injected readback and query-pool failures; [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
 - [ ] **M15-U3-09.1 — Create pass headers under Passes.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

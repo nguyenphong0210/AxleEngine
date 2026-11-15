@@ -1,4 +1,9 @@
 #include "RHISceneRendererPasses.hpp"
+#include "Passes/GTAOPass.hpp"
+#include "Passes/HiZGenerationPass.hpp"
+#include "Passes/ScreenSpaceReflectionPass.hpp"
+#include "Passes/FroxelFogPass.hpp"
+#include "Passes/PostProcessPass.hpp"
 #include <Axle/Path.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>

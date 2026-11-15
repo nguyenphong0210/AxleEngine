@@ -44,6 +44,8 @@
 
 namespace Axle {
 
+    namespace Passes { class GTAOPass; class HiZGenerationPass; }
+
     class Scene;
     class PhysicsScene;
     class RHIParticleRenderer;
@@ -170,6 +172,8 @@ namespace Axle {
     static_assert(sizeof(RHITAAConstants) == 256, "RHITAAConstants must be 256 bytes aligned!");
 
     class RHISceneRenderer {
+        friend class Passes::GTAOPass;
+        friend class Passes::HiZGenerationPass;
     public:
         RHISceneRenderer();
         ~RHISceneRenderer();

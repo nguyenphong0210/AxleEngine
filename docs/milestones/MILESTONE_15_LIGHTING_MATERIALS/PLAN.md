@@ -183,9 +183,9 @@ the item is visible.
   - [x] **M15-U0-06.2.2 — Create independent CPU Hi-Z reference.**
     - **PASS when:** a CPU reference accepts arbitrary depth arrays and produces the complete pyramid without reusing production shader/reduction code.
     - **Evidence:** `scripts/test_m15_hiz_reference.py` implements an independent 4x4 → 2x2 → 1x1 min-reduction reference; Debug/Release `M15HiZReference` CTest pass. No Editor evidence is required for this CPU-only leaf.
-  - [ ] **M15-U0-06.2.3 — Validate Hi-Z reference edge cases.**
+  - [x] **M15-U0-06.2.3 — Validate Hi-Z reference edge cases.**
     - **PASS when:** reference outputs match expected dimensions and edge values for `1x1`, `3x5` and `1919x1079` inputs.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+    - **Evidence:** `M15HiZReference` validates exact dimensions and edge values for `1x1`, `3x5` and `1919x1079`; Debug/Release CTest pass. No Editor evidence is required for this CPU-only leaf.
   - [ ] **M15-U0-06.2.4 — Validate nontrivial Hi-Z level identity.**
     - **PASS when:** tests fail if only level zero is written or all levels contain the same data, and pass for the independent reference pyramid.
     - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

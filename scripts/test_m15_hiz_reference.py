@@ -46,7 +46,33 @@ def main() -> int:
     assert levels[1][2] == [0.40, 0.20, 0.05, 0.35]
     assert levels[2][2] == [0.05]
     assert all(isfinite(value) for _, _, samples in levels for value in samples)
-    print("M15 Hi-Z CPU reference: PASS (4x4 -> 2x2 -> 1x1; independent min reduction)")
+    # U0-06.2.3 edge fixtures. These intentionally remain in the reference
+    # script so their expected dimensions and edge values are explicit.
+    one = build_hiz([0.37], 1, 1)
+    assert [(width, height) for width, height, _ in one] == [(1, 1)]
+    assert one[0][2] == [0.37]
+
+    odd_depth = [
+        0.91, 0.82, 0.73,
+        0.64, 0.55, 0.46,
+        0.37, 0.28, 0.19,
+        0.10, 0.20, 0.30,
+        0.40, 0.50, 0.60,
+    ]
+    odd = build_hiz(odd_depth, 3, 5)
+    assert [(width, height) for width, height, _ in odd] == [(3, 5), (1, 2), (1, 1)]
+    assert odd[1][2] == [0.55, 0.10]
+    assert odd[2][2] == [0.10]
+
+    large_width, large_height = 1919, 1079
+    large_depth = [float((index % 997) + 1) / 998.0 for index in range(large_width * large_height)]
+    large = build_hiz(large_depth, large_width, large_height)
+    assert [(width, height) for width, height, _ in large] == [
+        (1919, 1079), (959, 539), (479, 269), (239, 134), (119, 67),
+        (59, 33), (29, 16), (14, 8), (7, 4), (3, 2), (1, 1),
+    ]
+    assert all(isfinite(value) for _, _, samples in large for value in samples)
+    print("M15 Hi-Z CPU reference: PASS (4x4 canonical; 1x1, 3x5 and 1919x1079 edge cases)")
     return 0
 
 

@@ -159,6 +159,18 @@ Result: **PASS**.
 - Debug and Release `M15HiZReference` CTest: exit 0.
 - No Editor evidence is required for this CPU-only leaf.
 
+## M15-U0-06.2.3 — Hi-Z reference edge cases
+
+Result: **PASS**.
+
+- Extended `scripts/test_m15_hiz_reference.py` with explicit edge fixtures:
+  `1x1`, `3x5` and `1919x1079`.
+- The test validates every expected pyramid dimension and explicit edge values for
+  the small cases, plus finite output across the large odd-dimension pyramid.
+- `python scripts/test_m15_hiz_reference.py`: exit 0.
+- Debug and Release `M15HiZReference` CTest: exit 0.
+- No Editor evidence is required for this CPU-only leaf.
+
 ## M15-U0-06.1 — Smooth-normal reference implementation
 
 Result: **PARTIAL / NOT RUN for the required Editor visual gate**.

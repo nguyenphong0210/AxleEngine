@@ -3680,6 +3680,17 @@
       "base_commit": "ee88e0c",
       "timestamp_utc": "2026-11-15T03:29:43.751255+00:00",
       "body": "DELIVERY: M15-U0-07.2 artifact identity validation completed in commit ee88e0c.\n\nImplementation:\n- Added scripts/validate_artifact_identity.py with schema/version checks and required source commit, backend, configuration, fixture, resolution, comparison space, relative artifact path, file size and SHA-256.\n- Rejects missing/invalid metadata, absolute or traversal paths, missing artifacts, stale hashes and size mismatches.\n- Added scripts/test_m15_artifact_identity.py covering valid identity, stale hash, missing field and path traversal.\n- Registered M15ArtifactIdentity CTest; PLAN U0-07.2 checked PASS.\n\nVerification:\n- python scripts/test_m15_artifact_identity.py: exit 0.\n- ctest --test-dir build -C Debug -R ^M15ArtifactIdentity$ --output-on-failure: exit 0.\n- ctest --test-dir build -C Release -R ^M15ArtifactIdentity$ --output-on-failure: exit 0.\n- git diff --check: exit 0.\n\nNo Editor evidence is required for this CPU-only tooling leaf.\n"
+    },
+    {
+      "id": "CG-20261115T075633556925Z-GEMINI-ac01e2",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261115T032943751255Z-CODEX-445063",
+      "base_commit": "ab776a4",
+      "timestamp_utc": "2026-11-15T07:56:33.556925+00:00",
+      "body": "DELIVERY: M15-U1-01.1 direct-light units and shader constants frozen in commit ab776a4.\n\nImplementation:\n- Added DIRECT_LUX_TO_RADIANCE = 0.000035 and LOCAL_INTENSITY_SCALE = 0.05 to Engine/Resources/Shaders/ForwardPBR.hlsl and replaced magic literal factors.\n- Added AXLE_FORWARD_PBR_SHADER_PATH compile definition to AxleRenderUnitTests.\n- Extended Tests/rendering/Test_LightingServicesUnit.cpp with frozen direct-light unit contract: validates directional Lux scaling, additional directional pre-scaling, point/spot intensity factors, and canonical shader token usage.\n- Recorded PASS in docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md and docs/reviews/M15_U1_DIRECT_BRDF.md.\n\nVerification:\n- cmake --build build --config Debug --target AxleRenderUnitTests: exit 0.\n- cmake --build build --config Release --target AxleRenderUnitTests: exit 0.\n- ctest --test-dir build -C Debug -R ^RenderUnitTests$ --output-on-failure: exit 0, 1/1 passed.\n- ctest --test-dir build -C Release -R ^RenderUnitTests$ --output-on-failure: exit 0, 1/1 passed.\n- git diff --check: exit 0.\n\nNo Editor evidence is required for this CPU-only frozen-units contract.\n"
     }
   ],
   "deferred_tasks": [

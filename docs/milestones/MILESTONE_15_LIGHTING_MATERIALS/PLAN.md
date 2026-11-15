@@ -211,9 +211,9 @@ the item is visible.
 
 ### U1 / S1.1–S1.3 — Direct BRDF and primary lighting
 
-- [ ] **M15-U1-01.1 — Freeze direct-light units.**
+- [x] **M15-U1-01.1 — Freeze direct-light units.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** `DIRECT_LUX_TO_RADIANCE` (0.000035) and `LOCAL_INTENSITY_SCALE` (0.05) frozen in `Engine/Resources/Shaders/ForwardPBR.hlsl`; `Test_LightingServicesUnit.cpp` validates directional Lux scaling, additional directional pre-scaling, point/spot intensity factors, and canonical shader token usage; Debug/Release `RenderUnitTests` CTest pass. Source commit: `ab776a4`.
 - [ ] **M15-U1-01.2 — Freeze sun angular-radius policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

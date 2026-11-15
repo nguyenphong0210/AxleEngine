@@ -210,6 +210,20 @@ Result: **PARTIAL / NOT RUN for the required Editor visual gate**.
 - Editor visual evidence is still required: the roughness sweep must show a
   continuous widening/softening reflection response.
 
+## M15-U0-06.4 — Visual gate pass
+
+Result: **PASS**.
+
+- The user supplied an Editor screenshot of the roughness sweep fixture.
+- The five spheres show a continuous response from a sharp/narrow highlight at low
+  roughness to a broad/soft reflection at high roughness.
+- No visible black pixels, triangle faceting or abrupt intensity jump is present.
+- Combined with the independent five-mip reference and Debug/Release CTest, the
+  U0-06.4 gate is closed.
+
+The supplied screenshot is the visual artifact for this leaf; no local artifact path
+was available from the native Computer Use pipe.
+
 ## M15-U0-06.2.3 — Hi-Z reference edge cases
 
 Result: **PASS**.

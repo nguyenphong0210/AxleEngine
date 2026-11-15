@@ -196,10 +196,10 @@ the item is visible.
   - [x] **M15-U0-06.3.2 — Validate six-face axis-coded reference.**
     - **PASS when:** an axis-coded environment maps each face center to the expected native cube axis and preserves orientation without vertical flips.
     - **Evidence:** Debug/Release `AxleEnvironmentBakeTests` pass the six-face directional reference. No Editor evidence is required for this CPU-only reference leaf.
-- [ ] **M15-U0-06.4 — Reference roughness-to-mip mapping.**
+- [x] **M15-U0-06.4 — Reference roughness-to-mip mapping.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
-  - **Evidence:** `M15RoughnessMipReference` validates the independent 5-mip mapping, monotonicity, endpoints and clamping; Debug/Release CTest pass. Editor visual evidence remains required.
+  - **Evidence:** `M15RoughnessMipReference` validates the independent 5-mip mapping, monotonicity, endpoints and clamping; Debug/Release CTest pass. User-supplied Editor screenshot confirms continuous highlight/reflection broadening across the roughness sweep without black pixels, faceting or intensity jump. See [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#m15-u0-06-4--visual-gate-pass).
 - [ ] **M15-U0-07.1 — Create deterministic image comparison.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

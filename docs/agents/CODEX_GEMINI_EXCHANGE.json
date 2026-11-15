@@ -1,29 +1,32 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U2-04",
-    "title": "M15 U2/U5 environment scope boundary correction",
+    "id": "M15-U2-05",
+    "title": "M15 U2 environment backend readback",
     "state": "accepted",
     "coordinator": "User / Codex",
-    "implementer": "Codex (user question and status correction)",
-    "code_baseline": "e3bf496e",
-    "user_instruction": "Clarify whether M15-U2-04 remains incomplete.",
-    "user_scope": "Reconcile the U2-04 checkbox and evidence with the accepted U2 contract and deferred U5 dynamic capture/probe blending; documentation only.",
+    "implementer": "Codex (explicit user assignment)",
+    "code_baseline": "22f41ad8",
+    "user_instruction": "Close U2-05 with verified backend readbacks.",
+    "user_scope": "Verify and close U2-05.1 D3D12, U2-05.2 Vulkan, U2-05.3 OpenGL subset with exact builds, native fixture exit codes and artifact identity; stop before U5.",
     "expected_files": [
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U2_S2_3_ENVIRONMENT_CONSUMERS_REVIEW.md",
+      "docs/reviews/M15_U2_05_ENVIRONMENT_READBACK.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Documentation corrected; no rendering source change.",
-    "acceptance_status": "U2-04 scope boundary checked using accepted S2.1-S2.3 evidence; U5 dynamic capture/blending still open.",
+    "implementation_status": "No rendering source change; existing readback fixture rebuilt and audited on all required backends.",
+    "acceptance_status": "Accepted: U2-05.1 D3D12, U2-05.2 Vulkan and U2-05.3 OpenGL subset pass in Debug/Release; six artifacts independently validated.",
     "open_gates": [],
-    "next_action": "Stop at documentation correction; U2-05 and U5 feature work require separate assignment.",
-    "metadata_correction": "Supersedes accepted U3-03.1 card for this user-requested status correction; U3 acceptance remains in history and report.",
+    "next_action": "U2 readback checkpoints are complete; stop before U3-03.2 or U5 until explicitly assigned.",
+    "metadata_correction": "Supersedes accepted U2-04 documentation card because user explicitly released U2-05; U2-04 status remains in history.",
     "documentation_commits": [
-      "6e7e4385"
+      "75209349",
+      "644b15c3",
+      "0b8e1fd2",
+      "dd71b11b"
     ],
-    "evidence_report": "docs/reviews/M15_U2_S2_3_ENVIRONMENT_CONSUMERS_REVIEW.md",
-    "verification": "Read-only source and accepted reports reviewed; PLAN diff checked. No new GPU run or Editor visual claimed."
+    "evidence_report": "docs/reviews/M15_U2_05_ENVIRONMENT_READBACK.md",
+    "verification": "Debug/Release AxleEnvironmentRenderingTests builds exit 0. Six backend/config native fixture runs exit 0. Six identity manifests and all expected 128x128 PPMs validate. Logs/artifacts: build/agent-runs/M15-U2-05/."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -3945,6 +3948,28 @@
       "base_commit": "e3bf496e",
       "timestamp_utc": "2026-11-15T13:19:46.382236+00:00",
       "body": "DELIVERY: Corrected stale M15-U2-04 scope status in commit 6e7e4385. U2-04 is checked because accepted S2.1-S2.3 establish the shared environment input/publication/consumer/fallback contract. The previous Editor visual criterion described dynamic six-face capture and is now attached to U5-14. Current renderer loads one selected authored cubemap probe; dynamic six-face capture and multi-probe blending remain unchecked in U5. No rendering source changed, no new GPU test claimed; git diff --cached --check and exchange validation passed. Historical S2.3 report has an explicit follow-up note. No push.\n"
+    },
+    {
+      "id": "CG-20261115T133959095408Z-CODEX-2cf378",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U2-05",
+      "reply_to": null,
+      "base_commit": "22f41ad8",
+      "timestamp_utc": "2026-11-15T13:39:59.095408+00:00",
+      "body": "IN_PROGRESS: User explicitly released all M15-U2-05 backend readback checkpoints. Baseline 22f41ad8. I will audit the existing AxleEnvironmentRenderingTests fixture, build Debug/Release, rerun D3D12, Vulkan and OpenGL with isolated artifact directories, validate output files and exact exit codes, then update PLAN and a review report one checkpoint at a time. Expected tracked files: PLAN.md, docs/reviews/M15_U2_05_ENVIRONMENT_READBACK.md, and this exchange. No U5 capture work or push.\n"
+    },
+    {
+      "id": "CG-20261115T134546378010Z-CODEX-0efe0b",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M15-U2-05",
+      "reply_to": "CG-20261115T133959095408Z-CODEX-2cf378",
+      "base_commit": "22f41ad8",
+      "timestamp_utc": "2026-11-15T13:45:46.378010+00:00",
+      "body": "DELIVERY: M15-U2-05.1/.2/.3 accepted. Documentation commits: 75209349 (D3D12), 644b15c3 (Vulkan), 0b8e1fd2 (OpenGL), dd71b11b (final artifact audit clarification). Source baseline 22f41ad8; no rendering source changed.\n\nExact builds: cmake --build build --config Debug --target AxleEnvironmentRenderingTests --parallel 4; same command with Release. Both exit 0. Direct fixture runs: build/Tests/<Config>/AxleEnvironmentRenderingTests.exe <dx12|vulkan|gl> build/agent-runs/M15-U2-05/<config>-<backend>, six combinations, all exit 0. D3D12/Vulkan logs end native HDR subresource/sky/specular/diffuse/cache/exposure/reload/fallback PASS; OpenGL logs end background-only and explicit IBL pixel PASS. All expected PPMs parsed as 128x128 P6; distinct scenario hashes and cross-config matching hashes. Six SHA-256 identity manifests passed scripts/validate_artifact_identity.py. Logs, generated images, manifests and reports live under build/agent-runs/M15-U2-05; tracked report is docs/reviews/M15_U2_05_ENVIRONMENT_READBACK.md. U2-05 checkboxes are all ticked. OpenGL coverage is the declared subset; U5 dynamic capture/probe blending remains open. No Editor image or push required.\n"
     }
   ],
   "deferred_tasks": [

@@ -1,85 +1,95 @@
-# Milestone 17 — Scalable Geometry and Virtual Geometry Architecture
+# Milestone 17 - Scalable Geometry and Virtual Geometry Architecture
 
-## 1. Target and Scope
+## 1. Target and scope
 
-Phase 03 establishes scalable, high-throughput geometry rendering for AxleEngine. The core goal is to render dense scenes containing tens of millions of polygons and tens of thousands of instances with zero CPU bottleneck. This is achieved via a **Two-Tier Geometry Pipeline**:
-- **Tier 1 (OPT-16 Offline autoLOD):** Universal algorithmic mesh simplification (meshoptimizer) generating discrete LOD chains for skeletal meshes, transparent foliage, and legacy GPU fallbacks.
-- **Tier 2 (OPT-14 Virtual Geometry):** Real-time GPU-driven culling, meshlet clustering, cluster hierarchy (Nanite-style DAG), and hardware Task/Mesh Shaders for static geometry.
+Milestone 17 adds a scalable geometry path without removing the Forward raster path. It combines:
 
-Supporting references: [POST_OPT10_PROGRAM_PLAN.md](../../archive/design/deferred/POST_OPT10_PROGRAM_PLAN.md), [POST_OPT10_FEASIBILITY.md](../../archive/design/deferred/POST_OPT10_FEASIBILITY.md).
+- Tier 1 offline meshoptimizer LODs for skinned/deforming assets, transparency and legacy hardware.
+- Tier 2 meshlet/cluster data, GPU instance streaming and Hi-Z culling for dense opaque scenes.
+- An opaque Visibility Buffer plus compute material resolve.
+- Clustered Forward+ lighting shared by opaque resolve and transparent raster.
+- Capability gates that route missing mesh shaders, bindless descriptors or visibility support to indexed indirect or legacy Forward rendering.
 
----
+M16 owns RT acceleration structures and secondary lighting. M17 consumes a bounded RT proxy identity when RT is enabled; it does not build AS or own RT shader tables.
 
-## 2. Architecture and Pipeline
-
-```mermaid
-flowchart TD
-    RawMesh["Raw 3D Mesh FBX / glTF"] --> Cooker["Asset Cooker Import"]
-
-    subgraph Tier1 ["Tier 1: Offline autoLOD Pipeline OPT-16"]
-        Cooker --> MeshoptSimp["meshopt_simplify: Decimation Engine"]
-        MeshoptSimp --> DiscreteLODs["Discrete LOD0..LOD3 Chains"]
-        DiscreteLODs --> DitherFade["Screen-Size Coverage & Dither Cross-Fading"]
-    end
-
-    subgraph Tier2 ["Tier 2: Continuous Virtual Geometry OPT-14"]
-        Cooker --> MeshoptBuild["meshopt_buildMeshlets: <=64 Verts, <=126 Tris"]
-        MeshoptBuild --> ClusterDAG["Cluster DAG Hierarchy & Locked Boundary Loops"]
-    end
-
-    Scene["Scene World Instances"] --> GPUInstances["C14-01: GPU Unified Instance Buffer"]
-    GPUInstances --> CullingCompute["C14-02: GPU Frustum & Hi-Z Culling Compute"]
-    DepthPyramid["Hi-Z Depth Pyramid"] --> CullingCompute
-
-    CullingCompute -->|"Modern Hardware Tier"| TaskMesh["C14-05: Task & Mesh Shaders"]
-    CullingCompute -->|"Legacy Hardware Tier"| IndirectDraw["C14-06: ExecuteIndirect Indexed Draw"]
-
-    TaskMesh --> Rasterizer["Hardware Rasterizer"]
-    IndirectDraw --> Rasterizer
-    DitherFade -.->|"Skinned / Fallback"| IndirectDraw
-
-```
-
-### 2.1. Tier 1: Automated Offline LOD Pipeline (OPT-16)
-- **Embedded in Cooker:** Automatically executed during .fbx/.gltf asset import.
-- **Decimation Engine:** Uses meshoptimizer (meshopt_simplify) to produce discrete fallback levels:
-  - LOD 0: 100% original geometry.
-  - LOD 1: 50% triangle count.
-  - LOD 2: 25% triangle count.
-  - LOD 3: 10% triangle count.
-- **Application Scope:** Skinned/skeletal meshes, animated wind foliage, translucent meshes, and legacy GPU fallback.
-
-### 2.2. Unified GPU Instance Data (C14-01)
-- Consolidates world transforms, bounding spheres, axis-aligned bounding boxes (AABBs), material indices, and visual flags into a single structured buffer on VRAM.
-- Eliminates per-instance CPU traversal and individual uniform buffer updates.
-
-### 2.3. GPU-Driven Culling & Hi-Z Occlusion (C14-02)
-- **Frustum Culling:** Fast sphere-frustum intersection in compute shaders.
-- **Orientation & Cone Culling:** Normal cone rejection for backfacing clusters before rasterization.
-- **Two-Phase Hi-Z Occlusion Culling:** Tests bounding boxes against a hierarchical depth buffer (Hi-Z pyramid). Objects occluded by walls, mountains, or foreground structures are discarded immediately on the GPU.
-- **Indirect Argument Generation:** Compute shaders write directly to ExecuteIndirect (D3D12) /
-kCmdDrawIndexedIndirect (Vulkan) argument buffers.
-
-### 2.4. Meshlet Asset Pipeline (C14-03)
-- Uses meshoptimizer (meshopt_buildMeshlets) to divide meshes into bounded clusters: $\\le 64$ vertices, $\\le 126$ triangles per cluster.
-- Computes tight bounding spheres and cone apex/axis for early culling.
-- Binary asset caching into .axlebin for zero-cost runtime loading.
-
-### 2.5. Cluster DAG Continuous LOD (C14-04)
-- Organizes clusters into a Directed Acyclic Graph (DAG) for continuous Level-of-Detail (LOD).
-- **Locked Boundary Loops:** Shared borders between adjacent clusters are locked during decimation, guaranteeing 100% watertight transitions with zero visual cracking.
-
-### 2.6. Hardware Task & Mesh Shaders (C14-05)
-- **Task Shader (Amplification):** Evaluates projected screen-space error per cluster to select continuous LOD levels dynamically, issuing mesh shader threadgroups.
-- **Mesh Shader:** Directly emits primitives to the rasterizer, completely bypassing legacy input assembler and vertex fetch bottlenecks.
-
-### 2.7. Capability Gate & Indexed Fallback (C14-06)
-- Strict runtime feature detection: GPUs without Task/Mesh Shader support automatically use GPU-culled indirect indexed draws with discrete LODs, ensuring 100% functional parity.
+Supporting references: POST_OPT10_PROGRAM_PLAN.md and POST_OPT10_FEASIBILITY.md in the archive.
 
 ---
 
-## 3. Technology and Constraints
+## 2. Architecture and pipeline
 
-1. **Hardware Requirements:** Task/Mesh Shaders require D3D12 Ultimate (Feature Level 12_2) or Vulkan 1.3 with VK_EXT_mesh_shader.
-2. **Watertight Verification:** Cluster LOD transitions must pass automated crack-detection test fixtures verifying zero pixel leakage along shared edges.
-3. **Reproducible Benchmarks:** Dense scene scale claims must identify instance counts, polygon counts, target resolutions, and hardware configurations.
+The frame path is:
+
+    Raw mesh -> asset cooker -> LODs, meshlets, cluster DAG and optional RT proxy
+    RenderWorld snapshot -> GPUInstanceUpload -> GPU culling/Hi-Z
+    RenderWorld lights -> ClusterLightCulling
+    GPU culling -> VisibilityBufferPass -> VisBufferResolvePass -> opaque HDR
+    ClusterLightCulling -> VisBufferResolvePass and Transparent Forward+ -> post process
+
+The modern branch uses task/mesh rasterization when supported. The baseline branch uses indexed indirect rasterization. Both branches produce the same visibility identity.
+
+The current RenderPassScheduler can host these as explicit ordered passes with named RenderGraph dependencies. Async overlap and true topological scheduling remain a separate graph upgrade and are not assumed by this milestone.
+
+### 2.1 Tier 1: offline LOD
+
+The cooker uses meshopt_simplify to produce documented LOD0..LOD3 chains, screen-size hysteresis and shadow-caster LODs. The same cooker may emit a bounded RT proxy for M16, but M16 must remain runnable when that future M17 artifact is absent.
+
+### 2.2 GPU instance and culling contract
+
+GPUInstanceData is a renderer-owned, packed, generation-checked record derived from RenderWorld. It contains stable instance identity, transform/previous transform, bounds, meshlet and fallback-LOD ranges, material-table index and visibility flags. The upload ring and indirect argument buffers are frame-owned and retained until completion.
+
+Culling emits deterministic indexed indirect arguments first. Task/mesh shader dispatch is an optional path that must produce the same visibility identity and fallback image.
+
+### 2.3 Meshlet and cluster data
+
+meshopt_buildMeshlets produces bounded clusters (at most 64 vertices and 126 triangles in the default profile), tight bounds/cones and a stable cluster identity. Cluster DAG transitions use locked boundary loops and automated crack tests. Scene and asset limits must reject identity overflow rather than truncate IDs.
+
+### 2.4 Visibility Buffer and resolve
+
+VisibilityBufferPass covers opaque geometry that has a stable cluster/triangle/primitive identity. The format, depth convention, multi-draw partitioning, alpha-test boundary and overflow behavior are frozen before shader work.
+
+VisBufferResolvePass is a dedicated scheduler pass. It reads visibility, material tables, cluster light data and optional RT secondary outputs, reconstructs barycentrics/derivatives and writes the opaque HDR target. It is independent from the legacy Forward material callback so that graph lifetime, readback and fallback behavior can be tested separately.
+
+Bindless resolve uses typed texture/sampler tables only on a validated descriptor-indexing tier. Each table entry has a generation/default-resource policy. Fixed-slot ForwardPBR remains the fallback for OpenGL 4.5, unsupported descriptor tiers and incompatible custom graphs.
+
+### 2.5 Clustered Forward+ contract
+
+ClusterLightCulling builds a view-frustum grid with frozen tile dimensions, logarithmic/exponential z slicing, light bounds and index-list capacity. It emits deterministic cluster offsets/indices plus overflow counters. Directional, point, spot and rect lights are classified explicitly.
+
+VisBufferResolvePass and transparent Forward+ consume the same grid. Overflow selects a bounded deterministic fallback and publishes a diagnostic; it never silently drops an arbitrary subset of lights.
+
+### 2.6 Material divergence policy
+
+The first resolve implementation uses tile/material bins and a bounded set of built-in PBR shader families. Waves with a common material key use a fast path; mixed waves use scalar table fetches or a generic graph path. Global sorting and large permutation growth are opt-in experiments after the tile path has parity and timing evidence.
+
+### 2.7 Capability and fallback policy
+
+- Mesh/task shader unavailable: GPU-culled indexed indirect draws.
+- Descriptor indexing/unbounded arrays unavailable: fixed-slot material bindings.
+- Visibility resolve unavailable or unsupported material: ForwardPBR raster.
+- OpenGL 4.5: existing Forward path is the final safe tier.
+- RT unavailable: M16 policy resolves SSR, planar reflection, local probes and sky IBL.
+
+All fallbacks use the same RenderWorld/material contract and do not mutate authored scene data.
+
+---
+
+## 3. RenderGraph and lifetime constraints
+
+Visibility, cluster, material-table and indirect buffers are graph-declared resources. Future RT secondary targets are declared by M16 and read by resolve only after their generation is complete. The graph must validate resource generation, pass dependencies, overflow/readback buffers and per-view history invalidation.
+
+The present graph is sequential and whole-texture oriented. A later graph revision may add buffer/AS/SBT resource kinds, queue ownership and transient aliasing, but those features must not be inferred from the RFC alone.
+
+---
+
+## 4. Technology and constraints
+
+1. Task/Mesh Shaders require a declared D3D12/Vulkan capability and a new RHI command/pipeline seam; indexed indirect is the baseline.
+2. DXIL and SPIR-V shader reflection must agree for visibility IDs, descriptor indexing and material tables.
+3. Visibility derivative reconstruction, alpha-tested geometry and transparent materials require dedicated parity fixtures.
+4. Dense-scene benchmarks must report instance/triangle counts, resolution, GPU, visibility bandwidth, resolve time and cluster overflow.
+5. OpenGL 4.5 and other fallback backends remain supported throughout the milestone.
+
+## 5. Acceptance boundary
+
+M17 closes only when GPU instance identity, visibility reconstruction, bindless/fixed-slot parity, clustered overflow policy, mesh/indexed fallback parity and deterministic image/readback evidence pass. RT proxy consumption is validated jointly with M16 but M17 does not own AS lifetime.

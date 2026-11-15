@@ -33,12 +33,13 @@ M15 material/surface + view contracts
 
 ### M16-RT-02 — BLAS/TLAS lifecycle
 
-- [ ] **M16-RT-02.1 — Build BLAS for static opaque geometry.**
-- [ ] **M16-RT-02.2 — Refit BLAS for supported deforming geometry.**
-- [ ] **M16-RT-02.3 — Retire and compact BLAS generations after completion.**
-- [ ] **M16-RT-02.4 — Build TLAS with stable instance identity and masks.**
-- [ ] **M16-RT-02.5 — Update TLAS on transform, visibility, scene and material generation changes.**
-- [ ] **M16-RT-02.6 — Test resize, device reset, scene replacement and failed rebuild retention.**
+- [ ] **M16-RT-02.1 — Freeze the RT coarse-proxy contract.** Define proxy identity, source-mesh linkage, material/alpha/normal requirements, shadow/reflection masks, triangle-budget policy and static/deforming update classes. M16 must not depend on a future M17 autoLOD artifact.
+- [ ] **M16-RT-02.2 — Build BLAS for static opaque geometry from a retained proxy generation.** A source mesh may be used only when it already satisfies the proxy budget and hit-shader contract; otherwise use the cooker/runtime coarse proxy.
+- [ ] **M16-RT-02.3 — Refit or rebuild BLAS for supported deforming geometry.** Publish an explicit policy for skinned/deforming meshes; do not silently refit topology changes.
+- [ ] **M16-RT-02.4 — Retire and compact BLAS generations after completion.** Keep the last-good generation when a replacement build fails.
+- [ ] **M16-RT-02.5 — Build TLAS with stable instance identity and masks.** Preserve opaque, transparent, shadow-only and reflection-only classification.
+- [ ] **M16-RT-02.6 — Update TLAS on transform, visibility, scene and material generation changes.**
+- [ ] **M16-RT-02.7 — Test resize, device reset, scene replacement and failed rebuild retention.** Include proxy/source mismatch and budget overflow diagnostics.
 
 ### M16-RT-03 — RT pipeline and shader table
 

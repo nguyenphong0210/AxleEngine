@@ -16,7 +16,7 @@ M16 owns the RT backend and its capability-safe integration:
 - Spatial/temporal denoising, history rejection and camera/scene/material invalidation.
 - A single resolve policy with raster SSR, planar reflection, local probes and sky IBL as fallbacks.
 
-M16 does not own meshlet generation, autoLOD or clustered light culling; those remain in M17. M15 owns planar reflection and the raster reflection contracts consumed here.
+M16 does not own meshlet generation or clustered light culling; those remain in M17. M16 does own the minimal coarse RT-proxy contract needed to build a bounded BLAS. M17 autoLOD may later produce a compatible proxy, but M16 startup cannot depend on a future M17 artifact. M15 owns planar reflection and the raster reflection contracts consumed here.
 
 ## 2. Backend and pass topology
 
@@ -66,6 +66,12 @@ The graph must reject a pass that reads an unbuilt AS generation, mixes generati
 M16 consumes M15's canonical `ResolvedSurface` values. The RT hit path must use the same base color, metallic, roughness, normal, F0, clearcoat, sheen, transmission and reflection flags as ForwardPBR. Unsupported custom graph fields produce a named fallback rather than silently diverging.
 
 Geometry updates are classified as static build, transform refit, vertex/index rebuild or material-only update. TLAS instance masks separate opaque, transparent, shadow-only and reflection-only geometry. Capture and RT recursion policies explicitly disable recursive planar/probe/SSR sampling.
+
+### 5.1 Coarse RT proxy contract
+
+RT BLAS geometry is selected from a budgeted proxy generation, never from an unbounded Nanite micro-triangle stream. The proxy record carries a stable source-mesh UUID, proxy generation, primitive/material-slot mapping, alpha-test/two-sided classification, positions, normals and the UV/tangent data required by the hit material contract. Proxy triangle count is selected per asset and quality tier; the RFC's 10--20% ratio is a starting heuristic, not an invariant.
+
+Static assets are cooked or generated into a retained proxy before BLAS build. Supported deforming assets publish whether they refit, rebuild or fall back to raster; topology changes always rebuild. Proxy generation, BLAS generation and TLAS generation are independently leaseable and retain the last-good generation on failure. Shadow and reflection masks may select different proxy budgets when silhouette or leak risk requires it.
 
 ## 6. Quality tiers and fallback
 

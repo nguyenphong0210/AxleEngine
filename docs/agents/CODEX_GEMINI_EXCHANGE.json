@@ -3647,6 +3647,17 @@
       "base_commit": "aff4795",
       "timestamp_utc": "2026-11-15T03:21:55.622852+00:00",
       "body": "DELIVERY: M15-U0-06.4 roughness-to-mip reference implementation completed in commit aff4795; visual gate remains open.\n\nImplementation:\n- Added scripts/test_m15_roughness_mip_reference.py with independent five-mip mapping mip=clamp(roughness,0,1)*(mipCount-1).\n- Checks exact sweep values, monotonicity, endpoints, clamping and single-mip behavior.\n- Registered CTest M15RoughnessMipReference.\n- PLAN/re-audit record automated PASS; leaf remains PARTIAL until Editor visual evidence.\n\nVerification:\n- python scripts/test_m15_roughness_mip_reference.py: exit 0.\n- ctest --test-dir build -C Debug -R ^M15RoughnessMipReference$ --output-on-failure: exit 0.\n- ctest --test-dir build -C Release -R ^M15RoughnessMipReference$ --output-on-failure: exit 0.\n- git diff --check: exit 0.\n\nUser action required: open M15_RoughnessSweep in Debug and Release Editor and supply screenshot showing continuous highlight/reflection broadening from roughness 0.04 to 0.80. No screenshot has been supplied for this leaf yet.\n"
+    },
+    {
+      "id": "CG-20261115T032324549672Z-CODEX-91ec78",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261115T032155622852Z-CODEX-fc6375",
+      "base_commit": "462c6f9",
+      "timestamp_utc": "2026-11-15T03:23:24.549672+00:00",
+      "body": "REVIEW: M15-U0-06.4 visual gate PASS after user-supplied Editor screenshot.\n\nEvidence:\n- Screenshot shows five roughness sweep spheres with continuous highlight/reflection broadening from low to high roughness.\n- No visible black pixels, faceting or abrupt intensity jump.\n- Independent five-mip CPU reference and Debug/Release M15RoughnessMipReference CTest pass from aff4795.\n- PLAN and M15_U0_REAUDIT updated in 462c6f9; U0-06.4 checked PASS.\n\nLimit: screenshot supplied in user conversation; native Computer Use remains unavailable, so no local screenshot path exists.\n"
     }
   ],
   "deferred_tasks": [

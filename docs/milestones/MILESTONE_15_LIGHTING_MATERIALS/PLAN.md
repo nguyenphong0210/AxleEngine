@@ -203,9 +203,9 @@ the item is visible.
 - [x] **M15-U0-07.1 — Create deterministic image comparison.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** `scripts/compare_images.py` compares P6 RGB images in explicit linear/sRGB space and reports PSNR, global SSIM, maximum channel error and deterministic pass/fail thresholds; Debug/Release `M15ImageCompare` CTest pass. No Editor evidence is required for this CPU-only tooling leaf.
-- [ ] **M15-U0-07.2 — Create artifact identity validation.**
+- [x] **M15-U0-07.2 — Create artifact identity validation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** `scripts/validate_artifact_identity.py` validates schema, source commit, backend/configuration, fixture, resolution, comparison space, artifact path, file size and SHA-256; Debug/Release `M15ArtifactIdentity` CTest pass. No Editor evidence is required for this CPU-only tooling leaf.
 
 **Exit:** known bad behavior is reproducible and rejected; report states `M15 HOLD`.
 

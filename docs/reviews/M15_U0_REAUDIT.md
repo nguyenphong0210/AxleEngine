@@ -146,6 +146,20 @@ Result: **PASS**.
 - Debug and Release `M15ImageCompare` CTest pass.
 - No Editor evidence is required for this CPU-only tooling leaf.
 
+## M15-U0-07.2 — Artifact identity validation
+
+Result: **PASS**.
+
+- Added `scripts/validate_artifact_identity.py` with schema versioning and required
+  identity fields: source commit, backend, configuration, fixture, resolution,
+  comparison space, relative artifact path, file size and SHA-256.
+- The validator rejects missing metadata, invalid commits/backends/configurations,
+  absolute or traversal paths, missing artifacts, stale hashes and size mismatches.
+- Added `scripts/test_m15_artifact_identity.py` covering valid identity, stale hash,
+  missing field and path traversal cases.
+- Debug and Release `M15ArtifactIdentity` CTest pass.
+- No Editor evidence is required for this CPU-only tooling leaf.
+
 ## M15-U0-06.2.1 — Freeze Hi-Z depth convention and reduction operator
 
 Result: **PASS**.

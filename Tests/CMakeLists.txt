@@ -770,7 +770,9 @@ add_test(NAME M15RoughnessMipReference COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_SOURCE_DIR}/scripts/test_m15_roughness_mip_reference.py")
 add_test(NAME M15ImageCompare COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_SOURCE_DIR}/scripts/test_m15_image_compare.py")
-set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture BaselineToolRegressions AcceptanceEvidenceRegressions M14P0BaselineManifest M14P0BaselineRegressions M15RoughnessFixture M15HiZReference M15RoughnessMipReference M15ImageCompare
+add_test(NAME M15ArtifactIdentity COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_SOURCE_DIR}/scripts/test_m15_artifact_identity.py")
+set_tests_properties(ArchitectureBoundaryChecks ArchitectureForbiddenEdgeFixture BaselineToolRegressions AcceptanceEvidenceRegressions M14P0BaselineManifest M14P0BaselineRegressions M15RoughnessFixture M15HiZReference M15RoughnessMipReference M15ImageCompare M15ArtifactIdentity
     PROPERTIES LABELS "architecture;cpu" TIMEOUT 60)
 
 # Explicit developer/test build. Neither this target nor its executables are in ALL.

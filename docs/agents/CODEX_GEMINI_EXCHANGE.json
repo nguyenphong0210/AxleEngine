@@ -1,29 +1,28 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U1-S1.3",
-    "title": "M15 U1 S1.3 primary light units and shadows",
-    "state": "accepted",
+    "id": "M15-U1-04.1",
+    "title": "M15 U1 04.1 roughness/view/light-angle sweep",
+    "state": "in_progress",
     "coordinator": "User / Codex",
-    "implementer": "Codex (explicit user assignment for S1.3)",
-    "code_baseline": "d92ce53a",
-    "user_instruction": "Implement SubUnit S1.3 after accepted S1.2; do not push.",
-    "user_scope": "Implement and verify M15-U1-03.1 directional-light units/shadows, 03.2 point-light units/shadows, and 03.3 spot-light units/shadows; stop before U1-04.",
+    "implementer": "Codex (explicit user continuation after accepted S1.3)",
+    "code_baseline": "fde09d9b",
+    "user_instruction": "Continue M15 after accepted S1.3; implement the next planned U1-04.1 leaf; do not push.",
+    "user_scope": "Implement and verify the independent roughness/view/light-angle sweep for the M15 roughness fixture, then stop before U1-04.2.",
     "expected_files": [
       "Engine/Resources/Shaders/ForwardPBR.hlsl",
-      "Engine/Resources/Shaders/LocalShadows.hlsli",
-      "Tests/rendering/Test_M15_PrimaryLightingReferenceUnit.cpp",
+      "Tests/rendering/Test_M15_RoughnessSweepReferenceUnit.cpp",
       "Tests/rendering/RenderUnitTestMain.cpp",
       "Tests/CMakeLists.txt",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U1_S1_3_PRIMARY_LIGHTING_REVIEW.md",
+      "docs/reviews/M15_U1_04_1_ROUGHNESS_SWEEP_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Source commit c6245e2e adds the independent primary-light fixture and CTest wiring. Debug/Release RenderUnitTests, M15PrimaryLightingReference, CSM/local CPU tests, native D3D12/Vulkan cascade/local shadow tests and Debug/Release AxleEditor builds pass.",
-    "acceptance_status": "Accepted at c6245e2e after the separate read-only recheck found no P0/P1/P2 findings and the user supplied Editor screenshots for directional, point and spot shadows. PLAN parent and leaves are checked.",
+    "implementation_status": "Not started. Accepted S1.3 remains recorded in the review report and history; this task is the next released leaf.",
+    "acceptance_status": "Not started.",
     "open_gates": [],
-    "next_action": "Stop at accepted S1.3. U1-04 remains outside this release boundary and has not started.",
-    "metadata_correction": "Supersedes accepted S1.2 task card because the latest user instruction releases S1.3. S1.2 acceptance remains recorded in history and its review report."
+    "next_action": "Implement an independent CPU roughness/view/light-angle reference and wire Debug/Release CTest; then collect the required Editor visual evidence.",
+    "metadata_correction": "Supersedes the accepted S1.3 task card because the user explicitly continued to the next PLAN leaf. S1.3 acceptance remains recorded in history and its review report."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -3813,6 +3812,17 @@
       "base_commit": "c6245e2e",
       "timestamp_utc": "2026-11-15T09:52:40.779423+00:00",
       "body": "REVIEW / ACCEPTANCE: M15-U1-S1.3 is accepted at source c6245e2e after the required independent recheck and user Editor visual evidence.\n\nVerified independently:\n- No P0/P1/P2 findings in the separate-context source review.\n- Debug and Release focused CPU/CTest gates pass, including M15PrimaryLightingReference.\n- Debug and Release native D3D12 and Vulkan cascade/local-shadow tests pass for directional, point and spot paths.\n- Debug and Release AxleEditor builds pass.\n\nEditor evidence supplied by the user closes the visual gate:\n- Directional Light: Cast Real-Time Shadows enabled, four-split CSM settings visible, plane/sphere shadows visible, Console Error 0.\n- Point Light: Cast Shadows enabled, point shadow visible, Console Error 0.\n- Spot Light: Enabled and Cast Shadows enabled, range/cone controls visible, cone lighting/shadow visible, Console Error 0.\n\nAcceptance is recorded in docs/reviews/M15_U1_S1_3_PRIMARY_LIGHTING_REVIEW.md and docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md. Stop at S1.3; U1-04 remains outside this release boundary and has not started.\n"
+    },
+    {
+      "id": "CG-20261115T101028023511Z-CODEX-753b4e",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U1-04.1",
+      "reply_to": "CG-20261115T095240779423Z-CODEX-021208",
+      "base_commit": "fde09d9b",
+      "timestamp_utc": "2026-11-15T10:10:28.023511+00:00",
+      "body": "IN_PROGRESS: The user continued M15 after accepted S1.3. I am implementing M15-U1-04.1 (roughness/view/light-angle sweep) from the PLAN, bounded to this leaf and stopping before U1-04.2.\n\nPlanned work: an independent CPU reference fixture for GGX roughness response, view/light angle continuity and finite/invalid handling; RenderUnitTestMain and CTest wiring; a review report and PLAN evidence update after Debug/Release verification. Editor visual evidence will be collected from the M15_RoughnessSweep fixture after the CPU gates pass.\n\nThe previously observed local shadow banding is retained as a separate visual-quality finding; it is not being silently claimed as fixed by this sweep.\n"
     }
   ],
   "deferred_tasks": [

@@ -1,6 +1,6 @@
 # M15 U1 S1.3 primary-light units and shadows
 
-Status: **implementation self-verified; independent recheck pending**. The derived S1.3 parent and its three children remain unchecked in the PLAN until the separate-context review is complete.
+Status: **implementation independently rechecked; Editor visual gate open**. The separate-context review found no P0/P1/P2 findings. The derived S1.3 parent and its three children remain unchecked until the required Editor visual evidence is supplied.
 
 ## Scope and source
 
@@ -44,6 +44,10 @@ All commands ran from `D:\WorkSpace\AxleEngine`.
 
 No Editor visual screenshot is claimed yet. The PLAN's S1.3 leaves declare an Editor visual gate, so the user must still inspect the applicable fixture and provide the required Editor evidence before final acceptance. Native GPU evidence is complete on D3D12/Vulkan; OpenGL local-shadow fallback remains outside this subunit.
 
+## Independent recheck
+
+A separate read-only reviewer inspected `c6245e2e` against `d92ce53a`, including the production lighting/shadow paths, the dedicated fixture, CMake/runner wiring and existing CPU/native fixtures. It reported no P0, P1 or P2 findings and reran the focused Debug/Release CPU gates plus native D3D12/Vulkan cascade/local shadow tests. Validation error count was zero. It accepted 03.1, 03.2 and 03.3 from source and automated/native evidence.
+
 ## Open gate
 
-Separate-context review is required before acceptance. The implementation and all automated/native verification above are complete, but S1.3 remains **IMPLEMENTED / PENDING REVIEW AND EDITOR VISUAL EVIDENCE**.
+The PLAN declares an Editor visual gate for each S1.3 leaf. No Editor screenshot or UI inspection was performed by the reviewer, so S1.3 remains **IMPLEMENTED / INDEPENDENTLY RECHECKED / PENDING EDITOR VISUAL EVIDENCE**. Native GPU evidence is complete on D3D12/Vulkan; OpenGL local-shadow fallback remains outside this subunit.

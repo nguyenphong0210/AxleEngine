@@ -3,7 +3,7 @@
   "current_task": {
     "id": "M15-U1-S1.3",
     "title": "M15 U1 S1.3 primary light units and shadows",
-    "state": "implemented_pending_review",
+    "state": "implemented_pending_editor_gate",
     "coordinator": "User / Codex",
     "implementer": "Codex (explicit user assignment for S1.3)",
     "code_baseline": "d92ce53a",
@@ -20,9 +20,9 @@
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
     "implementation_status": "Source commit c6245e2e adds the independent primary-light fixture and CTest wiring. Debug/Release RenderUnitTests, M15PrimaryLightingReference, CSM/local CPU tests, native D3D12/Vulkan cascade/local shadow tests and Debug/Release AxleEditor builds pass.",
-    "acceptance_status": "Implementation self-verified; S1.3 parent and leaves remain unchecked pending separate-context recheck and required Editor visual evidence.",
-    "open_gates": ["Separate-context S1.3 source recheck", "User Editor visual evidence for directional/point/spot shadow fixtures"],
-    "next_action": "Complete independent recheck, collect Editor screenshots, then accept S1.3 and stop before U1-04.",
+    "acceptance_status": "Separate read-only recheck completed on c6245e2e with no P0/P1/P2 findings; CPU/native evidence accepts 03.1/03.2/03.3. PLAN parent and leaves remain unchecked only for the declared Editor visual gate.",
+    "open_gates": ["User Editor visual evidence for directional/point/spot shadow fixtures"],
+    "next_action": "Collect the required Editor screenshots, then accept S1.3 and stop before U1-04.",
     "metadata_correction": "Supersedes accepted S1.2 task card because the latest user instruction releases S1.3. S1.2 acceptance remains recorded in history and its review report."
   },
   "last_read": {

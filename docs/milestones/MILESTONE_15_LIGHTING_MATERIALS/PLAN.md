@@ -385,6 +385,7 @@ the item is visible.
 - [ ] **M15-U3-10.3 — Extract ScreenSpaceReflectionPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
+  - **Automated evidence:** `ScreenSpaceReflectionPass::Record` owns copy, Hi-Z, compute and apply; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 with probe/fallback and level readback assertions. Editor visual remains pending. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
 - [ ] **M15-U3-10.4 — Extract FroxelFogPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: fog shafts obey blockers; zero density/no-light leaves the image unchanged.

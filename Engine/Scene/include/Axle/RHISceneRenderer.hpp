@@ -44,7 +44,7 @@
 
 namespace Axle {
 
-    namespace Passes { class GTAOPass; class HiZGenerationPass; }
+    namespace Passes { class GTAOPass; class HiZGenerationPass; class ScreenSpaceReflectionPass; }
 
     class Scene;
     class PhysicsScene;
@@ -174,6 +174,7 @@ namespace Axle {
     class RHISceneRenderer {
         friend class Passes::GTAOPass;
         friend class Passes::HiZGenerationPass;
+        friend class Passes::ScreenSpaceReflectionPass;
     public:
         RHISceneRenderer();
         ~RHISceneRenderer();

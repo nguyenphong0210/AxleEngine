@@ -32,6 +32,16 @@ static const float DIRECT_LUX_TO_RADIANCE = 0.000035;
 static const float LOCAL_INTENSITY_SCALE = 0.05;
 
 // -----------------------------------------------------------------------------
+// Solar Angular Radius Policy (M15-U1-01.2: Frozen)
+// -----------------------------------------------------------------------------
+// Physical angular radius of the solar disk (0.53 degree diameter = 0.00462512 rad).
+// Authored bounds are clamped to [0.0, 0.25] radians on CPU and GPU.
+// Convolving the GGX roughness with this finite radius prevents zero-roughness
+// specular singularities and broadens the solar highlight physically.
+static const float SUN_DEFAULT_ANGULAR_RADIUS = 0.00462512;
+static const float SUN_MAX_ANGULAR_RADIUS = 0.25;
+
+// -----------------------------------------------------------------------------
 // Root Constants / Push Constants (Register b0, Space 0)
 // Size: EXACTLY 128 bytes (32 DWORDs) - Guaranteed hardware limit across Vulkan & D3D12
 // In Vulkan (SPIR-V), DXC compiles [[vk::push_constant]] to physical push constant range
@@ -504,7 +514,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         // Convolve the microfacet lobe with the finite solar disk. The default
         // radius is the measured 0.53 degree solar diameter; wider authored
         // radii soften the highlight while remaining energy bounded.
-        float sunAngularRadius = max(u_SunLight.ShadowParams.z, 0.0);
+        float sunAngularRadius = hasMultiLightSun ? clamp(u_SunLight.ShadowParams.z, 0.0, SUN_MAX_ANGULAR_RADIUS) : SUN_DEFAULT_ANGULAR_RADIUS;
         float sunConvolvedRoughness = sqrt(saturate(roughness * roughness + sunAngularRadius * sunAngularRadius));
         float  NDF = MaterialDistribution(N, H, tangent, bitangent, sunConvolvedRoughness, coatAnisotropy.z);
         float  G   = MaterialGeometry(N, V, sunDir, tangent, bitangent, sunConvolvedRoughness, coatAnisotropy.z);

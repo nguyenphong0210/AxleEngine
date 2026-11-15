@@ -168,6 +168,51 @@ bool RunLightingServiceUnitTests() {
                  forwardSource.find("totalAtten * LOCAL_INTENSITY_SCALE")!=std::string::npos,
         "ForwardPBR.hlsl point/spot terms use LOCAL_INTENSITY_SCALE");
 
+    // M15-U1-01.2: frozen sun angular-radius policy contract.
+    constexpr float PhysicalSolarAngularRadius = 0.00462512f;
+    constexpr float MaxSolarAngularRadius = 0.25f;
+    RENDER_CHECK(std::abs(PhysicalSolarAngularRadius - (0.53f * 0.5f * 3.14159265358979323846f / 180.0f)) < 1e-6f,
+        "physical solar angular radius matches 0.53 degree solar diameter within 1e-6 rad");
+
+    RenderWorld sunPolicyWorld;
+    sunPolicyWorld.DirectionalLight = RenderDirectionalLight{};
+    RENDER_CHECK(sunPolicyWorld.DirectionalLight->SolarAngularRadius == PhysicalSolarAngularRadius,
+        "RenderDirectionalLight defaults to physical solar angular radius (0.00462512 rad)");
+
+    sunPolicyWorld.DirectionalLight->SolarAngularRadius = -0.05f;
+    RENDER_CHECK(lighting.BuildFrame(sunPolicyWorld, settings).Sun.SolarAngularRadius == 0.0f,
+        "negative solar angular radius clamps to 0.0 rad (point directional fallback)");
+
+    sunPolicyWorld.DirectionalLight->SolarAngularRadius = 0.50f;
+    RENDER_CHECK(lighting.BuildFrame(sunPolicyWorld, settings).Sun.SolarAngularRadius == MaxSolarAngularRadius,
+        "excessive solar angular radius clamps to 0.25 rad upper bound");
+
+    // Shader convolution formula verification:
+    // sunConvolvedRoughness = sqrt(saturate(roughness^2 + sunAngularRadius^2))
+    auto convolveRoughness = [](float roughness, float sunRadius) {
+        float rSq = roughness * roughness + sunRadius * sunRadius;
+        return std::sqrt(std::clamp(rSq, 0.0f, 1.0f));
+    };
+    RENDER_CHECK(Axle::RenderTests::Near(convolveRoughness(0.0f, PhysicalSolarAngularRadius), PhysicalSolarAngularRadius, 1e-6f),
+        "zero roughness convolved with physical sun yields finite solar angular radius");
+    RENDER_CHECK(Axle::RenderTests::Near(convolveRoughness(0.5f, 0.0f), 0.5f, 1e-6f),
+        "zero solar radius collapses to unmodified roughness");
+    float prevConvolved = 0.0f;
+    for (int i = 0; i <= 10; ++i) {
+        float r = i / 10.0f;
+        float conv = convolveRoughness(r, PhysicalSolarAngularRadius);
+        RENDER_CHECK(conv >= prevConvolved && conv <= 1.0f, "convolved roughness is monotonic and bounded by 1.0");
+        prevConvolved = conv;
+    }
+
+    RENDER_CHECK(forwardSource.find("static const float SUN_DEFAULT_ANGULAR_RADIUS = 0.00462512;")!=std::string::npos &&
+                 forwardSource.find("static const float SUN_MAX_ANGULAR_RADIUS = 0.25;")!=std::string::npos,
+        "ForwardPBR.hlsl declares frozen solar angular radius constants");
+    RENDER_CHECK(forwardSource.find("float sunAngularRadius = hasMultiLightSun ? clamp(u_SunLight.ShadowParams.z, 0.0, SUN_MAX_ANGULAR_RADIUS) : SUN_DEFAULT_ANGULAR_RADIUS;")!=std::string::npos,
+        "ForwardPBR.hlsl applies frozen clamp and fallback for solar angular radius");
+    RENDER_CHECK(forwardSource.find("sunConvolvedRoughness = sqrt(saturate(roughness * roughness + sunAngularRadius * sunAngularRadius));")!=std::string::npos,
+        "ForwardPBR.hlsl uses canonical sun roughness convolution formula");
+
     std::cout << "  [LightingServices] Lighting/reflection/GI boundary tests passed.\n";
     return true;
 }

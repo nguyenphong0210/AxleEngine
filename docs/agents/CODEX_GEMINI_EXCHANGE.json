@@ -1,30 +1,31 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U1-04.2-05",
-    "title": "M15 U1 zero/behind-surface cases and direct-light fallback tiers",
+    "id": "M15-U2-S2.1",
+    "title": "M15 U2 S2.1 environment input contract freeze",
     "state": "accepted",
     "coordinator": "User / Codex",
     "implementer": "Codex (explicit user continuation after accepted S1.3)",
-    "code_baseline": "00f504cf",
-    "user_instruction": "Continue M15 after accepted U1-04.1; implement the two remaining U1 leaves U1-04.2 and U1-05; do not push.",
-    "user_scope": "Implement and verify independent zero/behind-surface finite cases and explicit direct-light fallback behavior for unsupported capability tiers.",
+    "code_baseline": "2678c4b2",
+    "user_instruction": "Begin M15 U2/S2.1 contract freeze; implement and verify the three S2.1 children without starting S2.2 or S2.3; do not push.",
+    "user_scope": "Freeze procedural-sky, environment-bake and authored-cubemap color/orientation conventions with an independent CPU fixture and exact evidence.",
     "expected_files": [
-      "Engine/Resources/Shaders/ForwardPBR.hlsl",
-      "Engine/Scene/src/RenderService.cpp",
-      "Engine/Renderer/src/RenderCapabilities.cpp",
-      "Tests/rendering/Test_M15_DirectLightEdgeAndFallbackReferenceUnit.cpp",
+      "Engine/Renderer/include/Axle/EnvironmentBake.hpp",
+      "Engine/Renderer/src/EnvironmentBake.cpp",
+      "Engine/Scene/include/Axle/Components.hpp",
+      "Engine/Scene/include/Axle/RenderWorld.hpp",
+      "Tests/rendering/Test_M15_EnvironmentContractReferenceUnit.cpp",
       "Tests/rendering/RenderUnitTestMain.cpp",
       "Tests/CMakeLists.txt",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U1_04_2_05_DIRECT_LIGHT_EDGE_AND_FALLBACK_REVIEW.md",
+      "docs/reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Implemented in 034f07e7: independent CPU zero/behind-surface and fallback capability fixtures, CLI commands and CTest wiring. Debug/Release focused and full RenderUnitTests plus Debug/Release OpenGL fallback runtime pass.",
-    "acceptance_status": "Accepted at 034f07e7 after the independent CPU fixtures, full Debug/Release RenderUnitTests and actual OpenGL fallback runtime passed. Review report: docs/reviews/M15_U1_04_2_05_DIRECT_LIGHT_EDGE_AND_FALLBACK_REVIEW.md.",
+    "implementation_status": "Implemented in 6c98b0e0: documented the S2.1 input contract and added an independent CPU fixture covering procedural sky validation, linear HDR bake conventions, cube orientation and authored opt-in semantics. Debug/Release focused and full RenderUnitTests plus EnvironmentBakeTests pass.",
+    "acceptance_status": "Accepted at 6c98b0e0 after the independent CPU fixture and Debug/Release gates passed. Review report: docs/reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md.",
     "open_gates": [],
-    "next_action": "Stop at the accepted U1 boundary. No later M15 package is released by this task.",
-    "metadata_correction": "Supersedes the accepted U1-04.1 task card because the user explicitly requested the two remaining U1 leaves. Earlier U1-04.1 acceptance remains recorded in history and its review report."
+    "next_action": "Stop at accepted S2.1. S2.2 publication/cache and S2.3 consumer behavior remain unreleased.",
+    "metadata_correction": "Supersedes the accepted U1 task card because the user explicitly released M15 U2/S2.1. Earlier U1 acceptance remains recorded in history and its review report."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -3858,6 +3859,28 @@
       "base_commit": "034f07e7",
       "timestamp_utc": "2026-11-15T10:29:54.166787+00:00",
       "body": "DELIVERY/ACCEPTANCE: M15-U1-04.2 and M15-U1-05 are implemented in commit 034f07e7 and accepted at the U1 boundary.\n\nImplementation:\n- Added independent CPU direct-light edge reference for zero, tangent and behind-surface vectors across roughness/metallic cases, with shader finite-guard assertions.\n- Added explicit capability/fallback reference: D3D12/Vulkan local shadows supported; OpenGL/None unsupported; RenderService LOCAL_SHADOW_UNSUPPORTED gate and suppression conditions asserted.\n- Added focused CLI/CTest entries M15DirectLightEdgeReference and M15DirectLightFallbackReference.\n\nVerified commands (all exit 0):\n- Debug and Release AxleRenderUnitTests builds.\n- Debug and Release focused CTest: M15DirectLightEdgeReference + M15DirectLightFallbackReference, 2/2 each.\n- Debug and Release full RenderUnitTests; the first Debug invocation hit an unrelated existing assembly/material persistence check at Test_RenderServiceUnit.cpp:665, and the immediate rerun passed without source changes.\n- Debug and Release actual OpenGL runtime: build/Tests/{Debug,Release}/AxleRenderServiceTests.exe gl; both report OPT05 RenderService PASS on NVIDIA GeForce RTX 3070 and exercise LOCAL_SHADOW_UNSUPPORTED plus suppression paths.\n\nReview report: docs/reviews/M15_U1_04_2_05_DIRECT_LIGHT_EDGE_AND_FALLBACK_REVIEW.md. PLAN leaves U1-04.2 and U1-05 are checked. No Editor screenshot is required for these CPU/runtime fixture leaves.\n"
+    },
+    {
+      "id": "CG-20261115T103849650084Z-CODEX-63882b",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U2-S2.1",
+      "reply_to": null,
+      "base_commit": "2678c4b2",
+      "timestamp_utc": "2026-11-15T10:38:49.650084+00:00",
+      "body": "IN_PROGRESS: User released M15-U2-S2.1. Codex will implement the three children U2-01.1 procedural-sky convention, U2-01.2 environment-bake convention and U2-01.3 authored-cubemap color/orientation from base 2678c4b2.\n\nScope is contract freeze plus an independent CPU fixture and CTest wiring. Existing environment runtime/cache and S2.2/S2.3 work remain outside this task. No push.\n"
+    },
+    {
+      "id": "CG-20261115T104859274728Z-CODEX-998c2b",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M15-U2-S2.1",
+      "reply_to": null,
+      "base_commit": "6c98b0e0",
+      "timestamp_utc": "2026-11-15T10:48:59.274728+00:00",
+      "body": "DELIVERY/ACCEPTANCE: M15-U2-S2.1 and children U2-01.1/U2-01.2/U2-01.3 are implemented in commit 6c98b0e0 and accepted.\n\nImplementation:\n- Documented procedural sky, linear HDR bake and fixed cube-face conventions in EnvironmentBake.hpp.\n- Documented authored background versus EnvironmentLighting opt-in and HDR identity policy in Components.hpp.\n- Added independent M15EnvironmentContractReference fixture and CLI/CTest wiring. It covers deterministic procedural sky output, +Y zenith, finite parameter rejection, linear RGBA32F bake, constant radiance, mip/BRDF validity, face orientation, authored extraction and non-mutating invalid source handling.\n\nVerified (all exit 0):\n- Debug/Release AxleRenderUnitTests builds.\n- Debug/Release M15EnvironmentContractReference, 1/1 each.\n- Debug/Release EnvironmentBakeTests, 1/1 each.\n- Debug/Release full RenderUnitTests, 1/1 each.\n\nReview report: docs/reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md. S2.2 and S2.3 remain outside this accepted scope. No Editor evidence is required for this CPU contract freeze.\n"
     }
   ],
   "deferred_tasks": [

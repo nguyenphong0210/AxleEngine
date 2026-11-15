@@ -256,17 +256,17 @@ the item is visible.
 
 ### U2 / S2.1–S2.3 — Dynamic environment and authored environment policy
 
-- [ ] **M15-U2-S2.1 — Freeze environment input contract.** *(roll-up: tick when U2-01.1–U2-01.3 are complete)*
+- [x] **M15-U2-S2.1 — Freeze environment input contract.** *(implemented and verified in `6c98b0e0`)*
   - **Scope:** freeze procedural-sky parameters, bake input/output conventions, authored cubemap color space, face orientation and explicit environment-lighting opt-in.
-  - [ ] **M15-U2-01.1 — Freeze procedural-sky convention.**
+  - [x] **M15-U2-01.1 — Freeze procedural-sky convention.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-  - [ ] **M15-U2-01.2 — Freeze environment-bake convention.**
+    - **Evidence:** `M15EnvironmentContractReference` checks deterministic equirectangular HDR generation, +Y zenith, finite parameter validation and explicit diagnostics in Debug/Release. See [S2.1 verification](../../reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md).
+  - [x] **M15-U2-01.2 — Freeze environment-bake convention.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-  - [ ] **M15-U2-01.3 — Freeze authored-cubemap color/orientation.**
+    - **Evidence:** `M15EnvironmentContractReference` checks linear RGBA32F input, deterministic constant bake, mip dimensions, BRDF finiteness and rejection of invalid source interpretation. See [S2.1 verification](../../reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md).
+  - [x] **M15-U2-01.3 — Freeze authored-cubemap color/orientation.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+    - **Evidence:** `M15EnvironmentContractReference` checks fixed cube face centers/order, +Y/-Y orientation, authored HDR identity, explicit `EnvironmentLighting` opt-in and non-mutating invalid-source rejection. See [S2.1 verification](../../reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md).
 
 - [ ] **M15-U2-S2.2 — Publish, cache and recover environment generations.** *(roll-up: tick when U2-02.1–U2-02.4 are complete)*
   - **Scope:** publish only complete generations, define cache identity, invalidate stale generations transactionally and retain a named last-good or neutral fallback on failure.

@@ -13,6 +13,7 @@ bool RunResolvedSurfaceUnitTests();
 bool RunLightingServiceUnitTests();
 bool RunM15BRDFReferenceUnitTests();
 bool RunM15PrimaryLightingReferenceUnitTests();
+bool RunM15RoughnessSweepReferenceUnitTests();
 bool RunTemporalPostDiagnosticsUnitTests();
 namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderWorkerUnitTests(); }
@@ -30,6 +31,9 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string_view(argv[1]) == "--m15-primary-lighting-reference") {
         return RunM15PrimaryLightingReferenceUnitTests() ? 0 : 1;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--m15-roughness-sweep-reference") {
+        return RunM15RoughnessSweepReferenceUnitTests() ? 0 : 1;
     }
 
     std::cout << "========================================================\n";
@@ -86,6 +90,10 @@ int main(int argc, char** argv) {
     }
     if (!RunM15PrimaryLightingReferenceUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunM15PrimaryLightingReferenceUnitTests FAILED!\n";
+        return 1;
+    }
+    if (!RunM15RoughnessSweepReferenceUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunM15RoughnessSweepReferenceUnitTests FAILED!\n";
         return 1;
     }
 

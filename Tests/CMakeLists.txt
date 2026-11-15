@@ -503,6 +503,7 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_RenderTransientGraphUnit.cpp
     rendering/Test_M15_BRDFReferenceUnit.cpp
     rendering/Test_M15_PrimaryLightingReferenceUnit.cpp
+    rendering/Test_M15_RoughnessSweepReferenceUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
 # M15-U1-01.1 & M15-U1-01.4: inspect canonical shader sources for lighting & exposure contracts.
@@ -526,6 +527,8 @@ add_test(NAME M15BRDFReference COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-
 set_tests_properties(M15BRDFReference PROPERTIES LABELS "render;cpu;m15" TIMEOUT 30)
 add_test(NAME M15PrimaryLightingReference COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-primary-lighting-reference)
 set_tests_properties(M15PrimaryLightingReference PROPERTIES LABELS "render;lighting;cpu;m15" TIMEOUT 30)
+add_test(NAME M15RoughnessSweepReference COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-roughness-sweep-reference)
+set_tests_properties(M15RoughnessSweepReference PROPERTIES LABELS "render;lighting;cpu;m15" TIMEOUT 30)
 add_test(NAME RenderHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleRenderUnitTests> --case render-probe)
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES LABELS "render;cpu")
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES TIMEOUT 30)

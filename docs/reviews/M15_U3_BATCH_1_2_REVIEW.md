@@ -65,3 +65,7 @@ Builds: `cmake --build build --config {Debug,Release} --target AxleRHIResourceVi
 **PASS (self-review).** The native environment fixture enables GTAO/contact, disables both, then enables SSR. It checks that target generation changes, ScreenNormal exists only when required and Hi-Z exists only for SSR. All render outputs remain readable.
 
 Builds: `cmake --build build --config {Debug,Release} --target AxleEnvironmentRenderingTests --parallel 4`, both exit 0. Runs: `build/Tests/{Debug,Release}/AxleEnvironmentRenderingTests.exe {dx12,vulkan} build/agent-runs/M15-U3-batches-1-2/07.2-{config}-{backend}-artifacts`, four exits 0. Logs and native images: `build/agent-runs/M15-U3-batches-1-2/07.2-*`.
+
+## U3-07.3 — Allocation failure and retry
+
+**PASS (self-review; existing dedicated fixtures).** `RHIResourceViewMain.cpp` injects a late `History1` allocation failure and checks the old generation, every target handle and GUI binding remain intact; its later successful reconfiguration validates a new complete generation. `Test_EnvironmentRendering.cpp` injects `CreateTexture` failure during same-wrapper reconfiguration, renders successfully with the old generation, then retries and observes a new generation and history frame index reset. Both fixtures were rebuilt and rerun after the batch's preceding checkpoint edits: the `07.1-` ResourceView logs and `07.2-` environment logs document Debug/Release D3D12/Vulkan, eight exits 0. No Editor image is required.

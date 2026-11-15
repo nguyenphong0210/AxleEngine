@@ -25,6 +25,7 @@ namespace Axle::Passes {
         const std::shared_ptr<RHI::RHIViewTargets>& Targets;
         const glm::mat4& ProjectionZO;
         nri::Texture* SceneTarget;
+        nri::Texture* SceneDepthTarget;
         nri::Descriptor* SceneTargetRTV;
         nri::Format SceneTargetFormat;
         uint32_t Width, Height;

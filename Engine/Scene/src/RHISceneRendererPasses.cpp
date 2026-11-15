@@ -1092,79 +1092,15 @@ namespace Axle {
             // fullscreen pass samples a 2x depth footprint and writes the AO
             // modulation back into the scene color before tone mapping/FXAA.
             if (useGTAO) {
-                if (!beginPass("GTAOCopy")) return fail();
-                Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
-                Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
-
-                if (!beginPass("GTAOCompute")) return fail();
-                RHIGTAOConstants gtaoConstants{};
-                gtaoConstants.InvProjection = glm::inverse(projZO);
-                gtaoConstants.View = camera.GetViewMatrix();
-                auto* gtaoTarget = viewTargets->GetGTAO();
-                const uint32_t gtaoWidth = gtaoTarget->GetWidth();
-                const uint32_t gtaoHeight = gtaoTarget->GetHeight();
-                gtaoConstants.ScreenSize = glm::vec4(static_cast<float>(gtaoWidth), static_cast<float>(gtaoHeight),
-                    1.0f / static_cast<float>(gtaoWidth), 1.0f / static_cast<float>(gtaoHeight));
-                gtaoConstants.GTAOParams = glm::vec4(settings.GTAORadiusPixels * 0.5f, settings.EnableGTAO ? settings.GTAOStrength : 0.0f, 0.0025f, 2.0f);
-                if (world.DirectionalLight && settings.EnableContactShadows) {
-                    glm::vec3 sunDir = glm::normalize(world.DirectionalLight->Direction);
-                    glm::vec3 sunDirView = glm::mat3(camera.GetViewMatrix()) * sunDir;
-                    gtaoConstants.SunDirView = glm::vec4(sunDirView, 1.0f);
-                    gtaoConstants.ContactParams = glm::vec4(settings.ContactShadowLengthPixels, 16.0f, settings.ContactShadowStrength, 0.02f);
-                } else {
-                    gtaoConstants.SunDirView = glm::vec4(0.0f);
-                    gtaoConstants.ContactParams = glm::vec4(0.0f);
-                }
-                if (!passUniform().UpdateData(&gtaoConstants, sizeof(RHIGTAOConstants))) return fail();
-
-                if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV())) return fail();
-                nri::Descriptor* normalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
-                if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 1, 0, normalSRV)) return fail();
-                if (!m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative())) return fail();
-                if (!m_GTAODescriptorPool.UpdateStorageTexture(m_GTAOComputeStorageSet, 0, 0, gtaoTarget->GetUAV())) return fail();
-
-                Commands().SetPipeline(m_GTAOComputePipeline);
-                Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_GTAOComputePipelineLayout);
-                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
-                m_GTAODescriptorPool.Bind(Commands().GetNative());
-                 if (!bindDescriptorSet(0, m_GTAOComputeTextureSet, nri::BindPoint::COMPUTE) ||
-                     !bindDescriptorSet(1, m_GTAOComputeStorageSet, nri::BindPoint::COMPUTE)) return fail();
-                Commands().Dispatch((gtaoWidth + 7) / 8, (gtaoHeight + 7) / 8, 1); ++dispatchCount;
-
-                if (!beginPass("GTAOApply")) return fail();
-                if (!passUniform().UpdateData(&gtaoConstants, sizeof(RHIGTAOConstants))) return fail();
-                if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV())) return fail();
-                if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 1, 0, gtaoTarget->GetSRV())) return fail();
-                if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV())) return fail();
-                if (!m_GTAODescriptorPool.UpdateSampler(m_GTAOApplyDescriptorSet, 3, 0, m_GTAOSampler.GetNative())) return fail();
-
-                nri::Pipeline* applyPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_GTAOApplyPipelineHDR)
-                    ? m_GTAOApplyPipelineHDR : m_GTAOApplyPipelineSDR;
-                if (!applyPipeline) return fail();
-
-                nri::AttachmentDesc applyColorAttachment = {};
-                applyColorAttachment.descriptor = sceneTargetRTV;
-                applyColorAttachment.loadOp = nri::LoadOp::CLEAR;
-                applyColorAttachment.storeOp = nri::StoreOp::STORE;
-                applyColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 1.0f };
-
-                nri::RenderingDesc applyRenderingDesc = {};
-                applyRenderingDesc.colors = &applyColorAttachment;
-                applyRenderingDesc.colorNum = 1;
-
-                beginRendering(applyRenderingDesc);
-                nri::Viewport applyVp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
-                Commands().SetViewport(applyVp);
-                nri::Rect applyScissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
-                Commands().SetScissor(applyScissor);
-
-                Commands().SetPipeline(applyPipeline);
-                Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_GTAOApplyPipelineLayout);
-                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::GRAPHICS);
-                m_GTAODescriptorPool.Bind(Commands().GetNative());
-                 if (!bindDescriptorSet(0, m_GTAOApplyDescriptorSet)) return fail();
-                Commands().Draw(3, 1, 0, 0);
-                endRendering();
+                const Passes::PassRecordOps ops{
+                    beginPass, passUniform,
+                    [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                        return bindDescriptorSet(index, set, bindPoint);
+                    }, beginRendering, endRendering};
+                if (!Passes::GTAOPass::Record(*this,
+                    {world, camera, settings, viewTargets, projZO, sceneTargetTexture,
+                     sceneDepthTexture, sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
+                    return fail();
             }
 
             // 7.6. Screen-Space Reflections (SSR) with Reflection Probes Fallback

@@ -284,21 +284,21 @@ the item is visible.
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
     - **Evidence:** Same-source corruption and upload OOM retain the exact last-good generation with a diagnostic; missing redirected source uses neutral fallback and does not borrow another source. See [S2.2 review](../../reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md).
 
-- [ ] **M15-U2-S2.3 — Verify environment consumers and failure behavior.** *(roll-up: tick when U2-03.1–U2-03.4 are complete)*
+- [x] **M15-U2-S2.3 — Verify environment consumers and failure behavior.** *(roll-up: tick when U2-03.1–U2-03.4 are complete)* [Accepted: S2.3 review](../../reviews/M15_U2_S2_3_ENVIRONMENT_CONSUMERS_REVIEW.md)
   - **Scope:** verify sky/direct-light coupling, independent environment rotation and intensity, plus missing/failed asset behavior without mutating authored data.
   - **Contract note:** `CustomAzimuth` and `CustomElevation` remain procedural sun controls. Authored HDR rotation must use a dedicated environment-rotation field before U2-03.2 is implemented; it must not silently reuse the sun controls.
-  - [ ] **M15-U2-03.1 — Verify sky/direct-light coupling.**
+  - [x] **M15-U2-03.1 — Verify sky/direct-light coupling.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-  - [ ] **M15-U2-03.2 — Verify environment rotation.**
+    - **Evidence:** Native fixture verifies procedural sky/direct-sun coupling and the environment-lighting gate on D3D12/Vulkan; see the S2.3 review and six native logs.
+  - [x] **M15-U2-03.2 — Verify environment rotation.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-  - [ ] **M15-U2-03.3 — Verify environment intensity.**
+    - **Evidence:** Dedicated EnvironmentRotation is serialized, exposed in the Inspector, propagated to native HLSL and OpenGL GLSL sampling; the axis/lobe fixture asserts a +90 degree authored HDR rotation.
+  - [x] **M15-U2-03.3 — Verify environment intensity.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-  - [ ] **M15-U2-03.4 — Verify missing/failed asset behavior.**
+    - **Evidence:** Native fixture verifies intensity/exposure changes through readback without rebaking the published generation, on D3D12/Vulkan; OpenGL fallback remains green.
+  - [x] **M15-U2-03.4 — Verify missing/failed asset behavior.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+    - **Evidence:** Native fixture covers missing, corrupt and injected upload-failure inputs, retaining last-good or neutral fallback with diagnostics; all six Debug/Release backend runs exit 0.
 
 - [ ] **M15-U2-04 — Keep local dynamic six-face capture and probe blending in U5; this Unit owns the shared environment input contract.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.

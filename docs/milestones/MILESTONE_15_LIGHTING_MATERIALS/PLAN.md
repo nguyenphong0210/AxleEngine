@@ -360,9 +360,9 @@ the item is visible.
 - [x] **M15-U3-07.3 — Test allocation failure/retry.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Existing native fixtures inject late target allocation failure, preserve generation/GUI binding, render old generation, then retry and reset history; Debug/Release D3D12/Vulkan 8/8 exit 0. [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
-- [ ] **M15-U3-07.4 — Test device epoch.**
+- [x] **M15-U3-07.4 — Test device epoch.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Native epoch fixture invalidates old view targets on device shutdown and rebuilds the same wrapper into a new generation after reinit; Debug/Release D3D12/Vulkan 4/4 exit 0. [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
 - [ ] **M15-U3-07.5 — Test shutdown/reinit.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

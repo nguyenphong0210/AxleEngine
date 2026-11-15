@@ -133,12 +133,20 @@ static bool EpochOwnership(RHIType backend) {
     RENDER_CHECK(presentation->Present(window), "shared epoch window frame");
     auto oldMesh = RHIMeshRegistry::Get().GetCube();
     RENDER_CHECK(oldMesh && oldMesh->IsValid(), "old epoch owns a real shared builtin");
+    RHIViewTargets targets;
+    RHIViewTargetDesc targetDesc; targetDesc.Width = targetDesc.Height = 8;
+    RENDER_CHECK(targets.Configure(targetDesc) && targets.Validate(), "old epoch owns a complete view target generation");
+    const auto oldTargetGeneration = targets.GetGeneration();
     const auto epoch = device.GetEpoch();
     RENDER_CHECK(device.Shutdown() && !ui.IsInitialized() && !ImGui::GetCurrentContext() && !oldMesh->IsValid(),
         "device closes the live native UI owner and all scene resources before native destruction");
+    RENDER_CHECK(!targets.IsValid(), "old view targets become invalid when their physical device closes");
     RHIDeviceDesc desc; desc.PreferredBackend = backend; desc.AllowFallback = false; desc.EnableNRIValidation = true;
     desc.EnableValidation = RHIDevice::IsGraphicsAPIValidationAvailable(backend);
     RENDER_CHECK(device.Init(desc) && device.GetEpoch() != epoch, "new physical device epoch");
+    RENDER_CHECK(targets.Configure(targetDesc) && targets.Validate() &&
+        targets.GetGeneration() != oldTargetGeneration,
+        "same view wrapper publishes a fresh target generation in the new device epoch");
     auto freshMesh = RHIMeshRegistry::Get().GetCube();
     RENDER_CHECK(freshMesh && freshMesh->IsValid() && freshMesh != oldMesh, "registry replaces stale migration caches with current-epoch resources");
     oldMesh.reset();

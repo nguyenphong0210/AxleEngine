@@ -69,3 +69,9 @@ Builds: `cmake --build build --config {Debug,Release} --target AxleEnvironmentRe
 ## U3-07.3 — Allocation failure and retry
 
 **PASS (self-review; existing dedicated fixtures).** `RHIResourceViewMain.cpp` injects a late `History1` allocation failure and checks the old generation, every target handle and GUI binding remain intact; its later successful reconfiguration validates a new complete generation. `Test_EnvironmentRendering.cpp` injects `CreateTexture` failure during same-wrapper reconfiguration, renders successfully with the old generation, then retries and observes a new generation and history frame index reset. Both fixtures were rebuilt and rerun after the batch's preceding checkpoint edits: the `07.1-` ResourceView logs and `07.2-` environment logs document Debug/Release D3D12/Vulkan, eight exits 0. No Editor image is required.
+
+## U3-07.4 — Device epoch
+
+**PASS (self-review).** The native epoch fixture now owns a complete `RHIViewTargets` generation across device shutdown/reinit. It asserts the old targets become invalid with the old device and that reconfiguring the same wrapper produces a valid, different target generation in the new epoch. The CPU `ViewContext` fixture also checks that an epoch change latches `ViewResetReason::DeviceEpoch`.
+
+Builds: `cmake --build build --config {Debug,Release} --target AxleRHIResourceViewTests --parallel 4`, both exit 0. Runs: `build/Tests/{Debug,Release}/AxleRHIResourceViewTests.exe {dx12,vulkan} epoch`, four exits 0. Logs: `build/agent-runs/M15-U3-batches-1-2/07.4-*`. No Editor image is required.

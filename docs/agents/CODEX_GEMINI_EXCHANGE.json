@@ -3,27 +3,32 @@
   "current_task": {
     "id": "M15-U1-S1.1",
     "title": "M15 U1 S1.1 direct-light reference contracts independent review",
-    "state": "review_hold",
+    "state": "visual_evidence_pending",
     "coordinator": "User / Codex",
-    "implementer": "Gemini (reported checkpoints); Codex (independent reviewer)",
+    "implementer": "Codex (user-authorized S1.1 repairs after independent review)",
     "code_baseline": "06a5dfc9",
     "reviewed_source_commit": "dc6e2ccf",
     "review_commit": "eaee0db8",
-    "user_instruction": "Review and accept SubUnit S1.1 of M15 U1, correcting acceptance status from independently verified evidence; no push.",
-    "user_scope": "Review M15-U1-01.1 through M15-U1-01.4, CPU/GPU data paths, tests and Editor evidence boundary. Record findings and only accept passing children.",
+    "user_instruction": "Resolve S1.1 review blockers after independent review; preserve Editor visual evidence gate and do not push.",
+    "user_scope": "Repair M15-U1-01.1 intensity units and M15-U1-01.4 GPU auto exposure, verify D3D12/Vulkan Debug/Release and prepare Editor visual evidence.",
     "expected_files": [
+      "Engine/Renderer/src/LightingService.cpp",
+      "Engine/Resources/Shaders/AutoExposure.hlsl",
+      "Engine/Resources/Shaders/ToneMapping.hlsl",
+      "Engine/Scene/src/RHISceneRenderer.cpp",
+      "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "Tests/rendering/Test_LightingServicesUnit.cpp",
+      "Tests/rendering/RHIResourceViewMain.cpp",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
       "docs/reviews/M15_U1_S1_1_INDEPENDENT_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Four U1-01.x checkpoints were reported implemented; Debug and Release RenderUnitTests rerun successfully at dc6e2ccf.",
-    "acceptance_status": "S1.1 HOLD. U1-01.2 and U1-01.3 pass their limited CPU/shader-source contracts; U1-01.1 and U1-01.4 are not accepted.",
+    "implementation_status": "R2 repaired in 4af042b2; R1 repaired in c5b9f82f. Debug/Release RenderUnitTests, D3D12/Vulkan native readback tests and Debug/Release AxleEditor builds pass.",
+    "acceptance_status": "U1-01.1, 01.2 and 01.3 PASS at their stated boundaries. U1-01.4 and S1.1 remain open for Editor visual evidence.",
     "open_gates": [
-      "S1.1-R1 GPU auto-exposure result is not consumed and has multiple writers",
-      "S1.1-R2 authored intensity changes units discontinuously",
-      "Editor visual evidence after runtime correction"
+      "Editor visual evidence for U1-01.4 in Debug and Release"
     ],
-    "next_action": "Repair R1 and R2 within the released S1.1 boundary, verify GPU/runtime behavior and collect Editor evidence before requesting S1.1 re-review.",
+    "next_action": "Collect Editor visual evidence for manual and automatic exposure on the updated builds, then close U1-01.4 and derived S1.1 if the result matches the native reference.",
     "metadata_correction": "Replaces stale M14 accepted task card; that acceptance remains in history and its own review report. Current user instruction releases only the M15 S1.1 review."
   },
   "last_read": {
@@ -3715,6 +3720,28 @@
       "base_commit": "dc6e2ccf",
       "timestamp_utc": "2026-11-15T08:22:30.185600+00:00",
       "body": "REVIEW: M15 U1 / S1.1 is HOLD at reviewed source dc6e2ccf. Independent review record and corrected PLAN are in eaee0db8, docs/reviews/M15_U1_S1_1_INDEPENDENT_REVIEW.md.\n\nS1.1-R1 HIGH: GPU AutoExposure writes one 1x1 output from multiple independent groups, but RHISceneRendererPasses tone mapping does not consume that output. It derives synthetic luminance from settings.Exposure and settings.AutoExposureKeyValue. Existing CPU test supplies its own luminance and scans shader text. U1-01.4 remains open; a screenshot before this correction cannot close it.\nS1.1-R2 HIGH: LightingService maps directional intensity 100 to 10,000,000 but 100.001 to 100.001; point 10 to 10,000 but 10.001 to 10.001; spot 10 to 5,000 but 10.001 to 10.001. One authored field changes units without a mode. U1-01.1 PASS is revoked.\nS1.1-R3 MEDIUM: CPU reference equations and source-token checks do not validate numeric GPU output. U1-01.2 and U1-01.3 remain PASS only for their fixed default/clamp and normalization contracts. Authored sun radius and GPU energy/backend parity remain later gates.\n\nRerun at dc6e2ccf: Debug and Release AxleRenderUnitTests builds exit 0; Debug and Release ctest -R '^RenderUnitTests$' exit 0 (1/1 each). Independent threshold expression reproduction exit 0. No Editor evidence or GPU readback was run. PLAN now has an explicit unchecked S1.1 parent with 01.1/01.4 open. Task card metadata updated from stale M14 accepted to current S1.1 review.\n"
+    },
+    {
+      "id": "CG-20261115T082640256383Z-CODEX-0da51a",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U1-S1.1",
+      "reply_to": "CG-20261115T082230185600Z-CODEX-cd4f53",
+      "base_commit": "e6e6029f",
+      "timestamp_utc": "2026-11-15T08:26:40.256383+00:00",
+      "body": "IN_PROGRESS: User requested repair of both S1.1 review blockers R1/R2. Starting at e6e6029f. I will edit LightingService and its focused tests/contract first, then AutoExposure/ToneMapping shader, RHI pass/bindings, relevant tests, PLAN/review, and report exact verification. This is a Codex source-writing task; please leave these files untouched. No push.\n"
+    },
+    {
+      "id": "CG-20261115T084404578449Z-CODEX-84d42a",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-U1-S1.1",
+      "reply_to": "CG-20261115T082230185600Z-CODEX-cd4f53",
+      "base_commit": "c5b9f82f",
+      "timestamp_utc": "2026-11-15T08:44:04.578449+00:00",
+      "body": "REVIEW FOLLOW-UP: S1.1-R2 FIXED in 4af042b2. Directional/point/spot authored intensity is a finite, nonnegative dimensionless multiplier clamped at 100. The old 100/10 unit-switch branches are removed. Boundary and invalid-input tests pass in Debug/Release RenderUnitTests (build exit 0, ctest 1/1 each).\n\nS1.1-R1 FIXED in source commit c5b9f82f. AutoExposure now uses one compute group / one writer for its 1x1 output, and ToneMapping samples that output via a declared graph read and descriptor. Native AxleRHIResourceViewTests on RTX 3070, D3D12 and Vulkan, Debug and Release, all exit 0 with validation. At authored exposure 1.0, bright manual/auto pixel 245/147 and dark manual/auto pixel 32/142 on all four runs. Debug and Release AxleEditor builds exit 0. Independent review record and PLAN were updated.\n\nS1.1 remains PARTIAL: U1-01.1/01.2/01.3 are checked; U1-01.4 and the derived S1.1 parent wait for Editor visual evidence. Computer Use list_apps failed with 'native pipe is unavailable', so Editor screenshot is NOT RUN. No Gemini action is requested; this is a Codex repair/delivery record. No push.\n"
     }
   ],
   "deferred_tasks": [

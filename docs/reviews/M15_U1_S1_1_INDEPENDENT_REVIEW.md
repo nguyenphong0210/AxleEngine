@@ -76,3 +76,34 @@ Those checks belong to the later U1 validation leaves.
 The two CTest passes verify that the existing test executable passes at this
 source revision; they do not close R1 or R2. No Editor image, GPU readback, or
 native backend comparison was run in this review. No S1.1 acceptance is recorded.
+
+## Repair progress
+
+### S1.1-R2 — fixed in `4af042b2`
+
+The authored directional, point and spot intensity fields now use one continuous
+dimensionless scale. `LightingService` clamps finite values to `[0, 100]`, maps
+invalid/negative values to zero, and converts to the original scene calibration
+without threshold-based reinterpretation. The new boundary/invalid-input tests
+pass in Debug and Release `RenderUnitTests` (1/1 each). No sampled fixture in
+`Tests` or `Samples` uses the old high-valued physical-input branch; external
+scenes that authored such values require an explicit migration review.
+
+### S1.1-R1 — source repaired in `c5b9f82f`, acceptance pending visual evidence
+
+`AutoExposure.hlsl` now uses one compute group for a bounded whole-viewport
+sampling grid and one writer for the 1x1 exposure value. The tone-mapping
+descriptor and render graph now read that value. The native resource-view test
+compares actual output pixels at fixed authored exposure 1.0:
+
+| Backend / configuration | Bright manual → auto | Dark manual → auto |
+|---|---:|---:|
+| D3D12 Debug | 245 → 147 | 32 → 142 |
+| Vulkan Debug | 245 → 147 | 32 → 142 |
+| D3D12 Release | 245 → 147 | 32 → 142 |
+| Vulkan Release | 245 → 147 | 32 → 142 |
+
+All four native runs exited 0 with validation enabled. Debug and Release
+`AxleEditor` builds exited 0. The PLAN's Editor visual gate is still open:
+Computer Use returned `native pipe is unavailable`, so no Editor screenshot was
+captured in this session. S1.1 remains HOLD until that gate finishes.

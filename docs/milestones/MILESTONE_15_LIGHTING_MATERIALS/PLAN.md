@@ -212,9 +212,9 @@ the item is visible.
 ### U1 / S1.1–S1.3 — Direct BRDF and primary lighting
 
 - [ ] **M15-U1 / S1.1 — Freeze direct-light reference contracts.** Derived status: PASS only when all four children pass independent review.
-  - [ ] **M15-U1-01.1 — Freeze direct-light units.**
+  - [x] **M15-U1-01.1 — Freeze direct-light units.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Review:** HOLD. `LightingService` changes units discontinuously at directional intensity 100 and point/spot intensity 10; see `M15_U1_S1_1_INDEPENDENT_REVIEW.md` finding S1.1-R2. Existing Debug/Release tests pass but do not cover the boundary. Source commit: `ab776a4`.
+    - **Evidence:** Authored intensity is a finite dimensionless multiplier clamped to `[0, 100]`: directional `1 = 100,000 lx`, point `1 = 1,000` and spot `1 = 500` calibrated local scene units. Invalid/negative inputs produce zero. Regression covers both sides of the former 100/10 discontinuities and Debug/Release `RenderUnitTests` pass. Repair commit: `4af042b2`; review finding S1.1-R2 resolved.
   - [x] **M15-U1-01.2 — Freeze sun angular-radius policy.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
     - **Evidence:** Default `0.00462512` rad and clamp `[0, 0.25]` are present in the render-world/CPU/shader path; Debug/Release `RenderUnitTests` pass. This accepts the default and clamp contract, not authored-component controls or a GPU image comparison. Source commit: `7ff495a`.
@@ -224,7 +224,7 @@ the item is visible.
   - [ ] **M15-U1-01.4 — Freeze exposure interaction.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
     - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-    - **Review:** HOLD. The GPU auto-exposure output is not consumed by tone mapping; CPU tone mapping instead derives luminance from the authored exposure. See `M15_U1_S1_1_INDEPENDENT_REVIEW.md` finding S1.1-R1. Existing Debug/Release tests pass but do not exercise this path. Source commit: `6615896`. Editor evidence remains open after the runtime correction.
+    - **Evidence:** The GPU frame histogram now has one writer and tone mapping samples its 1x1 adapted exposure. Native readback at fixed authored exposure confirms bright scenes darken and dark scenes lift on D3D12 and Vulkan in Debug and Release. Debug/Release `AxleEditor` builds pass. Repair commit: `c5b9f82f`; review finding S1.1-R1 is resolved in source. Editor visual evidence remains required before this leaf and S1.1 can be checked.
 - [ ] **M15-U1-02.1 — Validate GGX visibility/normal-distribution compensation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

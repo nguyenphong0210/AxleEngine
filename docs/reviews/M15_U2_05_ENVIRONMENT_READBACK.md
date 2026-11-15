@@ -43,3 +43,20 @@ in `red.identity.report.json`.
 
 The images and manifests are generated artifacts under `build` and are not
 committed. No Editor screenshot is required for this readback checkpoint.
+
+## U2-05.2 - Vulkan 1.3
+
+The Debug and Release builds above also produced the Vulkan-capable fixture
+(both exit 0).
+
+| Configuration | Direct command | Exit | Log | Artifact directory |
+|---|---|---:|---|---|
+| Debug | `build/Tests/Debug/AxleEnvironmentRenderingTests.exe vulkan build/agent-runs/M15-U2-05/debug-vulkan` | 0 | `build/agent-runs/M15-U2-05/debug-vulkan.log` | `build/agent-runs/M15-U2-05/debug-vulkan/` |
+| Release | `build/Tests/Release/AxleEnvironmentRenderingTests.exe vulkan build/agent-runs/M15-U2-05/release-vulkan` | 0 | `build/agent-runs/M15-U2-05/release-vulkan.log` | `build/agent-runs/M15-U2-05/release-vulkan/` |
+
+Both logs end in the native `PASS HDR subresources...` result quoted above.
+The four PPM outputs in each directory are valid 128x128 P6 images with distinct
+scene hashes. Each corresponding image has the same SHA-256 across Vulkan
+Debug/Release and D3D12 Debug/Release. Vulkan `red.identity.json` manifests
+pass `python scripts/validate_artifact_identity.py` (exit 0); validation
+reports are `red.identity.report.json` in each Vulkan artifact directory.

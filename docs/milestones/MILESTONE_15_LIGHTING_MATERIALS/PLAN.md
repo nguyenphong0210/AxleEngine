@@ -307,9 +307,9 @@ the item is visible.
 - [x] **M15-U2-05.1 — Run D3D12 environment readback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Debug/Release D3D12 native environment readback PASS (2/2, exit 0); 128x128 PPM output and SHA-256 manifests validated. Exact commands, logs and artifact directories: [U2-05 readback report](../../reviews/M15_U2_05_ENVIRONMENT_READBACK.md).
-- [ ] **M15-U2-05.2 — Run Vulkan environment readback.**
+- [x] **M15-U2-05.2 — Run Vulkan environment readback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Debug/Release Vulkan native environment readback PASS (2/2, exit 0); valid 128x128 PPM outputs match D3D12 hashes and SHA-256 manifests validate. Exact commands, logs and artifacts: [U2-05 readback report](../../reviews/M15_U2_05_ENVIRONMENT_READBACK.md).
 - [ ] **M15-U2-05.3 — Run OpenGL-subset environment readback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

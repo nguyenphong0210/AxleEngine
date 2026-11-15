@@ -25,3 +25,9 @@ Builds: Debug and Release `AxleEnvironmentRenderingTests`, exit 0. Native runs: 
 **PASS (self-verification).** `HiZGenerationPass::Record` now owns all eight min-depth levels, with level 0 reading the copied scene depth and each later level reading its predecessor. It updates each level's source/destination dimensions, descriptor sets and dispatch size, then returns to the SSR recorder. The pass declaration is composed from `ScreenSpaceReflectionPass::Declare`, preserving `SSRCopy` before Hi-Z and `SSRCompute` after it.
 
 Builds: Debug and Release `AxleEnvironmentRenderingTests`, exit 0. Native runs: Debug/Release × D3D12/Vulkan 4/4 exit 0 with the same command pattern and prefix `10.2-`. The strict fixture asserts `SSRCopy`, `HiZ0..7`, `SSRCompute`, `SSRApply`, reads back nontrivial per-level Hi-Z data and checks distinct levels. Logs and native artifacts: `build/agent-runs/M15-U3-batch-3/10.2-*`. No Editor visual gate is specified for U3-09.1–10.2; the SSR visual gate begins at U3-10.3.
+
+## Batch closure and boundary
+
+Checkpoint commits: `80a5a45c` (09.1), `4ea79584` (09.2), `5f0e8f2d` (10.1) and `ba16349c` (10.2). On the final source, `python scripts/check_architecture.py` exits 0 (`AXLE_ARCH_CHECK PASS`, 611 source files and 25 CMake files). Debug and Release `AxleEditor` builds both exit 0; logs: `build/agent-runs/M15-U3-batch-3/final-editor-*-build.log`. These are compile checks, not Editor visual captures.
+
+The modules currently live in `Engine/Scene/src/Passes` and expose typed graph declarations. GTAO and Hi-Z own GPU recording, while the existing `ScreenSpace` scheduler adapter still calls them synchronously. SSR, fog and post own only declarations until their U3-10.3–10.5 extraction. The target standalone `IRenderPass` registration and lightweight renderer facade remain U3-11 work; this batch does not claim that final modular architecture.

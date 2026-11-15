@@ -292,6 +292,8 @@ To eliminate the monolithic callback adapter debt in `RHISceneRendererPasses.cpp
 
 ### 3C. Scope boundaries: Milestone 15 vs Milestone 16
 
+U3-09.1–10.2 implementation checkpoint: the first pass contracts and graph declarations are under `Engine/Scene/src/Passes`, where the scene renderer currently owns their resources. GTAO and Hi-Z recording has moved there, but the existing scheduler adapter still invokes it. The `Engine/Renderer` paths and direct `IRenderPass` scheduler registration above remain the target for the later pass extraction/orchestration steps, not a claim about the current tree.
+
 To prevent scope creep and maintain milestone focus, technical responsibilities are split as follows:
 
 - **Modular IRenderPass Extraction**: 100% owned by M15 through progressive pass replacement.

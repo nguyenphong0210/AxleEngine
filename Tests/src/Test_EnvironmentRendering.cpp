@@ -694,6 +694,10 @@ bool Native(RHIType backend) {
         targetDesc.HDR=settings.EnableToneMapping; targetDesc.FXAA=settings.EnableFXAA; targetDesc.HistoryCount=2;
         CHECK(targets->Configure(targetDesc));
         CHECK(!render(targets).empty() && !render(targets).empty());
+        const auto firstCompletion = renderer.GetLastCompletion();
+        CHECK(firstCompletion && firstCompletion.Epoch == device.GetEpoch() &&
+            device.WaitForCompletion(firstCompletion) &&
+            renderer.GetDiagnostics().GetFrame().TargetGeneration == targets->GetGeneration());
         CHECK(renderer.GetDiagnostics().GetFrame().FrameIndex==1);
         const auto generation=targets->GetGeneration();
         {
@@ -706,6 +710,9 @@ bool Native(RHIType backend) {
         CHECK(!render(targets).empty() && renderer.GetDiagnostics().GetFrame().FrameIndex==2);
         CHECK(targets->Configure(targetDesc) && targets->GetGeneration()!=generation);
         CHECK(!render(targets).empty());
+        const auto replacementCompletion = renderer.GetLastCompletion();
+        CHECK(replacementCompletion && replacementCompletion.Epoch == firstCompletion.Epoch &&
+            replacementCompletion.Value > firstCompletion.Value && device.WaitForCompletion(replacementCompletion));
         CHECK(renderer.GetDiagnostics().GetFrame().FrameIndex==0);
         CHECK(renderer.GetDiagnostics().GetFrame().TargetGeneration==targets->GetGeneration());
         CHECK(!render(targets).empty() && renderer.GetDiagnostics().GetFrame().FrameIndex==1);

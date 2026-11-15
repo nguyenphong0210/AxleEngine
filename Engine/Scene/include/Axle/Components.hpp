@@ -898,6 +898,7 @@ namespace Axle {
 
     struct DirectionalLightComponent {
         glm::vec3 Color{ 1.0f, 0.98f, 0.92f }; // Sunlight warm tint
+        // Dimensionless multiplier: 1.0 maps to the 100,000 lx sun reference.
         float Intensity = 1.0f;
         float AmbientIntensity = 0.28f;
         float Azimuth = 45.0f;    // Compass angle (0..360 deg)
@@ -941,6 +942,7 @@ namespace Axle {
     struct PointLightComponent {
         LocalShadowSettings Shadows;
         glm::vec3 Color{ 1.0f, 1.0f, 1.0f };
+        // Dimensionless multiplier of the local scene-linear calibration.
         float Intensity = 1.0f;
         float Radius = 10.0f;
         float Falloff = 1.0f;
@@ -953,6 +955,7 @@ namespace Axle {
     struct SpotLightComponent {
         LocalShadowSettings Shadows;
         glm::vec3 Color{ 1.0f, 0.98f, 0.92f };
+        // Dimensionless multiplier of the local scene-linear calibration.
         float Intensity = 8.0f;
         float Range = 35.0f;
         float InnerConeAngle = 18.0f; // degrees

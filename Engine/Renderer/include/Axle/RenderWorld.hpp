@@ -98,6 +98,7 @@ namespace Axle {
     struct RenderDirectionalLight {
         glm::vec3 Direction{ 0.45f, 1.0f, 0.65f };
         glm::vec3 Color{ 1.0f, 0.98f, 0.92f };
+        // Dimensionless multiplier: 1.0 maps to the 100,000 lx sun reference.
         float Intensity = 1.0f;
         float AmbientIntensity = 0.28f;
         // Physical angular radius of the solar disk in radians (0.53 degrees diameter).
@@ -115,6 +116,7 @@ namespace Axle {
         uint32_t EntityID = 0;
         glm::vec3 Position{ 0.0f };
         glm::vec3 Color{ 1.0f };
+        // Dimensionless multiplier of the local scene-linear calibration.
         float Intensity = 1.0f;
         float Radius = 10.0f;
         float Falloff = 1.0f;
@@ -126,6 +128,7 @@ namespace Axle {
         glm::vec3 Position{ 0.0f };
         glm::vec3 Direction{ 0.0f, -1.0f, 0.0f };
         glm::vec3 Color{ 1.0f, 0.98f, 0.92f };
+        // Dimensionless multiplier of the local scene-linear calibration.
         float Intensity = 8.0f;
         float Range = 35.0f;
         float InnerAngle = 18.0f; // degrees

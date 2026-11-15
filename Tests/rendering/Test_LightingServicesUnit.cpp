@@ -5,6 +5,7 @@
 #include <Axle/PostProcessService.hpp>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <string>
 
 bool RunLightingServiceUnitTests() {
@@ -27,7 +28,7 @@ bool RunLightingServiceUnitTests() {
                  frame.Shadows.CascadeGeneration == cascade, "lighting service owns light counts and exact shadow publication metadata");
     RENDER_CHECK(frame.Sun.Illuminance == 100000.0f && frame.PointLights[0].Intensity == 1000.0f &&
                  frame.SpotLights[0].Intensity == 4000.0f && frame.RectLights[0].SignedIntensity == 10.0f,
-        "lighting service owns physical unit conversion and CPU light packing");
+        "lighting service owns authored intensity conversion and CPU light packing");
     settings.EnableShadows = false;
     auto noShadows = lighting.BuildFrame(world, settings, ShadowPublication{true, true, cascade, local});
     RENDER_CHECK(!noShadows.Shadows.CascadeGeneration && noShadows.DirectionalCount == 1,
@@ -58,9 +59,9 @@ bool RunLightingServiceUnitTests() {
     capped.RectLights[1].TwoSided=true;
     const auto packedCaps=lighting.BuildFrame(capped, settings);
     RENDER_CHECK(packedCaps.PointCount==MaxLightingPointLights && packedCaps.SpotCount==MaxLightingSpotLights &&
-                 packedCaps.RectCount==MaxLightingRectLights && packedCaps.PointLights[0].Intensity==25.0f &&
-                 packedCaps.SpotLights[0].Intensity==25.0f && packedCaps.RectLights[1].SignedIntensity==-10.0f,
-        "service caps all arrays and preserves physical intensities and two-sided sign");
+                 packedCaps.RectCount==MaxLightingRectLights && packedCaps.PointLights[0].Intensity==25000.0f &&
+                 packedCaps.SpotLights[0].Intensity==12500.0f && packedCaps.RectLights[1].SignedIntensity==-10.0f,
+        "service caps all arrays and preserves stable artist intensity scaling and two-sided sign");
     settings.EnableShadows=true;
     const auto unavailableShadows=lighting.BuildFrame(world, settings, {true, true, {}, {}});
     RENDER_CHECK(unavailableShadows.Status==LightingFrameStatus::Fallback &&
@@ -151,9 +152,28 @@ bool RunLightingServiceUnitTests() {
         "additional directionals are pre-scaled once on the CPU by the frozen Lux-to-radiance factor");
     RENDER_CHECK(artistUnits.PointLights[1].Intensity==2000.0f && artistUnits.SpotLights[0].Intensity==1000.0f,
         "artist point/spot intensities use the frozen 1000/500 local scales");
-    units.DirectionalLight->Intensity=120000.0f;
-    RENDER_CHECK(lighting.BuildFrame(units, settings).Sun.Illuminance==120000.0f,
-        "physical directional illuminance above 100 lx passes through unchanged");
+    units.DirectionalLight->Intensity=1.2f;
+    RENDER_CHECK(Axle::RenderTests::Near(lighting.BuildFrame(units, settings).Sun.Illuminance,120000.0f,0.02f),
+        "directional artist multiplier 1.2 maps continuously to 120,000 lux");
+    units.DirectionalLight->Intensity=100.0f;
+    units.PointLights[0].Intensity=10.0f;
+    units.SpotLights[0].Intensity=10.0f;
+    const auto atBoundary=lighting.BuildFrame(units, settings);
+    units.DirectionalLight->Intensity=100.001f;
+    units.PointLights[0].Intensity=10.001f;
+    units.SpotLights[0].Intensity=10.001f;
+    const auto aboveBoundary=lighting.BuildFrame(units, settings);
+    RENDER_CHECK(atBoundary.Sun.Illuminance==10000000.0f && aboveBoundary.Sun.Illuminance==10000000.0f &&
+                 atBoundary.PointLights[1].Intensity==10000.0f && aboveBoundary.PointLights[1].Intensity>10000.0f &&
+                 atBoundary.SpotLights[0].Intensity==5000.0f && aboveBoundary.SpotLights[0].Intensity>5000.0f,
+        "intensity scaling has no unit switch at historical 100/10 thresholds");
+    units.DirectionalLight->Intensity=-1.0f;
+    units.PointLights[0].Intensity=std::numeric_limits<float>::quiet_NaN();
+    units.SpotLights[0].Intensity=std::numeric_limits<float>::infinity();
+    const auto invalidUnits=lighting.BuildFrame(units, settings);
+    RENDER_CHECK(invalidUnits.Sun.Illuminance==0.0f && invalidUnits.PointLights[1].Intensity==0.0f &&
+                 invalidUnits.SpotLights[0].Intensity==0.0f,
+        "invalid and negative authored intensities fall back to dark finite lights");
 
     std::ifstream forwardShader(AXLE_FORWARD_PBR_SHADER_PATH);
     const std::string forwardSource{std::istreambuf_iterator<char>(forwardShader), std::istreambuf_iterator<char>()};

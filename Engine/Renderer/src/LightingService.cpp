@@ -3,19 +3,24 @@
 #include <cmath>
 namespace Axle {
     namespace {
-        // Preserve the existing artist/physical intensity thresholds during
-        // migration. Fidelity/unit redesign belongs to M15.
+        // Authored intensities are dimensionless multipliers. The directional
+        // reference is 100,000 lux; local reference factors are historical
+        // scene-linear calibrations, not candela or lumen conversions.
         constexpr float DirectSunlightIlluminance=100000.0f;
+        constexpr float MaxArtistIntensity=100.0f;
+        float ArtistIntensity(float intensity) {
+            return std::isfinite(intensity) ? std::clamp(intensity, 0.0f, MaxArtistIntensity) : 0.0f;
+        }
         float DirectionalIlluminance(float intensity) {
-            return intensity > 100.0f ? intensity : intensity * DirectSunlightIlluminance;
+            return ArtistIntensity(intensity) * DirectSunlightIlluminance;
         }
 
         float PointIntensity(float intensity) {
-            return intensity > 10.0f ? intensity : intensity * 1000.0f;
+            return ArtistIntensity(intensity) * 1000.0f;
         }
 
         float SpotIntensity(float intensity) {
-            return intensity > 10.0f ? intensity : intensity * 500.0f;
+            return ArtistIntensity(intensity) * 500.0f;
         }
 
         glm::vec3 NormalizedFallbackDirection(const glm::vec3& direction) {

@@ -311,6 +311,10 @@ bool Native(RHIType backend) {
     auto ssrWithProbe = render();
     CHECK(!ssrWithProbe.empty() && ssrWithProbe.size() == red.size());
     CHECK(ssrWithProbe != ssr);
+    CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","SurfaceNormal","Transparent","ParticlesAndPhysics",
+        "SSRCopy","HiZ0","HiZ1","HiZ2","HiZ3","HiZ4","HiZ5","HiZ6","HiZ7", "SSRCompute","SSRApply","Export"}));
+    CHECK(renderer.GetOpaqueNormalTarget() && renderer.GetOpaqueNormalTarget()->IsValid() &&
+        Read(*renderer.GetOpaqueNormalTarget(), 8).size() == size_t(width) * width * 8);
     const auto probeGeneration=renderer.GetReflectionFrame().ProbeGeneration;
     CHECK(renderer.GetReflectionFrame().State==ReflectionState::AuthoredReady && probeGeneration);
     CHECK(device.GetResources().Acquire(probeGeneration).IsLive());

@@ -342,9 +342,9 @@ the item is visible.
 - [x] **M15-U3-05.1 — Declare Hi-Z reads/writes.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Strict native environment fixture asserts all eight Hi-Z pass recordings and reads back distinct level data. Debug/Release D3D12/Vulkan 4/4 exit 0; [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
-- [ ] **M15-U3-05.2 — Declare normal/probe reads.**
+- [x] **M15-U3-05.2 — Declare normal/probe reads.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Strict native SSR fixture asserts `SurfaceNormal` and `SSRCompute` with an authored probe, reads ScreenNormal and observes changed output; Debug/Release D3D12/Vulkan 4/4 exit 0. [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
 - [ ] **M15-U3-05.3 — Declare history/exposure reads.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.

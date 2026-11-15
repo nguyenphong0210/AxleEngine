@@ -35,3 +35,9 @@ The same Debug/Release build commands above were run after this fixture was adde
 **PASS (self-review).** The production graph declares each `HiZ0..7` pass as an SRV read of the copied depth or previous level and a storage write to its own level. `SSRCompute` declares all levels as SRV reads. The strict native environment fixture now asserts the complete pass sequence, and its existing readback asserts each level has data distinct from its predecessor.
 
 Builds: `cmake --build build --config Debug --target AxleEnvironmentRenderingTests --parallel 4` and the same Release command, both exit 0. Runs: `build/Tests/{Debug,Release}/AxleEnvironmentRenderingTests.exe {dx12,vulkan} build/agent-runs/M15-U3-batches-1-2/05.1-{config}-{backend}-artifacts`, all four exit 0. Logs: `build/agent-runs/M15-U3-batches-1-2/05.1-build-*.log` and `05.1-*.log`; generated native images and scorecards are in the corresponding `05.1-*-*-artifacts` directories. No Editor image is required for this checkpoint.
+
+## U3-05.2 — Normal and probe graph reads
+
+**PASS (self-review).** GTAO and SSR graph declarations read the produced `ScreenNormal`; SSR declares the selected prefitered probe SRV before graph compile. The native environment fixture checks ScreenNormal GPU readback, the full SSR pass sequence with an authored probe, live probe generation, and a changed image when the probe is added. Strict graph validation rejects an undeclared physical read.
+
+The same Debug/Release environment build and four backend run commands as U3-05.1 were executed with the `05.2-` artifact prefix; all exit 0. Logs and native images: `build/agent-runs/M15-U3-batches-1-2/05.2-*`. No Editor image is required for this checkpoint.

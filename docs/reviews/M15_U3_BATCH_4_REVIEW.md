@@ -13,3 +13,9 @@ Builds: `cmake --build build --config {Debug,Release} --target AxleEnvironmentRe
 **Automated PASS; Editor visual PENDING.** `FroxelFogPass::Record` owns the depth/color copy, compute constants/descriptors/dispatch and fullscreen apply. It retains authored volumetric fog parameters when enabled and settings fallback otherwise, including the current directional-light default. Graph pass order and failure propagation are unchanged.
 
 Debug/Release `AxleEnvironmentRenderingTests` builds exit 0. Four native runs on D3D12/Vulkan exit 0, with the same command pattern and `10.4-` prefix. Logs and artifacts: `build/agent-runs/M15-U3-batch-4/10.4-*`. The fixture exercises fog enabled/disabled and authored fog data. A visual confirmation of blocker shafts and the zero-density/no-light result is still required by PLAN.
+
+## U3-10.5 — Post and temporal recording
+
+**PASS (self-verification).** `PostProcessPass::Record` now owns the bloom down/up pyramid and apply, auto-exposure compute, TAA resolve/copy, tone mapping and FXAA recording. Material-generation observation remains in the invoking adapter until the view-state forwarding checkpoint. The graph declarations remain in `PostProcessPass::Declare` and use the original order; failures return through the renderer's diagnostic path.
+
+Debug/Release `AxleEnvironmentRenderingTests` builds exit 0. Native D3D12/Vulkan runs exit 0 in all four combinations with `10.5-` log/artifact prefixes under `build/agent-runs/M15-U3-batch-4/`. The fixture exercises bloom, exposure and TAA ordering and output, including first/second history frames. No Editor visual gate is specified for this leaf.

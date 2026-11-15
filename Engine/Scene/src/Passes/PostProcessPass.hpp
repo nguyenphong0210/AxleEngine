@@ -1,7 +1,16 @@
 #pragma once
 
+#include "PassRecordOps.hpp"
 #include <Axle/RenderGraph.hpp>
+#include <Axle/TemporalService.hpp>
+#include <Axle/RHI/RHIViewTargets.hpp>
 #include <array>
+#include <memory>
+
+namespace Axle {
+    class RHISceneRenderer;
+    struct SceneRenderSettings;
+}
 
 namespace Axle::Passes {
     struct PostProcessResources {
@@ -13,8 +22,28 @@ namespace Axle::Passes {
         bool UseToneMap = false, UseFXAA = false;
     };
 
+    struct PostProcessRecordInputs {
+        const SceneRenderSettings& Settings;
+        const std::shared_ptr<RHI::RHIViewTargets>& Targets;
+        const TemporalHistorySelection& TemporalSelection;
+        const glm::mat4& ViewProjectionZO;
+        nri::Texture* SceneTarget;
+        nri::Descriptor* SceneTargetRTV;
+        nri::Texture* ColorTarget;
+        nri::Descriptor* ColorRTV;
+        nri::Format SceneTargetFormat;
+        uint32_t Width, Height;
+        float JitterX, JitterY;
+        bool UseBloom, UseAutoExposure, UseTAA, UseToneMap, UseFXAA;
+        RHI::RHITexture* HistoryRead;
+        RHI::RHITexture* HistoryWrite;
+        uint32_t& DispatchCount;
+    };
+
     class PostProcessPass final {
     public:
         static void Declare(RenderGraph& graph, const PostProcessResources& resources);
+        static bool Record(RHISceneRenderer& renderer, const PostProcessRecordInputs& inputs,
+                           const PassRecordOps& ops);
     };
 }

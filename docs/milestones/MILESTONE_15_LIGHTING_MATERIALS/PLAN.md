@@ -390,9 +390,9 @@ the item is visible.
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: fog shafts obey blockers; zero density/no-light leaves the image unchanged.
   - **Automated evidence:** `FroxelFogPass::Record` owns copy, compute and apply; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 with fog-on/off and authored fog cases. Editor visual remains pending. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
-- [ ] **M15-U3-10.5 — Extract PostProcessPass.**
+- [x] **M15-U3-10.5 — Extract PostProcessPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** `PostProcessPass::Record` owns bloom, auto exposure, TAA, tone mapping and FXAA recording; Debug/Release native environment fixture passes D3D12/Vulkan 4/4. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
 - [ ] **M15-U3-11.1 — Forward orchestration through RenderPassScheduler.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

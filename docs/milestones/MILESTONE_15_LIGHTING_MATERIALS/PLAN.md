@@ -330,9 +330,9 @@ the item is visible.
 - [x] **M15-U3-03.1 — Check descriptor update helpers.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Source `1cb3a8b7`; Debug/Release RenderGraph and environment native fixtures pass on D3D12/Vulkan (8/8, exit 0). Exact commands and artifact paths: [U3-03.1 descriptor helper review](../../reviews/M15_U3_03_1_DESCRIPTOR_HELPERS_REVIEW.md).
-- [ ] **M15-U3-03.2 — Check storage update helpers.**
+- [x] **M15-U3-03.2 — Check storage update helpers.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Source `5210156f`; Debug/Release RenderGraph storage fixture and environment renderer pass on D3D12/Vulkan (8/8, exit 0). Exact builds, commands, logs and artifacts: [U3-03.2 storage helper review](../../reviews/M15_U3_03_2_STORAGE_HELPERS_REVIEW.md).
 - [ ] **M15-U3-03.3 — Check constant update helpers.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

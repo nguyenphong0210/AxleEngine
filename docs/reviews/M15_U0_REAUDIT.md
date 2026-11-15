@@ -131,6 +131,21 @@ Result: **PASS**.
 The supplied screenshot is the visual artifact for this leaf; no local artifact path
 was available from the native Computer Use pipe.
 
+## M15-U0-07.1 — Deterministic image comparison
+
+Result: **PASS**.
+
+- Added `scripts/compare_images.py` for binary P6 RGB images with explicit
+  `linear` or `srgb` comparison space.
+- The comparator reports deterministic MSE, PSNR, global SSIM, maximum channel
+  error, differing-channel count and thresholded pass/fail status.
+- Default promotion thresholds are PSNR `>= 40 dB`, global SSIM `>= 0.985` and
+  maximum channel error `<= 4/255`; reports can be emitted as sorted JSON.
+- Added `scripts/test_m15_image_compare.py` covering exact matches, rejected large
+  channel changes, dimension mismatch and explicit comparison-space behavior.
+- Debug and Release `M15ImageCompare` CTest pass.
+- No Editor evidence is required for this CPU-only tooling leaf.
+
 ## M15-U0-06.2.1 — Freeze Hi-Z depth convention and reduction operator
 
 Result: **PASS**.

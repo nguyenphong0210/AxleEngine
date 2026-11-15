@@ -21,7 +21,9 @@
     ],
     "implementation_status": "Source commit c6245e2e adds the independent primary-light fixture and CTest wiring. Debug/Release RenderUnitTests, M15PrimaryLightingReference, CSM/local CPU tests, native D3D12/Vulkan cascade/local shadow tests and Debug/Release AxleEditor builds pass.",
     "acceptance_status": "Separate read-only recheck completed on c6245e2e with no P0/P1/P2 findings; CPU/native evidence accepts 03.1/03.2/03.3. PLAN parent and leaves remain unchecked only for the declared Editor visual gate.",
-    "open_gates": ["User Editor visual evidence for directional/point/spot shadow fixtures"],
+    "open_gates": [
+      "User Editor visual evidence for directional/point/spot shadow fixtures"
+    ],
     "next_action": "Collect the required Editor screenshots, then accept S1.3 and stop before U1-04.",
     "metadata_correction": "Supersedes accepted S1.2 task card because the latest user instruction releases S1.3. S1.2 acceptance remains recorded in history and its review report."
   },
@@ -3791,6 +3793,17 @@
       "base_commit": "d92ce53a",
       "timestamp_utc": "2026-11-15T09:24:18.311223+00:00",
       "body": "IN_PROGRESS: The user explicitly assigned M15 U1 SubUnit S1.3 after accepted S1.2. Scope is M15-U1-03.1 directional-light units/shadows, 03.2 point-light units/shadows, and 03.3 spot-light units/shadows. I will add a dedicated independent CPU fixture over LightingService, CascadedShadowMap and LocalShadowMap, verify production ForwardPBR shadow receiver paths, run Debug/Release and native D3D12/Vulkan cascade/local shadow tests, document evidence, and stop before U1-04. Base commit d92ce53a. Expected files: Tests/rendering/Test_M15_PrimaryLightingReferenceUnit.cpp, Tests/rendering/RenderUnitTestMain.cpp, Tests/CMakeLists.txt, docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md, docs/reviews/M15_U1_S1_3_PRIMARY_LIGHTING_REVIEW.md, docs/agents/CODEX_GEMINI_EXCHANGE.json.\n"
+    },
+    {
+      "id": "CG-20261115T093701134026Z-CODEX-c50c48",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-U1-S1.3",
+      "reply_to": "CG-20261115T092418311223Z-CODEX-1dcef4",
+      "base_commit": "c6245e2e",
+      "timestamp_utc": "2026-11-15T09:37:01.134026+00:00",
+      "body": "REVIEW: Separate read-only reviewer completed S1.3 recheck of c6245e2e against d92ce53a. No P0/P1/P2 findings. It inspected LightingService, CSM/local shadow CPU/RHI paths, ForwardPBR/LocalShadows receivers, fixture and wiring. It reran Debug/Release RenderUnitTests + M15BRDFReference + M15PrimaryLightingReference (3/3 each), CSM/local CPU tests, and native D3D12/Vulkan cascade/local tests in both configurations; all exit 0/PASS with validation count 0. Evidence summaries: cascade 54 darkened pixels and depth in all four cascades; local spot 196, point 179 darkened pixels, six faces 484 depth pixels each, seam 7927 per side. CPU/native acceptance is reported for 03.1/03.2/03.3. Editor visual gate remains open; no screenshots/UI inspection claimed. Source/docs report commit: 560eed1e. Stop before U1-04.\n"
     }
   ],
   "deferred_tasks": [

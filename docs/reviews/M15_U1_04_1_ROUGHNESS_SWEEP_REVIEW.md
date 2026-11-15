@@ -1,6 +1,6 @@
 # M15 U1-04.1 roughness/view/light-angle sweep
 
-Status: **implementation verified; Editor visual gate open**. The independent CPU reference and Debug/Release CTest gates pass. The required Editor screenshot still needs to show the M15 roughness fixture with the roughness progression visible.
+Status: **accepted**. The independent CPU reference and Debug/Release CTest gates pass, and the user supplied Editor screenshot shows the required roughness progression with Console `Error 0`.
 
 ## Scope and source
 
@@ -44,6 +44,6 @@ Reference output is stable in both configurations:
 
 ## Editor gate
 
-The PLAN requires an Editor visual check for this leaf. Capture the `M15_RoughnessSweep` fixture with the five spheres visible and the same light/view setup. The expected result is a continuous progression: the `0.04` sphere has the narrowest, strongest highlight and the `0.80` sphere has the broadest, weakest highlight/reflection. Console errors must remain zero. The local shadow banding observed while testing point/spot lights is a separate quality finding and is not claimed as fixed by this sweep.
+The user supplied an Editor screenshot of `M15_RoughnessSweep` with all five spheres visible, the Directional Light selected, `Cast Real-Time Shadows` enabled, and Console `Error 0`. The highlight progression is continuous from the narrow highlight on `roughness_004` through the broad highlight on `roughness_050`; `roughness_080` is the broadest/softest response. The local shadow banding observed while testing point/spot lights is a separate quality finding and is not claimed as fixed by this sweep.
 
-Until that screenshot is supplied, U1-04.1 remains **IMPLEMENTED / VERIFIED / PENDING EDITOR VISUAL EVIDENCE**.
+U1-04.1 is accepted at source `cc0623d9`. U1-04.2 and later leaves remain outside this release.

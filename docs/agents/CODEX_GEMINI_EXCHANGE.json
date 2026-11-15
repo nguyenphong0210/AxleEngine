@@ -3,7 +3,7 @@
   "current_task": {
     "id": "M15-U1-04.1",
     "title": "M15 U1 04.1 roughness/view/light-angle sweep",
-    "state": "implemented_pending_editor_gate",
+    "state": "accepted",
     "coordinator": "User / Codex",
     "implementer": "Codex (explicit user continuation after accepted S1.3)",
     "code_baseline": "fde09d9b",
@@ -19,11 +19,9 @@
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
     "implementation_status": "Source commit cc0623d9 adds an independent CPU roughness/view/light-angle reference and CTest wiring. Debug/Release AxleRenderUnitTests builds, focused M15RoughnessSweepReference, and the combined RenderUnitTests/M15BRDFReference/M15PrimaryLightingReference gates pass.",
-    "acceptance_status": "Implementation is verified; Editor visual evidence is still pending. The CPU reference reports monotonic peak reduction and half-power lobe broadening for roughness 0.04, 0.12, 0.25, 0.50 and 0.80, with finite view/light-angle sweeps.",
-    "open_gates": [
-      "User Editor visual evidence for M15_RoughnessSweep showing continuous roughness highlight/reflection broadening with Console Error 0"
-    ],
-    "next_action": "Collect the required Debug/Release Editor visual evidence, then accept U1-04.1 and stop before U1-04.2.",
+    "acceptance_status": "Accepted at cc0623d9 after the independent CPU reference and Debug/Release gates passed and the user supplied an Editor screenshot showing all five roughness spheres, continuous highlight broadening and Console Error 0.",
+    "open_gates": [],
+    "next_action": "Stop at accepted U1-04.1. U1-04.2 and later leaves remain outside this release boundary.",
     "metadata_correction": "Supersedes the accepted S1.3 task card because the user explicitly continued to the next PLAN leaf. S1.3 acceptance remains recorded in history and its review report."
   },
   "last_read": {
@@ -3825,6 +3823,17 @@
       "base_commit": "fde09d9b",
       "timestamp_utc": "2026-11-15T10:10:28.023511+00:00",
       "body": "IN_PROGRESS: The user continued M15 after accepted S1.3. I am implementing M15-U1-04.1 (roughness/view/light-angle sweep) from the PLAN, bounded to this leaf and stopping before U1-04.2.\n\nPlanned work: an independent CPU reference fixture for GGX roughness response, view/light angle continuity and finite/invalid handling; RenderUnitTestMain and CTest wiring; a review report and PLAN evidence update after Debug/Release verification. Editor visual evidence will be collected from the M15_RoughnessSweep fixture after the CPU gates pass.\n\nThe previously observed local shadow banding is retained as a separate visual-quality finding; it is not being silently claimed as fixed by this sweep.\n"
+    },
+    {
+      "id": "CG-20261115T101834547187Z-CODEX-c8eb37",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-U1-04.1",
+      "reply_to": "CG-20261115T101028023511Z-CODEX-753b4e",
+      "base_commit": "cc0623d9",
+      "timestamp_utc": "2026-11-15T10:18:34.547187+00:00",
+      "body": "REVIEW / ACCEPTANCE: M15-U1-04.1 is accepted at source cc0623d9.\n\nVerified independently through the implementation and test gates:\n- Debug and Release AxleRenderUnitTests builds pass.\n- Debug and Release focused CTest pass: RenderUnitTests, M15BRDFReference, M15PrimaryLightingReference and M15RoughnessSweepReference (4/4 each).\n- The independent reference reports monotonic peak reduction and half-power lobe broadening for roughness 0.04, 0.12, 0.25, 0.50 and 0.80, plus finite view/light-angle sweeps.\n\nEditor evidence supplied by the user closes the visual gate: the M15_RoughnessSweep fixture shows all five spheres, a continuous highlight progression from narrow/sharp at roughness_004 to broad/soft at roughness_080, Directional Light Cast Real-Time Shadows enabled and Console Error 0.\n\nAcceptance is recorded in docs/reviews/M15_U1_04_1_ROUGHNESS_SWEEP_REVIEW.md and docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md. Stop before U1-04.2. The previously observed point/spot local-shadow banding remains a separate quality finding and is not claimed as fixed by this sweep.\n"
     }
   ],
   "deferred_tasks": [

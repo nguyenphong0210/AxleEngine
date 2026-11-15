@@ -2767,7 +2767,8 @@ namespace Axle {
         m_OpaqueSceneNormal = viewTargets->Get(RHIViewTarget::ScreenNormal);
         m_ScreenStorageTarget = viewTargets->Get(RHIViewTarget::ScreenStorage);
         m_ViewContext.ObserveTargets(viewTargets);
-        m_ViewContext.PostProcess().BeginFrame(settings, m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT);
+        m_ViewContext.PostProcess().BeginFrame(m_ViewContext.GetInput().Settings,
+            m_CurrentColorFormat == nri::Format::RGBA16_SFLOAT);
 
         // Final target identity must reset histories before choosing jitter or
         // importing temporal slots. Frame acquisition already waited for reuse.
@@ -2806,13 +2807,11 @@ namespace Axle {
 
         const auto passCapabilities = backendPolicy.GetPassCapabilities();
         RecordFramePasses({
-            world, reflectionFrame, camera, settings, physicsScene,
-            viewTargets, colorTarget, colorRTV, width,
-            height, useMSAA, useToneMap, useFXAA,
+            world, reflectionFrame, physicsScene,
+            colorTarget, colorRTV, useMSAA, useToneMap, useFXAA,
             activeSampleCount, sceneTargetTexture, sceneTargetRTV, sceneDepthTexture,
             sceneDepthDSV, sceneTargetFormat, activePipeline,
-            projZO, viewProjZO, jitterX,
-            jitterY, giFrame, {passCapabilities.NativeRHI, passCapabilities.Compute,
+            projZO, viewProjZO, giFrame, {passCapabilities.NativeRHI, passCapabilities.Compute,
                 passCapabilities.StorageTextures, passCapabilities.Timestamps, passCapabilities.RayTracing}
         });
     }

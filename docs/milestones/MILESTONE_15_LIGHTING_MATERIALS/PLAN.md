@@ -396,9 +396,9 @@ the item is visible.
 - [x] **M15-U3-11.1 — Forward orchestration through RenderPassScheduler.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** DDGI, GTAO, SSR, fog and post/temporal now register as separately named scheduler nodes in their original order, with individual graph declaration, prepare and recording callbacks. Debug/Release native environment fixture passes D3D12/Vulkan 4/4, including graph order and output checks. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
-- [ ] **M15-U3-11.2 — Forward view state through ViewContext.**
+- [x] **M15-U3-11.2 — Forward view state through ViewContext.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** `RecordFramePasses` now obtains camera, settings, dimensions, jitter and target identity from the active `ViewContext` snapshot; borrowed frame inputs retain only world/service data and native output handles. Missing frame or invalid targets fail explicitly through diagnostics. Debug/Release Editor, environment and render-unit builds pass; native D3D12/Vulkan matrix passes 4/4. Existing `Test_ViewContextUnit` covers target-generation, material-generation, history and reset identity contracts. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
 
 **Exit:** validation clean; failures retain last-good generation or explicit fallback; timing is valid on tested workloads; pass modularity roadmap is active.
 

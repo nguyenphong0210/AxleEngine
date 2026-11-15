@@ -43,14 +43,30 @@ namespace Axle {
 
     bool RHISceneRenderer::RecordFramePasses(const FramePassInputs& inputs) {
         const auto& [
-            world, reflectionFrame, camera, settings, physicsScene,
-            viewTargets, colorTarget, colorRTV, width,
-            height, useMSAA, useToneMap, useFXAA,
+            world, reflectionFrame, physicsScene,
+            colorTarget, colorRTV, useMSAA, useToneMap, useFXAA,
             activeSampleCount, sceneTargetTexture, sceneTargetRTV, sceneDepthTexture,
             sceneDepthDSV, sceneTargetFormat, activePipeline,
-            projZO, viewProjZO, jitterX,
-            jitterY, giFrame, capabilities
+            projZO, viewProjZO, giFrame, capabilities
         ] = inputs;
+        // The ViewContext has observed the final target generation and jitter
+        // before this call. Every scheduled pass reads that same view snapshot.
+        if (!m_ViewContext.IsFrameActive()) {
+            AXLE_CORE_ERROR("Cannot record view passes without an active ViewContext frame");
+            return false;
+        }
+        const auto& view = m_ViewContext.GetInput();
+        const auto viewTargets = m_ViewContext.GetTargets();
+        if (!viewTargets || !viewTargets->IsValid()) {
+            AXLE_CORE_ERROR("Cannot record view passes without valid ViewContext targets");
+            return false;
+        }
+        const auto& camera = view.Camera;
+        const auto& settings = view.Settings;
+        const auto width = view.Width;
+        const auto height = view.Height;
+        const auto jitterX = view.Jitter.x;
+        const auto jitterY = view.Jitter.y;
         uint32_t dispatchCount = 0;
         // Declare the actual sequential passes before recording. Attachments
         // start undefined for this view; only an explicit CLEAR/write defines

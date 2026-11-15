@@ -14,6 +14,8 @@
 namespace Axle {
 using namespace RHI;
 namespace {
+constexpr size_t kEnvironmentGenerationCacheLimit=4;
+
 std::string SettingsKey(const EnvironmentBakeSettings& s) {
     return std::to_string(s.EnvironmentSize)+":"+std::to_string(s.IrradianceSize)+":"+std::to_string(s.PrefilterSize)+":"+
         std::to_string(s.PrefilterMips)+":"+std::to_string(s.BRDFSize)+":"+std::to_string(s.Samples);
@@ -64,6 +66,9 @@ void RHIEnvironment::Clear() {
     m_Selected.reset();m_Cache.clear();m_Diagnostic.clear();m_FailedBakeKey.clear();m_FailedBakeDiagnostic.clear();m_SourceExposure=1;
 }
 bool RHIEnvironment::Fallback(const std::string& request,const std::string& message) {
+    // A failed candidate never replaces the selected generation. Retain the
+    // newest valid generation from the same request domain and expose the
+    // failure through Diagnostic().
     m_Diagnostic=message;
     for(const auto& entry:m_Cache)if(entry->Request==request&&entry->IsValid()&&(!m_Selected||entry->Sequence>m_Selected->Sequence))m_Selected=entry;
     if(m_Selected){m_Selected->Used=++m_Clock;m_Diagnostic+="; retained same-source last-good environment";}
@@ -102,7 +107,7 @@ bool RHIEnvironment::Prepare(const RenderSkyboxData& sky) {
         auto candidate=std::make_shared<RHIEnvironmentGeneration>();candidate->Key=key;candidate->Request=request;
         if(!Upload(baked,*candidate)) {m_FailedBakeKey=key;m_FailedBakeDiagnostic="ENV_UPLOAD: native allocation/upload failed";return Fallback(request,m_FailedBakeDiagnostic);}
         ++m_UploadCount;candidate->Used=++m_Clock;candidate->Sequence=++m_Sequence;m_Selected=candidate;m_Cache.push_back(std::move(candidate));
-        while(m_Cache.size()>4) {auto oldest=std::min_element(m_Cache.begin(),m_Cache.end(),[](const auto& a,const auto& b){return a->Used<b->Used;});m_Cache.erase(oldest);}
+        while(m_Cache.size()>kEnvironmentGenerationCacheLimit) {auto oldest=std::min_element(m_Cache.begin(),m_Cache.end(),[](const auto& a,const auto& b){return a->Used<b->Used;});m_Cache.erase(oldest);}
         return true;
     }
     if(sky.HDRPath.empty()){m_Diagnostic="ENV_SOURCE: empty authored HDR reference; using diffuse ambient";return true;}
@@ -142,7 +147,7 @@ bool RHIEnvironment::Prepare(const RenderSkyboxData& sky) {
     if(!Upload(baked,*candidate))return Fallback(request,"ENV_UPLOAD: native allocation/upload failed");
     ++m_UploadCount;candidate->Used=++m_Clock;candidate->Sequence=++m_Sequence;
     m_Selected=candidate;m_Cache.push_back(std::move(candidate));
-    while(m_Cache.size()>4) {
+    while(m_Cache.size()>kEnvironmentGenerationCacheLimit) {
         auto oldest=std::min_element(m_Cache.begin(),m_Cache.end(),[](const auto& a,const auto& b){return a->Used<b->Used;});
         m_Cache.erase(oldest);
     }

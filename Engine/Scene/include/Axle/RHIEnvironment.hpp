@@ -7,13 +7,18 @@
 #include <vector>
 namespace Axle {
     struct RHIEnvironmentGeneration {
+        // A generation is immutable after publication. Key identifies the
+        // source/request, interpretation and bake settings; Request identifies
+        // the same-source fallback domain used when a newer bake fails.
         std::shared_ptr<RHI::RHITexture> Radiance, Irradiance, Prefilter, BRDF;
         std::string Key, Request;
         uint64_t Sequence=0, Used=0;
         bool IsValid() const;
     };
-    // Owner-thread preparation, before recording scene draws. The bounded cache
-    // and exact native descriptor leases retain generations through submissions.
+    // Owner-thread preparation, before recording scene draws. A generation is
+    // published only after all native maps upload successfully. The bounded
+    // cache and exact native descriptor leases retain generations through
+    // submissions; stale device-owned generations are rejected by IsValid().
     class RHIEnvironment {
     public:
         bool SetBakeSettings(const EnvironmentBakeSettings&,std::string* error=nullptr);

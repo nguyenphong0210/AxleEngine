@@ -655,6 +655,12 @@ bool Native(RHIType backend) {
     const auto autoExpFrame1 = render();
     const auto autoExpFrame2 = render();
     CHECK(!autoExpFrame1.empty() && !autoExpFrame2.empty());
+    {
+        const auto names = passNames();
+        const auto exposure = std::find(names.begin(), names.end(), "AutoExposure");
+        const auto tone = std::find(names.begin(), names.end(), "ToneMapping");
+        CHECK(exposure != names.end() && tone != names.end() && exposure < tone);
+    }
     settings.EnableAutoExposure = false;
 
     // 3. TAA Jitter and History Reprojection
@@ -664,6 +670,14 @@ bool Native(RHIType backend) {
     const auto taaFrame1 = render();
     const auto taaFrame2 = render();
     CHECK(!taaBaseline.empty() && !taaFrame1.empty() && !taaFrame2.empty());
+    {
+        const auto names = passNames();
+        const auto resolve = std::find(names.begin(), names.end(), "TAAResolve");
+        const auto copy = std::find(names.begin(), names.end(), "TAACopy");
+        const auto tone = std::find(names.begin(), names.end(), "ToneMapping");
+        CHECK(resolve != names.end() && copy != names.end() && tone != names.end() &&
+            resolve < copy && copy < tone);
+    }
     // The first frame must bypass invalid history, while the second frame must
     // use the opposite history slot after the resolve copy.
     for (size_t c = 0; c < 3; ++c) {

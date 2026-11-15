@@ -41,3 +41,9 @@ Builds: `cmake --build build --config Debug --target AxleEnvironmentRenderingTes
 **PASS (self-review).** GTAO and SSR graph declarations read the produced `ScreenNormal`; SSR declares the selected prefitered probe SRV before graph compile. The native environment fixture checks ScreenNormal GPU readback, the full SSR pass sequence with an authored probe, live probe generation, and a changed image when the probe is added. Strict graph validation rejects an undeclared physical read.
 
 The same Debug/Release environment build and four backend run commands as U3-05.1 were executed with the `05.2-` artifact prefix; all exit 0. Logs and native images: `build/agent-runs/M15-U3-batches-1-2/05.2-*`. No Editor image is required for this checkpoint.
+
+## U3-05.3 — History and exposure graph reads
+
+**Automated PASS; Editor visual PENDING.** Production `TAAResolve` declares the current color, depth, history read slot and history write slot; `AutoExposure` writes exposure, which `ToneMapping` reads. The native environment fixture checks pass order (`AutoExposure` before `ToneMapping`; `TAAResolve` before `TAACopy` before `ToneMapping`) and successful first/second TAA frames. The first frame uses an invalid-history flag to bypass stale history. Debug/Release Editor and environment builds exit 0; four environment runs on D3D12/Vulkan exit 0.
+
+Commands: `cmake --build build --config {Debug,Release} --target AxleEnvironmentRenderingTests AxleEditor --parallel 4`; `build/Tests/{Debug,Release}/AxleEnvironmentRenderingTests.exe {dx12,vulkan} build/agent-runs/M15-U3-batches-1-2/05.3-{config}-{backend}-artifacts`. Logs and native images are in `build/agent-runs/M15-U3-batches-1-2/05.3-*`. The PLAN checkbox remains open until the required Editor capture confirms no invalid image output with Auto-Exposure and TAA toggled.

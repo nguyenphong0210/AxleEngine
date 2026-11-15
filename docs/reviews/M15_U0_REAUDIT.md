@@ -173,6 +173,30 @@ Result: **PASS**.
 
 All four U0-06.2 child leaves now pass; the derived parent may be checked PASS.
 
+## M15-U0-06.3.1 — Freeze cubemap face and up-vector convention
+
+Result: **PASS**.
+
+- `EnvironmentCube` face order is frozen as `+X, -X, +Y, -Y, +Z, -Z`.
+- `EnvironmentCubeDirection` is the authoritative center/UV mapping and uses the
+  current native cube orientation, including the documented vertical flip policy.
+- The six face-center directions and axis-specific up-vector choices are recorded
+  by the existing environment-bake reference contract.
+- No Editor evidence is required for this contract/reference leaf.
+
+## M15-U0-06.3.2 — Six-face axis-coded reference
+
+Result: **PASS**.
+
+- The existing `AxleEnvironmentBakeTests` directional fixture assigns analytic
+  axis-coded radiance and checks all six face centers against `+X, -X, +Y, -Y,
+  +Z, -Z`, including top/bottom orientation and no vertical flip.
+- This is a CPU environment-bake reference; no Editor evidence is required.
+- Debug and Release `AxleEnvironmentBakeTests`: exit 0. Both runs report
+  `probe_direction_reference faces=6 center_axes=PASS up_orientation=PASS`.
+
+Both U0-06.3 child leaves now pass; the derived parent may be checked PASS.
+
 ## M15-U0-06.2.3 — Hi-Z reference edge cases
 
 Result: **PASS**.

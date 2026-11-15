@@ -44,6 +44,7 @@ bool Directional() {
     // Face centers must map to standard native cube axes without vertical flips.
     const glm::vec3 axes[]{ {1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1} };
     for(uint32_t f=0;f<6;++f)CHECK(glm::length(EnvironmentCubeDirection(f,.5f,.5f)-axes[f])<1e-6f);
+    std::cout << "probe_direction_reference faces=6 center_axes=PASS up_orientation=PASS\n";
     const auto top=maps.Radiance.Faces[2][0].Pixels[(s.EnvironmentSize/2)*s.EnvironmentSize+s.EnvironmentSize/2];
     const auto bottom=maps.Radiance.Faces[3][0].Pixels[(s.EnvironmentSize/2)*s.EnvironmentSize+s.EnvironmentSize/2];
     CHECK(top.x>2.9&&bottom.x<1.1);

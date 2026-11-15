@@ -189,9 +189,13 @@ the item is visible.
   - [x] **M15-U0-06.2.4 — Validate nontrivial Hi-Z level identity.**
     - **PASS when:** tests fail if only level zero is written or all levels contain the same data, and pass for the independent reference pyramid.
     - **Evidence:** `M15HiZReference` accepts the independent pyramid and rejects missing levels plus same-signature level data; Debug/Release CTest pass. No Editor evidence is required for this CPU-only leaf.
-- [ ] **M15-U0-06.3 — Reference probe direction.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+- [x] **M15-U0-06.3 — Reference probe direction.** *(derived parent; both children PASS)*
+  - [x] **M15-U0-06.3.1 — Freeze cubemap face and up-vector convention.**
+    - **PASS when:** the six face order and center-direction/up-vector policy are recorded from the current environment bake contract.
+    - **Evidence:** `EnvironmentCube` face order and `EnvironmentCubeDirection` mapping are recorded in [M15 U0 re-audit](../../reviews/M15_U0_REAUDIT.md#m15-u0-06-3-1--freeze-cubemap-face-and-up-vector-convention).
+  - [x] **M15-U0-06.3.2 — Validate six-face axis-coded reference.**
+    - **PASS when:** an axis-coded environment maps each face center to the expected native cube axis and preserves orientation without vertical flips.
+    - **Evidence:** Debug/Release `AxleEnvironmentBakeTests` pass the six-face directional reference. No Editor evidence is required for this CPU-only reference leaf.
 - [ ] **M15-U0-06.4 — Reference roughness-to-mip mapping.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.

@@ -268,21 +268,21 @@ the item is visible.
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
     - **Evidence:** `M15EnvironmentContractReference` checks fixed cube face centers/order, +Y/-Y orientation, authored HDR identity, explicit `EnvironmentLighting` opt-in and non-mutating invalid-source rejection. See [S2.1 verification](../../reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md).
 
-- [ ] **M15-U2-S2.2 — Publish, cache and recover environment generations.** *(roll-up: tick when U2-02.1–U2-02.4 are complete)*
+- [x] **M15-U2-S2.2 — Publish, cache and recover environment generations.** *(roll-up: tick when U2-02.1–U2-02.4 are complete)* *(accepted in `M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md`; source contract update verified in Debug/Release)*
   - **Scope:** publish only complete generations, define cache identity, invalidate stale generations transactionally and retain a named last-good or neutral fallback on failure.
   - **Implementation order:** U2-02.1 → U2-02.2 → U2-02.3 → U2-02.4. Keep publication/cache identity separate from invalidation/fallback changes.
-  - [ ] **M15-U2-02.1 — Publish environment generation.**
+  - [x] **M15-U2-02.1 — Publish environment generation.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-  - [ ] **M15-U2-02.2 — Define cache identity.**
+    - **Evidence:** `Test_EnvironmentRendering.cpp` verifies four-map publication only after complete native upload; Debug/Release DX12 and Vulkan native runs exit 0, and OpenGL fallback exits 0. See [S2.2 review](../../reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md).
+  - [x] **M15-U2-02.2 — Define cache identity.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-  - [ ] **M15-U2-02.3 — Define invalidation.**
+    - **Evidence:** Cache keys include source/request, source revision, image interpretation and bake settings; the fixture verifies reuse, source-change replacement and LRU bound `<=4`. See [S2.2 review](../../reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md).
+  - [x] **M15-U2-02.3 — Define invalidation.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-  - [ ] **M15-U2-02.4 — Define last-good fallback.**
+    - **Evidence:** Device shutdown/reinit removes stale native generations before rebuild; the fixture verifies a new native handle and bounded cache. See [S2.2 review](../../reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md).
+  - [x] **M15-U2-02.4 — Define last-good fallback.**
     - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-    - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+    - **Evidence:** Same-source corruption and upload OOM retain the exact last-good generation with a diagnostic; missing redirected source uses neutral fallback and does not borrow another source. See [S2.2 review](../../reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md).
 
 - [ ] **M15-U2-S2.3 — Verify environment consumers and failure behavior.** *(roll-up: tick when U2-03.1–U2-03.4 are complete)*
   - **Scope:** verify sky/direct-light coupling, independent environment rotation and intensity, plus missing/failed asset behavior without mutating authored data.

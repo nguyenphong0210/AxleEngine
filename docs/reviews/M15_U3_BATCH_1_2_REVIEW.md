@@ -23,3 +23,9 @@ build/Tests/Release/AxleRenderGraphTests.exe vulkan
 ```
 
 Logs: `build/agent-runs/M15-U3-batches-1-2/03.3-build-*.log` and `03.3-*-*.log`. All four native logs end `RenderGraph authority PASS`. The failure is injected before native map; a GPU/driver failure after a void native call cannot be observed by this helper. No Editor image is required for this checkpoint.
+
+## U3-04 — Bound descriptor immutability
+
+**PASS (self-review).** `RHIDescriptorPool::UpdateTextureRange` already rejects a pinned descriptor set, and `RHIResourceService::ReplaceDescriptorRange` repeats the guard. A new native fixture binds a real set, tries to replace its texture while the command is recording, executable and submitted, checks the original backing dependency remains published, then waits for completion and verifies that replacement and restoration work. No native update is attempted on rejected paths.
+
+The same Debug/Release build commands above were run after this fixture was added; both exit 0. The same four native fixture commands above were rerun with exit 0. Logs: `build/agent-runs/M15-U3-batches-1-2/04-build-*.log` and `04-*-*.log`; each native log ends `RenderGraph authority PASS`. No Editor image is required.

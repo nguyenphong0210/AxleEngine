@@ -361,6 +361,33 @@ static bool Run() {
     }
     RENDER_CHECK(pool.UpdateTexture(set,0,0,image.GetSRV()), "restore declared descriptor dependency");
     {
+        RHITexture replacement;
+        RENDER_CHECK(replacement.Init(desc), "post-bind replacement source");
+        RHICommandBuffer commands;
+        RENDER_CHECK(commands.Init() && commands.Begin(), "descriptor immutability recording");
+        RenderGraph graph; graph.AddPass("bound", {});
+        RENDER_CHECK(graph.DeclareRead("bound", set) && graph.Compile(true) && graph.BeginPass("bound", commands),
+            "bound descriptor graph declares the original input");
+        commands.SetPipelineLayout(nri::BindPoint::GRAPHICS, layout);
+        pool.Bind(commands.GetNative());
+        RHIDescriptorPool::BindDescriptorSet(commands.GetNative(), 0, set);
+        RENDER_CHECK(commands.IsRecording() && !pool.UpdateTexture(set, 0, 0, replacement.GetSRV()),
+            "descriptor set cannot change after binding in the recording");
+        const auto stillOriginal = device.GetResources().GetAccesses(device.GetResources().AcquireNative(set));
+        RENDER_CHECK(std::any_of(stillOriginal.begin(), stillOriginal.end(), [&](const auto& access) {
+            return access.Texture == image.GetNative();
+        }) && std::none_of(stillOriginal.begin(), stillOriginal.end(), [&](const auto& access) {
+            return access.Texture == replacement.GetNative();
+        }), "rejected post-bind update preserves the original descriptor dependency");
+        graph.EndRecording();
+        RENDER_CHECK(commands.End() && !pool.UpdateTexture(set, 0, 0, replacement.GetSRV()) &&
+            commands.Submit() && !pool.UpdateTexture(set, 0, 0, replacement.GetSRV()),
+            "descriptor remains immutable through executable and submitted states");
+        RENDER_CHECK(device.WaitIdle() && pool.UpdateTexture(set, 0, 0, replacement.GetSRV()) &&
+            pool.UpdateTexture(set, 0, 0, image.GetSRV()),
+            "completed submission releases descriptor immutability and permits reuse");
+    }
+    {
         // Imported views must identify their access on the exact backing generation.
         RHITexture backing; RENDER_CHECK(backing.Init(desc), "import backing generation");
         auto data=upload; data.texture=backing.GetNative();

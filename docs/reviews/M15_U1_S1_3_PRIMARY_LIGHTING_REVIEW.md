@@ -1,6 +1,6 @@
 # M15 U1 S1.3 primary-light units and shadows
 
-Status: **implementation independently rechecked; Editor visual gate open**. The separate-context review found no P0/P1/P2 findings. The derived S1.3 parent and its three children remain unchecked until the required Editor visual evidence is supplied.
+Status: **accepted**. The separate-context review found no P0/P1/P2 findings, and user-supplied Editor screenshots close the visual gate for directional, point and spot shadows.
 
 ## Scope and source
 
@@ -42,12 +42,18 @@ All commands ran from `D:\WorkSpace\AxleEngine`.
 | `cmake --build build --config <config> --target AxleEditor --parallel 6` | exit 0 | exit 0 | `build/Editor/<config>/AxleEditor.exe` |
 | `git diff --check` | exit 0 | same source | clean diff |
 
-No Editor visual screenshot is claimed yet. The PLAN's S1.3 leaves declare an Editor visual gate, so the user must still inspect the applicable fixture and provide the required Editor evidence before final acceptance. Native GPU evidence is complete on D3D12/Vulkan; OpenGL local-shadow fallback remains outside this subunit.
+User-supplied Editor evidence closes the visual gate:
+
+- Directional Light selected with `Cast Real-Time Shadows` enabled, four-split CSM settings visible, visible sphere/plane shadows and Console `Error 0`.
+- Point Light selected with `Cast Shadows` enabled, radius/intensity/bias settings visible, visible point-light shadow and Console `Error 0`.
+- Spot Light selected with `Enabled` and `Cast Shadows` enabled, range/cone settings visible, visible cone lighting/shadow and Console `Error 0`.
+
+The screenshots are recorded as conversation-supplied Editor evidence for S1.3. Native GPU evidence is complete on D3D12/Vulkan; OpenGL local-shadow fallback remains outside this subunit.
 
 ## Independent recheck
 
 A separate read-only reviewer inspected `c6245e2e` against `d92ce53a`, including the production lighting/shadow paths, the dedicated fixture, CMake/runner wiring and existing CPU/native fixtures. It reported no P0, P1 or P2 findings and reran the focused Debug/Release CPU gates plus native D3D12/Vulkan cascade/local shadow tests. Validation error count was zero. It accepted 03.1, 03.2 and 03.3 from source and automated/native evidence.
 
-## Open gate
+## Acceptance
 
-The PLAN declares an Editor visual gate for each S1.3 leaf. No Editor screenshot or UI inspection was performed by the reviewer, so S1.3 remains **IMPLEMENTED / INDEPENDENTLY RECHECKED / PENDING EDITOR VISUAL EVIDENCE**. Native GPU evidence is complete on D3D12/Vulkan; OpenGL local-shadow fallback remains outside this subunit.
+S1.3 is accepted at source `c6245e2e` with documentation/acceptance recorded in the follow-up commit. Later U1-04 work is outside this release boundary.

@@ -1,41 +1,40 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U2-S2.3",
-    "title": "M15 U2 S2.3 environment consumers and failure behavior",
+    "id": "M15-U3-03.1",
+    "title": "M15 U3 descriptor update helpers",
     "state": "accepted",
     "coordinator": "User / Codex",
-    "implementer": "Codex (explicit user continuation after accepted S2.2)",
-    "code_baseline": "1246c4cb",
-    "user_instruction": "Continue M15 with S2.3: verify environment consumers and failure behavior; implement dedicated authored environment rotation without reusing procedural sun controls; do not start U2-04/U2-05 or push.",
-    "user_scope": "Implement and verify U2-03.1 through U2-03.4 as one environment-consumer package.",
+    "implementer": "Codex (explicit user assignment)",
+    "code_baseline": "2a8befcd",
+    "user_instruction": "Implement M15-U3-03.1 descriptor update helpers and continue the same work.",
+    "user_scope": "Validate texture and sampler descriptor update helpers, propagate checked failures through their callers, add a native failure fixture, and stop before U3-03.2/.3 or U3-04.",
     "expected_files": [
-      "Engine/Scene/include/Axle/Components.hpp",
-      "Engine/Renderer/include/Axle/RenderWorld.hpp",
-      "Engine/Scene/src/SceneExtraction.cpp",
-      "Engine/Scene/src/SceneSerializer.cpp",
-      "Engine/UI/src/EntityInspector.cpp",
+      "Engine/RHI/include/Axle/RHI/RHIResource.hpp",
+      "Engine/RHI/src/RHIDescriptorPool.cpp",
+      "Engine/RHI/src/RHIMaterial.cpp",
+      "Engine/RHI/src/RHIResource.cpp",
+      "Engine/Scene/src/RHISceneRenderer.cpp",
       "Engine/Scene/src/RHISceneRendererPasses.cpp",
-      "Engine/Resources/Shaders/AtmosphericSkybox.hlsl",
-      "Engine/Resources/Shaders/ForwardPBR.hlsl",
-      "Tests/src/Test_EnvironmentRendering.cpp",
+      "Engine/VFX/src/RHIParticleRenderer.cpp",
+      "Tests/rendering/RenderGraphMain.cpp",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U2_S2_3_ENVIRONMENT_CONSUMERS_REVIEW.md",
+      "docs/reviews/M15_U3_03_1_DESCRIPTOR_HELPERS_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Complete: dedicated authored environment rotation, consumer coupling/intensity verification, and explicit missing/failed asset fallback are implemented and tested.",
-    "acceptance_status": "Accepted: U2-03.1 through U2-03.4 pass in Debug and Release on D3D12, Vulkan and OpenGL fallback.",
+    "implementation_status": "Complete: checked texture/sampler descriptor updates and callers; transactional dependency publication with injected pre-native failure boundary.",
+    "acceptance_status": "Self-reviewed and accepted: Debug/Release RenderGraph and environment native fixtures pass on D3D12/Vulkan.",
     "open_gates": [],
-    "next_action": "Stop at accepted S2.3; wait for an explicit user release before U2-04/U2-05.",
-    "metadata_correction": "Supersedes accepted S2.2 task card because the user explicitly continued to S2.3; S2.2 acceptance remains in history and its report.",
+    "next_action": "Stop at M15-U3-03.1; U3-03.2/.3 and U3-04 await separate user release.",
+    "metadata_correction": "Supersedes accepted S2.3 card because the user explicitly released M15-U3-03.1; S2.3 acceptance remains in history.",
     "implementation_commits": [
-      "44846d8f"
+      "1cb3a8b7"
     ],
     "documentation_commits": [
-      "d11dd4af"
+      "8b279cb7"
     ],
-    "evidence_report": "docs/reviews/M15_U2_S2_3_ENVIRONMENT_CONSUMERS_REVIEW.md",
-    "verification": "AxleEnvironmentRenderingTests and AxleEditor built in Debug/Release exit 0; native matrix Debug/Release x dx12/vulkan/gl exit 0. Logs: build/agent-runs/M15-U2-S2.3/*.log."
+    "evidence_report": "docs/reviews/M15_U3_03_1_DESCRIPTOR_HELPERS_REVIEW.md",
+    "verification": "Debug/Release RenderGraph and environment native fixtures x D3D12/Vulkan: 8/8 exit 0; Debug AxleEditor build exit 0. Logs/artifacts: build/agent-runs/M15-U3-03.1/."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -3913,6 +3912,28 @@
       "base_commit": "11cedd84a2ceb722c1ddfa38558e13ce0e35e38a",
       "timestamp_utc": "2026-11-15T11:01:46.381781+00:00",
       "body": "DELIVERY: M15-U2-S2.2 accepted.\n\nImplementation commit: f118cec7 (freeze RHIEnvironment generation publication, cache limit and fallback contract).\nDocumentation/evidence commit: 11cedd84.\n\nVerified scope U2-02.1 through U2-02.4:\n- complete four-map native generation is published only after upload success;\n- cache identity includes source/request, revision, interpretation and bake settings, with LRU bound 4;\n- stale native generations are removed after device shutdown/reinit and rebuilt;\n- same-source last-good is retained on corruption/upload failure, while redirected missing sources use neutral fallback with diagnostics.\n\nVerification:\n- Debug and Release AxleEnvironmentRenderingTests builds: exit 0.\n- Debug/Release x D3D12/Vulkan 1.3 native fixture: exit 0, ending PASS HDR native subresources, sky/specular/diffuse, cache, exposure, reload, fallback and upload retry.\n- Debug/Release x OpenGL 4.5 fallback fixture: exit 0, ending PASS OpenGL background-only and explicit IBL pixels, snapshot and ECS bridge gates.\n- Logs: build/agent-runs/M15-U2-S2.2/*.log.\n- Report: docs/reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md.\n\nS2.3 remains unreleased and untouched.\n"
+    },
+    {
+      "id": "CG-20261115T124024182310Z-CODEX-1aca1c",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U3-03.1",
+      "reply_to": null,
+      "base_commit": "2a8befcd",
+      "timestamp_utc": "2026-11-15T12:40:24.182310+00:00",
+      "body": "IN_PROGRESS: User explicitly released M15-U3-03.1 (descriptor update helpers), then asked Codex to continue. Baseline: 2a8befcd. I am changing RHI descriptor/resource update ordering, checked texture/sampler callers in material/renderer/VFX, and a native RenderGraph fixture. Storage/constant helper checkpoints U3-03.2/.3 and descriptor immutability U3-04 remain outside this assignment. Debug/Release native verification and a review report will be recorded before closure.\n"
+    },
+    {
+      "id": "CG-20261115T124923919549Z-CODEX-ed7813",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M15-U3-03.1",
+      "reply_to": "CG-20261115T124024182310Z-CODEX-1aca1c",
+      "base_commit": "2a8befcd",
+      "timestamp_utc": "2026-11-15T12:49:23.919549+00:00",
+      "body": "DELIVERY: M15-U3-03.1 is self-verified and accepted within the user-released checkpoint. Source commit 1cb3a8b7; PLAN/review commit 8b279cb7. The RHI helper validates and prepares descriptor dependencies before native update and publishes them only after the call. Texture/sampler caller failures now propagate through material creation, renderer initialization/view passes and VFX; SetIBLMaps logs and disables IBL on its void API failure path.\n\nVerification on final source: Debug AxleRenderGraphTests/AxleEditor and Debug/Release AxleRenderGraphTests/AxleEnvironmentRenderingTests builds exit 0. RenderGraph and environment native fixtures run on Debug/Release x D3D12/Vulkan (8/8 exit 0), with logs and output artifacts under build/agent-runs/M15-U3-03.1. Exact commands/results: docs/reviews/M15_U3_03_1_DESCRIPTOR_HELPERS_REVIEW.md. NRI UpdateDescriptorRanges returns void, so injected rejection is tested before the native call; no driver-returned error can be observed. U3-03.2, U3-03.3 and U3-04 remain open. No Editor screenshot is required for this code/fixture checkpoint; no push performed.\n"
     }
   ],
   "deferred_tasks": [

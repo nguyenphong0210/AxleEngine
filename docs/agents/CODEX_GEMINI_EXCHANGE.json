@@ -3,12 +3,12 @@
   "current_task": {
     "id": "M15-U3-03.3-08",
     "title": "M15 U3 S3.1 batches 1-2",
-    "state": "awaiting_editor_visual",
+    "state": "accepted_self_review",
     "coordinator": "User / Codex",
     "implementer": "Codex (explicit user continuation)",
     "code_baseline": "2fa66863",
     "user_instruction": "Implement U3 batches 1 and 2 sequentially through M15-U3-08.",
-    "user_scope": "M15-U3-03.3, 04, 05.1-05.3, 06, 07.1-07.5 and 08; verify and commit each completed checkpoint separately; Editor visual gate for 05.3 remains pending until evidence is captured.",
+    "user_scope": "M15-U3-03.3, 04, 05.1-05.3, 06, 07.1-07.5 and 08; verify and commit each completed checkpoint separately; close the 05.3 Editor visual gate from user-supplied evidence.",
     "expected_files": [
       "Engine/Scene/src/RHISceneRendererPasses.cpp",
       "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
@@ -21,11 +21,9 @@
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
     "implementation_status": "All U3-03.3 through U3-08 source/fixture work complete in sequential local commits.",
-    "acceptance_status": "Self-reviewed 11/12 checkpoints; U3-05.3 automated PASS, Editor visual pending.",
-    "open_gates": [
-      "U3-05.3 Editor visual evidence"
-    ],
-    "next_action": "Inspect user-provided Editor Auto-Exposure/TAA screenshots and tick U3-05.3 only if visual gate passes; stop before U3-09.1.",
+    "acceptance_status": "Self-reviewed 12/12 checkpoints; U3-05.3 automated and user-supplied D3D12 Editor visual evidence PASS. No independent review claimed.",
+    "open_gates": [],
+    "next_action": "Stop at the released U3-08 boundary; U3-09.1 requires a separate user assignment.",
     "metadata_correction": "Supersedes accepted U3-03.2 card under the user's explicit U3 batches 1-2 assignment; prior acceptance remains in history.",
     "implementation_commits": [
       "f32abcec",
@@ -45,7 +43,7 @@
       "23a7d388"
     ],
     "evidence_report": "docs/reviews/M15_U3_BATCH_1_2_REVIEW.md",
-    "verification": "Debug/Release native D3D12/Vulkan checkpoints pass; final U3-08 environment 4/4, resource-view 4/4, RenderUnit 2/2 and Editor Debug/Release builds exit 0. Logs/artifacts under build/agent-runs/M15-U3-batches-1-2/. U3-05.3 Editor screenshots pending."
+    "verification": "Debug/Release native D3D12/Vulkan checkpoints pass; final U3-08 environment 4/4, resource-view 4/4, RenderUnit 2/2 and Editor Debug/Release builds exit 0. Logs/artifacts under build/agent-runs/M15-U3-batches-1-2/. User-supplied U3-05.3 Editor screenshots show Auto-Exposure/TAA both on and both off, valid viewport and Error 0; Editor configuration unidentified. Visual acceptance recorded in f4a57536."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -4033,6 +4031,17 @@
       "base_commit": "23a7d388e2a6ffa825d3055dc6a8a289048adda8",
       "timestamp_utc": "2026-11-15T14:47:16.183198+00:00",
       "body": "DELIVERY: M15-U3 batches 1-2 implemented sequentially from 03.3 through 08. Base 2fa66863; source head 4eba2b07, evidence docs 23a7d388. 11/12 PLAN leaves are self-verified and ticked. U3-05.3 automated graph/renderer fixture passes, but its required Editor visual gate is PENDING; no visual acceptance claimed. Stop before U3-09.1.\n\nCheckpoints: 03.3 f32abcec; 04 63341216; 05.1 8cc159ca; 05.2 2a281c50; 05.3 automated 2141df80; 06 6299737f; 07.1 b44cf24d; 07.2 c0c317b2; 07.3 docs 8a0aa009; 07.4 bf727f54; 07.5 15e6a102; 08 source 4eba2b07 and evidence 23a7d388.\n\nFinal U3-08 verification: Debug/Release AxleEnvironmentRenderingTests x D3D12/Vulkan 4/4 exit 0, AxleRHIResourceViewTests targets 4/4 exit 0, RenderUnitTests 2/2 exit 0, Debug/Release AxleEditor builds exit 0. Exact commands, logs and artifact paths are in docs/reviews/M15_U3_BATCH_1_2_REVIEW.md; all outputs are under build/agent-runs/M15-U3-batches-1-2/. U3-08 has per-pass query/readback ring, valid timings, injected Invalid readback and Unknown query-pool fallback.\n\nUser was given specific Editor steps for U3-05.3 Auto-Exposure/TAA comparison and plans to send screenshots. Do not mark the visual gate PASS until those screenshots are reviewed. No independent reviewer was invoked or claimed."
+    },
+    {
+      "id": "CG-20261115T145434039198Z-CODEX-f41d79",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U3-03.3-08",
+      "reply_to": "CG-20261115T144716183198Z-CODEX-b709ad",
+      "base_commit": "f4a57536b6fcc76bb9911a3ebec1e8f8aa32c8f3",
+      "timestamp_utc": "2026-11-15T14:54:34.039198+00:00",
+      "body": "STATUS / VISUAL CLOSURE: M15-U3-05.3 Editor gate is accepted from user-supplied screenshots in the current conversation (2026-11-15). This closes 12/12 self-reviewed checkpoints in the released U3 batches 1-2 scope.\n\nOne D3D12 Editor capture of M15_RoughnessSweep has checkmarks beside Auto-Exposure and Temporal Anti-Aliasing (TAA); the paired capture has both unchecked at the same camera view. All five spheres and the floor render in both states, without a black/invalid frame; Console shows Error 0. The screenshots do not identify Debug or Release. Prior native fixture/build evidence remains as recorded in docs/reviews/M15_U3_BATCH_1_2_REVIEW.md and was not rerun for this documentation-only closure.\n\nPLAN and review report updated in f4a57536. No independent reviewer or cross-backend Editor visual was claimed. Stop before U3-09.1; no push.\n"
     }
   ],
   "deferred_tasks": [

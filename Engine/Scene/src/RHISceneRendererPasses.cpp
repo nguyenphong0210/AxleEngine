@@ -120,7 +120,8 @@ namespace Axle {
             }
         }
         const bool useAutoExposure = settings.EnableAutoExposure && activeSampleCount == 1 && m_AutoExposurePipeline &&
-            viewTargets->GetExposure() && viewTargets->GetExposure()->IsValid() && viewTargets->GetExposure()->GetUAV() != nullptr;
+            viewTargets->GetExposure() && viewTargets->GetExposure()->IsValid() &&
+            viewTargets->GetExposure()->GetUAV() && viewTargets->GetExposure()->GetSRV();
         const bool useDDGI = giFrame.UpdateScheduled && activeSampleCount == 1 && m_DDGIPipeline && sceneDepthTexture && sceneDepthDSV &&
             viewTargets->GetDDGI() && viewTargets->GetDDGI()->IsValid() && viewTargets->GetDDGI()->GetUAV() != nullptr;
         if (giFrame.UpdateScheduled && !useDDGI) {
@@ -1551,7 +1552,7 @@ namespace Axle {
                 m_AutoExposureDescriptorPool.Bind(Commands().GetNative());
                  if (!bindDescriptorSet(0, m_AutoExposureTextureSet, nri::BindPoint::COMPUTE) ||
                      !bindDescriptorSet(1, m_AutoExposureStorageSet, nri::BindPoint::COMPUTE)) return fail();
-                Commands().Dispatch((exposureWidth + 15) / 16, (exposureHeight + 15) / 16, 1); ++dispatchCount;
+                Commands().Dispatch(1, 1, 1); ++dispatchCount;
             }
 
             // 7d. Temporal Anti-Aliasing (TAA) Pass
@@ -1612,16 +1613,11 @@ namespace Axle {
             if (useToneMap && m_IntermediateHDRTarget && m_IntermediateHDRTarget->IsValid()) {
                 if (!beginPass("ToneMapping")) return fail();
                 RHIToneMappingConstants toneConstants{};
-                float effectiveExposure = settings.Exposure;
-                if (settings.EnableAutoExposure) {
-                    const float targetExp = std::clamp(settings.Exposure, settings.AutoExposureMin, settings.AutoExposureMax);
-                    const float luminance = settings.AutoExposureKeyValue / std::max(targetExp, 0.0001f);
-                    effectiveExposure = m_ViewContext.PostProcess().UpdateExposure(luminance, 1.0f / 60.0f);
-                } else {
-                    effectiveExposure = m_ViewContext.PostProcess().UpdateExposure(1.0f, 0.0f);
-                }
-                toneConstants.Params = glm::vec4(effectiveExposure, settings.Gamma, static_cast<float>(settings.ToneMappingMode), settings.WhitePoint);
+                // The compute pass owns auto exposure. Tone mapping samples its
+                // published 1x1 texture; manual exposure remains the fallback.
+                toneConstants.Params = glm::vec4(settings.Exposure, settings.Gamma, static_cast<float>(settings.ToneMappingMode), settings.WhitePoint);
                 toneConstants.ColorGrading = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+                toneConstants.Reserved[0].x = useAutoExposure ? 1.0f : 0.0f;
 
                 nri::Texture* toneOutTexture = colorTarget;
                 nri::Descriptor* toneOutRTV = colorRTV;
@@ -1636,7 +1632,8 @@ namespace Axle {
                                   toneOutRTV,
                                   width, height,
                                   m_CurrentColorFormat,
-                                  toneConstants, &passUniform())) return fail();
+                                  toneConstants, &passUniform(),
+                                  useAutoExposure ? viewTargets->GetExposure()->GetSRV() : nullptr)) return fail();
             }
 
             // 9. Post-Processing FXAA Pass
@@ -1697,8 +1694,13 @@ namespace Axle {
                     {taaHistoryWrite, Layout::CopySource},
                     {taaSource, Layout::CopyDest, Access::Write}});
             }
-            if (useToneMap) graph.AddPass("ToneMapping", {
-                {hdr,Layout::ShaderResource}, {fxaa,Layout::ColorAttachment,Access::Write,Load::Clear}});
+            if (useToneMap) {
+                if (useAutoExposure) graph.AddPass("ToneMapping", {
+                    {hdr,Layout::ShaderResource}, {exposureOutput,Layout::ShaderResource},
+                    {fxaa,Layout::ColorAttachment,Access::Write,Load::Clear}});
+                else graph.AddPass("ToneMapping", {
+                    {hdr,Layout::ShaderResource}, {fxaa,Layout::ColorAttachment,Access::Write,Load::Clear}});
+            }
             if (useFXAA) graph.AddPass("FXAA", {
                 {fxaa,Layout::ShaderResource}, {output,Layout::ColorAttachment,Access::Write,Load::Clear}});
         }, [&](const RenderPassContext&) -> RenderPassResult {
@@ -1724,6 +1726,8 @@ namespace Axle {
                     !graph.DeclareRead("TAAResolve",historyRead->GetSRV())) return fail();
             }
             if (useToneMap && !uniform("ToneMapping",sizeof(RHIToneMappingConstants))) return fail();
+            if (useToneMap && useAutoExposure &&
+                !graph.DeclareRead("ToneMapping",viewTargets->GetExposure()->GetSRV())) return fail();
             if (useFXAA && (!uniform("FXAA",sizeof(RHIFXAAConstants)) ||
                 !graph.DeclareRead("FXAA",RHIMaterial::GetDefaultWhiteTexture()->GetSRV()))) return fail();
             return {};

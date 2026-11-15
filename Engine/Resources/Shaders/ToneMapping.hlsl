@@ -14,9 +14,10 @@ cbuffer ToneMappingConstants : register(b0, space0) {
 
 // -----------------------------------------------------------------------------
 // Descriptor Set (Space 1)
-// Texture t0, Sampler s0
+// Texture t0: HDR scene; t1: one-pixel adapted exposure; Sampler s0
 // -----------------------------------------------------------------------------
 Texture2D    u_HDRTexture    : register(t0, space1);
+Texture2D<float4> u_ExposureTexture : register(t1, space1);
 SamplerState u_LinearSampler : register(s0, space1);
 
 // -----------------------------------------------------------------------------
@@ -115,6 +116,10 @@ float4 PSMain(VSOutput input) : SV_Target {
 
     // 1. Photometric Exposure Compensation
     float exposure = (u_Params.x > 0.0) ? u_Params.x : 1.0;
+    if (u_Reserved[0].x > 0.5) {
+        float adapted = u_ExposureTexture.Load(int3(0, 0, 0)).r;
+        exposure = (isfinite(adapted) && adapted > 0.0) ? adapted : exposure;
+    }
     float3 exposed = hdrColor * exposure;
 
     // 2. Film-Grade Tone Mapping Operator Selection

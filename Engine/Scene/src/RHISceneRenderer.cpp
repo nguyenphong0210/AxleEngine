@@ -1121,11 +1121,11 @@ namespace Axle {
         rootDesc.shaderStages = nri::StageBits::ALL;
 
         // Descriptor Set (space 1):
-        // Range 0: t0 (HDR Texture)
+        // Range 0: t0 (HDR Texture), t1 (adapted exposure)
         // Range 1: s0 (Linear/Bilinear Sampler)
         nri::DescriptorRangeDesc ranges[2] = {};
         ranges[0].baseRegisterIndex = 0;
-        ranges[0].descriptorNum = 1;
+        ranges[0].descriptorNum = 2;
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
@@ -2773,7 +2773,8 @@ namespace Axle {
                                             nri::Descriptor* outputRTV,
                                             uint32_t width, uint32_t height,
                                             nri::Format outFormat,
-                                            const RHIToneMappingConstants& constants, RHI::RHIBuffer* frameConstants)
+                                            const RHIToneMappingConstants& constants, RHI::RHIBuffer* frameConstants,
+                                            nri::Descriptor* exposureSRV)
     {
         if (!m_Initialized || !inputHDR_SRV || !outputTarget || !outputRTV || width == 0 || height == 0) return false;
 
@@ -2784,7 +2785,8 @@ namespace Axle {
 
         // 2. Bind HDR Texture SRV & Sampler in Space 1
         if (m_ToneMappingDescriptorPool.IsValid() && m_ToneMappingDescriptorSet) {
-            m_ToneMappingDescriptorPool.UpdateTexture(m_ToneMappingDescriptorSet, 0, 0, inputHDR_SRV);
+            if (!m_ToneMappingDescriptorPool.UpdateTexture(m_ToneMappingDescriptorSet, 0, 0, inputHDR_SRV) ||
+                !m_ToneMappingDescriptorPool.UpdateTexture(m_ToneMappingDescriptorSet, 0, 1, exposureSRV ? exposureSRV : inputHDR_SRV)) return false;
             if (m_ToneMappingSampler.IsValid()) {
                 m_ToneMappingDescriptorPool.UpdateSampler(m_ToneMappingDescriptorSet, 1, 0, m_ToneMappingSampler.GetNative());
             }

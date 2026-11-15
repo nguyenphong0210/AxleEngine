@@ -16,8 +16,10 @@ RWTexture2D<float4> u_ExposureOutput : register(u0, space2);
 
 groupshared uint s_Histogram[64];
 
+// One group owns the frame histogram and the single exposure output. Sampling
+// a bounded grid avoids cross-group races while covering the full viewport.
 [numthreads(16, 16, 1)]
-void CSMain(uint3 dispatchThreadID : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
+void CSMain(uint groupIndex : SV_GroupIndex) {
     // Clear shared histogram
     if (groupIndex < 64) {
         s_Histogram[groupIndex] = 0;
@@ -30,14 +32,18 @@ void CSMain(uint3 dispatchThreadID : SV_DispatchThreadID, uint groupIndex : SV_G
     float maxLog = u_ExposureParams.y;
     float logRange = max(maxLog - minLog, 0.01);
 
-    if (dispatchThreadID.x < width && dispatchThreadID.y < height) {
-        float3 color = u_HDRTexture.Load(int3(dispatchThreadID.xy, 0)).rgb;
+    uint pixelCount = width * height;
+    uint stride = max(1u, (uint)ceil(sqrt(float(pixelCount) / 65536.0)));
+    uint sampleWidth = (width + stride - 1u) / stride;
+    uint sampleHeight = (height + stride - 1u) / stride;
+    for (uint sample = groupIndex; sample < sampleWidth * sampleHeight; sample += 256u) {
+        uint2 pixel = uint2((sample % sampleWidth) * stride, (sample / sampleWidth) * stride);
+        float3 color = u_HDRTexture.Load(int3(pixel, 0)).rgb;
         float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
-
-        if (luma > 0.0001) {
+        if (isfinite(luma) && luma > 0.0001) {
             float logLuma = clamp((log2(luma) - minLog) / logRange, 0.0, 1.0);
             uint binIndex = min((uint)(logLuma * 63.0), 63u);
-            InterlockedAdd(s_Histogram[binIndex], 1);
+            InterlockedAdd(s_Histogram[binIndex], 1u);
         }
     }
 
@@ -55,8 +61,7 @@ void CSMain(uint3 dispatchThreadID : SV_DispatchThreadID, uint groupIndex : SV_G
             totalWeight += count;
         }
 
-        float avgLogLuma = (totalWeight > 0.0) ? (weightedLogSum / totalWeight) : 0.0;
-        float avgLuma = exp2(avgLogLuma);
+        float avgLuma = (totalWeight > 0.0) ? exp2(weightedLogSum / totalWeight) : 0.0001;
 
         float keyValue = (u_ExposureLimits.z > 0.0) ? u_ExposureLimits.z : 0.18; // 18% middle grey
         float targetExposure = keyValue / max(avgLuma, 0.001);
@@ -64,7 +69,7 @@ void CSMain(uint3 dispatchThreadID : SV_DispatchThreadID, uint groupIndex : SV_G
 
         // Read previous exposure from output storage
         float prevExposure = u_ExposureOutput[uint2(0, 0)].r;
-        if (prevExposure <= 0.001) prevExposure = 1.0;
+        if (!isfinite(prevExposure) || prevExposure <= 0.001) prevExposure = 1.0;
 
         float speed = u_ExposureParams.z;
         float dt = u_ExposureParams.w;

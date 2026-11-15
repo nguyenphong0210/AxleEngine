@@ -262,6 +262,39 @@ static bool Run(RHIType backend) {
     settings.EnableAutoExposure = settings.EnableDDGI = true;
     RENDER_CHECK(draw() && view.GetTargets()->GetExposure() && view.GetTargets()->GetDDGI(),
         "optional targets match renderer requirements even without an authored DDGI grid");
+    // M15 S1.1: scene luminance must reach tone mapping through the GPU exposure
+    // target while the authored exposure remains fixed at 1.0.
+    auto savedScene = scene;
+    scene = std::make_shared<Scene>();
+    settings.EnableGTAO = settings.EnableContactShadows = settings.EnableSSR = settings.EnableBloom = false;
+    settings.EnableDDGI = settings.EnableFXAA = false;
+    settings.AutoExposureSpeed = 1000.0f;
+    settings.Exposure = 1.0f;
+    settings.EnableAutoExposure = false;
+    settings.ClearColor = {2.0f, 2.0f, 2.0f, 1.0f};
+    RENDER_CHECK(draw(), "manual bright reference renders");
+    const auto manualBright = ReadTexture(*view.GetColorTexture());
+    settings.EnableAutoExposure = true;
+    RENDER_CHECK(draw(), "automatic bright reference renders");
+    const auto automaticBright = ReadTexture(*view.GetColorTexture());
+    settings.EnableAutoExposure = false;
+    settings.ClearColor = {0.02f, 0.02f, 0.02f, 1.0f};
+    RENDER_CHECK(draw(), "manual dark reference renders");
+    const auto manualDark = ReadTexture(*view.GetColorTexture());
+    settings.EnableAutoExposure = true;
+    RENDER_CHECK(draw(), "automatic dark reference renders");
+    const auto automaticDark = ReadTexture(*view.GetColorTexture());
+    RENDER_CHECK(manualBright.size() == 64 * 64 * 4 && automaticBright.size() == manualBright.size() &&
+                 manualDark.size() == manualBright.size() && automaticDark.size() == manualBright.size() &&
+                 automaticBright[0] + 20 < manualBright[0] &&
+                 automaticDark[0] > manualDark[0] + 20,
+        "GPU auto exposure darkens a bright scene and lifts a dark scene at fixed authored exposure");
+    std::cout << "  auto_exposure_gpu bright_manual=" << int(manualBright[0])
+              << " bright_auto=" << int(automaticBright[0])
+              << " dark_manual=" << int(manualDark[0])
+              << " dark_auto=" << int(automaticDark[0]) << '\n';
+    scene = savedScene;
+    settings.ClearColor = {0, 0, 0, 1};
     settings.EnableGTAO = settings.EnableContactShadows = settings.EnableSSR = settings.EnableBloom = false;
     settings.EnableAutoExposure = settings.EnableDDGI = false;
     settings.EnableToneMapping = settings.EnableFXAA = false;

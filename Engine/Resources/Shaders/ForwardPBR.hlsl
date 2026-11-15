@@ -499,7 +499,12 @@ float4 PSMain(PSInput input) : SV_Target0 {
     // Keep a finite floor for grazing/high-roughness samples and malformed
     // fallback LUTs; the final HDR clamp remains the last safety boundary.
     float2 ggxDFG = u_BRDFLUT.SampleLevel(u_EnvironmentSampler, float2(NdotV, roughness), 0.0).rg;
-    float ggxSingleScatterEnergy = max(ggxDFG.x + ggxDFG.y, 0.05);
+    float ggxSingleScatterEnergy = ggxDFG.x + ggxDFG.y;
+    // The resident neutral fallback LUT has r=1. A missing/corrupt bake must
+    // also stay neutral instead of magnifying every direct and indirect lobe.
+    if (!isfinite(ggxSingleScatterEnergy) || ggxSingleScatterEnergy <= 0.0)
+        ggxSingleScatterEnergy = 1.0;
+    ggxSingleScatterEnergy = clamp(ggxSingleScatterEnergy, 0.05, 1.0);
     float3 ggxEnergyCompensation = min(1.0 + F0 * (1.0 / ggxSingleScatterEnergy - 1.0), 8.0);
     
     // Direct Radiance Accumulation

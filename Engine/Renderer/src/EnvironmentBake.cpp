@@ -131,8 +131,15 @@ glm::vec2 IntegrateEnvironmentBRDF(float nDotV,float roughness,uint32_t samples)
         const double vh=std::max(glm::dot(v,h),0.0),nh=std::max(h.z,0.0);
         const auto l=2*vh*h-v;const double nl=std::max(l.z,0.0);
         if(nl<=0||nh<=0)continue;
-        const double k=r*r*.5;
-        const double g=(nv/(nv*(1-k)+k))*(nl/(nl*(1-k)+k));
+        // Match ForwardPBR's correlated Smith visibility for the isotropic
+        // GGX LUT slice. A Schlick product here yields a different directional
+        // single-scatter energy and miscalibrates the shader's compensation.
+        const double alpha=r*r;
+        const auto lambda=[alpha](double nDotW) {
+            const double tan2=(1-nDotW*nDotW)/(nDotW*nDotW);
+            return .5*(std::sqrt(1+alpha*alpha*tan2)-1);
+        };
+        const double g=1/(1+lambda(nv)+lambda(nl));
         const double visible=g*vh/(nh*nv),fc=std::pow(1-vh,5);
         a+=(1-fc)*visible;b+=fc*visible;
     }

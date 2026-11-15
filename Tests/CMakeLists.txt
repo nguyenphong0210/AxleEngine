@@ -501,6 +501,7 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_RenderWorkerUnit.cpp
     rendering/Test_RenderParallelRecordingUnit.cpp
     rendering/Test_RenderTransientGraphUnit.cpp
+    rendering/Test_M15_BRDFReferenceUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
 # M15-U1-01.1 & M15-U1-01.4: inspect canonical shader sources for lighting & exposure contracts.
@@ -519,6 +520,8 @@ if (MSVC)
     target_compile_options(AxleRenderUnitTests PRIVATE /bigobj /FS)
 endif()
 add_test(NAME RenderUnitTests COMMAND $<TARGET_FILE:AxleRenderUnitTests>)
+add_test(NAME M15BRDFReference COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-brdf-reference)
+set_tests_properties(M15BRDFReference PROPERTIES LABELS "render;cpu;m15" TIMEOUT 30)
 add_test(NAME RenderHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleRenderUnitTests> --case render-probe)
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES LABELS "render;cpu")
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES TIMEOUT 30)

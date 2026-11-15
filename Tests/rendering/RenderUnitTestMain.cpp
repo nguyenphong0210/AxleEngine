@@ -11,6 +11,7 @@ bool RunViewContextUnitTests();
 bool RunRenderPassUnitTests();
 bool RunResolvedSurfaceUnitTests();
 bool RunLightingServiceUnitTests();
+bool RunM15BRDFReferenceUnitTests();
 bool RunTemporalPostDiagnosticsUnitTests();
 namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderWorkerUnitTests(); }
@@ -22,6 +23,9 @@ int main(int argc, char** argv) {
         std::cout << "[AxleRenderUnitTests] Running intentional self-test failure probe...\n";
         std::cout << "AXLE_TEST_EXPECTED_FAILURE render-probe\n";
         return Axle::RenderTests::Check(false, "Deliberate test harness failure probe (--self-test-failure)", __FILE__, __LINE__) ? 0 : 1;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--m15-brdf-reference") {
+        return RunM15BRDFReferenceUnitTests() ? 0 : 1;
     }
 
     std::cout << "========================================================\n";
@@ -70,6 +74,10 @@ int main(int argc, char** argv) {
 
     if (!RunLightingServiceUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunLightingServiceUnitTests FAILED!\n";
+        return 1;
+    }
+    if (!RunM15BRDFReferenceUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunM15BRDFReferenceUnitTests FAILED!\n";
         return 1;
     }
 

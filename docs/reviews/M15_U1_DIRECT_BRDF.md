@@ -69,3 +69,27 @@ Result: **PASS**.
 - Source commit: `35905c6`.
 
 Next sequential leaf: `M15-U1-01.4 — Freeze exposure interaction`.
+
+## M15-U1-01.4 — Freeze exposure interaction
+
+Result: **PARTIAL / NOT RUN for Editor visual gate; automated test PASS**.
+
+- Implementation & Contracts:
+  - Verified direct sunlight reference radiance $L_o \approx 1.1140846\text{ cd/m}^2$ under frozen `DIRECT_LUX_TO_RADIANCE` and diffuse $1/\pi$.
+  - Linear exposure scaling: exposure 1.0 preserves radiance 1:1; exposure 2.0 doubles radiance linearly.
+  - Safe fallback: non-positive or non-finite exposure falls back to 1.0 safely without invalid black/negative output.
+  - Auto-exposure contract: `PostProcessService` adapts exposure dynamically to direct scene luminance, clamping strictly to $[\text{AutoExposureMin}, \text{AutoExposureMax}] = [0.1, 10.0]$.
+  - `ToneMapping.hlsl` verifies positive exposure fallback `(u_Params.x > 0.0) ? u_Params.x : 1.0` and pre-tonemapping radiance scaling `hdrColor * exposure`.
+- Verification:
+  - `cmake --build build --config Debug --target AxleRenderUnitTests`: exit 0.
+  - `cmake --build build --config Release --target AxleRenderUnitTests`: exit 0.
+  - `ctest --test-dir build -C Debug -R '^RenderUnitTests$' --output-on-failure`: exit 0 (1/1 passed).
+  - `ctest --test-dir build -C Release -R '^RenderUnitTests$' --output-on-failure`: exit 0 (1/1 passed).
+  - `cmake --build build --config Debug --target AxleEditor`: exit 0.
+  - `cmake --build build --config Release --target AxleEditor`: exit 0.
+  - `git diff --check`: exit 0.
+- Source commit: `6615896`.
+
+Editor visual gate remains open: build and launch AxleEditor, open test fixture, sweep exposure, and verify smooth highlight/shadow scaling without black pixels or clamping artifacts.
+
+Next sequential SubUnit: `S1.2 — GGX visibility and F0 reference (M15-U1-02.1)`.

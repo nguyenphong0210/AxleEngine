@@ -3713,6 +3713,17 @@
       "base_commit": "35905c6",
       "timestamp_utc": "2026-11-15T08:04:55.332937+00:00",
       "body": "DELIVERY: M15-U1-01.3 BRDF normalization and energy partition contract frozen in commit 35905c6.\n\nImplementation:\n- Added BRDF_DIFFUSE_NORMALIZATION = 0.31830988618379067154 and BRDF_SPECULAR_DENOMINATOR_SCALE = 4.0 to Engine/Resources/Shaders/ForwardPBR.hlsl; added INV_PI to PBRCommon.hlsli.\n- Standardized specular Cook-Torrance denominator across Sun, Point, and Spot lights to BRDF_SPECULAR_DENOMINATOR_SCALE * NdotV * max(NdotL, 0.001) + 0.0001.\n- Extended Tests/rendering/Test_LightingServicesUnit.cpp with dedicated BRDF normalization assertions: verified 1/PI precision, numerical GGX NDF hemispherical integration (1.000 ± 0.002) across multiple roughnesses, Lambertian diffuse hemispherical integral (1.0000 ± 1e-4), dielectric and metallic energy partition (kD = 0 for metals, kD + kS = 1 for dielectrics), and canonical shader tokens across sun, point, and spot lights.\n- Recorded PASS in docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md and docs/reviews/M15_U1_DIRECT_BRDF.md.\n\nVerification:\n- cmake --build build --config Debug --target AxleRenderUnitTests: exit 0.\n- cmake --build build --config Release --target AxleRenderUnitTests: exit 0.\n- ctest --test-dir build -C Debug -R ^RenderUnitTests$ --output-on-failure: exit 0, 1/1 passed.\n- ctest --test-dir build -C Release -R ^RenderUnitTests$ --output-on-failure: exit 0, 1/1 passed.\n- git diff --check: exit 0.\n\nNo Editor evidence is required for this CPU/shader reference contract leaf.\n"
+    },
+    {
+      "id": "CG-20261115T081112400686Z-GEMINI-701172",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-RENDER-ARCHITECTURE-REPAIRS",
+      "reply_to": "CG-20261115T080455332937Z-GEMINI-681f0a",
+      "base_commit": "6615896",
+      "timestamp_utc": "2026-11-15T08:11:12.400686+00:00",
+      "body": "DELIVERY: M15-U1-01.4 exposure interaction contract completed in commit 6615896; visual gate remains open.\n\nImplementation:\n- Added AXLE_TONEMAPPING_SHADER_PATH compile definition to AxleRenderUnitTests in Tests/CMakeLists.txt.\n- Extended Tests/rendering/Test_LightingServicesUnit.cpp with dedicated exposure interaction assertions: verified reference sunlight radiance (~1.114), 1:1 scaling under exposure 1.0, linear doubling under exposure 2.0, non-positive fallback to 1.0, auto-exposure scene luminance clamping [0.1, 10.0], and ToneMapping.hlsl positive exposure fallback and pre-tonemap scaling tokens.\n- Debug and Release AxleEditor build successfully.\n- Recorded automated PASS in docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md and docs/reviews/M15_U1_DIRECT_BRDF.md.\n\nVerification:\n- cmake --build build --config Debug --target AxleRenderUnitTests: exit 0.\n- cmake --build build --config Release --target AxleRenderUnitTests: exit 0.\n- ctest --test-dir build -C Debug -R ^RenderUnitTests$ --output-on-failure: exit 0, 1/1 passed.\n- ctest --test-dir build -C Release -R ^RenderUnitTests$ --output-on-failure: exit 0, 1/1 passed.\n- cmake --build build --config Debug --target AxleEditor: exit 0.\n- cmake --build build --config Release --target AxleEditor: exit 0.\n- git diff --check: exit 0.\n\nEditor visual gate remains open: user inspection or screenshot in AxleEditor required for final visual closure. SubUnit S1.1 automated items are complete.\n"
     }
   ],
   "deferred_tasks": [

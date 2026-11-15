@@ -223,6 +223,7 @@ the item is visible.
 - [ ] **M15-U1-01.4 — Freeze exposure interaction.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
+  - **Evidence:** Automated tests PASS in Debug/Release `RenderUnitTests` (source commit `6615896`); validates direct sunlight reference radiance (~1.114), 1:1 scaling at exposure 1.0, linear doubling at exposure 2.0, non-positive fallback to 1.0, auto-exposure luminance adaptation clamped to [0.1, 10.0], and `ToneMapping.hlsl` positive exposure fallback and pre-tonemap scaling tokens; Debug/Release `AxleEditor` build exit 0. Editor visual gate remains open pending visual inspection.
 - [ ] **M15-U1-02.1 — Validate GGX visibility/normal-distribution compensation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

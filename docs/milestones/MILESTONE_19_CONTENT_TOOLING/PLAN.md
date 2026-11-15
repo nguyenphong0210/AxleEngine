@@ -1,4 +1,4 @@
-# Milestone 18 — Content Authoring Studios & Tooling Plan
+# Milestone 19 — Content Authoring Studios & Tooling Plan
 
 **Status:** Proposed; packages released per explicit user instruction.
 **Baseline:** Post-OPT-10 asset registry, transaction-safe document foundations, and RHI preview viewports.
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-Milestone 18 establishes a production-grade, crash-resilient content authoring pipeline across AxleEditor and the standalone Runtime. It consolidates the historical visual authoring milestones (Historical Phase 38.3 Material Inspector, Phase 39 Visual Particle & VFX Studio, and Phase 40 Skeletal Animation Studio) into four unified, modular child phases (Phase 48.1 through 48.4, formerly OPT-17, 18, 19, Tools).
+Milestone 19 establishes a production-grade, crash-resilient content authoring pipeline across AxleEditor and the standalone Runtime. It consolidates the historical visual authoring milestones (Historical Phase 38.3 Material Inspector, Phase 39 Visual Particle & VFX Studio, and Phase 40 Skeletal Animation Studio) into four unified, modular child phases (Phase 48.1 through 48.4, formerly OPT-17, 18, 19, Tools).
 
 ---
 
@@ -33,14 +33,14 @@ Milestone 18 establishes a production-grade, crash-resilient content authoring p
 - [ ] **C17-07: Additive Animation & Upper-Body Layering** — Layered animation masks allowing upper-body actions (aiming, shooting, reloading) while lower-body executes locomotion loops.
 
 ### Phase 48.2: Visual FX Studio & GPU Particle Integration (formerly OPT-18 / Phase 39)
-- [ ] **C18-01: Document Lifecycle & Preview Isolation** — Standalone `.axlevfx` document model with multi-emitter persistence; isolated preview viewport simulation preventing active scene mutations.
-- [ ] **C18-02: Advanced Parameter Modes** — Constant, Two Constants (Random between two constants), Curve, Two Curves, and Color/Alpha gradient modes with deterministic seeds.
-- [ ] **C18-03: Advanced Motion & Emitter Modules** — Rate over distance (vehicle trails), start delay, prewarm, per-axis velocity/force over lifetime, orbital motion, and emitter-motion inheritance.
-- [ ] **C18-04: Ribbon & Trail Emitters** — Bounded per-particle history tracking, dynamic quad ribbon generation, texture UV stretch/wrap modes, and generation-safe particle handles.
-- [ ] **C18-05: Instanced Mesh Particles** — 3D mesh particle rendering with material overrides, custom orientation, and bounding-sphere sorting.
-- [ ] **C18-06: Particle Collision & Gameplay Events** — World collision against ground planes and mesh colliders; event-driven sub-emitter spawning on particle birth, collision, and death.
-- [ ] **C18-07: Flipbook Sub-Frame Motion Blending** — Sprite sheet UV animation with optical-flow or linear sub-frame blending for ultra-smooth smoke/fire effects.
-- [ ] **C18-08: GPU Particle Simulation & Visual Effect Graph** — Compute shader particle simulation pass on modern RHI; bitonic GPU particle sorting; direct indirect draw dispatch (`vkCmdDrawIndirect` / `ExecuteIndirect`).
+- [ ] **C19-01: Document Lifecycle & Preview Isolation** — Standalone `.axlevfx` document model with multi-emitter persistence; isolated preview viewport simulation preventing active scene mutations.
+- [ ] **C19-02: Advanced Parameter Modes** — Constant, Two Constants (Random between two constants), Curve, Two Curves, and Color/Alpha gradient modes with deterministic seeds.
+- [ ] **C19-03: Advanced Motion & Emitter Modules** — Rate over distance (vehicle trails), start delay, prewarm, per-axis velocity/force over lifetime, orbital motion, and emitter-motion inheritance.
+- [ ] **C19-04: Ribbon & Trail Emitters** — Bounded per-particle history tracking, dynamic quad ribbon generation, texture UV stretch/wrap modes, and generation-safe particle handles.
+- [ ] **C19-05: Instanced Mesh Particles** — 3D mesh particle rendering with material overrides, custom orientation, and bounding-sphere sorting.
+- [ ] **C19-06: Particle Collision & Gameplay Events** — World collision against ground planes and mesh colliders; event-driven sub-emitter spawning on particle birth, collision, and death.
+- [ ] **C19-07: Flipbook Sub-Frame Motion Blending** — Sprite sheet UV animation with optical-flow or linear sub-frame blending for ultra-smooth smoke/fire effects.
+- [ ] **C19-08: GPU Particle Simulation & Visual Effect Graph** — Compute shader particle simulation pass on modern RHI; bitonic GPU particle sorting; direct indirect draw dispatch (`vkCmdDrawIndirect` / `ExecuteIndirect`).
 
 ### Phase 48.3: Visual Material Graph UI & Advanced Scene Tooling (formerly OPT-19 / Phase 38.3)
 - [ ] **C19-01: Interactive Node Canvas** — Modern node graph editor in AxleEditor (`imnodes` / `ImGui Node Editor`); real-time AST lowering to HLSL with DXC compiler diagnostics.

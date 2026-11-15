@@ -355,7 +355,8 @@ The renderer facade returns a structured frame result containing success, fallba
 | GPU timestamps | scoped timestamp query | `unknown` timing state; never zero-as-valid |
 | D3D12/Vulkan | full RHI path | explicit validation result |
 | OpenGL | supported analytical subset | documented reduced feature set |
-| Ray tracing | optional M15+ extension | raster reflection/probe path |
+| Planar reflection | M15 raster extension | SSR/probe/sky fallback |
+| Ray tracing | M16 backend extension | planar/SSR/probe/sky fallback |
 
 Fallback selection is part of the frame result and diagnostic report. It is not hidden from the editor or acceptance tests.
 

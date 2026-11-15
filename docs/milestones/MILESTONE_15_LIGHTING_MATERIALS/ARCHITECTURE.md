@@ -22,8 +22,7 @@ M15 Lighting and Material Fidelity
       ├─ U7 Experimental DDGI
       ├─ U8 Post and temporal
       ├─ U9 Advanced materials
-      ├─ U10 Authoring and acceptance
-      └─ U11 Optional ray-traced extension
+      └─ U10 Authoring and acceptance
           └─ each Unit contains independently buildable/checkable SubUnits
               └─ high-risk SubUnits contain focused WorkItems with their own evidence
 ```
@@ -40,6 +39,7 @@ The architecture owns the Unit contracts. [PLAN.md](PLAN.md) owns the tickable S
 - GTAO/contact shadows with explicit composition policy.
 - Hi-Z and material-aware raster SSR.
 - Authored/dynamic local reflection captures with prefilter and blending.
+- Planar reflection through an isolated mirrored capture view and explicit raster fallback.
 - Stable exposure, bloom and TAA.
 
 ### Opt-in extensions
@@ -244,18 +244,19 @@ flowchart TD
     G --> H["SSRCopy"]
     H --> I0["HiZ0"]
     I0 --> I1["HiZ1 ... HiZ7"]
-    I1 --> J["SSRCompute -> SSRApply"]
-    J --> K["FogCopy -> FogCompute -> FogApply"]
-    K --> L["Bloom copy/down/up/apply"]
-    L --> M["AutoExposure"]
-    M --> N["TAA resolve/copy"]
-    N --> O["ToneMapping"]
-    O --> P["FXAA"]
-    P --> Q["Export / presentation target"]
-    Z["RHIViewTargets: color, depth, normal, storage, HiZ, history, AO, bloom, exposure, DDGI"] -. feeds .-> B
+    I1 --> J["PlanarReflectionCapture -> PlanarReflectionResolve"]
+    J --> K["SSRCompute -> SSRApply"]
+    K --> L["FogCopy -> FogCompute -> FogApply"]
+    L --> M["Bloom copy/down/up/apply"]
+    M --> N["AutoExposure"]
+    N --> O["TAA resolve/copy"]
+    O --> P["ToneMapping"]
+    P --> Q["FXAA"]
+    Q --> R["Export / presentation target"]
+    Z["RHIViewTargets: color, depth, normal, storage, HiZ, planar, history, AO, bloom, exposure, DDGI"] -. feeds .-> B
     Z -. feeds .-> G
     Z -. feeds .-> J
-    Z -. feeds .-> N
+    Z -. feeds .-> O
 ```
 
 The pass names above are the current `RHISceneRendererPasses.cpp` scheduler groups. The graph validates declared texture uses and invokes RHI transitions, while the actual draw/dispatch and descriptor updates are still recorded directly by `RHISceneRenderer`.
@@ -285,28 +286,29 @@ To eliminate the monolithic callback adapter debt in `RHISceneRendererPasses.cpp
    - `P3 (Occlusion)` $\rightarrow$ `GTAOPass`
    - `P4 (Hi-Z Foundation)` $\rightarrow$ `HiZGenerationPass`
    - `P6 (Reflections)` $\rightarrow$ `ScreenSpaceReflectionPass`
+   - `S5.8 (Planar Reflection)` $\rightarrow$ `PlanarReflectionPass` with an isolated capture `ViewContext`
    - `P8 (Post & Temporal)` $\rightarrow$ `PostProcessPass` and `TAAPass`
    - `P9 (Atmosphere)` $\rightarrow$ `FroxelFogPass`
    - `U0/U1 (Shadows & Opaque)` $\rightarrow$ `CascadedShadowPass` and `ForwardOpaquePass`
 4. **Renderer Role Transition**: `RHISceneRenderer` transitions into a lightweight facade that instantiates and registers these passes into `RenderPassScheduler` during initialization and dispatches execution via `m_PassScheduler.Execute(context)` per frame.
 
-### 3C. Scope boundaries: Milestone 15 vs Milestone 16
+### 3C. Scope boundaries: Milestone 15 vs Milestone 16/17
 
 U3-09.1–10.2 implementation checkpoint: the first pass contracts and graph declarations are under `Engine/Scene/src/Passes`, where the scene renderer currently owns their resources. GTAO and Hi-Z recording has moved there, but the existing scheduler adapter still invokes it. The `Engine/Renderer` paths and direct `IRenderPass` scheduler registration above remain the target for the later pass extraction/orchestration steps, not a claim about the current tree.
 
 To prevent scope creep and maintain milestone focus, technical responsibilities are split as follows:
 
 - **Modular IRenderPass Extraction**: 100% owned by M15 through progressive pass replacement.
-- **Hi-Z Depth Reduction**: 100% owned by M15 (U5/S5.1) for hierarchical SSR raymarching; reused in M16 for GPU occlusion culling.
+- **Hi-Z Depth Reduction**: 100% owned by M15 (U5/S5.1) for hierarchical SSR raymarching; reusable by M17 for GPU occlusion culling.
 - **Denoising Strategy**:
   - *M15:* Pass-local filtering (Bilateral filter for GTAO, Roughness cone filtering for SSR, Variance clipping for TAA).
-  - *M16 / U11:* Unified spatiotemporal denoising framework (SVGF) if dynamic ray tracing is enabled.
+  - *M16:* Unified spatiotemporal denoising framework (SVGF) for RT shadows/reflections.
 - **Clustered / Tiled Light Culling**:
-  - Formally assigned to **Milestone 16 (Phase 46.3)** to align with GPU-driven geometry culling and high-throughput scalability ($100{,}000+$ instances, hundreds of dynamic lights).
+  - Formally assigned to **Milestone 17** to align with GPU-driven geometry culling and high-throughput scalability ($100{,}000+$ instances, hundreds of dynamic lights).
   - M15 focuses strictly on lighting fidelity with bounded active light capacity managed by `LightingService`.
 - **Bindless Material Graph**:
   - *M15:* RHI `Tier2Bindless` heap resource management and canonical surface parameter packing.
-  - *M16:* Complete dynamic HLSL bindless array indexing (`g_Textures[index]`) to support GPU-driven indirect draw execution (`ExecuteIndirect` / Mesh Shaders).
+  - *M17:* Complete dynamic HLSL bindless array indexing (`g_Textures[index]`) to support GPU-driven indirect draw execution (`ExecuteIndirect` / Mesh Shaders).
 
 ## 4. Canonical material/surface contract
 
@@ -393,6 +395,14 @@ Dynamic capture requires six 90-degree views, correct depth/color formats, captu
 
 Fallback order is SSR confidence → valid local probe → sky IBL → neutral ambient.
 
+### Planar reflection
+
+Planar reflection is a raster reflection source owned by M15 for selected planes such as floors, mirrors and water surfaces. It must never call the parent view recursively. The renderer creates a separate capture `ViewContext` with its own camera matrices, jitter policy, history generation and target set.
+
+The capture camera is mirrored across the authored plane and uses an oblique clip plane to exclude geometry behind the reflector. A dedicated `PlanarReflectionPass` declares color/depth reads and writes through `RenderGraph`, schedules completion-retained resources, and resolves a confidence value into the shared reflection-energy policy. Recursion is disabled during capture; SSR, local probes and sky IBL provide fallback when the planar target is invalid, clipped or unavailable.
+
+The planar target is invalidated by plane, camera, scene, geometry, material, light, resize and device-epoch changes. The parent view history is never reused by the capture view, and a failed update retains a last-good target only for the declared generation or falls back explicitly.
+
 ## 8. Lighting and visibility
 
 - Directional/point/spot lights share units, shadows and BRDF inputs.
@@ -418,9 +428,11 @@ TAA owns current/previous transforms, jitter, motion policy, history validity/ge
 - Material Graph emits the same advanced fields or reports explicit unsupported scope.
 - Native asset/component/runtime/GPU/Inspector/Preview use matching defaults and clamps.
 
-## 11. Ray-traced extension boundary
+## 11. M16 ray-tracing handoff boundary
 
-Capability reporting is not implementation. A real RT extension requires backend policy, BLAS/TLAS ownership/update, RT pipeline stages, ForwardPBR-compatible material evaluation, denoising, temporal rejection and shared geometry with DDGI. Until those exist, M15 promises raster SSR/probes only and labels exact off-screen dynamic mirror reflection deferred.
+M15 does not implement the ray-tracing backend. It supplies the contracts M16 consumes: canonical `ResolvedSurface`, per-view `ViewContext`, capture/target lifetime and completion rules, material-energy resolve, denoising-history invalidation and the raster fallback chain. M16 owns capability policy, BLAS/TLAS, RT pipeline/SBT, RT shadows/reflections, unified denoising and optional RT GI.
+
+Capability reporting alone is not implementation. Until M16 passes its backend and material-parity gates, RT remains disabled or falls back to planar reflection, SSR, local probes and sky IBL without changing authored scene data.
 
 ## 12. Fallback and compatibility policy
 
@@ -429,9 +441,10 @@ Capability reporting is not implementation. A real RT extension requires backend
 | D3D12/Vulkan compute | GTAO, Hi-Z, SSR, fog, post | Explicit disable/diagnostic and stable direct/IBL path |
 | OpenGL | Analytical direct/ambient and supported material path | Diagnose unsupported compute; no false parity claim |
 | SSR miss | Local probe | Sky IBL, then neutral ambient |
+| Planar target miss/failure | Last-good planar generation | SSR, local probe, then sky IBL |
 | Probe failure | Last-good generation | Sky IBL/SSR policy |
 | DDGI unavailable | IBL/ambient diffuse | No authored-scene change |
-| RT unavailable | Raster SSR/probes | Documented quality reduction |
+| RT unavailable | Planar/SSR/probes | Documented quality reduction |
 
 ## 13. Quality tiers
 
@@ -440,7 +453,7 @@ Every tier specifies resolution, samples, update budget and memory:
 - **Low:** reduced AO/SSR/fog/post, no DDGI/RT, bounded probe updates.
 - **Medium:** half-resolution AO, raster SSR/probes, reduced fog/post history.
 - **High:** declared raster quality, dynamic probe scheduling and higher temporal quality.
-- **Ultra:** optional DDGI/RT only when capability and measured budget permit.
+- **Ultra:** optional DDGI in M15; RT quality tiers are defined and gated by M16.
 
 No tier enables a feature whose data/fallback contract is incomplete.
 
@@ -448,4 +461,4 @@ No tier enables a feature whose data/fallback contract is incomplete.
 
 Every checkpoint supplies exact commit/source/configuration, Debug/Release builds, physical D3D12/Vulkan results, applicable OpenGL/fallback results, validation logs, deterministic images/readbacks, failure/lifetime behavior, hardware/driver/resolution measurements and known limitations.
 
-M15 is accepted only when [PLAN.md](PLAN.md) U10/S10.5 is complete. Experimental DDGI and optional RT may be separately deferred, but deferred items remain visibly unchecked and excluded from the completion claim.
+M15 is accepted only when [PLAN.md](PLAN.md) U10/S10.5 is complete. Experimental DDGI may be separately deferred; RT is excluded from M15 acceptance and tracked by M16.

@@ -1,9 +1,9 @@
 # AxleEngine Master Development Roadmap
 
 This is the canonical master execution roadmap for AxleEngine.
-The entire engine lifecycle is governed by a unified **Milestone** architecture spanning **Milestones 01 through 19**. Each Milestone manages its sequential **Phases**.
+The entire engine lifecycle is governed by a unified **Milestone** architecture spanning **Milestones 01 through 20**. Each Milestone manages its sequential **Phases**.
 
-Detailed task checklists, work breakdown packages, and verification criteria live strictly within each Milestone's dedicated `PLAN.md` under [`docs/milestones/`](docs/milestones/README.md). Active technical milestones (Milestones 12–18) also maintain a companion `ARCHITECTURE.md` establishing subsystem designs, data contracts, and technology limits.
+Detailed task checklists, work breakdown packages, and verification criteria live strictly within each Milestone's dedicated `PLAN.md` under [`docs/milestones/`](docs/milestones/README.md). Active technical milestones (Milestones 12–20) also maintain a companion `ARCHITECTURE.md` establishing subsystem designs, data contracts, and technology limits.
 
 ---
 
@@ -26,10 +26,11 @@ Detailed task checklists, work breakdown packages, and verification criteria liv
 | **13** | **Render Concurrency & Shader Compilation Pipeline** | **Completed:** Decoupled Render Thread, transient VRAM memory aliasing, DXC Material Graph compiler & pipeline caching (Phases 43.1–43.2).<br>**Deferred:** Asynchronous parallel command recording rollout (Phase 43.3). | [Plan](docs/milestones/MILESTONE_13_RENDER_CONCURRENCY/PLAN.md) · [Architecture](docs/milestones/MILESTONE_13_RENDER_CONCURRENCY/ARCHITECTURE.md) |
 | **14** | **Render Architecture Refactor** | **Accepted:** U0-U9 final source, ownership contracts, RenderGraph/resource lifetime, service seams, backend/fallback policy, migration tooling and M15 handoff. M15 feature fidelity remains deferred. | [Plan](docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE/PLAN.md) · [Architecture](docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE/ARCHITECTURE.md) · [U9 review](docs/reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md) |
 | **15** | **Lighting & Material Fidelity** | **HOLD:** Former M14 feature milestone, now dependent on M14 architecture contracts. Includes direct BRDF, GTAO/contact, SSR, reflection captures, fog, DDGI, post/temporal and advanced materials (Phase 45). | [Plan](docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md) · [Architecture](docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/ARCHITECTURE.md) |
-| **16** | **Scalable Geometry & Virtual Geometry** | **Proposed:** Offline algorithmic autoLOD pipeline via `meshoptimizer` (Phase 46.1) and Nanite-style continuous virtual geometry with Task/Mesh Shaders (Phase 46.2). | [Plan](docs/milestones/MILESTONE_16_GEOMETRY_VISIBILITY/PLAN.md) · [Architecture](docs/milestones/MILESTONE_16_GEOMETRY_VISIBILITY/ARCHITECTURE.md) |
-| **17** | **Simulation Scale & Logic LOD** | **Proposed:** Significance evaluation tiers, deterministic staggered modulo scheduler, spatial hash grid, 0% CPU spatial dormancy bubble, kinematic physics bypass (Phases 47.1–47.4). | [Plan](docs/milestones/MILESTONE_17_SIMULATION_SCALE/PLAN.md) · [Architecture](docs/milestones/MILESTONE_17_SIMULATION_SCALE/ARCHITECTURE.md) |
-| **18** | **Content Authoring Studios & Tooling** | **Proposed:** Skeletal Animation Studio (Phase 48.1), Visual FX Studio & GPU Particles (Phase 48.2), Material Graph UI Canvas (Phase 48.3), Packaging Cooker & Asset Linter (Phase 48.4). | [Plan](docs/milestones/MILESTONE_18_CONTENT_TOOLING/PLAN.md) · [Architecture](docs/milestones/MILESTONE_18_CONTENT_TOOLING/ARCHITECTURE.md) |
-| **19** | **Performance Profiling, Parity & Master Rollout** | **Proposed:** Standardized benchmark matrix, automated multi-backend image parity (PSNR/SSIM), GPU timestamp telemetry, simulated device-loss recovery, final production scorecard (Phases 49.1–49.6). | [Plan](docs/milestones/MILESTONE_19_PERFORMANCE_ROLLOUT/PLAN.md) · [Architecture](docs/milestones/MILESTONE_19_PERFORMANCE_ROLLOUT/ARCHITECTURE.md) |
+| **16** | **Ray Tracing Backend** | **Proposed:** D3D12/Vulkan capability policy, BLAS/TLAS lifecycle, RT pipeline/SBT, RT shadows/reflections, unified denoising, material parity and explicit raster fallback. | [Plan](docs/milestones/MILESTONE_16_RAY_TRACING/PLAN.md) · [Architecture](docs/milestones/MILESTONE_16_RAY_TRACING/ARCHITECTURE.md) |
+| **17** | **Scalable Geometry & Virtual Geometry** | **Proposed:** Offline algorithmic autoLOD pipeline via `meshoptimizer` (Phase 46.1) and Nanite-style continuous virtual geometry with Task/Mesh Shaders (Phase 46.2). | [Plan](docs/milestones/MILESTONE_17_GEOMETRY_VISIBILITY/PLAN.md) · [Architecture](docs/milestones/MILESTONE_17_GEOMETRY_VISIBILITY/ARCHITECTURE.md) |
+| **18** | **Simulation Scale & Logic LOD** | **Proposed:** Significance evaluation tiers, deterministic staggered modulo scheduler, spatial hash grid, 0% CPU spatial dormancy bubble, kinematic physics bypass (Phases 47.1–47.4). | [Plan](docs/milestones/MILESTONE_18_SIMULATION_SCALE/PLAN.md) · [Architecture](docs/milestones/MILESTONE_18_SIMULATION_SCALE/ARCHITECTURE.md) |
+| **19** | **Content Authoring Studios & Tooling** | **Proposed:** Skeletal Animation Studio (Phase 48.1), Visual FX Studio & GPU Particles (Phase 48.2), Material Graph UI Canvas (Phase 48.3), Packaging Cooker & Asset Linter (Phase 48.4). | [Plan](docs/milestones/MILESTONE_19_CONTENT_TOOLING/PLAN.md) · [Architecture](docs/milestones/MILESTONE_19_CONTENT_TOOLING/ARCHITECTURE.md) |
+| **20** | **Performance Profiling, Parity & Master Rollout** | **Proposed:** Standardized benchmark matrix, automated multi-backend image parity (PSNR/SSIM), GPU timestamp telemetry, simulated device-loss recovery, final production scorecard (Phases 49.1–49.6). | [Plan](docs/milestones/MILESTONE_20_PERFORMANCE_ROLLOUT/PLAN.md) · [Architecture](docs/milestones/MILESTONE_20_PERFORMANCE_ROLLOUT/ARCHITECTURE.md) |
 
 ---
 
@@ -48,14 +49,15 @@ flowchart LR
         M15["M15: Lighting<br/>Material Fidelity"]
     end
 
-    subgraph Era3 ["Next-Gen Scale: Milestones 16 - 19"]
-        M16["M16: Geometry<br/>autoLOD & Meshlets"]
-        M17["M17: Simulation<br/>Significance & Dormancy"]
-        M18["M18: Content<br/>Anim, VFX & Mat Studios"]
-        M19["M19: Rollout<br/>Benchmarks & Parity"]
+    subgraph Era3 ["Next-Gen Rendering and Scale: Milestones 16 - 20"]
+        M16["M16: Ray Tracing<br/>BLAS/TLAS & RT Shading"]
+        M17["M17: Geometry<br/>autoLOD & Meshlets"]
+        M18["M18: Simulation<br/>Significance & Dormancy"]
+        M19["M19: Content<br/>Anim, VFX & Mat Studios"]
+        M20["M20: Rollout<br/>Benchmarks & Parity"]
     end
 
-    M01_11 --> M12 --> M13 --> M14 --> M15 --> M16 --> M17 --> M18 --> M19
+    M01_11 --> M12 --> M13 --> M14 --> M15 --> M16 --> M17 --> M18 --> M19 --> M20
 
 ```
 
@@ -67,9 +69,9 @@ flowchart LR
 - **Status:** M12/M13 baseline completed; M14 architecture accepted; M15 lighting/material fidelity remains held for its own released scope and evidence.
 - M14 makes the renderer modular and establishes the `ViewContext`, pass, material, resource-generation and fallback contracts required for reliable lighting fidelity work in M15.
 
-### 2.3. Next-Gen Scale, Content Studios & Production Rollout (Milestones 16 through 19)
+### 2.3. Ray Tracing, Next-Gen Scale, Content Studios & Production Rollout (Milestones 16 through 20)
 - **Status:** Proposed & Fully Planned.
-- Targets AAA geometric throughput (autoLOD and Task/Mesh Shaders), vast entity simulation scaling (significance tiers and spatial hibernation), end-to-end visual authoring tools (Animation Studio, Visual FX Studio, and Material Graph Node Canvas), concluding with exhaustive benchmark verification across Direct3D 12, Vulkan, and OpenGL.
+- Targets a capability-safe ray-tracing backend with raster fallback, AAA geometric throughput (autoLOD and Task/Mesh Shaders), vast entity simulation scaling (significance tiers and spatial hibernation), end-to-end visual authoring tools (Animation Studio, Visual FX Studio, and Material Graph Node Canvas), concluding with exhaustive benchmark verification across Direct3D 12, Vulkan, and OpenGL.
 
 ---
 

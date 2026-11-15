@@ -1,4 +1,4 @@
-# Milestone 16 — Scalable Geometry and Virtual Geometry Architecture
+# Milestone 17 — Scalable Geometry and Virtual Geometry Architecture
 
 ## 1. Target and Scope
 

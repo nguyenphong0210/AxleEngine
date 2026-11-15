@@ -44,7 +44,7 @@ Use these states in reports:
 | Dynamic capture/prefilter/scheduling/multi-probe | Not complete | Open |
 | SSR material resolve | Fixed Hi-Z input exists; cone tracing, material Fresnel and energy resolve remain open | Open |
 | Fog/DDGI/exposure/bloom/TAA/SSS/LTC | Prototypes or partial paths exist; contracts are not closed | Open |
-| RT | Capability reporting only; no BLAS/TLAS or RT pipeline | Optional extension open |
+| RT | Capability reporting only; no BLAS/TLAS or RT pipeline | Moved to M16 Ray Tracing Backend |
 
 ## 3. Hierarchy and dependency order
 
@@ -66,17 +66,17 @@ The detailed execution sections below use `P0..P13` plus the separately gated `P
 | M15 | 45.5 | U2 Dynamic Environment | S2.1–S2.3 | Procedural sky, environment bake/cache and publication |
 | M15 | 45.3 / shared infrastructure | U3 Screen-Space Infrastructure | S3.1–S3.4 (`P1`, `P2`) | Targets, graph, descriptors, surface data, timing and histories |
 | M15 | 45.7–45.8 | U4 Occlusion | S4.1–S4.3 (`P3`) | GTAO, bilateral reconstruction and directional contact shadows |
-| M15 | 45.9–45.11 | U5 Reflections and Area Lights | S5.1–S5.8 (`P4`, `P5A–P5D`, `P6`, `P7`) | Hi-Z, captures, probes, SSR and LTC |
+| M15 | 45.9–45.11 | U5 Reflections and Area Lights | S5.1–S5.8 (`P4`, `P5A–P5D`, `P6`, `P7`) | Hi-Z, captures, probes, SSR, planar reflection and LTC |
 | M15 | 45.12 | U6 Atmosphere | S6.1–S6.3 (`P9`) | Froxel fog, shadows and temporal fog state |
 | M15 | 45.13 | U7 Experimental GI | S7.1–S7.4 (`P11`) | DDGI acquisition, atlases, visibility and feedback |
 | M15 | 45.14–45.15 | U8 Post and Temporal | S8.1–S8.6 (`P8`) | Exposure, bloom and TAA |
 | M15 | 45.16 | U9 Advanced Materials | S9.1–S9.5 (`P10`) | Sheen, absorption, dispersion, SSS and graph parity |
 | M15 | 45.18 | U10 Authoring and Rollout | S10.1–S10.5 (`P12`) | Editor, presets, evidence and final acceptance |
-| M15 | optional 45.19 extension | U11 Ray-Traced Extension | S11.1–S11.4 (`P13`) | BLAS/TLAS, RT reflections and RT-assisted GI |
+Phase 45.17 is the final performance/quality gate inside U10; it is not a separate implementation Unit. Ray tracing is removed from M15 scope and is planned as M16-RT.
 
-Phase 45.17 is the final performance/quality gate inside U10; it is not a separate implementation Unit. U11 is optional and cannot be claimed as part of core M15 unless its SubUnits pass.
+M16-RT owns BLAS/TLAS, RT pipelines, RT reflections/shadows, denoising and optional RT GI. M15 only supplies the material, view, capture and raster fallback contracts that M16 consumes.
 
-Package aliases in this table follow the recovery plan: P8 is post/temporal, P9 is atmosphere, P10 is advanced materials, P11 is experimental DDGI, and P12 is authoring/final acceptance. P6B and P13 remain separately gated extensions.
+Package aliases in this table follow the recovery plan: P8 is post/temporal, P9 is atmosphere, P10 is advanced materials, P11 is experimental DDGI, and P12 is authoring/final acceptance. P6B remains a separately gated raster extension; P13 is retired from M15 and re-homed in M16-RT.
 
 ### Unit closure rule
 
@@ -91,33 +91,33 @@ allowed only as a derived summary: it remains unchecked until every child leaf i
 PASS, and it carries no evidence separate from its children. Close each leaf
 immediately after its evidence passes, then update the derived parent summary.
 
-### 3.1 Scope allocation boundary: Milestone 15 vs Milestone 16
+### 3.1 Scope allocation boundary: Milestone 15 vs Milestone 16/17
 
-To prevent scope creep and maintain distinct milestones (M15 Fidelity vs M16 Scalability), the following architectural boundaries are strictly enforced:
+To prevent scope creep, M15 owns raster lighting/material fidelity, M16 owns ray tracing, and M17 owns scalable geometry/visibility. The following boundaries are enforced:
 
 | Architectural Item | Target Milestone | Allocation and Execution Contract |
 |---|---|---|
 | **1. Modular `IRenderPass` Extraction** | **M15 (100% Progressive)** | Replace the monolithic lambda adapters in `RHISceneRendererPasses.cpp` by creating dedicated pass classes under `Engine/Renderer/include/Axle/Passes/` and `src/Passes/` as each M15 feature package is delivered. |
-| **2. Hi-Z Depth Pyramid** | **M15 (100% Core)** | Delivered in U5/S5.1 (P4) with full compute downsampling and odd-dimension handling for SSR; reused in M16 for GPU-driven occlusion culling. |
-| **3. Denoising Strategy** | **M15 (Pass-Local) / M16 (Unified)** | M15 uses pass-local spatial/temporal filters: Bilateral reconstruction for GTAO (P3), Roughness cone-filtering for SSR (P6), and Variance-clipped TAA (P8). A unified spatiotemporal denoiser (SVGF) is deferred to M16 or U11 (RT extension). |
-| **4. Clustered / Tiled Light Culling** | **M16 (100% Deferred)** | Formally deferred to Milestone 16 (Phase 46.3 — Scalable Lighting Pipeline). M15 retains Forward+ lighting with a bounded active light capacity managed by `LightingService`. |
-| **5. Bindless Textures for Material Graph** | **M15 (Heap Runtime) / M16 (Full Compiler)** | M15 delivers runtime `Tier2Bindless` heap resource support and standard texture slot mapping. Full HLSL dynamically indexed bindless array emission (`g_Textures[index]`) for indirect draw execution is aligned with M16 Virtual Geometry / Meshlets. |
+| **2. Hi-Z Depth Pyramid** | **M15 (100% Core)** | Delivered in U5/S5.1 (P4) with full compute downsampling and odd-dimension handling for SSR; reusable by M17 for GPU-driven occlusion culling. |
+| **3. Denoising Strategy** | **M15 (Pass-Local) / M16 (Unified)** | M15 uses pass-local spatial/temporal filters: Bilateral reconstruction for GTAO (P3), Roughness cone-filtering for SSR (P6), and Variance-clipped TAA (P8). A unified spatiotemporal denoiser (SVGF) is deferred to M16 (RT backend). |
+| **4. Clustered / Tiled Light Culling** | **M17 (100% Deferred)** | Formally deferred to Milestone 17 (Scalable Geometry and Visibility). M15 retains Forward+ lighting with a bounded active light capacity managed by `LightingService`. |
+| **5. Bindless Textures for Material Graph** | **M15 (Heap Runtime) / M17 (Full Compiler)** | M15 delivers runtime `Tier2Bindless` heap resource support and standard texture slot mapping. Full HLSL dynamically indexed bindless array emission (`g_Textures[index]`) for indirect draw execution is aligned with M17 Virtual Geometry / Meshlets. |
 
 ### Dependency order
 
 ```text
-U0 -> U1/U2 -> U3 -> U4 -> U5 -> U6/U7 -> U8 -> U9 -> U10; U11 is optional and depends on U3/U5/U7.
+U0 -> U1/U2 -> U3 -> U4 -> U5 -> U6/U7 -> U8 -> U9 -> U10; M16-RT depends on M15 U3/U5/U7, and M17 depends on M15 contracts.
 
-Within U5: `S5.1 Hi-Z -> S5.2 Dynamic Capture -> S5.3 Prefilter -> S5.4 Invalidation/Scheduling -> S5.5 Multi-Probe -> S5.6 SSR -> S5.7 LTC`. The existing `P4/P5A–P5D/P6/P7` names are implementation aliases for these SubUnits.
+Within U5: `S5.1 Hi-Z -> S5.2 Dynamic Capture -> S5.3 Prefilter -> S5.4 Invalidation/Scheduling -> S5.5 Multi-Probe -> S5.6 SSR -> S5.7 LTC -> S5.8 Planar Reflection`. The existing `P4/P5A–P5D/P6/P7` names are implementation aliases for these SubUnits.
 ```
 
-P5A–P5D may reuse authored-probe work, but none may silently depend on unfinished P6. P13 is optional for raster M15 acceptance and mandatory only if exact dynamic off-screen reflections are product requirements.
+P5A–P5D may reuse authored-probe work, but none may silently depend on unfinished P6. Planar reflection is a required M15 raster contract; RT off-screen reflection is an M16 requirement.
 
 ## 4. Canonical atomic execution and acceptance checklist
 
 This is the only state-bearing checklist for M15. Each item is one independently
 implementable behavior with its own PASS condition and evidence. A SubUnit is
-PASS only when all its items are PASS; optional U11/P6B/DDGI items may be marked
+PASS only when all its items are PASS; optional P6B/DDGI items may be marked
 DEFERRED with an explicit reason.
 
 **Visual verification rule:** any item marked `EDITOR VISUAL` requires rebuilding
@@ -965,6 +965,37 @@ the item is visible.
 
 **Exit:** shape/roughness-correct, finite highlights without duplicate emitter energy.
 
+### U5 / S5.8 — Planar reflection
+
+Planar reflection is the deterministic raster path for a selected reflective plane. It uses a separate capture ViewContext and target generation so the main view history, camera jitter and scheduler state are never re-entered recursively.
+
+- [ ] **M15-U5-46.1 — Freeze planar surface contract.**
+  - **PASS when:** the plane transform, normal, clip distance, source view and reflection confidence are represented explicitly and use the canonical surface units.
+  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path.
+- [ ] **M15-U5-46.2 — Create independent mirrored capture ViewContext.**
+  - **PASS when:** the mirrored camera is derived from the plane, recursion is disabled, and capture state cannot mutate the parent view history.
+  - **Evidence:** record source commit and a focused capture-context test.
+- [ ] **M15-U5-46.3 — Allocate planar color/depth targets and graph edges.**
+  - **PASS when:** resize, format, lifetime and completion dependencies are declared through RenderGraph/RHIViewTargets.
+  - **Evidence:** record graph validation, resize and device-reset results.
+- [ ] **M15-U5-46.4 — Register a dedicated PlanarReflectionPass.**
+  - **PASS when:** capture, resolve and release are scheduled as explicit passes without callback recursion or hidden resource reads.
+  - **Evidence:** record pass registration and scheduler execution logs.
+- [ ] **M15-U5-46.5 — Resolve planar energy and fallback.**
+  - **PASS when:** planar confidence is blended once with SSR, local probe and sky IBL according to the shared reflection energy policy.
+  - **EDITOR VISUAL:** capture a fixed view with planar reflection enabled and disabled; no black edge or duplicate highlight is allowed.
+- [ ] **M15-U5-46.6 — Validate oblique clipping, edges and self-intersection.**
+  - **PASS when:** the reflected plane excludes geometry behind the mirror, clips at the declared extent and avoids self-reflection artifacts.
+  - **Evidence:** record edge, grazing-angle and self-intersection fixtures.
+- [ ] **M15-U5-46.7 — Validate invalidation and failure retention.**
+  - **PASS when:** plane/camera/scene/material/light changes invalidate the capture and a failed update retains last-good data or an explicit fallback.
+  - **Evidence:** record generation and failure-path tests.
+- [ ] **M15-U5-46.8 — Complete Editor and native evidence.**
+  - **PASS when:** Debug/Release Editor evidence and deterministic image/readback comparison agree with the native fixture.
+  - **EDITOR VISUAL:** show the same camera with planar reflection on and off and the relevant Rendering Features policy visible.
+
+**Exit:** a planar mirror produces stable, clipped reflection with explicit SSR/probe/IBL fallback and no recursive capture.
+
 ### U6 / S6.1–S6.3 — Volumetric fog and atmosphere
 
 - [ ] **M15-U6-01.1 — Allocate froxel resources.**
@@ -1361,55 +1392,9 @@ the item is visible.
 
 **Exit:** every accepted runtime feature is authorable and survives save/reload.
 
-### U11 / S11.1–S11.4 — Optional ray-traced extension
+### M16 handoff — Ray Tracing Backend
 
-- [ ] **M15-U11-01.1 — Freeze backend policy.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-01.2 — Freeze capability fallback.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-02.1 — Build BLAS.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-02.2 — Refit BLAS.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-03.1 — Build TLAS.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-03.2 — Update TLAS on scene/geometry change.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-04.1 — Add RT pipeline.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-04.2 — Add ray-generation/miss/closest-hit shaders.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-05 — Match ForwardPBR material/lighting evaluation.**
-  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
-- [ ] **M15-U11-06.1 — Add denoising.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-06.2 — Add temporal rejection.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-07 — Share geometry data with DDGI.**
-  - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: colored indirect bounce follows world probes and walls suppress leakage.
-- [ ] **M15-U11-08.1 — Test off-screen reflection.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
-- [ ] **M15-U11-08.2 — Test self-intersection.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U11-08.3 — Test fallback.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-
-**Exit:** off-screen reflection works within documented limits, or P13 is explicitly deferred.
+M15 does not contain a ray-tracing Unit. The former U11/P13 checklist is moved to [Milestone 16 Ray Tracing Backend](../MILESTONE_16_RAY_TRACING/PLAN.md). M15 is complete for this boundary when its raster contracts are explicit: `ResolvedSurface`, `ViewContext`, capture targets, reflection confidence/energy policy, denoising history invalidation and raster fallback. M16 must consume those contracts without introducing a second material interpretation.
 
 ### U10 / S10.5 — Final acceptance and rollout
 
@@ -1506,7 +1491,7 @@ the item is visible.
 ## 5. M15 completion rule
 
 M15 is accepted only when all required U0-U10 atomic items are PASS, optional
-U11/P6B/DDGI items are PASS or explicitly DEFERRED, and the final acceptance
+P6B/DDGI items are PASS or explicitly DEFERRED, and the final acceptance
 items record Debug/Release builds, native backend evidence, Editor visual review,
 parity artifacts, soak/performance measurements and an independent review. A
 compile, non-empty image or parent heading never substitutes for an item PASS.

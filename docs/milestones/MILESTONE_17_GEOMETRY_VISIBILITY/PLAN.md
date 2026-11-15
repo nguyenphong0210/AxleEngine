@@ -1,4 +1,4 @@
-# Milestone 16 — Scalable Geometry & Virtual Geometry Plan
+# Milestone 17 — Scalable Geometry & Virtual Geometry Plan
 
 **Status:** Proposed; packages released per explicit user instruction.
 **Baseline:** Post-OPT-10 architecture foundation, unified RenderService, and Hi-Z depth pyramid infrastructure.
@@ -8,22 +8,22 @@
 
 ## 1. Executive Summary
 
-Milestone 16 establishes scalable, high-throughput geometry rendering for AxleEngine. It combines an offline algorithmic decimation pipeline (**Phase 46.1 autoLOD**, formerly OPT-16) for universal compatibility across animated/skinned characters and fallback devices, with a real-time GPU-driven virtual geometry pipeline (**Phase 46.2 Meshlets & Task/Mesh Shaders**, formerly OPT-14) for rendering massive static scenes with zero CPU submission bottlenecks.
+Milestone 17 establishes scalable, high-throughput geometry rendering for AxleEngine. It combines an offline algorithmic decimation pipeline (**Phase 46.1 autoLOD**, formerly OPT-16) for universal compatibility across animated/skinned characters and fallback devices, with a real-time GPU-driven virtual geometry pipeline (**Phase 46.2 Meshlets & Task/Mesh Shaders**, formerly OPT-14) for rendering massive static scenes with zero CPU submission bottlenecks.
 
 ---
 
 ## 2. Completed Work Packages
 
-*(None yet — Milestone 16 is an unreleased, proposed milestone).*
+*(None yet — Milestone 17 is an unreleased, proposed milestone).*
 
 ---
 
 ## 3. Checklist
 
 ### Phase 46.1: Offline autoLOD Pipeline via `meshoptimizer` (formerly OPT-16)
-- [ ] **C16-01: Automated Mesh Decimation via `meshoptimizer`** — Integrate `meshopt_simplify` into the Asset Cooker to automatically generate discrete fallback LODs (LOD0 100%, LOD1 50%, LOD2 25%, LOD3 10%) on mesh import without DCC manual modeling.
-- [ ] **C16-02: Screen-Size Metrics & Hysteresis** — Implement projected bounding-sphere screen coverage thresholds and temporal dither cross-fading to eliminate visual pop during LOD transitions.
-- [ ] **C16-03: Shadow Caster LODs & Cooker Caching** — Implement aggressive LOD selection for shadow depth passes and binary asset caching in `.axleasset` / `.axlebin`.
+- [ ] **C17-01: Automated Mesh Decimation via `meshoptimizer`** — Integrate `meshopt_simplify` into the Asset Cooker to automatically generate discrete fallback LODs (LOD0 100%, LOD1 50%, LOD2 25%, LOD3 10%) on mesh import without DCC manual modeling.
+- [ ] **C17-02: Screen-Size Metrics & Hysteresis** — Implement projected bounding-sphere screen coverage thresholds and temporal dither cross-fading to eliminate visual pop during LOD transitions.
+- [ ] **C17-03: Shadow Caster LODs & Cooker Caching** — Implement aggressive LOD selection for shadow depth passes and binary asset caching in `.axleasset` / `.axlebin`.
 
 ### Phase 46.2: Nanite-Style Virtual Geometry & GPU Culling (formerly OPT-14)
 - [ ] **C14-01: Unified GPU Instance Buffer** — Define compact GPU instance structure (Transform, Bounds, Material ID, Visibility Flags) and streaming ring buffer in `RHISceneRenderer`.
@@ -35,9 +35,9 @@ Milestone 16 establishes scalable, high-throughput geometry rendering for AxleEn
 - [ ] **C14-07: Dense-Scene Scale Verification** — Benchmark dense scene fixture ($100,000+$ instances, $50\\text{M}+$ polygons) measuring CPU draw submission reduction and frame-time stability.
 
 ### Phase 46.3: Clustered Forward Light Culling & Scalable Lighting Pipeline
-- [ ] **C16-08: 3D Frustum Cluster Grid Compute Pass** — Reuse Froxel grid math from M15 to partition view frustum into exponential depth clusters ($16 \times 9 \times 24$ or $16 \times 9 \times 32$ AABBs).
-- [ ] **C16-09: GPU Light Culling & Index List Emission** — Compute shader testing light bounding volumes (point/spot spheres and cones) against cluster AABBs, outputting compact light index list and cluster grid offsets in GPU StructuredBuffers.
-- [ ] **C16-10: ForwardPBR Clustered Shading Integration** — Update ForwardPBR and Material Graph to sample cluster light indices per-pixel, supporting hundreds of active dynamic lights without CPU draw-call or constant-buffer bottlenecks.
+- [ ] **C17-08: 3D Frustum Cluster Grid Compute Pass** — Reuse Froxel grid math from M15 to partition view frustum into exponential depth clusters ($16 \times 9 \times 24$ or $16 \times 9 \times 32$ AABBs).
+- [ ] **C17-09: GPU Light Culling & Index List Emission** — Compute shader testing light bounding volumes (point/spot spheres and cones) against cluster AABBs, outputting compact light index list and cluster grid offsets in GPU StructuredBuffers.
+- [ ] **C17-10: ForwardPBR Clustered Shading Integration** — Update ForwardPBR and Material Graph to sample cluster light indices per-pixel, supporting hundreds of active dynamic lights without CPU draw-call or constant-buffer bottlenecks.
 
 ---
 

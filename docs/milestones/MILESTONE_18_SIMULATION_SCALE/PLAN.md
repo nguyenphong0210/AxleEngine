@@ -1,4 +1,4 @@
-# Milestone 17 — Simulation Scale & Logic LOD Plan
+# Milestone 18 — Simulation Scale & Logic LOD Plan
 
 **Status:** Proposed; packages released per explicit user instruction.
 **Baseline:** Post-OPT-10 core simulation clock, Jolt physics integration, and EnTT ECS architecture.
@@ -8,13 +8,13 @@
 
 ## 1. Executive Summary
 
-Milestone 17 addresses CPU-side simulation scaling for large open worlds and high-density entity counts. The objective is to decouple simulation costs from total entity population by dynamically throttling inactive or distant work while strictly preserving authoritative physics, gameplay state, and determinism (formerly OPT-15).
+Milestone 18 addresses CPU-side simulation scaling for large open worlds and high-density entity counts. The objective is to decouple simulation costs from total entity population by dynamically throttling inactive or distant work while strictly preserving authoritative physics, gameplay state, and determinism (formerly OPT-15).
 
 ---
 
 ## 2. Completed Work Packages
 
-*(None yet — Milestone 17 is an unreleased, proposed milestone).*
+*(None yet — Milestone 18 is an unreleased, proposed milestone).*
 
 ---
 

@@ -1,4 +1,4 @@
-# Milestone 17 — Simulation Scale and Logic LOD Architecture
+# Milestone 18 — Simulation Scale and Logic LOD Architecture
 
 ## 1. Target and Scope
 

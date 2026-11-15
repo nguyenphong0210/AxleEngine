@@ -9,6 +9,7 @@
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <algorithm>
 #include <array>
+#include <cstring>
 
 using namespace Axle;
 using namespace Axle::RHI;
@@ -55,6 +56,33 @@ static bool Run() {
     RHIBuffer constants, vertices;
     RENDER_CHECK(constants.Init(RHIBufferDesc::Constant(256, RHIMemoryLocation::HostUpload)) &&
         vertices.Init(RHIBufferDesc::Vertex(256, RHIMemoryLocation::HostUpload)), "real buffer inputs");
+    {
+        std::array<uint8_t, 256> original{}, replacement{};
+        original.fill(0x35); replacement.fill(0xA7);
+        RENDER_CHECK(constants.UpdateData(original.data(), original.size()), "constant update succeeds");
+        const auto originalHandle = constants.GetHandle();
+        bool rejected = false;
+        {
+            ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+                if (operation == "MapBuffer" && !rejected) {
+                    rejected = true;
+                    return nri::Result::OUT_OF_MEMORY;
+                }
+                return {};
+            });
+            RENDER_CHECK(!constants.UpdateData(replacement.data(), replacement.size()) && rejected,
+                "constant mapping failure is reported before any bytes change");
+        }
+        auto* unchanged = static_cast<const uint8_t*>(constants.Map(0, original.size()));
+        RENDER_CHECK(unchanged && std::memcmp(unchanged, original.data(), original.size()) == 0 &&
+            constants.GetHandle() == originalHandle, "failed constant update keeps the original generation and bytes");
+        constants.Unmap();
+        RENDER_CHECK(constants.UpdateData(replacement.data(), replacement.size()), "constant update retries after map failure");
+        auto* updated = static_cast<const uint8_t*>(constants.Map(0, replacement.size()));
+        RENDER_CHECK(updated && std::memcmp(updated, replacement.data(), replacement.size()) == 0,
+            "retried constant update writes the complete value");
+        constants.Unmap();
+    }
     {
         RHITexture attachmentOnly; auto attachmentDesc=desc; attachmentDesc.Usage=RHITextureUsage::ColorAttachment;
         RENDER_CHECK(attachmentOnly.Init(attachmentDesc), "attachment-only physical texture");

@@ -47,7 +47,10 @@ def main() -> int:
         tag = re.search(r"^      Tag:\s*(roughness_\d+)$", block, re.MULTILINE)
         roughness = re.search(r"^      Roughness:\s*([0-9.]+)$", block, re.MULTILINE)
         metallic = re.search(r"^      Metallic:\s*([0-9.]+)$", block, re.MULTILINE)
+        material = re.search(r"^    MaterialComponent:\s*$([\s\S]*?)(?=^  - Entity:|\Z)", block, re.MULTILINE)
         if tag and roughness and metallic:
+            if not material or re.search(r"^      (?:MaterialHandle|AssetPath):", material.group(1), re.MULTILINE):
+                fail(f"{tag.group(1)} must use an inline material identity")
             found[tag.group(1)] = (roughness.group(1), metallic.group(1))
 
     expected = {key: (value, "1.0") for key, value in EXPECTED.items()}

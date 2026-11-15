@@ -95,3 +95,20 @@ Result: **PARTIAL / NOT RUN for the required visual gate**.
 
 Next action: capture the Editor visual result after the native Computer Use pipe is
 available; do not mark this leaf PASS from startup or schema evidence alone.
+
+## M15-U0-02.2 — Inline material isolation correction
+
+User visual inspection found a fixture defect: all five sweep entities referenced
+the shared `materials/Metal_Gold.axleasset`, so editing `roughness_080` changed the
+other four spheres through the shared material identity.
+
+- Removed the shared `MaterialHandle` and `AssetPath` from each sweep entity.
+- The fixture now uses the serialized inline material values for each sphere, while
+  retaining the common metallic/base-color policy.
+- Extended `M15RoughnessFixture` to reject shared material identity in sweep blocks.
+- Debug/Release strict startup still pass with eight entities; Debug/Release
+  `M15RoughnessFixture` CTest still passes.
+
+Result remains **PARTIAL / NOT RUN for the visual gate** until the user reopens the
+repaired fixture, edits one sphere, and confirms the other four retain their own
+roughness values and highlights.

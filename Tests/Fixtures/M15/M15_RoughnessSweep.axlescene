@@ -94,8 +94,6 @@ Entities:
       InheritTransform: true
       InheritScale: true
     MaterialComponent:
-      MaterialHandle: 9468030326175427127
-      AssetPath: materials/Metal_Gold.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 1 , 0.766 , 0.336 , 1 ]
@@ -176,8 +174,6 @@ Entities:
       InheritTransform: true
       InheritScale: true
     MaterialComponent:
-      MaterialHandle: 9468030326175427127
-      AssetPath: materials/Metal_Gold.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 1 , 0.766 , 0.336 , 1 ]
@@ -258,8 +254,6 @@ Entities:
       InheritTransform: true
       InheritScale: true
     MaterialComponent:
-      MaterialHandle: 9468030326175427127
-      AssetPath: materials/Metal_Gold.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 1 , 0.766 , 0.336 , 1 ]
@@ -340,8 +334,6 @@ Entities:
       InheritTransform: true
       InheritScale: true
     MaterialComponent:
-      MaterialHandle: 9468030326175427127
-      AssetPath: materials/Metal_Gold.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 1 , 0.766 , 0.336 , 1 ]
@@ -422,8 +414,6 @@ Entities:
       InheritTransform: true
       InheritScale: true
     MaterialComponent:
-      MaterialHandle: 9468030326175427127
-      AssetPath: materials/Metal_Gold.axleasset
       AlbedoPath: 
       UseAlbedoMap: false
       AlbedoColor: [ 1 , 0.766 , 0.336 , 1 ]

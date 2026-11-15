@@ -481,8 +481,9 @@ namespace Axle::RHI {
             lease.m_Generation->PendingStates.clear();
         }
     }
-    bool RHIResourceService::ReplaceDescriptorRange(const RHIResourceLease& lease, uint32_t range, uint32_t baseSlot, std::vector<RHIResourceLease> resources, const std::vector<const void*>& aliases) {
+    bool RHIResourceService::ReplaceDescriptorRange(const RHIResourceLease& lease, uint32_t range, uint32_t baseSlot, std::vector<RHIResourceLease> resources, const std::vector<const void*>& aliases, std::function<bool()> nativeUpdate) {
         if (resources.size() != aliases.size()) return false;
+        if (!nativeUpdate) return false;
         if (!IsOwnerThread() || !lease.IsLive() || lease.GetHandle().Epoch != GetEpoch() ||
             lease.m_Generation->Kind != RHIResourceKind::DescriptorSet || IsInUse(lease)) return false;
         for (const auto& resource : resources) if (!resource.IsLive() || resource.GetHandle().Epoch != GetEpoch()) return false;
@@ -530,6 +531,7 @@ namespace Axle::RHI {
             accessReplacement[key] = std::move(accesses);
             replacement[key] = {std::move(resources[i])};
         }
+        if (!nativeUpdate()) return false;
         lease.m_Generation->Ranges.swap(replacement);
         lease.m_Generation->RangeAccesses.swap(accessReplacement);
         return true;

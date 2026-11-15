@@ -6,6 +6,8 @@
 #include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHIDescriptorPool.hpp>
 #include <Axle/RHI/RHIFrameContext.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
+#include <algorithm>
 #include <array>
 
 using namespace Axle;
@@ -119,6 +121,72 @@ static bool Run() {
         !pool.UpdateStorageTexture(set,0,0,image.GetUAV()) &&
         !pool.UpdateTexture(set,1,0,image.GetSRV()) && !pool.UpdateTexture(set,0,1,image.GetSRV()),
         "wrong descriptor types and range bounds reject before native update");
+    {
+        RHITexture replacement;
+        RENDER_CHECK(replacement.Init(desc), "replacement descriptor source exists");
+        const auto beforeUpdate = device.GetResources().GetAccesses(device.GetResources().AcquireNative(set));
+        bool descriptorUpdateInjected = false;
+        {
+            ScopedRHIFault fault([&](std::string_view operation)->std::optional<nri::Result> {
+                if (operation == "UpdateDescriptorRanges" && !descriptorUpdateInjected) {
+                    descriptorUpdateInjected = true;
+                    return nri::Result::OUT_OF_MEMORY;
+                }
+                return {};
+            });
+            RENDER_CHECK(!pool.UpdateTexture(set, 0, 0, replacement.GetSRV()) && descriptorUpdateInjected,
+                "injected descriptor update rejection is reported");
+        }
+        const auto afterUpdate = device.GetResources().GetAccesses(device.GetResources().AcquireNative(set));
+        auto hasTexture = [](const auto& accesses, nri::Texture* texture) {
+            return std::any_of(accesses.begin(), accesses.end(), [texture](const auto& access) {
+                return access.Texture == texture;
+            });
+        };
+        RENDER_CHECK(hasTexture(beforeUpdate, image.GetNative()) && hasTexture(afterUpdate, image.GetNative()) &&
+            !hasTexture(afterUpdate, replacement.GetNative()),
+            "failed descriptor update preserves the published resource access");
+        RENDER_CHECK(pool.UpdateTexture(set, 0, 0, replacement.GetSRV()),
+            "descriptor helper remains usable after rejected update");
+        RENDER_CHECK(pool.UpdateTexture(set, 0, 0, image.GetSRV()),
+            "descriptor helper restores the original input");
+    }
+    {
+        RHISampler original, replacement;
+        RENDER_CHECK(original.Init(RHISamplerDesc::Point()) && replacement.Init(RHISamplerDesc::Bilinear()),
+            "real sampler descriptor sources");
+        nri::DescriptorRangeDesc samplerRange{};
+        samplerRange.descriptorType = nri::DescriptorType::SAMPLER;
+        samplerRange.descriptorNum = 1;
+        samplerRange.shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        nri::DescriptorSetDesc samplerSetDesc{};
+        samplerSetDesc.ranges = &samplerRange;
+        samplerSetDesc.rangeNum = 1;
+        nri::PipelineLayoutDesc samplerLayoutDesc{};
+        samplerLayoutDesc.descriptorSets = &samplerSetDesc;
+        samplerLayoutDesc.descriptorSetNum = 1;
+        samplerLayoutDesc.shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        RHIPipelineLayout samplerLayout;
+        RENDER_CHECK(samplerLayout.Init(samplerLayoutDesc), "sampler descriptor layout");
+        auto* samplerSet = pool.AllocateDescriptorSet(samplerLayout, 0);
+        RENDER_CHECK(samplerSet && pool.UpdateSampler(samplerSet, 0, 0, original.GetNative()),
+            "sampler helper publishes a real descriptor");
+        bool samplerUpdateInjected = false;
+        {
+            ScopedRHIFault fault([&](std::string_view operation)->std::optional<nri::Result> {
+                if (operation == "UpdateDescriptorRanges" && !samplerUpdateInjected) {
+                    samplerUpdateInjected = true;
+                    return nri::Result::OUT_OF_MEMORY;
+                }
+                return {};
+            });
+            RENDER_CHECK(!pool.UpdateSamplerRange(samplerSet, 0, 0, {replacement.GetNative()}) && samplerUpdateInjected,
+                "sampler range update reports injected rejection");
+        }
+        RENDER_CHECK(pool.UpdateSamplerRange(samplerSet, 0, 0, {replacement.GetNative()}) &&
+            pool.UpdateSampler(samplerSet, 0, 0, original.GetNative()),
+            "sampler range retry and single helper restore the descriptor");
+    }
     {
         RHIFrameContext frame;
         RENDER_CHECK(frame.Init()&&frame.Begin(),"frame-owned uniform arena");

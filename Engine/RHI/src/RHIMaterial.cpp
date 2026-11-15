@@ -828,11 +828,9 @@ namespace Axle::RHI {
         nri::Descriptor* emissSRV  = m_Textures[5] ? m_Textures[5]->GetSRV() : (blackTex ? blackTex->GetSRV() : nullptr);
 
         std::vector<nri::Descriptor*> srvs = { albedoSRV, normalSRV, roughSRV, metalSRV, aoSRV, emissSRV };
-        pool.UpdateTextureRange(set, 0, 0, srvs);
+        if (!pool.UpdateTextureRange(set, 0, 0, srvs)) return nullptr;
 
-        if (sampler) {
-            pool.UpdateSampler(set, 1, 0, sampler);
-        }
+        if (sampler && !pool.UpdateSampler(set, 1, 0, sampler)) return nullptr;
 
         return set;
     }

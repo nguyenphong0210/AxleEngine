@@ -152,7 +152,8 @@ namespace Axle::RHI {
         bool MarkDescriptorSet(const RHIResourceLease& lease,
             std::vector<std::pair<nri::DescriptorType, uint32_t>> ranges);
         bool ReplaceDescriptorRange(const RHIResourceLease& lease, uint32_t range, uint32_t baseSlot,
-            std::vector<RHIResourceLease> resources, const std::vector<const void*>& aliases);
+            std::vector<RHIResourceLease> resources, const std::vector<const void*>& aliases,
+            std::function<bool()> nativeUpdate);
         std::shared_ptr<RHIResourceOwner> m_Owner;
     };
 

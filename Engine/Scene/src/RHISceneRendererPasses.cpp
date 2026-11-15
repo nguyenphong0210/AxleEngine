@@ -1110,10 +1110,10 @@ namespace Axle {
                 }
                 if (!passUniform().UpdateData(&gtaoConstants, sizeof(RHIGTAOConstants))) return fail();
 
-                m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
+                if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV())) return fail();
                 nri::Descriptor* normalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
-                m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 1, 0, normalSRV);
-                m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative());
+                if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOComputeTextureSet, 1, 0, normalSRV)) return fail();
+                if (!m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative())) return fail();
                 m_GTAODescriptorPool.UpdateStorageTexture(m_GTAOComputeStorageSet, 0, 0, gtaoTarget->GetUAV());
 
                 Commands().SetPipeline(m_GTAOComputePipeline);
@@ -1126,10 +1126,10 @@ namespace Axle {
 
                 if (!beginPass("GTAOApply")) return fail();
                 if (!passUniform().UpdateData(&gtaoConstants, sizeof(RHIGTAOConstants))) return fail();
-                m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
-                m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 1, 0, gtaoTarget->GetSRV());
-                m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV());
-                m_GTAODescriptorPool.UpdateSampler(m_GTAOApplyDescriptorSet, 3, 0, m_GTAOSampler.GetNative());
+                if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV())) return fail();
+                if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 1, 0, gtaoTarget->GetSRV())) return fail();
+                if (!m_GTAODescriptorPool.UpdateTexture(m_GTAOApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV())) return fail();
+                if (!m_GTAODescriptorPool.UpdateSampler(m_GTAOApplyDescriptorSet, 3, 0, m_GTAOSampler.GetNative())) return fail();
 
                 nri::Pipeline* applyPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_GTAOApplyPipelineHDR)
                     ? m_GTAOApplyPipelineHDR : m_GTAOApplyPipelineSDR;
@@ -1221,15 +1221,15 @@ namespace Axle {
                 for (uint32_t level = 0; level < 8; ++level) {
                     auto* hiz = viewTargets->GetHiZ(level);
                     if (!hiz || !hiz->IsValid()) return fail();
-                    m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 0, level, hiz->GetSRV());
+                    if (!m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 0, level, hiz->GetSRV())) return fail();
                 }
                 nri::Descriptor* ssrNormalSRV = (m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()) ? m_OpaqueSceneNormal->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
                 nri::Descriptor* probeSRV = m_ActiveReflectionProbePrefilter && m_ActiveReflectionProbePrefilter->IsValid()
                     ? m_ActiveReflectionProbePrefilter->GetSRV() : RHIMaterial::GetDefaultPrefilterCubemap()->GetSRV();
-                m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 1, 0, ssrNormalSRV);
-                m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 0, m_OpaqueSceneColor->GetSRV());
-                m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 1, probeSRV);
-                m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative());
+                if (!m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 1, 0, ssrNormalSRV)) return fail();
+                if (!m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 0, m_OpaqueSceneColor->GetSRV())) return fail();
+                if (!m_SSRDescriptorPool.UpdateTexture(m_SSRComputeTextureSet, 2, 1, probeSRV)) return fail();
+                if (!m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative())) return fail();
                 m_SSRDescriptorPool.UpdateStorageTexture(m_SSRComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
 
                 Commands().SetPipeline(m_SSRComputePipeline);
@@ -1242,11 +1242,11 @@ namespace Axle {
 
                 if (!beginPass("SSRApply")) return fail();
                 if (!passUniform().UpdateData(&ssrConstants, sizeof(RHISSRConstants))) return fail();
-                m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
-                m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV());
-                m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV());
-                m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 3, 0, ssrNormalSRV);
-                m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 4, 0, m_SSRSampler.GetNative());
+                if (!m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 0, 0, m_OpaqueSceneDepth->GetSRV())) return fail();
+                if (!m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV())) return fail();
+                if (!m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 2, 0, m_OpaqueSceneColor->GetSRV())) return fail();
+                if (!m_SSRDescriptorPool.UpdateTexture(m_SSRApplyDescriptorSet, 3, 0, ssrNormalSRV)) return fail();
+                if (!m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 4, 0, m_SSRSampler.GetNative())) return fail();
 
                 nri::Pipeline* applyPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SSRApplyPipelineHDR)
                     ? m_SSRApplyPipelineHDR : m_SSRApplyPipelineSDR;
@@ -1314,8 +1314,8 @@ namespace Axle {
 
                 if (!passUniform().UpdateData(&fogConstants, sizeof(RHIVolumetricFogConstants))) return fail();
 
-                m_FogDescriptorPool.UpdateTexture(m_FogComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV());
-                m_FogDescriptorPool.UpdateSampler(m_FogComputeTextureSet, 1, 0, m_FogSampler.GetNative());
+                if (!m_FogDescriptorPool.UpdateTexture(m_FogComputeTextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV())) return fail();
+                if (!m_FogDescriptorPool.UpdateSampler(m_FogComputeTextureSet, 1, 0, m_FogSampler.GetNative())) return fail();
                 m_FogDescriptorPool.UpdateStorageTexture(m_FogComputeStorageSet, 0, 0, m_ScreenStorageTarget->GetUAV());
 
                 Commands().SetPipeline(m_FogComputePipeline);
@@ -1328,9 +1328,9 @@ namespace Axle {
 
                 if (!beginPass("FogApply")) return fail();
                 if (!passUniform().UpdateData(&fogConstants, sizeof(RHIVolumetricFogConstants))) return fail();
-                m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 0, 0, m_OpaqueSceneColor->GetSRV());
-                m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV());
-                m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 2, 0, m_FogSampler.GetNative());
+                if (!m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 0, 0, m_OpaqueSceneColor->GetSRV())) return fail();
+                if (!m_FogDescriptorPool.UpdateTexture(m_FogApplyDescriptorSet, 1, 0, m_ScreenStorageTarget->GetSRV())) return fail();
+                if (!m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 2, 0, m_FogSampler.GetNative())) return fail();
 
                 nri::Pipeline* applyPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_FogApplyPipelineHDR)
                     ? m_FogApplyPipelineHDR : m_FogApplyPipelineSDR;
@@ -1476,7 +1476,8 @@ namespace Axle {
                     auto* storageSet = m_BloomComputeStorageSets[bloomPassIndex++];
                     if (!m_BloomDescriptorPool.UpdateTexture(textureSet, 0, 0, source->GetSRV()) ||
                         !m_BloomDescriptorPool.UpdateStorageTexture(storageSet, 0, 0, destination->GetUAV())) { AXLE_CORE_ERROR("Bloom pass {0}: descriptor update failed", passName); return false; }
-                    if (m_BloomSampler.IsValid()) m_BloomDescriptorPool.UpdateSampler(textureSet, 1, 0, m_BloomSampler.GetNative());
+                    if (m_BloomSampler.IsValid() &&
+                        !m_BloomDescriptorPool.UpdateSampler(textureSet, 1, 0, m_BloomSampler.GetNative())) return false;
                     Commands().SetPipeline(m_BloomComputePipeline);
                     Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_BloomComputePipelineLayout);
                     Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
@@ -1496,10 +1497,10 @@ namespace Axle {
 
                 if (!beginPass("BloomApply")) return fail();
                 if (!passUniform().UpdateData(&lastBloomConstants, sizeof(lastBloomConstants))) return fail();
-                m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 0, 0, viewTargets->GetBloom(0)->GetSRV());
-                m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 1, 0, m_OpaqueSceneColor->GetSRV());
+                if (!m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 0, 0, viewTargets->GetBloom(0)->GetSRV())) return fail();
+                if (!m_BloomDescriptorPool.UpdateTexture(m_BloomApplyDescriptorSet, 1, 0, m_OpaqueSceneColor->GetSRV())) return fail();
                 if (m_BloomSampler.IsValid()) {
-                    m_BloomDescriptorPool.UpdateSampler(m_BloomApplyDescriptorSet, 2, 0, m_BloomSampler.GetNative());
+                    if (!m_BloomDescriptorPool.UpdateSampler(m_BloomApplyDescriptorSet, 2, 0, m_BloomSampler.GetNative())) return fail();
                 }
 
                 nri::Pipeline* bloomPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_BloomApplyPipelineHDR)
@@ -1578,8 +1579,8 @@ namespace Axle {
                     !m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 1, 0, depthSRV) ||
                     !m_TAADescriptorPool.UpdateTexture(m_TAADescriptorSet, 2, 0, historyRead->GetSRV())) return fail();
                 if (m_TAALinearSampler.IsValid() && m_TAAPointSampler.IsValid()) {
-                    m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative());
-                    m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative());
+                    if (!m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative())) return fail();
+                    if (!m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative())) return fail();
                 }
 
                 nri::Pipeline* taaPipeline = (historyWrite->GetFormat() == RHI::RHITextureFormat::RGBA16_FLOAT && m_TAAPipelineHDR)

@@ -115,7 +115,7 @@ namespace Axle {
         if (!res->Pool.Init(RHI::RHIDescriptorPoolDesc::Tier2Bindless(3, 1))) return nullptr;
         res->Set = res->Pool.AllocateDescriptorSet(m_PipelineLayout, 0);
         if (!res->Set) return nullptr;
-        res->Pool.UpdateSampler(res->Set, 3, 0, m_LinearSampler.GetNative());
+        if (!res->Pool.UpdateSampler(res->Set, 3, 0, m_LinearSampler.GetNative())) return nullptr;
         m_DrawResources.push_back(std::move(res));
         m_DrawResourceCursor = m_DrawResources.size();
         return m_DrawResources.back().get();
@@ -253,9 +253,8 @@ namespace Axle {
             return false;
         }
 
-        if (m_LinearSampler.IsValid()) {
-            m_DescriptorPool.UpdateSampler(m_DescriptorSet, 3, 0, m_LinearSampler.GetNative());
-        }
+        if (m_LinearSampler.IsValid() &&
+            !m_DescriptorPool.UpdateSampler(m_DescriptorSet, 3, 0, m_LinearSampler.GetNative())) return false;
 
         return true;
     }

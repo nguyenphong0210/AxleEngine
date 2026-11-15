@@ -176,7 +176,7 @@ namespace Axle {
                     defaultSRVs.push_back(whiteTex->GetSRV());
                     defaultSRVs.push_back(m_CascadedShadows.GetSRV());
                     defaultSRVs.push_back(m_LocalShadows.GetSRV());
-                    m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 0, defaultSRVs);
+                    if (!m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 0, defaultSRVs)) return false;
                 }
             }
         }
@@ -234,7 +234,7 @@ namespace Axle {
             m_ToneMappingDescriptorSet = m_ToneMappingDescriptorPool.AllocateDescriptorSet(m_ToneMappingPipelineLayout, 0);
             if (!m_ToneMappingDescriptorSet) return false;
             if (m_ToneMappingSampler.IsValid()) {
-                m_ToneMappingDescriptorPool.UpdateSampler(m_ToneMappingDescriptorSet, 1, 0, m_ToneMappingSampler.GetNative());
+                if (!m_ToneMappingDescriptorPool.UpdateSampler(m_ToneMappingDescriptorSet, 1, 0, m_ToneMappingSampler.GetNative())) return false;
             }
         }
 
@@ -261,7 +261,7 @@ namespace Axle {
             m_FXAADescriptorSet = m_FXAADescriptorPool.AllocateDescriptorSet(m_FXAAPipelineLayout, 0);
             if (!m_FXAADescriptorSet) return false;
             if (m_FXAASampler.IsValid()) {
-                m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 2, 0, m_FXAASampler.GetNative());
+                if (!m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 2, 0, m_FXAASampler.GetNative())) return false;
             }
         }
 
@@ -290,8 +290,8 @@ namespace Axle {
             m_GTAOApplyDescriptorSet = m_GTAODescriptorPool.AllocateDescriptorSet(m_GTAOApplyPipelineLayout, 0);
             if (!m_GTAOComputeTextureSet || !m_GTAOComputeStorageSet || !m_GTAOApplyDescriptorSet) return false;
             if (m_GTAOSampler.IsValid()) {
-                m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative());
-                m_GTAODescriptorPool.UpdateSampler(m_GTAOApplyDescriptorSet, 3, 0, m_GTAOSampler.GetNative());
+                if (!m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative()) ||
+                    !m_GTAODescriptorPool.UpdateSampler(m_GTAOApplyDescriptorSet, 3, 0, m_GTAOSampler.GetNative())) return false;
             }
         }
 
@@ -320,8 +320,8 @@ namespace Axle {
             m_SSRApplyDescriptorSet = m_SSRDescriptorPool.AllocateDescriptorSet(m_SSRApplyPipelineLayout, 0);
             if (!m_SSRComputeTextureSet || !m_SSRComputeStorageSet || !m_SSRApplyDescriptorSet) return false;
             if (m_SSRSampler.IsValid()) {
-                m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative());
-                m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 4, 0, m_SSRSampler.GetNative());
+                if (!m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative()) ||
+                    !m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 4, 0, m_SSRSampler.GetNative())) return false;
             }
         }
 
@@ -370,8 +370,8 @@ namespace Axle {
             m_FogApplyDescriptorSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogApplyPipelineLayout, 0);
             if (!m_FogComputeTextureSet || !m_FogComputeStorageSet || !m_FogApplyDescriptorSet) return false;
             if (m_FogSampler.IsValid()) {
-                m_FogDescriptorPool.UpdateSampler(m_FogComputeTextureSet, 1, 0, m_FogSampler.GetNative());
-                m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 2, 0, m_FogSampler.GetNative());
+                if (!m_FogDescriptorPool.UpdateSampler(m_FogComputeTextureSet, 1, 0, m_FogSampler.GetNative()) ||
+                    !m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 2, 0, m_FogSampler.GetNative())) return false;
             }
         }
 
@@ -405,9 +405,10 @@ namespace Axle {
                 if (!m_BloomComputeTextureSets[i] || !m_BloomComputeStorageSets[i]) return false;
             }
             if (m_BloomSampler.IsValid()) {
-                m_BloomDescriptorPool.UpdateSampler(m_BloomComputeTextureSet, 1, 0, m_BloomSampler.GetNative());
-                m_BloomDescriptorPool.UpdateSampler(m_BloomApplyDescriptorSet, 2, 0, m_BloomSampler.GetNative());
-                for (auto* set : m_BloomComputeTextureSets) m_BloomDescriptorPool.UpdateSampler(set, 1, 0, m_BloomSampler.GetNative());
+                if (!m_BloomDescriptorPool.UpdateSampler(m_BloomComputeTextureSet, 1, 0, m_BloomSampler.GetNative()) ||
+                    !m_BloomDescriptorPool.UpdateSampler(m_BloomApplyDescriptorSet, 2, 0, m_BloomSampler.GetNative())) return false;
+                for (auto* set : m_BloomComputeTextureSets)
+                    if (!m_BloomDescriptorPool.UpdateSampler(set, 1, 0, m_BloomSampler.GetNative())) return false;
             }
         }
 
@@ -427,7 +428,7 @@ namespace Axle {
         m_AutoExposureTextureSet = m_AutoExposureDescriptorPool.AllocateDescriptorSet(m_AutoExposurePipelineLayout, 0);
         m_AutoExposureStorageSet = m_AutoExposureDescriptorPool.AllocateDescriptorSet(m_AutoExposurePipelineLayout, 1);
         if (!m_AutoExposureTextureSet || !m_AutoExposureStorageSet) return false;
-        m_AutoExposureDescriptorPool.UpdateSampler(m_AutoExposureTextureSet, 1, 0, m_AutoExposureSampler.GetNative());
+        if (!m_AutoExposureDescriptorPool.UpdateSampler(m_AutoExposureTextureSet, 1, 0, m_AutoExposureSampler.GetNative())) return false;
         if (!m_AutoExposureConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIExposureConstants), RHIMemoryLocation::HostUpload, "AutoExposureConstantsBuffer"))) return false;
 
         if (!CompileDDGIShaders(device) || !CreateDDGIPipelineLayout(device) || !CreateDDGIPipeline(device)) return false;
@@ -439,7 +440,7 @@ namespace Axle {
         m_DDGITextureSet = m_DDGIDescriptorPool.AllocateDescriptorSet(m_DDGIPipelineLayout, 0);
         m_DDGIStorageSet = m_DDGIDescriptorPool.AllocateDescriptorSet(m_DDGIPipelineLayout, 1);
         if (!m_DDGITextureSet || !m_DDGIStorageSet) return false;
-        m_DDGIDescriptorPool.UpdateSampler(m_DDGITextureSet, 1, 0, m_DDGISampler.GetNative());
+        if (!m_DDGIDescriptorPool.UpdateSampler(m_DDGITextureSet, 1, 0, m_DDGISampler.GetNative())) return false;
         if (!m_DDGIConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIDDGIConstants), RHIMemoryLocation::HostUpload, "DDGIConstantsBuffer"))) return false;
 
         // Initialize Temporal Anti-Aliasing (TAA) Resources
@@ -464,8 +465,8 @@ namespace Axle {
             m_TAADescriptorSet = m_TAADescriptorPool.AllocateDescriptorSet(m_TAAPipelineLayout, 0);
             if (!m_TAADescriptorSet) return false;
             if (m_TAALinearSampler.IsValid() && m_TAAPointSampler.IsValid()) {
-                m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative());
-                m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative());
+                if (!m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative()) ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative())) return false;
             }
         }
 
@@ -862,7 +863,10 @@ namespace Axle {
                     prefTex->GetSRV(),
                     lutTex->GetSRV()
                 };
-                m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 6, iblSRVs);
+                if (!m_DescriptorPool.UpdateTextureRange(m_DefaultDescriptorSet, 0, 6, iblSRVs)) {
+                    m_UseIBL = false;
+                    AXLE_CORE_ERROR("RHISceneRenderer: Failed to update IBL descriptors");
+                }
             }
         }
     }
@@ -2788,7 +2792,7 @@ namespace Axle {
             if (!m_ToneMappingDescriptorPool.UpdateTexture(m_ToneMappingDescriptorSet, 0, 0, inputHDR_SRV) ||
                 !m_ToneMappingDescriptorPool.UpdateTexture(m_ToneMappingDescriptorSet, 0, 1, exposureSRV ? exposureSRV : inputHDR_SRV)) return false;
             if (m_ToneMappingSampler.IsValid()) {
-                m_ToneMappingDescriptorPool.UpdateSampler(m_ToneMappingDescriptorSet, 1, 0, m_ToneMappingSampler.GetNative());
+                if (!m_ToneMappingDescriptorPool.UpdateSampler(m_ToneMappingDescriptorSet, 1, 0, m_ToneMappingSampler.GetNative())) return false;
             }
         }
 
@@ -2897,12 +2901,11 @@ namespace Axle {
 
         // 2. Bind Texture SRV & Sampler in Space 1
         if (m_FXAADescriptorPool.IsValid() && m_FXAADescriptorSet) {
-            m_FXAADescriptorPool.UpdateTexture(m_FXAADescriptorSet, 0, 0, inputSRV);
-            m_FXAADescriptorPool.UpdateTexture(m_FXAADescriptorSet, 1, 0,
-                depthSRV ? depthSRV : RHIMaterial::GetDefaultWhiteTexture()->GetSRV());
-            if (m_FXAASampler.IsValid()) {
-                m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 2, 0, m_FXAASampler.GetNative());
-            }
+            if (!m_FXAADescriptorPool.UpdateTexture(m_FXAADescriptorSet, 0, 0, inputSRV) ||
+                !m_FXAADescriptorPool.UpdateTexture(m_FXAADescriptorSet, 1, 0,
+                    depthSRV ? depthSRV : RHIMaterial::GetDefaultWhiteTexture()->GetSRV())) return false;
+            if (m_FXAASampler.IsValid() &&
+                !m_FXAADescriptorPool.UpdateSampler(m_FXAADescriptorSet, 2, 0, m_FXAASampler.GetNative())) return false;
         }
 
         nri::Pipeline* activePipeline = (outFormat == nri::Format::RGBA16_SFLOAT && m_FXAAPipelineHDR)

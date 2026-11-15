@@ -170,8 +170,6 @@ namespace Axle::RHI {
             if (!lease.IsLive()) return false;
             resources.push_back(std::move(lease));
         }
-        if (!rhiDevice.GetResources().ReplaceDescriptorRange(setLease, rangeIndex, baseSlot, std::move(resources), std::vector<const void*>(descriptors.begin(), descriptors.end()))) return false;
-
         nri::UpdateDescriptorRangeDesc updateDesc = {};
         updateDesc.descriptorSet = set;
         updateDesc.rangeIndex = rangeIndex;
@@ -179,8 +177,15 @@ namespace Axle::RHI {
         updateDesc.descriptors = descriptors.data();
         updateDesc.descriptorNum = static_cast<uint32_t>(descriptors.size());
 
-        nriCore.UpdateDescriptorRanges(&updateDesc, 1);
-        return true;
+        const auto aliases = std::vector<const void*>(descriptors.begin(), descriptors.end());
+        return rhiDevice.GetResources().ReplaceDescriptorRange(setLease, rangeIndex, baseSlot, std::move(resources), aliases, [&] {
+            // NRI's update entry point is void. Reject an injected failure before
+            // touching native state, then publish the validated dependency map.
+            return ScopedRHIFault::Invoke("UpdateDescriptorRanges", [&] {
+                nriCore.UpdateDescriptorRanges(&updateDesc, 1);
+                return nri::Result::SUCCESS;
+            }) == nri::Result::SUCCESS;
+        });
     }
 
     bool RHIDescriptorPool::UpdateTexture(nri::DescriptorSet* set, uint32_t rangeIndex, uint32_t slot, nri::Descriptor* srv) {

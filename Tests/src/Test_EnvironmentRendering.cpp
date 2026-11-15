@@ -793,6 +793,11 @@ bool Native(RHIType backend) {
     const auto baselineEntities = renderer.GetRenderedEntityCount();
     renderer.Shutdown(); CHECK(environment.CacheSize()==0);
     CHECK(GetRHIValidationErrorCount()==0);
+    CHECK(renderer.Init(device, false) && !render().empty() &&
+        renderer.GetDiagnostics().GetFrame().FrameIndex == 0 &&
+        renderer.GetLastCompletion() && device.WaitForCompletion(renderer.GetLastCompletion()));
+    renderer.Shutdown();
+    CHECK(environment.CacheSize() == 0 && GetRHIValidationErrorCount() == 0);
     // CPU cache metadata may outlive a native device. Stale native generations
     // must become invalid and be recreated under the new owner epoch.
     RHIEnvironment survivor;CHECK(survivor.SetBakeSettings(bake));world.Skybox.Type=1;world.Skybox.HDRPath="blue.hdr";

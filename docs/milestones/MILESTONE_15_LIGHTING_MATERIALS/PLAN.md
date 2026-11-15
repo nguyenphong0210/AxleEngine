@@ -363,9 +363,9 @@ the item is visible.
 - [x] **M15-U3-07.4 — Test device epoch.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Native epoch fixture invalidates old view targets on device shutdown and rebuilds the same wrapper into a new generation after reinit; Debug/Release D3D12/Vulkan 4/4 exit 0. [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
-- [ ] **M15-U3-07.5 — Test shutdown/reinit.**
+- [x] **M15-U3-07.5 — Test shutdown/reinit.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Native environment fixture shuts renderer down, reinitializes, renders a fresh frame with valid completion, then shuts down cleanly; Debug/Release D3D12/Vulkan 4/4 exit 0. [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
 - [ ] **M15-U3-08 — Add asynchronous per-pass query/readback ring and invalid-measurement state.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.

@@ -75,3 +75,9 @@ Builds: `cmake --build build --config {Debug,Release} --target AxleEnvironmentRe
 **PASS (self-review).** The native epoch fixture now owns a complete `RHIViewTargets` generation across device shutdown/reinit. It asserts the old targets become invalid with the old device and that reconfiguring the same wrapper produces a valid, different target generation in the new epoch. The CPU `ViewContext` fixture also checks that an epoch change latches `ViewResetReason::DeviceEpoch`.
 
 Builds: `cmake --build build --config {Debug,Release} --target AxleRHIResourceViewTests --parallel 4`, both exit 0. Runs: `build/Tests/{Debug,Release}/AxleRHIResourceViewTests.exe {dx12,vulkan} epoch`, four exits 0. Logs: `build/agent-runs/M15-U3-batches-1-2/07.4-*`. No Editor image is required.
+
+## U3-07.5 — Renderer shutdown and reinit
+
+**PASS (self-review).** The native environment fixture now shuts down the renderer after a completed frame, checks its environment cache is empty and validation clean, reinitializes on the live device, renders a new frame with frame index zero and a waitable completion token, then shuts down again with no retained cache or validation errors. The independent device epoch fixture covers a physical device shutdown/reinit.
+
+Builds: `cmake --build build --config {Debug,Release} --target AxleEnvironmentRenderingTests --parallel 4`, both exit 0. Runs: `build/Tests/{Debug,Release}/AxleEnvironmentRenderingTests.exe {dx12,vulkan} build/agent-runs/M15-U3-batches-1-2/07.5-{config}-{backend}-artifacts`, four exits 0. Logs and native images: `build/agent-runs/M15-U3-batches-1-2/07.5-*`. No Editor image is required.

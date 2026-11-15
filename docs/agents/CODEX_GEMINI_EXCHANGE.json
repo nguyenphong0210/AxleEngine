@@ -1,31 +1,36 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U2-S2.1",
-    "title": "M15 U2 S2.1 environment input contract freeze",
+    "id": "M15-U2-S2.2",
+    "title": "M15 U2 S2.2 environment generation publication, cache and fallback",
     "state": "accepted",
     "coordinator": "User / Codex",
     "implementer": "Codex (explicit user continuation after accepted S1.3)",
-    "code_baseline": "2678c4b2",
-    "user_instruction": "Begin M15 U2/S2.1 contract freeze; implement and verify the three S2.1 children without starting S2.2 or S2.3; do not push.",
-    "user_scope": "Freeze procedural-sky, environment-bake and authored-cubemap color/orientation conventions with an independent CPU fixture and exact evidence.",
+    "code_baseline": "e72420cf",
+    "user_instruction": "Continue M15 with the next U2 part: implement and verify S2.2 publication/cache/invalidation/last-good fallback; do not start S2.3 or push.",
+    "user_scope": "Implement and verify U2-02.1 through U2-02.4 as one transactional environment-generation package with exact native evidence.",
     "expected_files": [
-      "Engine/Renderer/include/Axle/EnvironmentBake.hpp",
-      "Engine/Renderer/src/EnvironmentBake.cpp",
-      "Engine/Scene/include/Axle/Components.hpp",
-      "Engine/Scene/include/Axle/RenderWorld.hpp",
-      "Tests/rendering/Test_M15_EnvironmentContractReferenceUnit.cpp",
-      "Tests/rendering/RenderUnitTestMain.cpp",
+      "Engine/Scene/include/Axle/RHIEnvironment.hpp",
+      "Engine/Scene/src/RHIEnvironment.cpp",
+      "Tests/src/Test_EnvironmentRendering.cpp",
       "Tests/CMakeLists.txt",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md",
+      "docs/reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Implemented in 6c98b0e0: documented the S2.1 input contract and added an independent CPU fixture covering procedural sky validation, linear HDR bake conventions, cube orientation and authored opt-in semantics. Debug/Release focused and full RenderUnitTests plus EnvironmentBakeTests pass.",
-    "acceptance_status": "Accepted at 6c98b0e0 after the independent CPU fixture and Debug/Release gates passed. Review report: docs/reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md.",
+    "implementation_status": "Implemented and verified: complete native generation publication, keyed cache with LRU bound 4, stale-generation invalidation and same-source last-good/neutral fallback.",
+    "acceptance_status": "Accepted by Codex after Debug/Release native D3D12, Vulkan 1.3 and OpenGL fallback runs.",
     "open_gates": [],
-    "next_action": "Stop at accepted S2.1. S2.2 publication/cache and S2.3 consumer behavior remain unreleased.",
-    "metadata_correction": "Supersedes the accepted U1 task card because the user explicitly released M15 U2/S2.1. Earlier U1 acceptance remains recorded in history and its review report."
+    "next_action": "Stop before S2.3; await the user release for U2-03.1 through U2-03.4.",
+    "metadata_correction": "Supersedes the accepted S2.1 task card because the user explicitly continued to M15 U2/S2.2. Earlier S2.1 acceptance remains recorded in history and its review report.",
+    "implementation_commits": [
+      "f118cec7"
+    ],
+    "documentation_commits": [
+      "11cedd84"
+    ],
+    "evidence_report": "docs/reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md",
+    "verification": "AxleEnvironmentRenderingTests built Debug/Release exit 0; direct native matrix Debug/Release x dx12/vulkan/gl exit 0. Logs: build/agent-runs/M15-U2-S2.2/*.log."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -3881,6 +3886,28 @@
       "base_commit": "6c98b0e0",
       "timestamp_utc": "2026-11-15T10:48:59.274728+00:00",
       "body": "DELIVERY/ACCEPTANCE: M15-U2-S2.1 and children U2-01.1/U2-01.2/U2-01.3 are implemented in commit 6c98b0e0 and accepted.\n\nImplementation:\n- Documented procedural sky, linear HDR bake and fixed cube-face conventions in EnvironmentBake.hpp.\n- Documented authored background versus EnvironmentLighting opt-in and HDR identity policy in Components.hpp.\n- Added independent M15EnvironmentContractReference fixture and CLI/CTest wiring. It covers deterministic procedural sky output, +Y zenith, finite parameter rejection, linear RGBA32F bake, constant radiance, mip/BRDF validity, face orientation, authored extraction and non-mutating invalid source handling.\n\nVerified (all exit 0):\n- Debug/Release AxleRenderUnitTests builds.\n- Debug/Release M15EnvironmentContractReference, 1/1 each.\n- Debug/Release EnvironmentBakeTests, 1/1 each.\n- Debug/Release full RenderUnitTests, 1/1 each.\n\nReview report: docs/reviews/M15_U2_S2_1_ENVIRONMENT_CONTRACT_REVIEW.md. S2.2 and S2.3 remain outside this accepted scope. No Editor evidence is required for this CPU contract freeze.\n"
+    },
+    {
+      "id": "CG-20261115T105152254699Z-CODEX-30f632",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U2-S2.2",
+      "reply_to": null,
+      "base_commit": "e72420cf",
+      "timestamp_utc": "2026-11-15T10:51:52.254699+00:00",
+      "body": "IN_PROGRESS: User explicitly continued to M15-U2-S2.2. Codex will audit and close U2-02.1 publication, U2-02.2 cache identity, U2-02.3 invalidation and U2-02.4 last-good fallback from base e72420cf.\n\nThe existing RHIEnvironment path already contains a generation/cache/fallback implementation and the environment native fixture exercises much of it. This scope will verify the actual behavior, repair only necessary contract gaps, update the dedicated evidence report and stop before S2.3. No push.\n"
+    },
+    {
+      "id": "CG-20261115T110146381781Z-CODEX-7f3cd6",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M15-U2-S2.2",
+      "reply_to": "CG-20261115T105152254699Z-CODEX-30f632",
+      "base_commit": "11cedd84a2ceb722c1ddfa38558e13ce0e35e38a",
+      "timestamp_utc": "2026-11-15T11:01:46.381781+00:00",
+      "body": "DELIVERY: M15-U2-S2.2 accepted.\n\nImplementation commit: f118cec7 (freeze RHIEnvironment generation publication, cache limit and fallback contract).\nDocumentation/evidence commit: 11cedd84.\n\nVerified scope U2-02.1 through U2-02.4:\n- complete four-map native generation is published only after upload success;\n- cache identity includes source/request, revision, interpretation and bake settings, with LRU bound 4;\n- stale native generations are removed after device shutdown/reinit and rebuilt;\n- same-source last-good is retained on corruption/upload failure, while redirected missing sources use neutral fallback with diagnostics.\n\nVerification:\n- Debug and Release AxleEnvironmentRenderingTests builds: exit 0.\n- Debug/Release x D3D12/Vulkan 1.3 native fixture: exit 0, ending PASS HDR native subresources, sky/specular/diffuse, cache, exposure, reload, fallback and upload retry.\n- Debug/Release x OpenGL 4.5 fallback fixture: exit 0, ending PASS OpenGL background-only and explicit IBL pixels, snapshot and ECS bridge gates.\n- Logs: build/agent-runs/M15-U2-S2.2/*.log.\n- Report: docs/reviews/M15_U2_S2_2_ENVIRONMENT_GENERATION_REVIEW.md.\n\nS2.3 remains unreleased and untouched.\n"
     }
   ],
   "deferred_tasks": [

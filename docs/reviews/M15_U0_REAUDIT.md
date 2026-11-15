@@ -131,6 +131,20 @@ Result: **PASS**.
 The supplied screenshot is the visual artifact for this leaf; no local artifact path
 was available from the native Computer Use pipe.
 
+## M15-U0-06.2.1 — Freeze Hi-Z depth convention and reduction operator
+
+Result: **PASS**.
+
+- Current production shader `Engine/Resources/Shaders/HiZ.hlsl` uses the engine's
+  zero-to-one depth convention.
+- The conservative nearest-blocker operator is `min` over the 2x2 source samples.
+- Out-of-range source coordinates clamp to the last valid source pixel, defining the
+  edge policy for odd dimensions.
+- `RHIViewTargets` allocates each level with `max(1, floor(size / 2^level))` and
+  stores levels as independent `R32_FLOAT` textures.
+- No Editor visual evidence is required for this contract-freeze leaf. The CPU
+  reference and edge/identity tests remain separate sequential leaves.
+
 ## M15-U0-06.1 — Smooth-normal reference implementation
 
 Result: **PARTIAL / NOT RUN for the required Editor visual gate**.

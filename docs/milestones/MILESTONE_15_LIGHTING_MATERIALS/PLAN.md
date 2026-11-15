@@ -345,9 +345,10 @@ the item is visible.
 - [x] **M15-U3-05.2 — Declare normal/probe reads.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Strict native SSR fixture asserts `SurfaceNormal` and `SSRCompute` with an authored probe, reads ScreenNormal and observes changed output; Debug/Release D3D12/Vulkan 4/4 exit 0. [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
-- [ ] **M15-U3-05.3 — Declare history/exposure reads.**
+- [x] **M15-U3-05.3 — Declare history/exposure reads.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
+  - **Evidence:** Debug/Release D3D12/Vulkan native fixture checks history/exposure pass order and first/second TAA frames (4/4, exit 0); Debug/Release Editor builds exit 0. User-supplied D3D12 Editor screenshots show Auto-Exposure and TAA both on and both off, five rendered spheres, no invalid frame and Console `Error 0`. The screenshots do not identify the Editor build configuration. [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).
 - [x] **M15-U3-06 — Add per-view target generation, completion and reset ownership.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** Native fixture verifies target generation diagnostics, completion token epoch/value and wait, replacement reset and failed allocation preservation. Debug/Release D3D12/Vulkan 4/4 exit 0; [U3 batches 1–2 review](../../reviews/M15_U3_BATCH_1_2_REVIEW.md).

@@ -1,33 +1,26 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U1-S1.1",
-    "title": "M15 U1 S1.1 direct-light reference contracts independent review",
-    "state": "accepted",
+    "id": "M15-U1-S1.2",
+    "title": "M15 U1 S1.2 GGX visibility and dielectric/metal F0 reference",
+    "state": "implemented_pending_review",
     "coordinator": "User / Codex",
-    "implementer": "Codex (user-authorized S1.1 repairs after independent review)",
-    "code_baseline": "06a5dfc9",
-    "reviewed_source_commit": "dc6e2ccf",
-    "review_commit": "eaee0db8",
-    "user_instruction": "Resolve S1.1 review blockers after independent review; preserve Editor visual evidence gate and do not push.",
-    "user_scope": "Repair M15-U1-01.1 intensity units and M15-U1-01.4 GPU auto exposure, verify D3D12/Vulkan Debug/Release and prepare Editor visual evidence.",
+    "implementer": "Codex (explicit user assignment for S1.2)",
+    "code_baseline": "551fd4b7",
+    "user_instruction": "Implement SubUnit S1.2 after accepted S1.1; do not push.",
+    "user_scope": "Implement and verify M15-U1-02.1 GGX visibility/normal-distribution compensation and M15-U1-02.2 dielectric/metal F0 reference; stop before S1.3.",
     "expected_files": [
-      "Engine/Renderer/src/LightingService.cpp",
-      "Engine/Resources/Shaders/AutoExposure.hlsl",
-      "Engine/Resources/Shaders/ToneMapping.hlsl",
-      "Engine/Scene/src/RHISceneRenderer.cpp",
-      "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "Engine/Resources/Shaders/ForwardPBR.hlsl",
       "Tests/rendering/Test_LightingServicesUnit.cpp",
-      "Tests/rendering/RHIResourceViewMain.cpp",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U1_S1_1_INDEPENDENT_REVIEW.md",
+      "docs/reviews/M15_U1_S1_2_REFERENCE_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "R2 repaired in 4af042b2; R1 repaired in c5b9f82f. Debug/Release RenderUnitTests, D3D12/Vulkan native readback tests and Debug/Release AxleEditor builds pass.",
-    "acceptance_status": "M15-U1-01.1 through 01.4 and derived S1.1 PASS at source c5b9f82f after Debug/Release builds/tests, D3D12/Vulkan native readback, and two user-supplied D3D12 Editor screenshots showing Auto-Exposure on/off at fixed intensity/exposure. Screenshot binary configuration is not identified; do not claim both Editor configurations were pictured.",
-    "open_gates": [],
-    "next_action": "Stop at the accepted S1.1 boundary. Later U1 leaves remain unreleased until separately requested.",
-    "metadata_correction": "Replaces stale M14 accepted task card; that acceptance remains in history and its own review report. Current user instruction releases only the M15 S1.1 review."
+    "implementation_status": "Source commit 5c65cd84 aligns baked DFG visibility with ForwardPBR correlated Smith, adds finite neutral LUT fallback, and adds independent GGX/F0 reference fixture. Debug/Release RenderUnitTests and dedicated M15BRDFReference pass; DXC DXIL/SPIR-V compilation and D3D12/Vulkan native surface readbacks pass in both configurations.",
+    "acceptance_status": "Implementation self-verified; S1.2 parent and leaves remain unchecked pending separate-context recheck required by WORKING_PROTOCOL.md.",
+    "open_gates": ["Separate-context source recheck NOT RUN: reviewer agent authentication failed before inspection (refresh token revoked)"],
+    "next_action": "Obtain independent recheck of 5c65cd84, resolve any findings, then accept S1.2 and stop before S1.3.",
+    "metadata_correction": "Supersedes accepted S1.1 task card because the latest user instruction releases S1.2. S1.1 acceptance remains recorded in history and its review report."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -3751,6 +3744,17 @@
       "base_commit": "c5b9f82f",
       "timestamp_utc": "2026-11-15T08:52:21.236464+00:00",
       "body": "FINAL REVIEW / ACCEPTANCE: M15 U1 S1.1 PASS at source c5b9f82f. Findings S1.1-R2 and R1 were repaired in 4af042b2 and c5b9f82f respectively. Independent Debug/Release RenderUnitTests and AxleEditor builds passed. Native RTX 3070 readback on D3D12 and Vulkan, Debug and Release, passed with validation: bright manual/auto 245/147 and dark manual/auto 32/142 at fixed authored exposure 1.0.\n\nUser supplied two Editor screenshots in the active conversation on 2026-11-15. I inspected them: same D3D12 M15_RoughnessSweep scene/camera, directional intensity 5.00, authored exposure 1.00, console Error 0. Auto-Exposure checked in the first image darkens sky/plane/spheres relative to the second unchecked image; no black frame or invalid output visible. This closes the U1-01.4 Editor visual gate. The screenshots do not identify Debug vs Release; both Editor builds and both-config native readback were independently run, and I do not claim both Editor configurations were pictured.\n\nPLAN now checks U1-01.4 and derived S1.1. Remaining U1 leaves are outside this acceptance. No push and no Gemini action requested.\n"
+    },
+    {
+      "id": "CG-20261115T085632717425Z-CODEX-72d84d",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U1-S1.2",
+      "reply_to": "CG-20261115T085221236464Z-CODEX-f81fb7",
+      "base_commit": "551fd4b7",
+      "timestamp_utc": "2026-11-15T08:56:32.717425+00:00",
+      "body": "IN_PROGRESS: The user explicitly assigned Codex SubUnit S1.2, limited to M15-U1-02.1 GGX visibility/normal-distribution compensation and M15-U1-02.2 dielectric/metal F0 reference. I will inspect the production shader paths, add independent numeric and shader-boundary verification, repair any mismatch, run Debug/Release gates, document measured evidence, and commit coherent checkpoints. No later S1.3/U1 packages are released. Expected files: Engine/Resources/Shaders/ForwardPBR.hlsl if a correction is needed; Tests/rendering/ dedicated BRDF fixture and its CMake wiring as needed; docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md; docs/reviews/M15_U1_S1_2_REFERENCE_REVIEW.md; docs/agents/CODEX_GEMINI_EXCHANGE.json. Base 551fd4b7. No Editor visual gate is declared for these two leaves.\n"
     }
   ],
   "deferred_tasks": [

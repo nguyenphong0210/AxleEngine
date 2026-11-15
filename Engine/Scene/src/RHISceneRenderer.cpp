@@ -19,6 +19,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/RHI/RHIVertexLayout.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include "NativeForwardSource.hpp"
@@ -101,16 +102,26 @@ namespace Axle {
         if (device.GetCapabilities().TimestampFrequencyHz && device.GetNRICore().CreateQueryPool) {
             nri::QueryPoolDesc timestampDesc{};
             timestampDesc.queryType = nri::QueryType::TIMESTAMP;
-            timestampDesc.capacity = 2;
-            if (device.GetNRICore().CreateQueryPool(*device.GetNRIDevice(), timestampDesc, m_GPUTimestampPool) == nri::Result::SUCCESS && m_GPUTimestampPool) {
+            timestampDesc.capacity = MaxGPUTimestampQueries;
+            bool ready = true;
+            for (size_t index = 0; index < m_GPUTimestampSlots.size(); ++index) {
+                auto& slot = m_GPUTimestampSlots[index];
                 RHIBufferDesc readbackDesc{};
-                readbackDesc.Size = 16;
+                readbackDesc.Size = MaxGPUTimestampQueries * sizeof(uint64_t);
                 readbackDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
-                readbackDesc.DebugName = "RendererGPUTimestampReadback";
-                if (!m_GPUTimestampReadback.Init(readbackDesc)) {
-                    device.GetNRICore().DestroyQueryPool(m_GPUTimestampPool);
-                    m_GPUTimestampPool = nullptr;
+                readbackDesc.DebugName = "RendererGPUTimestampReadback" + std::to_string(index);
+                if (ScopedRHIFault::Invoke("CreateRendererTimestampPool", [&] {
+                        return device.GetNRICore().CreateQueryPool(*device.GetNRIDevice(), timestampDesc, slot.Pool);
+                    }) != nri::Result::SUCCESS ||
+                    !slot.Pool || !slot.Readback.Init(readbackDesc)) { ready = false; break; }
+            }
+            if (!ready) {
+                for (auto& slot : m_GPUTimestampSlots) {
+                    slot.Readback.Shutdown();
+                    if (slot.Pool) device.GetNRICore().DestroyQueryPool(slot.Pool);
+                    slot.Pool = nullptr;
                 }
+                AXLE_CORE_WARN("RHISceneRenderer: GPU timing is unavailable; scene rendering continues without timestamp queries.");
             }
         }
 
@@ -667,11 +678,17 @@ namespace Axle {
         m_AnisoSampler.Shutdown();
 
         m_PipelineLayout.Shutdown();
-        m_GPUTimestampReadback.Shutdown();
-        if (m_GPUTimestampPool && m_Device && m_Device->GetNRICore().DestroyQueryPool) {
-            m_Device->GetNRICore().DestroyQueryPool(m_GPUTimestampPool);
+        for (auto& slot : m_GPUTimestampSlots) {
+            slot.Readback.Shutdown();
+            if (slot.Pool && m_Device && m_Device->GetNRICore().DestroyQueryPool)
+                m_Device->GetNRICore().DestroyQueryPool(slot.Pool);
+            slot.Pool = nullptr; slot.Pending = false; slot.Completion = {};
+            slot.PassNames.clear(); slot.QueryCount = 0;
         }
-        m_GPUTimestampPool = nullptr;
+        m_ActiveGPUTimestampSlot = static_cast<size_t>(-1);
+        m_ActivePassEndQuery = UINT32_MAX;
+        m_NextGPUTimestampSlot = 0;
+        m_LastGPUTimingFrame = {};
         m_LastGPUTimestampMilliseconds = 0.0;
         m_ViewContext.Shutdown();
         m_Device = nullptr;
@@ -2460,27 +2477,88 @@ namespace Axle {
         return {m_HasActiveReflectionProbe ? m_ActiveReflectionProbePrefilter->GetHandle() : RHIResourceHandle{}, environment->Diagnostic()};
     }
 
-    void RHISceneRenderer::ConsumePreviousGPUTimestamp() {
-        const auto previousCompletion = m_LastCompletion;
-        if (!previousCompletion || !m_GPUTimestampPool || !m_GPUTimestampReadback.IsValid()) {
-            m_ViewContext.Diagnostics().SetFrameGPUTime(0.0, DiagnosticValidity::Unavailable);
+    void RHISceneRenderer::ConsumeReadyGPUTimestamps() {
+        if (!m_Device) return;
+        GPUTimingFrame newest;
+        bool hasNewResult = false;
+        for (auto& slot : m_GPUTimestampSlots) {
+            if (!slot.Pending || m_Device->GetResources().IsInUse(slot.Readback.AcquireLease())) continue;
+            GPUTimingFrame result;
+            result.Completion = slot.Completion;
+            result.Passes.reserve(slot.PassNames.size());
+            const auto frequency = m_Device->GetCapabilities().TimestampFrequencyHz;
+            auto* values = slot.Readback.IsValid() && frequency
+                ? static_cast<const uint64_t*>(slot.Readback.Map()) : nullptr;
+            const auto duration = [frequency](uint64_t start, uint64_t end) {
+                return frequency && end > start
+                    ? static_cast<double>(end - start) * 1000.0 / static_cast<double>(frequency) : 0.0;
+            };
+            if (values && slot.QueryCount >= 2) {
+                result.Milliseconds = duration(values[0], values[1]);
+                result.Validity = result.Milliseconds > 0.0 ? DiagnosticValidity::Valid : DiagnosticValidity::Unknown;
+                for (size_t index = 0; index < slot.PassNames.size(); ++index) {
+                    const uint32_t query = 2 + static_cast<uint32_t>(index) * 2;
+                    const double milliseconds = query + 1 < slot.QueryCount
+                        ? duration(values[query], values[query + 1]) : 0.0;
+                    result.Passes.push_back({slot.PassNames[index], milliseconds,
+                        milliseconds > 0.0 ? DiagnosticValidity::Valid : DiagnosticValidity::Unknown});
+                }
+                slot.Readback.Unmap();
+            } else {
+                result.Validity = DiagnosticValidity::Invalid;
+                for (const auto& name : slot.PassNames)
+                    result.Passes.push_back({name, 0.0, DiagnosticValidity::Invalid});
+            }
+            if (!hasNewResult || result.Completion.Value > newest.Completion.Value) {
+                newest = std::move(result);
+                hasNewResult = true;
+            }
+            slot.Pending = false; slot.Completion = {}; slot.QueryCount = 0; slot.PassNames.clear();
+        }
+        if (hasNewResult) {
+            m_LastGPUTimestampMilliseconds = newest.Validity == DiagnosticValidity::Valid ? newest.Milliseconds : 0.0;
+            m_ViewContext.Diagnostics().SetFrameGPUTime(m_LastGPUTimestampMilliseconds, newest.Validity);
+            m_LastGPUTimingFrame = std::move(newest);
+        }
+    }
+
+    void RHISceneRenderer::BeginGPUTimestampFrame() {
+        m_ActiveGPUTimestampSlot = static_cast<size_t>(-1);
+        m_ActivePassEndQuery = UINT32_MAX;
+        for (size_t attempt = 0; attempt < m_GPUTimestampSlots.size(); ++attempt) {
+            const auto index = (m_NextGPUTimestampSlot + attempt) % m_GPUTimestampSlots.size();
+            auto& slot = m_GPUTimestampSlots[index];
+            if (slot.Pending || !slot.Pool || !slot.Readback.IsValid()) continue;
+            slot.PassNames.clear(); slot.QueryCount = 2;
+            m_Device->GetNRICore().ResetQueries(*slot.Pool, 0, MaxGPUTimestampQueries);
+            m_Device->GetNRICore().CmdEndQuery(*Commands().GetNative(), *slot.Pool, 0);
+            m_ActiveGPUTimestampSlot = index;
+            m_NextGPUTimestampSlot = (index + 1) % m_GPUTimestampSlots.size();
             return;
         }
+        m_ViewContext.Diagnostics().SetFrameGPUTime(0.0, DiagnosticValidity::Unknown);
+    }
 
-        m_LastGPUTimestampMilliseconds = 0.0;
-        m_Device->WaitForCompletion(previousCompletion);
-        if (auto* values = static_cast<uint64_t*>(m_GPUTimestampReadback.Map())) {
-            const uint64_t delta = values[1] > values[0] ? values[1] - values[0] : 0;
-            const uint64_t frequency = m_Device->GetCapabilities().TimestampFrequencyHz;
-            const bool valid = frequency != 0 && delta != 0;
-            m_LastGPUTimestampMilliseconds = valid
-                ? static_cast<double>(delta) * 1000.0 / static_cast<double>(frequency) : 0.0;
-            m_ViewContext.Diagnostics().SetFrameGPUTime(m_LastGPUTimestampMilliseconds,
-                valid ? DiagnosticValidity::Valid : DiagnosticValidity::Unknown);
-            m_GPUTimestampReadback.Unmap();
-        } else {
-            m_ViewContext.Diagnostics().SetFrameGPUTime(0.0, DiagnosticValidity::Invalid);
+    void RHISceneRenderer::EndGPUTimestampPass() {
+        if (m_ActiveGPUTimestampSlot == static_cast<size_t>(-1) || m_ActivePassEndQuery == UINT32_MAX) return;
+        auto& slot = m_GPUTimestampSlots[m_ActiveGPUTimestampSlot];
+        m_Device->GetNRICore().CmdEndQuery(*Commands().GetNative(), *slot.Pool, m_ActivePassEndQuery);
+        m_ActivePassEndQuery = UINT32_MAX;
+    }
+
+    void RHISceneRenderer::BeginGPUTimestampPass(std::string_view name) {
+        EndGPUTimestampPass();
+        if (m_ActiveGPUTimestampSlot == static_cast<size_t>(-1)) return;
+        auto& slot = m_GPUTimestampSlots[m_ActiveGPUTimestampSlot];
+        if (slot.QueryCount + 2 > MaxGPUTimestampQueries) {
+            slot.PassNames.emplace_back(name); // Unmeasured pass remains Unknown.
+            return;
         }
+        const uint32_t start = slot.QueryCount;
+        slot.QueryCount += 2;
+        slot.PassNames.emplace_back(name);
+        m_Device->GetNRICore().CmdEndQuery(*Commands().GetNative(), *slot.Pool, start);
+        m_ActivePassEndQuery = start + 1;
     }
 
     void RHISceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene,
@@ -2491,7 +2569,6 @@ namespace Axle {
                                        PhysicsScene* physicsScene,
                                        std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
-        ConsumePreviousGPUTimestamp();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!colorTarget || !colorTarget->IsValid()) return;
 
@@ -2521,7 +2598,7 @@ namespace Axle {
                                        PhysicsScene* physicsScene,
                                        std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
-        ConsumePreviousGPUTimestamp();
+        ConsumeReadyGPUTimestamps();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!scene) return;
         SceneExtractionOptions options; options.CameraOverride = &camera;
@@ -2559,7 +2636,7 @@ namespace Axle {
                                            PhysicsScene* physicsScene,
                                            std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
-        ConsumePreviousGPUTimestamp();
+        ConsumeReadyGPUTimestamps();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!colorTarget || !colorTarget->IsValid()) return;
 
@@ -2589,7 +2666,7 @@ namespace Axle {
                                        PhysicsScene* physicsScene,
                                        std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
-        ConsumePreviousGPUTimestamp();
+        ConsumeReadyGPUTimestamps();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
         if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
         const auto backendPolicy = RenderBackendPolicy::FromDevice(m_Device->GetCapabilities());
@@ -2607,6 +2684,7 @@ namespace Axle {
         viewInput.MaterialGeneration = m_ViewContext.GetInput().MaterialGeneration;
         m_ViewContext.Observe(viewInput, m_Device->GetEpoch());
         if (!world.ErrorMessage.empty() || !m_ViewContext.BeginFrame()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
+        ConsumeReadyGPUTimestamps();
         for (const auto& fallback : backendPolicy.CollectFallbacks(requestedSettings))
             m_ViewContext.Diagnostics().AddFallback(fallback);
         const auto reflectionFrame = m_ReflectionService.Prepare(
@@ -2623,11 +2701,7 @@ namespace Axle {
                     m_ViewContext.AbandonFrame();
                 }
             });
-        if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
-            auto& core = m_Device->GetNRICore();
-            core.ResetQueries(*m_GPUTimestampPool, 0, 2);
-            core.CmdEndQuery(*Commands().GetNative(), *m_GPUTimestampPool, 0);
-        }
+        BeginGPUTimestampFrame();
         // The extracted CPU snapshot may be released immediately after this
         // call. Record executable owners in the actual submission pin chain.
         if (!world.DebugLines.empty()) {

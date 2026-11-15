@@ -208,6 +208,7 @@ namespace Axle {
                 passUniforms.emplace(name,std::move(buffer)); return true;
             };
         auto beginPass = [&](std::string_view name) {
+            EndGPUTimestampPass();
             if (diagnosticsPassActive) {
                 m_ViewContext.Diagnostics().EndPass();
                 diagnosticsPassActive = false;
@@ -215,6 +216,7 @@ namespace Axle {
             activePass = name;
             if (graph.BeginPass(name, Commands())) {
                 activeGraphPass = name;
+                BeginGPUTimestampPass(name);
                 m_ViewContext.Diagnostics().BeginPass(std::string(name));
                 diagnosticsPassActive = true;
                 return true;
@@ -1741,12 +1743,15 @@ namespace Axle {
 
         addPass("Export", [&](const RenderPassContext&) -> RenderPassResult {
             if (!beginPass("Export")) return fail();
-            if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid()) {
+            if (m_ActiveGPUTimestampSlot != static_cast<size_t>(-1)) {
+                EndGPUTimestampPass();
+                auto& slot = m_GPUTimestampSlots[m_ActiveGPUTimestampSlot];
                 auto& core = m_Device->GetNRICore();
-                core.CmdEndQuery(*Commands().GetNative(), *m_GPUTimestampPool, 1);
-                Commands().TransitionBuffer(m_GPUTimestampReadback.GetNative(), RHIAccess::None, RHIAccess::CopyDest);
+                core.CmdEndQuery(*Commands().GetNative(), *slot.Pool, 1);
+                Commands().TransitionBuffer(slot.Readback.GetNative(), RHIAccess::None, RHIAccess::CopyDest);
                 if (!Commands().IsRecording()) return fail();
-                core.CmdCopyQueries(*Commands().GetNative(), *m_GPUTimestampPool, 0, 2, *m_GPUTimestampReadback.GetNative(), 0);
+                core.CmdCopyQueries(*Commands().GetNative(), *slot.Pool, 0, slot.QueryCount,
+                    *slot.Readback.GetNative(), 0);
             }
 
             if (!graph.IsComplete()) return fail();
@@ -1756,8 +1761,9 @@ namespace Axle {
             if (sceneDepthDSV) exports.push_back({sceneDepth,Layout::DepthStencilRead});
             graph.AddPass("Export", std::move(exports));
         }, [&](const RenderPassContext&) -> RenderPassResult {
-            if (m_GPUTimestampPool && m_GPUTimestampReadback.IsValid() &&
-                !graph.DeclareBuffer("Export",m_GPUTimestampReadback.AcquireLease(),RHIAccess::CopyDest,Access::Write)) return fail();
+            if (m_ActiveGPUTimestampSlot != static_cast<size_t>(-1) &&
+                !graph.DeclareBuffer("Export",m_GPUTimestampSlots[m_ActiveGPUTimestampSlot].Readback.AcquireLease(),
+                    RHIAccess::CopyDest,Access::Write)) return fail();
             return {};
         });
 
@@ -1787,6 +1793,12 @@ namespace Axle {
         m_LocalShadows.OnSubmitted();
         m_LastCompletion = m_ViewContext.GetCompletion();
         m_LastRenderSucceeded = static_cast<bool>(m_LastCompletion);
+        if (m_LastRenderSucceeded && m_ActiveGPUTimestampSlot != static_cast<size_t>(-1)) {
+            auto& slot = m_GPUTimestampSlots[m_ActiveGPUTimestampSlot];
+            slot.Completion = m_LastCompletion;
+            slot.Pending = true;
+        }
+        m_ActiveGPUTimestampSlot = static_cast<size_t>(-1);
         m_ViewContext.Diagnostics().SetCounters(m_LastDrawCallCount, dispatchCount);
         return m_LastRenderSucceeded;
     }

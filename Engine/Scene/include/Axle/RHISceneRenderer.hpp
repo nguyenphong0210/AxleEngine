@@ -1,7 +1,11 @@
 #pragma once
 #include <map>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <array>
+#include <cstdint>
+#include <vector>
 #include <Axle/RHI/RHIFrameContext.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/Types.hpp>
@@ -226,8 +230,20 @@ namespace Axle {
         // Performance & Telemetry metrics
         uint32_t GetDrawCallCount() const { return m_LastDrawCallCount; }
         uint32_t GetRenderedEntityCount() const { return m_LastRenderedEntityCount; }
+        struct GPUTimingPass {
+            std::string Name;
+            double Milliseconds = 0.0;
+            DiagnosticValidity Validity = DiagnosticValidity::Unknown;
+        };
+        struct GPUTimingFrame {
+            RHI::RHICompletionToken Completion;
+            double Milliseconds = 0.0;
+            DiagnosticValidity Validity = DiagnosticValidity::Unknown;
+            std::vector<GPUTimingPass> Passes;
+        };
         double GetLastGPUTimestampMilliseconds() const { return m_LastGPUTimestampMilliseconds; }
         bool IsLastGPUTimestampValid() const { return m_ViewContext.Diagnostics().IsGPUTimeValid(); }
+        const GPUTimingFrame& GetLastGPUTimingFrame() const { return m_LastGPUTimingFrame; }
         const RenderDiagnostics& GetDiagnostics() const { return m_ViewContext.Diagnostics(); }
         uint64_t GetStreamedTransformBytes() const { return m_LastStreamedTransformBytes; }
 
@@ -449,7 +465,10 @@ namespace Axle {
         nri::Pipeline* GetOrCreateFogApplyPipeline(nri::Format colorFormat);
 
     private:
-        void ConsumePreviousGPUTimestamp();
+        void ConsumeReadyGPUTimestamps();
+        void BeginGPUTimestampFrame();
+        void BeginGPUTimestampPass(std::string_view name);
+        void EndGPUTimestampPass();
         ReflectionPublication PrepareReflectionProbe(const ReflectionFrame& reflectionFrame);
         RHI::RHIDevice* m_Device = nullptr;
         RHI::RHIPipelineLayout m_PipelineLayout;
@@ -665,8 +684,20 @@ namespace Axle {
         RHI::RHISampler m_TAAPointSampler;
         RHI::RHIDescriptorPool m_TAADescriptorPool;
         nri::DescriptorSet* m_TAADescriptorSet = nullptr;
-        nri::QueryPool* m_GPUTimestampPool = nullptr;
-        RHI::RHIBuffer m_GPUTimestampReadback;
+        static constexpr uint32_t MaxGPUTimestampQueries = 128;
+        struct GPUTimestampSlot {
+            nri::QueryPool* Pool = nullptr;
+            RHI::RHIBuffer Readback;
+            RHI::RHICompletionToken Completion;
+            std::vector<std::string> PassNames;
+            uint32_t QueryCount = 0;
+            bool Pending = false;
+        };
+        std::array<GPUTimestampSlot, 3> m_GPUTimestampSlots;
+        size_t m_ActiveGPUTimestampSlot = static_cast<size_t>(-1);
+        uint32_t m_ActivePassEndQuery = UINT32_MAX;
+        size_t m_NextGPUTimestampSlot = 0;
+        GPUTimingFrame m_LastGPUTimingFrame;
         double m_LastGPUTimestampMilliseconds = 0.0;
 
         // Intermediate Floating-point HDR Target for 2-pass Scene -> ToneMap execution

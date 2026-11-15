@@ -284,11 +284,38 @@ bool Native(RHIType backend) {
     }
     settings.EnableGTAO=true; settings.EnableContactShadows=false; auto gtaoOnly=render();
     CHECK(!gtaoOnly.empty()&&gtaoOnly.size()==red.size());
-    settings.EnableGTAO=false; settings.EnableContactShadows=true; auto contactOnly=render();
+    const auto& gtaoTiming = renderer.GetLastGPUTimingFrame();
+    CHECK(gtaoTiming.Completion && gtaoTiming.Validity == DiagnosticValidity::Valid &&
+        gtaoTiming.Milliseconds > 0.0 &&
+        std::any_of(gtaoTiming.Passes.begin(), gtaoTiming.Passes.end(), [](const auto& pass) {
+            return pass.Name == "GTAOCompute" && pass.Validity == DiagnosticValidity::Valid && pass.Milliseconds > 0.0;
+        }));
+    const auto measuredCompletion = gtaoTiming.Completion;
+    settings.EnableGTAO=false; settings.EnableContactShadows=true;
+    bool timingReadbackRejected = false;
+    std::vector<uint8_t> contactOnly;
+    {
+        ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "MapBuffer" &&
+                ScopedRHIOperation::Resource().starts_with("RendererGPUTimestampReadback") &&
+                !timingReadbackRejected) {
+                timingReadbackRejected = true;
+                return nri::Result::OUT_OF_MEMORY;
+            }
+            return {};
+        });
+        contactOnly = render();
+    }
     CHECK(!contactOnly.empty()&&contactOnly.size()==red.size());
+    CHECK(timingReadbackRejected && renderer.GetLastGPUTimingFrame().Validity == DiagnosticValidity::Invalid &&
+        renderer.GetLastGPUTimestampMilliseconds() == 0.0 &&
+        std::all_of(renderer.GetLastGPUTimingFrame().Passes.begin(), renderer.GetLastGPUTimingFrame().Passes.end(),
+            [](const auto& pass) { return pass.Validity == DiagnosticValidity::Invalid && pass.Milliseconds == 0.0; }));
     settings.EnableGTAO=false; settings.EnableContactShadows=false;
     CHECK(!render().empty() && renderer.GetDiagnostics().GetFrame().TargetGeneration != gtaoGeneration &&
         renderer.GetOpaqueNormalTarget() == nullptr && renderer.GetHiZTarget(0) == nullptr);
+    CHECK(renderer.GetLastGPUTimingFrame().Validity == DiagnosticValidity::Valid &&
+        renderer.GetLastGPUTimingFrame().Completion.Value > measuredCompletion.Value);
     settings.EnableSSR=true; auto ssr=render();
     CHECK(!ssr.empty()&&ssr.size()==red.size());
     CHECK(renderer.GetDiagnostics().GetFrame().TargetGeneration != gtaoGeneration &&
@@ -798,6 +825,24 @@ bool Native(RHIType backend) {
         renderer.GetLastCompletion() && device.WaitForCompletion(renderer.GetLastCompletion()));
     renderer.Shutdown();
     CHECK(environment.CacheSize() == 0 && GetRHIValidationErrorCount() == 0);
+    RHISceneRenderer noTimingRenderer;
+    bool timingPoolRejected = false;
+    {
+        ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+            if (operation == "CreateRendererTimestampPool" && !timingPoolRejected) {
+                timingPoolRejected = true;
+                return nri::Result::OUT_OF_MEMORY;
+            }
+            return {};
+        });
+        CHECK(noTimingRenderer.Init(device, false) && timingPoolRejected);
+    }
+    noTimingRenderer.RenderWorldView(world, camera, &color, &depth, settings);
+    CHECK(noTimingRenderer.WasLastRenderSuccessful() &&
+        noTimingRenderer.GetLastGPUTimingFrame().Validity == DiagnosticValidity::Unknown &&
+        noTimingRenderer.GetLastGPUTimestampMilliseconds() == 0.0);
+    noTimingRenderer.Shutdown();
+    CHECK(GetRHIValidationErrorCount() == 0);
     // CPU cache metadata may outlive a native device. Stale native generations
     // must become invalid and be recreated under the new owner epoch.
     RHIEnvironment survivor;CHECK(survivor.SetBakeSettings(bake));world.Skybox.Type=1;world.Skybox.HDRPath="blue.hdr";

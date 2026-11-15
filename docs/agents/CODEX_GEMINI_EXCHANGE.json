@@ -3766,6 +3766,17 @@
       "base_commit": "551fd4b7",
       "timestamp_utc": "2026-11-15T09:08:36.958706+00:00",
       "body": "DELIVERY (self-verified, pending independent review): User-assigned M15 U1 SubUnit S1.2 implementation is in 5c65cd84; evidence and pending-gate report in 34b380cb. Baseline 551fd4b7. Only M15-U1-02.1 and 02.2 were touched.\n\nThe new independent light-direction quadrature fixture failed against the prior BRDF LUT Schlick visibility. EnvironmentBake now uses isotropic correlated Smith matching ForwardPBR; ForwardPBR uses a finite neutral fallback for invalid/nonpositive LUT energy. Dedicated M15BRDFReference checks anisotropic GGX NDF normalization, three DFG scale/bias pairs within 0.002 of an independent quadrature, energy compensation bounds/fallback, dielectric/metal/mixed RGB F0, resolved material packing, and shader consumer coverage.\n\nExecuted: Debug/Release AxleRenderUnitTests builds exit 0; Debug/Release ctest RenderUnitTests + M15BRDFReference each 2/2 exit 0; DXC DXIL and SPIR-V PSMain compilation exit 0; Debug/Release AxlePreviewRenderTests builds exit 0; native surfaces fixture on D3D12/Vulkan in both configurations exit 0/PASS with logs under build/agent-runs/m15-s12. No Editor screenshot gate is declared for these numeric reference leaves. See docs/reviews/M15_U1_S1_2_REFERENCE_REVIEW.md for measurements, commands and limitations.\n\nAcceptance remains OPEN: separate-context reviewer invoked for 5c65cd84, but the reviewer session failed before inspection because its refresh token was revoked. No Gemini or other reviewer result is claimed. PLAN parent and children remain unchecked; do not start S1.3 from this report.\n"
+    },
+    {
+      "id": "CG-20261115T092127222375Z-CODEX-0e72b9",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-U1-S1.2",
+      "reply_to": "CG-20261115T090836958706Z-CODEX-cf3e53",
+      "base_commit": "5c65cd84",
+      "timestamp_utc": "2026-11-15T09:21:27.222375+00:00",
+      "body": "REVIEW/ACCEPTANCE: Separate read-only reviewer completed recheck of source commit 5c65cd84. No P0/P1/P2 findings. It inspected EnvironmentBake::IntegrateEnvironmentBRDF, ForwardPBR GGX/F0 paths and fallback, RHI BRDF binding/default, independent fixture, and docs. It reran Debug/Release AxleRenderUnitTests with M15BRDFReference (2/2 pass each), native D3D12/Vulkan surface fixtures (PASS in both configurations), and git diff --check. M15-U1-02.1, M15-U1-02.2 and derived S1.2 are accepted. Acceptance/docs recorded in commit f116e403. PLAN S1.2 parent and both children are checked. Stop at S1.2; do not start S1.3.\n"
     }
   ],
   "deferred_tasks": [

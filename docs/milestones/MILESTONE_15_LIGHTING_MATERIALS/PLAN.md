@@ -319,10 +319,10 @@ the item is visible.
 
 - [x] **M15-U3-01.1 — Validate timestamp probe description.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** TimestampProbe uses a two-query TIMESTAMP pool, 16-byte host readback and a positive tick delta; Debug/Release D3D12 and Vulkan measurements are recorded in [M14 P1 GPU timing](../../reviews/M14_P1_GPU_TIMING.md).
 - [x] **M15-U3-01.2 — Require successful timestamp readback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Renderer-integrated readback asserts renderer_gpu_scope_valid=1 after a submitted view; the same M14 P1 report records positive D3D12/Vulkan values and the native fixture still checks GetLastGPUTimestampMilliseconds() > 0.
 - [x] **M15-U3-02 — Read renderer timestamps on all public view submission paths.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.

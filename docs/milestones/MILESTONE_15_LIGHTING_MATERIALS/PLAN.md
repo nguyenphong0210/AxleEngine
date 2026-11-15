@@ -382,10 +382,10 @@ the item is visible.
 - [x] **M15-U3-10.2 — Extract HiZGenerationPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** `HiZGenerationPass::Record` owns all eight reduction levels, source/destination constants, descriptor updates and dispatch; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 with level identity/readback checks. [U3 batch 3 review](../../reviews/M15_U3_BATCH_3_REVIEW.md).
-- [ ] **M15-U3-10.3 — Extract ScreenSpaceReflectionPass.**
+- [x] **M15-U3-10.3 — Extract ScreenSpaceReflectionPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
-  - **Automated evidence:** `ScreenSpaceReflectionPass::Record` owns copy, Hi-Z, compute and apply; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 with probe/fallback and level readback assertions. Editor visual remains pending. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
+  - **Automated evidence:** `ScreenSpaceReflectionPass::Record` owns copy, Hi-Z, compute and apply; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 with probe/fallback and level readback assertions. Editor evidence: same camera/material pair shows no plane reflection with SSR off and a bright reflected streak on the plane with SSR on, with no black edge. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
 - [ ] **M15-U3-10.4 — Extract FroxelFogPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: fog shafts obey blockers; zero density/no-light leaves the image unchanged.

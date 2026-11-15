@@ -25,11 +25,12 @@ M15 material/surface + view contracts
 
 ### M16-RT-01 — Capability policy and RHI foundation
 
-- [ ] **M16-RT-01.1 — Freeze D3D12/Vulkan capability contract.** Define required AS, pipeline, shader-table, inline-ray and descriptor features.
+- [ ] **M16-RT-01.1 — Freeze D3D12/Vulkan capability contract.** Define required AS, pipeline, shader-table, inline-ray and descriptor features, plus the backend-neutral feature matrix consumed by M17. Mesh-shader and indirect-draw support must not be inferred from an RT bit.
 - [ ] **M16-RT-01.2 — Add RHI acceleration-structure descriptors and handles.** No backend-specific handle leaks into Scene.
 - [ ] **M16-RT-01.3 — Add RT pipeline/SBT descriptors and lifetime leases.**
 - [ ] **M16-RT-01.4 — Add RenderGraph RT access states and validation.**
 - [ ] **M16-RT-01.5 — Add explicit raster fallback diagnostics and quality-tier policy.**
+- [ ] **M16-RT-01.6 — Add engine-owned RT command entry points.** Expose AS build/refit, `DispatchRays`, SBT binding and completion-retained leases through RHI without leaking NRI handles into Scene or RenderWorld.
 
 ### M16-RT-02 — BLAS/TLAS lifecycle
 

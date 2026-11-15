@@ -42,6 +42,7 @@ Milestone 17 establishes scalable, high-throughput geometry rendering for AxleEn
 - [ ] **C17-15: ForwardPBR and Transparency Clustered Integration** - Update opaque visibility resolve and transparent ForwardPBR/Material Graph to consume the same cluster grid, with no duplicate light accumulation.
 - [ ] **C17-16: Material-Divergence Policy** - Add measured tile/material bins, specialized built-in PBR families and wave-level same-material fast paths with a generic fallback; cap shader-family/permutation growth.
 - [ ] **C17-17: Shared Scheduling and Evidence** - Register `ClusterLightCulling` before opaque resolve and transparent Forward+, validate graph dependencies and archive overflow, parity, timing and OpenGL 4.5 fallback evidence.
+- [ ] **C17-18: RenderGraph Resource and Feature Contract** - Declare visibility, cluster, indirect-argument and material-table resources with generation/lifetime validation; consume the shared feature matrix from M16 and reject undeclared or incompatible pass dependencies.
 
 ---
 

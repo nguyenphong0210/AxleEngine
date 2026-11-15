@@ -1,7 +1,7 @@
 # Milestone 15 — Lighting and Material Fidelity
 
-**Status:** `HOLD for full M15 acceptance. The user has separately released U0, S1.1 and S1.2; S1.2 is implemented and awaits independent recheck.`
-**Current source reference:** `5c65cd84` for S1.2 implementation; `19ac2a1` remains the historical M14 handoff baseline. This reference does not promote later M15 work.
+**Status:** `HOLD for full M15 acceptance. The user has separately released U0, S1.1, S1.2 and S1.3; S1.3 is accepted after independent review and Editor evidence.`
+**Current source reference:** `c6245e2e` for S1.3 implementation; `19ac2a1` remains the historical M14 handoff baseline. This reference does not promote later M15 work.
 **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
 **Detailed implementation notes:** [REMEDIATION_PLAN.md](REMEDIATION_PLAN.md)
 **M14 prerequisite review:** [M14 U9 final acceptance](../../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md)

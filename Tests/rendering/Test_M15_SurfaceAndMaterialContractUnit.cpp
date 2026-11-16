@@ -748,11 +748,11 @@ bool RunM15SurfaceAndMaterialContractUnitTests() {
         diagnostics.EndPass(DiagnosticStatus::Success, 0.15, 0.0, DiagnosticValidity::Unknown, 10, 0);
         diagnostics.BeginPass("ForwardLighting");
         diagnostics.EndPass(DiagnosticStatus::Success, 0.50, 1.25, DiagnosticValidity::Valid, 25, 2);
-        const auto& passes = diagnostics.GetFrame().Passes;
-        RENDER_CHECK(passes.size() == 2, "recorded 2 render passes");
-        RENDER_CHECK(passes[0].GPUValidity == DiagnosticValidity::Unknown,
+        RENDER_CHECK(diagnostics.GetFrame().Passes.size() == 2, "recorded 2 render passes");
+        RENDER_CHECK(diagnostics.GetFrame().Passes[0].GPUValidity == DiagnosticValidity::Unknown,
             "M15-U3-26.1: DepthPrepass without GPU query reports DiagnosticValidity::Unknown");
-        RENDER_CHECK(passes[1].GPUValidity == DiagnosticValidity::Valid && passes[1].GPUTimeMilliseconds == 1.25,
+        RENDER_CHECK(diagnostics.GetFrame().Passes[1].GPUValidity == DiagnosticValidity::Valid &&
+                     diagnostics.GetFrame().Passes[1].GPUTimeMilliseconds == 1.25,
             "M15-U3-26.1: ForwardLighting with valid GPU timer reports DiagnosticValidity::Valid");
 
         // 26.2: Record fallback reasons
@@ -761,7 +761,8 @@ bool RunM15SurfaceAndMaterialContractUnitTests() {
                             "ssr_depth_hierarchy_incomplete");
         diagnostics.AddFallback("ssr_depth_hierarchy_incomplete");
         diagnostics.AddFallback("SURFACE_UNSUPPORTED_FEATURES: Sheen (mask=0x1)");
-        RENDER_CHECK(passes.back().Status == DiagnosticStatus::Fallback && passes.back().Reason == "ssr_depth_hierarchy_incomplete",
+        RENDER_CHECK(diagnostics.GetFrame().Passes.back().Status == DiagnosticStatus::Fallback &&
+                     diagnostics.GetFrame().Passes.back().Reason == "ssr_depth_hierarchy_incomplete",
             "M15-U3-26.2: pass diagnostic records DiagnosticStatus::Fallback and explicit reason string");
         RENDER_CHECK(diagnostics.GetFrame().Fallbacks.size() == 2 &&
                      diagnostics.GetFrame().Fallbacks[0] == "ssr_depth_hierarchy_incomplete" &&

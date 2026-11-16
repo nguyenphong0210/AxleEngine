@@ -512,13 +512,13 @@ the item is visible.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `RHIViewTargetDesc::EnableScreenStorage = true` declares screen storage for motion/properties; `TemporalService` bypasses uninitialized motion on frame 0 and validates motion tracking on commit. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
 - [x] **M15-U3-24.2 — Declare depth resources.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `RHIViewTargetDesc::EnableDepth = true` with `D32_FLOAT` and `RenderAuxiliary = true` declares depth and auxiliary resources. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+  - **Evidence:** CPU contract verifies the descriptor policy; native `Test_EnvironmentRendering` configures the target generation and verifies `Depth`, `OpaqueDepth`, and `ParticleDepth` are allocated and valid on D3D12/Vulkan. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
 - [x] **M15-U3-24.3 — Declare history resources.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `RHIViewTargetDesc::HistoryCount = 2` declares dual-slot history; `TemporalService` manages ping-pong read/write slot transitions on commit. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
 - [x] **M15-U3-24.4 — Declare exposure resources.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `EnableAutoExposure = true` and `PostProcessService` updates and strictly clamps exposure to `[AutoExposureMin, AutoExposureMax]`. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md). Editor visual evidence remains user-provided.
+  - **Evidence:** CPU contract verifies policy/clamping; native `Test_EnvironmentRendering` configures and validates the 1x1 exposure UAV/SRV on D3D12/Vulkan. Editor visual evidence remains user-provided. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
 - [x] **M15-U3-25.1 — Reset on target generation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.

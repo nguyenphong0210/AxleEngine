@@ -442,14 +442,20 @@ bool Native(RHIType backend) {
         targetDesc.Width = width; targetDesc.Height = width;
         targetDesc.EnableNormal = true;
         targetDesc.EnableScreenStorage = true;
+        targetDesc.EnableAutoExposure = true;
         targetDesc.HistoryCount = 2;
         CHECK(screenTargets.Configure(targetDesc));
         CHECK(screenTargets.IsValid());
+        CHECK(screenTargets.Get(RHIViewTarget::Depth) != nullptr && screenTargets.Get(RHIViewTarget::Depth)->IsValid());
+        CHECK(screenTargets.Get(RHIViewTarget::OpaqueDepth) != nullptr && screenTargets.Get(RHIViewTarget::OpaqueDepth)->IsValid());
+        CHECK(screenTargets.Get(RHIViewTarget::ParticleDepth) != nullptr && screenTargets.Get(RHIViewTarget::ParticleDepth)->IsValid());
         CHECK(screenTargets.Get(RHIViewTarget::ScreenNormal) != nullptr);
         CHECK(screenTargets.Get(RHIViewTarget::ScreenNormal)->IsValid());
         CHECK(screenTargets.Get(RHIViewTarget::ScreenStorage) != nullptr);
         CHECK(screenTargets.Get(RHIViewTarget::ScreenStorage)->IsValid());
         CHECK(screenTargets.Get(RHIViewTarget::ScreenStorage)->GetUAV() != nullptr);
+        CHECK(screenTargets.Get(RHIViewTarget::Exposure) != nullptr && screenTargets.Get(RHIViewTarget::Exposure)->IsValid());
+        CHECK(screenTargets.Get(RHIViewTarget::Exposure)->GetUAV() != nullptr && screenTargets.Get(RHIViewTarget::Exposure)->GetSRV() != nullptr);
         CHECK(screenTargets.Get(RHIViewTarget::History0) != nullptr && screenTargets.Get(RHIViewTarget::History0)->IsValid());
         CHECK(screenTargets.Get(RHIViewTarget::History1) != nullptr && screenTargets.Get(RHIViewTarget::History1)->IsValid());
     }

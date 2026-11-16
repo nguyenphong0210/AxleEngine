@@ -28,7 +28,9 @@
     ],
     "next_action": "Codex / User review and acceptance.",
     "metadata_correction": "Records delivery of M15-U4-03.1 through U4-03.2.",
-    "implementation_commits": [],
+    "implementation_commits": [
+      "83ef0286"
+    ],
     "documentation_commits": [],
     "evidence_report": "docs/reviews/M15_U4_BATCH_1_REVIEW.md",
     "verification": "Debug/Release AxleRenderUnitTests (100% pass, including --m15-occlusion-contract), Debug/Release AxleEnvironmentRenderingTests on DX12 and Vulkan (100% pass, pixel parity diff=(0,0,0)), check_architecture.py PASS, git diff --check PASS."

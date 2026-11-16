@@ -401,10 +401,25 @@ namespace Axle {
                                 ShaderAddress address{description.RegisterSpace,range.baseRegisterIndex};
                                 if (range.descriptorType==nri::DescriptorType::CONSTANT_BUFFER) {
                                     for(size_t i=0;i<buffers.size();++i) if(buffers[i].Address==address) descriptor=resource.ConstantBuffers[i].GetCBV();
+                                    // Reserved lighting contract descriptors are
+                                    // renderer-owned and are not packed as graph
+                                    // material buffers.
+                                    if (!descriptor && address == ShaderAddress{3,0}) descriptor=m_LightBuffer.GetCBV();
+                                    if (!descriptor && address == ShaderAddress{0,4}) descriptor=m_CascadedShadows.GetConstantsCBV();
+                                    if (!descriptor && address == ShaderAddress{0,5}) descriptor=m_LocalShadows.GetConstantsCBV();
                                 } else if(range.descriptorType==nri::DescriptorType::TEXTURE) {
                                     for(size_t i=0;i<item.TextureRequests.size();++i) if(item.TextureRequests[i].Address==address) descriptor=resource.Textures[i]->GetSRV();
+                                    if (!descriptor && address.RegisterSpace == 2) {
+                                        if (address.RegisterIndex == 0) descriptor=ActiveIrradiance()->GetSRV();
+                                        else if (address.RegisterIndex == 1) descriptor=ActivePrefilter()->GetSRV();
+                                        else if (address.RegisterIndex == 2) descriptor=ActiveBRDF()->GetSRV();
+                                        else if (address.RegisterIndex == 3) descriptor=m_CascadedShadows.GetSRV();
+                                        else if (address.RegisterIndex == 4) descriptor=m_LocalShadows.GetSRV();
+                                    }
                                 } else if(range.descriptorType==nri::DescriptorType::SAMPLER) {
                                     descriptor=m_CustomSampler.GetNative();
+                                    if (address.RegisterSpace == 2 && address.RegisterIndex == 1)
+                                        descriptor=m_CustomSampler.GetNative();
                                     for (const auto& sampler:generation.BindingPlan.Samplers) if(sampler.Address==address && sampler.Policy!=ShaderSamplerPolicy::Default) {
                                         const auto found=m_CustomPolicySamplers.find(sampler.Policy);
                                         if(found==m_CustomPolicySamplers.end())return false;
@@ -818,12 +833,30 @@ namespace Axle {
                                 auto resolved = ResolveShaderSurface(item.Surface, SurfaceEvaluation::CustomShader,
                                     selected.Generation->GenerationID, plan, engine, mat.CustomProperties);
                                 if (auto* surface = std::get_if<ResolvedShaderSurface>(&resolved)) {
-                                    item.Surface = std::move(surface->Surface);
-                                    item.PackedConstants = std::move(surface->Constants);
-                                    item.TextureRequests = std::move(surface->Textures);
-                                    item.CustomGeneration = selected.Generation;
-                                    item.UseCustomShader = true;
-                                    if (!item.Surface.Diagnostic.empty()) diagnostic(item.Surface.Diagnostic);
+                                    if (surface->Surface.Fallback) {
+                                        // Unsupported canonical controls must use
+                                        // the complete ForwardPBR path. Keeping
+                                        // the custom pipeline selected here would
+                                        // silently discard the authored feature.
+                                        const auto unsupported = surface->Surface.UnsupportedFeatures;
+                                        const auto message = surface->Surface.Diagnostic;
+                                        item.Surface.Fallback = true;
+                                        item.Surface.UnsupportedFeatures = unsupported;
+                                        item.Surface.Diagnostic = message;
+                                        item.Surface.Evaluation = SurfaceEvaluation::BuiltIn;
+                                        item.Surface.ShaderGeneration = 0;
+                                        item.CustomGeneration.reset();
+                                        item.UseCustomShader = false;
+                                        diagnostic(item.Surface.Diagnostic);
+                                        m_MaterialFeedback[meshInst.EntityID].Generation = 0;
+                                    } else {
+                                        item.Surface = std::move(surface->Surface);
+                                        item.PackedConstants = std::move(surface->Constants);
+                                        item.TextureRequests = std::move(surface->Textures);
+                                        item.CustomGeneration = selected.Generation;
+                                        item.UseCustomShader = true;
+                                        if (!item.Surface.Diagnostic.empty()) diagnostic(item.Surface.Diagnostic);
+                                    }
                                 } else {
                                     const auto& error = std::get<MaterialBindingError>(resolved);
                                     diagnostic(error.Code + ": " + error.Message);

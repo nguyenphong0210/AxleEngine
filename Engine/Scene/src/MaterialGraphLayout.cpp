@@ -5,6 +5,27 @@
 
 namespace Axle {
 namespace {
+    bool IsEngineLightingBuffer(const RHI::RHIShaderConstantBuffer& buffer) {
+        return (buffer.Name == "MultiLightBuffer" && buffer.Space == 3 && buffer.BindPoint == 0) ||
+               (buffer.Name == "CascadeReceiver" && buffer.Space == 0 && buffer.BindPoint == 4) ||
+               (buffer.Name == "LocalShadowReceiver" && buffer.Space == 0 && buffer.BindPoint == 5);
+    }
+    bool IsEngineLightingResource(const RHI::RHIShaderResourceBinding& resource) {
+        if (resource.Type == RHI::RHIResourceType::ConstantBuffer)
+            return (resource.Name == "MultiLightBuffer" && resource.Space == 3 && resource.BindPoint == 0) ||
+                   (resource.Name == "CascadeReceiver" && resource.Space == 0 && resource.BindPoint == 4) ||
+                   (resource.Name == "LocalShadowReceiver" && resource.Space == 0 && resource.BindPoint == 5);
+        if (resource.Space != 2) return false;
+        if (resource.Type == RHI::RHIResourceType::Texture)
+            return (resource.BindPoint <= 4) &&
+                (resource.Name == "u_IrradianceMap" || resource.Name == "u_PrefilterMap" ||
+                 resource.Name == "u_BRDFLUT" || resource.Name == "u_CascadeDepth" ||
+                 resource.Name == "u_LocalShadowDepth");
+        if (resource.Type == RHI::RHIResourceType::Sampler)
+            return resource.BindPoint <= 1 &&
+                (resource.Name == "u_EnvironmentSampler" || resource.Name == "u_ShadowSampler");
+        return false;
+    }
     void Field(std::string& key, std::string_view field) {
         key += std::to_string(field.size()) + ':'; key += field;
     }
@@ -42,6 +63,7 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
         if(resource.Type==RHIResourceType::ConstantBuffer) {
             expected=resource.Space==0 && ((resource.Name=="EngineObject"&&resource.BindPoint==0)||
                 (resource.Name=="EngineScene"&&resource.BindPoint==1)||(resource.Name=="MaterialParameters"&&resource.BindPoint==2));
+            expected = expected || IsEngineLightingResource(resource);
             if(!reflection.FindConstantBuffer(resource.Name))return fail("Missing reflected cbuffer storage: "+resource.Name);
         } else for(const auto& texture:graph.Textures) {
             if(resource.Type==RHIResourceType::Texture && resource.Name==texture.TextureSymbol)
@@ -49,7 +71,8 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
             if(resource.Type==RHIResourceType::Sampler && resource.Name==texture.SamplerSymbol)
                 expected=resource.Space==1 && resource.BindPoint==texture.Binding;
         }
-        if(!expected)return fail("Descriptor differs from the graph interface: "+resource.Name);
+            expected = expected || IsEngineLightingResource(resource);
+            if(!expected)return fail("Descriptor differs from the graph interface: "+resource.Name);
         std::string record="resource";Field(record,resource.Name);Number(record,resource.Type);Number(record,resource.Space);
         Number(record,resource.BindPoint);Number(record,resource.BindCount);Number(record,resource.TextureDimension);
         // Merge represents one stage in Stage and remaining stages in AdditionalStages.
@@ -89,6 +112,14 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
             records.push_back(std::move(record));
         }
     }
+    // Reserved engine lighting descriptors are bound by the renderer and must
+    // never become editable graph properties or packed graph constant buffers.
+    auto planningReflection = normalized;
+    planningReflection.Resources.erase(std::remove_if(planningReflection.Resources.begin(), planningReflection.Resources.end(),
+        [](const auto& resource) { return IsEngineLightingResource(resource); }), planningReflection.Resources.end());
+    planningReflection.ConstantBuffers.erase(std::remove_if(planningReflection.ConstantBuffers.begin(), planningReflection.ConstantBuffers.end(),
+        [](const auto& buffer) { return IsEngineLightingBuffer(buffer); }), planningReflection.ConstantBuffers.end());
+
     std::vector<ShaderPropertyDesc> properties;
     for(const auto& texture:graph.Textures) {
         ShaderPropertyDesc desc;desc.Name=texture.TextureSymbol;desc.Type=ShaderPropertyType::Texture2D;
@@ -98,7 +129,7 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
         properties.push_back(std::move(desc));
     }
     ValidatedShaderInterface interface;interface.AllowLegacyTemplate=false;
-    auto plan=BuildMaterialBindingPlan(normalized,interface,properties);
+    auto plan=BuildMaterialBindingPlan(planningReflection,interface,properties);
     if(const auto* issue=std::get_if<MaterialBindingError>(&plan))return fail(issue->Code+": "+issue->Message);
     // Physical Vulkan vertex locations are backend-specific; semantic storage is portable.
     for(const auto& vertex:reflection.VertexInputs) {

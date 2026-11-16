@@ -19,8 +19,11 @@ namespace {
         add(!surface.EnableSpecularHighlights, SurfaceFeature::SpecularPolicy);
         add(!surface.EnableEnvironmentReflections, SurfaceFeature::ReflectionPolicy);
         add(surface.Surface == SurfaceType::Cutout, SurfaceFeature::Cutout);
-        add(surface.EmissionIntensity != 0 && surface.EmissionColor != glm::vec3(0), SurfaceFeature::Emission);
+        // MaterialSurface evaluates graph emission directly.  Do not report
+        // authored emission as unsupported when the graph contract exposes the
+        // Emission field.
         add(surface.TextureFlags & ~1u, SurfaceFeature::NonBaseTextures);
+        add(std::abs(surface.Dispersion) > 1e-6f, SurfaceFeature::Dispersion);
         return mask;
     }
     bool Finite(const ResolvedMaterialProperty& property) {

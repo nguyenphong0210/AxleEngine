@@ -19,7 +19,8 @@ namespace Axle {
         Subsurface = 1u << 3, Absorption = 1u << 4, Refraction = 1u << 5,
         DetailNormal = 1u << 6, NormalStrength = 1u << 7,
         SpecularPolicy = 1u << 8, ReflectionPolicy = 1u << 9, Cutout = 1u << 10,
-        Emission = 1u << 11, NonBaseTextures = 1u << 12
+        Emission = 1u << 11, NonBaseTextures = 1u << 12,
+        Dispersion = 1u << 13
     };
     struct ResolvedSurfaceTexture {
         std::string Path;

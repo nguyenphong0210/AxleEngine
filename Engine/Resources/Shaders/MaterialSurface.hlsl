@@ -9,6 +9,66 @@ cbuffer EngineScene : register(b1, space0) {
     float4 u_SunColor;
 };
 
+// Shared lighting contract with ForwardPBR.  Graph materials use the same
+// uploaded light buffer and shadow receiver data as the built-in path; they do
+// not silently fall back to a hard-coded single-light approximation.
+struct DirectionalSunLight {
+    float4 DirectionAndIlluminance;
+    float4 ColorAndAmbient;
+    float4 AmbientColor;
+    float4 ShadowParams;
+};
+struct PointLightData {
+    float4 PositionAndRadius;
+    float4 ColorAndIntensity;
+    float4 Params;
+    float4 Reserved;
+};
+struct SpotLightData {
+    float4 PositionAndRange;
+    float4 DirectionAndIntensity;
+    float4 ColorAndInnerAngle;
+    float4 AngleParams;
+};
+struct RectLightData {
+    float4 PositionAndWidth;
+    float4 DirectionAndHeight;
+    float4 UpAndRange;
+    float4 ColorAndIntensity;
+};
+// The graph parameter ABI owns b2/space0.  Keep the shared engine light
+// contract in a reserved space so authored graph parameters cannot collide.
+cbuffer MultiLightBuffer : register(b0, space3) {
+    DirectionalSunLight u_SunLight;
+    uint4 u_LightCounts;
+    float4 u_CameraPosExposure;
+    float4 u_LightReserved[2];
+    PointLightData u_PointLights[16];
+    SpotLightData u_SpotLights[16];
+    RectLightData u_RectLights[2];
+};
+cbuffer CascadeReceiver : register(b4, space0) {
+    float4x4 u_CascadeMatrices[4];
+    float4 u_CascadeSplits;
+    float4 u_CascadeAtlas;
+    float4 u_CascadeBias;
+};
+cbuffer LocalShadowReceiver : register(b5, space0) {
+    float4x4 u_LocalShadowMatrices[16];
+    float4 u_LocalShadowTiles[16];
+    float4 u_LocalShadowBias[16];
+    int4 u_LocalShadowViews[8];
+    float4 u_LocalShadowAtlas;
+};
+
+TextureCube u_IrradianceMap : register(t0, space2);
+TextureCube u_PrefilterMap : register(t1, space2);
+Texture2D u_BRDFLUT : register(t2, space2);
+Texture2D<float> u_CascadeDepth : register(t3, space2);
+Texture2D<float> u_LocalShadowDepth : register(t4, space2);
+SamplerState u_EnvironmentSampler : register(s0, space2);
+SamplerComparisonState u_ShadowSampler : register(s1, space2);
+
 // @AXLE_GRAPH_DECLARATIONS@
 
 struct MaterialSurface {
@@ -60,6 +120,32 @@ float3 AxleEvaluateWorldNormal(PSInput input, MaterialSurface surface) {
     return AxleSafeNormal(tangent*surface.Normal.x + bitangent*surface.Normal.y + geometricNormal*surface.Normal.z, geometricNormal);
 }
 
+float AxleSunShadowVisibility(float3 world, float3 normal, float3 sun) {
+    uint count = (uint)u_CascadeAtlas.x;
+    if (count == 0u) return 1.0;
+    float depth = -mul(u_ViewProjection, float4(world, 1.0)).z;
+    if (depth < u_CascadeAtlas.w || depth > u_CascadeSplits[count - 1u]) return 1.0;
+    uint cascade = 0u;
+    [unroll] for (uint c = 0u; c < 3u; ++c)
+        if (c + 1u < count && depth > u_CascadeSplits[c]) cascade = c + 1u;
+    float4 clipPosition = mul(u_CascadeMatrices[cascade], float4(world, 1.0));
+    if (clipPosition.w <= 0.0) return 1.0;
+    float3 clip = clipPosition.xyz / clipPosition.w;
+    if (any(abs(clip.xy) > 1.0) || clip.z < 0.0 || clip.z > 1.0) return 1.0;
+    float2 local = clip.xy * float2(0.5, -0.5) + 0.5;
+    float2 tile = float2(cascade % 2u, cascade / 2u) * 0.5;
+    float2 uv = tile + local * 0.5;
+    float ndl = saturate(dot(normal, sun));
+    float reference = clip.z - u_CascadeBias.x - u_CascadeBias.y * (1.0 - ndl);
+    float visibility = 0.0;
+    [unroll] for (int y = -1; y <= 1; ++y) [unroll] for (int x = -1; x <= 1; ++x) {
+        float2 tap = clamp(uv + float2(x, y) * u_CascadeAtlas.y * u_CascadeBias.w,
+                           tile + u_CascadeAtlas.y * 0.5, tile + 0.5 - u_CascadeAtlas.y * 0.5);
+        visibility += u_CascadeDepth.SampleCmpLevelZero(u_ShadowSampler, tap, reference);
+    }
+    return visibility / 9.0;
+}
+
 PSInput VSMain(VSInput input) {
     PSInput output;
     float4 world = mul(u_Model, float4(input.Position, 1.0));
@@ -90,7 +176,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 bitangent = cross(geometricNormal, tangent)*(input.Tangent.w < 0.0 ? -1.0 : 1.0);
     float3 normal = AxleSafeNormal(tangent*surface.Normal.x + bitangent*surface.Normal.y + geometricNormal*surface.Normal.z, geometricNormal);
     float3 view = AxleSafeNormal(u_CameraPosition.xyz - input.WorldPos, normal);
-    float3 light = AxleSafeNormal(u_SunDirection.xyz, normal);
+    bool hasMultiLightSun = u_LightCounts.z > 0u;
+    float3 light = AxleSafeNormal(hasMultiLightSun ? u_SunLight.DirectionAndIlluminance.xyz : u_SunDirection.xyz, normal);
     float3 halfVector = AxleSafeNormal(view + light, normal);
     float nv = max(dot(normal, view), 0.001);
     float nl = saturate(dot(normal, light));
@@ -101,10 +188,65 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
     // Direct sun lighting using unified physical calibration scale
     static const float DIRECT_LUX_TO_RADIANCE = 0.000035;
-    float sunIntensity = max(u_SunDirection.w, 0.0);
-    float sunRadianceScale = sunIntensity > 10.0 ? DIRECT_LUX_TO_RADIANCE : 1.0;
-    float3 directLight = max(u_SunColor.rgb, float3(0,0,0)) * (sunIntensity * sunRadianceScale) * nl;
+    float sunIntensity = hasMultiLightSun ? max(u_SunLight.DirectionAndIlluminance.w, 0.0) : max(u_SunDirection.w, 0.0);
+    float sunRadianceScale = hasMultiLightSun || sunIntensity > 10.0 ? DIRECT_LUX_TO_RADIANCE : 1.0;
+    float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : u_SunColor.rgb;
+    float3 directLight = max(sunColor, float3(0,0,0)) * (sunIntensity * sunRadianceScale) * nl * AxleSunShadowVisibility(input.WorldPos, normal, light);
     float3 direct = (diffuse + specular) * directLight;
+
+    // Keep the graph path on the same Forward+ light data contract.  The
+    // authored graph still controls the surface value, while the renderer
+    // supplies the complete local-light list through MultiLightBuffer.
+    [loop] for (uint p = 0u; p < min(u_LightCounts.x, 16u); ++p) {
+        PointLightData pointLight = u_PointLights[p];
+        float radius = pointLight.PositionAndRadius.w;
+        float3 toLight = pointLight.PositionAndRadius.xyz - input.WorldPos;
+        float distanceToLight = length(toLight);
+        if (radius <= 0.0 || distanceToLight <= 1e-4 || distanceToLight >= radius) continue;
+        float3 localLight = toLight / distanceToLight;
+        float ratio = distanceToLight / radius;
+        float window = saturate(1.0 - ratio * ratio * ratio * ratio);
+        float attenuation = (window * window) / max(distanceToLight * distanceToLight, max(pointLight.Params.y, 0.0025));
+        if (pointLight.Params.x > 0.1 && abs(pointLight.Params.x - 1.0) > 0.01)
+            attenuation = pow(max(attenuation, 0.0), pointLight.Params.x);
+        float localNl = saturate(dot(normal, localLight));
+        if (localNl <= 0.0) continue;
+        float3 localHalf = AxleSafeNormal(view + localLight, normal);
+        float3 localF = FresnelSchlick(saturate(dot(localHalf, view)), f0);
+        float3 localSpec = DistributionGGX(normal, localHalf, roughness) *
+            GeometrySmith(normal, view, localLight, roughness) * localF /
+            max(4.0 * nv * localNl, 0.0001);
+        float3 localDiffuse = (1.0 - localF) * (1.0 - metallic) * base * INV_PI;
+        float3 radiance = max(pointLight.ColorAndIntensity.rgb, 0.0) *
+            (pointLight.ColorAndIntensity.w * attenuation * 0.05);
+        direct += (localDiffuse + localSpec) * radiance * localNl;
+    }
+    [loop] for (uint s = 0u; s < min(u_LightCounts.y, 16u); ++s) {
+        SpotLightData spot = u_SpotLights[s];
+        float range = spot.PositionAndRange.w;
+        float3 toLight = spot.PositionAndRange.xyz - input.WorldPos;
+        float distanceToLight = length(toLight);
+        if (range <= 0.0 || distanceToLight <= 1e-4 || distanceToLight >= range) continue;
+        float3 localLight = toLight / distanceToLight;
+        float cosTheta = dot(-localLight, normalize(spot.DirectionAndIntensity.xyz));
+        float cone = saturate((cosTheta - spot.AngleParams.x) /
+                              max(0.0001, spot.ColorAndInnerAngle.w - spot.AngleParams.x));
+        if (cone <= 0.0) continue;
+        float ratio = distanceToLight / range;
+        float window = saturate(1.0 - ratio * ratio * ratio * ratio);
+        float attenuation = (window * window) / max(distanceToLight * distanceToLight, 0.0025) * cone * cone;
+        float localNl = saturate(dot(normal, localLight));
+        if (localNl <= 0.0) continue;
+        float3 localHalf = AxleSafeNormal(view + localLight, normal);
+        float3 localF = FresnelSchlick(saturate(dot(localHalf, view)), f0);
+        float3 localSpec = DistributionGGX(normal, localHalf, roughness) *
+            GeometrySmith(normal, view, localLight, roughness) * localF /
+            max(4.0 * nv * localNl, 0.0001);
+        float3 localDiffuse = (1.0 - localF) * (1.0 - metallic) * base * INV_PI;
+        float3 radiance = max(spot.ColorAndInnerAngle.rgb, 0.0) *
+            (spot.DirectionAndIntensity.w * attenuation * 0.05);
+        direct += (localDiffuse + localSpec) * radiance * localNl;
+    }
 
     // Clearcoat layer evaluation
     float coat = saturate(surface.Clearcoat);
@@ -117,7 +259,22 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
     // Ambient / indirect term scaled by AO; direct and emissive are preserved
     float3 ambientRef = FresnelSchlickRoughness(nv, f0, roughness);
-    float3 ambient = (base * 0.03 * (1.0 - metallic) + ambientRef * 0.02) * saturate(surface.AO) * max(u_SunColor.w, 0.0);
+    float3 ambient;
+    if (u_LightCounts.w == 1u) {
+        uint envWidth, envHeight, envLevels;
+        u_PrefilterMap.GetDimensions(0, envWidth, envHeight, envLevels);
+        float maxLod = max(0.0, float(envLevels) - 1.0);
+        float3 ambientF = ambientRef;
+        float3 ambientKD = (1.0 - ambientF) * (1.0 - metallic);
+        float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, normal).rgb;
+        float3 prefiltered = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, reflect(-view, normal), roughness * maxLod).rgb;
+        float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(nv, roughness)).rg;
+        ambient = (irradiance * base * ambientKD + prefiltered * (ambientF * envBRDF.x + envBRDF.y)) * saturate(surface.AO) * max(u_LightReserved[0].y, 0.0);
+    } else {
+        float3 ambientColor = hasMultiLightSun ? u_SunLight.AmbientColor.rgb : max(u_SunColor.rgb, float3(0,0,0));
+        float ambientStrength = hasMultiLightSun ? max(u_LightReserved[0].y, 0.0) : max(u_SunColor.w, 0.0);
+        ambient = (base * 0.03 * (1.0 - metallic) + ambientRef * 0.02) * saturate(surface.AO) * ambientStrength;
+    }
     float3 color = direct + ambient + max(surface.Emission, float3(0,0,0));
     color = clamp(color, 0.0, 65000.0);
 

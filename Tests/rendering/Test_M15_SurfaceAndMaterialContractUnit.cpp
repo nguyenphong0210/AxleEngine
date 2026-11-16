@@ -554,20 +554,26 @@ bool RunM15SurfaceAndMaterialContractUnitTests() {
             "M15-U3-23.1: both shaders apply 1/PI diffuse normalization");
         RENDER_CHECK(fwdSource.find("u_LightCounts") != std::string::npos && fwdSource.find("u_PointLights") != std::string::npos,
             "M15-U3-23.1: ForwardPBR implements multi-light point/spot loops");
-        RENDER_CHECK(matSource.find("u_PointLights") == std::string::npos,
-            "M15-U3-23.1: MaterialSurface scopes to primary sun; multi-lights recorded as unsupported in graph layout");
+        RENDER_CHECK(matSource.find("MultiLightBuffer") != std::string::npos &&
+                     matSource.find("u_LightCounts") != std::string::npos &&
+                     matSource.find("u_PointLights") != std::string::npos,
+            "M15-U3-23.1: MaterialSurface consumes the shared multi-light buffer contract");
 
         // 23.2: Compare Shadows
         RENDER_CHECK(fwdSource.find("CascadeReceiver") != std::string::npos && fwdSource.find("SunShadowVisibility") != std::string::npos,
             "M15-U3-23.2: ForwardPBR evaluates cascaded directional shadow receivers");
-        RENDER_CHECK(matSource.find("CascadeReceiver") == std::string::npos,
-            "M15-U3-23.2: MaterialSurface omits shadow receivers in graph interface; tested via fallback diagnostics");
+        RENDER_CHECK(matSource.find("CascadeReceiver") != std::string::npos &&
+                     matSource.find("AxleSunShadowVisibility") != std::string::npos,
+            "M15-U3-23.2: MaterialSurface consumes the shared cascaded shadow receiver contract");
 
         // 23.3: Compare IBL
         RENDER_CHECK(fwdSource.find("u_IrradianceMap") != std::string::npos && fwdSource.find("u_PrefilterMap") != std::string::npos,
             "M15-U3-23.3: ForwardPBR implements full split-sum IBL pipeline");
-        RENDER_CHECK(matSource.find("FresnelSchlickRoughness") != std::string::npos,
-            "M15-U3-23.3: MaterialSurface unifies analytical ambient specular reflection response");
+        RENDER_CHECK(matSource.find("u_IrradianceMap") != std::string::npos &&
+                     matSource.find("u_PrefilterMap") != std::string::npos &&
+                     matSource.find("u_BRDFLUT") != std::string::npos &&
+                     matSource.find("FresnelSchlickRoughness") != std::string::npos,
+            "M15-U3-23.3: MaterialSurface consumes the split-sum IBL contract");
 
         // 23.4: Compare Output Policy
         RENDER_CHECK(matSource.find("u_CameraPosition.w <= 0.0") != std::string::npos &&

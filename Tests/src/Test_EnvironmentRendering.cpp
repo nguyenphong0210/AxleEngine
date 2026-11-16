@@ -905,6 +905,24 @@ bool Native(RHIType backend) {
               << parityDiffR << "," << parityDiffG << "," << parityDiffB << ")\n";
     CHECK(parityDiffR <= 2 && parityDiffG <= 2 && parityDiffB <= 2);
 
+    // Exercise the opposite output-policy branch with the same authored
+    // surface and camera.  The previous comparison only covered SDR mode.
+    settings.EnableToneMapping = true;
+    world.Meshes[0].Material.UseCustomShader = false;
+    const auto hdrBuiltinParityOutput = render();
+    CHECK(!hdrBuiltinParityOutput.empty());
+    world.Meshes[0].Material.UseCustomShader = true;
+    const auto hdrGraphParityOutput = render();
+    CHECK(!hdrGraphParityOutput.empty() && hdrGraphParityOutput.size() == hdrBuiltinParityOutput.size());
+    const size_t hdrCenter = center;
+    const int hdrDiffR = std::abs(static_cast<int>(hdrBuiltinParityOutput[hdrCenter + 0]) - static_cast<int>(hdrGraphParityOutput[hdrCenter + 0]));
+    const int hdrDiffG = std::abs(static_cast<int>(hdrBuiltinParityOutput[hdrCenter + 1]) - static_cast<int>(hdrGraphParityOutput[hdrCenter + 1]));
+    const int hdrDiffB = std::abs(static_cast<int>(hdrBuiltinParityOutput[hdrCenter + 2]) - static_cast<int>(hdrGraphParityOutput[hdrCenter + 2]));
+    std::cout << "  [Parity] M15-U3-23.4 HDR Built-in vs Graph center diff=("
+              << hdrDiffR << "," << hdrDiffG << "," << hdrDiffB << ")\n";
+    CHECK(hdrDiffR <= 2 && hdrDiffG <= 2 && hdrDiffB <= 2);
+    settings.EnableToneMapping = false;
+
     CHECK(device.WaitIdle());
     const auto baselineDrawCalls = renderer.GetDrawCallCount();
     const auto baselineEntities = renderer.GetRenderedEntityCount();

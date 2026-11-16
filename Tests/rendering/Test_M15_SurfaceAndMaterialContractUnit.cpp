@@ -472,6 +472,9 @@ bool RunM15SurfaceAndMaterialContractUnitTests() {
         advDesc.SheenEnabled = true;
         advDesc.SubsurfaceEnabled = true;
         advDesc.AbsorptionEnabled = true;
+        advDesc.EmissiveColor = glm::vec3(1.0f, 0.5f, 0.25f);
+        advDesc.EmissiveIntensity = 2.0f;
+        advDesc.Dispersion = 0.045f;
         advDesc.RefractionEnabled = true;
         advDesc.SurfaceType = SurfaceType::Cutout;
         advDesc.NormalStrength = 2.0f;
@@ -496,11 +499,14 @@ bool RunM15SurfaceAndMaterialContractUnitTests() {
         expectedMask |= static_cast<uint32_t>(SurfaceFeature::Subsurface);
         expectedMask |= static_cast<uint32_t>(SurfaceFeature::Absorption);
         expectedMask |= static_cast<uint32_t>(SurfaceFeature::Refraction);
+        expectedMask |= static_cast<uint32_t>(SurfaceFeature::Dispersion);
         expectedMask |= static_cast<uint32_t>(SurfaceFeature::Cutout);
         expectedMask |= static_cast<uint32_t>(SurfaceFeature::NormalStrength);
 
         RENDER_CHECK((surface.UnsupportedFeatures & expectedMask) == expectedMask,
             "M15-U3-22: UnsupportedFeatures bitmask correctly records all unsupported advanced features");
+        RENDER_CHECK((surface.UnsupportedFeatures & static_cast<uint32_t>(SurfaceFeature::Emission)) == 0,
+            "M15-U3-22: authored emission is supported by MaterialSurface and is not marked unsupported");
         RENDER_CHECK(surface.Fallback == true,
             "M15-U3-22: surface.Fallback is set to true when unsupported features are present");
         RENDER_CHECK(surface.Diagnostic.find("SURFACE_UNSUPPORTED_FEATURES:") != std::string::npos,

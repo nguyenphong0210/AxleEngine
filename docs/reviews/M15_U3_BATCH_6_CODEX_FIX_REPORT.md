@@ -24,6 +24,8 @@ fallback bit was diagnostic only.
   emission is part of `MaterialSurface`. Non-zero dispersion has its own mask.
 - Contract tests now require the shared light, shadow and IBL declarations, and
   the native parity fixture compares both SDR and HDR output branches.
+- The unsupported-feature contract test now guards the corrected emission and
+  dispersion behavior explicitly.
 
 ## Verification
 

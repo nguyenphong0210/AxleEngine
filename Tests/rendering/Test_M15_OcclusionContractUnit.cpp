@@ -239,6 +239,33 @@ bool RunM15OcclusionContractUnitTests() {
         RENDER_CHECK(radNoSunContact1 == expectedNoSun,
             "M15-U4-04.1: radiance equals ambient + local + emissive with zero directional sun light");
 
+        // Legacy U4-A callers may still populate only DirectDiffuse/DirectSpecular.
+        // When HasSun=false those terms remain local direct light rather than
+        // disappearing during the U4-B separation upgrade.
+        ShadingComponents legacyNoSun{};
+        legacyNoSun.DirectDiffuse = glm::vec3(0.7f, 0.5f, 0.3f);
+        legacyNoSun.DirectSpecular = glm::vec3(0.2f, 0.4f, 0.6f);
+        legacyNoSun.HasSun = false;
+        const glm::vec3 legacyExpected = legacyNoSun.DirectDiffuse + legacyNoSun.DirectSpecular;
+        RENDER_CHECK(EvaluateShading(legacyNoSun, 1.0f, 0.0f) == legacyExpected &&
+                     EvaluateShading(legacyNoSun, 1.0f, 1.0f) == legacyExpected,
+            "M15-U4-04.1: legacy direct terms remain as local light when HasSun=false");
+
+        ShadingComponents legacySpecularOnly{};
+        legacySpecularOnly.DirectSpecular = glm::vec3(1.0f, 0.75f, 0.5f);
+        legacySpecularOnly.HasSun = true;
+        RENDER_CHECK(EvaluateShading(legacySpecularOnly, 1.0f, 0.0f) == glm::vec3(0.0f) &&
+                     EvaluateShading(legacySpecularOnly, 1.0f, 1.0f) == legacySpecularOnly.DirectSpecular,
+            "M15-U4-04.1: legacy specular-only sun term is still contact attenuated");
+
+        // With CSM disabled, contact still attenuates the sun independently of
+        // any stale CSMVisibility value.
+        ShadingComponents noCSMScene = sceneLighting;
+        noCSMScene.EnableCSM = false;
+        noCSMScene.CSMVisibility = 0.0f;
+        RENDER_CHECK(VerifySunOnlyContactModulation(noCSMScene),
+            "M15-U4-04.1: contact modulation remains correct when CSM is disabled");
+
         // Test 4.3: Preserve normal direct-light behavior when contact shadows are disabled
         RENDER_CHECK(VerifyContactDisabledBehavior(sceneLighting),
             "M15-U4-04.1: when EnableContactShadows=false, normal direct-light behavior is preserved regardless of contact input");

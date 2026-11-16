@@ -346,9 +346,17 @@ namespace Axle {
             const bool hasExplicitSeparation = (sunDiff != glm::vec3(0.0f) || sunSpec != glm::vec3(0.0f) ||
                                                 localDiff != glm::vec3(0.0f) || localSpec != glm::vec3(0.0f));
             if (!hasExplicitSeparation) {
-                // Backwards compatibility with U4-A: treat DirectDiffuse and DirectSpecular as sun contribution
-                sunDiff = comp.DirectDiffuse;
-                sunSpec = comp.DirectSpecular;
+                // Backwards compatibility with U4-A: route the legacy direct
+                // fields to the only available direct-light class. When a
+                // caller explicitly says that no sun exists, those fields
+                // represent local direct light rather than disappearing.
+                if (comp.HasSun) {
+                    sunDiff = comp.DirectDiffuse;
+                    sunSpec = comp.DirectSpecular;
+                } else {
+                    localDiff = comp.DirectDiffuse;
+                    localSpec = comp.DirectSpecular;
+                }
             }
 
             // Directional sun contribution:
@@ -439,13 +447,15 @@ namespace Axle {
             }
 
             // 4. If Sun is present and contact shadows enabled, difference must affect only sun contribution
-            if (comp.HasSun && comp.EnableContactShadows && comp.CSMVisibility > 0.0f) {
+            if (comp.HasSun && comp.EnableContactShadows) {
                 glm::vec3 sunContribution = comp.SunDiffuse + comp.SunSpecular;
-                if (sunContribution == glm::vec3(0.0f) && comp.DirectDiffuse != glm::vec3(0.0f)) {
+                if (sunContribution == glm::vec3(0.0f) &&
+                    (comp.DirectDiffuse != glm::vec3(0.0f) || comp.DirectSpecular != glm::vec3(0.0f))) {
                     sunContribution = comp.DirectDiffuse + comp.DirectSpecular;
                 }
                 const glm::vec3 diff = atContact1 - atContact0;
-                const glm::vec3 expectedDrop = sunContribution * std::min(comp.CSMVisibility, 1.0f);
+                const float effectiveCSM = comp.EnableCSM ? std::clamp(comp.CSMVisibility, 0.0f, 1.0f) : 1.0f;
+                const glm::vec3 expectedDrop = sunContribution * effectiveCSM;
                 constexpr float eps = 1e-5f;
                 if (std::abs(diff.x - expectedDrop.x) > eps ||
                     std::abs(diff.y - expectedDrop.y) > eps ||

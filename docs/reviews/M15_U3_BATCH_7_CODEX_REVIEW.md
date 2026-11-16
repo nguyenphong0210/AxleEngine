@@ -50,5 +50,6 @@ User-provided captures were reviewed after the native verification:
   disabled on the same fixture, with a visible output difference and Console
   `Error 0`. The native D3D12/Vulkan fog-on/off and authored-fog cases provide
   the detailed blocker-path verification; the Editor pair supplies the visual
-  toggle and clean-output check. The Editor now also exposes
-  `VolumetricFogComponent` for future authored captures.
+  toggle and clean-output check. Runtime and serialization retain
+  `VolumetricFogComponent`; its arbitrary-entity Editor authoring is deferred
+  until a bounded/priority volume contract exists.

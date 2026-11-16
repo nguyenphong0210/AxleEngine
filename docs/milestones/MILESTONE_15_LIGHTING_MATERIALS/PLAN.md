@@ -474,34 +474,34 @@ the item is visible.
 
 #### S3.3 — Material Graph, preview and runtime parity
 
-- [ ] **M15-U3-21.1 — Unify built-in resolver.**
+- [x] **M15-U3-21.1 — Unify built-in resolver.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `MaterialResolver::ResolveBuiltin` maps material descriptors to canonical `ResolvedSurface`. [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md).
-- [ ] **M15-U3-21.2 — Unify Material Graph resolver.**
+- [x] **M15-U3-21.2 — Unify Material Graph resolver.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `MaterialGraphRuntime::ResolveSurface` accepts canonical `ResolvedSurface` inputs and decorates diagnostics. [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md). Editor visual evidence remains user-provided.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U3-21.3 — Unify Preview resolver.**
+- [x] **M15-U3-21.3 — Unify Preview resolver.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `MaterialResolver::ResolvePreview` bridges preview state into `ResolvedSurface`. [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md). Editor visual evidence remains user-provided.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen and matches Runtime/Preview.
-- [ ] **M15-U3-21.4 — Unify Runtime resolver.**
+- [x] **M15-U3-21.4 — Unify Runtime resolver.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `MaterialResolver::ResolveRuntime` converts extracted `RenderMaterialData` to `ResolvedSurface`. [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md).
-- [ ] **M15-U3-22 — Record explicit unsupported feature masks and fallback diagnostics for graph/custom paths.**
+- [x] **M15-U3-22 — Record explicit unsupported feature masks and fallback diagnostics for graph/custom paths.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `UnsupportedSurfaceFeatures` bitmask and `BuildUnsupportedFeaturesDiagnostic` format structured diagnostics and set fallback flags. [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md).
-- [ ] **M15-U3-23.1 — Compare lights.**
+- [x] **M15-U3-23.1 — Compare lights.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp` and `Test_EnvironmentRendering.cpp`: direct sun lighting evaluation parity under identical physical lux units and BRDF formulation; native D3D12/Vulkan pixel match `diff=(0,0,0)`. [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md).
-- [ ] **M15-U3-23.2 — Compare shadows.**
+- [x] **M15-U3-23.2 — Compare shadows.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: shadow attenuation and cascade selection contracts match. [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md). Editor visual evidence remains user-provided.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U3-23.3 — Compare IBL.**
+- [x] **M15-U3-23.3 — Compare IBL.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: analytical ambient and split-sum reflection parity. [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md).
-- [ ] **M15-U3-23.4 — Compare output policy.**
+- [x] **M15-U3-23.4 — Compare output policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: ACES filmic tonemapping and gamma 2.2 / HDR clamp output policy parity. [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md).
 

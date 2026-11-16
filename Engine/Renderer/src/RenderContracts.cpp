@@ -506,6 +506,114 @@ namespace Axle {
             return at1 == at0;
         }
 
+        // =====================================================================
+        // M15-U4-C: Half-Resolution, Bilateral Reconstruction & Depth Edge Protection
+        // =====================================================================
+        Resolution2D ComputeHalfResolution(uint32_t fullWidth, uint32_t fullHeight) {
+            return Resolution2D{
+                std::max(1u, fullWidth >> 1),
+                std::max(1u, fullHeight >> 1)
+            };
+        }
+
+        BilateralTapResult EvaluateBilateralWeight(float centerZ, float tapZ, int tapOffsetX, int tapOffsetY) {
+            static constexpr float spatialWeights[5] = { 0.06136f, 0.24477f, 0.38774f, 0.24477f, 0.06136f };
+            const int clampedX = std::clamp(tapOffsetX + 2, 0, 4);
+            const int clampedY = std::clamp(tapOffsetY + 2, 0, 4);
+            const float spatialWeight = spatialWeights[clampedX] * spatialWeights[clampedY];
+
+            const float depthDiff = std::abs(centerZ - tapZ);
+            const float denom = 0.05f * std::max(std::abs(centerZ), 0.1f) + 1e-4f;
+            const float depthWeight = std::exp(-depthDiff / denom);
+            const float totalWeight = depthWeight * spatialWeight;
+
+            BilateralTapResult result{};
+            result.SpatialWeight = spatialWeight;
+            result.DepthWeight = depthWeight;
+            result.TotalWeight = totalWeight;
+            result.IsEdgeRejected = (depthWeight < 1e-3f);
+            return result;
+        }
+
+        bool VerifyHalfResolutionDimensions(uint32_t fullW, uint32_t fullH) {
+            const Resolution2D half = ComputeHalfResolution(fullW, fullH);
+            if (half.Width == 0 || half.Height == 0) return false;
+            if (fullW > 1 && half.Width != (fullW >> 1)) return false;
+            if (fullH > 1 && half.Height != (fullH >> 1)) return false;
+            if (fullW == 1 && half.Width != 1) return false;
+            if (fullH == 1 && half.Height != 1) return false;
+            return true;
+        }
+
+        bool VerifyBilateralReconstructionStability() {
+            // 1. Spatial kernel must integrate to 1.0
+            float spatialSum = 0.0f;
+            for (int y = -2; y <= 2; ++y) {
+                for (int x = -2; x <= 2; ++x) {
+                    spatialSum += EvaluateBilateralWeight(1.0f, 1.0f, x, y).SpatialWeight;
+                }
+            }
+            if (std::abs(spatialSum - 1.0f) > 1e-4f) return false;
+
+            // 2. On a flat/smooth surface (depthDiff = 0), depth weight is 1.0 and total weight sum is 1.0
+            float totalFlatSum = 0.0f;
+            for (int y = -2; y <= 2; ++y) {
+                for (int x = -2; x <= 2; ++x) {
+                    const auto tap = EvaluateBilateralWeight(2.5f, 2.5f, x, y);
+                    if (std::abs(tap.DepthWeight - 1.0f) > 1e-5f) return false;
+                    totalFlatSum += tap.TotalWeight;
+                }
+            }
+            if (std::abs(totalFlatSum - 1.0f) > 1e-4f) return false;
+
+            // 3. Peak weight must be at center (0, 0)
+            const auto centerTap = EvaluateBilateralWeight(2.0f, 2.0f, 0, 0);
+            const auto cornerTap = EvaluateBilateralWeight(2.0f, 2.0f, 2, 2);
+            if (centerTap.TotalWeight <= cornerTap.TotalWeight) return false;
+
+            return true;
+        }
+
+        bool VerifyDepthEdgeProtection(float centerZ, float foregroundZ, float backgroundZ) {
+            // When center is foreground:
+            // Foreground neighbor tap must have strong weight (near 1.0)
+            const auto fgTap = EvaluateBilateralWeight(centerZ, foregroundZ, 1, 0);
+            if (fgTap.DepthWeight < 0.8f || fgTap.IsEdgeRejected) return false;
+
+            // Background neighbor tap across a depth discontinuity must be strongly rejected
+            const auto bgTap = EvaluateBilateralWeight(centerZ, backgroundZ, 1, 0);
+            if (!bgTap.IsEdgeRejected || bgTap.DepthWeight > 1e-3f) return false;
+
+            return true;
+        }
+
+        bool VerifyOddResolutionSafety(uint32_t oddW, uint32_t oddH) {
+            const Resolution2D half = ComputeHalfResolution(oddW, oddH);
+            if (half.Width == 0 || half.Height == 0) return false;
+
+            // Half-resolution must be non-zero and bounded by full resolution
+            if (half.Width > oddW || half.Height > oddH) return false;
+
+            // Compute dispatch thread groups: (halfW + 7) / 8
+            const uint32_t groupsX = (half.Width + 7) / 8;
+            const uint32_t groupsY = (half.Height + 7) / 8;
+            const uint32_t totalThreadsX = groupsX * 8;
+            const uint32_t totalThreadsY = groupsY * 8;
+            if (totalThreadsX < half.Width || totalThreadsY < half.Height) return false;
+
+            // Verify reciprocal texel size is positive and finite
+            const float rcpW = 1.0f / static_cast<float>(half.Width);
+            const float rcpH = 1.0f / static_cast<float>(half.Height);
+            if (rcpW <= 0.0f || rcpH <= 0.0f || std::isinf(rcpW) || std::isinf(rcpH)) return false;
+
+            // Boundary UV check: pixel (oddW - 1, oddH - 1)
+            const float lastFullU = (static_cast<float>(oddW - 1) + 0.5f) / static_cast<float>(oddW);
+            const float lastFullV = (static_cast<float>(oddH - 1) + 0.5f) / static_cast<float>(oddH);
+            if (lastFullU < 0.0f || lastFullU > 1.0f || lastFullV < 0.0f || lastFullV > 1.0f) return false;
+
+            return true;
+        }
+
     } // namespace OcclusionContract
 
 } // namespace Axle

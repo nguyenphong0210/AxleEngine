@@ -207,6 +207,46 @@ namespace Axle {
 
         // 5. M15-U4-04.1: Verifies that when contact shadows are disabled, normal direct-light behavior is preserved.
         bool VerifyContactDisabledBehavior(const ShadingComponents& comp);
+
+        // =====================================================================
+        // M15-U4-C: Half-Resolution, Bilateral Reconstruction & Depth Edge Protection
+        // =====================================================================
+        struct Resolution2D {
+            uint32_t Width = 0;
+            uint32_t Height = 0;
+            bool operator==(const Resolution2D&) const = default;
+        };
+
+        // Computes half-resolution dimensions for GTAO targets from full-resolution extent.
+        // Handles even, odd, and degenerate dimensions (e.g. 1920x1080 -> 960x540, 1919x1079 -> 959x539, 1x1 -> 1x1).
+        Resolution2D ComputeHalfResolution(uint32_t fullWidth, uint32_t fullHeight);
+
+        // Bilateral reconstruction weights and depth-edge filter evaluation
+        struct BilateralTapResult {
+            float SpatialWeight = 0.0f;
+            float DepthWeight = 0.0f;
+            float TotalWeight = 0.0f;
+            bool IsEdgeRejected = false;
+        };
+
+        // Evaluates cross-bilateral filter weight for a sample tap:
+        // centerZ: view-space depth of center pixel
+        // tapZ: view-space depth of neighbor tap
+        // tapOffsetX, tapOffsetY: integer pixel offset in [-2, 2]
+        BilateralTapResult EvaluateBilateralWeight(float centerZ, float tapZ, int tapOffsetX, int tapOffsetY);
+
+        // Verification helpers for M15-U4-C:
+        // 1. M15-U4-05.1: Verifies half-resolution computation across standard and odd dimensions.
+        bool VerifyHalfResolutionDimensions(uint32_t fullW, uint32_t fullH);
+
+        // 2. M15-U4-05.2: Verifies 5x5 spatial kernel normalization and smooth reconstruction stability.
+        bool VerifyBilateralReconstructionStability();
+
+        // 3. M15-U4-05.3: Verifies depth-edge rejection (edge isolation) across depth discontinuities.
+        bool VerifyDepthEdgeProtection(float centerZ, float foregroundZ, float backgroundZ);
+
+        // 4. M15-U4-05.4: Verifies odd-resolution boundary safety (1919x1079, 127x63, 1x1).
+        bool VerifyOddResolutionSafety(uint32_t oddW, uint32_t oddH);
     }
 
 } // namespace Axle

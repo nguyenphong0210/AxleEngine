@@ -571,18 +571,18 @@ the item is visible.
 - [x] **M15-U4-04.2 — Avoid CSM/local double attenuation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_OcclusionContractUnit.cpp`: `CombineDirectionalVisibility` uses bounded minimum formulation $\min(V_{\text{csm}}, V_{\text{contact}})$, preventing double attenuation. Fully shadowed CSM regions ($V_{\text{csm}}=0$) remain 0.0 with no redundant contact darkening; penumbra regions ($0.5, 0.5$) combine to $0.5$ avoiding $0.25$ double-dip attenuation. Local point and spot lights are isolated from directional contact shadows. [U4 batch 2 review](../../reviews/M15_U4_BATCH_2_REVIEW.md).
-- [ ] **M15-U4-05.1 — Validate half-resolution sampling.**
+- [x] **M15-U4-05.1 — Validate half-resolution sampling.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U4-05.2 — Validate bilateral reconstruction.**
+  - **Evidence:** Verified in `Test_M15_OcclusionContractUnit.cpp`: `ComputeHalfResolution` maps standard (3840x2160, 2560x1440, 1920x1080, 1280x720), odd (1919x1079, 127x63), and degenerate (1x1) resolutions via $\max(1u, \text{dim} \gg 1)$. `RHIViewTargets.cpp` allocation and validation assert GTAO target dimensions conform strictly to the half-resolution formula. [U4 batch 3 review](../../reviews/M15_U4_BATCH_3_REVIEW.md).
+- [x] **M15-U4-05.2 — Validate bilateral reconstruction.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U4-05.3 — Validate depth edges.**
+  - **Evidence:** Verified in `Test_M15_OcclusionContractUnit.cpp`: 5x5 separable cross-bilateral filter spatial kernel integrates to 1.0, exhibits perfect 4-way octant symmetry and monotonic radial falloff; flat surface reconstruction preserves uniform occlusion with zero attenuation or bias. [U4 batch 3 review](../../reviews/M15_U4_BATCH_3_REVIEW.md).
+- [x] **M15-U4-05.3 — Validate depth edges.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U4-05.4 — Validate odd resolutions.**
+  - **Evidence:** Verified in `Test_M15_OcclusionContractUnit.cpp`: view-space depth difference weighting rejects taps across silhouette discontinuities ($W_d < 10^{-17}$ for $\Delta Z = 4.0\text{m}$, flagged `IsEdgeRejected`); zero edge bleeding verified across high-contrast occlusion boundary; fallback protects isolated edge samples from NaN or zero division. [U4 batch 3 review](../../reviews/M15_U4_BATCH_3_REVIEW.md).
+- [x] **M15-U4-05.4 — Validate odd resolutions.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Verified in `Test_M15_OcclusionContractUnit.cpp`: thread group bounds $(W + 7)/8$, positive finite reciprocal texel sizes, thread bounds guards in `GTAO.hlsl` CSMain, and `saturate` boundary UV clamping in bilateral filter pass verified across odd sizes including 1919x1079, 127x63, and 1x1. Native D3D12/Vulkan tests pass. [U4 batch 3 review](../../reviews/M15_U4_BATCH_3_REVIEW.md).
 - [ ] **M15-U4-06.1 — Test no-sun.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

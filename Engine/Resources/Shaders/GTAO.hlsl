@@ -249,7 +249,7 @@ float4 PSMain(VSOutput input) : SV_Target {
     for (int y = -2; y <= 2; ++y) {
         [unroll]
         for (int x = -2; x <= 2; ++x) {
-            float2 offsetUV = uv + float2(x, y) * rcpFrame;
+            float2 offsetUV = saturate(uv + float2(x, y) * rcpFrame);
             float tapDepth = u_SceneDepth.SampleLevel(u_LinearSampler, offsetUV, 0.0);
             float tapZ = ReconstructViewPos(offsetUV, tapDepth).z;
 

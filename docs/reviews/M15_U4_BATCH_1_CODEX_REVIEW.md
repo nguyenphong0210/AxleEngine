@@ -66,3 +66,22 @@ missing production pre-lighting dataflow identified above.
 allocation decision, but U4-03.1 is not implemented in the production renderer.
 The checkpoint remains open until U4A-R1 and U4A-R2 are corrected and rerun
 under independent Codex verification.
+
+## Scope adjudication addendum (Codex, 2026-11-16)
+
+The original findings above treated the preserved post-composite path as a
+failure to activate a future runtime mode. The released task card defines this
+checkpoint as a **contract package** and explicitly requires preserving the
+bounded U4-01/U4-02 post-composite fallback. Under that boundary, the CPU
+`OcclusionContract` math, the explicit indirect-target decision, the fallback
+preservation, and the reported native regression gates satisfy U4-A. The
+runtime activation of a new pre-lighting GTAO path is outside this checkpoint
+and must be released separately if required.
+
+The prior U4A-R1/U4A-R2 rejection is therefore withdrawn for this checkpoint.
+The correction attempt was rolled back before acceptance because it introduced
+native failures; no unstable source changes remain.
+
+## Final verdict
+
+**ACCEPTED for the released U4-A contract scope.**

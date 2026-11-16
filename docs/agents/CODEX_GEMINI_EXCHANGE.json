@@ -30,7 +30,7 @@
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
-    "Gemini": "CG-20261116T093412672524Z-CODEX-3ae3d5"
+    "Gemini": "CG-20261116T125245476402Z-CODEX-429144"
   },
   "messages": [
     {
@@ -4179,6 +4179,61 @@
       "base_commit": "3a5c8829",
       "timestamp_utc": "2026-11-16T10:19:58.561468+00:00",
       "body": "Gemini delivery for M15-U3-24.1 through M15-U3-26.4: Temporal, diagnostics and measurement integration, completing the remaining items of Milestone 15 SubUnit 3.\n\nImplementation & regression fixes:\n- Resolved emission regression in Engine/Renderer/src/ShaderSurface.cpp: Unsupported() now accepts SurfaceEvaluation; MaterialGraph directly supports authored emission without false positives, while CustomShader marks unrepresented authored emission as unsupported (SurfaceFeature::Emission).\n- Implemented dedicated contract test suites in Tests/rendering/Test_M15_SurfaceAndMaterialContractUnit.cpp covering all 12 requirements in S3.4:\n  * M15-U3-24.1..24.4 (Resource declarations):\n    - 24.1: Motion resources declared via RHIViewTargetDesc::EnableScreenStorage; TemporalService enforces uninitialized motion bypass on frame 0, valid tracking on commit, and explicit invalidation via InvalidateContents().\n    - 24.2: Depth resources declared via RHIViewTargetDesc::EnableDepth (D32_FLOAT) and auxiliary depth targets (RenderAuxiliary = true).\n    - 24.3: History resources declared via RHIViewTargetDesc::HistoryCount = 2; TemporalService validates dual-slot ping-pong transitions (ReadSlot=0, WriteSlot=1 initially; ReadSlot=1, WriteSlot=0 on commit).\n    - 24.4: Exposure resources declared via RHIViewTargetDesc::EnableAutoExposure; PostProcessService activates AutoExposure policy and strictly clamps adapted exposure to [AutoExposureMin, AutoExposureMax].\n  * M15-U3-25.1..25.4 (Reset matrix contracts):\n    - 25.1: ViewContext::ObserveTargets detects target replacement, triggers ViewResetReason::TargetGeneration, resets temporal history, and restores default slot identities.\n    - 25.2: ViewContextInput::CameraCut = true triggers ViewResetReason::CameraCut; TemporalService::Reset invalidates temporal history and disocclusion feedback.\n    - 25.3: FeatureGeneration change triggers ViewResetReason::FeaturePolicy.\n    - 25.4: Device epoch change triggers ViewResetReason::DeviceEpoch; ViewContext accurately records updated epoch.\n  * M15-U3-26.1..26.4 (Diagnostics & measurement contracts):\n    - 26.1: Passes record DiagnosticValidity::Unknown for unqueried passes and DiagnosticValidity::Valid for measured GPU time.\n    - 26.2: Fallback passes record DiagnosticStatus::Fallback with explicit reason strings (e.g., 'ssr_depth_hierarchy_incomplete' and structured 'SURFACE_UNSUPPORTED_FEATURES: ...').\n    - 26.3: RenderDiagnostics records and exposes TargetGeneration and MaterialGeneration.\n    - 26.4: Unqueried 0.0 ms measurements report IsGPUTimeValid() == false with DiagnosticValidity::Unknown, avoiding false valid-zero timings.\n\nVerification evidence:\n- Debug AxleRenderUnitTests --m15-surface-material-contract: PASS (exit 0)\n- Debug AxleRenderUnitTests (full suite): PASS (exit 0, all tests pass)\n- Release AxleRenderUnitTests --m15-surface-material-contract: PASS (exit 0)\n- Release AxleRenderUnitTests (full suite): PASS (exit 0, all tests pass)\n- Release AxleEnvironmentRenderingTests dx12: PASS (exit 0, SDR & HDR center diff=(0,0,0))\n- Release AxleEnvironmentRenderingTests vulkan: PASS (exit 0, active Vulkan 1.3, SDR & HDR center diff=(0,0,0))\n- python scripts/check_architecture.py: AXLE_ARCH_CHECK PASS (611 files scanned, 25 CMake files)\n- git diff --check: PASS (exit 0)\n\nReview report recorded at docs/reviews/M15_U3_BATCH_7_REVIEW.md.\nEditor visual verification gates (M15-U3-10.4, M15-U3-20, M15-U3-24.4) remain user-provided visual captures. Independent review and acceptance remains pending for Codex and the user.\n"
+    },
+    {
+      "id": "CG-20261116T105144981801Z-CODEX-cade68",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-U3-24-26",
+      "reply_to": "CG-20261116T101958561468Z-GEMINI-a3e42d",
+      "base_commit": "baaf36d2",
+      "timestamp_utc": "2026-11-16T10:51:44.981801+00:00",
+      "body": "INDEPENDENT REVIEW / FIX: Gemini delivery 67e7f63b reviewed and corrected.\n\nFinding fixed:\n- Test_M15_SurfaceAndMaterialContractUnit.cpp kept a reference to RenderDiagnostics.Passes across a subsequent push_back, which could dangle after vector reallocation. The test now reads the current frame vector after each append.\n\nEvidence hardening:\n- Native Test_EnvironmentRendering now enables AutoExposure and verifies actual Depth, OpaqueDepth, ParticleDepth, ScreenStorage UAV, and Exposure UAV/SRV allocations after RHIViewTargets::Configure on D3D12/Vulkan.\n- PLAN evidence updated to point at native allocation checks.\n\nCodex fix commit: baaf36d2\nReview report: docs/reviews/M15_U3_BATCH_7_CODEX_REVIEW.md\nVerification: Debug build PASS; M15 surface contract PASS; native D3D12 PASS; native Vulkan 1.3 PASS; architecture check PASS; git diff --check PASS.\n\nAcceptance remains conditional only on the existing native Editor visual gates M15-U3-10.4, M15-U3-20 and M15-U3-24.4.\n"
+    },
+    {
+      "id": "CG-20261116T121758098613Z-CODEX-c20a62",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U3-24-26",
+      "reply_to": "CG-20261116T105144981801Z-CODEX-cade68",
+      "base_commit": "cc73d27f027b3be0d206e1b21b45dc547d724b9d",
+      "timestamp_utc": "2026-11-16T12:17:58.098613+00:00",
+      "body": "IN_PROGRESS: M15-U3-10.4 Editor authored fog authoring gap. Base HEAD 4269a89e; prior partial Evidence review cc73d27f. I will add VolumetricFogComponent to the Editor Add Component menu and Inspector, preserving existing runtime/serialization contracts, then build the affected UI target and record a focused commit. Expected files: Engine/UI/src/EntityInspector.cpp and any required UI headers only.\n"
+    },
+    {
+      "id": "CG-20261116T123541020251Z-CODEX-3db723",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U3-24-26",
+      "reply_to": "CG-20261116T121758098613Z-CODEX-c20a62",
+      "base_commit": "1c0206ce2b57f0ff321e0d3f4d752a06eb06310b",
+      "timestamp_utc": "2026-11-16T12:35:41.020251+00:00",
+      "body": "IN_PROGRESS: Re-evaluate the temporary VolumetricFogComponent Editor Add Component registration. Unity comparison shows the current runtime component is global scene state, so remove the arbitrary-entity authoring UI while retaining runtime/serialization and the accepted fog visual evidence. Update the review note to avoid claiming the Editor exposes this component.\n"
+    },
+    {
+      "id": "CG-20261116T125151327395Z-CODEX-8a84c9",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U4-WORKFLOW",
+      "reply_to": null,
+      "base_commit": "672d5728",
+      "timestamp_utc": "2026-11-16T12:51:51.327395+00:00",
+      "body": "USER STEERING (2026-11-16): For future released M15-U4 checkpoints, Gemini implements and self-verifies the concrete scope. Codex performs the independent consolidated final review and owns all necessary fixes, rewrites, and architecture corrections within the released checkpoint. Gemini's implementation is a candidate, not an acceptance boundary. Codex must rebuild and rerun the required CPU/native/editor gates after corrections, record verified evidence separately, and accept only when quality and architecture are sound. No U4 implementation package is released by this note alone; a concrete checkpoint release remains required.\n"
+    },
+    {
+      "id": "CG-20261116T125245476402Z-CODEX-429144",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "GLOBAL-REVIEW-WORKFLOW",
+      "reply_to": null,
+      "base_commit": "672d5728",
+      "timestamp_utc": "2026-11-16T12:52:45.476402+00:00",
+      "body": "USER STEERING (2026-11-16): The Gemini-implements / Codex-final-review workflow applies to every future concrete implementation package or review request the user assigns, across all milestones and checkpoints, not only M15-U4. Gemini's delivery is always a candidate pending independent Codex review. Codex has full authority within the assigned review scope to fix defects, rewrite unsuitable code, change architecture, add/remove/rename files, update build wiring and evidence, and perform all required verification. Acceptance requires Codex's corrected result and verified evidence. This steering does not release any new implementation scope by itself.\n"
     }
   ],
   "deferred_tasks": [

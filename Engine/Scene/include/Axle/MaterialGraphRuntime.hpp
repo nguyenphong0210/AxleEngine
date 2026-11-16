@@ -88,6 +88,9 @@ namespace Axle {
         // Surface numeric fields are not a CPU evaluation of graph expressions.
         static ShaderSurfaceResult ResolveSurface(const MaterialGraphReadyGeneration& generation,
             const MaterialGraphInstance& instance = {}, const EngineMaterialValues& view = {});
+        static ShaderSurfaceResult ResolveSurface(const MaterialGraphReadyGeneration& generation,
+            const ResolvedSurface& baseSurface,
+            const MaterialGraphInstance& instance = {}, const EngineMaterialValues& view = {});
         // Populate the texture/sampler ranges of fresh caller-owned descriptor sets.
         // Caller packs/binds cbuffers and retains the generation while recording.
         static bool WriteResourceDescriptors(const MaterialGraphReadyGeneration& generation,

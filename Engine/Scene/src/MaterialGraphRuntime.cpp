@@ -159,6 +159,7 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
 }
 
 ShaderSurfaceResult MaterialGraphRuntime::ResolveSurface(const MaterialGraphReadyGeneration& generation,
+    const ResolvedSurface& baseSurface,
     const MaterialGraphInstance& instance, const EngineMaterialValues& view) {
     if (!generation.ID || generation.Program.ShaderKey.empty())
         return MaterialBindingError{"GraphSurfaceGeneration", {}, {}, "Graph surface requires a published program generation"};
@@ -169,10 +170,14 @@ ShaderSurfaceResult MaterialGraphRuntime::ResolveSurface(const MaterialGraphRead
     MaterialGraphDiagnostic error;
     if (!instance.Resolve(generation.Program, properties, &error))
         return MaterialBindingError{error.Code, {}, error.Field, error.Message};
-    RHI::RHIMaterialDesc desc;
-    desc.CullMode = Cull(generation.Program.CullMode);
-    desc.DepthWrite = generation.Program.DepthWrite;
-    auto result = ResolveShaderSurface(MaterialResolver::Resolve(RHI::RHIMaterial(desc)),
+
+    ResolvedSurface base = baseSurface;
+    base.Cull = Cull(generation.Program.CullMode);
+    base.DepthWrite = generation.Program.DepthWrite;
+    base.Evaluation = SurfaceEvaluation::BuiltIn;
+    if (!base.Generation) base.Generation = 1;
+
+    auto result = ResolveShaderSurface(base,
         SurfaceEvaluation::MaterialGraph, generation.ID, generation.Program.BindingPlan, view, properties);
     if (auto* surface = std::get_if<ResolvedShaderSurface>(&result)) {
         if (!generation.Resources.Warnings.empty()) {
@@ -190,6 +195,14 @@ ShaderSurfaceResult MaterialGraphRuntime::ResolveSurface(const MaterialGraphRead
         }
     }
     return result;
+}
+
+ShaderSurfaceResult MaterialGraphRuntime::ResolveSurface(const MaterialGraphReadyGeneration& generation,
+    const MaterialGraphInstance& instance, const EngineMaterialValues& view) {
+    RHI::RHIMaterialDesc desc;
+    desc.CullMode = Cull(generation.Program.CullMode);
+    desc.DepthWrite = generation.Program.DepthWrite;
+    return ResolveSurface(generation, MaterialResolver::Resolve(RHI::RHIMaterial(desc)), instance, view);
 }
 
 nri::Pipeline* MaterialGraphRuntime::GetPipeline(const MaterialGraphReadyGeneration& generation) {

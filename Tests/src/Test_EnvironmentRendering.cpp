@@ -1,4 +1,5 @@
 #include <Axle/RHISceneRenderer.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/RHI/RHIDiagnostics.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/RHI/RHIBuffer.hpp>
@@ -814,6 +815,95 @@ bool Native(RHIType backend) {
     material->GetDesc().AbsorptionEnabled = false;
     material->GetDesc().RefractionEnabled = false;
     material->GetDesc().SurfaceType = Axle::SurfaceType::Opaque;
+
+    // 4. M15-U3-23 Native built-in vs custom graph surface pixel parity fixture
+    camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0, 0, 5), glm::vec3(0), glm::vec3(0, 1, 0)), glm::vec3(0, 0, 5));
+    material->GetDesc().BaseColor = glm::vec4(0.8f, 0.4f, 0.2f, 1.0f);
+    material->GetDesc().Roughness = 0.5f;
+    material->GetDesc().Metallic = 0.0f;
+    material->GetDesc().NormalStrength = 1.0f;
+    material->GetDesc().AO = 1.0f;
+    material->GetDesc().ClearcoatStrength = 0.0f;
+    material->GetDesc().AnisotropyStrength = 0.0f;
+    material->GetDesc().SheenEnabled = false;
+    material->GetDesc().SubsurfaceEnabled = false;
+    material->GetDesc().AbsorptionEnabled = false;
+    material->GetDesc().RefractionEnabled = false;
+
+    world.DirectionalLight = RenderDirectionalLight{};
+    world.DirectionalLight->Direction = glm::normalize(glm::vec3(0.0f, 0.0f, 1.0f));
+    world.DirectionalLight->Intensity = 1.0f;
+    world.DirectionalLight->AmbientIntensity = 0.0f;
+    world.DirectionalLight->Color = glm::vec3(1.0f, 1.0f, 1.0f);
+    world.Skybox.EnvironmentLighting = false;
+    world.Skybox.SunColor = glm::vec4(0.0f);
+
+    world.Meshes = { mesh };
+    world.Meshes[0].Material.RHIMaterialAsset = material;
+    world.Meshes[0].Material.UseCustomShader = false;
+    world.Meshes[0].Material.CustomProperties.clear();
+
+    const auto builtinParityOutput = render();
+    CHECK(!builtinParityOutput.empty());
+
+    // Assemble and save an equivalent custom material surface shader
+    std::string declarations = "cbuffer MaterialParameters : register(b2, space0) {\n    float4 u_GraphBaseColor;\n};\n";
+    std::string surfaceFunc =
+        "MaterialSurface AxleEvaluateMaterial(float2 uv) {\n"
+        "    MaterialSurface s;\n"
+        "    s.BaseColor = float3(0.8, 0.4, 0.2);\n"
+        "    s.Metallic = 0.0;\n"
+        "    s.Roughness = 0.5;\n"
+        "    s.Normal = float3(0, 0, 1);\n"
+        "    s.Emission = float3(0, 0, 0);\n"
+        "    s.AO = 1.0;\n"
+        "    s.Clearcoat = 0.0;\n"
+        "    s.ClearcoatRoughness = 0.04;\n"
+        "    s.Anisotropy = 0.0;\n"
+        "    s.AnisotropyRotation = 0.0;\n"
+        "    s.SheenColor = float3(0, 0, 0);\n"
+        "    s.SheenRoughness = 0.0;\n"
+        "    s.SubsurfaceColor = float3(0, 0, 0);\n"
+        "    s.SubsurfaceRadius = 0.0;\n"
+        "    s.AbsorptionColor = float3(0, 0, 0);\n"
+        "    s.IOR = 1.5;\n"
+        "    s.Dispersion = 0.0;\n"
+        "    s.FeatureFlags = 0;\n"
+        "    return s;\n"
+        "}\n";
+    std::string parityShaderCode = Axle::AssembleMaterialSurfaceShader(declarations, surfaceFunc);
+    std::ofstream parityFile(Output / "parity_graph.hlsl");
+    parityFile << parityShaderCode;
+    parityFile.close();
+
+    world.Meshes[0].Material.UseCustomShader = true;
+    world.Meshes[0].Material.CustomShaderPath = "parity_graph.hlsl";
+    ShaderPropertyInstance graphColorProp;
+    graphColorProp.Desc.ConstantBufferName = "MaterialParameters";
+    graphColorProp.Desc.Name = "u_GraphBaseColor";
+    graphColorProp.Desc.DisplayName = "u_GraphBaseColor";
+    graphColorProp.Desc.Type = ShaderPropertyType::Float4;
+    graphColorProp.Vec4Val = glm::vec4(0.8f, 0.4f, 0.2f, 1.0f);
+    world.Meshes[0].Material.CustomProperties = { graphColorProp };
+
+    const auto graphParityOutput = render();
+    CHECK(!graphParityOutput.empty() && graphParityOutput.size() == builtinParityOutput.size());
+
+    world.Meshes[0].Material.UseCustomShader = false;
+    world.Meshes[0].Material.CustomProperties.clear();
+
+    int parityDiffR = std::abs(static_cast<int>(builtinParityOutput[center + 0]) - static_cast<int>(graphParityOutput[center + 0]));
+    int parityDiffG = std::abs(static_cast<int>(builtinParityOutput[center + 1]) - static_cast<int>(graphParityOutput[center + 1]));
+    int parityDiffB = std::abs(static_cast<int>(builtinParityOutput[center + 2]) - static_cast<int>(graphParityOutput[center + 2]));
+    std::cout << "  [Parity] M15-U3-23 Built-in vs Graph center pixel: ("
+              << static_cast<int>(builtinParityOutput[center + 0]) << ","
+              << static_cast<int>(builtinParityOutput[center + 1]) << ","
+              << static_cast<int>(builtinParityOutput[center + 2]) << ") vs ("
+              << static_cast<int>(graphParityOutput[center + 0]) << ","
+              << static_cast<int>(graphParityOutput[center + 1]) << ","
+              << static_cast<int>(graphParityOutput[center + 2]) << ") diff=("
+              << parityDiffR << "," << parityDiffG << "," << parityDiffB << ")\n";
+    CHECK(parityDiffR <= 2 && parityDiffG <= 2 && parityDiffB <= 2);
 
     CHECK(device.WaitIdle());
     const auto baselineDrawCalls = renderer.GetDrawCallCount();

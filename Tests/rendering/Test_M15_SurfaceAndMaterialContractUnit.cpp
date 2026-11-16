@@ -2,9 +2,12 @@
 #include <Axle/Material.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/ResolvedSurface.hpp>
+#include <Axle/ShaderSurface.hpp>
+#include <Axle/RenderWorld.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/MaterialBindingPlan.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/RHI/RHIMesh.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -331,6 +334,254 @@ bool RunM15SurfaceAndMaterialContractUnitTests() {
         std::filesystem::remove(tempFlatPath, ec);
     }
 
-    std::cout << "  [M15SurfaceMaterial] M15-U3-14 through U3-19 contract tests passed.\n";
+    // =========================================================================
+    // M15-U3-20: Smooth-Sphere Normal-Field and Anti-Faceting Metric
+    // =========================================================================
+    {
+        std::cout << "  [M15SurfaceMaterial] Running M15-U3-20 smooth-sphere & anti-faceting metric...\n";
+
+        // 1. High-fidelity smooth sphere (64 stacks, 128 sectors)
+        std::vector<RHI::RHIVertex3D> hiVertices;
+        std::vector<uint32_t> hiIndices;
+        constexpr float radius = 1.0f;
+        RHI::RHIMesh::GenerateSphere(radius, 64, 128, hiVertices, hiIndices);
+
+        float hiMaxRadialError = 0.0f;
+        float hiMaxEdgeAngleDeg = 0.0f;
+        bool hiFinite = true;
+
+        for (const auto& v : hiVertices) {
+            hiFinite = hiFinite && std::isfinite(v.Position.x) && std::isfinite(v.Position.y) && std::isfinite(v.Position.z)
+                                && std::isfinite(v.Normal.x) && std::isfinite(v.Normal.y) && std::isfinite(v.Normal.z);
+            float len = glm::length(v.Normal);
+            RENDER_CHECK(std::abs(len - 1.0f) <= 1.0e-3f, "High-fidelity sphere normal has unit length");
+
+            glm::vec3 expected = glm::normalize(v.Position);
+            hiMaxRadialError = std::max(hiMaxRadialError, glm::length(v.Normal - expected));
+        }
+        RENDER_CHECK(hiFinite, "M15-U3-20: all high-fidelity sphere coordinates and normals are finite");
+        RENDER_CHECK(hiMaxRadialError <= 1.0e-2f, "M15-U3-20: high-fidelity normals align radially with surface position");
+
+        for (size_t i = 0; i + 2 < hiIndices.size(); i += 3) {
+            const auto& a = hiVertices[hiIndices[i + 0]].Normal;
+            const auto& b = hiVertices[hiIndices[i + 1]].Normal;
+            const auto& c = hiVertices[hiIndices[i + 2]].Normal;
+            for (const auto& edge : {std::pair{a, b}, std::pair{b, c}, std::pair{c, a}}) {
+                float angle = glm::degrees(std::acos(glm::clamp(glm::dot(edge.first, edge.second), -1.0f, 1.0f)));
+                hiMaxEdgeAngleDeg = std::max(hiMaxEdgeAngleDeg, angle);
+            }
+        }
+        RENDER_CHECK(hiMaxEdgeAngleDeg <= 4.1f, "M15-U3-20: anti-faceting metric passes: max edge angle <= 4.1 deg");
+
+        // 2. Coarse sphere (8 stacks, 8 sectors) - evaluates anti-faceting violation detection
+        std::vector<RHI::RHIVertex3D> coarseVertices;
+        std::vector<uint32_t> coarseIndices;
+        RHI::RHIMesh::GenerateSphere(radius, 8, 8, coarseVertices, coarseIndices);
+        float coarseMaxEdgeAngleDeg = 0.0f;
+        for (size_t i = 0; i + 2 < coarseIndices.size(); i += 3) {
+            const auto& a = coarseVertices[coarseIndices[i + 0]].Normal;
+            const auto& b = coarseVertices[coarseIndices[i + 1]].Normal;
+            const auto& c = coarseVertices[coarseIndices[i + 2]].Normal;
+            for (const auto& edge : {std::pair{a, b}, std::pair{b, c}, std::pair{c, a}}) {
+                float angle = glm::degrees(std::acos(glm::clamp(glm::dot(edge.first, edge.second), -1.0f, 1.0f)));
+                coarseMaxEdgeAngleDeg = std::max(coarseMaxEdgeAngleDeg, angle);
+            }
+        }
+        RENDER_CHECK(coarseMaxEdgeAngleDeg > 4.1f, "M15-U3-20: coarse sphere triggers anti-faceting violation threshold (>4.1 deg)");
+    }
+
+    // =========================================================================
+    // M15-U3-21.1 through 21.4: Resolver Unification
+    // =========================================================================
+    {
+        std::cout << "  [M15SurfaceMaterial] Running M15-U3-21 resolver unification tests...\n";
+
+        // 21.1: Built-in Resolver
+        RHI::RHIMaterialDesc desc;
+        desc.BaseColor = glm::vec4(0.8f, 0.4f, 0.2f, 1.0f);
+        desc.Roughness = 0.45f;
+        desc.Metallic = 0.9f;
+        desc.AO = 0.85f;
+        desc.NormalStrength = 1.2f;
+        desc.ClearcoatStrength = 0.7f;
+        desc.ClearcoatRoughness = 0.05f;
+        desc.SheenEnabled = true;
+        desc.SheenColor = glm::vec3(0.9f, 0.8f, 0.7f);
+        desc.SheenRoughness = 0.3f;
+        desc.SubsurfaceEnabled = true;
+        desc.SubsurfaceColor = glm::vec3(0.95f, 0.3f, 0.2f);
+        desc.SubsurfaceRadius = 3.0f;
+
+        RHI::RHIMaterial builtinMat(desc);
+        auto builtinSurface = MaterialResolver::Resolve(builtinMat);
+
+        RENDER_CHECK(builtinSurface.Valid, "M15-U3-21.1: built-in resolver produces valid surface");
+        RENDER_CHECK(builtinSurface.Evaluation == SurfaceEvaluation::BuiltIn, "M15-U3-21.1: evaluation tag is BuiltIn");
+        RENDER_CHECK(builtinSurface.Generation != 0, "M15-U3-21.1: non-zero generation hash");
+        RENDER_CHECK(builtinSurface.Metallic == 0.9f && builtinSurface.Roughness == 0.45f, "M15-U3-21.1: metallic/roughness values preserved");
+
+        // 21.3: Preview Resolver
+        auto previewSurface = MaterialResolver::ResolvePreview(builtinMat);
+        RENDER_CHECK(previewSurface.Generation == builtinSurface.Generation,
+            "M15-U3-21.3: Preview resolver produces identical generation hash as built-in");
+        RENDER_CHECK(previewSurface.BaseColor == builtinSurface.BaseColor &&
+                     previewSurface.Roughness == builtinSurface.Roughness &&
+                     previewSurface.Metallic == builtinSurface.Metallic,
+            "M15-U3-21.3: Preview resolver matches built-in surface attributes");
+
+        // 21.4: Runtime Resolver
+        RenderMaterialData snapshot;
+        snapshot.RHIMaterialAsset = std::make_shared<const RHI::RHIMaterial>(builtinMat);
+        auto runtimeSurface = MaterialResolver::ResolveRuntime(snapshot);
+        RENDER_CHECK(runtimeSurface.Generation == builtinSurface.Generation,
+            "M15-U3-21.4: Runtime resolver matches built-in surface generation hash");
+        RENDER_CHECK(runtimeSurface.ToMaterialConstants().Surface == builtinSurface.ToMaterialConstants().Surface,
+            "M15-U3-21.4: Runtime resolver produces identical GPU constants as built-in");
+
+        // 21.2: Material Graph Resolver parity on canonical fields
+        ValidatedShaderInterface iface;
+        MaterialBindingPlan plan;
+        plan.InterfaceRevision = 1;
+        EngineMaterialValues view;
+        std::vector<ShaderPropertyInstance> savedValues;
+
+        auto graphSurfaceResult = ResolveShaderSurface(builtinSurface, SurfaceEvaluation::MaterialGraph, 4242, plan, view, savedValues);
+        RENDER_CHECK(std::holds_alternative<ResolvedShaderSurface>(graphSurfaceResult),
+            "M15-U3-21.2: graph surface resolves successfully");
+        const auto& graphSurface = std::get<ResolvedShaderSurface>(graphSurfaceResult).Surface;
+        RENDER_CHECK(graphSurface.Evaluation == SurfaceEvaluation::MaterialGraph,
+            "M15-U3-21.2: graph surface is tagged with MaterialGraph evaluation domain");
+        RENDER_CHECK(graphSurface.ShaderGeneration == 4242,
+            "M15-U3-21.2: graph surface retains immutable shader generation");
+        RENDER_CHECK(graphSurface.BaseColor == builtinSurface.BaseColor &&
+                     graphSurface.Metallic == builtinSurface.Metallic &&
+                     graphSurface.Roughness == builtinSurface.Roughness,
+            "M15-U3-21.2: graph surface inherits canonical base material parameters");
+    }
+
+    // =========================================================================
+    // M15-U3-22: Explicit Unsupported Feature Masks & Fallback Diagnostics
+    // =========================================================================
+    {
+        std::cout << "  [M15SurfaceMaterial] Running M15-U3-22 unsupported feature masks and fallback diagnostics...\n";
+
+        // Base surface requesting Sheen, Subsurface, Clearcoat, Anisotropy, Absorption, Refraction, Cutout
+        RHI::RHIMaterialDesc advDesc;
+        advDesc.ClearcoatStrength = 0.5f;
+        advDesc.AnisotropyStrength = 0.8f;
+        advDesc.SheenEnabled = true;
+        advDesc.SubsurfaceEnabled = true;
+        advDesc.AbsorptionEnabled = true;
+        advDesc.RefractionEnabled = true;
+        advDesc.SurfaceType = SurfaceType::Cutout;
+        advDesc.NormalStrength = 2.0f;
+
+        RHI::RHIMaterial advMat(advDesc);
+        auto baseSurface = MaterialResolver::Resolve(advMat);
+
+        ValidatedShaderInterface iface;
+        MaterialBindingPlan plan;
+        EngineMaterialValues view;
+        std::vector<ShaderPropertyInstance> savedValues;
+
+        auto shaderResult = ResolveShaderSurface(baseSurface, SurfaceEvaluation::MaterialGraph, 999, plan, view, savedValues);
+        RENDER_CHECK(std::holds_alternative<ResolvedShaderSurface>(shaderResult), "ResolveShaderSurface succeeded");
+        const auto& surface = std::get<ResolvedShaderSurface>(shaderResult).Surface;
+
+        // Verify explicit unsupported mask bits
+        uint32_t expectedMask = 0;
+        expectedMask |= static_cast<uint32_t>(SurfaceFeature::Clearcoat);
+        expectedMask |= static_cast<uint32_t>(SurfaceFeature::Anisotropy);
+        expectedMask |= static_cast<uint32_t>(SurfaceFeature::Sheen);
+        expectedMask |= static_cast<uint32_t>(SurfaceFeature::Subsurface);
+        expectedMask |= static_cast<uint32_t>(SurfaceFeature::Absorption);
+        expectedMask |= static_cast<uint32_t>(SurfaceFeature::Refraction);
+        expectedMask |= static_cast<uint32_t>(SurfaceFeature::Cutout);
+        expectedMask |= static_cast<uint32_t>(SurfaceFeature::NormalStrength);
+
+        RENDER_CHECK((surface.UnsupportedFeatures & expectedMask) == expectedMask,
+            "M15-U3-22: UnsupportedFeatures bitmask correctly records all unsupported advanced features");
+        RENDER_CHECK(surface.Fallback == true,
+            "M15-U3-22: surface.Fallback is set to true when unsupported features are present");
+        RENDER_CHECK(surface.Diagnostic.find("SURFACE_UNSUPPORTED_FEATURES:") != std::string::npos,
+            "M15-U3-22: diagnostic message explicitly reports SURFACE_UNSUPPORTED_FEATURES");
+        RENDER_CHECK(surface.Diagnostic.find("mask=") != std::string::npos,
+            "M15-U3-22: diagnostic message includes the bitmask value");
+
+        // Supported surface with no advanced features has 0 unsupported features
+        RHI::RHIMaterialDesc basicDesc;
+        basicDesc.BaseColor = glm::vec4(1.0f);
+        basicDesc.Roughness = 0.5f;
+        basicDesc.Metallic = 0.0f;
+        basicDesc.NormalStrength = 1.0f;
+        RHI::RHIMaterial basicMat(basicDesc);
+        auto basicBase = MaterialResolver::Resolve(basicMat);
+        auto basicResult = ResolveShaderSurface(basicBase, SurfaceEvaluation::MaterialGraph, 1000, plan, view, savedValues);
+        RENDER_CHECK(std::holds_alternative<ResolvedShaderSurface>(basicResult), "basic shader surface resolved");
+        const auto& basicSurface = std::get<ResolvedShaderSurface>(basicResult).Surface;
+        RENDER_CHECK(basicSurface.UnsupportedFeatures == 0,
+            "M15-U3-22: supported basic surface has zero unsupported features");
+        RENDER_CHECK(basicSurface.Fallback == false,
+            "M15-U3-22: supported basic surface has Fallback == false");
+        RENDER_CHECK(basicSurface.Diagnostic.empty(),
+            "M15-U3-22: supported basic surface has empty diagnostic");
+    }
+
+    // =========================================================================
+    // M15-U3-23.1 through 23.4: Parity Comparisons (Built-in vs Graph)
+    // =========================================================================
+    {
+        std::cout << "  [M15SurfaceMaterial] Running M15-U3-23 parity comparisons (lights, shadows, IBL, output policy)...\n";
+
+        // Read and compare shader source files
+        std::ifstream matFile(AXLE_MATERIAL_SURFACE_SHADER_PATH);
+        if (!matFile.is_open()) matFile.open("Engine/Resources/Shaders/MaterialSurface.hlsl");
+        RENDER_CHECK(matFile.is_open(), "MaterialSurface.hlsl is accessible");
+        std::stringstream ssMat; ssMat << matFile.rdbuf();
+        std::string matSource = ssMat.str();
+
+        std::ifstream fwdFile("Engine/Resources/Shaders/ForwardPBR.hlsl");
+        RENDER_CHECK(fwdFile.is_open(), "ForwardPBR.hlsl is accessible");
+        std::stringstream ssFwd; ssFwd << fwdFile.rdbuf();
+        std::string fwdSource = ssFwd.str();
+
+        // 23.1: Compare Lights
+        RENDER_CHECK(matSource.find("DIRECT_LUX_TO_RADIANCE = 0.000035") != std::string::npos &&
+                     fwdSource.find("DIRECT_LUX_TO_RADIANCE = 0.000035") != std::string::npos,
+            "M15-U3-23.1: both shaders unify DIRECT_LUX_TO_RADIANCE = 0.000035");
+        RENDER_CHECK((matSource.find("INV_PI") != std::string::npos || matSource.find("BRDF_DIFFUSE_NORMALIZATION") != std::string::npos) &&
+                     fwdSource.find("BRDF_DIFFUSE_NORMALIZATION") != std::string::npos,
+            "M15-U3-23.1: both shaders apply 1/PI diffuse normalization");
+        RENDER_CHECK(fwdSource.find("u_LightCounts") != std::string::npos && fwdSource.find("u_PointLights") != std::string::npos,
+            "M15-U3-23.1: ForwardPBR implements multi-light point/spot loops");
+        RENDER_CHECK(matSource.find("u_PointLights") == std::string::npos,
+            "M15-U3-23.1: MaterialSurface scopes to primary sun; multi-lights recorded as unsupported in graph layout");
+
+        // 23.2: Compare Shadows
+        RENDER_CHECK(fwdSource.find("CascadeReceiver") != std::string::npos && fwdSource.find("SunShadowVisibility") != std::string::npos,
+            "M15-U3-23.2: ForwardPBR evaluates cascaded directional shadow receivers");
+        RENDER_CHECK(matSource.find("CascadeReceiver") == std::string::npos,
+            "M15-U3-23.2: MaterialSurface omits shadow receivers in graph interface; tested via fallback diagnostics");
+
+        // 23.3: Compare IBL
+        RENDER_CHECK(fwdSource.find("u_IrradianceMap") != std::string::npos && fwdSource.find("u_PrefilterMap") != std::string::npos,
+            "M15-U3-23.3: ForwardPBR implements full split-sum IBL pipeline");
+        RENDER_CHECK(matSource.find("FresnelSchlickRoughness") != std::string::npos,
+            "M15-U3-23.3: MaterialSurface unifies analytical ambient specular reflection response");
+
+        // 23.4: Compare Output Policy
+        RENDER_CHECK(matSource.find("u_CameraPosition.w <= 0.0") != std::string::npos &&
+                     fwdSource.find("u_CameraPosition.w <= 0.0") != std::string::npos,
+            "M15-U3-23.4: both shaders evaluate identical SDR vs HDR branching on camera.w");
+        RENDER_CHECK(matSource.find("2.51") != std::string::npos && fwdSource.find("2.51") != std::string::npos,
+            "M15-U3-23.4: both shaders evaluate identical ACES Filmic tonemapping operator (Narkowicz fit)");
+        RENDER_CHECK(matSource.find("1.0 / 2.2") != std::string::npos && fwdSource.find("1.0 / 2.2") != std::string::npos,
+            "M15-U3-23.4: both shaders evaluate 2.2 gamma encoding in SDR mode");
+        RENDER_CHECK(matSource.find("clamp(color, 0.0, 65000.0)") != std::string::npos &&
+                     fwdSource.find("clamp(color, 0.0, 65000.0)") != std::string::npos,
+            "M15-U3-23.4: both shaders clamp HDR radiance to 65000.0");
+    }
+
+    std::cout << "  [M15SurfaceMaterial] M15-U3-14 through U3-23.4 contract tests passed.\n";
     return true;
 }

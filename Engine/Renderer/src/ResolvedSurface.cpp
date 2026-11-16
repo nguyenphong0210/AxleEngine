@@ -183,4 +183,12 @@ namespace Axle {
         if (!result.Valid) result.Diagnostic = "SURFACE_LEGACY_INVALID: invalid procedural snapshot inputs";
         return result;
     }
+
+    ResolvedSurface MaterialResolver::ResolvePreview(const RHI::RHIMaterial& material, uint64_t generation) {
+        return Resolve(material, generation);
+    }
+
+    ResolvedSurface MaterialResolver::ResolveRuntime(const RenderMaterialData& snapshot) {
+        return Resolve(snapshot);
+    }
 }

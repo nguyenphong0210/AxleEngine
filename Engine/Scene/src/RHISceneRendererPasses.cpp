@@ -697,7 +697,7 @@ namespace Axle {
             sceneConstants.SunDirection = glm::vec4(sun.DirectionAndIlluminance.x,
                                                     sun.DirectionAndIlluminance.y,
                                                     sun.DirectionAndIlluminance.z,
-                                                    sun.DirectionAndIlluminance.w * 0.0005f);
+                                                    sun.DirectionAndIlluminance.w);
             sceneConstants.SunColor = sun.ColorAndAmbient;
             sceneConstants.AmbientLight = glm::vec4(sun.AmbientColor.r, sun.AmbientColor.g, sun.AmbientColor.b, sun.ColorAndAmbient.w);
 

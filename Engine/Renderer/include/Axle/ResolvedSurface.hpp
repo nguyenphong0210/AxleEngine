@@ -99,6 +99,8 @@ namespace Axle {
     public:
         static ResolvedSurface Resolve(const RHI::RHIMaterial& material, uint64_t generation = 0);
         static ResolvedSurface Resolve(const RenderMaterialData& snapshot);
+        static ResolvedSurface ResolvePreview(const RHI::RHIMaterial& material, uint64_t generation = 0);
+        static ResolvedSurface ResolveRuntime(const RenderMaterialData& snapshot);
         static uint64_t ComputeGeneration(const RHI::RHIMaterial& material);
     };
 

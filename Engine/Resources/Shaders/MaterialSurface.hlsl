@@ -117,8 +117,25 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
     // Ambient / indirect term scaled by AO; direct and emissive are preserved
     float3 ambientRef = FresnelSchlickRoughness(nv, f0, roughness);
-    float3 ambient = (base * 0.03 * (1.0 - metallic) + ambientRef * 0.02) * saturate(surface.AO);
-    return float4(direct + ambient + max(surface.Emission, float3(0,0,0)), 1.0);
+    float3 ambient = (base * 0.03 * (1.0 - metallic) + ambientRef * 0.02) * saturate(surface.AO) * max(u_SunColor.w, 0.0);
+    float3 color = direct + ambient + max(surface.Emission, float3(0,0,0));
+    color = clamp(color, 0.0, 65000.0);
+
+    // 11. Tone Mapping & Color Polish (ACES Filmic Operator & Gamma Correction)
+    // Parity with ForwardPBR.hlsl output policy (M15-U3-23.4):
+    // If u_CameraPosition.w > 0.0 (HDR Post-Processing Mode): Output pure linear HDR radiance
+    // If u_CameraPosition.w <= 0.0 (Legacy SDR Fallback): Apply ACES Filmic & 2.2 Gamma
+    if (u_CameraPosition.w <= 0.0) {
+        // ACES Filmic (Narkowicz fit)
+        const float a = 2.51;
+        const float b = 0.03;
+        const float c = 2.43;
+        const float d = 0.59;
+        const float e = 0.14;
+        color = saturate((color * (a * color + b)) / (color * (c * color + d) + e));
+        color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+    }
+    return float4(color, 1.0);
 }
 
 // Material Graphs use this companion entry point for the screen-space normal

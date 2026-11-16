@@ -465,9 +465,9 @@ the item is visible.
 - [x] **M15-U3-19.4 — Round-trip save/reopen.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: Save and Load round-trip preserves all material parameters across `.axleasset` and flat `.mat` file formats. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
-- [ ] **M15-U3-20 — Add smooth-sphere normal-field and anti-faceting metric.**
+- [x] **M15-U3-20 — Add smooth-sphere normal-field and anti-faceting metric.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp` (max normal angular delta $\theta = 3.98^\circ \le 4.1^\circ$, radial alignment $\le 10^{-6}$). [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md). Editor visual evidence remains user-provided.
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp` (max normal angular delta $\theta = 3.98^\circ \le 4.1^\circ$, radial alignment $\le 10^{-6}$). User-provided Editor capture reviewed in this session: smooth sphere highlights and silhouettes show no visible triangle bands, faceting or invalid pixels; Console reports `Error 0`. [U3 batch 6 review](../../reviews/M15_U3_BATCH_6_REVIEW.md).
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere has smooth shading with no triangle bands, faceting or invalid pixels.
 
 **Exit:** smooth sphere has no triangle bands; built-in/graph materials match in supported scope; save/reopen preserves fields.
@@ -518,7 +518,7 @@ the item is visible.
   - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `RHIViewTargetDesc::HistoryCount = 2` declares dual-slot history; `TemporalService` manages ping-pong read/write slot transitions on commit. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
 - [x] **M15-U3-24.4 — Declare exposure resources.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** CPU contract verifies policy/clamping; native `Test_EnvironmentRendering` configures and validates the 1x1 exposure UAV/SRV on D3D12/Vulkan. Editor visual evidence remains user-provided. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+  - **Evidence:** CPU contract verifies policy/clamping; native `Test_EnvironmentRendering` configures and validates the 1x1 exposure UAV/SRV on D3D12/Vulkan. User-provided Editor captures reviewed in this session show the same fixture with `Auto-Exposure` unchecked and checked, with stable output and Console `Error 0`. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
 - [x] **M15-U3-25.1 — Reset on target generation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.

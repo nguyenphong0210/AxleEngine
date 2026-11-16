@@ -35,3 +35,17 @@ after exercising retry/fallback behavior.
 M15-U3-24.1 through U3-26.4 are code and automated-test complete after the
 correction. Native Editor visual gates remain separate user evidence:
 M15-U3-10.4, M15-U3-20 and M15-U3-24.4.
+
+## Editor evidence review
+
+User-provided captures were reviewed after the native verification:
+
+- **M15-U3-20:** accepted. The roughness-sweep spheres show continuous smooth
+  highlights and silhouettes without visible triangle bands, faceting or
+  invalid pixels; the Editor Console reports `Error 0`.
+- **M15-U3-24.4:** accepted. The paired captures keep the fixture view stable
+  while showing `Auto-Exposure` unchecked and checked in `View -> Rendering
+  Features`; the output remains valid and the Console reports `Error 0`.
+- **M15-U3-10.4:** still pending. The submitted captures do not show
+  `Volumetric Fog` enabled or a fog-on/fog-off pair, so they cannot establish
+  blocker-aware fog shafts and the zero-density/no-light result.

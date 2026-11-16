@@ -199,6 +199,117 @@ bool RunM15OcclusionContractUnitTests() {
             "M15-U4-03.2: ViewTargets generation is 0 before configuration");
     }
 
-    std::cout << "  [M15Occlusion] M15-U4-01 through U4-03.2 contract tests passed.\n";
+    // =========================================================================
+    // 4. M15-U4-04.1: Apply Contact to Directional Sun Contribution Only
+    // =========================================================================
+    {
+        std::cout << "  [M15Occlusion] Verifying M15-U4-04.1 directional contact shadow application & normal fallback...\n";
+
+        using namespace Axle::OcclusionContract;
+
+        // Multi-light scene setup: Directional Sun, Local lights, Ambient, Emissive
+        ShadingComponents sceneLighting{};
+        sceneLighting.Ambient = glm::vec3(0.15f, 0.18f, 0.22f);
+        sceneLighting.SunDiffuse = glm::vec3(1.10f, 1.05f, 0.95f);
+        sceneLighting.SunSpecular = glm::vec3(2.20f, 2.10f, 1.90f);
+        sceneLighting.LocalDiffuse = glm::vec3(0.80f, 0.60f, 0.40f);
+        sceneLighting.LocalSpecular = glm::vec3(1.50f, 1.20f, 0.90f);
+        sceneLighting.Emissive = glm::vec3(3.0f, 1.5f, 0.5f);
+        sceneLighting.HasSun = true;
+        sceneLighting.HasLocalLights = true;
+        sceneLighting.EnableContactShadows = true;
+        sceneLighting.EnableCSM = true;
+        sceneLighting.CSMVisibility = 1.0f;
+
+        // Test 4.1: Contact shadow modulates ONLY directional sun contribution
+        RENDER_CHECK(VerifySunOnlyContactModulation(sceneLighting),
+            "M15-U4-04.1: contact shadow modulates strictly directional sun contribution; local, ambient, and emissive are invariant");
+
+        // Test 4.2: Sun Present vs Sun Absent
+        RENDER_CHECK(VerifySunAbsenceBehavior(sceneLighting),
+            "M15-U4-04.1: when directional sun is absent (HasSun=false), contact shadows have zero effect on total radiance");
+
+        ShadingComponents noSunScene = sceneLighting;
+        noSunScene.HasSun = false;
+        const glm::vec3 radNoSunContact1 = EvaluateShading(noSunScene, 1.0f, 1.0f);
+        const glm::vec3 radNoSunContact0 = EvaluateShading(noSunScene, 1.0f, 0.0f);
+        RENDER_CHECK(radNoSunContact1 == radNoSunContact0,
+            "M15-U4-04.1: radiance identical across contact shadow variations when sun is absent");
+        const glm::vec3 expectedNoSun = noSunScene.Ambient + noSunScene.LocalDiffuse + noSunScene.LocalSpecular + noSunScene.Emissive;
+        RENDER_CHECK(radNoSunContact1 == expectedNoSun,
+            "M15-U4-04.1: radiance equals ambient + local + emissive with zero directional sun light");
+
+        // Test 4.3: Preserve normal direct-light behavior when contact shadows are disabled
+        RENDER_CHECK(VerifyContactDisabledBehavior(sceneLighting),
+            "M15-U4-04.1: when EnableContactShadows=false, normal direct-light behavior is preserved regardless of contact input");
+
+        ShadingComponents contactDisabledScene = sceneLighting;
+        contactDisabledScene.EnableContactShadows = false;
+        const glm::vec3 radContactDisabled0 = EvaluateShading(contactDisabledScene, 1.0f, 0.0f);
+        const glm::vec3 radContactDisabled1 = EvaluateShading(contactDisabledScene, 1.0f, 1.0f);
+        const glm::vec3 normalDirect = sceneLighting.Ambient + (sceneLighting.SunDiffuse + sceneLighting.SunSpecular) +
+                                       (sceneLighting.LocalDiffuse + sceneLighting.LocalSpecular) + sceneLighting.Emissive;
+        RENDER_CHECK(radContactDisabled0 == radContactDisabled1 && radContactDisabled0 == normalDirect,
+            "M15-U4-04.1: normal direct lighting matches unattenuated reference when contact shadows are disabled");
+
+        // Test 4.4: Inspect shader & pass guards for sun presence and contact enable
+        const std::string gtaoPassSource = ReadShaderSource("Engine/Scene/src/Passes/GTAOPass.cpp");
+        RENDER_CHECK(!gtaoPassSource.empty(), "GTAOPass.cpp source loaded for inspection");
+        RENDER_CHECK(gtaoPassSource.find("if (i.World.DirectionalLight && i.Settings.EnableContactShadows)") != std::string::npos,
+            "M15-U4-04.1: GTAOPass gates contact shadow execution on both DirectionalLight presence and EnableContactShadows");
+
+        const std::string gtaoShaderSource = ReadShaderSource(AXLE_GTAO_SHADER_PATH);
+        RENDER_CHECK(gtaoShaderSource.find("if (u_SunDirView.w > 0.5 && u_ContactParams.z > 0.001)") != std::string::npos,
+            "M15-U4-04.1: GTAO compute shader activates contact raymarch only when sun is present (u_SunDirView.w > 0.5) and strength > 0");
+    }
+
+    // =========================================================================
+    // 5. M15-U4-04.2: Avoid CSM & Local Double Attenuation
+    // =========================================================================
+    {
+        std::cout << "  [M15Occlusion] Verifying M15-U4-04.2 avoidance of CSM and local shadow double attenuation...\n";
+
+        using namespace Axle::OcclusionContract;
+
+        // Test 5.1: Fully shadowed by CSM (csm = 0.0) -> contact shadow cannot double-darken
+        const float visAtZeroCSM = CombineDirectionalVisibility(0.0f, 0.2f, true, true);
+        RENDER_CHECK(visAtZeroCSM == 0.0f,
+            "M15-U4-04.2: surface fully in CSM shadow (CSM=0) remains at visibility 0.0 (no redundant contact attenuation)");
+
+        // Test 5.2: In penumbra (csm = 0.5, cs = 0.5) -> combined visibility is 0.5, NOT 0.25
+        const float visPenumbra = CombineDirectionalVisibility(0.5f, 0.5f, true, true);
+        RENDER_CHECK(visPenumbra == 0.5f,
+            "M15-U4-04.2: CSM penumbra (0.5) and contact shadow (0.5) combine via min to 0.5, avoiding 0.25 double-dip attenuation");
+
+        // Test 5.3: CSM enabled vs disabled
+        const float visCSMDisabled = CombineDirectionalVisibility(0.2f, 0.8f, true, false);
+        RENDER_CHECK(visCSMDisabled == 0.8f,
+            "M15-U4-04.2: when CSM is disabled, directional visibility follows contact shadow directly without cascade clipping");
+
+        const float visContactDisabled = CombineDirectionalVisibility(0.4f, 0.1f, false, true);
+        RENDER_CHECK(visContactDisabled == 0.4f,
+            "M15-U4-04.2: when contact shadows are disabled, directional visibility follows CSM directly without contact clipping");
+
+        // Test 5.4: Local light isolation - Point and spot lights are NEVER attenuated by contact shadows
+        ShadingComponents localScene{};
+        localScene.LocalDiffuse = glm::vec3(2.0f, 1.5f, 1.0f);
+        localScene.LocalSpecular = glm::vec3(4.0f, 3.0f, 2.0f);
+        localScene.HasSun = false;
+        localScene.HasLocalLights = true;
+
+        const glm::vec3 localAtContact1 = EvaluateShading(localScene, 1.0f, 1.0f);
+        const glm::vec3 localAtContact0 = EvaluateShading(localScene, 1.0f, 0.0f);
+        const glm::vec3 localAtContactHalf = EvaluateShading(localScene, 1.0f, 0.5f);
+        RENDER_CHECK(localAtContact1 == localAtContact0 && localAtContact1 == localAtContactHalf,
+            "M15-U4-04.2: local point and spot light radiance is 100% invariant under directional contact shadow variations");
+        RENDER_CHECK(localAtContact1 == (localScene.LocalDiffuse + localScene.LocalSpecular),
+            "M15-U4-04.2: local light radiance preserves full unattenuated intensity");
+
+        // Test 5.5: Comprehensive double attenuation sweep
+        RENDER_CHECK(VerifyNoCSMDoubleAttenuation(0.7f, 0.3f),
+            "M15-U4-04.2: VerifyNoCSMDoubleAttenuation passes across comprehensive boundary matrix");
+    }
+
+    std::cout << "  [M15Occlusion] M15-U4-01 through U4-04.2 contract tests passed.\n";
     return true;
 }

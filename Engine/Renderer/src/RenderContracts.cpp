@@ -320,12 +320,49 @@ namespace Axle {
     // =========================================================================
     namespace OcclusionContract {
 
+        float CombineDirectionalVisibility(float csmVisibility, float contactShadow,
+                                           bool enableContactShadows, bool enableCSM) {
+            const float csm = enableCSM ? std::clamp(csmVisibility, 0.0f, 1.0f) : 1.0f;
+            const float cs  = enableContactShadows ? std::clamp(contactShadow, 0.0f, 1.0f) : 1.0f;
+            // The minimum operator represents that both CSM and screen-space contact shadows
+            // sample the occlusion of the same directional sun light source.
+            // Using min(csm, cs) guarantees that:
+            // 1. A point fully shadowed by CSM (csm = 0) remains 0 (no redundant/double darkening).
+            // 2. Penumbra regions do not compound attenuation (e.g. 0.5 * 0.5 = 0.25 is avoided).
+            // 3. When contact shadows are disabled or cs = 1.0, csm is preserved untouched.
+            return std::min(csm, cs);
+        }
+
         glm::vec3 EvaluateShading(const ShadingComponents& comp, float ambientOcclusion, float contactShadow) {
             const float ao = std::clamp(ambientOcclusion, 0.0f, 1.0f);
-            const float cs = std::clamp(contactShadow, 0.0f, 1.0f);
             const glm::vec3 ambientTerm = comp.Ambient * ao;
-            const glm::vec3 directTerm = (comp.DirectDiffuse + comp.DirectSpecular) * cs;
-            return ambientTerm + directTerm + comp.Emissive;
+
+            // Determine sun and local components with backwards-compatibility for U4-A:
+            glm::vec3 sunDiff = comp.SunDiffuse;
+            glm::vec3 sunSpec = comp.SunSpecular;
+            glm::vec3 localDiff = comp.LocalDiffuse;
+            glm::vec3 localSpec = comp.LocalSpecular;
+
+            const bool hasExplicitSeparation = (sunDiff != glm::vec3(0.0f) || sunSpec != glm::vec3(0.0f) ||
+                                                localDiff != glm::vec3(0.0f) || localSpec != glm::vec3(0.0f));
+            if (!hasExplicitSeparation) {
+                // Backwards compatibility with U4-A: treat DirectDiffuse and DirectSpecular as sun contribution
+                sunDiff = comp.DirectDiffuse;
+                sunSpec = comp.DirectSpecular;
+            }
+
+            // Directional sun contribution:
+            glm::vec3 sunTerm{0.0f};
+            if (comp.HasSun) {
+                const float sunVisibility = CombineDirectionalVisibility(
+                    comp.CSMVisibility, contactShadow, comp.EnableContactShadows, comp.EnableCSM);
+                sunTerm = (sunDiff + sunSpec) * sunVisibility;
+            }
+
+            // Local light contribution (point, spot): NEVER attenuated by directional contact shadow
+            const glm::vec3 localTerm = localDiff + localSpec;
+
+            return ambientTerm + sunTerm + localTerm + comp.Emissive;
         }
 
         bool IsSeparateIndirectTargetRequired(DataflowMode mode) {
@@ -372,6 +409,91 @@ namespace Axle {
             return std::abs(delta.x - comp.Ambient.x) < epsilon &&
                    std::abs(delta.y - comp.Ambient.y) < epsilon &&
                    std::abs(delta.z - comp.Ambient.z) < epsilon;
+        }
+
+        bool VerifySunOnlyContactModulation(const ShadingComponents& comp) {
+            const glm::vec3 atContact1 = EvaluateShading(comp, 1.0f, 1.0f);
+            const glm::vec3 atContact0 = EvaluateShading(comp, 1.0f, 0.0f);
+
+            // 1. Ambient term must be completely unchanged by contact shadows
+            ShadingComponents ambOnly{};
+            ambOnly.Ambient = comp.Ambient;
+            if (EvaluateShading(ambOnly, 1.0f, 1.0f) != EvaluateShading(ambOnly, 1.0f, 0.0f)) {
+                return false;
+            }
+
+            // 2. Emissive term must be completely unchanged by contact shadows
+            ShadingComponents emOnly{};
+            emOnly.Emissive = comp.Emissive;
+            if (EvaluateShading(emOnly, 1.0f, 1.0f) != EvaluateShading(emOnly, 1.0f, 0.0f)) {
+                return false;
+            }
+
+            // 3. Local lights (point, spot) must be completely unchanged by contact shadows
+            ShadingComponents localOnly{};
+            localOnly.LocalDiffuse = comp.LocalDiffuse;
+            localOnly.LocalSpecular = comp.LocalSpecular;
+            localOnly.HasSun = false;
+            if (EvaluateShading(localOnly, 1.0f, 1.0f) != EvaluateShading(localOnly, 1.0f, 0.0f)) {
+                return false;
+            }
+
+            // 4. If Sun is present and contact shadows enabled, difference must affect only sun contribution
+            if (comp.HasSun && comp.EnableContactShadows && comp.CSMVisibility > 0.0f) {
+                glm::vec3 sunContribution = comp.SunDiffuse + comp.SunSpecular;
+                if (sunContribution == glm::vec3(0.0f) && comp.DirectDiffuse != glm::vec3(0.0f)) {
+                    sunContribution = comp.DirectDiffuse + comp.DirectSpecular;
+                }
+                const glm::vec3 diff = atContact1 - atContact0;
+                const glm::vec3 expectedDrop = sunContribution * std::min(comp.CSMVisibility, 1.0f);
+                constexpr float eps = 1e-5f;
+                if (std::abs(diff.x - expectedDrop.x) > eps ||
+                    std::abs(diff.y - expectedDrop.y) > eps ||
+                    std::abs(diff.z - expectedDrop.z) > eps) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool VerifyNoCSMDoubleAttenuation(float csmVisibility, float contactShadow) {
+            // Test 1: Fully shadowed by CSM (csm = 0.0) -> contact shadow cannot double-darken
+            const float visAtZeroCSM = CombineDirectionalVisibility(0.0f, contactShadow, true, true);
+            if (visAtZeroCSM != 0.0f) return false;
+
+            // Test 2: In penumbra (csm = 0.5, cs = 0.5) -> combined must be 0.5, NOT 0.25 (avoids double attenuation)
+            const float visPenumbra = CombineDirectionalVisibility(0.5f, 0.5f, true, true);
+            if (visPenumbra != 0.5f) return false;
+
+            // Test 3: Unshadowed CSM (csm = 1.0) -> contact shadow applies cleanly
+            const float visAtFullCSM = CombineDirectionalVisibility(1.0f, contactShadow, true, true);
+            if (std::abs(visAtFullCSM - std::clamp(contactShadow, 0.0f, 1.0f)) > 1e-6f) return false;
+
+            // Test 4: Contact shadows disabled -> returns pure CSM visibility
+            const float visDisabled = CombineDirectionalVisibility(csmVisibility, contactShadow, false, true);
+            if (std::abs(visDisabled - std::clamp(csmVisibility, 0.0f, 1.0f)) > 1e-6f) return false;
+
+            // Test 5: CSM disabled -> returns pure contact shadow visibility
+            const float visCSMDisabled = CombineDirectionalVisibility(csmVisibility, contactShadow, true, false);
+            if (std::abs(visCSMDisabled - std::clamp(contactShadow, 0.0f, 1.0f)) > 1e-6f) return false;
+
+            return true;
+        }
+
+        bool VerifySunAbsenceBehavior(const ShadingComponents& comp) {
+            ShadingComponents noSun = comp;
+            noSun.HasSun = false;
+            const glm::vec3 at1 = EvaluateShading(noSun, 1.0f, 1.0f);
+            const glm::vec3 at0 = EvaluateShading(noSun, 1.0f, 0.0f);
+            return at1 == at0;
+        }
+
+        bool VerifyContactDisabledBehavior(const ShadingComponents& comp) {
+            ShadingComponents disabled = comp;
+            disabled.EnableContactShadows = false;
+            const glm::vec3 at1 = EvaluateShading(disabled, 1.0f, 1.0f);
+            const glm::vec3 at0 = EvaluateShading(disabled, 1.0f, 0.0f);
+            return at1 == at0;
         }
 
     } // namespace OcclusionContract

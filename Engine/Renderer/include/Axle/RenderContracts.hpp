@@ -151,14 +151,35 @@ namespace Axle {
 
         struct ShadingComponents {
             glm::vec3 Ambient{0.0f};        // Indirect diffuse + indirect specular (IBL or analytical)
-            glm::vec3 DirectDiffuse{0.0f};  // Directional + punctual diffuse (sun, point, spot)
-            glm::vec3 DirectSpecular{0.0f}; // Direct specular highlights (GGX glints)
-            glm::vec3 Emissive{0.0f};        // Authored material emissive radiance
+            glm::vec3 DirectDiffuse{0.0f};  // Total direct diffuse (backward compatible)
+            glm::vec3 DirectSpecular{0.0f}; // Total direct specular (backward compatible)
+            glm::vec3 Emissive{0.0f};       // Authored material emissive radiance
+
+            // Detailed light term separation (M15-U4-B: directional sun vs local lights)
+            glm::vec3 SunDiffuse{0.0f};     // Matching directional sun diffuse contribution
+            glm::vec3 SunSpecular{0.0f};    // Matching directional sun specular contribution
+            glm::vec3 LocalDiffuse{0.0f};   // Local / punctual light diffuse (point, spot)
+            glm::vec3 LocalSpecular{0.0f};  // Local / punctual light specular (point, spot)
+
+            bool HasSun{true};              // Directional sun light present in scene
+            bool HasLocalLights{false};     // Local lights present in scene
+            bool EnableContactShadows{true};// Contact shadow evaluation enabled
+            bool EnableCSM{true};           // Cascaded shadow maps enabled
+            float CSMVisibility{1.0f};      // [0, 1] visibility from CSM
         };
 
         // Evaluates final surface radiance under the pre-lighting occlusion contract:
-        // AO modulates strictly Ambient; DirectDiffuse, DirectSpecular, and Emissive remain 100% unchanged.
+        // - AO modulates strictly Ambient; Emissive remains 100% invariant.
+        // - Contact shadow modulates strictly the matching directional sun contribution.
+        // - Local lights (point, spot) are NEVER attenuated by directional contact shadows.
+        // - Combined directional visibility avoids CSM/contact double attenuation via min(csm, contact).
+        // - When contact shadows are disabled, normal direct-light behavior is preserved.
         glm::vec3 EvaluateShading(const ShadingComponents& comp, float ambientOcclusion, float contactShadow = 1.0f);
+
+        // Combines CSM visibility and contact shadow visibility, preventing double attenuation.
+        // Returns the effective directional light visibility factor in [0.0, 1.0].
+        float CombineDirectionalVisibility(float csmVisibility, float contactShadow,
+                                           bool enableContactShadows = true, bool enableCSM = true);
 
         // Validates whether a separate physical indirect render target is required for the given dataflow mode.
         // Under PreLightingSeparated forward shading, a separate indirect target is NOT required.
@@ -167,8 +188,25 @@ namespace Axle {
         // Returns architectural rationale documentation regarding separate indirect targets.
         std::string_view GetIndirectTargetDecisionRationale();
 
-        // Verification helper: verifies that direct lighting and emissive are invariant under AO variation.
+        // Verification helpers:
+        // 1. Verifies that direct lighting and emissive are invariant under AO variation.
         bool VerifyAmbientOnlyModulation(const ShadingComponents& comp);
+
+        // 2. M15-U4-04.1: Verifies contact shadow modulates strictly the matching directional sun contribution;
+        //    local lights, ambient, and emissive remain strictly invariant.
+        bool VerifySunOnlyContactModulation(const ShadingComponents& comp);
+
+        // 3. M15-U4-04.2: Verifies that CSM and contact shadows avoid double attenuation:
+        //    - Fully in CSM shadow (CSM=0) -> combined visibility is 0 (contact shadow cannot double-darken).
+        //    - Partial penumbra (CSM=0.5, contact=0.5) -> combined visibility is 0.5 (not 0.25).
+        //    - Local lights are never attenuated by contact shadows.
+        bool VerifyNoCSMDoubleAttenuation(float csmVisibility, float contactShadow);
+
+        // 4. M15-U4-04.1: Verifies that when sun is absent (HasSun = false), contact shadows have zero effect.
+        bool VerifySunAbsenceBehavior(const ShadingComponents& comp);
+
+        // 5. M15-U4-04.1: Verifies that when contact shadows are disabled, normal direct-light behavior is preserved.
+        bool VerifyContactDisabledBehavior(const ShadingComponents& comp);
     }
 
 } // namespace Axle

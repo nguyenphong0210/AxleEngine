@@ -565,12 +565,12 @@ the item is visible.
 - [x] **M15-U4-03.2 — Expose true indirect target if needed.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Verified in `Test_M15_OcclusionContractUnit.cpp`: architectural decision documented that a separate physical indirect target is NOT required for forward shading under the pre-lighting contract ($L_{\text{ambient}}$ modulated directly in registers during forward pass, saving ~16.6 MB VRAM at 1080p and eliminating MRT write bandwidth). Auxiliary target allocation via `RHIViewTargetDesc::EnableScreenStorage` is available for decoupled passes. [U4 batch 1 review](../../reviews/M15_U4_BATCH_1_REVIEW.md).
-- [ ] **M15-U4-04.1 — Apply contact to directional contribution.**
+- [x] **M15-U4-04.1 — Apply contact to directional contribution.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U4-04.2 — Avoid CSM/local double attenuation.**
+  - **Evidence:** Verified in `Test_M15_OcclusionContractUnit.cpp`: contact shadow visibility modulates strictly the matching directional sun contribution; local lights (point, spot), ambient, and emissive remain 100% invariant under contact shadow variations. When directional sun is absent (`HasSun=false`), contact shadows have zero effect on scene radiance. When contact shadows are disabled (`EnableContactShadows=false`), normal direct lighting is preserved. Native D3D12/Vulkan tests pass. [U4 batch 2 review](../../reviews/M15_U4_BATCH_2_REVIEW.md).
+- [x] **M15-U4-04.2 — Avoid CSM/local double attenuation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Verified in `Test_M15_OcclusionContractUnit.cpp`: `CombineDirectionalVisibility` uses bounded minimum formulation $\min(V_{\text{csm}}, V_{\text{contact}})$, preventing double attenuation. Fully shadowed CSM regions ($V_{\text{csm}}=0$) remain 0.0 with no redundant contact darkening; penumbra regions ($0.5, 0.5$) combine to $0.5$ avoiding $0.25$ double-dip attenuation. Local point and spot lights are isolated from directional contact shadows. [U4 batch 2 review](../../reviews/M15_U4_BATCH_2_REVIEW.md).
 - [ ] **M15-U4-05.1 — Validate half-resolution sampling.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

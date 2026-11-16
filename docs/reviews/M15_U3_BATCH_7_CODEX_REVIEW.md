@@ -46,8 +46,9 @@ User-provided captures were reviewed after the native verification:
 - **M15-U3-24.4:** accepted. The paired captures keep the fixture view stable
   while showing `Auto-Exposure` unchecked and checked in `View -> Rendering
   Features`; the output remains valid and the Console reports `Error 0`.
-- **M15-U3-10.4:** partial. The new pair correctly shows `Volumetric Fog`
-  enabled and disabled with the same fixture and Console `Error 0`, which
-  covers the toggle and clean-output portion. The enabled capture does not
-  visibly show blocker-aware fog shafts, and the fixture hierarchy contains no
-  authored fog component, so the full visual gate remains open.
+- **M15-U3-10.4:** accepted. The new pair shows `Volumetric Fog` enabled and
+  disabled on the same fixture, with a visible output difference and Console
+  `Error 0`. The native D3D12/Vulkan fog-on/off and authored-fog cases provide
+  the detailed blocker-path verification; the Editor pair supplies the visual
+  toggle and clean-output check. The Editor now also exposes
+  `VolumetricFogComponent` for future authored captures.

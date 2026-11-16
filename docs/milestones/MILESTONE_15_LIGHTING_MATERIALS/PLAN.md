@@ -386,10 +386,10 @@ the item is visible.
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
   - **Automated evidence:** `ScreenSpaceReflectionPass::Record` owns copy, Hi-Z, compute and apply; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 with probe/fallback and level readback assertions. Editor evidence: same camera/material pair shows no plane reflection with SSR off and a bright reflected streak on the plane with SSR on, with no black edge. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
-- [ ] **M15-U3-10.4 — Extract FroxelFogPass.**
+- [x] **M15-U3-10.4 — Extract FroxelFogPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: fog shafts obey blockers; zero density/no-light leaves the image unchanged.
-  - **Automated evidence:** `FroxelFogPass::Record` owns copy, compute and apply; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 with fog-on/off and authored fog cases. Editor visual remains pending. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
+  - **Automated evidence:** FroxelFogPass::Record owns copy, compute and apply; Debug/Release native environment fixture passes D3D12/Vulkan 4/4 with fog-on/off and authored fog cases. User-provided Editor captures reviewed in this session show Volumetric Fog enabled and disabled on the same fixture, with visibly different output and Console Error 0. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).
 - [x] **M15-U3-10.5 — Extract PostProcessPass.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** `PostProcessPass::Record` owns bloom, auto exposure, TAA, tone mapping and FXAA recording; Debug/Release native environment fixture passes D3D12/Vulkan 4/4. [U3 batch 4 review](../../reviews/M15_U3_BATCH_4_REVIEW.md).

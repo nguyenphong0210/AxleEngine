@@ -874,6 +874,33 @@ namespace Axle {
             ImGui::TextDisabled("Light Direction: (%.2f, %.2f, %.2f)", dir.x, dir.y, dir.z);
         }, /*canRemove=*/ true);
 
+        // Volumetric Fog Component
+        DrawComponent<VolumetricFogComponent>("Volumetric Fog", entity, [&](VolumetricFogComponent& fog) {
+            ImGui::Checkbox("Enabled", &fog.Enabled);
+            ImGui::SliderFloat("Density", &fog.Density, 0.0f, 0.2f, "%.4f");
+            ImGui::SliderFloat("Height Falloff", &fog.HeightFalloff, 0.0f, 2.0f, "%.3f");
+            ImGui::SliderFloat("Scattering Asymmetry", &fog.ScatteringAsymmetry, -1.0f, 1.0f, "%.3f");
+            ImGui::ColorEdit3("Color", glm::value_ptr(fog.Color));
+            ImGui::SliderFloat("Max Distance", &fog.MaxDistance, 1.0f, 500.0f, "%.1f m");
+            ImGui::SliderFloat("Intensity", &fog.Intensity, 0.0f, 5.0f, "%.2f");
+
+            ImGui::Spacing();
+            ImGui::TextDisabled("Evidence presets:");
+            if (ImGui::SmallButton("Soft shafts")) {
+                fog.Enabled = true;
+                fog.Density = 0.02f;
+                fog.HeightFalloff = 0.1f;
+                fog.ScatteringAsymmetry = 0.7f;
+                fog.Color = glm::vec3(0.8f, 0.85f, 0.9f);
+                fog.MaxDistance = 100.0f;
+                fog.Intensity = 1.0f;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Zero density")) {
+                fog.Density = 0.0f;
+            }
+        }, /*canRemove=*/ true);
+
         // Skybox Component (Procedural Atmospheric vs HDR Cubemap IBL)
         DrawComponent<SkyboxComponent>("Skybox & Environment", entity, [&](SkyboxComponent& sbc) {
             ImGui::Checkbox("Enable Skybox", &sbc.Enabled);
@@ -1959,6 +1986,11 @@ namespace Axle {
                 // ambient fallback so metallic materials are immediately readable.
                 skybox.EnvironmentLighting = true;
             }
+        });
+        items.push_back({
+            "Rendering", "VolumetricFogComponent", "Authored froxel fog density, scattering and distance settings",
+            entity.HasComponent<VolumetricFogComponent>(), true,
+            [&]() { entity.AddComponent<VolumetricFogComponent>(); }
         });
         items.push_back({
             "Rendering", "CameraComponent", "Perspective/Orthographic scene camera",

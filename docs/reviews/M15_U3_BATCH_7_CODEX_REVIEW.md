@@ -46,6 +46,8 @@ User-provided captures were reviewed after the native verification:
 - **M15-U3-24.4:** accepted. The paired captures keep the fixture view stable
   while showing `Auto-Exposure` unchecked and checked in `View -> Rendering
   Features`; the output remains valid and the Console reports `Error 0`.
-- **M15-U3-10.4:** still pending. The submitted captures do not show
-  `Volumetric Fog` enabled or a fog-on/fog-off pair, so they cannot establish
-  blocker-aware fog shafts and the zero-density/no-light result.
+- **M15-U3-10.4:** partial. The new pair correctly shows `Volumetric Fog`
+  enabled and disabled with the same fixture and Console `Error 0`, which
+  covers the toggle and clean-output portion. The enabled capture does not
+  visibly show blocker-aware fog shafts, and the fixture hierarchy contains no
+  authored fog component, so the full visual gate remains open.

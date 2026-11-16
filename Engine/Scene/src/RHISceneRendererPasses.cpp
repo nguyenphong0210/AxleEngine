@@ -871,7 +871,19 @@ namespace Axle {
                     !graph.DeclareRead("SurfaceNormal",m_SceneConstantBuffer.GetCBV())) return fail();
                 for (const auto& item : opaqueQueue) {
                     if (!declareMesh("SurfaceNormal",*item.Mesh)) return fail();
-                    if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
+                    // Material Graphs currently expose an opaque surface output only:
+                    // do not pretend their companion normal pass provides alpha
+                    // cutout/transparent coverage until the graph schema carries
+                    // an explicit alpha output.
+                    if (item.UseCustomShader && item.CustomGeneration && item.CustomGeneration->HasNormalPass &&
+                        item.SurfaceType == Axle::SurfaceType::Opaque && item.DepthWrite &&
+                        item.DrawResourceIndex < m_CustomDraws.size()) {
+                        const auto& res = *m_CustomDraws[item.DrawResourceIndex];
+                        for (const auto& buffer : res.ConstantBuffers)
+                            if (!graph.DeclareRead("SurfaceNormal", buffer.GetCBV())) return fail();
+                        for (auto* set : res.Sets)
+                            if (!graph.DeclareRead("SurfaceNormal", set)) return fail();
+                    } else if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
                         const auto& res = *m_MaterialDraws[item.DrawResourceIndex];
                         if (!graph.DeclareRead("SurfaceNormal", res.Constants.GetCBV()) ||
                             !graph.DeclareRead("SurfaceNormal", res.Set)) return fail();
@@ -914,7 +926,34 @@ namespace Axle {
                 m_DescriptorPool.Bind(Commands().GetNative());
             }
             for (const auto& item : opaqueQueue) {
-                if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
+                if (item.UseCustomShader && item.CustomGeneration && item.CustomGeneration->HasNormalPass &&
+                    item.SurfaceType == Axle::SurfaceType::Opaque && item.DepthWrite &&
+                    item.DrawResourceIndex < m_CustomDraws.size()) {
+                    const auto& resource = *m_CustomDraws[item.DrawResourceIndex];
+                    auto* customNormalPipeline = CreateCustomMaterialPipeline(
+                        *item.CustomGeneration, RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()),
+                        m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode,
+                        item.DepthWrite, true);
+                    if (!customNormalPipeline) {
+                        endRendering();
+                        return RenderPassResult::Failed("SurfaceNormal: custom graph normal pipeline creation failed");
+                    }
+                    Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, *item.CustomGeneration->PipelineLayout);
+                    m_CustomDescriptorPool.Bind(Commands().GetNative());
+                    for (size_t i = 0; i < resource.Sets.size(); ++i)
+                        if (!bindDescriptorSet(static_cast<uint32_t>(i), resource.Sets[i])) {
+                            endRendering();
+                            return RenderPassResult::Failed("SurfaceNormal: custom descriptor binding failed");
+                        }
+                    Commands().SetPipeline(customNormalPipeline);
+                    item.Mesh->Bind(Commands());
+                    item.Mesh->Draw(Commands());
+                    m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
+                    Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+                    m_DescriptorPool.Bind(Commands().GetNative());
+                    Commands().SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
+                    continue;
+                } else if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
                     const auto& resource = *m_MaterialDraws[item.DrawResourceIndex];
                     Commands().SetRootDescriptor(2, resource.Constants.GetCBV());
                     if (!bindDescriptorSet(0, resource.Set)) {

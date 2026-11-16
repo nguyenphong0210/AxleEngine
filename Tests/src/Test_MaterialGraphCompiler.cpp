@@ -75,8 +75,8 @@ namespace {
         auto sample=Sample();MaterialGraphDiagnostic error;
         for(auto format:{RHIShaderFormat::DXIL,RHIShaderFormat::SPIRV}) {
             CompiledMaterialGraphProgram program;CHECK(Compile(sample,format,program));
-            CHECK(program.Vertex.IsValid()&&program.Fragment.IsValid());
-            CHECK(program.Vertex.Format==format&&program.Fragment.Format==format);
+            CHECK(program.Vertex.IsValid()&&program.Fragment.IsValid()&&program.NormalFragment.IsValid());
+            CHECK(program.Vertex.Format==format&&program.Fragment.Format==format&&program.NormalFragment.Format==format);
             CHECK(program.Graph.Parameters.size()==5&&program.Graph.Textures.size()==2&&program.DefaultProperties.size()==7);
             CHECK(program.Reflection.FindConstantBuffer("EngineObject")&&program.Reflection.FindConstantBuffer("MaterialParameters"));
             const auto declared=ShaderPropertyParser::ParseFromHLSL(program.HLSL,&program.Reflection);

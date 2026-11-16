@@ -87,8 +87,9 @@ namespace {
             compilerIdentity=RHI::RHISlangCompiler::Get().Identity();
         }
         // Collision-free, process-local content identity. The fixed compiler contract
-        // is part of this version: SM6_0, HLSL2021, O3, VSMain/PSMain, Vulkan1.3 DX layout.
-        candidate.ShaderKey="MaterialGraphShader:2:"+std::to_string(compilerIdentity.size())+":"+compilerIdentity+":"+std::to_string(static_cast<unsigned>(format))+":"+
+        // is part of this version: SM6_0, HLSL2021, O3, VSMain/PSMain/PSNormalMain,
+        // Vulkan1.3 DX layout.
+        candidate.ShaderKey="MaterialGraphShader:3:"+std::to_string(compilerIdentity.size())+":"+compilerIdentity+":"+std::to_string(static_cast<unsigned>(format))+":"+
             std::to_string(candidate.Graph.CompilerKey.size())+":"+candidate.Graph.CompilerKey+candidate.HLSL;
         return true;
     }
@@ -108,7 +109,10 @@ namespace {
         description.Stage=RHI::RHIShaderStage::Fragment; description.EntryPoint="PSMain";
         auto fragment=compile();
         if(!fragment.Success || !fragment.Bytecode.IsValid()) return fail("Fragment compilation failed: "+fragment.ErrorMessage,slang?"MG_SLANG_FRAGMENT":"MG_DXC_FRAGMENT");
-        candidate.Vertex=std::move(vertex.Bytecode); candidate.Fragment=std::move(fragment.Bytecode);
+        description.EntryPoint="PSNormalMain";
+        auto normal=compile();
+        if(!normal.Success || !normal.Bytecode.IsValid()) return fail("Normal fragment compilation failed: "+normal.ErrorMessage,slang?"MG_SLANG_NORMAL":"MG_DXC_NORMAL");
+        candidate.Vertex=std::move(vertex.Bytecode); candidate.Fragment=std::move(fragment.Bytecode); candidate.NormalFragment=std::move(normal.Bytecode);
         candidate.Reflection=RHI::RHIShaderReflection::Merge({vertex.Reflection,fragment.Reflection});
         return true;
     }

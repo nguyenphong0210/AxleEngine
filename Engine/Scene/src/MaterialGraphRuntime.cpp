@@ -106,7 +106,7 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
         const auto code=m_Shaders.find(program.ShaderKey);
         if(code!=m_Shaders.end()) {
             ++m_Stats.ShaderCacheHits;
-            program.Vertex=code->second.Vertex;program.Fragment=code->second.Fragment;program.Reflection=code->second.Reflection;
+            program.Vertex=code->second.Vertex;program.Fragment=code->second.Fragment;program.NormalFragment=code->second.NormalFragment;program.Reflection=code->second.Reflection;
         } else {
             ++m_Stats.ShaderCompiles;
             if(!MaterialGraphProgram::CompilePrepared(document,program,&m_Diagnostic))return false;
@@ -126,6 +126,7 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
             native->GenerationID=candidate->ID;
             native->BindingPlan=program.BindingPlan;native->Reflection=program.Reflection;
             native->VSBytecode=program.Vertex;native->PSBytecode=program.Fragment;
+            native->NormalPSBytecode=program.NormalFragment;native->HasNormalPass=program.NormalFragment.IsValid();
             uint32_t rootSpace=0;for(const auto& r:program.Reflection.Resources)rootSpace=std::max(rootSpace,r.Space+1);
             native->LayoutDescription=program.Reflection.BuildPipelineLayoutDesc(rootSpace);
             if(!native->LayoutDescription.RootConstants.empty())return Fail(&m_Diagnostic,"MG_RELOAD_LAYOUT","Graph cbuffers must use descriptors");
@@ -145,7 +146,7 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
         if(code==m_Shaders.end() && m_ShaderCapacity) {
             while(m_Shaders.size()>=m_ShaderCapacity){m_Shaders.erase(m_ShaderOrder.front());m_ShaderOrder.pop_front();}
             m_ShaderOrder.push_back(program.ShaderKey);
-            m_Shaders.emplace(program.ShaderKey,ShaderCode{program.Vertex,program.Fragment,program.Reflection});
+            m_Shaders.emplace(program.ShaderKey,ShaderCode{program.Vertex,program.Fragment,program.NormalFragment,program.Reflection});
         }
         if(m_Ready && m_Ready->PipelineKey==candidate->PipelineKey && m_Ready->DeviceEpoch==candidate->DeviceEpoch &&
            m_Ready->Resources.Key==candidate->Resources.Key &&

@@ -272,6 +272,7 @@ bool Native(RHIType backend) {
     MaterialGraphRuntime runtime(doc.Identity,target);CHECK(Reload(runtime,doc));
     auto old=runtime.Ready();auto* firstPipeline=MaterialGraphRuntime::GetPipeline(*old);CHECK(firstPipeline);
     CHECK(old->Native->GenerationID==old->ID);
+    CHECK(old->Program.NormalFragment.IsValid()&&old->Native->HasNormalPass&&old->Native->NormalPSBytecode.IsValid());
     CHECK(Pixel(Draw(old),{51,102,153}));
     auto updated=doc;Parameter(updated,"Glow").Default.Components={0.6f,0.1f,0.3f};CHECK(Reload(runtime,updated));
     CHECK(runtime.Ready()->ID!=old->ID&&runtime.Stats().ShaderCompiles==1&&runtime.Stats().LayoutBuilds==1);
@@ -312,7 +313,8 @@ bool Native(RHIType backend) {
     CHECK(FileSystem::WriteBinaryFileAtomically(Workspace/(backend==RHIType::Vulkan?"vulkan.rgba":"dx12.rgba"),pixels.data(),pixels.size()));
     CHECK(runtime.Ready()->Program.Vertex.SaveToFile(Workspace/(backend==RHIType::Vulkan?"vulkan.vs.bin":"dx12.vs.bin")));
     CHECK(runtime.Ready()->Program.Fragment.SaveToFile(Workspace/(backend==RHIType::Vulkan?"vulkan.ps.bin":"dx12.ps.bin")));
-    std::cout<<"PASS native returned bytecodes: default/override oracles, cache reuse, parse/layout/pipeline rollback, recorded leases and epoch rebuild\n";
+    CHECK(runtime.Ready()->Program.NormalFragment.SaveToFile(Workspace/(backend==RHIType::Vulkan?"vulkan.normal.ps.bin":"dx12.normal.ps.bin")));
+    std::cout<<"PASS native returned bytecodes: default/override oracles, graph normal companion, cache reuse, parse/layout/pipeline rollback, recorded leases and epoch rebuild\n";
     return true;
 }
 }

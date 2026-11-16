@@ -10,12 +10,13 @@
 namespace Axle {
     nri::Pipeline* CreateCustomMaterialPipeline(const CustomReadyGeneration& generation,
         nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount,
-        SurfaceType surfaceType, CullMode cullMode, bool depthWrite) {
+        SurfaceType surfaceType, CullMode cullMode, bool depthWrite, bool normalPass) {
         using namespace RHI;
         if (!generation.PipelineLayout || !generation.PipelineLayout->IsValid()) return nullptr;
+        if (normalPass && (!generation.HasNormalPass || !generation.NormalPSBytecode.IsValid())) return nullptr;
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = generation.PipelineLayout.get();
-        gfxDesc.Shaders = { generation.VSBytecode, generation.PSBytecode };
+        gfxDesc.Shaders = { generation.VSBytecode, normalPass ? generation.NormalPSBytecode : generation.PSBytecode };
 
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
         if (cullMode == Axle::CullMode::Back) {

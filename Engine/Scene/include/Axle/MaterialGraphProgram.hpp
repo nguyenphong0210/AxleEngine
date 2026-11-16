@@ -12,6 +12,9 @@ namespace Axle {
         std::string HLSL;
         RHI::RHIShaderBytecode Vertex;
         RHI::RHIShaderBytecode Fragment;
+        // Companion fragment entry point used by the screen-space normal pass.
+        // It is generated from the same graph and TBN path as Fragment.
+        RHI::RHIShaderBytecode NormalFragment;
         RHI::RHIShaderReflection Reflection;
         std::vector<ShaderPropertyInstance> DefaultProperties;
         std::vector<MaterialGraphParameter> ParameterSchema;

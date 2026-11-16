@@ -197,6 +197,10 @@ bool RunM15SurfaceAndMaterialContractUnitTests() {
             "M15-U3-17.1: MaterialSurface.hlsl unifies Lambertian diffuse normalization");
         RENDER_CHECK(source.find("FresnelSchlickRoughness") != std::string::npos,
             "M15-U3-17.6: MaterialSurface.hlsl unifies ambient specular reflection response");
+        RENDER_CHECK(source.find("AxleEvaluateWorldNormal") != std::string::npos &&
+                    source.find("PSNormalMain") != std::string::npos &&
+                    source.find("AxleEvaluateMaterial(input.TexCoord)") != std::string::npos,
+            "M15-U3-16: Material Graph normal output shares graph evaluation and TBN construction");
     }
 
     // =========================================================================

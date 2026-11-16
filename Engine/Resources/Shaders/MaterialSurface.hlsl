@@ -52,6 +52,14 @@ float3 AxleSafeNormal(float3 value, float3 fallback) {
     return dot(value, value) > 1e-12 ? normalize(value) : fallback;
 }
 
+float3 AxleEvaluateWorldNormal(PSInput input, MaterialSurface surface) {
+    float3 geometricNormal = AxleSafeNormal(input.Normal, float3(0,1,0));
+    float3 fallbackTangent = abs(geometricNormal.z) < 0.99 ? cross(float3(0,0,1), geometricNormal) : cross(float3(0,1,0), geometricNormal);
+    float3 tangent = AxleSafeNormal(input.Tangent.xyz - geometricNormal*dot(input.Tangent.xyz, geometricNormal), normalize(fallbackTangent));
+    float3 bitangent = cross(geometricNormal, tangent)*(input.Tangent.w < 0.0 ? -1.0 : 1.0);
+    return AxleSafeNormal(tangent*surface.Normal.x + bitangent*surface.Normal.y + geometricNormal*surface.Normal.z, geometricNormal);
+}
+
 PSInput VSMain(VSInput input) {
     PSInput output;
     float4 world = mul(u_Model, float4(input.Position, 1.0));
@@ -73,6 +81,9 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 base = max(surface.BaseColor, float3(0,0,0));
     float metallic = saturate(surface.Metallic);
     float roughness = clamp(surface.Roughness, 0.04, 1.0);
+    // Keep the color path's geometric TBN construction stable. The normal
+    // helper is shared with PSNormalMain, but must not feed back into the
+    // tangent basis used by the clear-coat lobe.
     float3 geometricNormal = AxleSafeNormal(input.Normal, float3(0,1,0));
     float3 fallbackTangent = abs(geometricNormal.z) < 0.99 ? cross(float3(0,0,1), geometricNormal) : cross(float3(0,1,0), geometricNormal);
     float3 tangent = AxleSafeNormal(input.Tangent.xyz - geometricNormal*dot(input.Tangent.xyz, geometricNormal), normalize(fallbackTangent));
@@ -108,4 +119,12 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 ambientRef = FresnelSchlickRoughness(nv, f0, roughness);
     float3 ambient = (base * 0.03 * (1.0 - metallic) + ambientRef * 0.02) * saturate(surface.AO);
     return float4(direct + ambient + max(surface.Emission, float3(0,0,0)), 1.0);
+}
+
+// Material Graphs use this companion entry point for the screen-space normal
+// producer. It evaluates the same authored graph function and TBN path as the
+// color pass, so GTAO/SSR never silently fall back to the default descriptor.
+float4 PSNormalMain(PSInput input) : SV_Target0 {
+    MaterialSurface surface = AxleEvaluateMaterial(input.TexCoord);
+    return float4(AxleEvaluateWorldNormal(input, surface), 1.0);
 }

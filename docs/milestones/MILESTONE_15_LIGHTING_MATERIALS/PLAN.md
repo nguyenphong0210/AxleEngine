@@ -404,6 +404,13 @@ the item is visible.
 
 ### U3 / S3.2 — Surface, normal and material data contract
 
+> **Codex status correction (2026-11-16):** the built-in SurfaceNormal contract
+> and opaque Material Graph companion normal path are verified. Graphs still do
+> not expose authored alpha, so graph cutout/transparent coverage remains an
+> explicit fallback tracked by U3-22. The scalar U3-17 material checks pass,
+> while full graph-vs-ForwardPBR light/shadow/IBL parity remains open under
+> U3-21.2 and U3-23.1..23.3.
+
 - [x] **M15-U3-12 — Remove derivative-flat-normal override from generic ForwardPBR modes.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.

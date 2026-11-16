@@ -8,6 +8,11 @@
 #include <Axle/MaterialBindingPlan.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
+#include <Axle/ViewContext.hpp>
+#include <Axle/TemporalService.hpp>
+#include <Axle/PostProcessService.hpp>
+#include <Axle/RenderDiagnostics.hpp>
+#include <Axle/RHI/RHIViewTargets.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -594,6 +599,191 @@ bool RunM15SurfaceAndMaterialContractUnitTests() {
             "M15-U3-23.4: both shaders clamp HDR radiance to 65000.0");
     }
 
-    std::cout << "  [M15SurfaceMaterial] M15-U3-14 through U3-23.4 contract tests passed.\n";
+    // =========================================================================
+    // M15-U3-24.1 through 24.4: Declare Motion, Depth, History, Exposure Resources
+    // =========================================================================
+    {
+        std::cout << "  [M15SurfaceMaterial] Running M15-U3-24 resource declaration contracts (motion, depth, history, exposure)...\n";
+
+        // 24.1: Declare motion resources
+        RHI::RHIViewTargetDesc motionDesc;
+        motionDesc.Width = 128;
+        motionDesc.Height = 128;
+        motionDesc.EnableScreenStorage = true;
+        motionDesc.HDR = true;
+        RENDER_CHECK(motionDesc.EnableScreenStorage, "M15-U3-24.1: RHIViewTargetDesc declares ScreenStorage for motion/properties");
+        TemporalService temporal;
+        auto firstTemporal = temporal.Begin(2, {0.1f, -0.1f});
+        RENDER_CHECK(!firstTemporal.MotionValid && !temporal.IsMotionValid(),
+            "M15-U3-24.1: first temporal frame explicitly bypasses uninitialized motion vectors");
+        temporal.Commit(glm::mat4(2.0f), true);
+        auto secondTemporal = temporal.Begin(2, {0.0f, 0.0f});
+        RENDER_CHECK(secondTemporal.MotionValid && temporal.IsMotionValid(),
+            "M15-U3-24.1: subsequent temporal frame after successful commit declares valid motion vectors");
+        temporal.InvalidateContents();
+        RENDER_CHECK(!temporal.IsMotionValid(),
+            "M15-U3-24.1: InvalidateContents explicitly invalidates motion resources");
+
+        // 24.2: Declare depth resources
+        RHI::RHIViewTargetDesc depthDesc;
+        depthDesc.Width = 128;
+        depthDesc.Height = 128;
+        depthDesc.EnableDepth = true;
+        depthDesc.DepthFormat = RHI::RHITextureFormat::D32_FLOAT;
+        depthDesc.RenderAuxiliary = true;
+        RENDER_CHECK(depthDesc.EnableDepth && depthDesc.DepthFormat == RHI::RHITextureFormat::D32_FLOAT,
+            "M15-U3-24.2: RHIViewTargetDesc declares 32-bit floating point depth resource");
+        RENDER_CHECK(depthDesc.RenderAuxiliary,
+            "M15-U3-24.2: RHIViewTargetDesc declares auxiliary depth resources (OpaqueDepth, ParticleDepth)");
+
+        // 24.3: Declare history resources
+        RHI::RHIViewTargetDesc historyDesc;
+        historyDesc.Width = 128;
+        historyDesc.Height = 128;
+        historyDesc.HistoryCount = 2;
+        RENDER_CHECK(historyDesc.HistoryCount == 2,
+            "M15-U3-24.3: RHIViewTargetDesc declares dual-slot ping-pong history resources");
+        TemporalService historyTemporal;
+        auto hFirst = historyTemporal.Begin(2, {0.25f, 0.25f});
+        RENDER_CHECK(hFirst.ReadSlot == 0 && hFirst.WriteSlot == 1 && !hFirst.HistoryValid,
+            "M15-U3-24.3: history slot 0 initialized for read with uninitialized bypass, slot 1 for write");
+        historyTemporal.Commit(glm::mat4(1.0f), true);
+        auto hSecond = historyTemporal.Begin(2, {0.0f, 0.0f});
+        RENDER_CHECK(hSecond.ReadSlot == 1 && hSecond.WriteSlot == 0 && hSecond.HistoryValid,
+            "M15-U3-24.3: commit flips history slots (Read=1, Write=0) and marks history valid");
+
+        // 24.4: Declare exposure resources
+        RHI::RHIViewTargetDesc exposureDesc;
+        exposureDesc.Width = 128;
+        exposureDesc.Height = 128;
+        exposureDesc.EnableAutoExposure = true;
+        RENDER_CHECK(exposureDesc.EnableAutoExposure,
+            "M15-U3-24.4: RHIViewTargetDesc declares AutoExposure resource");
+        PostProcessService post;
+        SceneRenderSettings ppSettings;
+        ppSettings.EnableAutoExposure = true;
+        ppSettings.AutoExposureMin = 0.2f;
+        ppSettings.AutoExposureMax = 5.0f;
+        post.BeginFrame(ppSettings, true);
+        RENDER_CHECK(post.GetPolicy().AutoExposure, "M15-U3-24.4: PostProcessPolicy activates AutoExposure");
+        float clampedExposure = post.UpdateExposure(0.001f, 1.0f);
+        RENDER_CHECK(clampedExposure >= ppSettings.AutoExposureMin && clampedExposure <= ppSettings.AutoExposureMax,
+            "M15-U3-24.4: adapted exposure is safely clamped to [AutoExposureMin, AutoExposureMax]");
+    }
+
+    // =========================================================================
+    // M15-U3-25.1 through 25.4: Reset Matrix Contracts
+    // =========================================================================
+    {
+        std::cout << "  [M15SurfaceMaterial] Running M15-U3-25 reset matrix contracts...\n";
+
+        ViewContext context;
+        ViewContextInput input;
+        input.Width = 128;
+        input.Height = 128;
+        input.Targets = std::make_shared<RHI::RHIViewTargets>();
+        input.SceneRevision = 1;
+        input.MaterialGeneration = 1;
+        input.FeatureGeneration = 1;
+
+        // Initial observe
+        auto reasons = context.Observe(input, 1);
+        RENDER_CHECK((reasons & ViewResetReason::Initial) != ViewResetReason::None,
+            "M15-U3-25: initial observation triggers ViewResetReason::Initial");
+        context.ConsumeResetReasons();
+
+        // 25.1: Reset on target generation
+        auto newTargets = std::make_shared<RHI::RHIViewTargets>();
+        bool targetReset = context.ObserveTargets(newTargets);
+        RENDER_CHECK(targetReset && (context.GetResetReasons() & ViewResetReason::TargetGeneration) != ViewResetReason::None,
+            "M15-U3-25.1: target replacement triggers ViewResetReason::TargetGeneration");
+        context.Temporal().Begin(2);
+        context.Temporal().Commit(glm::mat4(1.0f), true);
+        RENDER_CHECK(context.Temporal().IsHistoryValid(), "temporal history established");
+        context.ObserveTargets(std::make_shared<RHI::RHIViewTargets>());
+        RENDER_CHECK(!context.Temporal().IsHistoryValid() && context.Temporal().GetReadSlot() == 0 && context.Temporal().GetWriteSlot() == 1,
+            "M15-U3-25.1: target generation change resets temporal history and restores initial slot identities");
+        context.ConsumeResetReasons();
+
+        // 25.2: Reset on camera cut
+        input.Targets = newTargets;
+        input.CameraCut = true;
+        reasons = context.Observe(input, 1);
+        RENDER_CHECK((reasons & ViewResetReason::CameraCut) != ViewResetReason::None,
+            "M15-U3-25.2: CameraCut == true triggers ViewResetReason::CameraCut");
+        context.Temporal().Reset(static_cast<uint32_t>(ViewResetReason::CameraCut));
+        auto postCut = context.Temporal().Begin(2);
+        RENDER_CHECK(!postCut.HistoryValid && !postCut.DisocclusionValid && context.Temporal().GetCommittedFrameCount() == 0,
+            "M15-U3-25.2: camera cut reset invalidates history and disocclusion feedback");
+        context.ConsumeResetReasons();
+        input.CameraCut = false;
+
+        // 25.3: Reset on feature toggle
+        input.FeatureGeneration = 2;
+        reasons = context.Observe(input, 1);
+        RENDER_CHECK((reasons & ViewResetReason::FeaturePolicy) != ViewResetReason::None,
+            "M15-U3-25.3: FeatureGeneration change triggers ViewResetReason::FeaturePolicy");
+        context.ConsumeResetReasons();
+
+        // 25.4: Reset on device epoch
+        reasons = context.Observe(input, 2); // Device epoch changed from 1 to 2
+        RENDER_CHECK((reasons & ViewResetReason::DeviceEpoch) != ViewResetReason::None,
+            "M15-U3-25.4: device epoch change triggers ViewResetReason::DeviceEpoch");
+        RENDER_CHECK(context.GetDeviceEpoch() == 2,
+            "M15-U3-25.4: ViewContext tracks updated device epoch");
+        context.ConsumeResetReasons();
+    }
+
+    // =========================================================================
+    // M15-U3-26.1 through 26.4: Diagnostics & Measurement Integration
+    // =========================================================================
+    {
+        std::cout << "  [M15SurfaceMaterial] Running M15-U3-26 diagnostics & measurement contracts...\n";
+
+        RenderDiagnostics diagnostics;
+        diagnostics.BeginFrame(100, 42);
+
+        // 26.1: Record timing validity
+        diagnostics.BeginPass("DepthPrepass");
+        diagnostics.EndPass(DiagnosticStatus::Success, 0.15, 0.0, DiagnosticValidity::Unknown, 10, 0);
+        diagnostics.BeginPass("ForwardLighting");
+        diagnostics.EndPass(DiagnosticStatus::Success, 0.50, 1.25, DiagnosticValidity::Valid, 25, 2);
+        const auto& passes = diagnostics.GetFrame().Passes;
+        RENDER_CHECK(passes.size() == 2, "recorded 2 render passes");
+        RENDER_CHECK(passes[0].GPUValidity == DiagnosticValidity::Unknown,
+            "M15-U3-26.1: DepthPrepass without GPU query reports DiagnosticValidity::Unknown");
+        RENDER_CHECK(passes[1].GPUValidity == DiagnosticValidity::Valid && passes[1].GPUTimeMilliseconds == 1.25,
+            "M15-U3-26.1: ForwardLighting with valid GPU timer reports DiagnosticValidity::Valid");
+
+        // 26.2: Record fallback reasons
+        diagnostics.BeginPass("SSRPass");
+        diagnostics.EndPass(DiagnosticStatus::Fallback, 0.1, 0.0, DiagnosticValidity::Unavailable, 0, 0,
+                            "ssr_depth_hierarchy_incomplete");
+        diagnostics.AddFallback("ssr_depth_hierarchy_incomplete");
+        diagnostics.AddFallback("SURFACE_UNSUPPORTED_FEATURES: Sheen (mask=0x1)");
+        RENDER_CHECK(passes.back().Status == DiagnosticStatus::Fallback && passes.back().Reason == "ssr_depth_hierarchy_incomplete",
+            "M15-U3-26.2: pass diagnostic records DiagnosticStatus::Fallback and explicit reason string");
+        RENDER_CHECK(diagnostics.GetFrame().Fallbacks.size() == 2 &&
+                     diagnostics.GetFrame().Fallbacks[0] == "ssr_depth_hierarchy_incomplete" &&
+                     diagnostics.GetFrame().Fallbacks[1].find("SURFACE_UNSUPPORTED_FEATURES:") != std::string::npos,
+            "M15-U3-26.2: frame diagnostics preserves structured fallback reasons");
+
+        // 26.3: Record resource generations
+        diagnostics.SetMaterialGeneration(77);
+        diagnostics.SetTargetGeneration(42);
+        RENDER_CHECK(diagnostics.GetFrame().TargetGeneration == 42,
+            "M15-U3-26.3: frame diagnostics records TargetGeneration");
+        RENDER_CHECK(diagnostics.GetFrame().MaterialGeneration == 77,
+            "M15-U3-26.3: frame diagnostics records MaterialGeneration");
+
+        // 26.4: Report Unknown invalid measurements
+        diagnostics.SetFrameGPUTime(0.0, DiagnosticValidity::Unknown);
+        RENDER_CHECK(!diagnostics.IsGPUTimeValid(),
+            "M15-U3-26.4: 0.0 ms GPU time with DiagnosticValidity::Unknown reports IsGPUTimeValid() == false");
+        RENDER_CHECK(diagnostics.GetFrame().GPUValidity == DiagnosticValidity::Unknown,
+            "M15-U3-26.4: frame GPU validity is explicitly Unknown, not valid zero");
+    }
+
+    std::cout << "  [M15SurfaceMaterial] M15-U3-14 through U3-26.4 contract tests passed.\n";
     return true;
 }

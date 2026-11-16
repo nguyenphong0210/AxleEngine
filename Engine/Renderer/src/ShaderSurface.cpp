@@ -4,7 +4,7 @@
 
 namespace Axle {
 namespace {
-    uint32_t Unsupported(const ResolvedSurface& surface) {
+    uint32_t Unsupported(const ResolvedSurface& surface, SurfaceEvaluation evaluation) {
         uint32_t mask = 0;
         auto add = [&](bool requested, SurfaceFeature feature) { if (requested) mask |= static_cast<uint32_t>(feature); };
         add(surface.ClearcoatStrength > 0, SurfaceFeature::Clearcoat);
@@ -19,9 +19,10 @@ namespace {
         add(!surface.EnableSpecularHighlights, SurfaceFeature::SpecularPolicy);
         add(!surface.EnableEnvironmentReflections, SurfaceFeature::ReflectionPolicy);
         add(surface.Surface == SurfaceType::Cutout, SurfaceFeature::Cutout);
-        // MaterialSurface evaluates graph emission directly.  Do not report
-        // authored emission as unsupported when the graph contract exposes the
-        // Emission field.
+        // MaterialSurface evaluates graph emission directly. CustomShader does not expose authored emission.
+        if (evaluation == SurfaceEvaluation::CustomShader) {
+            add(surface.EmissionIntensity != 0 && surface.EmissionColor != glm::vec3(0), SurfaceFeature::Emission);
+        }
         add(surface.TextureFlags & ~1u, SurfaceFeature::NonBaseTextures);
         add(std::abs(surface.Dispersion) > 1e-6f, SurfaceFeature::Dispersion);
         return mask;
@@ -69,7 +70,7 @@ namespace {
         result.Surface = base;
         result.Surface.Evaluation = evaluation;
         result.Surface.ShaderGeneration = shaderGeneration;
-        result.Surface.UnsupportedFeatures = Unsupported(base);
+        result.Surface.UnsupportedFeatures = Unsupported(base, evaluation);
         result.Surface.Fallback = result.Surface.UnsupportedFeatures != 0;
         if (result.Surface.UnsupportedFeatures)
             result.Surface.Diagnostic = "SURFACE_UNSUPPORTED_FEATURES: canonical material controls are not exposed by this shader interface (mask=" +

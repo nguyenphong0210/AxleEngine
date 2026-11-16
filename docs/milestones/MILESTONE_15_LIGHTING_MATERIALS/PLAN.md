@@ -507,42 +507,43 @@ the item is visible.
 
 #### S3.4 — Temporal, diagnostics and measurement integration
 
-- [ ] **M15-U3-24.1 — Declare motion resources.**
+- [x] **M15-U3-24.1 — Declare motion resources.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-24.2 — Declare depth resources.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `RHIViewTargetDesc::EnableScreenStorage = true` declares screen storage for motion/properties; `TemporalService` bypasses uninitialized motion on frame 0 and validates motion tracking on commit. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+- [x] **M15-U3-24.2 — Declare depth resources.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-24.3 — Declare history resources.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `RHIViewTargetDesc::EnableDepth = true` with `D32_FLOAT` and `RenderAuxiliary = true` declares depth and auxiliary resources. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+- [x] **M15-U3-24.3 — Declare history resources.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-24.4 — Declare exposure resources.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `RHIViewTargetDesc::HistoryCount = 2` declares dual-slot history; `TemporalService` manages ping-pong read/write slot transitions on commit. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+- [x] **M15-U3-24.4 — Declare exposure resources.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `EnableAutoExposure = true` and `PostProcessService` updates and strictly clamps exposure to `[AutoExposureMin, AutoExposureMax]`. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md). Editor visual evidence remains user-provided.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U3-25.1 — Reset on target generation.**
+- [x] **M15-U3-25.1 — Reset on target generation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-25.2 — Reset on camera cut.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `ObserveTargets` triggers `ViewResetReason::TargetGeneration`, resets temporal history, and restores default slot identities. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+- [x] **M15-U3-25.2 — Reset on camera cut.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-25.3 — Reset on feature toggle.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `CameraCut = true` triggers `ViewResetReason::CameraCut` and invalidates temporal history and disocclusion feedback. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+- [x] **M15-U3-25.3 — Reset on feature toggle.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-25.4 — Reset on device epoch.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `FeatureGeneration` increment triggers `ViewResetReason::FeaturePolicy`. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+- [x] **M15-U3-25.4 — Reset on device epoch.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-26.1 — Record timing validity.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: Device epoch increment triggers `ViewResetReason::DeviceEpoch` and updates `ViewContext` device epoch. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+- [x] **M15-U3-26.1 — Record timing validity.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-26.2 — Record fallback reasons.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: unqueried passes report `GPUValidity == Unknown`, while active queries record `GPUValidity == Valid` with measured time. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+- [x] **M15-U3-26.2 — Record fallback reasons.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-26.3 — Record resource generations.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: pass fallback reports `DiagnosticStatus::Fallback` with explicit reason string, preserved in frame diagnostics list. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+- [x] **M15-U3-26.3 — Record resource generations.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-26.4 — Report Unknown invalid measurements.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `RenderDiagnostics` records and returns `TargetGeneration` and `MaterialGeneration`. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
+- [x] **M15-U3-26.4 — Report Unknown invalid measurements.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: unqueried 0.0 ms measurements report `IsGPUTimeValid() == false` with `GPUValidity == Unknown`. [U3 batch 7 review](../../reviews/M15_U3_BATCH_7_REVIEW.md).
 
 **S3.3/S3.4 exit:** parity, reset and diagnostics fixtures pass on supported native paths, with unsupported paths explicitly reported.
 

@@ -518,14 +518,17 @@ namespace Axle {
 
         BilateralTapResult EvaluateBilateralWeight(float centerZ, float tapZ, int tapOffsetX, int tapOffsetY) {
             static constexpr float spatialWeights[5] = { 0.06136f, 0.24477f, 0.38774f, 0.24477f, 0.06136f };
-            const int clampedX = std::clamp(tapOffsetX + 2, 0, 4);
-            const int clampedY = std::clamp(tapOffsetY + 2, 0, 4);
+            const int clampedX = std::clamp(tapOffsetX, -2, 2) + 2;
+            const int clampedY = std::clamp(tapOffsetY, -2, 2) + 2;
             const float spatialWeight = spatialWeights[clampedX] * spatialWeights[clampedY];
+
+            if (!std::isfinite(centerZ) || !std::isfinite(tapZ))
+                return {spatialWeight, 0.0f, 0.0f, true};
 
             const float depthDiff = std::abs(centerZ - tapZ);
             const float denom = 0.05f * std::max(std::abs(centerZ), 0.1f) + 1e-4f;
             const float depthWeight = std::exp(-depthDiff / denom);
-            const float totalWeight = depthWeight * spatialWeight;
+            const float totalWeight = depthWeight < 1e-3f ? 0.0f : depthWeight * spatialWeight;
 
             BilateralTapResult result{};
             result.SpatialWeight = spatialWeight;
@@ -536,6 +539,7 @@ namespace Axle {
         }
 
         bool VerifyHalfResolutionDimensions(uint32_t fullW, uint32_t fullH) {
+            if (fullW == 0 || fullH == 0) return false;
             const Resolution2D half = ComputeHalfResolution(fullW, fullH);
             if (half.Width == 0 || half.Height == 0) return false;
             if (fullW > 1 && half.Width != (fullW >> 1)) return false;
@@ -588,6 +592,7 @@ namespace Axle {
         }
 
         bool VerifyOddResolutionSafety(uint32_t oddW, uint32_t oddH) {
+            if (oddW == 0 || oddH == 0) return false;
             const Resolution2D half = ComputeHalfResolution(oddW, oddH);
             if (half.Width == 0 || half.Height == 0) return false;
 

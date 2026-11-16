@@ -2,6 +2,7 @@
 #include "../RHISceneRendererPasses.hpp"
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <algorithm>
 
 namespace Axle::Passes {
     void GTAOPass::Declare(RenderGraph& graph, const GTAOResources& r) {
@@ -68,6 +69,16 @@ namespace Axle::Passes {
             !ops.BindDescriptor(1, renderer.m_GTAOComputeStorageSet, nri::BindPoint::COMPUTE)) return false;
         commands.Dispatch((gtaoWidth + 7) / 8, (gtaoHeight + 7) / 8, 1);
         ++i.DispatchCount;
+
+        // The compute pass writes a half-resolution target, but reconstruction is
+        // rasterized over the full-resolution scene. Keep the two coordinate
+        // contracts explicit: the apply shader locates full-resolution depth
+        // texels with ScreenSize and queries the AO source dimensions separately
+        // for its half-resolution reconstruction neighborhood.
+        const uint32_t fullWidth = std::max(1u, i.Width);
+        const uint32_t fullHeight = std::max(1u, i.Height);
+        constants.ScreenSize = glm::vec4(static_cast<float>(fullWidth), static_cast<float>(fullHeight),
+            1.0f / static_cast<float>(fullWidth), 1.0f / static_cast<float>(fullHeight));
 
         if (!ops.BeginPass("GTAOApply") || !ops.Uniform().UpdateData(&constants, sizeof(constants)) ||
             !pool.UpdateTexture(renderer.m_GTAOApplyDescriptorSet, 0, 0, depth->GetSRV()) ||

@@ -28,6 +28,10 @@
 #include <iostream>
 #include <chrono>
 
+bool RunM15OcclusionRenderingTests(const std::filesystem::path& output);
+bool RunM15OcclusionDispatchTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
+                                 Axle::SceneRenderSettings settings, const std::filesystem::path& output);
+
 #define CHECK(x) do { if (!(x)) { std::cerr << "FAIL " << __LINE__ << ": " #x "\n"; return false; } } while (0)
 namespace {
 using namespace Axle;
@@ -206,6 +210,7 @@ bool Native(RHIType backend) {
     TextureDescriptor authored; authored.Type="CubemapHDR"; authored.Source="red.hdr";
     CHECK(TextureDescriptor::Save((Output/"sky.axleasset").string(),authored));
     RHISceneRenderer renderer; CHECK(renderer.Init(device,false));
+    CHECK(RunM15OcclusionRenderingTests(Output));
     auto& environment=renderer.GetEnvironment(); EnvironmentBakeSettings bake;
     bake.EnvironmentSize=16; bake.IrradianceSize=4; bake.PrefilterSize=16; bake.PrefilterMips=5; bake.BRDFSize=16; bake.Samples=64;
     CHECK(environment.SetBakeSettings(bake));
@@ -313,6 +318,7 @@ bool Native(RHIType backend) {
         std::all_of(renderer.GetLastGPUTimingFrame().Passes.begin(), renderer.GetLastGPUTimingFrame().Passes.end(),
             [](const auto& pass) { return pass.Validity == DiagnosticValidity::Invalid && pass.Milliseconds == 0.0; }));
     settings.EnableGTAO=false; settings.EnableContactShadows=false;
+    CHECK(RunM15OcclusionDispatchTests(renderer, world, settings, Output));
     CHECK(!render().empty() && renderer.GetDiagnostics().GetFrame().TargetGeneration != gtaoGeneration &&
         renderer.GetOpaqueNormalTarget() == nullptr && renderer.GetHiZTarget(0) == nullptr);
     CHECK(renderer.GetLastGPUTimingFrame().Validity == DiagnosticValidity::Valid &&

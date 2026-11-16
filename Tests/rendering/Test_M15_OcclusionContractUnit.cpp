@@ -8,6 +8,7 @@
 #include <string>
 #include <cmath>
 #include <iostream>
+#include <limits>
 
 using namespace Axle;
 using namespace Axle::RHI;
@@ -280,7 +281,7 @@ bool RunM15OcclusionContractUnitTests() {
             "M15-U4-04.1: normal direct lighting matches unattenuated reference when contact shadows are disabled");
 
         // Test 4.4: Inspect shader & pass guards for sun presence and contact enable
-        const std::string gtaoPassSource = ReadShaderSource("Engine/Scene/src/Passes/GTAOPass.cpp");
+        const std::string gtaoPassSource = ReadShaderSource(AXLE_GTAO_PASS_SOURCE_PATH);
         RENDER_CHECK(!gtaoPassSource.empty(), "GTAOPass.cpp source loaded for inspection");
         RENDER_CHECK(gtaoPassSource.find("if (i.World.DirectionalLight && i.Settings.EnableContactShadows)") != std::string::npos,
             "M15-U4-04.1: GTAOPass gates contact shadow execution on both DirectionalLight presence and EnableContactShadows");
@@ -396,7 +397,7 @@ bool RunM15OcclusionContractUnitTests() {
         }
 
         // Verify RHIViewTargets GTAO texture allocation matches half-resolution contract
-        const std::string rhiTargetsSource = ReadShaderSource("Engine/RHI/src/RHIViewTargets.cpp");
+        const std::string rhiTargetsSource = ReadShaderSource(AXLE_RHI_VIEW_TARGETS_SOURCE_PATH);
         RENDER_CHECK(!rhiTargetsSource.empty(), "RHIViewTargets.cpp loaded for target allocation contract verification");
         RENDER_CHECK(rhiTargetsSource.find("std::max(1u, desc.Width >> 1), std::max(1u, desc.Height >> 1), RHITextureFormat::RGBA16_FLOAT") != std::string::npos,
             "M15-U4-05.1: RHIViewTargets allocates GTAO target at max(1u, desc.Width >> 1) x max(1u, desc.Height >> 1) RHITextureFormat::RGBA16_FLOAT");
@@ -505,8 +506,7 @@ bool RunM15OcclusionContractUnitTests() {
             "M15-U4-05.3: neighbor depth weight across discontinuity is < 1e-3 (actual < 1e-15)");
 
         // Test 8.3: Zero edge bleeding verification:
-        // Foreground object has low occlusion (AO = 0.2, bright/unoccluded edge).
-        // Background wall has heavy corner occlusion (AO = 0.95, dark corner).
+        // Visibility 0.2 is strongly occluded; visibility 0.95 is nearly unoccluded.
         // If bilateral filtering bled across the silhouette edge, foreground AO would jump towards 0.95.
         // We verify that the background tap contributing to the foreground pixel has total weight < 1e-5.
         const float fgAO = 0.20f;
@@ -530,7 +530,8 @@ bool RunM15OcclusionContractUnitTests() {
         RENDER_CHECK(std::abs(filteredAO - fgAO) < 0.01f,
             "M15-U4-05.3: zero edge bleeding: filtered foreground AO remains within 0.01 of true foreground AO despite 0.95 background occlusion");
 
-        // Test 8.4: Isolated pixel fallback (all neighbor taps across depth edges)
+        // Test 8.4: Depth-weight verification. The native reconstruction fixture
+        // separately checks bilinear contamination and unmatched thin surfaces.
         RENDER_CHECK(VerifyDepthEdgeProtection(centerZ, foregroundNeighborZ, backgroundNeighborZ),
             "M15-U4-05.3: VerifyDepthEdgeProtection passes contract verification");
 
@@ -538,8 +539,12 @@ bool RunM15OcclusionContractUnitTests() {
         const std::string gtaoShader = ReadShaderSource(AXLE_GTAO_SHADER_PATH);
         RENDER_CHECK(gtaoShader.find("float depthWeight = exp(-depthDiff / (0.05 * max(abs(centerZ), 0.1) + 1e-4));") != std::string::npos,
             "M15-U4-05.3: GTAO.hlsl implements exponential depth weighting with adaptive view-depth scaling");
-        RENDER_CHECK(gtaoShader.find("float2 filteredOcclusion = weightSum > 1e-4 ? (occlusionSum / weightSum) : u_OcclusionTexture.SampleLevel(u_LinearSampler, uv, 0.0);") != std::string::npos,
-            "M15-U4-05.3: GTAO.hlsl implements fallback to center tap sample when weightSum <= 1e-4, preventing NaN/division-by-zero on isolated edges");
+        RENDER_CHECK(gtaoShader.find("float2 filteredOcclusion = weightSum > 1e-4 ? (occlusionSum / weightSum) : float2(1.0, 1.0);") != std::string::npos,
+            "M15-U4-05.3: isolated unrepresented surfaces use neutral visibility without importing foreign occlusion");
+        RENDER_CHECK(edgeTap.TotalWeight == 0.0f &&
+            EvaluateBilateralWeight(std::numeric_limits<float>::quiet_NaN(), 2.0f, 0, 0).IsEdgeRejected &&
+            EvaluateBilateralWeight(2.0f, std::numeric_limits<float>::infinity(), 0, 0).TotalWeight == 0.0f,
+            "M15-U4-05.3: across-edge and invalid-depth taps contribute no occlusion");
     }
 
     // =========================================================================
@@ -598,8 +603,26 @@ bool RunM15OcclusionContractUnitTests() {
         const std::string gtaoShader = ReadShaderSource(AXLE_GTAO_SHADER_PATH);
         RENDER_CHECK(gtaoShader.find("if (pixelPos.x >= (uint)u_ScreenSize.x || pixelPos.y >= (uint)u_ScreenSize.y) return;") != std::string::npos,
             "M15-U4-05.4: GTAO CSMain has thread-group boundary guard preventing out-of-bounds execution on odd dimensions");
-        RENDER_CHECK(gtaoShader.find("float2 offsetUV = saturate(uv + float2(x, y) * rcpFrame);") != std::string::npos,
-            "M15-U4-05.4: GTAO.hlsl bilateral filter clamps sample UVs with saturate() to prevent out-of-bounds boundary fetches");
+        RENDER_CHECK(gtaoShader.find("int2 aoPixel = clamp(occlusionCenter + int2(x, y), int2(0, 0), occlusionMax);") != std::string::npos,
+            "M15-U4-05.4: GTAO.hlsl clamps half-resolution reconstruction texels to source bounds");
+
+        // The apply pass reconstructs full-resolution pixels from a half-resolution
+        // AO target. Its constants locate full-resolution depth texels; the shader
+        // queries AO dimensions separately for the half-resolution footprint.
+        const std::string gtaoPass = ReadShaderSource(AXLE_GTAO_PASS_SOURCE_PATH);
+        RENDER_CHECK(gtaoPass.find("const uint32_t fullWidth = std::max(1u, i.Width);") != std::string::npos &&
+                     gtaoPass.find("constants.ScreenSize = glm::vec4(static_cast<float>(fullWidth)") != std::string::npos,
+            "M15-U4-05.4: GTAO apply restores full-resolution screen texel spacing after half-resolution compute");
+
+        RENDER_CHECK(gtaoShader.find("u_SceneDepth.Load(int3(centerPixel, 0))") != std::string::npos &&
+                     gtaoShader.find("u_SceneDepth.Load(int3(tapPixel, 0))") != std::string::npos &&
+                     gtaoShader.find("u_OcclusionTexture.Load(int3(aoPixel, 0))") != std::string::npos &&
+                     gtaoShader.find("OcclusionSourcePixel(pixelPos, uint2(u_ScreenSize.xy), sceneSize)") != std::string::npos &&
+                     gtaoShader.find("OcclusionSourcePixel(uint2(aoPixel), occlusionSize, sceneSize)") != std::string::npos,
+            "M15-U4-05.3: compute and reconstruction pair exact depth and AO texels with identical odd-resolution mapping");
+        RENDER_CHECK(!VerifyHalfResolutionDimensions(0, 1) && !VerifyHalfResolutionDimensions(1, 0) &&
+                     !VerifyOddResolutionSafety(0, 0) && !VerifyOddResolutionSafety(0, 1),
+            "M15-U4-05.4: zero-size views are rejected before reciprocal/UV computations");
     }
 
     std::cout << "  [M15Occlusion] All M15-U4 (U4-01 through U4-05.4) occlusion contract tests passed successfully.\n";

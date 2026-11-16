@@ -27,6 +27,13 @@ float3 ReconstructViewPos(float2 uv, float depth) {
     return viewPos.xyz / max(abs(viewPos.w), 1e-6);
 }
 
+// Each half-resolution visibility texel belongs to one real scene texel.
+// Use the same rational center mapping in compute and reconstruction; a fixed
+// pixel*2 mapping is incorrect when the full-resolution extent is odd.
+uint2 OcclusionSourcePixel(uint2 pixel, uint2 occlusionSize, uint2 sceneSize) {
+    return min(((pixel * 2 + 1) * sceneSize) / (occlusionSize * 2), sceneSize - 1);
+}
+
 // Interleaved spatial noise hash for spatial jittering
 float SpatialHash(uint2 pixelPos) {
     return frac(52.9829189 * frac(dot(float2(pixelPos), float2(0.06711056, 0.00583715))));
@@ -47,9 +54,13 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     if (pixelPos.x >= (uint)u_ScreenSize.x || pixelPos.y >= (uint)u_ScreenSize.y) return;
 
     float2 rcpFrame = u_ScreenSize.zw;
-    float2 uv = (float2(pixelPos) + 0.5) * rcpFrame;
+    uint2 sceneSize;
+    u_ComputeDepth.GetDimensions(sceneSize.x, sceneSize.y);
+    uint2 sourcePixel = OcclusionSourcePixel(pixelPos, uint2(u_ScreenSize.xy), sceneSize);
+    float2 uv = (float2(sourcePixel) + 0.5) / float2(sceneSize);
 
-    float depth = u_ComputeDepth.SampleLevel(u_ComputeSampler, uv, 0.0);
+    // Do not average unrelated surface depths/normals before estimating AO.
+    float depth = u_ComputeDepth.Load(int3(sourcePixel, 0));
     if (depth >= 0.9999 || depth <= 0.0) {
         u_ComputeOutput[pixelPos] = float2(1.0, 1.0);
         return;
@@ -58,7 +69,9 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     float3 viewPos = ReconstructViewPos(uv, depth);
 
     // 1. Determine surface normal in view space
-    float4 normalSample = u_ComputeNormal.SampleLevel(u_ComputeSampler, uv, 0.0);
+    uint2 normalSize;
+    u_ComputeNormal.GetDimensions(normalSize.x, normalSize.y);
+    float4 normalSample = u_ComputeNormal.Load(int3(min(sourcePixel, normalSize - 1), 0));
     float3 viewNormal;
     if (dot(normalSample.xyz, normalSample.xyz) > 0.01) {
         viewNormal = normalize(mul((float3x3)u_View, normalSample.xyz));
@@ -230,16 +243,29 @@ float4 PSMain(VSOutput input) : SV_Target {
     float2 uv = input.TexCoord;
     float2 rcpFrame = u_ScreenSize.zw;
 
-    float centerDepth = u_SceneDepth.SampleLevel(u_LinearSampler, uv, 0.0);
+    // The apply pass is full-resolution even though the AO source is half-
+    // resolution. Fetch scene depth at exact texels so bilinear depth filtering
+    // cannot manufacture values across silhouettes before edge rejection runs.
+    uint2 sceneSize = uint2(max(u_ScreenSize.x, 1.0), max(u_ScreenSize.y, 1.0));
+    int2 sceneMax = int2(sceneSize) - int2(1, 1);
+    int2 centerPixel = clamp(int2(uv * u_ScreenSize.xy), int2(0, 0), sceneMax);
+    float2 centerUV = (float2(centerPixel) + 0.5) * rcpFrame;
+
+    float centerDepth = u_SceneDepth.Load(int3(centerPixel, 0));
     float4 sceneColor = u_SceneColor.SampleLevel(u_LinearSampler, uv, 0.0);
 
     if (centerDepth >= 0.9999) {
         return sceneColor;
     }
 
-    float centerZ = ReconstructViewPos(uv, centerDepth).z;
+    float centerZ = ReconstructViewPos(centerUV, centerDepth).z;
 
-    // Cross-bilateral 5x5 reconstruction to eliminate depth edge-bleed
+    // Filter individual half-resolution AO/depth pairs. Linear AO sampling
+    // would mix surfaces before depth rejection, even with exact depth loads.
+    uint2 occlusionSize;
+    u_OcclusionTexture.GetDimensions(occlusionSize.x, occlusionSize.y);
+    int2 occlusionMax = int2(occlusionSize) - int2(1, 1);
+    int2 occlusionCenter = min(int2(centerUV * float2(occlusionSize)), occlusionMax);
     float2 occlusionSum = 0.0;
     float weightSum = 0.0;
 
@@ -249,22 +275,28 @@ float4 PSMain(VSOutput input) : SV_Target {
     for (int y = -2; y <= 2; ++y) {
         [unroll]
         for (int x = -2; x <= 2; ++x) {
-            float2 offsetUV = saturate(uv + float2(x, y) * rcpFrame);
-            float tapDepth = u_SceneDepth.SampleLevel(u_LinearSampler, offsetUV, 0.0);
+            int2 aoPixel = clamp(occlusionCenter + int2(x, y), int2(0, 0), occlusionMax);
+            int2 tapPixel = int2(OcclusionSourcePixel(uint2(aoPixel), occlusionSize, sceneSize));
+            float2 offsetUV = (float2(tapPixel) + 0.5) * rcpFrame;
+            float tapDepth = u_SceneDepth.Load(int3(tapPixel, 0));
+            if (tapDepth <= 0.0 || tapDepth >= 0.9999) continue;
             float tapZ = ReconstructViewPos(offsetUV, tapDepth).z;
 
             float depthDiff = abs(centerZ - tapZ);
             float depthWeight = exp(-depthDiff / (0.05 * max(abs(centerZ), 0.1) + 1e-4));
+            if (depthWeight < 1e-3) continue;
             float spatialWeight = spatialWeights[x + 2] * spatialWeights[y + 2];
             float totalWeight = depthWeight * spatialWeight;
 
-            float2 tapOcclusion = u_OcclusionTexture.SampleLevel(u_LinearSampler, offsetUV, 0.0);
+            float2 tapOcclusion = u_OcclusionTexture.Load(int3(aoPixel, 0));
             occlusionSum += tapOcclusion * totalWeight;
             weightSum += totalWeight;
         }
     }
 
-    float2 filteredOcclusion = weightSum > 1e-4 ? (occlusionSum / weightSum) : u_OcclusionTexture.SampleLevel(u_LinearSampler, uv, 0.0);
+    // A thin surface may have no representative half-res texel. Neutral
+    // visibility is preferable to importing a different surface's occlusion.
+    float2 filteredOcclusion = weightSum > 1e-4 ? (occlusionSum / weightSum) : float2(1.0, 1.0);
     float finalAO = saturate(filteredOcclusion.r);
     float finalContact = saturate(filteredOcclusion.g);
 

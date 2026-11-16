@@ -232,7 +232,8 @@ namespace Axle {
         // Evaluates cross-bilateral filter weight for a sample tap:
         // centerZ: view-space depth of center pixel
         // tapZ: view-space depth of neighbor tap
-        // tapOffsetX, tapOffsetY: integer pixel offset in [-2, 2]
+        // tapOffsetX, tapOffsetY: integer half-resolution texel offset in [-2, 2].
+        // Rejected/invalid depth taps contribute zero weight, matching GTAO.hlsl.
         BilateralTapResult EvaluateBilateralWeight(float centerZ, float tapZ, int tapOffsetX, int tapOffsetY);
 
         // Verification helpers for M15-U4-C:

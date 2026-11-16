@@ -1,5 +1,11 @@
 # M15 U4 Batch 3 — GTAO Half-Resolution Sampling, Bilateral Reconstruction & Depth-Edge Protection
 
+> Codex acceptance addendum: the independent review found and repaired
+> pre-filtered AO/depth edge leakage and the isolated-surface fallback, then
+> added production shader and odd-resolution GPU fixtures. The self-verification
+> below describes Gemini's original candidate; final behavior and acceptance
+> evidence are in [the Codex review](M15_U4_BATCH_3_CODEX_REVIEW.md).
+
 The user authorized implementation of Milestone 15 items `M15-U4-05.1` through `M15-U4-05.4` (M15-U4-C). CPU unit contracts, shader clamping guarantees, and GPU native verification evidence are recorded below. Independent review and acceptance remains pending for Codex and the user.
 
 ---

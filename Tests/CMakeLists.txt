@@ -33,8 +33,11 @@ add_executable(AxleEnvironmentBakeTests EXCLUDE_FROM_ALL src/Test_EnvironmentBak
 target_link_libraries(AxleEnvironmentBakeTests PRIVATE Axle::Renderer)
 add_test(NAME EnvironmentBakeTests COMMAND $<TARGET_FILE:AxleEnvironmentBakeTests>)
 set_tests_properties(EnvironmentBakeTests PROPERTIES LABELS "environment;lighting;cpu" TIMEOUT 90)
-add_executable(AxleEnvironmentRenderingTests EXCLUDE_FROM_ALL src/Test_EnvironmentRendering.cpp)
+add_executable(AxleEnvironmentRenderingTests EXCLUDE_FROM_ALL
+    src/Test_EnvironmentRendering.cpp rendering/Test_M15_OcclusionRendering.cpp)
 target_link_libraries(AxleEnvironmentRenderingTests PRIVATE Axle::Scene glad glfw)
+target_compile_definitions(AxleEnvironmentRenderingTests PRIVATE
+    AXLE_GTAO_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/GTAO.hlsl")
 option(AXLE_ENABLE_ENVIRONMENT_GPU_TESTS "Register physical D3D12/Vulkan/OpenGL HDR and IBL tests" OFF)
 if(AXLE_ENABLE_ENVIRONMENT_GPU_TESTS)
     foreach(backend dx12 vulkan gl)
@@ -518,6 +521,8 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
     AXLE_TONEMAPPING_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ToneMapping.hlsl"
       AXLE_LOCAL_SHADOW_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/LocalShadows.hlsli"
       AXLE_GTAO_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/GTAO.hlsl"
+      AXLE_GTAO_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/GTAOPass.cpp"
+      AXLE_RHI_VIEW_TARGETS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/RHI/src/RHIViewTargets.cpp"
       AXLE_RENDER_CAPABILITIES_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Renderer/src/RenderCapabilities.cpp"
       AXLE_RENDER_SERVICE_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RenderService.cpp")
 target_link_libraries(AxleRenderUnitTests PRIVATE

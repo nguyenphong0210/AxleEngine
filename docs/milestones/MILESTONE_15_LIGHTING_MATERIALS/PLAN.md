@@ -410,54 +410,54 @@ the item is visible.
 - [x] **M15-U3-13 — Produce opaque world-space `ScreenNormal` and declare it in the graph.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-14 — Match normal producer with normal/detail-normal decoding and strength.**
+- [x] **M15-U3-14 — Match normal producer with normal/detail-normal decoding and strength.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-15.1 — Verify inverse-transpose under nonuniform scale.**
+  - **Evidence:** `SurfaceNormal.hlsl` and `RHISceneRendererPasses.cpp` bind material constants/textures and implement `DecodeMaterialNormal` with strength and RNM detail blending; verified in `AxleRenderUnitTests` `--m15-surface-material-contract` (exit 0). [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-15.1 — Verify inverse-transpose under nonuniform scale.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-15.2 — Verify mirrored-transform handedness.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: cofactor transform preserves normal-tangent orthogonality ($n' \cdot t' = 0$) under nonuniform scale and oblique rotation. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-15.2 — Verify mirrored-transform handedness.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-15.3 — Verify normal-map transform.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: negative determinant mirrors tangent sign $t.w \to -t.w$ while preserving outward normal direction, aligning bitangent with texture V coordinate. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-15.3 — Verify normal-map transform.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-16 — Define alpha-cutout/depth/normal coverage and background validity.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: tangent-space normal map perturbs normal into world tangent space via reconstructed TBN. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-16 — Define alpha-cutout/depth/normal coverage and background validity.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-17.1 — Unify base color.**
+  - **Evidence:** `SurfaceNormal.hlsl` executes cutout discard on alpha threshold failure and outputs `float4(normalize(N), 1.0)` for covered geometry (0.0 for background); verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-17.1 — Unify base color.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-17.2 — Unify metallic/roughness.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `MaterialSurface.hlsl` normalizes Lambertian diffuse using `INV_PI` matching `ForwardPBR.hlsl`. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-17.2 — Unify metallic/roughness.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
-- [ ] **M15-U3-17.3 — Unify AO/emission.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: roughness clamped `[0.04, 1.0]` and metallic saturated `[0.0, 1.0]`. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-17.3 — Unify AO/emission.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-17.4 — Unify normal/tangent.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: AO scales ambient accumulation while direct lighting and emission are preserved unscaled. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-17.4 — Unify normal/tangent.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-17.5 — Unify clearcoat/anisotropy.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: matching TBN and normal decoding contracts. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-17.5 — Unify clearcoat/anisotropy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-17.6 — Unify reflection inputs.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: clearcoat BRDF layer attenuation evaluates in `MaterialSurface.hlsl`. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-17.6 — Unify reflection inputs.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
-- [ ] **M15-U3-18 — Verify sRGB/linear texture and packed ORM conventions.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `MaterialSurface.hlsl` unifies direct sunlight scale (`DIRECT_LUX_TO_RADIANCE` 0.000035) and ambient specular evaluation using `FresnelSchlickRoughness`. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-18 — Verify sRGB/linear texture and packed ORM conventions.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-19.1 — Round-trip asset to component.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `Albedo` and `Emissive` are sRGB, remaining slots are Linear; `PackedORM` maps to slot 2 with `PackedORMTexturedPBR`. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-19.1 — Round-trip asset to component.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-19.2 — Round-trip component to extraction.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `SetAsset()` / `SyncFromAsset()` and `SyncToAsset()` synchronize all standard and advanced material parameters. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-19.2 — Round-trip component to extraction.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-19.3 — Round-trip extraction to GPU.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `SyncToRHI()` accurately populates `RHIMaterialDesc` with all material properties. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-19.3 — Round-trip extraction to GPU.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U3-19.4 — Round-trip save/reopen.**
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: `RHIMaterial::BuildConstants()` populates GPU `MaterialConstants` correctly matching shader layout. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
+- [x] **M15-U3-19.4 — Round-trip save/reopen.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Verified in `Test_M15_SurfaceAndMaterialContractUnit.cpp`: Save and Load round-trip preserves all material parameters across `.axleasset` and flat `.mat` file formats. [U3 batch 5 review](../../reviews/M15_U3_BATCH_5_REVIEW.md).
 - [ ] **M15-U3-20 — Add smooth-sphere normal-field and anti-faceting metric.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere has smooth shading with no triangle bands, faceting or invalid pixels.

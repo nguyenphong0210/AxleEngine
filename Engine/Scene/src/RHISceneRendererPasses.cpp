@@ -869,7 +869,14 @@ namespace Axle {
             if (useSurfaceNormal) {
                 if (!graph.DeclareRead("SurfaceNormal",m_DefaultDescriptorSet) ||
                     !graph.DeclareRead("SurfaceNormal",m_SceneConstantBuffer.GetCBV())) return fail();
-                for (const auto& item : opaqueQueue) if (!declareMesh("SurfaceNormal",*item.Mesh)) return fail();
+                for (const auto& item : opaqueQueue) {
+                    if (!declareMesh("SurfaceNormal",*item.Mesh)) return fail();
+                    if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
+                        const auto& res = *m_MaterialDraws[item.DrawResourceIndex];
+                        if (!graph.DeclareRead("SurfaceNormal", res.Constants.GetCBV()) ||
+                            !graph.DeclareRead("SurfaceNormal", res.Set)) return fail();
+                    }
+                }
             }
             return {};
         });
@@ -905,12 +912,21 @@ namespace Axle {
             Commands().SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
             if (m_DescriptorPool.IsValid()) {
                 m_DescriptorPool.Bind(Commands().GetNative());
-                if (m_DefaultDescriptorSet && !bindDescriptorSet(0, m_DefaultDescriptorSet)) {
-                    endRendering();
-                    return RenderPassResult::Failed("SurfaceNormal: descriptor binding failed");
-                }
             }
             for (const auto& item : opaqueQueue) {
+                if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
+                    const auto& resource = *m_MaterialDraws[item.DrawResourceIndex];
+                    Commands().SetRootDescriptor(2, resource.Constants.GetCBV());
+                    if (!bindDescriptorSet(0, resource.Set)) {
+                        endRendering();
+                        return RenderPassResult::Failed("SurfaceNormal: descriptor binding failed");
+                    }
+                } else if (m_DefaultDescriptorSet) {
+                    if (!bindDescriptorSet(0, m_DefaultDescriptorSet)) {
+                        endRendering();
+                        return RenderPassResult::Failed("SurfaceNormal: descriptor binding failed");
+                    }
+                }
                 Commands().SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
                 item.Mesh->Bind(Commands());
                 item.Mesh->Draw(Commands());

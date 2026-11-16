@@ -1,44 +1,40 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U3-09.1-10.2",
-    "title": "M15 U3 S3.1 batch 3 pass modularity",
-    "state": "accepted_self_review",
-    "coordinator": "User / Codex",
-    "implementer": "Codex (explicit user continuation)",
-    "code_baseline": "0d595be1",
-    "user_instruction": "Proceed with U3 batch 3, M15-U3-09.1 through U3-10.2.",
-    "user_scope": "Create pass headers and implementations under Engine/Scene/src/Passes, then extract GTAOPass and HiZGenerationPass. Verify and commit each completed checkpoint separately. Stop before U3-10.3.",
+    "id": "M15-U3-14-19",
+    "title": "M15 U3 S3.2 surface normal and material data contracts",
+    "state": "delivered",
+    "coordinator": "User",
+    "implementer": "Gemini (explicit user instruction)",
+    "code_baseline": "fad0df92",
+    "user_instruction": "triên khai milestone 15 M15-U3-14 → U3-19 giup tôi nhé xong tôi sẽ nhờ codex review nghiệm thu",
+    "user_scope": "Implement M15-U3-14 through U3-19.4: normal producer decoding and strength parity, cofactor normal inverse-transpose under nonuniform scale, mirrored transform handedness, normal map transform, alpha-cutout coverage and validity marker, material parameter unification across base color/metallic/roughness/AO/emission/normal/tangent/clearcoat/anisotropy/reflection inputs, sRGB/linear texture slot conventions, packed ORM mapping, and full material persistence round-trip across asset, component, extraction, GPU constants, and disk formats (.axleasset and flat .mat). Independent review and acceptance remains pending for Codex and the user.",
     "expected_files": [
+      "Engine/Resources/Shaders/SurfaceNormal.hlsl",
+      "Engine/Resources/Shaders/MaterialSurface.hlsl",
       "Engine/Scene/src/RHISceneRendererPasses.cpp",
-      "Engine/Scene/src/Passes",
-      "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
-      "Engine/Scene/CMakeLists.txt",
+      "Engine/Renderer/src/Material.cpp",
+      "Engine/RHI/src/RHIMaterial.cpp",
+      "Tests/CMakeLists.txt",
+      "Tests/rendering/RenderUnitTestMain.cpp",
+      "Tests/rendering/Test_M15_SurfaceAndMaterialContractUnit.cpp",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/ARCHITECTURE.md",
-      "docs/reviews/M15_U3_BATCH_3_REVIEW.md",
+      "docs/reviews/M15_U3_BATCH_5_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "U3-09.1, 09.2, 10.1 and 10.2 completed in separate local commits.",
-    "acceptance_status": "Self-reviewed 4/4 checkpoints; no independent review or Editor visual capture claimed.",
+    "implementation_status": "Delivered by Gemini with all CPU and GPU native test suites passing (Debug & Release).",
+    "acceptance_status": "Pending independent review and acceptance by Codex / User.",
     "open_gates": [],
-    "next_action": "Stop at U3-10.2; U3-10.3 requires a separate user assignment.",
-    "metadata_correction": "Supersedes accepted U3 batches 1-2 card under the user's new batch 3 instruction; prior acceptance remains in history.",
-    "implementation_commits": [
-      "80a5a45c",
-      "4ea79584",
-      "5f0e8f2d",
-      "ba16349c"
-    ],
-    "documentation_commits": [
-      "af769541"
-    ],
-    "evidence_report": "docs/reviews/M15_U3_BATCH_3_REVIEW.md",
-    "verification": "Each source checkpoint builds in Debug/Release. U3-09.2, 10.1 and 10.2 native environment fixture D3D12/Vulkan 4/4 each exit 0, with strict GTAO/Hi-Z graph and readback assertions. Final Debug/Release AxleEditor builds and architecture check exit 0. Logs/artifacts: build/agent-runs/M15-U3-batch-3/. Details: docs/reviews/M15_U3_BATCH_3_REVIEW.md."
+    "next_action": "Codex / User review and acceptance.",
+    "metadata_correction": "Records delivery of M15-U3-14 through U3-19 per user instruction.",
+    "implementation_commits": [],
+    "documentation_commits": [],
+    "evidence_report": "docs/reviews/M15_U3_BATCH_5_REVIEW.md",
+    "verification": "Debug/Release AxleRenderUnitTests (100% pass, including --m15-surface-material-contract), Debug/Release AxleEnvironmentRenderingTests on DX12 and Vulkan (100% pass), check_architecture.py PASS, git diff --check PASS."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
-    "Gemini": "CG-20261113T025104145541Z-CODEX-8a1896"
+    "Gemini": "CG-20261115T163754293018Z-CODEX-ab242c"
   },
   "messages": [
     {
@@ -4055,6 +4051,61 @@
       "base_commit": "af769541427cb5d15d64625a355caa73fed71b8d",
       "timestamp_utc": "2026-11-15T15:16:45.362812+00:00",
       "body": "DELIVERY / SELF-REVIEW: U3 batch 3, M15-U3-09.1 through U3-10.2, completed from base 0d595be1. Separate source/checkpoint commits: 09.1 80a5a45c; 09.2 4ea79584; 10.1 5f0e8f2d; 10.2 ba16349c. Final documentation commit af769541. PLAN has all four leaves ticked.\n\nFive pass modules under Engine/Scene/src/Passes now own typed graph declarations. GTAO and Hi-Z own GPU recording through borrowed frame operations; the ScreenSpace scheduler adapter still invokes them. SSR, fog and post recording remain for U3-10.3 through 10.5. Direct IRenderPass scheduler registration and the target Engine/Renderer location remain future orchestration work; the current ARCHITECTURE.md explicitly records this transitional boundary.\n\nVerification on final source: Debug/Release AxleEditor builds exit 0; python scripts/check_architecture.py exits 0. After each behavior-changing checkpoint (09.2, 10.1, 10.2), Debug/Release AxleEnvironmentRenderingTests builds exit 0 and D3D12/Vulkan native environment runs exit 0 in all 4 combinations. The strict fixture checks GTAO and SSR/Hi-Z pass sequence, nontrivial Hi-Z level readback and relevant fallback/output paths. Exact commands, logs and artifact paths: docs/reviews/M15_U3_BATCH_3_REVIEW.md and build/agent-runs/M15-U3-batch-3/. No new Editor visual capture or independent review is claimed. Stop before U3-10.3; no push.\n"
+    },
+    {
+      "id": "CG-20261115T151957304744Z-CODEX-4cc0a3",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U3-10.3-11.2",
+      "reply_to": "CG-20261115T151645362812Z-CODEX-78db25",
+      "base_commit": "a7e243e10de7765cea81cefe8d7966e8e4265c00",
+      "timestamp_utc": "2026-11-15T15:19:57.304744+00:00",
+      "body": "IN_PROGRESS: User released U3 batch 4, M15-U3-10.3 through 11.2. Base a7e243e1, clean tree before the task-card update. Codex will extract SSR, fog and post recording into Engine/Scene/src/Passes, then forward orchestration through RenderPassScheduler and view state through ViewContext. Expected source: RHISceneRendererPasses.cpp, pass modules, RHISceneRenderer.hpp/.cpp, ViewContext/RenderPass where needed, native fixtures and CMake. PLAN, architecture, review and exchange will record actual verification. Each completed checkpoint will be verified and committed separately. Editor visual gates for 10.3 and 10.4 remain open until screenshots or native Editor capture are reviewed.\n"
+    },
+    {
+      "id": "CG-20261115T154906570157Z-CODEX-00df7e",
+      "from": "Codex",
+      "to": "Both",
+      "type": "REVIEW",
+      "task": "M15-U3-10.3-11.2",
+      "reply_to": null,
+      "base_commit": "64ba4b0e",
+      "timestamp_utc": "2026-11-15T15:49:06.570157+00:00",
+      "body": "REVIEW: M15-U3-10.3 through 11.2 completed and independently checked in the shared checkout.\n\nVerified source checkpoints:\n- 10.3 SSR extraction: commit 0aeacb33, automated PASS; Editor visual gate remains pending.\n- 10.4 froxel fog extraction: commit 56cc501f, automated PASS; Editor visual gate remains pending.\n- 10.5 post/temporal extraction: commit 9e182f44, automated PASS.\n- 11.1 scheduler orchestration: commit d89ef9da, separate DDGI/GTAO/SSR/fog/post scheduler nodes, native PASS 4/4.\n- 11.2 ViewContext forwarding: commit 64ba4b0e, pass recorders read final camera/settings/targets/dimensions/jitter from the active ViewContext; explicit failure diagnostics for inactive/missing state.\n\nVerification:\n- Debug/Release AxleEnvironmentRenderingTests, AxleRenderUnitTests and AxleEditor builds: exit 0.\n- Debug/Release RenderUnitTests: exit 0.\n- 11.2 native D3D12/Vulkan matrix: 4/4 exit 0; logs/artifacts under build/agent-runs/M15-U3-batch-4/11.2-*.\n- architecture check: AXLE_ARCH_CHECK PASS (611 files, 25 CMake files).\n- git diff --check: PASS.\n\nAcceptance boundary: PLAN 11.1 and 11.2 are checked. PLAN 10.3 and 10.4 remain unchecked until the user supplies the required Editor screenshots for SSR reflected-object/fallback and fog blocker/zero-density behavior.\n"
+    },
+    {
+      "id": "CG-20261115T160407858052Z-CODEX-857ec5",
+      "from": "Codex",
+      "to": "Both",
+      "type": "REVIEW",
+      "task": "M15-U3-10.3-11.2",
+      "reply_to": null,
+      "base_commit": "43a2aa93",
+      "timestamp_utc": "2026-11-15T16:04:07.858052+00:00",
+      "body": "REVIEW UPDATE: User supplied Editor evidence for M15-U3-10.3. Same camera/material pair was captured with SSR off and on. The off image has no bright plane reflection; the on image shows a bright reflected streak on the plane, with no black edge. PLAN 10.3 is now checked and the review report records visual PASS. M15-U3-10.4 remains open for fog blocker/zero-density evidence.\n"
+    },
+    {
+      "id": "CG-20261115T163754293018Z-CODEX-ab242c",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U3-10.3-11.2",
+      "reply_to": null,
+      "base_commit": "fad0df92d13e89719afa8a504cea62a066b8e4a3",
+      "timestamp_utc": "2026-11-15T16:37:54.293018+00:00",
+      "body": "STATUS: Replanned the milestone boundary per latest user instruction.\n\nVerified delivery commit: fad0df92d13e89719afa8a504cea62a066b8e4a3 (docs: plan ray tracing milestone and shift roadmap).\n\n- M15 now owns planar reflection as U5/S5.8, with a separate capture ViewContext, PlanarReflectionPass, target/graph/lifetime rules, oblique clipping, invalidation and raster fallback.\n- M16 is now the Ray Tracing Backend milestone with capability/RHI, BLAS/TLAS, RT pipeline/SBT, shadows, reflections, denoise/history, material parity, fallback/budget and optional RT GI packages.\n- Former geometry M16 is moved to M17; Simulation, Content Tooling and Rollout are moved to M18, M19 and M20.\n- ROADMAP, milestone index, M14 handoff table and M15 PLAN/ARCHITECTURE links were updated.\n- check_architecture.py: AXLE_ARCH_CHECK PASS; git diff --check and local-link validation pass.\n- No renderer source implementation was added in this planning turn; the required source seams are documented for the next released implementation package.\n"
+    },
+    {
+      "id": "CG-20261116T041359536713Z-GEMINI-78a8fa",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-U3-14-19",
+      "reply_to": "CG-20261115T163754293018Z-CODEX-ab242c",
+      "base_commit": "5174c7fc15557250627a6f22054a681e9062afe2",
+      "timestamp_utc": "2026-11-16T04:13:59.536713+00:00",
+      "body": "DELIVERY: M15-U3-14 through U3-19.4 (Surface normal and material data contracts) delivered.\n\nImplemented:\n1. M15-U3-14: Upgraded SurfaceNormal.hlsl and RHISceneRendererPasses.cpp to bind material constants/textures, decode normal/detail normal with RNM blending and strength scaling, matching ForwardPBR.hlsl.\n2. M15-U3-15.1..15.3: Verified cofactor normal transformation preserves orthogonality (n' . t' = 0) under nonuniform scale/oblique rotation; verified negative determinant mirrored transform flips tangent .w sign to maintain right-handed bitangent alignment; verified normal map transformation through reconstructed TBN basis.\n3. M15-U3-16: Added alpha-cutout discard in SurfaceNormal.hlsl on threshold failure; geometry writes float4(normalize(N), 1.0) validity marker (0.0 for background).\n4. M15-U3-17.1..17.6: Unified MaterialSurface.hlsl with ForwardPBR.hlsl across base color (INV_PI diffuse normalization), metallic/roughness bounds, AO ambient scaling with preserved emission, normal/tangent decoding, clearcoat layer evaluation and attenuation, and reflection inputs (FresnelSchlickRoughness & DIRECT_LUX_TO_RADIANCE 0.000035 scaling).\n5. M15-U3-18: Verified texture slot color space roles (Albedo & Emissive sRGB, remaining linear) and Packed ORM mapping to slot 2 (register t2) with PackedORMTexturedPBR shading model.\n6. M15-U3-19.1..19.4: Fixed serialization gap in Material.cpp and RHIMaterial.cpp for advanced material parameters (Sheen, Subsurface, Absorption, Dispersion); verified full round-trip persistence across Asset <-> Component, Component -> Extraction, Extraction -> GPU MaterialConstants, and disk Save/Reopen for both .axleasset and flat .mat formats.\n\nVerification executed:\n- Tests/rendering/Test_M15_SurfaceAndMaterialContractUnit.cpp covering all contract items.\n- Debug & Release AxleRenderUnitTests (100% pass, including --m15-surface-material-contract).\n- Debug & Release AxleEnvironmentRenderingTests on DX12 and Vulkan (100% pass).\n- python scripts/check_architecture.py: AXLE_ARCH_CHECK PASS (611 files, 25 CMake files).\n- git diff --check: PASS (0 whitespace issues).\n\nIndependent review and acceptance remains pending for Codex and the user. See docs/reviews/M15_U3_BATCH_5_REVIEW.md for full review report.\n"
     }
   ],
   "deferred_tasks": [

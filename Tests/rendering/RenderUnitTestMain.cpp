@@ -17,6 +17,7 @@ bool RunM15RoughnessSweepReferenceUnitTests();
 bool RunM15DirectLightEdgeReferenceUnitTests();
 bool RunM15DirectLightFallbackReferenceUnitTests();
 bool RunM15EnvironmentContractReferenceUnitTests();
+bool RunM15SurfaceAndMaterialContractUnitTests();
 bool RunTemporalPostDiagnosticsUnitTests();
 namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderWorkerUnitTests(); }
@@ -46,6 +47,9 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string_view(argv[1]) == "--m15-environment-contract-reference") {
         return RunM15EnvironmentContractReferenceUnitTests() ? 0 : 1;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--m15-surface-material-contract") {
+        return RunM15SurfaceAndMaterialContractUnitTests() ? 0 : 1;
     }
 
     std::cout << "========================================================\n";
@@ -118,6 +122,10 @@ int main(int argc, char** argv) {
     }
     if (!RunM15EnvironmentContractReferenceUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunM15EnvironmentContractReferenceUnitTests FAILED!\n";
+        return 1;
+    }
+    if (!RunM15SurfaceAndMaterialContractUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunM15SurfaceAndMaterialContractUnitTests FAILED!\n";
         return 1;
     }
 

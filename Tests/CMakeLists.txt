@@ -506,12 +506,15 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_M15_RoughnessSweepReferenceUnit.cpp
     rendering/Test_M15_DirectLightEdgeAndFallbackReferenceUnit.cpp
     rendering/Test_M15_EnvironmentContractReferenceUnit.cpp
+    rendering/Test_M15_SurfaceAndMaterialContractUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
 # M15-U1-01.1 & M15-U1-01.4: inspect canonical shader sources for lighting & exposure contracts.
 target_compile_definitions(AxleRenderUnitTests PRIVATE
     AXLE_FORWARD_PBR_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ForwardPBR.hlsl"
-      AXLE_TONEMAPPING_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ToneMapping.hlsl"
+    AXLE_SURFACE_NORMAL_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/SurfaceNormal.hlsl"
+    AXLE_MATERIAL_SURFACE_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/MaterialSurface.hlsl"
+    AXLE_TONEMAPPING_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ToneMapping.hlsl"
       AXLE_LOCAL_SHADOW_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/LocalShadows.hlsli"
       AXLE_RENDER_CAPABILITIES_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Renderer/src/RenderCapabilities.cpp"
       AXLE_RENDER_SERVICE_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RenderService.cpp")
@@ -539,6 +542,8 @@ add_test(NAME M15DirectLightFallbackReference COMMAND $<TARGET_FILE:AxleRenderUn
 set_tests_properties(M15DirectLightFallbackReference PROPERTIES LABELS "render;lighting;cpu;m15" TIMEOUT 30)
 add_test(NAME M15EnvironmentContractReference COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-environment-contract-reference)
 set_tests_properties(M15EnvironmentContractReference PROPERTIES LABELS "render;environment;lighting;cpu;m15" TIMEOUT 90)
+add_test(NAME M15SurfaceMaterialContract COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-surface-material-contract)
+set_tests_properties(M15SurfaceMaterialContract PROPERTIES LABELS "render;material;surface;cpu;m15" TIMEOUT 30)
 add_test(NAME RenderHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleRenderUnitTests> --case render-probe)
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES LABELS "render;cpu")
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES TIMEOUT 30)

@@ -76,18 +76,36 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 geometricNormal = AxleSafeNormal(input.Normal, float3(0,1,0));
     float3 fallbackTangent = abs(geometricNormal.z) < 0.99 ? cross(float3(0,0,1), geometricNormal) : cross(float3(0,1,0), geometricNormal);
     float3 tangent = AxleSafeNormal(input.Tangent.xyz - geometricNormal*dot(input.Tangent.xyz, geometricNormal), normalize(fallbackTangent));
-    float3 bitangent = cross(geometricNormal, tangent)*(input.Tangent.w < 0 ? -1.0 : 1.0);
+    float3 bitangent = cross(geometricNormal, tangent)*(input.Tangent.w < 0.0 ? -1.0 : 1.0);
     float3 normal = AxleSafeNormal(tangent*surface.Normal.x + bitangent*surface.Normal.y + geometricNormal*surface.Normal.z, geometricNormal);
     float3 view = AxleSafeNormal(u_CameraPosition.xyz - input.WorldPos, normal);
     float3 light = AxleSafeNormal(u_SunDirection.xyz, normal);
     float3 halfVector = AxleSafeNormal(view + light, normal);
-    float nv = saturate(dot(normal, view));
+    float nv = max(dot(normal, view), 0.001);
     float nl = saturate(dot(normal, light));
     float3 f0 = lerp(float3(0.04,0.04,0.04), base, metallic);
     float3 fresnel = FresnelSchlick(saturate(dot(halfVector, view)), f0);
     float3 specular = DistributionGGX(normal, halfVector, roughness)*GeometrySmith(normal, view, light, roughness)*fresnel / max(4.0*nv*nl, 0.0001);
-    float3 diffuse = (1.0 - fresnel)*(1.0 - metallic)*base / PI;
-    float3 direct = (diffuse + specular)*max(u_SunColor.rgb, float3(0,0,0))*max(u_SunDirection.w, 0.0)*nl;
-    float3 ambient = base*0.03*saturate(surface.AO);
+    float3 diffuse = (1.0 - fresnel)*(1.0 - metallic)*base * INV_PI;
+
+    // Direct sun lighting using unified physical calibration scale
+    static const float DIRECT_LUX_TO_RADIANCE = 0.000035;
+    float sunIntensity = max(u_SunDirection.w, 0.0);
+    float sunRadianceScale = sunIntensity > 10.0 ? DIRECT_LUX_TO_RADIANCE : 1.0;
+    float3 directLight = max(u_SunColor.rgb, float3(0,0,0)) * (sunIntensity * sunRadianceScale) * nl;
+    float3 direct = (diffuse + specular) * directLight;
+
+    // Clearcoat layer evaluation
+    float coat = saturate(surface.Clearcoat);
+    if (coat > 0.0) {
+        float coatRoughness = clamp(surface.ClearcoatRoughness, 0.04, 1.0);
+        float coatF = 0.04 + 0.96 * pow(1.0 - saturate(dot(view, halfVector)), 5.0);
+        float coatBRDF = DistributionGGX(normal, halfVector, coatRoughness) * GeometrySmith(normal, view, light, coatRoughness) * coatF / max(4.0 * nv * max(nl, 0.001), 0.0001);
+        direct = direct * (1.0 - coat * coatF) * (1.0 - coat * coatF) + coat * coatBRDF * directLight;
+    }
+
+    // Ambient / indirect term scaled by AO; direct and emissive are preserved
+    float3 ambientRef = FresnelSchlickRoughness(nv, f0, roughness);
+    float3 ambient = (base * 0.03 * (1.0 - metallic) + ambientRef * 0.02) * saturate(surface.AO);
     return float4(direct + ambient + max(surface.Emission, float3(0,0,0)), 1.0);
 }

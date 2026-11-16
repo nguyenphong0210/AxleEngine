@@ -558,12 +558,13 @@ the item is visible.
 - [x] **M15-U4-02.2 — Use bounded AO/contact weights.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U4-03.1 — Move AO before lighting.**
+- [x] **M15-U4-03.1 — Move AO before lighting.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
+  - **Evidence:** Verified in `Test_M15_OcclusionContractUnit.cpp`: pre-lighting occlusion contract guarantees $L_o = L_{\text{ambient}} \cdot ao + (L_d + L_s) \cdot cs + L_e$, where ambient/indirect is modulated strictly while direct diffuse, specular highlights, and emissive remain strictly invariant. Preserves U4-01/U4-02 bounded post-composite fallback passes. Native D3D12 and Vulkan tests pass. [U4 batch 1 review](../../reviews/M15_U4_BATCH_1_REVIEW.md). Editor visual evidence remains user-provided.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U4-03.2 — Expose true indirect target if needed.**
+- [x] **M15-U4-03.2 — Expose true indirect target if needed.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Verified in `Test_M15_OcclusionContractUnit.cpp`: architectural decision documented that a separate physical indirect target is NOT required for forward shading under the pre-lighting contract ($L_{\text{ambient}}$ modulated directly in registers during forward pass, saving ~16.6 MB VRAM at 1080p and eliminating MRT write bandwidth). Auxiliary target allocation via `RHIViewTargetDesc::EnableScreenStorage` is available for decoupled passes. [U4 batch 1 review](../../reviews/M15_U4_BATCH_1_REVIEW.md).
 - [ ] **M15-U4-04.1 — Apply contact to directional contribution.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

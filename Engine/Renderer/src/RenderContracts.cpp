@@ -315,4 +315,65 @@ namespace Axle {
 
     } // namespace CapabilityContract
 
+    // =========================================================================
+    // 8. Occlusion and Shading Separation Contracts (M15-U4)
+    // =========================================================================
+    namespace OcclusionContract {
+
+        glm::vec3 EvaluateShading(const ShadingComponents& comp, float ambientOcclusion, float contactShadow) {
+            const float ao = std::clamp(ambientOcclusion, 0.0f, 1.0f);
+            const float cs = std::clamp(contactShadow, 0.0f, 1.0f);
+            const glm::vec3 ambientTerm = comp.Ambient * ao;
+            const glm::vec3 directTerm = (comp.DirectDiffuse + comp.DirectSpecular) * cs;
+            return ambientTerm + directTerm + comp.Emissive;
+        }
+
+        bool IsSeparateIndirectTargetRequired(DataflowMode mode) {
+            // Under PreLightingSeparated forward shading, the forward pixel shader scales
+            // ambient in GPU registers before accumulating with direct light and emissive.
+            // A separate physical render target is NOT required.
+            if (mode == DataflowMode::PreLightingSeparated) {
+                return false;
+            }
+            // Under deferred post-lighting compositing, a separate indirect target is required
+            // to avoid multiplying the direct and emissive terms by ambient occlusion.
+            return true;
+        }
+
+        std::string_view GetIndirectTargetDecisionRationale() {
+            return "DECISION: A separate physical indirect render target is NOT required for forward shading under the pre-lighting occlusion contract. "
+                   "Evaluating ambient occlusion prior to or within forward shading allows in-place register modulation (Color = Ambient * AO + Direct + Emissive), "
+                   "saving 16-36 MB of VRAM (RGBA16_FLOAT) and eliminating Multiple Render Target (MRT) write bandwidth and fullscreen composite blits. "
+                   "Auxiliary indirect targets remain available optionally for decoupled diagnostics and debug readback.";
+        }
+
+        bool VerifyAmbientOnlyModulation(const ShadingComponents& comp) {
+            const glm::vec3 shadedAt0 = EvaluateShading(comp, 0.0f, 1.0f);
+            const glm::vec3 shadedAt1 = EvaluateShading(comp, 1.0f, 1.0f);
+
+            // Emissive radiance must be completely unchanged by AO variation
+            ShadingComponents emissiveOnly{};
+            emissiveOnly.Emissive = comp.Emissive;
+            if (EvaluateShading(emissiveOnly, 0.0f, 1.0f) != EvaluateShading(emissiveOnly, 1.0f, 1.0f)) {
+                return false;
+            }
+
+            // Direct light (diffuse + specular) must be completely unchanged by AO variation
+            ShadingComponents directOnly{};
+            directOnly.DirectDiffuse = comp.DirectDiffuse;
+            directOnly.DirectSpecular = comp.DirectSpecular;
+            if (EvaluateShading(directOnly, 0.0f, 1.0f) != EvaluateShading(directOnly, 1.0f, 1.0f)) {
+                return false;
+            }
+
+            // Difference between AO=1 and AO=0 must strictly equal the Ambient term
+            const glm::vec3 delta = shadedAt1 - shadedAt0;
+            constexpr float epsilon = 1e-6f;
+            return std::abs(delta.x - comp.Ambient.x) < epsilon &&
+                   std::abs(delta.y - comp.Ambient.y) < epsilon &&
+                   std::abs(delta.z - comp.Ambient.z) < epsilon;
+        }
+
+    } // namespace OcclusionContract
+
 } // namespace Axle

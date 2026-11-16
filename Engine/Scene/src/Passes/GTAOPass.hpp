@@ -37,5 +37,10 @@ namespace Axle::Passes {
         static void Declare(RenderGraph& graph, const GTAOResources& resources);
         static bool Record(RHISceneRenderer& renderer, const GTAORecordInputs& inputs,
                            const PassRecordOps& ops);
+
+        // M15-U4 pre-lighting dataflow and indirect target query contracts
+        static bool IsPreLightingDataflowSupported();
+        static bool IsSeparateIndirectTargetRequired();
+        static std::string_view GetIndirectTargetDecisionRationale();
     };
 }

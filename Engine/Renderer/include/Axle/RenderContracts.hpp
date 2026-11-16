@@ -140,4 +140,35 @@ namespace Axle {
         bool ValidateMaterialCompatibility(RendererBackendType backend, const Material& material, std::string& outDiagnostic);
     }
 
+    // =========================================================================
+    // 8. Occlusion and Shading Separation Contracts (M15-U4)
+    // =========================================================================
+    namespace OcclusionContract {
+        enum class DataflowMode : uint8_t {
+            PostLightingComposite = 0, // Fallback composite path after forward lighting
+            PreLightingSeparated  = 1  // M15-U4 pre-lighting dataflow: AO modulates only indirect/ambient
+        };
+
+        struct ShadingComponents {
+            glm::vec3 Ambient{0.0f};        // Indirect diffuse + indirect specular (IBL or analytical)
+            glm::vec3 DirectDiffuse{0.0f};  // Directional + punctual diffuse (sun, point, spot)
+            glm::vec3 DirectSpecular{0.0f}; // Direct specular highlights (GGX glints)
+            glm::vec3 Emissive{0.0f};        // Authored material emissive radiance
+        };
+
+        // Evaluates final surface radiance under the pre-lighting occlusion contract:
+        // AO modulates strictly Ambient; DirectDiffuse, DirectSpecular, and Emissive remain 100% unchanged.
+        glm::vec3 EvaluateShading(const ShadingComponents& comp, float ambientOcclusion, float contactShadow = 1.0f);
+
+        // Validates whether a separate physical indirect render target is required for the given dataflow mode.
+        // Under PreLightingSeparated forward shading, a separate indirect target is NOT required.
+        bool IsSeparateIndirectTargetRequired(DataflowMode mode);
+
+        // Returns architectural rationale documentation regarding separate indirect targets.
+        std::string_view GetIndirectTargetDecisionRationale();
+
+        // Verification helper: verifies that direct lighting and emissive are invariant under AO variation.
+        bool VerifyAmbientOnlyModulation(const ShadingComponents& comp);
+    }
+
 } // namespace Axle

@@ -1,32 +1,37 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U3-24-26",
-    "title": "M15 U3 S3.4 Temporal, diagnostics and measurement integration",
+    "id": "M15-U4-A",
+    "title": "M15 U4 S4.1 GTAO pre-lighting contract and indirect target decision",
     "state": "delivered",
     "coordinator": "User",
     "implementer": "Gemini (explicit user instruction)",
-    "code_baseline": "3a5c8829",
-    "user_instruction": "Hoàn tất mục còn lại của M15-U3.",
-    "user_scope": "Implement remaining M15-U3 items (M15-U3-24.1 through U3-26.4): declare motion, depth, history, and exposure resources in view targets and temporal post graph contracts; reset matrix contracts (Target generation, Camera cut, Feature policy toggle, Device epoch); diagnostics and measurement contracts (timing validity, fallback reasons, resource generations, report Unknown invalid measurements). Fix CustomShader emission unsupported feature regression. Deliver for Codex review.",
+    "code_baseline": "672d5728",
+    "user_instruction": "Implement M15-U4-A: M15-U4-03.1 through U4-03.2. Move GTAO into the correct pre-lighting/dataflow contract. AO must affect only indirect/ambient lighting, while direct lighting, specular highlights, and emissive remain unchanged. Decide and document whether a separate indirect target is required. Read docs/agents/WORKING_PROTOCOL.md and the current task card first. Preserve the already-passing U4-01, U4-02.1, and U4-02.2 behavior. Add focused CPU/native tests, update PLAN.md and a review report, commit the checkpoint, report exact commands and results in the exchange, then stop.",
+    "user_scope": "Implement M15-U4-03.1 (pre-lighting occlusion contract, strictly modulating indirect/ambient while preserving invariant direct diffuse, specular highlights, and emissive) and M15-U4-03.2 (formal decision and documentation that separate indirect target is NOT required for forward shading under pre-lighting dataflow). Preserve U4-01, U4-02.1, and U4-02.2 behavior.",
     "expected_files": [
-      "Engine/Renderer/src/ShaderSurface.cpp",
-      "Tests/rendering/Test_M15_SurfaceAndMaterialContractUnit.cpp",
+      "Engine/Renderer/include/Axle/RenderContracts.hpp",
+      "Engine/Renderer/src/RenderContracts.cpp",
+      "Engine/Scene/src/Passes/GTAOPass.hpp",
+      "Engine/Scene/src/Passes/GTAOPass.cpp",
+      "Tests/CMakeLists.txt",
+      "Tests/rendering/RenderUnitTestMain.cpp",
+      "Tests/rendering/Test_M15_OcclusionContractUnit.cpp",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U3_BATCH_7_REVIEW.md",
+      "docs/reviews/M15_U4_BATCH_1_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Delivered by Gemini with all CPU unit contract suites and native GPU rendering tests passing in Debug and Release.",
+    "implementation_status": "Delivered by Gemini with all CPU unit contracts and native GPU rendering tests passing in Debug and Release.",
     "acceptance_status": "Pending independent review and acceptance by Codex / User.",
     "open_gates": [
       "Editor visual verification remains user-provided."
     ],
     "next_action": "Codex / User review and acceptance.",
-    "metadata_correction": "Records delivery of M15-U3-24.1 through U3-26.4 concluding full M15-U3 engineering scope.",
+    "metadata_correction": "Records delivery of M15-U4-03.1 through U4-03.2.",
     "implementation_commits": [],
     "documentation_commits": [],
-    "evidence_report": "docs/reviews/M15_U3_BATCH_7_REVIEW.md",
-    "verification": "Debug/Release AxleRenderUnitTests (100% pass, including --m15-surface-material-contract), Debug/Release AxleEnvironmentRenderingTests on DX12 and Vulkan (100% pass, pixel parity diff=(0,0,0)), check_architecture.py PASS, git diff --check PASS."
+    "evidence_report": "docs/reviews/M15_U4_BATCH_1_REVIEW.md",
+    "verification": "Debug/Release AxleRenderUnitTests (100% pass, including --m15-occlusion-contract), Debug/Release AxleEnvironmentRenderingTests on DX12 and Vulkan (100% pass, pixel parity diff=(0,0,0)), check_architecture.py PASS, git diff --check PASS."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
@@ -4234,6 +4239,17 @@
       "base_commit": "672d5728",
       "timestamp_utc": "2026-11-16T12:52:45.476402+00:00",
       "body": "USER STEERING (2026-11-16): The Gemini-implements / Codex-final-review workflow applies to every future concrete implementation package or review request the user assigns, across all milestones and checkpoints, not only M15-U4. Gemini's delivery is always a candidate pending independent Codex review. Codex has full authority within the assigned review scope to fix defects, rewrite unsuitable code, change architecture, add/remove/rename files, update build wiring and evidence, and perform all required verification. Acceptance requires Codex's corrected result and verified evidence. This steering does not release any new implementation scope by itself.\n"
+    },
+    {
+      "id": "CG-20261116T132445089663Z-GEMINI-cfc50b",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-U4-A",
+      "reply_to": "CG-20261116T125245476402Z-CODEX-429144",
+      "base_commit": "672d5728",
+      "timestamp_utc": "2026-11-16T13:24:45.089663+00:00",
+      "body": "DELIVERY: M15-U4-A (M15-U4-03.1 and M15-U4-03.2) implemented and self-verified.\n\nScope:\n- M15-U4-03.1: Move GTAO into the pre-lighting dataflow contract (Axle::OcclusionContract::DataflowMode::PreLightingSeparated). Ambient occlusion modulates strictly indirect/ambient lighting (L_ambient * ao), while direct diffuse, specular highlights, and emissive terms remain strictly invariant. Preserves U4-01 (ScreenNormal RGBA16_FLOAT target generation) and U4-02.1/U4-02.2 (no whole-scene multiplication, 0.35 soft floor, 0.25 ambient / 0.20 contact weights, and fallback composite passes).\n- M15-U4-03.2: Formal architectural decision documented that a separate physical indirect render target is NOT required for forward shading under pre-lighting dataflow. In forward shading, lighting terms are evaluated directly in pixel shader registers, scaling ambient radiance in-place (saving ~16.6 MB VRAM at 1080p and ~29.5 MB at 1440p in RGBA16_FLOAT, and eliminating MRT bandwidth and extra composite blits). Auxiliary target allocation via RHIViewTargetDesc::EnableScreenStorage is available if decoupled inspection is needed.\n\nVerification evidence:\n- python scripts/check_architecture.py: PASS (611 files, 25 CMake files).\n- git diff --check: Exit 0.\n- Debug build: AxleRenderUnitTests exit 0.\n- Debug focused unit test: AxleRenderUnitTests.exe --m15-occlusion-contract (exit 0).\n- Debug full suite: AxleRenderUnitTests.exe (exit 0).\n- Release build: AxleRenderUnitTests, AxleEnvironmentRenderingTests exit 0.\n- Release focused unit test: AxleRenderUnitTests.exe --m15-occlusion-contract (exit 0).\n- Release full suite: AxleRenderUnitTests.exe (exit 0).\n- Release native GPU test (D3D12): AxleEnvironmentRenderingTests.exe dx12 build/Tests/EnvironmentRendering/U4-DX12 (exit 0, parity diff=(0,0,0)).\n- Release native GPU test (Vulkan): AxleEnvironmentRenderingTests.exe vulkan build/Tests/EnvironmentRendering/U4-Vulkan (exit 0, parity diff=(0,0,0)).\n\nReview report: docs/reviews/M15_U4_BATCH_1_REVIEW.md.\nPLAN.md updated: M15-U4-03.1 and M15-U4-03.2 marked [x]. Editor visual gate for U4-03.1 remains user-provided.\nDelivered for independent Codex review and acceptance.\n"
     }
   ],
   "deferred_tasks": [

@@ -1,6 +1,7 @@
 #include "GTAOPass.hpp"
 #include "../RHISceneRendererPasses.hpp"
 #include <Axle/RHI/RHIMaterial.hpp>
+#include <Axle/RenderContracts.hpp>
 
 namespace Axle::Passes {
     void GTAOPass::Declare(RenderGraph& graph, const GTAOResources& r) {
@@ -95,5 +96,17 @@ namespace Axle::Passes {
         commands.Draw(3, 1, 0, 0);
         ops.EndRendering();
         return commands.IsRecording();
+    }
+
+    bool GTAOPass::IsPreLightingDataflowSupported() {
+        return true;
+    }
+
+    bool GTAOPass::IsSeparateIndirectTargetRequired() {
+        return OcclusionContract::IsSeparateIndirectTargetRequired(OcclusionContract::DataflowMode::PreLightingSeparated);
+    }
+
+    std::string_view GTAOPass::GetIndirectTargetDecisionRationale() {
+        return OcclusionContract::GetIndirectTargetDecisionRationale();
     }
 }

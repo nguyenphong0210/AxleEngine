@@ -31,6 +31,7 @@
 #include <sstream>
 #include <algorithm>
 #include <array>
+#include <bit>
 
 namespace Axle {
 
@@ -614,6 +615,7 @@ namespace Axle {
         m_CaptureRenderSucceeded = false;
         m_CaptureSession = {};
         m_DynamicProbeCaptures.clear();
+        m_DynamicCaptureTextures.clear();
         m_FailedDynamicCaptureRevisions.clear();
         m_LastDynamicCaptureResult = {};
         if (m_CaptureTargets) {
@@ -950,14 +952,17 @@ namespace Axle {
 
     std::shared_ptr<RHITexture> RHISceneRenderer::ActiveIrradiance() const {
         auto ready=m_Environment.Ready();auto texture=ready?ready->Irradiance:(m_PreparedManualIBL?m_IrradianceMap:nullptr);
+        if (texture && IsCaptureFeedbackTexture(*texture)) texture.reset();
         return texture&&texture->IsValid()?texture:RHIMaterial::GetDefaultIrradianceCubemap();
     }
     std::shared_ptr<RHITexture> RHISceneRenderer::ActivePrefilter() const {
         auto ready=m_Environment.Ready();auto texture=ready?ready->Prefilter:(m_PreparedManualIBL?m_PrefilterMap:nullptr);
+        if (texture && IsCaptureFeedbackTexture(*texture)) texture.reset();
         return texture&&texture->IsValid()?texture:RHIMaterial::GetDefaultPrefilterCubemap();
     }
     std::shared_ptr<RHITexture> RHISceneRenderer::ActiveBRDF() const {
         auto ready=m_Environment.Ready();auto texture=ready?ready->BRDF:(m_PreparedManualIBL?m_BRDFLUT:nullptr);
+        if (texture && IsCaptureFeedbackTexture(*texture)) texture.reset();
         return texture&&texture->IsValid()?texture:RHIMaterial::GetDefaultBRDFLUT();
     }
 
@@ -2683,13 +2688,98 @@ namespace Axle {
         return {m_HasActiveReflectionProbe ? m_ActiveReflectionProbePrefilter->GetHandle() : RHIResourceHandle{}, environment->Diagnostic()};
     }
 
+    bool RHISceneRenderer::IsCaptureFeedbackTexture(const RHITexture& texture) const {
+        if (!m_CaptureSession.Active) return false;
+        if (m_CaptureSession.CandidateCubemap && m_CaptureSession.CandidateCubemap->GetNative() == texture.GetNative()) return true;
+        for (const auto& handle : m_DynamicCaptureTextures)
+            if (handle == texture.GetHandle()) return true;
+        return false;
+    }
+
+    uint64_t RHISceneRenderer::ComputeDynamicCaptureStamp(const RenderWorld& world,
+            const RenderReflectionProbe& probe, const SceneRenderSettings& settings) const {
+        uint64_t hash = 1469598103934665603ull;
+        const auto mix = [&](const auto&... values) {
+            const auto one = [&](const auto& value) {
+                const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
+                for (size_t i = 0; i < sizeof(value); ++i) { hash ^= bytes[i]; hash *= 1099511628211ull; }
+            };
+            (one(values), ...);
+        };
+        const auto text = [&](const std::string& value) {
+            mix(value.size()); for (char c : value) mix(c);
+        };
+        const auto file = [&](const std::string& path) {
+            text(path);
+            if (path.empty()) return;
+            std::error_code error;
+            const auto time = std::filesystem::last_write_time(FileSystem::ResolveAssetPath(PathFromUtf8(path)), error);
+            mix(error.value()); if (!error) mix(time.time_since_epoch().count());
+        };
+        mix(world.SceneRevision, probe.EntityID, probe.Position, probe.CaptureResolution,
+            probe.CaptureNearPlane, probe.CaptureFarPlane, probe.CaptureShadows);
+        mix(m_UseIBL, m_IBLAllowed);
+        for (const auto& texture : {m_IrradianceMap, m_PrefilterMap, m_BRDFLUT}) {
+            const auto handle = texture ? texture->GetHandle() : RHIResourceHandle{};
+            mix(handle.Epoch, handle.Slot, handle.Generation);
+        }
+        mix(settings.EnableShadows, settings.EnableSkybox, settings.LocalShadowResolution,
+            settings.MaxShadowedPointLights, settings.MaxShadowedSpotLights, settings.LocalShadowDistance,
+            settings.ShadowCascadeCount, settings.EnableStudioLightLobes);
+        const auto directional = [&](const RenderDirectionalLight& light) {
+            mix(light.Direction, light.Color, light.Intensity, light.AmbientIntensity, light.SolarAngularRadius,
+                light.CastsShadows, light.ShadowQuality, light.ShadowBias, light.ShadowSlopeBias,
+                light.ShadowNormalBias, light.ShadowFilterRadius, light.MaxShadowDistance, light.CascadeSplitLambda);
+        };
+        mix(world.DirectionalLight.has_value());
+        if (world.DirectionalLight) directional(*world.DirectionalLight);
+        mix(world.AdditionalDirectionalLights.size());
+        for (const auto& light : world.AdditionalDirectionalLights) directional(light);
+        const auto shadow = [&](const LocalShadowSettings& s) { mix(s.CastShadows, s.Bias, s.SlopeBias, s.NormalBias, s.FilterRadius, s.NearPlane); };
+        mix(world.PointLights.size(), world.SpotLights.size(), world.RectLights.size());
+        for (const auto& light : world.PointLights) { mix(light.EntityID, light.Position, light.Color, light.Intensity, light.Radius, light.Falloff); shadow(light.Shadows); }
+        for (const auto& light : world.SpotLights) { mix(light.EntityID, light.Position, light.Direction, light.Color, light.Intensity, light.Range, light.InnerAngle, light.OuterAngle); shadow(light.Shadows); }
+        for (const auto& light : world.RectLights) mix(light.EntityID, light.Position, light.Direction, light.Up, light.Color, light.Intensity, light.Width, light.Height, light.Range, light.TwoSided);
+        const auto& sky = world.Skybox;
+        mix(sky.Authored, sky.Enabled, sky.EnvironmentLighting, sky.SyncWithSun, sky.CustomAzimuth, sky.CustomElevation,
+            sky.HemisphereAmbient, sky.SunSize, sky.SunGlow, sky.Turbidity, sky.Type, sky.SunDirection, sky.SunColor,
+            sky.ZenithColor, sky.HorizonColor, sky.GroundColor, sky.Intensity, sky.Exposure, sky.EnvironmentRotation);
+        file(sky.HDRPath);
+        if (!sky.Authored) mix(m_SkyboxParams.Enabled, m_SkyboxParams.Type, m_SkyboxParams.Intensity, m_SkyboxParams.Exposure,
+            m_SkyboxParams.ZenithColor, m_SkyboxParams.HorizonColor, m_SkyboxParams.GroundColor, m_SkyboxParams.SunSize,
+            m_SkyboxParams.SunGlow, m_SkyboxParams.Turbidity, m_SkyboxParams.EnvironmentRotation);
+        mix(world.Meshes.size());
+        for (const auto& mesh : world.Meshes) {
+            const auto surface = MaterialResolver::Resolve(mesh.Material);
+            mix(mesh.EntityID, mesh.WorldTransform, mesh.CastsShadows, surface.Generation, mesh.MeshSourceUUID);
+            text(mesh.MeshURI);
+            for (const auto& binding : surface.Textures) file(binding.Path);
+            const auto view = mesh.NativeView ? mesh.NativeView : mesh.NativeMesh ? mesh.NativeMesh->CaptureView() : nullptr;
+            const auto handle = view ? view->GetVertexHandle() : RHIResourceHandle{};
+            mix(handle.Epoch, handle.Slot, handle.Generation);
+            const auto indices = view ? view->GetIndexHandle() : RHIResourceHandle{};
+            mix(indices.Epoch, indices.Slot, indices.Generation);
+            mix(mesh.Material.UseCustomShader); file(mesh.Material.CustomShaderPath);
+            if (mesh.Material.UseCustomShader && !mesh.Material.CustomShaderPath.empty()) {
+                CustomProgramKey key;
+                key.ShaderPath = PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(mesh.Material.CustomShaderPath)).lexically_normal());
+                key.Backend = m_Device ? m_Device->GetBackend() : RHIType::None;
+                text(m_CustomProgramCache.ComputeFingerprint(key));
+            }
+            for (const auto& property : mesh.Material.CustomProperties) {
+                text(property.Desc.Name); mix(property.FloatVal, property.Vec4Val, property.IntVal, property.BoolVal); file(property.TexturePath);
+            }
+        }
+        return hash ? hash : 1;
+    }
+
     std::string RHISceneRenderer::ResolveDynamicProbeKey(const RenderReflectionProbe& probe) {
         if (probe.EntityID != 0) {
             return "dynamic:entity:" + std::to_string(probe.EntityID);
         }
-        const long long px = static_cast<long long>(std::llround(double(probe.Position.x) * 1000.0));
-        const long long py = static_cast<long long>(std::llround(double(probe.Position.y) * 1000.0));
-        const long long pz = static_cast<long long>(std::llround(double(probe.Position.z) * 1000.0));
+        const auto px = std::bit_cast<uint32_t>(probe.Position.x);
+        const auto py = std::bit_cast<uint32_t>(probe.Position.y);
+        const auto pz = std::bit_cast<uint32_t>(probe.Position.z);
         return "dynamic:anon:" + std::to_string(px) + ":" + std::to_string(py) + ":" + std::to_string(pz);
     }
 
@@ -2724,7 +2814,16 @@ namespace Axle {
         const RenderReflectionProbe& probe,
         const SceneRenderSettings& settings,
         const ReflectionCaptureContract::ReflectionCapturePolicy* policyOverride) {
+        // Reentrant rejection must not clear or wait on the outer session.
+        if (m_CaptureInProgress) {
+            DynamicReflectionCaptureResult rejected;
+            rejected.Diagnostic = "DYNAMIC_PROBE_RECURSION: nested reflection capture is forbidden";
+            return rejected;
+        }
+        m_CaptureInProgress = true;
+        struct CaptureGuard { bool& Active; ~CaptureGuard() { Active = false; } } captureGuard{m_CaptureInProgress};
         const std::string probeKey = ResolveDynamicProbeKey(probe);
+        const uint64_t inputStamp = ComputeDynamicCaptureStamp(world, probe, settings);
         const auto prevIt = m_DynamicProbeCaptures.find(probeKey);
         const bool hasPrevious = (prevIt != m_DynamicProbeCaptures.end() &&
                                   prevIt->second &&
@@ -2735,10 +2834,13 @@ namespace Axle {
         auto waitCompletion = [&](RHICompletionToken& token) {
             if (token) {
                 if (m_Device && token.Epoch == m_Device->GetEpoch()) {
-                    m_Device->WaitForCompletion(token);
+                    if (!m_Device->WaitForCompletion(token)) return false;
+                } else {
+                    return false;
                 }
                 token = {};
             }
+            return true;
         };
 
         auto failCapture = [&](std::string diagnostic, uint32_t capturedFaces = 0) -> DynamicReflectionCaptureResult {
@@ -2751,15 +2853,15 @@ namespace Axle {
             m_LastDynamicCaptureResult.PreservedPreviousGeneration = hasPrevious;
             m_LastDynamicCaptureResult.ProbeKey = probeKey;
             m_LastDynamicCaptureResult.Diagnostic = std::move(diagnostic);
-            m_FailedDynamicCaptureRevisions[probeKey] = world.SceneRevision;
+            if (!policyOverride && m_LastDynamicCaptureResult.Diagnostic.starts_with("DYNAMIC_PROBE_SETTINGS:"))
+                m_FailedDynamicCaptureRevisions[probeKey] = inputStamp;
+            else
+                m_FailedDynamicCaptureRevisions.erase(probeKey);
             return m_LastDynamicCaptureResult;
         };
 
         if (!m_Initialized || !m_Device || !m_Device->CanSubmit() || !m_Device->CanCreateResources()) {
             return failCapture("DYNAMIC_PROBE_DEVICE: native render owner is unavailable");
-        }
-        if (m_CaptureSession.Active) {
-            return failCapture("DYNAMIC_PROBE_RECURSION: nested reflection capture is forbidden");
         }
         if (!world.ErrorMessage.empty()) {
             return failCapture("DYNAMIC_PROBE_WORLD_INVALID: " + world.ErrorMessage);
@@ -2814,8 +2916,8 @@ namespace Axle {
 
         // Synchronize shared host-upload buffers and scratch targets before reconfiguration.
         RHICompletionToken pendingMainCompletion = m_LastCompletion;
-        waitCompletion(pendingMainCompletion);
-        waitCompletion(m_CaptureLastCompletion);
+        if (!waitCompletion(pendingMainCompletion) || !waitCompletion(m_CaptureLastCompletion))
+            return failCapture("DYNAMIC_PROBE_COMPLETION: prior work did not complete");
 
         if (!m_CaptureTargets || !m_CaptureTargets->Configure(policy.Resolution)) {
             return failCapture("DYNAMIC_PROBE_ALLOCATION: scratch face target allocation failed");
@@ -2835,7 +2937,10 @@ namespace Axle {
             ReflectionCaptureContract::SanitizeCaptureSettings(settings, policy));
         const RenderWorld filteredWorld = ReflectionCaptureContract::FilterCaptureWorld(world, policy);
 
-        // Save mutable main-view state so reflection capture has zero side effects on caller state.
+        // Preserve observable main-view and environment state. Shared GPU draw,
+        // light and shadow scratch is prepared again by the next main frame.
+        auto savedEnvironment = m_Environment;
+        const bool savedPreparedManualIBL = m_PreparedManualIBL;
         const nri::Format savedColorFormat = m_CurrentColorFormat;
         const nri::Format savedDepthFormat = m_CurrentDepthFormat;
         const uint8_t savedMSAASamples = m_CurrentMSAASamples;
@@ -2871,6 +2976,9 @@ namespace Axle {
             *this,
             [&]() {
                 m_CaptureSession = {};
+                m_Environment = std::move(savedEnvironment);
+                m_PreparedManualIBL = savedPreparedManualIBL;
+                m_BoundIBL = {}; // Descriptor inputs were changed by capture preparation.
                 m_CurrentColorFormat = savedColorFormat;
                 m_CurrentDepthFormat = savedDepthFormat;
                 m_CurrentMSAASamples = savedMSAASamples;
@@ -2902,7 +3010,8 @@ namespace Axle {
 
         for (uint32_t face = 0; face < ReflectionCaptureContract::FaceCount; ++face) {
             if (face > 0) {
-                waitCompletion(m_CaptureLastCompletion);
+                if (!waitCompletion(m_CaptureLastCompletion))
+                    return failCapture("DYNAMIC_PROBE_COMPLETION: prior face did not complete", face);
             }
 
             m_CurrentColorFormat = nri::Format::RGBA16_SFLOAT;
@@ -2947,11 +3056,14 @@ namespace Axle {
         published->EntityID = probe.EntityID;
         published->GenerationID = m_NextDynamicCaptureGenerationID++;
         published->SceneRevision = world.SceneRevision;
+        published->InputStamp = policyOverride ? 0 : inputStamp;
         published->Resolution = policy.Resolution;
         published->Position = probe.Position;
         published->Cubemap = candidateCubemap;
         published->Completion = m_CaptureLastCompletion;
         m_DynamicProbeCaptures[probeKey] = published;
+        std::erase_if(m_DynamicCaptureTextures, [&](const auto& handle) { return !m_Device->GetResources().Acquire(handle).IsLive(); });
+        m_DynamicCaptureTextures.push_back(candidateCubemap->GetHandle());
 
         m_LastDynamicCaptureResult = {};
         m_LastDynamicCaptureResult.Success = true;
@@ -3179,13 +3291,14 @@ namespace Axle {
                 const auto& selectedProbe = *previewReflection.SelectedProbe;
                 const std::string probeKey = ResolveDynamicProbeKey(selectedProbe);
                 const auto existing = GetDynamicReflectionProbe(probeKey);
+                const auto inputStamp = ComputeDynamicCaptureStamp(world, selectedProbe, requestedSettings);
                 const bool matchesExisting = existing && existing->Cubemap && existing->Cubemap->IsValid() &&
-                    existing->SceneRevision == world.SceneRevision &&
+                    existing->InputStamp == inputStamp &&
                     existing->Resolution == selectedProbe.CaptureResolution &&
                     glm::length(existing->Position - selectedProbe.Position) <= 1e-4f;
                 const auto failedIt = m_FailedDynamicCaptureRevisions.find(probeKey);
                 const bool alreadyFailedRevision = (failedIt != m_FailedDynamicCaptureRevisions.end() &&
-                                                    failedIt->second == world.SceneRevision);
+                                                    failedIt->second == inputStamp);
                 if (!matchesExisting && !alreadyFailedRevision) {
                     CaptureDynamicReflectionProbe(world, selectedProbe, requestedSettings);
                     if (m_CaptureLastCompletion) {

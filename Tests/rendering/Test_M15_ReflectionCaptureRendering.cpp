@@ -251,8 +251,14 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         const RHICompletionToken mainCompletionBefore = renderer.GetLastCompletion();
 
         // Execute dynamic six-face capture with noisy settings (must isolate all post/SSR/TAA/debug/self/transparent)
+        RenderSkyboxData preparedSky;
+        preparedSky.Authored = preparedSky.Enabled = preparedSky.EnvironmentLighting = true;
+        preparedSky.Type = 1; preparedSky.HDRPath = "red.hdr";
+        RENDER_CHECK(renderer.GetEnvironment().Prepare(preparedSky) && renderer.GetEnvironment().Ready(), "prepare main HDR environment sentinel");
+        const auto environmentBeforeCapture = renderer.GetEnvironment().Ready();
         const DynamicReflectionCaptureResult captureResInfo =
             renderer.CaptureDynamicReflectionProbe(world, probe, noisySettings);
+        RENDER_CHECK(renderer.GetEnvironment().Ready() == environmentBeforeCapture, "capture preserves main environment publication");
         RENDER_CHECK(captureResInfo.Success && captureResInfo.CapturedFaces == 6 &&
                      captureResInfo.PublishedGenerationID > 0,
             "U5-B dynamic capture publishes candidate after all 6 faces");
@@ -340,18 +346,15 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         // 2. M15-U5-14: Mirror reflection fallback samples published dynamic cubemap
         // ---------------------------------------------------------------------
         RenderWorld mirrorWorld = world;
-        mirrorWorld.Meshes.clear();
-        // Mirror sphere at origin (EntityID 888 != probe.EntityID 777) looking from (-3, 0, 0) toward +X!
-        // Note: wait — at (0,0,0) looking from (-3,0,0) toward (0,0,0), center reflection ray bounces along (-1,0,0) -> -X Green wall!
-        // Looking from (+3,0,0) toward (0,0,0) reflects right back toward (+1,0,0) -> +X Red HDR wall!
-        // Even better: keep mirror sphere at origin inside the probe, camera at (+3.5, 0, 0) looking at (0, 0, 0),
-        // with SSR ON and dynamic probe active -> center mirror pixel reflects +X Red wall!
+        std::erase_if(mirrorWorld.Meshes, [](const auto& mesh) { return mesh.EntityID < 10 || mesh.EntityID > 15; });
+        // The mirror carries the probe entity identity so capture excludes it.
+        // Real emissive walls stay in the world; no stale capture is substituted.
         RHIMaterialDesc mirrorDesc{};
         mirrorDesc.CullMode = CullMode::None;
         mirrorDesc.BaseColor = glm::vec4(0.95f, 0.95f, 0.95f, 1.0f);
         mirrorDesc.Metallic = 1.0f;
         mirrorDesc.Roughness = 0.05f;
-        mirrorWorld.Meshes.push_back(MakeBoxInstance(888, sphereView, std::make_shared<RHIMaterial>(mirrorDesc), {0, 0, 0}, {1.0f, 1.0f, 1.0f}));
+        mirrorWorld.Meshes.push_back(MakeBoxInstance(probe.EntityID, sphereView, std::make_shared<RHIMaterial>(mirrorDesc), {0, 0, 0}, {1.0f, 1.0f, 1.0f}));
         mirrorWorld.ReflectionProbes = {probe};
 
         PerspectiveCamera mirrorCam(55.0f, 1.0f, 0.1f, 100.0f);
@@ -467,7 +470,20 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         greenWorld.Skybox.Enabled = false;
         greenWorld.Meshes.push_back(MakeBoxInstance(201, cubeView, MakeEmissiveMaterial({0.0f, 1.0f, 0.0f}, 2.0f), {4.0f, 0.0f, 0.0f}, {0.5f, 8.0f, 8.0f}));
 
-        const auto greenRes = renderer.CaptureDynamicReflectionProbe(greenWorld, txnProbe);
+        bool nestedRejected = true, allocationAttempted = false, faceAttempted = false;
+        DynamicReflectionCaptureResult greenRes;
+        {
+            ScopedRHIFault reentry([&](std::string_view op) -> std::optional<nri::Result> {
+                if ((op == "CreateTexture" && !allocationAttempted) || (op == "BeginCommandBuffer" && !faceAttempted)) {
+                    if (op == "CreateTexture") allocationAttempted = true; else faceAttempted = true;
+                    const auto nested = renderer.CaptureDynamicReflectionProbe(greenWorld, txnProbe);
+                    nestedRejected &= !nested.Success && nested.Diagnostic.find("RECURSION") != std::string::npos;
+                }
+                return {};
+            });
+            greenRes = renderer.CaptureDynamicReflectionProbe(greenWorld, txnProbe);
+        }
+        RENDER_CHECK(nestedRejected && allocationAttempted && faceAttempted, "nested capture during allocation and recording preserves the outer session");
         RENDER_CHECK(greenRes.Success && greenRes.CapturedFaces == 6, "U5-15 initial valid green generation");
         auto greenGen = renderer.GetDynamicReflectionProbe(txnProbe);
         RENDER_CHECK(greenGen && device.WaitForCompletion(greenGen->Completion), "U5-15 green wait");
@@ -537,8 +553,92 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         const glm::vec3 recoveredCenter = AverageRegion(recoveredFace0, 32, 14, 14, 18, 18);
         RENDER_CHECK(recoveredCenter.b > 1.0f && recoveredCenter.g < 0.2f,
             "M15-U5-15: recovered generation contains new blue scene radiance");
+
+        // Even a superseded cubemap retained by a caller must not feed back
+        // into later captures through the manual IBL input path.
+        const auto savedIrr = renderer.GetIrradianceMap(), savedPref = renderer.GetPrefilterMap(), savedLut = renderer.GetBRDFLUT();
+        RenderWorld feedbackWorld;
+        feedbackWorld.Skybox.Authored = feedbackWorld.Skybox.Enabled = feedbackWorld.Skybox.EnvironmentLighting = true;
+        feedbackWorld.Skybox.Type = 1;
+        feedbackWorld.DirectionalLight = RenderDirectionalLight{};
+        feedbackWorld.DirectionalLight->Intensity = 0; feedbackWorld.DirectionalLight->AmbientIntensity = 1;
+        auto receiver = std::make_shared<RHIMaterial>();
+        feedbackWorld.Meshes.push_back(MakeBoxInstance(1410, cubeView, receiver, {-4,0,0}, {.5f,8,8}));
+        RenderReflectionProbe feedbackProbe;
+        feedbackProbe.EntityID = 1401; feedbackProbe.CaptureResolution = 32; feedbackProbe.CaptureShadows = false;
+        const std::weak_ptr<RHITexture> originalWrapper = greenGen->Cubemap;
+        auto retainedAlias = std::make_shared<RHITexture>(greenGen->Cubemap->RetainGeneration());
+        greenGen.reset(); retainedGen.reset();
+        RENDER_CHECK(originalWrapper.expired(), "feedback alias outlives the original publication wrapper");
+        renderer.SetIBLMaps(retainedAlias, retainedAlias, RHIMaterial::GetDefaultBRDFLUT());
+        RENDER_CHECK(renderer.CaptureDynamicReflectionProbe(feedbackWorld, feedbackProbe).Success, "capture suppresses superseded manual IBL feedback");
+        const auto blocked = renderer.GetDynamicReflectionProbe(feedbackProbe);
+        std::vector<glm::vec4> blockedPixels, neutralPixels;
+        RENDER_CHECK(ReadCubeFaceRGBA16(*blocked->Cubemap, 1, blockedPixels), "read feedback suppression capture");
+        renderer.SetIBLMaps(RHIMaterial::GetDefaultIrradianceCubemap(), RHIMaterial::GetDefaultPrefilterCubemap(), RHIMaterial::GetDefaultBRDFLUT());
+        feedbackProbe.EntityID = 1402;
+        RENDER_CHECK(renderer.CaptureDynamicReflectionProbe(feedbackWorld, feedbackProbe).Success, "neutral manual IBL reference capture");
+        RENDER_CHECK(ReadCubeFaceRGBA16(*renderer.GetDynamicReflectionProbe(feedbackProbe)->Cubemap, 1, neutralPixels), "read neutral feedback oracle");
+        const auto reference = AverageRegion(neutralPixels,32,14,14,18,18);
+        RENDER_CHECK(reference.r > .1f && glm::distance(reference, AverageRegion(blockedPixels,32,14,14,18,18)) < .003f,
+            "published-cubemap IBL feedback matches nonzero neutral reference");
+        renderer.SetIBLMaps(savedIrr, savedPref, savedLut);
     }
 
+    // Automatic capture invalidation must observe settings/material edits even
+    // when the scene's transform revision has not changed.
+    {
+        RenderWorld world;
+        world.SceneRevision = 450;
+        auto material = MakeEmissiveMaterial({1,0,0}, 2);
+        world.Meshes.push_back(MakeBoxInstance(1301, cubeView, material, {4,0,0}, {.5f,8,8}));
+        RenderReflectionProbe probe;
+        probe.EntityID = 1300; probe.DynamicCapture = true; probe.CaptureResolution = 32;
+        probe.BoxExtents = glm::vec3(100); probe.CaptureShadows = false;
+        world.ReflectionProbes.push_back(probe);
+        RHITexture color, depth;
+        RENDER_CHECK(color.Init(RHITextureDesc::RenderTarget2D(32,32)) && depth.Init(RHITextureDesc::DepthStencil2D(32,32)), "automatic capture targets");
+        PerspectiveCamera camera(55,1,.1f,100);
+        camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0,0,3), glm::vec3(0), glm::vec3(0,1,0)), {0,0,3});
+        SceneRenderSettings settings; settings.EnableParticles = settings.EnableShadows = settings.EnableSkybox = false;
+        auto render = [&] {
+            renderer.RenderWorldView(world, camera, &color, &depth, settings);
+            return renderer.WasLastRenderSuccessful();
+        };
+        RENDER_CHECK(render(), "initial automatic capture");
+        auto generation = renderer.GetDynamicReflectionProbe(probe);
+        RENDER_CHECK(generation && render() && renderer.GetDynamicReflectionProbe(probe)->GenerationID == generation->GenerationID, "unchanged request reuses capture");
+        material->GetDesc().EmissiveColor = {0,1,0};
+        RENDER_CHECK(render() && renderer.GetDynamicReflectionProbe(probe)->GenerationID > generation->GenerationID, "material edit recaptures at unchanged transform revision");
+        generation = renderer.GetDynamicReflectionProbe(probe);
+        std::vector<glm::vec4> pixels;
+        RENDER_CHECK(ReadCubeFaceRGBA16(*generation->Cubemap,0,pixels) && AverageRegion(pixels,32,14,14,18,18).g > 1, "automatic replacement contains new material radiance");
+        world.ReflectionProbes[0].CaptureFarPlane = 2;
+        RENDER_CHECK(render() && renderer.GetDynamicReflectionProbe(probe)->GenerationID > generation->GenerationID, "clip edit triggers automatic capture");
+        generation = renderer.GetDynamicReflectionProbe(probe);
+        RENDER_CHECK(ReadCubeFaceRGBA16(*generation->Cubemap,0,pixels) && AverageRegion(pixels,32,14,14,18,18).g < .1f, "short far plane removes distant wall");
+        world.ReflectionProbes[0].CaptureResolution = 127;
+        RENDER_CHECK(render() && renderer.GetDynamicReflectionProbe(probe)->GenerationID == generation->GenerationID, "invalid automatic request retains last-good");
+        world.ReflectionProbes[0].CaptureResolution = 32;
+        world.ReflectionProbes[0].CaptureFarPlane = 50;
+        RENDER_CHECK(render() && renderer.GetDynamicReflectionProbe(probe)->GenerationID > generation->GenerationID, "corrected settings retry at unchanged revision");
+        generation = renderer.GetDynamicReflectionProbe(probe);
+        world.ReflectionProbes[0].CaptureNearPlane = .12f;
+        world.ReflectionProbes[0].CaptureShadows = true;
+        settings.EnableShadows = true;
+        RENDER_CHECK(render() && renderer.GetDynamicReflectionProbe(probe)->GenerationID > generation->GenerationID, "near plane and shadow policy invalidate the capture request");
+        generation = renderer.GetDynamicReflectionProbe(probe);
+        material->GetDesc().EmissiveColor = {0,0,1};
+        bool transientFault = false;
+        {
+            ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
+                if (op == "BeginCommandBuffer" && !transientFault) { transientFault = true; return nri::Result::OUT_OF_MEMORY; }
+                return {};
+            });
+            RENDER_CHECK(render() && transientFault && renderer.GetDynamicReflectionProbe(probe)->GenerationID == generation->GenerationID, "automatic transient failure keeps last-good capture");
+        }
+        RENDER_CHECK(render() && renderer.GetDynamicReflectionProbe(probe)->GenerationID > generation->GenerationID, "automatic capture retries transient failure without a revision change");
+    }
     renderer.ClearDynamicReflectionProbes();
     RENDER_CHECK(device.WaitIdle(), "U5-B wait idle at cleanup");
     RENDER_CHECK(Axle::RenderTests::GetRHIValidationErrorCount() == 0, "U5-B zero RHI validation errors");

@@ -7,6 +7,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/SceneExtraction.hpp>
+#include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -35,6 +36,15 @@ namespace {
 }
 
 bool RunM15ReflectionCaptureContractUnitTests() {
+    RenderReflectionProbe anonymous;
+    anonymous.Position.x = .0001f;
+    const auto firstKey = RHISceneRenderer::ResolveDynamicProbeKey(anonymous);
+    anonymous.Position.x = .0002f;
+    RENDER_CHECK(firstKey != RHISceneRenderer::ResolveDynamicProbeKey(anonymous), "anonymous probe keys preserve exact finite coordinates");
+    anonymous.Position.x = std::numeric_limits<float>::infinity();
+    RENDER_CHECK(!RHISceneRenderer::ResolveDynamicProbeKey(anonymous).empty(), "invalid anonymous coordinates do not enter integer conversion");
+    RENDER_CHECK(BuildCubeFaceCamera({},0,.1f,.105f).GetFarClip() == .105f,
+        "valid close clip planes are preserved without silent widening");
     std::cout << "[M15ReflectionCapture] Running Milestone 15 Unit 5 Batch B (Dynamic Reflection Capture) Contract Tests...\n";
 
     // 1. M15-U5-08.1 / 08.2: Target allocation & policy contract

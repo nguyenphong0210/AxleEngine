@@ -195,6 +195,7 @@ namespace Axle {
         uint64_t EntityID = 0;
         uint64_t GenerationID = 0;
         uint64_t SceneRevision = 0;
+        uint64_t InputStamp = 0;
         uint32_t Resolution = 0;
         glm::vec3 Position{ 0.0f };
         std::shared_ptr<RHI::RHITexture> Cubemap;
@@ -486,6 +487,9 @@ namespace Axle {
 
     private:
         bool CompileShaders(RHI::RHIDevice& device);
+        bool IsCaptureFeedbackTexture(const RHI::RHITexture& texture) const;
+        uint64_t ComputeDynamicCaptureStamp(const RenderWorld& world, const RenderReflectionProbe& probe,
+                                            const SceneRenderSettings& settings) const;
         struct FramePassInputs;
         bool RecordFramePasses(const FramePassInputs& inputs);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
@@ -716,6 +720,8 @@ namespace Axle {
         std::unordered_map<std::string, std::shared_ptr<DynamicReflectionProbeGeneration>> m_DynamicProbeCaptures;
         std::unordered_map<std::string, uint64_t> m_FailedDynamicCaptureRevisions;
         uint64_t m_NextDynamicCaptureGenerationID = 1;
+        bool m_CaptureInProgress = false;
+        std::vector<RHI::RHIResourceHandle> m_DynamicCaptureTextures;
         DynamicReflectionCaptureResult m_LastDynamicCaptureResult;
 
         // Volumetric Fog & Atmospheric Media Resources

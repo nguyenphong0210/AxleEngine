@@ -418,6 +418,10 @@ namespace Axle {
                                 texture=m_MaterialTextures.Get(request.ResolvedPath,request.Role==TextureRole::Color,&diagnostic);
                                 if (!diagnostic.empty()) { item.Surface.Fallback=true; item.Surface.Diagnostic=std::move(diagnostic); }
                             }
+                            if (texture && IsCaptureFeedbackTexture(*texture)) {
+                                texture = texture->GetDesc().IsCubeMap ? RHIMaterial::GetDefaultPrefilterCubemap() : RHIMaterial::GetDefaultBlackTexture();
+                                viewCtx.Diagnostics().AddFallback("capture_feedback_suppressed: dynamic cubemap material input");
+                            }
                             if (!texture) texture=request.Role==TextureRole::TangentNormal?RHIMaterial::GetDefaultFlatNormalTexture():RHIMaterial::GetDefaultWhiteTexture();
                             if (!texture || !texture->GetSRV()) return false;
                             resource.Textures.push_back(std::move(texture));
@@ -522,6 +526,7 @@ namespace Axle {
                             if (!diagnostic.empty()) { item.Surface.Fallback=true; item.Surface.Diagnostic=std::move(diagnostic); }
                         }
                     }
+                    if (texture && IsCaptureFeedbackTexture(*texture)) texture.reset();
                     if (!texture) {
                         materialData.Flags.x &= ~(1u << slot);
                         texture = RHIMaterial::GetFallbackTexture(static_cast<RHITextureSlot>(slot));

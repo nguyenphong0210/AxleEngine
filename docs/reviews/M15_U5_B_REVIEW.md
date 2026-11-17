@@ -95,3 +95,7 @@ All four native GPU configurations (`Debug-DX12`, `Debug-Vulkan`, `Release-DX12`
 
 - **Deferred Editor Visual Captures (`M15-U5-08.1`, `08.2`, `10.1`–`10.4`, `11.2`, `13.1`, `13.2`, `14`):** Remain open (`[ ]` in `PLAN.md`) until the consolidated interactive Editor visual pass following automated U5 completion.
 - **Codex Independent Review:** Pending review/acceptance of `U5-B`.
+
+## Independent Codex review supersedes self-verification
+
+Codex repaired whole-operation recursion isolation, automatic request invalidation/retry, valid clip-plane preservation, anonymous-key safety, retained-generation feedback suppression and main environment restoration. The mirror regression now captures the current world instead of depending on a stale cached scene. See [the independent findings, executed verification and acceptance limits](M15_U5_B_CODEX_REVIEW.md). Automated scope is accepted after corrections; interactive captures remain user-deferred. The original self-verification above is retained as reported historical evidence, including checks not independently reproduced in this environment.

@@ -1197,7 +1197,7 @@ namespace Axle {
             float farPlane) {
             const CubeFaceBasis basis = GetCubeFaceBasis(faceIndex < FaceCount ? faceIndex : 0u);
             const float safeNear = std::isfinite(nearPlane) ? std::max(nearPlane, MinNearPlane) : 0.1f;
-            const float safeFar = (std::isfinite(farPlane) && farPlane > safeNear + 0.01f) ? farPlane : (safeNear + 100.0f);
+            const float safeFar = (std::isfinite(farPlane) && farPlane > safeNear) ? farPlane : (safeNear + 100.0f);
             PerspectiveCamera cam(FaceFovDegrees, FaceAspectRatio, safeNear, safeFar);
             const glm::mat4 view = glm::lookAtRH(probePosition, probePosition + basis.Forward, basis.Up);
             cam.SetViewMatrix(view, probePosition);

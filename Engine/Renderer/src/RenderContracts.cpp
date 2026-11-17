@@ -772,6 +772,11 @@ namespace Axle {
 
         bool VerifyNormalMapOcclusionStability(const NormalMapSample& sample, const glm::mat4& viewMatrix,
                                                const glm::vec3& viewDir, const glm::vec3& lightDirView) {
+            for (int c = 0; c < 3; ++c)
+                if (!std::isfinite(viewDir[c]) || !std::isfinite(lightDirView[c])) return false;
+            if (glm::length(viewDir) < 1e-6f || glm::length(lightDirView) < 1e-6f) return false;
+            const auto V = glm::normalize(viewDir);
+            const auto L = glm::normalize(lightDirView);
             const glm::vec3 worldN = EvaluateTangentSpaceNormal(sample);
             for (int c = 0; c < 3; ++c) if (!std::isfinite(worldN[c])) return false;
 
@@ -784,20 +789,21 @@ namespace Axle {
             // Check grazing angle / backfacing normal perturbation:
             // When normal map perturbs normal away from view (NdotV <= 0),
             // GTAO contract falls back to neutral ao = 1.0 to prevent black faceting.
-            const float NdotV = glm::dot(normViewN, viewDir);
+            const float NdotV = glm::dot(normViewN, V);
             if (NdotV > 0.0f) {
-                const glm::vec3 orthoAxis = glm::normalize(glm::cross(viewDir, glm::vec3(0, 1, 0)));
+                const auto axis = std::abs(V.y) < .9f ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
+                const glm::vec3 orthoAxis = glm::normalize(glm::cross(V, axis));
                 const glm::vec3 projN = normViewN - orthoAxis * glm::dot(normViewN, orthoAxis);
                 const float projLen = glm::length(projN);
                 if (projLen >= 1e-4f) {
-                    const float gamma = std::atan2(glm::dot(projN / projLen, glm::cross(orthoAxis, viewDir)),
-                                                   std::max(glm::dot(projN / projLen, viewDir), 1e-6f));
+                    const float gamma = std::atan2(glm::dot(projN / projLen, glm::cross(orthoAxis, V)),
+                                                   std::max(glm::dot(projN / projLen, V), 1e-6f));
                     if (!std::isfinite(gamma)) return false;
                 }
             }
 
             // Contact shadow ray launch validity:
-            const float NdotL = glm::dot(normViewN, lightDirView);
+            const float NdotL = glm::dot(normViewN, L);
             const float bias = 0.01f;
             const glm::vec3 rayOffset = normViewN * (bias * 2.0f);
             for (int c = 0; c < 3; ++c) if (!std::isfinite(rayOffset[c])) return false;
@@ -845,6 +851,12 @@ namespace Axle {
 
         bool VerifyDeformedMeshOcclusionStability(const DeformedVertexSample& sample, float backgroundDepth,
                                                  const glm::mat4& viewMatrix, const glm::mat4& projMatrix) {
+            if (!std::isfinite(backgroundDepth) || backgroundDepth <= 0) return false;
+            for (int c = 0; c < 4; ++c) for (int r = 0; r < 4; ++r)
+                if (!std::isfinite(projMatrix[c][r]) || !std::isfinite(viewMatrix[c][r]) ||
+                    !std::isfinite(sample.DeformationTransform[c][r])) return false;
+            const float determinant = glm::determinant(projMatrix);
+            if (!std::isfinite(determinant) || std::abs(determinant) < 1e-8f) return false;
             glm::vec3 P{0.0f}, N{0.0f};
             glm::vec4 T{0.0f};
             EvaluateDeformedVertex(sample, P, N, T);
@@ -852,11 +864,19 @@ namespace Axle {
             for (int c = 0; c < 3; ++c) {
                 if (!std::isfinite(P[c]) || !std::isfinite(N[c]) || !std::isfinite(T[c])) return false;
             }
+            if (!std::isfinite(T.w)) return false;
             if (std::abs(glm::dot(N, glm::vec3(T))) > 1e-3f) return false;
 
             const glm::vec3 Pview = glm::vec3(viewMatrix * glm::vec4(P, 1.0f));
             const float Z = -Pview.z;
             if (!std::isfinite(Z) || Z <= 0.0f) return false;
+
+            const auto clip = projMatrix * glm::vec4(Pview, 1);
+            if (!std::isfinite(clip.w) || clip.w <= 1e-6f) return false;
+            const auto reconstructed = glm::inverse(projMatrix) * glm::vec4(glm::vec3(clip) / clip.w, 1);
+            if (!std::isfinite(reconstructed.w) || std::abs(reconstructed.w) < 1e-6f) return false;
+            const auto error = glm::distance(glm::vec3(reconstructed) / reconstructed.w, Pview);
+            if (!std::isfinite(error) || error > 1e-4f * std::max(1.0f, glm::length(Pview))) return false;
 
             // Bilateral filter edge rejection across disocclusion boundaries
             const auto bgTap = EvaluateBilateralWeight(Z, backgroundDepth, 1, 0);

@@ -445,7 +445,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 N = normalize(input.NormalWS);
     if ((HasMaterialMap(1)||HasMaterialMap(8)) && abs(input.TangentWS.w)>0.1) {
         float3 T=input.TangentWS.xyz-N*dot(N,input.TangentWS.xyz);
-        T=normalize(T);
+        float3 fallbackTangent = abs(N.z) < 0.99 ? cross(float3(0,0,1), N) : cross(float3(0,1,0), N);
+        T=dot(T,T)>1e-12?normalize(T):normalize(fallbackTangent);
         float3 B=cross(N,T)*(input.TangentWS.w<0.0?-1.0:1.0);
         float2 uv=input.TexCoord*u_MaterialUV.xy+u_MaterialUV.zw;
         float3 baseNormal=float3(0,0,1);

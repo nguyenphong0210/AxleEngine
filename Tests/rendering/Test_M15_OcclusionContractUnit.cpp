@@ -807,6 +807,13 @@ bool RunM15OcclusionContractUnitTests() {
 
         RENDER_CHECK(VerifyNormalMapOcclusionStability(flatSample, viewMat, viewDir, sunDir),
             "M15-U4-07.1: VerifyNormalMapOcclusionStability passes for flat normal sample");
+        RENDER_CHECK(!VerifyNormalMapOcclusionStability(flatSample, viewMat, glm::vec3(0), sunDir) &&
+            !VerifyNormalMapOcclusionStability(flatSample, viewMat, glm::vec3(std::numeric_limits<float>::quiet_NaN()), sunDir),
+            "normal stability rejects zero and nonfinite view directions");
+        auto yNormal = flatSample;
+        yNormal.GeometricNormal = {0, 1, 0};
+        RENDER_CHECK(VerifyNormalMapOcclusionStability(yNormal, glm::mat4(1), {0, 1, 0}, sunDir),
+            "valid vertical view has a nondegenerate slice basis");
         RENDER_CHECK(VerifyNormalMapOcclusionStability(perturbedSample, viewMat, viewDir, sunDir),
             "M15-U4-07.1: VerifyNormalMapOcclusionStability passes for perturbed normal sample");
 
@@ -857,6 +864,11 @@ bool RunM15OcclusionContractUnitTests() {
 
         RENDER_CHECK(VerifyDeformedMeshOcclusionStability(deformSample, backgroundDepth, viewMat, projMat),
             "M15-U4-07.2: VerifyDeformedMeshOcclusionStability passes: edge rejection isolates silhouette and surface reconstruction is smooth");
+        auto invalidProjection = projMat;
+        invalidProjection[0][0] = std::numeric_limits<float>::quiet_NaN();
+        RENDER_CHECK(!VerifyDeformedMeshOcclusionStability(deformSample, backgroundDepth, viewMat, invalidProjection) &&
+            !VerifyDeformedMeshOcclusionStability(deformSample, backgroundDepth, viewMat, glm::mat4(0)),
+            "deformed depth verification uses and validates projection instead of ignoring it");
 
         // Verification over dynamic deformation parameter sweep (animated skeletal bend)
         for (float angleDeg : {0.0f, 15.0f, 30.0f, 60.0f, 90.0f, 120.0f}) {

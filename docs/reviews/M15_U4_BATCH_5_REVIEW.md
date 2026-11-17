@@ -84,3 +84,7 @@ The user authorized implementation of Milestone 15 items `M15-U4-07.1` through `
 
 - **Interactive Editor Visual Inspection:** Both Debug and Release `AxleEditor` compile, link, and successfully load the dedicated test scene (`Tests/Fixtures/M15/U4D/U4D.axleproj`) for 5 UI frames. Interactive screen capture remains open per project protocol.
 - **Stop Condition:** Stopping at the `M15-U4-E` boundary (`M15-U4-07.1` through `U4-07.2`). Handoff to Codex for independent review.
+
+## Independent Codex review supersedes self-verification
+
+The delivery was not accepted unchanged: its normal-map draws bound no normal texture, and its deformed draws did not exercise current-depth reconstruction or disocclusion. Codex replaced those checks with real renderer fixtures and repaired a native NaN defect in degenerate normal-map tangent handling. CPU verification now uses projection and validates directions. See [the independent findings, final executed matrix, and acceptance limits](M15_U4_BATCH_5_CODEX_REVIEW.md). Automated U4-07.1/07.2 pass after corrections; interactive Editor capture remains open. Original self-verification above is retained as historical reported evidence.

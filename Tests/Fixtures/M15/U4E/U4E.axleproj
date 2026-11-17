@@ -1,0 +1,7 @@
+Project:
+  SchemaVersion: 1
+  Name: M15_U4E_MappedDeformation
+  StartScene: scenes/MappedDeformation.axlescene
+  AssetDirectory: assets
+  RHIBackend: Vulkan
+  Plugins:

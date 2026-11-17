@@ -1,4 +1,4 @@
-#include "RenderTestCommon.hpp"
+#include "OcclusionTestSupport.hpp"
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHI/RHIDescriptorPool.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
@@ -17,51 +17,9 @@
 using namespace Axle;
 using namespace Axle::RHI;
 
-namespace {
-bool Upload(RHITexture& texture, const void* pixels, uint32_t pixelSize) {
-    nri::TextureSubresourceUploadDesc sub{};
-    sub.slices = pixels; sub.sliceNum = 1;
-    sub.rowPitch = texture.GetWidth() * pixelSize;
-    sub.slicePitch = sub.rowPitch * texture.GetHeight();
-    nri::TextureUploadDesc upload{};
-    upload.texture = texture.GetNative(); upload.subresources = &sub;
-    upload.planes = texture.GetFormat() == RHITextureFormat::D32_FLOAT ? nri::PlaneBits::DEPTH : nri::PlaneBits::COLOR;
-    upload.after = {nri::AccessBits::SHADER_RESOURCE, nri::Layout::SHADER_RESOURCE, nri::StageBits::ALL};
-    return RHIDevice::Get().UploadData(&upload, 1, nullptr, 0) == nri::Result::SUCCESS;
-}
+using Axle::RenderTests::Upload;
+using Axle::RenderTests::Read;
 
-bool Read(RHITexture& texture, std::vector<glm::vec4>& pixels) {
-    auto& device = RHIDevice::Get();
-    const auto alignment = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice()).memoryAlignment;
-    const auto align = [](uint32_t value, uint32_t step) { return (value + step - 1) / step * step; };
-    nri::TextureDataLayoutDesc layout{};
-    const bool half = texture.GetFormat() == RHITextureFormat::RGBA16_FLOAT;
-    const uint32_t pixelSize = half ? 8u : 16u;
-    layout.rowPitch = align(texture.GetWidth() * pixelSize, alignment.uploadBufferTextureRow);
-    layout.slicePitch = align(layout.rowPitch * texture.GetHeight(), alignment.uploadBufferTextureSlice);
-    RHIBufferDesc desc; desc.Size = layout.slicePitch; desc.MemoryLocation = RHIMemoryLocation::HostReadback;
-    RHIBuffer readback; RHICommandBuffer commands;
-    RENDER_CHECK(readback.Init(desc) && commands.Init() && commands.Begin(), "GTAO readback allocation");
-    nri::TextureRegionDesc region{};
-    region.width = texture.GetWidth(); region.height = texture.GetHeight(); region.depth = 1;
-    commands.ReadbackTextureToBuffer(*readback.GetNative(), layout, *texture.GetNative(), region);
-    RENDER_CHECK(commands.End() && commands.Submit() && device.WaitIdle(), "GTAO readback submission");
-    const auto* data = static_cast<const uint8_t*>(readback.Map());
-    RENDER_CHECK(data, "GTAO readback mapping");
-    pixels.resize(size_t(texture.GetWidth()) * texture.GetHeight());
-    for (uint32_t y = 0; y < texture.GetHeight(); ++y) {
-        if (!half) {
-            std::memcpy(pixels.data() + size_t(y) * texture.GetWidth(), data + size_t(y) * layout.rowPitch, texture.GetWidth() * 16);
-        } else for (uint32_t x = 0; x < texture.GetWidth(); ++x) {
-            uint32_t packed[2]{};
-            std::memcpy(packed, data + size_t(y) * layout.rowPitch + size_t(x) * 8, 8);
-            pixels[size_t(y) * texture.GetWidth() + x] = glm::vec4(glm::unpackHalf2x16(packed[0]), glm::unpackHalf2x16(packed[1]));
-        }
-    }
-    readback.Unmap();
-    return true;
-}
-}
 
 bool RunM15OcclusionHorizonTests(const std::filesystem::path& output) {
     auto& device = RHIDevice::Get();
@@ -682,47 +640,9 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
             render("mirror-specular-ao0", Term::Specular, 0, 1, modified) && equal(modified, reference),
             "M15-U4-06.5: mirror/unoccluded specular regression: AO=0 never darkens specular glints");
 
-        // 6. M15-U4-07.1: Test normal-map behavior:
-        // Direct diffuse and specular glints remain invariant under AO variation on normal-mapped surface
-        RENDER_CHECK(render("normal-map-specular-ref", Term::Specular, 1, 1, reference) &&
-            render("normal-map-specular-ao0", Term::Specular, 0, 1, modified) && equal(modified, reference),
-            "M15-U4-07.1: normal-mapped surface: AO=0 leaves direct specular highlights invariant");
-        RENDER_CHECK(render("normal-map-sun-ref", Term::Sun, 1, 1, reference) &&
-            render("normal-map-sun-ao0", Term::Sun, 0, 1, modified) && equal(modified, reference),
-            "M15-U4-07.1: normal-mapped surface: AO=0 leaves directional sun contribution invariant");
-        RENDER_CHECK(render("normal-map-ambient-ref", Term::Ambient, 1, 1, reference) &&
-            render("normal-map-ambient-half", Term::Ambient, 0.5f, 1, modified) && equal(modified, reference, 0.5f),
-            "M15-U4-07.1: normal-mapped surface: AO scales ambient lighting linearly");
-        RENDER_CHECK(render("normal-map-emissive-ref", Term::Emissive, 1, 1, reference) &&
-            render("normal-map-emissive-darkened", Term::Emissive, 0, 0, modified) && equal(modified, reference),
-            "M15-U4-07.1: normal-mapped surface: emissive radiance is strictly invariant under AO and contact variations");
 
-        // 7. M15-U4-07.2: Test animated / deformed mesh:
-        // Dynamically deformed vertex buffer simulates skeletal deformation and mesh bending
-        RHIVertex3D deformedVertices[3];
-        for (int v = 0; v < 3; ++v) {
-            deformedVertices[v] = vertices[v];
-            const float angle = glm::radians(30.0f);
-            const float c = std::cos(angle), s = std::sin(angle);
-            const glm::vec3 pos = deformedVertices[v].Position;
-            deformedVertices[v].Position = glm::vec3(pos.x * 1.15f, pos.y * c - pos.z * s, pos.y * s + pos.z * c);
-            const glm::vec3 norm = deformedVertices[v].Normal;
-            deformedVertices[v].Normal = glm::normalize(glm::vec3(norm.x / 1.15f, norm.y * c - norm.z * s, norm.y * s + norm.z * c));
-        }
-        RENDER_CHECK(vertexBuffer.UpdateData(deformedVertices, sizeof(deformedVertices)), "update deformed vertex buffer");
-        RENDER_CHECK(render("deformed-mesh-sun-ref", Term::Sun, 1, 1, reference) &&
-            render("deformed-mesh-sun-ao0", Term::Sun, 0, 1, modified) && equal(modified, reference),
-            "M15-U4-07.2: deformed mesh: directional sun contribution remains invariant under AO variation");
-        RENDER_CHECK(render("deformed-mesh-local-ref", Term::Local, 1, 1, reference) &&
-            render("deformed-mesh-local-contact0", Term::Local, 1, 0, modified) && equal(modified, reference),
-            "M15-U4-07.2: deformed mesh: local lights remain invariant under contact shadow variations");
-        RENDER_CHECK(render("deformed-mesh-emissive-ref", Term::Emissive, 1, 1, reference) &&
-            render("deformed-mesh-emissive-darkened", Term::Emissive, 0, 0, modified) && equal(modified, reference),
-            "M15-U4-07.2: deformed mesh: emissive radiance is invariant under AO and contact variations");
-        // Restore standard full-screen triangle vertices
-        RENDER_CHECK(vertexBuffer.UpdateData(vertices, sizeof(vertices)), "restore vertex buffer");
     }
     RENDER_CHECK(GetRHIValidationErrorCount() == 0, "production forward invariance fixture validation");
-    std::cout << "PASS M15-U4-A/B/D/E production forward radiance: AO ambient-only, sun-only contact, CSM minimum, emissive/local invariance, normal-map and deformed mesh stability\n";
+    std::cout << "PASS M15-U4-A/B/D production forward radiance: AO ambient-only, sun-only contact, CSM minimum, emissive/local invariance\n";
     return true;
 }

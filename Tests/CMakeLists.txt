@@ -34,7 +34,8 @@ target_link_libraries(AxleEnvironmentBakeTests PRIVATE Axle::Renderer)
 add_test(NAME EnvironmentBakeTests COMMAND $<TARGET_FILE:AxleEnvironmentBakeTests>)
 set_tests_properties(EnvironmentBakeTests PROPERTIES LABELS "environment;lighting;cpu" TIMEOUT 90)
 add_executable(AxleEnvironmentRenderingTests EXCLUDE_FROM_ALL
-    src/Test_EnvironmentRendering.cpp rendering/Test_M15_OcclusionRendering.cpp)
+    src/Test_EnvironmentRendering.cpp rendering/Test_M15_OcclusionRendering.cpp
+    rendering/Test_M15_OcclusionSurfaceRendering.cpp)
 target_link_libraries(AxleEnvironmentRenderingTests PRIVATE Axle::Scene glad glfw)
 target_compile_definitions(AxleEnvironmentRenderingTests PRIVATE
     AXLE_GTAO_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/GTAO.hlsl")

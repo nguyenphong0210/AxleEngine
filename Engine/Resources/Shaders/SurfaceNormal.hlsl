@@ -54,8 +54,8 @@ bool HasMaterialMap(uint slot) { return (u_MaterialFlags.x & (1u << slot)) != 0;
 
 Texture2D u_AlbedoMap       : register(t0, space1);
 Texture2D u_NormalMap       : register(t1, space1);
-Texture2D u_DetailNormalMap : register(t8, space1);
-Texture2D u_DetailMaskMap   : register(t9, space1);
+Texture2D u_DetailNormalMap : register(t11, space1);
+Texture2D u_DetailMaskMap   : register(t12, space1);
 SamplerState u_Sampler      : register(s0);
 
 struct PSInput {
@@ -94,7 +94,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 N = normalize(input.NormalWS);
     if ((HasMaterialMap(1) || HasMaterialMap(8)) && abs(input.TangentWS.w) > 0.1) {
         float3 T = input.TangentWS.xyz - N * dot(N, input.TangentWS.xyz);
-        T = normalize(T);
+        float3 fallbackTangent = abs(N.z) < 0.99 ? cross(float3(0,0,1), N) : cross(float3(0,1,0), N);
+        T = dot(T,T)>1e-12 ? normalize(T) : normalize(fallbackTangent);
         float3 B = cross(N, T) * (input.TangentWS.w < 0.0 ? -1.0 : 1.0);
         float2 uv = input.TexCoord * u_MaterialUV.xy + u_MaterialUV.zw;
         float3 baseNormal = float3(0, 0, 1);

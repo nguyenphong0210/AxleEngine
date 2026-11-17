@@ -30,6 +30,7 @@
 
 bool RunM15OcclusionRenderingTests(const std::filesystem::path& output);
 bool RunM15OcclusionHorizonTests(const std::filesystem::path& output);
+bool RunM15OcclusionSurfaceTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15OcclusionForwardTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15OcclusionSphereTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
                               const Axle::PerspectiveCamera& camera, Axle::SceneRenderSettings settings,
@@ -1007,6 +1008,7 @@ bool Native(RHIType backend) {
     SceneRenderSettings regressionSettings;
     regressionSettings.EnableShadows = regressionSettings.EnableParticles = false;
     CHECK(RunM15OcclusionSphereTests(renderer, regressionWorld, camera, regressionSettings, Output));
+    CHECK(RunM15OcclusionSurfaceTests(renderer, Output));
     renderer.Shutdown();
     CHECK(environment.CacheSize() == 0 && GetRHIValidationErrorCount() == 0);
     RHISceneRenderer noTimingRenderer;

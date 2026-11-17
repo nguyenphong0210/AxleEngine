@@ -20,16 +20,16 @@ using Axle::RenderTests::Read;
 using Axle::RenderTests::Upload;
 
 namespace {
-    bool ReadCubeFaceRGBA16(RHITexture& cubemap, uint32_t face, std::vector<glm::vec4>& pixels) {
+    bool ReadCubeFaceRGBA16(RHITexture& cubemap, uint32_t face, std::vector<glm::vec4>& pixels, uint32_t mip = 0) {
         if (!cubemap.IsValid() || !cubemap.GetDesc().IsCubeMap || face >= 6 ||
-            cubemap.GetFormat() != RHITextureFormat::RGBA16_FLOAT) {
+            mip >= cubemap.GetMipCount() || cubemap.GetFormat() != RHITextureFormat::RGBA16_FLOAT) {
             return false;
         }
         auto& device = RHIDevice::Get();
         const auto alignment = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice()).memoryAlignment;
         const auto align = [](uint32_t value, uint32_t step) { return (value + step - 1u) / step * step; };
-        const uint32_t w = cubemap.GetWidth();
-        const uint32_t h = cubemap.GetHeight();
+        const uint32_t w = std::max(1u, cubemap.GetWidth() >> mip);
+        const uint32_t h = std::max(1u, cubemap.GetHeight() >> mip);
         nri::TextureDataLayoutDesc layout{};
         layout.rowPitch = align(w * 8u, alignment.uploadBufferTextureRow);
         layout.slicePitch = align(layout.rowPitch * h, alignment.uploadBufferTextureSlice);
@@ -47,12 +47,64 @@ namespace {
         region.width = static_cast<nri::Dim_t>(w);
         region.height = static_cast<nri::Dim_t>(h);
         region.depth = 1;
-        region.mipOffset = 0;
+        region.mipOffset = static_cast<nri::Dim_t>(mip);
         region.layerOffset = static_cast<nri::Dim_t>(face);
         region.planes = nri::PlaneBits::COLOR;
 
         commands.ReadbackTextureToBuffer(*readback.GetNative(), layout, *cubemap.GetNative(), region);
         commands.TransitionTexture(cubemap.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResource);
+        if (!commands.End() || !commands.Submit() || !device.WaitIdle()) {
+            return false;
+        }
+
+        const auto* data = static_cast<const uint8_t*>(readback.Map());
+        if (!data) {
+            return false;
+        }
+        pixels.resize(size_t(w) * h);
+        for (uint32_t y = 0; y < h; ++y) {
+            for (uint32_t x = 0; x < w; ++x) {
+                uint32_t packed[2]{};
+                std::memcpy(packed, data + size_t(y) * layout.rowPitch + size_t(x) * 8u, 8);
+                pixels[size_t(y) * w + x] = glm::vec4(
+                    glm::unpackHalf2x16(packed[0]),
+                    glm::unpackHalf2x16(packed[1]));
+            }
+        }
+        readback.Unmap();
+        return true;
+    }
+
+    bool ReadTexture2DRGBA16(RHITexture& texture, std::vector<glm::vec4>& pixels) {
+        if (!texture.IsValid() || texture.GetFormat() != RHITextureFormat::RGBA16_FLOAT) {
+            return false;
+        }
+        auto& device = RHIDevice::Get();
+        const auto alignment = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice()).memoryAlignment;
+        const auto align = [](uint32_t value, uint32_t step) { return (value + step - 1u) / step * step; };
+        const uint32_t w = texture.GetWidth();
+        const uint32_t h = texture.GetHeight();
+        nri::TextureDataLayoutDesc layout{};
+        layout.rowPitch = align(w * 8u, alignment.uploadBufferTextureRow);
+        layout.slicePitch = align(layout.rowPitch * h, alignment.uploadBufferTextureSlice);
+
+        RHIBufferDesc desc{};
+        desc.Size = layout.slicePitch;
+        desc.MemoryLocation = RHIMemoryLocation::HostReadback;
+        RHIBuffer readback;
+        RHICommandBuffer commands;
+        if (!readback.Init(desc) || !commands.Init() || !commands.Begin()) {
+            return false;
+        }
+
+        nri::TextureRegionDesc region{};
+        region.width = static_cast<nri::Dim_t>(w);
+        region.height = static_cast<nri::Dim_t>(h);
+        region.depth = 1;
+        region.planes = nri::PlaneBits::COLOR;
+
+        commands.ReadbackTextureToBuffer(*readback.GetNative(), layout, *texture.GetNative(), region);
+        commands.TransitionTexture(texture.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResource);
         if (!commands.End() || !commands.Submit() || !device.WaitIdle()) {
             return false;
         }
@@ -639,9 +691,273 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         }
         RENDER_CHECK(render() && renderer.GetDynamicReflectionProbe(probe)->GenerationID > generation->GenerationID, "automatic capture retries transient failure without a revision change");
     }
+
+    // -------------------------------------------------------------------------
+    // 5. M15-U5-C (S5.3): Multi-mip GGX roughness prefilter, cross-face seams,
+    //    pole isotropy, CPU parity, roughness sweep, & mid-prefilter fault rollback
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t prefilterRes = 64u;
+        constexpr uint32_t expectedMips = 5u;
+        RenderWorld prefilterWorld;
+        prefilterWorld.SceneRevision = 500;
+        prefilterWorld.Skybox.Authored = true;
+        prefilterWorld.Skybox.Enabled = false;
+
+        // Compact bright HDR emitter on +Z (center blur & sharpness fixture)
+        prefilterWorld.Meshes.push_back(MakeBoxInstance(
+            2001, cubeView, MakeEmissiveMaterial({12.0f, 6.0f, 2.0f}, 1.0f), {0.0f, 0.0f, 5.0f}, {1.6f, 1.6f, 0.4f}));
+        // Bright HDR seam pillar straddling the +X / +Z boundary (u_Z=1 / u_X=0)
+        prefilterWorld.Meshes.push_back(MakeBoxInstance(
+            2002, cubeView, MakeEmissiveMaterial({0.0f, 8.0f, 8.0f}, 1.0f), {4.0f, 0.0f, 4.0f}, {1.6f, 2.5f, 1.6f}));
+        // Symmetric square HDR beacon on the +Y pole to test azimuthal isotropy (zero equirectangular pinch)
+        prefilterWorld.Meshes.push_back(MakeBoxInstance(
+            2003, cubeView, MakeEmissiveMaterial({8.0f, 4.0f, 10.0f}, 1.0f), {0.0f, 5.0f, 0.0f}, {1.8f, 0.4f, 1.8f}));
+
+        RenderReflectionProbe prefilterProbe{};
+        prefilterProbe.EntityID = 2000;
+        prefilterProbe.Position = {0.0f, 0.0f, 0.0f};
+        prefilterProbe.BoxExtents = {20.0f, 20.0f, 20.0f};
+        prefilterProbe.DynamicCapture = true;
+        prefilterProbe.CaptureResolution = prefilterRes;
+        prefilterProbe.CaptureShadows = false;
+
+        const auto captureRes = renderer.CaptureDynamicReflectionProbe(prefilterWorld, prefilterProbe);
+        RENDER_CHECK(captureRes.Success && captureRes.CapturedFaces == 6u,
+            "M15-U5-16.1/17.1: 64px dynamic capture with multi-mip GGX prefilter succeeds");
+        const auto gen = renderer.GetDynamicReflectionProbe(prefilterProbe);
+        RENDER_CHECK(gen && device.WaitForCompletion(gen->Completion) &&
+                     gen->MipCount == expectedMips &&
+                     gen->Cubemap && gen->Cubemap->IsValid() &&
+                     gen->Cubemap->GetMipCount() == expectedMips &&
+                     gen->Cubemap->GetDesc().ArrayLayers == 6 &&
+                     gen->Cubemap->GetDesc().IsCubeMap &&
+                     gen->Cubemap->GetFormat() == RHITextureFormat::RGBA16_FLOAT &&
+                     gen->RawCubemap && gen->RawCubemap->IsValid() &&
+                     gen->RawCubemap->GetMipCount() == expectedMips,
+            "M15-U5-16.1/16.2: dynamic probe publishes 5-mip RGBA16_FLOAT prefiltered and raw cubemaps");
+        for (uint32_t mip = 0u; mip < expectedMips; ++mip) {
+            RENDER_CHECK(gen->Cubemap->GetMipSRV(mip) != nullptr && gen->Cubemap->GetMipUAV(mip) != nullptr,
+                "M15-U5-16.2: every prefilter mip exposes valid per-mip SRV and storage UAV");
+        }
+
+        // Read every face & mip, check finiteness/non-negativity, peak drop, skirt spread, seam continuity, pole isotropy
+        std::array<std::vector<glm::vec3>, 6> rawMip0;
+        float plusZCenterPeak[expectedMips]{};
+        float plusZSkirt[expectedMips]{};
+        for (uint32_t f = 0u; f < 6u; ++f) {
+            std::vector<glm::vec4> rawFace;
+            RENDER_CHECK(ReadCubeFaceRGBA16(*gen->RawCubemap, f, rawFace, 0u), "M15-U5-C raw mip0 readback");
+            rawMip0[f].resize(rawFace.size());
+            for (size_t i = 0; i < rawFace.size(); ++i) {
+                rawMip0[f][i] = glm::vec3(rawFace[i]);
+            }
+        }
+
+        for (uint32_t mip = 0u; mip < expectedMips; ++mip) {
+            const uint32_t mSize = std::max(1u, prefilterRes >> mip);
+            std::array<std::vector<glm::vec4>, 6> mFaces;
+            for (uint32_t f = 0u; f < 6u; ++f) {
+                RENDER_CHECK(ReadCubeFaceRGBA16(*gen->Cubemap, f, mFaces[f], mip),
+                    "M15-U5-C prefilter mip readback");
+                for (const auto& p : mFaces[f]) {
+                    RENDER_CHECK(std::isfinite(p.r) && std::isfinite(p.g) && std::isfinite(p.b) && std::isfinite(p.a) &&
+                                 p.r >= 0.0f && p.g >= 0.0f && p.b >= 0.0f,
+                        "M15-U5-17.1: prefilter output stays strictly finite and non-negative across all faces/mips");
+                }
+            }
+
+            const uint32_t c0 = (mSize > 2u) ? (mSize / 2u - 1u) : 0u;
+            const uint32_t c1 = (mSize > 2u) ? (mSize / 2u + 1u) : mSize;
+            plusZCenterPeak[mip] = AverageRegion(mFaces[4], mSize, c0, c0, c1, c1).r;
+            const uint32_t sx0 = mSize / 4u;
+            const uint32_t sx1 = std::max(sx0 + 1u, mSize / 4u + std::max(1u, mSize / 8u));
+            plusZSkirt[mip] = AverageRegion(mFaces[4], mSize, sx0, c0, sx1, c1).r;
+
+            // M15-U5-17.3: Cross-face seam continuity along the +X (u=0, left col) / +Z (u=1, right col) shared edge
+            if (mip >= 1u && mip <= 3u) {
+                const glm::vec3 zRightEdge = AverageRegion(mFaces[4], mSize, mSize - 1u, c0, mSize, c1);
+                const glm::vec3 xLeftEdge = AverageRegion(mFaces[0], mSize, 0u, c0, 1u, c1);
+                const float seamMean = 0.5f * (zRightEdge.g + xLeftEdge.g);
+                const float seamDiff = std::abs(zRightEdge.g - xLeftEdge.g);
+                RENDER_CHECK(seamMean > 0.5f && seamDiff < seamMean * 0.35f,
+                    "M15-U5-17.3: +X/+Z seam continuity preserves bright edge radiance without dark border cutoff");
+            }
+
+            // M15-U5-20: +Y pole isotropy (horizontal vs vertical spread on face 2 matches cleanly)
+            if (mip == 2u) {
+                const uint32_t off = mSize / 4u;
+                const glm::vec3 horizSample = AverageRegion(mFaces[2], mSize, mSize / 2u + off, c0, mSize / 2u + off + 1u, c1);
+                const glm::vec3 vertSample = AverageRegion(mFaces[2], mSize, c0, mSize / 2u + off, c1, mSize / 2u + off + 1u);
+                const glm::vec3 poleCenter = AverageRegion(mFaces[2], mSize, c0, c0, c1, c1);
+                const float maxSpread = std::max({horizSample.b, vertSample.b, 1e-4f});
+                RENDER_CHECK(poleCenter.b > 0.5f && std::abs(horizSample.b - vertSample.b) <= maxSpread * 0.35f,
+                    "M15-U5-20: +Y pole filtering stays isotropic without equirectangular pinch distortion");
+            }
+        }
+
+        RENDER_CHECK(plusZCenterPeak[0] > plusZCenterPeak[1] &&
+                     plusZCenterPeak[1] > plusZCenterPeak[2] &&
+                     plusZCenterPeak[2] > plusZCenterPeak[3] &&
+                     plusZCenterPeak[3] > plusZCenterPeak[4] &&
+                     plusZSkirt[2] > plusZSkirt[0] + 0.05f,
+            "M15-U5-17.1/18.1: mip peaks decrease monotonically and GGX skirt broadens with mip level");
+
+        // M15-U5-19.1: Controlled parity check against CPU 3D cubemap GGX reference
+        for (uint32_t checkMip : {1u, 2u}) {
+            const uint32_t mSize = prefilterRes >> checkMip;
+            const float rough = ReflectionCaptureContract::ComputePrefilterRoughness(checkMip, expectedMips);
+            std::vector<glm::vec4> gpuFaceZ;
+            RENDER_CHECK(ReadCubeFaceRGBA16(*gen->Cubemap, 4u, gpuFaceZ, checkMip), "M15-U5-19.1 read GPU face");
+            const uint32_t px = mSize / 2u;
+            const float u = (static_cast<float>(px) + 0.5f) / static_cast<float>(mSize);
+            const glm::vec3 gpuVal = glm::vec3(gpuFaceZ[size_t(px) * mSize + px]);
+            const glm::vec3 dir = ReflectionCaptureContract::ComputeCubeTexelDirection(4u, u, u);
+            const glm::vec3 cpuRef = ReflectionCaptureContract::EvaluatePrefilterDirectionCPU(
+                rawMip0, prefilterRes, dir, rough, ReflectionCaptureContract::DefaultPrefilterSampleCount);
+            const float denom = std::max(glm::length(cpuRef), 0.1f);
+            const float relErr = glm::distance(gpuVal, cpuRef) / denom;
+            std::cout << "  [U5-C Parity] mip=" << checkMip << " r=" << rough
+                      << " gpu=(" << gpuVal.r << "," << gpuVal.g << "," << gpuVal.b << ")"
+                      << " cpu=(" << cpuRef.r << "," << cpuRef.g << "," << cpuRef.b << ") relErr=" << relErr << "\n";
+            RENDER_CHECK(relErr < 0.25f,
+                "M15-U5-19.1: GPU cubemap GGX prefilter matches pure-3D CPU reference closely");
+        }
+
+        // M15-U5-18.1 / 18.2 / 19.2: Roughness sweep sphere fixture sampling dynamic prefiltered cubemap via ForwardPBR
+        {
+            RHITexture sweepColor, sweepDepth;
+            RENDER_CHECK(sweepColor.Init(RHITextureDesc::RenderTarget2D(64, 64, RHITextureFormat::RGBA16_FLOAT, "U5CSweepColor")) &&
+                         sweepDepth.Init(RHITextureDesc::DepthStencil2D(64, 64, RHITextureFormat::D32_FLOAT, "U5CSweepDepth")),
+                "M15-U5-19.2 sweep render targets");
+            const auto savedIrr = renderer.GetIrradianceMap();
+            const auto savedPref = renderer.GetPrefilterMap();
+            const auto savedLut = renderer.GetBRDFLUT();
+            renderer.SetIBLMaps(RHIMaterial::GetDefaultIrradianceCubemap(), gen->Cubemap, RHIMaterial::GetDefaultBRDFLUT());
+
+            RHIMaterialDesc matDesc{};
+            matDesc.BaseColor = {1.0f, 1.0f, 1.0f, 1.0f};
+            matDesc.Metallic = 1.0f;
+            matDesc.Roughness = 0.05f;
+            auto sweepMat = std::make_shared<RHIMaterial>(matDesc);
+
+            RenderWorld sweepWorld;
+            sweepWorld.SceneRevision = 510;
+            sweepWorld.Skybox.Authored = true;
+            sweepWorld.Skybox.Enabled = true;
+            sweepWorld.Skybox.EnvironmentLighting = true;
+            sweepWorld.Skybox.Type = 1;
+            sweepWorld.Meshes.push_back(MakeBoxInstance(2100, sphereView, sweepMat, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, false));
+
+            PerspectiveCamera sweepCam(45.0f, 1.0f, 0.1f, 50.0f);
+            sweepCam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 2.8f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), {0.0f, 0.0f, 2.8f});
+            SceneRenderSettings sweepSettings;
+            sweepSettings.EnableShadows = false;
+            sweepSettings.EnableParticles = false;
+            sweepSettings.EnableSSR = false;
+            sweepSettings.EnableGTAO = false;
+            sweepSettings.EnableTAA = false;
+            sweepSettings.EnableBloom = false;
+            sweepSettings.EnableFXAA = false;
+            sweepSettings.EnableToneMapping = false;
+            sweepSettings.ClearColor = {0.0f, 0.0f, 0.0f, 1.0f};
+
+            const float roughnessSteps[4] = {0.05f, 0.35f, 0.70f, 0.95f};
+            float peakLuma[4]{};
+            float offCenterFraction[4]{};
+            for (int step = 0; step < 4; ++step) {
+                sweepMat->SetRoughness(roughnessSteps[step]);
+                renderer.RenderWorldView(sweepWorld, sweepCam, &sweepColor, &sweepDepth, sweepSettings);
+                RENDER_CHECK(renderer.WasLastRenderSuccessful(), "M15-U5-19.2 roughness sweep render");
+                std::vector<glm::vec4> pixels;
+                RENDER_CHECK(ReadTexture2DRGBA16(sweepColor, pixels), "M15-U5-19.2 sweep readback");
+
+                float maxVal = 0.0f;
+                float centerVal = 0.0f;
+                float ringSum = 0.0f;
+                uint32_t ringCount = 0;
+                for (uint32_t y = 0; y < 64u; ++y) {
+                    for (uint32_t x = 0; x < 64u; ++x) {
+                        const glm::vec4& p = pixels[size_t(y) * 64u + x];
+                        RENDER_CHECK(std::isfinite(p.r) && std::isfinite(p.g) && std::isfinite(p.b) && p.r >= 0.0f && p.g >= 0.0f && p.b >= 0.0f,
+                            "M15-U5-19.2 sphere render outputs remain finite and non-negative");
+                        const float luma = p.r * 0.2126f + p.g * 0.7152f + p.b * 0.0722f;
+                        maxVal = std::max(maxVal, luma);
+                        const float dx = static_cast<float>(x) - 31.5f;
+                        const float dy = static_cast<float>(y) - 31.5f;
+                        const float dist = std::sqrt(dx * dx + dy * dy);
+                        if (dist <= 3.0f) centerVal = std::max(centerVal, luma);
+                        if (dist >= 6.0f && dist <= 16.0f) {
+                            ringSum += luma;
+                            ++ringCount;
+                        }
+                    }
+                }
+                peakLuma[step] = std::max(maxVal, centerVal);
+                offCenterFraction[step] = (ringCount > 0 && peakLuma[step] > 1e-4f)
+                    ? (ringSum / static_cast<float>(ringCount)) / peakLuma[step]
+                    : 0.0f;
+                std::cout << "  [U5-C Sweep] r=" << roughnessSteps[step]
+                          << " peakLuma=" << peakLuma[step]
+                          << " ringFraction=" << offCenterFraction[step] << "\n";
+            }
+            RENDER_CHECK(peakLuma[0] > peakLuma[1] &&
+                         peakLuma[1] > peakLuma[2] &&
+                         peakLuma[2] > peakLuma[3] &&
+                         offCenterFraction[3] > offCenterFraction[1] &&
+                         offCenterFraction[2] > offCenterFraction[0],
+                "M15-U5-18.1/18.2/19.2: roughness sweep reduces specular peak monotonically and broadens highlight skirt");
+            renderer.SetIBLMaps(savedIrr, savedPref, savedLut);
+        }
+
+        // Mid-prefilter fault rollback verification: injecting BeginCommandBuffer fault on command #7 (after 6 faces)
+        {
+            const uint64_t retainedGenId = gen->GenerationID;
+            const auto retainedHandle = gen->Cubemap->GetHandle();
+            RenderWorld updatedWorld = prefilterWorld;
+            updatedWorld.SceneRevision = 520;
+            updatedWorld.Meshes[0] = MakeBoxInstance(
+                2001, cubeView, MakeEmissiveMaterial({0.0f, 15.0f, 0.0f}, 1.0f), {0.0f, 0.0f, 5.0f}, {1.6f, 1.6f, 0.4f});
+
+            uint32_t beginCmds = 0;
+            bool prefilterFaultHit = false;
+            {
+                ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
+                    if (op == "BeginCommandBuffer") {
+                        ++beginCmds;
+                        if (beginCmds == 7u && !prefilterFaultHit) {
+                            prefilterFaultHit = true;
+                            return nri::Result::OUT_OF_MEMORY;
+                        }
+                    }
+                    return {};
+                });
+                const auto faultRes = renderer.CaptureDynamicReflectionProbe(updatedWorld, prefilterProbe);
+                RENDER_CHECK(prefilterFaultHit &&
+                             !faultRes.Success &&
+                             faultRes.PreservedPreviousGeneration &&
+                             faultRes.PublishedGenerationID == retainedGenId &&
+                             faultRes.Diagnostic.find("DYNAMIC_PROBE_PREFILTER_FAILED") != std::string::npos,
+                    "M15-U5-C rollback: prefilter command failure aborts publication cleanly while keeping previous generation");
+            }
+            const auto afterFaultGen = renderer.GetDynamicReflectionProbe(prefilterProbe);
+            RENDER_CHECK(afterFaultGen && afterFaultGen->GenerationID == retainedGenId &&
+                         afterFaultGen->Cubemap->GetHandle() == retainedHandle,
+                "M15-U5-C rollback: retained prefiltered cubemap handle remains valid after prefilter fault");
+            std::vector<glm::vec4> intactMip2;
+            RENDER_CHECK(ReadCubeFaceRGBA16(*afterFaultGen->Cubemap, 4u, intactMip2, 2u), "M15-U5-C intact mip2");
+            RENDER_CHECK(AverageRegion(intactMip2, 16u, 7u, 7u, 9u, 9u).r > AverageRegion(intactMip2, 16u, 7u, 7u, 9u, 9u).g,
+                "M15-U5-C rollback: preserved prefilter mip chain still holds original orange/red radiance");
+
+            const auto recoverRes = renderer.CaptureDynamicReflectionProbe(updatedWorld, prefilterProbe);
+            RENDER_CHECK(recoverRes.Success && recoverRes.PublishedGenerationID > retainedGenId,
+                "M15-U5-C recovery: recapture succeeds once prefilter fault clears");
+        }
+    }
+
     renderer.ClearDynamicReflectionProbes();
     RENDER_CHECK(device.WaitIdle(), "U5-B wait idle at cleanup");
     RENDER_CHECK(Axle::RenderTests::GetRHIValidationErrorCount() == 0, "U5-B zero RHI validation errors");
-    std::cout << "[M15ReflectionCaptureGPU] All U5-B native D3D12/Vulkan checks passed!\n";
+    std::cout << "[M15ReflectionCaptureGPU] All U5-B/U5-C native D3D12/Vulkan checks passed!\n";
     return true;
 }

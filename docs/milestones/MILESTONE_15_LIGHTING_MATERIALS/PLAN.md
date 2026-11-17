@@ -747,36 +747,39 @@ the item is visible.
 
 #### S5.3 — Cubemap prefilter
 
-- [ ] **M15-U5-16.1 — Allocate mip-capable cubemap.**
+- [x] **M15-U5-16.1 — Allocate mip-capable cubemap.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-16.2 — Allocate destination UAV/SRV views.**
+  - **Evidence:** `RHITextureDesc::CubemapStorage` allocates 6-layer `RGBA16_FLOAT` mip-capable cubemaps (`MipLevels = ReflectionCaptureContract::ComputePrefilterMipCount(res)` clamped `[1, 5]`); `ValidatePrefilterPolicy` rejects SDR `RGBA8_UNORM`, out-of-range mips/resolutions, and undersized budgets. Verified (self-verification; independent Codex review pending) by `AxleRHIResourceViewTests` (dx12/vulkan Debug/Release), `AxleRenderUnitTests`, and `AxleEnvironmentRenderingTests` (dx12/vulkan Debug/Release); [U5-C Review](../../reviews/M15_U5_C_REVIEW.md).
+- [x] **M15-U5-16.2 — Allocate destination UAV/SRV views.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** `RHITexture` exposes `GetMipUAV(mip)` (`STORAGE_TEXTURE_ARRAY`, `mipOffset = mip, mipNum = 1, layerNum = 6`) and `GetMipSRV(mip)` (`TEXTURE_CUBE`, `mipOffset = mip, mipNum = 1`) with generation lease aliases, `DefineViewAccess`, `RetainGeneration()`, `Shutdown()`, and `ScopedRHIFault` rollback. Verified in `AxleRHIResourceViewTests {dx12,vulkan} targets` (Debug/Release, mid-mip `CreateTextureUAV` fault injection) and `AxleEnvironmentRenderingTests`; [U5-C Review](../../reviews/M15_U5_C_REVIEW.md).
 - [ ] **M15-U5-17.1 — Implement roughness prefilter.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
-- [ ] **M15-U5-17.2 — Preserve face orientation.**
+  - **Automated Status:** Automated PASS (self-verification; independent Codex review pending) — `Engine/Resources/Shaders/CubemapPrefilter.hlsl` (`DownsampleCubeCS` + `PrefilterCubeCS`) and `RHISceneRenderer::PrefilterCapturedCubemap` execute pure-3D multi-mip downsampling + GGX importance sampling across all 6 faces (`mip 0..4`) with trilinear clamp sampler, per-mip barrier transitions, and mid-prefilter fault rollback. Native D3D12/Vulkan checks verify strictly finite non-negative texels across all 5 mips x 6 faces, monotonic peak drop across mips `0..4`, and widening GGX skirt (`plusZSkirt[2] > plusZSkirt[0] + 0.05f`).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass).
+- [x] **M15-U5-17.2 — Preserve face orientation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-17.3 — Handle seams.**
+  - **Evidence:** `CubemapPrefilter.hlsl` (`CubeFaceTexelDirection`) and `ReflectionCaptureContract::ComputeCubeTexelDirection` share canonical `EnvironmentCubeDirection` bases (`+X,-X,+Y,-Y,+Z,-Z`) across every mip `0..4`; verified on CPU (`Test_M15_ReflectionCaptureContractUnit.cpp`) and Debug/Release D3D12/Vulkan native tests (`Test_M15_ReflectionCaptureRendering.cpp`); [U5-C Review](../../reviews/M15_U5_C_REVIEW.md).
+- [x] **M15-U5-17.3 — Handle seams.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-18.1 — Use sharp mirror mip.**
+  - **Evidence:** `CubemapPrefilter.hlsl` samples 3D `TextureCube` across normalized direction vectors using `Trilinear(ClampToEdge)` without face-clamped 2D wrapping; CPU checks validate shared edge alignment (`+Z/+X`, `+Z/+Y`) and native Debug/Release D3D12/Vulkan readbacks across a bright `+X/+Z` boundary pillar confirm continuous radiance across adjacent cube borders on prefiltered mips `1..3` (`0` validation errors); [U5-C Review](../../reviews/M15_U5_C_REVIEW.md).
+- [x] **M15-U5-18.1 — Use sharp mirror mip.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** `PrefilterCubeCS` (`mip == 0` / `roughness <= 1e-4`) samples crisp mip `0` source radiance without GGX cone blur; `ForwardPBR.hlsl` queries `u_PrefilterMap.GetDimensions(0, ..., envLevels)` (`MAX_REFLECTION_LOD = float(envLevels - 1)`) so `roughness = 0.05` samples near mip `0` with crisp peak `0.993335` in Debug/Release D3D12 & Vulkan; [U5-C Review](../../reviews/M15_U5_C_REVIEW.md).
 - [ ] **M15-U5-18.2 — Use blurred rough-material mips.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U5-19.1 — Validate controlled environment.**
+  - **Automated Status:** Automated PASS (self-verification; independent Codex review pending) — `ForwardPBR` split-sum roughness sweep against captured 5-mip dynamic cubemap demonstrates monotonic broadening into higher prefiltered mips (`ringFraction`: `0.175925` @ `0.05` -> `0.485786` @ `0.35` -> `0.776941` @ `0.70` -> `0.837986` @ `0.95`) on Debug/Release D3D12 & Vulkan.
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass).
+- [x] **M15-U5-19.1 — Validate controlled environment.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Controlled 64px HDR cubemap fixture compared GPU prefilter output against CPU 3D cubemap GGX reference (`ReflectionCaptureContract::EvaluatePrefilterDirectionCPU`) on Debug/Release D3D12 & Vulkan (`mip 1` `r=0.25`: `gpu=(7.66797,3.87109,1.31445)` vs `cpu=(7.83077,3.91539,1.30513)`, `relErr=0.0190894`; `mip 2` `r=0.50`: `relErr=0.1366`); [U5-C Review](../../reviews/M15_U5_C_REVIEW.md).
 - [ ] **M15-U5-19.2 — Validate roughness sweep.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
-- [ ] **M15-U5-20 — Do not route cubemap data through equirectangular assumptions.**
+  - **Automated Status:** Automated PASS (self-verification; independent Codex review pending) — metallic sphere fixture sweeping `roughness = 0.05 -> 0.35 -> 0.70 -> 0.95` produces strictly finite non-negative pixels and monotonic peak/width progression (`peakLuma`: `0.993335 -> 0.974489 -> 0.875152 -> 0.84256`) on Debug/Release D3D12 & Vulkan (`exit 0`, `0` validation errors).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass).
+- [x] **M15-U5-20 — Do not route cubemap data through equirectangular assumptions.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+  - **Evidence:** `CubemapPrefilter.hlsl` and `RenderContracts.cpp` operate purely on 3D cubemap texel directions (`CubeFaceTexelDirection`, `SampleCubemapBilinear3D`) with zero equirectangular/spherical projection (`atan2`/`asin` absent by contract test); native `+Y` pole beacon checks confirm azimuthal isotropy on Debug/Release D3D12 & Vulkan; [U5-C Review](../../reviews/M15_U5_C_REVIEW.md).
 
 #### S5.4 — Invalidation and scheduling
 

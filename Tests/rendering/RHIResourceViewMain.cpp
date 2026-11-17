@@ -461,6 +461,48 @@ static bool TargetSets(RHIType backend) {
     const bool externalLive = device.GetResources().Acquire(externalHandle).IsLive();
     RENDER_CHECK(!oldLive, "completed frame releases the retired color generation");
     RENDER_CHECK(!externalLive, "completed frame releases the retired external generation");
+
+    // M15-U5-16.1 / 16.2: Multi-mip cubemap storage allocation, per-mip SRV/UAV views, and fault rollback.
+    {
+        RHITexture cubeStorage;
+        RENDER_CHECK(cubeStorage.Init(RHITextureDesc::CubemapStorage(32, 5, RHITextureFormat::RGBA16_FLOAT, "TestCubePrefilter")),
+            "multi-mip HDR cubemap storage creation");
+        RENDER_CHECK(cubeStorage.IsValid() && cubeStorage.GetMipCount() == 5 && cubeStorage.GetDesc().IsCubeMap &&
+                     cubeStorage.GetDesc().ArrayLayers == 6 && cubeStorage.GetSRV() != nullptr && cubeStorage.GetUAV() != nullptr,
+            "multi-mip cubemap exposes 5 mips, 6 cube layers, whole-cube SRV, and mip-0 UAV");
+        for (uint32_t mip = 0; mip < 5; ++mip) {
+            RENDER_CHECK(cubeStorage.GetMipSRV(mip) != nullptr && cubeStorage.GetMipUAV(mip) != nullptr,
+                "every mip level exposes distinct SRV and storage array UAV descriptors");
+        }
+        RENDER_CHECK(cubeStorage.GetMipSRV(5) == nullptr && cubeStorage.GetMipUAV(5) == nullptr,
+            "out-of-range mip views return null cleanly");
+        RHITexture retained = cubeStorage.RetainGeneration();
+        const auto cubeHandle = cubeStorage.GetHandle();
+        cubeStorage.Shutdown();
+        RENDER_CHECK(retained.IsValid() && retained.GetMipUAV(4) != nullptr && device.GetResources().Acquire(cubeHandle).IsLive(),
+            "RetainGeneration preserves per-mip cubemap views independently");
+        retained.Shutdown();
+        RENDER_CHECK(!device.GetResources().Acquire(cubeHandle).IsLive(), "releasing retained multi-mip cubemap frees views and texture");
+
+        uint32_t uavCount = 0;
+        bool uavFaultHit = false;
+        RHITexture failedCube;
+        {
+            ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
+                if (op == "CreateTextureUAV") {
+                    ++uavCount;
+                    if (uavCount == 3 && !uavFaultHit) {
+                        uavFaultHit = true;
+                        return nri::Result::OUT_OF_MEMORY;
+                    }
+                }
+                return {};
+            });
+            RENDER_CHECK(!failedCube.Init(RHITextureDesc::CubemapStorage(32, 5, RHITextureFormat::RGBA16_FLOAT, "FailedCubePrefilter")) &&
+                         uavFaultHit && !failedCube.IsValid(),
+                "mid-mip UAV creation fault cleans up partial cubemap resources without leaks");
+        }
+    }
     return true;
 }
 

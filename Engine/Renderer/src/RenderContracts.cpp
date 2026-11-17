@@ -1307,6 +1307,190 @@ namespace Axle {
 
             return out;
         }
+
+        uint32_t ComputePrefilterMipCount(uint32_t resolution) {
+            if (resolution == 0u) {
+                return 0u;
+            }
+            uint32_t chainDepth = 0u;
+            for (uint32_t dim = resolution; dim > 0u; dim >>= 1u) {
+                ++chainDepth;
+            }
+            return std::min(MaxPrefilterMipCount, std::max(1u, chainDepth));
+        }
+
+        float ComputePrefilterRoughness(uint32_t mip, uint32_t mipCount) {
+            if (mipCount <= 1u || mip == 0u) {
+                return 0.0f;
+            }
+            const uint32_t clampedMip = std::min(mip, mipCount - 1u);
+            return std::clamp(
+                static_cast<float>(clampedMip) / static_cast<float>(mipCount - 1u),
+                0.0f, 1.0f);
+        }
+
+        bool ValidatePrefilterPolicy(const ReflectionPrefilterPolicy& policy, std::string* outReason) {
+            if (policy.ColorFormat != nri::Format::RGBA16_SFLOAT) {
+                SetReason(outReason, "reflection prefilter cubemap must use linear HDR RGBA16_FLOAT");
+                return false;
+            }
+            const bool isPowerOfTwo = (policy.Resolution != 0u) && ((policy.Resolution & (policy.Resolution - 1u)) == 0u);
+            if (policy.Resolution < MinResolution || policy.Resolution > MaxResolution || !isPowerOfTwo) {
+                SetReason(outReason, "reflection prefilter resolution must be a power of two in [16, 1024]");
+                return false;
+            }
+            uint32_t fullChainDepth = 0u;
+            for (uint32_t dim = policy.Resolution; dim > 0u; dim >>= 1u) {
+                ++fullChainDepth;
+            }
+            const uint32_t maxAllowedMips = std::min(MaxPrefilterMipCount, fullChainDepth);
+            if (policy.MipCount == 0u || policy.MipCount > maxAllowedMips) {
+                SetReason(outReason, "reflection prefilter mip count exceeds allowed [1, 5] cube chain");
+                return false;
+            }
+            if (policy.SampleCount < MinPrefilterSampleCount || policy.SampleCount > MaxPrefilterSampleCount) {
+                SetReason(outReason, "reflection prefilter sample count out of bounds [16, 1024]");
+                return false;
+            }
+            SetReason(outReason, "");
+            return true;
+        }
+
+        glm::vec3 ComputeCubeTexelDirection(uint32_t faceIndex, float u, float v) {
+            if (faceIndex >= FaceCount) {
+                return glm::vec3(0.0f);
+            }
+            const CubeFaceBasis basis = GetCubeFaceBasis(faceIndex);
+            const float x = 2.0f * u - 1.0f;
+            const float y = 2.0f * v - 1.0f;
+            return glm::normalize(basis.Forward + x * basis.Right - y * basis.Up);
+        }
+
+        glm::vec3 SampleCubemapBilinear3D(
+            const std::array<std::vector<glm::vec3>, FaceCount>& faces,
+            uint32_t faceResolution,
+            const glm::vec3& direction) {
+            if (faceResolution == 0u) {
+                return glm::vec3(0.0f);
+            }
+            const size_t expectedPixels = static_cast<size_t>(faceResolution) * faceResolution;
+            for (const auto& face : faces) {
+                if (face.size() != expectedPixels) {
+                    return glm::vec3(0.0f);
+                }
+            }
+            const float len = glm::length(direction);
+            if (!std::isfinite(len) || len <= 1e-7f) {
+                return glm::vec3(0.0f);
+            }
+            const glm::vec3 d = direction / len;
+            const float absX = std::abs(d.x);
+            const float absY = std::abs(d.y);
+            const float absZ = std::abs(d.z);
+
+            uint32_t face = 0u;
+            float sc = 0.0f;
+            float tc = 0.0f;
+            float ma = 1.0f;
+            if (absX >= absY && absX >= absZ) {
+                ma = absX;
+                if (d.x >= 0.0f) {
+                    face = 0u; sc = -d.z; tc = -d.y;
+                } else {
+                    face = 1u; sc = d.z; tc = -d.y;
+                }
+            } else if (absY >= absX && absY >= absZ) {
+                ma = absY;
+                if (d.y >= 0.0f) {
+                    face = 2u; sc = d.x; tc = d.z;
+                } else {
+                    face = 3u; sc = d.x; tc = -d.z;
+                }
+            } else {
+                ma = absZ;
+                if (d.z >= 0.0f) {
+                    face = 4u; sc = d.x; tc = -d.y;
+                } else {
+                    face = 5u; sc = -d.x; tc = -d.y;
+                }
+            }
+
+            const float u = std::clamp(0.5f * (sc / ma + 1.0f), 0.0f, 1.0f);
+            const float v = std::clamp(0.5f * (tc / ma + 1.0f), 0.0f, 1.0f);
+            const float fx = u * static_cast<float>(faceResolution) - 0.5f;
+            const float fy = v * static_cast<float>(faceResolution) - 0.5f;
+            const int x0 = std::clamp(static_cast<int>(std::floor(fx)), 0, static_cast<int>(faceResolution) - 1);
+            const int y0 = std::clamp(static_cast<int>(std::floor(fy)), 0, static_cast<int>(faceResolution) - 1);
+            const int x1 = std::min(x0 + 1, static_cast<int>(faceResolution) - 1);
+            const int y1 = std::min(y0 + 1, static_cast<int>(faceResolution) - 1);
+            const float tx = std::clamp(fx - static_cast<float>(x0), 0.0f, 1.0f);
+            const float ty = std::clamp(fy - static_cast<float>(y0), 0.0f, 1.0f);
+
+            const auto& px = faces[face];
+            const glm::vec3 c00 = px[static_cast<size_t>(y0) * faceResolution + x0];
+            const glm::vec3 c10 = px[static_cast<size_t>(y0) * faceResolution + x1];
+            const glm::vec3 c01 = px[static_cast<size_t>(y1) * faceResolution + x0];
+            const glm::vec3 c11 = px[static_cast<size_t>(y1) * faceResolution + x1];
+            return glm::mix(glm::mix(c00, c10, tx), glm::mix(c01, c11, tx), ty);
+        }
+
+        glm::vec3 EvaluatePrefilterDirectionCPU(
+            const std::array<std::vector<glm::vec3>, FaceCount>& sourceFaces,
+            uint32_t sourceResolution,
+            const glm::vec3& normalDir,
+            float roughness,
+            uint32_t sampleCount) {
+            if (sourceResolution == 0u || sampleCount == 0u || !IsFiniteVec3(normalDir)) {
+                return glm::vec3(0.0f);
+            }
+            const float nLen = glm::length(normalDir);
+            if (nLen <= 1e-7f) {
+                return glm::vec3(0.0f);
+            }
+            const glm::vec3 N = normalDir / nLen;
+            const float clampedRough = std::clamp(roughness, 0.0f, 1.0f);
+            if (clampedRough <= 0.0f) {
+                return glm::max(SampleCubemapBilinear3D(sourceFaces, sourceResolution, N), glm::vec3(0.0f));
+            }
+
+            const auto radicalInverse = [](uint32_t bits) -> float {
+                bits = (bits << 16u) | (bits >> 16u);
+                bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xaaaaaaaau) >> 1u);
+                bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xccccccccu) >> 2u);
+                bits = ((bits & 0x0f0f0f0fu) << 4u) | ((bits & 0xf0f0f0f0u) >> 4u);
+                bits = ((bits & 0x00ff00ffu) << 8u) | ((bits & 0xff00ff00u) >> 8u);
+                return static_cast<float>(bits) * 2.3283064365386963e-10f;
+            };
+
+            const glm::vec3 up = std::abs(N.z) < 0.999f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+            const glm::vec3 tangent = glm::normalize(glm::cross(up, N));
+            const glm::vec3 bitangent = glm::cross(N, tangent);
+            const float a = clampedRough * clampedRough;
+            const float a2 = a * a;
+            constexpr float kPi = 3.14159265358979323846f;
+
+            glm::vec3 prefiltered(0.0f);
+            float totalWeight = 0.0f;
+            for (uint32_t i = 0u; i < sampleCount; ++i) {
+                const float xiX = static_cast<float>(i) / static_cast<float>(sampleCount);
+                const float xiY = radicalInverse(i);
+                const float cosTheta = std::sqrt((1.0f - xiY) / std::max(1.0f + (a2 - 1.0f) * xiY, 1e-6f));
+                const float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
+                const float phi = 2.0f * kPi * xiX;
+                const glm::vec3 H = glm::normalize(
+                    tangent * (std::cos(phi) * sinTheta) +
+                    bitangent * (std::sin(phi) * sinTheta) +
+                    N * cosTheta);
+                const glm::vec3 L = glm::normalize(2.0f * glm::dot(N, H) * H - N);
+                const float NdotL = glm::dot(N, L);
+                if (NdotL > 0.0f) {
+                    const glm::vec3 radiance = glm::max(SampleCubemapBilinear3D(sourceFaces, sourceResolution, L), glm::vec3(0.0f));
+                    prefiltered += radiance * NdotL;
+                    totalWeight += NdotL;
+                }
+            }
+            return totalWeight > 0.0f ? (prefiltered / totalWeight) : glm::vec3(0.0f);
+        }
     } // namespace ReflectionCaptureContract
 
 } // namespace Axle

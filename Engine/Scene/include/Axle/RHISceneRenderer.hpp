@@ -190,6 +190,14 @@ namespace Axle {
     };
     static_assert(sizeof(RHICubemapCaptureConstants) == 256, "RHICubemapCaptureConstants must be 256 bytes aligned!");
 
+    // 256-byte CBV aligned constants for dynamic reflection cubemap downsample / GGX prefilter pass
+    struct alignas(256) RHICubemapPrefilterConstants {
+        glm::uvec4 Dims{ 128u, 128u, 0u, 5u }; // x: DstSize, y: SrcBaseSize, z: MipIndex, w: MipCount
+        glm::vec4 Params{ 0.0f, 64.0f, 0.0f, 0.0f }; // x: Roughness, y: SampleCount, z/w: Reserved
+        glm::vec4 Reserved[14]{};
+    };
+    static_assert(sizeof(RHICubemapPrefilterConstants) == 256, "RHICubemapPrefilterConstants must be 256 bytes aligned!");
+
     struct DynamicReflectionProbeGeneration {
         std::string ProbeKey;
         uint64_t EntityID = 0;
@@ -197,8 +205,10 @@ namespace Axle {
         uint64_t SceneRevision = 0;
         uint64_t InputStamp = 0;
         uint32_t Resolution = 0;
+        uint32_t MipCount = 1;
         glm::vec3 Position{ 0.0f };
-        std::shared_ptr<RHI::RHITexture> Cubemap;
+        std::shared_ptr<RHI::RHITexture> Cubemap;    // Mip-capable prefiltered cubemap (mip 0 = mirror, mips 1..N-1 = GGX roughness)
+        std::shared_ptr<RHI::RHITexture> RawCubemap; // Captured unblurred source cubemap (all mips)
         RHI::RHICompletionToken Completion;
     };
 
@@ -533,6 +543,16 @@ namespace Axle {
         bool CreateCubemapCapturePipelineLayout(RHI::RHIDevice& device);
         bool CreateCubemapCapturePipeline(RHI::RHIDevice& device);
 
+        bool CompileCubemapPrefilterShaders(RHI::RHIDevice& device);
+        bool CreateCubemapPrefilterPipelineLayout(RHI::RHIDevice& device);
+        bool CreateCubemapPrefilterPipelines(RHI::RHIDevice& device);
+        bool PrefilterCapturedCubemap(
+            RHI::RHITexture& rawCubemap,
+            RHI::RHITexture& prefilteredCubemap,
+            uint32_t resolution,
+            uint32_t mipCount,
+            std::string* outDiagnostic = nullptr);
+
     private:
         void ConsumeReadyGPUTimestamps();
         void BeginGPUTimestampFrame();
@@ -703,6 +723,21 @@ namespace Axle {
         nri::DescriptorSet* m_CaptureOrientationTextureSet = nullptr;
         nri::DescriptorSet* m_CaptureOrientationStorageSet = nullptr;
         std::unique_ptr<Passes::ReflectionCaptureTargets> m_CaptureTargets;
+
+        // Dynamic reflection cubemap downsample & GGX roughness prefilter resources (M15-U5-C)
+        static constexpr uint32_t MaxCapturePrefilterMips = 5u;
+        RHI::RHIPipelineLayout m_CapturePrefilterPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_CaptureDownsamplePipeline;
+        RHI::RHIResourceRef<nri::Pipeline> m_CapturePrefilterPipeline;
+        RHI::RHIShaderBytecode m_CaptureDownsampleComputeShader;
+        RHI::RHIShaderBytecode m_CapturePrefilterComputeShader;
+        RHI::RHISampler m_CapturePrefilterSampler;
+        RHI::RHIDescriptorPool m_CapturePrefilterDescriptorPool;
+        std::array<nri::DescriptorSet*, MaxCapturePrefilterMips> m_CaptureDownsampleTextureSets{};
+        std::array<nri::DescriptorSet*, MaxCapturePrefilterMips> m_CaptureDownsampleStorageSets{};
+        std::array<nri::DescriptorSet*, MaxCapturePrefilterMips> m_CapturePrefilterTextureSets{};
+        std::array<nri::DescriptorSet*, MaxCapturePrefilterMips> m_CapturePrefilterStorageSets{};
+        std::array<RHI::RHIBuffer, MaxCapturePrefilterMips * 2> m_CapturePrefilterConstantBuffers;
 
         struct CaptureSessionState {
             bool Active = false;

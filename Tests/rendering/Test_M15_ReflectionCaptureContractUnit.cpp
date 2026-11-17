@@ -25,6 +25,10 @@ using namespace Axle::ReflectionCaptureContract;
 #define AXLE_CUBEMAP_CAPTURE_SHADER_PATH "Engine/Resources/Shaders/CubemapCapture.hlsl"
 #endif
 
+#ifndef AXLE_CUBEMAP_PREFILTER_SHADER_PATH
+#define AXLE_CUBEMAP_PREFILTER_SHADER_PATH "Engine/Resources/Shaders/CubemapPrefilter.hlsl"
+#endif
+
 namespace {
     std::string ReadText(const char* path) {
         std::ifstream file(path);
@@ -316,6 +320,102 @@ bool RunM15ReflectionCaptureContractUnitTests() {
                      std::abs(extracted.ReflectionProbes[0].CaptureNearPlane - 0.25f) < 1e-4f &&
                      std::abs(extracted.ReflectionProbes[0].CaptureFarPlane - 75.0f) < 1e-4f,
             "SceneExtraction preserves dynamic reflection probe settings after round-trip");
+    }
+
+    // 6. M15-U5-C (S5.3): Cubemap roughness prefilter contracts & pure 3D cubemap reference
+    {
+        RENDER_CHECK(ComputePrefilterMipCount(0u) == 0u &&
+                     ComputePrefilterMipCount(4u) == 3u &&
+                     ComputePrefilterMipCount(8u) == 4u &&
+                     ComputePrefilterMipCount(16u) == 5u &&
+                     ComputePrefilterMipCount(128u) == 5u &&
+                     ComputePrefilterMipCount(1024u) == 5u,
+            "M15-U5-16.1: ComputePrefilterMipCount computes clamped [1, 5] power-of-two cube mip chain");
+
+        RENDER_CHECK(ComputePrefilterRoughness(0u, 5u) == 0.0f &&
+                     std::abs(ComputePrefilterRoughness(1u, 5u) - 0.25f) < 1e-6f &&
+                     std::abs(ComputePrefilterRoughness(2u, 5u) - 0.50f) < 1e-6f &&
+                     std::abs(ComputePrefilterRoughness(3u, 5u) - 0.75f) < 1e-6f &&
+                     std::abs(ComputePrefilterRoughness(4u, 5u) - 1.00f) < 1e-6f,
+            "M15-U5-17.1: ComputePrefilterRoughness maps mips linearly from 0.0 (mirror) to 1.0 (diffuse lobe)");
+
+        ReflectionPrefilterPolicy validPrefilter;
+        std::string reason;
+        RENDER_CHECK(ValidatePrefilterPolicy(validPrefilter, &reason) && reason.empty(),
+            "M15-U5-16.1: default RGBA16_FLOAT 5-mip prefilter policy validates");
+
+        ReflectionPrefilterPolicy badFormat = validPrefilter;
+        badFormat.ColorFormat = nri::Format::RGBA8_UNORM;
+        RENDER_CHECK(!ValidatePrefilterPolicy(badFormat, &reason),
+            "M15-U5-16.1: rejects SDR prefilter cubemap formats");
+
+        ReflectionPrefilterPolicy badMips = validPrefilter;
+        badMips.MipCount = 6u;
+        RENDER_CHECK(!ValidatePrefilterPolicy(badMips, &reason),
+            "M15-U5-16.1: rejects prefilter mip count exceeding max 5-mip chain");
+
+        badMips.Resolution = 16u;
+        badMips.MipCount = 6u;
+        RENDER_CHECK(!ValidatePrefilterPolicy(badMips, &reason),
+            "M15-U5-16.1: rejects mip count exceeding resolution chain depth");
+
+        ReflectionPrefilterPolicy badSamples = validPrefilter;
+        badSamples.SampleCount = 4u;
+        RENDER_CHECK(!ValidatePrefilterPolicy(badSamples, &reason),
+            "M15-U5-17.1: rejects insufficient prefilter sample budget");
+
+        // M15-U5-17.2 / 17.3 / 20: Pure 3D cube direction seam continuity and bilinear 3D lookup without equirectangular projection.
+        const glm::vec3 edgeRightPlusZ = ComputeCubeTexelDirection(4u, 1.0f, 0.5f); // (+X/+Z edge)
+        const glm::vec3 edgeLeftPlusX = ComputeCubeTexelDirection(0u, 0.0f, 0.5f);  // (+X/+Z edge)
+        RENDER_CHECK(glm::distance(edgeRightPlusZ, edgeLeftPlusX) < 1e-5f,
+            "M15-U5-17.2 / 17.3: +Z right seam equals +X left seam in 3D direction space");
+
+        const glm::vec3 edgeTopPlusZ = ComputeCubeTexelDirection(4u, 0.5f, 0.0f);   // (+Z/+Y edge)
+        const glm::vec3 edgeBottomPlusY = ComputeCubeTexelDirection(2u, 0.5f, 1.0f);
+        RENDER_CHECK(glm::distance(edgeTopPlusZ, edgeBottomPlusY) < 1e-5f,
+            "M15-U5-17.2 / 17.3: +Z top seam equals +Y bottom seam in 3D direction space");
+
+        constexpr uint32_t refRes = 16u;
+        std::array<std::vector<glm::vec3>, FaceCount> constantCube;
+        std::array<std::vector<glm::vec3>, FaceCount> poleSpotCube;
+        for (uint32_t f = 0u; f < FaceCount; ++f) {
+            constantCube[f].assign(static_cast<size_t>(refRes) * refRes, glm::vec3(2.0f, 4.0f, 8.0f));
+            poleSpotCube[f].resize(static_cast<size_t>(refRes) * refRes);
+            for (uint32_t y = 0u; y < refRes; ++y) {
+                for (uint32_t x = 0u; x < refRes; ++x) {
+                    const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(refRes);
+                    const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(refRes);
+                    const glm::vec3 dir = ComputeCubeTexelDirection(f, u, v);
+                    const float poleLobe = 0.1f + 20.0f * std::pow(std::max(dir.y, 0.0f), 24.0f);
+                    poleSpotCube[f][static_cast<size_t>(y) * refRes + x] = glm::vec3(poleLobe);
+                }
+            }
+        }
+
+        const glm::vec3 constOut = EvaluatePrefilterDirectionCPU(constantCube, refRes, {0.0f, 1.0f, 0.0f}, 0.75f, 64u);
+        RENDER_CHECK(glm::distance(constOut, glm::vec3(2.0f, 4.0f, 8.0f)) < 1e-4f,
+            "M15-U5-19.1: constant HDR cubemap radiance is conserved at rough mips");
+
+        const glm::vec3 sharpPole = EvaluatePrefilterDirectionCPU(poleSpotCube, refRes, {0.0f, 1.0f, 0.0f}, 0.0f, 64u);
+        const glm::vec3 midPole = EvaluatePrefilterDirectionCPU(poleSpotCube, refRes, {0.0f, 1.0f, 0.0f}, 0.50f, 64u);
+        const glm::vec3 roughPole = EvaluatePrefilterDirectionCPU(poleSpotCube, refRes, {0.0f, 1.0f, 0.0f}, 1.00f, 64u);
+        const glm::vec3 poleRingX = EvaluatePrefilterDirectionCPU(poleSpotCube, refRes, glm::normalize(glm::vec3(0.45f, 1.0f, 0.0f)), 0.50f, 256u);
+        const glm::vec3 poleRingZ = EvaluatePrefilterDirectionCPU(poleSpotCube, refRes, glm::normalize(glm::vec3(0.0f, 1.0f, 0.45f)), 0.50f, 256u);
+        const float maxPoleRing = std::max({poleRingX.r, poleRingZ.r, 1e-4f});
+        RENDER_CHECK(sharpPole.r > midPole.r && midPole.r > roughPole.r &&
+                     std::abs(poleRingX.r - poleRingZ.r) <= maxPoleRing * 0.05f,
+            "M15-U5-19.1 / 20: CPU 3D cubemap GGX prefilter decreases peak monotonically with isotropic +Y pole response");
+
+        const std::string prefilterShader = ReadText(AXLE_CUBEMAP_PREFILTER_SHADER_PATH);
+        RENDER_CHECK(!prefilterShader.empty() &&
+                     prefilterShader.find("DownsampleCubeCS") != std::string::npos &&
+                     prefilterShader.find("PrefilterCubeCS") != std::string::npos &&
+                     prefilterShader.find("TextureCube<float4>") != std::string::npos &&
+                     prefilterShader.find("RWTexture2DArray<float4>") != std::string::npos &&
+                     prefilterShader.find("ImportanceSampleGGX") != std::string::npos &&
+                     prefilterShader.find("atan2") == std::string::npos &&
+                     prefilterShader.find("asin") == std::string::npos,
+            "M15-U5-17.1 / 20: CubemapPrefilter.hlsl prefilters 3D TextureCube into RWTexture2DArray without equirectangular math");
     }
 
     std::cout << "[M15ReflectionCapture] All dynamic reflection capture contract tests passed!\n";

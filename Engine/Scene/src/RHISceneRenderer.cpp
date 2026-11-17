@@ -383,6 +383,41 @@ namespace Axle {
         if (!m_CaptureOrientationTextureSet || !m_CaptureOrientationStorageSet) return false;
         m_CaptureTargets = std::make_unique<Passes::ReflectionCaptureTargets>();
 
+        if (!CompileCubemapPrefilterShaders(device) || !CreateCubemapPrefilterPipelineLayout(device) || !CreateCubemapPrefilterPipelines(device)) {
+            return false;
+        }
+        if (!m_CapturePrefilterSampler.Init(RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge))) {
+            return false;
+        }
+        RHIDescriptorPoolDesc prefilterPoolDesc;
+        prefilterPoolDesc.MaxDescriptorSets = ReflectionCaptureContract::MaxPrefilterMipCount * 4u;
+        prefilterPoolDesc.MaxTextures = ReflectionCaptureContract::MaxPrefilterMipCount * 4u;
+        prefilterPoolDesc.MaxSamplers = ReflectionCaptureContract::MaxPrefilterMipCount * 4u;
+        prefilterPoolDesc.MaxStorageTextures = ReflectionCaptureContract::MaxPrefilterMipCount * 4u;
+        prefilterPoolDesc.MaxConstantBuffers = 0;
+        if (!m_CapturePrefilterDescriptorPool.Init(prefilterPoolDesc)) return false;
+        for (uint32_t mip = 0; mip < ReflectionCaptureContract::MaxPrefilterMipCount; ++mip) {
+            m_CaptureDownsampleTextureSets[mip] = m_CapturePrefilterDescriptorPool.AllocateDescriptorSet(m_CapturePrefilterPipelineLayout, 0);
+            m_CaptureDownsampleStorageSets[mip] = m_CapturePrefilterDescriptorPool.AllocateDescriptorSet(m_CapturePrefilterPipelineLayout, 1);
+            m_CapturePrefilterTextureSets[mip] = m_CapturePrefilterDescriptorPool.AllocateDescriptorSet(m_CapturePrefilterPipelineLayout, 0);
+            m_CapturePrefilterStorageSets[mip] = m_CapturePrefilterDescriptorPool.AllocateDescriptorSet(m_CapturePrefilterPipelineLayout, 1);
+            if (!m_CaptureDownsampleTextureSets[mip] || !m_CaptureDownsampleStorageSets[mip] ||
+                !m_CapturePrefilterTextureSets[mip] || !m_CapturePrefilterStorageSets[mip]) {
+                return false;
+            }
+            if (!m_CapturePrefilterDescriptorPool.UpdateSampler(m_CaptureDownsampleTextureSets[mip], 1, 0, m_CapturePrefilterSampler.GetNative()) ||
+                !m_CapturePrefilterDescriptorPool.UpdateSampler(m_CapturePrefilterTextureSets[mip], 1, 0, m_CapturePrefilterSampler.GetNative())) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < m_CapturePrefilterConstantBuffers.size(); ++i) {
+            if (!m_CapturePrefilterConstantBuffers[i].Init(
+                    RHIBufferDesc::Constant(sizeof(RHICubemapPrefilterConstants), RHIMemoryLocation::HostUpload,
+                                            "CubemapPrefilterConstants_" + std::to_string(i)))) {
+                return false;
+            }
+        }
+
         // Initialize Volumetric Fog & Atmospheric Participating Media Resources
         if (!CompileFogShaders(device) || !CreateFogPipelineLayout(device) || !CreateFogPipeline(device)) return false;
 
@@ -628,6 +663,21 @@ namespace Axle {
         m_CaptureOrientationStorageSet = nullptr;
         m_CaptureOrientationDescriptorPool.Shutdown();
         m_CaptureOrientationComputeShader = {};
+
+        m_CaptureDownsamplePipeline = nullptr;
+        m_CapturePrefilterPipeline = nullptr;
+        m_CapturePrefilterPipelineLayout.Shutdown();
+        m_CaptureDownsampleTextureSets.fill(nullptr);
+        m_CaptureDownsampleStorageSets.fill(nullptr);
+        m_CapturePrefilterTextureSets.fill(nullptr);
+        m_CapturePrefilterStorageSets.fill(nullptr);
+        m_CapturePrefilterDescriptorPool.Shutdown();
+        m_CapturePrefilterSampler.Shutdown();
+        for (auto& cb : m_CapturePrefilterConstantBuffers) {
+            cb.Shutdown();
+        }
+        m_CaptureDownsampleComputeShader = {};
+        m_CapturePrefilterComputeShader = {};
 
         m_FogComputePipeline = nullptr;
         m_FogApplyPipelineSDR = nullptr;
@@ -2033,6 +2083,267 @@ namespace Axle {
         return m_CaptureOrientationPipeline != nullptr;
     }
 
+    bool RHISceneRenderer::CompileCubemapPrefilterShaders(RHIDevice& device) {
+        auto shaderPath = FindShaderPath("CubemapPrefilter.hlsl");
+        if (shaderPath.empty()) return false;
+        std::ifstream file(shaderPath);
+        std::stringstream sourceStream;
+        sourceStream << file.rdbuf();
+        const auto source = sourceStream.str();
+        if (source.empty()) return false;
+
+        RHIShaderCompileDesc downDesc;
+        downDesc.Source = source;
+        downDesc.SourcePath = PathToUtf8(shaderPath);
+        downDesc.EntryPoint = "DownsampleCubeCS";
+        downDesc.Stage = RHIShaderStage::Compute;
+        downDesc.HLSLVersion = "2021";
+        downDesc.ShaderModel = "6_0";
+        downDesc.Format = device.GetCapabilities().ActiveBackend == RHIType::Vulkan ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        downDesc.Optimization = true;
+        const auto downResult = RHIShaderCompiler::Get().Compile(downDesc);
+        if (!downResult.Success) return false;
+        m_CaptureDownsampleComputeShader = downResult.Bytecode;
+
+        RHIShaderCompileDesc preDesc = downDesc;
+        preDesc.EntryPoint = "PrefilterCubeCS";
+        const auto preResult = RHIShaderCompiler::Get().Compile(preDesc);
+        if (!preResult.Success) return false;
+        m_CapturePrefilterComputeShader = preResult.Bytecode;
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateCubemapPrefilterPipelineLayout(RHIDevice& device) {
+        (void)device;
+        nri::RootDescriptorDesc root{};
+        root.registerIndex = 0;
+        root.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        root.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        nri::DescriptorRangeDesc textureRanges[2]{};
+        textureRanges[0].baseRegisterIndex = 0;
+        textureRanges[0].descriptorNum = 1;
+        textureRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        textureRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        textureRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        textureRanges[1].baseRegisterIndex = 0;
+        textureRanges[1].descriptorNum = 1;
+        textureRanges[1].descriptorType = nri::DescriptorType::SAMPLER;
+        textureRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        textureRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorRangeDesc storageRange{};
+        storageRange.baseRegisterIndex = 0;
+        storageRange.descriptorNum = 1;
+        storageRange.descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        storageRange.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        storageRange.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc sets[2]{};
+        sets[0].registerSpace = 1;
+        sets[0].ranges = textureRanges;
+        sets[0].rangeNum = 2;
+        sets[1].registerSpace = 2;
+        sets[1].ranges = &storageRange;
+        sets[1].rangeNum = 1;
+
+        nri::PipelineLayoutDesc layout{};
+        layout.rootRegisterSpace = 0;
+        layout.rootDescriptors = &root;
+        layout.rootDescriptorNum = 1;
+        layout.descriptorSets = sets;
+        layout.descriptorSetNum = 2;
+        layout.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        return m_CapturePrefilterPipelineLayout.Init(layout);
+    }
+
+    bool RHISceneRenderer::CreateCubemapPrefilterPipelines(RHIDevice& device) {
+        (void)device;
+        auto& cache = RHIPipelineCache::Get();
+        RHIComputePipelineDesc downDesc;
+        downDesc.Layout = &m_CapturePrefilterPipelineLayout;
+        downDesc.ComputeShader = m_CaptureDownsampleComputeShader;
+        m_CaptureDownsamplePipeline = cache.GetOrCreateComputePipeline(downDesc);
+
+        RHIComputePipelineDesc preDesc;
+        preDesc.Layout = &m_CapturePrefilterPipelineLayout;
+        preDesc.ComputeShader = m_CapturePrefilterComputeShader;
+        m_CapturePrefilterPipeline = cache.GetOrCreateComputePipeline(preDesc);
+        return m_CaptureDownsamplePipeline != nullptr && m_CapturePrefilterPipeline != nullptr;
+    }
+
+    bool RHISceneRenderer::PrefilterCapturedCubemap(
+        RHITexture& rawCubemap,
+        RHITexture& prefilteredCubemap,
+        uint32_t resolution,
+        uint32_t mipCount,
+        std::string* outDiagnostic) {
+        static_assert(MaxCapturePrefilterMips == ReflectionCaptureContract::MaxPrefilterMipCount,
+            "MaxCapturePrefilterMips must match ReflectionCaptureContract::MaxPrefilterMipCount");
+        if (outDiagnostic) outDiagnostic->clear();
+        if (!m_Device || !m_Device->CanSubmit() ||
+            !rawCubemap.IsValid() || !prefilteredCubemap.IsValid() ||
+            !m_CaptureDownsamplePipeline || !m_CapturePrefilterPipeline ||
+            !m_CapturePrefilterSampler.IsValid() ||
+            mipCount == 0 || mipCount > ReflectionCaptureContract::MaxPrefilterMipCount ||
+            rawCubemap.GetMipCount() < mipCount || prefilteredCubemap.GetMipCount() < mipCount) {
+            if (outDiagnostic) *outDiagnostic = "prefilter pipeline or target cubemap prerequisites invalid";
+            return false;
+        }
+
+        RHICommandBuffer commands;
+        if (!commands.Init(m_Device->GetGraphicsQueue()) || !commands.Begin()) {
+            if (outDiagnostic) *outDiagnostic = "failed to begin cubemap prefilter command buffer";
+            return false;
+        }
+
+        commands.KeepAlive(rawCubemap.AcquireLease());
+        commands.KeepAlive(prefilteredCubemap.AcquireLease());
+        commands.KeepAlive(m_CapturePrefilterPipelineLayout.AcquireLease());
+        commands.KeepAlive(m_CapturePrefilterSampler.AcquireLease());
+        commands.KeepAlive(m_CapturePrefilterDescriptorPool.AcquireLease());
+
+        // Step 1: Generate source cubemap mip chain in 3D cubemap space so GGX importance
+        // sampling can read anti-aliased solid-angle levels across all 6 faces seamlessly.
+        for (uint32_t mip = 1u; mip < mipCount; ++mip) {
+            const uint32_t dstSize = std::max(1u, resolution >> mip);
+            nri::Descriptor* srcMipSRV = rawCubemap.GetMipSRV(mip - 1u);
+            nri::Descriptor* dstMipUAV = rawCubemap.GetMipUAV(mip);
+            auto* texSet = m_CaptureDownsampleTextureSets[mip];
+            auto* storageSet = m_CaptureDownsampleStorageSets[mip];
+            auto& cb = m_CapturePrefilterConstantBuffers[mip];
+            if (!srcMipSRV || !dstMipUAV || !texSet || !storageSet || !cb.IsValid()) {
+                if (outDiagnostic) *outDiagnostic = "missing downsample per-mip views or descriptor set";
+                return false;
+            }
+
+            RHICubemapPrefilterConstants constants{};
+            constants.Dims = glm::uvec4(dstSize, resolution, mip, mipCount);
+            constants.Params = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+            if (!cb.UpdateData(&constants, sizeof(constants)) ||
+                !m_CapturePrefilterDescriptorPool.UpdateTexture(texSet, 0, 0, srcMipSRV) ||
+                !m_CapturePrefilterDescriptorPool.UpdateStorageTexture(storageSet, 0, 0, dstMipUAV)) {
+                if (outDiagnostic) *outDiagnostic = "failed to update downsample descriptor or constants";
+                return false;
+            }
+
+            RHITextureBarrier toStorage(rawCubemap.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResourceStorage);
+            toStorage.AfterStage = RHIPipelineStage::ComputeShader;
+            toStorage.MipOffset = static_cast<uint16_t>(mip);
+            toStorage.MipNum = 1u;
+            toStorage.LayerOffset = 0u;
+            toStorage.LayerNum = ReflectionCaptureContract::FaceCount;
+            toStorage.Planes = nri::PlaneBits::COLOR;
+            RHIBarrierGroup beginGroup;
+            beginGroup.AddTexture(toStorage);
+            commands.PipelineBarrier(beginGroup);
+
+            commands.KeepAlive(cb.AcquireLease());
+            commands.SetPipeline(m_CaptureDownsamplePipeline);
+            commands.SetPipelineLayout(nri::BindPoint::COMPUTE, m_CapturePrefilterPipelineLayout);
+            commands.SetRootDescriptor(0, cb.GetCBV(), 0, nri::BindPoint::COMPUTE);
+            m_CapturePrefilterDescriptorPool.Bind(commands.GetNative());
+            RHIDescriptorPool::BindDescriptorSet(commands.GetNative(), 0, texSet, nri::BindPoint::COMPUTE);
+            RHIDescriptorPool::BindDescriptorSet(commands.GetNative(), 1, storageSet, nri::BindPoint::COMPUTE);
+            const uint32_t groups = (dstSize + 7u) / 8u;
+            commands.Dispatch(groups, groups, ReflectionCaptureContract::FaceCount);
+
+            RHITextureBarrier toSRV(rawCubemap.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResource);
+            toSRV.AfterStage = RHIPipelineStage::ComputeShader;
+            toSRV.MipOffset = static_cast<uint16_t>(mip);
+            toSRV.MipNum = 1u;
+            toSRV.LayerOffset = 0u;
+            toSRV.LayerNum = ReflectionCaptureContract::FaceCount;
+            toSRV.Planes = nri::PlaneBits::COLOR;
+            RHIBarrierGroup endGroup;
+            endGroup.AddTexture(toSRV);
+            commands.PipelineBarrier(endGroup);
+            if (!commands.IsRecording()) {
+                if (outDiagnostic) *outDiagnostic = "downsample command recording failed";
+                return false;
+            }
+        }
+
+        // Step 2: GGX importance-sampled roughness prefilter across every mip level and all 6 faces.
+        {
+            RHITextureBarrier prefilterWrite(prefilteredCubemap.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResourceStorage);
+            prefilterWrite.AfterStage = RHIPipelineStage::ComputeShader;
+            prefilterWrite.MipOffset = 0u;
+            prefilterWrite.MipNum = static_cast<uint16_t>(mipCount);
+            prefilterWrite.LayerOffset = 0u;
+            prefilterWrite.LayerNum = ReflectionCaptureContract::FaceCount;
+            prefilterWrite.Planes = nri::PlaneBits::COLOR;
+            RHIBarrierGroup writeGroup;
+            writeGroup.AddTexture(prefilterWrite);
+            commands.PipelineBarrier(writeGroup);
+        }
+
+        nri::Descriptor* rawCubeSRV = rawCubemap.GetSRV();
+        if (!rawCubeSRV) {
+            if (outDiagnostic) *outDiagnostic = "source cubemap SRV missing";
+            return false;
+        }
+        for (uint32_t mip = 0u; mip < mipCount; ++mip) {
+            const uint32_t dstSize = std::max(1u, resolution >> mip);
+            const float roughness = ReflectionCaptureContract::ComputePrefilterRoughness(mip, mipCount);
+            nri::Descriptor* dstMipUAV = prefilteredCubemap.GetMipUAV(mip);
+            auto* texSet = m_CapturePrefilterTextureSets[mip];
+            auto* storageSet = m_CapturePrefilterStorageSets[mip];
+            auto& cb = m_CapturePrefilterConstantBuffers[ReflectionCaptureContract::MaxPrefilterMipCount + mip];
+            if (!dstMipUAV || !texSet || !storageSet || !cb.IsValid()) {
+                if (outDiagnostic) *outDiagnostic = "missing prefilter per-mip UAV or descriptor set";
+                return false;
+            }
+
+            RHICubemapPrefilterConstants constants{};
+            constants.Dims = glm::uvec4(dstSize, resolution, mip, mipCount);
+            constants.Params = glm::vec4(
+                roughness,
+                static_cast<float>(ReflectionCaptureContract::DefaultPrefilterSampleCount),
+                0.0f,
+                0.0f);
+            if (!cb.UpdateData(&constants, sizeof(constants)) ||
+                !m_CapturePrefilterDescriptorPool.UpdateTexture(texSet, 0, 0, rawCubeSRV) ||
+                !m_CapturePrefilterDescriptorPool.UpdateStorageTexture(storageSet, 0, 0, dstMipUAV)) {
+                if (outDiagnostic) *outDiagnostic = "failed to update prefilter descriptor or constants";
+                return false;
+            }
+
+            commands.KeepAlive(cb.AcquireLease());
+            commands.SetPipeline(m_CapturePrefilterPipeline);
+            commands.SetPipelineLayout(nri::BindPoint::COMPUTE, m_CapturePrefilterPipelineLayout);
+            commands.SetRootDescriptor(0, cb.GetCBV(), 0, nri::BindPoint::COMPUTE);
+            m_CapturePrefilterDescriptorPool.Bind(commands.GetNative());
+            RHIDescriptorPool::BindDescriptorSet(commands.GetNative(), 0, texSet, nri::BindPoint::COMPUTE);
+            RHIDescriptorPool::BindDescriptorSet(commands.GetNative(), 1, storageSet, nri::BindPoint::COMPUTE);
+            const uint32_t groups = (dstSize + 7u) / 8u;
+            commands.Dispatch(groups, groups, ReflectionCaptureContract::FaceCount);
+            if (!commands.IsRecording()) {
+                if (outDiagnostic) *outDiagnostic = "prefilter dispatch recording failed";
+                return false;
+            }
+        }
+
+        {
+            RHITextureBarrier prefilterRead(prefilteredCubemap.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResource);
+            prefilterRead.MipOffset = 0u;
+            prefilterRead.MipNum = static_cast<uint16_t>(mipCount);
+            prefilterRead.LayerOffset = 0u;
+            prefilterRead.LayerNum = ReflectionCaptureContract::FaceCount;
+            prefilterRead.Planes = nri::PlaneBits::COLOR;
+            RHIBarrierGroup readGroup;
+            readGroup.AddTexture(prefilterRead);
+            commands.PipelineBarrier(readGroup);
+        }
+
+        if (!commands.End() || !commands.Submit()) {
+            if (outDiagnostic) *outDiagnostic = "cubemap prefilter command submit failed";
+            return false;
+        }
+        m_CaptureLastCompletion = m_Device->GetLastSubmittedToken();
+        return static_cast<bool>(m_CaptureLastCompletion);
+    }
+
     bool RHISceneRenderer::CompileFogShaders(RHIDevice& device) {
         auto& compiler = RHIShaderCompiler::Get();
         auto shaderPath = FindShaderPath("VolumetricFog.hlsl");
@@ -2899,6 +3210,17 @@ namespace Axle {
             return failCapture("DYNAMIC_PROBE_SETTINGS: " + policyReason);
         }
 
+        const uint32_t prefilterMips = ReflectionCaptureContract::ComputePrefilterMipCount(policy.Resolution);
+        ReflectionCaptureContract::ReflectionPrefilterPolicy prefilterPolicy;
+        prefilterPolicy.Resolution = policy.Resolution;
+        prefilterPolicy.MipCount = prefilterMips;
+        prefilterPolicy.SampleCount = ReflectionCaptureContract::DefaultPrefilterSampleCount;
+        prefilterPolicy.ColorFormat = policy.ColorFormat;
+        std::string prefilterPolicyReason;
+        if (!ReflectionCaptureContract::ValidatePrefilterPolicy(prefilterPolicy, &prefilterPolicyReason)) {
+            return failCapture("DYNAMIC_PROBE_SETTINGS: " + prefilterPolicyReason);
+        }
+
         for (uint32_t face = 0; face < ReflectionCaptureContract::FaceCount; ++face) {
             const auto basis = ReflectionCaptureContract::GetCubeFaceBasis(face);
             std::string basisReason;
@@ -2910,8 +3232,11 @@ namespace Axle {
         const auto backendPolicy = RenderBackendPolicy::FromDevice(m_Device->GetCapabilities());
         if (!backendPolicy.Supports(BackendFeature::Compute) ||
             !backendPolicy.Supports(BackendFeature::StorageTextures) ||
-            !m_CaptureOrientationPipeline) {
-            return failCapture("DYNAMIC_PROBE_UNAVAILABLE: compute orientation pipeline unavailable on active backend");
+            !m_CaptureOrientationPipeline ||
+            !m_CaptureDownsamplePipeline ||
+            !m_CapturePrefilterPipeline ||
+            !m_CapturePrefilterSampler.IsValid()) {
+            return failCapture("DYNAMIC_PROBE_UNAVAILABLE: compute capture/prefilter pipeline unavailable on active backend");
         }
 
         // Synchronize shared host-upload buffers and scratch targets before reconfiguration.
@@ -2923,14 +3248,24 @@ namespace Axle {
             return failCapture("DYNAMIC_PROBE_ALLOCATION: scratch face target allocation failed");
         }
 
-        auto candidateCubemap = std::make_shared<RHITexture>();
-        if (!candidateCubemap->Init(RHITextureDesc::Cubemap(
+        auto candidateRawCubemap = std::make_shared<RHITexture>();
+        if (!candidateRawCubemap->Init(RHITextureDesc::CubemapStorage(
                 policy.Resolution,
-                1u,
+                prefilterMips,
+                RHITextureFormat::RGBA16_FLOAT,
+                "DynamicReflectionProbeRawCubemap_" + probeKey)) ||
+            !candidateRawCubemap->IsValid()) {
+            return failCapture("DYNAMIC_PROBE_ALLOCATION: candidate raw cubemap allocation failed");
+        }
+
+        auto candidateCubemap = std::make_shared<RHITexture>();
+        if (!candidateCubemap->Init(RHITextureDesc::CubemapStorage(
+                policy.Resolution,
+                prefilterMips,
                 RHITextureFormat::RGBA16_FLOAT,
                 "DynamicReflectionProbeCubemap_" + probeKey)) ||
             !candidateCubemap->IsValid()) {
-            return failCapture("DYNAMIC_PROBE_ALLOCATION: candidate cubemap allocation failed");
+            return failCapture("DYNAMIC_PROBE_ALLOCATION: candidate prefiltered cubemap allocation failed");
         }
 
         const SceneRenderSettings captureSettings = backendPolicy.ResolveSettings(
@@ -3025,7 +3360,7 @@ namespace Axle {
             m_CaptureSession.IncludeTransparent = policy.IncludeTransparent;
             m_CaptureSession.IncludeParticles = policy.IncludeParticles;
             m_CaptureSession.IncludeEditorOverlays = policy.IncludeEditorOverlays;
-            m_CaptureSession.CandidateCubemap = candidateCubemap;
+            m_CaptureSession.CandidateCubemap = candidateRawCubemap;
             m_CaptureSession.SourceFace = m_CaptureTargets->FaceColor.get();
             m_CaptureSession.OrientedFace = m_CaptureTargets->OrientedColor.get();
 
@@ -3050,6 +3385,15 @@ namespace Axle {
             }
         }
 
+        if (!waitCompletion(m_CaptureLastCompletion)) {
+            return failCapture("DYNAMIC_PROBE_COMPLETION: final face capture did not complete", ReflectionCaptureContract::FaceCount);
+        }
+
+        std::string prefilterDiag;
+        if (!PrefilterCapturedCubemap(*candidateRawCubemap, *candidateCubemap, policy.Resolution, prefilterMips, &prefilterDiag)) {
+            return failCapture("DYNAMIC_PROBE_PREFILTER_FAILED: " + prefilterDiag, ReflectionCaptureContract::FaceCount);
+        }
+
         m_FailedDynamicCaptureRevisions.erase(probeKey);
         auto published = std::make_shared<DynamicReflectionProbeGeneration>();
         published->ProbeKey = probeKey;
@@ -3058,12 +3402,15 @@ namespace Axle {
         published->SceneRevision = world.SceneRevision;
         published->InputStamp = policyOverride ? 0 : inputStamp;
         published->Resolution = policy.Resolution;
+        published->MipCount = prefilterMips;
         published->Position = probe.Position;
         published->Cubemap = candidateCubemap;
+        published->RawCubemap = candidateRawCubemap;
         published->Completion = m_CaptureLastCompletion;
         m_DynamicProbeCaptures[probeKey] = published;
         std::erase_if(m_DynamicCaptureTextures, [&](const auto& handle) { return !m_Device->GetResources().Acquire(handle).IsLive(); });
         m_DynamicCaptureTextures.push_back(candidateCubemap->GetHandle());
+        m_DynamicCaptureTextures.push_back(candidateRawCubemap->GetHandle());
 
         m_LastDynamicCaptureResult = {};
         m_LastDynamicCaptureResult.Success = true;

@@ -12,6 +12,7 @@
 #include <Axle/RHI/RHIVertexLayout.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <glm/glm.hpp>
+#include <array>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -370,6 +371,17 @@ namespace Axle {
         constexpr float FaceFovDegrees = 90.0f;
         constexpr float FaceAspectRatio = 1.0f;
         constexpr float MinNearPlane = 0.01f;
+        constexpr uint32_t MaxPrefilterMipCount = 5u;
+        constexpr uint32_t MinPrefilterSampleCount = 16u;
+        constexpr uint32_t DefaultPrefilterSampleCount = 64u;
+        constexpr uint32_t MaxPrefilterSampleCount = 1024u;
+
+        struct ReflectionPrefilterPolicy {
+            uint32_t Resolution = DefaultResolution;
+            uint32_t MipCount = MaxPrefilterMipCount;
+            uint32_t SampleCount = DefaultPrefilterSampleCount;
+            nri::Format ColorFormat = nri::Format::RGBA16_SFLOAT;
+        };
 
         struct CubeFaceBasis {
             uint32_t FaceIndex = 0;
@@ -418,6 +430,22 @@ namespace Axle {
         RenderWorld FilterCaptureWorld(
             const RenderWorld& sourceWorld,
             const ReflectionCapturePolicy& policy);
+
+        // M15-U5-C: Cubemap roughness prefilter contracts (pure 3D cubemap space; no equirectangular conversion).
+        uint32_t ComputePrefilterMipCount(uint32_t resolution);
+        float ComputePrefilterRoughness(uint32_t mip, uint32_t mipCount);
+        bool ValidatePrefilterPolicy(const ReflectionPrefilterPolicy& policy, std::string* outReason = nullptr);
+        glm::vec3 ComputeCubeTexelDirection(uint32_t faceIndex, float u, float v);
+        glm::vec3 SampleCubemapBilinear3D(
+            const std::array<std::vector<glm::vec3>, FaceCount>& faces,
+            uint32_t faceResolution,
+            const glm::vec3& direction);
+        glm::vec3 EvaluatePrefilterDirectionCPU(
+            const std::array<std::vector<glm::vec3>, FaceCount>& sourceFaces,
+            uint32_t sourceResolution,
+            const glm::vec3& normalDir,
+            float roughness,
+            uint32_t sampleCount = DefaultPrefilterSampleCount);
     }
 
 } // namespace Axle

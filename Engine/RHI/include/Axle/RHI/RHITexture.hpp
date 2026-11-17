@@ -3,6 +3,7 @@
 #include <Axle/RHI/RHIResource.hpp>
 #include <NRI.h>
 #include <string>
+#include <vector>
 
 namespace Axle::RHI {
 
@@ -140,6 +141,19 @@ namespace Axle::RHI {
             desc.DebugName = name;
             return desc;
         }
+
+        static RHITextureDesc CubemapStorage(uint32_t size, uint32_t mipLevels = 1, RHITextureFormat format = RHITextureFormat::RGBA16_FLOAT, const std::string& name = "RHICubemapStorage") {
+            RHITextureDesc desc;
+            desc.Width = size;
+            desc.Height = size;
+            desc.ArrayLayers = 6;
+            desc.MipLevels = mipLevels;
+            desc.IsCubeMap = true;
+            desc.Format = format;
+            desc.Usage = RHITextureUsage::ShaderResource | RHITextureUsage::Storage;
+            desc.DebugName = name;
+            return desc;
+        }
     };
 
     class RHITexture {
@@ -168,6 +182,7 @@ namespace Axle::RHI {
         const RHITextureDesc& GetDesc() const { return m_Desc; }
         uint32_t GetWidth() const { return m_Desc.Width; }
         uint32_t GetHeight() const { return m_Desc.Height; }
+        uint32_t GetMipCount() const { return m_Desc.MipLevels; }
         RHITextureFormat GetFormat() const { return m_Desc.Format; }
 
         nri::Texture* GetNative() const { return IsValid() ? m_Texture : nullptr; }
@@ -175,6 +190,8 @@ namespace Axle::RHI {
         nri::Descriptor* GetRTV() const { return IsValid() ? m_RTV : nullptr; }
         nri::Descriptor* GetDSV() const { return IsValid() ? m_DSV : nullptr; }
         nri::Descriptor* GetUAV() const { return IsValid() ? m_UAV : nullptr; }
+        nri::Descriptor* GetMipSRV(uint32_t mip) const { return (IsValid() && mip < m_MipSRVs.size()) ? m_MipSRVs[mip] : nullptr; }
+        nri::Descriptor* GetMipUAV(uint32_t mip) const { return (IsValid() && mip < m_MipUAVs.size()) ? m_MipUAVs[mip] : nullptr; }
 
         // Returns native platform descriptor handle (e.g. D3D12_CPU_DESCRIPTOR_HANDLE ptr for SRV)
         uint64_t GetNativeSRVHandle() const;
@@ -194,6 +211,8 @@ namespace Axle::RHI {
         nri::Descriptor* m_RTV = nullptr;
         nri::Descriptor* m_DSV = nullptr;
         nri::Descriptor* m_UAV = nullptr;
+        std::vector<nri::Descriptor*> m_MipSRVs;
+        std::vector<nri::Descriptor*> m_MipUAVs;
     };
 
 }

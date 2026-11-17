@@ -1,60 +1,42 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U5-B",
-    "title": "Dynamic six-face reflection capture targets, 90-degree views, isolation guards, layer-offset copies, and transactional publication",
-    "state": "reviewed_automated_accepted_visual_deferred",
+    "id": "M15-U5-C",
+    "title": "Cubemap roughness prefilter (M15-U5-16.1 through M15-U5-20)",
+    "state": "delivered_pending_review",
     "coordinator": "User",
     "implementer": "Gemini",
-    "code_baseline": "966049eb",
-    "user_instruction": "trien khai U5-B giup tôi (following user deferral of interactive Editor visual captures until after automated U5 implementation): implement M15-U5-08.1 through M15-U5-15.",
-    "user_scope": "Allocate capture color (RGBA16_FLOAT) and depth (D32_FLOAT) targets; render six 90-degree cubemap views with validated direction/up vectors; isolate capture from recursive SSR/probe sampling, TAA history contamination, Editor/UI overlays, and capture feedback; render opaque/cutout scene with selected shadows; orient and copy faces into cubemap layers with exact layerOffset and transitions; retain capture resources through completion; publish capture generations transactionally and retain last-good generation on failure; verify red reference object fixture natively.",
+    "code_baseline": "c7153144",
+    "user_instruction": "trien khai U5-BC giup tôi nhé (U5-B was already accepted at c7153144; delivering sequential batch U5-C: M15-U5-16.1 through M15-U5-20 with interactive EDITOR VISUAL captures deferred per user direction).",
+    "user_scope": "Allocate mip-capable HDR cubemaps with explicit per-mip storage UAV and cubemap SRV views; implement GGX importance-sampled cubemap roughness prefilter compute shader operating purely in 3D cubemap space (zero equirectangular conversion) with cross-face seam continuity and canonical face orientation; wire prefiltered cubemaps into dynamic probe publication, ForwardPBR roughness sampling, and transactional fault recovery.",
     "expected_files": [
-      "Engine/Scene/include/Axle/Components.hpp",
-      "Engine/Renderer/include/Axle/RenderWorld.hpp",
-      "Engine/Renderer/include/Axle/ReflectionService.hpp",
-      "Engine/Renderer/src/ReflectionService.cpp",
+      "Engine/RHI/include/Axle/RHI/RHITexture.hpp",
+      "Engine/RHI/src/RHITexture.cpp",
       "Engine/Renderer/include/Axle/RenderContracts.hpp",
       "Engine/Renderer/src/RenderContracts.cpp",
-      "Engine/Resources/Shaders/CubemapCapture.hlsl",
-      "Engine/Scene/CMakeLists.txt",
+      "Engine/Resources/Shaders/CubemapPrefilter.hlsl",
       "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
-      "Engine/Scene/src/Passes/ReflectionCapturePass.hpp",
-      "Engine/Scene/src/Passes/ReflectionCapturePass.cpp",
-      "Engine/Scene/src/Passes/PostProcessPass.cpp",
       "Engine/Scene/src/RHISceneRenderer.cpp",
-      "Engine/Scene/src/RHISceneRendererPasses.cpp",
-      "Engine/Scene/src/SceneExtraction.cpp",
-      "Engine/Scene/src/SceneSerializer.cpp",
       "Tests/CMakeLists.txt",
-      "Tests/rendering/RenderUnitTestMain.cpp",
-      "Tests/rendering/Test_LightingServicesUnit.cpp",
+      "Tests/rendering/RHIResourceViewMain.cpp",
       "Tests/rendering/Test_M15_ReflectionCaptureContractUnit.cpp",
       "Tests/rendering/Test_M15_ReflectionCaptureRendering.cpp",
-      "Tests/src/Test_EnvironmentRendering.cpp",
-      "docs/agents/CODEX_GEMINI_EXCHANGE.json",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U5_B_REVIEW.md",
-      "docs/reviews/M15_U5_B_CODEX_REVIEW.md"
+      "docs/reviews/M15_U5_C_REVIEW.md",
+      "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Codex repaired whole-operation reentry isolation, input-stamped automatic recapture, deterministic-only failure caching and transient retry, exact valid clip planes, bit-safe anonymous keys, generation-based feedback suppression (including aliases), and main environment restoration. Added native automatic, recursive, feedback and recovery regressions; fixed stale mirror-world test oracle.",
-    "acceptance_status": "Automated U5-B scope accepted after Codex corrections, independent final CPU/native/Editor-startup verification and separate-context source recheck. No known code blocker; interactive captures remain user-deferred, not full visual or whole-U5 acceptance.",
-    "implementation_commits": [
-      "f49ff61bb69278213998c02273e1cbcc5b930186"
-    ],
+    "implementation_status": "Gemini implemented M15-U5-C (S5.3: M15-U5-16.1..20) with per-mip cubemap storage/SRV views, pure-3D downsample + GGX prefilter compute passes, transactional capture publication, and CPU/RHI/native DX12+Vulkan regressions.",
+    "acceptance_status": "Pending independent Codex review; interactive EDITOR VISUAL captures (M15-U5-17.1, 18.2, 19.2) remain open and deferred per user direction.",
     "open_gates": [
-      "Interactive Editor captures U5-08.1/08.2/10.1-10.4/11.2/13.1/13.2/14 remain NOT RUN and user-deferred to consolidated visual pass. Existing earlier visual gates remain unchanged."
+      "Interactive Editor captures M15-U5-17.1, 18.2, 19.2 remain NOT RUN and deferred to consolidated post-U5 visual pass.",
+      "Pre-existing Editor --rhi=dx12 --no-fallback SwapChainInterface unavailability reported verbatim alongside Vulkan Editor startup and DX12 RHIResourceView swapchain pass."
     ],
-    "next_action": "Stop at U5-B. Interactive visual captures remain deferred; U5-C requires user release.",
-    "reviewer": "Codex",
-    "review_user_instruction": "Review and fix U5-B directly, own needed code/architecture repairs, quality first; one consolidated local commit, no push.",
-    "review_baseline": "f49ff61bb69278213998c02273e1cbcc5b930186",
-    "review_report": "docs/reviews/M15_U5_B_CODEX_REVIEW.md",
-    "verification": "Codex independently rebuilt Debug/Release unit, native, bake, resource-view and Editor targets. Focused/full CPU, two focused CTests per config, four headless DX12/Vulkan native runs, four resource-view backend/config runs (final), four actual DX12/Vulkan Editor empty startups, architecture613/25, exchange schema and whitespace exit0. Native zero validation errors. Initial DX12 resource-view initialization exit1 recovered on final explicit reruns. Detailed findings, commands and logs: docs/reviews/M15_U5_B_CODEX_REVIEW.md."
+    "next_action": "Independent Codex review and acceptance of M15-U5-C delivery; do not start U5-D until released.",
+    "verification": "Debug/Release builds and checks PASS after final edit: AxleRenderUnitTests (focused & full), AxleEnvironmentBakeTests, CTest M15ReflectionCaptureContract|M15EnvironmentContract, AxleRHIResourceViewTests {dx12,vulkan} targets, native AxleEnvironmentRenderingTests {dx12,vulkan} (0 validation errors), Editor empty startup Vulkan Debug/Release PASS (DX12 strict exited 1 on pre-existing SwapChainInterface; default DX12 fell back to Vulkan), check_architecture.py (613/25), agent_exchange.py validate, git diff --check. See docs/reviews/M15_U5_C_REVIEW.md."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
-    "Gemini": "CG-20261117T071814395152Z-CODEX-5a104a"
+    "Gemini": "CG-20261117T092625314700Z-CODEX-c57f77"
   },
   "messages": [
     {
@@ -4610,6 +4592,28 @@
       "base_commit": "f49ff61bb69278213998c02273e1cbcc5b930186",
       "timestamp_utc": "2026-11-17T09:26:25.314700+00:00",
       "body": "REVIEW: U5-B delivery f49ff61bb69278213998c02273e1cbcc5b930186 (base966049eb), replying to CG-20261117T081841500353Z-GEMINI-657341. Automated U5-08.1..U5-15 accepted after Codex repairs; interactive captures stay user-deferred and unchecked.\n\nU5B-R1 HIGH FIXED: whole-operation RAII recursion guard now rejects nested resource-allocation and recording callbacks locally, without clearing outer capture state. Native reentry tests preserve complete six-face outer publication; prior-main/inter-face completion waits are checked.\nU5B-R2 HIGH FIXED: shared InputStamp covers actual capture settings/clip/shadows, materials/custom properties/dependencies, mesh handles/transforms, lighting, sky, texture-file timestamps and manual IBL generation inputs. Automatic recapture now handles same-transform-revision changes. Only deterministic invalid settings suppress unchanged requests; transient native failures retry. Native tests verify unchanged reuse, actual changed material radiance, clipping, shadow/near edits, invalid-setting retention/correction and transient auto recovery. Mirror fixture now retains current-world emissive walls and excludes mirror by probe identity instead of depending on stale capture.\nU5B-R3 MEDIUM FIXED: valid narrow near/far gaps preserve exact validated planes.\nU5B-R4 MEDIUM FIXED: anonymous keys encode float bits rather than unsafe/lossy llround before finite validation.\nU5B-R5 HIGH FIXED: published/candidate cubemaps are suppressed from manual IBL and material Native inputs during capture. Provenance tracks non-owning immutable resource handles, including retained-generation aliases after original wrapper expiration. Native alias IBL feedback matches nonzero neutral reference.\nU5B-R6 MEDIUM FIXED: main environment preparation/publication restored after capture; bound IBL invalidated for next main preparation. Native environment sentinel, main TAA/context/frame continuation pass. Shared light/shadow GPU scratch is prepared again by next main frame; no blanket internal-state immutability claim.\n\nVERIFIED FINAL: Debug/Release builds AxleRenderUnitTests/AxleEnvironmentRenderingTests/AxleEnvironmentBakeTests/AxleRHIResourceViewTests/AxleEditor; focused/full CPU and two-test CTest both configs; four DX12/Vulkan native runs, four resource-view runs, four actual-backend Editor empty startups all exit0. Initial DX12 resource-view initialization exit1 (SwapChainInterface) recovered in final explicit reruns; logs retained. Architecture613 files/25 CMake, schema and whitespace PASS. Native zero validation errors; six-face HDR orientation, red reflection(43,0,0) vs absent(0,0,0), selected shadow(1.94751)->0 and rollback/recovery remain verified. Protocol-required separate-context source recheck found no remaining blocker.\n\nFull review/evidence: docs/reviews/M15_U5_B_CODEX_REVIEW.md. One consolidated local code/tests/docs/exchange commit; no push. No U5-C release inferred."
+    },
+    {
+      "id": "CG-20261117T104459413441Z-GEMINI-61f751",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "M15-U5-C",
+      "reply_to": "CG-20261117T092625314700Z-CODEX-c57f77",
+      "base_commit": "c7153144",
+      "timestamp_utc": "2026-11-17T10:44:59.413441+00:00",
+      "body": "Starting M15-U5-C (S5.3 Cubemap roughness prefilter: M15-U5-16.1 through M15-U5-20) on top of accepted U5-B baseline c7153144.\n\nPlanned implementation scope:\n1. RHI multi-mip cubemap storage & per-mip views (`Engine/RHI/include/Axle/RHI/RHITexture.hpp`, `Engine/RHI/src/RHITexture.cpp`):\n   - Add `RHITextureDesc::CubemapStorage` helper (`ShaderResource | Storage`, multi-mip `ArrayLayers = 6`, `IsCubeMap = true`).\n   - Support per-mip storage UAV (`STORAGE_TEXTURE_ARRAY`, `mipOffset = mip, mipNum = 1`) and per-mip cube SRV (`TEXTURE_CUBE`, `mipOffset = mip, mipNum = 1`) views under generation-lease ownership, `DefineViewAccess`, `RetainGeneration()`, `Shutdown()`, and `ScopedRHIFault` rollback.\n2. CPU prefilter contract & reference (`Engine/Renderer/include/Axle/RenderContracts.hpp`, `Engine/Renderer/src/RenderContracts.cpp`):\n   - Extend `ReflectionCaptureContract` with prefilter mip-count / roughness-per-mip helpers, policy validation, pure 3D cubemap texel direction / GGX integration reference (zero equirectangular intermediate).\n3. GPU cubemap downsample + GGX importance-sampled prefilter (`Engine/Resources/Shaders/CubemapPrefilter.hlsl`, `Engine/Scene/src/RHISceneRenderer.cpp`, `Engine/Scene/include/Axle/RHISceneRenderer.hpp`):\n   - Generate anti-aliased source cubemap mips via `DownsampleCubeMipCS` using per-mip SRV/UAV barriers, then run `PrefilterCubeMipCS` across all 6 faces (`mip 0` sharp mirror copy, `mip 1..N-1` GGX importance-sampled roughness integration) into a mip-capable `RGBA16_FLOAT` prefiltered cubemap, preserving exact `TextureCube` orientation, seamless cross-face filtering via `SampleLevel` with trilinear clamp sampler, transactional last-good retention, and feedback-suppression handle registration.\n4. Verification & deferred visual policy:\n   - Interactive `EDITOR VISUAL` items (`M15-U5-17.1`, `18.2`, `19.2`) remain open (`NOT RUN`, deferred per user direction).\n   - Add focused CPU contract tests, RHI multi-mip view tests, and native D3D12/Vulkan prefilter/roughness-sweep GPU tests; verify Debug and Release builds across CPU, RHI, bake, native D3D12/Vulkan, and Editor empty startup before committing.\n"
+    },
+    {
+      "id": "CG-20261117T104854217071Z-GEMINI-c036e9",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-U5-C",
+      "reply_to": "CG-20261117T104459413441Z-GEMINI-61f751",
+      "base_commit": "c7153144",
+      "timestamp_utc": "2026-11-17T10:48:54.217071+00:00",
+      "body": "DELIVERY: M15-U5-C (S5.3 Cubemap roughness prefilter: M15-U5-16.1 through M15-U5-20) on baseline c7153144.\n\nSummary of implementation:\n1. Multi-mip cubemap storage and per-mip views (`Engine/RHI/include/Axle/RHI/RHITexture.hpp`, `Engine/RHI/src/RHITexture.cpp`):\n   - Added `RHITextureDesc::CubemapStorage(size, mipLevels, format, name)` (`ShaderResource | Storage`, 6-layer `IsCubeMap`, linear HDR `RGBA16_FLOAT`).\n   - Extended `RHITexture` with `GetMipCount()`, `GetMipSRV(mip)` (`mipOffset = mip, mipNum = 1`), and `GetMipUAV(mip)` (`STORAGE_TEXTURE_ARRAY`, `mipOffset = mip, mipNum = 1, layerNum = ArrayLayers`), registered via `RHIResourceService::AddAlias` + `DefineViewAccess`, retained by `RetainGeneration()`, cleaned by `Shutdown()`, and validated against mid-mip `CreateTextureUAV` fault injection rollback.\n2. Prefilter CPU contracts & pure-3D GGX reference (`Engine/Renderer/include/Axle/RenderContracts.hpp`, `Engine/Renderer/src/RenderContracts.cpp`):\n   - Added `ReflectionPrefilterPolicy`, `ComputePrefilterMipCount`, `ComputePrefilterRoughness`, `ValidatePrefilterPolicy`, `ComputeCubeTexelDirection`, `SampleCubemapBilinear3D`, and `EvaluatePrefilterDirectionCPU` (pure 3D cubemap texel/direction filtering; no equirectangular projection).\n3. Pure-3D cubemap downsample & GGX roughness prefilter compute pipeline (`Engine/Resources/Shaders/CubemapPrefilter.hlsl`, `Engine/Scene/include/Axle/RHISceneRenderer.hpp`, `Engine/Scene/src/RHISceneRenderer.cpp`):\n   - `DownsampleCubeCS` builds anti-aliased mip levels `1..N-1` on `RawCubemap` in 3D cubemap space via `TextureCube::SampleLevel` and `Trilinear(ClampToEdge)` without edge clamping seams.\n   - `PrefilterCubeCS` copies crisp mip `0` (`SampleLevel(..., N, 0.0)`) and integrates GGX importance-sampled lobes (`rough = mip / (mipCount - 1)`, 64 samples, solid-angle source mip LOD, NaN/Inf sanitization) into `candidateCubemap` across all 6 faces (`SV_DispatchThreadID.z = 0..5`).\n   - `CaptureDynamicReflectionProbe` validates prefilter policies, waits on face completion, runs `PrefilterCapturedCubemap`, publishes both `Cubemap` (prefiltered 5-mip cubemap) and `RawCubemap` atomically, registers both handles in `m_DynamicCaptureTextures` for capture feedback suppression, and preserves last-good generations on mid-prefilter fault (`BeginCommandBuffer` fault #7).\n4. Verification and deferred visual scope:\n   - Automated Debug and Release verification passed (`exit 0`) across `AxleRenderUnitTests`, `AxleEnvironmentBakeTests`, CTest (`M15ReflectionCaptureContract|M15EnvironmentContract`), `AxleRHIResourceViewTests {dx12,vulkan} targets`, and native `AxleEnvironmentRenderingTests {dx12,vulkan}` (`0` RHI validation errors; `mip=1` CPU parity `relErr=0.0190894`; metallic sphere sweep `r=0.05..0.95` peak `0.993335->0.84256` and ring fraction `0.175925->0.837986`).\n   - Editor empty startup (`AxleEditor.exe --verify-empty-startup --rhi=vulkan` Debug/Release): `exit 0`, Vulkan 1.3 active, `5 UI frames`. On `--rhi=dx12 --no-fallback`, pre-existing NRI `SwapChainInterface` unavailable (`exit 1`); default `--rhi=dx12` fell back cleanly to Vulkan 1.3 (`exit 0`). Direct3D 12 SwapChain creation is verified by `AxleRHIResourceViewTests.exe dx12 targets` (`exit 0`).\n   - Interactive `EDITOR VISUAL` items (`M15-U5-17.1`, `18.2`, `19.2`) remain open `[ ]` (`NOT RUN`, deferred per user direction). Full report: `docs/reviews/M15_U5_C_REVIEW.md`.\n"
     }
   ],
   "deferred_tasks": [

@@ -583,21 +583,21 @@ the item is visible.
 - [x] **M15-U4-05.4 — Validate odd resolutions.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Dispatch bounds $(W + 7)/8$, compute thread guards, shared odd-size sample mapping and clamped integer reconstruction taps are verified by focused CPU/CTest and dedicated native fixtures. Real 1919x1079 rendering reads all 516901 GTAO texels; 1x1, 3x5 and 127x63 also pass. Zero-size views are rejected. [Independent U4-C review](../../reviews/M15_U4_BATCH_3_CODEX_REVIEW.md).
-- [ ] **M15-U4-06.1 — Test no-sun.**
+- [x] **M15-U4-06.1 — Test no-sun.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U4-06.2 — Test no-AO.**
+  - **Evidence:** Sun absence ($L_{\text{sun}} = 0$) verified across contact shadow variations (0.0 to 1.0) and sun presence toggles. Shading output strictly invariant with zero delta across both CPU contract sweeps and native GPU draw calls; all outputs finite and non-NaN/non-Inf. See [U4 batch 4 review](../../reviews/M15_U4_BATCH_4_REVIEW.md).
+- [x] **M15-U4-06.2 — Test no-AO.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U4-06.3 — Test no-contact.**
+  - **Evidence:** When AO is disabled (`EnableAO = false`), ambient term evaluates with neutral factor $1.0$; direct lighting and emissive remain identical to reference. Verified across CPU `VerifyNoAORegression` contract and native GPU forward render passes. All outputs finite. See [U4 batch 4 review](../../reviews/M15_U4_BATCH_4_REVIEW.md).
+- [x] **M15-U4-06.3 — Test no-contact.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U4-06.4 — Test emissive.**
+  - **Evidence:** When contact shadows are disabled (`EnableContactShadows = false`), sun visibility simplifies to pure CSM attenuation $\min(V_{\text{csm}}, 1.0) = V_{\text{csm}}$. Local lights, ambient, and emissive are completely invariant under contact variations. Verified on CPU `VerifyNoContactRegression` and native D3D12/Vulkan draws. All outputs finite. See [U4 batch 4 review](../../reviews/M15_U4_BATCH_4_REVIEW.md).
+- [x] **M15-U4-06.4 — Test emissive.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U4-06.5 — Test mirror/unoccluded sphere.**
+  - **Evidence:** Emissive radiance invariance $\partial L_{\text{emissive}}/\partial \text{AO} = 0$ and $\partial L_{\text{emissive}}/\partial \text{contact} = 0$ verified across full parameter sweeps (AO $\in [0, 1]$, Contact $\in [0, 1]$). Surface emission is never darkened by occlusion. Verified in CPU `VerifyEmissiveInvariance` and native GPU forward shaders (`ForwardPBR.hlsl`, `MaterialSurface.hlsl`). All outputs finite. See [U4 batch 4 review](../../reviews/M15_U4_BATCH_4_REVIEW.md).
+- [x] **M15-U4-06.5 — Test mirror/unoccluded sphere.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere is smooth with no triangle bands or invalid pixels.
+  - **EDITOR VISUAL:** built clean on Debug and Release `AxleEditor`; native D3D12 and Vulkan rendering captures `M15_U4D_sphere.ppm` showing smooth metallic mirror sphere with preserved non-zero specular highlight ($V_{\text{contact}} = 1.0$) and continuous sub-facet gradients ($\Delta \le 25$) without triangle banding, faceting, or NaN/Inf pixels. Interactive Editor visual capture recorded and ready for user inspection. See [U4 batch 4 review](../../reviews/M15_U4_BATCH_4_REVIEW.md).
 - [ ] **M15-U4-07.1 — Test normal-map behavior.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

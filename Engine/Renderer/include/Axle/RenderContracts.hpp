@@ -163,6 +163,7 @@ namespace Axle {
 
             bool HasSun{true};              // Directional sun light present in scene
             bool HasLocalLights{false};     // Local lights present in scene
+            bool EnableAO{true};            // Ambient occlusion evaluation enabled
             bool EnableContactShadows{true};// Contact shadow evaluation enabled
             bool EnableCSM{true};           // Cascaded shadow maps enabled
             float CSMVisibility{1.0f};      // [0, 1] visibility from CSM
@@ -248,6 +249,28 @@ namespace Axle {
 
         // 4. M15-U4-05.4: Verifies odd-resolution boundary safety (1919x1079, 127x63, 1x1).
         bool VerifyOddResolutionSafety(uint32_t oddW, uint32_t oddH);
+
+        // =====================================================================
+        // M15-U4-D: Regression Fixtures & Invariance Contracts (U4-06.1 - U4-06.5)
+        // =====================================================================
+        // 1. M15-U4-06.1: Verifies that when sun is absent (HasSun = false), contact shadows have zero effect
+        //    and total radiance matches ambient + local + emissive, with all outputs finite.
+        bool VerifyNoSunRegression(const ShadingComponents& comp);
+
+        // 2. M15-U4-06.2: Verifies that when AO is disabled, ambient receives neutral factor and all outputs are finite.
+        bool VerifyNoAORegression(const ShadingComponents& comp);
+
+        // 3. M15-U4-06.3: Verifies that when contact shadows are disabled, directional sun receives normal CSM visibility
+        //    without contact attenuation and all outputs are finite.
+        bool VerifyNoContactRegression(const ShadingComponents& comp);
+
+        // 4. M15-U4-06.4: Verifies that emissive radiance is strictly invariant under both AO and contact variations,
+        //    is never darkened, and all outputs are finite.
+        bool VerifyEmissiveInvariance(const ShadingComponents& comp);
+
+        // 5. M15-U4-06.5: Verifies that unoccluded specular highlights (e.g. mirror/metallic sphere) are strictly invariant
+        //    under AO variations, are never darkened, and all outputs are finite.
+        bool VerifyUnoccludedSpecularInvariance(const ShadingComponents& comp);
     }
 
 } // namespace Axle

@@ -644,6 +644,111 @@ bool RunM15OcclusionContractUnitTests() {
             "M15-U4-05.4: zero-size views are rejected before reciprocal/UV computations");
     }
 
-    std::cout << "  [M15Occlusion] All M15-U4 (U4-01 through U4-05.4) occlusion contract tests passed successfully.\n";
+    // =========================================================================
+    // 10. M15-U4-06.1 through U4-06.5: Regression Fixtures & Invariance Contracts
+    // =========================================================================
+    {
+        std::cout << "  [M15Occlusion] Verifying M15-U4-06.1 through U4-06.5 regression fixtures...\n";
+
+        using namespace Axle::OcclusionContract;
+
+        // Base multi-component test scene
+        ShadingComponents scene{};
+        scene.Ambient = glm::vec3(0.2f, 0.25f, 0.3f);
+        scene.SunDiffuse = glm::vec3(0.9f, 0.85f, 0.75f);
+        scene.SunSpecular = glm::vec3(1.5f, 1.4f, 1.2f);
+        scene.LocalDiffuse = glm::vec3(0.6f, 0.4f, 0.2f);
+        scene.LocalSpecular = glm::vec3(1.1f, 0.8f, 0.5f);
+        scene.Emissive = glm::vec3(2.5f, 1.2f, 0.3f);
+        scene.HasSun = true;
+        scene.HasLocalLights = true;
+        scene.EnableAO = true;
+        scene.EnableContactShadows = true;
+        scene.EnableCSM = true;
+        scene.CSMVisibility = 1.0f;
+
+        // 10.1: M15-U4-06.1 Test no-sun
+        RENDER_CHECK(VerifyNoSunRegression(scene),
+            "M15-U4-06.1: VerifyNoSunRegression passes: contact shadows have zero effect when HasSun=false and outputs are finite");
+
+        ShadingComponents noSunScene = scene;
+        noSunScene.HasSun = false;
+        for (float cs : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f}) {
+            const glm::vec3 rad = EvaluateShading(noSunScene, 1.0f, cs);
+            RENDER_CHECK(std::isfinite(rad.x) && std::isfinite(rad.y) && std::isfinite(rad.z),
+                "M15-U4-06.1: no-sun radiance is finite across contact shadow variations");
+            RENDER_CHECK(rad == EvaluateShading(noSunScene, 1.0f, 1.0f),
+                "M15-U4-06.1: no-sun radiance is invariant under contact shadow variations");
+        }
+
+        // 10.2: M15-U4-06.2 Test no-AO
+        RENDER_CHECK(VerifyNoAORegression(scene),
+            "M15-U4-06.2: VerifyNoAORegression passes: when EnableAO=false, ambient is unattenuated at ao=0 and outputs are finite");
+
+        ShadingComponents noAOScene = scene;
+        noAOScene.EnableAO = false;
+        for (float ao : {0.0f, 0.1f, 0.5f, 0.9f, 1.0f}) {
+            const glm::vec3 rad = EvaluateShading(noAOScene, ao, 1.0f);
+            RENDER_CHECK(std::isfinite(rad.x) && std::isfinite(rad.y) && std::isfinite(rad.z),
+                "M15-U4-06.2: no-AO radiance is finite across AO input variations");
+            RENDER_CHECK(rad == EvaluateShading(noAOScene, 1.0f, 1.0f),
+                "M15-U4-06.2: no-AO radiance is invariant under AO input variations");
+        }
+
+        // 10.3: M15-U4-06.3 Test no-contact
+        RENDER_CHECK(VerifyNoContactRegression(scene),
+            "M15-U4-06.3: VerifyNoContactRegression passes: when EnableContactShadows=false, sun follows CSM directly and outputs are finite");
+
+        ShadingComponents noContactScene = scene;
+        noContactScene.EnableContactShadows = false;
+        for (float cs : {0.0f, 0.2f, 0.5f, 0.8f, 1.0f}) {
+            const glm::vec3 rad = EvaluateShading(noContactScene, 1.0f, cs);
+            RENDER_CHECK(std::isfinite(rad.x) && std::isfinite(rad.y) && std::isfinite(rad.z),
+                "M15-U4-06.3: no-contact radiance is finite across contact shadow input variations");
+            RENDER_CHECK(rad == EvaluateShading(noContactScene, 1.0f, 1.0f),
+                "M15-U4-06.3: no-contact radiance is invariant under contact shadow input variations");
+        }
+
+        // 10.4: M15-U4-06.4 Test emissive
+        RENDER_CHECK(VerifyEmissiveInvariance(scene),
+            "M15-U4-06.4: VerifyEmissiveInvariance passes: emissive radiance is strictly preserved and never darkened by AO or contact");
+
+        ShadingComponents pureEmissive{};
+        pureEmissive.Emissive = glm::vec3(4.0f, 2.0f, 0.5f);
+        for (float ao : {0.0f, 0.5f, 1.0f}) {
+            for (float cs : {0.0f, 0.5f, 1.0f}) {
+                const glm::vec3 eRad = EvaluateShading(pureEmissive, ao, cs);
+                RENDER_CHECK(eRad == pureEmissive.Emissive,
+                    "M15-U4-06.4: pure emissive radiance strictly equals authored emission across all (AO, contact) pairs");
+                RENDER_CHECK(std::isfinite(eRad.x) && std::isfinite(eRad.y) && std::isfinite(eRad.z),
+                    "M15-U4-06.4: emissive radiance is finite");
+            }
+        }
+
+        // 10.5: M15-U4-06.5 Test mirror / unoccluded sphere specular
+        RENDER_CHECK(VerifyUnoccludedSpecularInvariance(scene),
+            "M15-U4-06.5: VerifyUnoccludedSpecularInvariance passes: unoccluded specular highlights are 100% invariant under AO");
+
+        ShadingComponents mirrorSphere{};
+        mirrorSphere.SunSpecular = glm::vec3(5.0f, 4.8f, 4.5f);   // Sharp solar glint on chrome
+        mirrorSphere.LocalSpecular = glm::vec3(2.5f, 2.0f, 1.5f); // Local point light glint
+        mirrorSphere.Ambient = glm::vec3(0.05f);                  // Low ambient reflection
+        mirrorSphere.HasSun = true;
+        mirrorSphere.HasLocalLights = true;
+        mirrorSphere.CSMVisibility = 1.0f;                        // Unoccluded
+        for (float ao : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f}) {
+            const glm::vec3 rad = EvaluateShading(mirrorSphere, ao, 1.0f);
+            RENDER_CHECK(std::isfinite(rad.x) && std::isfinite(rad.y) && std::isfinite(rad.z),
+                "M15-U4-06.5: mirror sphere radiance is finite");
+            // Delta from AO=1 must only be Ambient * (1 - ao)
+            const glm::vec3 delta = EvaluateShading(mirrorSphere, 1.0f, 1.0f) - rad;
+            const glm::vec3 expectedDelta = mirrorSphere.Ambient * (1.0f - ao);
+            constexpr float eps = 1e-5f;
+            RENDER_CHECK(glm::distance(delta, expectedDelta) < eps,
+                "M15-U4-06.5: AO attenuation on mirror sphere strictly affects only ambient, leaving specular glints intact");
+        }
+    }
+
+    std::cout << "  [M15Occlusion] All M15-U4 (U4-01 through U4-06.5) occlusion contract tests passed successfully.\n";
     return true;
 }

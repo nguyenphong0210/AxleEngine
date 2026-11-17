@@ -463,8 +463,38 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
             render("csm-zero", Term::Sun, 1, 0.5f, modified, true, true, 2) && equal(modified, sun, 0), "CSM/contact use minimum without penumbra double attenuation");
         RENDER_CHECK(render("unrepresented-fragment", Term::Sun, 0, 0, modified, true, true, 0, 0.6f) && equal(modified, sun),
             "fragment absent from prepass cannot inherit background visibility");
+
+        // M15-U4-D: Regression Fixtures (U4-06.1 - U4-06.5)
+        // 1. M15-U4-06.1: Test no-sun: sun absent, contact variations have 0 effect on radiance
+        RENDER_CHECK(render("no-sun-contact1", Term::Local, 1, 1, reference) &&
+            render("no-sun-contact0", Term::Local, 1, 0, modified) && equal(modified, reference),
+            "M15-U4-06.1: no-sun regression: contact variations have zero effect on local light radiance");
+        RENDER_CHECK(render("no-sun-amb-contact1", Term::Ambient, 1, 1, reference) &&
+            render("no-sun-amb-contact0", Term::Ambient, 1, 0, modified) && equal(modified, reference),
+            "M15-U4-06.1: no-sun regression: contact variations have zero effect on ambient radiance");
+
+        // 2. M15-U4-06.2: Test no-AO: when AO is disabled, ambient receives neutral 1.0 factor
+        RENDER_CHECK(render("no-ao-reference", Term::Ambient, 1, 1, reference, true) &&
+            render("no-ao-disabled-zero", Term::Ambient, 0, 1, modified, false) && equal(modified, reference),
+            "M15-U4-06.2: no-AO regression: disabled AO preserves full neutral ambient radiance at ao=0");
+
+        // 3. M15-U4-06.3: Test no-contact: when contact is disabled, sun receives normal CSM visibility
+        RENDER_CHECK(render("no-contact-reference", Term::Sun, 1, 1, reference, true, true) &&
+            render("no-contact-disabled-zero", Term::Sun, 1, 0, modified, true, false) && equal(modified, reference),
+            "M15-U4-06.3: no-contact regression: disabled contact preserves full sun radiance at contact=0");
+
+        // 4. M15-U4-06.4: Test emissive: emissive surfaces are strictly invariant under AO and contact variations
+        RENDER_CHECK(render("emissive-bright-ref", Term::Emissive, 1, 1, reference) &&
+            render("emissive-darkened-test", Term::Emissive, 0, 0, modified) && equal(modified, reference),
+            "M15-U4-06.4: emissive regression: AO=0 and contact=0 never darken emissive surfaces");
+        RENDER_CHECK(reference[36].x > 0.05f, "emissive reference fixture is strictly nonzero");
+
+        // 5. M15-U4-06.5: Test mirror / unoccluded specular: metallic specular glints invariant under AO
+        RENDER_CHECK(render("mirror-specular-ref", Term::Specular, 1, 1, reference) &&
+            render("mirror-specular-ao0", Term::Specular, 0, 1, modified) && equal(modified, reference),
+            "M15-U4-06.5: mirror/unoccluded specular regression: AO=0 never darkens specular glints");
     }
     RENDER_CHECK(GetRHIValidationErrorCount() == 0, "production forward invariance fixture validation");
-    std::cout << "PASS M15-U4-A/B production forward radiance: AO ambient-only, sun-only contact, CSM minimum, emissive/local invariance and missing-guide fallback\n";
+    std::cout << "PASS M15-U4-A/B/D production forward radiance: AO ambient-only, sun-only contact, CSM minimum, emissive/local invariance and missing-guide fallback\n";
     return true;
 }

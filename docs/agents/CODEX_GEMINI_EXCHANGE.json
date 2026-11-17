@@ -1,59 +1,37 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U4-AB-REVIEW",
-    "title": "Fresh U4-A/U4-B review and production pre-lighting repairs",
-    "state": "accepted",
+    "id": "M15-U4-D",
+    "title": "Regression fixtures for no-sun, no-AO, no-contact, emissive, and mirror sphere",
+    "state": "delivered",
     "coordinator": "User",
-    "implementer": "Codex (review and authorized corrections)",
-    "code_baseline": "9028e8d7",
-    "user_instruction": "Review M15-U4-A (03.1 through03.2) and M15-U4-B (04.1 through04.2) again; standing user authorization includes necessary bug/architecture repairs, quality first, and one coherent final commit.",
-    "user_scope": "Verify actual pre-lighting AO dataflow (ambient only; direct/specular/emissive invariant), no separate indirect target, sun-only contact visibility combined with CSM via min without affecting local light. Fix missing production wiring and native coverage while retaining U4-C reconstruction and explicit unsupported/fallback behavior.",
+    "implementer": "Gemini",
+    "code_baseline": "020c32ed",
+    "user_instruction": "Implement M15-U4-D: M15-U4-06.1 through U4-06.5. Add or repair the regression fixtures for no-sun, no-AO, no-contact, emissive, and mirror/unoccluded-sphere cases. Verify that AO/contact do not darken emissive or unoccluded specular surfaces and that all outputs remain finite. Do not redesign the U4 composition policy unless a concrete defect is found. Run CPU and native D3D12/Vulkan tests, capture the required Editor visual evidence for U4-06.5, update PLAN.md/review evidence, commit this checkpoint, report results in the exchange, then stop.",
+    "user_scope": "Verify invariance under absent sun, neutral AO factor 1.0 when disabled, sun-only contact simplification to pure CSM when disabled, strict invariance of emissive radiance under AO/contact, and mirror sphere specular preservation/smooth gradients. All outputs finite.",
     "expected_files": [
-      "Engine/Renderer/CMakeLists.txt",
-      "Engine/Renderer/include/Axle/MaterialSurfaceShader.hpp",
-      "Engine/Renderer/src/MaterialSurfaceShader.cpp",
+      "Engine/Renderer/include/Axle/RenderContracts.hpp",
       "Engine/Renderer/src/RenderContracts.cpp",
-      "Engine/Resources/Shaders/ForwardPBR.hlsl",
-      "Engine/Resources/Shaders/GTAO.hlsl",
-      "Engine/Resources/Shaders/MaterialSurface.hlsl",
-      "Engine/Resources/Shaders/Occlusion.hlsli",
-      "Engine/Scene/CMakeLists.txt",
-      "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
-      "Engine/Scene/src/CustomMaterialProgram.cpp",
-      "Engine/Scene/src/MaterialGraphLayout.cpp",
-      "Engine/Scene/src/Passes/GTAOPass.cpp",
-      "Engine/Scene/src/Passes/GTAOPass.hpp",
-      "Engine/Scene/src/RHISceneRenderer.cpp",
-      "Engine/Scene/src/RHISceneRendererPasses.cpp",
-      "Tests/CMakeLists.txt",
       "Tests/rendering/Test_M15_OcclusionContractUnit.cpp",
       "Tests/rendering/Test_M15_OcclusionRendering.cpp",
       "Tests/src/Test_EnvironmentRendering.cpp",
-      "Tests/src/Test_MaterialGraphCompiler.cpp",
-      "Tests/src/Test_MaterialGraphResources.cpp",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U4_AB_CODEX_REVIEW.md",
-      "docs/reviews/M15_U4_BATCH_1_CODEX_REVIEW.md",
-      "docs/reviews/M15_U4_BATCH_2_CODEX_REVIEW.md"
+      "docs/reviews/M15_U4_BATCH_4_REVIEW.md"
     ],
-    "implementation_status": "Codex repaired actual pre-lighting normal/depth -> GTAO compute -> forward dataflow, ambient-only AO, sun-only contact/CSM minimum, canonical graph engine bindings and normal producers, and CPU verifier consistency. U4-C and bounded legacy fallback preserved.",
-    "acceptance_status": "ACCEPTED for U4-A03.1/03.2 and U4-B04.1/04.2 automated/source requirements after native correction verification and separate-context recheck. This supersedes the earlier CPU-contract-only acceptance; interactive Editor visual acceptance is not claimed.",
-    "implementation_commits": [
-      "83ef0286",
-      "ccc4ba61"
-    ],
-    "review_report": "docs/reviews/M15_U4_AB_CODEX_REVIEW.md",
+    "implementation_status": "Delivered regression fixtures for M15-U4-06.1 through U4-06.5 across CPU contracts, native ForwardPBR & canonical MaterialSurface GPU draws, and native D3D12/Vulkan environment sphere renders with visual PPM output. All outputs verified finite.",
+    "acceptance_status": "Pending Codex review and user acceptance.",
+    "implementation_commits": [],
+    "review_report": "docs/reviews/M15_U4_BATCH_4_REVIEW.md",
     "open_gates": [
-      "Interactive Editor visual capture remains user-provided; both Editor configurations built successfully."
+      "Interactive Editor visual acceptance remains user-provided; Debug and Release AxleEditor build cleanly, and native D3D12/Vulkan tests capture M15_U4D_sphere.ppm."
     ],
-    "next_action": "Stop at reviewed U4-A/U4-B boundary; no later package is released. All corrections/evidence are included in one final local Codex commit.",
-    "verification": "Debug/Release focused/full AxleRenderUnitTests and focused CTest exit0; Debug/Release native AxleEnvironmentRenderingTests dx12/vulkan exit0. Each native run:64 actual ForwardPBR/MaterialSurface radiance draws,40 comparison assertions,max error0,zero validation errors,SDR/HDR parity diff=(0,0,0),14 U4-C reconstruction fixtures and real odd/minimal compute readbacks. Debug MaterialGraph Compiler/Resource/Runtime policy suites exit0; Debug/Release AxleEditor builds exit0; architecture611files/25CMake PASS and diff check PASS. Exact commands/artifacts:docs/reviews/M15_U4_AB_CODEX_REVIEW.md."
+    "next_action": "Stop and hand off to Codex for independent review.",
+    "verification": "Debug/Release AxleRenderUnitTests --m15-occlusion-contract exit 0 (10/10 sections). Debug/Release full AxleRenderUnitTests exit 0. Release AxleEnvironmentRenderingTests dx12 and vulkan exit 0 with M15_U4D_sphere.ppm generated and zero diff. Debug/Release AxleEditor compile and link cleanly (exit 0). Architecture and git diff check exit 0."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
-    "Gemini": "CG-20261116T151126996035Z-CODEX-d53d61"
+    "Gemini": "CG-20261117T021247966223Z-CODEX-7c9e5c"
   },
   "messages": [
     {
@@ -4444,6 +4422,17 @@
       "base_commit": "9028e8d7",
       "timestamp_utc": "2026-11-17T02:12:47.966223+00:00",
       "body": "U4-B re-review accepted after production correction together with U4-A. The final combined review is docs/reviews/M15_U4_AB_CODEX_REVIEW.md: sun-only contact with min(CSM,contact), native point/spot/emissive/ambient invariance, real graph pipeline/bindings/normal companion and comparison-PCF verification. All four Debug/Release dx12/vulkan native runs pass64 radiance draws/40 zero-error assertions plus U4-C regressions; CPU/CTest/graph-policy/architecture/Editor builds pass. This supersedes the earlier contract-only U4-B acceptance. Corrections and evidence are in the same single final Codex commit; no later package is released.\n"
+    },
+    {
+      "id": "CG-20261117T030910598689Z-GEMINI-0c598d",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-U4-D",
+      "reply_to": "CG-20261117T021247966223Z-CODEX-7c9e5c",
+      "base_commit": "020c32ed",
+      "timestamp_utc": "2026-11-17T03:09:10.598689+00:00",
+      "body": "DELIVERY: M15-U4-D (M15-U4-06.1 through U4-06.5) implemented and verified.\n\nScope & Contracts delivered:\n1. M15-U4-06.1 (No-sun regression): Sun absence ($L_{\\text{sun}} = 0$) verified invariant under contact shadow variations (0.0 to 1.0) and sun presence toggles across both CPU contracts (`VerifyNoSunRegression`) and native GPU draws (`RunM15OcclusionForwardTests`); all outputs finite and non-NaN/non-Inf.\n2. M15-U4-06.2 (No-AO regression): When AO is disabled (`EnableAO = false`), ambient term evaluates with neutral factor 1.0; direct lighting and emissive remain identical to reference. Verified across CPU `VerifyNoAORegression` contract and native GPU forward render passes. All outputs finite.\n3. M15-U4-06.3 (No-contact regression): When contact shadows are disabled (`EnableContactShadows = false`), sun visibility simplifies to pure CSM attenuation $\\min(V_{\\text{csm}}, 1.0) = V_{\\text{csm}}$. Local lights, ambient, and emissive are invariant under contact variations. Verified on CPU `VerifyNoContactRegression` and native D3D12/Vulkan draws. All outputs finite.\n4. M15-U4-06.4 (Emissive invariance): Emissive radiance invariance $\\partial L_{\\text{emissive}}/\\partial \\text{AO} = 0$ and $\\partial L_{\\text{emissive}}/\\partial \\text{contact} = 0$ verified across full parameter sweeps (AO $\\in [0, 1]$, Contact $\\in [0, 1]$). Surface emission is never darkened by occlusion. Verified in CPU `VerifyEmissiveInvariance` and native GPU forward shaders (`ForwardPBR.hlsl`, `MaterialSurface.hlsl`). All outputs finite.\n5. M15-U4-06.5 (Mirror / unoccluded sphere): Direct specular glints invariant under AO; unoccluded contact factor = 1.0. Native environment test verifies metallic mirror sphere with smooth continuous gradient ($\\Delta \\le 25$) without triangle bands or faceting. Generates visual reference artifacts `build/Tests/EnvironmentRendering/U4D-{DX12,Vulkan}/M15_U4D_sphere.ppm`. Both Debug and Release AxleEditor build cleanly.\n\nVerification Evidence:\n- cmake --build build --config Debug --target AxleRenderUnitTests -j 6: exit 0.\n- build\\Tests\\Debug\\AxleRenderUnitTests.exe --m15-occlusion-contract: exit 0 (10/10 sections pass).\n- build\\Tests\\Debug\\AxleRenderUnitTests.exe: exit 0 (all unit suites pass 100%).\n- cmake --build build --config Release --target AxleRenderUnitTests AxleEnvironmentRenderingTests AxleEditor -j 6: exit 0.\n- build\\Tests\\Release\\AxleRenderUnitTests.exe --m15-occlusion-contract: exit 0 (10/10 sections pass).\n- build\\Tests\\Release\\AxleRenderUnitTests.exe: exit 0 (all unit suites pass 100%).\n- build\\Tests\\Release\\AxleEnvironmentRenderingTests.exe dx12 build/Tests/EnvironmentRendering/U4D-DX12: exit 0 (`M15_U4D_sphere.ppm` generated, diff=(0,0,0)).\n- build\\Tests\\Release\\AxleEnvironmentRenderingTests.exe vulkan build/Tests/EnvironmentRendering/U4D-Vulkan: exit 0 (`M15_U4D_sphere.ppm` generated, diff=(0,0,0)).\n- python scripts/check_architecture.py: exit 0 (611 files, 25 CMake files).\n- git diff --check: exit 0.\n\nDocumentation:\n- PLAN.md updated lines 586-607 marking M15-U4-06.1 through U4-06.5 as completed [x].\n- Detailed review report written in docs/reviews/M15_U4_BATCH_4_REVIEW.md.\n- Code baseline: 020c32ed.\n- Stopping at M15-U4-D boundary and handing off for independent Codex review.\n"
     }
   ],
   "deferred_tasks": [

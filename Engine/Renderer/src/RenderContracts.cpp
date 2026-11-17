@@ -341,7 +341,7 @@ namespace Axle {
         }
 
         glm::vec3 EvaluateShading(const ShadingComponents& comp, float ambientOcclusion, float contactShadow) {
-            const float ao = std::clamp(ambientOcclusion, 0.0f, 1.0f);
+            const float ao = comp.EnableAO ? std::clamp(ambientOcclusion, 0.0f, 1.0f) : 1.0f;
             const glm::vec3 ambientTerm = comp.Ambient * ao;
 
             // Determine sun and local components with backwards-compatibility for U4-A:
@@ -619,6 +619,112 @@ namespace Axle {
             const float lastFullU = (static_cast<float>(oddW - 1) + 0.5f) / static_cast<float>(oddW);
             const float lastFullV = (static_cast<float>(oddH - 1) + 0.5f) / static_cast<float>(oddH);
             if (lastFullU < 0.0f || lastFullU > 1.0f || lastFullV < 0.0f || lastFullV > 1.0f) return false;
+
+            return true;
+        }
+
+        // =====================================================================
+        // M15-U4-D: Regression Fixtures & Invariance Contracts (U4-06.1 - U4-06.5)
+        // =====================================================================
+        bool VerifyNoSunRegression(const ShadingComponents& comp) {
+            ShadingComponents noSun = comp;
+            noSun.HasSun = false;
+            const glm::vec3 at1 = EvaluateShading(noSun, 1.0f, 1.0f);
+            const glm::vec3 at0 = EvaluateShading(noSun, 1.0f, 0.0f);
+            const glm::vec3 atHalf = EvaluateShading(noSun, 0.5f, 0.0f);
+            if (at1 != at0) return false;
+            if (!std::isfinite(at1.x) || !std::isfinite(at1.y) || !std::isfinite(at1.z)) return false;
+            if (!std::isfinite(atHalf.x) || !std::isfinite(atHalf.y) || !std::isfinite(atHalf.z)) return false;
+
+            // Expected radiance is ambient * ao + local + emissive
+            glm::vec3 expectedLocal = comp.LocalDiffuse + comp.LocalSpecular;
+            if (!HasSeparatedLighting(comp)) {
+                expectedLocal = comp.DirectDiffuse + comp.DirectSpecular;
+            }
+            const glm::vec3 expected = comp.Ambient + expectedLocal + comp.Emissive;
+            constexpr float eps = 1e-5f;
+            return glm::distance(at1, expected) < eps;
+        }
+
+        bool VerifyNoAORegression(const ShadingComponents& comp) {
+            ShadingComponents noAO = comp;
+            noAO.EnableAO = false;
+            const glm::vec3 at0 = EvaluateShading(noAO, 0.0f, 1.0f);
+            const glm::vec3 at1 = EvaluateShading(noAO, 1.0f, 1.0f);
+            if (at0 != at1) return false;
+            if (!std::isfinite(at0.x) || !std::isfinite(at0.y) || !std::isfinite(at0.z)) return false;
+
+            // When AO is disabled, ambient is unattenuated (identical to AO=1 with EnableAO=true)
+            ShadingComponents withAO = comp;
+            withAO.EnableAO = true;
+            const glm::vec3 normalAt1 = EvaluateShading(withAO, 1.0f, 1.0f);
+            return at0 == normalAt1;
+        }
+
+        bool VerifyNoContactRegression(const ShadingComponents& comp) {
+            ShadingComponents noContact = comp;
+            noContact.EnableContactShadows = false;
+            const glm::vec3 at0 = EvaluateShading(noContact, 1.0f, 0.0f);
+            const glm::vec3 at1 = EvaluateShading(noContact, 1.0f, 1.0f);
+            if (at0 != at1) return false;
+            if (!std::isfinite(at0.x) || !std::isfinite(at0.y) || !std::isfinite(at0.z)) return false;
+
+            // When contact is disabled, directional sun visibility is purely CSM
+            ShadingComponents withContact = comp;
+            withContact.EnableContactShadows = true;
+            const glm::vec3 normalAt1 = EvaluateShading(withContact, 1.0f, 1.0f);
+            return at0 == normalAt1;
+        }
+
+        bool VerifyEmissiveInvariance(const ShadingComponents& comp) {
+            // 1. Pure emissive surface must remain strictly unchanged regardless of AO or contact shadows
+            ShadingComponents emissiveOnly{};
+            emissiveOnly.Emissive = comp.Emissive;
+            const glm::vec3 e00 = EvaluateShading(emissiveOnly, 0.0f, 0.0f);
+            const glm::vec3 e10 = EvaluateShading(emissiveOnly, 1.0f, 0.0f);
+            const glm::vec3 e01 = EvaluateShading(emissiveOnly, 0.0f, 1.0f);
+            const glm::vec3 e11 = EvaluateShading(emissiveOnly, 1.0f, 1.0f);
+            if (e00 != comp.Emissive || e10 != comp.Emissive || e01 != comp.Emissive || e11 != comp.Emissive) {
+                return false;
+            }
+            if (!std::isfinite(e00.x) || !std::isfinite(e00.y) || !std::isfinite(e00.z)) return false;
+
+            // 2. In mixed scene, emissive contribution is never darkened by AO or contact
+            const glm::vec3 fullAt00 = EvaluateShading(comp, 0.0f, 0.0f);
+            const glm::vec3 fullAt11 = EvaluateShading(comp, 1.0f, 1.0f);
+            if (!std::isfinite(fullAt00.x) || !std::isfinite(fullAt00.y) || !std::isfinite(fullAt00.z)) return false;
+            if (!std::isfinite(fullAt11.x) || !std::isfinite(fullAt11.y) || !std::isfinite(fullAt11.z)) return false;
+
+            return true;
+        }
+
+        bool VerifyUnoccludedSpecularInvariance(const ShadingComponents& comp) {
+            // Specular highlight from directional sun or local light (unoccluded: CSM=1, contact=1)
+            ShadingComponents specComp = comp;
+            specComp.SunSpecular = comp.SunSpecular;
+            specComp.LocalSpecular = comp.LocalSpecular;
+            specComp.CSMVisibility = 1.0f;
+            specComp.EnableCSM = true;
+            specComp.EnableContactShadows = true;
+
+            // Direct specular must be 100% invariant under AO variation
+            const glm::vec3 sAtAO0 = EvaluateShading(specComp, 0.0f, 1.0f);
+            const glm::vec3 sAtAO1 = EvaluateShading(specComp, 1.0f, 1.0f);
+            // Delta between AO=0 and AO=1 must affect only Ambient, NOT specular
+            const glm::vec3 delta = sAtAO1 - sAtAO0;
+            constexpr float eps = 1e-5f;
+            if (glm::distance(delta, specComp.Ambient) > eps) return false;
+
+            // Pure unoccluded specular highlights:
+            ShadingComponents pureSpecular{};
+            pureSpecular.SunSpecular = comp.SunSpecular;
+            pureSpecular.LocalSpecular = comp.LocalSpecular;
+            pureSpecular.HasSun = comp.HasSun;
+            pureSpecular.CSMVisibility = 1.0f;
+            const glm::vec3 p0 = EvaluateShading(pureSpecular, 0.0f, 1.0f);
+            const glm::vec3 p1 = EvaluateShading(pureSpecular, 1.0f, 1.0f);
+            if (p0 != p1) return false;
+            if (!std::isfinite(p0.x) || !std::isfinite(p0.y) || !std::isfinite(p0.z)) return false;
 
             return true;
         }

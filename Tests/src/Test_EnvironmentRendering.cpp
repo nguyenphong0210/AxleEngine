@@ -284,6 +284,15 @@ bool Native(RHIType backend) {
     const double baseLuma = averageLuma(red);
     const double gtaoLuma = averageLuma(gtao);
     CHECK(gtaoLuma >= baseLuma * 0.65 && gtaoLuma <= baseLuma * 1.05);
+    // M15-U4-06.5: Verify mirror / unoccluded specular sphere highlight preservation & smoothness
+    CHECK(gtao[center] > 0); // specular highlight preserved under GTAO
+    CHECK(PPM("M15_U4D_sphere.ppm", gtao, width));
+    // Verify continuous smooth gradient on the sphere (no triangle bands or faceting)
+    const size_t centerRight = (size_t(width / 2) * width + width / 2 + 1) * 4;
+    const size_t centerDown  = (size_t(width / 2 + 1) * width + width / 2) * 4;
+    const int diffR = std::abs(int(gtao[center]) - int(gtao[centerRight]));
+    const int diffD = std::abs(int(gtao[center]) - int(gtao[centerDown]));
+    CHECK(diffR <= 25 && diffD <= 25); // adjacent texels exhibit smooth sub-facet variance
     {
         std::ofstream scorecard(Output / "M14_U9_timestamp_scorecard.txt", std::ios::app);
         scorecard << "renderer_gpu_scope_ms=" << renderer.GetLastGPUTimestampMilliseconds() << "\n"

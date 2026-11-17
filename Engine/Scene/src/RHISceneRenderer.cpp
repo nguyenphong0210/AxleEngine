@@ -675,7 +675,9 @@ namespace Axle {
         m_CaptureLRUClock = 0;
         m_DynamicCaptureEvictionCount = 0;
         m_DynamicCaptureBudgetOverrideBytes = 0;
+        m_LastDynamicCaptureBudgetBytes = 64ull * 1024ull * 1024ull;
         m_HasDynamicCaptureBudgetOverride = false;
+        m_ScheduledReflectionProbeKey.clear();
         m_ActiveDynamicSceneInstanceID = 0;
         m_ActiveDynamicSceneLifetimeEpoch = 0;
         m_LastScheduledProbes = 0;
@@ -3357,6 +3359,8 @@ namespace Axle {
         m_PendingDynamicCaptures.erase(probeKey);
         if (auto it = m_DynamicProbeStatuses.find(probeKey); it != m_DynamicProbeStatuses.end()) {
             it->second.Stale = true;
+            it->second.Pending = false;
+            it->second.CompletedFaces = 0;
             if (it->second.HasGeneration) {
                 it->second.State = DynamicCaptureLifecycleState::Stale;
             }
@@ -3402,7 +3406,8 @@ namespace Axle {
 
     DynamicReflectionCaptureCacheStats RHISceneRenderer::GetDynamicReflectionCaptureCacheStats() const {
         DynamicReflectionCaptureCacheStats stats;
-        stats.BudgetBytes = EffectiveDynamicCaptureBudgetBytes(SceneRenderSettings{});
+        stats.BudgetBytes = m_HasDynamicCaptureBudgetOverride
+            ? m_DynamicCaptureBudgetOverrideBytes : m_LastDynamicCaptureBudgetBytes;
         stats.EvictionCount = m_DynamicCaptureEvictionCount;
         stats.LRUClock = m_CaptureLRUClock;
         stats.LastScheduledProbes = m_LastScheduledProbes;
@@ -3489,11 +3494,11 @@ namespace Axle {
         }
     }
 
-    void RHISceneRenderer::SynchronizeDynamicCaptureCacheState(const RenderWorld& world) {
+    bool RHISceneRenderer::SynchronizeDynamicCaptureCacheState(const RenderWorld& world) {
         const uint64_t currentEpoch = m_Device ? m_Device->GetEpoch() : 0;
         if (m_CaptureLastCompletion) {
             if (m_Device && currentEpoch != 0 && m_CaptureLastCompletion.Epoch == currentEpoch) {
-                m_Device->WaitForCompletion(m_CaptureLastCompletion);
+                if (!m_Device->WaitForCompletion(m_CaptureLastCompletion)) return false;
             }
             m_CaptureLastCompletion = {};
         }
@@ -3557,6 +3562,7 @@ namespace Axle {
             m_ActiveDynamicSceneInstanceID = world.SceneInstanceID;
             m_ActiveDynamicSceneLifetimeEpoch = world.SceneLifetimeEpoch;
         }
+        return true;
     }
 
     bool RHISceneRenderer::EnforceDynamicCaptureCacheBudget(
@@ -3567,12 +3573,12 @@ namespace Axle {
         std::vector<ReflectionCaptureContract::CaptureCacheSlotInfo> slots;
         slots.reserve(m_DynamicProbeCaptures.size() + m_PendingDynamicCaptures.size());
         for (const auto& [key, gen] : m_DynamicProbeCaptures) {
-            if (key == incomingKey || !gen) continue;
+            if (!gen) continue;
             slots.push_back(ReflectionCaptureContract::CaptureCacheSlotInfo{
                 key,
                 gen->CachedBytes,
                 gen->LastUsedSequence,
-                false
+                key == incomingKey || key == m_ScheduledReflectionProbeKey || m_PendingDynamicCaptures.contains(key)
             });
         }
         for (const auto& [key, job] : m_PendingDynamicCaptures) {
@@ -3884,8 +3890,9 @@ namespace Axle {
         ++status.FailureCount;
         status.LastDiagnostic = diagnosticCopy;
 
-        if (suppressAutoRetry &&
-            (diagnosticCopy.starts_with("DYNAMIC_PROBE_SETTINGS:") || diagnosticCopy.starts_with("DYNAMIC_PROBE_BUDGET:"))) {
+        // Capacity is transient: budget edits, completed jobs and evictions can unblock
+        // identical input. Only deterministic invalid capture settings suppress retries.
+        if (suppressAutoRetry && diagnosticCopy.starts_with("DYNAMIC_PROBE_SETTINGS:")) {
             m_FailedDynamicCaptureRevisions[keyCopy] = targetInputStamp;
         } else {
             m_FailedDynamicCaptureRevisions.erase(keyCopy);
@@ -3984,8 +3991,14 @@ namespace Axle {
         m_CaptureInProgress = true;
         struct CaptureGuard { bool& Active; ~CaptureGuard() { Active = false; } } captureGuard{m_CaptureInProgress};
 
-        SynchronizeDynamicCaptureCacheState(world);
         const std::string probeKey = ResolveDynamicProbeKey(probe);
+        auto priorMainCompletion = m_ViewContext.GetCompletion();
+        if ((priorMainCompletion && m_Device && priorMainCompletion.Epoch == m_Device->GetEpoch() &&
+             !WaitForDeviceToken(priorMainCompletion)) || !SynchronizeDynamicCaptureCacheState(world)) {
+            return RecordDynamicCaptureFailure(probeKey, probe, 0,
+                "DYNAMIC_PROBE_COMPLETION: prior work did not complete", 0, false);
+        }
+        m_LastDynamicCaptureBudgetBytes = settings.ReflectionCaptureCacheBudgetBytes;
         m_PendingDynamicCaptures.erase(probeKey);
         const ReflectionCaptureDomainStamps domainStamps = ComputeDynamicCaptureDomainStamps(world, probe, settings);
         const uint64_t inputStamp = domainStamps.CombinedStamp;
@@ -4083,18 +4096,48 @@ namespace Axle {
         const RenderWorld& world,
         const glm::vec3& cameraPosition,
         const SceneRenderSettings& requestedSettings) {
-        SynchronizeDynamicCaptureCacheState(world);
-        m_LastScheduledProbes = 0;
-        m_LastScheduledFaces = 0;
         if (m_CaptureInProgress) {
             return;
         }
+        m_CaptureInProgress = true;
+        struct CaptureGuard { bool& Active; ~CaptureGuard() { Active = false; } } captureGuard{m_CaptureInProgress};
+        m_LastScheduledProbes = 0;
+        m_LastScheduledFaces = 0;
+        m_LastDynamicCaptureBudgetBytes = requestedSettings.ReflectionCaptureCacheBudgetBytes;
+
+        // Public render entry points reset their last-result receipt before reaching
+        // this method. The view context retains the actual prior main submission.
+        // Wait before capture touches shared uploads, descriptors or cache entries.
+        auto mainCompletion = m_ViewContext.GetCompletion();
+        if (mainCompletion && mainCompletion.Epoch == m_Device->GetEpoch() &&
+            !WaitForDeviceToken(mainCompletion)) return;
+        if (!SynchronizeDynamicCaptureCacheState(world)) return;
+
+        // A rendered world's probe list is authoritative. Deleted probes and probes
+        // switched to authored data must not leave pinned, unfinished jobs behind.
+        std::unordered_set<std::string> liveKeys;
+        for (const auto& probe : world.ReflectionProbes) {
+            if (probe.DynamicCapture && probe.CubemapPath.empty()) liveKeys.insert(ResolveDynamicProbeKey(probe));
+        }
+        std::unordered_set<std::string> retiredKeys;
+        for (const auto& [key, gen] : m_DynamicProbeCaptures) if (!liveKeys.contains(key)) retiredKeys.insert(key);
+        for (const auto& [key, job] : m_PendingDynamicCaptures) if (!liveKeys.contains(key)) retiredKeys.insert(key);
+        for (const auto& key : retiredKeys) EvictDynamicProbeEntry(key, "DYNAMIC_PROBE_EVICTED: probe removed");
+        std::erase_if(m_DynamicProbeStatuses, [&](const auto& item) { return !liveKeys.contains(item.first); });
+        std::erase_if(m_RequestedManualCaptures, [&](const auto& item) { return !liveKeys.contains(item.first); });
+        std::erase_if(m_ForcedInvalidatedProbes, [&](const auto& item) { return !liveKeys.contains(item.first); });
+        std::erase_if(m_FailedDynamicCaptureRevisions, [&](const auto& item) { return !liveKeys.contains(item.first); });
 
         const auto previewReflection = m_ReflectionService.Prepare(
             world, cameraPosition, requestedSettings.EnableSSR, world.SceneRevision);
         const std::string selectedKey = previewReflection.SelectedProbe
             ? ResolveDynamicProbeKey(*previewReflection.SelectedProbe)
             : std::string{};
+        m_ScheduledReflectionProbeKey = selectedKey;
+        struct SelectionGuard {
+            std::string& Key;
+            ~SelectionGuard() { Key.clear(); }
+        } selectionGuard{m_ScheduledReflectionProbeKey};
 
         struct CandidateProbe {
             const RenderReflectionProbe* Probe = nullptr;
@@ -4132,9 +4175,8 @@ namespace Axle {
             if (existing) {
                 invalidation = m_ReflectionService.EvaluateInvalidation(existing->DomainStamps, currentStamps, manualRequested);
                 if (existing->InputStamp == 0) {
-                    invalidation.SettingsChanged = (existing->Resolution != probe.CaptureResolution) || invalidation.SettingsChanged;
-                    invalidation.TransformChanged =
-                        (glm::length(existing->Position - probe.Position) > 1e-4f) || invalidation.TransformChanged;
+                    // A policy-override capture is not a receipt for the default policy.
+                    invalidation.SettingsChanged = true;
                 }
             } else {
                 invalidation = ReflectionInvalidation{true, true, true, true, true, true, true, true, manualRequested};
@@ -4258,8 +4300,6 @@ namespace Axle {
             return nullptr;
         };
 
-        m_CaptureInProgress = true;
-        struct CaptureGuard { bool& Active; ~CaptureGuard() { Active = false; } } captureGuard{m_CaptureInProgress};
         CaptureViewStateGuard viewStateGuard(*this);
 
         for (const auto& step : plan) {
@@ -4605,14 +4645,14 @@ namespace Axle {
     {
         if (!m_CaptureSession.Active) {
             ConsumeReadyGPUTimestamps();
+            m_LastRenderSucceeded = false;
+            m_LastCompletion = {};
             if (m_CaptureLastCompletion) {
                 if (m_Device && m_CaptureLastCompletion.Epoch == m_Device->GetEpoch()) {
-                    m_Device->WaitForCompletion(m_CaptureLastCompletion);
+                    if (!m_Device->WaitForCompletion(m_CaptureLastCompletion)) return;
                 }
                 m_CaptureLastCompletion = {};
             }
-            m_LastRenderSucceeded = false;
-            m_LastCompletion = {};
         } else {
             m_CaptureRenderSucceeded = false;
             m_CaptureLastCompletion = {};

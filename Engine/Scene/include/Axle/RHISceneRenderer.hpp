@@ -531,7 +531,7 @@ namespace Axle {
                                             const SceneRenderSettings& settings) const;
         uint64_t EffectiveDynamicCaptureBudgetBytes(const SceneRenderSettings& settings) const;
         bool WaitForDeviceToken(RHI::RHICompletionToken& token);
-        void SynchronizeDynamicCaptureCacheState(const RenderWorld& world);
+        bool SynchronizeDynamicCaptureCacheState(const RenderWorld& world);
         void EvictDynamicProbeEntry(const std::string& probeKey, const std::string& reason);
         bool EnforceDynamicCaptureCacheBudget(
             const std::string& incomingKey,
@@ -835,7 +835,10 @@ namespace Axle {
         uint64_t m_CaptureLRUClock = 0;
         uint64_t m_DynamicCaptureEvictionCount = 0;
         uint64_t m_DynamicCaptureBudgetOverrideBytes = 0;
+        uint64_t m_LastDynamicCaptureBudgetBytes = 64ull * 1024ull * 1024ull;
         bool m_HasDynamicCaptureBudgetOverride = false;
+        // Protect the main view's selected reflection from background cache admission.
+        std::string m_ScheduledReflectionProbeKey;
         uint64_t m_ActiveDynamicSceneInstanceID = 0;
         uint64_t m_ActiveDynamicSceneLifetimeEpoch = 0;
         uint32_t m_LastScheduledProbes = 0;

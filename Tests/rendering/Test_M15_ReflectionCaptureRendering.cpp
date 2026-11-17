@@ -325,6 +325,10 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
             "M15-U5-10.2: dynamic capture isolates main-view ViewContext, FrameIndex, and completion");
 
         // Next main-view frame must continue smoothly from frameIndexBeforeCapture -> +1 without TAA reset!
+        // Keep the captured probe in the live world. Manual mode prevents another
+        // capture here; removing it would intentionally retire its cached generation.
+        mainWorld.ReflectionProbes = {probe};
+        mainWorld.ReflectionProbes[0].CaptureMode = ReflectionProbeCaptureMode::Manual;
         renderer.RenderWorldView(mainWorld, mainCam, &mainColor, &mainDepth, noisySettings);
         RENDER_CHECK(renderer.WasLastRenderSuccessful() &&
                      renderer.GetDiagnostics().GetFrame().FrameIndex == frameIndexBeforeCapture + 1,
@@ -829,6 +833,52 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
                 "M15-U5-19.1: GPU cubemap GGX prefilter matches pure-3D CPU reference closely");
         }
 
+        // Prefilter rollback at begin and after all mip dispatches are recorded (command #7, after six faces).
+        {
+            const uint64_t retainedGenId = gen->GenerationID;
+            const auto retainedHandle = gen->Cubemap->GetHandle();
+            RenderWorld updatedWorld = prefilterWorld;
+            updatedWorld.SceneRevision = 520;
+            updatedWorld.Meshes[0] = MakeBoxInstance(
+                2001, cubeView, MakeEmissiveMaterial({0.0f, 15.0f, 0.0f}, 1.0f), {0.0f, 0.0f, 5.0f}, {1.6f, 1.6f, 0.4f});
+
+            for (const auto boundary : {"BeginCommandBuffer", "EndCommandBuffer"}) {
+                uint32_t commandCount = 0;
+                bool prefilterFaultHit = false;
+                {
+                    ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
+                        if (op == boundary) {
+                            ++commandCount;
+                            if (commandCount == 7u && !prefilterFaultHit) {
+                                prefilterFaultHit = true;
+                                return nri::Result::OUT_OF_MEMORY;
+                            }
+                        }
+                        return {};
+                    });
+                    const auto faultRes = renderer.CaptureDynamicReflectionProbe(updatedWorld, prefilterProbe);
+                    RENDER_CHECK(prefilterFaultHit &&
+                                 !faultRes.Success &&
+                                 faultRes.PreservedPreviousGeneration &&
+                                 faultRes.PublishedGenerationID == retainedGenId &&
+                                 faultRes.Diagnostic.find("DYNAMIC_PROBE_PREFILTER_FAILED") != std::string::npos,
+                        "M15-U5-C rollback: prefilter command failure aborts publication cleanly while keeping previous generation");
+                }
+                const auto afterFaultGen = renderer.GetDynamicReflectionProbe(prefilterProbe);
+                RENDER_CHECK(afterFaultGen && afterFaultGen->GenerationID == retainedGenId &&
+                             afterFaultGen->Cubemap->GetHandle() == retainedHandle,
+                    "M15-U5-C rollback: retained prefiltered cubemap handle remains valid after prefilter fault");
+                std::vector<glm::vec4> intactMip2;
+                RENDER_CHECK(ReadCubeFaceRGBA16(*afterFaultGen->Cubemap, 4u, intactMip2, 2u), "M15-U5-C intact mip2");
+                RENDER_CHECK(AverageRegion(intactMip2, 16u, 7u, 7u, 9u, 9u).r > AverageRegion(intactMip2, 16u, 7u, 7u, 9u, 9u).g,
+                    "M15-U5-C rollback: preserved prefilter mip chain still holds original orange/red radiance");
+
+            }
+
+            const auto recoverRes = renderer.CaptureDynamicReflectionProbe(updatedWorld, prefilterProbe);
+            RENDER_CHECK(recoverRes.Success && recoverRes.PublishedGenerationID > retainedGenId,
+                "M15-U5-C recovery: recapture succeeds once prefilter fault clears");
+        }
         // M15-U5-18.1 / 18.2 / 19.2: Roughness sweep sphere fixture sampling dynamic prefiltered cubemap via ForwardPBR
         {
             RHITexture sweepColor, sweepDepth;
@@ -915,53 +965,6 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
                          offCenterFraction[2] > offCenterFraction[0],
                 "M15-U5-18.1/18.2/19.2: roughness sweep reduces specular peak monotonically and broadens highlight skirt");
             renderer.SetIBLMaps(savedIrr, savedPref, savedLut);
-        }
-
-        // Prefilter rollback at begin and after all mip dispatches are recorded (command #7, after six faces).
-        {
-            const uint64_t retainedGenId = gen->GenerationID;
-            const auto retainedHandle = gen->Cubemap->GetHandle();
-            RenderWorld updatedWorld = prefilterWorld;
-            updatedWorld.SceneRevision = 520;
-            updatedWorld.Meshes[0] = MakeBoxInstance(
-                2001, cubeView, MakeEmissiveMaterial({0.0f, 15.0f, 0.0f}, 1.0f), {0.0f, 0.0f, 5.0f}, {1.6f, 1.6f, 0.4f});
-
-            for (const auto boundary : {"BeginCommandBuffer", "EndCommandBuffer"}) {
-                uint32_t commandCount = 0;
-                bool prefilterFaultHit = false;
-                {
-                    ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
-                        if (op == boundary) {
-                            ++commandCount;
-                            if (commandCount == 7u && !prefilterFaultHit) {
-                                prefilterFaultHit = true;
-                                return nri::Result::OUT_OF_MEMORY;
-                            }
-                        }
-                        return {};
-                    });
-                    const auto faultRes = renderer.CaptureDynamicReflectionProbe(updatedWorld, prefilterProbe);
-                    RENDER_CHECK(prefilterFaultHit &&
-                                 !faultRes.Success &&
-                                 faultRes.PreservedPreviousGeneration &&
-                                 faultRes.PublishedGenerationID == retainedGenId &&
-                                 faultRes.Diagnostic.find("DYNAMIC_PROBE_PREFILTER_FAILED") != std::string::npos,
-                        "M15-U5-C rollback: prefilter command failure aborts publication cleanly while keeping previous generation");
-                }
-                const auto afterFaultGen = renderer.GetDynamicReflectionProbe(prefilterProbe);
-                RENDER_CHECK(afterFaultGen && afterFaultGen->GenerationID == retainedGenId &&
-                             afterFaultGen->Cubemap->GetHandle() == retainedHandle,
-                    "M15-U5-C rollback: retained prefiltered cubemap handle remains valid after prefilter fault");
-                std::vector<glm::vec4> intactMip2;
-                RENDER_CHECK(ReadCubeFaceRGBA16(*afterFaultGen->Cubemap, 4u, intactMip2, 2u), "M15-U5-C intact mip2");
-                RENDER_CHECK(AverageRegion(intactMip2, 16u, 7u, 7u, 9u, 9u).r > AverageRegion(intactMip2, 16u, 7u, 7u, 9u, 9u).g,
-                    "M15-U5-C rollback: preserved prefilter mip chain still holds original orange/red radiance");
-
-            }
-
-            const auto recoverRes = renderer.CaptureDynamicReflectionProbe(updatedWorld, prefilterProbe);
-            RENDER_CHECK(recoverRes.Success && recoverRes.PublishedGenerationID > retainedGenId,
-                "M15-U5-C recovery: recapture succeeds once prefilter fault clears");
         }
     }
 
@@ -1350,6 +1353,130 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
                          AverageRegion(clearedPixels, 32u, 14u, 14u, 18u, 18u).b > 2.0f,
                 "M15-U5-26.4: Scene::Clear() lifetime epoch increment invalidates prior scene capture and recaptures Blue radiance");
         }
+    }
+
+    // U5D-R1/R2: exercise budget recovery, staging footprint, and removed jobs through the real scheduler.
+    {
+        renderer.ClearDynamicReflectionProbes();
+        renderer.ClearDynamicCaptureBudgetOverride();
+        const uint64_t bytes = ReflectionCaptureContract::EstimateDynamicProbeCacheBytes(32u, 5u);
+        RenderWorld w;
+        w.SceneInstanceID = 91001;
+        w.SceneLifetimeEpoch = 1;
+        w.Skybox.Authored = true;
+        w.Skybox.Enabled = false;
+        RenderReflectionProbe p;
+        p.EntityID = 91001;
+        p.DynamicCapture = true;
+        p.CaptureResolution = 32;
+        p.CaptureShadows = false;
+        p.BoxExtents = glm::vec3(20.0f);
+        w.ReflectionProbes = {p};
+        RHITexture c, d;
+        RENDER_CHECK(c.Init(RHITextureDesc::RenderTarget2D(32, 32)) &&
+                     d.Init(RHITextureDesc::DepthStencil2D(32, 32)), "U5D regression targets");
+        PerspectiveCamera camera(55.0f, 1.0f, 0.1f, 100.0f);
+        SceneRenderSettings s;
+        s.EnableSkybox = false;
+        s.EnableShadows = false;
+        s.EnableParticles = false;
+        auto draw = [&]() {
+            renderer.RenderWorldView(w, camera, &c, &d, s);
+            return renderer.WasLastRenderSuccessful() && device.WaitForCompletion(renderer.GetLastCompletion());
+        };
+
+        s.ReflectionCaptureCacheBudgetBytes = bytes / 2;
+        RENDER_CHECK(draw() && !renderer.GetDynamicReflectionProbe(p), "U5D-R1 cold over-budget failure");
+        s.ReflectionCaptureCacheBudgetBytes = bytes;
+        RENDER_CHECK(draw() && renderer.GetDynamicReflectionProbe(p),
+            "U5D-R1 increasing budget retries an unchanged failed probe automatically");
+        RENDER_CHECK(renderer.GetDynamicReflectionCaptureCacheStats().BudgetBytes == bytes,
+            "U5D-R1 diagnostics report the actual scene-settings budget");
+
+        const auto lastGood = renderer.GetDynamicReflectionProbe(p);
+        ++w.SceneRevision;
+        s.ReflectionCaptureMaxFacesPerFrame = 2;
+        s.ReflectionCaptureCacheBudgetBytes = bytes + bytes / 2;
+        RENDER_CHECK(draw(), "U5D-R1 tight-budget rebuild frame");
+        auto stats = renderer.GetDynamicReflectionCaptureCacheStats();
+        RENDER_CHECK(stats.PendingJobCount == 0 && stats.UsedBytes == bytes &&
+                     renderer.GetDynamicReflectionProbe(p)->GenerationID == lastGood->GenerationID,
+            "U5D-R1 staging must include the retained generation in its budget and preserve last-good on rejection");
+
+        s.ReflectionCaptureCacheBudgetBytes = 2 * bytes;
+        RENDER_CHECK(draw(), "U5D-R2 begin partial rebuild");
+        stats = renderer.GetDynamicReflectionCaptureCacheStats();
+        RENDER_CHECK(stats.PendingJobCount == 1 && stats.UsedBytes == 2 * bytes,
+            "U5D-R1 a permitted partial rebuild accounts for resident and candidate cubemaps");
+        w.ReflectionProbes.clear();
+        RENDER_CHECK(draw(), "U5D-R2 remove probe while capture is pending");
+        stats = renderer.GetDynamicReflectionCaptureCacheStats();
+        RENDER_CHECK(stats.PendingJobCount == 0 && stats.CachedProbeCount == 0 && stats.UsedBytes == 0 &&
+                     !renderer.GetDynamicReflectionProbeStatus(p),
+            "U5D-R2 removing a probe retires its job, cache, and diagnostics");
+
+        s.ReflectionCaptureCacheBudgetBytes = bytes;
+        s.ReflectionCaptureMaxFacesPerFrame = 6;
+        auto background = p;
+        background.EntityID += 1;
+        background.Position = {0.0f, 0.0f, 80.0f};
+        w.ReflectionProbes = {p, background};
+        RENDER_CHECK(draw() && renderer.GetDynamicReflectionProbe(p), "U5D-R3 selected probe admission");
+        const auto selectedGeneration = renderer.GetDynamicReflectionProbe(p)->GenerationID;
+        RENDER_CHECK(draw() && draw() && renderer.GetDynamicReflectionProbe(p) &&
+                     renderer.GetDynamicReflectionProbe(p)->GenerationID == selectedGeneration &&
+                     renderer.GetLastReflectionFrame().PrefilterReady &&
+                     renderer.GetDynamicReflectionCaptureCacheStats().LastScheduledFaces == 0,
+            "U5D-R3 background probes cannot evict the selected reflection and cause recapture thrashing");
+
+        // Retire cold jobs too, when there has never been a published generation.
+        renderer.ClearDynamicReflectionProbes();
+        s.ReflectionCaptureMaxFacesPerFrame = 2;
+        w.ReflectionProbes = {p};
+        RENDER_CHECK(draw() && renderer.GetDynamicReflectionCaptureCacheStats().PendingJobCount == 1,
+            "U5D-R2 cold partial capture");
+        w.ReflectionProbes[0].DynamicCapture = false;
+        RENDER_CHECK(draw() && renderer.GetDynamicReflectionCaptureCacheStats().UsedBytes == 0 &&
+                     !renderer.GetDynamicReflectionProbeStatus(p),
+            "U5D-R2 switching away from dynamic capture retires a cold pending job");
+
+        // A one-off policy must not masquerade as a ready default-policy capture.
+        w.ReflectionProbes = {p};
+        s.ReflectionCaptureMaxFacesPerFrame = 6;
+        s.ReflectionCaptureCacheBudgetBytes = 2 * bytes;
+        ReflectionCaptureContract::ReflectionCapturePolicy overridePolicy;
+        overridePolicy.Resolution = p.CaptureResolution;
+        overridePolicy.NearPlane = 0.5f;
+        const auto overridden = renderer.CaptureDynamicReflectionProbe(w, p, s, &overridePolicy);
+        RENDER_CHECK(overridden.Success && draw() &&
+                     renderer.GetDynamicReflectionProbe(p)->GenerationID > overridden.PublishedGenerationID,
+            "U5D-R4 an automatic probe replaces a one-off policy override with the default capture policy");
+
+        // Leave a main submission outstanding: capture must synchronize it before
+        // touching its shared buffers, including when that first wait fails.
+        renderer.RenderWorldView(w, camera, &c, &d, s);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful(), "U5D-R5 main render without caller wait");
+        const auto beforeWaitFailure = renderer.GetDynamicReflectionProbe(p)->GenerationID;
+        ++w.SceneRevision;
+        bool failedWait = false;
+        bool allocatedBeforeWait = false;
+        {
+            ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
+                if (op == "CreateTexture" && !failedWait) allocatedBeforeWait = true;
+                if (op == "WaitFence" && !failedWait) {
+                    failedWait = true;
+                    return nri::Result::FAILURE;
+                }
+                return {};
+            });
+            RENDER_CHECK(draw(), "U5D-R5 main rendering recovers after a single capture synchronization failure");
+        }
+        RENDER_CHECK(failedWait && !allocatedBeforeWait &&
+                     renderer.GetDynamicReflectionCaptureCacheStats().LastScheduledFaces == 0 &&
+                     renderer.GetDynamicReflectionProbe(p)->GenerationID == beforeWaitFailure,
+            "U5D-R5 failed prior-main synchronization defers capture before any allocation or publication");
+        RENDER_CHECK(draw() && renderer.GetDynamicReflectionProbe(p)->GenerationID > beforeWaitFailure,
+            "U5D-R5 deferred capture retries on the next render after synchronization recovers");
     }
 
     renderer.ClearDynamicReflectionProbes();

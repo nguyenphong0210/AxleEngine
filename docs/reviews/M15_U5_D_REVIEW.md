@@ -78,3 +78,15 @@ All 24 automated verification runs executed cleanly after the final code/test ed
 ### Explicit Scope & Verification Limits
 - **DX12 Presentation Target Limit:** As established in U5-C (`M15_U5_C_CODEX_REVIEW.md`), `SwapChainInterface` initialization for `AxleRHIResourceViewTests dx12 targets` and strict `--rhi=dx12 --no-fallback` Editor startup is unsupported on this local adapter/driver setup and was not claimed as D3D12 presentation evidence; native D3D12 compute/rendering/storage views (`dx12 storage`, `AxleEnvironmentRenderingTests dx12`) passed in both Debug and Release.
 - **Deferred Interactive Visual Checks:** Interactive `EDITOR VISUAL` items (`M15-U5-21.3`, `21.4`, `26.1`) remain `NOT RUN` and unchecked in [PLAN.md](file:///d:/WorkSpace/AxleEngine/docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md), deferred per user direction to the consolidated post-U5 visual verification pass.
+
+
+## Codex review outcome (2026-11-17)
+
+Automated U5-D scope was accepted after independent repairs to cache admission
+and recovery, removed-probe retirement, selected-probe eviction protection,
+override receipts and synchronization with preceding main-view submissions.
+The original implementation and self-verification claims above remain historical
+reported evidence. See [the independent findings, final executed matrix and
+acceptance limits](M15_U5_D_CODEX_REVIEW.md). Final Debug/Release strict DX12 and
+Vulkan presentation/startup checks now pass; interactive fixture visuals remain
+user-deferred and NOT RUN. Partial captures still require a stable input window.

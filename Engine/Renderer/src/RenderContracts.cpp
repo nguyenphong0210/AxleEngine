@@ -1243,6 +1243,8 @@ namespace Axle {
             out.Skybox.Enabled = policy.IncludeSkybox && sourceWorld.Skybox.Enabled;
             out.EntityToStableUUID = sourceWorld.EntityToStableUUID;
             out.SceneRevision = sourceWorld.SceneRevision;
+            out.SceneInstanceID = sourceWorld.SceneInstanceID;
+            out.SceneLifetimeEpoch = sourceWorld.SceneLifetimeEpoch;
             out.TotalEntities = sourceWorld.TotalEntities;
 
             if (!policy.AllowProbeSampling) {

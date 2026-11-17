@@ -135,7 +135,7 @@ namespace Axle {
         desc.FXAA = settings.EnableFXAA;
         desc.HistoryCount = settings.EnableTAA ? 2 : 0;
         desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
-        desc.EnableHiZ = settings.EnableSSR;
+        desc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
         desc.EnableBloom = settings.EnableBloom;
         desc.EnableAutoExposure = settings.EnableAutoExposure;
         desc.EnableDDGI = settings.EnableDDGI;

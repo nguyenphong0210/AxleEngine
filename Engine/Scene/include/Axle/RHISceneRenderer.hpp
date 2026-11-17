@@ -466,6 +466,7 @@ namespace Axle {
         bool CompileHiZShaders(RHI::RHIDevice& device);
         bool CreateHiZPipelineLayout(RHI::RHIDevice& device);
         bool CreateHiZPipeline(RHI::RHIDevice& device);
+        nri::Pipeline* GetOrCreateHiZVisualizePipeline(nri::Format colorFormat);
 
         bool CompileFogShaders(RHI::RHIDevice& device);
         bool CreateFogPipelineLayout(RHI::RHIDevice& device);
@@ -617,16 +618,22 @@ namespace Axle {
         RenderReflectionProbe m_ActiveReflectionProbe{};
         bool m_HasActiveReflectionProbe = false;
 
-        // Hi-Z depth pyramid resources. The view target owns eight reduction
-        // levels; this renderer owns the reduction compute pipeline and sets.
+        // Hi-Z depth pyramid resources. The view target owns dynamically sized
+        // reduction levels; this renderer owns the compute/visualize pipelines and sets.
         RHI::RHIPipelineLayout m_HiZPipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_HiZPipeline;
+        RHI::RHIPipelineLayout m_HiZVisualizePipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_HiZVisualizePipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_HiZVisualizePipelineHDR;
         RHI::RHIBuffer m_HiZConstantBuffer;
         RHI::RHIShaderBytecode m_HiZComputeShader;
+        RHI::RHIShaderBytecode m_HiZVisualizeVertexShader;
+        RHI::RHIShaderBytecode m_HiZVisualizePixelShader;
         RHI::RHISampler m_HiZSampler;
         RHI::RHIDescriptorPool m_HiZDescriptorPool;
-        std::array<nri::DescriptorSet*, 8> m_HiZTextureSets{};
-        std::array<nri::DescriptorSet*, 8> m_HiZStorageSets{};
+        std::array<nri::DescriptorSet*, RHI::RHIViewTargets::MaxHiZLevels> m_HiZTextureSets{};
+        std::array<nri::DescriptorSet*, RHI::RHIViewTargets::MaxHiZLevels> m_HiZStorageSets{};
+        nri::DescriptorSet* m_HiZVisualizeTextureSet = nullptr;
 
         // Volumetric Fog & Atmospheric Media Resources
         RHI::RHIPipelineLayout m_FogComputePipelineLayout;

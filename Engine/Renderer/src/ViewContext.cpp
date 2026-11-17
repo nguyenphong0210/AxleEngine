@@ -23,6 +23,7 @@ namespace Axle {
         mix(settings.EnableGTAO);
         mix(settings.EnableContactShadows);
         mix(settings.EnableSSR);
+        mix(settings.HiZVisualizationLevel);
         mix(settings.EnableVolumetricFog);
         mix(settings.EnableDDGI);
         mix(settings.EnableBloom);

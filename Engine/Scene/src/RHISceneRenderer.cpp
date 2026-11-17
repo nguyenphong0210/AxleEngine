@@ -351,11 +351,11 @@ namespace Axle {
         if (!CompileHiZShaders(device) || !CreateHiZPipelineLayout(device) || !CreateHiZPipeline(device)) return false;
         if (!m_HiZSampler.Init(RHISamplerDesc::Point(RHIAddressMode::ClampToEdge))) return false;
         RHIDescriptorPoolDesc hizPoolDesc;
-        hizPoolDesc.MaxDescriptorSets = 16;
-        hizPoolDesc.MaxTextures = 16;
-        hizPoolDesc.MaxSamplers = 16;
-        hizPoolDesc.MaxStorageTextures = 16;
-        hizPoolDesc.MaxConstantBuffers = 16;
+        hizPoolDesc.MaxDescriptorSets = 36;
+        hizPoolDesc.MaxTextures = 36;
+        hizPoolDesc.MaxSamplers = 36;
+        hizPoolDesc.MaxStorageTextures = 36;
+        hizPoolDesc.MaxConstantBuffers = 36;
         if (!m_HiZDescriptorPool.Init(hizPoolDesc)) return false;
         for (size_t level = 0; level < m_HiZTextureSets.size(); ++level) {
             m_HiZTextureSets[level] = m_HiZDescriptorPool.AllocateDescriptorSet(m_HiZPipelineLayout, 0);
@@ -363,6 +363,8 @@ namespace Axle {
             if (!m_HiZTextureSets[level] || !m_HiZStorageSets[level]) return false;
             if (!m_HiZDescriptorPool.UpdateSampler(m_HiZTextureSets[level], 1, 0, m_HiZSampler.GetNative())) return false;
         }
+        m_HiZVisualizeTextureSet = m_HiZDescriptorPool.AllocateDescriptorSet(m_HiZVisualizePipelineLayout, 0);
+        if (!m_HiZVisualizeTextureSet) return false;
         if (!m_HiZConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIHiZConstants), RHIMemoryLocation::HostUpload, "HiZConstantsBuffer"))) return false;
 
         // Initialize Volumetric Fog & Atmospheric Participating Media Resources
@@ -577,10 +579,14 @@ namespace Axle {
         m_SSRSampler.Shutdown();
 
         m_HiZPipeline = nullptr;
+        m_HiZVisualizePipelineSDR = nullptr;
+        m_HiZVisualizePipelineHDR = nullptr;
         m_HiZPipelineLayout.Shutdown();
+        m_HiZVisualizePipelineLayout.Shutdown();
         m_HiZConstantBuffer.Shutdown();
         m_HiZTextureSets.fill(nullptr);
         m_HiZStorageSets.fill(nullptr);
+        m_HiZVisualizeTextureSet = nullptr;
         m_HiZDescriptorPool.Shutdown();
         m_HiZSampler.Shutdown();
 
@@ -1798,6 +1804,20 @@ namespace Axle {
         const auto result = RHIShaderCompiler::Get().Compile(desc);
         if (!result.Success) return false;
         m_HiZComputeShader = result.Bytecode;
+
+        RHIShaderCompileDesc visVsDesc = desc;
+        visVsDesc.EntryPoint = "VisualizeVSMain";
+        visVsDesc.Stage = RHIShaderStage::Vertex;
+        const auto visVsRes = RHIShaderCompiler::Get().Compile(visVsDesc);
+        if (!visVsRes.Success) return false;
+        m_HiZVisualizeVertexShader = visVsRes.Bytecode;
+
+        RHIShaderCompileDesc visPsDesc = desc;
+        visPsDesc.EntryPoint = "VisualizePSMain";
+        visPsDesc.Stage = RHIShaderStage::Fragment;
+        const auto visPsRes = RHIShaderCompiler::Get().Compile(visPsDesc);
+        if (!visPsRes.Success) return false;
+        m_HiZVisualizePixelShader = visPsRes.Bytecode;
         return true;
     }
 
@@ -1842,7 +1862,49 @@ namespace Axle {
         layout.descriptorSets = sets;
         layout.descriptorSetNum = 2;
         layout.shaderStages = nri::StageBits::COMPUTE_SHADER;
-        return m_HiZPipelineLayout.Init(layout);
+        if (!m_HiZPipelineLayout.Init(layout)) return false;
+
+        nri::RootDescriptorDesc visRoot{};
+        visRoot.registerIndex = 0;
+        visRoot.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        visRoot.shaderStages = nri::StageBits::ALL;
+
+        nri::DescriptorRangeDesc visTexRange{};
+        visTexRange.baseRegisterIndex = 0;
+        visTexRange.descriptorNum = 1;
+        visTexRange.descriptorType = nri::DescriptorType::TEXTURE;
+        visTexRange.shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        visTexRange.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc visSet{};
+        visSet.registerSpace = 1;
+        visSet.ranges = &visTexRange;
+        visSet.rangeNum = 1;
+
+        nri::PipelineLayoutDesc visLayout{};
+        visLayout.rootRegisterSpace = 0;
+        visLayout.rootDescriptors = &visRoot;
+        visLayout.rootDescriptorNum = 1;
+        visLayout.descriptorSets = &visSet;
+        visLayout.descriptorSetNum = 1;
+        visLayout.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+        return m_HiZVisualizePipelineLayout.Init(visLayout);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateHiZVisualizePipeline(nri::Format colorFormat) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_HiZVisualizePipelineLayout;
+        gfxDesc.Shaders = { m_HiZVisualizeVertexShader, m_HiZVisualizePixelShader };
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+        gfxDesc.DepthStencil.DepthTestEnable = false;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+        return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
     }
 
     bool RHISceneRenderer::CreateHiZPipeline(RHIDevice& device) {
@@ -1851,7 +1913,9 @@ namespace Axle {
         desc.Layout = &m_HiZPipelineLayout;
         desc.ComputeShader = m_HiZComputeShader;
         m_HiZPipeline = RHIPipelineCache::Get().GetOrCreateComputePipeline(desc);
-        return m_HiZPipeline != nullptr;
+        m_HiZVisualizePipelineSDR = GetOrCreateHiZVisualizePipeline(nri::Format::RGBA8_UNORM);
+        m_HiZVisualizePipelineHDR = GetOrCreateHiZVisualizePipeline(nri::Format::RGBA16_SFLOAT);
+        return m_HiZPipeline != nullptr && m_HiZVisualizePipelineSDR != nullptr && m_HiZVisualizePipelineHDR != nullptr;
     }
 
     bool RHISceneRenderer::CompileFogShaders(RHIDevice& device) {
@@ -2752,7 +2816,7 @@ namespace Axle {
         targetDesc.HDR = useToneMap; targetDesc.FXAA = useFXAA; targetDesc.OwnPrimary = false;
         targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
         targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
-        targetDesc.EnableHiZ = settings.EnableSSR;
+        targetDesc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
         targetDesc.EnableBloom = settings.EnableBloom;
         targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
         targetDesc.EnableAutoExposure = settings.EnableAutoExposure;

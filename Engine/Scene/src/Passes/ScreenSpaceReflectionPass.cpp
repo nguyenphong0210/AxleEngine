@@ -2,6 +2,7 @@
 #include "HiZGenerationPass.hpp"
 #include "../RHISceneRendererPasses.hpp"
 #include <Axle/RHI/RHIMaterial.hpp>
+#include <algorithm>
 
 namespace Axle::Passes {
     void ScreenSpaceReflectionPass::Declare(RenderGraph& graph, const ScreenSpaceReflectionResources& r) {
@@ -14,7 +15,9 @@ namespace Axle::Passes {
         std::vector<RenderGraph::Use> computeUses{
             {r.Depth, Layout::ShaderResource}, {r.SceneNormal, Layout::ShaderResource},
             {r.Input, Layout::ShaderResource}, {r.Storage, Layout::ShaderResourceStorage, Access::Write}};
-        for (const auto& hiz : r.HiZ) computeUses.push_back({hiz, Layout::ShaderResource});
+        for (size_t level = 0; level < std::min<size_t>(r.HiZ.size(), RHI::RHIViewTargets::MinSSRHiZLevels); ++level) {
+            computeUses.push_back({r.HiZ[level], Layout::ShaderResource});
+        }
         graph.AddPass("SSRCompute", std::move(computeUses));
         graph.AddPass("SSRApply", {
             {r.SceneNormal, Layout::ShaderResource}, {r.Depth, Layout::ShaderResource},

@@ -121,6 +121,7 @@ private:
     bool m_EnableVolumetricFog = false;
     bool m_EnableAutoExposure = false;
     bool m_EnableTAA = false;
+    int m_HiZVisualizationLevel = -1;
     bool m_F1KeyWasPressed = false;
     bool m_F9KeyWasPressed = false;
     bool m_F11KeyWasPressed = false;

@@ -18,11 +18,15 @@ def build_hiz(depth: list[float], width: int, height: int) -> list[tuple[int, in
         destination_width = max(1, source_width // 2)
         destination_height = max(1, source_height // 2)
         destination: list[float] = []
+        odd_width = source_width > 1 and (source_width & 1) != 0
+        odd_height = source_height > 1 and (source_height & 1) != 0
         for y in range(destination_height):
+            max_offset_y = 2 if (odd_height and y + 1 == destination_height) else 1
             for x in range(destination_width):
+                max_offset_x = 2 if (odd_width and x + 1 == destination_width) else 1
                 samples = []
-                for offset_y in (0, 1):
-                    for offset_x in (0, 1):
+                for offset_y in range(max_offset_y + 1):
+                    for offset_x in range(max_offset_x + 1):
                         sample_x = min(x * 2 + offset_x, source_width - 1)
                         sample_y = min(y * 2 + offset_y, source_height - 1)
                         samples.append(source[sample_y * source_width + sample_x])
@@ -82,8 +86,17 @@ def main() -> int:
     ]
     odd = build_hiz(odd_depth, 3, 5)
     assert [(width, height) for width, height, _ in odd] == [(3, 5), (1, 2), (1, 1)]
-    assert odd[1][2] == [0.55, 0.10]
+    # Conservative M15-U5-06.2 odd-edge policy folds trailing col x=2 (0.46 < 0.55)
+    # and trailing row y=4 so no closer border texel is lost.
+    assert odd[1][2] == [0.46, 0.10]
     assert odd[2][2] == [0.10]
+
+    # Verify a close blocker strictly on the bottom-right odd corner propagates to 1x1.
+    border_depth = list(odd_depth)
+    border_depth[4 * 3 + 2] = 0.02
+    border_odd = build_hiz(border_depth, 3, 5)
+    assert border_odd[1][2] == [0.46, 0.02]
+    assert border_odd[2][2] == [0.02]
 
     large_width, large_height = 1919, 1079
     large_depth = [float((index % 997) + 1) / 998.0 for index in range(large_width * large_height)]

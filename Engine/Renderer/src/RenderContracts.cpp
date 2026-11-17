@@ -891,4 +891,155 @@ namespace Axle {
 
     } // namespace OcclusionContract
 
+    // =========================================================================
+    // 9. Hi-Z Depth Pyramid Contracts (M15-U5-A)
+    // =========================================================================
+    namespace HiZContract {
+
+        uint32_t ComputeUsefulLevelCount(uint32_t fullWidth, uint32_t fullHeight) {
+            return RHI::RHIViewTargets::ComputeUsefulHiZLevelCount(fullWidth, fullHeight);
+        }
+
+        uint32_t ComputeAllocatedLevelCount(uint32_t fullWidth, uint32_t fullHeight) {
+            return RHI::RHIViewTargets::ComputeAllocatedHiZLevelCount(fullWidth, fullHeight);
+        }
+
+        PyramidExtent ComputeLevelExtent(uint32_t fullWidth, uint32_t fullHeight, uint32_t level) {
+            if (fullWidth == 0 || fullHeight == 0 || level >= MaxLevels) return {};
+            return PyramidExtent{
+                std::max(1u, fullWidth >> level),
+                std::max(1u, fullHeight >> level)
+            };
+        }
+
+        std::string_view GetDepthConventionSummary() {
+            return "Modern RHI depth [0.0, 1.0]: 0.0 is near plane, 1.0 is far/sky, and Hi-Z stores the conservative minimum depth (nearest blocker) across covered texels.";
+        }
+
+        std::string_view GetEdgePolicySummary() {
+            return "Level extents halve via max(1u, prev >> 1). When source extent > 1 is odd, the final destination column/row folds source coordinate (2 * dst + 2 = src - 1) into the min reduction (up to 3x3 at bottom-right corners); out-of-range taps on 1-pixel axes clamp to src - 1.";
+        }
+
+        bool BuildMinReductionPyramid(const std::vector<float>& depthLevel0,
+                                      uint32_t width, uint32_t height, uint32_t levelCount,
+                                      std::vector<std::vector<float>>& outLevels,
+                                      std::vector<PyramidExtent>& outExtents) {
+            outLevels.clear();
+            outExtents.clear();
+            if (width == 0 || height == 0 || levelCount == 0 || levelCount > MaxLevels) return false;
+            const size_t expectedCount = size_t(width) * size_t(height);
+            if (depthLevel0.size() != expectedCount) return false;
+            for (float d : depthLevel0) {
+                if (!std::isfinite(d) || d < NearDepth || d > FarDepth) return false;
+            }
+
+            outLevels.reserve(levelCount);
+            outExtents.reserve(levelCount);
+            outLevels.push_back(depthLevel0);
+            outExtents.push_back({width, height});
+
+            for (uint32_t level = 1; level < levelCount; ++level) {
+                const auto& src = outLevels[level - 1];
+                const auto srcExt = outExtents[level - 1];
+                const uint32_t dstW = std::max(1u, srcExt.Width >> 1);
+                const uint32_t dstH = std::max(1u, srcExt.Height >> 1);
+                std::vector<float> dst(size_t(dstW) * size_t(dstH), FarDepth);
+
+                if (srcExt.Width == 1 && srcExt.Height == 1) {
+                    dst[0] = src[0];
+                } else {
+                    auto loadSrc = [&](uint32_t sx, uint32_t sy) {
+                        const uint32_t cx = std::min(sx, srcExt.Width - 1u);
+                        const uint32_t cy = std::min(sy, srcExt.Height - 1u);
+                        return src[size_t(cy) * srcExt.Width + cx];
+                    };
+                    const bool oddW = srcExt.Width > 1u && (srcExt.Width & 1u) != 0u;
+                    const bool oddH = srcExt.Height > 1u && (srcExt.Height & 1u) != 0u;
+                    for (uint32_t y = 0; y < dstH; ++y) {
+                        const bool extraY = oddH && (y + 1u == dstH);
+                        const uint32_t maxOY = extraY ? 2u : 1u;
+                        for (uint32_t x = 0; x < dstW; ++x) {
+                            const bool extraX = oddW && (x + 1u == dstW);
+                            const uint32_t maxOX = extraX ? 2u : 1u;
+                            float minVal = FarDepth;
+                            for (uint32_t oy = 0; oy <= maxOY; ++oy) {
+                                for (uint32_t ox = 0; ox <= maxOX; ++ox) {
+                                    minVal = std::min(minVal, loadSrc(x * 2u + ox, y * 2u + oy));
+                                }
+                            }
+                            dst[size_t(y) * dstW + x] = minVal;
+                        }
+                    }
+                }
+                outLevels.push_back(std::move(dst));
+                outExtents.push_back({dstW, dstH});
+            }
+            return true;
+        }
+
+        bool VerifyConservativeMinReduction(const std::vector<float>& depthLevel0,
+                                            uint32_t width, uint32_t height) {
+            const uint32_t useful = ComputeUsefulLevelCount(width, height);
+            if (useful == 0) return false;
+            std::vector<std::vector<float>> levels;
+            std::vector<PyramidExtent> extents;
+            if (!BuildMinReductionPyramid(depthLevel0, width, height, useful, levels, extents)) return false;
+
+            const auto& lastExt = extents.back();
+            if (lastExt.Width != 1 || lastExt.Height != 1) return false;
+
+            float baseMin = FarDepth;
+            for (float d : levels[0]) baseMin = std::min(baseMin, d);
+
+            for (size_t l = 1; l < levels.size(); ++l) {
+                const auto srcExt = extents[l - 1];
+                const auto dstExt = extents[l];
+                const bool oddW = srcExt.Width > 1u && (srcExt.Width & 1u) != 0u;
+                const bool oddH = srcExt.Height > 1u && (srcExt.Height & 1u) != 0u;
+
+                float levelMin = FarDepth;
+                for (uint32_t y = 0; y < dstExt.Height; ++y) {
+                    const uint32_t syEnd = (oddH && y + 1u == dstExt.Height) ? (srcExt.Height - 1u) : std::min(srcExt.Height - 1u, y * 2u + 1u);
+                    for (uint32_t x = 0; x < dstExt.Width; ++x) {
+                        const uint32_t sxEnd = (oddW && x + 1u == dstExt.Width) ? (srcExt.Width - 1u) : std::min(srcExt.Width - 1u, x * 2u + 1u);
+                        const float coarseVal = levels[l][size_t(y) * dstExt.Width + x];
+                        if (!std::isfinite(coarseVal) || coarseVal < NearDepth || coarseVal > FarDepth) return false;
+                        levelMin = std::min(levelMin, coarseVal);
+                        for (uint32_t sy = y * 2u; sy <= syEnd; ++sy) {
+                            for (uint32_t sx = x * 2u; sx <= sxEnd; ++sx) {
+                                if (coarseVal > levels[l - 1][size_t(sy) * srcExt.Width + sx] + 1e-6f) {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (std::abs(levelMin - baseMin) > 1e-6f) return false;
+            }
+            return true;
+        }
+
+        bool VerifyOddResolutionPyramid(uint32_t width, uint32_t height) {
+            const uint32_t useful = ComputeUsefulLevelCount(width, height);
+            const uint32_t allocated = ComputeAllocatedLevelCount(width, height);
+            if (useful == 0 || allocated < SSRBindingLevels || allocated < useful) return false;
+            if (ComputeLevelExtent(width, height, useful - 1) != PyramidExtent{1, 1}) return false;
+
+            std::vector<float> testDepth(size_t(width) * size_t(height), 0.85f);
+            // Place nearest blocker strictly on the bottom-right odd border corner.
+            testDepth[size_t(height - 1u) * width + (width - 1u)] = 0.04f;
+            if (!VerifyConservativeMinReduction(testDepth, width, height)) return false;
+
+            std::vector<std::vector<float>> levels;
+            std::vector<PyramidExtent> extents;
+            if (!BuildMinReductionPyramid(testDepth, width, height, allocated, levels, extents)) return false;
+            for (uint32_t l = 0; l < allocated; ++l) {
+                if (extents[l] != ComputeLevelExtent(width, height, l)) return false;
+                if (levels[l].back() != 0.04f) return false;
+            }
+            return true;
+        }
+
+    } // namespace HiZContract
+
 } // namespace Axle

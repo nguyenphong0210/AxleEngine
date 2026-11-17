@@ -7,6 +7,7 @@
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHIMaterialConstants.hpp>
 #include <Axle/RHI/RHIVertexLayout.hpp>
+#include <Axle/RHI/RHIViewTargets.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <string_view>
@@ -307,6 +308,52 @@ namespace Axle {
         //    remain stable without faceting, halos, disocclusion bleeding, or NaNs.
         bool VerifyDeformedMeshOcclusionStability(const DeformedVertexSample& sample, float backgroundDepth,
                                                  const glm::mat4& viewMatrix, const glm::mat4& projMatrix);
+    }
+
+    // =========================================================================
+    // 9. Hi-Z Depth Pyramid Contracts (M15-U5-A: U5-05.1 - U5-07.2)
+    // =========================================================================
+    namespace HiZContract {
+        constexpr float NearDepth = 0.0f;
+        constexpr float FarDepth = 1.0f;
+        constexpr uint32_t MaxLevels = RHI::RHIViewTargets::MaxHiZLevels;
+        constexpr uint32_t SSRBindingLevels = RHI::RHIViewTargets::MinSSRHiZLevels;
+
+        struct PyramidExtent {
+            uint32_t Width = 0;
+            uint32_t Height = 0;
+            bool operator==(const PyramidExtent&) const = default;
+        };
+
+        // Useful reduction depth from full resolution down to 1x1 (inclusive). Returns 0 for zero extents.
+        uint32_t ComputeUsefulLevelCount(uint32_t fullWidth, uint32_t fullHeight);
+
+        // Allocated RHI Hi-Z levels: max(SSRBindingLevels, ComputeUsefulLevelCount). Returns 0 for zero extents.
+        uint32_t ComputeAllocatedLevelCount(uint32_t fullWidth, uint32_t fullHeight);
+
+        // Computes extent of Hi-Z level using floor-halving clamped to [1, full]. Returns {0,0} on invalid input.
+        PyramidExtent ComputeLevelExtent(uint32_t fullWidth, uint32_t fullHeight, uint32_t level);
+
+        std::string_view GetDepthConventionSummary();
+        std::string_view GetEdgePolicySummary();
+
+        // Builds the CPU conservative min-reduction reference matching HiZ.hlsl:
+        // - Level 0 copies finite [0, 1] input depth.
+        // - Subsequent levels compute min over 2x2 blocks, conservatively folding trailing
+        //   odd column/row (3rd tap at max edge when srcExtent > 1 is odd) so no closer blocker
+        //   can be dropped at odd viewports (e.g. 3x5, 1919x1079).
+        bool BuildMinReductionPyramid(const std::vector<float>& depthLevel0,
+                                      uint32_t width, uint32_t height, uint32_t levelCount,
+                                      std::vector<std::vector<float>>& outLevels,
+                                      std::vector<PyramidExtent>& outExtents);
+
+        // Verifies conservative nearest-blocker coverage: global minimum is preserved at every
+        // level and every coarse texel is <= all covered finer texels.
+        bool VerifyConservativeMinReduction(const std::vector<float>& depthLevel0,
+                                            uint32_t width, uint32_t height);
+
+        // Verifies dimensions, boundary coverage, and trailing-edge propagation for arbitrary odd/minimal sizes.
+        bool VerifyOddResolutionPyramid(uint32_t width, uint32_t height);
     }
 
 } // namespace Axle

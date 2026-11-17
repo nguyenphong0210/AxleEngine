@@ -42,6 +42,7 @@ namespace Axle {
         float ContactShadowStrength = 1.0f;
         float SSRLengthPixels = 64.0f;
         float SSRStrength = 0.5f;
+        int HiZVisualizationLevel = -1; // -1: disabled; >= 0 displays Hi-Z pyramid level
         float FogDensity = 0.02f;
         float FogHeightFalloff = 0.1f;
         float FogScattering = 0.7f;

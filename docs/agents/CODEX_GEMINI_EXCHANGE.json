@@ -1,53 +1,57 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U4-E",
-    "title": "Normal-mapped materials and animated/deformed mesh occlusion validation",
-    "state": "reviewed_visual_gate_open",
+    "id": "M15-U5-A",
+    "title": "Hi-Z depth pyramid contracts, conservative odd-edge reduction, useful level count, per-level visualization, and barrier validation",
+    "state": "delivered",
     "coordinator": "User",
     "implementer": "Gemini",
-    "code_baseline": "80e9837a",
-    "user_instruction": "Implement M15-U4-E: M15-U4-07.1 through U4-07.2. Validate GTAO/contact behavior with normal-mapped materials and animated or deformed meshes. Ensure ScreenNormal, depth reconstruction, and occlusion remain stable without faceting, halos, disocclusion artifacts, or NaNs. Reuse existing U3 normal/material contracts. Add focused CPU/native tests and the required Editor visual verification where applicable. Run Debug/Release D3D12/Vulkan checks, update PLAN.md/review evidence, commit this checkpoint, report exact results in the exchange, then stop.",
-    "user_scope": "Verify normal-mapped materials (tangent-space decoding, TBN perturbation, grazing/backfacing normal stability in ScreenNormal, GTAO horizon search and contact shadows) and animated/deformed meshes (skinning matrix transformations, normal-tangent orthogonality, depth reconstruction, and cross-bilateral filter edge rejection across disocclusion silhouette boundaries). All outputs finite.",
+    "code_baseline": "a746397b",
+    "user_instruction": "triên khai U5 A giup tôi nhé (following user approval to defer interactive Editor visual captures and split M15-U5 into U5-A..I in PLAN.md): implement M15-U5-05.1 through M15-U5-07.2.",
+    "user_scope": "Validate Hi-Z min-reduction against CPU reference at canonical 4x4 and 1x1/3x5/1919x1079; freeze [0.0, 1.0] nearest-blocker min-depth convention; define conservative odd-edge border folding policy; define useful vs SSR-minimum allocated level counts up to 16 levels; implement per-level visualization with explicit fallbacks and Editor control; validate RenderGraph and native GPU barriers.",
     "expected_files": [
+      "Editor/src/EditorLayer.cpp",
+      "Editor/src/EditorLayer.hpp",
+      "Engine/RHI/include/Axle/RHI/RHIViewTargets.hpp",
+      "Engine/RHI/src/RHIViewTargets.cpp",
       "Engine/Renderer/include/Axle/RenderContracts.hpp",
+      "Engine/Renderer/include/Axle/SceneRenderSettings.hpp",
       "Engine/Renderer/src/RenderContracts.cpp",
-      "Tests/rendering/Test_M15_OcclusionContractUnit.cpp",
-      "Tests/rendering/Test_M15_OcclusionRendering.cpp",
+      "Engine/Renderer/src/ViewContext.cpp",
+      "Engine/Resources/Shaders/HiZ.hlsl",
+      "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "Engine/Scene/src/Passes/HiZGenerationPass.cpp",
+      "Engine/Scene/src/Passes/HiZGenerationPass.hpp",
+      "Engine/Scene/src/Passes/ScreenSpaceReflectionPass.cpp",
+      "Engine/Scene/src/Passes/ScreenSpaceReflectionPass.hpp",
+      "Engine/Scene/src/RHISceneRenderer.cpp",
+      "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "Engine/Scene/src/RenderService.cpp",
+      "Engine/UI/src/RHIViewportDescriptor.cpp",
+      "Tests/CMakeLists.txt",
+      "Tests/rendering/RenderUnitTestMain.cpp",
+      "Tests/rendering/Test_M15_HiZContractUnit.cpp",
+      "Tests/rendering/Test_M15_HiZRendering.cpp",
+      "Tests/src/Test_EnvironmentRendering.cpp",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U4_BATCH_5_REVIEW.md",
-      "Engine/Resources/Shaders/ForwardPBR.hlsl",
-      "Engine/Resources/Shaders/SurfaceNormal.hlsl",
-      "Tests/CMakeLists.txt",
-      "Tests/src/Test_EnvironmentRendering.cpp",
-      "Tests/rendering/OcclusionTestSupport.hpp",
-      "Tests/rendering/Test_M15_OcclusionSurfaceRendering.cpp",
-      "Tests/Fixtures/M15/U4E/README.md",
-      "Tests/Fixtures/M15/U4E/U4E.axleproj",
-      "Tests/Fixtures/M15/U4E/assets/gradient.hdr",
-      "Tests/Fixtures/M15/U4E/assets/normal.tga",
-      "Tests/Fixtures/M15/U4E/assets/scenes/MappedDeformation.axlescene",
-      "docs/reviews/M15_U4_BATCH_5_CODEX_REVIEW.md"
+      "docs/reviews/M15_U5_A_REVIEW.md",
+      "scripts/test_m15_hiz_reference.py"
     ],
-    "implementation_status": "Codex repaired NaN tangent-basis fallback in ForwardPBR/SurfaceNormal, replaced mislabeled native draws with actual normal-map and moving deformed-mesh renderer fixtures, validated CPU projection/directions, and supplied the applicable U4E Editor project. Separate-context source recheck found no blockers. Final recheck also repaired SurfaceNormal detail normal/mask registers t8/t9 -> t11/t12 to match ForwardPBR/shared material descriptors. White/black detail masks are verified natively. The moving-pose oracle explicitly asserts retained target generations.",
-    "acceptance_status": "Automated U4-07.1 and U4-07.2 behavior accepted after corrections; no known code blocker. Interactive Editor visual inspection/capture remains NOT RUN. Prior U4-D visual gate remains open; no whole-U4 or subsequent-package acceptance.",
-    "implementation_commits": [
-      "c93a60894434fcd00cd40209ac266aceca0d1db1"
-    ],
-    "review_report": "docs/reviews/M15_U4_BATCH_5_CODEX_REVIEW.md",
+    "implementation_status": "Implemented Axle::HiZContract ([0.0, 1.0] min-depth nearest-blocker policy, conservative odd-edge folding, useful vs allocated level count), expanded RHIViewTargets & RHISceneRenderer up to MaxHiZLevels=16 while retaining MinSSRHiZLevels=8 for SSR, updated HiZ.hlsl (conservative includeExtraX/Y + VisualizeVSMain/VisualizePSMain), added HiZGenerationPass::DeclareVisualization/RecordVisualization, wired SceneRenderSettings::HiZVisualizationLevel across ViewContext/RenderService/RHIViewportDescriptor/RHISceneRendererPasses/EditorLayer, updated scripts/test_m15_hiz_reference.py, and added Test_M15_HiZContractUnit + Test_M15_HiZRendering.",
+    "acceptance_status": "Self-verification complete on CPU and Debug/Release native D3D12/Vulkan; pending independent Codex review and acceptance.",
+    "implementation_commits": [],
+    "review_report": "docs/reviews/M15_U5_A_REVIEW.md",
     "open_gates": [
-      "Interactive Editor visual inspection/capture of U4E.axleproj remains NOT RUN: actual window was found, but accessibility unavailable and screenshot CreateForMonitor fails 0x80070057. Debug/Release Vulkan Editor loaded the correct 3-entity scene for 5 UI frames; native PPMs are separate evidence. The prior U4-D visual gate is unchanged."
+      "M15-U5-07.1 interactive Editor visual capture deferred per user direction; U4-06.5, U4-E, and M15-U5-03 visual gates also remain deferred.",
+      "Independent Codex review pending."
     ],
-    "next_action": "Inspect/capture the dedicated U4E Editor fixture when capture is available; stop at U4-E scope. Do not infer release of another package.",
-    "verification": "Codex independently rebuilt Debug/Release unit/native/Editor targets; focused/full CPU suites, focused CTest, four hardware DX12/Vulkan native runs, two actual U4E Vulkan Editor startup runs, architecture611 files/25 CMake and whitespace exit0. Real map normal errors<.002, 72 back-facing AO=1 samples per pipeline, mapped direct/emission toggle HDR error0, front-facing builtin/graph HDR parity<=.0012207. Published deformed generations produce receiver minAO~.284, 1218 disocclusion events and fresh-view HDR error0. Zero native validation errors. Exact commands/logs and visual limitation in independent review. Final rerun includes retained-generation assertions and detail normal/mask cases (errors .000289818/0); all four native configurations, both CPU/CTest configurations and actual U4E Editor startups exit0 after this last shader correction.",
-    "reviewer": "Codex",
-    "review_user_instruction": "Review and fix U4-E directly; own needed code/architecture repairs, prioritize quality, and make one consolidated local commit.",
-    "review_baseline": "c93a60894434fcd00cd40209ac266aceca0d1db1"
+    "next_action": "Await user direction (next batch U5-B or consolidated Codex review).",
+    "verification": "Verified in Debug and Release after final code edit: python scripts/test_m15_hiz_reference.py (exit 0); Debug/Release AxleRenderUnitTests --m15-hiz-contract & full suite from repo root (exit 0); Debug/Release ctest -R ^(M15HiZContract|M15HiZReference)$ (2/2 PASS); Debug/Release AxleRHIResourceViewTests (exit 0); Debug/Release AxleEnvironmentRenderingTests on D3D12 and Vulkan (4/4 exit 0, max_error=0 across 4x4/1x1/3x5/127x63/1919x1079 standalone and rendered HiZ0..HiZ(N-1), 0 validation errors); Debug/Release AxleEditor --verify-empty-startup on Vulkan and D3D12 (4/4 exit 0)."
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
-    "Gemini": "CG-20261117T040408319260Z-CODEX-890a66"
+    "Gemini": "CG-20261117T053657428682Z-CODEX-eb2e82"
   },
   "messages": [
     {
@@ -4515,6 +4519,28 @@
       "base_commit": "c93a60894434fcd00cd40209ac266aceca0d1db1",
       "timestamp_utc": "2026-11-17T05:36:57.428682+00:00",
       "body": "FINAL REVIEW ADDENDUM to CG-20261117T053120469191Z-CODEX-13f204; delivery c93a60894434fcd00cd40209ac266aceca0d1db1. Two final correction rechecks are included in the same consolidated commit, with no intermediate commits.\n\nU4E-R5 P1 FIXED: SurfaceNormal detail normal/mask registers were t8/t9 (BRDF LUT/clearcoat) instead of ForwardPBR/shared layout t11/t12. Native reproduction failed with ScreenNormal error1.13572 (build/Codex-U4E-before-detail-fix.log, exit1). Corrected to t11/t12, preserving logical enable flag bits8/9. Actual white-mask detail and black-mask neutral native errors now .000289818 and0.\n\nTest-oracle correction: RHIViewTargets::Configure always publishes a new generation. The fixture now configures only on descriptor change and explicitly requires moving poses to keep the previous target generation before comparison with a deliberately fresh view. This ensures genuine retained-target disocclusion coverage. No production view policy change.\n\nFINAL VERIFIED after these changes: rebuilt all three targets in Debug/Release; focused/full CPU and focused CTest both configs exit0; all four Debug/Release dx12/vulkan full native runs exit0 with zero validation errors, current depth/normal checks,72 back-facing neutral AO samples per pipeline,1218 disocclusion events, genuine minAO .28418/.288086, fresh-view HDR error0 and the detail cases above. Both actual U4E Vulkan Editor startups exit0 (3 entities/5 UI frames). Architecture611 files/25 CMake and whitespace exit0. Separate-context source reviewer rechecked both final fixes and found no blocker.\n\nFinal verdict unchanged: automated U4-07.1/07.2 accepted after corrections, no known code blocker. Interactive Editor visual capture remains NOT RUN (current actual-window CreateForMonitor0x80070057 failure); prior U4-D visual gate unchanged. Full findings/commands/paths: docs/reviews/M15_U4_BATCH_5_CODEX_REVIEW.md. One consolidated local code/tests/fixture/docs/exchange commit; no push or subsequent package release."
+    },
+    {
+      "id": "CG-20261117T064125511281Z-GEMINI-181023",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "M15-U5-A",
+      "reply_to": "CG-20261117T053657428682Z-CODEX-eb2e82",
+      "base_commit": "a746397b",
+      "timestamp_utc": "2026-11-17T06:41:25.511281+00:00",
+      "body": "IN_PROGRESS from a746397b: User instructs implementing M15-U5-A (S5.1 remainder: M15-U5-05.1 through M15-U5-07.2 — Hi-Z depth pyramid contracts, conservative odd-edge reduction, useful level count policy, barriers, per-level visualization, and 1x1/3x5/1919x1079 native readbacks), while deferring interactive Editor visual captures to a consolidated visual verification pass later.\n\nExpected files:\n- Engine/RHI/include/Axle/RHI/RHIViewTargets.hpp\n- Engine/RHI/src/RHIViewTargets.cpp\n- Engine/Renderer/include/Axle/RenderContracts.hpp\n- Engine/Renderer/src/RenderContracts.cpp\n- Engine/Renderer/include/Axle/SceneRenderSettings.hpp\n- Engine/Renderer/src/ViewContext.cpp\n- Engine/Resources/Shaders/HiZ.hlsl\n- Engine/Scene/include/Axle/RHISceneRenderer.hpp\n- Engine/Scene/src/RHISceneRenderer.cpp\n- Engine/Scene/src/RHISceneRendererPasses.cpp\n- Engine/Scene/src/Passes/HiZGenerationPass.hpp\n- Engine/Scene/src/Passes/HiZGenerationPass.cpp\n- Engine/Scene/src/Passes/ScreenSpaceReflectionPass.cpp\n- Engine/Scene/src/RenderService.cpp\n- Engine/UI/src/RHIViewportDescriptor.cpp\n- Editor/src/EditorLayer.cpp\n- scripts/test_m15_hiz_reference.py\n- Tests/CMakeLists.txt\n- Tests/rendering/RenderUnitTestMain.cpp\n- Tests/rendering/Test_M15_HiZContractUnit.cpp\n- Tests/rendering/Test_M15_HiZRendering.cpp\n- Tests/src/Test_EnvironmentRendering.cpp\n- docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md\n- docs/reviews/M15_U5_A_REVIEW.md\n- docs/agents/CODEX_GEMINI_EXCHANGE.json\n"
+    },
+    {
+      "id": "CG-20261117T070850437254Z-GEMINI-4e70b7",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-U5-A",
+      "reply_to": "CG-20261117T064125511281Z-GEMINI-181023",
+      "base_commit": "a746397b218b2eb5a1db9c4e7c0b640be781625c",
+      "timestamp_utc": "2026-11-17T07:08:50.437254+00:00",
+      "body": "DELIVERY: M15-U5-A (M15-U5-05.1 through M15-U5-07.2, Hi-Z Depth Pyramid) self-verification complete from baseline a746397b (single coherent delivery commit created at delivery).\n\nImplemented scope:\n- Depth convention & odd-edge policy (M15-U5-06.1, M15-U5-06.2): Froze [0.0, 1.0] zero-to-one min-depth nearest-blocker policy in Axle::HiZContract (Engine/Renderer/include/Axle/RenderContracts.hpp, src/RenderContracts.cpp) and implemented conservative odd-edge folding (includeExtraX, includeExtraY) across HiZ.hlsl, Axle::HiZContract::BuildMinReductionPyramid, and scripts/test_m15_hiz_reference.py so trailing odd border columns/rows never drop out.\n- Useful vs allocated level count (M15-U5-06.3): Implemented ComputeUsefulHiZLevelCount (floor(log2(max(w, h))) + 1 clamped to [1, MaxHiZLevels(16)]) and ComputeAllocatedHiZLevelCount (max(MinSSRHiZLevels(8), useful)) in RHIViewTargets and Axle::HiZContract; expanded RHIViewTargets (m_ExtraHiZTextures) and RHISceneRenderer (36-set pool, 16 texture/storage sets) to 16 R32_FLOAT levels while keeping SSR's 8 static u_HiZ0..u_HiZ7 bindings (1919x1079 allocates 11 levels down to 1x1).\n- Per-level visualization & target parity (M15-U5-07.1): Added VisualizeVSMain/VisualizePSMain in HiZ.hlsl, HiZGenerationPass::DeclareVisualization/RecordVisualization, SceneRenderSettings::HiZVisualizationLevel (-1 off, hashed into HashViewFeaturePolicy), target-descriptor parity in RHISceneRenderer/RenderService/RHIViewportDescriptor, EditorLayer UI control ('Hi-Z Debug Level (-1=Off)'), and explicit fallbacks (hiz_visualization_unavailable, hiz_visualization_clamped_or_tail).\n- Validation & barriers (M15-U5-05.1..05.4, M15-U5-07.2): Added Test_M15_HiZContractUnit (CTest M15HiZContract) and Test_M15_HiZRendering (AxleEnvironmentRenderingTests).\n\nSelf-verification results (pending independent Codex review):\n- python scripts/test_m15_hiz_reference.py -> exit 0\n- Debug & Release AxleRenderUnitTests.exe (--m15-hiz-contract and full suite from repo root) -> exit 0\n- Debug & Release ctest --test-dir build -R \"^(M15HiZContract|M15HiZReference)$\" -> 2/2 PASS (note: existing pre-U5 Test_M15_SurfaceAndMaterialContractUnit.cpp:554 opens relative ForwardPBR.hlsl so full ctest RenderUnitTests requires repo-root CWD)\n- Debug & Release AxleRHIResourceViewTests.exe -> PASS (exit 0)\n- Debug & Release AxleEnvironmentRenderingTests.exe on D3D12 & Vulkan (4/4) -> PASS, max_error=0 across 4x4/1x1/3x5/127x63/1919x1079 standalone + rendered HiZ0..HiZ(N-1), visualization level0/level3/level6/clamped99/HDR/recovery PASS, 0 validation errors (artifacts in build/Tests/EnvironmentRendering/U5A-*/)\n- Debug & Release AxleEditor.exe --verify-empty-startup on Vulkan & D3D12 (4/4) -> PASS (5 UI frames, clean exit)\n\nReview report: docs/reviews/M15_U5_A_REVIEW.md\nOpen gate: M15-U5-07.1 interactive Editor visual capture deferred per user direction (alongside prior deferred U4-06.5, U4-E, and M15-U5-03 visuals). Independent Codex review pending. No push performed.\n"
     }
   ],
   "deferred_tasks": [

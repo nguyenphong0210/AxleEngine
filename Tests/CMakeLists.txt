@@ -35,10 +35,11 @@ add_test(NAME EnvironmentBakeTests COMMAND $<TARGET_FILE:AxleEnvironmentBakeTest
 set_tests_properties(EnvironmentBakeTests PROPERTIES LABELS "environment;lighting;cpu" TIMEOUT 90)
 add_executable(AxleEnvironmentRenderingTests EXCLUDE_FROM_ALL
     src/Test_EnvironmentRendering.cpp rendering/Test_M15_OcclusionRendering.cpp
-    rendering/Test_M15_OcclusionSurfaceRendering.cpp)
+    rendering/Test_M15_OcclusionSurfaceRendering.cpp rendering/Test_M15_HiZRendering.cpp)
 target_link_libraries(AxleEnvironmentRenderingTests PRIVATE Axle::Scene glad glfw)
 target_compile_definitions(AxleEnvironmentRenderingTests PRIVATE
-    AXLE_GTAO_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/GTAO.hlsl")
+    AXLE_GTAO_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/GTAO.hlsl"
+    AXLE_HIZ_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/HiZ.hlsl")
 option(AXLE_ENABLE_ENVIRONMENT_GPU_TESTS "Register physical D3D12/Vulkan/OpenGL HDR and IBL tests" OFF)
 if(AXLE_ENABLE_ENVIRONMENT_GPU_TESTS)
     foreach(backend dx12 vulkan gl)
@@ -512,6 +513,7 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_M15_EnvironmentContractReferenceUnit.cpp
     rendering/Test_M15_SurfaceAndMaterialContractUnit.cpp
     rendering/Test_M15_OcclusionContractUnit.cpp
+    rendering/Test_M15_HiZContractUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
 # M15-U1-01.1 & M15-U1-01.4: inspect canonical shader sources for lighting & exposure contracts.
@@ -523,6 +525,7 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
       AXLE_LOCAL_SHADOW_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/LocalShadows.hlsli"
       AXLE_GTAO_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/GTAO.hlsl"
       AXLE_OCCLUSION_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/Occlusion.hlsli"
+      AXLE_HIZ_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/HiZ.hlsl"
       AXLE_SCENE_PASSES_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RHISceneRendererPasses.cpp"
       AXLE_GTAO_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/GTAOPass.cpp"
       AXLE_RHI_VIEW_TARGETS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/RHI/src/RHIViewTargets.cpp"
@@ -556,6 +559,8 @@ add_test(NAME M15SurfaceMaterialContract COMMAND $<TARGET_FILE:AxleRenderUnitTes
 set_tests_properties(M15SurfaceMaterialContract PROPERTIES LABELS "render;material;surface;cpu;m15" TIMEOUT 30)
 add_test(NAME M15OcclusionContract COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-occlusion-contract)
 set_tests_properties(M15OcclusionContract PROPERTIES LABELS "render;occlusion;gtao;cpu;m15" TIMEOUT 30)
+add_test(NAME M15HiZContract COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-hiz-contract)
+set_tests_properties(M15HiZContract PROPERTIES LABELS "render;hiz;cpu;m15" TIMEOUT 30)
 add_test(NAME RenderHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleRenderUnitTests> --case render-probe)
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES LABELS "render;cpu")
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES TIMEOUT 30)

@@ -1521,6 +1521,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     renderSettings.EnableBloom = m_EnableBloom;
     renderSettings.EnableVolumetricFog = m_EnableVolumetricFog;
     renderSettings.EnableAutoExposure = m_EnableAutoExposure;
+    renderSettings.HiZVisualizationLevel = m_HiZVisualizationLevel;
     renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
     renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
 
@@ -1889,6 +1890,8 @@ void EditorLayer::RenderToolbar() {
             ImGui::Checkbox("Volumetric Fog", &m_EnableVolumetricFog);
             ImGui::Checkbox("Auto-Exposure", &m_EnableAutoExposure);
             ImGui::Checkbox("Temporal Anti-Aliasing (TAA)", &m_EnableTAA);
+            ImGui::Separator();
+            ImGui::SliderInt("Hi-Z Debug Level (-1=Off)", &m_HiZVisualizationLevel, -1, 11);
             ImGui::EndPopup();
         }
 

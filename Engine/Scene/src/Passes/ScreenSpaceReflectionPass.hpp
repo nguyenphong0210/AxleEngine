@@ -3,8 +3,8 @@
 #include "PassRecordOps.hpp"
 #include <Axle/RenderGraph.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
-#include <array>
 #include <memory>
+#include <vector>
 #include <glm/mat4x4.hpp>
 
 namespace Axle {
@@ -16,7 +16,7 @@ namespace Axle {
 namespace Axle::Passes {
     struct ScreenSpaceReflectionResources {
         RenderGraph::Resource SceneColor, Input, SceneDepth, Depth, SceneNormal, Storage;
-        std::array<RenderGraph::Resource, 8> HiZ;
+        std::vector<RenderGraph::Resource> HiZ;
     };
 
     struct ScreenSpaceReflectionRecordInputs {

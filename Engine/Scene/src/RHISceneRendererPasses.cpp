@@ -103,21 +103,37 @@ namespace Axle {
         const auto gtaoDepth = useGTAO ? graph.Import("GTAODepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto gtaoStorage = useGTAO ? graph.Import("GTAOStorage", viewTargets->GetGTAO()->GetNative()) : output;
 
+        const uint32_t hiZLevelCount = viewTargets->GetHiZLevelCount();
         const bool useSSR = settings.EnableSSR && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
-            m_SSRComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
+            m_SSRComputePipeline && m_HiZPipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
             m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
-            m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
+            m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr &&
+            hiZLevelCount >= RHIViewTargets::MinSSRHiZLevels;
+        const bool useHiZVisual = settings.HiZVisualizationLevel >= 0 && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+            m_HiZPipeline &&
+            (sceneTargetFormat == nri::Format::RGBA16_SFLOAT ? m_HiZVisualizePipelineHDR != nullptr : m_HiZVisualizePipelineSDR != nullptr) &&
+            m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() && hiZLevelCount > 0;
+        const bool needHiZ = useSSR || useHiZVisual;
+        const uint32_t visLevel = useHiZVisual
+            ? std::clamp<uint32_t>(static_cast<uint32_t>(settings.HiZVisualizationLevel), 0u, hiZLevelCount - 1u)
+            : 0u;
+        if (settings.HiZVisualizationLevel >= 0 && !useHiZVisual) {
+            m_ViewContext.Diagnostics().AddFallback("hiz_visualization_unavailable: single-sample depth and Hi-Z targets required");
+        } else if (useHiZVisual && static_cast<uint32_t>(settings.HiZVisualizationLevel) >= viewTargets->GetHiZUsefulLevelCount()) {
+            m_ViewContext.Diagnostics().AddFallback("hiz_visualization_clamped_or_tail: requested level exceeds useful pyramid depth");
+        }
         const bool useSurfaceNormal=(useGTAO || useSSR) && m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid();
         const char* normalPassName = useGTAO ? "SurfaceNormalPrepass" : "SurfaceNormal";
         const auto ssrInput = useSSR ? graph.Import("SSRInput", m_OpaqueSceneColor->GetNative()) : output;
-        const auto ssrDepth = useSSR ? graph.Import("SSRDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
+        const auto ssrDepth = needHiZ ? graph.Import("SSRDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto ssrStorage = useSSR ? graph.Import("SSRStorage", m_ScreenStorageTarget->GetNative()) : output;
-        std::array<Graph::Resource, 8> hizResources{};
-        if (useSSR) {
-            for (uint32_t level = 0; level < hizResources.size(); ++level) {
+        std::vector<Graph::Resource> hizResources;
+        if (needHiZ) {
+            hizResources.reserve(hiZLevelCount);
+            for (uint32_t level = 0; level < hiZLevelCount; ++level) {
                 auto* hiz = viewTargets->GetHiZ(level);
                 if (!hiz || !hiz->IsValid()) { return false; }
-                hizResources[level] = graph.Import("HiZ" + std::to_string(level), hiz->GetNative());
+                hizResources.push_back(graph.Import("HiZ" + std::to_string(level), hiz->GetNative()));
             }
         }
 
@@ -1261,17 +1277,25 @@ namespace Axle {
         });
 
         addPass("ScreenSpaceReflectionPass", [&](const RenderPassContext&) -> RenderPassResult {
-            // 7.6. Screen-Space Reflections with probe fallback.
+            // 7.6. Screen-Space Reflections with probe fallback (and optional Hi-Z visualization).
+            const Passes::PassRecordOps ops{
+                beginPass, passUniform,
+                [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                    return bindDescriptorSet(index, set, bindPoint);
+                }, beginRendering, endRendering};
             if (useSSR) {
-                const Passes::PassRecordOps ops{
-                    beginPass, passUniform,
-                    [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
-                        return bindDescriptorSet(index, set, bindPoint);
-                    }, beginRendering, endRendering};
                 if (!Passes::ScreenSpaceReflectionPass::Record(*this,
                     {camera, settings, viewTargets, projZO, sceneTargetTexture, sceneDepthTexture,
                      sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
                     return fail();
+            } else if (useHiZVisual) {
+                if (!beginPass("HiZCopy")) return fail();
+                Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
+                if (!Passes::HiZGenerationPass::Record(*this, viewTargets, ops, dispatchCount)) return fail();
+            }
+            if (useHiZVisual && !Passes::HiZGenerationPass::RecordVisualization(
+                *this, {viewTargets, sceneTargetRTV, sceneTargetFormat, width, height, visLevel}, ops)) {
+                return fail();
             }
 
             return {};
@@ -1279,6 +1303,13 @@ namespace Axle {
             if (useSSR) {
                 Passes::ScreenSpaceReflectionPass::Declare(graph, {sceneColor, ssrInput, sceneDepth,
                     ssrDepth, sceneNormal, ssrStorage, hizResources});
+            } else if (useHiZVisual) {
+                graph.AddPass("HiZCopy", {
+                    {sceneDepth, Layout::CopySource}, {ssrDepth, Layout::CopyDest, Access::Write}});
+                Passes::HiZGenerationPass::Declare(graph, {ssrDepth, hizResources});
+            }
+            if (useHiZVisual) {
+                Passes::HiZGenerationPass::DeclareVisualization(graph, {hizResources[visLevel], sceneColor});
             }
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useSSR) {
@@ -1287,7 +1318,10 @@ namespace Axle {
                 auto probe = m_ActiveReflectionProbePrefilter && m_ActiveReflectionProbePrefilter->IsValid()
                     ? m_ActiveReflectionProbePrefilter : RHIMaterial::GetDefaultPrefilterCubemap();
                 if (!probe || !graph.DeclareRead("SSRCompute",probe->GetSRV())) return fail();
+            } else if (useHiZVisual) {
+                for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
             }
+            if (useHiZVisual && !uniform("HiZVisualize", sizeof(RHIHiZConstants))) return fail();
             return {};
         });
 

@@ -6,9 +6,28 @@
 namespace Axle::RHI {
     namespace { std::atomic<uint64_t> s_NextViewGeneration{1}; }
 
+    uint32_t RHIViewTargets::ComputeUsefulHiZLevelCount(uint32_t width, uint32_t height) {
+        if (width == 0 || height == 0) return 0;
+        uint32_t levels = 1;
+        uint32_t w = width;
+        uint32_t h = height;
+        while ((w > 1 || h > 1) && levels < MaxHiZLevels) {
+            w = std::max(1u, w >> 1);
+            h = std::max(1u, h >> 1);
+            ++levels;
+        }
+        return levels;
+    }
+
+    uint32_t RHIViewTargets::ComputeAllocatedHiZLevelCount(uint32_t width, uint32_t height) {
+        const uint32_t useful = ComputeUsefulHiZLevelCount(width, height);
+        return useful == 0 ? 0 : std::min(MaxHiZLevels, std::max(MinSSRHiZLevels, useful));
+    }
+
     bool RHIViewTargets::IsValid() const {
         if (!m_Initialized) return false;
         for (const auto& texture : m_Textures) if (texture && !texture->IsValid()) return false;
+        for (const auto& texture : m_ExtraHiZTextures) if (texture && !texture->IsValid()) return false;
         return true;
     }
     bool RHIViewTargets::Validate() const {
@@ -45,10 +64,24 @@ namespace Axle::RHI {
         if (m_Desc.EnableAutoExposure && !check2D(RHIViewTarget::Exposure, 1, 1, RHITextureFormat::RGBA16_FLOAT)) return false;
         if (m_Desc.EnableDDGI && !check2D(RHIViewTarget::DDGI, 256, 128, RHITextureFormat::RGBA16_FLOAT)) return false;
         if (m_Desc.EnableHiZ) {
-            for (uint32_t level = 0; level < 8; ++level) {
-                if (!check2D(static_cast<RHIViewTarget>(static_cast<uint8_t>(RHIViewTarget::HiZ0) + level),
-                             std::max(1u, m_Desc.Width >> level), std::max(1u, m_Desc.Height >> level), RHITextureFormat::R32_FLOAT)) return false;
+            const uint32_t expectedUseful = ComputeUsefulHiZLevelCount(m_Desc.Width, m_Desc.Height);
+            const uint32_t expectedAllocated = ComputeAllocatedHiZLevelCount(m_Desc.Width, m_Desc.Height);
+            if (m_HiZUsefulLevels != expectedUseful || m_HiZAllocatedLevels != expectedAllocated || expectedAllocated == 0)
+                return false;
+            for (uint32_t level = 0; level < MaxHiZLevels; ++level) {
+                auto* texture = GetHiZ(level);
+                if (level < expectedAllocated) {
+                    const uint32_t expectedW = std::max(1u, m_Desc.Width >> level);
+                    const uint32_t expectedH = std::max(1u, m_Desc.Height >> level);
+                    if (!texture || !texture->IsValid() || texture->GetWidth() != expectedW ||
+                        texture->GetHeight() != expectedH || texture->GetFormat() != RHITextureFormat::R32_FLOAT ||
+                        texture->GetDesc().SampleCount != 1 || !texture->GetUAV()) return false;
+                } else if (texture != nullptr) {
+                    return false;
+                }
             }
+        } else if (m_HiZUsefulLevels != 0 || m_HiZAllocatedLevels != 0) {
+            return false;
         }
         if (m_Desc.HistoryCount > 0 && !check2D(RHIViewTarget::History0, m_Desc.Width, m_Desc.Height, sceneFormat)) return false;
         if (m_Desc.HistoryCount > 1 && !check2D(RHIViewTarget::History1, m_Desc.Width, m_Desc.Height, sceneFormat)) return false;
@@ -133,15 +166,21 @@ namespace Axle::RHI {
             candidate.m_Textures[static_cast<size_t>(RHIViewTarget::DDGI)] = std::move(texture);
         }
         if (desc.EnableHiZ) {
+            candidate.m_HiZUsefulLevels = ComputeUsefulHiZLevelCount(desc.Width, desc.Height);
+            candidate.m_HiZAllocatedLevels = ComputeAllocatedHiZLevelCount(desc.Width, desc.Height);
             uint32_t mipWidth = desc.Width;
             uint32_t mipHeight = desc.Height;
-            for (uint32_t level = 0; level < 8; ++level) {
+            for (uint32_t level = 0; level < candidate.m_HiZAllocatedLevels; ++level) {
                 auto texture = std::make_unique<RHITexture>();
                 auto native = RHITextureDesc::StorageTexture2D(
                     std::max(1u, mipWidth), std::max(1u, mipHeight), RHITextureFormat::R32_FLOAT,
                     "ViewTarget_HiZ" + std::to_string(level));
                 if (!texture->Init(native)) return false;
-                candidate.m_Textures[static_cast<size_t>(RHIViewTarget::HiZ0) + level] = std::move(texture);
+                if (level < 8) {
+                    candidate.m_Textures[static_cast<size_t>(RHIViewTarget::HiZ0) + level] = std::move(texture);
+                } else {
+                    candidate.m_ExtraHiZTextures[level - 8] = std::move(texture);
+                }
                 mipWidth = std::max(1u, mipWidth >> 1);
                 mipHeight = std::max(1u, mipHeight >> 1);
             }

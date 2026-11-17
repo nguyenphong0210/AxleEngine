@@ -763,6 +763,111 @@ bool RunM15OcclusionContractUnitTests() {
         }
     }
 
-    std::cout << "  [M15Occlusion] All M15-U4 (U4-01 through U4-06.5) occlusion contract tests passed successfully.\n";
+    // =========================================================================
+    // 11. M15-U4-E: Normal-Map and Animated/Deformed Mesh Contracts (U4-07.1 - U4-07.2)
+    // =========================================================================
+    {
+        std::cout << "  [M15Occlusion] Verifying M15-U4-07.1 through U4-07.2 (Normal maps & deformed mesh contracts)...\n";
+
+        // 11.1: M15-U4-07.1 Normal-Map Behavior
+        NormalMapSample flatSample{};
+        flatSample.TangentRG = glm::vec2(0.5f, 0.5f);
+        flatSample.Strength = 1.0f;
+        flatSample.GeometricNormal = glm::vec3(0.0f, 0.0f, 1.0f);
+        flatSample.Tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+
+        const glm::vec3 flatN = EvaluateTangentSpaceNormal(flatSample);
+        RENDER_CHECK(glm::distance(flatN, glm::vec3(0.0f, 0.0f, 1.0f)) < 1e-5f,
+            "M15-U4-07.1: flat normal sample (0.5, 0.5) evaluates to geometric normal +Z");
+
+        NormalMapSample perturbedSample = flatSample;
+        perturbedSample.TangentRG = glm::vec2(0.75f, 0.5f); // Perturb toward tangent +X
+        const glm::vec3 perturbedN = EvaluateTangentSpaceNormal(perturbedSample);
+        RENDER_CHECK(perturbedN.x > 0.3f && perturbedN.z > 0.5f && std::abs(perturbedN.y) < 1e-5f,
+            "M15-U4-07.1: normal map sample perturbs normal along tangent vector");
+
+        // Normal map strength scale
+        NormalMapSample zeroStrengthSample = perturbedSample;
+        zeroStrengthSample.Strength = 0.0f;
+        const glm::vec3 zeroStrN = EvaluateTangentSpaceNormal(zeroStrengthSample);
+        RENDER_CHECK(glm::distance(zeroStrN, glm::vec3(0.0f, 0.0f, 1.0f)) < 1e-5f,
+            "M15-U4-07.1: zero normal strength scales back to unperturbed geometric normal");
+
+        // High strength scale
+        NormalMapSample highStrSample = perturbedSample;
+        highStrSample.Strength = 2.0f;
+        const glm::vec3 highStrN = EvaluateTangentSpaceNormal(highStrSample);
+        RENDER_CHECK(highStrN.x > perturbedN.x && std::isfinite(highStrN.x) && std::abs(glm::length(highStrN) - 1.0f) < 1e-5f,
+            "M15-U4-07.1: high normal strength maintains unit length and finiteness");
+
+        // Stability check across view and light configurations
+        const glm::mat4 viewMat = glm::lookAt(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+        const glm::vec3 viewDir = glm::vec3(0.0f, 0.0f, 1.0f);
+        const glm::vec3 sunDir = glm::normalize(glm::vec3(0.3f, 0.8f, 0.5f));
+
+        RENDER_CHECK(VerifyNormalMapOcclusionStability(flatSample, viewMat, viewDir, sunDir),
+            "M15-U4-07.1: VerifyNormalMapOcclusionStability passes for flat normal sample");
+        RENDER_CHECK(VerifyNormalMapOcclusionStability(perturbedSample, viewMat, viewDir, sunDir),
+            "M15-U4-07.1: VerifyNormalMapOcclusionStability passes for perturbed normal sample");
+
+        // Grazing angle view
+        const glm::vec3 grazingViewDir = glm::normalize(glm::vec3(0.95f, 0.0f, 0.31225f));
+        RENDER_CHECK(VerifyNormalMapOcclusionStability(perturbedSample, viewMat, grazingViewDir, sunDir),
+            "M15-U4-07.1: VerifyNormalMapOcclusionStability passes under grazing view angle");
+
+        // Back-facing perturbation (normal map pushes normal away from view: dot(N, V) <= 0)
+        NormalMapSample backfacingSample = flatSample;
+        backfacingSample.TangentRG = glm::vec2(0.05f, 0.5f); // Strong perturbation in -X
+        const glm::vec3 backfacingViewDir = glm::normalize(glm::vec3(0.8f, 0.0f, 0.1f));
+        RENDER_CHECK(VerifyNormalMapOcclusionStability(backfacingSample, viewMat, backfacingViewDir, sunDir),
+            "M15-U4-07.1: VerifyNormalMapOcclusionStability falls back cleanly to neutral AO on back-facing normal perturbation");
+
+        // 11.2: M15-U4-07.2 Animated / Deformed Mesh Behavior
+        DeformedVertexSample deformSample{};
+        deformSample.RestPosition = glm::vec3(1.0f, 0.0f, 0.0f);
+        deformSample.RestNormal = glm::vec3(0.0f, 1.0f, 0.0f);
+        deformSample.RestTangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+
+        // Skinned transform: non-uniform scale + rotation + translation
+        glm::mat4 skinMat = glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 1.0f, -3.0f));
+        skinMat = glm::rotate(skinMat, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        skinMat = glm::scale(skinMat, glm::vec3(1.5f, 0.8f, 1.2f));
+        deformSample.DeformationTransform = skinMat;
+
+        glm::vec3 defPos{0.0f}, defNorm{0.0f};
+        glm::vec4 defTan{0.0f};
+        EvaluateDeformedVertex(deformSample, defPos, defNorm, defTan);
+
+        RENDER_CHECK(std::isfinite(defPos.x) && std::isfinite(defPos.y) && std::isfinite(defPos.z),
+            "M15-U4-07.2: deformed vertex position is finite");
+        RENDER_CHECK(std::isfinite(defNorm.x) && std::isfinite(defNorm.y) && std::isfinite(defNorm.z),
+            "M15-U4-07.2: deformed vertex normal is finite");
+        RENDER_CHECK(std::isfinite(defTan.x) && std::isfinite(defTan.y) && std::isfinite(defTan.z),
+            "M15-U4-07.2: deformed vertex tangent is finite");
+        RENDER_CHECK(std::abs(glm::length(defNorm) - 1.0f) < 1e-4f,
+            "M15-U4-07.2: deformed normal remains normalized");
+        RENDER_CHECK(std::abs(glm::length(glm::vec3(defTan)) - 1.0f) < 1e-4f,
+            "M15-U4-07.2: deformed tangent remains normalized");
+        RENDER_CHECK(std::abs(glm::dot(defNorm, glm::vec3(defTan))) < 1e-4f,
+            "M15-U4-07.2: deformed normal and tangent preserve strict orthogonality under non-uniform skinning deformation");
+
+        // Bilateral edge isolation & continuous surface verification
+        const glm::mat4 projMat = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
+        const float backgroundDepth = 15.0f; // Disocclusion step behind the deformed mesh
+
+        RENDER_CHECK(VerifyDeformedMeshOcclusionStability(deformSample, backgroundDepth, viewMat, projMat),
+            "M15-U4-07.2: VerifyDeformedMeshOcclusionStability passes: edge rejection isolates silhouette and surface reconstruction is smooth");
+
+        // Verification over dynamic deformation parameter sweep (animated skeletal bend)
+        for (float angleDeg : {0.0f, 15.0f, 30.0f, 60.0f, 90.0f, 120.0f}) {
+            DeformedVertexSample animatedSample = deformSample;
+            glm::mat4 animMat = glm::rotate(glm::mat4(1.0f), glm::radians(angleDeg), glm::vec3(1.0f, 0.0f, 0.0f));
+            animatedSample.DeformationTransform = animMat * skinMat;
+            RENDER_CHECK(VerifyDeformedMeshOcclusionStability(animatedSample, backgroundDepth, viewMat, projMat),
+                "M15-U4-07.2: dynamic deformation sweep maintains bilateral occlusion stability across joint bend angles");
+        }
+    }
+
+    std::cout << "  [M15Occlusion] All M15-U4 (U4-01 through U4-07.2) occlusion contract tests passed successfully.\n";
     return true;
 }

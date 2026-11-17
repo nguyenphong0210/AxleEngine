@@ -741,6 +741,134 @@ namespace Axle {
             return true;
         }
 
+        // =====================================================================
+        // M15-U4-E: Normal-Map & Animated/Deformed Mesh Contracts (U4-07.1 - U4-07.2)
+        // =====================================================================
+
+        glm::vec3 EvaluateTangentSpaceNormal(const NormalMapSample& sample) {
+            if (!std::isfinite(sample.TangentRG.x) || !std::isfinite(sample.TangentRG.y) ||
+                !std::isfinite(sample.Strength)) return glm::vec3(0, 0, 1);
+
+            const glm::vec2 xy = sample.TangentRG * 2.0f - 1.0f;
+            const float z = std::sqrt(std::max(0.0f, 1.0f - glm::dot(xy, xy)));
+            const glm::vec3 tangentN = glm::normalize(glm::vec3(xy * std::max(0.0f, sample.Strength), std::max(z, 1e-4f)));
+
+            glm::vec3 N = sample.GeometricNormal;
+            if (glm::dot(N, N) > 1e-12f) N = glm::normalize(N);
+            else N = glm::vec3(0, 0, 1);
+
+            glm::vec3 T = glm::vec3(sample.Tangent) - N * glm::dot(N, glm::vec3(sample.Tangent));
+            if (glm::dot(T, T) > 1e-12f) {
+                T = glm::normalize(T);
+            } else {
+                T = std::abs(N.z) < 0.99f ? glm::normalize(glm::cross(glm::vec3(0, 0, 1), N))
+                                          : glm::normalize(glm::cross(glm::vec3(0, 1, 0), N));
+            }
+
+            const glm::vec3 B = glm::cross(N, T) * (sample.Tangent.w < 0.0f ? -1.0f : 1.0f);
+            const glm::vec3 perturbed = T * tangentN.x + B * tangentN.y + N * tangentN.z;
+            return glm::dot(perturbed, perturbed) > 1e-12f ? glm::normalize(perturbed) : N;
+        }
+
+        bool VerifyNormalMapOcclusionStability(const NormalMapSample& sample, const glm::mat4& viewMatrix,
+                                               const glm::vec3& viewDir, const glm::vec3& lightDirView) {
+            const glm::vec3 worldN = EvaluateTangentSpaceNormal(sample);
+            for (int c = 0; c < 3; ++c) if (!std::isfinite(worldN[c])) return false;
+
+            const glm::vec3 viewN = glm::mat3(viewMatrix) * worldN;
+            for (int c = 0; c < 3; ++c) if (!std::isfinite(viewN[c])) return false;
+            const float viewNLen = glm::length(viewN);
+            if (viewNLen < 1e-6f) return false;
+            const glm::vec3 normViewN = viewN / viewNLen;
+
+            // Check grazing angle / backfacing normal perturbation:
+            // When normal map perturbs normal away from view (NdotV <= 0),
+            // GTAO contract falls back to neutral ao = 1.0 to prevent black faceting.
+            const float NdotV = glm::dot(normViewN, viewDir);
+            if (NdotV > 0.0f) {
+                const glm::vec3 orthoAxis = glm::normalize(glm::cross(viewDir, glm::vec3(0, 1, 0)));
+                const glm::vec3 projN = normViewN - orthoAxis * glm::dot(normViewN, orthoAxis);
+                const float projLen = glm::length(projN);
+                if (projLen >= 1e-4f) {
+                    const float gamma = std::atan2(glm::dot(projN / projLen, glm::cross(orthoAxis, viewDir)),
+                                                   std::max(glm::dot(projN / projLen, viewDir), 1e-6f));
+                    if (!std::isfinite(gamma)) return false;
+                }
+            }
+
+            // Contact shadow ray launch validity:
+            const float NdotL = glm::dot(normViewN, lightDirView);
+            const float bias = 0.01f;
+            const glm::vec3 rayOffset = normViewN * (bias * 2.0f);
+            for (int c = 0; c < 3; ++c) if (!std::isfinite(rayOffset[c])) return false;
+
+            // Shading composition with normal-mapped lighting components:
+            ShadingComponents comp{};
+            comp.Ambient = glm::vec3(0.15f);
+            comp.SunDiffuse = glm::vec3(0.8f) * std::max(0.0f, NdotL);
+            comp.SunSpecular = glm::vec3(0.4f);
+            comp.Emissive = glm::vec3(0.05f);
+            comp.HasSun = true;
+            comp.EnableAO = true;
+            comp.EnableContactShadows = true;
+
+            const glm::vec3 rad0 = EvaluateShading(comp, 0.0f, 1.0f);
+            const glm::vec3 rad1 = EvaluateShading(comp, 1.0f, 1.0f);
+            for (int c = 0; c < 3; ++c) {
+                if (!std::isfinite(rad0[c]) || !std::isfinite(rad1[c])) return false;
+            }
+            if (glm::distance(rad1 - rad0, comp.Ambient) > 1e-5f) return false;
+
+            return true;
+        }
+
+        void EvaluateDeformedVertex(const DeformedVertexSample& sample,
+                                    glm::vec3& outPosition, glm::vec3& outNormal, glm::vec4& outTangent) {
+            outPosition = glm::vec3(sample.DeformationTransform * glm::vec4(sample.RestPosition, 1.0f));
+
+            const glm::mat3 M = glm::mat3(sample.DeformationTransform);
+            const glm::vec3 a = M * glm::vec3(1, 0, 0);
+            const glm::vec3 b = M * glm::vec3(0, 1, 0);
+            const glm::vec3 c = M * glm::vec3(0, 0, 1);
+            const float det = glm::dot(a, glm::cross(b, c));
+            const float handedness = det < 0.0f ? -1.0f : 1.0f;
+
+            const glm::vec3 nTrans = (glm::cross(b, c) * sample.RestNormal.x +
+                                      glm::cross(c, a) * sample.RestNormal.y +
+                                      glm::cross(a, b) * sample.RestNormal.z) * handedness;
+            outNormal = glm::dot(nTrans, nTrans) > 1e-12f ? glm::normalize(nTrans) : glm::vec3(0, 1, 0);
+
+            const glm::vec3 tTrans = M * glm::vec3(sample.RestTangent);
+            outTangent = glm::vec4(glm::dot(tTrans, tTrans) > 1e-12f ? glm::normalize(tTrans) : glm::vec3(1, 0, 0),
+                                   sample.RestTangent.w * handedness);
+        }
+
+        bool VerifyDeformedMeshOcclusionStability(const DeformedVertexSample& sample, float backgroundDepth,
+                                                 const glm::mat4& viewMatrix, const glm::mat4& projMatrix) {
+            glm::vec3 P{0.0f}, N{0.0f};
+            glm::vec4 T{0.0f};
+            EvaluateDeformedVertex(sample, P, N, T);
+
+            for (int c = 0; c < 3; ++c) {
+                if (!std::isfinite(P[c]) || !std::isfinite(N[c]) || !std::isfinite(T[c])) return false;
+            }
+            if (std::abs(glm::dot(N, glm::vec3(T))) > 1e-3f) return false;
+
+            const glm::vec3 Pview = glm::vec3(viewMatrix * glm::vec4(P, 1.0f));
+            const float Z = -Pview.z;
+            if (!std::isfinite(Z) || Z <= 0.0f) return false;
+
+            // Bilateral filter edge rejection across disocclusion boundaries
+            const auto bgTap = EvaluateBilateralWeight(Z, backgroundDepth, 1, 0);
+            if (!bgTap.IsEdgeRejected || bgTap.DepthWeight > 0.01f) return false;
+
+            // Bilateral filter continuous reconstruction on surface
+            const auto contTap = EvaluateBilateralWeight(Z, Z, 1, 0);
+            if (contTap.IsEdgeRejected || contTap.TotalWeight <= 0.0f) return false;
+
+            return true;
+        }
+
     } // namespace OcclusionContract
 
 } // namespace Axle

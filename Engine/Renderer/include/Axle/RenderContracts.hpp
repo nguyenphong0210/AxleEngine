@@ -271,6 +271,42 @@ namespace Axle {
         // 5. M15-U4-06.5: Verifies that unoccluded specular highlights (e.g. mirror/metallic sphere) are strictly invariant
         //    under AO variations, are never darkened, and all outputs are finite.
         bool VerifyUnoccludedSpecularInvariance(const ShadingComponents& comp);
+
+        // =====================================================================
+        // M15-U4-E: Normal-Map & Animated/Deformed Mesh Contracts (U4-07.1 - U4-07.2)
+        // =====================================================================
+        struct NormalMapSample {
+            glm::vec2 TangentRG{0.5f, 0.5f}; // Raw texture sample in [0, 1]
+            float Strength{1.0f};            // Normal map strength scale
+            glm::vec3 GeometricNormal{0.0f, 0.0f, 1.0f};
+            glm::vec4 Tangent{1.0f, 0.0f, 0.0f, 1.0f}; // xyz = tangent, w = handedness
+        };
+
+        // 1. M15-U4-07.1: Evaluates world-space perturbed normal from tangent-space normal map
+        //    using canonical TBN construction matching ForwardPBR.hlsl and SurfaceNormal.hlsl.
+        glm::vec3 EvaluateTangentSpaceNormal(const NormalMapSample& sample);
+
+        // 2. M15-U4-07.1: Verifies that normal-mapped surface occlusion and contact shadows
+        //    remain stable, bounded, and finite across normal map strengths, grazing angles,
+        //    and back-facing perturbations without faceting or NaNs.
+        bool VerifyNormalMapOcclusionStability(const NormalMapSample& sample, const glm::mat4& viewMatrix,
+                                               const glm::vec3& viewDir, const glm::vec3& lightDirView);
+
+        struct DeformedVertexSample {
+            glm::vec3 RestPosition{0.0f};
+            glm::vec3 RestNormal{0.0f, 0.0f, 1.0f};
+            glm::vec4 RestTangent{1.0f, 0.0f, 0.0f, 1.0f};
+            glm::mat4 DeformationTransform{1.0f}; // Linear blend skinning or dynamic deform matrix
+        };
+
+        // 3. M15-U4-07.2: Evaluates deformed vertex position, normal, and tangent.
+        void EvaluateDeformedVertex(const DeformedVertexSample& sample,
+                                    glm::vec3& outPosition, glm::vec3& outNormal, glm::vec4& outTangent);
+
+        // 4. M15-U4-07.2: Verifies that deformed/animated mesh depth reconstruction and bilateral occlusion
+        //    remain stable without faceting, halos, disocclusion bleeding, or NaNs.
+        bool VerifyDeformedMeshOcclusionStability(const DeformedVertexSample& sample, float backgroundDepth,
+                                                 const glm::mat4& viewMatrix, const glm::mat4& projMatrix);
     }
 
 } // namespace Axle

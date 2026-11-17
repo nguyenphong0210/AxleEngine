@@ -599,12 +599,12 @@ the item is visible.
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Automated PASS:** Codex repaired a real GTAO horizon integral defect that nearly blackened the unoccluded sphere. Production compute fixtures preserve open planes and still occlude a genuine blocker. Linear RGBA16 HDR readback before tone mapping compares 1264 interior pixels, AO/contact toggles, repeated disable, finite RGBA, and analytic smooth normals. Debug/Release D3D12/Vulkan pass. Native images and exact commands: [independent U4-D review](../../reviews/M15_U4_BATCH_4_CODEX_REVIEW.md).
   - **EDITOR VISUAL ? NOT RUN:** Debug/Release Editor build and load the dedicated `Tests/Fixtures/M15/U4D/U4D.axleproj` fixture, but native window capture fails (`IGraphicsCaptureItemInterop.CreateForMonitor`, `0x80070057`); the alternate helper pipe is unavailable. Native PPMs do not substitute for an Editor screenshot. Keep this item open until the applicable Editor viewport is inspected and captured; expected smooth curvature, no triangle bands, no invalid pixels.
-- [ ] **M15-U4-07.1 — Test normal-map behavior.**
+- [x] **M15-U4-07.1 — Test normal-map behavior.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U4-07.2 — Test animated/deformed mesh.**
+  - **Evidence:** CPU TBN perturbation and occlusion stability contracts pass across strengths, grazing views, and back-facing normal fallback. Native ForwardPBR and canonical MaterialSurface forward passes verify that specular glints and directional sun radiance remain invariant under AO variations on normal-mapped surfaces, AO scales ambient linearly, and emissive is strictly invariant. Debug/Release D3D12/Vulkan readbacks are finite with zero validation errors. [U4 batch 5 review](../../reviews/M15_U4_BATCH_5_REVIEW.md).
+- [x] **M15-U4-07.2 — Test animated/deformed mesh.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** CPU skeletal skinning and deformation contracts preserve normal-tangent orthogonality ($|N' \cdot T'| < 10^{-3}$) and verify cross-bilateral filter edge rejection across disocclusion silhouette boundaries ($W_{\text{depth}} \to 0$) without occlusion bleeding or halos. Native forward passes verify that dynamically deformed meshes maintain sun/local lighting invariance and emissive preservation under AO and contact shadow variations. Debug/Release D3D12/Vulkan readbacks are finite with zero validation errors. [U4 batch 5 review](../../reviews/M15_U4_BATCH_5_REVIEW.md).
 
 **Exit:** occlusion is stable and finite; unoccluded specular/emission is preserved; no new faceting/halos.
 

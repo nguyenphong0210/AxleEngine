@@ -1,7 +1,7 @@
 # Milestone 15 — Lighting and Material Fidelity
 
-**Status:** `HOLD for full M15 acceptance. The user has separately released U0, S1.1, S1.2 and S1.3; S1.3 is accepted after independent review and Editor evidence.`
-**Current source reference:** `c6245e2e` for S1.3 implementation; `19ac2a1` remains the historical M14 handoff baseline. This reference does not promote later M15 work.
+**Status:** `HOLD for full M15 acceptance. U0, U1, U2, U3, and automated U4 (U4-A through U4-E) are accepted after independent Codex reviews; U4-06.5 and U4-E interactive Editor visual gates are explicitly deferred to a consolidated visual verification pass while U5 is prioritized next.`
+**Current source reference:** `114438ba` for U4-E (`80e9837a` U4-D, `9028e8d7` U4-C, `020c32ed` U4-A/B, `baaf36d2` U3, `c6245e2e` S1.3); `19ac2a1` remains the historical M14 handoff baseline. This reference and the batch schedule below do not mark any unchecked leaf PASS or release later packages until explicitly assigned in the live exchange.
 **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
 **Detailed implementation notes:** [REMEDIATION_PLAN.md](REMEDIATION_PLAN.md)
 **M14 prerequisite review:** [M14 U9 final acceptance](../../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md)
@@ -112,6 +112,24 @@ Within U5: `S5.1 Hi-Z -> S5.2 Dynamic Capture -> S5.3 Prefilter -> S5.4 Invalida
 ```
 
 P5A–P5D may reuse authored-probe work, but none may silently depend on unfinished P6. Planar reflection is a required M15 raster contract; RT off-screen reflection is an M16 requirement.
+
+#### U5 Execution Batches (U5-A through U5-I)
+
+To keep each delivery checkpoint focused, buildable, and independently verifiable on CPU and native D3D12/Vulkan without violating Section 4's single atomic checklist rule, the remaining U5 work is organized into nine sequential batches matching SubUnits `S5.1`–`S5.8` (splitting `S5.6` into traversal and resolve):
+
+| Batch | SubUnit & Atomic Leaves | Scope Focus | Suggested Review Cluster |
+|---|---|---|---|
+| **U5-A** | `S5.1`: `M15-U5-05.1` → `M15-U5-07.2` | Hi-Z conservative odd-edge sampling (`HiZ.hlsl`), `[0, 1]` min-depth convention contract, useful level-count policy (`RHIViewTargets`), per-level visualization, RHI barrier validation, and `1x1`/`3x5`/`1919x1079` native readbacks vs CPU reference. | Cluster 1 (Hi-Z, Probes) |
+| **U5-B** | `S5.2`: `M15-U5-08.1` → `M15-U5-15` | Dynamic six-face reflection capture: color/depth targets, six 90-degree views & direction/up validation, recursion/TAA/UI/feedback isolation guards, opaque/cutout + selected shadows, layer-offset copies, transactional generation publish & last-good retention, red-object cubemap fixture. | Cluster 1 (Hi-Z, Probes) |
+| **U5-C** | `S5.3`: `M15-U5-16.1` → `M15-U5-20` | Cubemap roughness prefilter: mip-capable cubemap + per-mip UAV/SRV views, GGX roughness prefilter compute shader preserving face orientation & cross-face seams natively (no equirectangular routing), mirror vs rough sweep fixtures. | Cluster 1 (Hi-Z, Probes) |
+| **U5-D** | `S5.4`: `M15-U5-21.1` → `M15-U5-26.4` | Capture invalidation & scheduling: transform/revision/geometry/material/light/asset tracking, manual/auto capture with per-frame face/probe budget, `Pending`/`Stale`/`Failed` diagnostics, last-good retention on failure, capture cache eviction, resize/device-reset/scene-replace fixtures. | Cluster 1 (Hi-Z, Probes) |
+| **U5-E** | `S5.5`: `M15-U5-27.1` → `M15-U5-31.5` | Multi-probe selection & fallback: Box/Sphere influence weights, per-probe parallax correction prior to blending, seamless multi-probe blending, unified reflection energy policy across `SSR -> Local Probe -> Sky IBL`, overlap/boundary/missing/stale/SSR-miss tests. | Cluster 1 (Hi-Z, Probes) |
+| **U5-F** | `S5.6` (part 1): `M15-U5-32.1` → `M15-U5-33.3` | Hi-Z SSR ray traversal & refinement: freeze ray/depth projection, initial ray + start mip, true Hi-Z cell stepping & descend/refine loop (`SSR.hlsl`), bounds/max-steps termination, thickness, hit refinement, edge/disocclusion rejection, CPU/native traversal readback. | Cluster 2 (SSR Resolve) |
+| **U5-G** | `S5.6` (part 2): `M15-U5-34.1` → `M15-U5-39.6` | Material-aware SSR resolve: HDR color mip pyramid + roughness cone filtering, surface roughness/metallic/baseColor/reflection flags binding, dielectric & conductor Fresnel `F0`, indirect specular replacement/blend in `ForwardPBR`/`MaterialSurface` without duplicating IBL, SSR/probe/sky blend, full sweep matrix (hit, miss, motion, roughness, gold/chrome/dielectric). | Cluster 2 (SSR Resolve) |
+| **U5-H** | `S5.7`: `M15-U5-40` → `M15-U5-45.3` | LTC rectangular & disk area lights: validated LTC transform/amplitude tables, rectangle & disk emitters, units/orientation/sidedness/range, diffuse + specular LTC integration, explicit area-shadow policy, Component/Extraction/Serialization/Inspector completion, Monte Carlo numerical comparison. | Cluster 3 (Area & Planar) |
+| **U5-I** | `S5.8`: `M15-U5-46.1` → `M15-U5-46.8` | Planar reflection: planar surface contract, independent mirrored capture `ViewContext`, targets/graph edges, dedicated `PlanarReflectionPass`, shared energy resolve/fallback, oblique near-plane clipping & self-intersection avoidance, invalidation/failure retention, native tests. | Cluster 3 (Area & Planar) |
+
+**Deferred Editor visual policy (user steering 2026-11-17):** Open `EDITOR VISUAL` gates (`M15-U4-06.5`, `U4-E`, `U5-03`, and new U5 visual gates) remain explicitly marked `NOT RUN` / open during automated batch delivery and will be verified in a consolidated Editor capture session. Do not mark any `EDITOR VISUAL` item `PASS` or close its parent acceptance claim until the required Debug/Release Editor screenshots are attached and inspected.
 
 ## 4. Canonical atomic execution and acceptance checklist
 
@@ -610,6 +628,8 @@ the item is visible.
 **Exit:** occlusion is stable and finite; unoccluded specular/emission is preserved; no new faceting/halos.
 
 ### U5 / S5.1 — Hi-Z depth pyramid
+
+> **Execution schedule note (2026-11-17):** See [U5 Execution Batches](#u5-execution-batches-u5-a-through-u5-i) for the `U5-A`..`U5-I` breakdown. Historical resource items `M15-U5-01`..`U5-04.2` predate this breakdown (`M15-U5-03` still requires its deferred `EDITOR VISUAL` fixture verification). Implementation resumes at `U5-A` (`M15-U5-05.1` → `M15-U5-07.2`) when released.
 
 - [x] **M15-U5-01 — Use immutable per-level descriptor generations.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.

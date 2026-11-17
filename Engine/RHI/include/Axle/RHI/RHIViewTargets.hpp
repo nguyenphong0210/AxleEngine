@@ -9,7 +9,8 @@ namespace Axle::RHI {
         Color, Depth, MSAAColor, MSAADepth, HDR, FXAA,
         OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1,
         GTAO, Bloom0, Bloom1, Bloom2, Bloom3, Bloom4, Bloom5, Exposure, DDGI,
-        HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, ReflectionEnvironment, ReflectionResponse, Count
+        HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, ReflectionEnvironment, ReflectionResponse,
+        SSRColor0, SSRColor1, SSRColor2, SSRColor3, Count
     };
     struct RHIViewTargetDesc {
         uint32_t Width = 1, Height = 1;
@@ -57,6 +58,9 @@ namespace Axle::RHI {
         RHITexture* GetDDGI() const { return Get(RHIViewTarget::DDGI); }
         RHITexture* GetBloom(uint32_t level) const {
             return level < 6 ? Get(static_cast<RHIViewTarget>(static_cast<uint8_t>(RHIViewTarget::Bloom0) + level)) : nullptr;
+        }
+        RHITexture* GetSSRColor(uint32_t level) const {
+            return level < 4 ? Get(static_cast<RHIViewTarget>(static_cast<uint8_t>(RHIViewTarget::SSRColor0) + level)) : nullptr;
         }
         const RHIViewTargetDesc& GetDesc() const { return m_Desc; }
         uint64_t GetGeneration() const { return m_Generation; }

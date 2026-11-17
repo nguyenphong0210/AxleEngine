@@ -686,6 +686,47 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         // readbacks, rather than requiring a particular shader expression.
     }
 
+    // 8. M15-U5-F (S5.6): Material-aware SSR cone footprint, roughness fade,
+    //    dielectric vs conductor F0, and shader resolve bindings.
+    {
+        RENDER_CHECK(SSRRaymarchContract::EvaluateRoughnessFade(0.05f) == 1.0f &&
+                     SSRRaymarchContract::EvaluateRoughnessFade(0.65f) == 1.0f &&
+                     SSRRaymarchContract::EvaluateRoughnessFade(0.80f) > 0.1f &&
+                     SSRRaymarchContract::EvaluateRoughnessFade(0.80f) < 0.9f &&
+                     SSRRaymarchContract::EvaluateRoughnessFade(0.98f) == 0.0f,
+            "M15-U5-34.1 / 38.1: EvaluateRoughnessFade smoothly tapers rough reflections down to 0");
+
+        const glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(45.0f), 16.0f / 9.0f, 0.1f, 100.0f);
+        const float rLow = SSRRaymarchContract::ComputeRoughnessConePixelRadius(0.05f, 3.0f, -6.0f, proj, 1280u, 720u);
+        const float rMid = SSRRaymarchContract::ComputeRoughnessConePixelRadius(0.30f, 3.0f, -6.0f, proj, 1280u, 720u);
+        const float rHigh = SSRRaymarchContract::ComputeRoughnessConePixelRadius(0.65f, 3.0f, -6.0f, proj, 1280u, 720u);
+        const float rFar = SSRRaymarchContract::ComputeRoughnessConePixelRadius(0.30f, 9.0f, -6.0f, proj, 1280u, 720u);
+        RENDER_CHECK(rLow < rMid && rMid < rHigh && rMid < rFar && rHigh <= SSRRaymarchContract::MaxConeRadiusPixels,
+            "M15-U5-34.1: Roughness cone radius expands monotonically with roughness and hit distance");
+
+        const glm::vec3 blueDielectricF0 = SSRRaymarchContract::ComputeSpecularF0({0.02f, 0.12f, 0.95f}, 0.0f);
+        const glm::vec3 goldConductorF0 = SSRRaymarchContract::ComputeSpecularF0({1.0f, 0.71f, 0.29f}, 1.0f);
+        RENDER_CHECK(std::abs(blueDielectricF0.r - 0.04f) < 1e-5f &&
+                     std::abs(blueDielectricF0.g - 0.04f) < 1e-5f &&
+                     std::abs(blueDielectricF0.b - 0.04f) < 1e-5f &&
+                     goldConductorF0.r > goldConductorF0.g && goldConductorF0.g > goldConductorF0.b * 2.0f,
+            "M15-U5-36.1 / 36.2: Dielectric baseColor yields achromatic F0=0.04 while conductor preserves tinted F0");
+
+        const std::string commonShader = ReadText(AXLE_REFLECTION_PROBE_COMMON_SHADER_PATH);
+        const std::string ssrShader = ReadText(AXLE_SSR_SHADER_PATH);
+        const std::string forwardShader = ReadText(AXLE_FORWARD_PBR_SHADER_PATH);
+        const std::string surfaceShader = ReadText(AXLE_MATERIAL_SURFACE_SHADER_PATH);
+        RENDER_CHECK(!commonShader.empty() && !ssrShader.empty() && !forwardShader.empty() && !surfaceShader.empty() &&
+                     commonShader.find("MakeMaterialReflectionSurfaceOutput") != std::string::npos &&
+                     ssrShader.find("DownsampleColorCS") != std::string::npos &&
+                     ssrShader.find("u_SSRColor0") != std::string::npos &&
+                     ssrShader.find("u_SSRColor3") != std::string::npos &&
+                     forwardShader.find("MakeMaterialReflectionSurfaceOutput") != std::string::npos &&
+                     surfaceShader.find("MakeMaterialReflectionSurfaceOutput") != std::string::npos &&
+                     surfaceShader.find("reflectionResponse *= 0.02") == std::string::npos,
+            "M15-U5-35.2 / 35.4: Shaders declare material reflection roughness/flag channel, SSRColor0..3, and calibrated resolve");
+    }
+
     std::cout << "[M15ReflectionCapture] All dynamic reflection capture contract tests passed!\n";
     return true;
 }

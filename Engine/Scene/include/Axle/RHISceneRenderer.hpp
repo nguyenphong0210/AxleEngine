@@ -108,7 +108,8 @@ namespace Axle {
         glm::vec4 ProbeBoxMin{ -10.0f, -10.0f, -10.0f, 1.0f };     // 16 bytes: (xyz: min, w: ParallaxCorrected)
         glm::vec4 ProbeBoxMax{ 10.0f, 10.0f, 10.0f, 1.0f };        // 16 bytes: (xyz: max, w: Intensity)
         glm::vec4 ProbePosition{ 0.0f, 0.0f, 0.0f, 0.0f };         // 16 bytes: (xyz: center, w: HasProbe)
-        glm::vec4 Padding[11]{};                                   // 176 bytes -> 512 bytes total
+        glm::vec4 SSRExtra{ 7.0f, 32.0f, 0.0f, 0.0f };             // 16 bytes: (x: maxHiZMip, y: maxConeRadiusPx, zw: reserved)
+        glm::vec4 Padding[10]{};                                   // 160 bytes -> 512 bytes total
     };
     static_assert(sizeof(RHISSRConstants) == 512, "RHISSRConstants must be 512 bytes aligned!");
 
@@ -777,17 +778,22 @@ namespace Axle {
         // Screen-Space Reflections (SSR) & Reflection Probes Resources
         RHI::RHIPipelineLayout m_SSRComputePipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_SSRComputePipeline;
+        RHI::RHIPipelineLayout m_SSRDownsamplePipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_SSRDownsamplePipeline;
         RHI::RHIPipelineLayout m_SSRApplyPipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_SSRApplyPipelineSDR;
         RHI::RHIResourceRef<nri::Pipeline> m_SSRApplyPipelineHDR;
         RHI::RHIBuffer m_SSRConstantBuffer;
         RHI::RHIShaderBytecode m_SSRComputeShader;
+        RHI::RHIShaderBytecode m_SSRDownsampleShader;
         RHI::RHIShaderBytecode m_SSRApplyVertexShader;
         RHI::RHIShaderBytecode m_SSRApplyPixelShader;
         RHI::RHISampler m_SSRSampler;
         RHI::RHIDescriptorPool m_SSRDescriptorPool;
         nri::DescriptorSet* m_SSRComputeTextureSet = nullptr;
         nri::DescriptorSet* m_SSRComputeStorageSet = nullptr;
+        std::array<nri::DescriptorSet*, 4> m_SSRDownsampleTextureSets{};
+        std::array<nri::DescriptorSet*, 4> m_SSRDownsampleStorageSets{};
         nri::DescriptorSet* m_SSRApplyDescriptorSet = nullptr;
         std::unordered_map<std::string, std::unique_ptr<RHIEnvironment>> m_ReflectionProbeEnvironments;
         std::shared_ptr<RHI::RHITexture> m_ActiveReflectionProbePrefilter;

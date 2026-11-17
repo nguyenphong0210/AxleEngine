@@ -1061,6 +1061,333 @@ namespace {
         std::cout << "[M15ReflectionCaptureGPU] All U5-E multi-probe blend & P5 exit checks passed!\n";
         return true;
     }
+
+    bool RunM15MaterialSSRTests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
+        std::cout << "[M15MaterialSSR] Running U5-F (S5.6) native D3D12/Vulkan material SSR tests...\n";
+        auto& device = RHIDevice::Get();
+        renderer.ClearDynamicReflectionProbes();
+        RENDER_CHECK(device.WaitIdle(), "U5-F idle before suite");
+
+        auto cubeMesh = RHIMesh::CreateCube(1.0f);
+        auto sphereMesh = RHIMesh::CreateSphere(1.0f, 24, 32);
+        RENDER_CHECK(cubeMesh && cubeMesh->IsValid() && sphereMesh && sphereMesh->IsValid(), "U5-F fixture meshes");
+        auto cubeView = cubeMesh->CaptureView();
+        auto sphereView = sphereMesh->CaptureView();
+
+        constexpr uint32_t renderW = 256u;
+        constexpr uint32_t renderH = 256u;
+        auto targets = std::make_shared<RHIViewTargets>();
+        RHIViewTargetDesc vtDesc{};
+        vtDesc.Width = renderW;
+        vtDesc.Height = renderH;
+        vtDesc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
+        vtDesc.EnableNormal = true;
+        vtDesc.EnableScreenStorage = true;
+        vtDesc.EnableHiZ = true;
+        vtDesc.HDR = true;
+        vtDesc.EnableReflectionTerms = true;
+        RENDER_CHECK(targets->Configure(vtDesc), "U5-F RHIViewTargets configure");
+
+        auto makeMaterial = [](const glm::vec3& baseColor, float metallic, float roughness, bool enableReflections = true) {
+            RHIMaterialDesc desc{};
+            desc.CullMode = CullMode::None;
+            desc.BaseColor = glm::vec4(baseColor, 1.0f);
+            desc.Metallic = metallic;
+            desc.Roughness = roughness;
+            desc.EnableEnvironmentReflections = enableReflections;
+            return std::make_shared<RHIMaterial>(desc);
+        };
+
+        PerspectiveCamera cam(45.0f, 1.0f, 0.1f, 100.0f);
+        const glm::vec3 camPos(0.0f, 2.0f, 8.0f);
+        const glm::vec3 camTarget(0.0f, 0.4f, 0.0f);
+        cam.SetViewMatrix(glm::lookAtRH(camPos, camTarget, glm::vec3(0.0f, 1.0f, 0.0f)), camPos);
+
+        SceneRenderSettings baseSettings{};
+        baseSettings.EnableSSR = true;
+        baseSettings.SSRLengthPixels = 40.0f;
+        baseSettings.SSRStrength = 1.0f;
+        baseSettings.EnableGTAO = false;
+        baseSettings.EnableContactShadows = false;
+        baseSettings.EnableSkybox = false;
+        baseSettings.EnableShadows = false;
+        baseSettings.EnableParticles = false;
+        baseSettings.EnableStudioLightLobes = false;
+        baseSettings.EnableToneMapping = true;
+
+        auto renderScene = [&](const RenderWorld& world, const PerspectiveCamera& viewCam,
+                               std::vector<glm::vec4>& outHDR, std::vector<glm::vec4>* outStorage = nullptr) -> bool {
+            renderer.RenderWorldView(world, viewCam, targets->Get(RHIViewTarget::Color), targets->Get(RHIViewTarget::Depth),
+                                     baseSettings, nullptr, targets);
+            if (!renderer.WasLastRenderSuccessful() || renderer.GetDiagnostics().HasErrors() || !device.WaitIdle()) {
+                return false;
+            }
+            auto* linear = renderer.GetIntermediateHDRTarget();
+            if (!linear || !ReadTexture2DRGBA16(*linear, outHDR) ||
+                outHDR.size() != size_t(renderW) * renderH || !AllFiniteNonNegative(outHDR)) {
+                return false;
+            }
+            if (outStorage) {
+                auto* st = targets->Get(RHIViewTarget::ScreenStorage);
+                if (!st || !ReadTexture2DRGBA16(*st, *outStorage) || outStorage->size() != size_t(renderW) * renderH) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        auto sampleAtWorld = [&](const PerspectiveCamera& viewCam, const std::vector<glm::vec4>& img,
+                                 const glm::vec3& worldPos, glm::vec4& outSample, uint32_t halfExtent = 2u) -> bool {
+            uint32_t px = 0, py = 0;
+            if (!ProjectWorldToPixel(viewCam, renderW, renderH, worldPos, px, py)) return false;
+            glm::vec4 sum(0.0f);
+            uint32_t count = 0;
+            const uint32_t x0 = px > halfExtent ? px - halfExtent : 0u;
+            const uint32_t y0 = py > halfExtent ? py - halfExtent : 0u;
+            const uint32_t x1 = std::min(renderW, px + halfExtent + 1u);
+            const uint32_t y1 = std::min(renderH, py + halfExtent + 1u);
+            for (uint32_t y = y0; y < y1; ++y) {
+                for (uint32_t x = x0; x < x1; ++x) {
+                    sum += img[size_t(y) * renderW + x];
+                    ++count;
+                }
+            }
+            outSample = count > 0 ? sum / float(count) : glm::vec4(0.0f);
+            return true;
+        };
+
+        // -----------------------------------------------------------------
+        // 1. M15-U5-32.7 / 33.1 / 39.1 / 39.2: Hit, Thickness Pass-Through & Miss Fallback
+        // -----------------------------------------------------------------
+        {
+            RenderWorld world;
+            world.SceneRevision = 9201;
+            world.Skybox.Authored = true;
+            world.Skybox.Enabled = false;
+            world.Meshes.push_back(MakeBoxInstance(1, cubeView, makeMaterial({1.0f, 1.0f, 1.0f}, 1.0f, 0.05f),
+                {0.0f, -0.05f, 0.0f}, {16.0f, 0.1f, 16.0f}, false));
+            world.Meshes.push_back(MakeBoxInstance(2, cubeView, MakeEmissiveMaterial({1.0f, 0.04f, 0.04f}, 5.0f),
+                {0.0f, 1.0f, -3.0f}, {3.5f, 2.0f, 0.5f}, false));
+
+            std::vector<glm::vec4> hdr, storage;
+            RENDER_CHECK(renderScene(world, cam, hdr, &storage), "U5-F 39.1 SSR hit frame");
+            glm::vec4 hitHDR(0.0f), hitStorage(0.0f);
+            RENDER_CHECK(sampleAtWorld(cam, hdr, {0.0f, 0.0f, 0.0f}, hitHDR) &&
+                         sampleAtWorld(cam, storage, {0.0f, 0.0f, 0.0f}, hitStorage),
+                "U5-F 39.1 sample center floor");
+            std::cout << "  [U5-F Hit] storage=(" << hitStorage.x << "," << hitStorage.y << "," << hitStorage.z << ",conf=" << hitStorage.a
+                      << ") hdr=(" << hitHDR.r << "," << hitHDR.g << "," << hitHDR.b << ")\n";
+            RENDER_CHECK(hitStorage.a > 0.15f && hitHDR.r > 1.5f && hitHDR.r > hitHDR.g * 5.0f,
+                "M15-U5-32.7 / 39.1: SSR hits Red geometry cleanly with confident ScreenStorage output");
+
+            // Thin foreground bar positioned along screen projection of ray above the reflection path
+            world.Meshes.push_back(MakeBoxInstance(3, cubeView, makeMaterial({0.02f, 0.02f, 0.02f}, 0.0f, 0.95f),
+                {0.0f, 0.92f, 2.0f}, {2.5f, 0.25f, 0.10f}, false));
+            ++world.SceneRevision;
+            std::vector<glm::vec4> thickHDR, thickSt;
+            RENDER_CHECK(renderScene(world, cam, thickHDR, &thickSt), "U5-F 33.1 thickness pass-through frame");
+            glm::vec4 thickCenter(0.0f), thickStorage(0.0f);
+            RENDER_CHECK(sampleAtWorld(cam, thickHDR, {0.0f, 0.0f, 0.0f}, thickCenter) &&
+                         sampleAtWorld(cam, thickSt, {0.0f, 0.0f, 0.0f}, thickStorage), "U5-F 33.1 sample center");
+            std::cout << "  [U5-F Thickness] st=(" << thickStorage.x << "," << thickStorage.y << "," << thickStorage.z << ",conf=" << thickStorage.a
+                      << ") hdr=(" << thickCenter.r << "," << thickCenter.g << "," << thickCenter.b << ")\n";
+            RENDER_CHECK(thickCenter.r > 1.0f && thickCenter.r > thickCenter.g * 4.0f,
+                "M15-U5-33.1: thickness gate rejects foreground floating occluder and reaches Red background wall");
+
+            // Miss -> local probe fallback (remove Red wall + dark blocker, keep Blue local probe)
+            RenderWorld missWorld;
+            missWorld.SceneRevision = 9202;
+            missWorld.Skybox.Authored = true;
+            missWorld.Skybox.Enabled = false;
+            missWorld.Meshes.push_back(MakeBoxInstance(1, cubeView, makeMaterial({1.0f, 1.0f, 1.0f}, 1.0f, 0.05f),
+                {0.0f, -0.05f, 0.0f}, {16.0f, 0.1f, 16.0f}, false));
+            RenderReflectionProbe blueProbe{};
+            blueProbe.EntityID = 9202;
+            blueProbe.BoxExtents = {24.0f, 24.0f, 24.0f};
+            blueProbe.Intensity = 1.0f;
+            blueProbe.ParallaxCorrected = false;
+            blueProbe.CubemapPath = "u5e_blue.hdr";
+            missWorld.ReflectionProbes.push_back(blueProbe);
+
+            std::vector<glm::vec4> missHDR, missStorage;
+            RENDER_CHECK(renderScene(missWorld, cam, missHDR, &missStorage), "U5-F 39.2 SSR miss fallback frame");
+            glm::vec4 missCenterHDR(0.0f), missCenterSt(0.0f);
+            RENDER_CHECK(sampleAtWorld(cam, missHDR, {0.0f, 0.0f, 0.0f}, missCenterHDR) &&
+                         sampleAtWorld(cam, missStorage, {0.0f, 0.0f, 0.0f}, missCenterSt),
+                "U5-F 39.2 sample miss floor");
+            std::cout << "  [U5-F Miss->Probe] conf=" << missCenterSt.a
+                      << " hdr=(" << missCenterHDR.r << "," << missCenterHDR.g << "," << missCenterHDR.b << ")\n";
+            RENDER_CHECK(missCenterSt.a < 0.05f && missCenterHDR.b > 0.8f && missCenterHDR.b > missCenterHDR.r * 4.0f,
+                "M15-U5-38.2 / 39.2: SSR miss falls back cleanly to Blue local probe without black hole");
+
+            // M15-U5-38.3: Pure sky fallback when no probe covers pixel and HDR skybox environment is active
+            RENDER_CHECK(SaveCubemapAsset(output, "u5f_sky_green.hdr", {0.04f, 1.8f, 0.04f}), "U5-F save green sky HDR");
+            missWorld.ReflectionProbes.clear();
+            missWorld.Skybox.Authored = true;
+            missWorld.Skybox.Enabled = true;
+            missWorld.Skybox.EnvironmentLighting = true;
+            missWorld.Skybox.Type = 1;
+            missWorld.Skybox.HDRPath = "u5f_sky_green.hdr";
+            ++missWorld.SceneRevision;
+            baseSettings.EnableSkybox = true;
+            std::vector<glm::vec4> skyHDR;
+            glm::vec4 skyCenter(0.0f);
+            RENDER_CHECK(renderScene(missWorld, cam, skyHDR) &&
+                         sampleAtWorld(cam, skyHDR, {0.0f, 0.0f, 0.0f}, skyCenter),
+                "U5-F 38.3 sky fallback frame");
+            baseSettings.EnableSkybox = false;
+            std::cout << "  [U5-F Miss->Sky] hdr=(" << skyCenter.r << "," << skyCenter.g << "," << skyCenter.b << ")\n";
+            RENDER_CHECK(skyCenter.g > 0.8f && skyCenter.g > skyCenter.r * 4.0f,
+                "M15-U5-38.3: SSR miss with no local probe falls back smoothly to sky environment");
+        }
+
+        // -----------------------------------------------------------------
+        // 2. M15-U5-34.1 / 34.2 / 39.4: Roughness Cone & SSRColor0..3 Pyramid Sweep
+        // -----------------------------------------------------------------
+        {
+            RenderWorld sweepWorld;
+            sweepWorld.SceneRevision = 9210;
+            sweepWorld.Skybox.Authored = true;
+            sweepWorld.Skybox.Enabled = false;
+            sweepWorld.Meshes.push_back(MakeBoxInstance(10, cubeView, makeMaterial({1.0f, 1.0f, 1.0f}, 1.0f, 0.05f),
+                {0.0f, -0.05f, 0.0f}, {16.0f, 0.1f, 16.0f}, false));
+            // Compact bright Green emissive stripe reflecting near center floor
+            sweepWorld.Meshes.push_back(MakeBoxInstance(11, cubeView, MakeEmissiveMaterial({0.05f, 1.0f, 0.05f}, 14.0f),
+                {0.0f, 0.75f, -3.0f}, {1.8f, 0.28f, 0.4f}, false));
+
+            const float roughLevels[3]{0.05f, 0.30f, 0.65f};
+            float greenPeak[3]{};
+            for (int r = 0; r < 3; ++r) {
+                sweepWorld.Meshes[0].Material.RHIMaterialAsset = makeMaterial({1.0f, 1.0f, 1.0f}, 1.0f, roughLevels[r]);
+                ++sweepWorld.SceneRevision;
+                std::vector<glm::vec4> hdr;
+                RENDER_CHECK(renderScene(sweepWorld, cam, hdr), "U5-F 39.4 roughness sweep frame");
+                if (r == 0) {
+                    for (uint32_t level = 0; level < SSRRaymarchContract::ColorPyramidLevels; ++level) {
+                        auto* pyrTex = targets->GetSSRColor(level);
+                        std::vector<glm::vec4> pyrPx;
+                        RENDER_CHECK(pyrTex && pyrTex->IsValid() &&
+                                     pyrTex->GetWidth() == std::max(1u, renderW >> (level + 1u)) &&
+                                     ReadTexture2DRGBA16(*pyrTex, pyrPx) && AllFiniteNonNegative(pyrPx),
+                            "M15-U5-34.2: SSRColor pyramid level populated with finite HDR texels");
+                        float maxG = 0.0f;
+                        for (const auto& p : pyrPx) maxG = std::max(maxG, p.g);
+                        RENDER_CHECK(maxG > 0.25f, "M15-U5-34.2: SSRColor pyramid preserves HDR emitter energy");
+                    }
+                }
+                glm::vec4 center(0.0f);
+                RENDER_CHECK(sampleAtWorld(cam, hdr, {0.0f, 0.0f, 0.0f}, center), "U5-F 39.4 sample center");
+                greenPeak[r] = center.g;
+            }
+            std::cout << "  [U5-F Roughness Sweep] G(0.05)=" << greenPeak[0]
+                      << " G(0.30)=" << greenPeak[1] << " G(0.65)=" << greenPeak[2] << "\n";
+            RENDER_CHECK(greenPeak[0] > 3.0f &&
+                         greenPeak[0] > greenPeak[1] * 1.15f &&
+                         greenPeak[1] > greenPeak[2] * 1.15f,
+                "M15-U5-34.1 / 39.4: SSR roughness cone pyramid blur decreases peak energy monotonically");
+        }
+
+        // -----------------------------------------------------------------
+        // 3. M15-U5-35.2 / 35.3 / 36.1 / 36.2 / 39.5: Gold / Chrome / Dielectric & Reflection Flag
+        // -----------------------------------------------------------------
+        {
+            RenderWorld matWorld;
+            matWorld.SceneRevision = 9220;
+            matWorld.Skybox.Authored = true;
+            matWorld.Skybox.Enabled = false;
+            matWorld.Meshes.push_back(MakeBoxInstance(20, cubeView, makeMaterial({1.0f, 1.0f, 1.0f}, 1.0f, 0.06f),
+                {0.0f, -0.05f, 0.0f}, {16.0f, 0.1f, 16.0f}, false));
+            matWorld.Meshes.push_back(MakeBoxInstance(21, cubeView, MakeEmissiveMaterial({1.0f, 1.0f, 1.0f}, 6.0f),
+                {0.0f, 1.0f, -3.0f}, {3.5f, 2.0f, 0.5f}, false));
+
+            std::vector<glm::vec4> hdr;
+            glm::vec4 chromeC(0.0f), goldC(0.0f), dielC(0.0f), disabledC(0.0f), disabledSt(0.0f);
+
+            RENDER_CHECK(renderScene(matWorld, cam, hdr) && sampleAtWorld(cam, hdr, {0.0f, 0.0f, 0.0f}, chromeC),
+                "U5-F 39.5 chrome reflection");
+
+            matWorld.Meshes[0].Material.RHIMaterialAsset = makeMaterial({1.0f, 0.71f, 0.29f}, 1.0f, 0.06f);
+            ++matWorld.SceneRevision;
+            RENDER_CHECK(renderScene(matWorld, cam, hdr) && sampleAtWorld(cam, hdr, {0.0f, 0.0f, 0.0f}, goldC),
+                "U5-F 39.5 gold reflection");
+
+            matWorld.Meshes[0].Material.RHIMaterialAsset = makeMaterial({0.02f, 0.12f, 0.95f}, 0.0f, 0.06f);
+            ++matWorld.SceneRevision;
+            RENDER_CHECK(renderScene(matWorld, cam, hdr) && sampleAtWorld(cam, hdr, {0.0f, 0.0f, 0.0f}, dielC),
+                "U5-F 39.5 blue dielectric reflection");
+
+            std::cout << "  [U5-F Gold/Chrome/Dielectric] chrome=(" << chromeC.r << "," << chromeC.g << "," << chromeC.b
+                      << ") gold=(" << goldC.r << "," << goldC.g << "," << goldC.b
+                      << ") blueDiel=(" << dielC.r << "," << dielC.g << "," << dielC.b << ")\n";
+            RENDER_CHECK(chromeC.g > 2.5f && std::abs(chromeC.r - chromeC.b) < chromeC.g * 0.2f,
+                "M15-U5-36.2 / 39.5: Chrome reflects neutral white conductor specular");
+            RENDER_CHECK(goldC.r > 2.5f && goldC.r > goldC.g * 1.15f && goldC.g > goldC.b * 1.45f && goldC.r > goldC.b * 1.9f,
+                "M15-U5-36.2 / 39.5: Gold tints conductor SSR with metallic F0");
+            RENDER_CHECK(dielC.r > 0.3f && std::abs(dielC.r - dielC.b) < std::max(dielC.r, dielC.b) * 0.25f &&
+                         chromeC.g > dielC.g * 2.5f,
+                "M15-U5-36.1 / 39.5: Blue dielectric reflects achromatic Fresnel F0=0.04 without blue albedo tint");
+
+            // Disabled reflection flag on floor suppresses SSR output while keeping ScreenStorage trace valid
+            std::vector<glm::vec4> st;
+            matWorld.Meshes[0].Material.RHIMaterialAsset = makeMaterial({1.0f, 1.0f, 1.0f}, 1.0f, 0.06f, false);
+            ++matWorld.SceneRevision;
+            RENDER_CHECK(renderScene(matWorld, cam, hdr, &st) &&
+                         sampleAtWorld(cam, hdr, {0.0f, 0.0f, 0.0f}, disabledC) &&
+                         sampleAtWorld(cam, st, {0.0f, 0.0f, 0.0f}, disabledSt),
+                "U5-F 35.3 reflection disabled frame");
+            std::cout << "  [U5-F Disabled] conf=" << disabledSt.a
+                      << " hdr=(" << disabledC.r << "," << disabledC.g << "," << disabledC.b << ")\n";
+            RENDER_CHECK(disabledSt.a > 0.15f && std::max({disabledC.r, disabledC.g, disabledC.b}) < 0.05f,
+                "M15-U5-35.3: Disabled EnableEnvironmentReflections suppresses SSR resolve on receiver");
+        }
+
+        // -----------------------------------------------------------------
+        // 4. M15-U5-39.3 / 39.6: Moving Object & Camera Motion Stability
+        // -----------------------------------------------------------------
+        {
+            RenderWorld dynWorld;
+            dynWorld.SceneRevision = 9230;
+            dynWorld.Skybox.Authored = true;
+            dynWorld.Skybox.Enabled = false;
+            dynWorld.Meshes.push_back(MakeBoxInstance(30, cubeView, makeMaterial({1.0f, 1.0f, 1.0f}, 1.0f, 0.06f),
+                {0.0f, -0.05f, 0.0f}, {16.0f, 0.1f, 16.0f}, false));
+            dynWorld.Meshes.push_back(MakeBoxInstance(31, cubeView, MakeEmissiveMaterial({1.0f, 0.05f, 0.05f}, 6.0f),
+                {-2.2f, 0.85f, -3.0f}, {1.2f, 1.6f, 0.5f}, false));
+
+            std::vector<glm::vec4> hdr0, hdr1, hdr2;
+            RENDER_CHECK(renderScene(dynWorld, cam, hdr0), "U5-F 39.3 moving frame 0");
+            glm::vec4 left0(0.0f), mid0(0.0f);
+            RENDER_CHECK(sampleAtWorld(cam, hdr0, {-1.6f, 0.0f, 0.0f}, left0) &&
+                         sampleAtWorld(cam, hdr0, {0.0f, 0.0f, 0.0f}, mid0), "U5-F 39.3 sample frame 0");
+            RENDER_CHECK(left0.r > 1.5f && mid0.r < 0.2f, "M15-U5-39.3: frame 0 reflection aligns under x=-2.2 emitter");
+
+            dynWorld.Meshes[1] = MakeBoxInstance(31, cubeView, MakeEmissiveMaterial({1.0f, 0.05f, 0.05f}, 6.0f),
+                {0.0f, 0.85f, -3.0f}, {1.2f, 1.6f, 0.5f}, false);
+            ++dynWorld.SceneRevision;
+            RENDER_CHECK(renderScene(dynWorld, cam, hdr1), "U5-F 39.3 moving frame 1");
+            glm::vec4 left1(0.0f), mid1(0.0f);
+            RENDER_CHECK(sampleAtWorld(cam, hdr1, {-1.6f, 0.0f, 0.0f}, left1) &&
+                         sampleAtWorld(cam, hdr1, {0.0f, 0.0f, 0.0f}, mid1), "U5-F 39.3 sample frame 1");
+            RENDER_CHECK(left1.r < 0.2f && mid1.r > 1.5f,
+                "M15-U5-39.3: moved emitter leaves zero stale ghosting at prior location");
+
+            // Curved sphere + White emitter under camera motion
+            dynWorld.Meshes.push_back(MakeBoxInstance(32, sphereView, makeMaterial({1.0f, 1.0f, 1.0f}, 1.0f, 0.08f),
+                {1.6f, 0.8f, 0.0f}, {1.0f, 1.0f, 1.0f}, false));
+            const glm::vec3 eyes[3]{{-1.5f, 2.1f, 8.4f}, {0.0f, 2.0f, 8.0f}, {1.5f, 1.9f, 7.6f}};
+            for (int f = 0; f < 3; ++f) {
+                PerspectiveCamera mCam(45.0f, 1.0f, 0.1f, 100.0f);
+                mCam.SetViewMatrix(glm::lookAtRH(eyes[f], camTarget, glm::vec3(0.0f, 1.0f, 0.0f)), eyes[f]);
+                RENDER_CHECK(renderScene(dynWorld, mCam, hdr2), "M15-U5-39.6: camera motion SSR frame stable");
+            }
+            std::cout << "  [U5-F Dynamic] f0=(" << left0.r << "," << mid0.r << ") f1=(" << left1.r << "," << mid1.r << ")\n";
+        }
+
+        RENDER_CHECK(device.WaitIdle() && Axle::RenderTests::GetRHIValidationErrorCount() == 0,
+            "U5-F zero RHI validation errors across all material SSR tests");
+        std::cout << "[M15MaterialSSR] All U5-F (S5.6) native D3D12/Vulkan material SSR checks passed!\n";
+        return true;
+    }
 } // namespace
 
 bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
@@ -2336,6 +2663,9 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
 
     RENDER_CHECK(RunM15MultiProbeBlendTests(renderer, output),
         "M15-U5-E: multi-probe blend, per-probe parallax, energy policy & P5 exit checks pass");
+
+    RENDER_CHECK(RunM15MaterialSSRTests(renderer, output),
+        "M15-U5-F: material-aware SSR, Hi-Z DDA, roughness cone pyramid, F0 & dynamic checks pass");
 
     renderer.ClearDynamicReflectionProbes();
     RENDER_CHECK(device.WaitIdle(), "U5-B wait idle at cleanup");

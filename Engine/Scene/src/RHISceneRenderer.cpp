@@ -354,10 +354,10 @@ namespace Axle {
         }
 
         RHIDescriptorPoolDesc ssrPoolDesc;
-        ssrPoolDesc.MaxDescriptorSets = 16;
-        ssrPoolDesc.MaxTextures = 64;
-        ssrPoolDesc.MaxSamplers = 16;
-        ssrPoolDesc.MaxStorageTextures = 16;
+        ssrPoolDesc.MaxDescriptorSets = 28;
+        ssrPoolDesc.MaxTextures = 80;
+        ssrPoolDesc.MaxSamplers = 24;
+        ssrPoolDesc.MaxStorageTextures = 24;
         ssrPoolDesc.MaxConstantBuffers = 16;
         if (!m_SSRDescriptorPool.Init(ssrPoolDesc)) {
             AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize SSR Descriptor Pool!");
@@ -367,9 +367,17 @@ namespace Axle {
             m_SSRComputeStorageSet = m_SSRDescriptorPool.AllocateDescriptorSet(m_SSRComputePipelineLayout, 1);
             m_SSRApplyDescriptorSet = m_SSRDescriptorPool.AllocateDescriptorSet(m_SSRApplyPipelineLayout, 0);
             if (!m_SSRComputeTextureSet || !m_SSRComputeStorageSet || !m_SSRApplyDescriptorSet) return false;
+            for (uint32_t level = 0; level < m_SSRDownsampleTextureSets.size(); ++level) {
+                m_SSRDownsampleTextureSets[level] = m_SSRDescriptorPool.AllocateDescriptorSet(m_SSRDownsamplePipelineLayout, 0);
+                m_SSRDownsampleStorageSets[level] = m_SSRDescriptorPool.AllocateDescriptorSet(m_SSRDownsamplePipelineLayout, 1);
+                if (!m_SSRDownsampleTextureSets[level] || !m_SSRDownsampleStorageSets[level]) return false;
+            }
             if (m_SSRSampler.IsValid()) {
                 if (!m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative()) ||
-                    !m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 5, 0, m_SSRSampler.GetNative())) return false;
+                    !m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 9, 0, m_SSRSampler.GetNative())) return false;
+                for (uint32_t level = 0; level < m_SSRDownsampleTextureSets.size(); ++level) {
+                    if (!m_SSRDescriptorPool.UpdateSampler(m_SSRDownsampleTextureSets[level], 1, 0, m_SSRSampler.GetNative())) return false;
+                }
             }
         }
 
@@ -646,13 +654,17 @@ namespace Axle {
         m_GTAOSampler.Shutdown();
 
         m_SSRComputePipeline = nullptr;
+        m_SSRDownsamplePipeline = nullptr;
         m_SSRApplyPipelineSDR = nullptr;
         m_SSRApplyPipelineHDR = nullptr;
         m_SSRComputePipelineLayout.Shutdown();
+        m_SSRDownsamplePipelineLayout.Shutdown();
         m_SSRApplyPipelineLayout.Shutdown();
         m_SSRConstantBuffer.Shutdown();
         m_SSRComputeTextureSet = nullptr;
         m_SSRComputeStorageSet = nullptr;
+        m_SSRDownsampleTextureSets.fill(nullptr);
+        m_SSRDownsampleStorageSets.fill(nullptr);
         m_SSRApplyDescriptorSet = nullptr;
         m_SSRDescriptorPool.Shutdown();
         m_SSRSampler.Shutdown();
@@ -1772,6 +1784,15 @@ namespace Axle {
         }
         m_SSRComputeShader = csRes.Bytecode;
 
+        RHIShaderCompileDesc dsDesc = csDesc;
+        dsDesc.EntryPoint = "DownsampleColorCS";
+        auto dsRes = compiler.Compile(dsDesc);
+        if (!dsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile SSR Downsample CS: {0}", dsRes.ErrorMessage);
+            return false;
+        }
+        m_SSRDownsampleShader = dsRes.Bytecode;
+
         // 2. Vertex Shader: VSMain
         RHIShaderCompileDesc vsDesc = csDesc;
         vsDesc.EntryPoint = "VSMain";
@@ -1863,23 +1884,64 @@ namespace Axle {
 
         if (!m_SSRComputePipelineLayout.Init(compLayoutDesc)) return false;
 
-        // Exact forward reflection terms: five sampled textures and one sampler.
+        nri::RootDescriptorDesc dsRootDesc{};
+        dsRootDesc.registerIndex = 0;
+        dsRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        dsRootDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+
+        nri::DescriptorRangeDesc dsTexRanges[2]{};
+        dsTexRanges[0].baseRegisterIndex = 0;
+        dsTexRanges[0].descriptorNum = 1;
+        dsTexRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        dsTexRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        dsTexRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        dsTexRanges[1].baseRegisterIndex = 0;
+        dsTexRanges[1].descriptorNum = 1;
+        dsTexRanges[1].descriptorType = nri::DescriptorType::SAMPLER;
+        dsTexRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        dsTexRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorRangeDesc dsStorageRange{};
+        dsStorageRange.baseRegisterIndex = 0;
+        dsStorageRange.descriptorNum = 1;
+        dsStorageRange.descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        dsStorageRange.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        dsStorageRange.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc dsSets[2]{};
+        dsSets[0].registerSpace = 1;
+        dsSets[0].ranges = dsTexRanges;
+        dsSets[0].rangeNum = 2;
+        dsSets[1].registerSpace = 2;
+        dsSets[1].ranges = &dsStorageRange;
+        dsSets[1].rangeNum = 1;
+
+        nri::PipelineLayoutDesc dsLayoutDesc{};
+        dsLayoutDesc.rootRegisterSpace = 0;
+        dsLayoutDesc.rootDescriptors = &dsRootDesc;
+        dsLayoutDesc.rootDescriptorNum = 1;
+        dsLayoutDesc.descriptorSets = dsSets;
+        dsLayoutDesc.descriptorSetNum = 2;
+        dsLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        if (!m_SSRDownsamplePipelineLayout.Init(dsLayoutDesc)) return false;
+
+        // Forward reflection resolve inputs: Depth, SSR hit, SceneColor, EnvSpec, Resp, SSRColor0..3, Sampler.
         nri::RootDescriptorDesc applyRootDesc{};
         applyRootDesc.registerIndex = 0;
         applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         applyRootDesc.shaderStages = nri::StageBits::ALL;
-        nri::DescriptorRangeDesc applyRanges[6]{};
-        for (uint32_t i = 0; i < 6; ++i) {
-            applyRanges[i].baseRegisterIndex = i < 5 ? i : 0;
+        nri::DescriptorRangeDesc applyRanges[10]{};
+        for (uint32_t i = 0; i < 10; ++i) {
+            applyRanges[i].baseRegisterIndex = i < 9 ? i : 0;
             applyRanges[i].descriptorNum = 1;
-            applyRanges[i].descriptorType = i < 5 ? nri::DescriptorType::TEXTURE : nri::DescriptorType::SAMPLER;
+            applyRanges[i].descriptorType = i < 9 ? nri::DescriptorType::TEXTURE : nri::DescriptorType::SAMPLER;
             applyRanges[i].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         }
 
         nri::DescriptorSetDesc applyDescSet = {};
         applyDescSet.registerSpace = 1;
         applyDescSet.ranges = applyRanges;
-        applyDescSet.rangeNum = 6;
+        applyDescSet.rangeNum = 10;
 
         nri::PipelineLayoutDesc applyLayoutDesc = {};
         applyLayoutDesc.rootRegisterSpace = 0;
@@ -1920,10 +1982,16 @@ namespace Axle {
         compDesc.ComputeShader = m_SSRComputeShader;
         m_SSRComputePipeline = cache.GetOrCreateComputePipeline(compDesc);
 
+        RHIComputePipelineDesc dsDesc;
+        dsDesc.Layout = &m_SSRDownsamplePipelineLayout;
+        dsDesc.ComputeShader = m_SSRDownsampleShader;
+        m_SSRDownsamplePipeline = cache.GetOrCreateComputePipeline(dsDesc);
+
         m_SSRApplyPipelineSDR = GetOrCreateSSRApplyPipeline(nri::Format::RGBA8_UNORM);
         m_SSRApplyPipelineHDR = GetOrCreateSSRApplyPipeline(nri::Format::RGBA16_SFLOAT);
 
-        return m_SSRComputePipeline != nullptr && m_SSRApplyPipelineSDR != nullptr && m_SSRApplyPipelineHDR != nullptr;
+        return m_SSRComputePipeline != nullptr && m_SSRDownsamplePipeline != nullptr &&
+            m_SSRApplyPipelineSDR != nullptr && m_SSRApplyPipelineHDR != nullptr;
     }
 
     bool RHISceneRenderer::CompileHiZShaders(RHIDevice& device) {

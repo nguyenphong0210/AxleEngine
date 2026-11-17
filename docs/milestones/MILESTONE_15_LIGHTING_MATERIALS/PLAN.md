@@ -909,95 +909,102 @@ The two SSR term targets add 16 bytes/pixel; remaining S5.6 quality work stays o
 
 ### U5 / S5.6 — Material-aware SSR and reflection resolve
 
-- [ ] **M15-U5-32.1 — Freeze ray/depth projection.**
+- [x] **M15-U5-32.1 — Freeze ray/depth projection.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-32.2 — Build initial ray and starting mip.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `SSRRaymarchContract::ProjectViewToUVZ`/`ReconstructViewPos`/`ClipScreenRay` match `SSR.hlsl` RH `[0,1]` depth projection and pass Debug/Release unit checks. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-32.2 — Build initial ray and starting mip.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-32.3 — Advance current Hi-Z cell.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `BuildInitialSSRRay` and `SSR.hlsl` initialize normal-biased start view/UVZ, clamp `maxMip` to `GetHiZUsefulLevelCount()-1`, and reject sky/near-plane rays in Debug/Release CPU & DX12/Vulkan runs. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-32.3 — Advance current Hi-Z cell.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-32.4 — Descend/refine possible hit.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Hierarchical Hi-Z DDA ascends coarse mips across open cells (`rayZMax < cellMinZ`) and steps deterministically in Debug/Release CPU (`HighestMipReached >= 2`) and DX12/Vulkan GPU runs. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-32.4 — Descend/refine possible hit.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-32.5 — Handle bounds/max steps/termination.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Coarse intersections clamp Z entry (`tPlane`), descend `--mip` to mip 0, and refine exact crossings cleanly in CPU/DX12/Vulkan tests. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-32.5 — Handle bounds/max steps/termination.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-32.6 — Produce hit distance/miss/confidence.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Screen/depth `[0,1]` clipping, near-plane clamping, `SSRParams.y=64` step budget, and early sky-exit termination pass Debug/Release CPU & DX12/Vulkan checks. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-32.6 — Produce hit distance/miss/confidence.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-32.7 — Run CPU/native traversal readback.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `CSMain` writes `[0,1]` normalized `float4(hitUV, hitDistNorm, confidence)` safe for both `RGBA16_FLOAT` and `RGBA8_UNORM`; misses output `conf=0`, hits output `conf=0.810352` on native DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-32.7 — Run CPU/native traversal readback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-33.1 — Add thickness.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Synthetic 64x64 Hi-Z pyramid CPU readback (`Test_M15_HiZContractUnit`) and native `ScreenStorage` readbacks (`storage=(0.501855, 0.406592, 0.0703271, conf=0.810352)`) pass in Debug/Release DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-33.1 — Add thickness.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-33.2 — Add hit refinement.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). View-space penetration check rejects false hits deeper behind surface than thickness in CPU checks and native DX12/Vulkan (`[U5-F Thickness] st=(0.501855, 0.406592, conf=0.484912) hdr=(2.42344, 0.096936, 0.096936)` past foreground bar). See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-33.2 — Add hit refinement.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-33.3 — Add edge/disocclusion rejection.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). 4-step binary crossing refinement reduces intersection error in `SSRRaymarchContract` and `SSR.hlsl` (`HitUV` error `< 0.08` CPU, sub-texel native hit agreement). See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-33.3 — Add edge/disocclusion rejection.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). 4-neighbor orthogonal depth support check and smooth screen-border/distance/camera fades attenuate uncertain silhouette/border hits in `SSR.hlsl`. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
 - [ ] **M15-U5-34.1 — Filter by roughness cone.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
-- [ ] **M15-U5-34.2 — Filter over HDR color footprint.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `ComputeRoughnessConePixelRadius` and `SSRApply` cone LOD integration produce monotonic roughness broadening in native DX12/Vulkan (`G(0.05)=11.3359 -> G(0.30)=8.93125 -> G(0.65)=2.65836`). See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
+- [x] **M15-U5-34.2 — Filter over HDR color footprint.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `RHIViewTarget::SSRColor0..3` half-res `RGBA16_FLOAT` chain populated via `DownsampleColorCS` and sampled with 9-tap depth-aware cone integration in Debug/Release DX12/Vulkan and RenderGraph barrier tests. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
 - [ ] **M15-U5-35.1 — Pass roughness.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
-- [ ] **M15-U5-35.2 — Pass metallic/base color.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `ForwardPBR.hlsl` and `MaterialSurface.hlsl` emit per-pixel signed roughness via `MakeMaterialReflectionSurfaceOutput` into `ReflectionEnvironment.a` verified by shader contract and native roughness sweep tests. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
+- [x] **M15-U5-35.2 — Pass metallic/base color.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Metallic/dielectric Fresnel response propagated cleanly via `ReflectionResponse.rgb` without legacy `0.02` attenuation in `MaterialSurface.hlsl`, differentiating Gold, Chrome, and Blue dielectric natively on DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
 - [ ] **M15-U5-35.3 — Pass reflection flags.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
-- [ ] **M15-U5-35.4 — Validate declared resolve bindings.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `ReflectionEnvironment.a` sign gates `SSRApply` per receiver without breaking `ScreenStorage` tracing (`[U5-F Disabled] conf=0.810352, hdr=(0,0,0)` on Debug/Release DX12/Vulkan). See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
+- [x] **M15-U5-35.4 — Validate declared resolve bindings.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-36.1 — Compute dielectric Fresnel/F0.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `m_SSRDownsamplePipelineLayout`, `m_SSRApplyPipelineLayout` (`t0..t8`, `s0`), descriptor sets, and `SSRCopy -> HiZ -> SSRColor0..3 -> SSRCompute -> SSRApply` RenderGraph barriers pass negative/positive validation with zero DX12/Vulkan errors. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-36.1 — Compute dielectric Fresnel/F0.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-36.2 — Compute conductor Fresnel/F0.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `ComputeSpecularF0` and canonical shaders use achromatic `0.04` F0 on dielectrics; native Blue dielectric (`baseColor=(0.02,0.12,0.95), metallic=0`) reflects achromatic white `(1.28965, 1.28965, 1.28965)`. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-36.2 — Compute conductor Fresnel/F0.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-37.1 — Replace/blend indirect specular.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Conductors use tinted `baseColor` F0; native Gold `(4.86016, 3.73008, 2.20039)` and Chrome `(4.86016, 4.86016, 4.86016)` match physical Schlick Fresnel on DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-37.1 — Replace/blend indirect specular.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `SSRApply` replaces exported `envSample.rgb` with filtered SSR radiance weighted by `confidence * roughnessFade`, preserving direct lighting/emission in linear HDR across DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
 - [ ] **M15-U5-37.2 — Prevent duplicate IBL reflection.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Both U5-E energy conservation check (`base=0.99987 -> ssr=1.01134`) and U5-F `SSRApply` replacement keep indirect specular free of additive double counting on Debug/Release DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
 - [ ] **M15-U5-38.1 — Blend SSR confidence.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
-- [ ] **M15-U5-38.2 — Blend local probe influence.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). `weight = confidence * EvaluateRoughnessFade(roughness)` smoothly lerps prior environment specular into SSR hit color in `SSR.hlsl` without discontinuities. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
+- [x] **M15-U5-38.2 — Blend local probe influence.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-38.3 — Blend sky fallback.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Native SSR miss over local Blue probe preserves `envSample` cleanly (`[U5-F Miss->Probe] conf=0, hdr=(0.0312439, 0.0312439, 1.99961)`) alongside U5-E multi-probe blending on DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-38.3 — Blend sky fallback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-39.1 — Test hit.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Native SSR miss with no local probe cleanly falls back to sky environment (`[U5-F Miss->Sky] hdr=(0.0390503, 1.79648, 0.0390503)` DX12 / `(0.0390564, 1.79668, 0.0390564)` Vulkan). See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-39.1 — Test hit.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-39.2 — Test miss.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Native Red wall reflection hit produces `conf=0.810352` and linear HDR `(4.05078, 0.161987, 0.161987)` identically in Debug/Release DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-39.2 — Test miss.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-39.3 — Test moving object.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Native miss tests (`Miss->Probe` and `Miss->Sky`) confirm `conf=0` and clean fallback radiance on Debug/Release DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-39.3 — Test moving object.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Translating Red emitter cube across frames (`f0=(4.83656, 0) -> f1=(0, 4.86016)`) moves SSR cleanly with zero stale ghosting in Debug/Release DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
 - [ ] **M15-U5-39.4 — Test roughness sweep.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
-- [ ] **M15-U5-39.5 — Test gold/chrome/dielectric.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Native roughness sweep `(0.05, 0.30, 0.65)` yields monotonic Green peak reduction `11.3359 -> 8.93125 -> 2.65836` in Debug/Release DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
+- [x] **M15-U5-39.5 — Test gold/chrome/dielectric.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-39.6 — Test camera motion.**
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Native Chrome `(4.86016, 4.86016, 4.86016)`, Gold `(4.86016, 3.73008, 2.20039)`, and Blue dielectric `(1.28965, 1.28965, 1.28965)` pass in Debug/Release DX12/Vulkan. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
+- [x] **M15-U5-39.6 — Test camera motion.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated PASS (Gemini implementation self-verification; pending independent Codex review). Multi-frame camera orbit/translation across floor + curved sphere completes cleanly with finite non-negative HDR outputs and zero DX12/Vulkan validation errors. See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
 
 **Exit:** colored geometry appears in the expected reflection; roughness varies continuously; no black edge, ghost or energy spike.
+  - **Automated status:** Implemented & self-verified by Gemini across Debug/Release CPU + native DX12/Vulkan + headless Editor startup checks (pending independent Codex review). Interactive Editor visual gates (`34.1`, `35.1`, `35.3`, `37.2`, `38.1`, `39.4`) remain open (deferred per user direction to post-U5 consolidated visual pass). See [U5-F review](../../reviews/M15_U5_F_REVIEW.md).
 
 ### U5 / S5.7 — LTC rectangular and disk area lights
 

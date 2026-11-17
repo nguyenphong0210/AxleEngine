@@ -53,6 +53,14 @@ namespace Axle::RHI {
         if (m_Desc.EnableReflectionTerms &&
             (!check2D(RHIViewTarget::ReflectionEnvironment, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT) ||
              !check2D(RHIViewTarget::ReflectionResponse, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT))) return false;
+        for (uint32_t level = 0; m_Desc.EnableReflectionTerms && level < 4; ++level) {
+            const uint32_t expectedW = std::max(1u, m_Desc.Width >> (level + 1u));
+            const uint32_t expectedH = std::max(1u, m_Desc.Height >> (level + 1u));
+            auto* ssrColor = GetSSRColor(level);
+            if (!check2D(static_cast<RHIViewTarget>(static_cast<uint8_t>(RHIViewTarget::SSRColor0) + level),
+                         expectedW, expectedH, RHITextureFormat::RGBA16_FLOAT) ||
+                !ssrColor || !ssrColor->GetUAV()) return false;
+        }
         if (m_Desc.EnableScreenStorage &&
             (!check2D(RHIViewTarget::ScreenStorage, m_Desc.Width, m_Desc.Height,
                       m_Desc.HDR ? RHITextureFormat::RGBA16_FLOAT : m_Desc.ColorFormat) ||
@@ -131,6 +139,17 @@ namespace Axle::RHI {
         if (desc.EnableReflectionTerms &&
             (!create(RHIViewTarget::ReflectionEnvironment, RHITextureFormat::RGBA16_FLOAT, 1, false) ||
              !create(RHIViewTarget::ReflectionResponse, RHITextureFormat::RGBA16_FLOAT, 1, false))) return false;
+        if (desc.EnableReflectionTerms) {
+            for (uint32_t level = 0; level < 4; ++level) {
+                const uint32_t colorWidth = std::max(1u, desc.Width >> (level + 1u));
+                const uint32_t colorHeight = std::max(1u, desc.Height >> (level + 1u));
+                auto texture = std::make_unique<RHITexture>();
+                auto native = RHITextureDesc::StorageTexture2D(
+                    colorWidth, colorHeight, RHITextureFormat::RGBA16_FLOAT, "ViewTarget_SSRColor" + std::to_string(level));
+                if (!texture->Init(native)) return false;
+                candidate.m_Textures[static_cast<size_t>(RHIViewTarget::SSRColor0) + level] = std::move(texture);
+            }
+        }
         if (desc.EnableScreenStorage) {
             auto texture = std::make_unique<RHITexture>();
             auto native = RHITextureDesc::StorageTexture2D(desc.Width, desc.Height, desc.HDR ? RHITextureFormat::RGBA16_FLOAT : desc.ColorFormat, "ViewTarget_ScreenStorage");

@@ -489,4 +489,66 @@ namespace Axle {
             uint32_t maxFacesPerFrame);
     }
 
+    // M15-U5-F (S5.6): Frozen ray/depth projection, hierarchical Hi-Z DDA traversal,
+    // roughness-cone footprint sizing, and material F0/roughness resolve contracts.
+    namespace SSRRaymarchContract {
+        inline constexpr uint32_t ColorPyramidLevels = 4u;
+        inline constexpr float MaxConeRadiusPixels = 32.0f;
+
+        struct RaySetup {
+            glm::vec3 StartView{0.0f};
+            glm::vec3 StartUVZ{0.0f};
+            glm::vec3 EndView{0.0f};
+            glm::vec3 EndUVZ{0.0f};
+            float MaxTraceDist = 0.0f;
+            uint32_t StartMip = 0u;
+            uint32_t MaxUsefulMip = 0u;
+            bool Valid = false;
+        };
+
+        struct HiZTraceResult {
+            bool Hit = false;
+            glm::vec2 HitUV{0.0f};
+            float HitDepth = 1.0f;
+            float HitDistance = 0.0f;
+            float Confidence = 0.0f;
+            uint32_t StepsExecuted = 0u;
+            uint32_t HighestMipReached = 0u;
+        };
+
+        glm::vec3 ProjectViewToUVZ(const glm::vec3& viewPos, const glm::mat4& projZO);
+        glm::vec3 ReconstructViewPos(const glm::vec2& uv, float depth, const glm::mat4& invProjZO);
+        glm::uvec2 ComputeHiZMipSize(uint32_t baseWidth, uint32_t baseHeight, uint32_t mip);
+        bool ClipScreenRay(const glm::vec3& startUVZ, const glm::vec3& endUVZ, float* outTMax);
+        RaySetup BuildInitialSSRRay(
+            const glm::vec2& uv,
+            float depth,
+            const glm::vec3& viewNormal,
+            const glm::mat4& projZO,
+            const glm::mat4& invProjZO,
+            uint32_t width,
+            uint32_t height,
+            uint32_t usefulHiZLevels,
+            float maxDistance);
+        HiZTraceResult TraceHiZDepthBuffer(
+            const std::vector<std::vector<float>>& hiZPyramid,
+            uint32_t width,
+            uint32_t height,
+            const RaySetup& ray,
+            const glm::mat4& projZO,
+            const glm::mat4& invProjZO,
+            float thickness,
+            uint32_t maxSteps,
+            float ssrStrength = 1.0f);
+        float EvaluateRoughnessFade(float roughness);
+        float ComputeRoughnessConePixelRadius(
+            float roughness,
+            float hitDistanceMeters,
+            float hitViewZ,
+            const glm::mat4& projZO,
+            uint32_t width,
+            uint32_t height);
+        glm::vec3 ComputeSpecularF0(const glm::vec3& baseColor, float metallic);
+    }
+
 } // namespace Axle

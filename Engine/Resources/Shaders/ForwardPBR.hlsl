@@ -844,10 +844,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         MultiProbeBlendResult envBlend = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, roughness, u_EnvironmentSampler, float3(0.0, 0.0, 0.0));
         float3 probeSpec = envBlend.ProbeColor * (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation * u_MaterialSurface.w;
         float3 specularAmbient = lerp(analyticalSpec, probeSpec, envBlend.ProbeCoverage);
-        float3 analyticalResponse = ambientF * (1.0 - roughness * 0.5) * ggxEnergyCompensation *
-            (1.0 - saturate(u_LightReserved[0].z));
-        reflectionResponse = lerp(analyticalResponse, (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation,
-            envBlend.ProbeCoverage) * u_MaterialSurface.w;
+        // True split-sum BRDF reflectance drives dynamic SSR hits even in unlit dark rooms without sky IBL.
+        reflectionResponse = (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation * u_MaterialSurface.w;
         if (coatAnisotropy.x > 0.0 && envBlend.ProbeCoverage > 0.0) {
             float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0 - NdotV, 5.0));
             float coatRough = clamp(coatAnisotropy.y, 0.04, 1.0);
@@ -939,10 +937,10 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
             }
             color=transmitted*u_RefractionTint.rgb*(1.0-fresnel)+color*fresnel;
             if (u_CameraPosition.w<=0.0) color=pow(max(color,0.0),1.0/2.2);
-            return MakeReflectionSurfaceOutput(float4(color,1.0), 0.0, 0.0);
+            return MakeMaterialReflectionSurfaceOutput(float4(color,1.0), 0.0, 0.0, 1.0, 0.0);
         }
     }
-    return MakeReflectionSurfaceOutput(float4(color, albedo.a), reflectionEnvironment, reflectionResponse);
+    return MakeMaterialReflectionSurfaceOutput(float4(color, albedo.a), reflectionEnvironment, reflectionResponse, roughness, u_MaterialSurface.w);
 }
 
 float4 PSMain(PSInput input) : SV_Target0 { return EvaluateReflectionSurface(input).Color; }

@@ -216,6 +216,159 @@ bool RunM15HiZContractUnitTests() {
             "M15-U5-07.2: RenderGraph rejects reading uninitialized Hi-Z before generation barrier");
     }
 
-    std::cout << "[M15HiZ] All M15-U5-A (M15-U5-05.1 through U5-07.2) Hi-Z contract tests passed.\n";
+    // 5. M15-U5-F (S5.6): Frozen ray/depth projection, hierarchical Hi-Z DDA traversal,
+    //    thickness & border fade, and SSRColor0..3 pyramid RenderGraph barriers
+    {
+        constexpr uint32_t w = 64u;
+        constexpr uint32_t h = 64u;
+        const glm::mat4 proj = []() {
+            glm::mat4 p = glm::perspectiveRH_ZO(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
+            return p;
+        }();
+        const glm::mat4 invProj = glm::inverse(proj);
+
+        // 5a. M15-U5-32.1: Projection round-trip & screen ray clipping
+        const glm::vec3 sampleView(-0.8f, 0.4f, -6.5f);
+        const glm::vec3 uvz = SSRRaymarchContract::ProjectViewToUVZ(sampleView, proj);
+        const glm::vec3 recovered = SSRRaymarchContract::ReconstructViewPos(glm::vec2(uvz.x, uvz.y), uvz.z, invProj);
+        RENDER_CHECK(uvz.x > 0.0f && uvz.x < 1.0f && uvz.y > 0.0f && uvz.y < 1.0f &&
+                     uvz.z > 0.0f && uvz.z < 1.0f &&
+                     glm::length(recovered - sampleView) < 1e-3f,
+            "M15-U5-32.1: ProjectViewToUVZ and ReconstructViewPos round-trip cleanly under RH [0,1] depth");
+
+        float clippedT = 0.0f;
+        RENDER_CHECK(SSRRaymarchContract::ClipScreenRay({0.5f, 0.5f, 0.5f}, {2.0f, 0.5f, 0.5f}, &clippedT) &&
+                     std::abs(clippedT - (1.0f / 3.0f)) < 1e-4f,
+            "M15-U5-32.1: ClipScreenRay clips exit rays precisely to screen boundary");
+        RENDER_CHECK(!SSRRaymarchContract::ClipScreenRay({1.2f, 0.5f, 0.5f}, {1.8f, 0.5f, 0.5f}, &clippedT),
+            "M15-U5-32.1: ClipScreenRay rejects exterior off-screen rays");
+
+        // 5b. M15-U5-32.2..32.7: Synthetic Hi-Z DDA open sky miss vs wall hit vs thickness rejection
+        const uint32_t usefulLevels = ComputeUsefulLevelCount(w, h);
+        const glm::vec3 floorOriginView(0.0f, -1.2f, -5.0f);
+        const glm::vec3 floorUVZ = SSRRaymarchContract::ProjectViewToUVZ(floorOriginView, proj);
+        const glm::vec3 floorNormalView = glm::normalize(glm::vec3(0.0f, 0.96f, 0.28f));
+
+        // Open sky depth buffer with only the floor pixel populated
+        std::vector<float> skyDepth(size_t(w) * h, 1.0f);
+        const uint32_t ox = static_cast<uint32_t>(floorUVZ.x * w);
+        const uint32_t oy = static_cast<uint32_t>(floorUVZ.y * h);
+        skyDepth[size_t(oy) * w + ox] = floorUVZ.z;
+        std::vector<std::vector<float>> skyPyramid;
+        std::vector<PyramidExtent> skyExtents;
+        RENDER_CHECK(BuildMinReductionPyramid(skyDepth, w, h, usefulLevels, skyPyramid, skyExtents),
+            "M15-U5-32.7: build synthetic open-sky Hi-Z pyramid");
+
+        const auto skyRay = SSRRaymarchContract::BuildInitialSSRRay(
+            glm::vec2(floorUVZ.x, floorUVZ.y), floorUVZ.z, floorNormalView, proj, invProj, w, h, usefulLevels, 30.0f);
+        RENDER_CHECK(skyRay.Valid && skyRay.MaxUsefulMip == usefulLevels - 1u,
+            "M15-U5-32.2: BuildInitialSSRRay produces valid view/UVZ ray setup");
+
+        const auto skyRes = SSRRaymarchContract::TraceHiZDepthBuffer(
+            skyPyramid, w, h, skyRay, proj, invProj, 0.5f, 32u, 1.0f);
+        RENDER_CHECK(!skyRes.Hit && skyRes.HighestMipReached >= 2u && skyRes.StepsExecuted > 0u && skyRes.StepsExecuted < 32u,
+            "M15-U5-32.3 / 32.5: open-sky Hi-Z DDA ascends coarse mips and misses quickly");
+
+        // Place a solid target blocker directly along the traced ray at t = 0.25 * (End - Start)
+        const glm::vec3 wallView = glm::mix(skyRay.StartView, skyRay.EndView, 0.22f);
+        const glm::vec3 wallUVZ = SSRRaymarchContract::ProjectViewToUVZ(wallView, proj);
+        std::vector<float> wallDepth = skyDepth;
+        const uint32_t wx = std::clamp<uint32_t>(static_cast<uint32_t>(wallUVZ.x * w), 2u, w - 3u);
+        const uint32_t wy = std::clamp<uint32_t>(static_cast<uint32_t>(wallUVZ.y * h), 2u, h - 3u);
+        for (uint32_t yy = wy - 2u; yy <= wy + 2u; ++yy) {
+            for (uint32_t xx = wx - 2u; xx <= wx + 2u; ++xx) {
+                wallDepth[size_t(yy) * w + xx] = wallUVZ.z;
+            }
+        }
+        std::vector<std::vector<float>> wallPyramid;
+        std::vector<PyramidExtent> wallExtents;
+        RENDER_CHECK(BuildMinReductionPyramid(wallDepth, w, h, usefulLevels, wallPyramid, wallExtents),
+            "M15-U5-32.7: build synthetic wall-hit Hi-Z pyramid");
+        const auto hitRes = SSRRaymarchContract::TraceHiZDepthBuffer(
+            wallPyramid, w, h, skyRay, proj, invProj, 0.5f, 32u, 1.0f);
+        RENDER_CHECK(hitRes.Hit && hitRes.HitDistance > 0.2f && hitRes.Confidence > 0.1f &&
+                     glm::length(hitRes.HitUV - glm::vec2(wallUVZ.x, wallUVZ.y)) < 0.08f,
+            "M15-U5-32.4 / 32.6 / 33.2: Hi-Z DDA descends to mip 0 and refines target intersection accurately");
+
+        // Thin-surface thickness rejection: a closer depth 2.5m in front of the ray cannot falsely block it
+        const glm::vec3 frontView = wallView + glm::vec3(0.0f, 0.0f, 2.5f);
+        const glm::vec3 frontUVZ = SSRRaymarchContract::ProjectViewToUVZ(frontView, proj);
+        std::vector<float> falseBlockDepth = skyDepth;
+        for (uint32_t yy = wy - 1u; yy <= wy + 1u; ++yy) {
+            for (uint32_t xx = wx - 1u; xx <= wx + 1u; ++xx) {
+                falseBlockDepth[size_t(yy) * w + xx] = frontUVZ.z;
+            }
+        }
+        std::vector<std::vector<float>> falseBlockPyramid;
+        RENDER_CHECK(BuildMinReductionPyramid(falseBlockDepth, w, h, usefulLevels, falseBlockPyramid, wallExtents),
+            "M15-U5-33.1: build thin-blocker behind-ray Hi-Z pyramid");
+        const auto rejectedRes = SSRRaymarchContract::TraceHiZDepthBuffer(
+            falseBlockPyramid, w, h, skyRay, proj, invProj, 0.5f, 32u, 1.0f);
+        RENDER_CHECK(!rejectedRes.Hit,
+            "M15-U5-33.1: thickness check rejects intersection deeper behind surface than thickness");
+
+        // 5c. M15-U5-34.2 / 35.4: Full SSRCopy -> HiZ -> SSRColor0..3 -> SSRCompute -> SSRApply RenderGraph chain
+        RenderGraph ssrGraph;
+        const auto gColor = ssrGraph.Import("SceneColor", nullptr, true);
+        const auto gDepth = ssrGraph.Import("SceneDepth", nullptr, true);
+        const auto gNormal = ssrGraph.Import("SceneNormal", nullptr, true);
+        const auto gInput = ssrGraph.Import("SSRInput", nullptr, false);
+        const auto gSsrDepth = ssrGraph.Import("SSRDepth", nullptr, false);
+        const auto gStorage = ssrGraph.Import("SSRStorage", nullptr, false);
+        const auto gEnv = ssrGraph.Import("ReflectionEnvironment", nullptr, true);
+        const auto gResp = ssrGraph.Import("ReflectionResponse", nullptr, true);
+        std::vector<RenderGraph::Resource> gHiZ, gSSRColor;
+        for (uint32_t l = 0; l < 8u; ++l) gHiZ.push_back(ssrGraph.Import("HiZ" + std::to_string(l), nullptr, false));
+        for (uint32_t l = 0; l < SSRRaymarchContract::ColorPyramidLevels; ++l) {
+            gSSRColor.push_back(ssrGraph.Import("SSRColor" + std::to_string(l), nullptr, false));
+        }
+
+        ssrGraph.AddPass("SSRCopy", {
+            {gColor, RHI::RHIResourceLayout::CopySource},
+            {gInput, RHI::RHIResourceLayout::CopyDest, RenderGraph::Access::Write},
+            {gDepth, RHI::RHIResourceLayout::CopySource},
+            {gSsrDepth, RHI::RHIResourceLayout::CopyDest, RenderGraph::Access::Write}});
+        for (uint32_t l = 0; l < 8u; ++l) {
+            ssrGraph.AddPass("HiZ" + std::to_string(l), {
+                {l == 0 ? gSsrDepth : gHiZ[l - 1], RHI::RHIResourceLayout::ShaderResource},
+                {gHiZ[l], RHI::RHIResourceLayout::ShaderResourceStorage, RenderGraph::Access::Write}});
+        }
+        for (uint32_t l = 0; l < SSRRaymarchContract::ColorPyramidLevels; ++l) {
+            ssrGraph.AddPass("SSRColor" + std::to_string(l), {
+                {l == 0 ? gInput : gSSRColor[l - 1], RHI::RHIResourceLayout::ShaderResource},
+                {gSSRColor[l], RHI::RHIResourceLayout::ShaderResourceStorage, RenderGraph::Access::Write}});
+        }
+        std::vector<RenderGraph::Use> compUses = {
+            {gSsrDepth, RHI::RHIResourceLayout::ShaderResource},
+            {gNormal, RHI::RHIResourceLayout::ShaderResource},
+            {gInput, RHI::RHIResourceLayout::ShaderResource},
+            {gStorage, RHI::RHIResourceLayout::ShaderResourceStorage, RenderGraph::Access::Write}};
+        for (uint32_t l = 0; l < 8u; ++l) compUses.push_back({gHiZ[l], RHI::RHIResourceLayout::ShaderResource});
+        ssrGraph.AddPass("SSRCompute", std::move(compUses));
+        std::vector<RenderGraph::Use> applyUses = {
+            {gEnv, RHI::RHIResourceLayout::ShaderResource},
+            {gResp, RHI::RHIResourceLayout::ShaderResource},
+            {gSsrDepth, RHI::RHIResourceLayout::ShaderResource},
+            {gStorage, RHI::RHIResourceLayout::ShaderResource},
+            {gInput, RHI::RHIResourceLayout::ShaderResource},
+            {gColor, RHI::RHIResourceLayout::ColorAttachment, RenderGraph::Access::Write, RenderGraph::Load::Clear}};
+        for (uint32_t l = 0; l < SSRRaymarchContract::ColorPyramidLevels; ++l) {
+            applyUses.push_back({gSSRColor[l], RHI::RHIResourceLayout::ShaderResource});
+        }
+        ssrGraph.AddPass("SSRApply", std::move(applyUses));
+        RENDER_CHECK(ssrGraph.Compile(false, false),
+            "M15-U5-34.2 / 35.4: Full Hi-Z + SSRColor0..3 + SSRApply RenderGraph compiles with clean barriers");
+
+        RenderGraph missingColorGraph;
+        const auto missingColor = missingColorGraph.Import("SSRColor0", nullptr, false);
+        const auto badOut = missingColorGraph.Import("SceneColor", nullptr, true);
+        missingColorGraph.AddPass("SSRApply", {
+            {missingColor, RHI::RHIResourceLayout::ShaderResource},
+            {badOut, RHI::RHIResourceLayout::ColorAttachment, RenderGraph::Access::Write, RenderGraph::Load::Clear}});
+        RENDER_CHECK(!missingColorGraph.Compile(false, false) && !missingColorGraph.GetError().empty(),
+            "M15-U5-35.4: RenderGraph rejects SSRApply reading unwritten SSRColor0 pyramid");
+    }
+
+    std::cout << "[M15HiZ] All M15-U5-A & M15-U5-F Hi-Z/SSR contract tests passed.\n";
     return true;
 }

@@ -50,7 +50,23 @@ struct ReflectionSurfaceOutput {
 ReflectionSurfaceOutput MakeReflectionSurfaceOutput(float4 color, float3 environment, float3 response) {
     ReflectionSurfaceOutput result;
     result.Color = color;
-    result.Environment = float4(clamp(environment, 0.0, 65000.0), 1.0);
+    result.Environment = float4(clamp(environment, 0.0, 65000.0), 0.04);
+    result.Response = float4(clamp(response, 0.0, 65000.0), 1.0);
+    return result;
+}
+
+ReflectionSurfaceOutput MakeMaterialReflectionSurfaceOutput(
+    float4 color,
+    float3 environment,
+    float3 response,
+    float roughness,
+    float reflectionEnabled) {
+    ReflectionSurfaceOutput result;
+    result.Color = color;
+    float packedRoughness = clamp(roughness, 0.04, 1.0);
+    result.Environment = float4(
+        clamp(environment, 0.0, 65000.0),
+        reflectionEnabled > 0.001 ? packedRoughness : -packedRoughness);
     result.Response = float4(clamp(response, 0.0, 65000.0), 1.0);
     return result;
 }

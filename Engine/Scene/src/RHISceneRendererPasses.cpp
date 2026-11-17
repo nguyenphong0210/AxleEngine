@@ -9,6 +9,7 @@
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/SceneLighting.hpp>
+#include <Axle/RenderContracts.hpp>
 #include <Axle/ShaderSurface.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/RHIPhysicsDebugRenderer.hpp>
@@ -118,11 +119,21 @@ namespace Axle {
 
         const uint32_t hiZLevelCount = viewTargets->GetHiZLevelCount();
         bool useSSR = settings.EnableSSR && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
-            m_SSRComputePipeline && m_HiZPipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
+            m_SSRComputePipeline && m_SSRDownsamplePipeline && m_HiZPipeline &&
+            m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
             m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
             m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr &&
             hiZLevelCount >= RHIViewTargets::MinSSRHiZLevels &&
             viewTargets->Get(RHIViewTarget::ReflectionEnvironment) && viewTargets->Get(RHIViewTarget::ReflectionResponse);
+        if (useSSR) {
+            for (uint32_t level = 0; level < SSRRaymarchContract::ColorPyramidLevels; ++level) {
+                auto* ssrColor = viewTargets->GetSSRColor(level);
+                if (!ssrColor || !ssrColor->IsValid()) {
+                    useSSR = false;
+                    break;
+                }
+            }
+        }
         const bool useHiZVisual = settings.HiZVisualizationLevel >= 0 && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_HiZPipeline &&
             (sceneTargetFormat == nri::Format::RGBA16_SFLOAT ? m_HiZVisualizePipelineHDR != nullptr : m_HiZVisualizePipelineSDR != nullptr) &&
@@ -144,6 +155,15 @@ namespace Axle {
         const auto ssrStorage = useSSR ? graph.Import("SSRStorage", m_ScreenStorageTarget->GetNative()) : output;
         const auto reflectionEnvironment = useSSR ? graph.Import("ReflectionEnvironment", viewTargets->Get(RHIViewTarget::ReflectionEnvironment)->GetNative()) : output;
         const auto reflectionResponse = useSSR ? graph.Import("ReflectionResponse", viewTargets->Get(RHIViewTarget::ReflectionResponse)->GetNative()) : output;
+        std::vector<Graph::Resource> ssrColorResources;
+        if (useSSR) {
+            ssrColorResources.reserve(SSRRaymarchContract::ColorPyramidLevels);
+            for (uint32_t level = 0; level < SSRRaymarchContract::ColorPyramidLevels; ++level) {
+                auto* ssrColor = viewTargets->GetSSRColor(level);
+                if (!ssrColor || !ssrColor->IsValid()) { return false; }
+                ssrColorResources.push_back(graph.Import("SSRColor" + std::to_string(level), ssrColor->GetNative()));
+            }
+        }
         std::vector<Graph::Resource> hizResources;
         if (needHiZ) {
             hizResources.reserve(hiZLevelCount);
@@ -955,6 +975,8 @@ namespace Axle {
                     opaqueAttachments[i].loadOp = nri::LoadOp::CLEAR;
                     opaqueAttachments[i].storeOp = nri::StoreOp::STORE;
                 }
+                opaqueAttachments[1].clearValue.color.f = {0.0f, 0.0f, 0.0f, -1.0f};
+                opaqueAttachments[2].clearValue.color.f = {0.0f, 0.0f, 0.0f, 1.0f};
                 opaqueRendering.colors = opaqueAttachments;
                 opaqueRendering.colorNum = 3;
             }
@@ -1217,7 +1239,8 @@ namespace Axle {
         }, [&](RenderGraph& graph) {
             if (useSSR) {
                 Passes::ScreenSpaceReflectionPass::Declare(graph, {sceneColor, ssrInput, sceneDepth,
-                    ssrDepth, sceneNormal, ssrStorage, hizResources, reflectionEnvironment, reflectionResponse});
+                    ssrDepth, sceneNormal, ssrStorage, hizResources, ssrColorResources,
+                    reflectionEnvironment, reflectionResponse});
             } else if (useHiZVisual) {
                 graph.AddPass("HiZCopy", {
                     {sceneDepth, Layout::CopySource}, {ssrDepth, Layout::CopyDest, Access::Write}});
@@ -1230,6 +1253,7 @@ namespace Axle {
             if (useSSR) {
                 if (!uniform("SSRCompute",sizeof(RHISSRConstants)) || !uniform("SSRApply",sizeof(RHISSRConstants))) return fail();
                 for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
+                for (uint32_t i=0; i<ssrColorResources.size(); ++i) if (!uniform("SSRColor"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
             } else if (useHiZVisual) {
                 for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
             }

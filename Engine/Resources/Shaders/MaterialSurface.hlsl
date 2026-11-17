@@ -302,8 +302,7 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float3 probeSpec = probeBlend.ProbeColor * (ambientRef * envBRDF.x + envBRDF.y);
         float3 skySpec = ambientRef * 0.02 * (1.0 - saturate(u_LightReserved[0].z)) * ambientStrength;
         ambient = (base * 0.03 * (1.0 - metallic) * ambientStrength + lerp(skySpec, probeSpec, probeBlend.ProbeCoverage)) * saturate(surface.AO);
-        reflectionResponse = lerp(ambientRef * 0.02 * (1.0 - saturate(u_LightReserved[0].z)),
-            ambientRef * envBRDF.x + envBRDF.y, probeBlend.ProbeCoverage) * saturate(surface.AO) * screenVisibility.x;
+        reflectionResponse = (ambientRef * envBRDF.x + envBRDF.y) * saturate(surface.AO) * screenVisibility.x;
         reflectionEnvironment = lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * saturate(surface.AO) * screenVisibility.x;
     }
     float3 color = direct + ambient * screenVisibility.x + max(surface.Emission, float3(0,0,0));
@@ -323,7 +322,7 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         color = saturate((color * (a * color + b)) / (color * (c * color + d) + e));
         color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
     }
-    return MakeReflectionSurfaceOutput(float4(color, 1.0), reflectionEnvironment, reflectionResponse);
+    return MakeMaterialReflectionSurfaceOutput(float4(color, 1.0), reflectionEnvironment, reflectionResponse, roughness, 1.0);
 }
 
 float4 PSMain(PSInput input) : SV_Target0 { return EvaluateReflectionSurface(input).Color; }

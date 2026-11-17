@@ -1632,4 +1632,285 @@ namespace Axle {
         }
     } // namespace ReflectionCaptureContract
 
+    namespace SSRRaymarchContract {
+        glm::vec3 ProjectViewToUVZ(const glm::vec3& viewPos, const glm::mat4& projZO) {
+            const glm::vec4 clip = projZO * glm::vec4(viewPos, 1.0f);
+            const float invW = 1.0f / std::max(std::abs(clip.w), 1e-6f);
+            const glm::vec3 ndc = glm::vec3(clip) * invW;
+            return glm::vec3(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f, ndc.z);
+        }
+
+        glm::vec3 ReconstructViewPos(const glm::vec2& uv, float depth, const glm::mat4& invProjZO) {
+            const glm::vec4 clip(uv.x * 2.0f - 1.0f, (1.0f - uv.y) * 2.0f - 1.0f, depth, 1.0f);
+            const glm::vec4 viewPos = invProjZO * clip;
+            const float invW = 1.0f / std::max(std::abs(viewPos.w), 1e-6f);
+            return glm::vec3(viewPos) * invW;
+        }
+
+        glm::uvec2 ComputeHiZMipSize(uint32_t baseWidth, uint32_t baseHeight, uint32_t mip) {
+            return glm::uvec2(
+                std::max(1u, baseWidth >> std::min(mip, 15u)),
+                std::max(1u, baseHeight >> std::min(mip, 15u)));
+        }
+
+        bool ClipScreenRay(const glm::vec3& startUVZ, const glm::vec3& endUVZ, float* outTMax) {
+            if (!outTMax) return false;
+            float tMin = 0.0f;
+            float tMax = 1.0f;
+            const glm::vec3 d = endUVZ - startUVZ;
+            const float eps = 1e-7f;
+            const float mins[3]{0.0f, 0.0f, 0.0f};
+            const float maxs[3]{1.0f, 1.0f, 0.9999f};
+            for (int c = 0; c < 3; ++c) {
+                if (std::abs(d[c]) < eps) {
+                    if (startUVZ[c] < mins[c] || startUVZ[c] > maxs[c]) {
+                        *outTMax = 0.0f;
+                        return false;
+                    }
+                } else {
+                    float t0 = (mins[c] - startUVZ[c]) / d[c];
+                    float t1 = (maxs[c] - startUVZ[c]) / d[c];
+                    if (t0 > t1) std::swap(t0, t1);
+                    tMin = std::max(tMin, t0);
+                    tMax = std::min(tMax, t1);
+                    if (tMin > tMax) {
+                        *outTMax = 0.0f;
+                        return false;
+                    }
+                }
+            }
+            *outTMax = std::clamp(tMax, 0.0f, 1.0f);
+            return *outTMax > 1e-5f;
+        }
+
+        RaySetup BuildInitialSSRRay(
+            const glm::vec2& uv,
+            float depth,
+            const glm::vec3& viewNormal,
+            const glm::mat4& projZO,
+            const glm::mat4& invProjZO,
+            uint32_t width,
+            uint32_t height,
+            uint32_t usefulHiZLevels,
+            float maxDistance) {
+            RaySetup setup{};
+            if (width == 0 || height == 0 || depth <= 0.0f || depth >= 0.9999f || maxDistance <= 0.0f) {
+                return setup;
+            }
+            const glm::vec3 originView = ReconstructViewPos(uv, depth, invProjZO);
+            const float normLen = glm::length(viewNormal);
+            const float originLen = glm::length(originView);
+            if (normLen < 1e-5f || originLen < 1e-5f) {
+                return setup;
+            }
+            const glm::vec3 n = viewNormal / normLen;
+            const glm::vec3 vDir = originView / originLen;
+            const glm::vec3 reflDir = glm::normalize(glm::reflect(vDir, n));
+
+            const float rcpW = 1.0f / static_cast<float>(width);
+            const float rcpH = 1.0f / static_cast<float>(height);
+            const float texelWorldSize = std::abs(originView.z) * std::max(
+                rcpW / std::max(std::abs(projZO[0][0]), 1e-4f),
+                rcpH / std::max(std::abs(projZO[1][1]), 1e-4f));
+            const glm::vec3 startView = originView + n * std::max(0.01f, texelWorldSize * 1.5f);
+
+            const float nearViewZ = std::abs(ReconstructViewPos(glm::vec2(0.5f, 0.5f), 0.0f, invProjZO).z);
+            const float safeNear = std::max(nearViewZ * 1.25f, 0.05f);
+            if (startView.z >= -safeNear) {
+                return setup;
+            }
+
+            float traceDist = std::max(maxDistance, 1.0f);
+            if (reflDir.z > 1e-5f) {
+                traceDist = std::min(traceDist, (-safeNear - startView.z) / reflDir.z);
+            }
+            if (traceDist <= 0.02f) {
+                return setup;
+            }
+
+            const glm::vec3 fullEndView = startView + reflDir * traceDist;
+            const glm::vec3 rawStartUVZ = ProjectViewToUVZ(startView, projZO);
+            const glm::vec3 rawEndUVZ = ProjectViewToUVZ(fullEndView, projZO);
+            float tMaxClip = 1.0f;
+            if (!ClipScreenRay(rawStartUVZ, rawEndUVZ, &tMaxClip)) {
+                return setup;
+            }
+
+            setup.StartView = startView;
+            setup.StartUVZ = rawStartUVZ;
+            setup.EndView = startView + reflDir * (traceDist * tMaxClip);
+            setup.EndUVZ = glm::mix(rawStartUVZ, rawEndUVZ, tMaxClip);
+            setup.MaxTraceDist = traceDist;
+            setup.StartMip = 0u;
+            setup.MaxUsefulMip = usefulHiZLevels > 0u ? std::min(usefulHiZLevels - 1u, 7u) : 0u;
+            setup.Valid = true;
+            return setup;
+        }
+
+        HiZTraceResult TraceHiZDepthBuffer(
+            const std::vector<std::vector<float>>& hiZPyramid,
+            uint32_t width,
+            uint32_t height,
+            const RaySetup& ray,
+            const glm::mat4& projZO,
+            const glm::mat4& invProjZO,
+            float thickness,
+            uint32_t maxSteps,
+            float ssrStrength) {
+            (void)projZO;
+            HiZTraceResult out{};
+            if (!ray.Valid || hiZPyramid.empty() || width == 0 || height == 0 || maxSteps == 0) {
+                return out;
+            }
+            const uint32_t maxAvailMip = std::min(
+                ray.MaxUsefulMip,
+                static_cast<uint32_t>(hiZPyramid.size() - 1u));
+            const glm::vec3 dirUVZ = ray.EndUVZ - ray.StartUVZ;
+            const float pxLen = std::max(
+                1.0f,
+                glm::length(glm::vec2(dirUVZ.x * static_cast<float>(width), dirUVZ.y * static_cast<float>(height))));
+            const float minOriginT = std::min(0.5f, 1.25f / pxLen);
+            float tCurr = minOriginT;
+            uint32_t mip = std::min(ray.StartMip, maxAvailMip);
+            const float safeThickness = std::max(thickness, 0.05f);
+
+            const auto sampleLevel = [&](uint32_t level, const glm::uvec2& cell) -> float {
+                const glm::uvec2 dims = ComputeHiZMipSize(width, height, level);
+                if (hiZPyramid[level].size() != size_t(dims.x) * dims.y) return 1.0f;
+                const uint32_t cx = std::min(cell.x, dims.x - 1u);
+                const uint32_t cy = std::min(cell.y, dims.y - 1u);
+                return hiZPyramid[level][size_t(cy) * dims.x + cx];
+            };
+
+            for (uint32_t step = 0; step < maxSteps && tCurr < 1.0f; ++step) {
+                ++out.StepsExecuted;
+                out.HighestMipReached = std::max(out.HighestMipReached, mip);
+
+                const glm::vec3 pCurr = ray.StartUVZ + dirUVZ * tCurr;
+                if (pCurr.x < 0.0f || pCurr.x > 1.0f || pCurr.y < 0.0f || pCurr.y > 1.0f || pCurr.z >= 0.9999f) {
+                    break;
+                }
+
+                const glm::uvec2 dims = ComputeHiZMipSize(width, height, mip);
+                const glm::vec2 cellF(
+                    std::clamp(pCurr.x * static_cast<float>(dims.x), 0.0f, static_cast<float>(dims.x) - 1e-4f),
+                    std::clamp(pCurr.y * static_cast<float>(dims.y), 0.0f, static_cast<float>(dims.y) - 1e-4f));
+                const glm::uvec2 cellIdx(static_cast<uint32_t>(std::floor(cellF.x)), static_cast<uint32_t>(std::floor(cellF.y)));
+
+                const float edgeX = (static_cast<float>(cellIdx.x) + (dirUVZ.x >= 0.0f ? 1.0f : 0.0f)) / static_cast<float>(dims.x) +
+                                    (dirUVZ.x >= 0.0f ? 1e-4f : -1e-4f) / static_cast<float>(width);
+                const float edgeY = (static_cast<float>(cellIdx.y) + (dirUVZ.y >= 0.0f ? 1.0f : 0.0f)) / static_cast<float>(dims.y) +
+                                    (dirUVZ.y >= 0.0f ? 1e-4f : -1e-4f) / static_cast<float>(height);
+                const float tx = std::abs(dirUVZ.x) > 1e-7f ? (edgeX - ray.StartUVZ.x) / dirUVZ.x : 1.0f;
+                const float ty = std::abs(dirUVZ.y) > 1e-7f ? (edgeY - ray.StartUVZ.y) / dirUVZ.y : 1.0f;
+                const float tNextCell = std::clamp(std::max(tCurr + 1e-5f, std::min(tx, ty)), tCurr, 1.0f);
+
+                const float zEnter = ray.StartUVZ.z + dirUVZ.z * tCurr;
+                const float zExit = ray.StartUVZ.z + dirUVZ.z * tNextCell;
+                const float rayZMin = std::min(zEnter, zExit);
+                const float rayZMax = std::max(zEnter, zExit);
+                const float cellMinZ = sampleLevel(mip, cellIdx);
+
+                if (rayZMax < cellMinZ || cellMinZ >= 0.9999f) {
+                    tCurr = tNextCell;
+                    mip = std::min(mip + 1u, maxAvailMip);
+                    continue;
+                }
+
+                if (mip > 0u) {
+                    if (zEnter < cellMinZ && dirUVZ.z > 1e-7f) {
+                        const float tPlane = (cellMinZ - ray.StartUVZ.z) / dirUVZ.z;
+                        tCurr = std::clamp(tPlane, tCurr, tNextCell);
+                    }
+                    --mip;
+                    continue;
+                }
+
+                // Mip 0: check view-space penetration thickness & binary refine crossing
+                const glm::vec2 centerUV = (glm::vec2(cellIdx) + 0.5f) / glm::vec2(dims);
+                const glm::vec3 sceneView = ReconstructViewPos(centerUV, cellMinZ, invProjZO);
+                const glm::vec3 rayEnterView = ReconstructViewPos(glm::vec2(pCurr.x, pCurr.y), zEnter, invProjZO);
+                const glm::vec3 rayExitUVZ = ray.StartUVZ + dirUVZ * tNextCell;
+                const glm::vec3 rayExitView = ReconstructViewPos(glm::vec2(rayExitUVZ.x, rayExitUVZ.y), zExit, invProjZO);
+                const float penEnter = sceneView.z - rayEnterView.z;
+                const float penExit = sceneView.z - rayExitView.z;
+                const bool crosses = (rayZMin <= cellMinZ && rayZMax >= cellMinZ);
+                const bool withinBehind = (std::min(penEnter, penExit) <= safeThickness && std::max(penEnter, penExit) > -1e-4f);
+
+                if (crosses || withinBehind) {
+                    float tLo = tCurr;
+                    float tHi = tNextCell;
+                    for (int b = 0; b < 4; ++b) {
+                        const float tMid = 0.5f * (tLo + tHi);
+                        const glm::vec3 pMid = ray.StartUVZ + dirUVZ * tMid;
+                        const glm::uvec2 mCell(
+                            static_cast<uint32_t>(std::clamp(pMid.x * static_cast<float>(width), 0.0f, static_cast<float>(width) - 1e-4f)),
+                            static_cast<uint32_t>(std::clamp(pMid.y * static_cast<float>(height), 0.0f, static_cast<float>(height) - 1e-4f)));
+                        const float dMid = sampleLevel(0u, mCell);
+                        if (pMid.z >= dMid) tHi = tMid; else tLo = tMid;
+                    }
+                    const glm::vec3 pFinal = ray.StartUVZ + dirUVZ * tHi;
+                    const glm::uvec2 fCell(
+                        static_cast<uint32_t>(std::clamp(pFinal.x * static_cast<float>(width), 0.0f, static_cast<float>(width) - 1e-4f)),
+                        static_cast<uint32_t>(std::clamp(pFinal.y * static_cast<float>(height), 0.0f, static_cast<float>(height) - 1e-4f)));
+                    const float finalSceneZ = sampleLevel(0u, fCell);
+                    if (finalSceneZ < 0.9999f) {
+                        const glm::vec3 finalSceneView = ReconstructViewPos(glm::vec2(pFinal.x, pFinal.y), finalSceneZ, invProjZO);
+                        const glm::vec3 finalRayView = ReconstructViewPos(glm::vec2(pFinal.x, pFinal.y), pFinal.z, invProjZO);
+                        const float finalPen = finalSceneView.z - finalRayView.z;
+                        if (finalPen <= safeThickness && finalPen >= -0.05f) {
+                            const auto smooth = [](float edge0, float edge1, float x) {
+                                const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+                                return t * t * (3.0f - 2.0f * t);
+                            };
+                            const float fadeX = smooth(0.0f, 0.12f, pFinal.x) * (1.0f - smooth(0.88f, 1.0f, pFinal.x));
+                            const float fadeY = smooth(0.0f, 0.12f, pFinal.y) * (1.0f - smooth(0.88f, 1.0f, pFinal.y));
+                            const float screenFade = std::clamp(fadeX * fadeY, 0.0f, 1.0f);
+                            const float stepFade = std::clamp(1.0f - static_cast<float>(step) / static_cast<float>(maxSteps), 0.0f, 1.0f);
+                            out.Hit = true;
+                            out.HitUV = glm::vec2(pFinal.x, pFinal.y);
+                            out.HitDepth = finalSceneZ;
+                            out.HitDistance = glm::length(finalSceneView - ray.StartView);
+                            out.Confidence = std::clamp(screenFade * stepFade * std::clamp(ssrStrength, 0.0f, 1.0f), 0.0f, 1.0f);
+                            return out;
+                        }
+                    }
+                }
+
+                tCurr = tNextCell;
+                mip = 0u;
+            }
+
+            return out;
+        }
+
+        float EvaluateRoughnessFade(float roughness) {
+            const float r = std::clamp(roughness, 0.04f, 1.0f);
+            const float t = std::clamp((r - 0.65f) / (0.98f - 0.65f), 0.0f, 1.0f);
+            return 1.0f - t * t * (3.0f - 2.0f * t);
+        }
+
+        float ComputeRoughnessConePixelRadius(
+            float roughness,
+            float hitDistanceMeters,
+            float hitViewZ,
+            const glm::mat4& projZO,
+            uint32_t width,
+            uint32_t height) {
+            const float r = std::clamp(roughness, 0.04f, 1.0f);
+            const float coneTan = std::clamp(r * r * 0.75f, 0.0f, 0.75f);
+            const float worldRadius = coneTan * std::max(hitDistanceMeters, 0.0f);
+            const float projScale = 0.5f * std::max(
+                std::abs(projZO[0][0]) * static_cast<float>(width),
+                std::abs(projZO[1][1]) * static_cast<float>(height));
+            return std::clamp(projScale * worldRadius / std::max(std::abs(hitViewZ), 0.1f), 0.0f, MaxConeRadiusPixels);
+        }
+
+        glm::vec3 ComputeSpecularF0(const glm::vec3& baseColor, float metallic) {
+            const float m = std::clamp(metallic, 0.0f, 1.0f);
+            const glm::vec3 safeBase = glm::max(baseColor, glm::vec3(0.0f));
+            return glm::mix(glm::vec3(0.04f), safeBase, m);
+        }
+    } // namespace SSRRaymarchContract
+
 } // namespace Axle

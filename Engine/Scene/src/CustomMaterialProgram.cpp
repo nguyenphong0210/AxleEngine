@@ -1,5 +1,6 @@
 #include <Axle/CustomMaterialProgram.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Path.hpp>
 #include <fstream>
@@ -30,7 +31,7 @@ namespace Axle {
 
         gfxDesc.DepthStencil.DepthTestEnable = true;
         gfxDesc.DepthStencil.DepthWriteEnable = depthWrite;
-        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS;
+        gfxDesc.DepthStencil.DepthCompareOp = normalPass && !depthWrite ? nri::CompareOp::EQUAL : nri::CompareOp::LESS;
         gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
 
         if (surfaceType == Axle::SurfaceType::Transparent) {
@@ -263,7 +264,19 @@ namespace Axle {
             return result;
         }
 
-        auto mergedReflection = RHI::RHIShaderReflection::Merge({ vsResult.Reflection, psResult.Reflection });
+        RHI::RHIShaderCompileResult normalResult;
+        const bool hasNormalPass = std::regex_search(vsDesc.Source, std::regex(R"(\bPSNormalMain\s*\()"));
+        if (hasNormalPass) {
+            auto normalDesc = psDesc;
+            normalDesc.EntryPoint = "PSNormalMain";
+            normalResult = compiler.Compile(normalDesc);
+            if (!normalResult.Success) {
+                result.Diagnostic = "Normal companion compilation failed: " + normalResult.ErrorMessage;
+                return result;
+            }
+        }
+        auto mergedReflection = hasNormalPass ? RHI::RHIShaderReflection::Merge({vsResult.Reflection, psResult.Reflection, normalResult.Reflection}) :
+                                               RHI::RHIShaderReflection::Merge({vsResult.Reflection, psResult.Reflection});
         auto validation=CustomShaderInterface::Validate(mergedReflection);
         std::string collision;
         if (!validation.IsValid || CustomShaderInterface::HasVulkanBindingCollision(mergedReflection,collision)) {
@@ -274,8 +287,11 @@ namespace Axle {
 
         std::string annotatedSource=source;
         for(const auto& dependency:result.Dependencies)annotatedSource+="\n"+FileSystem::ReadTextFile(dependency);
-        auto properties = ShaderPropertyParser::ParseFromHLSL(annotatedSource+"\n"+vsDesc.Source, &mergedReflection);
-        auto planResult = BuildMaterialBindingPlan(mergedReflection, iface, properties);
+        auto editableReflection = mergedReflection;
+        if (!ValidateMaterialSurfaceEngineBuffers(mergedReflection, result.Diagnostic)) return result;
+        StripMaterialSurfaceEngineBindings(editableReflection);
+        auto properties = ShaderPropertyParser::ParseFromHLSL(annotatedSource+"\n"+vsDesc.Source, &editableReflection);
+        auto planResult = BuildMaterialBindingPlan(editableReflection, iface, properties);
         if (std::holds_alternative<MaterialBindingError>(planResult)) {
             const auto& err = std::get<MaterialBindingError>(planResult);
             result.Success = false;
@@ -286,6 +302,8 @@ namespace Axle {
         auto generation = std::make_shared<CustomReadyGeneration>();
         generation->VSBytecode = vsResult.Bytecode;
         generation->PSBytecode = psResult.Bytecode;
+        if (hasNormalPass) generation->NormalPSBytecode = normalResult.Bytecode;
+        generation->HasNormalPass = hasNormalPass;
         generation->Reflection = mergedReflection;
         generation->BindingPlan = std::get<MaterialBindingPlan>(planResult);
 
@@ -305,6 +323,11 @@ namespace Axle {
 
         if (!CreateCustomMaterialPipeline(*generation,nri::Format::RGBA8_UNORM,nri::Format::D32_SFLOAT,1,SurfaceType::Opaque,CullMode::None,true)) {
             result.Diagnostic="Custom material pipeline validation failed.";return result;
+        }
+        if (hasNormalPass &&
+            (!CreateCustomMaterialPipeline(*generation,nri::Format::RGBA16_SFLOAT,nri::Format::D32_SFLOAT,1,SurfaceType::Opaque,CullMode::None,true,true) ||
+             !CreateCustomMaterialPipeline(*generation,nri::Format::RGBA16_SFLOAT,nri::Format::D32_SFLOAT,1,SurfaceType::Opaque,CullMode::None,false,true))) {
+            result.Diagnostic="Custom material normal pipeline validation failed.";return result;
         }
         result.Success = true;
         result.Generation = generation;

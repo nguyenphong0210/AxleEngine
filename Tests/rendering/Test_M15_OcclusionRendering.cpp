@@ -2,7 +2,10 @@
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHI/RHIDescriptorPool.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
+#include <Axle/RHI/RHIVertexLayout.hpp>
 #include <Axle/SceneRenderSettings.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
+#include <Axle/RenderContracts.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/packing.hpp>
 #include <algorithm>
@@ -22,7 +25,7 @@ bool Upload(RHITexture& texture, const void* pixels, uint32_t pixelSize) {
     sub.slicePitch = sub.rowPitch * texture.GetHeight();
     nri::TextureUploadDesc upload{};
     upload.texture = texture.GetNative(); upload.subresources = &sub;
-    upload.planes = nri::PlaneBits::COLOR;
+    upload.planes = texture.GetFormat() == RHITextureFormat::D32_FLOAT ? nri::PlaneBits::DEPTH : nri::PlaneBits::COLOR;
     upload.after = {nri::AccessBits::SHADER_RESOURCE, nri::Layout::SHADER_RESOURCE, nri::StageBits::ALL};
     return RHIDevice::Get().UploadData(&upload, 1, nullptr, 0) == nri::Result::SUCCESS;
 }
@@ -50,9 +53,9 @@ bool Read(RHITexture& texture, std::vector<glm::vec4>& pixels) {
         if (!half) {
             std::memcpy(pixels.data() + size_t(y) * texture.GetWidth(), data + size_t(y) * layout.rowPitch, texture.GetWidth() * 16);
         } else for (uint32_t x = 0; x < texture.GetWidth(); ++x) {
-            uint32_t packed = 0;
-            std::memcpy(&packed, data + size_t(y) * layout.rowPitch + size_t(x) * 8, 4);
-            pixels[size_t(y) * texture.GetWidth() + x] = glm::vec4(glm::unpackHalf2x16(packed), 0, 1);
+            uint32_t packed[2]{};
+            std::memcpy(packed, data + size_t(y) * layout.rowPitch + size_t(x) * 8, 8);
+            pixels[size_t(y) * texture.GetWidth() + x] = glm::vec4(glm::unpackHalf2x16(packed[0]), glm::unpackHalf2x16(packed[1]));
         }
     }
     readback.Unmap();
@@ -227,5 +230,241 @@ bool RunM15OcclusionRenderingTests(const std::filesystem::path& output) {
         RENDER_CHECK(maxError < 2e-5f, "production bilateral reconstruction preserves each surface and neutral unmatched fallback");
     }
     std::cout << "PASS M15-U4-C production GTAO reconstruction: edge isolation, reversed visibility, thin fallback, odd and minimal extents\n";
+    return true;
+}
+
+// Bind deterministic visibility/depth to the actual production ForwardPBR PSO.
+// Isolated radiance terms prove invariance even when GTAO happens to estimate a
+// neutral surface in an ordinary environment fixture.
+bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
+    constexpr uint32_t size = 8;
+    RHIVertex3D vertices[3];
+    vertices[0].Position = {-1, -1, 0.5f}; vertices[1].Position = {3, -1, 0.5f}; vertices[2].Position = {-1, 3, 0.5f};
+    for (auto& vertex : vertices) vertex.Normal = {0, 0, 1};
+    RHIBuffer vertexBuffer, sceneBuffer, materialBuffer, cascadeBuffer;
+    RENDER_CHECK(vertexBuffer.Init(RHIBufferDesc::Vertex(sizeof(vertices), RHIMemoryLocation::HostUpload)) &&
+        vertexBuffer.UpdateData(vertices, sizeof(vertices)), "forward invariance vertex buffer");
+    RENDER_CHECK(sceneBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISceneConstants), RHIMemoryLocation::HostUpload)) &&
+        materialBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIMaterialConstants), RHIMemoryLocation::HostUpload)) &&
+        cascadeBuffer.Init(RHIBufferDesc::Constant(sizeof(RHICascadeConstants), RHIMemoryLocation::HostUpload)), "forward invariance buffers");
+    std::ofstream evidence(output / "M15_U4AB_forward.txt");
+    RENDER_CHECK(evidence.is_open(), "forward invariance evidence");
+    enum class Term { Sun, Specular, Ambient, Emissive, Local, Spot, SunAndLocal };
+    // Compile the canonical graph surface template too. These are genuine graph
+    // VS/PS bytecodes with reflected descriptors, not a built-in fallback.
+    RHIShaderCompileDesc graphCompile;
+    graphCompile.Format = RHIDevice::Get().GetBackend() == RHIType::Vulkan ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+    graphCompile.SourcePath = "occlusion_graph_fixture.hlsl";
+    graphCompile.Source = AssembleMaterialSurfaceShader(
+        "cbuffer TestMaterial : register(b2,space0) { float4 testBase; float4 testEmission; float4 testParams; };",
+        "MaterialSurface AxleEvaluateMaterial(float2 uv) { MaterialSurface s = (MaterialSurface)0; "
+        "s.BaseColor=testBase.rgb; s.Emission=testEmission.rgb*testEmission.w; "
+        "s.Roughness=testParams.z; s.Metallic=testParams.w; s.Normal=float3(0,0,1); s.AO=1; s.IOR=1.5; s.ClearcoatRoughness=.04; return s; }");
+    graphCompile.EntryPoint = "VSMain"; graphCompile.Stage = RHIShaderStage::Vertex;
+    const auto graphVS = RHIShaderCompiler::Get().Compile(graphCompile);
+    graphCompile.EntryPoint = "PSMain"; graphCompile.Stage = RHIShaderStage::Fragment;
+    const auto graphPS = RHIShaderCompiler::Get().Compile(graphCompile);
+    RENDER_CHECK(graphVS.Success && graphPS.Success, "canonical graph radiance shader compilation");
+    const auto graphReflection = RHIShaderReflection::Merge({graphVS.Reflection, graphPS.Reflection});
+    const auto graphLayoutDescription = graphReflection.BuildPipelineLayoutDesc(5);
+    RHIPipelineLayout graphLayout;
+    RENDER_CHECK(graphLayout.Init(graphLayoutDescription), "canonical graph radiance layout");
+    RHIGraphicsPipelineDesc graphPipelineDescription;
+    graphPipelineDescription.Layout = &graphLayout;
+    graphPipelineDescription.Shaders = {graphVS.Bytecode, graphPS.Bytecode};
+    graphPipelineDescription.Rasterizer.CullMode = nri::CullMode::NONE;
+    graphPipelineDescription.VertexInput = VertexLayoutContract::GetCanonicalVertexInputDesc();
+    graphPipelineDescription.ColorAttachments = {RHIBlendAttachmentDesc::Opaque()};
+    graphPipelineDescription.ColorAttachmentFormats = {nri::Format::RGBA16_SFLOAT};
+    RHIPipelineCache graphCache;
+    auto* graphPipeline = graphCache.GetOrCreateGraphicsPipeline(graphPipelineDescription);
+    RHISampler graphShadowSampler;
+    RENDER_CHECK(graphPipeline && graphShadowSampler.Init(RHISamplerDesc::ShadowPCF()), "canonical graph radiance pipeline");
+    RHIBuffer graphObjectBuffer, graphSceneBuffer, graphMaterialBuffer;
+    RENDER_CHECK(graphObjectBuffer.Init(RHIBufferDesc::Constant(256, RHIMemoryLocation::HostUpload)) &&
+        graphSceneBuffer.Init(RHIBufferDesc::Constant(256, RHIMemoryLocation::HostUpload)) &&
+        graphMaterialBuffer.Init(RHIBufferDesc::Constant(256, RHIMemoryLocation::HostUpload)), "canonical graph test buffers");
+    bool graphMode = false;
+    auto render = [&](const char* name, Term term, float ao, float contact, std::vector<glm::vec4>& pixels,
+                      bool enableAO = true, bool enableContact = true, int csm = 0, float guideDepth = 0.5f) -> bool {
+        const bool sun = term == Term::Sun || term == Term::Specular || term == Term::SunAndLocal;
+        const bool local = term == Term::Local || term == Term::SunAndLocal;
+        RHISceneConstants scene;
+        scene.CameraPosition = {0, 0, 5, 1}; scene.View = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5));
+        scene.Projection[2][2] = -1.0f;
+        scene.SunDirection = {0, 0, 1, 0};
+        RHIMaterialConstants material;
+        material.Flags.y = 1;
+        RHIObjectPushConstants object;
+        object.ColorPrimary = {0.6f, 0.4f, 0.2f, 1}; object.ColorSecondary = {};
+        object.Params = {1, 3, term == Term::Specular ? 0.2f : 0.5f, term == Term::Specular ? 1.0f : 0.0f};
+        object.MaterialExtra = {};
+        if (term == Term::Emissive) object.ColorSecondary = {0.7f, 0.2f, 0.1f, 2};
+        RHIMultiLightBufferData lights;
+        lights.CameraPosAndExposure = scene.CameraPosition;
+        lights.SunLight.DirectionAndIlluminance = {0, 0, 1, sun ? 30000.0f : 0.0f};
+        lights.SunLight.ColorAndAmbient = {1, 1, 1, 0};
+        lights.SunLight.AmbientColor = {0.25f, 0.3f, 0.4f, 1};
+        lights.ReservedHeader[0] = {1, term == Term::Ambient ? 1.0f : 0.0f, 0, 0};
+        lights.ReservedHeader[1] = {0, enableAO ? 1.0f : 0.0f, enableContact ? 1.0f : 0.0f, 0};
+        if (local) {
+            lights.LightCounts.x = 1;
+            lights.PointLights[0].PositionAndRadius = {0, 0, 3, 10};
+            lights.PointLights[0].ColorAndIntensity = {1, 0.8f, 0.6f, 30};
+        }
+        if (term == Term::Spot) {
+            lights.LightCounts.y = 1;
+            lights.SpotLights[0].PositionAndRange = {0, 0, 3, 10};
+            lights.SpotLights[0].DirectionAndIntensity = {0, 0, -1, 30};
+            lights.SpotLights[0].ColorAndInnerAngle = {1, 0.8f, 0.6f, 0.98f};
+            lights.SpotLights[0].AngleParams = {0.9f, 1, 0, 0};
+        }
+        RHICascadeConstants cascades;
+        std::vector<float> shadowPixels(size * size, 1.0f);
+        if (csm) {
+            cascades.Matrices[0] = glm::mat4(0); cascades.Matrices[0][3] = {0, 0, 0.5f, 1};
+            cascades.Splits = glm::vec4(100); cascades.Atlas = {1, 1.0f / size, size / 2, 0.1f};
+            cascades.Bias = {0, 0, 0, 1};
+            for (uint32_t y = 0; y < size; ++y) for (uint32_t x = 0; x < size; ++x)
+                shadowPixels[y * size + x] = csm == 2 ? 0.0f : (x < size / 4 ? 0.0f : 1.0f);
+        }
+        RENDER_CHECK(sceneBuffer.UpdateData(&scene, sizeof(scene)) && materialBuffer.UpdateData(&material, sizeof(material)) &&
+            cascadeBuffer.UpdateData(&cascades, sizeof(cascades)) && renderer.GetLightBuffer().Update(lights), "forward invariance constants");
+        RHITexture target, targetDepth, visibility, guide, shadow;
+        RENDER_CHECK(target.Init(RHITextureDesc::RenderTarget2D(size, size, RHITextureFormat::RGBA16_FLOAT)) &&
+            targetDepth.Init(RHITextureDesc::DepthStencil2D(size, size)) && shadow.Init(RHITextureDesc::DepthStencil2D(size, size)), "forward invariance targets");
+        auto description = RHITextureDesc::RenderTarget2D(size / 2, size / 2, RHITextureFormat::RGBA32_FLOAT);
+        description.Usage = RHITextureUsage::ShaderResource;
+        RENDER_CHECK(visibility.Init(description), "forward synthetic visibility");
+        description.Width = description.Height = size; description.Format = RHITextureFormat::R32_FLOAT;
+        RENDER_CHECK(guide.Init(description), "forward synthetic guide");
+        std::vector<glm::vec4> values(size * size / 4, glm::vec4(ao, contact, 0, 0));
+        std::vector<float> depths(size * size, guideDepth);
+        RENDER_CHECK(Upload(visibility, values.data(), 16) && Upload(guide, depths.data(), 4) &&
+            Upload(shadow, shadowPixels.data(), 4), "forward synthetic visibility/depth upload");
+        auto& pool = renderer.GetDescriptorPool();
+        auto* materialSet = pool.AllocateDescriptorSet(renderer.GetPipelineLayout(), 0);
+        auto* visibilitySet = pool.AllocateDescriptorSet(renderer.GetPipelineLayout(), 1);
+        std::vector<nri::Descriptor*> textures = {
+            RHIMaterial::GetDefaultWhiteTexture()->GetSRV(), RHIMaterial::GetDefaultFlatNormalTexture()->GetSRV(),
+            RHIMaterial::GetDefaultRoughnessTexture()->GetSRV(), RHIMaterial::GetDefaultBlackTexture()->GetSRV(),
+            RHIMaterial::GetDefaultWhiteTexture()->GetSRV(), RHIMaterial::GetDefaultBlackTexture()->GetSRV(),
+            RHIMaterial::GetDefaultIrradianceCubemap()->GetSRV(), RHIMaterial::GetDefaultPrefilterCubemap()->GetSRV(),
+            RHIMaterial::GetDefaultBRDFLUT()->GetSRV()};
+        for (uint32_t slot = 6; slot < uint32_t(RHITextureSlot::Count); ++slot)
+            textures.push_back(RHIMaterial::GetFallbackTexture(RHITextureSlot(slot))->GetSRV());
+        textures.insert(textures.end(), {RHIMaterial::GetDefaultBlackTexture()->GetSRV(), RHIMaterial::GetDefaultWhiteTexture()->GetSRV(),
+            shadow.GetSRV(), renderer.GetLocalShadows().GetSRV()});
+        RENDER_CHECK(materialSet && visibilitySet && pool.UpdateTextureRange(materialSet, 0, 0, textures) &&
+            pool.UpdateTextureRange(visibilitySet, 0, 0, {visibility.GetSRV(), guide.GetSRV()}), "forward synthetic descriptors");
+        RHIDescriptorPool graphPool;
+        std::vector<nri::DescriptorSet*> graphSets;
+        if (graphMode) {
+            struct GraphScene { glm::mat4 VP; glm::vec4 Camera, SunDirection, SunColor; glm::mat4 Projection; };
+            const GraphScene graphScene{scene.ViewProjection, scene.CameraPosition, scene.SunDirection, scene.SunColor, scene.Projection};
+            const glm::vec4 parameters[]{object.ColorPrimary, object.ColorSecondary, object.Params};
+            RENDER_CHECK(graphObjectBuffer.UpdateData(&object.Model, sizeof(glm::mat4)) &&
+                graphSceneBuffer.UpdateData(&graphScene, sizeof(graphScene)) &&
+                graphMaterialBuffer.UpdateData(parameters, sizeof(parameters)) && graphPool.Init(), "canonical graph synthetic constants");
+            for (size_t i = 0; i < graphLayoutDescription.DescriptorSets.size(); ++i) {
+                auto* set = graphPool.AllocateDescriptorSet(graphLayout, uint32_t(i));
+                RENDER_CHECK(set, "canonical graph synthetic descriptor allocation");
+                graphSets.push_back(set);
+                const auto& setDescription = graphLayoutDescription.DescriptorSets[i];
+                for (size_t r = 0; r < setDescription.Ranges.size(); ++r) {
+                    const auto& range = setDescription.Ranges[r];
+                    const auto space = setDescription.RegisterSpace, slot = range.baseRegisterIndex;
+                    nri::Descriptor* descriptor = nullptr;
+                    if (range.descriptorType == nri::DescriptorType::CONSTANT_BUFFER) {
+                        if (space == 0 && slot == 0) descriptor = graphObjectBuffer.GetCBV();
+                        else if (space == 0 && slot == 1) descriptor = graphSceneBuffer.GetCBV();
+                        else if (space == 0 && slot == 2) descriptor = graphMaterialBuffer.GetCBV();
+                        else if (space == 0 && slot == 4) descriptor = cascadeBuffer.GetCBV();
+                        else if (space == 0 && slot == 5) descriptor = renderer.GetLocalShadows().GetConstantsCBV();
+                        else if (space == 3 && slot == 0) descriptor = renderer.GetLightBuffer().GetCBV();
+                    } else if (range.descriptorType == nri::DescriptorType::TEXTURE) {
+                        if (space == 2 && slot < 3) descriptor = textures[6 + slot];
+                        else if (space == 2 && slot == 3) descriptor = shadow.GetSRV();
+                        else if (space == 2 && slot == 4) descriptor = renderer.GetLocalShadows().GetSRV();
+                        else if (space == 4 && slot == 0) descriptor = visibility.GetSRV();
+                        else if (space == 4 && slot == 1) descriptor = guide.GetSRV();
+                    } else if (range.descriptorType == nri::DescriptorType::SAMPLER) {
+                        descriptor = slot == 1 ? graphShadowSampler.GetNative() : renderer.GetSampler().GetNative();
+                    }
+                    RENDER_CHECK(descriptor && range.descriptorNum == 1 && graphPool.UpdateTexture(set, uint32_t(r), 0, descriptor), "canonical graph synthetic descriptor binding");
+                }
+            }
+        }
+        RHICommandBuffer commands;
+        RENDER_CHECK(commands.Init() && commands.Begin(), "forward production recording");
+        commands.TransitionTexture(target.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+        commands.TransitionTexture(targetDepth.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::DepthStencilWrite);
+        nri::AttachmentDesc colorAttachment{}, depthAttachment{};
+        colorAttachment.descriptor = target.GetRTV(); colorAttachment.loadOp = nri::LoadOp::CLEAR; colorAttachment.storeOp = nri::StoreOp::STORE;
+        depthAttachment.descriptor = targetDepth.GetDSV(); depthAttachment.loadOp = nri::LoadOp::CLEAR; depthAttachment.storeOp = nri::StoreOp::STORE;
+        depthAttachment.clearValue.depthStencil.depth = 1;
+        nri::RenderingDesc rendering{}; rendering.colors = &colorAttachment; rendering.colorNum = 1; rendering.depth = depthAttachment;
+        commands.BeginRendering(rendering);
+        commands.SetViewport({0, 0, float(size), float(size), 0, 1});
+        commands.SetScissor({0, 0, size, size});
+        if (graphMode) {
+            commands.SetPipeline(graphPipeline); commands.SetPipelineLayout(nri::BindPoint::GRAPHICS, graphLayout);
+            graphPool.Bind(commands.GetNative());
+            for (size_t i = 0; i < graphSets.size(); ++i) commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, uint32_t(i), graphSets[i]);
+        } else {
+            commands.SetPipeline(renderer.GetHDRPipeline()); commands.SetPipelineLayout(nri::BindPoint::GRAPHICS, renderer.GetPipelineLayout());
+            commands.SetRootDescriptor(0, sceneBuffer.GetCBV()); commands.SetRootDescriptor(1, renderer.GetLightBuffer().GetCBV());
+            commands.SetRootDescriptor(2, materialBuffer.GetCBV()); commands.SetRootDescriptor(3, cascadeBuffer.GetCBV());
+            commands.SetRootDescriptor(4, renderer.GetLocalShadows().GetConstantsCBV());
+            pool.Bind(commands.GetNative()); commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, 0, materialSet);
+            commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, 1, visibilitySet);
+            commands.SetRootConstants(0, &object, sizeof(object));
+        }
+        commands.SetVertexBuffer(0, vertexBuffer, 0, sizeof(RHIVertex3D));
+        commands.Draw(3); commands.EndRendering();
+        RENDER_CHECK(commands.End() && commands.Submit() && RHIDevice::Get().WaitIdle() && Read(target, pixels), "production forward radiance readback");
+        const auto center = pixels[size * size / 2 + size / 2];
+        evidence << (graphMode ? "graph " : "builtin ") << name << " center=" << center.x << ',' << center.y << ',' << center.z << '\n';
+        for (const auto pixel : pixels)
+            RENDER_CHECK(std::isfinite(pixel.x) && std::isfinite(pixel.y) && std::isfinite(pixel.z), "finite production forward radiance");
+        return true;
+    };
+    auto equal = [&](const std::vector<glm::vec4>& actual, const std::vector<glm::vec4>& expected, float scale = 1.0f) {
+        float maxError = 0, maximum = 0;
+        for (size_t i = 0; i < actual.size(); ++i) for (size_t channel = 0; channel < 3; ++channel) {
+            maxError = std::max(maxError, std::abs(actual[i][channel] - expected[i][channel] * scale));
+            maximum = std::max(maximum, std::abs(expected[i][channel]));
+        }
+        evidence << "max_error=" << maxError << '\n';
+        return maxError <= 0.002f * std::max(maximum, 1.0f);
+    };
+    std::vector<glm::vec4> reference, modified, sun, local, combined;
+    for (const bool useGraph : {false, true}) {
+        graphMode = useGraph;
+        for (const auto term : {Term::Sun, Term::Specular, Term::Emissive, Term::Local, Term::Spot}) {
+            RENDER_CHECK(render("ao-reference", term, 1, 1, reference) && render("ao-zero", term, 0, 1, modified) && equal(modified, reference),
+                "AO leaves production sun diffuse/specular, emissive and local direct invariant");
+            RENDER_CHECK(reference[36].x > 0.01f, "isolated radiance fixture is nonzero");
+        }
+        RENDER_CHECK(render("ambient-reference", Term::Ambient, 1, 1, reference) &&
+            render("ambient-half", Term::Ambient, 0.5f, 0, modified) && equal(modified, reference, 0.5f) &&
+            render("ambient-zero", Term::Ambient, 0, 0, modified) && equal(modified, reference, 0) &&
+            render("ao-disabled", Term::Ambient, 0, 0, modified, false) && equal(modified, reference), "AO scales only ambient and disabled AO stays neutral");
+        RENDER_CHECK(render("sun-reference", Term::Sun, 1, 1, sun) && render("sun-half", Term::Sun, 1, 0.5f, modified) && equal(modified, sun, 0.5f) &&
+            render("sun-blocked", Term::Sun, 1, 0, modified) && equal(modified, sun, 0) &&
+            render("contact-disabled", Term::Sun, 1, 0, modified, true, false) && equal(modified, sun), "contact scales only matching sun and respects its enable flag");
+        for (const auto term : {Term::Ambient, Term::Emissive, Term::Local, Term::Spot})
+            RENDER_CHECK(render("contact-reference", term, 1, 1, reference) && render("contact-blocked", term, 1, 0, modified) && equal(modified, reference),
+                "contact leaves ambient, emissive and local lights invariant without sun");
+        RENDER_CHECK(render("local-reference", Term::Local, 1, 1, local) &&
+            render("mixed-sun-blocked", Term::SunAndLocal, 1, 0, combined) && equal(combined, local), "local light survives contact-blocked sun in mixed scene");
+        RENDER_CHECK(render("csm-penumbra", Term::Sun, 1, 1, reference, true, true, 1) && equal(reference, sun, 0.5f) &&
+            render("csm-contact-penumbra", Term::Sun, 1, 0.5f, modified, true, true, 1) && equal(modified, reference) &&
+            render("csm-zero", Term::Sun, 1, 0.5f, modified, true, true, 2) && equal(modified, sun, 0), "CSM/contact use minimum without penumbra double attenuation");
+        RENDER_CHECK(render("unrepresented-fragment", Term::Sun, 0, 0, modified, true, true, 0, 0.6f) && equal(modified, sun),
+            "fragment absent from prepass cannot inherit background visibility");
+    }
+    RENDER_CHECK(GetRHIValidationErrorCount() == 0, "production forward invariance fixture validation");
+    std::cout << "PASS M15-U4-A/B production forward radiance: AO ambient-only, sun-only contact, CSM minimum, emissive/local invariance and missing-guide fallback\n";
     return true;
 }

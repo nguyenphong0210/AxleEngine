@@ -8,6 +8,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+#include "Occlusion.hlsli"
+
 cbuffer GTAOConstants : register(b0, space0) {
     float4x4 u_InvProjection;
     float4x4 u_View;
@@ -25,13 +27,6 @@ float3 ReconstructViewPos(float2 uv, float depth) {
     float4 clip = float4(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, depth, 1.0);
     float4 viewPos = mul(u_InvProjection, clip);
     return viewPos.xyz / max(abs(viewPos.w), 1e-6);
-}
-
-// Each half-resolution visibility texel belongs to one real scene texel.
-// Use the same rational center mapping in compute and reconstruction; a fixed
-// pixel*2 mapping is incorrect when the full-resolution extent is odd.
-uint2 OcclusionSourcePixel(uint2 pixel, uint2 occlusionSize, uint2 sceneSize) {
-    return min(((pixel * 2 + 1) * sceneSize) / (occlusionSize * 2), sceneSize - 1);
 }
 
 // Interleaved spatial noise hash for spatial jittering
@@ -258,45 +253,8 @@ float4 PSMain(VSOutput input) : SV_Target {
         return sceneColor;
     }
 
-    float centerZ = ReconstructViewPos(centerUV, centerDepth).z;
-
-    // Filter individual half-resolution AO/depth pairs. Linear AO sampling
-    // would mix surfaces before depth rejection, even with exact depth loads.
-    uint2 occlusionSize;
-    u_OcclusionTexture.GetDimensions(occlusionSize.x, occlusionSize.y);
-    int2 occlusionMax = int2(occlusionSize) - int2(1, 1);
-    int2 occlusionCenter = min(int2(centerUV * float2(occlusionSize)), occlusionMax);
-    float2 occlusionSum = 0.0;
-    float weightSum = 0.0;
-
-    const float spatialWeights[5] = { 0.06136, 0.24477, 0.38774, 0.24477, 0.06136 };
-
-    [unroll]
-    for (int y = -2; y <= 2; ++y) {
-        [unroll]
-        for (int x = -2; x <= 2; ++x) {
-            int2 aoPixel = clamp(occlusionCenter + int2(x, y), int2(0, 0), occlusionMax);
-            int2 tapPixel = int2(OcclusionSourcePixel(uint2(aoPixel), occlusionSize, sceneSize));
-            float2 offsetUV = (float2(tapPixel) + 0.5) * rcpFrame;
-            float tapDepth = u_SceneDepth.Load(int3(tapPixel, 0));
-            if (tapDepth <= 0.0 || tapDepth >= 0.9999) continue;
-            float tapZ = ReconstructViewPos(offsetUV, tapDepth).z;
-
-            float depthDiff = abs(centerZ - tapZ);
-            float depthWeight = exp(-depthDiff / (0.05 * max(abs(centerZ), 0.1) + 1e-4));
-            if (depthWeight < 1e-3) continue;
-            float spatialWeight = spatialWeights[x + 2] * spatialWeights[y + 2];
-            float totalWeight = depthWeight * spatialWeight;
-
-            float2 tapOcclusion = u_OcclusionTexture.Load(int3(aoPixel, 0));
-            occlusionSum += tapOcclusion * totalWeight;
-            weightSum += totalWeight;
-        }
-    }
-
-    // A thin surface may have no representative half-res texel. Neutral
-    // visibility is preferable to importing a different surface's occlusion.
-    float2 filteredOcclusion = weightSum > 1e-4 ? (occlusionSum / weightSum) : float2(1.0, 1.0);
+    float4 unproject = float4(u_InvProjection[2][2], u_InvProjection[2][3], u_InvProjection[3][2], u_InvProjection[3][3]);
+    float2 filteredOcclusion = AxleReconstructOcclusion(u_SceneDepth, u_OcclusionTexture, uint2(centerPixel), unproject);
     float finalAO = saturate(filteredOcclusion.r);
     float finalContact = saturate(filteredOcclusion.g);
 
@@ -304,12 +262,9 @@ float4 PSMain(VSOutput input) : SV_Target {
     finalAO = lerp(0.35, 1.0, finalAO);
     finalContact = lerp(0.5, 1.0, finalContact);
 
-    // GTAO is recorded after the forward color pass in the current renderer.
-    // Keep the screen-space composite conservative: ambient visibility gets a
-    // bounded weight and contact visibility gets its own bounded weight. This
-    // prevents the old full-color multiplication from crushing direct light,
-    // specular highlights and emissive materials. A future pre-lighting AO
-    // path can replace these weights with a true separated indirect term.
+    // Retained bounded post-composite fallback. The native pre-lighting path
+    // consumes visibility in forward shading instead of executing this draw.
+    // Keep this explicit fallback conservative when used by older callers.
     float ambientWeight = 0.25 * saturate(u_GTAOParams.y);
     float contactWeight = 0.20 * saturate(u_ContactParams.z);
     float ambientFactor = lerp(1.0, finalAO, ambientWeight);

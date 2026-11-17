@@ -29,6 +29,7 @@
 #include <chrono>
 
 bool RunM15OcclusionRenderingTests(const std::filesystem::path& output);
+bool RunM15OcclusionForwardTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15OcclusionDispatchTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
                                  Axle::SceneRenderSettings settings, const std::filesystem::path& output);
 
@@ -257,13 +258,13 @@ bool Native(RHIType backend) {
     const size_t center=(width/2*width+width/2)*4;
     CHECK(red[0]>red[2]+40&&red[center]>red[center+2]+40); // sky and metallic specular receive HDR
     CHECK(PPM("red.ppm",red,width));
+    CHECK(RunM15OcclusionForwardTests(renderer, Output));
     // M14-U4 Occlusion verification: Dedicated compute GTAO & directional contact shadows
     settings.EnableGTAO=true; settings.EnableContactShadows=true; auto gtao=render();
     CHECK(!gtao.empty()&&gtao.size()==red.size());
     const auto gtaoGeneration = renderer.GetDiagnostics().GetFrame().TargetGeneration;
     CHECK(gtaoGeneration && renderer.GetOpaqueNormalTarget() && renderer.GetHiZTarget(0) == nullptr);
-    CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","SurfaceNormal","Transparent","ParticlesAndPhysics",
-        "GTAOCopy","GTAOCompute","GTAOApply","Export"}));
+    CHECK(passNames()==std::vector<std::string>({"SurfaceNormalPrepass","GTAOCompute","OpaqueAndSky","Transparent","ParticlesAndPhysics","Export"}));
     CHECK(renderer.GetLastGPUTimestampMilliseconds() > 0.0);
     auto* normalTarget = renderer.GetOpaqueNormalTarget();
     CHECK(normalTarget && normalTarget->IsValid());
@@ -843,6 +844,7 @@ bool Native(RHIType backend) {
     material->GetDesc().RefractionEnabled = false;
 
     world.DirectionalLight = RenderDirectionalLight{};
+    material->GetDesc().Dispersion = 0.0f;
     world.DirectionalLight->Direction = glm::normalize(glm::vec3(0.0f, 0.0f, 1.0f));
     world.DirectionalLight->Intensity = 1.0f;
     world.DirectionalLight->AmbientIntensity = 0.0f;
@@ -900,6 +902,49 @@ bool Native(RHIType backend) {
 
     const auto graphParityOutput = render();
     CHECK(!graphParityOutput.empty() && graphParityOutput.size() == builtinParityOutput.size());
+    auto requireGraph = [&] {
+        const auto& materials = renderer.GetDiagnostics().GetFrame().Materials;
+        return std::any_of(materials.begin(), materials.end(), [](const auto& entry) {
+            return entry.EntityID == 1 && entry.Evaluation == SurfaceEvaluation::CustomShader &&
+                entry.ShaderGeneration != 0 && entry.Valid && !entry.Fallback && entry.Reason.empty();
+        });
+    };
+    CHECK(requireGraph());
+    CHECK(graphParityOutput[center] > 20);
+
+    // U4-A/B must use the actual canonical graph pipeline and its companion
+    // normal producer. A built-in fallback can look identical at the center.
+    settings.EnableGTAO = true;
+    const auto graphAOOutput = render();
+    CHECK(!graphAOOutput.empty() && requireGraph());
+    CHECK(passNames() == std::vector<std::string>({"SurfaceNormalPrepass", "GTAOCompute", "OpaqueAndSky", "Transparent", "ParticlesAndPhysics", "Export"}));
+    CHECK(graphAOOutput == graphParityOutput); // Direct-only radiance is AO invariant.
+    CHECK(renderer.GetOpaqueNormalTarget());
+    const auto graphNormal = Read(*renderer.GetOpaqueNormalTarget(), 8);
+    CHECK(!graphNormal.empty());
+    bool graphNormalWritten = false;
+    for (size_t channel = 0; channel < 6; ++channel) graphNormalWritten |= graphNormal[normalCenter + channel] != 0;
+    CHECK(graphNormalWritten);
+    settings.EnableGTAO = false;
+    settings.EnableSSR = true;
+    CHECK(!render().empty() && requireGraph());
+    const auto graphSSRNormal = Read(*renderer.GetOpaqueNormalTarget(), 8);
+    CHECK(!graphSSRNormal.empty());
+    bool graphSSRNormalWritten = false;
+    for (size_t channel = 0; channel < 6; ++channel) graphSSRNormalWritten |= graphSSRNormal[normalCenter + channel] != 0;
+    CHECK(graphSSRNormalWritten); // Equal-depth, read-only normal replay.
+    material->SetDepthWrite(false);
+    CHECK(!render().empty() && requireGraph());
+    const auto nonWritingSSRNormal = Read(*renderer.GetOpaqueNormalTarget(), 8);
+    CHECK(!nonWritingSSRNormal.empty());
+    for (size_t channel = 0; channel < 6; ++channel) CHECK(nonWritingSSRNormal[normalCenter + channel] == 0);
+    settings.EnableSSR = false;
+    const auto nonWritingReference = render();
+    CHECK(!nonWritingReference.empty() && requireGraph());
+    settings.EnableGTAO = true;
+    CHECK(render() == nonWritingReference && requireGraph());
+    material->SetDepthWrite(true);
+    settings.EnableGTAO = false;
 
     world.Meshes[0].Material.UseCustomShader = false;
     world.Meshes[0].Material.CustomProperties.clear();
@@ -926,6 +971,7 @@ bool Native(RHIType backend) {
     world.Meshes[0].Material.UseCustomShader = true;
     const auto hdrGraphParityOutput = render();
     CHECK(!hdrGraphParityOutput.empty() && hdrGraphParityOutput.size() == hdrBuiltinParityOutput.size());
+    CHECK(requireGraph());
     const size_t hdrCenter = center;
     const int hdrDiffR = std::abs(static_cast<int>(hdrBuiltinParityOutput[hdrCenter + 0]) - static_cast<int>(hdrGraphParityOutput[hdrCenter + 0]));
     const int hdrDiffG = std::abs(static_cast<int>(hdrBuiltinParityOutput[hdrCenter + 1]) - static_cast<int>(hdrGraphParityOutput[hdrCenter + 1]));

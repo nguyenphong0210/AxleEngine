@@ -1,6 +1,7 @@
 #include "TestWorkspace.hpp"
 #include "MaterialGraphTestDraw.hpp"
 #include <Axle/TextureDescriptor.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Package.hpp>
 #include <Axle/Path.hpp>
@@ -178,8 +179,10 @@ bool CPU() {
         CHECK(MaterialSamplerDescription(policy)&&MaterialSamplerDescription(policy)->Anisotropy==1);
     for(const std::string sampler:{"LinearRepeat","LinearClamp","PointRepeat","PointClamp"})for(auto format:{RHIShaderFormat::DXIL,RHIShaderFormat::SPIRV}) {
         CompiledMaterialGraphProgram program;CHECK(MaterialGraphProgram::Compile(Graph("textures/gray.tga","Linear",sampler),format,program,&error));
-        const auto declared=ShaderPropertyParser::ParseFromHLSL(program.HLSL,&program.Reflection);
-        auto plan=BuildMaterialBindingPlan(program.Reflection,{},declared);CHECK(std::holds_alternative<MaterialBindingPlan>(plan));
+        auto editableReflection=program.Reflection;
+        StripMaterialSurfaceEngineBindings(editableReflection);
+        const auto declared=ShaderPropertyParser::ParseFromHLSL(program.HLSL,&editableReflection);
+        auto plan=BuildMaterialBindingPlan(editableReflection,{},declared);CHECK(std::holds_alternative<MaterialBindingPlan>(plan));
         ShaderSamplerPolicy expected;CHECK(ParseShaderSamplerPolicy(sampler,expected)&&program.BindingPlan.Samplers[0].Policy==expected);
         CHECK(std::get<MaterialBindingPlan>(plan).Samplers[0].Policy==expected);
     }

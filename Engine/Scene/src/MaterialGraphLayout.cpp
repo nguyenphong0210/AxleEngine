@@ -1,31 +1,11 @@
 #include <Axle/MaterialGraphProgram.hpp>
 #include <Axle/CustomShaderInterface.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <algorithm>
 #include <set>
 
 namespace Axle {
 namespace {
-    bool IsEngineLightingBuffer(const RHI::RHIShaderConstantBuffer& buffer) {
-        return (buffer.Name == "MultiLightBuffer" && buffer.Space == 3 && buffer.BindPoint == 0) ||
-               (buffer.Name == "CascadeReceiver" && buffer.Space == 0 && buffer.BindPoint == 4) ||
-               (buffer.Name == "LocalShadowReceiver" && buffer.Space == 0 && buffer.BindPoint == 5);
-    }
-    bool IsEngineLightingResource(const RHI::RHIShaderResourceBinding& resource) {
-        if (resource.Type == RHI::RHIResourceType::ConstantBuffer)
-            return (resource.Name == "MultiLightBuffer" && resource.Space == 3 && resource.BindPoint == 0) ||
-                   (resource.Name == "CascadeReceiver" && resource.Space == 0 && resource.BindPoint == 4) ||
-                   (resource.Name == "LocalShadowReceiver" && resource.Space == 0 && resource.BindPoint == 5);
-        if (resource.Space != 2) return false;
-        if (resource.Type == RHI::RHIResourceType::Texture)
-            return (resource.BindPoint <= 4) &&
-                (resource.Name == "u_IrradianceMap" || resource.Name == "u_PrefilterMap" ||
-                 resource.Name == "u_BRDFLUT" || resource.Name == "u_CascadeDepth" ||
-                 resource.Name == "u_LocalShadowDepth");
-        if (resource.Type == RHI::RHIResourceType::Sampler)
-            return resource.BindPoint <= 1 &&
-                (resource.Name == "u_EnvironmentSampler" || resource.Name == "u_ShadowSampler");
-        return false;
-    }
     void Field(std::string& key, std::string_view field) {
         key += std::to_string(field.size()) + ':'; key += field;
     }
@@ -37,6 +17,8 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
     using namespace RHI;
     if(error)*error={};
     auto fail=[&](std::string message) {if(error)*error={"MG_LAYOUT",std::move(message),{},0,{}};return false;};
+    std::string engineLayoutDiagnostic;
+    if (!ValidateMaterialSurfaceEngineBuffers(reflection, engineLayoutDiagnostic)) return fail(engineLayoutDiagnostic);
     const auto stages=RHIShaderCompiler::StageToNRI(reflection.Stage)|reflection.AdditionalStages;
     if((reflection.Format!=RHIShaderFormat::DXIL && reflection.Format!=RHIShaderFormat::SPIRV) ||
        stages!=(nri::StageBits::VERTEX_SHADER|nri::StageBits::FRAGMENT_SHADER))return fail("Graph layout requires merged vertex/fragment reflection");
@@ -63,7 +45,7 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
         if(resource.Type==RHIResourceType::ConstantBuffer) {
             expected=resource.Space==0 && ((resource.Name=="EngineObject"&&resource.BindPoint==0)||
                 (resource.Name=="EngineScene"&&resource.BindPoint==1)||(resource.Name=="MaterialParameters"&&resource.BindPoint==2));
-            expected = expected || IsEngineLightingResource(resource);
+            expected = expected || IsMaterialSurfaceEngineResource(resource);
             if(!reflection.FindConstantBuffer(resource.Name))return fail("Missing reflected cbuffer storage: "+resource.Name);
         } else for(const auto& texture:graph.Textures) {
             if(resource.Type==RHIResourceType::Texture && resource.Name==texture.TextureSymbol)
@@ -71,7 +53,7 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
             if(resource.Type==RHIResourceType::Sampler && resource.Name==texture.SamplerSymbol)
                 expected=resource.Space==1 && resource.BindPoint==texture.Binding;
         }
-            expected = expected || IsEngineLightingResource(resource);
+            expected = expected || IsMaterialSurfaceEngineResource(resource);
             if(!expected)return fail("Descriptor differs from the graph interface: "+resource.Name);
         std::string record="resource";Field(record,resource.Name);Number(record,resource.Type);Number(record,resource.Space);
         Number(record,resource.BindPoint);Number(record,resource.BindCount);Number(record,resource.TextureDimension);
@@ -88,8 +70,19 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
         std::string record="buffer";Field(record,buffer.Name);Number(record,buffer.Space);Number(record,buffer.BindPoint);Number(record,buffer.Size);
         records.push_back(std::move(record));
         std::sort(buffer.Variables.begin(),buffer.Variables.end(),[](const auto& a,const auto& b){return a.Offset<b.Offset;});
+        if (IsMaterialSurfaceEngineBuffer(buffer)) {
+            // Renderer-owned structs, uint vectors and matrix arrays are not
+            // editable graph parameters. Their physical layout still keys PSOs.
+            for (const auto& variable : buffer.Variables) {
+                record="engine-variable";Field(record,buffer.Name);Field(record,variable.Name);Number(record,variable.Offset);
+                Number(record,variable.Size);Number(record,variable.ScalarType);Number(record,variable.Rows);
+                Number(record,variable.Columns);Number(record,variable.Elements);Number(record,variable.RowMajor);
+                records.push_back(std::move(record));
+            }
+            continue;
+        }
         if((buffer.Name=="EngineObject"&&buffer.Variables.size()!=1)||
-           (buffer.Name=="EngineScene"&&buffer.Variables.size()!=4))return fail("Incomplete engine cbuffer storage: "+buffer.Name);
+           (buffer.Name=="EngineScene"&&buffer.Variables.size()!=5))return fail("Incomplete engine cbuffer storage: "+buffer.Name);
         std::set<std::string> variables;
         for(const auto& variable:buffer.Variables) {
             if(!variables.insert(variable.Name).second || variable.ScalarType!=RHIShaderScalarType::Float || variable.Elements || variable.RowMajor)
@@ -101,6 +94,7 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
                 else if(variable.Name=="u_CameraPosition") {columns=4;offset=64;}
                 else if(variable.Name=="u_SunDirection") {columns=4;offset=80;}
                 else if(variable.Name=="u_SunColor") {columns=4;offset=96;}
+                else if(variable.Name=="u_Projection") {rows=columns=4;offset=112;}
             } else if(buffer.Name=="MaterialParameters") {
                 for(const auto& parameter:graph.Parameters) if(parameter.Symbol==variable.Name)columns=static_cast<uint32_t>(parameter.Default.Type)+1;
                 if(variable.Offset%4 || variable.Offset%16+variable.Size>16)return fail("Parameter crosses a DX cbuffer register: "+variable.Name);
@@ -115,10 +109,7 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
     // Reserved engine lighting descriptors are bound by the renderer and must
     // never become editable graph properties or packed graph constant buffers.
     auto planningReflection = normalized;
-    planningReflection.Resources.erase(std::remove_if(planningReflection.Resources.begin(), planningReflection.Resources.end(),
-        [](const auto& resource) { return IsEngineLightingResource(resource); }), planningReflection.Resources.end());
-    planningReflection.ConstantBuffers.erase(std::remove_if(planningReflection.ConstantBuffers.begin(), planningReflection.ConstantBuffers.end(),
-        [](const auto& buffer) { return IsEngineLightingBuffer(buffer); }), planningReflection.ConstantBuffers.end());
+    StripMaterialSurfaceEngineBindings(planningReflection);
 
     std::vector<ShaderPropertyDesc> properties;
     for(const auto& texture:graph.Textures) {

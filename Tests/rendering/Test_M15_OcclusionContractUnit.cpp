@@ -146,8 +146,20 @@ bool RunM15OcclusionContractUnitTests() {
         // Verify MaterialSurface.hlsl restricts AO to ambient
         RENDER_CHECK(matSource.find("saturate(surface.AO)") != std::string::npos,
             "M15-U4-03.1: MaterialSurface scales ambient term by surface.AO");
-        RENDER_CHECK(matSource.find("float3 color = direct + ambient + max(surface.Emission, float3(0,0,0));") != std::string::npos,
+        RENDER_CHECK(matSource.find("float3 color = direct + ambient * screenVisibility.x + max(surface.Emission, float3(0,0,0));") != std::string::npos,
             "M15-U4-03.1: MaterialSurface adds direct and emission unscaled by AO");
+        const auto passesSource = ReadShaderSource(AXLE_SCENE_PASSES_SOURCE_PATH);
+        const auto prepass = passesSource.find("if (useGTAO) registerSurfaceNormal();");
+        const auto compute = passesSource.find("addPass(\"GTAOPreLighting\"");
+        const auto color = passesSource.find("addPass(\"OpaqueAndSky\"");
+        RENDER_CHECK(prepass != std::string::npos && compute != std::string::npos && color != std::string::npos &&
+                     prepass < compute && compute < color && passesSource.find("GTAOPass::RecordPreLighting(*this") != std::string::npos,
+            "M15-U4-03.1: production graph runs depth/normal prepass and GTAO compute before forward color");
+        RENDER_CHECK(fwdSource.find("AxleForwardVisibility(input.PositionCS.xyz") != std::string::npos &&
+                     matSource.find("AxleForwardVisibility(input.Position.xyz") != std::string::npos &&
+                     fwdSource.find("AxleDirectionalVisibility(SunShadowVisibility(") != std::string::npos &&
+                     matSource.find("AxleDirectionalVisibility(AxleSunShadowVisibility(") != std::string::npos,
+            "M15-U4-A/B: built-in and graph forward shaders consume visibility in their separated lighting terms");
     }
 
     // =========================================================================
@@ -266,6 +278,13 @@ bool RunM15OcclusionContractUnitTests() {
         noCSMScene.CSMVisibility = 0.0f;
         RENDER_CHECK(VerifySunOnlyContactModulation(noCSMScene),
             "M15-U4-04.1: contact modulation remains correct when CSM is disabled");
+
+        ShadingComponents explicitLocalWithLegacy;
+        explicitLocalWithLegacy.LocalDiffuse = glm::vec3(0.4f);
+        explicitLocalWithLegacy.DirectDiffuse = glm::vec3(1.0f);
+        RENDER_CHECK(VerifySunOnlyContactModulation(explicitLocalWithLegacy) &&
+            EvaluateShading(explicitLocalWithLegacy, 1.0f, 0.0f) == explicitLocalWithLegacy.LocalDiffuse,
+            "M15-U4-04.1: verifier and evaluator both ignore legacy direct fields when explicit local terms exist");
 
         // Test 4.3: Preserve normal direct-light behavior when contact shadows are disabled
         RENDER_CHECK(VerifyContactDisabledBehavior(sceneLighting),
@@ -536,10 +555,10 @@ bool RunM15OcclusionContractUnitTests() {
             "M15-U4-05.3: VerifyDepthEdgeProtection passes contract verification");
 
         // Test 8.5: Verify shader implementation of edge protection in GTAO.hlsl
-        const std::string gtaoShader = ReadShaderSource(AXLE_GTAO_SHADER_PATH);
+        const std::string gtaoShader = ReadShaderSource(AXLE_GTAO_SHADER_PATH) + ReadShaderSource(AXLE_OCCLUSION_SHADER_PATH);
         RENDER_CHECK(gtaoShader.find("float depthWeight = exp(-depthDiff / (0.05 * max(abs(centerZ), 0.1) + 1e-4));") != std::string::npos,
             "M15-U4-05.3: GTAO.hlsl implements exponential depth weighting with adaptive view-depth scaling");
-        RENDER_CHECK(gtaoShader.find("float2 filteredOcclusion = weightSum > 1e-4 ? (occlusionSum / weightSum) : float2(1.0, 1.0);") != std::string::npos,
+        RENDER_CHECK(gtaoShader.find("return weightSum > 1e-4 ? (occlusionSum / weightSum) : float2(1.0, 1.0);") != std::string::npos,
             "M15-U4-05.3: isolated unrepresented surfaces use neutral visibility without importing foreign occlusion");
         RENDER_CHECK(edgeTap.TotalWeight == 0.0f &&
             EvaluateBilateralWeight(std::numeric_limits<float>::quiet_NaN(), 2.0f, 0, 0).IsEdgeRejected &&
@@ -600,7 +619,7 @@ bool RunM15OcclusionContractUnitTests() {
             "M15-U4-05.4: VerifyOddResolutionSafety passes for 801x601");
 
         // Test 9.5: Shader boundary clamping and compute thread guards
-        const std::string gtaoShader = ReadShaderSource(AXLE_GTAO_SHADER_PATH);
+        const std::string gtaoShader = ReadShaderSource(AXLE_GTAO_SHADER_PATH) + ReadShaderSource(AXLE_OCCLUSION_SHADER_PATH);
         RENDER_CHECK(gtaoShader.find("if (pixelPos.x >= (uint)u_ScreenSize.x || pixelPos.y >= (uint)u_ScreenSize.y) return;") != std::string::npos,
             "M15-U4-05.4: GTAO CSMain has thread-group boundary guard preventing out-of-bounds execution on odd dimensions");
         RENDER_CHECK(gtaoShader.find("int2 aoPixel = clamp(occlusionCenter + int2(x, y), int2(0, 0), occlusionMax);") != std::string::npos,
@@ -615,8 +634,8 @@ bool RunM15OcclusionContractUnitTests() {
             "M15-U4-05.4: GTAO apply restores full-resolution screen texel spacing after half-resolution compute");
 
         RENDER_CHECK(gtaoShader.find("u_SceneDepth.Load(int3(centerPixel, 0))") != std::string::npos &&
-                     gtaoShader.find("u_SceneDepth.Load(int3(tapPixel, 0))") != std::string::npos &&
-                     gtaoShader.find("u_OcclusionTexture.Load(int3(aoPixel, 0))") != std::string::npos &&
+                     gtaoShader.find("sceneDepth.Load(int3(tapPixel, 0))") != std::string::npos &&
+                     gtaoShader.find("visibility.Load(int3(aoPixel, 0))") != std::string::npos &&
                      gtaoShader.find("OcclusionSourcePixel(pixelPos, uint2(u_ScreenSize.xy), sceneSize)") != std::string::npos &&
                      gtaoShader.find("OcclusionSourcePixel(uint2(aoPixel), occlusionSize, sceneSize)") != std::string::npos,
             "M15-U4-05.3: compute and reconstruction pair exact depth and AO texels with identical odd-resolution mapping");

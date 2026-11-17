@@ -1,5 +1,9 @@
 # M15 U4 Batch 2 — Independent Codex Review
 
+> Re-review, 2026-11-17: the historical acceptance below covered CPU contract
+> math. Production contact separation and CSM composition are reviewed and
+> repaired in [the consolidated U4-A/B re-review](M15_U4_AB_CODEX_REVIEW.md).
+
 ## Scope
 
 Reviewed Gemini delivery `ccc4ba61` plus exchange metadata `75661471` from

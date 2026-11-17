@@ -7,7 +7,10 @@ cbuffer EngineScene : register(b1, space0) {
     float4 u_CameraPosition;
     float4 u_SunDirection;
     float4 u_SunColor;
+    column_major float4x4 u_Projection;
 };
+
+#include "Occlusion.hlsli"
 
 // Shared lighting contract with ForwardPBR.  Graph materials use the same
 // uploaded light buffer and shadow receiver data as the built-in path; they do
@@ -123,7 +126,9 @@ float3 AxleEvaluateWorldNormal(PSInput input, MaterialSurface surface) {
 float AxleSunShadowVisibility(float3 world, float3 normal, float3 sun) {
     uint count = (uint)u_CascadeAtlas.x;
     if (count == 0u) return 1.0;
-    float depth = -mul(u_ViewProjection, float4(world, 1.0)).z;
+    float4 cameraClip = mul(u_ViewProjection, float4(world, 1.0));
+    float4 unproject = float4(-u_Projection[3][3], u_Projection[2][3], u_Projection[3][2], -u_Projection[2][2]);
+    float depth = -AxleOcclusionViewDepth(cameraClip.z / cameraClip.w, unproject);
     if (depth < u_CascadeAtlas.w || depth > u_CascadeSplits[count - 1u]) return 1.0;
     uint cascade = 0u;
     [unroll] for (uint c = 0u; c < 3u; ++c)
@@ -191,7 +196,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float sunIntensity = hasMultiLightSun ? max(u_SunLight.DirectionAndIlluminance.w, 0.0) : max(u_SunDirection.w, 0.0);
     float sunRadianceScale = hasMultiLightSun || sunIntensity > 10.0 ? DIRECT_LUX_TO_RADIANCE : 1.0;
     float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : u_SunColor.rgb;
-    float3 directLight = max(sunColor, float3(0,0,0)) * (sunIntensity * sunRadianceScale) * nl * AxleSunShadowVisibility(input.WorldPos, normal, light);
+    float2 screenVisibility = AxleForwardVisibility(input.Position.xyz, u_Projection, u_LightReserved[1].yz);
+    float3 directLight = max(sunColor, float3(0,0,0)) * (sunIntensity * sunRadianceScale) * nl * AxleDirectionalVisibility(AxleSunShadowVisibility(input.WorldPos, normal, light), screenVisibility.y);
     float3 direct = (diffuse + specular) * directLight;
 
     // Keep the graph path on the same Forward+ light data contract.  The
@@ -275,7 +281,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float ambientStrength = hasMultiLightSun ? max(u_LightReserved[0].y, 0.0) : max(u_SunColor.w, 0.0);
         ambient = (base * 0.03 * (1.0 - metallic) + ambientRef * 0.02) * saturate(surface.AO) * ambientStrength;
     }
-    float3 color = direct + ambient + max(surface.Emission, float3(0,0,0));
+    float3 color = direct + ambient * screenVisibility.x + max(surface.Emission, float3(0,0,0));
     color = clamp(color, 0.0, 65000.0);
 
     // 11. Tone Mapping & Color Polish (ACES Filmic Operator & Gamma Correction)

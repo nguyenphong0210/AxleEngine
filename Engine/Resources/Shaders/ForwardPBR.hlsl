@@ -1,5 +1,6 @@
 #define AXLE_FORWARD_LOCAL_SHADOWS 1
 #define AXLE_FORWARD_ENVIRONMENT_IBL 1
+#include "Occlusion.hlsli"
 // =============================================================================
 // ForwardPBR.hlsl - Unified D3D12 (DXIL) & Vulkan 1.3 (SPIR-V) PBR Forward+ Pipeline
 // Standardized HLSL 2021 Codebase for AxleEngine Multi-Backend 3D Viewport Renderer
@@ -514,6 +515,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 ggxEnergyCompensation = min(1.0 + F0 * (1.0 / ggxSingleScatterEnergy - 1.0), 8.0);
     
     // Direct Radiance Accumulation
+    float2 screenVisibility = surfaceType < 2 ? AxleForwardVisibility(input.PositionCS.xyz, u_Projection, u_LightReserved[1].yz) : float2(1.0, 1.0);
+    ao *= screenVisibility.x;
     float3 Lo = float3(0.0, 0.0, 0.0);
 
     // 6. Primary Directional Sun Light (Physical Illuminance in Lux)
@@ -523,7 +526,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
     float sunIntensity = hasMultiLightSun ? max(u_SunLight.DirectionAndIlluminance.w,0.0) * DIRECT_LUX_TO_RADIANCE : max(u_SunDirection.w,0.0);
     float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : u_SunColor.rgb;
-    float3 sunRadiance = sunColor * sunIntensity * SunShadowVisibility(input.WorldPos,N,sunDir);
+    float3 sunRadiance = sunColor * sunIntensity * AxleDirectionalVisibility(SunShadowVisibility(input.WorldPos,N,sunDir), screenVisibility.y);
 
     float NdotL_Sun = max(dot(N, sunDir), 0.0);
     // Photographic Studio Softbox Diffuse Wrap (Area Light Approximation)

@@ -97,9 +97,9 @@ namespace Axle {
         const auto opaqueDepth = copyRefraction ? graph.Import("OpaqueDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto particleDepthImage = copyParticleDepth ? graph.Import("ParticleDepth", m_ParticleSceneDepth->GetNative()) : sceneDepth;
         const bool useGTAO = (settings.EnableGTAO || settings.EnableContactShadows) && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+            m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid() &&
             m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
             viewTargets->GetGTAO() && viewTargets->GetGTAO()->IsValid() && viewTargets->GetGTAO()->GetUAV() != nullptr;
-        const auto gtaoInput = useGTAO ? graph.Import("GTAOInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto gtaoDepth = useGTAO ? graph.Import("GTAODepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto gtaoStorage = useGTAO ? graph.Import("GTAOStorage", viewTargets->GetGTAO()->GetNative()) : output;
 
@@ -108,6 +108,7 @@ namespace Axle {
             m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
             m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
         const bool useSurfaceNormal=(useGTAO || useSSR) && m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid();
+        const char* normalPassName = useGTAO ? "SurfaceNormalPrepass" : "SurfaceNormal";
         const auto ssrInput = useSSR ? graph.Import("SSRInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto ssrDepth = useSSR ? graph.Import("SSRDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto ssrStorage = useSSR ? graph.Import("SSRStorage", m_ScreenStorageTarget->GetNative()) : output;
@@ -409,6 +410,10 @@ namespace Axle {
                                     if (!descriptor && address == ShaderAddress{0,5}) descriptor=m_LocalShadows.GetConstantsCBV();
                                 } else if(range.descriptorType==nri::DescriptorType::TEXTURE) {
                                     for(size_t i=0;i<item.TextureRequests.size();++i) if(item.TextureRequests[i].Address==address) descriptor=resource.Textures[i]->GetSRV();
+                                    if (!descriptor && address.RegisterSpace == 4) {
+                                        if (address.RegisterIndex == 0) descriptor=useGTAO?viewTargets->GetGTAO()->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
+                                        else if (address.RegisterIndex == 1) descriptor=useGTAO?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
+                                    }
                                     if (!descriptor && address.RegisterSpace == 2) {
                                         if (address.RegisterIndex == 0) descriptor=ActiveIrradiance()->GetSRV();
                                         else if (address.RegisterIndex == 1) descriptor=ActivePrefilter()->GetSRV();
@@ -419,7 +424,9 @@ namespace Axle {
                                 } else if(range.descriptorType==nri::DescriptorType::SAMPLER) {
                                     descriptor=m_CustomSampler.GetNative();
                                     if (address.RegisterSpace == 2 && address.RegisterIndex == 1)
-                                        descriptor=m_CustomSampler.GetNative();
+                                        descriptor=m_CustomShadowSampler.GetNative();
+                                    if (address.RegisterSpace == 2 && address.RegisterIndex == 0)
+                                        descriptor=m_CustomPolicySamplers.at(ShaderSamplerPolicy::LinearClamp).GetNative();
                                     for (const auto& sampler:generation.BindingPlan.Samplers) if(sampler.Address==address && sampler.Policy!=ShaderSamplerPolicy::Default) {
                                         const auto found=m_CustomPolicySamplers.find(sampler.Policy);
                                         if(found==m_CustomPolicySamplers.end())return false;
@@ -529,7 +536,8 @@ namespace Axle {
                 const auto& resource = *m_MaterialDraws[item.DrawResourceIndex];
                 Commands().SetPipeline(item.PreparedPipeline);
                 Commands().SetRootDescriptor(2, resource.Constants.GetCBV());
-                if (!bindDescriptorSet(0, resource.Set)) { drawFailed = true; return; }
+                if (!bindDescriptorSet(0, resource.Set) ||
+                    !bindDescriptorSet(1, m_ForwardOcclusionDescriptorSet)) { drawFailed = true; return; }
                 Commands().SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
                 m_LastStreamedTransformBytes += sizeof(item.PushConsts);
                 item.Mesh->Bind(Commands()); item.Mesh->Draw(Commands());
@@ -641,6 +649,14 @@ namespace Axle {
             RHIMultiLightBufferData lightData{};
             lightData.CameraPosAndExposure = glm::vec4(camera.GetPosition(), 1.0f);
             lightData.ReservedHeader[0].x = settings.EnableStudioLightLobes ? 0.0f : 1.0f;
+            lightData.ReservedHeader[1].y = useGTAO && settings.EnableGTAO ? 1.0f : 0.0f;
+            lightData.ReservedHeader[1].z = useGTAO && settings.EnableContactShadows && world.DirectionalLight ? 1.0f : 0.0f;
+            auto* neutral = RHIMaterial::GetDefaultWhiteTexture().get();
+            if (!neutral || !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 0, 0,
+                {useGTAO ? viewTargets->GetGTAO()->GetSRV() : neutral->GetSRV(),
+                 useGTAO ? m_OpaqueSceneDepth->GetSRV() : neutral->GetSRV()})) return fail();
+            if (!useGTAO && (settings.EnableGTAO || settings.EnableContactShadows))
+                m_ViewContext.Diagnostics().AddFallback("occlusion_unavailable: single-sample depth/normal/storage required; neutral visibility");
 
             const auto& lightingSun=lightingFrame.Sun;
             lightData.SunLight.DirectionAndIlluminance = glm::vec4(lightingSun.Direction, lightingSun.Illuminance);
@@ -728,6 +744,127 @@ namespace Axle {
                 return RenderPassResult::Failed(m_CascadedShadows.GetDiagnostic());
             if (!m_LocalShadows.Prepare(world, camera, settings, m_MaterialTextures))
                 return RenderPassResult::Failed(m_LocalShadows.GetDiagnostic());
+            return {};
+        });
+
+        auto registerSurfaceNormal = [&] {
+            addPass("SurfaceNormals", [&](const RenderPassContext&) -> RenderPassResult {
+                if (!useSurfaceNormal)
+                    return RenderPassResult{};
+                if (!beginPass(normalPassName))
+                    return RenderPassResult::Failed("SurfaceNormal: graph begin failed");
+                auto* normalPipeline = GetOrCreateSurfaceNormalPipeline(
+                    RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()), m_CurrentDepthFormat, useGTAO);
+                if (!normalPipeline)
+                    return RenderPassResult::Failed("SurfaceNormal: pipeline creation failed");
+
+                nri::AttachmentDesc normalAttachment = {};
+                normalAttachment.descriptor = m_OpaqueSceneNormal->GetRTV();
+                normalAttachment.loadOp = nri::LoadOp::CLEAR;
+                normalAttachment.storeOp = nri::StoreOp::STORE;
+                normalAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+                nri::AttachmentDesc normalDepthAttachment = depthAttachment;
+                normalDepthAttachment.descriptor = useGTAO ? m_OpaqueSceneDepth->GetDSV() : sceneDepthDSV;
+                normalDepthAttachment.loadOp = useGTAO ? nri::LoadOp::CLEAR : nri::LoadOp::LOAD;
+                normalDepthAttachment.storeOp = nri::StoreOp::STORE;
+                nri::RenderingDesc normalRenderingDesc = {};
+                normalRenderingDesc.colors = &normalAttachment;
+                normalRenderingDesc.colorNum = 1;
+                if (sceneDepthDSV) normalRenderingDesc.depth = normalDepthAttachment;
+                beginRendering(normalRenderingDesc);
+                Commands().SetViewport(vp);
+                Commands().SetScissor(scissor);
+                Commands().SetPipeline(normalPipeline);
+                Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+                Commands().SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
+                if (m_DescriptorPool.IsValid()) {
+                    m_DescriptorPool.Bind(Commands().GetNative());
+                }
+                for (const auto& item : opaqueQueue) {
+                    if (!item.DepthWrite) continue;
+                    if (item.UseCustomShader && (!item.CustomGeneration || !item.CustomGeneration->HasNormalPass)) {
+                        m_ViewContext.Diagnostics().AddFallback("screen_normal_unavailable: custom shader has no companion normal pass; excluded from occlusion guides");
+                        continue;
+                    }
+                    if (item.UseCustomShader && item.CustomGeneration && item.CustomGeneration->HasNormalPass &&
+                        item.SurfaceType == Axle::SurfaceType::Opaque && item.DepthWrite &&
+                        item.DrawResourceIndex < m_CustomDraws.size()) {
+                        const auto& resource = *m_CustomDraws[item.DrawResourceIndex];
+                        auto* customNormalPipeline = CreateCustomMaterialPipeline(
+                            *item.CustomGeneration, RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()),
+                            m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode,
+                            useGTAO && item.DepthWrite, true);
+                        if (!customNormalPipeline) {
+                            endRendering();
+                            return RenderPassResult::Failed("SurfaceNormal: custom graph normal pipeline creation failed");
+                        }
+                        Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, *item.CustomGeneration->PipelineLayout);
+                        m_CustomDescriptorPool.Bind(Commands().GetNative());
+                        for (size_t i = 0; i < resource.Sets.size(); ++i)
+                            if (item.CustomGeneration->LayoutDescription.DescriptorSets[i].RegisterSpace != 4 &&
+                                !bindDescriptorSet(static_cast<uint32_t>(i), resource.Sets[i])) {
+                                endRendering();
+                                return RenderPassResult::Failed("SurfaceNormal: custom descriptor binding failed");
+                            }
+                        Commands().SetPipeline(customNormalPipeline);
+                        item.Mesh->Bind(Commands());
+                        item.Mesh->Draw(Commands());
+                        m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
+                        Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+                        m_DescriptorPool.Bind(Commands().GetNative());
+                        Commands().SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
+                        continue;
+                    } else if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
+                        const auto& resource = *m_MaterialDraws[item.DrawResourceIndex];
+                        auto* itemNormalPipeline = GetOrCreateSurfaceNormalPipeline(
+                            RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()), m_CurrentDepthFormat, useGTAO, item.CullMode);
+                        if (!itemNormalPipeline) { endRendering(); return fail(); }
+                        Commands().SetPipeline(itemNormalPipeline);
+                        Commands().SetRootDescriptor(2, resource.Constants.GetCBV());
+                        if (!bindDescriptorSet(0, resource.Set)) {
+                            endRendering();
+                            return RenderPassResult::Failed("SurfaceNormal: descriptor binding failed");
+                        }
+                    } else if (m_DefaultDescriptorSet) {
+                        if (!bindDescriptorSet(0, m_DefaultDescriptorSet)) {
+                            endRendering();
+                            return RenderPassResult::Failed("SurfaceNormal: descriptor binding failed");
+                        }
+                    }
+                    Commands().SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
+                    item.Mesh->Bind(Commands());
+                    item.Mesh->Draw(Commands());
+                    m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
+                }
+                endRendering();
+                return RenderPassResult{};
+            }, [&](RenderGraph& graph) {
+                if (useSurfaceNormal) {
+                    graph.AddPass(normalPassName, {
+                        {useGTAO ? gtaoDepth : sceneDepth, Layout::DepthStencilWrite, Access::Write, useGTAO ? Load::Clear : Load::Load},
+                        {sceneNormal, Layout::ColorAttachment, Access::Write, Load::Clear}});
+                }
+            });
+
+        };
+        if (useGTAO) registerSurfaceNormal();
+
+        addPass("GTAOPreLighting", [&](const RenderPassContext&) -> RenderPassResult {
+            if (!useGTAO) return {};
+            const Passes::PassRecordOps ops{beginPass, passUniform,
+                [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                    return bindDescriptorSet(index, set, bindPoint);
+                }, beginRendering, endRendering};
+            if (!Passes::GTAOPass::RecordPreLighting(*this,
+                {world, camera, settings, viewTargets, projZO, sceneTargetTexture,
+                 sceneDepthTexture, sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops)) return fail();
+            return {};
+        }, [&](RenderGraph& graph) {
+            if (useGTAO) Passes::GTAOPass::DeclarePreLighting(graph,
+                {sceneColor, output, sceneDepth, gtaoDepth, sceneNormal, gtaoStorage});
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (useGTAO && !uniform("GTAOCompute", sizeof(RHIGTAOConstants))) return fail();
             return {};
         });
 
@@ -891,6 +1028,7 @@ namespace Axle {
             for (auto& item : transparentQueue) PrepareDrawItem(item,"Transparent",copyRefraction);
             if (drawFailed) return RenderPassResult::Failed("material input preparation failed: " + graph.GetError());
             for (const auto pass : {"OpaqueAndSky", "Transparent"}) {
+                if (!graph.DeclareRead(pass, m_ForwardOcclusionDescriptorSet)) return fail();
                 for (auto* cbv : {m_SceneConstantBuffer.GetCBV(), m_LightBuffer.GetCBV(),
                     m_CascadedShadows.GetConstantsCBV(), m_LocalShadows.GetConstantsCBV()})
                     if (!graph.DeclareRead(pass,cbv)) return fail();
@@ -900,10 +1038,10 @@ namespace Axle {
                 (!graph.DeclareRead("OpaqueAndSky",m_SkyboxDescriptorSet) ||
                  !graph.DeclareRead("OpaqueAndSky",m_SkyboxConstantBuffer.GetCBV()))) return fail();
             if (useSurfaceNormal) {
-                if (!graph.DeclareRead("SurfaceNormal",m_DefaultDescriptorSet) ||
-                    !graph.DeclareRead("SurfaceNormal",m_SceneConstantBuffer.GetCBV())) return fail();
+                if (!graph.DeclareRead(normalPassName,m_DefaultDescriptorSet) ||
+                    !graph.DeclareRead(normalPassName,m_SceneConstantBuffer.GetCBV())) return fail();
                 for (const auto& item : opaqueQueue) {
-                    if (!declareMesh("SurfaceNormal",*item.Mesh)) return fail();
+                    if (!declareMesh(normalPassName,*item.Mesh)) return fail();
                     // Material Graphs currently expose an opaque surface output only:
                     // do not pretend their companion normal pass provides alpha
                     // cutout/transparent coverage until the graph schema carries
@@ -913,106 +1051,21 @@ namespace Axle {
                         item.DrawResourceIndex < m_CustomDraws.size()) {
                         const auto& res = *m_CustomDraws[item.DrawResourceIndex];
                         for (const auto& buffer : res.ConstantBuffers)
-                            if (!graph.DeclareRead("SurfaceNormal", buffer.GetCBV())) return fail();
-                        for (auto* set : res.Sets)
-                            if (!graph.DeclareRead("SurfaceNormal", set)) return fail();
+                            if (!graph.DeclareRead(normalPassName, buffer.GetCBV())) return fail();
+                        for (size_t setIndex = 0; setIndex < res.Sets.size(); ++setIndex)
+                            if (item.CustomGeneration->LayoutDescription.DescriptorSets[setIndex].RegisterSpace != 4 &&
+                                !graph.DeclareRead(normalPassName, res.Sets[setIndex])) return fail();
                     } else if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
                         const auto& res = *m_MaterialDraws[item.DrawResourceIndex];
-                        if (!graph.DeclareRead("SurfaceNormal", res.Constants.GetCBV()) ||
-                            !graph.DeclareRead("SurfaceNormal", res.Set)) return fail();
+                        if (!graph.DeclareRead(normalPassName, res.Constants.GetCBV()) ||
+                            !graph.DeclareRead(normalPassName, res.Set)) return fail();
                     }
                 }
             }
             return {};
         });
 
-        addPass("ScreenSpace", [&](const RenderPassContext&) -> RenderPassResult {
-            if (!useSurfaceNormal)
-                return RenderPassResult{};
-            if (!beginPass("SurfaceNormal"))
-                return RenderPassResult::Failed("SurfaceNormal: graph begin failed");
-            auto* normalPipeline = GetOrCreateSurfaceNormalPipeline(
-                RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()), m_CurrentDepthFormat);
-            if (!normalPipeline)
-                return RenderPassResult::Failed("SurfaceNormal: pipeline creation failed");
-
-            nri::AttachmentDesc normalAttachment = {};
-            normalAttachment.descriptor = m_OpaqueSceneNormal->GetRTV();
-            normalAttachment.loadOp = nri::LoadOp::CLEAR;
-            normalAttachment.storeOp = nri::StoreOp::STORE;
-            normalAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 0.0f };
-
-            nri::AttachmentDesc normalDepthAttachment = depthAttachment;
-            normalDepthAttachment.loadOp = nri::LoadOp::LOAD;
-            normalDepthAttachment.storeOp = nri::StoreOp::STORE;
-            nri::RenderingDesc normalRenderingDesc = {};
-            normalRenderingDesc.colors = &normalAttachment;
-            normalRenderingDesc.colorNum = 1;
-            if (sceneDepthDSV) normalRenderingDesc.depth = normalDepthAttachment;
-            beginRendering(normalRenderingDesc);
-            Commands().SetViewport(vp);
-            Commands().SetScissor(scissor);
-            Commands().SetPipeline(normalPipeline);
-            Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
-            Commands().SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
-            if (m_DescriptorPool.IsValid()) {
-                m_DescriptorPool.Bind(Commands().GetNative());
-            }
-            for (const auto& item : opaqueQueue) {
-                if (item.UseCustomShader && item.CustomGeneration && item.CustomGeneration->HasNormalPass &&
-                    item.SurfaceType == Axle::SurfaceType::Opaque && item.DepthWrite &&
-                    item.DrawResourceIndex < m_CustomDraws.size()) {
-                    const auto& resource = *m_CustomDraws[item.DrawResourceIndex];
-                    auto* customNormalPipeline = CreateCustomMaterialPipeline(
-                        *item.CustomGeneration, RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()),
-                        m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode,
-                        item.DepthWrite, true);
-                    if (!customNormalPipeline) {
-                        endRendering();
-                        return RenderPassResult::Failed("SurfaceNormal: custom graph normal pipeline creation failed");
-                    }
-                    Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, *item.CustomGeneration->PipelineLayout);
-                    m_CustomDescriptorPool.Bind(Commands().GetNative());
-                    for (size_t i = 0; i < resource.Sets.size(); ++i)
-                        if (!bindDescriptorSet(static_cast<uint32_t>(i), resource.Sets[i])) {
-                            endRendering();
-                            return RenderPassResult::Failed("SurfaceNormal: custom descriptor binding failed");
-                        }
-                    Commands().SetPipeline(customNormalPipeline);
-                    item.Mesh->Bind(Commands());
-                    item.Mesh->Draw(Commands());
-                    m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
-                    Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
-                    m_DescriptorPool.Bind(Commands().GetNative());
-                    Commands().SetRootDescriptor(0, m_SceneConstantBuffer.GetCBV());
-                    continue;
-                } else if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
-                    const auto& resource = *m_MaterialDraws[item.DrawResourceIndex];
-                    Commands().SetRootDescriptor(2, resource.Constants.GetCBV());
-                    if (!bindDescriptorSet(0, resource.Set)) {
-                        endRendering();
-                        return RenderPassResult::Failed("SurfaceNormal: descriptor binding failed");
-                    }
-                } else if (m_DefaultDescriptorSet) {
-                    if (!bindDescriptorSet(0, m_DefaultDescriptorSet)) {
-                        endRendering();
-                        return RenderPassResult::Failed("SurfaceNormal: descriptor binding failed");
-                    }
-                }
-                Commands().SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
-                item.Mesh->Bind(Commands());
-                item.Mesh->Draw(Commands());
-                m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
-            }
-            endRendering();
-            return RenderPassResult{};
-        }, [&](RenderGraph& graph) {
-            if (useSurfaceNormal) {
-                graph.AddPass("SurfaceNormal", {
-                    {sceneDepth, Layout::DepthStencilWrite, Access::Write, Load::Load},
-                    {sceneNormal, Layout::ColorAttachment, Access::Write, Load::Clear}});
-            }
-        });
+        if (!useGTAO) registerSurfaceNormal();
 
         addPass("Transparent", [&](const RenderPassContext&) -> RenderPassResult {
             if (copyRefraction) {
@@ -1204,34 +1257,6 @@ namespace Axle {
             }
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useDDGI && !uniform("DDGIUpdate",sizeof(RHIDDGIConstants))) return fail();
-            return {};
-        });
-
-        addPass("GTAOPass", [&](const RenderPassContext&) -> RenderPassResult {
-            // 7.5. Half-resolution-style screen-space GTAO sampling. The shared
-            // fullscreen pass samples a 2x depth footprint and writes the AO
-            // modulation back into the scene color before tone mapping/FXAA.
-            if (useGTAO) {
-                const Passes::PassRecordOps ops{
-                    beginPass, passUniform,
-                    [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
-                        return bindDescriptorSet(index, set, bindPoint);
-                    }, beginRendering, endRendering};
-                if (!Passes::GTAOPass::Record(*this,
-                    {world, camera, settings, viewTargets, projZO, sceneTargetTexture,
-                     sceneDepthTexture, sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
-                    return fail();
-            }
-
-            return {};
-        }, [&](RenderGraph& graph) {
-            if (useGTAO) {
-                Passes::GTAOPass::Declare(graph, {sceneColor, gtaoInput, sceneDepth, gtaoDepth,
-                    sceneNormal, gtaoStorage});
-            }
-        }, [&](const RenderPassContext&) -> RenderPassResult {
-            if (useGTAO && (!uniform("GTAOCompute",sizeof(RHIGTAOConstants)) ||
-                !uniform("GTAOApply",sizeof(RHIGTAOConstants)))) return fail();
             return {};
         });
 

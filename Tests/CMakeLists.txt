@@ -521,6 +521,8 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
     AXLE_TONEMAPPING_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ToneMapping.hlsl"
       AXLE_LOCAL_SHADOW_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/LocalShadows.hlsli"
       AXLE_GTAO_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/GTAO.hlsl"
+      AXLE_OCCLUSION_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/Occlusion.hlsli"
+      AXLE_SCENE_PASSES_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RHISceneRendererPasses.cpp"
       AXLE_GTAO_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/GTAOPass.cpp"
       AXLE_RHI_VIEW_TARGETS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/RHI/src/RHIViewTargets.cpp"
       AXLE_RENDER_CAPABILITIES_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Renderer/src/RenderCapabilities.cpp"

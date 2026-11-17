@@ -320,6 +320,13 @@ namespace Axle {
     // =========================================================================
     namespace OcclusionContract {
 
+        namespace {
+            bool HasSeparatedLighting(const ShadingComponents& comp) {
+                return comp.SunDiffuse != glm::vec3(0) || comp.SunSpecular != glm::vec3(0) ||
+                       comp.LocalDiffuse != glm::vec3(0) || comp.LocalSpecular != glm::vec3(0);
+            }
+        }
+
         float CombineDirectionalVisibility(float csmVisibility, float contactShadow,
                                            bool enableContactShadows, bool enableCSM) {
             const float csm = enableCSM ? std::clamp(csmVisibility, 0.0f, 1.0f) : 1.0f;
@@ -343,9 +350,7 @@ namespace Axle {
             glm::vec3 localDiff = comp.LocalDiffuse;
             glm::vec3 localSpec = comp.LocalSpecular;
 
-            const bool hasExplicitSeparation = (sunDiff != glm::vec3(0.0f) || sunSpec != glm::vec3(0.0f) ||
-                                                localDiff != glm::vec3(0.0f) || localSpec != glm::vec3(0.0f));
-            if (!hasExplicitSeparation) {
+            if (!HasSeparatedLighting(comp)) {
                 // Backwards compatibility with U4-A: route the legacy direct
                 // fields to the only available direct-light class. When a
                 // caller explicitly says that no sun exists, those fields
@@ -449,8 +454,7 @@ namespace Axle {
             // 4. If Sun is present and contact shadows enabled, difference must affect only sun contribution
             if (comp.HasSun && comp.EnableContactShadows) {
                 glm::vec3 sunContribution = comp.SunDiffuse + comp.SunSpecular;
-                if (sunContribution == glm::vec3(0.0f) &&
-                    (comp.DirectDiffuse != glm::vec3(0.0f) || comp.DirectSpecular != glm::vec3(0.0f))) {
+                if (!HasSeparatedLighting(comp)) {
                     sunContribution = comp.DirectDiffuse + comp.DirectSpecular;
                 }
                 const glm::vec3 diff = atContact1 - atContact0;

@@ -1,5 +1,10 @@
 # M15 U4 Batch 1 — Independent Codex Review
 
+> Re-review, 2026-11-17: the later contract-only acceptance below did not prove
+> production runtime dataflow. The user requested a fresh review; actual
+> pre-lighting wiring and native radiance evidence are now documented in
+> [the consolidated U4-A/B re-review](M15_U4_AB_CODEX_REVIEW.md).
+
 ## Scope
 
 Reviewed Gemini delivery `83ef0286` plus exchange metadata `5afdce70` for

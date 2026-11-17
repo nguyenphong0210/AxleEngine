@@ -438,7 +438,8 @@ namespace Axle {
         bool RecordFramePasses(const FramePassInputs& inputs);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
         bool CreateGraphicsPipeline(RHI::RHIDevice& device);
-        nri::Pipeline* GetOrCreateSurfaceNormalPipeline(nri::Format colorFormat, nri::Format depthFormat);
+        nri::Pipeline* GetOrCreateSurfaceNormalPipeline(nri::Format colorFormat, nri::Format depthFormat,
+                                                       bool preLighting = false, CullMode cull = CullMode::None);
 
         bool CompileSkyboxShaders(RHI::RHIDevice& device);
         bool CreateSkyboxPipelineLayout(RHI::RHIDevice& device);
@@ -481,7 +482,6 @@ namespace Axle {
         RHI::RHIPipelineLayout m_PipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_Pipeline;
         RHI::RHIResourceRef<nri::Pipeline> m_PipelineHDR;
-        RHI::RHIResourceRef<nri::Pipeline> m_SurfaceNormalPipeline;
         RHI::RHIShaderBytecode m_SurfaceNormalPixelShader;
 
         nri::Format m_CurrentColorFormat = nri::Format::RGBA8_UNORM;
@@ -490,6 +490,7 @@ namespace Axle {
         RHI::RHISampler m_AnisoSampler;
         RHI::RHIDescriptorPool m_DescriptorPool;
         nri::DescriptorSet* m_DefaultDescriptorSet = nullptr;
+        nri::DescriptorSet* m_ForwardOcclusionDescriptorSet = nullptr;
         struct MaterialDrawResources {
             RHI::RHIBuffer Constants;
             nri::DescriptorSet* Set = nullptr;
@@ -508,6 +509,7 @@ namespace Axle {
 
         RHI::RHIDescriptorPool m_CustomDescriptorPool;
         RHI::RHISampler m_CustomSampler;
+        RHI::RHISampler m_CustomShadowSampler;
         std::map<ShaderSamplerPolicy,RHI::RHISampler> m_CustomPolicySamplers;
 
         nri::Pipeline* GetOrCreateCustomPipeline(

@@ -145,7 +145,7 @@ namespace Axle {
 
         // Per-draw resource descriptors; the immutable sampler uses no heap slots.
         // Reserve the fixed PBR-default and sky sets in addition to 4096 draws.
-        constexpr uint32_t materialSets=4096+2;
+        constexpr uint32_t materialSets=4096+3;
         auto materialPoolDesc = RHIDescriptorPoolDesc::Tier2Bindless(materialSets*ForwardTextureCount,materialSets);
         materialPoolDesc.MaxSamplers = 0;
         if (!m_DescriptorPool.Init(materialPoolDesc)) {
@@ -192,10 +192,17 @@ namespace Axle {
             }
         }
 
+        m_ForwardOcclusionDescriptorSet = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 1);
+        auto neutralOcclusion = RHIMaterial::GetDefaultWhiteTexture();
+        if (!m_ForwardOcclusionDescriptorSet || !neutralOcclusion ||
+            !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 0, 0,
+                {neutralOcclusion->GetSRV(), neutralOcclusion->GetSRV()})) return false;
+
         RHIDescriptorPoolDesc customPool;
         customPool.MaxDescriptorSets=4096; customPool.MaxConstantBuffers=16384;
         customPool.MaxTextures=16384; customPool.MaxSamplers=1024;
-        if (!m_CustomDescriptorPool.Init(customPool) || !m_CustomSampler.Init(RHISamplerDesc::Anisotropic16x())) return false;
+        if (!m_CustomDescriptorPool.Init(customPool) || !m_CustomSampler.Init(RHISamplerDesc::Anisotropic16x()) ||
+            !m_CustomShadowSampler.Init(RHISamplerDesc::ShadowPCF())) return false;
         for(auto policy:{ShaderSamplerPolicy::LinearRepeat,ShaderSamplerPolicy::LinearClamp,ShaderSamplerPolicy::PointRepeat,ShaderSamplerPolicy::PointClamp})
             if(!m_CustomPolicySamplers[policy].Init(*MaterialSamplerDescription(policy)))return false;
 
@@ -641,7 +648,6 @@ namespace Axle {
 
         m_Pipeline = nullptr;
         m_PipelineHDR = nullptr;
-        m_SurfaceNormalPipeline = nullptr;
         m_SurfaceNormalPixelShader = {};
         m_SkyboxPipeline = nullptr;
         m_SkyboxPipelineHDR = nullptr;
@@ -662,6 +668,7 @@ namespace Axle {
         m_CustomDraws.clear();
         m_CustomDescriptorPool.Shutdown();
         m_CustomSampler.Shutdown();
+        m_CustomShadowSampler.Shutdown();
         m_CustomPolicySamplers.clear();
         m_CustomProgramCache.Clear();
         m_OpaqueSceneColor = nullptr;
@@ -671,6 +678,7 @@ namespace Axle {
         m_ScreenStorageTarget = nullptr;
         m_MaterialTextures.Clear();
         m_DefaultDescriptorSet = nullptr;
+        m_ForwardOcclusionDescriptorSet = nullptr;
         m_IrradianceMap = nullptr;
         m_PrefilterMap = nullptr;
         m_BRDFLUT = nullptr;
@@ -839,10 +847,18 @@ namespace Axle {
         samplers[3].desc=RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge).ToNRIDesc();
         samplers[3].shaderStages=nri::StageBits::FRAGMENT_SHADER;
 
-        nri::DescriptorSetDesc descSet = {};
-        descSet.registerSpace = 1;
-        descSet.ranges = ranges;
-        descSet.rangeNum = 1;
+        nri::DescriptorRangeDesc occlusionRange{};
+        occlusionRange.baseRegisterIndex = 0;
+        occlusionRange.descriptorNum = 2;
+        occlusionRange.descriptorType = nri::DescriptorType::TEXTURE;
+        occlusionRange.shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        nri::DescriptorSetDesc descriptorSets[2]{};
+        descriptorSets[0].registerSpace = 1;
+        descriptorSets[0].ranges = ranges;
+        descriptorSets[0].rangeNum = 1;
+        descriptorSets[1].registerSpace = 4;
+        descriptorSets[1].ranges = &occlusionRange;
+        descriptorSets[1].rangeNum = 1;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
@@ -852,8 +868,8 @@ namespace Axle {
         layoutDesc.rootDescriptorNum = 5;
         layoutDesc.rootSamplers = samplers;
         layoutDesc.rootSamplerNum = 4;
-        layoutDesc.descriptorSets = &descSet;
-        layoutDesc.descriptorSetNum = 1;
+        layoutDesc.descriptorSets = descriptorSets;
+        layoutDesc.descriptorSetNum = 2;
         layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_PipelineLayout.Init(layoutDesc);
@@ -940,26 +956,25 @@ namespace Axle {
         return cache.GetOrCreateGraphicsPipeline(gfxDesc);
     }
 
-    nri::Pipeline* RHISceneRenderer::GetOrCreateSurfaceNormalPipeline(nri::Format colorFormat, nri::Format depthFormat) {
-        if (m_SurfaceNormalPipeline) return m_SurfaceNormalPipeline;
+    nri::Pipeline* RHISceneRenderer::GetOrCreateSurfaceNormalPipeline(nri::Format colorFormat, nri::Format depthFormat,
+                                                                    bool preLighting, CullMode cull) {
         if (!m_SurfaceNormalPixelShader.IsValid() || !m_VertexShader.IsValid()) return nullptr;
 
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_PipelineLayout;
         gfxDesc.Shaders = { m_VertexShader, m_SurfaceNormalPixelShader };
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
-        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.CullMode = cull == CullMode::Back ? nri::CullMode::BACK : cull == CullMode::Front ? nri::CullMode::FRONT : nri::CullMode::NONE;
         gfxDesc.Rasterizer.FrontCounterClockwise = true;
         gfxDesc.DepthStencil.DepthTestEnable = true;
-        gfxDesc.DepthStencil.DepthWriteEnable = false;
-        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::EQUAL;
+        gfxDesc.DepthStencil.DepthWriteEnable = preLighting;
+        gfxDesc.DepthStencil.DepthCompareOp = preLighting ? nri::CompareOp::LESS : nri::CompareOp::EQUAL;
         gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
         gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
         gfxDesc.ColorAttachmentFormats = { colorFormat };
         gfxDesc.SampleCount = 1;
         gfxDesc.VertexInput = VertexLayoutContract::GetCanonicalVertexInputDesc();
-        m_SurfaceNormalPipeline = RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
-        return m_SurfaceNormalPipeline;
+        return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
     }
 
     nri::Pipeline* RHISceneRenderer::GetOrCreateCustomPipeline(const CustomReadyGeneration& generation,

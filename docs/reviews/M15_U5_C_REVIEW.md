@@ -1,5 +1,7 @@
 # M15 U5 Batch C — Cubemap Roughness Prefilter Self-Verification Review (`M15-U5-16.1` -> `M15-U5-20`)
 
+> Historical Gemini self-verification report. Codex independently reviewed and repaired this delivery; current findings, rerun evidence, acceptance limits, and corrected scene-linear HDR measurements are in [M15_U5_C_CODEX_REVIEW.md](M15_U5_C_CODEX_REVIEW.md). The original measurements below remain historical reported evidence.
+
 Self-verification delivery report for Milestone 15 Unit 5 Batch C (`U5-C`, SubUnit `S5.3`: `M15-U5-16.1` through `M15-U5-20`), implemented on top of accepted `U5-B` review commit `c7153144`. Independent Codex review and acceptance remain pending per [WORKING_PROTOCOL.md](../agents/WORKING_PROTOCOL.md). Interactive Editor visual captures (`M15-U5-17.1`, `18.2`, `19.2`) remain open and explicitly deferred per user direction to the post-U5 consolidated visual pass.
 
 ---

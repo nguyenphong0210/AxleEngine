@@ -11,6 +11,7 @@
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <limits>
@@ -393,6 +394,31 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         }
 
         const glm::vec3 constOut = EvaluatePrefilterDirectionCPU(constantCube, refRes, {0.0f, 1.0f, 0.0f}, 0.75f, 64u);
+        auto seamCube = constantCube;
+        for (auto& face : seamCube) std::fill(face.begin(), face.end(), glm::vec3(0));
+        std::fill(seamCube[0].begin(), seamCube[0].end(), glm::vec3(4));
+        const auto seam = SampleCubemapBilinear3D(seamCube, refRes, {1,0,1});
+        const auto left = SampleCubemapBilinear3D(seamCube, refRes, {1-.00001f,0,1});
+        const auto right = SampleCubemapBilinear3D(seamCube, refRes, {1+.00001f,0,1});
+        RENDER_CHECK(glm::distance(seam, glm::vec3(2)) < .001f && glm::distance(left, right) < .002f,
+            "CPU cube bilinear footprint blends across face edges continuously");
+        auto cornerCube = constantCube;
+        for (uint32_t f = 0; f < FaceCount; ++f)
+            std::fill(cornerCube[f].begin(), cornerCube[f].end(), glm::vec3(float(f + 1)));
+        for (float x : {-1.0f, 1.0f}) for (float y : {-1.0f, 1.0f}) for (float z : {-1.0f, 1.0f}) {
+            const glm::vec3 corner(x, y, z);
+            const float expected = ((x > 0 ? 1.0f : 2.0f) + (y > 0 ? 3.0f : 4.0f) + (z > 0 ? 5.0f : 6.0f)) / 3.0f;
+            RENDER_CHECK(glm::distance(SampleCubemapBilinear3D(cornerCube, refRes, corner), glm::vec3(expected)) < .001f,
+                "CPU cube corner symmetrically averages its three meeting faces");
+            for (int axis = 0; axis < 3; ++axis) {
+                auto approach = corner;
+                approach[axis] *= 1.00001f;
+                RENDER_CHECK(glm::distance(SampleCubemapBilinear3D(cornerCube, refRes, approach), glm::vec3(expected)) < .002f,
+                    "all eight cube corners stay continuous when approached from each major face");
+            }
+        }
+        RENDER_CHECK(EvaluatePrefilterDirectionCPU(constantCube,refRes,{0,1,0},std::numeric_limits<float>::quiet_NaN(),64) == glm::vec3(0),
+            "nonfinite roughness receives the explicit neutral reference fallback");
         RENDER_CHECK(glm::distance(constOut, glm::vec3(2.0f, 4.0f, 8.0f)) < 1e-4f,
             "M15-U5-19.1: constant HDR cubemap radiance is conserved at rough mips");
 

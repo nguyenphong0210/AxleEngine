@@ -1357,7 +1357,7 @@ namespace Axle {
         }
 
         glm::vec3 ComputeCubeTexelDirection(uint32_t faceIndex, float u, float v) {
-            if (faceIndex >= FaceCount) {
+            if (faceIndex >= FaceCount || !std::isfinite(u) || !std::isfinite(v)) {
                 return glm::vec3(0.0f);
             }
             const CubeFaceBasis basis = GetCubeFaceBasis(faceIndex);
@@ -1419,18 +1419,45 @@ namespace Axle {
             const float v = std::clamp(0.5f * (tc / ma + 1.0f), 0.0f, 1.0f);
             const float fx = u * static_cast<float>(faceResolution) - 0.5f;
             const float fy = v * static_cast<float>(faceResolution) - 0.5f;
-            const int x0 = std::clamp(static_cast<int>(std::floor(fx)), 0, static_cast<int>(faceResolution) - 1);
-            const int y0 = std::clamp(static_cast<int>(std::floor(fy)), 0, static_cast<int>(faceResolution) - 1);
-            const int x1 = std::min(x0 + 1, static_cast<int>(faceResolution) - 1);
-            const int y1 = std::min(y0 + 1, static_cast<int>(faceResolution) - 1);
+            const int x0 = static_cast<int>(std::floor(fx));
+            const int y0 = static_cast<int>(std::floor(fy));
+            const int x1 = x0 + 1;
+            const int y1 = y0 + 1;
             const float tx = std::clamp(fx - static_cast<float>(x0), 0.0f, 1.0f);
             const float ty = std::clamp(fy - static_cast<float>(y0), 0.0f, 1.0f);
 
-            const auto& px = faces[face];
-            const glm::vec3 c00 = px[static_cast<size_t>(y0) * faceResolution + x0];
-            const glm::vec3 c10 = px[static_cast<size_t>(y0) * faceResolution + x1];
-            const glm::vec3 c01 = px[static_cast<size_t>(y1) * faceResolution + x0];
-            const glm::vec3 c11 = px[static_cast<size_t>(y1) * faceResolution + x1];
+            const auto tap = [&](int x, int y) {
+                if (x >= 0 && y >= 0 && x < int(faceResolution) && y < int(faceResolution))
+                    return faces[face][size_t(y) * faceResolution + x];
+                const auto faceTap = [&](const glm::vec3& dir, uint32_t f) {
+                    const auto basis = GetCubeFaceBasis(f);
+                    const float major = glm::dot(dir, basis.Forward);
+                    const int ix = std::clamp(int((glm::dot(dir, basis.Right) / major + 1) * .5f * faceResolution), 0, int(faceResolution)-1);
+                    const int iy = std::clamp(int((1 - glm::dot(dir, basis.Up) / major) * .5f * faceResolution), 0, int(faceResolution)-1);
+                    return faces[f][size_t(iy) * faceResolution + ix];
+                };
+                if ((x < 0 || x >= int(faceResolution)) && (y < 0 || y >= int(faceResolution))) {
+                    // A cube corner meets three faces. Average their corner texels
+                    // symmetrically so the limit is independent of the major face.
+                    const auto corner = ComputeCubeTexelDirection(face, x < 0 ? 0.0f : 1.0f, y < 0 ? 0.0f : 1.0f);
+                    glm::vec3 sum(0);
+                    for (uint32_t f = 0; f < FaceCount; ++f)
+                        if (glm::dot(corner, GetCubeFaceBasis(f).Forward) > 0) sum += faceTap(corner, f);
+                    return sum / 3.0f;
+                }
+                // Extend the bilinear footprint across the cube edge, rather
+                // than clamping it to one face and introducing a reference seam.
+                const auto direction = ComputeCubeTexelDirection(face, (x + .5f) / faceResolution, (y + .5f) / faceResolution);
+                uint32_t adjacent = 0;
+                float major = -1;
+                for (uint32_t f = 0; f < FaceCount; ++f) {
+                    const float alignment = glm::dot(direction, GetCubeFaceBasis(f).Forward);
+                    if (alignment > major) { major = alignment; adjacent = f; }
+                }
+                return faceTap(direction, adjacent);
+            };
+            const glm::vec3 c00 = tap(x0, y0), c10 = tap(x1, y0);
+            const glm::vec3 c01 = tap(x0, y1), c11 = tap(x1, y1);
             return glm::mix(glm::mix(c00, c10, tx), glm::mix(c01, c11, tx), ty);
         }
 
@@ -1440,11 +1467,11 @@ namespace Axle {
             const glm::vec3& normalDir,
             float roughness,
             uint32_t sampleCount) {
-            if (sourceResolution == 0u || sampleCount == 0u || !IsFiniteVec3(normalDir)) {
+            if (sourceResolution == 0u || sampleCount == 0u || !IsFiniteVec3(normalDir) || !std::isfinite(roughness)) {
                 return glm::vec3(0.0f);
             }
             const float nLen = glm::length(normalDir);
-            if (nLen <= 1e-7f) {
+            if (!std::isfinite(nLen) || nLen <= 1e-7f) {
                 return glm::vec3(0.0f);
             }
             const glm::vec3 N = normalDir / nLen;

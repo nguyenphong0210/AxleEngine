@@ -262,6 +262,8 @@ namespace Axle::RHI {
             uavView.mipNum = 1;
             uavView.layerOffset = 0;
             uavView.layerNum = static_cast<nri::Dim_t>(desc.ArrayLayers);
+            // NRI's REMAINING sentinel resolves to the base depth, not the mip depth.
+            if (desc.Depth > 1) uavView.sliceNum = static_cast<nri::Dim_t>(desc.Depth);
 
             res = ScopedRHIFault::Invoke("CreateTextureUAV", [&] { return core.CreateTextureView(uavView, m_UAV); });
             if (res != nri::Result::SUCCESS || !m_UAV) {
@@ -276,6 +278,8 @@ namespace Axle::RHI {
                 nri::TextureViewDesc mipUavView = uavView;
                 mipUavView.mipOffset = static_cast<nri::Dim_t>(mip);
                 mipUavView.mipNum = 1;
+                if (desc.Depth > 1)
+                    mipUavView.sliceNum = static_cast<nri::Dim_t>(std::max(1u, desc.Depth >> mip));
                 res = ScopedRHIFault::Invoke("CreateTextureUAV", [&] { return core.CreateTextureView(mipUavView, m_MipUAVs[mip]); });
                 if (res != nri::Result::SUCCESS || !m_MipUAVs[mip]) {
                     AXLE_CORE_ERROR("RHITexture::Init failed to create per-mip UAV mip {0}! Result: {1}", mip, static_cast<int>(res));

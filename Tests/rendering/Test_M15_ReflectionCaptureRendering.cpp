@@ -859,7 +859,7 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
             sweepSettings.EnableTAA = false;
             sweepSettings.EnableBloom = false;
             sweepSettings.EnableFXAA = false;
-            sweepSettings.EnableToneMapping = false;
+            sweepSettings.EnableToneMapping = true;
             sweepSettings.ClearColor = {0.0f, 0.0f, 0.0f, 1.0f};
 
             const float roughnessSteps[4] = {0.05f, 0.35f, 0.70f, 0.95f};
@@ -870,7 +870,8 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
                 renderer.RenderWorldView(sweepWorld, sweepCam, &sweepColor, &sweepDepth, sweepSettings);
                 RENDER_CHECK(renderer.WasLastRenderSuccessful(), "M15-U5-19.2 roughness sweep render");
                 std::vector<glm::vec4> pixels;
-                RENDER_CHECK(ReadTexture2DRGBA16(sweepColor, pixels), "M15-U5-19.2 sweep readback");
+                RENDER_CHECK(renderer.GetIntermediateHDRTarget() && ReadTexture2DRGBA16(*renderer.GetIntermediateHDRTarget(), pixels),
+                    "M15-U5-19.2 scene-linear sweep readback before tone mapping");
 
                 float maxVal = 0.0f;
                 float centerVal = 0.0f;
@@ -879,7 +880,7 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
                 for (uint32_t y = 0; y < 64u; ++y) {
                     for (uint32_t x = 0; x < 64u; ++x) {
                         const glm::vec4& p = pixels[size_t(y) * 64u + x];
-                        RENDER_CHECK(std::isfinite(p.r) && std::isfinite(p.g) && std::isfinite(p.b) && p.r >= 0.0f && p.g >= 0.0f && p.b >= 0.0f,
+                        RENDER_CHECK(std::isfinite(p.r) && std::isfinite(p.g) && std::isfinite(p.b) && std::isfinite(p.a) && p.r >= 0.0f && p.g >= 0.0f && p.b >= 0.0f,
                             "M15-U5-19.2 sphere render outputs remain finite and non-negative");
                         const float luma = p.r * 0.2126f + p.g * 0.7152f + p.b * 0.0722f;
                         maxVal = std::max(maxVal, luma);
@@ -894,6 +895,7 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
                     }
                 }
                 peakLuma[step] = std::max(maxVal, centerVal);
+                if (step == 0) RENDER_CHECK(peakLuma[step] > 1, "sharp sweep is genuinely HDR, not display-mapped color in FP16 storage");
                 offCenterFraction[step] = (ringCount > 0 && peakLuma[step] > 1e-4f)
                     ? (ringSum / static_cast<float>(ringCount)) / peakLuma[step]
                     : 0.0f;
@@ -910,7 +912,7 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
             renderer.SetIBLMaps(savedIrr, savedPref, savedLut);
         }
 
-        // Mid-prefilter fault rollback verification: injecting BeginCommandBuffer fault on command #7 (after 6 faces)
+        // Prefilter rollback at begin and after all mip dispatches are recorded (command #7, after six faces).
         {
             const uint64_t retainedGenId = gen->GenerationID;
             const auto retainedHandle = gen->Cubemap->GetHandle();
@@ -919,35 +921,38 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
             updatedWorld.Meshes[0] = MakeBoxInstance(
                 2001, cubeView, MakeEmissiveMaterial({0.0f, 15.0f, 0.0f}, 1.0f), {0.0f, 0.0f, 5.0f}, {1.6f, 1.6f, 0.4f});
 
-            uint32_t beginCmds = 0;
-            bool prefilterFaultHit = false;
-            {
-                ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
-                    if (op == "BeginCommandBuffer") {
-                        ++beginCmds;
-                        if (beginCmds == 7u && !prefilterFaultHit) {
-                            prefilterFaultHit = true;
-                            return nri::Result::OUT_OF_MEMORY;
+            for (const auto boundary : {"BeginCommandBuffer", "EndCommandBuffer"}) {
+                uint32_t commandCount = 0;
+                bool prefilterFaultHit = false;
+                {
+                    ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
+                        if (op == boundary) {
+                            ++commandCount;
+                            if (commandCount == 7u && !prefilterFaultHit) {
+                                prefilterFaultHit = true;
+                                return nri::Result::OUT_OF_MEMORY;
+                            }
                         }
-                    }
-                    return {};
-                });
-                const auto faultRes = renderer.CaptureDynamicReflectionProbe(updatedWorld, prefilterProbe);
-                RENDER_CHECK(prefilterFaultHit &&
-                             !faultRes.Success &&
-                             faultRes.PreservedPreviousGeneration &&
-                             faultRes.PublishedGenerationID == retainedGenId &&
-                             faultRes.Diagnostic.find("DYNAMIC_PROBE_PREFILTER_FAILED") != std::string::npos,
-                    "M15-U5-C rollback: prefilter command failure aborts publication cleanly while keeping previous generation");
+                        return {};
+                    });
+                    const auto faultRes = renderer.CaptureDynamicReflectionProbe(updatedWorld, prefilterProbe);
+                    RENDER_CHECK(prefilterFaultHit &&
+                                 !faultRes.Success &&
+                                 faultRes.PreservedPreviousGeneration &&
+                                 faultRes.PublishedGenerationID == retainedGenId &&
+                                 faultRes.Diagnostic.find("DYNAMIC_PROBE_PREFILTER_FAILED") != std::string::npos,
+                        "M15-U5-C rollback: prefilter command failure aborts publication cleanly while keeping previous generation");
+                }
+                const auto afterFaultGen = renderer.GetDynamicReflectionProbe(prefilterProbe);
+                RENDER_CHECK(afterFaultGen && afterFaultGen->GenerationID == retainedGenId &&
+                             afterFaultGen->Cubemap->GetHandle() == retainedHandle,
+                    "M15-U5-C rollback: retained prefiltered cubemap handle remains valid after prefilter fault");
+                std::vector<glm::vec4> intactMip2;
+                RENDER_CHECK(ReadCubeFaceRGBA16(*afterFaultGen->Cubemap, 4u, intactMip2, 2u), "M15-U5-C intact mip2");
+                RENDER_CHECK(AverageRegion(intactMip2, 16u, 7u, 7u, 9u, 9u).r > AverageRegion(intactMip2, 16u, 7u, 7u, 9u, 9u).g,
+                    "M15-U5-C rollback: preserved prefilter mip chain still holds original orange/red radiance");
+
             }
-            const auto afterFaultGen = renderer.GetDynamicReflectionProbe(prefilterProbe);
-            RENDER_CHECK(afterFaultGen && afterFaultGen->GenerationID == retainedGenId &&
-                         afterFaultGen->Cubemap->GetHandle() == retainedHandle,
-                "M15-U5-C rollback: retained prefiltered cubemap handle remains valid after prefilter fault");
-            std::vector<glm::vec4> intactMip2;
-            RENDER_CHECK(ReadCubeFaceRGBA16(*afterFaultGen->Cubemap, 4u, intactMip2, 2u), "M15-U5-C intact mip2");
-            RENDER_CHECK(AverageRegion(intactMip2, 16u, 7u, 7u, 9u, 9u).r > AverageRegion(intactMip2, 16u, 7u, 7u, 9u, 9u).g,
-                "M15-U5-C rollback: preserved prefilter mip chain still holds original orange/red radiance");
 
             const auto recoverRes = renderer.CaptureDynamicReflectionProbe(updatedWorld, prefilterProbe);
             RENDER_CHECK(recoverRes.Success && recoverRes.PublishedGenerationID > retainedGenId,

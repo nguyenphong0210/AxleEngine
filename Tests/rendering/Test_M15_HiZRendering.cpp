@@ -33,7 +33,7 @@ namespace {
     }
 
     bool ReadColor8(RHITexture& texture, std::vector<glm::vec4>& pixels) {
-        if (texture.GetFormat() != RHITextureFormat::RGBA8_UNORM) {
+        if (texture.GetFormat() != RHITextureFormat::RGBA8_UNORM && texture.GetFormat() != RHITextureFormat::BGRA8_UNORM) {
             return Read(texture, pixels);
         }
         const std::vector<uint8_t> bytes = Axle::RenderTests::ReadTexture(texture);
@@ -138,6 +138,8 @@ bool RunM15HiZTests(RHISceneRenderer& renderer, const std::filesystem::path& out
         const StandaloneCase cases[] = {
             {4, 4, false, "canonical-4x4"},
             {1, 1, false, "minimal-1x1"},
+            {1, 5, true, "narrow-1x5-border"},
+            {5, 1, true, "short-5x1-border"},
             {3, 5, false, "odd-3x5"},
             {3, 5, true,  "odd-3x5-border"},
             {127, 63, true, "odd-127x63-border"},
@@ -317,7 +319,12 @@ bool RunM15HiZTests(RHISceneRenderer& renderer, const std::filesystem::path& out
             const uint32_t usefulCount = targets->GetHiZUsefulLevelCount();
             std::vector<glm::vec4> level0Rgba;
             RENDER_CHECK(targets->GetHiZ(0) && Read(*targets->GetHiZ(0), level0Rgba), "read rendered HiZ0");
-            const std::vector<float> level0 = ExtractScalarChannel(level0Rgba);
+            std::vector<glm::vec4> sceneDepth;
+            RENDER_CHECK(Read(*targets->Get(RHIViewTarget::OpaqueDepth), sceneDepth) && sceneDepth == level0Rgba,
+                "rendered HiZ0 exactly copies actual opaque scene depth");
+            const std::vector<float> level0 = ExtractScalarChannel(sceneDepth);
+            if (ext.x >= 127) RENDER_CHECK(std::any_of(level0.begin(), level0.end(), [](float d) { return d < .9999f; }) &&
+                std::any_of(level0.begin(), level0.end(), [](float d) { return d == 1; }), "rendered depth includes both geometry and clear sky");
 
             std::vector<std::vector<float>> expectedLevels;
             std::vector<HiZContract::PyramidExtent> expectedExtents;
@@ -420,6 +427,20 @@ bool RunM15HiZTests(RHISceneRenderer& renderer, const std::filesystem::path& out
             "Hi-Z coarse visualization propagates minimum depth across tiles down to uniform 1x1");
         // Requested level 99 clamps cleanly to level 7 (1x1) matching level 6
         RENDER_CHECK(visClamped == vis6, "clamped level 99 matches coarsest 1x1 level");
+
+        for (auto format : {RHITextureFormat::BGRA8_UNORM, RHITextureFormat::RGBA32_FLOAT}) {
+            visDesc.ColorFormat = format;
+            visSettings.HiZVisualizationLevel = 3;
+            RENDER_CHECK(visTargets->Configure(visDesc), "nondefault visualization format allocation");
+            renderer.RenderWorldView(hizWorld, visCam, visTargets->Get(RHIViewTarget::Color),
+                visTargets->Get(RHIViewTarget::Depth), visSettings, nullptr, visTargets);
+            RENDER_CHECK(renderer.WasLastRenderSuccessful(), "visualization pipeline matches attachment format");
+            std::vector<glm::vec4> pixels;
+            RENDER_CHECK(ReadColor8(*visTargets->Get(RHIViewTarget::Color), pixels) && pixels.size() == vis3.size(), "read nondefault visualization format");
+            for (size_t i = 0; i < pixels.size(); ++i)
+                RENDER_CHECK(std::isfinite(pixels[i].x) && std::abs(pixels[i].x - vis3[i].x) <= 1.0f/255, "visualization depth tone is format-independent");
+        }
+        visDesc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
 
         // HDR tone-mapped path with visualization enabled
         visSettings.EnableToneMapping = true;

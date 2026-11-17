@@ -22,7 +22,7 @@ namespace Axle::Passes {
     struct HiZVisualizationInputs {
         const std::shared_ptr<RHI::RHIViewTargets>& Targets;
         nri::Descriptor* SceneTargetRTV = nullptr;
-        nri::Format SceneTargetFormat = nri::Format::RGBA8_UNORM;
+        nri::Pipeline* Pipeline = nullptr;
         uint32_t Width = 0;
         uint32_t Height = 0;
         uint32_t Level = 0;

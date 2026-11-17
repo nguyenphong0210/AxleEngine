@@ -97,3 +97,7 @@ Note on `ctest` full `RenderUnitTests`: existing pre-U5 test `Test_M15_SurfaceAn
 
 - **M15-U5-07.1 Interactive Editor Visual Capture:** Remains open (`[ ]` in `PLAN.md`) and deferred to the post-U5 visual verification pass per user direction (alongside prior deferred `M15-U4-06.5`, `U4-E`, and `M15-U5-03` visual items).
 - **Codex Independent Review:** Pending at the end of `U5-A` (or consolidated Cluster 1 review once `U5-B..D` follow).
+
+## Independent Codex review
+
+See [the independent findings and final executed checks](M15_U5_A_CODEX_REVIEW.md). Codex corrected visualization attachment-format selection, missing capability fallback and Editor level bounds, and strengthened native depth-source and one-axis edge assertions. Automated scope is accepted after corrections; interactive captures remain user-deferred. Original self-verification is retained above as historical reported evidence.

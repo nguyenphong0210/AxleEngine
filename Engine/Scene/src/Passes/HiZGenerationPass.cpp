@@ -68,8 +68,7 @@ namespace Axle::Passes {
         auto* hiz = i.Targets ? i.Targets->GetHiZ(i.Level) : nullptr;
         if (!hiz || !hiz->IsValid() || !i.SceneTargetRTV || i.Width == 0 || i.Height == 0 ||
             !renderer.m_HiZVisualizeTextureSet) return false;
-        nri::Pipeline* pipeline = (i.SceneTargetFormat == nri::Format::RGBA16_SFLOAT && renderer.m_HiZVisualizePipelineHDR)
-            ? renderer.m_HiZVisualizePipelineHDR : renderer.m_HiZVisualizePipelineSDR;
+        nri::Pipeline* pipeline = i.Pipeline;
         if (!pipeline) return false;
         if (!ops.BeginPass("HiZVisualize")) return false;
         RHIHiZConstants constants{};

@@ -1,4 +1,5 @@
 #include "RenderTestCommon.hpp"
+#include <Axle/RenderBackendPolicy.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/RenderGraph.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
@@ -156,6 +157,9 @@ bool RunM15HiZContractUnitTests() {
         SceneRenderSettings baseSettings{};
         SceneRenderSettings vis0 = baseSettings; vis0.HiZVisualizationLevel = 0;
         SceneRenderSettings vis3 = baseSettings; vis3.HiZVisualizationLevel = 3;
+        const auto compatibility = RenderBackendPolicy::FromBackend(RendererBackendType::OpenGL_Compatibility);
+        RENDER_CHECK(compatibility.ResolveSettings(vis3).HiZVisualizationLevel == -1 &&
+            !compatibility.CollectFallbacks(vis3).empty(), "unsupported backend disables Hi-Z visualization with an explicit fallback");
         RENDER_CHECK(HashViewFeaturePolicy(baseSettings) != HashViewFeaturePolicy(vis0) &&
             HashViewFeaturePolicy(vis0) != HashViewFeaturePolicy(vis3),
             "M15-U5-07.1: HashViewFeaturePolicy reflects HiZVisualizationLevel feature changes");

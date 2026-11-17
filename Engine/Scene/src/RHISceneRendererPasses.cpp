@@ -114,6 +114,7 @@ namespace Axle {
             (sceneTargetFormat == nri::Format::RGBA16_SFLOAT ? m_HiZVisualizePipelineHDR != nullptr : m_HiZVisualizePipelineSDR != nullptr) &&
             m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() && hiZLevelCount > 0;
         const bool needHiZ = useSSR || useHiZVisual;
+        nri::Pipeline* hiZVisualPipeline = nullptr;
         const uint32_t visLevel = useHiZVisual
             ? std::clamp<uint32_t>(static_cast<uint32_t>(settings.HiZVisualizationLevel), 0u, hiZLevelCount - 1u)
             : 0u;
@@ -1294,7 +1295,7 @@ namespace Axle {
                 if (!Passes::HiZGenerationPass::Record(*this, viewTargets, ops, dispatchCount)) return fail();
             }
             if (useHiZVisual && !Passes::HiZGenerationPass::RecordVisualization(
-                *this, {viewTargets, sceneTargetRTV, sceneTargetFormat, width, height, visLevel}, ops)) {
+                *this, {viewTargets, sceneTargetRTV, hiZVisualPipeline, width, height, visLevel}, ops)) {
                 return fail();
             }
 
@@ -1321,7 +1322,10 @@ namespace Axle {
             } else if (useHiZVisual) {
                 for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
             }
-            if (useHiZVisual && !uniform("HiZVisualize", sizeof(RHIHiZConstants))) return fail();
+            if (useHiZVisual) {
+                hiZVisualPipeline = GetOrCreateHiZVisualizePipeline(sceneTargetFormat);
+                if (!hiZVisualPipeline || !uniform("HiZVisualize", sizeof(RHIHiZConstants))) return fail();
+            }
             return {};
         });
 

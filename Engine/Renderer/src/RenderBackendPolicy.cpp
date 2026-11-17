@@ -120,6 +120,7 @@ namespace Axle {
             resolved.EnableGTAO = false;
             resolved.EnableContactShadows = false;
             resolved.EnableSSR = false;
+            resolved.HiZVisualizationLevel = -1;
             resolved.EnableVolumetricFog = false;
             resolved.EnableDDGI = false;
             resolved.EnableBloom = false;
@@ -141,6 +142,8 @@ namespace Axle {
         if (authored.EnableGTAO && !resolved.EnableGTAO) reasons.push_back("gtao_disabled:compute_or_storage_unavailable");
         if (authored.EnableContactShadows && !resolved.EnableContactShadows) reasons.push_back("contact_shadows_disabled:compute_or_storage_unavailable");
         if (authored.EnableSSR && !resolved.EnableSSR) reasons.push_back("ssr_disabled:compute_or_storage_unavailable");
+        if (authored.HiZVisualizationLevel >= 0 && resolved.HiZVisualizationLevel < 0)
+            reasons.push_back("hiz_visualization_disabled:compute_or_storage_unavailable");
         if (authored.EnableVolumetricFog && !resolved.EnableVolumetricFog) reasons.push_back("volumetric_fog_disabled:compute_or_storage_unavailable");
         if (authored.EnableDDGI && !resolved.EnableDDGI) reasons.push_back("ddgi_disabled:compute_or_storage_unavailable");
         return reasons;

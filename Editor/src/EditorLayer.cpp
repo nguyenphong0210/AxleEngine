@@ -1891,7 +1891,8 @@ void EditorLayer::RenderToolbar() {
             ImGui::Checkbox("Auto-Exposure", &m_EnableAutoExposure);
             ImGui::Checkbox("Temporal Anti-Aliasing (TAA)", &m_EnableTAA);
             ImGui::Separator();
-            ImGui::SliderInt("Hi-Z Debug Level (-1=Off)", &m_HiZVisualizationLevel, -1, 11);
+            ImGui::SliderInt("Hi-Z Debug Level (-1=Off)", &m_HiZVisualizationLevel, -1,
+                static_cast<int>(Axle::RHI::RHIViewTargets::MaxHiZLevels) - 1);
             ImGui::EndPopup();
         }
 

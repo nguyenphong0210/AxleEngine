@@ -689,11 +689,18 @@ namespace Axle {
             }
             if (!std::isfinite(e00.x) || !std::isfinite(e00.y) || !std::isfinite(e00.z)) return false;
 
-            // 2. In mixed scene, emissive contribution is never darkened by AO or contact
-            const glm::vec3 fullAt00 = EvaluateShading(comp, 0.0f, 0.0f);
-            const glm::vec3 fullAt11 = EvaluateShading(comp, 1.0f, 1.0f);
-            if (!std::isfinite(fullAt00.x) || !std::isfinite(fullAt00.y) || !std::isfinite(fullAt00.z)) return false;
-            if (!std::isfinite(fullAt11.x) || !std::isfinite(fullAt11.y) || !std::isfinite(fullAt11.z)) return false;
+            // Compare the mixed scene against the same lighting without emission.
+            // Finiteness alone would also accept occlusion-dependent emission.
+            ShadingComponents withoutEmission = comp;
+            withoutEmission.Emissive = glm::vec3(0.0f);
+            for (float ao : {0.0f, 0.5f, 1.0f}) for (float contact : {0.0f, 0.5f, 1.0f}) {
+                const auto actual = EvaluateShading(comp, ao, contact);
+                const auto expected = EvaluateShading(withoutEmission, ao, contact) + comp.Emissive;
+                for (int channel = 0; channel < 3; ++channel) {
+                    if (!std::isfinite(actual[channel]) || !std::isfinite(expected[channel]) ||
+                        std::abs(actual[channel] - expected[channel]) > 1e-5f * std::max(1.0f, std::abs(expected[channel]))) return false;
+                }
+            }
 
             return true;
         }
@@ -713,12 +720,17 @@ namespace Axle {
             // Delta between AO=0 and AO=1 must affect only Ambient, NOT specular
             const glm::vec3 delta = sAtAO1 - sAtAO0;
             constexpr float eps = 1e-5f;
-            if (glm::distance(delta, specComp.Ambient) > eps) return false;
+            const auto expectedDelta = specComp.EnableAO ? specComp.Ambient : glm::vec3(0.0f);
+            for (int channel = 0; channel < 3; ++channel) {
+                if (!std::isfinite(sAtAO0[channel]) || !std::isfinite(sAtAO1[channel]) ||
+                    std::abs(delta[channel] - expectedDelta[channel]) > eps * std::max(1.0f, std::abs(sAtAO1[channel]))) return false;
+            }
 
             // Pure unoccluded specular highlights:
             ShadingComponents pureSpecular{};
             pureSpecular.SunSpecular = comp.SunSpecular;
             pureSpecular.LocalSpecular = comp.LocalSpecular;
+            if (!HasSeparatedLighting(comp)) pureSpecular.DirectSpecular = comp.DirectSpecular;
             pureSpecular.HasSun = comp.HasSun;
             pureSpecular.CSMVisibility = 1.0f;
             const glm::vec3 p0 = EvaluateShading(pureSpecular, 0.0f, 1.0f);

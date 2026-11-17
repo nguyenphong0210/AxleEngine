@@ -1,0 +1,7 @@
+Project:
+  SchemaVersion: 1
+  Name: M15_U4D_UnoccludedSphere
+  StartScene: scenes/UnoccludedSphere.axlescene
+  AssetDirectory: assets
+  RHIBackend: Direct3D12
+  Plugins:

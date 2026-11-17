@@ -1,0 +1,34 @@
+# AxleFileIdentity: 1 16933897577863100321
+Scene: M15 U4D Unoccluded Sphere
+Entities:
+  - Entity: 1001
+    TagComponent:
+      Tag: Smooth HDR environment (no sun)
+    SkyboxComponent:
+      Enabled: true
+      EnvironmentLighting: true
+      SkyboxType: 1
+      HDRPath: gradient.hdr
+      Intensity: 1
+      Exposure: 1
+      HemisphereAmbient: false
+  - Entity: 1002
+    TagComponent:
+      Tag: Unoccluded mirror sphere
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+    MeshInstance3D:
+      AssetPath: builtin://sphere
+      PatternMode: 3
+      Color1: [0.8, 0.8, 0.8, 1]
+    MaterialComponent:
+      AlbedoColor: [0.8, 0.8, 0.8, 1]
+      Roughness: 0.2
+      Metallic: 1
+      EnableSpecularHighlights: true
+      EnableEnvironmentReflections: true
+      SurfaceType: Opaque
+      CullMode: Back
+      DepthWrite: true

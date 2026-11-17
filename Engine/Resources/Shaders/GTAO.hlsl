@@ -43,6 +43,25 @@ Texture2D<float4>   u_ComputeNormal  : register(t1, space1);
 SamplerState        u_ComputeSampler : register(s0, space1);
 RWTexture2D<float2> u_ComputeOutput  : register(u0, space2);
 
+// Primitive of cos(theta - gamma) * sin(theta), anchored at theta=0.
+// The two signed sides of a slice integrate with |sin(theta)|.
+float HorizonIntegral(float theta, float gamma) {
+    return 0.25 * (cos(gamma) - cos(2.0 * theta - gamma) + 2.0 * theta * sin(gamma));
+}
+
+float SampleHorizonCos(float2 uv, uint2 sceneSize, float3 position, float3 normal,
+                       float3 viewDir, float3 sliceAxis, float bias) {
+    uint2 pixel = min(uint2(saturate(uv) * float2(sceneSize)), sceneSize - 1);
+    float depth = u_ComputeDepth.Load(int3(pixel, 0));
+    if (depth <= 0.0 || depth >= 0.9999) return -1.0;
+    // Depth and reconstruction must describe the same surface sample.
+    float3 delta = ReconstructViewPos((float2(pixel) + 0.5) / float2(sceneSize), depth) - position;
+    float distance = length(delta);
+    if (distance <= bias || distance >= 4.0 || dot(delta, normal) <= bias) return -1.0;
+    float2 projected = float2(dot(delta, viewDir), dot(delta, sliceAxis));
+    return projected.x / max(length(projected), 1e-6);
+}
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     uint2 pixelPos = dispatchThreadId.xy;
@@ -93,11 +112,11 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     float depthBias = u_GTAOParams.z;
     float power = max(u_GTAOParams.w, 0.1);
 
-    if (strength > 0.001) {
+    if (strength > 0.001 && dot(viewNormal, viewDir) > 0.0) {
         float noise = SpatialHash(pixelPos);
         const int NUM_SLICES = 4;
         const int NUM_STEPS = 4;
-        float totalVisibility = 0.0;
+        float totalOcclusion = 0.0;
         float totalWeight = 0.0;
 
         [unroll]
@@ -106,7 +125,8 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
             float2 sliceDir = float2(cos(phi), sin(phi));
 
             // Project normal onto slice plane
-            float3 sliceAxis = normalize(float3(sliceDir.x, sliceDir.y, 0.0));
+            float3 screenAxis = float3(sliceDir.x, -sliceDir.y, 0.0);
+            float3 sliceAxis = normalize(screenAxis - viewDir * dot(screenAxis, viewDir));
             float3 orthoAxis = cross(viewDir, sliceAxis);
             float3 projNormal = viewNormal - orthoAxis * dot(viewNormal, orthoAxis);
             float projLen = length(projNormal);
@@ -114,58 +134,37 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
             projNormal /= projLen;
 
             // Angle gamma between view direction and projected normal
-            float cosGamma = clamp(dot(projNormal, viewDir), -1.0, 1.0);
-            float gamma = acos(cosGamma);
-            if (dot(projNormal, sliceAxis) < 0.0) gamma = -gamma;
+            float gamma = atan2(dot(projNormal, sliceAxis), max(dot(projNormal, viewDir), 1e-6));
 
             // Search horizons h1 (positive) and h2 (negative)
-            float h1 = -float(M_PI) * 0.5;
-            float h2 = -float(M_PI) * 0.5;
+            // Unblocked starts at the back of the slice; the nearest blocker
+            // maximizes cosine and contracts the visible arc toward viewDir.
+            float horizonCos1 = -1.0;
+            float horizonCos2 = -1.0;
 
             for (int step = 1; step <= NUM_STEPS; ++step) {
                 float stepFraction = float(step) / float(NUM_STEPS);
                 float stepDist = stepFraction * radiusPixels;
 
-                // Positive direction sample
-                float2 uvSample1 = saturate(uv + sliceDir * stepDist * rcpFrame);
-                float depthSample1 = u_ComputeDepth.SampleLevel(u_ComputeSampler, uvSample1, 0.0);
-                if (depthSample1 < 0.9999) {
-                    float3 posSample1 = ReconstructViewPos(uvSample1, depthSample1);
-                    float3 delta1 = posSample1 - viewPos;
-                    float dist1 = length(delta1);
-                    if (dist1 > depthBias && dist1 < 4.0) {
-                        float cosAngle1 = dot(delta1 / dist1, viewDir);
-                        float angle1 = acos(clamp(cosAngle1, -1.0, 1.0));
-                        h1 = max(h1, angle1);
-                    }
-                }
-
-                // Negative direction sample
-                float2 uvSample2 = saturate(uv - sliceDir * stepDist * rcpFrame);
-                float depthSample2 = u_ComputeDepth.SampleLevel(u_ComputeSampler, uvSample2, 0.0);
-                if (depthSample2 < 0.9999) {
-                    float3 posSample2 = ReconstructViewPos(uvSample2, depthSample2);
-                    float3 delta2 = posSample2 - viewPos;
-                    float dist2 = length(delta2);
-                    if (dist2 > depthBias && dist2 < 4.0) {
-                        float cosAngle2 = dot(delta2 / dist2, viewDir);
-                        float angle2 = acos(clamp(cosAngle2, -1.0, 1.0));
-                        h2 = max(h2, angle2);
-                    }
-                }
+                horizonCos1 = max(horizonCos1, SampleHorizonCos(uv + sliceDir * stepDist * rcpFrame,
+                    sceneSize, viewPos, viewNormal, viewDir, sliceAxis, depthBias));
+                horizonCos2 = max(horizonCos2, SampleHorizonCos(uv - sliceDir * stepDist * rcpFrame,
+                    sceneSize, viewPos, viewNormal, viewDir, sliceAxis, depthBias));
             }
 
-            // Analytical GTAO integration Jimenez 2016
-            h1 = clamp(h1, -float(M_PI) * 0.5, float(M_PI) * 0.5);
-            h2 = clamp(h2, -float(M_PI) * 0.5, float(M_PI) * 0.5);
-            float sliceVis = 0.25 * (sin(2.0 * h1 - gamma) + sin(2.0 * h2 - gamma) + 2.0 * sin(gamma));
-            sliceVis = saturate(sliceVis);
-
-            totalVisibility += sliceVis * projLen;
-            totalWeight += projLen;
+            float openNegative = gamma - float(M_PI) * 0.5;
+            float openPositive = gamma + float(M_PI) * 0.5;
+            float h1 = clamp(acos(clamp(horizonCos1, -1.0, 1.0)), openNegative, openPositive);
+            float h2 = clamp(-acos(clamp(horizonCos2, -1.0, 1.0)), openNegative, openPositive);
+            // Normalize by the same finite-slice open hemisphere quadrature.
+            // Unoccluded surfaces then stay exactly neutral at every tilt.
+            float openWeight = (HorizonIntegral(openPositive, gamma) + HorizonIntegral(openNegative, gamma)) * projLen;
+            float visibleWeight = (HorizonIntegral(h1, gamma) + HorizonIntegral(h2, gamma)) * projLen;
+            totalOcclusion += (horizonCos1 == -1.0 && horizonCos2 == -1.0) ? 0.0 : max(openWeight - visibleWeight, 0.0);
+            totalWeight += openWeight;
         }
 
-        float visibility = totalWeight > 1e-4 ? (totalVisibility / totalWeight) : 1.0;
+        float visibility = totalWeight > 1e-4 ? 1.0 - totalOcclusion / totalWeight : 1.0;
         ao = saturate(1.0 - (1.0 - visibility) * strength);
         ao = pow(ao, power);
     }

@@ -728,6 +728,20 @@ bool RunM15OcclusionContractUnitTests() {
         // 10.5: M15-U4-06.5 Test mirror / unoccluded sphere specular
         RENDER_CHECK(VerifyUnoccludedSpecularInvariance(scene),
             "M15-U4-06.5: VerifyUnoccludedSpecularInvariance passes: unoccluded specular highlights are 100% invariant under AO");
+        RENDER_CHECK(VerifyUnoccludedSpecularInvariance(noAOScene),
+            "disabled AO with nonzero ambient must also pass specular invariance");
+        for (float csm : {0.0f, 0.25f, 0.5f, 1.0f}) {
+            auto shadowed = noContactScene;
+            shadowed.CSMVisibility = csm;
+            const auto expected = shadowed.Ambient + (shadowed.SunDiffuse + shadowed.SunSpecular) * csm +
+                shadowed.LocalDiffuse + shadowed.LocalSpecular + shadowed.Emissive;
+            RENDER_CHECK(glm::distance(EvaluateShading(shadowed, 1, 0), expected) < 1e-5f && VerifyNoContactRegression(shadowed),
+                "disabled contact preserves partial and fully blocked CSM visibility");
+        }
+        auto invalid = scene;
+        invalid.Ambient.x = std::numeric_limits<float>::infinity();
+        RENDER_CHECK(!VerifyUnoccludedSpecularInvariance(invalid) && !VerifyEmissiveInvariance(invalid),
+            "regression verifiers reject non-finite mixed radiance");
 
         ShadingComponents mirrorSphere{};
         mirrorSphere.SunSpecular = glm::vec3(5.0f, 4.8f, 4.5f);   // Sharp solar glint on chrome

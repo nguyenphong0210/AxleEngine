@@ -29,7 +29,11 @@
 #include <chrono>
 
 bool RunM15OcclusionRenderingTests(const std::filesystem::path& output);
+bool RunM15OcclusionHorizonTests(const std::filesystem::path& output);
 bool RunM15OcclusionForwardTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
+bool RunM15OcclusionSphereTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
+                              const Axle::PerspectiveCamera& camera, Axle::SceneRenderSettings settings,
+                              const std::filesystem::path& output);
 bool RunM15OcclusionDispatchTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
                                  Axle::SceneRenderSettings settings, const std::filesystem::path& output);
 
@@ -212,6 +216,7 @@ bool Native(RHIType backend) {
     CHECK(TextureDescriptor::Save((Output/"sky.axleasset").string(),authored));
     RHISceneRenderer renderer; CHECK(renderer.Init(device,false));
     CHECK(RunM15OcclusionRenderingTests(Output));
+    CHECK(RunM15OcclusionHorizonTests(Output));
     auto& environment=renderer.GetEnvironment(); EnvironmentBakeSettings bake;
     bake.EnvironmentSize=16; bake.IrradianceSize=4; bake.PrefilterSize=16; bake.PrefilterMips=5; bake.BRDFSize=16; bake.Samples=64;
     CHECK(environment.SetBakeSettings(bake));
@@ -284,15 +289,6 @@ bool Native(RHIType backend) {
     const double baseLuma = averageLuma(red);
     const double gtaoLuma = averageLuma(gtao);
     CHECK(gtaoLuma >= baseLuma * 0.65 && gtaoLuma <= baseLuma * 1.05);
-    // M15-U4-06.5: Verify mirror / unoccluded specular sphere highlight preservation & smoothness
-    CHECK(gtao[center] > 0); // specular highlight preserved under GTAO
-    CHECK(PPM("M15_U4D_sphere.ppm", gtao, width));
-    // Verify continuous smooth gradient on the sphere (no triangle bands or faceting)
-    const size_t centerRight = (size_t(width / 2) * width + width / 2 + 1) * 4;
-    const size_t centerDown  = (size_t(width / 2 + 1) * width + width / 2) * 4;
-    const int diffR = std::abs(int(gtao[center]) - int(gtao[centerRight]));
-    const int diffD = std::abs(int(gtao[center]) - int(gtao[centerDown]));
-    CHECK(diffR <= 25 && diffD <= 25); // adjacent texels exhibit smooth sub-facet variance
     {
         std::ofstream scorecard(Output / "M14_U9_timestamp_scorecard.txt", std::ios::app);
         scorecard << "renderer_gpu_scope_ms=" << renderer.GetLastGPUTimestampMilliseconds() << "\n"
@@ -998,6 +994,19 @@ bool Native(RHIType backend) {
     CHECK(renderer.Init(device, false) && !render().empty() &&
         renderer.GetDiagnostics().GetFrame().FrameIndex == 0 &&
         renderer.GetLastCompletion() && device.WaitForCompletion(renderer.GetLastCompletion()));
+    CHECK(HDR("u4d-gradient.hdr", {}, 1));
+    RenderWorld regressionWorld;
+    regressionWorld.Meshes.push_back(mesh);
+    regressionWorld.Meshes[0].Material = {};
+    RHIMaterialDesc mirrorDesc;
+    mirrorDesc.BaseColor = glm::vec4(.8f, .8f, .8f, 1);
+    mirrorDesc.Metallic = 1; mirrorDesc.Roughness = .2f;
+    regressionWorld.Meshes[0].Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(mirrorDesc);
+    regressionWorld.Skybox.Authored = regressionWorld.Skybox.Enabled = regressionWorld.Skybox.EnvironmentLighting = true;
+    regressionWorld.Skybox.Type = 1; regressionWorld.Skybox.HDRPath = "u4d-gradient.hdr";
+    SceneRenderSettings regressionSettings;
+    regressionSettings.EnableShadows = regressionSettings.EnableParticles = false;
+    CHECK(RunM15OcclusionSphereTests(renderer, regressionWorld, camera, regressionSettings, Output));
     renderer.Shutdown();
     CHECK(environment.CacheSize() == 0 && GetRHIValidationErrorCount() == 0);
     RHISceneRenderer noTimingRenderer;

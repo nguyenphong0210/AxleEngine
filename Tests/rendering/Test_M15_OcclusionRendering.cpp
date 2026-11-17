@@ -63,6 +63,185 @@ bool Read(RHITexture& texture, std::vector<glm::vec4>& pixels) {
 }
 }
 
+bool RunM15OcclusionHorizonTests(const std::filesystem::path& output) {
+    auto& device = RHIDevice::Get();
+    std::ifstream file(AXLE_GTAO_SHADER_PATH);
+    RHIShaderCompileDesc shader;
+    shader.Source = std::string(std::istreambuf_iterator<char>(file), {});
+    shader.SourcePath = AXLE_GTAO_SHADER_PATH;
+    shader.EntryPoint = "CSMain"; shader.Stage = RHIShaderStage::Compute;
+    shader.Format = device.GetBackend() == RHIType::Vulkan ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+    const auto compiled = RHIShaderCompiler::Get().Compile(shader);
+    RENDER_CHECK(compiled.Success, "production GTAO horizon shader");
+    nri::RootDescriptorDesc root{};
+    root.descriptorType = nri::DescriptorType::CONSTANT_BUFFER; root.shaderStages = nri::StageBits::COMPUTE_SHADER;
+    nri::DescriptorRangeDesc inputs[3]{}, storage{};
+    for (uint32_t i = 0; i < 3; ++i) {
+        inputs[i].baseRegisterIndex = i < 2 ? i : 0;
+        inputs[i].descriptorNum = 1; inputs[i].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        inputs[i].descriptorType = i < 2 ? nri::DescriptorType::TEXTURE : nri::DescriptorType::SAMPLER;
+    }
+    storage.descriptorNum = 1; storage.shaderStages = nri::StageBits::COMPUTE_SHADER;
+    storage.descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+    nri::DescriptorSetDesc sets[2]{};
+    sets[0].registerSpace = 1; sets[0].ranges = inputs; sets[0].rangeNum = 3;
+    sets[1].registerSpace = 2; sets[1].ranges = &storage; sets[1].rangeNum = 1;
+    nri::PipelineLayoutDesc description{};
+    description.rootDescriptors = &root; description.rootDescriptorNum = 1;
+    description.descriptorSets = sets; description.descriptorSetNum = 2; description.shaderStages = nri::StageBits::COMPUTE_SHADER;
+    RHIPipelineLayout layout; RHIPipelineCache cache; RHISampler sampler; RHIBuffer constants;
+    RENDER_CHECK(layout.Init(description) && sampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge)) &&
+        constants.Init(RHIBufferDesc::Constant(sizeof(RHIGTAOConstants), RHIMemoryLocation::HostUpload)), "horizon fixture resources");
+    RHIComputePipelineDesc pipelineDescription;
+    pipelineDescription.Layout = &layout; pipelineDescription.ComputeShader = compiled.Bytecode;
+    auto* pipeline = cache.GetOrCreateComputePipeline(pipelineDescription);
+    RENDER_CHECK(pipeline, "production horizon compute pipeline");
+    std::ofstream evidence(output / "M15_U4D_horizons.txt");
+    RENDER_CHECK(evidence.is_open(), "horizon evidence file");
+    constexpr uint32_t size = 64, half = size / 2;
+    for (const int mode : {0, 1, 2, 3}) {
+        std::vector<float> depths(size * size);
+        std::vector<glm::vec4> normals(size * size, glm::vec4(mode == 1 ? glm::normalize(glm::vec3(.4f, 0, 1)) : glm::vec3(0, 0, 1), 1));
+        for (uint32_t y = 0; y < size; ++y) for (uint32_t x = 0; x < size; ++x)
+            depths[y * size + x] = mode == 3 ? 1 : mode == 2 && x < size / 2 ? .1f :
+                mode == 1 ? (2 + .4f * (2 * (x + .5f) / size - 1)) / 10 : .2f;
+        RHITexture depth, normal, result;
+        auto input = RHITextureDesc::RenderTarget2D(size, size, RHITextureFormat::R32_FLOAT);
+        input.Usage = RHITextureUsage::ShaderResource;
+        RENDER_CHECK(depth.Init(input), "horizon depth");
+        input.Format = RHITextureFormat::RGBA32_FLOAT;
+        RENDER_CHECK(normal.Init(input) && result.Init(RHITextureDesc::StorageTexture2D(half, half, RHITextureFormat::RGBA16_FLOAT)) &&
+            Upload(depth, depths.data(), 4) && Upload(normal, normals.data(), 16), "horizon inputs");
+        RHIGTAOConstants values{};
+        values.InvProjection[2][2] = -10;
+        values.ScreenSize = {half, half, 1.0f / half, 1.0f / half};
+        values.GTAOParams = {8, 1, .0025f, 2};
+        RENDER_CHECK(constants.UpdateData(&values, sizeof(values)), "horizon constants");
+        RHIDescriptorPool pool;
+        RENDER_CHECK(pool.Init(), "horizon descriptor pool");
+        auto* textures = pool.AllocateDescriptorSet(layout, 0);
+        auto* outputSet = pool.AllocateDescriptorSet(layout, 1);
+        RENDER_CHECK(textures && outputSet && pool.UpdateTexture(textures, 0, 0, depth.GetSRV()) &&
+            pool.UpdateTexture(textures, 1, 0, normal.GetSRV()) && pool.UpdateSampler(textures, 2, 0, sampler.GetNative()) &&
+            pool.UpdateStorageTexture(outputSet, 0, 0, result.GetUAV()), "horizon bindings");
+        RHICommandBuffer commands;
+        RENDER_CHECK(commands.Init() && commands.Begin(), "horizon recording");
+        commands.TransitionTexture(result.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResourceStorage);
+        commands.SetPipeline(pipeline); commands.SetPipelineLayout(nri::BindPoint::COMPUTE, layout);
+        commands.SetRootDescriptor(0, constants.GetCBV(), 0, nri::BindPoint::COMPUTE);
+        pool.Bind(commands.GetNative());
+        commands.SetDescriptorSet(nri::BindPoint::COMPUTE, 0, textures);
+        // This standalone fixture has no render-graph access declarations.
+        // The generic read-only set helper would transition the UAV to SRV.
+        nri::SetDescriptorSetDesc outputBinding{};
+        outputBinding.bindPoint = nri::BindPoint::COMPUTE;
+        outputBinding.setIndex = 1; outputBinding.descriptorSet = outputSet;
+        device.GetNRICore().CmdSetDescriptorSet(*commands.GetNative(), outputBinding);
+        commands.Dispatch(half / 8, half / 8, 1);
+        std::vector<glm::vec4> pixels;
+        RENDER_CHECK(commands.End() && commands.Submit() && device.WaitIdle() && Read(result, pixels), "horizon GPU readback");
+        float minimum = 1;
+        for (uint32_t y = 0; y < half; ++y) for (uint32_t x = 0; x < half; ++x) {
+            const auto p = pixels[y * half + x];
+            RENDER_CHECK(std::isfinite(p.x) && std::isfinite(p.y) && p.x >= 0 && p.x <= 1 && p.y == 1, "bounded AO and neutral no-sun contact");
+            if ((mode != 2 || x < half / 2 || x >= 28) && p.x != 1) {
+                evidence << "nonneutral mode=" << mode << " x=" << x << " y=" << y << " ao=" << p.x << " contact=" << p.y << '\n';
+                evidence.flush();
+                RENDER_CHECK(false, "open plane, foreground and background are exactly neutral");
+            }
+            minimum = std::min(minimum, p.x);
+        }
+        evidence << "mode=" << mode << " min_ao=" << minimum << '\n';
+        if (mode == 2) RENDER_CHECK(minimum < .9f, "real foreground blocker occludes the rear plane; AO is not hardcoded neutral");
+    }
+    return true;
+}
+
+// An isolated convex sphere cannot occlude itself. Read linear HDR, rather
+// than checking that a tone-mapped byte happens to be nonzero.
+bool RunM15OcclusionSphereTests(RHISceneRenderer& renderer, const RenderWorld& world,
+                               const PerspectiveCamera& camera, SceneRenderSettings settings,
+                               const std::filesystem::path& output) {
+    constexpr uint32_t size = 128;
+    RHITexture color, depth;
+    RENDER_CHECK(color.Init(RHITextureDesc::RenderTarget2D(size, size, RHITextureFormat::RGBA16_FLOAT)) &&
+        depth.Init(RHITextureDesc::DepthStencil2D(size, size)), "sphere HDR targets");
+    settings.EnableToneMapping = true; // Select scene-linear forward shading.
+    settings.EnableFXAA = settings.EnableTAA = false;
+    settings.EnableGTAO = settings.EnableContactShadows = false;
+    std::ofstream evidence(output / "M15_U4D_sphere.txt");
+    RENDER_CHECK(evidence.is_open(), "sphere evidence file");
+    auto render = [&](const char* name, std::vector<glm::vec4>& pixels) {
+        renderer.RenderWorldView(world, camera, &color, &depth, settings);
+        auto* hdr = renderer.GetIntermediateHDRTarget();
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() && hdr && Read(*hdr, pixels), "sphere production HDR render before tone mapping");
+        std::ofstream image(output / (std::string("M15_U4D_sphere-") + name + ".ppm"), std::ios::binary);
+        image << "P6\n" << size << ' ' << size << "\n255\n";
+        for (auto pixel : pixels) {
+            for (int c = 0; c < 4; ++c) RENDER_CHECK(std::isfinite(pixel[c]), "finite sphere HDR including alpha");
+            for (int c = 0; c < 3; ++c) {
+                const float x = std::max(pixel[c], 0.0f);
+                const float mapped = std::clamp((x * (2.51f * x + .03f)) / (x * (2.43f * x + .59f) + .14f), 0.0f, 1.0f);
+                const auto byte = static_cast<unsigned char>(std::lround(std::pow(mapped, 1.0f / 2.2f) * 255));
+                image.write(reinterpret_cast<const char*>(&byte), 1);
+            }
+        }
+        RENDER_CHECK(bool(image), "sphere image artifact");
+        return true;
+    };
+    std::vector<glm::vec4> reference, actual;
+    RENDER_CHECK(render("off", reference), "sphere reference");
+    float minimum = 1e9f, maximum = 0;
+    for (uint32_t y = 44; y < 84; ++y) for (uint32_t x = 44; x < 84; ++x) {
+        minimum = std::min(minimum, reference[y * size + x].x);
+        maximum = std::max(maximum, reference[y * size + x].x);
+    }
+    RENDER_CHECK(minimum > 0.05f && maximum > 1.0f && maximum - minimum > 0.1f, "sphere linear HDR reference exceeds one and has a visible reflection gradient");
+    for (const auto mode : {1, 2, 3, 0}) {
+        settings.EnableGTAO = (mode & 1) != 0;
+        settings.EnableContactShadows = (mode & 2) != 0;
+        RENDER_CHECK(render(mode == 1 ? "ao" : mode == 2 ? "contact" : mode == 3 ? "both" : "disabled-again", actual), "sphere toggle fixture");
+        float worstLoss = 0, maxError = 0;
+        size_t samples = 0;
+        // Avoid the silhouette where screen-space depth becomes undersampled.
+        for (int y = 0; y < int(size); ++y) for (int x = 0; x < int(size); ++x) {
+            const float dx = x + .5f - size * .5f, dy = y + .5f - size * .5f;
+            if (dx * dx + dy * dy > 20 * 20) continue;
+            const auto i = y * size + x;
+            for (int c = 0; c < 3; ++c) {
+                worstLoss = std::max(worstLoss, 1.0f - actual[i][c] / std::max(reference[i][c], 1e-4f));
+                maxError = std::max(maxError, std::abs(actual[i][c] - reference[i][c]));
+            }
+            ++samples;
+        }
+        evidence << "mode=" << mode << " pixels=" << samples << " worst_relative_loss=" << worstLoss << " max_hdr_error=" << maxError << '\n';
+        RENDER_CHECK(samples > 1200 && worstLoss < 0.05f, "unoccluded mirror reflection loses less than 5 percent with real GTAO");
+        if (mode == 2 || mode == 0) RENDER_CHECK(maxError == 0, "absent-sun contact and disabled-again render are exactly neutral");
+        if (mode == 3) {
+            std::vector<glm::vec4> normals;
+            RENDER_CHECK(renderer.GetOpaqueNormalTarget() && Read(*renderer.GetOpaqueNormalTarget(), normals), "sphere normal readback");
+            float maxNormalError = 0;
+            const float tangent = std::tan(glm::radians(55.0f) * .5f);
+            for (int y = 44; y < 84; ++y) for (int x = 44; x < 84; ++x) {
+                const float dx = x + .5f - size * .5f, dy = y + .5f - size * .5f;
+                if (dx * dx + dy * dy > 20 * 20) continue;
+                const auto ray = glm::normalize(glm::vec3(dx / 64 * tangent, -dy / 64 * tangent, -1));
+                const float b = 5 * ray.z;
+                const float distance = -b - std::sqrt(b * b - 24);
+                const auto expected = glm::normalize(glm::vec3(0, 0, 5) + ray * distance);
+                const auto normal = normals[y * size + x];
+                for (int c = 0; c < 4; ++c) RENDER_CHECK(std::isfinite(normal[c]), "finite sphere normal");
+                RENDER_CHECK(normal.w == 1, "sphere interior has surface normal data");
+                maxNormalError = std::max(maxNormalError, glm::distance(glm::vec3(normal), expected));
+            }
+            evidence << "max_analytic_normal_error=" << maxNormalError << '\n';
+            RENDER_CHECK(maxNormalError < 0.02f, "smooth sphere normals match analytic curvature across the interior");
+        }
+    }
+    RENDER_CHECK(GetRHIValidationErrorCount() == 0, "sphere fixture native validation");
+    return true;
+}
+
 // Exercise the actual view-target allocator, recorder, compute dispatch and
 // apply draw at floor-half odd and minimal extents, with native validation on.
 bool RunM15OcclusionDispatchTests(RHISceneRenderer& renderer, const RenderWorld& world,
@@ -426,7 +605,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
         const auto center = pixels[size * size / 2 + size / 2];
         evidence << (graphMode ? "graph " : "builtin ") << name << " center=" << center.x << ',' << center.y << ',' << center.z << '\n';
         for (const auto pixel : pixels)
-            RENDER_CHECK(std::isfinite(pixel.x) && std::isfinite(pixel.y) && std::isfinite(pixel.z), "finite production forward radiance");
+            RENDER_CHECK(std::isfinite(pixel.x) && std::isfinite(pixel.y) && std::isfinite(pixel.z) && std::isfinite(pixel.w), "finite production forward radiance");
         return true;
     };
     auto equal = [&](const std::vector<glm::vec4>& actual, const std::vector<glm::vec4>& expected, float scale = 1.0f) {
@@ -482,12 +661,21 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
         RENDER_CHECK(render("no-contact-reference", Term::Sun, 1, 1, reference, true, true) &&
             render("no-contact-disabled-zero", Term::Sun, 1, 0, modified, true, false) && equal(modified, reference),
             "M15-U4-06.3: no-contact regression: disabled contact preserves full sun radiance at contact=0");
+        for (const int csm : {1, 2}) {
+            RENDER_CHECK(render("no-contact-csm-reference", Term::Sun, 1, 1, reference, true, true, csm) &&
+                render("no-contact-csm-disabled", Term::Sun, 1, 0, modified, true, false, csm) && equal(modified, reference),
+                "disabled contact retains native partial and fully blocked CSM");
+            RENDER_CHECK(equal(reference, sun, csm == 1 ? 0.5f : 0.0f), "no-contact reference follows CSM independently");
+        }
 
         // 4. M15-U4-06.4: Test emissive: emissive surfaces are strictly invariant under AO and contact variations
         RENDER_CHECK(render("emissive-bright-ref", Term::Emissive, 1, 1, reference) &&
             render("emissive-darkened-test", Term::Emissive, 0, 0, modified) && equal(modified, reference),
             "M15-U4-06.4: emissive regression: AO=0 and contact=0 never darken emissive surfaces");
         RENDER_CHECK(reference[36].x > 0.05f, "emissive reference fixture is strictly nonzero");
+        for (float ao : {0.0f, 0.5f, 1.0f}) for (float contact : {0.0f, 0.5f, 1.0f})
+            RENDER_CHECK(render("emissive-sweep", Term::Emissive, ao, contact, modified) && equal(modified, reference),
+                "native emissive radiance is invariant over the AO/contact sweep");
 
         // 5. M15-U4-06.5: Test mirror / unoccluded specular: metallic specular glints invariant under AO
         RENDER_CHECK(render("mirror-specular-ref", Term::Specular, 1, 1, reference) &&

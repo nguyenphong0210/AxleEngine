@@ -128,3 +128,7 @@ The user authorized implementation of Milestone 15 items `M15-U4-06.1` through `
 | :--- | :--- | :---: | :--- |
 | Debug Editor | `cmake --build build --config Debug --target AxleEditor -j 6` | 0 | PASS |
 | Release Editor | `cmake --build build --config Release --target AxleEditor -j 6` | 0 | PASS |
+
+## Codex independent review supersedes self-verification
+
+The original delivery was not acceptable unchanged: its sphere fixture passed despite near-black unoccluded reflections, and its PLAN entry claimed an Editor capture that was not present. Codex repaired production GTAO horizon integration and strengthened CPU/native regression coverage. See [the independent findings, executed evidence, and partial acceptance verdict](M15_U4_BATCH_4_CODEX_REVIEW.md). U4-06.1 through U4-06.4 and automated U4-06.5 are accepted after corrections; the required Editor screenshot remains NOT RUN because capture fails on this session. Original self-verification above is retained as historical reported evidence.

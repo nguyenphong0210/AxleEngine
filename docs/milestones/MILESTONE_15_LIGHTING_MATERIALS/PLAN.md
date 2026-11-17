@@ -583,21 +583,22 @@ the item is visible.
 - [x] **M15-U4-05.4 — Validate odd resolutions.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Dispatch bounds $(W + 7)/8$, compute thread guards, shared odd-size sample mapping and clamped integer reconstruction taps are verified by focused CPU/CTest and dedicated native fixtures. Real 1919x1079 rendering reads all 516901 GTAO texels; 1x1, 3x5 and 127x63 also pass. Zero-size views are rejected. [Independent U4-C review](../../reviews/M15_U4_BATCH_3_CODEX_REVIEW.md).
-- [x] **M15-U4-06.1 — Test no-sun.**
+- [x] **M15-U4-06.1 ? Test no-sun.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Sun absence ($L_{\text{sun}} = 0$) verified across contact shadow variations (0.0 to 1.0) and sun presence toggles. Shading output strictly invariant with zero delta across both CPU contract sweeps and native GPU draw calls; all outputs finite and non-NaN/non-Inf. See [U4 batch 4 review](../../reviews/M15_U4_BATCH_4_REVIEW.md).
-- [x] **M15-U4-06.2 — Test no-AO.**
+  - **Evidence:** Codex verified CPU contact sweeps and native built-in/canonical graph isolation; the actual no-sun sphere is identical with contact toggled. Debug/Release on D3D12 and Vulkan pass. [Independent U4-D review](../../reviews/M15_U4_BATCH_4_CODEX_REVIEW.md).
+- [x] **M15-U4-06.2 ? Test no-AO.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** When AO is disabled (`EnableAO = false`), ambient term evaluates with neutral factor $1.0$; direct lighting and emissive remain identical to reference. Verified across CPU `VerifyNoAORegression` contract and native GPU forward render passes. All outputs finite. See [U4 batch 4 review](../../reviews/M15_U4_BATCH_4_REVIEW.md).
-- [x] **M15-U4-06.3 — Test no-contact.**
+  - **Evidence:** CPU disabled-AO sweeps, native zero-mask/disabled-flag comparison, and repeated real-renderer enable/disable transitions verify neutral AO=1. [Independent U4-D review](../../reviews/M15_U4_BATCH_4_CODEX_REVIEW.md).
+- [x] **M15-U4-06.3 ? Test no-contact.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** When contact shadows are disabled (`EnableContactShadows = false`), sun visibility simplifies to pure CSM attenuation $\min(V_{\text{csm}}, 1.0) = V_{\text{csm}}$. Local lights, ambient, and emissive are completely invariant under contact variations. Verified on CPU `VerifyNoContactRegression` and native D3D12/Vulkan draws. All outputs finite. See [U4 batch 4 review](../../reviews/M15_U4_BATCH_4_REVIEW.md).
-- [x] **M15-U4-06.4 — Test emissive.**
+  - **Evidence:** CPU and both production forward shaders preserve CSM visibility at 0, 0.5 and 1 with contact disabled; real no-sun contact dispatch remains neutral. [Independent U4-D review](../../reviews/M15_U4_BATCH_4_CODEX_REVIEW.md).
+- [x] **M15-U4-06.4 ? Test emissive.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Emissive radiance invariance $\partial L_{\text{emissive}}/\partial \text{AO} = 0$ and $\partial L_{\text{emissive}}/\partial \text{contact} = 0$ verified across full parameter sweeps (AO $\in [0, 1]$, Contact $\in [0, 1]$). Surface emission is never darkened by occlusion. Verified in CPU `VerifyEmissiveInvariance` and native GPU forward shaders (`ForwardPBR.hlsl`, `MaterialSurface.hlsl`). All outputs finite. See [U4 batch 4 review](../../reviews/M15_U4_BATCH_4_REVIEW.md).
-- [x] **M15-U4-06.5 — Test mirror/unoccluded sphere.**
+  - **Evidence:** CPU mixed-light emission additivity and pure emission sweeps; native AO/contact 3x3 sweeps verify nonzero emissive invariance on built-in and canonical graph shaders. HDR readbacks are finite. [Independent U4-D review](../../reviews/M15_U4_BATCH_4_CODEX_REVIEW.md).
+- [ ] **M15-U4-06.5 ? Test mirror/unoccluded sphere.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** built clean on Debug and Release `AxleEditor`; native D3D12 and Vulkan rendering captures `M15_U4D_sphere.ppm` showing smooth metallic mirror sphere with preserved non-zero specular highlight ($V_{\text{contact}} = 1.0$) and continuous sub-facet gradients ($\Delta \le 25$) without triangle banding, faceting, or NaN/Inf pixels. Interactive Editor visual capture recorded and ready for user inspection. See [U4 batch 4 review](../../reviews/M15_U4_BATCH_4_REVIEW.md).
+  - **Automated PASS:** Codex repaired a real GTAO horizon integral defect that nearly blackened the unoccluded sphere. Production compute fixtures preserve open planes and still occlude a genuine blocker. Linear RGBA16 HDR readback before tone mapping compares 1264 interior pixels, AO/contact toggles, repeated disable, finite RGBA, and analytic smooth normals. Debug/Release D3D12/Vulkan pass. Native images and exact commands: [independent U4-D review](../../reviews/M15_U4_BATCH_4_CODEX_REVIEW.md).
+  - **EDITOR VISUAL ? NOT RUN:** Debug/Release Editor build and load the dedicated `Tests/Fixtures/M15/U4D/U4D.axleproj` fixture, but native window capture fails (`IGraphicsCaptureItemInterop.CreateForMonitor`, `0x80070057`); the alternate helper pipe is unavailable. Native PPMs do not substitute for an Editor screenshot. Keep this item open until the applicable Editor viewport is inspected and captured; expected smooth curvature, no triangle bands, no invalid pixels.
 - [ ] **M15-U4-07.1 — Test normal-map behavior.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

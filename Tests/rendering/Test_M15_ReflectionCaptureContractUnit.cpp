@@ -444,6 +444,154 @@ bool RunM15ReflectionCaptureContractUnitTests() {
             "M15-U5-17.1 / 20: CubemapPrefilter.hlsl prefilters 3D TextureCube into RWTexture2DArray without equirectangular math");
     }
 
+    // 6. M15-U5-D (S5.4): Manual/automatic modes, YAML round-trip, per-domain stamps,
+    //    bounded scheduler allocation, and cache memory budget + LRU eviction plan.
+    {
+        Scene sceneA;
+        auto probeEntityA = sceneA.CreateEntityWithUUID(100001ULL, "ProbeA");
+        auto& rpc = probeEntityA.AddComponent<ReflectionProbeComponent>();
+        rpc.DynamicCapture = true;
+        rpc.CaptureResolution = 64u;
+        rpc.CaptureMode = ReflectionProbeCaptureMode::Manual;
+        rpc.BoxExtents = {12.0f, 12.0f, 12.0f};
+        rpc.BoxOffset = {0.0f, 1.5f, 0.0f};
+
+        const RenderWorld extractedA = ExtractRenderWorld(sceneA);
+        RENDER_CHECK(extractedA.ReflectionProbes.size() == 1 &&
+                     extractedA.ReflectionProbes[0].CaptureMode == ReflectionProbeCaptureMode::Manual &&
+                     extractedA.ReflectionProbes[0].StableUUID == 100001ULL &&
+                     extractedA.SceneInstanceID == sceneA.GetInstanceId() &&
+                     extractedA.SceneLifetimeEpoch >= 1u,
+            "M15-U5-22 / 26.4: SceneExtraction propagates CaptureMode, StableUUID, SceneInstanceID and SceneLifetimeEpoch");
+
+        SceneSerializer srcSer(&sceneA);
+        const std::string yamlText = srcSer.SerializeToString();
+        RENDER_CHECK(yamlText.find("CaptureMode: Manual") != std::string::npos,
+            "M15-U5-22: SceneSerializer writes CaptureMode: Manual");
+        Scene sceneB;
+        SceneSerializer dstSer(&sceneB);
+        RENDER_CHECK(dstSer.DeserializeFromString(yamlText),
+            "M15-U5-22: SceneSerializer deserializes ReflectionProbeComponent YAML");
+        const RenderWorld extractedB = ExtractRenderWorld(sceneB);
+        RENDER_CHECK(extractedB.ReflectionProbes.size() == 1 &&
+                     extractedB.ReflectionProbes[0].CaptureMode == ReflectionProbeCaptureMode::Manual,
+            "M15-U5-22: CaptureMode::Manual survives YAML serialize/deserialize round-trip");
+
+        RenderReflectionProbe pA = extractedA.ReflectionProbes[0];
+        RenderReflectionProbe pB = extractedB.ReflectionProbes[0];
+        pA.EntityID = 1;
+        pB.EntityID = 1;
+        pB.StableUUID = 200002ULL;
+        RENDER_CHECK(RHISceneRenderer::ResolveDynamicProbeKey(pA) != RHISceneRenderer::ResolveDynamicProbeKey(pB),
+            "M15-U5-26.4: distinct StableUUIDs prevent probe key aliasing across scenes with identical entity IDs");
+
+        // Per-domain stamp isolation (21.1 - 21.5, 26.2)
+        RHISceneRenderer cpuStampRenderer;
+        RenderWorld baseWorld;
+        baseWorld.SceneRevision = 10;
+        baseWorld.SceneInstanceID = 7;
+        baseWorld.SceneLifetimeEpoch = 1;
+        baseWorld.DirectionalLight = RenderDirectionalLight{};
+        baseWorld.PointLights.push_back(RenderPointLight{});
+        RenderMeshInstance mesh{};
+        mesh.EntityID = 11;
+        mesh.StableUUID = 777;
+        mesh.WorldTransform = glm::mat4(1.0f);
+        mesh.Material.Roughness = 0.5f;
+        RenderSkinInstance skin{};
+        skin.BoneMatrices.push_back(glm::mat4(1.0f));
+        baseWorld.Meshes.push_back(mesh);
+        baseWorld.Skins.push_back(skin);
+        RenderReflectionProbe baseProbe{};
+        baseProbe.EntityID = 100;
+        baseProbe.CaptureResolution = 64u;
+        baseProbe.DynamicCapture = true;
+        SceneRenderSettings baseSettings;
+        ReflectionService reflService;
+
+        const auto baseStamps = cpuStampRenderer.ComputeDynamicCaptureDomainStamps(baseWorld, baseProbe, baseSettings);
+        {
+            RenderReflectionProbe movedProbe = baseProbe;
+            movedProbe.Position.x += 2.0f;
+            const auto inv = reflService.EvaluateInvalidation(
+                baseStamps, cpuStampRenderer.ComputeDynamicCaptureDomainStamps(baseWorld, movedProbe, baseSettings));
+            RENDER_CHECK(inv.TransformChanged && !inv.GeometryChanged && !inv.MaterialChanged && !inv.LightingChanged,
+                "M15-U5-21.1: probe transform change sets TransformChanged only");
+        }
+        {
+            RenderWorld revWorld = baseWorld;
+            revWorld.SceneRevision = 11;
+            const auto inv = reflService.EvaluateInvalidation(
+                baseStamps, cpuStampRenderer.ComputeDynamicCaptureDomainStamps(revWorld, baseProbe, baseSettings));
+            RENDER_CHECK(inv.SceneRevisionChanged && !inv.TransformChanged && !inv.GeometryChanged,
+                "M15-U5-21.2: scene revision change sets SceneRevisionChanged");
+        }
+        {
+            RenderWorld animWorld = baseWorld;
+            animWorld.Skins[0].BoneMatrices[0] = glm::translate(glm::mat4(1.0f), {0.0f, 1.0f, 0.0f});
+            const auto inv = reflService.EvaluateInvalidation(
+                baseStamps, cpuStampRenderer.ComputeDynamicCaptureDomainStamps(animWorld, baseProbe, baseSettings));
+            RENDER_CHECK(inv.GeometryChanged && !inv.TransformChanged && !inv.MaterialChanged && !inv.LightingChanged,
+                "M15-U5-21.3: deformed/animated skin bone change triggers GeometryChanged");
+        }
+        {
+            RenderWorld matWorld = baseWorld;
+            matWorld.Meshes[0].Material.Roughness = 0.15f;
+            const auto inv = reflService.EvaluateInvalidation(
+                baseStamps, cpuStampRenderer.ComputeDynamicCaptureDomainStamps(matWorld, baseProbe, baseSettings));
+            RENDER_CHECK(inv.MaterialChanged && !inv.TransformChanged && !inv.GeometryChanged && !inv.LightingChanged,
+                "M15-U5-21.3: material property edit triggers MaterialChanged only");
+        }
+        {
+            RenderWorld lightWorld = baseWorld;
+            lightWorld.PointLights[0].Intensity = 25.0f;
+            const auto inv = reflService.EvaluateInvalidation(
+                baseStamps, cpuStampRenderer.ComputeDynamicCaptureDomainStamps(lightWorld, baseProbe, baseSettings));
+            RENDER_CHECK(inv.LightingChanged && !inv.TransformChanged && !inv.GeometryChanged && !inv.MaterialChanged,
+                "M15-U5-21.4: light intensity edit triggers LightingChanged only");
+        }
+        {
+            RenderWorld assetWorld = baseWorld;
+            assetWorld.Skybox.HDRPath = "missing_asset_path_check.hdr";
+            const auto inv = reflService.EvaluateInvalidation(
+                baseStamps, cpuStampRenderer.ComputeDynamicCaptureDomainStamps(assetWorld, baseProbe, baseSettings));
+            RENDER_CHECK(inv.AssetChanged && inv.LightingChanged,
+                "M15-U5-21.5: skybox HDR path update triggers AssetChanged");
+        }
+
+        // Cache byte footprint & LRU eviction planning (M15-U5-25)
+        const uint64_t expectedBytes64 = 2ull * 6ull * 8ull * (4096ull + 1024ull + 256ull + 64ull + 16ull);
+        RENDER_CHECK(EstimateDynamicProbeCacheBytes(64u, 5u, nri::Format::RGBA16_SFLOAT) == expectedBytes64,
+            "M15-U5-25: EstimateDynamicProbeCacheBytes matches dual 6-face RGBA16_FLOAT mip-chain footprint");
+
+        const std::vector<CaptureCacheSlotInfo> lruEntries{
+            {"probeA", 500ull, 10ull, false},
+            {"probeB", 500ull, 30ull, false},
+            {"probeC", 500ull, 20ull, false}
+        };
+        std::vector<std::string> evictKeys;
+        std::string budgetDiag;
+        RENDER_CHECK(!ComputeLRUCacheEvictionPlan(lruEntries, 400ull, 500ull, &evictKeys, &budgetDiag),
+            "M15-U5-25: single probe exceeding total cache budget fails deterministically");
+        RENDER_CHECK(ComputeLRUCacheEvictionPlan(lruEntries, 1500ull, 700ull, &evictKeys, &budgetDiag) &&
+                     evictKeys.size() == 2 && evictKeys[0] == "probeA" && evictKeys[1] == "probeC",
+            "M15-U5-25: LRU eviction selects oldest sequence entries first (probeA then probeC, keeping probeB)");
+
+        // Bounded per-frame capture schedule (M15-U5-23.1)
+        const std::vector<ScheduledCaptureWork> queue{
+            {"pHigh", 2u, 1000u},
+            {"pLow", 6u, 500u}
+        };
+        const auto singleProbePlan = ComputeFrameCaptureSchedule(queue, 1u, 6u);
+        RENDER_CHECK(singleProbePlan.size() == 1 && singleProbePlan[0].ProbeKey == "pHigh" && singleProbePlan[0].FacesToRun == 2u,
+            "M15-U5-23.1: maxProbesPerFrame=1 bounds execution to highest priority probe");
+        const auto sharedBudgetPlan = ComputeFrameCaptureSchedule(queue, 2u, 4u);
+        RENDER_CHECK(sharedBudgetPlan.size() == 2 &&
+                     sharedBudgetPlan[0].ProbeKey == "pHigh" && sharedBudgetPlan[0].FacesToRun == 2u &&
+                     sharedBudgetPlan[1].ProbeKey == "pLow" && sharedBudgetPlan[1].FacesToRun == 2u,
+            "M15-U5-23.1: maxFacesPerFrame=4 caps total faces across probes per frame");
+    }
+
     std::cout << "[M15ReflectionCapture] All dynamic reflection capture contract tests passed!\n";
     return true;
 }

@@ -34,6 +34,7 @@ bool RunM15OcclusionSurfaceTests(Axle::RHISceneRenderer& renderer, const std::fi
 bool RunM15OcclusionForwardTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15HiZTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15ReflectionCaptureTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
+bool RunM15ReflectionDeviceResetTests(const Axle::RHI::RHIDeviceDesc& initDesc);
 bool RunM15OcclusionSphereTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
                               const Axle::PerspectiveCamera& camera, Axle::SceneRenderSettings settings,
                               const std::filesystem::path& output);
@@ -1041,6 +1042,7 @@ bool Native(RHIType backend) {
     CHECK(survivor.Prepare(world.Skybox)&&survivor.Ready()&&survivor.UploadCount()==2);
     CHECK(survivor.Ready()->Radiance->GetHandle()!=stale&&survivor.CacheSize()==1);
     survivor.Clear();CHECK(device.WaitIdle()&&GetRHIValidationErrorCount()==0);
+    CHECK(RunM15ReflectionDeviceResetTests(init));
     std::cout<<"baseline_width=128 baseline_height=128 color_format=RGBA8_UNORM depth_format=D32_FLOAT "
              <<"baseline_draw_calls="<<baselineDrawCalls<<" baseline_entities="<<baselineEntities<<"\n";
     std::cout<<"PASS HDR native subresources, sky/specular/diffuse, cache, exposure, reload, fallback and upload retry\n";

@@ -140,6 +140,81 @@ bool RunLightingServiceUnitTests() {
                  dynFailed.Diagnostic.find("dynamic_probe_unavailable") != std::string::npos,
         "failed dynamic probe publication degrades explicitly with dynamic_probe_unavailable");
 
+    // M15-U5-D: Per-domain invalidation and Pending/Stale/Failed retention diagnostics
+    {
+        ReflectionCaptureDomainStamps baseStamps{};
+        baseStamps.TransformStamp = 100;
+        baseStamps.SceneRevision = 10;
+        baseStamps.SceneInstanceID = 1;
+        baseStamps.SceneLifetimeEpoch = 1;
+        baseStamps.GeometryStamp = 200;
+        baseStamps.MaterialStamp = 300;
+        baseStamps.LightingStamp = 400;
+        baseStamps.AssetStamp = 500;
+        baseStamps.SettingsStamp = 600;
+        baseStamps.DeviceEpoch = 1;
+        baseStamps.CombinedStamp = 700;
+
+        RENDER_CHECK(!reflection.EvaluateInvalidation(baseStamps, baseStamps, false).Any(),
+            "M15-U5-21: identical domain stamps produce zero invalidation");
+
+        auto t = baseStamps; t.TransformStamp = 101;
+        const auto invT = reflection.EvaluateInvalidation(baseStamps, t);
+        RENDER_CHECK(invT.TransformChanged && !invT.SceneRevisionChanged && !invT.GeometryChanged && !invT.MaterialChanged && !invT.LightingChanged && !invT.AssetChanged,
+            "M15-U5-21.1: transform change isolates TransformChanged");
+
+        auto s = baseStamps; s.SceneRevision = 11;
+        const auto invS = reflection.EvaluateInvalidation(baseStamps, s);
+        RENDER_CHECK(invS.SceneRevisionChanged && !invS.TransformChanged && !invS.GeometryChanged,
+            "M15-U5-21.2: scene revision change isolates SceneRevisionChanged");
+
+        auto g = baseStamps; g.GeometryStamp = 201;
+        RENDER_CHECK(reflection.EvaluateInvalidation(baseStamps, g).GeometryChanged,
+            "M15-U5-21.3: geometry stamp change flags GeometryChanged");
+
+        auto m = baseStamps; m.MaterialStamp = 301;
+        RENDER_CHECK(reflection.EvaluateInvalidation(baseStamps, m).MaterialChanged,
+            "M15-U5-21.3: material stamp change flags MaterialChanged");
+
+        auto l = baseStamps; l.LightingStamp = 401;
+        RENDER_CHECK(reflection.EvaluateInvalidation(baseStamps, l).LightingChanged,
+            "M15-U5-21.4: lighting stamp change flags LightingChanged");
+
+        auto a = baseStamps; a.AssetStamp = 501;
+        RENDER_CHECK(reflection.EvaluateInvalidation(baseStamps, a).AssetChanged,
+            "M15-U5-21.5: asset stamp change flags AssetChanged");
+
+        auto d = baseStamps; d.DeviceEpoch = 2;
+        RENDER_CHECK(reflection.EvaluateInvalidation(baseStamps, d).DeviceEpochChanged,
+            "M15-U5-26.3: device epoch change flags DeviceEpochChanged");
+
+        RENDER_CHECK(reflection.EvaluateInvalidation(baseStamps, baseStamps, true).ManualRequested,
+            "M15-U5-22: manual capture trigger sets ManualRequested");
+
+        ReflectionPublication retainedPending{dynHandle, "DYNAMIC_PROBE_PENDING: captured 2/6 faces", true, true, false, 2u, 6u, 9ull};
+        const auto pendingFrame = reflection.ResolvePublication(dynPending, retainedPending, true, true);
+        RENDER_CHECK(pendingFrame.State == ReflectionState::DynamicReady &&
+                     pendingFrame.PrefilterReady &&
+                     pendingFrame.ProbeGeneration == dynHandle &&
+                     pendingFrame.CapturePending &&
+                     pendingFrame.CaptureStale &&
+                     !pendingFrame.CaptureFailed &&
+                     pendingFrame.CaptureCompletedFaces == 2u &&
+                     pendingFrame.CaptureTotalFaces == 6u &&
+                     pendingFrame.ActiveGenerationID == 9ull,
+            "M15-U5-23.2 / 23.3 / 24: retained generation reports Pending + Stale while remaining bound");
+
+        ReflectionPublication retainedFailed{dynHandle, "DYNAMIC_PROBE_FACE_FAILED: face 2", false, true, true, 2u, 6u, 9ull};
+        const auto failedRetainedFrame = reflection.ResolvePublication(dynPending, retainedFailed, false, true);
+        RENDER_CHECK(failedRetainedFrame.State == ReflectionState::DynamicReady &&
+                     failedRetainedFrame.PrefilterReady &&
+                     failedRetainedFrame.ProbeGeneration == dynHandle &&
+                     failedRetainedFrame.CaptureFailed &&
+                     failedRetainedFrame.CaptureStale &&
+                     failedRetainedFrame.Diagnostic.find("DYNAMIC_PROBE_FACE_FAILED") != std::string::npos,
+            "M15-U5-23.4 / 24: rebuild failure preserves last-good handle and surfaces CaptureFailed + CaptureStale");
+    }
+
     GIService gi;
     auto disabled = gi.Prepare(world, settings, true, 9);
     RENDER_CHECK(disabled.Status == GIFrameStatus::Disabled && disabled.Fallback == GIFallback::IBL,

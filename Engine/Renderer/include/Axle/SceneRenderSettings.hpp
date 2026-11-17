@@ -62,6 +62,11 @@ namespace Axle {
         float TAAFeedbackMin = 0.88f;
         float TAAFeedbackMax = 0.96f;
         glm::vec4 ClearColor{ 0.0f, 0.0f, 0.0f, 1.0f }; // Configurable background clear color (Supports transparent clear for editor viewports)
+
+        // Dynamic reflection probe scheduler and cache budget (M15-U5-D)
+        uint32_t ReflectionCaptureMaxFacesPerFrame = 6u;
+        uint32_t ReflectionCaptureMaxProbesPerFrame = 1u;
+        uint64_t ReflectionCaptureCacheBudgetBytes = 64ull * 1024ull * 1024ull;
     };
 
 }

@@ -785,54 +785,57 @@ Codex verification limit: native headless DX12/Vulkan filtering and storage-view
 
 #### S5.4 — Invalidation and scheduling
 
-- [ ] **M15-U5-21.1 — Track probe transform.**
+- [x] **M15-U5-21.1 — Track probe transform.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-21.2 — Track scene revision.**
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `ReflectionCaptureDomainStamps::TransformStamp` hashes `EntityID`, `StableUUID`, `Position`, `BoxOffset`, `BoxExtents`, `Radius`, `Shape`, `WorldTransform`, and `ParallaxCorrected` in `RHISceneRenderer::ComputeDynamicCaptureDomainStamps`; verified in `Test_LightingServicesUnit.cpp`, `Test_M15_ReflectionCaptureContractUnit.cpp`, and `Test_M15_ReflectionCaptureRendering.cpp` (Debug/Release DX12 & Vulkan, `exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
+- [x] **M15-U5-21.2 — Track scene revision.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `RenderWorld` extracts `SceneRevision`, `SceneInstanceID`, and `SceneLifetimeEpoch`; `ReflectionService::EvaluateInvalidation` detects changes cleanly across Debug/Release CPU contracts & native DX12/Vulkan checks (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
 - [ ] **M15-U5-21.3 — Track geometry/material.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
+  - **Automated Status:** Automated PASS (self-verification; independent Codex review pending) — `GeometryStamp` tracks mesh transforms/UUIDs/URIs/shadows/builtins and `Skins` bone matrices; `MaterialStamp` tracks resolved `MaterialResolver` surface generation, scalars, shaders, and custom properties. Verified on CPU (`Test_M15_ReflectionCaptureContractUnit.cpp`) and Debug/Release DX12 & Vulkan (`Test_M15_ReflectionCaptureRendering.cpp`, `exit 0`).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass).
 - [ ] **M15-U5-21.4 — Track light/shadow.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U5-21.5 — Track asset generation.**
+  - **Automated Status:** Automated PASS (self-verification; independent Codex review pending) — `LightingStamp` hashes directional/additional directional lights, point/spot/rect lights, shadow flags/biases/resolutions, skybox settings, and IBL enablement; verified on CPU and Debug/Release DX12 & Vulkan (`exit 0`).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass).
+- [x] **M15-U5-21.5 — Track asset generation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-22 — Support manual and automatic capture.**
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `AssetStamp` hashes `DeviceEpoch`, manual IBL handles, texture/shader file timestamps, custom shader fingerprints, and mesh `NativeView` vertex/index handles; verified via live GPU `RHIMesh` swap (`Test_M15_ReflectionCaptureRendering.cpp`) and CPU contracts (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
+- [x] **M15-U5-22 — Support manual and automatic capture.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-23.1 — Bound faces/probes per frame.**
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `ReflectionProbeCaptureMode` (`Automatic`/`Manual`) wired through `Types.hpp`, `Components.hpp`, `RenderWorld.hpp`, `SceneExtraction.cpp`, and `SceneSerializer.cpp` (`CaptureMode` YAML round-trip). `Manual` probes hold last-good capture with `Stale`/`ManualRefreshRequired` across edits until explicit `CaptureDynamicReflectionProbe` or `RequestDynamicReflectionCapture`; verified across Debug/Release CPU & DX12/Vulkan (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
+- [x] **M15-U5-23.1 — Bound faces/probes per frame.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-23.2 — Expose pending diagnostics.**
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `SceneRenderSettings::ReflectionCaptureMaxFacesPerFrame` (default `6`) & `ReflectionCaptureMaxProbesPerFrame` (default `1`), `ComputeFrameCaptureSchedule`, and `RHISceneRenderer::PendingCaptureJob` slice 6-face captures deterministically across frames (`MaxFacesPerFrame=2` -> 3 frames) and cap per-frame probes (`MaxProbesPerFrame=1`) on Debug/Release DX12 & Vulkan (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
+- [x] **M15-U5-23.2 — Expose pending diagnostics.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-23.3 — Expose stale diagnostics.**
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `DynamicReflectionProbeStatus` and `ReflectionFrame` (`CapturePending`, `CaptureCompletedFaces`, `CaptureTotalFaces`, `ActiveGenerationID`) expose per-face progress during multi-frame jobs without leaking partial cubemaps; verified in `Test_LightingServicesUnit.cpp` and `Test_M15_ReflectionCaptureRendering.cpp` (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
+- [x] **M15-U5-23.3 — Expose stale diagnostics.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-23.4 — Expose failed diagnostics.**
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `DynamicReflectionProbeStatus::Stale` and `ReflectionFrame::CaptureStale` surface edited manual probes, `InvalidateDynamicReflectionProbe` triggers, and retained last-good generations during pending/failed rebuilds (`DYNAMIC_PROBE_STALE`) on Debug/Release CPU & DX12/Vulkan (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
+- [x] **M15-U5-23.4 — Expose failed diagnostics.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-24 — Retain last-good generation on rebuild failure.**
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `RecordDynamicCaptureFailure` updates `DynamicCaptureLifecycleState::Failed`, `FailureCount`, `LastDiagnostic`, and `ReflectionFrame::CaptureFailed` across Debug/Release CPU & DX12/Vulkan (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
+- [x] **M15-U5-24 — Retain last-good generation on rebuild failure.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-25 — Add capture cache key, memory budget and eviction.**
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). Multi-frame `PendingCaptureJob` stages exclusively into candidate cubemaps; mid-capture `ScopedRHIFault` on face `4/6` (plus settings/budget errors) aborts cleanly, preserves the existing `DynamicReflectionProbeGeneration` & HDR texels, keeps `ReflectionFrame::PrefilterReady` bound, and recovers cleanly on retry in Debug/Release DX12 & Vulkan (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
+- [x] **M15-U5-25 — Add capture cache key, memory budget and eviction.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `ResolveDynamicProbeKey` (`uuid:`/`entity:`/`anon:`), `EstimateDynamicProbeCacheBytes`, `ReflectionCaptureCacheBudgetBytes`, `SetDynamicReflectionCaptureCacheBudget`, `DynamicReflectionCaptureCacheStats`, and LRU eviction (`ComputeLRUCacheEvictionPlan` via `LastUsedSequence`) verified across 3 probes in a 2-probe budget + tight-budget rejection in Debug/Release CPU & DX12/Vulkan (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
 - [ ] **M15-U5-26.1 — Test repeated capture.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
-- [ ] **M15-U5-26.2 — Test resize.**
+  - **Automated Status:** Automated PASS (self-verification; independent Codex review pending) — automated Debug/Release D3D12 & Vulkan runs validate repeated capture reuse when unchanged, monotonic `GenerationID` advancement across material/clip/mode/recovery transitions, and clean texel replacement (`exit 0`).
+  - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass).
+- [x] **M15-U5-26.2 — Test resize.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-26.3 — Test device reset.**
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). Resizing main viewport targets (`64x64 -> 96x48`) leaves probe `GenerationID` unchanged; changing probe `CaptureResolution` (`32 -> 64`) reallocates cubemaps cleanly and updates `CachedBytes` (`130,944 -> 524,160`) in Debug/Release DX12 & Vulkan (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
+- [x] **M15-U5-26.3 — Test device reset.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-26.4 — Test scene replacement.**
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `IsValidForDevice(deviceEpoch)` checks `DeviceEpoch` and live handle epoch; `RunM15ReflectionDeviceResetTests` executes full `device.Shutdown()` + `device.Init(...)` transition on Debug/Release DX12 & Vulkan (`exit 0`, zero validation errors), rejecting prior-epoch generations and recapturing cleanly on the new epoch. [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
+- [x] **M15-U5-26.4 — Test scene replacement.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated PASS (self-verification; independent Codex review pending). `RenderWorld::SceneInstanceID` + `SceneLifetimeEpoch` and `StableUUID` keys isolate replaced scenes (`Scene A -> Scene B` even with colliding ECS entity indices) and `Scene::Clear()` lifetime epoch increments, purging retired generations without entity aliasing or cross-scene radiance leakage on Debug/Release CPU & DX12/Vulkan (`exit 0`). [U5-D Self-Review](../../reviews/M15_U5_D_REVIEW.md).
 
 #### S5.5 — Multi-probe selection and blend
 

@@ -150,6 +150,9 @@ namespace Axle {
         bool CaptureShadows = true;
         float CaptureNearPlane = 0.1f;
         float CaptureFarPlane = 100.0f;
+        ReflectionProbeCaptureMode CaptureMode = ReflectionProbeCaptureMode::Automatic;
+        UUID StableUUID = 0;
+        glm::mat4 WorldTransform{ 1.0f };
     };
 
     struct RenderRectLight {
@@ -250,6 +253,8 @@ namespace Axle {
             Camera = RenderCamera{};
             Skybox = RenderSkyboxData{};
             SceneRevision = 0;
+            SceneInstanceID = 0;
+            SceneLifetimeEpoch = 0;
             TotalEntities = 0;
         }
 
@@ -284,6 +289,8 @@ namespace Axle {
 
         std::unordered_map<uint32_t, UUID> EntityToStableUUID;
         uint64_t SceneRevision = 0;
+        uint64_t SceneInstanceID = 0;
+        uint64_t SceneLifetimeEpoch = 0;
         uint32_t TotalEntities = 0;
     };
 }

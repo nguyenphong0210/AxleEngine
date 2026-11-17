@@ -179,6 +179,11 @@ namespace Axle {
             glm::mat4 worldMat = scene.GetWorldTransform(entity);
             RenderReflectionProbe rprobe;
             rprobe.EntityID = static_cast<uint32_t>(entity);
+            if (registry.all_of<IDComponent>(entity)) {
+                rprobe.StableUUID = registry.get<IDComponent>(entity).ID;
+                world.EntityToStableUUID[static_cast<uint32_t>(entity)] = rprobe.StableUUID;
+            }
+            rprobe.WorldTransform = worldMat;
             rprobe.Position = glm::vec3(worldMat[3]) + probe.BoxOffset;
             rprobe.BoxExtents = probe.BoxExtents;
             rprobe.BoxOffset = probe.BoxOffset;
@@ -192,6 +197,7 @@ namespace Axle {
             rprobe.CaptureShadows = probe.CaptureShadows;
             rprobe.CaptureNearPlane = probe.CaptureNearPlane;
             rprobe.CaptureFarPlane = probe.CaptureFarPlane;
+            rprobe.CaptureMode = probe.CaptureMode;
             world.ReflectionProbes.push_back(rprobe);
         }
 
@@ -405,6 +411,9 @@ namespace Axle {
         }
 
         world.SceneRevision = scene.GetTransformRevision();
+        world.SceneInstanceID = scene.GetInstanceId();
+        const auto sceneLifetime = scene.GetLifetime();
+        world.SceneLifetimeEpoch = sceneLifetime ? sceneLifetime->Epoch.load(std::memory_order_relaxed) : 0;
         for (const auto& line : scene.ExtractExtensionDebug()) {
             world.DebugLines.push_back({line.CodeLease, {line.From[0], line.From[1], line.From[2]},
                 {line.To[0], line.To[1], line.To[2]}, {line.Color[0], line.Color[1], line.Color[2], line.Color[3]}});

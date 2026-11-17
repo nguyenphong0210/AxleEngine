@@ -201,15 +201,29 @@ namespace Axle {
     struct DynamicReflectionProbeGeneration {
         std::string ProbeKey;
         uint64_t EntityID = 0;
+        UUID StableUUID = 0;
         uint64_t GenerationID = 0;
         uint64_t SceneRevision = 0;
+        uint64_t SceneInstanceID = 0;
+        uint64_t SceneLifetimeEpoch = 0;
         uint64_t InputStamp = 0;
+        ReflectionCaptureDomainStamps DomainStamps{};
+        uint64_t DeviceEpoch = 0;
+        uint64_t CachedBytes = 0;
+        uint64_t LastUsedSequence = 0;
         uint32_t Resolution = 0;
         uint32_t MipCount = 1;
+        ReflectionProbeCaptureMode CaptureMode = ReflectionProbeCaptureMode::Automatic;
         glm::vec3 Position{ 0.0f };
         std::shared_ptr<RHI::RHITexture> Cubemap;    // Mip-capable prefiltered cubemap (mip 0 = mirror, mips 1..N-1 = GGX roughness)
         std::shared_ptr<RHI::RHITexture> RawCubemap; // Captured unblurred source cubemap (all mips)
         RHI::RHICompletionToken Completion;
+
+        bool IsValidForDevice(uint64_t deviceEpoch) const {
+            if (!Cubemap || !Cubemap->IsValid()) return false;
+            if (deviceEpoch == 0) return true;
+            return DeviceEpoch == deviceEpoch && Cubemap->GetHandle().Epoch == deviceEpoch;
+        }
     };
 
     struct DynamicReflectionCaptureResult {
@@ -347,16 +361,30 @@ namespace Axle {
         std::shared_ptr<RHI::RHITexture> GetPrefilterMap() const { return m_PrefilterMap; }
         std::shared_ptr<RHI::RHITexture> GetBRDFLUT() const { return m_BRDFLUT; }
 
-        // Dynamic six-face reflection probe capture & transactional publication (M15-U5-B)
+        // Dynamic six-face reflection probe capture, invalidation & scheduling (M15-U5-B/C/D)
         static std::string ResolveDynamicProbeKey(const RenderReflectionProbe& probe);
+        ReflectionCaptureDomainStamps ComputeDynamicCaptureDomainStamps(
+            const RenderWorld& world,
+            const RenderReflectionProbe& probe,
+            const SceneRenderSettings& settings = SceneRenderSettings{}) const;
         DynamicReflectionCaptureResult CaptureDynamicReflectionProbe(
             const RenderWorld& world,
             const RenderReflectionProbe& probe,
             const SceneRenderSettings& settings = SceneRenderSettings{},
             const ReflectionCaptureContract::ReflectionCapturePolicy* policyOverride = nullptr);
+        void RequestDynamicReflectionCapture(const std::string& probeKey);
+        void RequestDynamicReflectionCapture(const RenderReflectionProbe& probe);
+        void InvalidateDynamicReflectionProbe(const std::string& probeKey, const std::string& reason = "manual_invalidation");
+        void InvalidateDynamicReflectionProbe(const RenderReflectionProbe& probe, const std::string& reason = "manual_invalidation");
         std::shared_ptr<const DynamicReflectionProbeGeneration> GetDynamicReflectionProbe(const std::string& probeKey) const;
         std::shared_ptr<const DynamicReflectionProbeGeneration> GetDynamicReflectionProbe(const RenderReflectionProbe& probe) const;
+        std::optional<DynamicReflectionProbeStatus> GetDynamicReflectionProbeStatus(const std::string& probeKey) const;
+        std::optional<DynamicReflectionProbeStatus> GetDynamicReflectionProbeStatus(const RenderReflectionProbe& probe) const;
+        DynamicReflectionCaptureCacheStats GetDynamicReflectionCaptureCacheStats() const;
+        void SetDynamicReflectionCaptureCacheBudget(uint64_t budgetBytes);
+        void ClearDynamicCaptureBudgetOverride();
         void ClearDynamicReflectionProbes();
+        const ReflectionFrame& GetLastReflectionFrame() const { return m_LastReflectionFrame; }
         const DynamicReflectionCaptureResult& GetLastDynamicCaptureResult() const { return m_LastDynamicCaptureResult; }
 
         // Procedural Atmospheric Skybox pass configuration
@@ -496,10 +524,54 @@ namespace Axle {
         };
 
     private:
+        friend struct CaptureViewStateGuard;
         bool CompileShaders(RHI::RHIDevice& device);
         bool IsCaptureFeedbackTexture(const RHI::RHITexture& texture) const;
         uint64_t ComputeDynamicCaptureStamp(const RenderWorld& world, const RenderReflectionProbe& probe,
                                             const SceneRenderSettings& settings) const;
+        uint64_t EffectiveDynamicCaptureBudgetBytes(const SceneRenderSettings& settings) const;
+        bool WaitForDeviceToken(RHI::RHICompletionToken& token);
+        void SynchronizeDynamicCaptureCacheState(const RenderWorld& world);
+        void EvictDynamicProbeEntry(const std::string& probeKey, const std::string& reason);
+        bool EnforceDynamicCaptureCacheBudget(
+            const std::string& incomingKey,
+            uint64_t incomingBytes,
+            uint64_t budgetBytes,
+            std::string* outReason);
+        bool ValidateDynamicCaptureSetup(
+            const RenderReflectionProbe& probe,
+            const ReflectionCaptureContract::ReflectionCapturePolicy& policy,
+            uint32_t* outPrefilterMips,
+            std::string* outDiagnostic) const;
+        DynamicReflectionCaptureResult RecordDynamicCaptureFailure(
+            const std::string& probeKey,
+            const RenderReflectionProbe& probe,
+            uint64_t targetInputStamp,
+            const std::string& diagnostic,
+            uint32_t capturedFaces,
+            bool suppressAutoRetry);
+        DynamicReflectionCaptureResult PublishDynamicProbeGeneration(
+            const std::string& probeKey,
+            const RenderReflectionProbe& probe,
+            const ReflectionCaptureDomainStamps& domainStamps,
+            uint64_t inputStampValue,
+            uint32_t resolution,
+            uint32_t prefilterMips,
+            uint64_t cachedBytes,
+            const std::shared_ptr<RHI::RHITexture>& rawCubemap,
+            const std::shared_ptr<RHI::RHITexture>& prefilteredCubemap);
+        bool CaptureSingleProbeFace(
+            const RenderWorld& filteredWorld,
+            const RenderReflectionProbe& probe,
+            const ReflectionCaptureContract::ReflectionCapturePolicy& policy,
+            const SceneRenderSettings& captureSettings,
+            const std::shared_ptr<RHI::RHITexture>& candidateRawCubemap,
+            uint32_t faceIndex,
+            std::string* outDiagnostic);
+        void ScheduleDynamicReflectionCaptures(
+            const RenderWorld& world,
+            const glm::vec3& cameraPosition,
+            const SceneRenderSettings& requestedSettings);
         struct FramePassInputs;
         bool RecordFramePasses(const FramePassInputs& inputs);
         bool CreatePipelineLayout(RHI::RHIDevice& device);
@@ -752,9 +824,22 @@ namespace Axle {
             RHI::RHITexture* OrientedFace = nullptr;
         };
         CaptureSessionState m_CaptureSession;
+        struct PendingCaptureJob;
         std::unordered_map<std::string, std::shared_ptr<DynamicReflectionProbeGeneration>> m_DynamicProbeCaptures;
+        std::unordered_map<std::string, std::unique_ptr<PendingCaptureJob>> m_PendingDynamicCaptures;
+        std::unordered_map<std::string, DynamicReflectionProbeStatus> m_DynamicProbeStatuses;
+        std::unordered_map<std::string, bool> m_RequestedManualCaptures;
+        std::unordered_map<std::string, std::string> m_ForcedInvalidatedProbes;
         std::unordered_map<std::string, uint64_t> m_FailedDynamicCaptureRevisions;
         uint64_t m_NextDynamicCaptureGenerationID = 1;
+        uint64_t m_CaptureLRUClock = 0;
+        uint64_t m_DynamicCaptureEvictionCount = 0;
+        uint64_t m_DynamicCaptureBudgetOverrideBytes = 0;
+        bool m_HasDynamicCaptureBudgetOverride = false;
+        uint64_t m_ActiveDynamicSceneInstanceID = 0;
+        uint64_t m_ActiveDynamicSceneLifetimeEpoch = 0;
+        uint32_t m_LastScheduledProbes = 0;
+        uint32_t m_LastScheduledFaces = 0;
         bool m_CaptureInProgress = false;
         std::vector<RHI::RHIResourceHandle> m_DynamicCaptureTextures;
         DynamicReflectionCaptureResult m_LastDynamicCaptureResult;

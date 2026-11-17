@@ -81,4 +81,23 @@ namespace Axle {
         if (str == "PackedORM" || str == "ORM" || str == "Packed" || str == "packed_orm") return TextureMode::PackedORM;
         return TextureMode::SeparateMaps;
     }
+
+    // Dynamic reflection probe capture scheduling policy
+    enum class ReflectionProbeCaptureMode : uint8_t {
+        Automatic = 0, // Re-captures automatically on tracked domain invalidations
+        Manual    = 1  // Retains existing capture until explicit capture or manual request
+    };
+
+    inline const char* ReflectionProbeCaptureModeToString(ReflectionProbeCaptureMode mode) {
+        switch (mode) {
+            case ReflectionProbeCaptureMode::Manual: return "Manual";
+            case ReflectionProbeCaptureMode::Automatic:
+            default:                                 return "Automatic";
+        }
+    }
+
+    inline ReflectionProbeCaptureMode StringToReflectionProbeCaptureMode(std::string_view str) {
+        if (str == "Manual" || str == "manual") return ReflectionProbeCaptureMode::Manual;
+        return ReflectionProbeCaptureMode::Automatic;
+    }
 }

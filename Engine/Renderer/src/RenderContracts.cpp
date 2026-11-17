@@ -1518,6 +1518,116 @@ namespace Axle {
             }
             return totalWeight > 0.0f ? (prefiltered / totalWeight) : glm::vec3(0.0f);
         }
+
+        uint64_t EstimateCubemapTextureBytes(
+            uint32_t resolution,
+            uint32_t mipCount,
+            nri::Format colorFormat) {
+            if (resolution == 0u || mipCount == 0u) {
+                return 0ull;
+            }
+            const uint64_t bytesPerTexel = (colorFormat == nri::Format::RGBA32_SFLOAT) ? 16ull : 8ull;
+            uint64_t totalTexelsPerFace = 0ull;
+            uint32_t dim = resolution;
+            for (uint32_t mip = 0u; mip < mipCount; ++mip) {
+                totalTexelsPerFace += static_cast<uint64_t>(dim) * dim;
+                dim = std::max(1u, dim >> 1u);
+            }
+            return totalTexelsPerFace * FaceCount * bytesPerTexel;
+        }
+
+        uint64_t EstimateDynamicProbeCacheBytes(
+            uint32_t resolution,
+            uint32_t mipCount,
+            nri::Format colorFormat) {
+            // Each dynamic probe generation owns both its raw source cubemap and its GGX prefiltered cubemap.
+            return 2ull * EstimateCubemapTextureBytes(resolution, mipCount, colorFormat);
+        }
+
+        bool ComputeLRUCacheEvictionPlan(
+            const std::vector<CaptureCacheSlotInfo>& entries,
+            uint64_t budgetBytes,
+            uint64_t incomingBytes,
+            std::vector<std::string>* outEvictKeys,
+            std::string* outReason) {
+            if (outEvictKeys) outEvictKeys->clear();
+            if (incomingBytes > budgetBytes) {
+                SetReason(outReason, "single dynamic probe capture exceeds cache budget");
+                return false;
+            }
+
+            uint64_t totalExistingBytes = 0ull;
+            std::vector<const CaptureCacheSlotInfo*> evictable;
+            evictable.reserve(entries.size());
+            for (const auto& entry : entries) {
+                totalExistingBytes += entry.ByteSize;
+                if (!entry.PinProtected) {
+                    evictable.push_back(&entry);
+                }
+            }
+
+            if (totalExistingBytes + incomingBytes <= budgetBytes) {
+                SetReason(outReason, "");
+                return true;
+            }
+
+            std::sort(evictable.begin(), evictable.end(),
+                [](const CaptureCacheSlotInfo* a, const CaptureCacheSlotInfo* b) {
+                    if (a->LastUsedSequence != b->LastUsedSequence) {
+                        return a->LastUsedSequence < b->LastUsedSequence;
+                    }
+                    return a->ProbeKey < b->ProbeKey;
+                });
+
+            uint64_t currentBytes = totalExistingBytes;
+            for (const CaptureCacheSlotInfo* candidate : evictable) {
+                if (currentBytes + incomingBytes <= budgetBytes) {
+                    break;
+                }
+                currentBytes = (candidate->ByteSize <= currentBytes) ? (currentBytes - candidate->ByteSize) : 0ull;
+                if (outEvictKeys) {
+                    outEvictKeys->push_back(candidate->ProbeKey);
+                }
+            }
+
+            if (currentBytes + incomingBytes > budgetBytes) {
+                if (outEvictKeys) outEvictKeys->clear();
+                SetReason(outReason, "insufficient evictable cache capacity under active pins");
+                return false;
+            }
+            SetReason(outReason, "");
+            return true;
+        }
+
+        std::vector<ScheduledCaptureAllocation> ComputeFrameCaptureSchedule(
+            const std::vector<ScheduledCaptureWork>& queue,
+            uint32_t maxProbesPerFrame,
+            uint32_t maxFacesPerFrame) {
+            std::vector<ScheduledCaptureAllocation> plan;
+            if (queue.empty() || maxProbesPerFrame == 0u || maxFacesPerFrame == 0u) {
+                return plan;
+            }
+
+            std::vector<ScheduledCaptureWork> ordered = queue;
+            std::stable_sort(ordered.begin(), ordered.end(),
+                [](const ScheduledCaptureWork& a, const ScheduledCaptureWork& b) {
+                    return a.PriorityScore > b.PriorityScore;
+                });
+
+            uint32_t remainingFacesBudget = maxFacesPerFrame;
+            for (const auto& item : ordered) {
+                if (plan.size() >= maxProbesPerFrame || remainingFacesBudget == 0u) {
+                    break;
+                }
+                if (item.RemainingFaces == 0u) {
+                    continue;
+                }
+                const uint32_t facesToRun = std::min(item.RemainingFaces, remainingFacesBudget);
+                plan.push_back(ScheduledCaptureAllocation{item.ProbeKey, facesToRun});
+                remainingFacesBudget -= facesToRun;
+            }
+            return plan;
+        }
     } // namespace ReflectionCaptureContract
 
 } // namespace Axle

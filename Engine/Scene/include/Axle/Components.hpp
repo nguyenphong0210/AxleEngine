@@ -988,6 +988,7 @@ namespace Axle {
         bool CaptureShadows = true;
         float CaptureNearPlane = 0.1f;
         float CaptureFarPlane = 100.0f;
+        ReflectionProbeCaptureMode CaptureMode = ReflectionProbeCaptureMode::Automatic;
 
         ReflectionProbeComponent() = default;
         ReflectionProbeComponent(const glm::vec3& extents, float intensity = 1.0f, bool parallax = true)

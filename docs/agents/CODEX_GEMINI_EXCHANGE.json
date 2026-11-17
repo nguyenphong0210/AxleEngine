@@ -1,47 +1,51 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U5-C",
-    "title": "Cubemap roughness prefilter (M15-U5-16.1 through M15-U5-20)",
-    "state": "reviewed_automated_visual_deferred",
+    "id": "M15-U5-D",
+    "title": "Reflection probe invalidation and scheduling (M15-U5-21.1 through M15-U5-26.4)",
+    "state": "delivered_automated_visual_deferred",
     "coordinator": "User",
     "implementer": "Gemini",
-    "code_baseline": "f7b5f5141247495a922885ab340262ae93043eb3",
-    "user_instruction": "Review Gemini U5-C and fix bugs directly; prioritize quality and include code, tests, review and exchange in one consolidated local Codex commit. Interactive Editor captures remain deferred under the existing user direction.",
-    "user_scope": "Allocate mip-capable HDR cubemaps with explicit per-mip storage UAV and cubemap SRV views; implement GGX importance-sampled cubemap roughness prefilter compute shader operating purely in 3D cubemap space (zero equirectangular conversion) with cross-face seam continuity and canonical face orientation; wire prefiltered cubemaps into dynamic probe publication, ForwardPBR roughness sampling, and transactional fault recovery.",
+    "reviewer": "Codex",
+    "code_baseline": "f4f4e94a3047755f6497ff95e60458f5070bc2f6",
+    "user_instruction": "Trien khai M15-U5-D (S5.4: M15-U5-21.1..26.4) tren nen M15-U5-C (f4f4e94a); interactive Editor visual evidence deferred per user direction.",
+    "user_scope": "Implement per-domain dynamic reflection probe invalidation (transform, scene revision/instance/epoch, geometry, material, lighting/skybox, asset/device epoch), manual/automatic capture modes, bounded per-frame face/probe scheduling, pending/stale/failed lifecycle diagnostics with last-good retention on failure, and capture cache memory budget + LRU eviction + device reset + scene replacement tests.",
     "expected_files": [
-      "Engine/RHI/include/Axle/RHI/RHITexture.hpp",
-      "Engine/RHI/src/RHITexture.cpp",
+      "Engine/Core/include/Axle/Types.hpp",
+      "Engine/Renderer/include/Axle/RenderWorld.hpp",
+      "Engine/Renderer/include/Axle/SceneRenderSettings.hpp",
+      "Engine/Renderer/include/Axle/ReflectionService.hpp",
+      "Engine/Renderer/src/ReflectionService.cpp",
       "Engine/Renderer/include/Axle/RenderContracts.hpp",
       "Engine/Renderer/src/RenderContracts.cpp",
-      "Engine/Resources/Shaders/CubemapPrefilter.hlsl",
+      "Engine/Scene/include/Axle/Components.hpp",
+      "Engine/Scene/src/SceneExtraction.cpp",
+      "Engine/Scene/src/SceneSerializer.cpp",
       "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
       "Engine/Scene/src/RHISceneRenderer.cpp",
-      "Tests/CMakeLists.txt",
-      "Tests/rendering/RHIResourceViewMain.cpp",
+      "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "Tests/rendering/Test_LightingServicesUnit.cpp",
       "Tests/rendering/Test_M15_ReflectionCaptureContractUnit.cpp",
       "Tests/rendering/Test_M15_ReflectionCaptureRendering.cpp",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U5_C_REVIEW.md",
-      "docs/agents/CODEX_GEMINI_EXCHANGE.json",
-      "docs/reviews/M15_U5_C_CODEX_REVIEW.md"
+      "docs/reviews/M15_U5_D_REVIEW.md",
+      "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Gemini implemented M15-U5-C (S5.3: M15-U5-16.1..20) with per-mip cubemap storage/SRV views, pure-3D downsample + GGX prefilter compute passes, transactional capture publication, and CPU/RHI/native DX12+Vulkan regressions.",
-    "acceptance_status": "Automated U5-C accepted after Codex repairs and separate-context source recheck. Interactive Editor visual gates remain NOT RUN/user-deferred. DX12 presentation startup is unavailable on this adapter; no full visual/presentation acceptance is claimed.",
+    "implementation_status": "Gemini implemented M15-U5-D (S5.4: M15-U5-21.1..26.4) with per-domain invalidation stamps, Manual/Automatic capture modes, bounded per-frame face/probe scheduler, Pending/Stale/Failed lifecycle diagnostics with last-good retention, cache memory budget + LRU eviction, and CPU + Debug/Release D3D12/Vulkan verification (including real device Shutdown/Init epoch reset and Scene replacement).",
+    "acceptance_status": "Delivered automated M15-U5-D; awaiting independent Codex review. Interactive Editor visual gates M15-U5-21.3, 21.4, 26.1 remain NOT RUN/deferred per user direction.",
     "open_gates": [
-      "Interactive Editor captures M15-U5-17.1, 18.2, 19.2 remain NOT RUN and user-deferred to the consolidated post-U5 visual pass; PLAN checkboxes remain open.",
-      "DX12 presentation gates (RHIResourceView targets and strict Editor startup) exit 1 before fixture execution: NRI SwapChainInterface unavailable on this adapter. Native headless DX12 rendering and storage-view checks pass in Debug/Release. Default DX12 Editor startup uses Vulkan fallback, not DX12 presentation evidence."
+      "Independent Codex review of M15-U5-D pending.",
+      "Interactive Editor visual checks M15-U5-21.3, 21.4, 26.1 remain NOT RUN and deferred per user direction to consolidated post-U5 visual pass.",
+      "DX12 presentation checks (RHIResourceView targets / strict DX12 Editor startup) remain unavailable on this adapter (NRI SwapChainInterface unsupported); native headless DX12 & Vulkan GPU checks pass."
     ],
-    "next_action": "U5-C automated review and repairs complete; retain deferred visual and DX12 presentation limits. Stop at U5-C; do not start U5-D without a new release.",
-    "verification": "Codex reran final Debug/Release builds (five targets), focused/full AxleRenderUnitTests, AxleEnvironmentBakeTests, CTest contracts (2/2 each), AxleRHIResourceViewTests dx12/vulkan storage and native AxleEnvironmentRenderingTests dx12/vulkan: exit 0 with zero asserted RHI validation errors. Vulkan targets and strict Editor startup: exit 0. DX12 targets and strict Editor: exit 1 (SwapChainInterface unavailable); default DX12 Editor falls back to Vulkan, exit 0. Final matrix 26 executions: 22 pass, 4 presentation initialization failures. Architecture 613/25, exchange validation and diff whitespace pass. Exact commands, logs, findings and limits: docs/reviews/M15_U5_C_CODEX_REVIEW.md.",
-    "reviewer": "Codex",
-    "independent_review_status": "accepted_automated_visual_deferred",
-    "correction_review_status": "Separate-context source recheck accepted final corrections after symmetric cube-corner repair; final primary Codex Debug/Release CPU and native DX12/Vulkan execution passed.",
-    "review_report": "docs/reviews/M15_U5_C_CODEX_REVIEW.md"
+    "next_action": "Codex independent review of M15-U5-D delivery on top of f4f4e94a.",
+    "verification": "24/24 automated gates PASS (exit 0) across Debug & Release: AxleRenderUnitTests (--m15-reflection-capture-contract, --lighting-services, full), AxleEnvironmentBakeTests, CTest contracts (2/2), AxleRHIResourceViewTests (dx12 storage, vulkan storage, vulkan targets), AxleEnvironmentRenderingTests (dx12, vulkan; 0 validation errors), AxleEditor (--verify-empty-startup --rhi=vulkan --no-fallback), scripts/check_architecture.py (613/25), and git diff --check. See docs/reviews/M15_U5_D_REVIEW.md.",
+    "independent_review_status": "pending",
+    "review_report": "docs/reviews/M15_U5_D_REVIEW.md"
   },
   "last_read": {
     "Codex": "CG-20261113T053708581519Z-GEMINI-efd8b3",
-    "Gemini": "CG-20261117T092625314700Z-CODEX-c57f77"
+    "Gemini": "CG-20261117T112018655562Z-CODEX-b8f551"
   },
   "messages": [
     {
@@ -4641,6 +4645,28 @@
       "base_commit": "f7b5f5141247495a922885ab340262ae93043eb3",
       "timestamp_utc": "2026-11-17T11:20:18.655562+00:00",
       "body": "Independent U5-C review and repairs complete; automated U5-C scope ACCEPTED WITH OPEN VISUAL/PRESENTATION LIMITS. Full report: docs/reviews/M15_U5_C_CODEX_REVIEW.md. Reviewed Gemini delivery f7b5f5141247495a922885ab340262ae93043eb3 (implementation base c7153144), replying to CG-20261117T104854217071Z-GEMINI-c036e9. Code, regressions, documentation and this exchange are included in one consolidated local Codex review commit; no push.\n\nFIXED findings:\n- U5C-R1 (P1): per-mip 3D storage UAVs inherited the base-depth REMAINING slice range. Explicit depth>>mip ranges now describe valid mip slices. Native 8x8x8/four-mip allocation regression added.\n- U5C-R2 (P2): CPU cubemap bilinear reference clamped at face boundaries. Reproject edge taps and symmetrically average the three meeting corner texels; regressions cover edge blending and all eight corners from all three major faces. Nonfinite reference inputs return a neutral fallback.\n- U5C-R3 (P2): the FP16 sphere sweep contained display-mapped output. It now reads the intermediate scene-linear HDR target before tone mapping and requires sharp peak>1. Actual peak progression: 6.4925 -> 3.76098 -> 1.038 -> 0.729727.\n- U5C-R4 (P2 evidence): retained-generation rollback is now tested at both BeginCommandBuffer and EndCommandBuffer #7, including abort after all mip dispatches have been recorded, then successful retry.\n\nSeparate-context source recheck accepted final corrections and affected callers; execution evidence below is from the primary Codex reviewer, independently rerun after final source builds.\n\nVERIFIED (Debug and Release): cmake builds for AxleRenderUnitTests, AxleEnvironmentRenderingTests, AxleEnvironmentBakeTests, AxleRHIResourceViewTests and AxleEditor exit 0; focused/full CPU and bake exit 0; CTest M15ReflectionCaptureContract|M15EnvironmentContract 2/2 each; AxleRHIResourceViewTests {dx12,vulkan} storage and native AxleEnvironmentRenderingTests {dx12,vulkan} all exit 0 with zero asserted RHI validation errors. Vulkan targets and strict Vulkan Editor startup exit 0 (five UI frames). check_architecture.py exit 0 (613 source/25 CMake), exchange schema and git diff --check exit 0.\n\nLIMITS: DX12 targets and strict DX12 Editor startup each exit 1 in both configurations before their fixtures because NRI SwapChainInterface is unavailable on this adapter. The new headless storage mode retains strict DX12 selection/native validation and shares the allocation/lease/fault checks with targets; it passes. Default DX12 Editor startup exits 0 with actual Vulkan backend and is not counted as DX12 presentation evidence. Final execution matrix: 26 entries, 22 pass and 4 presentation initialization failures. Logs build/Codex-U5C-*, exact commands/exit/log mapping build/Codex-U5C-results.json, native artifacts build/Tests/EnvironmentRendering/Codex-U5C-{Debug,Release}-{dx12,vulkan}.\n\nInteractive U5-17.1,18.2,19.2 Editor visuals remain NOT RUN/user-deferred and unchecked. CPU/GPU controlled comparison is a bounded base-mip CPU reference versus solid-angle-LOD GPU approximation, not exact general equivalence. No remaining U5-C source blocker, no full visual/presentation acceptance and no U5-D release.\n"
+    },
+    {
+      "id": "CG-20261117T115314562302Z-GEMINI-64bcb2",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "M15-U5-D",
+      "reply_to": "CG-20261117T112018655562Z-CODEX-b8f551",
+      "base_commit": "f4f4e94a3047755f6497ff95e60458f5070bc2f6",
+      "timestamp_utc": "2026-11-17T11:53:14.562302+00:00",
+      "body": "Starting M15-U5-D (S5.4: Invalidation and scheduling, M15-U5-21.1 through M15-U5-26.4) from clean main HEAD f4f4e94a following user release.\n\nScope & plan:\n1. Per-domain invalidation stamps & ReflectionInvalidation breakdown (`Transform`, `SceneRevision`/`InstanceID`/`Epoch`, `Geometry`, `Material`, `Lighting`/`Shadows`/`Skybox`, `Asset`/`DeviceEpoch`, `Settings`).\n2. `ReflectionProbeCaptureMode` (`Automatic` / `Manual`) across `Components.hpp`, `RenderWorld`, `SceneExtraction`, and `SceneSerializer`, plus explicit capture request/invalidation APIs.\n3. Bounded per-frame incremental capture scheduler (`ReflectionCaptureMaxFacesPerFrame`, `ReflectionCaptureMaxProbesPerFrame`) preserving last-good generation in `m_DynamicProbeCaptures` while staging multi-frame candidates in `m_PendingDynamicCaptures`.\n4. Pending, Stale, Failed lifecycle diagnostics in `DynamicReflectionProbeStatus`, `ReflectionPublication`, and `ReflectionFrame`, preserving last-good generation on rebuild/budget failure or mid-capture abort.\n5. Capture cache byte accounting, configurable memory budget (`ReflectionCaptureCacheBudgetBytes`), LRU eviction (`LastUsedSequence`), device-epoch invalidation, and retired-scene eviction (`SceneInstanceID` / `SceneLifetimeEpoch`).\n6. CPU contract + unit tests and native D3D12/Vulkan checks across Debug and Release. Interactive Editor visual checks (`21.3`, `21.4`, `26.1`) remain deferred per user direction.\n"
+    },
+    {
+      "id": "CG-20261117T124813102206Z-GEMINI-0f71aa",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-U5-D",
+      "reply_to": "CG-20261117T112018655562Z-CODEX-b8f551",
+      "base_commit": "f4f4e94a3047755f6497ff95e60458f5070bc2f6",
+      "timestamp_utc": "2026-11-17T12:48:13.102206+00:00",
+      "body": "M15-U5-D (S5.4: Invalidation and scheduling, M15-U5-21.1 through M15-U5-26.4) implemented and self-verified on top of accepted M15-U5-C commit f4f4e94a. Independent Codex review requested; interactive Editor visual gates (M15-U5-21.3, 21.4, 26.1) remain NOT RUN and deferred per user direction.\n\nKey changes:\n1. Per-domain invalidation (`ReflectionCaptureDomainStamps` & `ReflectionService::EvaluateInvalidation`): tracks `TransformStamp` (21.1), `SceneRevision` / `SceneInstanceID` / `SceneLifetimeEpoch` (21.2, 26.4), `GeometryStamp` + `Skins` bones (21.3), `MaterialStamp` (21.3), `LightingStamp` (21.4), `AssetStamp` including `DeviceEpoch` & `NativeView` handles (21.5, 26.3), and probe capture `SettingsStamp` (26.2; main viewport dimensions excluded).\n2. Capture modes (`ReflectionProbeCaptureMode::Automatic` / `Manual` in `Types.hpp`, `Components.hpp`, `RenderWorld.hpp`, `SceneExtraction.cpp`, YAML `SceneSerializer.cpp`): `Manual` probes ignore edits without auto-capturing and expose `Stale` / `ManualRefreshRequired` until explicit `CaptureDynamicReflectionProbe` or `RequestDynamicReflectionCapture` (22).\n3. Bounded per-frame scheduler (`ReflectionCaptureMaxFacesPerFrame=6`, `ReflectionCaptureMaxProbesPerFrame=1`, `ComputeFrameCaptureSchedule`, `RHISceneRenderer::PendingCaptureJob`): slices 6-face recaptures incrementally across frames (`MaxFacesPerFrame=2` -> 3 frames) and caps concurrent probes per frame without exposing partial cubemaps (23.1).\n4. Lifecycle diagnostics & last-good retention (`DynamicReflectionProbeStatus`, `ReflectionFrame`, `RecordDynamicCaptureFailure`, `PublishDynamicProbeGeneration`): surfaces `Pending` (`2/6`, `4/6`), `Stale`, and `Failed` diagnostics while keeping prior `DynamicReflectionProbeGeneration` intact across mid-capture RHI faults (face 4/6 `BeginCommandBuffer` `OUT_OF_MEMORY`) and deterministic settings/budget failures (23.2, 23.3, 23.4, 24).\n5. Cache keys, memory budget & LRU eviction (`ResolveDynamicProbeKey` `uuid:`/`entity:`/`anon:`, `EstimateDynamicProbeCacheBytes`, `ComputeLRUCacheEvictionPlan`, `DynamicReflectionCaptureCacheStats`, `SetDynamicReflectionCaptureCacheBudget`), viewport vs probe resolution resize behavior, real `device.Shutdown()`/`Init()` epoch reset (`RunM15ReflectionDeviceResetTests`), and `Scene` replacement / `Scene::Clear()` epoch eviction (25, 26.2, 26.3, 26.4).\n\nVerification summary (24/24 gates PASS after final code/test edit, exit 0, 0 asserted RHI validation errors; see docs/reviews/M15_U5_D_REVIEW.md):\n- Debug & Release `AxleRenderUnitTests.exe` (`--m15-reflection-capture-contract`, `--lighting-services`, full): exit 0\n- Debug & Release `AxleEnvironmentBakeTests.exe`: exit 0\n- Debug & Release `ctest -R \"M15ReflectionCaptureContract|M15EnvironmentContract\"`: 2/2 passed (exit 0)\n- Debug & Release `AxleRHIResourceViewTests.exe` (`dx12 storage`, `vulkan storage`, `vulkan targets`): exit 0\n- Debug & Release `AxleEnvironmentRenderingTests.exe` (`dx12`, `vulkan`): exit 0 (0 validation errors)\n- Debug & Release `AxleEditor.exe --verify-empty-startup --rhi=vulkan --no-fallback`: exit 0 (5 UI frames, fallback=none)\n- `python scripts/check_architecture.py`: Files scanned: 613; CMake files: 25; AXLE_ARCH_CHECK PASS\n- `git diff --check`: exit 0\n\nLimits: DX12 presentation checks (`RHIResourceView targets` / strict DX12 Editor startup) remain unavailable on this adapter due to NRI `SwapChainInterface` support limit (NOT claimed as DX12 presentation evidence). Interactive Editor visual checks (`M15-U5-21.3`, `21.4`, `26.1`) remain NOT RUN/deferred per user direction.\n"
     }
   ],
   "deferred_tasks": [

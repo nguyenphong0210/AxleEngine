@@ -446,6 +446,47 @@ namespace Axle {
             const glm::vec3& normalDir,
             float roughness,
             uint32_t sampleCount = DefaultPrefilterSampleCount);
+
+        // M15-U5-D: Capture cache sizing, LRU eviction planning, and bounded frame scheduling.
+        struct CaptureCacheSlotInfo {
+            std::string ProbeKey;
+            uint64_t ByteSize = 0;
+            uint64_t LastUsedSequence = 0;
+            bool PinProtected = false;
+        };
+
+        struct ScheduledCaptureWork {
+            std::string ProbeKey;
+            uint32_t RemainingFaces = FaceCount;
+            uint64_t PriorityScore = 0;
+        };
+
+        struct ScheduledCaptureAllocation {
+            std::string ProbeKey;
+            uint32_t FacesToRun = 0;
+        };
+
+        uint64_t EstimateCubemapTextureBytes(
+            uint32_t resolution,
+            uint32_t mipCount,
+            nri::Format colorFormat = nri::Format::RGBA16_SFLOAT);
+
+        uint64_t EstimateDynamicProbeCacheBytes(
+            uint32_t resolution,
+            uint32_t mipCount,
+            nri::Format colorFormat = nri::Format::RGBA16_SFLOAT);
+
+        bool ComputeLRUCacheEvictionPlan(
+            const std::vector<CaptureCacheSlotInfo>& entries,
+            uint64_t budgetBytes,
+            uint64_t incomingBytes,
+            std::vector<std::string>* outEvictKeys,
+            std::string* outReason = nullptr);
+
+        std::vector<ScheduledCaptureAllocation> ComputeFrameCaptureSchedule(
+            const std::vector<ScheduledCaptureWork>& queue,
+            uint32_t maxProbesPerFrame,
+            uint32_t maxFacesPerFrame);
     }
 
 } // namespace Axle

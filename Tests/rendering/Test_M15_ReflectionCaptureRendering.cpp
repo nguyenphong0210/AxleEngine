@@ -2,6 +2,11 @@
 #include "RHIReadback.hpp"
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <Axle/Scene.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/Components.hpp>
+#include <Axle/SceneExtraction.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
@@ -206,7 +211,7 @@ namespace {
 } // namespace
 
 bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
-    std::cout << "[M15ReflectionCaptureGPU] Running native D3D12/Vulkan U5-B dynamic capture tests...\n";
+    std::cout << "[M15ReflectionCaptureGPU] Running native D3D12/Vulkan U5-B/U5-C/U5-D dynamic capture tests...\n";
     auto& device = RHIDevice::Get();
 
     auto cubeMesh = RHIMesh::CreateCube(1.0f);
@@ -960,9 +965,471 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         }
     }
 
+    // -------------------------------------------------------------------------
+    // 6. M15-U5-D (S5.4): Per-domain invalidation, Manual/Automatic modes,
+    //    bounded per-frame scheduling, Pending/Stale/Failed retention,
+    //    cache memory budget + LRU eviction, viewport/probe resize, and scene replacement.
+    // -------------------------------------------------------------------------
+    {
+        renderer.ClearDynamicReflectionProbes();
+        renderer.ClearDynamicCaptureBudgetOverride();
+
+        RHITexture color, depth;
+        RENDER_CHECK(color.Init(RHITextureDesc::RenderTarget2D(64, 64)) &&
+                     depth.Init(RHITextureDesc::DepthStencil2D(64, 64)),
+            "U5-D viewport targets");
+        PerspectiveCamera cam(55.0f, 1.0f, 0.1f, 100.0f);
+        cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 2.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                          {0.0f, 0.0f, 2.5f});
+
+        SceneRenderSettings schedSettings;
+        schedSettings.EnableParticles = false;
+        schedSettings.EnableShadows = false;
+        schedSettings.EnableSkybox = false;
+
+        auto renderView = [&](const RenderWorld& w, RHITexture& c, RHITexture& d, const SceneRenderSettings& s) {
+            renderer.RenderWorldView(w, cam, &c, &d, s);
+            const auto& completion = renderer.GetLastCompletion();
+            if (completion) {
+                device.WaitForCompletion(completion);
+            }
+            return renderer.WasLastRenderSuccessful();
+        };
+
+        // 6A. Isolated per-domain triggers (21.1..21.5) & Manual vs Automatic + Incremental faces (22, 23.1, 23.2, 23.3, 23.4, 24)
+        {
+            RenderWorld u5dWorld;
+            u5dWorld.SceneRevision = 700;
+            u5dWorld.Skybox.Authored = true;
+            u5dWorld.Skybox.Enabled = false;
+
+            auto beaconMat = MakeEmissiveMaterial({10.0f, 0.0f, 0.0f}, 1.0f);
+            u5dWorld.Meshes.push_back(MakeBoxInstance(
+                4001, cubeView, beaconMat, {5.0f, 0.0f, 0.0f}, {0.5f, 8.0f, 8.0f}));
+
+            RenderReflectionProbe manualProbe{};
+            manualProbe.EntityID = 4000;
+            manualProbe.Position = {0.0f, 0.0f, 0.0f};
+            manualProbe.BoxExtents = {20.0f, 20.0f, 20.0f};
+            manualProbe.DynamicCapture = true;
+            manualProbe.CaptureResolution = 32u;
+            manualProbe.CaptureShadows = false;
+            manualProbe.CaptureMode = ReflectionProbeCaptureMode::Manual;
+            u5dWorld.ReflectionProbes.push_back(manualProbe);
+
+            // M15-U5-22: Manual mode stays Idle until explicit capture or manual request.
+            RENDER_CHECK(renderView(u5dWorld, color, depth, schedSettings), "U5-D manual cold render");
+            RENDER_CHECK(!renderer.GetDynamicReflectionProbe(manualProbe),
+                "M15-U5-22: manual probe does not auto-capture on initial render");
+            const auto coldStatus = renderer.GetDynamicReflectionProbeStatus(manualProbe);
+            RENDER_CHECK(coldStatus && coldStatus->State == DynamicCaptureLifecycleState::Idle &&
+                         coldStatus->ManualRefreshRequired && !coldStatus->HasGeneration,
+                "M15-U5-22: cold manual probe reports Idle and ManualRefreshRequired");
+
+            // Explicit synchronous capture creates Generation 1 (red radiance).
+            const auto manualCap = renderer.CaptureDynamicReflectionProbe(u5dWorld, manualProbe, schedSettings);
+            RENDER_CHECK(manualCap.Success && manualCap.CapturedFaces == 6u,
+                "M15-U5-22: explicit CaptureDynamicReflectionProbe populates Manual probe");
+            const auto gen1 = renderer.GetDynamicReflectionProbe(manualProbe);
+            RENDER_CHECK(gen1 && gen1->DeviceEpoch == device.GetEpoch() && gen1->IsValidForDevice(device.GetEpoch()) &&
+                         !gen1->IsValidForDevice(device.GetEpoch() + 1u),
+                "M15-U5-26.3: dynamic probe generation tracks DeviceEpoch and rejects mismatched epochs");
+
+            // Domain stamp check on live world: each edit isolates its domain flag cleanly.
+            const auto stamps1 = gen1->DomainStamps;
+            ReflectionService reflSvc;
+            {
+                auto pMoved = manualProbe; pMoved.Position.y += 1.0f;
+                const auto inv = reflSvc.EvaluateInvalidation(stamps1, renderer.ComputeDynamicCaptureDomainStamps(u5dWorld, pMoved, schedSettings));
+                RENDER_CHECK(inv.TransformChanged && !inv.GeometryChanged && !inv.MaterialChanged && !inv.LightingChanged,
+                    "M15-U5-21.1: GPU renderer DomainStamps isolate probe TransformChanged");
+            }
+            {
+                RenderWorld altMeshWorld = u5dWorld;
+                auto altCube = RHIMesh::CreateCube(1.0f);
+                RENDER_CHECK(altCube && altCube->IsValid(), "U5-D alternate cube asset");
+                altMeshWorld.Meshes[0].NativeMesh = altCube;
+                altMeshWorld.Meshes[0].NativeView = altCube->CaptureView();
+                const auto inv = reflSvc.EvaluateInvalidation(stamps1, renderer.ComputeDynamicCaptureDomainStamps(altMeshWorld, manualProbe, schedSettings));
+                RENDER_CHECK(inv.AssetChanged && !inv.TransformChanged && !inv.GeometryChanged && !inv.MaterialChanged,
+                    "M15-U5-21.5: mesh NativeView asset swap triggers AssetChanged");
+            }
+            {
+                RenderWorld revWorld = u5dWorld;
+                revWorld.SceneRevision = 701;
+                const auto inv = reflSvc.EvaluateInvalidation(stamps1, renderer.ComputeDynamicCaptureDomainStamps(revWorld, manualProbe, schedSettings));
+                RENDER_CHECK(inv.SceneRevisionChanged && !inv.GeometryChanged && !inv.MaterialChanged && !inv.LightingChanged,
+                    "M15-U5-21.2: GPU renderer DomainStamps isolate SceneRevisionChanged");
+            }
+            {
+                RenderWorld geomWorld = u5dWorld;
+                geomWorld.Meshes[0].WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), {4.5f, 0.0f, 0.0f}), {0.5f, 8.0f, 8.0f});
+                const auto inv = reflSvc.EvaluateInvalidation(stamps1, renderer.ComputeDynamicCaptureDomainStamps(geomWorld, manualProbe, schedSettings));
+                RENDER_CHECK(inv.GeometryChanged && !inv.TransformChanged && !inv.MaterialChanged && !inv.LightingChanged,
+                    "M15-U5-21.3: GPU renderer DomainStamps isolate mesh transform GeometryChanged");
+            }
+            {
+                RenderWorld lightWorld = u5dWorld;
+                RenderPointLight pt{};
+                pt.EntityID = 4999; pt.Position = {2.0f, 2.0f, 0.0f}; pt.Intensity = 15.0f;
+                lightWorld.PointLights.push_back(pt);
+                const auto inv = reflSvc.EvaluateInvalidation(stamps1, renderer.ComputeDynamicCaptureDomainStamps(lightWorld, manualProbe, schedSettings));
+                RENDER_CHECK(inv.LightingChanged && !inv.TransformChanged && !inv.GeometryChanged && !inv.MaterialChanged,
+                    "M15-U5-21.4: GPU renderer DomainStamps isolate point-light LightingChanged");
+            }
+
+            // Edit material (Red -> Green) on Manual probe -> retains gen1 + flags Stale without auto-capturing.
+            beaconMat->GetDesc().EmissiveColor = {0.0f, 10.0f, 0.0f};
+            RENDER_CHECK(renderView(u5dWorld, color, depth, schedSettings), "U5-D manual edit render");
+            const auto afterManualEdit = renderer.GetDynamicReflectionProbe(manualProbe);
+            const auto staleStatus = renderer.GetDynamicReflectionProbeStatus(manualProbe);
+            const auto& staleFrame = renderer.GetLastReflectionFrame();
+            RENDER_CHECK(afterManualEdit && afterManualEdit->GenerationID == gen1->GenerationID &&
+                         staleStatus && staleStatus->State == DynamicCaptureLifecycleState::Stale &&
+                         staleStatus->Stale && staleStatus->HasGeneration && staleStatus->ManualRefreshRequired &&
+                         staleStatus->PendingInvalidation.MaterialChanged &&
+                         staleFrame.PrefilterReady && staleFrame.CaptureStale && staleFrame.ActiveGenerationID == gen1->GenerationID,
+                "M15-U5-22 / 23.3: edited Manual probe keeps gen1 alive while exposing Stale diagnostics");
+
+            // Request incremental capture at MaxFacesPerFrame = 2 -> 3 frames (2/6 -> 4/6 -> Ready 6/6)
+            SceneRenderSettings slicedSettings = schedSettings;
+            slicedSettings.ReflectionCaptureMaxFacesPerFrame = 2u;
+            slicedSettings.ReflectionCaptureMaxProbesPerFrame = 1u;
+            renderer.RequestDynamicReflectionCapture(manualProbe);
+
+            RENDER_CHECK(renderView(u5dWorld, color, depth, slicedSettings), "U5-D sliced frame 1");
+            const auto pend1 = renderer.GetDynamicReflectionProbeStatus(manualProbe);
+            const auto& frame1 = renderer.GetLastReflectionFrame();
+            RENDER_CHECK(pend1 && pend1->State == DynamicCaptureLifecycleState::Pending && pend1->Pending &&
+                         pend1->CompletedFaces == 2u && pend1->HasGeneration &&
+                         renderer.GetDynamicReflectionProbe(manualProbe)->GenerationID == gen1->GenerationID &&
+                         frame1.PrefilterReady && frame1.CapturePending && frame1.CaptureCompletedFaces == 2u &&
+                         renderer.GetDynamicReflectionCaptureCacheStats().LastScheduledFaces == 2u,
+                "M15-U5-23.1 / 23.2: MaxFacesPerFrame=2 runs 2/6 faces on frame 1 while retaining last-good gen1");
+
+            RENDER_CHECK(renderView(u5dWorld, color, depth, slicedSettings), "U5-D sliced frame 2");
+            const auto pend2 = renderer.GetDynamicReflectionProbeStatus(manualProbe);
+            RENDER_CHECK(pend2 && pend2->State == DynamicCaptureLifecycleState::Pending && pend2->Pending &&
+                         pend2->CompletedFaces == 4u &&
+                         renderer.GetDynamicReflectionProbe(manualProbe)->GenerationID == gen1->GenerationID,
+                "M15-U5-23.1 / 23.2: frame 2 advances pending capture to 4/6 faces without publishing partial cubemap");
+
+            // Inject transient failure mid-job on face 4 (while CompletedFaces == 4) -> aborts job cleanly, retains gen1!
+            {
+                bool hitFault = false;
+                {
+                    ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
+                        if (op == "BeginCommandBuffer" && !hitFault) {
+                            hitFault = true;
+                            return nri::Result::OUT_OF_MEMORY;
+                        }
+                        return {};
+                    });
+                    RENDER_CHECK(renderView(u5dWorld, color, depth, slicedSettings) && hitFault,
+                        "U5-D mid-job fault frame executes main pass cleanly after face-4 failure");
+                }
+                const auto retainedAfterFail = renderer.GetDynamicReflectionProbe(manualProbe);
+                const auto failStatus = renderer.GetDynamicReflectionProbeStatus(manualProbe);
+                const auto& failFrame = renderer.GetLastReflectionFrame();
+                RENDER_CHECK(retainedAfterFail && retainedAfterFail->GenerationID == gen1->GenerationID &&
+                             failStatus && failStatus->State == DynamicCaptureLifecycleState::Failed &&
+                             failStatus->Failed && failStatus->HasGeneration && failStatus->Stale &&
+                             failStatus->CompletedFaces == 4u &&
+                             failStatus->FailureCount >= 1u &&
+                             renderer.GetDynamicReflectionCaptureCacheStats().PendingJobCount == 0u &&
+                             failFrame.PrefilterReady && failFrame.CaptureFailed && failFrame.CaptureStale &&
+                             failFrame.ProbeGeneration == gen1->Cubemap->GetHandle(),
+                    "M15-U5-23.4 / 24: mid-capture RHI failure at face 4 aborts pending job, retains gen1, and reports Failed+Stale");
+
+                std::vector<glm::vec4> intactPixels;
+                RENDER_CHECK(ReadCubeFaceRGBA16(*retainedAfterFail->Cubemap, 0u, intactPixels) &&
+                             AverageRegion(intactPixels, 32u, 14u, 14u, 18u, 18u).r > 2.0f,
+                    "M15-U5-24: retained gen1 still holds original HDR red radiance after mid-job abort");
+            }
+
+            // Finish recovery with new manual request across 3 frames -> completes Blue radiance (gen2 > gen1)
+            beaconMat->GetDesc().EmissiveColor = {0.0f, 0.0f, 10.0f};
+            renderer.RequestDynamicReflectionCapture(manualProbe);
+            RENDER_CHECK(renderView(u5dWorld, color, depth, slicedSettings) &&
+                         renderView(u5dWorld, color, depth, slicedSettings) &&
+                         renderView(u5dWorld, color, depth, slicedSettings),
+                "U5-D recover incremental 3 frames");
+            const auto gen2 = renderer.GetDynamicReflectionProbe(manualProbe);
+            const auto readyStatus = renderer.GetDynamicReflectionProbeStatus(manualProbe);
+            RENDER_CHECK(gen2 && gen2->GenerationID > gen1->GenerationID &&
+                         readyStatus && readyStatus->State == DynamicCaptureLifecycleState::Ready &&
+                         !readyStatus->Pending && !readyStatus->Stale && !readyStatus->Failed &&
+                         readyStatus->CompletedFaces == 6u,
+                "M15-U5-22 / 23.1: explicit recapture completes cleanly to Ready after mid-job failure");
+            std::vector<glm::vec4> recoveredPixels;
+            RENDER_CHECK(ReadCubeFaceRGBA16(*gen2->Cubemap, 0u, recoveredPixels) &&
+                         AverageRegion(recoveredPixels, 32u, 14u, 14u, 18u, 18u).b > 2.0f &&
+                         AverageRegion(recoveredPixels, 32u, 14u, 14u, 18u, 18u).r < 0.2f,
+                "M15-U5-21.3 / 22: published gen2 reflects updated Blue emissive radiance");
+
+            // 6B. Main viewport resize MUST NOT invalidate world-space capture; probe resolution resize MUST reallocate (26.2)
+            RHITexture resizedColor, resizedDepth;
+            RENDER_CHECK(resizedColor.Init(RHITextureDesc::RenderTarget2D(96, 48)) &&
+                         resizedDepth.Init(RHITextureDesc::DepthStencil2D(96, 48)),
+                "U5-D resized main viewport targets");
+            RENDER_CHECK(renderView(u5dWorld, resizedColor, resizedDepth, schedSettings), "U5-D main viewport resize render");
+            RENDER_CHECK(renderer.GetDynamicReflectionProbe(manualProbe)->GenerationID == gen2->GenerationID,
+                "M15-U5-26.2: resizing main viewport does NOT invalidate cached dynamic probe");
+
+            const uint64_t bytes32 = ReflectionCaptureContract::EstimateDynamicProbeCacheBytes(32u, 5u);
+            const uint64_t bytes64 = ReflectionCaptureContract::EstimateDynamicProbeCacheBytes(64u, 5u);
+            RENDER_CHECK(gen2->CachedBytes == bytes32 && bytes64 > bytes32,
+                "M15-U5-25 / 26.2: dynamic probe tracks exact cache footprint");
+
+            u5dWorld.ReflectionProbes[0].CaptureMode = ReflectionProbeCaptureMode::Automatic;
+            u5dWorld.ReflectionProbes[0].CaptureResolution = 64u;
+            RENDER_CHECK(renderView(u5dWorld, resizedColor, resizedDepth, schedSettings), "U5-D probe resolution resize 32->64");
+            const auto gen3 = renderer.GetDynamicReflectionProbe(u5dWorld.ReflectionProbes[0]);
+            RENDER_CHECK(gen3 && gen3->GenerationID > gen2->GenerationID && gen3->Resolution == 64u &&
+                         gen3->CachedBytes == bytes64 && gen3->Cubemap->GetWidth() == 64u,
+                "M15-U5-26.2: increasing CaptureResolution reallocates cubemap and updates CachedBytes");
+        }
+
+        // 6C. Multi-probe frame bound (23.1) + Cache Memory Budget & LRU Eviction (25)
+        {
+            renderer.ClearDynamicReflectionProbes();
+            const uint64_t perProbeBytes = ReflectionCaptureContract::EstimateDynamicProbeCacheBytes(32u, 5u);
+
+            RenderWorld cacheWorld;
+            cacheWorld.SceneRevision = 800;
+            cacheWorld.Skybox.Authored = true;
+            cacheWorld.Skybox.Enabled = false;
+            cacheWorld.Meshes.push_back(MakeBoxInstance(
+                5000, cubeView, MakeEmissiveMaterial({4.0f, 4.0f, 4.0f}, 1.0f), {6.0f, 0.0f, 0.0f}, {0.5f, 6.0f, 6.0f}));
+
+            RenderReflectionProbe probe1{};
+            probe1.EntityID = 5001; probe1.Position = {0.0f, 0.0f, 0.0f}; probe1.BoxExtents = {8.0f, 8.0f, 8.0f};
+            probe1.DynamicCapture = true; probe1.CaptureResolution = 32u; probe1.CaptureShadows = false;
+
+            RenderReflectionProbe probe2{};
+            probe2.EntityID = 5002; probe2.Position = {0.0f, 0.0f, 40.0f}; probe2.BoxExtents = {8.0f, 8.0f, 8.0f};
+            probe2.DynamicCapture = true; probe2.CaptureResolution = 32u; probe2.CaptureShadows = false;
+
+            RenderReflectionProbe probe3{};
+            probe3.EntityID = 5003; probe3.Position = {0.0f, 0.0f, 80.0f}; probe3.BoxExtents = {8.0f, 8.0f, 8.0f};
+            probe3.DynamicCapture = true; probe3.CaptureResolution = 32u; probe3.CaptureShadows = false;
+
+            cacheWorld.ReflectionProbes = {probe1, probe2};
+            SceneRenderSettings multiSettings = schedSettings;
+            multiSettings.ReflectionCaptureMaxProbesPerFrame = 1u;
+            multiSettings.ReflectionCaptureMaxFacesPerFrame = 6u;
+            multiSettings.ReflectionCaptureCacheBudgetBytes = 2ull * perProbeBytes;
+
+            // Camera at origin: selects probe1 first (MaxProbesPerFrame=1 -> ONLY probe1 captures on frame 1!)
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              {0.0f, 0.0f, 1.0f});
+            RENDER_CHECK(renderView(cacheWorld, color, depth, multiSettings), "U5-D multi-probe frame 1");
+            RENDER_CHECK(renderer.GetDynamicReflectionProbe(probe1) != nullptr &&
+                         renderer.GetDynamicReflectionProbe(probe2) == nullptr &&
+                         renderer.GetDynamicReflectionCaptureCacheStats().LastScheduledProbes == 1u,
+                "M15-U5-23.1: MaxProbesPerFrame=1 captures selected probe1 and defers probe2 to next frame");
+
+            // Frame 2: probe1 ready, now probe2 captures!
+            RENDER_CHECK(renderView(cacheWorld, color, depth, multiSettings), "U5-D multi-probe frame 2");
+            RENDER_CHECK(renderer.GetDynamicReflectionProbe(probe1) != nullptr &&
+                         renderer.GetDynamicReflectionProbe(probe2) != nullptr &&
+                         renderer.GetDynamicReflectionCaptureCacheStats().CachedProbeCount == 2u &&
+                         renderer.GetDynamicReflectionCaptureCacheStats().UsedBytes == 2ull * perProbeBytes,
+                "M15-U5-23.1 / 25: both probes fit within 2-probe budget on subsequent frame");
+
+            // Move camera near probe2 so probe2's LastUsedSequence becomes newer than probe1, then add probe3!
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 41.0f), glm::vec3(0.0f, 0.0f, 40.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              {0.0f, 0.0f, 41.0f});
+            RENDER_CHECK(renderView(cacheWorld, color, depth, multiSettings), "U5-D touch probe2 LRU");
+            cacheWorld.ReflectionProbes.push_back(probe3);
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 81.0f), glm::vec3(0.0f, 0.0f, 80.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              {0.0f, 0.0f, 81.0f});
+            RENDER_CHECK(renderView(cacheWorld, color, depth, multiSettings), "U5-D probe3 LRU eviction");
+            const auto stats = renderer.GetDynamicReflectionCaptureCacheStats();
+            RENDER_CHECK(stats.CachedProbeCount == 2u &&
+                         stats.UsedBytes == 2ull * perProbeBytes &&
+                         stats.EvictionCount >= 1u &&
+                         renderer.GetDynamicReflectionProbe(probe1) == nullptr &&
+                         renderer.GetDynamicReflectionProbe(probe2) != nullptr &&
+                         renderer.GetDynamicReflectionProbe(probe3) != nullptr,
+                "M15-U5-25: exceeding cache budget evicts least-recently-used probe1 while retaining probe2 and probe3");
+
+            // Single capture exceeding tight budget fails safely without disturbing cached probe2 & probe3
+            renderer.SetDynamicReflectionCaptureCacheBudget(perProbeBytes / 2ull);
+            RenderReflectionProbe probe4{};
+            probe4.EntityID = 5004; probe4.Position = {0.0f, 0.0f, 120.0f}; probe4.DynamicCapture = true; probe4.CaptureResolution = 32u;
+            const auto overBudgetRes = renderer.CaptureDynamicReflectionProbe(cacheWorld, probe4, multiSettings);
+            RENDER_CHECK(!overBudgetRes.Success &&
+                         overBudgetRes.Diagnostic.find("DYNAMIC_PROBE_BUDGET") != std::string::npos &&
+                         renderer.GetDynamicReflectionProbe(probe2) != nullptr &&
+                         renderer.GetDynamicReflectionProbe(probe3) != nullptr &&
+                         renderer.GetDynamicReflectionProbe(probe4) == nullptr,
+                "M15-U5-25: single probe exceeding cache budget fails cleanly without evicting resident cache");
+            renderer.ClearDynamicCaptureBudgetOverride();
+        }
+
+        // 6D. Scene Replacement with ECS Scene instances & Clear() lifetime epoch (26.4)
+        {
+            renderer.ClearDynamicReflectionProbes();
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 2.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              {0.0f, 0.0f, 2.5f});
+
+            auto makeBeaconScene = [&](UUID probeUuid, const glm::vec3& colorVal) {
+                auto sc = std::make_unique<Scene>();
+                auto pEnt = sc->CreateEntityWithUUID(probeUuid, "SceneProbe");
+                auto& rpc = pEnt.AddComponent<ReflectionProbeComponent>();
+                rpc.DynamicCapture = true;
+                rpc.CaptureResolution = 32u;
+                rpc.CaptureShadows = false;
+                rpc.BoxExtents = {20.0f, 20.0f, 20.0f};
+
+                auto mEnt = sc->CreateEntity("BeaconWall");
+                mEnt.GetComponent<TransformComponent>().Translation = {5.0f, 0.0f, 0.0f};
+                mEnt.GetComponent<TransformComponent>().Scale = {0.5f, 8.0f, 8.0f};
+                auto& mc = mEnt.AddComponent<MeshInstance3D>();
+                mc.RHIMeshAsset = cubeMesh;
+                mc.RHIMaterialAsset = MakeEmissiveMaterial(colorVal, 1.0f);
+                return sc;
+            };
+
+            auto sceneA = makeBeaconScene(700001ULL, {10.0f, 0.0f, 0.0f});
+            RenderWorld worldA = ExtractRenderWorld(*sceneA);
+            worldA.Skybox.Authored = true;
+            worldA.Skybox.Enabled = false;
+            RENDER_CHECK(worldA.ReflectionProbes.size() == 1 && renderView(worldA, color, depth, schedSettings),
+                "U5-D sceneA initial render");
+            const auto genA = renderer.GetDynamicReflectionProbe(worldA.ReflectionProbes[0]);
+            RENDER_CHECK(genA && genA->SceneInstanceID == sceneA->GetInstanceId(),
+                "M15-U5-26.4: Scene A probe captured with SceneInstanceID");
+
+            // Scene B reuses ECS entity index 0 but has distinct SceneInstanceID + StableUUID + Green beacon
+            auto sceneB = makeBeaconScene(700002ULL, {0.0f, 10.0f, 0.0f});
+            RenderWorld worldB = ExtractRenderWorld(*sceneB);
+            worldB.Skybox.Authored = true;
+            worldB.Skybox.Enabled = false;
+            RENDER_CHECK(worldB.ReflectionProbes.size() == 1 && renderView(worldB, color, depth, schedSettings),
+                "U5-D sceneB replacement render");
+            const auto genB = renderer.GetDynamicReflectionProbe(worldB.ReflectionProbes[0]);
+            const auto statsAfterRep = renderer.GetDynamicReflectionCaptureCacheStats();
+            RENDER_CHECK(genB && genB->SceneInstanceID == sceneB->GetInstanceId() &&
+                         !renderer.GetDynamicReflectionProbe(worldA.ReflectionProbes[0]) &&
+                         statsAfterRep.CachedProbeCount == 1u && statsAfterRep.EvictionCount >= 1u,
+                "M15-U5-26.4: replacing Scene A with Scene B evicts retired scene entries without entity-ID aliasing");
+            std::vector<glm::vec4> sceneBPixels;
+            RENDER_CHECK(ReadCubeFaceRGBA16(*genB->Cubemap, 0u, sceneBPixels) &&
+                         AverageRegion(sceneBPixels, 32u, 14u, 14u, 18u, 18u).g > 2.0f &&
+                         AverageRegion(sceneBPixels, 32u, 14u, 14u, 18u, 18u).r < 0.2f,
+                "M15-U5-26.4: replaced Scene B capture contains Green radiance with zero Scene A leakage");
+
+            // Clearing sceneB advances SceneLifetimeEpoch -> purges epoch 1 capture and recaptures epoch 2 cleanly
+            sceneB->Clear();
+            auto pEnt2 = sceneB->CreateEntityWithUUID(700002ULL, "SceneProbeAfterClear");
+            auto& rpc2 = pEnt2.AddComponent<ReflectionProbeComponent>();
+            rpc2.DynamicCapture = true;
+            rpc2.CaptureResolution = 32u;
+            rpc2.CaptureShadows = false;
+            rpc2.BoxExtents = {20.0f, 20.0f, 20.0f};
+            auto mEnt2 = sceneB->CreateEntity("BlueBeaconAfterClear");
+            mEnt2.GetComponent<TransformComponent>().Translation = {5.0f, 0.0f, 0.0f};
+            mEnt2.GetComponent<TransformComponent>().Scale = {0.5f, 8.0f, 8.0f};
+            auto& mc2 = mEnt2.AddComponent<MeshInstance3D>();
+            mc2.RHIMeshAsset = cubeMesh;
+            mc2.RHIMaterialAsset = MakeEmissiveMaterial({0.0f, 0.0f, 10.0f}, 1.0f);
+
+            RenderWorld worldB2 = ExtractRenderWorld(*sceneB);
+            worldB2.Skybox.Authored = true;
+            worldB2.Skybox.Enabled = false;
+            RENDER_CHECK(worldB2.SceneLifetimeEpoch > worldB.SceneLifetimeEpoch &&
+                         renderView(worldB2, color, depth, schedSettings),
+                "U5-D cleared sceneB epoch 2 render");
+            const auto genB2 = renderer.GetDynamicReflectionProbe(worldB2.ReflectionProbes[0]);
+            std::vector<glm::vec4> clearedPixels;
+            RENDER_CHECK(genB2 && genB2->SceneLifetimeEpoch == worldB2.SceneLifetimeEpoch &&
+                         genB2->GenerationID > genB->GenerationID &&
+                         ReadCubeFaceRGBA16(*genB2->Cubemap, 0u, clearedPixels) &&
+                         AverageRegion(clearedPixels, 32u, 14u, 14u, 18u, 18u).b > 2.0f,
+                "M15-U5-26.4: Scene::Clear() lifetime epoch increment invalidates prior scene capture and recaptures Blue radiance");
+        }
+    }
+
     renderer.ClearDynamicReflectionProbes();
     RENDER_CHECK(device.WaitIdle(), "U5-B wait idle at cleanup");
     RENDER_CHECK(Axle::RenderTests::GetRHIValidationErrorCount() == 0, "U5-B zero RHI validation errors");
-    std::cout << "[M15ReflectionCaptureGPU] All U5-B/U5-C native D3D12/Vulkan checks passed!\n";
+    std::cout << "[M15ReflectionCaptureGPU] All U5-B/U5-C/U5-D native D3D12/Vulkan checks passed!\n";
+    return true;
+}
+
+bool RunM15ReflectionDeviceResetTests(const RHIDeviceDesc& initDesc) {
+    auto& device = RHIDevice::Get();
+    const uint64_t epochBefore = device.GetEpoch();
+
+    auto buildSceneWorld = [](const glm::vec3& emissive) {
+        RenderWorld w;
+        w.SceneRevision = 900;
+        w.Skybox.Authored = true;
+        w.Skybox.Enabled = false;
+        auto cube = RHIMesh::CreateCube(1.0f);
+        if (cube && cube->IsValid()) {
+            w.Meshes.push_back(MakeBoxInstance(
+                6001, cube->CaptureView(), MakeEmissiveMaterial(emissive, 1.0f), {5.0f, 0.0f, 0.0f}, {0.5f, 8.0f, 8.0f}));
+        }
+        return w;
+    };
+
+    RenderReflectionProbe resetProbe{};
+    resetProbe.EntityID = 6000;
+    resetProbe.DynamicCapture = true;
+    resetProbe.CaptureResolution = 32u;
+    resetProbe.CaptureShadows = false;
+    resetProbe.BoxExtents = {20.0f, 20.0f, 20.0f};
+
+    std::shared_ptr<const DynamicReflectionProbeGeneration> staleGeneration;
+    {
+        RHISceneRenderer resetRenderer;
+        RENDER_CHECK(resetRenderer.Init(device, false), "M15-U5-26.3: init renderer on epochBefore");
+        RenderWorld world1 = buildSceneWorld({10.0f, 0.0f, 0.0f});
+        RENDER_CHECK(!world1.Meshes.empty(), "M15-U5-26.3: epochBefore cube created");
+        const auto cap1 = resetRenderer.CaptureDynamicReflectionProbe(world1, resetProbe);
+        RENDER_CHECK(cap1.Success, "M15-U5-26.3: initial capture before device reset succeeds");
+        staleGeneration = resetRenderer.GetDynamicReflectionProbe(resetProbe);
+        RENDER_CHECK(staleGeneration &&
+                     staleGeneration->DeviceEpoch == epochBefore &&
+                     staleGeneration->IsValidForDevice(epochBefore),
+            "M15-U5-26.3: initial capture binds to epochBefore");
+        resetRenderer.Shutdown();
+    }
+
+    RENDER_CHECK(device.WaitIdle(), "M15-U5-26.3 wait idle before shutdown");
+    device.Shutdown();
+    RENDER_CHECK(!staleGeneration->Cubemap->IsValid() &&
+                 !staleGeneration->IsValidForDevice(epochBefore),
+        "M15-U5-26.3: shutting down RHI device invalidates prior dynamic probe generation");
+
+    RENDER_CHECK(device.Init(initDesc), "M15-U5-26.3: re-initialize RHI device");
+    const uint64_t epochAfter = device.GetEpoch();
+    RENDER_CHECK(epochAfter > epochBefore && !staleGeneration->IsValidForDevice(epochAfter),
+        "M15-U5-26.3: new device epoch rejects stale generation from prior epoch");
+
+    {
+        RHISceneRenderer resetRenderer;
+        RENDER_CHECK(resetRenderer.Init(device, false), "M15-U5-26.3: init renderer on epochAfter");
+        RenderWorld world2 = buildSceneWorld({0.0f, 10.0f, 0.0f});
+        RENDER_CHECK(!world2.Meshes.empty(), "M15-U5-26.3: epochAfter cube created");
+        const auto cap2 = resetRenderer.CaptureDynamicReflectionProbe(world2, resetProbe);
+        RENDER_CHECK(cap2.Success, "M15-U5-26.3: capture succeeds after device reset");
+        const auto newGeneration = resetRenderer.GetDynamicReflectionProbe(resetProbe);
+        std::vector<glm::vec4> pixels;
+        RENDER_CHECK(newGeneration &&
+                     newGeneration->DeviceEpoch == epochAfter &&
+                     newGeneration->IsValidForDevice(epochAfter) &&
+                     newGeneration->Cubemap->GetHandle().Epoch == epochAfter &&
+                     ReadCubeFaceRGBA16(*newGeneration->Cubemap, 0u, pixels) &&
+                     AverageRegion(pixels, 32u, 14u, 14u, 18u, 18u).g > 2.0f,
+            "M15-U5-26.3: post-reset capture runs cleanly on new epoch with zero validation errors");
+        resetRenderer.Shutdown();
+    }
+
+    RENDER_CHECK(device.WaitIdle() && Axle::RenderTests::GetRHIValidationErrorCount() == 0,
+        "M15-U5-26.3: zero RHI validation errors across device reset");
     return true;
 }

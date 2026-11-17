@@ -41,6 +41,7 @@ namespace Axle {
         frame.ParallaxCorrected=selected->ParallaxCorrected;
         frame.DynamicCaptureSupported=selectedDynamic;
         frame.State=selectedDynamic ? ReflectionState::DynamicPending : ReflectionState::AuthoredPending;
+        frame.CaptureTotalFaces=selectedDynamic ? 6u : 0u;
         frame.Diagnostic=selectedDynamic
             ? "dynamic_probe_pending: six-face capture publication required"
             : "authored_probe_pending: native prefilter publication required";
@@ -50,6 +51,12 @@ namespace Axle {
                                                           bool ssrAvailable, bool skyIBLAvailable) const {
         frame.ProbeGeneration={};
         frame.PrefilterReady=false;
+        frame.CapturePending=publication.CapturePending;
+        frame.CaptureStale=publication.CaptureStale;
+        frame.CaptureFailed=publication.CaptureFailed;
+        frame.CaptureCompletedFaces=publication.CaptureCompletedFaces;
+        frame.CaptureTotalFaces=publication.CaptureTotalFaces;
+        frame.ActiveGenerationID=publication.ActiveGenerationID;
         frame.Fallback=ssrAvailable ? ReflectionFallback::SSR :
             (skyIBLAvailable ? ReflectionFallback::SkyIBL : ReflectionFallback::NeutralAmbient);
         const bool isDynamic = frame.SelectedProbe && frame.SelectedProbe->DynamicCapture && frame.SelectedProbe->CubemapPath.empty();
@@ -68,6 +75,24 @@ namespace Axle {
             if (!publication.Diagnostic.empty()) frame.Diagnostic+="; "+publication.Diagnostic;
         }
         return frame;
+    }
+    ReflectionInvalidation ReflectionService::EvaluateInvalidation(
+        const ReflectionCaptureDomainStamps& published,
+        const ReflectionCaptureDomainStamps& current,
+        bool manualRequested) const {
+        ReflectionInvalidation out;
+        out.TransformChanged = (published.TransformStamp != current.TransformStamp);
+        out.SceneRevisionChanged = (published.SceneRevision != current.SceneRevision) ||
+                                   (published.SceneInstanceID != current.SceneInstanceID) ||
+                                   (published.SceneLifetimeEpoch != current.SceneLifetimeEpoch);
+        out.GeometryChanged = (published.GeometryStamp != current.GeometryStamp);
+        out.MaterialChanged = (published.MaterialStamp != current.MaterialStamp);
+        out.LightingChanged = (published.LightingStamp != current.LightingStamp);
+        out.AssetChanged = (published.AssetStamp != current.AssetStamp);
+        out.SettingsChanged = (published.SettingsStamp != current.SettingsStamp);
+        out.DeviceEpochChanged = (published.DeviceEpoch != current.DeviceEpoch);
+        out.ManualRequested = manualRequested;
+        return out;
     }
     const char* ReflectionService::FallbackName(ReflectionFallback fallback){switch(fallback){case ReflectionFallback::SSR:return "SSR";case ReflectionFallback::LocalProbe:return "LocalProbe";case ReflectionFallback::SkyIBL:return "SkyIBL";case ReflectionFallback::NeutralAmbient:return "NeutralAmbient";default:return "None";}}
 }

@@ -983,6 +983,11 @@ namespace Axle {
         float Intensity = 1.0f;
         std::string CubemapPath;
         bool ParallaxCorrected = true;
+        bool DynamicCapture = false;
+        uint32_t CaptureResolution = 128;
+        bool CaptureShadows = true;
+        float CaptureNearPlane = 0.1f;
+        float CaptureFarPlane = 100.0f;
 
         ReflectionProbeComponent() = default;
         ReflectionProbeComponent(const glm::vec3& extents, float intensity = 1.0f, bool parallax = true)

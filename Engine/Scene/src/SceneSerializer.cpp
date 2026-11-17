@@ -327,6 +327,11 @@ namespace Axle {
                 ss << "      Intensity: " << rpc.Intensity << "\n";
                 ss << "      CubemapPath: " << rpc.CubemapPath << "\n";
                 ss << "      ParallaxCorrected: " << (rpc.ParallaxCorrected ? "true" : "false") << "\n";
+                ss << "      DynamicCapture: " << (rpc.DynamicCapture ? "true" : "false") << "\n";
+                ss << "      CaptureResolution: " << rpc.CaptureResolution << "\n";
+                ss << "      CaptureShadows: " << (rpc.CaptureShadows ? "true" : "false") << "\n";
+                ss << "      CaptureNearPlane: " << rpc.CaptureNearPlane << "\n";
+                ss << "      CaptureFarPlane: " << rpc.CaptureFarPlane << "\n";
             }
 
             // RectLightComponent
@@ -1095,6 +1100,16 @@ namespace Axle {
                             rpc.CubemapPath = Trim(trimmed.substr(12));
                         } else if (trimmed.rfind("ParallaxCorrected:", 0) == 0) {
                             rpc.ParallaxCorrected = (Trim(trimmed.substr(18)) == "true");
+                        } else if (trimmed.rfind("DynamicCapture:", 0) == 0) {
+                            rpc.DynamicCapture = (Trim(trimmed.substr(15)) == "true");
+                        } else if (trimmed.rfind("CaptureResolution:", 0) == 0) {
+                            rpc.CaptureResolution = static_cast<uint32_t>(std::max(1, std::stoi(Trim(trimmed.substr(18)))));
+                        } else if (trimmed.rfind("CaptureShadows:", 0) == 0) {
+                            rpc.CaptureShadows = (Trim(trimmed.substr(15)) == "true");
+                        } else if (trimmed.rfind("CaptureNearPlane:", 0) == 0) {
+                            rpc.CaptureNearPlane = std::stof(Trim(trimmed.substr(17)));
+                        } else if (trimmed.rfind("CaptureFarPlane:", 0) == 0) {
+                            rpc.CaptureFarPlane = std::stof(Trim(trimmed.substr(16)));
                         }
                         break;
                     }

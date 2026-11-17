@@ -20,6 +20,7 @@ bool RunM15EnvironmentContractReferenceUnitTests();
 bool RunM15SurfaceAndMaterialContractUnitTests();
 bool RunM15OcclusionContractUnitTests();
 bool RunM15HiZContractUnitTests();
+bool RunM15ReflectionCaptureContractUnitTests();
 bool RunTemporalPostDiagnosticsUnitTests();
 namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderWorkerUnitTests(); }
@@ -58,6 +59,9 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string_view(argv[1]) == "--m15-hiz-contract") {
         return RunM15HiZContractUnitTests() ? 0 : 1;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--m15-reflection-capture-contract") {
+        return RunM15ReflectionCaptureContractUnitTests() ? 0 : 1;
     }
 
     std::cout << "========================================================\n";
@@ -143,6 +147,11 @@ int main(int argc, char** argv) {
 
     if (!RunM15HiZContractUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunM15HiZContractUnitTests FAILED!\n";
+        return 1;
+    }
+
+    if (!RunM15ReflectionCaptureContractUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunM15ReflectionCaptureContractUnitTests FAILED!\n";
         return 1;
     }
 

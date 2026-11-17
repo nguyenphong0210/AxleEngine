@@ -9,13 +9,14 @@ namespace Axle {
             (world.Skybox.Authored && world.Skybox.Enabled && world.Skybox.EnvironmentLighting
                 ? ReflectionFallback::SkyIBL : ReflectionFallback::NeutralAmbient);
         frame.State=ReflectionState::Fallback;
-        frame.Diagnostic="no_authored_probe_influence: " + std::string(FallbackName(frame.Fallback)) + " fallback";
+        frame.Diagnostic="no_active_probe_influence: " + std::string(FallbackName(frame.Fallback)) + " fallback";
         // Preserve the live renderer's single-probe influence policy. Ties keep
         // source order, and out-of-influence probes cannot replace the sky.
         const RenderReflectionProbe* selected=nullptr;
         float selectedWeight=0.0f;
         for (const auto& probe : world.ReflectionProbes) {
-            if (probe.CubemapPath.empty()) continue;
+            const bool isDynamic = probe.DynamicCapture && probe.CubemapPath.empty();
+            if (probe.CubemapPath.empty() && !isDynamic) continue;
             const glm::vec3 local=cameraPosition-probe.Position;
             float distanceOutside=0.0f;
             float influence=1.0f;
@@ -32,13 +33,17 @@ namespace Axle {
             if (weight>selectedWeight) { selectedWeight=weight; selected=&probe; }
         }
         if (!selected) return frame;
+        const bool selectedDynamic = selected->DynamicCapture && selected->CubemapPath.empty();
         frame.SelectedProbe=*selected;
         frame.SelectedProbeCount=1;
         frame.SelectedProbeEntityID=selected->EntityID;
         frame.CubemapPath=selected->CubemapPath;
         frame.ParallaxCorrected=selected->ParallaxCorrected;
-        frame.State=ReflectionState::AuthoredPending;
-        frame.Diagnostic="authored_probe_pending: native prefilter publication required";
+        frame.DynamicCaptureSupported=selectedDynamic;
+        frame.State=selectedDynamic ? ReflectionState::DynamicPending : ReflectionState::AuthoredPending;
+        frame.Diagnostic=selectedDynamic
+            ? "dynamic_probe_pending: six-face capture publication required"
+            : "authored_probe_pending: native prefilter publication required";
         return frame;
     }
     ReflectionFrame ReflectionService::ResolvePublication(ReflectionFrame frame, const ReflectionPublication& publication,
@@ -47,15 +52,18 @@ namespace Axle {
         frame.PrefilterReady=false;
         frame.Fallback=ssrAvailable ? ReflectionFallback::SSR :
             (skyIBLAvailable ? ReflectionFallback::SkyIBL : ReflectionFallback::NeutralAmbient);
+        const bool isDynamic = frame.SelectedProbe && frame.SelectedProbe->DynamicCapture && frame.SelectedProbe->CubemapPath.empty();
         if (frame.SelectedProbe && publication.PrefilterGeneration) {
             frame.ProbeGeneration=publication.PrefilterGeneration;
             frame.PrefilterReady=true;
-            frame.State=ReflectionState::AuthoredReady;
+            frame.DynamicCaptureSupported=isDynamic;
+            frame.State=isDynamic ? ReflectionState::DynamicReady : ReflectionState::AuthoredReady;
             frame.Fallback=ReflectionFallback::None;
             frame.Diagnostic=publication.Diagnostic;
         } else {
             frame.State=ReflectionState::Fallback;
-            frame.Diagnostic=std::string(frame.SelectedProbe ? "authored_probe_unavailable: " : "no_authored_probe_influence: ") +
+            frame.Diagnostic=std::string(!frame.SelectedProbe ? "no_active_probe_influence: " :
+                (isDynamic ? "dynamic_probe_unavailable: " : "authored_probe_unavailable: ")) +
                 FallbackName(frame.Fallback) + " fallback";
             if (!publication.Diagnostic.empty()) frame.Diagnostic+="; "+publication.Diagnostic;
         }

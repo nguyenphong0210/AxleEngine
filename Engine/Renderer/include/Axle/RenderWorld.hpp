@@ -145,6 +145,11 @@ namespace Axle {
         int Shape = 0; // 0: Box, 1: Sphere
         bool ParallaxCorrected = true;
         std::string CubemapPath;
+        bool DynamicCapture = false;
+        uint32_t CaptureResolution = 128;
+        bool CaptureShadows = true;
+        float CaptureNearPlane = 0.1f;
+        float CaptureFarPlane = 100.0f;
     };
 
     struct RenderRectLight {

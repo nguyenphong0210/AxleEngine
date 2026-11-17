@@ -57,6 +57,7 @@ add_library(AxleScene STATIC
     src/Passes/ScreenSpaceReflectionPass.cpp
     src/Passes/FroxelFogPass.cpp
     src/Passes/PostProcessPass.cpp
+    src/Passes/ReflectionCapturePass.cpp
     src/RHILocalShadows.cpp
     src/RHIShadowDepthAtlas.cpp
     src/RHICascadedShadows.cpp

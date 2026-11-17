@@ -4,6 +4,7 @@
 #include "Passes/ScreenSpaceReflectionPass.hpp"
 #include "Passes/FroxelFogPass.hpp"
 #include "Passes/PostProcessPass.hpp"
+#include "Passes/ReflectionCapturePass.hpp"
 #include <Axle/Path.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
@@ -51,12 +52,13 @@ namespace Axle {
         ] = inputs;
         // The ViewContext has observed the final target generation and jitter
         // before this call. Every scheduled pass reads that same view snapshot.
-        if (!m_ViewContext.IsFrameActive()) {
+        ViewContext& viewCtx = ActiveViewContext();
+        if (!viewCtx.IsFrameActive()) {
             AXLE_CORE_ERROR("Cannot record view passes without an active ViewContext frame");
             return false;
         }
-        const auto& view = m_ViewContext.GetInput();
-        const auto viewTargets = m_ViewContext.GetTargets();
+        const auto& view = viewCtx.GetInput();
+        const auto viewTargets = viewCtx.GetTargets();
         if (!viewTargets || !viewTargets->IsValid()) {
             AXLE_CORE_ERROR("Cannot record view passes without valid ViewContext targets");
             return false;
@@ -79,17 +81,28 @@ namespace Axle {
         const auto sceneColor = graph.Import("SceneColor", sceneTargetTexture);
         const auto sceneDepth = graph.Import("SceneDepth", sceneDepthTexture);
         const auto output = graph.Import("Output", colorTarget);
+        const bool captureActive = m_CaptureSession.Active &&
+            m_CaptureSession.CandidateCubemap && m_CaptureSession.CandidateCubemap->IsValid() &&
+            m_CaptureSession.SourceFace && m_CaptureSession.SourceFace->IsValid();
+        const bool allowCaptureTransparent = !captureActive || m_CaptureSession.IncludeTransparent;
+        const bool allowCaptureParticlesAndOverlays = !captureActive ||
+            m_CaptureSession.IncludeParticles || m_CaptureSession.IncludeEditorOverlays;
+        const auto captureOriented = captureActive && m_CaptureSession.FlipHorizontal &&
+            m_CaptureSession.OrientedFace && m_CaptureSession.OrientedFace->IsValid()
+            ? graph.Import("CaptureOriented", m_CaptureSession.OrientedFace->GetNative()) : output;
+        const auto captureCubemap = captureActive
+            ? graph.Import("CaptureCubemap", m_CaptureSession.CandidateCubemap->GetNative(), true) : output;
         const auto sceneNormal = m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid()
             ? graph.Import("SceneNormal", m_OpaqueSceneNormal->GetNative()) : output;
         const auto hdr = useToneMap ? graph.Import("HDR", m_IntermediateHDRTarget->GetNative()) : output;
         const auto fxaa = useFXAA ? graph.Import("FXAA", m_IntermediateFXAATarget->GetNative()) : output;
-        const bool copyRefraction = activeSampleCount == 1 && sceneDepthDSV && sceneDepthTexture &&
+        const bool copyRefraction = allowCaptureTransparent && activeSampleCount == 1 && sceneDepthDSV && sceneDepthTexture &&
             std::any_of(world.Meshes.begin(), world.Meshes.end(), [](const auto& mesh) {
                 const auto& material = mesh.Material.RHIMaterialAsset;
                 return mesh.NativeView && mesh.NativeView->IsValid() && material &&
                     material->GetSurfaceType() == SurfaceType::Transparent && material->GetDesc().RefractionEnabled;
             });
-        const bool copyParticleDepth = settings.EnableParticles && m_ParticleRenderer &&
+        const bool copyParticleDepth = allowCaptureParticlesAndOverlays && settings.EnableParticles && m_ParticleRenderer &&
             std::any_of(world.Particles.begin(), world.Particles.end(), [](const auto& particle) {
                 return particle && particle->Config.SoftnessDistance > 0.0f;
             }) && activeSampleCount == 1 && sceneDepthDSV && sceneDepthTexture;
@@ -119,9 +132,9 @@ namespace Axle {
             ? std::clamp<uint32_t>(static_cast<uint32_t>(settings.HiZVisualizationLevel), 0u, hiZLevelCount - 1u)
             : 0u;
         if (settings.HiZVisualizationLevel >= 0 && !useHiZVisual) {
-            m_ViewContext.Diagnostics().AddFallback("hiz_visualization_unavailable: single-sample depth and Hi-Z targets required");
+            viewCtx.Diagnostics().AddFallback("hiz_visualization_unavailable: single-sample depth and Hi-Z targets required");
         } else if (useHiZVisual && static_cast<uint32_t>(settings.HiZVisualizationLevel) >= viewTargets->GetHiZUsefulLevelCount()) {
-            m_ViewContext.Diagnostics().AddFallback("hiz_visualization_clamped_or_tail: requested level exceeds useful pyramid depth");
+            viewCtx.Diagnostics().AddFallback("hiz_visualization_clamped_or_tail: requested level exceeds useful pyramid depth");
         }
         const bool useSurfaceNormal=(useGTAO || useSSR) && m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid();
         const char* normalPassName = useGTAO ? "SurfaceNormalPrepass" : "SurfaceNormal";
@@ -167,7 +180,7 @@ namespace Axle {
             m_LastGIFrame.UpdateScheduled=false;
             m_LastGIFrame.Status=GIFrameStatus::Fallback;
             m_LastGIFrame.Diagnostic="ddgi_native_update_unavailable: IBL diffuse fallback";
-            m_ViewContext.Diagnostics().AddFallback(m_LastGIFrame.Diagnostic);
+            viewCtx.Diagnostics().AddFallback(m_LastGIFrame.Diagnostic);
         }
         const auto ddgiInput = useDDGI ? graph.Import("DDGIInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto ddgiDepth = useDDGI ? graph.Import("DDGIDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
@@ -181,7 +194,7 @@ namespace Axle {
         RHITexture* historyWrite = nullptr;
         const bool useTAA = settings.EnableTAA && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_TAAPipelineSDR && history0 && history0->IsValid() && history1 && history1->IsValid();
-        auto temporalSelection = m_ViewContext.Temporal().Begin(useTAA ? 2 : 0, { jitterX, jitterY });
+        auto temporalSelection = viewCtx.Temporal().Begin(useTAA ? 2 : 0, { jitterX, jitterY });
         historyRead = (temporalSelection.ReadSlot == 0) ? history0 : history1;
         historyWrite = (temporalSelection.WriteSlot == 0) ? history0 : history1;
         // The first frame deliberately reads an uninitialized slot but the
@@ -249,18 +262,18 @@ namespace Axle {
         auto beginPass = [&](std::string_view name) {
             EndGPUTimestampPass();
             if (diagnosticsPassActive) {
-                m_ViewContext.Diagnostics().EndPass();
+                viewCtx.Diagnostics().EndPass();
                 diagnosticsPassActive = false;
             }
             activePass = name;
             if (graph.BeginPass(name, Commands())) {
                 activeGraphPass = name;
                 BeginGPUTimestampPass(name);
-                m_ViewContext.Diagnostics().BeginPass(std::string(name));
+                viewCtx.Diagnostics().BeginPass(std::string(name));
                 diagnosticsPassActive = true;
                 return true;
             }
-            m_ViewContext.Diagnostics().AddError("graph_begin_failed:" + std::string(name));
+            viewCtx.Diagnostics().AddError("graph_begin_failed:" + std::string(name));
             return false;
         };
         auto fail = [&] {
@@ -330,9 +343,10 @@ namespace Axle {
                 skyboxConstants.ZenithColor = glm::vec4(activeSkybox.ZenithColor, sunsetFactor);
                 skyboxConstants.HorizonColor = glm::vec4(activeSkybox.HorizonColor, activeSkybox.Turbidity);
                 skyboxConstants.GroundColor = glm::vec4(activeSkybox.GroundColor, activeSkybox.Exposure);
-                // If Tone Mapping is enabled, output linear HDR sky radiance (-1.0f mode)
-                float skyboxToneMode = settings.EnableToneMapping ? -1.0f : static_cast<float>(settings.ToneMappingMode);
-                skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, skyboxToneMode, settings.EnableToneMapping ? 1.0f : settings.Gamma);
+                // If Tone Mapping is enabled or dynamic cubemap capture is active, output linear HDR sky radiance (-1.0f mode)
+                const bool linearHdrOutput = settings.EnableToneMapping || captureActive;
+                float skyboxToneMode = linearHdrOutput ? -1.0f : static_cast<float>(settings.ToneMappingMode);
+                skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, skyboxToneMode, linearHdrOutput ? 1.0f : settings.Gamma);
 
                 if(hdrEnvironment) {
                     const double authoredScale=std::isfinite(activeSkybox.Intensity)&&std::isfinite(activeSkybox.Exposure)
@@ -340,8 +354,8 @@ namespace Axle {
                     const float rotation=std::isfinite(activeSkybox.EnvironmentRotation)
                         ? glm::radians(activeSkybox.EnvironmentRotation) : 0.0f;
                     skyboxConstants.Reserved[0]=glm::vec4(1,static_cast<float>(authoredScale*m_Environment.SourceExposure()),rotation,0);
-                    skyboxConstants.Params.z=settings.EnableToneMapping?-1.f:0.f;
-                    skyboxConstants.Params.w=settings.EnableToneMapping?1.f:2.2f;
+                    skyboxConstants.Params.z=linearHdrOutput?-1.f:0.f;
+                    skyboxConstants.Params.w=linearHdrOutput?1.f:2.2f;
                 }
                 if (!m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants))) return false;
 
@@ -622,7 +636,7 @@ namespace Axle {
             lightingFrame = m_LightingService.BuildFrame(world, settings, shadowPublication);
             m_LastLightingFrame=lightingFrame;
             if (lightingFrame.Status == LightingFrameStatus::Fallback && !lightingFrame.Diagnostic.empty())
-                m_ViewContext.Diagnostics().AddFallback(lightingFrame.Diagnostic);
+                viewCtx.Diagnostics().AddFallback(lightingFrame.Diagnostic);
             const auto localIdentity=m_Device->GetResources().AcquireNative(m_LocalShadows.GetSRV()).GetHandle();
             if(localIdentity!=m_BoundLocalAtlas) {
                 if(!m_DescriptorPool.UpdateTexture(m_DefaultDescriptorSet,0,16,m_LocalShadows.GetSRV()))return RenderPassResult::Failed("lighting/environment preparation failed");
@@ -634,7 +648,7 @@ namespace Axle {
             const bool skyIBLAvailable=m_IBLAllowed && (m_Environment.Ready() || m_PreparedManualIBL) && lighting.EnvironmentLighting;
             m_LastReflectionFrame=m_ReflectionService.ResolvePublication(reflectionFrame, reflectionPublication, useSSR, skyIBLAvailable);
             if (m_LastReflectionFrame.State==ReflectionState::Fallback || !m_LastReflectionFrame.Diagnostic.empty())
-                m_ViewContext.Diagnostics().AddFallback(m_LastReflectionFrame.Diagnostic);
+                viewCtx.Diagnostics().AddFallback(m_LastReflectionFrame.Diagnostic);
             const std::array<std::shared_ptr<RHITexture>,3> ibl={ActiveIrradiance(),ActivePrefilter(),ActiveBRDF()};
             std::array<RHIResourceHandle,3> identities;
             std::vector<nri::Descriptor*> descriptors;
@@ -658,7 +672,7 @@ namespace Axle {
             sceneConstants.ViewProjection = viewProjZO;
             sceneConstants.View = camera.GetViewMatrix();
             sceneConstants.Projection = projZO;
-            sceneConstants.CameraPosition = glm::vec4(camera.GetPosition(), settings.EnableToneMapping ? 1.0f : 0.0f);
+            sceneConstants.CameraPosition = glm::vec4(camera.GetPosition(), (settings.EnableToneMapping || captureActive) ? 1.0f : 0.0f);
             sceneConstants.AmbientLight = glm::vec4(0.22f, 0.25f, 0.32f, lighting.AmbientIntensity);
             sceneConstants.SunDirection = glm::vec4(lighting.SunDirection,0.0f);
             sceneConstants.SunColor = glm::vec4(1.0f, 0.98f, 0.92f, 1.0f);
@@ -673,7 +687,7 @@ namespace Axle {
                 {useGTAO ? viewTargets->GetGTAO()->GetSRV() : neutral->GetSRV(),
                  useGTAO ? m_OpaqueSceneDepth->GetSRV() : neutral->GetSRV()})) return fail();
             if (!useGTAO && (settings.EnableGTAO || settings.EnableContactShadows))
-                m_ViewContext.Diagnostics().AddFallback("occlusion_unavailable: single-sample depth/normal/storage required; neutral visibility");
+                viewCtx.Diagnostics().AddFallback("occlusion_unavailable: single-sample depth/normal/storage required; neutral visibility");
 
             const auto& lightingSun=lightingFrame.Sun;
             lightData.SunLight.DirectionAndIlluminance = glm::vec4(lightingSun.Direction, lightingSun.Illuminance);
@@ -801,7 +815,7 @@ namespace Axle {
                 for (const auto& item : opaqueQueue) {
                     if (!item.DepthWrite) continue;
                     if (item.UseCustomShader && (!item.CustomGeneration || !item.CustomGeneration->HasNormalPass)) {
-                        m_ViewContext.Diagnostics().AddFallback("screen_normal_unavailable: custom shader has no companion normal pass; excluded from occlusion guides");
+                        viewCtx.Diagnostics().AddFallback("screen_normal_unavailable: custom shader has no companion normal pass; excluded from occlusion guides");
                         continue;
                     }
                     if (item.UseCustomShader && item.CustomGeneration && item.CustomGeneration->HasNormalPass &&
@@ -951,7 +965,7 @@ namespace Axle {
                     item.BaseSurfaceGeneration = item.Surface.Generation;
                     if (!item.Surface.Valid) {
                         m_MaterialDiagnostics[meshInst.EntityID] = item.Surface.Diagnostic;
-                        m_ViewContext.Diagnostics().AddMaterial(meshInst.EntityID, item.Surface);
+                        viewCtx.Diagnostics().AddMaterial(meshInst.EntityID, item.Surface);
                         return RenderPassResult::Failed(item.Surface.Diagnostic);
                     }
                     glm::vec3 diff = glm::vec3(worldMat[3]) - camPos;
@@ -1042,14 +1056,19 @@ namespace Axle {
             }
 
             for (auto& item : opaqueQueue) PrepareDrawItem(item,"OpaqueAndSky",false);
-            for (auto& item : transparentQueue) PrepareDrawItem(item,"Transparent",copyRefraction);
+            if (allowCaptureTransparent) {
+                for (auto& item : transparentQueue) PrepareDrawItem(item,"Transparent",copyRefraction);
+            }
             if (drawFailed) return RenderPassResult::Failed("material input preparation failed: " + graph.GetError());
-            for (const auto pass : {"OpaqueAndSky", "Transparent"}) {
-                if (!graph.DeclareRead(pass, m_ForwardOcclusionDescriptorSet)) return fail();
+            auto declareForwardPass = [&](const char* pass) {
+                if (!graph.DeclareRead(pass, m_ForwardOcclusionDescriptorSet)) return false;
                 for (auto* cbv : {m_SceneConstantBuffer.GetCBV(), m_LightBuffer.GetCBV(),
                     m_CascadedShadows.GetConstantsCBV(), m_LocalShadows.GetConstantsCBV()})
-                    if (!graph.DeclareRead(pass,cbv)) return fail();
-            }
+                    if (!graph.DeclareRead(pass,cbv)) return false;
+                return true;
+            };
+            if (!declareForwardPass("OpaqueAndSky")) return fail();
+            if (allowCaptureTransparent && !declareForwardPass("Transparent")) return fail();
             if (!graph.DeclareRead("OpaqueAndSky",m_DefaultDescriptorSet)) return fail();
             if (settings.EnableSkybox && m_SkyboxPipeline && lighting.Environment &&
                 (!graph.DeclareRead("OpaqueAndSky",m_SkyboxDescriptorSet) ||
@@ -1084,6 +1103,7 @@ namespace Axle {
 
         if (!useGTAO) registerSurfaceNormal();
 
+        if (allowCaptureTransparent) {
         addPass("Transparent", [&](const RenderPassContext&) -> RenderPassResult {
             if (copyRefraction) {
                 if (!beginPass("RefractionCopy")) return fail();
@@ -1130,7 +1150,9 @@ namespace Axle {
             }
             graph.AddPass("Transparent", std::move(transparentUses));
         });
+        }
 
+        if (allowCaptureParticlesAndOverlays || useMSAA) {
         addPass("ParticlesAndResolve", [&](const RenderPassContext&) -> RenderPassResult {
             if (copyParticleDepth) {
                 if (!beginPass("ParticleDepthCopy")) return fail();
@@ -1234,6 +1256,7 @@ namespace Axle {
             }
             return {};
         });
+        }
 
         addPass("DDGIUpdate", [&](const RenderPassContext&) -> RenderPassResult {
             if (useDDGI) {
@@ -1360,22 +1383,25 @@ namespace Axle {
                 for (const auto& item : queue) {
                     const auto entity = static_cast<uint32_t>(item.DiagnosticEntity);
                     identities.emplace_back(entity, item.Surface.Generation);
-                    m_ViewContext.Diagnostics().AddMaterial(entity, item.Surface);
+                    viewCtx.Diagnostics().AddMaterial(entity, item.Surface);
                     if (item.Surface.Fallback) {
-                        m_ViewContext.Diagnostics().AddFallback(item.Surface.Diagnostic);
+                        viewCtx.Diagnostics().AddFallback(item.Surface.Diagnostic);
                         m_MaterialDiagnostics[entity] = item.Surface.Diagnostic;
                     }
                 }
             };
-            collect(opaqueQueue); collect(transparentQueue);
+            collect(opaqueQueue);
+            if (allowCaptureTransparent) {
+                collect(transparentQueue);
+            }
             std::sort(identities.begin(), identities.end());
             uint64_t materialGeneration = 1469598103934665603ull;
             for (const auto& [entity, generation] : identities) {
                 materialGeneration ^= entity; materialGeneration *= 1099511628211ull;
                 materialGeneration ^= generation; materialGeneration *= 1099511628211ull;
             }
-            if (m_ViewContext.ObserveMaterialGeneration(materialGeneration))
-                temporalSelection = m_ViewContext.Temporal().Begin(useTAA ? 2 : 0, {jitterX, jitterY});
+            if (viewCtx.ObserveMaterialGeneration(materialGeneration))
+                temporalSelection = viewCtx.Temporal().Begin(useTAA ? 2 : 0, {jitterX, jitterY});
             const Passes::PassRecordOps postOps{
                 beginPass, passUniform,
                 [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
@@ -1422,6 +1448,37 @@ namespace Axle {
             return {};
         });
 
+        if (captureActive) {
+            addPass("ReflectionCapturePass", [&](const RenderPassContext&) -> RenderPassResult {
+                const Passes::PassRecordOps captureOps{
+                    beginPass, passUniform,
+                    [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                        return bindDescriptorSet(index, set, bindPoint);
+                    }, beginRendering, endRendering};
+                if (!Passes::ReflectionCapturePass::RecordOrientAndCopy(
+                        *this,
+                        {m_CaptureSession.SourceFace,
+                         m_CaptureSession.OrientedFace,
+                         m_CaptureSession.CandidateCubemap.get(),
+                         m_CaptureSession.FaceIndex,
+                         m_CaptureSession.Resolution,
+                         m_CaptureSession.FlipHorizontal,
+                         dispatchCount},
+                        captureOps)) {
+                    return fail();
+                }
+                return {};
+            }, [&](RenderGraph& graph) {
+                Passes::ReflectionCapturePass::DeclareOrientAndCopy(
+                    graph, {sceneColor, captureOriented, captureCubemap, m_CaptureSession.FlipHorizontal});
+            }, [&](const RenderPassContext&) -> RenderPassResult {
+                if (m_CaptureSession.FlipHorizontal && !uniform("CaptureOrient", sizeof(RHICubemapCaptureConstants))) {
+                    return fail();
+                }
+                return {};
+            });
+        }
+
         addPass("Export", [&](const RenderPassContext&) -> RenderPassResult {
             if (!beginPass("Export")) return fail();
             if (m_ActiveGPUTimestampSlot != static_cast<size_t>(-1)) {
@@ -1440,6 +1497,7 @@ namespace Axle {
         }, [&](RenderGraph& graph) {
             std::vector<Graph::Use> exports{{output,Layout::ShaderResource}};
             if (sceneDepthDSV) exports.push_back({sceneDepth,Layout::DepthStencilRead});
+            if (captureActive) exports.push_back({captureCubemap,Layout::ShaderResource});
             graph.AddPass("Export", std::move(exports));
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (m_ActiveGPUTimestampSlot != static_cast<size_t>(-1) &&
@@ -1452,27 +1510,33 @@ namespace Axle {
         passContext.World = &world;
         passContext.Camera = &camera;
         passContext.Settings = &settings;
-        passContext.View = &m_ViewContext;
+        passContext.View = &viewCtx;
         passContext.Graph = &graph;
         passContext.Commands = &Commands();
         passContext.Capabilities = capabilities;
         const auto frameResult = m_PassScheduler.Execute(passContext, true);
         if (!frameResult) {
             endRendering();
-            if (diagnosticsPassActive) m_ViewContext.Diagnostics().EndPass(DiagnosticStatus::Failed);
-            m_ViewContext.Diagnostics().AddError(m_PassScheduler.GetDiagnostic());
+            if (diagnosticsPassActive) viewCtx.Diagnostics().EndPass(DiagnosticStatus::Failed);
+            viewCtx.Diagnostics().AddError(m_PassScheduler.GetDiagnostic());
             AXLE_CORE_ERROR("View pass failed: {0}", m_PassScheduler.GetDiagnostic());
             return false;
         }
-        if (diagnosticsPassActive) m_ViewContext.Diagnostics().EndPass();
+        if (diagnosticsPassActive) viewCtx.Diagnostics().EndPass();
         graph.EndRecording();
-        if (!m_ViewContext.EndFrameAndSubmit()) {
+        if (!viewCtx.EndFrameAndSubmit()) {
             AXLE_CORE_ERROR("View command finalization or submit failed");
             return false;
         }
-        m_ViewContext.Temporal().Commit(viewProjZO, useTAA);
+        viewCtx.Temporal().Commit(viewProjZO, useTAA);
         m_LocalShadows.OnSubmitted();
-        m_LastCompletion = m_ViewContext.GetCompletion();
+        if (m_CaptureSession.Active) {
+            m_CaptureLastCompletion = viewCtx.GetCompletion();
+            m_CaptureRenderSucceeded = static_cast<bool>(m_CaptureLastCompletion);
+            viewCtx.Diagnostics().SetCounters(m_LastDrawCallCount, dispatchCount);
+            return m_CaptureRenderSucceeded;
+        }
+        m_LastCompletion = viewCtx.GetCompletion();
         m_LastRenderSucceeded = static_cast<bool>(m_LastCompletion);
         if (m_LastRenderSucceeded && m_ActiveGPUTimestampSlot != static_cast<size_t>(-1)) {
             auto& slot = m_GPUTimestampSlots[m_ActiveGPUTimestampSlot];
@@ -1480,7 +1544,7 @@ namespace Axle {
             slot.Pending = true;
         }
         m_ActiveGPUTimestampSlot = static_cast<size_t>(-1);
-        m_ViewContext.Diagnostics().SetCounters(m_LastDrawCallCount, dispatchCount);
+        viewCtx.Diagnostics().SetCounters(m_LastDrawCallCount, dispatchCount);
         return m_LastRenderSucceeded;
     }
 }

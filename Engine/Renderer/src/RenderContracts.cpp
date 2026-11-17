@@ -1,7 +1,10 @@
 #include <Axle/RenderContracts.hpp>
 #include <Axle/Material.hpp>
+#include <Axle/ResolvedSurface.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 #include <algorithm>
+#include <unordered_set>
 
 namespace Axle {
 
@@ -1041,5 +1044,269 @@ namespace Axle {
         }
 
     } // namespace HiZContract
+
+    // =========================================================================
+    // Reflection Capture Contract (M15-U5-B)
+    // =========================================================================
+    namespace ReflectionCaptureContract {
+        namespace {
+            bool IsFiniteVec3(const glm::vec3& v) {
+                return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+            }
+
+            void SetReason(std::string* outReason, const char* msg) {
+                if (outReason) {
+                    *outReason = msg;
+                }
+            }
+        } // namespace
+
+        CubeFaceBasis GetCubeFaceBasis(uint32_t faceIndex) {
+            CubeFaceBasis basis;
+            basis.FaceIndex = faceIndex;
+            basis.FlipHorizontalForCubemapCopy = true;
+            switch (faceIndex) {
+                case 0u: // +X
+                    basis.Forward = { 1.0f, 0.0f, 0.0f };
+                    basis.Up = { 0.0f, 1.0f, 0.0f };
+                    basis.Right = { 0.0f, 0.0f, -1.0f };
+                    break;
+                case 1u: // -X
+                    basis.Forward = { -1.0f, 0.0f, 0.0f };
+                    basis.Up = { 0.0f, 1.0f, 0.0f };
+                    basis.Right = { 0.0f, 0.0f, 1.0f };
+                    break;
+                case 2u: // +Y
+                    basis.Forward = { 0.0f, 1.0f, 0.0f };
+                    basis.Up = { 0.0f, 0.0f, -1.0f };
+                    basis.Right = { 1.0f, 0.0f, 0.0f };
+                    break;
+                case 3u: // -Y
+                    basis.Forward = { 0.0f, -1.0f, 0.0f };
+                    basis.Up = { 0.0f, 0.0f, 1.0f };
+                    basis.Right = { 1.0f, 0.0f, 0.0f };
+                    break;
+                case 4u: // +Z
+                    basis.Forward = { 0.0f, 0.0f, 1.0f };
+                    basis.Up = { 0.0f, 1.0f, 0.0f };
+                    basis.Right = { 1.0f, 0.0f, 0.0f };
+                    break;
+                case 5u: // -Z
+                    basis.Forward = { 0.0f, 0.0f, -1.0f };
+                    basis.Up = { 0.0f, 1.0f, 0.0f };
+                    basis.Right = { -1.0f, 0.0f, 0.0f };
+                    break;
+                default:
+                    basis.Forward = glm::vec3(0.0f);
+                    basis.Up = glm::vec3(0.0f);
+                    basis.Right = glm::vec3(0.0f);
+                    basis.FlipHorizontalForCubemapCopy = false;
+                    break;
+            }
+            return basis;
+        }
+
+        bool ValidateCubeFaceBasis(const CubeFaceBasis& basis, std::string* outReason) {
+            if (basis.FaceIndex >= FaceCount) {
+                SetReason(outReason, "cube face index out of range [0, 5]");
+                return false;
+            }
+            if (!IsFiniteVec3(basis.Forward) || !IsFiniteVec3(basis.Up) || !IsFiniteVec3(basis.Right)) {
+                SetReason(outReason, "cube face basis contains non-finite vector components");
+                return false;
+            }
+            const float fLen = glm::length(basis.Forward);
+            const float uLen = glm::length(basis.Up);
+            const float rLen = glm::length(basis.Right);
+            if (std::abs(fLen - 1.0f) > 1e-4f || std::abs(uLen - 1.0f) > 1e-4f || std::abs(rLen - 1.0f) > 1e-4f) {
+                SetReason(outReason, "cube face basis vectors must have unit length");
+                return false;
+            }
+            if (std::abs(glm::dot(basis.Forward, basis.Up)) > 1e-4f ||
+                std::abs(glm::dot(basis.Forward, basis.Right)) > 1e-4f ||
+                std::abs(glm::dot(basis.Up, basis.Right)) > 1e-4f) {
+                SetReason(outReason, "cube face basis vectors must be mutually orthogonal");
+                return false;
+            }
+            // D3D12/Vulkan TextureCube faces use a left-handed tangent frame: Right == Up x Forward.
+            // Rasterization uses right-handed lookAtRH (+X_cam = Forward x Up = -Right), so
+            // FlipHorizontalForCubemapCopy must be enabled to align captured faces into TextureCube.
+            const glm::vec3 expectedCubemapRight = glm::cross(basis.Up, basis.Forward);
+            if (glm::dot(expectedCubemapRight, basis.Right) <= 0.999f) {
+                SetReason(outReason, "cube face right vector does not match left-handed cubemap tangent (Up x Forward)");
+                return false;
+            }
+            if (!basis.FlipHorizontalForCubemapCopy) {
+                SetReason(outReason, "right-handed cubemap capture requires FlipHorizontalForCubemapCopy");
+                return false;
+            }
+            const CubeFaceBasis canonical = GetCubeFaceBasis(basis.FaceIndex);
+            if (glm::dot(basis.Forward, canonical.Forward) < 0.9999f ||
+                glm::dot(basis.Up, canonical.Up) < 0.9999f ||
+                glm::dot(basis.Right, canonical.Right) < 0.9999f) {
+                SetReason(outReason, "cube face basis does not match canonical TextureCube face orientation");
+                return false;
+            }
+            SetReason(outReason, "");
+            return true;
+        }
+
+        bool ValidateCapturePolicy(const ReflectionCapturePolicy& policy, std::string* outReason) {
+            if (policy.SampleCount != 1u) {
+                SetReason(outReason, "reflection capture target must be single-sample (SampleCount == 1)");
+                return false;
+            }
+            if (policy.ColorFormat != nri::Format::RGBA16_SFLOAT) {
+                SetReason(outReason, "reflection capture color target must be linear HDR RGBA16_FLOAT");
+                return false;
+            }
+            if (policy.DepthFormat != nri::Format::D32_SFLOAT) {
+                SetReason(outReason, "reflection capture depth target must be D32_FLOAT");
+                return false;
+            }
+            const bool isPowerOfTwo = (policy.Resolution != 0u) && ((policy.Resolution & (policy.Resolution - 1u)) == 0u);
+            if (policy.Resolution < MinResolution || policy.Resolution > MaxResolution || !isPowerOfTwo) {
+                SetReason(outReason, "reflection capture resolution must be a power of two in [16, 1024]");
+                return false;
+            }
+            if (!std::isfinite(policy.NearPlane) || !std::isfinite(policy.FarPlane) ||
+                policy.NearPlane < MinNearPlane || policy.FarPlane <= policy.NearPlane) {
+                SetReason(outReason, "reflection capture clip planes must satisfy 0.01 <= NearPlane < FarPlane");
+                return false;
+            }
+            if (policy.AllowSSR || policy.AllowProbeSampling) {
+                SetReason(outReason, "reflection capture must isolate SSR and recursive reflection probe sampling");
+                return false;
+            }
+            if (!policy.IsolateMainViewTAA) {
+                SetReason(outReason, "reflection capture must isolate main-view TAA history");
+                return false;
+            }
+            if (policy.IncludeEditorOverlays) {
+                SetReason(outReason, "reflection capture must exclude Editor overlays, wireframes, and debug lines");
+                return false;
+            }
+            SetReason(outReason, "");
+            return true;
+        }
+
+        PerspectiveCamera BuildCubeFaceCamera(
+            const glm::vec3& probePosition,
+            uint32_t faceIndex,
+            float nearPlane,
+            float farPlane) {
+            const CubeFaceBasis basis = GetCubeFaceBasis(faceIndex < FaceCount ? faceIndex : 0u);
+            const float safeNear = std::isfinite(nearPlane) ? std::max(nearPlane, MinNearPlane) : 0.1f;
+            const float safeFar = (std::isfinite(farPlane) && farPlane > safeNear + 0.01f) ? farPlane : (safeNear + 100.0f);
+            PerspectiveCamera cam(FaceFovDegrees, FaceAspectRatio, safeNear, safeFar);
+            const glm::mat4 view = glm::lookAtRH(probePosition, probePosition + basis.Forward, basis.Up);
+            cam.SetViewMatrix(view, probePosition);
+            return cam;
+        }
+
+        SceneRenderSettings SanitizeCaptureSettings(
+            const SceneRenderSettings& mainSettings,
+            const ReflectionCapturePolicy& policy) {
+            SceneRenderSettings out = mainSettings;
+            out.MSAASamples = 1u;
+            out.EnableToneMapping = false;
+            out.ToneMappingMode = 3; // Linear bypass (shaders also observe capture linear HDR mode)
+            out.EnableFXAA = false;
+            out.EnableBloom = false;
+            out.EnableAutoExposure = false;
+            out.EnableTAA = false;
+            out.EnableSSR = policy.AllowSSR;
+            out.EnableGTAO = false;
+            out.EnableContactShadows = false;
+            out.EnableVolumetricFog = false;
+            out.EnableDDGI = false;
+            out.HiZVisualizationLevel = -1;
+            out.Wireframe = policy.IncludeEditorOverlays ? mainSettings.Wireframe : false;
+            out.ShowPhysicsDebug = policy.IncludeEditorOverlays ? mainSettings.ShowPhysicsDebug : false;
+            out.EnableSkybox = policy.IncludeSkybox && mainSettings.EnableSkybox;
+            out.EnableParticles = policy.IncludeParticles && mainSettings.EnableParticles;
+            out.EnableShadows = policy.IncludeSelectedShadows && mainSettings.EnableShadows;
+            return out;
+        }
+
+        RenderWorld FilterCaptureWorld(
+            const RenderWorld& sourceWorld,
+            const ReflectionCapturePolicy& policy) {
+            RenderWorld out;
+            out.Camera = sourceWorld.Camera;
+            out.DirectionalLight = sourceWorld.DirectionalLight;
+            out.AdditionalDirectionalLights = sourceWorld.AdditionalDirectionalLights;
+            out.PointLights = sourceWorld.PointLights;
+            out.SpotLights = sourceWorld.SpotLights;
+            out.RectLights = sourceWorld.RectLights;
+            out.Skybox = sourceWorld.Skybox;
+            out.Skybox.Enabled = policy.IncludeSkybox && sourceWorld.Skybox.Enabled;
+            out.EntityToStableUUID = sourceWorld.EntityToStableUUID;
+            out.SceneRevision = sourceWorld.SceneRevision;
+            out.TotalEntities = sourceWorld.TotalEntities;
+
+            if (!policy.AllowProbeSampling) {
+                out.ReflectionProbes.clear();
+            } else {
+                out.ReflectionProbes = sourceWorld.ReflectionProbes;
+            }
+            if (policy.IncludeParticles) {
+                out.Particles = sourceWorld.Particles;
+            }
+            if (policy.IncludeEditorOverlays) {
+                out.DebugLines = sourceWorld.DebugLines;
+            }
+
+            if (!(policy.IncludeSelectedShadows && policy.IncludeDirectionalShadows)) {
+                if (out.DirectionalLight.has_value()) {
+                    out.DirectionalLight->CastsShadows = false;
+                }
+                for (auto& dl : out.AdditionalDirectionalLights) {
+                    dl.CastsShadows = false;
+                }
+            }
+            if (!(policy.IncludeSelectedShadows && policy.IncludeLocalShadows)) {
+                for (auto& pl : out.PointLights) {
+                    pl.Shadows.CastShadows = false;
+                }
+                for (auto& sl : out.SpotLights) {
+                    sl.Shadows.CastShadows = false;
+                }
+            }
+
+            std::unordered_set<uint64_t> excludedIds;
+            if (policy.ExcludeEntityID != 0u) {
+                excludedIds.insert(policy.ExcludeEntityID);
+            }
+            for (uint64_t id : policy.AdditionalExcludedEntityIDs) {
+                if (id != 0u) {
+                    excludedIds.insert(id);
+                }
+            }
+
+            if (policy.IncludeOpaqueAndCutout) {
+                out.Skins = sourceWorld.Skins;
+            }
+
+            out.Meshes.reserve(sourceWorld.Meshes.size());
+            for (const auto& mesh : sourceWorld.Meshes) {
+                if (mesh.EntityID != 0u && excludedIds.count(static_cast<uint64_t>(mesh.EntityID)) > 0u) {
+                    continue;
+                }
+                const ResolvedSurface surface = MaterialResolver::Resolve(mesh.Material);
+                const bool isTransparent =
+                    (surface.Surface == SurfaceType::Transparent || surface.Surface == SurfaceType::Additive);
+                if (isTransparent && !policy.IncludeTransparent) {
+                    continue;
+                }
+                if (!isTransparent && !policy.IncludeOpaqueAndCutout) {
+                    continue;
+                }
+                out.Meshes.push_back(mesh);
+            }
+
+            return out;
+        }
+    } // namespace ReflectionCaptureContract
 
 } // namespace Axle

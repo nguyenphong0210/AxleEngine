@@ -33,6 +33,7 @@ bool RunM15OcclusionHorizonTests(const std::filesystem::path& output);
 bool RunM15OcclusionSurfaceTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15OcclusionForwardTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15HiZTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
+bool RunM15ReflectionCaptureTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15OcclusionSphereTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
                               const Axle::PerspectiveCamera& camera, Axle::SceneRenderSettings settings,
                               const std::filesystem::path& output);
@@ -1011,6 +1012,7 @@ bool Native(RHIType backend) {
     CHECK(RunM15OcclusionSphereTests(renderer, regressionWorld, camera, regressionSettings, Output));
     CHECK(RunM15OcclusionSurfaceTests(renderer, Output));
     CHECK(RunM15HiZTests(renderer, Output));
+    CHECK(RunM15ReflectionCaptureTests(renderer, Output));
     renderer.Shutdown();
     CHECK(environment.CacheSize() == 0 && GetRHIValidationErrorCount() == 0);
     RHISceneRenderer noTimingRenderer;

@@ -2,6 +2,9 @@
 
 #include <Axle/Types.hpp>
 #include <Axle/RenderCapabilities.hpp>
+#include <Axle/PerspectiveCamera.hpp>
+#include <Axle/SceneRenderSettings.hpp>
+#include <Axle/RenderWorld.hpp>
 #include <Axle/RHI/RHICommon.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
@@ -354,6 +357,67 @@ namespace Axle {
 
         // Verifies dimensions, boundary coverage, and trailing-edge propagation for arbitrary odd/minimal sizes.
         bool VerifyOddResolutionPyramid(uint32_t width, uint32_t height);
+    }
+
+    // =========================================================================
+    // Reflection Capture Contract (M15-U5-B)
+    // =========================================================================
+    namespace ReflectionCaptureContract {
+        constexpr uint32_t FaceCount = 6u;
+        constexpr uint32_t DefaultResolution = 128u;
+        constexpr uint32_t MinResolution = 16u;
+        constexpr uint32_t MaxResolution = 1024u;
+        constexpr float FaceFovDegrees = 90.0f;
+        constexpr float FaceAspectRatio = 1.0f;
+        constexpr float MinNearPlane = 0.01f;
+
+        struct CubeFaceBasis {
+            uint32_t FaceIndex = 0;
+            glm::vec3 Forward{ 1.0f, 0.0f, 0.0f };
+            glm::vec3 Up{ 0.0f, 1.0f, 0.0f };
+            glm::vec3 Right{ 0.0f, 0.0f, -1.0f };
+            bool FlipHorizontalForCubemapCopy = true;
+        };
+
+        struct ReflectionCapturePolicy {
+            uint32_t Resolution = DefaultResolution;
+            uint8_t SampleCount = 1u;
+            nri::Format ColorFormat = nri::Format::RGBA16_SFLOAT;
+            nri::Format DepthFormat = nri::Format::D32_SFLOAT;
+            bool IncludeOpaqueAndCutout = true;
+            bool IncludeSkybox = true;
+            bool IncludeSelectedShadows = true;
+            bool IncludeDirectionalShadows = true;
+            bool IncludeLocalShadows = true;
+            bool IncludeTransparent = false;
+            bool IncludeParticles = false;
+            bool IncludeEditorOverlays = false;
+            bool AllowSSR = false;
+            bool AllowProbeSampling = false;
+            bool IsolateMainViewTAA = true;
+            float NearPlane = 0.1f;
+            float FarPlane = 100.0f;
+            uint64_t ExcludeEntityID = 0;
+            std::vector<uint64_t> AdditionalExcludedEntityIDs;
+        };
+
+        CubeFaceBasis GetCubeFaceBasis(uint32_t faceIndex);
+        bool ValidateCubeFaceBasis(const CubeFaceBasis& basis, std::string* outReason = nullptr);
+        bool ValidateCapturePolicy(const ReflectionCapturePolicy& policy, std::string* outReason = nullptr);
+
+        PerspectiveCamera BuildCubeFaceCamera(
+            const glm::vec3& probePosition,
+            uint32_t faceIndex,
+            float nearPlane,
+            float farPlane);
+
+        SceneRenderSettings SanitizeCaptureSettings(
+            const SceneRenderSettings& mainSettings,
+            const ReflectionCapturePolicy& policy);
+
+        RenderWorld FilterCaptureWorld(
+            const RenderWorld& sourceWorld,
+            const ReflectionCapturePolicy& policy);
     }
 
 } // namespace Axle

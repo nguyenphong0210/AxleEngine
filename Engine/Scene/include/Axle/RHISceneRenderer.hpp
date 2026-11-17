@@ -44,7 +44,19 @@
 
 namespace Axle {
 
-    namespace Passes { class GTAOPass; class HiZGenerationPass; class ScreenSpaceReflectionPass; class FroxelFogPass; class PostProcessPass; }
+    namespace Passes {
+        class GTAOPass;
+        class HiZGenerationPass;
+        class ScreenSpaceReflectionPass;
+        class FroxelFogPass;
+        class PostProcessPass;
+        struct ReflectionCaptureTargets;
+        class ReflectionCapturePass;
+    }
+
+    namespace ReflectionCaptureContract {
+        struct ReflectionCapturePolicy;
+    }
 
     class Scene;
     class PhysicsScene;
@@ -171,12 +183,40 @@ namespace Axle {
     };
     static_assert(sizeof(RHITAAConstants) == 256, "RHITAAConstants must be 256 bytes aligned!");
 
+    // 256-byte CBV aligned constants for dynamic reflection cubemap orientation pass
+    struct alignas(256) RHICubemapCaptureConstants {
+        glm::uvec4 Params{ 128u, 1u, 0u, 0u }; // x: Resolution, y: FlipHorizontal (1/0), z: FaceIndex, w: Reserved
+        glm::vec4 Reserved[15]{};
+    };
+    static_assert(sizeof(RHICubemapCaptureConstants) == 256, "RHICubemapCaptureConstants must be 256 bytes aligned!");
+
+    struct DynamicReflectionProbeGeneration {
+        std::string ProbeKey;
+        uint64_t EntityID = 0;
+        uint64_t GenerationID = 0;
+        uint64_t SceneRevision = 0;
+        uint32_t Resolution = 0;
+        glm::vec3 Position{ 0.0f };
+        std::shared_ptr<RHI::RHITexture> Cubemap;
+        RHI::RHICompletionToken Completion;
+    };
+
+    struct DynamicReflectionCaptureResult {
+        bool Success = false;
+        uint32_t CapturedFaces = 0;
+        uint64_t PublishedGenerationID = 0;
+        bool PreservedPreviousGeneration = false;
+        std::string ProbeKey;
+        std::string Diagnostic;
+    };
+
     class RHISceneRenderer {
         friend class Passes::GTAOPass;
         friend class Passes::HiZGenerationPass;
         friend class Passes::ScreenSpaceReflectionPass;
         friend class Passes::FroxelFogPass;
         friend class Passes::PostProcessPass;
+        friend class Passes::ReflectionCapturePass;
     public:
         RHISceneRenderer();
         ~RHISceneRenderer();
@@ -295,6 +335,18 @@ namespace Axle {
         std::shared_ptr<RHI::RHITexture> GetIrradianceMap() const { return m_IrradianceMap; }
         std::shared_ptr<RHI::RHITexture> GetPrefilterMap() const { return m_PrefilterMap; }
         std::shared_ptr<RHI::RHITexture> GetBRDFLUT() const { return m_BRDFLUT; }
+
+        // Dynamic six-face reflection probe capture & transactional publication (M15-U5-B)
+        static std::string ResolveDynamicProbeKey(const RenderReflectionProbe& probe);
+        DynamicReflectionCaptureResult CaptureDynamicReflectionProbe(
+            const RenderWorld& world,
+            const RenderReflectionProbe& probe,
+            const SceneRenderSettings& settings = SceneRenderSettings{},
+            const ReflectionCaptureContract::ReflectionCapturePolicy* policyOverride = nullptr);
+        std::shared_ptr<const DynamicReflectionProbeGeneration> GetDynamicReflectionProbe(const std::string& probeKey) const;
+        std::shared_ptr<const DynamicReflectionProbeGeneration> GetDynamicReflectionProbe(const RenderReflectionProbe& probe) const;
+        void ClearDynamicReflectionProbes();
+        const DynamicReflectionCaptureResult& GetLastDynamicCaptureResult() const { return m_LastDynamicCaptureResult; }
 
         // Procedural Atmospheric Skybox pass configuration
         void SetSkyboxParameters(const SkyboxComponent& skybox) { m_SkyboxParams = skybox; }
@@ -473,6 +525,10 @@ namespace Axle {
         bool CreateFogPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateFogApplyPipeline(nri::Format colorFormat);
 
+        bool CompileCubemapCaptureShaders(RHI::RHIDevice& device);
+        bool CreateCubemapCapturePipelineLayout(RHI::RHIDevice& device);
+        bool CreateCubemapCapturePipeline(RHI::RHIDevice& device);
+
     private:
         void ConsumeReadyGPUTimestamps();
         void BeginGPUTimestampFrame();
@@ -635,6 +691,33 @@ namespace Axle {
         std::array<nri::DescriptorSet*, RHI::RHIViewTargets::MaxHiZLevels> m_HiZStorageSets{};
         nri::DescriptorSet* m_HiZVisualizeTextureSet = nullptr;
 
+        // Dynamic six-face reflection cubemap orientation & session resources
+        RHI::RHIPipelineLayout m_CaptureOrientationPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_CaptureOrientationPipeline;
+        RHI::RHIShaderBytecode m_CaptureOrientationComputeShader;
+        RHI::RHIDescriptorPool m_CaptureOrientationDescriptorPool;
+        nri::DescriptorSet* m_CaptureOrientationTextureSet = nullptr;
+        nri::DescriptorSet* m_CaptureOrientationStorageSet = nullptr;
+        std::unique_ptr<Passes::ReflectionCaptureTargets> m_CaptureTargets;
+
+        struct CaptureSessionState {
+            bool Active = false;
+            uint32_t FaceIndex = 0;
+            uint32_t Resolution = 0;
+            bool FlipHorizontal = true;
+            bool IncludeTransparent = false;
+            bool IncludeParticles = false;
+            bool IncludeEditorOverlays = false;
+            std::shared_ptr<RHI::RHITexture> CandidateCubemap;
+            RHI::RHITexture* SourceFace = nullptr;
+            RHI::RHITexture* OrientedFace = nullptr;
+        };
+        CaptureSessionState m_CaptureSession;
+        std::unordered_map<std::string, std::shared_ptr<DynamicReflectionProbeGeneration>> m_DynamicProbeCaptures;
+        std::unordered_map<std::string, uint64_t> m_FailedDynamicCaptureRevisions;
+        uint64_t m_NextDynamicCaptureGenerationID = 1;
+        DynamicReflectionCaptureResult m_LastDynamicCaptureResult;
+
         // Volumetric Fog & Atmospheric Media Resources
         RHI::RHIPipelineLayout m_FogComputePipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_FogComputePipeline;
@@ -736,6 +819,7 @@ namespace Axle {
         std::unique_ptr<RHIObjectPicker> m_ObjectPicker;
 
         ViewContext m_ViewContext;
+        ViewContext m_CaptureViewContext;
         RenderPassScheduler m_PassScheduler;
         // Policy services are view execution collaborators.  The renderer
         // keeps the facade for compatibility, while policy and fallback state
@@ -746,9 +830,13 @@ namespace Axle {
         LightingFrame m_LastLightingFrame;
         ReflectionFrame m_LastReflectionFrame;
         GIFrame m_LastGIFrame;
-        RHI::RHICommandBuffer& Commands() { return *m_ViewContext.Commands(); }
+        ViewContext& ActiveViewContext() { return m_CaptureSession.Active ? m_CaptureViewContext : m_ViewContext; }
+        const ViewContext& ActiveViewContext() const { return m_CaptureSession.Active ? m_CaptureViewContext : m_ViewContext; }
+        RHI::RHICommandBuffer& Commands() { return *ActiveViewContext().Commands(); }
         bool m_LastRenderSucceeded = false;
         RHI::RHICompletionToken m_LastCompletion;
+        bool m_CaptureRenderSucceeded = false;
+        RHI::RHICompletionToken m_CaptureLastCompletion;
         std::unordered_map<uint32_t, std::string> m_MaterialDiagnostics;
         struct MaterialFeedback {
             std::vector<ShaderPropertyInstance> Properties;

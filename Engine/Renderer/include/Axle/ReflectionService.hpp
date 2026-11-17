@@ -6,7 +6,7 @@
 #include <optional>
 #include <string>
 namespace Axle {
-    enum class ReflectionState : uint8_t { Disabled, AuthoredReady, DynamicPending, Fallback, AuthoredPending };
+    enum class ReflectionState : uint8_t { Disabled, AuthoredReady, DynamicPending, Fallback, AuthoredPending, DynamicReady };
     enum class ReflectionFallback : uint8_t { None, SSR, LocalProbe, SkyIBL, NeutralAmbient };
     struct ReflectionFrame {
         ReflectionState State=ReflectionState::Disabled;

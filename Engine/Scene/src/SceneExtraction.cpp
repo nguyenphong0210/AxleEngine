@@ -187,6 +187,11 @@ namespace Axle {
             rprobe.Shape = static_cast<int>(probe.Shape);
             rprobe.ParallaxCorrected = probe.ParallaxCorrected;
             rprobe.CubemapPath = probe.CubemapPath;
+            rprobe.DynamicCapture = probe.DynamicCapture;
+            rprobe.CaptureResolution = probe.CaptureResolution;
+            rprobe.CaptureShadows = probe.CaptureShadows;
+            rprobe.CaptureNearPlane = probe.CaptureNearPlane;
+            rprobe.CaptureFarPlane = probe.CaptureFarPlane;
             world.ReflectionProbes.push_back(rprobe);
         }
 

@@ -190,7 +190,7 @@ namespace Axle::Passes {
                 if (!beginPass("TAAResolve")) return false;
                 RHITAAConstants taaConstants{};
                 taaConstants.InvViewProj = glm::inverse(viewProjZO);
-                taaConstants.PrevViewProj = temporalSelection.HistoryValid ? renderer.m_ViewContext.Temporal().GetPreviousViewProjection() : viewProjZO;
+                taaConstants.PrevViewProj = temporalSelection.HistoryValid ? renderer.ActiveViewContext().Temporal().GetPreviousViewProjection() : viewProjZO;
                 taaConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
                                                     1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
                 taaConstants.TAAParams = glm::vec4(jitterX, jitterY, settings.TAAFeedbackMin, settings.TAAFeedbackMax);

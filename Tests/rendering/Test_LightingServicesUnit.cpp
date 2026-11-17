@@ -110,6 +110,36 @@ bool RunLightingServiceUnitTests() {
     RENDER_CHECK(invalidation.Any() && invalidation.SceneRevisionChanged && invalidation.LightingChanged,
         "reflection invalidation tracks scene and lighting changes independently");
 
+    RenderWorld dynamicWorld;
+    RenderReflectionProbe dynProbe{};
+    dynProbe.EntityID = 55;
+    dynProbe.Position = {0.0f, 0.0f, 0.0f};
+    dynProbe.BoxExtents = {10.0f, 10.0f, 10.0f};
+    dynProbe.DynamicCapture = true;
+    dynProbe.CaptureResolution = 128;
+    dynProbe.CaptureShadows = true;
+    dynamicWorld.ReflectionProbes.push_back(dynProbe);
+    const auto dynPending = reflection.Prepare(dynamicWorld, {0.0f, 0.0f, 0.0f}, true, 11);
+    RENDER_CHECK(dynPending.State == ReflectionState::DynamicPending &&
+                 dynPending.DynamicCaptureSupported &&
+                 !dynPending.PrefilterReady &&
+                 dynPending.SelectedProbeEntityID == 55,
+        "dynamic capture probe without authored path enters DynamicPending");
+    const RHI::RHIResourceHandle dynHandle{3, 41, 7};
+    const auto dynReady = reflection.ResolvePublication(dynPending, {dynHandle, {}}, true, true);
+    RENDER_CHECK(dynReady.State == ReflectionState::DynamicReady &&
+                 dynReady.DynamicCaptureSupported &&
+                 dynReady.PrefilterReady &&
+                 dynReady.ProbeGeneration == dynHandle &&
+                 dynReady.Fallback == ReflectionFallback::None,
+        "published dynamic probe generation transitions to DynamicReady");
+    const auto dynFailed = reflection.ResolvePublication(dynPending, {{}, "DYNAMIC_PROBE_FACE_FAILED"}, false, true);
+    RENDER_CHECK(dynFailed.State == ReflectionState::Fallback &&
+                 !dynFailed.PrefilterReady &&
+                 dynFailed.Fallback == ReflectionFallback::SkyIBL &&
+                 dynFailed.Diagnostic.find("dynamic_probe_unavailable") != std::string::npos,
+        "failed dynamic probe publication degrades explicitly with dynamic_probe_unavailable");
+
     GIService gi;
     auto disabled = gi.Prepare(world, settings, true, 9);
     RENDER_CHECK(disabled.Status == GIFrameStatus::Disabled && disabled.Fallback == GIFallback::IBL,

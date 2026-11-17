@@ -3,6 +3,8 @@
 #include <Axle/ReflectionService.hpp>
 #include <Axle/GIService.hpp>
 #include <Axle/PostProcessService.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <cmath>
 #include <fstream>
 #include <iterator>
 #include <limits>
@@ -213,6 +215,209 @@ bool RunLightingServiceUnitTests() {
                      failedRetainedFrame.CaptureStale &&
                      failedRetainedFrame.Diagnostic.find("DYNAMIC_PROBE_FACE_FAILED") != std::string::npos,
             "M15-U5-23.4 / 24: rebuild failure preserves last-good handle and surfaces CaptureFailed + CaptureStale");
+    }
+
+    // M15-U5-E (S5.5): Box & sphere influence, multi-probe blend, per-probe parallax, SSR/sky energy policy, missing & stale probes
+    {
+        // M15-U5-27.1: Box influence (interior center, face boundary, rotated OBB, BlendDistance falloff, NaN/zero safety)
+        RenderReflectionProbe boxProbe{};
+        boxProbe.EntityID = 9001;
+        boxProbe.Shape = 0;
+        boxProbe.Position = {0.0f, 0.0f, 0.0f};
+        boxProbe.BoxExtents = {4.0f, 4.0f, 4.0f}; // half = (2, 2, 2)
+        boxProbe.BlendDistance = 2.0f;
+
+        const auto boxCenter = ReflectionService::EvaluateProbeInfluence(boxProbe, {0.0f, 0.0f, 0.0f});
+        const auto boxMid = ReflectionService::EvaluateProbeInfluence(boxProbe, {1.0f, 0.0f, 0.0f});
+        const auto boxFace = ReflectionService::EvaluateProbeInfluence(boxProbe, {2.0f, 0.0f, 0.0f});
+        const auto boxHalfTail = ReflectionService::EvaluateProbeInfluence(boxProbe, {3.0f, 0.0f, 0.0f});
+        const auto boxEdgeOut = ReflectionService::EvaluateProbeInfluence(boxProbe, {4.0f, 0.0f, 0.0f});
+        const auto boxNaN = ReflectionService::EvaluateProbeInfluence(boxProbe, {std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f});
+        RENDER_CHECK(boxCenter.InsideCore && Axle::RenderTests::Near(boxCenter.Coverage, 1.0f, 1e-5f) &&
+                     Axle::RenderTests::Near(boxCenter.BlendWeight, 1.0f, 1e-5f) &&
+                     boxMid.InsideCore && boxMid.BlendWeight < boxCenter.BlendWeight && boxMid.BlendWeight > boxFace.BlendWeight &&
+                     boxFace.InsideCore && Axle::RenderTests::Near(boxFace.Coverage, 1.0f, 1e-5f) &&
+                     Axle::RenderTests::Near(boxFace.BlendWeight, 0.05f, 1e-5f) &&
+                     !boxHalfTail.InsideCore && Axle::RenderTests::Near(boxHalfTail.Coverage, 0.5f, 1e-4f) &&
+                     Axle::RenderTests::Near(boxEdgeOut.Coverage, 0.0f, 1e-5f) &&
+                     Axle::RenderTests::Near(boxEdgeOut.BlendWeight, 0.0f, 1e-5f) &&
+                     boxNaN.Coverage == 0.0f && boxNaN.BlendWeight == 0.0f,
+            "M15-U5-27.1: box influence evaluates C1 interior/boundary/falloff weights and rejects non-finite coordinates");
+
+        // Rotated box OBB check (45 deg around +Y)
+        RenderReflectionProbe rotBox = boxProbe;
+        rotBox.BoxExtents = {8.0f, 4.0f, 2.0f}; // long along local X (+/-4), narrow along local Z (+/-1)
+        rotBox.BlendDistance = 1.0f;
+        rotBox.WorldTransform = glm::rotate(glm::mat4(1.0f), glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        const glm::vec3 alongRotX = glm::normalize(glm::vec3(1.0f, 0.0f, -1.0f)) * 2.5f;
+        const glm::vec3 alongRotZ = glm::normalize(glm::vec3(1.0f, 0.0f, 1.0f)) * 2.5f;
+        const auto rotInfX = ReflectionService::EvaluateProbeInfluence(rotBox, alongRotX);
+        const auto rotInfZ = ReflectionService::EvaluateProbeInfluence(rotBox, alongRotZ);
+        RENDER_CHECK(rotInfX.InsideCore && Axle::RenderTests::Near(rotInfX.Coverage, 1.0f, 1e-4f) &&
+                     !rotInfZ.InsideCore && rotInfZ.Coverage == 0.0f,
+            "M15-U5-27.1: rotated box probe evaluates OBB extents along WorldTransform axes");
+
+        // M15-U5-27.2: Sphere influence (radial center, midpoint, radius surface, outer falloff)
+        RenderReflectionProbe sphereProbe{};
+        sphereProbe.EntityID = 9002;
+        sphereProbe.Shape = 1;
+        sphereProbe.Position = {0.0f, 0.0f, 0.0f};
+        sphereProbe.Radius = 3.0f;
+        sphereProbe.BlendDistance = 3.0f;
+
+        const auto sphCenter = ReflectionService::EvaluateProbeInfluence(sphereProbe, {0.0f, 0.0f, 0.0f});
+        const auto sphDiagInside = ReflectionService::EvaluateProbeInfluence(sphereProbe, glm::normalize(glm::vec3(1, 1, 1)) * 1.5f);
+        const auto sphBoundary = ReflectionService::EvaluateProbeInfluence(sphereProbe, {3.0f, 0.0f, 0.0f});
+        const auto sphMidTail = ReflectionService::EvaluateProbeInfluence(sphereProbe, {4.5f, 0.0f, 0.0f});
+        const auto sphOutside = ReflectionService::EvaluateProbeInfluence(sphereProbe, {6.0f, 0.0f, 0.0f});
+        RENDER_CHECK(sphCenter.InsideCore && Axle::RenderTests::Near(sphCenter.Coverage, 1.0f, 1e-5f) &&
+                     sphDiagInside.InsideCore && Axle::RenderTests::Near(sphDiagInside.InnerRatio, 0.5f, 1e-4f) &&
+                     sphBoundary.InsideCore && Axle::RenderTests::Near(sphBoundary.BlendWeight, 0.05f, 1e-5f) &&
+                     !sphMidTail.InsideCore && Axle::RenderTests::Near(sphMidTail.Coverage, 0.5f, 1e-4f) &&
+                     Axle::RenderTests::Near(sphOutside.Coverage, 0.0f, 1e-5f),
+            "M15-U5-27.2: sphere influence preserves isotropic radial smooth falloff");
+
+        // M15-U5-28 & 29 & 30.1..30.3 & 31.1..31.4: Multi-probe overlap, parallax before blend, SSR+sky energy policy, missing/stale
+        RenderReflectionProbe leftProbe{};
+        leftProbe.EntityID = 9101;
+        leftProbe.Shape = 0;
+        leftProbe.Position = {-2.0f, 0.0f, 0.0f};
+        leftProbe.BoxExtents = {6.0f, 6.0f, 6.0f};
+        leftProbe.BlendDistance = 2.0f;
+        leftProbe.Intensity = 1.0f;
+        leftProbe.ParallaxCorrected = true;
+        leftProbe.CubemapPath = "left_probe.axleasset";
+
+        RenderReflectionProbe rightProbe = leftProbe;
+        rightProbe.EntityID = 9102;
+        rightProbe.Position = {2.0f, 0.0f, 0.0f};
+        rightProbe.CubemapPath = "right_probe.axleasset";
+
+        ReflectionProbeCandidate leftCand;
+        leftCand.Probe = leftProbe; leftCand.Ready = true;
+        ReflectionProbeCandidate rightCand;
+        rightCand.Probe = rightProbe; rightCand.Ready = true;
+        std::vector<ReflectionProbeCandidate> overlapCands{leftCand, rightCand};
+
+        std::vector<glm::vec3> recordedDirsA, recordedDirsB;
+        auto sampleColor = [&](const RenderReflectionProbe& p, const glm::vec3& dir, size_t) -> glm::vec3 {
+            if (p.EntityID == 9101) { recordedDirsA.push_back(dir); return {1.0f, 0.0f, 0.0f}; }
+            recordedDirsB.push_back(dir);
+            return {0.0f, 1.0f, 0.0f};
+        };
+
+        // Sweep across x in [-6, +6]: must transition monotonically from Red -> 50/50 -> Green with no hard steps!
+        float prevGFraction = -0.01f;
+        for (int step = 0; step <= 60; ++step) {
+            const float x = -6.0f + 0.2f * static_cast<float>(step);
+            const auto blend = ReflectionService::EvaluateEnvironmentBlend(
+                overlapCands, {x, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, sampleColor);
+            RENDER_CHECK(Axle::RenderTests::Near(blend.SSRWeight + blend.ProbeWeight + blend.SkyWeight, 1.0f, 1e-5f),
+                "M15-U5-30.3: convex blend weights always sum identically to 1.0");
+            const float gFraction = (blend.ProbeColor.r + blend.ProbeColor.g) > 1e-5f
+                ? blend.ProbeColor.g / (blend.ProbeColor.r + blend.ProbeColor.g) : 0.0f;
+            if (step > 0) {
+                RENDER_CHECK(gFraction + 1e-4f >= prevGFraction && (gFraction - prevGFraction) < 0.15f,
+                    "M15-U5-28 / 31.1: overlapping multi-probe transition is monotonic and free of hard seams");
+            }
+            prevGFraction = gFraction;
+        }
+        const auto midpointBlend = ReflectionService::EvaluateEnvironmentBlend(
+            overlapCands, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0.0f, 0.0f, {0, 0, 0}, {0, 0, 1}, sampleColor);
+        RENDER_CHECK(Axle::RenderTests::Near(midpointBlend.ProbeColor.r, 0.5f, 1e-4f) &&
+                     Axle::RenderTests::Near(midpointBlend.ProbeColor.g, 0.5f, 1e-4f) &&
+                     Axle::RenderTests::Near(midpointBlend.TotalProbeCoverage, 1.0f, 1e-5f) &&
+                     Axle::RenderTests::Near(midpointBlend.SkyWeight, 0.0f, 1e-5f),
+            "M15-U5-28: symmetric overlap midpoint yields exact 50/50 probe blend and zero sky leak inside core");
+
+        // M15-U5-29: Parallax correction is applied independently per probe BEFORE blending
+        recordedDirsA.clear(); recordedDirsB.clear();
+        (void)ReflectionService::EvaluateEnvironmentBlend(
+            overlapCands, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0.0f, 0.0f, {0, 0, 0}, {0, 0, 1}, sampleColor);
+        RENDER_CHECK(!recordedDirsA.empty() && !recordedDirsB.empty() &&
+                     recordedDirsA[0].x > 0.4f && recordedDirsB[0].x < -0.4f &&
+                     Axle::RenderTests::Near(glm::length(recordedDirsA[0]), 1.0f, 1e-4f) &&
+                     Axle::RenderTests::Near(glm::length(recordedDirsB[0]), 1.0f, 1e-4f),
+            "M15-U5-29: left probe and right probe receive distinct normalized per-probe parallax directions before blending");
+
+        // Sphere parallax check too
+        const glm::vec3 sphParallax = ReflectionService::ApplyProbeParallax(sphereProbe, {1.5f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
+        RENDER_CHECK(sphParallax.x > 0.4f && sphParallax.z > 0.7f && Axle::RenderTests::Near(glm::length(sphParallax), 1.0f, 1e-4f),
+            "M15-U5-29: sphere probe applies forward sphere-intersection parallax correction");
+
+        // M15-U5-30.1 / 30.2 / 30.3: Energy conservation across SSR confidence + probe boundary + sky fallback
+        const auto unitSampler = [](const RenderReflectionProbe&, const glm::vec3&, size_t) { return glm::vec3(1.0f); };
+        for (float ssrConf : {0.0f, 0.35f, 0.75f, 1.0f}) {
+            for (float posX : {0.0f, 5.5f, 8.0f}) {
+                const auto energyBlend = ReflectionService::EvaluateEnvironmentBlend(
+                    overlapCands, {posX, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f},
+                    ssrConf, 1.0f, glm::vec3(1.0f), glm::vec3(1.0f), unitSampler);
+                RENDER_CHECK(Axle::RenderTests::Near(energyBlend.BlendedColor.r, 1.0f, 1e-5f) &&
+                             Axle::RenderTests::Near(energyBlend.BlendedColor.g, 1.0f, 1e-5f) &&
+                             Axle::RenderTests::Near(energyBlend.BlendedColor.b, 1.0f, 1e-5f) &&
+                             Axle::RenderTests::Near(energyBlend.SSRWeight + energyBlend.ProbeWeight + energyBlend.SkyWeight, 1.0f, 1e-5f),
+                    "M15-U5-30.1/30.2/30.3: unified energy policy preserves exact unit radiance across SSR, probes, and sky");
+            }
+        }
+
+        // M15-U5-31.3 & 31.4: Multi-probe PrepareView + ResolvePublication with missing and stale probes
+        RenderWorld multiWorld;
+        multiWorld.SceneRevision = 40;
+        multiWorld.Skybox.Authored = multiWorld.Skybox.Enabled = multiWorld.Skybox.EnvironmentLighting = true;
+        multiWorld.ReflectionProbes = {leftProbe, rightProbe};
+        const glm::vec3 viewSamplePt{0.0f, 0.0f, 0.0f};
+        const auto multiPrep = reflection.PrepareView(
+            multiWorld, {0.0f, 0.0f, 8.0f}, std::span<const glm::vec3>(&viewSamplePt, 1), false, 40);
+        RENDER_CHECK(multiPrep.ActiveProbes.size() == 2u,
+            "M15-U5-28: PrepareView discovers both overlapping mesh-region probes even when camera sits outside");
+
+        ReflectionPublication missingPub;
+        missingPub.ProbePublications.resize(2);
+        missingPub.ProbePublications[0].Ready = false;
+        missingPub.ProbePublications[0].Diagnostic = "missing_cubemap";
+        missingPub.ProbePublications[1].Ready = true;
+        missingPub.ProbePublications[1].PrefilterGeneration = prefilter;
+        missingPub.ProbePublications[1].ActiveGenerationID = 42ull;
+        const auto resolvedMissing = reflection.ResolvePublication(multiPrep, missingPub, false, true);
+        RENDER_CHECK(resolvedMissing.ActiveProbeCount == 1u &&
+                     resolvedMissing.MissingProbeCount == 1u &&
+                     resolvedMissing.PrefilterReady &&
+                     resolvedMissing.SelectedProbeEntityID == 9102 &&
+                     Axle::RenderTests::Near(resolvedMissing.ActiveProbes[0].NormalizedWeight, 0.0f, 1e-6f) &&
+                     Axle::RenderTests::Near(resolvedMissing.ActiveProbes[1].NormalizedWeight, 1.0f, 1e-6f),
+            "M15-U5-31.3: missing probe is omitted and remaining valid probe renormalizes cleanly to 1.0");
+
+        ReflectionPublication stalePub;
+        stalePub.ProbePublications.resize(2);
+        stalePub.ProbePublications[0].Ready = true;
+        stalePub.ProbePublications[0].CaptureStale = true;
+        stalePub.ProbePublications[0].PrefilterGeneration = dynHandle;
+        stalePub.ProbePublications[0].ActiveGenerationID = 10ull;
+        stalePub.ProbePublications[1].Ready = true;
+        stalePub.ProbePublications[1].PrefilterGeneration = prefilter;
+        stalePub.ProbePublications[1].ActiveGenerationID = 11ull;
+        const auto resolvedStale = reflection.ResolvePublication(multiPrep, stalePub, false, true);
+        RENDER_CHECK(resolvedStale.ActiveProbeCount == 2u &&
+                     resolvedStale.StaleProbeCount == 1u &&
+                     resolvedStale.CaptureStale &&
+                     resolvedStale.ActiveProbes[0].Stale &&
+                     resolvedStale.ActiveProbes[0].NormalizedWeight > 0.1f,
+            "M15-U5-31.4: stale probe retains last-good contribution cleanly while flagging StaleProbeCount");
+
+        // Bound to MaxActiveReflectionProbes = 4 even when >4 probes overlap
+        RenderWorld sixWorld;
+        for (int k = 0; k < 6; ++k) {
+            RenderReflectionProbe p = leftProbe;
+            p.EntityID = 9200u + static_cast<uint64_t>(k);
+            p.Position = {0.1f * static_cast<float>(k), 0.0f, 0.0f};
+            sixWorld.ReflectionProbes.push_back(p);
+        }
+        const auto cappedView = reflection.PrepareView(sixWorld, {0.0f, 0.0f, 0.0f}, {}, false, 41);
+        float cappedSum = 0.0f;
+        for (const auto& c : cappedView.ActiveProbes) cappedSum += c.NormalizedWeight;
+        RENDER_CHECK(cappedView.ActiveProbes.size() == MaxActiveReflectionProbes &&
+                     Axle::RenderTests::Near(cappedSum, 1.0f, 1e-5f),
+            "M15-U5-28: active probe candidates are bounded to MaxActiveReflectionProbes=4 with normalized weights");
     }
 
     GIService gi;

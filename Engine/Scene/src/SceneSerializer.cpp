@@ -333,6 +333,7 @@ namespace Axle {
                 ss << "      CaptureNearPlane: " << rpc.CaptureNearPlane << "\n";
                 ss << "      CaptureFarPlane: " << rpc.CaptureFarPlane << "\n";
                 ss << "      CaptureMode: " << ReflectionProbeCaptureModeToString(rpc.CaptureMode) << "\n";
+                ss << "      BlendDistance: " << rpc.BlendDistance << "\n";
             }
 
             // RectLightComponent
@@ -1113,6 +1114,8 @@ namespace Axle {
                             rpc.CaptureFarPlane = std::stof(Trim(trimmed.substr(16)));
                         } else if (trimmed.rfind("CaptureMode:", 0) == 0) {
                             rpc.CaptureMode = StringToReflectionProbeCaptureMode(Trim(trimmed.substr(12)));
+                        } else if (trimmed.rfind("BlendDistance:", 0) == 0) {
+                            rpc.BlendDistance = std::max(0.0f, std::stof(Trim(trimmed.substr(14))));
                         }
                         break;
                     }

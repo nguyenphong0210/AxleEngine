@@ -232,6 +232,13 @@ SamplerState u_EnvironmentSampler : register(s3,space0);
 SamplerState u_ScreenSampler : register(s1, space0);
 SamplerState u_Sampler      : register(s0, space0);
 
+#define AXLE_REFLECTION_PROBE_CBUFFER_REGISTER b6
+TextureCube u_ReflectionProbeCube0 : register(t2, space4);
+TextureCube u_ReflectionProbeCube1 : register(t3, space4);
+TextureCube u_ReflectionProbeCube2 : register(t4, space4);
+TextureCube u_ReflectionProbeCube3 : register(t5, space4);
+#include "ReflectionProbeCommon.hlsli"
+
 float3 RotateEnvironmentDirection(float3 direction) {
     float angle=u_LightReserved[0].w;
     float s=sin(angle), c=cos(angle);
@@ -787,7 +794,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         }
     }
 
-    // 9. Ambient Lighting: Image-Based Lighting (IBL) or Analytical Approximation
+    // 9. Ambient Lighting: Image-Based Lighting (IBL), Multi-Probe Parallax & Sky Fallback
     float3 ambientF = FresnelSchlickRoughness(NdotV, F0, roughness);
     float3 ambientKD = (float3(1.0, 1.0, 1.0) - ambientF) * (1.0 - metallic);
     float3 ambient;
@@ -798,41 +805,56 @@ float4 PSMain(PSInput input) : SV_Target0 {
         u_PrefilterMap.GetDimensions(0, envWidth, envHeight, envLevels);
     }
     float MAX_REFLECTION_LOD = max(0.0, float(envLevels) - 1.0);
+    float3 R = reflect(-V, N);
+    float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(max(NdotV, 0.0), roughness)).rg;
+    float envIntensity = max(u_LightReserved[0].y, 0.0);
 
     if (hasSplitSumIBL) {
-        // Image-Based Lighting (IBL) via Split-Sum Approximation
+        // Image-Based Lighting (IBL) via Split-Sum Approximation + Multi-Probe Blend
         // A. Diffuse Irradiance: Cosine-weighted hemispherical integration
         float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, RotateEnvironmentDirection(N)).rgb;
-        float3 diffuseAmbient = irradiance * albedo.rgb * ambientKD;
+        float3 diffuseAmbient = irradiance * albedo.rgb * ambientKD * envIntensity;
 
-        // B. Specular Radiance: Pre-filtered environment radiance (roughness-dependent mip level)
-        float3 R = reflect(-V, N);
-        float3 prefilteredColor = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), roughness * MAX_REFLECTION_LOD).rgb;
+        // B. Specular Radiance: Pre-filtered local probes (scaled by probe Intensity) -> sky fallback (scaled by envIntensity)
+        float3 skyPrefilter = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), roughness * MAX_REFLECTION_LOD).rgb * envIntensity;
+        MultiProbeBlendResult envBlend = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, roughness, u_EnvironmentSampler, skyPrefilter);
+        float3 prefilteredColor = envBlend.BlendedEnvColor;
 
         // C. Split-sum BRDF integration 2D LUT: scale (rg.x) and bias (rg.y) for Fresnel reflection
-        float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(max(NdotV, 0.0), roughness)).rg;
         float3 specularAmbient = prefilteredColor * (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation;
 
         float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
-        float3 coatEnvironment = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), clamp(coatAnisotropy.y,0.04,1.0) * MAX_REFLECTION_LOD).rgb;
+        float coatRough = clamp(coatAnisotropy.y, 0.04, 1.0);
+        float3 skyCoatEnv = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), coatRough * MAX_REFLECTION_LOD).rgb * envIntensity;
+        float3 coatEnvironment = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, coatRough, u_EnvironmentSampler, skyCoatEnv).BlendedEnvColor;
         diffuseAmbient *= (1.0-coatF) * (1.0-coatF);
         specularAmbient = (specularAmbient * (1.0-coatF) * (1.0-coatF) + coatEnvironment * coatF) * u_MaterialSurface.w;
-        float envIntensity = max(u_LightReserved[0].y,0.0);
-        ambient = (diffuseAmbient + specularAmbient) * envIntensity * ao;
+        ambient = (diffuseAmbient + specularAmbient) * ao;
     } else {
-        // Shared analytical environment approximation: only authored ambient
-        // strength contributes; no studio softboxes are synthesized by a view.
-        float3 ambientColor=u_SunLight.AmbientColor.rgb;
-        float3 R=reflect(-V,N);
-        float3 diffuseAmbient=ambientColor*albedo.rgb*ambientKD;
-        float3 specularAmbient=ambientColor*ambientF*(1.0-roughness*0.5)*u_MaterialSurface.w*ggxEnergyCompensation;
-        ambient=(diffuseAmbient+specularAmbient*(1-saturate(u_LightReserved[0].z)))*max(u_LightReserved[0].y,0.0)*ao;
+        // Shared analytical environment approximation with seamless local-probe split-sum blend:
+        // local probes carry their own authored Intensity even when world sky/ambient is zero.
+        float3 ambientColor = u_SunLight.AmbientColor.rgb;
+        float3 diffuseAmbient = ambientColor * albedo.rgb * ambientKD * envIntensity;
+        float3 analyticalSpec = ambientColor * ambientF * (1.0 - roughness * 0.5) * u_MaterialSurface.w * ggxEnergyCompensation * (1.0 - saturate(u_LightReserved[0].z)) * envIntensity;
+        MultiProbeBlendResult envBlend = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, roughness, u_EnvironmentSampler, float3(0.0, 0.0, 0.0));
+        float3 probeSpec = envBlend.ProbeColor * (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation * u_MaterialSurface.w;
+        float3 specularAmbient = lerp(analyticalSpec, probeSpec, envBlend.ProbeCoverage);
+        if (coatAnisotropy.x > 0.0 && envBlend.ProbeCoverage > 0.0) {
+            float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0 - NdotV, 5.0));
+            float coatRough = clamp(coatAnisotropy.y, 0.04, 1.0);
+            float3 coatProbeEnv = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, coatRough, u_EnvironmentSampler, float3(0.0, 0.0, 0.0)).ProbeColor;
+            float coatBlend = coatF * envBlend.ProbeCoverage;
+            diffuseAmbient *= (1.0 - coatBlend) * (1.0 - coatBlend);
+            specularAmbient = specularAmbient * (1.0 - coatBlend) * (1.0 - coatBlend) + coatProbeEnv * coatBlend * u_MaterialSurface.w;
+        }
+        ambient = (diffuseAmbient + specularAmbient) * ao;
     }
     
     if (u_Sheen.w >= 0.0) {
-        float3 sheenEnv = (hasSplitSumIBL ? u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(reflect(-V, N)), u_Sheen.w * MAX_REFLECTION_LOD).rgb : u_SunLight.AmbientColor.rgb);
+        float3 sheenSky = (hasSplitSumIBL ? u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), u_Sheen.w * MAX_REFLECTION_LOD).rgb : u_SunLight.AmbientColor.rgb) * envIntensity;
+        float3 sheenEnv = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, u_Sheen.w, u_EnvironmentSampler, sheenSky).BlendedEnvColor;
         float3 sheenAmbient = sheenEnv * u_Sheen.rgb * pow(1.0 - NdotV, 4.0) * u_MaterialSurface.w;
-        ambient += sheenAmbient * max(u_LightReserved[0].y, 0.0) * ao;
+        ambient += sheenAmbient * ao;
     }
     if (u_Subsurface.w > 0.0) {
         float3 sssEnv = (hasSplitSumIBL ? u_IrradianceMap.Sample(u_EnvironmentSampler, RotateEnvironmentDirection(N)).rgb : u_SunLight.AmbientColor.rgb);

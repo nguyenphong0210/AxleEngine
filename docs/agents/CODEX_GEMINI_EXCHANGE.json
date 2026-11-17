@@ -1,49 +1,52 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U5-D",
-    "title": "Reflection probe invalidation and scheduling (M15-U5-21.1 through M15-U5-26.4)",
-    "state": "accepted_automated_visual_deferred",
+    "id": "M15-U5-E",
+    "title": "Multi-probe selection and blend (M15-U5-27.1 through M15-U5-31.5 + P5 exit)",
+    "state": "delivered_awaiting_review",
     "coordinator": "User",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "f4f4e94a3047755f6497ff95e60458f5070bc2f6",
-    "user_instruction": "Trien khai M15-U5-D (S5.4: M15-U5-21.1..26.4) tren nen M15-U5-C (f4f4e94a); interactive Editor visual evidence deferred per user direction. User subsequently requested Codex review and necessary fixes of the completed U5-D delivery.",
-    "user_scope": "Implement per-domain dynamic reflection probe invalidation (transform, scene revision/instance/epoch, geometry, material, lighting/skybox, asset/device epoch), manual/automatic capture modes, bounded per-frame face/probe scheduling, pending/stale/failed lifecycle diagnostics with last-good retention on failure, and capture cache memory budget + LRU eviction + device reset + scene replacement tests.",
+    "code_baseline": "b77f70d9",
+    "user_instruction": "Trien khai M15-U5-E (S5.5: M15-U5-27.1..31.5 + P5 exit) tren nen M15-U5-D (b77f70d9); interactive Editor visual evidence remains deferred per user direction to consolidated post-U5 visual pass.",
+    "user_scope": "Implement normalized box & sphere probe influence functions, bounded multi-probe selection & smooth seam-free blending, per-probe parallax correction before blending, unified energy-conserving reflection resolve across SSR confidence + local probes + sky/neutral fallback, and CPU + native D3D12/Vulkan regression tests covering overlap, boundary movement, missing probe, stale probe, SSR miss, and P5 exit.",
     "expected_files": [
-      "Engine/Core/include/Axle/Types.hpp",
-      "Engine/Renderer/include/Axle/RenderWorld.hpp",
-      "Engine/Renderer/include/Axle/SceneRenderSettings.hpp",
+      "Engine/Renderer/CMakeLists.txt",
       "Engine/Renderer/include/Axle/ReflectionService.hpp",
+      "Engine/Renderer/include/Axle/RenderWorld.hpp",
+      "Engine/Renderer/src/MaterialSurfaceShader.cpp",
       "Engine/Renderer/src/ReflectionService.cpp",
-      "Engine/Renderer/include/Axle/RenderContracts.hpp",
-      "Engine/Renderer/src/RenderContracts.cpp",
+      "Engine/Resources/Shaders/ForwardPBR.hlsl",
+      "Engine/Resources/Shaders/MaterialSurface.hlsl",
+      "Engine/Resources/Shaders/ReflectionProbeCommon.hlsli",
+      "Engine/Resources/Shaders/SSR.hlsl",
+      "Engine/Scene/CMakeLists.txt",
       "Engine/Scene/include/Axle/Components.hpp",
-      "Engine/Scene/src/SceneExtraction.cpp",
-      "Engine/Scene/src/SceneSerializer.cpp",
       "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
+      "Engine/Scene/src/Passes/ScreenSpaceReflectionPass.cpp",
       "Engine/Scene/src/RHISceneRenderer.cpp",
       "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "Engine/Scene/src/SceneExtraction.cpp",
+      "Engine/Scene/src/SceneSerializer.cpp",
+      "Tests/CMakeLists.txt",
       "Tests/rendering/Test_LightingServicesUnit.cpp",
+      "Tests/rendering/Test_M15_OcclusionRendering.cpp",
       "Tests/rendering/Test_M15_ReflectionCaptureContractUnit.cpp",
       "Tests/rendering/Test_M15_ReflectionCaptureRendering.cpp",
       "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-      "docs/reviews/M15_U5_D_REVIEW.md",
+      "docs/reviews/M15_U5_E_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Gemini delivery fb699f21 reviewed and repaired by Codex; independent source recheck and final Debug/Release verification complete. See docs/reviews/M15_U5_D_CODEX_REVIEW.md.",
-    "acceptance_status": "Automated U5-D accepted after Codex repairs. Interactive U5-21.3, 21.4, 26.1 Editor visuals remain user-deferred/NOT RUN. Partial capture requires compatible inputs across its scheduled faces.",
+    "implementation_status": "Gemini completed M15-U5-E (S5.5: M15-U5-27.1..31.5 + P5 exit) on top of b77f70d9 and verified Debug/Release CPU + D3D12/Vulkan checks (exit 0).",
+    "acceptance_status": "pending",
     "open_gates": [
-      "Interactive Editor visual checks M15-U5-21.3, 21.4 and 26.1 remain NOT RUN/user-deferred to the consolidated post-U5 visual pass."
+      "Interactive Editor visual checks M15-U5-27.2, 28, 29, 30.1, 31.5 deferred to consolidated post-U5 visual pass."
     ],
-    "next_action": "Stop at the U5-D boundary; await user assignment for U5-E. Keep the consolidated Editor fixture visual gates open.",
-    "verification": "Codex final builds exit 0; 26/26 final checks exit 0 in Debug/Release: focused/full CPU, lighting, bake, CTest contracts 2/2 each, native DX12/Vulkan rendering with zero asserted validation errors, storage/targets both backends, strict Editor startup both backends (5 UI frames, fallback=none). Architecture 613/25, exchange schema and whitespace pass. Exact command/exit/log matrix: build/Codex-U5D-results.json. Separate-context source recheck found no P1/P2 blocker.",
-    "independent_review_status": "accepted_after_repairs_automated_visual_deferred",
-    "review_report": "docs/reviews/M15_U5_D_CODEX_REVIEW.md"
+    "next_action": "Independent Codex review and acceptance of M15-U5-E deliverables; consolidated post-U5 interactive Editor visual checks remain deferred per user direction."
   },
   "last_read": {
     "Codex": "CG-20261117T124813102206Z-GEMINI-0f71aa",
-    "Gemini": "CG-20261117T112018655562Z-CODEX-b8f551"
+    "Gemini": "CG-20261117T130958640519Z-CODEX-7d5c30"
   },
   "messages": [
     {
@@ -4687,6 +4690,28 @@
       "base_commit": "fb699f21e7524e9ed2e60ddfcbd6de18f4e75c50",
       "timestamp_utc": "2026-11-17T13:09:58.640519+00:00",
       "body": "Independent U5-D review/repairs complete: automated M15-U5-21.1..26.4 ACCEPTED WITH OPEN INTERACTIVE VISUAL GATES. Reviewed Gemini delivery fb699f21 (implementation base f4f4e94a), replying to CG-20261117T124813102206Z-GEMINI-0f71aa. Full findings/evidence: docs/reviews/M15_U5_D_CODEX_REVIEW.md. Corrections, regressions, plan/reports and exchange form one consolidated local Codex review commit; no push.\n\nFIXED:\n- U5D-R1 P1: admission counts old resident plus staged candidate; capacity failures retry unchanged input after budget/capacity changes, while invalid settings retain deterministic suppression. Cache stats report actual settings/override budget. Native regression originally reproduced unchanged-input budget recovery failure, then passes after correction.\n- U5D-R2 P1: removed/disabled/non-dynamic probes retire resident cache, pending jobs and ancillary records; forced invalidation clears canceled progress. Filtered worlds preserve scene identity/epoch. Tests remove both rebuilding and never-published jobs.\n- U5D-R3 P2: selected reflection and last-good generations with active jobs are pinned against background eviction. One-probe-budget regression preserves selected generation and avoids recapture/fallback thrashing; other residents remain LRU-evictable.\n- U5D-R4 P2: policy-override InputStamp=0 cannot masquerade as a default capture when resolution/position match but clip/content policy differs. Native explicit-override/default-rebuild regression added.\n- U5D-R5 P1: capture waits on retained main ViewContext completion even though public result receipts are reset; failed capture waits are not dropped. Scheduler recursion guard covers synchronization/preparation. Native no-caller-wait + single WaitFence failure defers capture before allocation/publication and recovers next render.\n\nVERIFIED FINAL: Debug/Release full builds AxleRenderUnitTests, AxleEnvironmentRenderingTests, AxleEnvironmentBakeTests, AxleRHIResourceViewTests and AxleEditor exit 0; final focused/full CPU, lighting, bake, CTest contracts 2/2 each, four DX12/Vulkan rendering runs including device-reset/scene-replace and U4/U5 regressions, storage/targets both backends, and strict Editor startup both backends all exit 0 (26/26 commands). Native fixtures assert zero RHI validation errors. All four Editor runs execute five UI frames with requested actual backend and fallback=none. DX12 presentation now passes in this session, unlike historical U5-C/Gemini U5-D initialization attempts. Architecture 613 source/25 CMake, exchange validation and whitespace pass. Exact commands/exits/log paths: build/Codex-U5D-results.json; native artifacts build/Tests/EnvironmentRendering/Codex-U5D-{Debug,Release}-{dx12,vulkan}. A separate-context read-only source reviewer rechecked corrections and fixture changes with no P1/P2 blocker.\n\nBOUNDARIES: interactive U5-21.3/21.4/26.1 Editor fixture visuals remain user-deferred/NOT RUN. Partial jobs restart on changed input and require a compatible capture window; continuous motion may keep cold probes pending or retain stale last-good reflections. Cache accounting measures owned cubemap payloads (including staged candidates), excluding scratch/driver overhead and external retained owners. Tightened budgets do not forcibly discard last-good; rebuild admission requires old+new capacity. No U5-E activation or full U5 visual acceptance.\n"
+    },
+    {
+      "id": "CG-20261117T133612889500Z-GEMINI-11cfab",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "M15-U5-E",
+      "reply_to": "CG-20261117T130958640519Z-CODEX-7d5c30",
+      "base_commit": "b77f70d9",
+      "timestamp_utc": "2026-11-17T13:36:12.889500+00:00",
+      "body": "Starting M15-U5-E (S5.5 Multi-probe selection and blend: M15-U5-27.1 through M15-U5-31.5 + P5 exit) on top of accepted U5-D commit b77f70d9.\n\nPlan:\n1. CPU contracts & service (ReflectionService): C1-smooth box & sphere influence weights, bounded top-K (MaxActiveReflectionProbes=4) multi-probe view selection, per-probe box/sphere parallax correction before blending, normalized convex blend weights, and unified SSR confidence + probe coverage + sky/neutral fallback energy-conservation policy, plus missing & retained-stale probe handling.\n2. Shared HLSL + GPU binding (ReflectionProbeCommon.hlsli, ForwardPBR.hlsl, MaterialSurface.hlsl, SSR.hlsl, RHISceneRenderer*): bind ReflectionProbeBuffer (b6, space0) + 4 cubemap SRVs (t2..t5, space4 / SSRApply space1), evaluate multi-probe parallax & sky fallback in forward passes (working cleanly both with SSR disabled for P5 exit and with SSR enabled via energy-conserving SSRApply replacement without double-counting).\n3. Tests & verification: expand CPU unit tests and native D3D12/Vulkan GPU readback tests (overlap, boundary movement, per-probe parallax, missing probe, stale probe, SSR miss, energy policy, P5 exit with SSR disabled & roughness sharpness); run full Debug & Release verification matrices. Interactive Editor visuals remain deferred per user direction."
+    },
+    {
+      "id": "CG-20261117T143543452697Z-GEMINI-67672c",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-U5-E",
+      "reply_to": "CG-20261117T133612889500Z-GEMINI-11cfab",
+      "base_commit": "b77f70d9",
+      "timestamp_utc": "2026-11-17T14:35:43.452697+00:00",
+      "body": "Delivered M15-U5-E (S5.5: M15-U5-27.1 through M15-U5-31.5 + P5 exit) on top of accepted M15-U5-D commit b77f70d9 for independent Codex review and acceptance.\n\nKey Changes:\n1. Probe Influence & Multi-Probe Selection (`Engine/Renderer/include/Axle/RenderWorld.hpp`, `ReflectionService.hpp/.cpp`, `Engine/Scene/include/Axle/Components.hpp`, `SceneExtraction.cpp`, `SceneSerializer.cpp`):\n   - Added trailing defaulted `BlendDistance = 0.0f` to `RenderReflectionProbe` / `ReflectionProbeComponent`, with YAML round-trip serialization and backward-compatible default zero handling when omitted.\n   - Implemented identical C1 `smoothstep` inner/outer influence evaluation (`EvaluateProbeInfluence`) for OBB Box (`Shape == 0`) and Sphere (`Shape == 1`) shapes, per-probe box/sphere ray parallax correction (`ApplyProbeParallax`), deterministic 4-probe selection (`MaxActiveReflectionProbes = 4`), view sampling across scene meshes + camera (`PrepareView`), missing/stale publication accounting (`MissingProbeCount`, `StaleProbeCount`), and convex energy blend evaluation (`EvaluateEnvironmentBlend`: `SSRWeight + ProbeWeight + SkyWeight == 1.0f`).\n2. Unified Shader & GPU Binding Contract (`Engine/Resources/Shaders/ReflectionProbeCommon.hlsli`, `ForwardPBR.hlsl`, `MaterialSurface.hlsl`, `SSR.hlsl`, `RHISceneRenderer.hpp/.cpp`, `RHISceneRendererPasses.cpp`, `ScreenSpaceReflectionPass.cpp`, `MaterialSurfaceShader.cpp`, `Engine/Renderer/CMakeLists.txt`, `Engine/Scene/CMakeLists.txt`):\n   - Created `ReflectionProbeCommon.hlsli` embedded in renderer & scene shader bundles (`EvaluateProbeInfluenceHLSL`, `ApplyProbeParallaxHLSL`, `EvaluateMultiProbeBlendHLSL`).\n   - Added `512B` `RHIReflectionProbeBufferData` (`b6` in forward shaders, `b1` in `SSRApply`) + 4 active prefilter cubemaps (`t2..t5 space4` in forward passes, `t5..t8 space1` in `SSRApply`), plus reverse-priority LRU timestamping so primary camera probes stay newest in LRU cache.\n   - Separated sky `envIntensity` gating from local `probe.Intensity` so local probes illuminate reflective surfaces cleanly even with skybox/ambient disabled.\n   - Refactored `SSR.hlsl` so `CSMain` outputs raw hit radiance and `[0..1]` confidence, while `SSRApply` replaces `EvaluateMultiProbeBlendHLSL` `fallbackEnv` proportionally via `(ssrColor - fallbackEnv) * (ssrWeight * F)` rather than adding SSR radiance atop existing IBL.\n3. Automated CPU, Contract & GPU Tests (`Tests/CMakeLists.txt`, `Tests/rendering/Test_LightingServicesUnit.cpp`, `Tests/rendering/Test_M15_ReflectionCaptureContractUnit.cpp`, `Tests/rendering/Test_M15_ReflectionCaptureRendering.cpp`, `Tests/rendering/Test_M15_OcclusionRendering.cpp`):\n   - CPU unit + YAML/shader contract checks (`BlendDistance` round-trip, OBB/sphere influence, per-probe parallax, overlap cap, energy conservation, missing/stale handling, shader tokens).\n   - Native D3D12 & Vulkan GPU tests (`RunM15MultiProbeBlendTests`): Box overlap, Sphere overlap, Boundary -> Sky fallback, Per-probe Box parallax (`raw=(0.073623,0.978027)` -> `corrected=(0.950684,0.0644263)`), Missing probe omission/renormalization, Stale Manual retention & recapture, Unified Energy (`base=0.905273` vs `withSSR=0.876614`), SSR hit/miss fallback (`hitL_no=(0.959961,0.172974)` vs `hitL_on=(0.403046,0.466727)`), and P5 exit with SSR disabled (`[P5 Exit Cube -Z] center=(4,0.159912,0.159912)`, linear HDR `[P5 Exit Roughness SSR=OFF] R(0.05)=3.29863 R(0.40)=1.09219 R(0.85)=0.138735`).\n\nVerification (all executed cleanly after final code/test edit, Debug & Release, exit 0, 0 RHI validation errors):\n- `cmake --build build --config {Debug,Release}` on test targets + `AxleEditor`: PASS\n- `AxleRenderUnitTests.exe` (full, `--lighting-services`, `--m15-reflection-capture-contract`), Debug & Release: PASS\n- `ctest --test-dir build -C {Debug,Release} -R \"M15ReflectionCaptureContract|M15EnvironmentContract|MaterialGraph\" --output-on-failure`: 8/8 PASS (Debug & Release)\n- `AxleEnvironmentBakeTests.exe`, Debug & Release: PASS\n- `AxleRHIResourceViewTests.exe {dx12,vulkan} {storage,targets}`, Debug & Release: PASS\n- `AxleEnvironmentRenderingTests.exe {dx12,vulkan}`, Debug & Release: PASS\n- `AxleEditor.exe --verify-empty-startup --rhi={dx12,vulkan} --no-fallback`, Debug & Release: PASS (`5 UI frames`)\n- `python scripts/check_architecture.py`: PASS (`613 files, 25 CMake files`)\n\nReview & Status:\n- Self-review: `docs/reviews/M15_U5_E_REVIEW.md`\n- Plan updated: `docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md` (interactive `EDITOR VISUAL` items `M15-U5-27.2`, `28`, `29`, `30.1`, `31.5` intentionally kept `[ ]` and marked `NOT RUN (deferred per user direction to consolidated post-U5 visual pass)`).\n"
     }
   ],
   "deferred_tasks": [

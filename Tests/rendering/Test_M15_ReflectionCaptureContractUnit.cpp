@@ -30,6 +30,22 @@ using namespace Axle::ReflectionCaptureContract;
 #define AXLE_CUBEMAP_PREFILTER_SHADER_PATH "Engine/Resources/Shaders/CubemapPrefilter.hlsl"
 #endif
 
+#ifndef AXLE_FORWARD_PBR_SHADER_PATH
+#define AXLE_FORWARD_PBR_SHADER_PATH "Engine/Resources/Shaders/ForwardPBR.hlsl"
+#endif
+
+#ifndef AXLE_MATERIAL_SURFACE_SHADER_PATH
+#define AXLE_MATERIAL_SURFACE_SHADER_PATH "Engine/Resources/Shaders/MaterialSurface.hlsl"
+#endif
+
+#ifndef AXLE_SSR_SHADER_PATH
+#define AXLE_SSR_SHADER_PATH "Engine/Resources/Shaders/SSR.hlsl"
+#endif
+
+#ifndef AXLE_REFLECTION_PROBE_COMMON_SHADER_PATH
+#define AXLE_REFLECTION_PROBE_COMMON_SHADER_PATH "Engine/Resources/Shaders/ReflectionProbeCommon.hlsli"
+#endif
+
 namespace {
     std::string ReadText(const char* path) {
         std::ifstream file(path);
@@ -590,6 +606,90 @@ bool RunM15ReflectionCaptureContractUnitTests() {
                      sharedBudgetPlan[0].ProbeKey == "pHigh" && sharedBudgetPlan[0].FacesToRun == 2u &&
                      sharedBudgetPlan[1].ProbeKey == "pLow" && sharedBudgetPlan[1].FacesToRun == 2u,
             "M15-U5-23.1: maxFacesPerFrame=4 caps total faces across probes per frame");
+    }
+
+    // 7. M15-U5-E (S5.5): BlendDistance extraction/YAML round-trip, 512B GPU probe CBV contract,
+    //    and unified ReflectionProbeCommon / ForwardPBR / MaterialSurface / SSR shader energy policy.
+    {
+        Scene blendScene;
+        auto probeEntity = blendScene.CreateEntityWithUUID(555001ULL, "BlendProbe");
+        auto& rpc = probeEntity.AddComponent<ReflectionProbeComponent>();
+        rpc.Shape = ProbeShape::Sphere;
+        rpc.Radius = 7.5f;
+        rpc.BlendDistance = 2.25f;
+        rpc.ParallaxCorrected = true;
+        rpc.Intensity = 1.4f;
+
+        const RenderWorld extractedBlend = ExtractRenderWorld(blendScene);
+        RENDER_CHECK(extractedBlend.ReflectionProbes.size() == 1 &&
+                     extractedBlend.ReflectionProbes[0].Shape == 1 &&
+                     std::abs(extractedBlend.ReflectionProbes[0].Radius - 7.5f) < 1e-4f &&
+                     std::abs(extractedBlend.ReflectionProbes[0].BlendDistance - 2.25f) < 1e-4f,
+            "M15-U5-27.1 / 27.2: SceneExtraction propagates Shape, Radius and BlendDistance");
+
+        SceneSerializer srcSer(&blendScene);
+        const std::string yamlText = srcSer.SerializeToString();
+        RENDER_CHECK(yamlText.find("BlendDistance: ") != std::string::npos,
+            "M15-U5-27.1 / 27.2: SceneSerializer writes BlendDistance for reflection probes");
+
+        Scene loadedScene;
+        SceneSerializer dstSer(&loadedScene);
+        RENDER_CHECK(dstSer.DeserializeFromString(yamlText),
+            "M15-U5-27.1 / 27.2: SceneSerializer deserializes ReflectionProbe BlendDistance");
+        const RenderWorld extractedLoaded = ExtractRenderWorld(loadedScene);
+        RENDER_CHECK(extractedLoaded.ReflectionProbes.size() == 1 &&
+                     extractedLoaded.ReflectionProbes[0].Shape == 1 &&
+                     std::abs(extractedLoaded.ReflectionProbes[0].BlendDistance - 2.25f) < 1e-4f,
+            "M15-U5-27.1 / 27.2: BlendDistance survives full YAML round-trip");
+
+        // Legacy scenes omitting BlendDistance must deserialize cleanly with BlendDistance = 0
+        std::string legacyYaml = yamlText;
+        const size_t bdPos = legacyYaml.find("      BlendDistance:");
+        RENDER_CHECK(bdPos != std::string::npos, "M15-U5-E legacy yaml fixture strips BlendDistance line");
+        const size_t bdEnd = legacyYaml.find('\n', bdPos);
+        legacyYaml.erase(bdPos, bdEnd != std::string::npos ? (bdEnd - bdPos + 1) : std::string::npos);
+        Scene legacyScene;
+        SceneSerializer legacySer(&legacyScene);
+        RENDER_CHECK(legacySer.DeserializeFromString(legacyYaml),
+            "M15-U5-E: legacy scene YAML without BlendDistance loads cleanly");
+        const RenderWorld extractedLegacy = ExtractRenderWorld(legacyScene);
+        RENDER_CHECK(extractedLegacy.ReflectionProbes.size() == 1 &&
+                     extractedLegacy.ReflectionProbes[0].BlendDistance == 0.0f,
+            "M15-U5-E: omitted BlendDistance defaults to 0.0f");
+
+        static_assert(MaxActiveReflectionProbes == 4u, "Up to 4 reflection probes are bound per view");
+        static_assert(sizeof(RHIGPUReflectionProbe) == 112u, "RHIGPUReflectionProbe matches HLSL float4 x 7 layout");
+        static_assert(sizeof(RHIReflectionProbeBufferData) == 512u, "RHIReflectionProbeBufferData must match 512-byte CBV");
+        RENDER_CHECK(sizeof(RHIReflectionProbeBufferData) == 512u,
+            "M15-U5-28: RHIReflectionProbeBufferData maintains 512-byte GPU constant buffer layout");
+
+        const std::string commonShader = ReadText(AXLE_REFLECTION_PROBE_COMMON_SHADER_PATH);
+        RENDER_CHECK(!commonShader.empty() &&
+                     commonShader.find("EvaluateProbeInfluenceHLSL") != std::string::npos &&
+                     commonShader.find("ApplyProbeParallaxHLSL") != std::string::npos &&
+                     commonShader.find("EvaluateMultiProbeBlendHLSL") != std::string::npos &&
+                     commonShader.find("smoothstep") != std::string::npos &&
+                     commonShader.find("u_ReflectionProbeCube0") != std::string::npos &&
+                     commonShader.find("u_ReflectionProbeCube3") != std::string::npos,
+            "M15-U5-27.1..29: ReflectionProbeCommon.hlsli provides shared C1 influence, per-probe parallax, and 4-slot blend");
+
+        const std::string forwardShader = ReadText(AXLE_FORWARD_PBR_SHADER_PATH);
+        const std::string surfaceShader = ReadText(AXLE_MATERIAL_SURFACE_SHADER_PATH);
+        RENDER_CHECK(!forwardShader.empty() && !surfaceShader.empty() &&
+                     forwardShader.find("#include \"ReflectionProbeCommon.hlsli\"") != std::string::npos &&
+                     forwardShader.find("EvaluateMultiProbeBlendHLSL") != std::string::npos &&
+                     surfaceShader.find("#include \"ReflectionProbeCommon.hlsli\"") != std::string::npos &&
+                     surfaceShader.find("EvaluateMultiProbeBlendHLSL") != std::string::npos,
+            "M15-U5-28 / 30.2: ForwardPBR.hlsl and MaterialSurface.hlsl share the canonical multi-probe + sky blend path");
+
+        const std::string ssrShader = ReadText(AXLE_SSR_SHADER_PATH);
+        RENDER_CHECK(!ssrShader.empty() &&
+                     ssrShader.find("#include \"ReflectionProbeCommon.hlsli\"") != std::string::npos &&
+                     ssrShader.find("EvaluateMultiProbeBlendHLSL") != std::string::npos &&
+                     ssrShader.find("envReplacementDelta") != std::string::npos &&
+                     ssrShader.find("(ssrColor - fallbackEnv)") != std::string::npos &&
+                     ssrShader.find("u_ProbeCubemap") == std::string::npos,
+            "M15-U5-30.1 / 30.3 / 31.5: SSR.hlsl replaces fallbackEnv proportionally via (ssrColor - fallbackEnv) under one energy policy");
     }
 
     std::cout << "[M15ReflectionCapture] All dynamic reflection capture contract tests passed!\n";

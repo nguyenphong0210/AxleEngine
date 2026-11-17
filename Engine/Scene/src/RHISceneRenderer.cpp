@@ -163,7 +163,7 @@ namespace Axle {
         // Per-draw resource descriptors; the immutable sampler uses no heap slots.
         // Reserve the fixed PBR-default and sky sets in addition to 4096 draws.
         constexpr uint32_t materialSets=4096+3;
-        auto materialPoolDesc = RHIDescriptorPoolDesc::Tier2Bindless(materialSets*ForwardTextureCount,materialSets);
+        auto materialPoolDesc = RHIDescriptorPoolDesc::Tier2Bindless(materialSets*ForwardTextureCount + 16u, materialSets);
         materialPoolDesc.MaxSamplers = 0;
         if (!m_DescriptorPool.Init(materialPoolDesc)) {
             AXLE_CORE_ERROR("RHISceneRenderer: Failed to initialize material descriptors!");
@@ -211,9 +211,22 @@ namespace Axle {
 
         m_ForwardOcclusionDescriptorSet = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 1);
         auto neutralOcclusion = RHIMaterial::GetDefaultWhiteTexture();
-        if (!m_ForwardOcclusionDescriptorSet || !neutralOcclusion ||
+        auto defaultProbePrefilter = RHIMaterial::GetDefaultPrefilterCubemap();
+        if (!m_ForwardOcclusionDescriptorSet || !neutralOcclusion || !defaultProbePrefilter ||
             !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 0, 0,
-                {neutralOcclusion->GetSRV(), neutralOcclusion->GetSRV()})) return false;
+                {neutralOcclusion->GetSRV(), neutralOcclusion->GetSRV()}) ||
+            !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 1, 0,
+                {defaultProbePrefilter->GetSRV(), defaultProbePrefilter->GetSRV(),
+                 defaultProbePrefilter->GetSRV(), defaultProbePrefilter->GetSRV()})) return false;
+
+        if (!m_ReflectionProbeBuffer.Init(RHIBufferDesc::Constant(
+                sizeof(RHIReflectionProbeBufferData), RHIMemoryLocation::HostUpload, "ReflectionProbeConstantsBuffer"))) {
+            return false;
+        }
+        {
+            const RHIReflectionProbeBufferData emptyProbes{};
+            if (!m_ReflectionProbeBuffer.UpdateData(&emptyProbes, sizeof(emptyProbes))) return false;
+        }
 
         RHIDescriptorPoolDesc customPool;
         customPool.MaxDescriptorSets=4096; customPool.MaxConstantBuffers=16384;
@@ -335,8 +348,8 @@ namespace Axle {
         // Initialize Screen Space Reflections (SSR) & Reflection Probes Pipeline & Resources
         if (!CompileSSRShaders(device) || !CreateSSRPipelineLayout(device) || !CreateSSRPipeline(device)) return false;
 
-        if (!m_SSRSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
-            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Linear Clamp Sampler for SSR.");
+        if (!m_SSRSampler.Init(RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Trilinear Clamp Sampler for SSR.");
             return false;
         }
 
@@ -356,7 +369,7 @@ namespace Axle {
             if (!m_SSRComputeTextureSet || !m_SSRComputeStorageSet || !m_SSRApplyDescriptorSet) return false;
             if (m_SSRSampler.IsValid()) {
                 if (!m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative()) ||
-                    !m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 4, 0, m_SSRSampler.GetNative())) return false;
+                    !m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 6, 0, m_SSRSampler.GetNative())) return false;
             }
         }
 
@@ -677,7 +690,7 @@ namespace Axle {
         m_DynamicCaptureBudgetOverrideBytes = 0;
         m_LastDynamicCaptureBudgetBytes = 64ull * 1024ull * 1024ull;
         m_HasDynamicCaptureBudgetOverride = false;
-        m_ScheduledReflectionProbeKey.clear();
+        m_ScheduledReflectionProbeKeys.clear();
         m_ActiveDynamicSceneInstanceID = 0;
         m_ActiveDynamicSceneLifetimeEpoch = 0;
         m_LastScheduledProbes = 0;
@@ -784,7 +797,12 @@ namespace Axle {
         m_Environment.Clear();m_BoundIBL={};m_PreparedManualIBL=false;m_SkyboxDescriptorSet=nullptr;
         m_ReflectionProbeEnvironments.clear();
         m_ActiveReflectionProbePrefilter.reset();
+        m_ActiveReflectionProbePrefilters.fill({});
+        m_ActiveReflectionProbes.fill({});
+        m_ActiveReflectionProbeStale.fill(false);
+        m_ActiveReflectionProbeCount = 0;
         m_HasActiveReflectionProbe = false;
+        m_ReflectionProbeBuffer.Shutdown();
         m_LightBuffer.Shutdown();
         m_SceneConstantBuffer.Shutdown();
 
@@ -925,7 +943,7 @@ namespace Axle {
         // Root Descriptors (space 0):
         // [0] b1, space 0: 256-byte Scene Constants
         // [1] b2, space 0: 2304-byte Forward+ Multi-Light Buffer
-        nri::RootDescriptorDesc rootDescs[5] = {};
+        nri::RootDescriptorDesc rootDescs[6] = {};
         rootDescs[0].registerIndex = ConstantBufferContract::FrameConstantsRegister;
         rootDescs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[0].shaderStages = nri::StageBits::ALL;
@@ -945,6 +963,10 @@ namespace Axle {
         rootDescs[4].registerIndex = 5;
         rootDescs[4].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[4].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
+        rootDescs[5].registerIndex = 6; // Multi-probe reflection constants
+        rootDescs[5].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDescs[5].shaderStages = nri::StageBits::FRAGMENT_SHADER;
 
         // Space 1 includes PBR, IBL, refraction, cascades and local shadow textures.
         nri::DescriptorRangeDesc ranges[2] = {};
@@ -972,25 +994,32 @@ namespace Axle {
         samplers[3].desc=RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge).ToNRIDesc();
         samplers[3].shaderStages=nri::StageBits::FRAGMENT_SHADER;
 
-        nri::DescriptorRangeDesc occlusionRange{};
-        occlusionRange.baseRegisterIndex = 0;
-        occlusionRange.descriptorNum = 2;
-        occlusionRange.descriptorType = nri::DescriptorType::TEXTURE;
-        occlusionRange.shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        nri::DescriptorRangeDesc occlusionAndProbeRanges[2]{};
+        occlusionAndProbeRanges[0].baseRegisterIndex = 0;
+        occlusionAndProbeRanges[0].descriptorNum = 2;
+        occlusionAndProbeRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        occlusionAndProbeRanges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
+        occlusionAndProbeRanges[1].baseRegisterIndex = 2;
+        occlusionAndProbeRanges[1].descriptorNum = MaxActiveReflectionProbes;
+        occlusionAndProbeRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
+        occlusionAndProbeRanges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        occlusionAndProbeRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
         nri::DescriptorSetDesc descriptorSets[2]{};
         descriptorSets[0].registerSpace = 1;
         descriptorSets[0].ranges = ranges;
         descriptorSets[0].rangeNum = 1;
         descriptorSets[1].registerSpace = 4;
-        descriptorSets[1].ranges = &occlusionRange;
-        descriptorSets[1].rangeNum = 1;
+        descriptorSets[1].ranges = occlusionAndProbeRanges;
+        descriptorSets[1].rangeNum = 2;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
         layoutDesc.rootConstants = &rootConst;
         layoutDesc.rootConstantNum = 1;
         layoutDesc.rootDescriptors = rootDescs;
-        layoutDesc.rootDescriptorNum = 5;
+        layoutDesc.rootDescriptorNum = 6;
         layoutDesc.rootSamplers = samplers;
         layoutDesc.rootSamplerNum = 4;
         layoutDesc.descriptorSets = descriptorSets;
@@ -1772,7 +1801,7 @@ namespace Axle {
         compTexRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
         compTexRanges[2].baseRegisterIndex = 9;
-        compTexRanges[2].descriptorNum = 2;
+        compTexRanges[2].descriptorNum = 1;
         compTexRanges[2].descriptorType = nri::DescriptorType::TEXTURE;
         compTexRanges[2].shaderStages = nri::StageBits::COMPUTE_SHADER;
         compTexRanges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
@@ -1813,18 +1842,25 @@ namespace Axle {
 
         // 2. Apply Pipeline Layout:
         // Root Descriptor [0] b0 space 0: 512-byte RHISSRConstants
-        nri::RootDescriptorDesc applyRootDesc = {};
-        applyRootDesc.registerIndex = 0;
-        applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
-        applyRootDesc.shaderStages = nri::StageBits::ALL;
+        // Root Descriptor [1] b1 space 0: 512-byte RHIReflectionProbeBufferData
+        nri::RootDescriptorDesc applyRootDescs[2] = {};
+        applyRootDescs[0].registerIndex = 0;
+        applyRootDescs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        applyRootDescs[0].shaderStages = nri::StageBits::ALL;
+
+        applyRootDescs[1].registerIndex = 1;
+        applyRootDescs[1].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        applyRootDescs[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
 
         // Descriptor Set (space 1):
         // Range 0: t0 (Depth) -> TEXTURE
         // Range 1: t1 (SSR Result) -> TEXTURE
         // Range 2: t2 (Scene Color) -> TEXTURE
         // Range 3: t3 (Scene Normal) -> TEXTURE
-        // Range 4: s0 (Sampler) -> SAMPLER
-        nri::DescriptorRangeDesc applyRanges[5] = {};
+        // Range 4: t4 (Sky Prefilter Cubemap) -> TEXTURE
+        // Range 5: t5..t8 (Active Reflection Probe Cubemaps 0..3) -> TEXTURE
+        // Range 6: s0 (Sampler) -> SAMPLER
+        nri::DescriptorRangeDesc applyRanges[7] = {};
         applyRanges[0].baseRegisterIndex = 0;
         applyRanges[0].descriptorNum = 1;
         applyRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
@@ -1849,21 +1885,33 @@ namespace Axle {
         applyRanges[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         applyRanges[3].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        applyRanges[4].baseRegisterIndex = 0;
+        applyRanges[4].baseRegisterIndex = 4;
         applyRanges[4].descriptorNum = 1;
-        applyRanges[4].descriptorType = nri::DescriptorType::SAMPLER;
+        applyRanges[4].descriptorType = nri::DescriptorType::TEXTURE;
         applyRanges[4].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         applyRanges[4].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[5].baseRegisterIndex = 5;
+        applyRanges[5].descriptorNum = MaxActiveReflectionProbes;
+        applyRanges[5].descriptorType = nri::DescriptorType::TEXTURE;
+        applyRanges[5].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[5].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        applyRanges[6].baseRegisterIndex = 0;
+        applyRanges[6].descriptorNum = 1;
+        applyRanges[6].descriptorType = nri::DescriptorType::SAMPLER;
+        applyRanges[6].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        applyRanges[6].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
         nri::DescriptorSetDesc applyDescSet = {};
         applyDescSet.registerSpace = 1;
         applyDescSet.ranges = applyRanges;
-        applyDescSet.rangeNum = 5;
+        applyDescSet.rangeNum = 7;
 
         nri::PipelineLayoutDesc applyLayoutDesc = {};
         applyLayoutDesc.rootRegisterSpace = 0;
-        applyLayoutDesc.rootDescriptors = &applyRootDesc;
-        applyLayoutDesc.rootDescriptorNum = 1;
+        applyLayoutDesc.rootDescriptors = applyRootDescs;
+        applyLayoutDesc.rootDescriptorNum = 2;
         applyLayoutDesc.descriptorSets = &applyDescSet;
         applyLayoutDesc.descriptorSetNum = 1;
         applyLayoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
@@ -2974,93 +3022,252 @@ namespace Axle {
         }
     }
 
+    std::vector<glm::vec3> RHISceneRenderer::CollectReflectionSamplePoints(const RenderWorld& world) {
+        std::vector<glm::vec3> points;
+        if (world.ReflectionProbes.empty() || world.Meshes.empty()) return points;
+        points.reserve(world.Meshes.size() + world.Meshes.size() * world.ReflectionProbes.size());
+        for (const auto& mesh : world.Meshes) {
+            points.emplace_back(mesh.WorldTransform[3]);
+            if (!mesh.NativeView || !mesh.NativeView->IsValid()) continue;
+            const glm::vec3 bMin = mesh.NativeView->GetBoundingMin();
+            const glm::vec3 bMax = mesh.NativeView->GetBoundingMax();
+            glm::vec3 wMin(std::numeric_limits<float>::max());
+            glm::vec3 wMax(std::numeric_limits<float>::lowest());
+            for (int corner = 0; corner < 8; ++corner) {
+                const glm::vec3 localCorner(
+                    (corner & 1) ? bMax.x : bMin.x,
+                    (corner & 2) ? bMax.y : bMin.y,
+                    (corner & 4) ? bMax.z : bMin.z);
+                const glm::vec3 worldCorner = glm::vec3(mesh.WorldTransform * glm::vec4(localCorner, 1.0f));
+                if (std::isfinite(worldCorner.x) && std::isfinite(worldCorner.y) && std::isfinite(worldCorner.z)) {
+                    wMin = glm::min(wMin, worldCorner);
+                    wMax = glm::max(wMax, worldCorner);
+                }
+            }
+            if (wMin.x <= wMax.x && wMin.y <= wMax.y && wMin.z <= wMax.z) {
+                for (const auto& probe : world.ReflectionProbes) {
+                    points.push_back(glm::clamp(probe.Position, wMin, wMax));
+                }
+            }
+        }
+        return points;
+    }
+
+    RHIReflectionProbeBufferData RHISceneRenderer::BuildReflectionProbeBufferData(
+        const ReflectionFrame&,
+        bool useIBL,
+        bool useSSR,
+        float envIntensity,
+        const glm::vec3& skyAmbientColor,
+        bool diffuseOnly,
+        float skyRotationRad) const {
+        RHIReflectionProbeBufferData out{};
+        out.Header = glm::uvec4(
+            m_ActiveReflectionProbeCount,
+            useIBL ? 1u : 0u,
+            diffuseOnly ? 1u : 0u,
+            useSSR ? 1u : 0u);
+        out.Params = glm::vec4(
+            0.0f,
+            std::isfinite(envIntensity) ? std::max(envIntensity, 0.0f) : 1.0f,
+            std::isfinite(skyRotationRad) ? skyRotationRad : 0.0f,
+            0.0f);
+        out.SkyAmbient = glm::vec4(
+            std::isfinite(skyAmbientColor.r) ? std::max(skyAmbientColor.r, 0.0f) : 0.0f,
+            std::isfinite(skyAmbientColor.g) ? std::max(skyAmbientColor.g, 0.0f) : 0.0f,
+            std::isfinite(skyAmbientColor.b) ? std::max(skyAmbientColor.b, 0.0f) : 0.0f,
+            1.0f);
+
+        for (uint32_t i = 0; i < m_ActiveReflectionProbeCount && i < MaxActiveReflectionProbes; ++i) {
+            const auto& tex = m_ActiveReflectionProbePrefilters[i];
+            if (!tex || !tex->IsValid()) continue;
+            const ReflectionProbeBasis basis = ReflectionService::BuildProbeBasis(m_ActiveReflectionProbes[i]);
+            auto& gpu = out.Probes[i];
+            gpu.PositionAndShape = glm::vec4(basis.Position, basis.Shape == 1 ? 1.0f : 0.0f);
+            gpu.HalfExtentsAndRadius = glm::vec4(basis.HalfExtents, basis.Radius);
+            gpu.Params = glm::vec4(
+                basis.Intensity,
+                basis.ParallaxCorrected ? 1.0f : 0.0f,
+                basis.BlendDistance,
+                m_ActiveReflectionProbeStale[i] ? 1.0f : 0.0f);
+            gpu.AxisX = glm::vec4(basis.AxisX, 0.0f);
+            gpu.AxisY = glm::vec4(basis.AxisY, 0.0f);
+            gpu.AxisZ = glm::vec4(basis.AxisZ, 0.0f);
+            const uint32_t mips = std::max(1u, tex->GetMipCount());
+            gpu.PrefilterInfo = glm::vec4(static_cast<float>(mips - 1u), 1.0f, 0.0f, 0.0f);
+        }
+        return out;
+    }
+
     ReflectionPublication RHISceneRenderer::PrepareReflectionProbe(const ReflectionFrame& reflectionFrame) {
         m_ActiveReflectionProbePrefilter.reset();
+        m_ActiveReflectionProbePrefilters.fill({});
+        m_ActiveReflectionProbes.fill({});
+        m_ActiveReflectionProbeStale.fill(false);
+        m_ActiveReflectionProbeCount = 0;
         m_HasActiveReflectionProbe = false;
         if (m_CaptureSession.Active) {
             return {{}, "dynamic_probe_suppressed_during_capture"};
         }
-        if (!reflectionFrame.SelectedProbe) return {};
-        const auto* selected=&*reflectionFrame.SelectedProbe;
 
-        if (selected->DynamicCapture && selected->CubemapPath.empty()) {
-            const std::string probeKey = ResolveDynamicProbeKey(*selected);
-            const uint64_t currentEpoch = m_Device ? m_Device->GetEpoch() : 0;
-            std::shared_ptr<DynamicReflectionProbeGeneration> dynamicProbe;
-            if (const auto probeIt = m_DynamicProbeCaptures.find(probeKey);
-                probeIt != m_DynamicProbeCaptures.end() &&
-                probeIt->second &&
-                probeIt->second->IsValidForDevice(currentEpoch)) {
-                dynamicProbe = probeIt->second;
-                dynamicProbe->LastUsedSequence = ++m_CaptureLRUClock;
+        std::vector<RenderReflectionProbe> candidates;
+        if (!reflectionFrame.ActiveProbes.empty()) {
+            candidates.reserve(reflectionFrame.ActiveProbes.size());
+            for (const auto& c : reflectionFrame.ActiveProbes) {
+                candidates.push_back(c.Probe);
+                if (candidates.size() >= MaxActiveReflectionProbes) break;
             }
+        } else if (reflectionFrame.SelectedProbe) {
+            candidates.push_back(*reflectionFrame.SelectedProbe);
+        }
+        if (candidates.empty()) return {};
 
-            ReflectionPublication publication;
-            if (const auto statusIt = m_DynamicProbeStatuses.find(probeKey);
-                statusIt != m_DynamicProbeStatuses.end()) {
-                publication.CapturePending = statusIt->second.Pending;
-                publication.CaptureStale = statusIt->second.Stale;
-                publication.CaptureFailed = statusIt->second.Failed;
-                publication.CaptureCompletedFaces = statusIt->second.CompletedFaces;
-                publication.CaptureTotalFaces = statusIt->second.TotalFaces;
-                publication.Diagnostic = statusIt->second.LastDiagnostic;
-                if (dynamicProbe) {
-                    statusIt->second.LastUsedSequence = dynamicProbe->LastUsedSequence;
+        ReflectionPublication publication;
+        publication.ProbePublications.resize(candidates.size());
+        const uint64_t currentEpoch = m_Device ? m_Device->GetEpoch() : 0;
+        bool primarySet = false;
+
+        for (size_t idx = candidates.size(); idx > 0; --idx) {
+            const size_t i = idx - 1;
+            const auto& cand = candidates[i];
+            auto& entryPub = publication.ProbePublications[i];
+            std::shared_ptr<RHITexture> resolvedTexture;
+
+            if (cand.DynamicCapture && cand.CubemapPath.empty()) {
+                const std::string probeKey = ResolveDynamicProbeKey(cand);
+                std::shared_ptr<DynamicReflectionProbeGeneration> dynamicProbe;
+                if (const auto probeIt = m_DynamicProbeCaptures.find(probeKey);
+                    probeIt != m_DynamicProbeCaptures.end() &&
+                    probeIt->second &&
+                    probeIt->second->IsValidForDevice(currentEpoch)) {
+                    dynamicProbe = probeIt->second;
+                    dynamicProbe->LastUsedSequence = ++m_CaptureLRUClock;
                 }
-            } else {
-                publication.CaptureTotalFaces = ReflectionCaptureContract::FaceCount;
-                publication.CapturePending = (selected->CaptureMode == ReflectionProbeCaptureMode::Automatic);
-            }
 
-            if (!dynamicProbe) {
-                if (publication.Diagnostic.empty()) {
-                    publication.Diagnostic = m_LastDynamicCaptureResult.Diagnostic.empty()
+                if (const auto statusIt = m_DynamicProbeStatuses.find(probeKey);
+                    statusIt != m_DynamicProbeStatuses.end()) {
+                    entryPub.CapturePending = statusIt->second.Pending;
+                    entryPub.CaptureStale = statusIt->second.Stale;
+                    entryPub.CaptureFailed = statusIt->second.Failed;
+                    entryPub.CaptureCompletedFaces = statusIt->second.CompletedFaces;
+                    entryPub.CaptureTotalFaces = statusIt->second.TotalFaces;
+                    entryPub.Diagnostic = statusIt->second.LastDiagnostic;
+                    if (dynamicProbe) {
+                        statusIt->second.LastUsedSequence = dynamicProbe->LastUsedSequence;
+                    }
+                } else {
+                    entryPub.CaptureTotalFaces = ReflectionCaptureContract::FaceCount;
+                    entryPub.CapturePending = (cand.CaptureMode == ReflectionProbeCaptureMode::Automatic);
+                }
+
+                if (dynamicProbe && dynamicProbe->Cubemap && dynamicProbe->Cubemap->IsValid() &&
+                    !IsCaptureFeedbackTexture(*dynamicProbe->Cubemap)) {
+                    resolvedTexture = dynamicProbe->Cubemap;
+                    entryPub.Ready = true;
+                    entryPub.PrefilterGeneration = resolvedTexture->GetHandle();
+                    entryPub.ActiveGenerationID = dynamicProbe->GenerationID;
+                    if (!entryPub.CapturePending && !entryPub.CaptureStale && !entryPub.CaptureFailed) {
+                        entryPub.Diagnostic.clear();
+                    }
+                } else if (entryPub.Diagnostic.empty()) {
+                    entryPub.Diagnostic = m_LastDynamicCaptureResult.Diagnostic.empty()
                         ? "dynamic probe cubemap not captured"
                         : m_LastDynamicCaptureResult.Diagnostic;
                 }
-                return publication;
+            } else if (!cand.CubemapPath.empty()) {
+                const std::string path = PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(cand.CubemapPath)).lexically_normal());
+                auto& environment = m_ReflectionProbeEnvironments[path];
+                if (!environment) {
+                    environment = std::make_unique<RHIEnvironment>();
+                    EnvironmentBakeSettings settings;
+                    settings.EnvironmentSize = 128;
+                    settings.IrradianceSize = 16;
+                    settings.PrefilterSize = 64;
+                    settings.PrefilterMips = 5;
+                    settings.BRDFSize = 64;
+                    settings.Samples = 128;
+                    if (!environment->SetBakeSettings(settings)) {
+                        entryPub.Diagnostic = "probe bake settings unavailable";
+                    }
+                }
+                if (environment) {
+                    RenderSkyboxData source;
+                    source.Authored = true;
+                    source.Enabled = true;
+                    source.EnvironmentLighting = true;
+                    source.Type = 1;
+                    source.HDRPath = cand.CubemapPath;
+                    source.Intensity = 1.0f;
+                    source.Exposure = 1.0f;
+                    if (environment->Prepare(source) && environment->Ready() && environment->Ready()->IsValid() &&
+                        environment->Ready()->Prefilter && environment->Ready()->Prefilter->IsValid() &&
+                        !IsCaptureFeedbackTexture(*environment->Ready()->Prefilter)) {
+                        resolvedTexture = environment->Ready()->Prefilter;
+                        entryPub.Ready = true;
+                        entryPub.PrefilterGeneration = resolvedTexture->GetHandle();
+                        entryPub.Diagnostic = environment->Diagnostic();
+                    } else {
+                        entryPub.Diagnostic = environment->Diagnostic().empty()
+                            ? "authored probe prefilter unavailable"
+                            : environment->Diagnostic();
+                    }
+                }
             }
-
-            m_ActiveReflectionProbePrefilter = dynamicProbe->Cubemap;
-            m_ActiveReflectionProbe = *selected;
-            m_HasActiveReflectionProbe = true;
-            publication.PrefilterGeneration = m_ActiveReflectionProbePrefilter->GetHandle();
-            publication.ActiveGenerationID = dynamicProbe->GenerationID;
-            if (!publication.CapturePending && !publication.CaptureStale && !publication.CaptureFailed) {
-                publication.Diagnostic.clear();
-            }
-            return publication;
         }
 
-        const std::string path = PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(selected->CubemapPath)).lexically_normal());
-        auto& environment = m_ReflectionProbeEnvironments[path];
-        if (!environment) {
-            environment = std::make_unique<RHIEnvironment>();
-            EnvironmentBakeSettings settings;
-            settings.EnvironmentSize = 128;
-            settings.IrradianceSize = 16;
-            settings.PrefilterSize = 64;
-            settings.PrefilterMips = 5;
-            settings.BRDFSize = 64;
-            settings.Samples = 128;
-            if (!environment->SetBakeSettings(settings)) return {{}, "probe bake settings unavailable"};
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            const auto& cand = candidates[i];
+            const auto& entryPub = publication.ProbePublications[i];
+            if (!entryPub.Ready) continue;
+
+            std::shared_ptr<RHITexture> resolvedTexture;
+            if (cand.DynamicCapture && cand.CubemapPath.empty()) {
+                const auto probeIt = m_DynamicProbeCaptures.find(ResolveDynamicProbeKey(cand));
+                if (probeIt != m_DynamicProbeCaptures.end() && probeIt->second &&
+                    probeIt->second->IsValidForDevice(currentEpoch)) {
+                    resolvedTexture = probeIt->second->Cubemap;
+                }
+            } else if (!cand.CubemapPath.empty()) {
+                const std::string path = PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(cand.CubemapPath)).lexically_normal());
+                if (const auto envIt = m_ReflectionProbeEnvironments.find(path);
+                    envIt != m_ReflectionProbeEnvironments.end() && envIt->second && envIt->second->Ready()) {
+                    resolvedTexture = envIt->second->Ready()->Prefilter;
+                }
+            }
+
+            if (resolvedTexture && m_ActiveReflectionProbeCount < MaxActiveReflectionProbes) {
+                const uint32_t slot = m_ActiveReflectionProbeCount++;
+                m_ActiveReflectionProbePrefilters[slot] = resolvedTexture;
+                m_ActiveReflectionProbes[slot] = cand;
+                m_ActiveReflectionProbeStale[slot] = entryPub.CaptureStale;
+                if (!primarySet) {
+                    primarySet = true;
+                    m_ActiveReflectionProbePrefilter = resolvedTexture;
+                    m_ActiveReflectionProbe = cand;
+                    m_HasActiveReflectionProbe = true;
+                    publication.PrefilterGeneration = entryPub.PrefilterGeneration;
+                    publication.ActiveGenerationID = entryPub.ActiveGenerationID;
+                    publication.CapturePending = entryPub.CapturePending;
+                    publication.CaptureStale = entryPub.CaptureStale;
+                    publication.CaptureFailed = entryPub.CaptureFailed;
+                    publication.CaptureCompletedFaces = entryPub.CaptureCompletedFaces;
+                    publication.CaptureTotalFaces = entryPub.CaptureTotalFaces;
+                    publication.Diagnostic = entryPub.Diagnostic;
+                }
+            }
         }
 
-        RenderSkyboxData source;
-        source.Authored = true;
-        source.Enabled = true;
-        source.EnvironmentLighting = true;
-        source.Type = 1;
-        source.HDRPath = selected->CubemapPath;
-        source.Intensity = 1.0f;
-        source.Exposure = 1.0f;
-        if (!environment->Prepare(source) || !environment->Ready() || !environment->Ready()->IsValid())
-            return {{}, environment->Diagnostic()};
-
-        m_ActiveReflectionProbePrefilter = environment->Ready()->Prefilter;
-        m_ActiveReflectionProbe = *selected;
-        m_HasActiveReflectionProbe = m_ActiveReflectionProbePrefilter->IsValid();
-        return {m_HasActiveReflectionProbe ? m_ActiveReflectionProbePrefilter->GetHandle() : RHIResourceHandle{}, environment->Diagnostic()};
+        if (!primarySet && !publication.ProbePublications.empty()) {
+            const auto& fallbackPub = publication.ProbePublications[0];
+            publication.CapturePending = fallbackPub.CapturePending;
+            publication.CaptureStale = fallbackPub.CaptureStale;
+            publication.CaptureFailed = fallbackPub.CaptureFailed;
+            publication.CaptureCompletedFaces = fallbackPub.CaptureCompletedFaces;
+            publication.CaptureTotalFaces = fallbackPub.CaptureTotalFaces;
+            publication.ActiveGenerationID = fallbackPub.ActiveGenerationID;
+            publication.Diagnostic = fallbackPub.Diagnostic;
+        }
+        return publication;
     }
 
     bool RHISceneRenderer::IsCaptureFeedbackTexture(const RHITexture& texture) const {
@@ -3448,6 +3655,10 @@ namespace Axle {
         m_ForcedInvalidatedProbes.clear();
         m_FailedDynamicCaptureRevisions.clear();
         m_ActiveReflectionProbePrefilter.reset();
+        m_ActiveReflectionProbePrefilters.fill({});
+        m_ActiveReflectionProbes.fill({});
+        m_ActiveReflectionProbeStale.fill(false);
+        m_ActiveReflectionProbeCount = 0;
         m_HasActiveReflectionProbe = false;
         m_ActiveDynamicSceneInstanceID = 0;
         m_ActiveDynamicSceneLifetimeEpoch = 0;
@@ -3468,11 +3679,36 @@ namespace Axle {
                 if (evicted->Completion && m_Device && evicted->Completion.Epoch == currentEpoch) {
                     m_Device->WaitForCompletion(evicted->Completion);
                 }
-                if (m_ActiveReflectionProbePrefilter &&
-                    evicted->Cubemap &&
-                    m_ActiveReflectionProbePrefilter->GetHandle() == evicted->Cubemap->GetHandle()) {
-                    m_ActiveReflectionProbePrefilter.reset();
-                    m_HasActiveReflectionProbe = false;
+                if (evicted->Cubemap) {
+                    const auto evictedHandle = evicted->Cubemap->GetHandle();
+                    if (m_ActiveReflectionProbePrefilter && m_ActiveReflectionProbePrefilter->GetHandle() == evictedHandle) {
+                        m_ActiveReflectionProbePrefilter.reset();
+                        m_HasActiveReflectionProbe = false;
+                    }
+                    uint32_t writeSlot = 0;
+                    for (uint32_t slot = 0; slot < m_ActiveReflectionProbeCount && slot < MaxActiveReflectionProbes; ++slot) {
+                        if (m_ActiveReflectionProbePrefilters[slot] &&
+                            m_ActiveReflectionProbePrefilters[slot]->GetHandle() == evictedHandle) {
+                            continue;
+                        }
+                        if (writeSlot != slot) {
+                            m_ActiveReflectionProbePrefilters[writeSlot] = std::move(m_ActiveReflectionProbePrefilters[slot]);
+                            m_ActiveReflectionProbes[writeSlot] = m_ActiveReflectionProbes[slot];
+                            m_ActiveReflectionProbeStale[writeSlot] = m_ActiveReflectionProbeStale[slot];
+                        }
+                        ++writeSlot;
+                    }
+                    for (uint32_t slot = writeSlot; slot < MaxActiveReflectionProbes; ++slot) {
+                        m_ActiveReflectionProbePrefilters[slot].reset();
+                        m_ActiveReflectionProbes[slot] = {};
+                        m_ActiveReflectionProbeStale[slot] = false;
+                    }
+                    m_ActiveReflectionProbeCount = writeSlot;
+                    if (m_ActiveReflectionProbeCount > 0) {
+                        m_ActiveReflectionProbePrefilter = m_ActiveReflectionProbePrefilters[0];
+                        m_ActiveReflectionProbe = m_ActiveReflectionProbes[0];
+                        m_HasActiveReflectionProbe = true;
+                    }
                 }
             }
             m_DynamicProbeCaptures.erase(capIt);
@@ -3574,11 +3810,14 @@ namespace Axle {
         slots.reserve(m_DynamicProbeCaptures.size() + m_PendingDynamicCaptures.size());
         for (const auto& [key, gen] : m_DynamicProbeCaptures) {
             if (!gen) continue;
+            const bool isViewPinned = std::find(m_ScheduledReflectionProbeKeys.begin(),
+                                                m_ScheduledReflectionProbeKeys.end(),
+                                                key) != m_ScheduledReflectionProbeKeys.end();
             slots.push_back(ReflectionCaptureContract::CaptureCacheSlotInfo{
                 key,
                 gen->CachedBytes,
                 gen->LastUsedSequence,
-                key == incomingKey || key == m_ScheduledReflectionProbeKey || m_PendingDynamicCaptures.contains(key)
+                key == incomingKey || isViewPinned || m_PendingDynamicCaptures.contains(key)
             });
         }
         for (const auto& [key, job] : m_PendingDynamicCaptures) {
@@ -3675,6 +3914,10 @@ namespace Axle {
         std::shared_ptr<RHI::RHITexture> SavedActiveProbe;
         RenderReflectionProbe SavedProbeDesc;
         bool SavedHasActiveProbe;
+        std::array<std::shared_ptr<RHI::RHITexture>, MaxActiveReflectionProbes> SavedActiveProbes;
+        std::array<RenderReflectionProbe, MaxActiveReflectionProbes> SavedProbeDescs;
+        std::array<bool, MaxActiveReflectionProbes> SavedProbeStaleFlags;
+        uint32_t SavedActiveProbeCount;
         std::unordered_map<uint32_t, std::string> SavedMaterialDiagnostics;
         std::unordered_map<uint32_t, RHISceneRenderer::MaterialFeedback> SavedMaterialFeedback;
         uint32_t SavedDrawCalls;
@@ -3706,6 +3949,10 @@ namespace Axle {
             , SavedActiveProbe(r.m_ActiveReflectionProbePrefilter)
             , SavedProbeDesc(r.m_ActiveReflectionProbe)
             , SavedHasActiveProbe(r.m_HasActiveReflectionProbe)
+            , SavedActiveProbes(r.m_ActiveReflectionProbePrefilters)
+            , SavedProbeDescs(r.m_ActiveReflectionProbes)
+            , SavedProbeStaleFlags(r.m_ActiveReflectionProbeStale)
+            , SavedActiveProbeCount(r.m_ActiveReflectionProbeCount)
             , SavedMaterialDiagnostics(r.m_MaterialDiagnostics)
             , SavedMaterialFeedback(r.m_MaterialFeedback)
             , SavedDrawCalls(r.m_LastDrawCallCount)
@@ -3738,6 +3985,10 @@ namespace Axle {
             Renderer.m_ActiveReflectionProbePrefilter = SavedActiveProbe;
             Renderer.m_ActiveReflectionProbe = SavedProbeDesc;
             Renderer.m_HasActiveReflectionProbe = SavedHasActiveProbe;
+            Renderer.m_ActiveReflectionProbePrefilters = SavedActiveProbes;
+            Renderer.m_ActiveReflectionProbes = SavedProbeDescs;
+            Renderer.m_ActiveReflectionProbeStale = SavedProbeStaleFlags;
+            Renderer.m_ActiveReflectionProbeCount = SavedActiveProbeCount;
             Renderer.m_MaterialDiagnostics = SavedMaterialDiagnostics;
             Renderer.m_MaterialFeedback = SavedMaterialFeedback;
             Renderer.m_LastDrawCallCount = SavedDrawCalls;
@@ -4128,16 +4379,28 @@ namespace Axle {
         std::erase_if(m_ForcedInvalidatedProbes, [&](const auto& item) { return !liveKeys.contains(item.first); });
         std::erase_if(m_FailedDynamicCaptureRevisions, [&](const auto& item) { return !liveKeys.contains(item.first); });
 
-        const auto previewReflection = m_ReflectionService.Prepare(
+        const auto samplePoints = CollectReflectionSamplePoints(world);
+        const auto previewReflection = m_ReflectionService.PrepareView(
+            world, cameraPosition, samplePoints, requestedSettings.EnableSSR, world.SceneRevision);
+        const auto cameraReflection = m_ReflectionService.Prepare(
             world, cameraPosition, requestedSettings.EnableSSR, world.SceneRevision);
-        const std::string selectedKey = previewReflection.SelectedProbe
-            ? ResolveDynamicProbeKey(*previewReflection.SelectedProbe)
-            : std::string{};
-        m_ScheduledReflectionProbeKey = selectedKey;
+        std::vector<std::string> viewPriorityKeys;
+        viewPriorityKeys.reserve(previewReflection.ActiveProbes.size());
+        for (const auto& active : previewReflection.ActiveProbes) {
+            if (active.DynamicCapture) {
+                viewPriorityKeys.push_back(ResolveDynamicProbeKey(active.Probe));
+            }
+        }
+        m_ScheduledReflectionProbeKeys.clear();
+        for (const auto& active : cameraReflection.ActiveProbes) {
+            if (active.DynamicCapture) {
+                m_ScheduledReflectionProbeKeys.push_back(ResolveDynamicProbeKey(active.Probe));
+            }
+        }
         struct SelectionGuard {
-            std::string& Key;
-            ~SelectionGuard() { Key.clear(); }
-        } selectionGuard{m_ScheduledReflectionProbeKey};
+            std::vector<std::string>& Keys;
+            ~SelectionGuard() { Keys.clear(); }
+        } selectionGuard{m_ScheduledReflectionProbeKeys};
 
         struct CandidateProbe {
             const RenderReflectionProbe* Probe = nullptr;
@@ -4258,7 +4521,10 @@ namespace Axle {
             }
 
             uint64_t priorityScore = static_cast<uint64_t>(world.ReflectionProbes.size() - idx);
-            if (probeKey == selectedKey) priorityScore += 1000000ull;
+            if (std::find(viewPriorityKeys.begin(), viewPriorityKeys.end(), probeKey) !=
+                viewPriorityKeys.end()) {
+                priorityScore += 1000000ull;
+            }
             if (hasPendingJob) priorityScore += 10000ull;
             if (manualRequested) priorityScore += 1000ull;
 
@@ -4684,8 +4950,11 @@ namespace Axle {
         }
         for (const auto& fallback : backendPolicy.CollectFallbacks(requestedSettings))
             viewCtx.Diagnostics().AddFallback(fallback);
-        const auto reflectionFrame = m_ReflectionService.Prepare(
-            world, camera.GetPosition(), settings.EnableSSR, world.SceneRevision);
+        const auto reflectionSamplePoints = m_CaptureSession.Active
+            ? std::vector<glm::vec3>{}
+            : CollectReflectionSamplePoints(world);
+        const auto reflectionFrame = m_ReflectionService.PrepareView(
+            world, camera.GetPosition(), reflectionSamplePoints, settings.EnableSSR, world.SceneRevision);
         m_LastReflectionFrame=reflectionFrame;
         const auto giFrame = m_GIService.Prepare(
             world, settings, backendPolicy.Supports(BackendFeature::Compute), world.SceneRevision);

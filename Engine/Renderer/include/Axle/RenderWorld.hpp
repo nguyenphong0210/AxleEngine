@@ -153,6 +153,7 @@ namespace Axle {
         ReflectionProbeCaptureMode CaptureMode = ReflectionProbeCaptureMode::Automatic;
         UUID StableUUID = 0;
         glm::mat4 WorldTransform{ 1.0f };
+        float BlendDistance = 0.0f; // 0 = auto (sphere: Radius, box: length(BoxExtents * 0.5))
     };
 
     struct RenderRectLight {

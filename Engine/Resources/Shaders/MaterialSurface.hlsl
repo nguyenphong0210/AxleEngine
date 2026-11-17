@@ -72,6 +72,13 @@ Texture2D<float> u_LocalShadowDepth : register(t4, space2);
 SamplerState u_EnvironmentSampler : register(s0, space2);
 SamplerComparisonState u_ShadowSampler : register(s1, space2);
 
+#define AXLE_REFLECTION_PROBE_CBUFFER_REGISTER b6
+TextureCube u_ReflectionProbeCube0 : register(t2, space4);
+TextureCube u_ReflectionProbeCube1 : register(t3, space4);
+TextureCube u_ReflectionProbeCube2 : register(t4, space4);
+TextureCube u_ReflectionProbeCube3 : register(t5, space4);
+#include "ReflectionProbeCommon.hlsli"
+
 // @AXLE_GRAPH_DECLARATIONS@
 
 struct MaterialSurface {
@@ -266,20 +273,27 @@ float4 PSMain(PSInput input) : SV_Target0 {
     // Ambient / indirect term scaled by AO; direct and emissive are preserved
     float3 ambientRef = FresnelSchlickRoughness(nv, f0, roughness);
     float3 ambient;
+    float3 reflDir = reflect(-view, normal);
     if (u_LightCounts.w == 1u) {
         uint envWidth, envHeight, envLevels;
         u_PrefilterMap.GetDimensions(0, envWidth, envHeight, envLevels);
         float maxLod = max(0.0, float(envLevels) - 1.0);
         float3 ambientF = ambientRef;
         float3 ambientKD = (1.0 - ambientF) * (1.0 - metallic);
-        float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, normal).rgb;
-        float3 prefiltered = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, reflect(-view, normal), roughness * maxLod).rgb;
+        float envIntensity = max(u_LightReserved[0].y, 0.0);
+        float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, normal).rgb * envIntensity;
+        float3 skyPrefiltered = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, reflDir, roughness * maxLod).rgb * envIntensity;
+        float3 prefiltered = EvaluateMultiProbeBlendHLSL(input.WorldPos, reflDir, roughness, u_EnvironmentSampler, skyPrefiltered).BlendedEnvColor;
         float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(nv, roughness)).rg;
-        ambient = (irradiance * base * ambientKD + prefiltered * (ambientF * envBRDF.x + envBRDF.y)) * saturate(surface.AO) * max(u_LightReserved[0].y, 0.0);
+        ambient = (irradiance * base * ambientKD + prefiltered * (ambientF * envBRDF.x + envBRDF.y)) * saturate(surface.AO);
     } else {
         float3 ambientColor = hasMultiLightSun ? u_SunLight.AmbientColor.rgb : max(u_SunColor.rgb, float3(0,0,0));
         float ambientStrength = hasMultiLightSun ? max(u_LightReserved[0].y, 0.0) : max(u_SunColor.w, 0.0);
-        ambient = (base * 0.03 * (1.0 - metallic) + ambientRef * 0.02) * saturate(surface.AO) * ambientStrength;
+        MultiProbeBlendResult probeBlend = EvaluateMultiProbeBlendHLSL(input.WorldPos, reflDir, roughness, u_EnvironmentSampler, float3(0,0,0));
+        float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(nv, roughness)).rg;
+        float3 probeSpec = probeBlend.ProbeColor * (ambientRef * envBRDF.x + envBRDF.y);
+        float3 skySpec = ambientRef * 0.02 * (1.0 - saturate(u_LightReserved[0].z)) * ambientStrength;
+        ambient = (base * 0.03 * (1.0 - metallic) * ambientStrength + lerp(skySpec, probeSpec, probeBlend.ProbeCoverage)) * saturate(surface.AO);
     }
     float3 color = direct + ambient * screenVisibility.x + max(surface.Emission, float3(0,0,0));
     color = clamp(color, 0.0, 65000.0);

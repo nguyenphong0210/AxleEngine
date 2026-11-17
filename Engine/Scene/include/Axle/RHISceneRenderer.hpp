@@ -112,6 +112,26 @@ namespace Axle {
     };
     static_assert(sizeof(RHISSRConstants) == 512, "RHISSRConstants must be 512 bytes aligned!");
 
+    struct alignas(16) RHIGPUReflectionProbe {
+        glm::vec4 PositionAndShape{ 0.0f };
+        glm::vec4 HalfExtentsAndRadius{ 5.0f, 5.0f, 5.0f, 10.0f };
+        glm::vec4 Params{ 1.0f, 1.0f, 1.0f, 0.0f };
+        glm::vec4 AxisX{ 1.0f, 0.0f, 0.0f, 0.0f };
+        glm::vec4 AxisY{ 0.0f, 1.0f, 0.0f, 0.0f };
+        glm::vec4 AxisZ{ 0.0f, 0.0f, 1.0f, 0.0f };
+        glm::vec4 PrefilterInfo{ 0.0f };
+    };
+    static_assert(sizeof(RHIGPUReflectionProbe) == 112, "RHIGPUReflectionProbe must be 112 bytes!");
+
+    struct alignas(256) RHIReflectionProbeBufferData {
+        glm::uvec4 Header{ 0u, 0u, 0u, 0u };
+        glm::vec4 Params{ 0.0f, 1.0f, 0.0f, 0.0f };
+        glm::vec4 SkyAmbient{ 0.0f };
+        glm::vec4 Reserved{ 0.0f };
+        RHIGPUReflectionProbe Probes[MaxActiveReflectionProbes]{};
+    };
+    static_assert(sizeof(RHIReflectionProbeBufferData) == 512, "RHIReflectionProbeBufferData must be 512 bytes aligned!");
+
     // 256-byte CBV aligned constants for one Hi-Z depth reduction level.
     struct alignas(256) RHIHiZConstants {
         glm::vec4 SourceSize{ 1.0f, 1.0f, 1.0f, 1.0f }; // source width/height and inverse size
@@ -324,6 +344,7 @@ namespace Axle {
         nri::Pipeline* GetHDRPipeline() const { return m_PipelineHDR; }
         const RHICascadedShadows& GetCascadedShadows() const { return m_CascadedShadows; }
         RHICascadedShadows& GetCascadedShadows() { return m_CascadedShadows; }
+        const RHI::RHIBuffer& GetReflectionProbeBuffer() const { return m_ReflectionProbeBuffer; }
         bool WasLastRenderSuccessful() const { return m_LastRenderSucceeded; }
         RHI::RHICompletionToken GetLastCompletion() const { return m_LastCompletion; }
         const auto& GetMaterialDiagnostics() const { return m_MaterialDiagnostics; }
@@ -769,6 +790,11 @@ namespace Axle {
         std::shared_ptr<RHI::RHITexture> m_ActiveReflectionProbePrefilter;
         RenderReflectionProbe m_ActiveReflectionProbe{};
         bool m_HasActiveReflectionProbe = false;
+        std::array<std::shared_ptr<RHI::RHITexture>, MaxActiveReflectionProbes> m_ActiveReflectionProbePrefilters{};
+        std::array<RenderReflectionProbe, MaxActiveReflectionProbes> m_ActiveReflectionProbes{};
+        std::array<bool, MaxActiveReflectionProbes> m_ActiveReflectionProbeStale{};
+        uint32_t m_ActiveReflectionProbeCount = 0;
+        RHI::RHIBuffer m_ReflectionProbeBuffer;
 
         // Hi-Z depth pyramid resources. The view target owns dynamically sized
         // reduction levels; this renderer owns the compute/visualize pipelines and sets.
@@ -837,8 +863,17 @@ namespace Axle {
         uint64_t m_DynamicCaptureBudgetOverrideBytes = 0;
         uint64_t m_LastDynamicCaptureBudgetBytes = 64ull * 1024ull * 1024ull;
         bool m_HasDynamicCaptureBudgetOverride = false;
-        // Protect the main view's selected reflection from background cache admission.
-        std::string m_ScheduledReflectionProbeKey;
+        // Protect the main view's selected reflections from background cache admission.
+        std::vector<std::string> m_ScheduledReflectionProbeKeys;
+        static std::vector<glm::vec3> CollectReflectionSamplePoints(const RenderWorld& world);
+        RHIReflectionProbeBufferData BuildReflectionProbeBufferData(
+            const ReflectionFrame& reflectionFrame,
+            bool useIBL,
+            bool useSSR,
+            float envIntensity,
+            const glm::vec3& skyAmbientColor,
+            bool diffuseOnly,
+            float skyRotationRad) const;
         uint64_t m_ActiveDynamicSceneInstanceID = 0;
         uint64_t m_ActiveDynamicSceneLifetimeEpoch = 0;
         uint32_t m_LastScheduledProbes = 0;

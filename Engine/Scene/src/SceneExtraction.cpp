@@ -198,6 +198,7 @@ namespace Axle {
             rprobe.CaptureNearPlane = probe.CaptureNearPlane;
             rprobe.CaptureFarPlane = probe.CaptureFarPlane;
             rprobe.CaptureMode = probe.CaptureMode;
+            rprobe.BlendDistance = probe.BlendDistance;
             world.ReflectionProbes.push_back(rprobe);
         }
 

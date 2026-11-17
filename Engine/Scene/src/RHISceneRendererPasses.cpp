@@ -443,11 +443,19 @@ namespace Axle {
                                     if (!descriptor && address == ShaderAddress{3,0}) descriptor=m_LightBuffer.GetCBV();
                                     if (!descriptor && address == ShaderAddress{0,4}) descriptor=m_CascadedShadows.GetConstantsCBV();
                                     if (!descriptor && address == ShaderAddress{0,5}) descriptor=m_LocalShadows.GetConstantsCBV();
+                                    if (!descriptor && address == ShaderAddress{0,6}) descriptor=m_ReflectionProbeBuffer.GetCBV();
                                 } else if(range.descriptorType==nri::DescriptorType::TEXTURE) {
                                     for(size_t i=0;i<item.TextureRequests.size();++i) if(item.TextureRequests[i].Address==address) descriptor=resource.Textures[i]->GetSRV();
                                     if (!descriptor && address.RegisterSpace == 4) {
                                         if (address.RegisterIndex == 0) descriptor=useGTAO?viewTargets->GetGTAO()->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                                         else if (address.RegisterIndex == 1) descriptor=useGTAO?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
+                                        else if (address.RegisterIndex >= 2 && address.RegisterIndex < 2u + MaxActiveReflectionProbes) {
+                                            const uint32_t probeIdx = address.RegisterIndex - 2u;
+                                            const auto& probeTex = m_ActiveReflectionProbePrefilters[probeIdx];
+                                            auto resolvedProbe = (probeTex && probeTex->IsValid() && !IsCaptureFeedbackTexture(*probeTex))
+                                                ? probeTex : RHIMaterial::GetDefaultPrefilterCubemap();
+                                            descriptor = resolvedProbe ? resolvedProbe->GetSRV() : nullptr;
+                                        }
                                     }
                                     if (!descriptor && address.RegisterSpace == 2) {
                                         if (address.RegisterIndex == 0) descriptor=ActiveIrradiance()->GetSRV();
@@ -568,6 +576,7 @@ namespace Axle {
                 Commands().SetRootDescriptor(1, m_LightBuffer.GetCBV());
                 Commands().SetRootDescriptor(3, m_CascadedShadows.GetConstantsCBV());
                 Commands().SetRootDescriptor(4, m_LocalShadows.GetConstantsCBV());
+                Commands().SetRootDescriptor(5, m_ReflectionProbeBuffer.GetCBV());
             } else {
                 const auto& resource = *m_MaterialDraws[item.DrawResourceIndex];
                 Commands().SetPipeline(item.PreparedPipeline);
@@ -688,9 +697,19 @@ namespace Axle {
             lightData.ReservedHeader[1].y = useGTAO && settings.EnableGTAO ? 1.0f : 0.0f;
             lightData.ReservedHeader[1].z = useGTAO && settings.EnableContactShadows && world.DirectionalLight ? 1.0f : 0.0f;
             auto* neutral = RHIMaterial::GetDefaultWhiteTexture().get();
-            if (!neutral || !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 0, 0,
-                {useGTAO ? viewTargets->GetGTAO()->GetSRV() : neutral->GetSRV(),
-                 useGTAO ? m_OpaqueSceneDepth->GetSRV() : neutral->GetSRV()})) return fail();
+            auto* defaultPrefilter = RHIMaterial::GetDefaultPrefilterCubemap().get();
+            if (!neutral || !defaultPrefilter) return fail();
+            std::vector<nri::Descriptor*> probeSRVs(MaxActiveReflectionProbes, defaultPrefilter->GetSRV());
+            for (uint32_t slot = 0; slot < MaxActiveReflectionProbes; ++slot) {
+                const auto& probeTex = m_ActiveReflectionProbePrefilters[slot];
+                if (probeTex && probeTex->IsValid() && !IsCaptureFeedbackTexture(*probeTex)) {
+                    probeSRVs[slot] = probeTex->GetSRV();
+                }
+            }
+            if (!m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 0, 0,
+                    {useGTAO ? viewTargets->GetGTAO()->GetSRV() : neutral->GetSRV(),
+                     useGTAO ? m_OpaqueSceneDepth->GetSRV() : neutral->GetSRV()}) ||
+                !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 1, 0, probeSRVs)) return fail();
             if (!useGTAO && (settings.EnableGTAO || settings.EnableContactShadows))
                 viewCtx.Diagnostics().AddFallback("occlusion_unavailable: single-sample depth/normal/storage required; neutral visibility");
 
@@ -741,6 +760,24 @@ namespace Axle {
 
             if (!m_LightBuffer.Update(lightData))
                 return RenderPassResult::Failed("light uniform update failed");
+
+            {
+                const float envIntensity = lighting.AmbientIntensity * (lighting.EnvironmentLighting ? m_Environment.SourceExposure() : 1.0f);
+                const bool diffuseOnlyFlag = lighting.EnvironmentLighting && !useIBL;
+                const float skyRotationRad = lightData.ReservedHeader[0].w;
+                const auto probeBufferData = BuildReflectionProbeBufferData(
+                    m_LastReflectionFrame,
+                    useIBL,
+                    useSSR,
+                    envIntensity,
+                    glm::vec3(lightData.SunLight.AmbientColor),
+                    diffuseOnlyFlag,
+                    skyRotationRad);
+                if (!m_ReflectionProbeBuffer.IsValid() ||
+                    !m_ReflectionProbeBuffer.UpdateData(&probeBufferData, sizeof(probeBufferData))) {
+                    return RenderPassResult::Failed("reflection probe uniform update failed");
+                }
+            }
 
                 if (m_ParticleRenderer) {
                     ParticleLightEnvironment environment;
@@ -923,6 +960,7 @@ namespace Axle {
 
             Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
             Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
+            Commands().SetRootDescriptor(5,m_ReflectionProbeBuffer.GetCBV());
 
             // Bind Descriptor Pool & Material Descriptor Set (Space 1: 6 PBR textures + 16x Aniso Sampler)
             if (m_DescriptorPool.IsValid()) {
@@ -1068,8 +1106,15 @@ namespace Axle {
             auto declareForwardPass = [&](const char* pass) {
                 if (!graph.DeclareRead(pass, m_ForwardOcclusionDescriptorSet)) return false;
                 for (auto* cbv : {m_SceneConstantBuffer.GetCBV(), m_LightBuffer.GetCBV(),
-                    m_CascadedShadows.GetConstantsCBV(), m_LocalShadows.GetConstantsCBV()})
+                    m_CascadedShadows.GetConstantsCBV(), m_LocalShadows.GetConstantsCBV(),
+                    m_ReflectionProbeBuffer.GetCBV()})
                     if (!graph.DeclareRead(pass,cbv)) return false;
+                for (uint32_t slot = 0; slot < MaxActiveReflectionProbes; ++slot) {
+                    const auto& probeTex = m_ActiveReflectionProbePrefilters[slot];
+                    if (probeTex && probeTex->IsValid() && !IsCaptureFeedbackTexture(*probeTex)) {
+                        if (!graph.DeclareRead(pass, probeTex->GetSRV())) return false;
+                    }
+                }
                 return true;
             };
             if (!declareForwardPass("OpaqueAndSky")) return fail();
@@ -1128,6 +1173,7 @@ namespace Axle {
             Commands().SetRootDescriptor(1,m_LightBuffer.GetCBV());
             Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
             Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
+            Commands().SetRootDescriptor(5,m_ReflectionProbeBuffer.GetCBV());
 
             // 4b. Render Transparent & Additive Queue (Sorted Back-to-Front)
             if (!transparentQueue.empty()) {
@@ -1344,9 +1390,17 @@ namespace Axle {
             if (useSSR) {
                 if (!uniform("SSRCompute",sizeof(RHISSRConstants)) || !uniform("SSRApply",sizeof(RHISSRConstants))) return fail();
                 for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
-                auto probe = m_ActiveReflectionProbePrefilter && m_ActiveReflectionProbePrefilter->IsValid()
-                    ? m_ActiveReflectionProbePrefilter : RHIMaterial::GetDefaultPrefilterCubemap();
-                if (!probe || !graph.DeclareRead("SSRCompute",probe->GetSRV())) return fail();
+                if (!m_ReflectionProbeBuffer.IsValid() || !graph.DeclareRead("SSRApply", m_ReflectionProbeBuffer.GetCBV())) return fail();
+                auto skyPref = ActivePrefilter();
+                auto defaultProbe = RHIMaterial::GetDefaultPrefilterCubemap();
+                if (!skyPref || !skyPref->IsValid() || !graph.DeclareRead("SSRApply", skyPref->GetSRV())) return fail();
+                if (!defaultProbe || !defaultProbe->IsValid() || !graph.DeclareRead("SSRApply", defaultProbe->GetSRV())) return fail();
+                for (uint32_t slot = 0; slot < MaxActiveReflectionProbes; ++slot) {
+                    const auto& probeTex = m_ActiveReflectionProbePrefilters[slot];
+                    if (probeTex && probeTex->IsValid() && !IsCaptureFeedbackTexture(*probeTex)) {
+                        if (!graph.DeclareRead("SSRApply", probeTex->GetSRV())) return fail();
+                    }
+                }
             } else if (useHiZVisual) {
                 for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
             }

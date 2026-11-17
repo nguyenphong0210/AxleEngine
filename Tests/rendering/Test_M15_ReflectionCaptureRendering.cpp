@@ -11,6 +11,7 @@
 #include <Axle/RHI/RHIMesh.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/RenderParticleData.hpp>
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/packing.hpp>
 #include <algorithm>
@@ -207,6 +208,736 @@ namespace {
             }
         }
         return count > 0 ? (sum / static_cast<float>(count)) : glm::vec3(0.0f);
+    }
+
+    bool WriteSolidHDRFile(const std::filesystem::path& path, const glm::vec3& color) {
+        std::ofstream file(path, std::ios::binary);
+        if (!file.is_open()) return false;
+        file << "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 16 +X 32\n";
+        unsigned char pixel[4]{0, 0, 0, 0};
+        const float maximum = std::max({color.x, color.y, color.z});
+        if (maximum > 1e-6f) {
+            int exponent = 0;
+            const float scale = std::frexp(maximum, &exponent) * 256.0f / maximum;
+            pixel[0] = static_cast<unsigned char>(std::clamp(color.x * scale, 0.0f, 255.0f));
+            pixel[1] = static_cast<unsigned char>(std::clamp(color.y * scale, 0.0f, 255.0f));
+            pixel[2] = static_cast<unsigned char>(std::clamp(color.z * scale, 0.0f, 255.0f));
+            pixel[3] = static_cast<unsigned char>(exponent + 128);
+        }
+        for (int i = 0; i < 16 * 32; ++i) {
+            file.write(reinterpret_cast<const char*>(pixel), 4);
+        }
+        return bool(file);
+    }
+
+    bool SaveCubemapAsset(
+        const std::filesystem::path& output,
+        const char* hdrName,
+        const glm::vec3& color) {
+        return WriteSolidHDRFile(output / hdrName, color);
+    }
+
+    std::shared_ptr<RHIMaterial> MakeChromeMaterial(float roughness = 0.04f, float metallic = 1.0f) {
+        RHIMaterialDesc desc{};
+        desc.CullMode = CullMode::None;
+        desc.BaseColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        desc.Metallic = metallic;
+        desc.Roughness = roughness;
+        return std::make_shared<RHIMaterial>(desc);
+    }
+
+    bool ProjectWorldToPixel(
+        const PerspectiveCamera& camera,
+        uint32_t width,
+        uint32_t height,
+        const glm::vec3& worldPos,
+        uint32_t& outX,
+        uint32_t& outY) {
+        const glm::vec4 clip = camera.GetViewProjectionMatrix() * glm::vec4(worldPos, 1.0f);
+        if (clip.w <= 1e-4f) return false;
+        const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+        const float u = ndc.x * 0.5f + 0.5f;
+        const float v = 0.5f - ndc.y * 0.5f;
+        if (u <= 0.02f || u >= 0.98f || v <= 0.02f || v >= 0.98f) return false;
+        outX = static_cast<uint32_t>(std::clamp(u * static_cast<float>(width), 0.0f, static_cast<float>(width - 1u)));
+        outY = static_cast<uint32_t>(std::clamp(v * static_cast<float>(height), 0.0f, static_cast<float>(height - 1u)));
+        return true;
+    }
+
+    glm::vec3 SampleWindowAroundPixel(
+        const std::vector<glm::vec4>& pixels,
+        uint32_t width,
+        uint32_t height,
+        uint32_t cx,
+        uint32_t cy,
+        uint32_t halfExtent = 2u) {
+        const uint32_t x0 = cx > halfExtent ? cx - halfExtent : 0u;
+        const uint32_t y0 = cy > halfExtent ? cy - halfExtent : 0u;
+        const uint32_t x1 = std::min(width, cx + halfExtent + 1u);
+        const uint32_t y1 = std::min(height, cy + halfExtent + 1u);
+        return AverageRegion(pixels, width, x0, y0, x1, y1);
+    }
+
+    bool AllFiniteNonNegative(const std::vector<glm::vec4>& pixels) {
+        for (const auto& p : pixels) {
+            if (!std::isfinite(p.r) || !std::isfinite(p.g) || !std::isfinite(p.b) || !std::isfinite(p.a) ||
+                p.r < -1e-4f || p.g < -1e-4f || p.b < -1e-4f) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool RunM15MultiProbeBlendTests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
+        std::cout << "[M15ReflectionCaptureGPU] Running U5-E multi-probe blend, parallax, energy policy & P5 exit checks...\n";
+        auto& device = RHIDevice::Get();
+        renderer.ClearDynamicReflectionProbes();
+        RENDER_CHECK(device.WaitIdle(), "U5-E idle before suite");
+
+        RENDER_CHECK(
+            SaveCubemapAsset(output, "u5e_red.hdr",   {2.0f, 0.04f, 0.04f}) &&
+            SaveCubemapAsset(output, "u5e_green.hdr", {0.04f, 2.0f, 0.04f}) &&
+            SaveCubemapAsset(output, "u5e_blue.hdr",  {0.04f, 0.04f, 2.0f}) &&
+            SaveCubemapAsset(output, "u5e_white.hdr", {1.0f, 1.0f, 1.0f}),
+            "U5-E authored HDR cubemap assets created");
+
+        auto cubeMesh = RHIMesh::CreateCube(1.0f);
+        auto sphereMesh = RHIMesh::CreateSphere(1.0f, 24, 32);
+        RENDER_CHECK(cubeMesh && cubeMesh->IsValid() && sphereMesh && sphereMesh->IsValid(), "U5-E fixture meshes");
+        auto cubeView = cubeMesh->CaptureView();
+        auto sphereView = sphereMesh->CaptureView();
+
+        constexpr uint32_t renderW = 256u;
+        constexpr uint32_t renderH = 128u;
+        RHITexture hdrColor, depthTex;
+        RENDER_CHECK(hdrColor.Init(RHITextureDesc::RenderTarget2D(renderW, renderH, RHITextureFormat::RGBA16_FLOAT)) &&
+                     depthTex.Init(RHITextureDesc::DepthStencil2D(renderW, renderH)),
+            "U5-E linear HDR render target init");
+
+        auto renderHDR = [&](const RenderWorld& world, const PerspectiveCamera& cam, const SceneRenderSettings& inSettings,
+                             std::vector<glm::vec4>& outPixels) -> bool {
+            SceneRenderSettings s = inSettings;
+            s.EnableToneMapping = false;
+            s.EnableShadows = false;
+            s.EnableParticles = false;
+            s.EnableStudioLightLobes = false;
+            renderer.RenderWorldView(world, cam, &hdrColor, &depthTex, s);
+            if (!renderer.WasLastRenderSuccessful() || renderer.GetDiagnostics().HasErrors() || !device.WaitIdle()) {
+                return false;
+            }
+            if (!ReadTexture2DRGBA16(hdrColor, outPixels)) return false;
+            return outPixels.size() == size_t(renderW) * renderH && AllFiniteNonNegative(outPixels);
+        };
+
+        auto chromeBarMat = MakeChromeMaterial(0.04f, 1.0f);
+
+        // -----------------------------------------------------------------
+        // 1. M15-U5-27.1 / 28 / 31.1: Overlapping Box probes + 4-probe cap
+        // -----------------------------------------------------------------
+        {
+            PerspectiveCamera cam(45.0f, float(renderW) / float(renderH), 0.1f, 100.0f);
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 12.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              glm::vec3(0.0f, 0.0f, 12.0f));
+
+            RenderWorld world;
+            world.SceneRevision = 9101;
+            world.Skybox.Authored = true;
+            world.Skybox.Enabled = false;
+            world.Meshes.push_back(MakeBoxInstance(101, cubeView, chromeBarMat, {0.0f, 0.0f, 0.0f}, {16.0f, 2.5f, 0.5f}, false));
+
+            RenderReflectionProbe leftBox{};
+            leftBox.EntityID = 5101;
+            leftBox.Shape = 0;
+            leftBox.Position = {-6.0f, 0.0f, 0.0f};
+            leftBox.BoxExtents = {4.0f, 12.0f, 12.0f}; // halfExtents.x = 2 -> [-8..-4], BlendDistance=8 -> reaches +4
+            leftBox.BlendDistance = 8.0f;
+            leftBox.Intensity = 1.0f;
+            leftBox.ParallaxCorrected = false;
+            leftBox.CubemapPath = "u5e_red.hdr";
+
+            RenderReflectionProbe rightBox{};
+            rightBox.EntityID = 5102;
+            rightBox.Shape = 0;
+            rightBox.Position = {6.0f, 0.0f, 0.0f};
+            rightBox.BoxExtents = {4.0f, 12.0f, 12.0f}; // core [+4..+8], BlendDistance=8 -> reaches -4
+            rightBox.BlendDistance = 8.0f;
+            rightBox.Intensity = 1.0f;
+            rightBox.ParallaxCorrected = false;
+            rightBox.CubemapPath = "u5e_green.hdr";
+
+            world.ReflectionProbes.push_back(leftBox);
+            world.ReflectionProbes.push_back(rightBox);
+
+            SceneRenderSettings s{};
+            s.EnableSkybox = false;
+            s.EnableSSR = false;
+            std::vector<glm::vec4> pixels;
+            RENDER_CHECK(renderHDR(world, cam, s, pixels), "M15-U5-27.1/28 box overlap render");
+            RENDER_CHECK(renderer.GetLastReflectionFrame().ActiveProbeCount == 2u,
+                "M15-U5-28: both overlapping box probes remain active simultaneously");
+
+            const float xs[7]{-6.0f, -3.5f, -1.75f, 0.0f, 1.75f, 3.5f, 6.0f};
+            float greenFrac[7]{};
+            glm::vec3 samples[7]{};
+            for (int i = 0; i < 7; ++i) {
+                uint32_t px = 0, py = 0;
+                RENDER_CHECK(ProjectWorldToPixel(cam, renderW, renderH, {xs[i], 0.0f, 0.25f}, px, py), "U5-E box sample projection");
+                samples[i] = SampleWindowAroundPixel(pixels, renderW, renderH, px, py);
+                greenFrac[i] = samples[i].g / std::max(samples[i].r + samples[i].g, 1e-4f);
+            }
+            std::cout << "  [U5-E BoxOverlap] left=(" << samples[0].r << "," << samples[0].g
+                      << ") mid=(" << samples[3].r << "," << samples[3].g
+                      << ") right=(" << samples[6].r << "," << samples[6].g << ")\n";
+            RENDER_CHECK(samples[0].r > 0.7f && samples[0].r > samples[0].g * 5.0f,
+                "M15-U5-27.1: left box interior samples Red probe cleanly");
+            RENDER_CHECK(samples[6].g > 0.7f && samples[6].g > samples[6].r * 5.0f,
+                "M15-U5-27.1: right box interior samples Green probe cleanly");
+            RENDER_CHECK(std::abs(samples[3].r - samples[3].g) < 0.25f * std::max(samples[3].r, samples[3].g) &&
+                         samples[3].r > 0.35f && samples[3].g > 0.35f,
+                "M15-U5-28: midpoint smoothly blends 50/50 Red + Green without darkening seam");
+            for (int i = 1; i < 7; ++i) {
+                RENDER_CHECK(greenFrac[i] + 0.01f >= greenFrac[i - 1],
+                    "M15-U5-28/31.1: overlap transition is monotonically smooth");
+                RENDER_CHECK((greenFrac[i] - greenFrac[i - 1]) < 0.45f,
+                    "M15-U5-28: no hard binary step seam across probe overlap");
+            }
+
+            // Also verify 5 probes cap to MaxActiveReflectionProbes (4) on GPU
+            RenderWorld capWorld = world;
+            for (uint32_t extra = 0; extra < 3; ++extra) {
+                RenderReflectionProbe p = leftBox;
+                p.EntityID = 5200u + extra;
+                p.Position = {0.0f, 0.0f, 0.0f};
+                p.BoxExtents = {24.0f, 24.0f, 24.0f};
+                capWorld.ReflectionProbes.push_back(p);
+            }
+            std::vector<glm::vec4> capPixels;
+            RENDER_CHECK(renderHDR(capWorld, cam, s, capPixels), "U5-E 5-probe cap render");
+            RENDER_CHECK(renderer.GetLastReflectionFrame().ActiveProbeCount == MaxActiveReflectionProbes,
+                "M15-U5-28: active GPU probe slots cap cleanly at 4");
+        }
+
+        // -----------------------------------------------------------------
+        // 2. M15-U5-27.2: Overlapping Sphere probes (radial smoothstep)
+        // -----------------------------------------------------------------
+        {
+            PerspectiveCamera cam(45.0f, float(renderW) / float(renderH), 0.1f, 100.0f);
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 12.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              glm::vec3(0.0f, 0.0f, 12.0f));
+
+            RenderWorld world;
+            world.SceneRevision = 9102;
+            world.Skybox.Authored = true;
+            world.Skybox.Enabled = false;
+            world.Meshes.push_back(MakeBoxInstance(102, cubeView, chromeBarMat, {0.0f, 0.0f, 0.0f}, {16.0f, 2.5f, 0.5f}, false));
+
+            RenderReflectionProbe leftSphere{};
+            leftSphere.EntityID = 5111;
+            leftSphere.Shape = 1;
+            leftSphere.Position = {-6.0f, 0.0f, 0.0f};
+            leftSphere.Radius = 2.0f;
+            leftSphere.BlendDistance = 8.0f;
+            leftSphere.Intensity = 1.0f;
+            leftSphere.ParallaxCorrected = false;
+            leftSphere.CubemapPath = "u5e_red.hdr";
+
+            RenderReflectionProbe rightSphere{};
+            rightSphere.EntityID = 5112;
+            rightSphere.Shape = 1;
+            rightSphere.Position = {6.0f, 0.0f, 0.0f};
+            rightSphere.Radius = 2.0f;
+            rightSphere.BlendDistance = 8.0f;
+            rightSphere.Intensity = 1.0f;
+            rightSphere.ParallaxCorrected = false;
+            rightSphere.CubemapPath = "u5e_green.hdr";
+
+            world.ReflectionProbes.push_back(leftSphere);
+            world.ReflectionProbes.push_back(rightSphere);
+
+            SceneRenderSettings s{};
+            s.EnableSkybox = false;
+            s.EnableSSR = false;
+            std::vector<glm::vec4> pixels;
+            RENDER_CHECK(renderHDR(world, cam, s, pixels), "M15-U5-27.2 sphere overlap render");
+            RENDER_CHECK(renderer.GetLastReflectionFrame().ActiveProbeCount == 2u,
+                "M15-U5-27.2: both overlapping sphere probes active");
+
+            const float xs[7]{-6.0f, -3.5f, -1.75f, 0.0f, 1.75f, 3.5f, 6.0f};
+            float greenFrac[7]{};
+            glm::vec3 samples[7]{};
+            for (int i = 0; i < 7; ++i) {
+                uint32_t px = 0, py = 0;
+                RENDER_CHECK(ProjectWorldToPixel(cam, renderW, renderH, {xs[i], 0.0f, 0.25f}, px, py), "U5-E sphere sample projection");
+                samples[i] = SampleWindowAroundPixel(pixels, renderW, renderH, px, py);
+                greenFrac[i] = samples[i].g / std::max(samples[i].r + samples[i].g, 1e-4f);
+            }
+            std::cout << "  [U5-E SphereOverlap] left=(" << samples[0].r << "," << samples[0].g
+                      << ") mid=(" << samples[3].r << "," << samples[3].g
+                      << ") right=(" << samples[6].r << "," << samples[6].g << ")\n";
+            RENDER_CHECK(samples[0].r > 0.7f && samples[0].r > samples[0].g * 5.0f &&
+                         samples[6].g > 0.7f && samples[6].g > samples[6].r * 5.0f &&
+                         std::abs(samples[3].r - samples[3].g) < 0.25f * std::max(samples[3].r, samples[3].g),
+                "M15-U5-27.2: sphere radial falloff transitions Red -> balanced -> Green");
+            for (int i = 1; i < 7; ++i) {
+                RENDER_CHECK(greenFrac[i] + 0.01f >= greenFrac[i - 1] && (greenFrac[i] - greenFrac[i - 1]) < 0.45f,
+                    "M15-U5-27.2: sphere overlap gradient is monotonic and free of hard seams");
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // 3. M15-U5-31.2 / 30.2: Probe boundary movement -> smooth Sky fallback
+        // -----------------------------------------------------------------
+        {
+            PerspectiveCamera cam(45.0f, float(renderW) / float(renderH), 0.1f, 100.0f);
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 12.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              glm::vec3(0.0f, 0.0f, 12.0f));
+
+            RenderWorld world;
+            world.SceneRevision = 9103;
+            world.Skybox.Authored = world.Skybox.Enabled = world.Skybox.EnvironmentLighting = true;
+            world.Skybox.Type = 1;
+            world.Skybox.HDRPath = "u5e_blue.hdr";
+            world.Meshes.push_back(MakeBoxInstance(103, cubeView, chromeBarMat, {0.0f, 0.0f, 0.0f}, {16.0f, 2.5f, 0.5f}, false));
+
+            RenderReflectionProbe edgeProbe{};
+            edgeProbe.EntityID = 5121;
+            edgeProbe.Shape = 0;
+            edgeProbe.Position = {-5.0f, 0.0f, 0.0f};
+            edgeProbe.BoxExtents = {4.0f, 12.0f, 12.0f}; // core [-7..-3], outer fade to +3
+            edgeProbe.BlendDistance = 6.0f;
+            edgeProbe.Intensity = 1.0f;
+            edgeProbe.ParallaxCorrected = false;
+            edgeProbe.CubemapPath = "u5e_red.hdr";
+            world.ReflectionProbes.push_back(edgeProbe);
+
+            SceneRenderSettings s{};
+            s.EnableSkybox = true;
+            s.EnableSSR = false;
+            std::vector<glm::vec4> pixels;
+            RENDER_CHECK(renderHDR(world, cam, s, pixels), "M15-U5-31.2/30.2 boundary sky fallback render");
+
+            const float xs[5]{-5.0f, -1.5f, 0.0f, 1.5f, 5.0f};
+            float blueFrac[5]{};
+            glm::vec3 samples[5]{};
+            for (int i = 0; i < 5; ++i) {
+                uint32_t px = 0, py = 0;
+                RENDER_CHECK(ProjectWorldToPixel(cam, renderW, renderH, {xs[i], 0.0f, 0.25f}, px, py), "U5-E sky boundary proj");
+                samples[i] = SampleWindowAroundPixel(pixels, renderW, renderH, px, py);
+                blueFrac[i] = samples[i].b / std::max(samples[i].r + samples[i].b, 1e-4f);
+            }
+            std::cout << "  [U5-E BoundarySky] inside=(" << samples[0].r << "," << samples[0].b
+                      << ") edge=(" << samples[2].r << "," << samples[2].b
+                      << ") outside=(" << samples[4].r << "," << samples[4].b << ")\n";
+            RENDER_CHECK(samples[0].r > samples[0].b * 4.0f && samples[0].r > 0.7f,
+                "M15-U5-31.2: inside probe boundary reflects local Red probe");
+            RENDER_CHECK(samples[2].r > 0.35f && samples[2].b > 0.35f,
+                "M15-U5-30.2: probe boundary smoothly mixes into sky without black energy dip");
+            RENDER_CHECK(samples[4].b > samples[4].r * 4.0f && samples[4].b > 0.7f,
+                "M15-U5-30.2 / 31.2: outside probe boundary falls back cleanly to Blue sky IBL");
+            for (int i = 1; i < 5; ++i) {
+                RENDER_CHECK(blueFrac[i] + 0.01f >= blueFrac[i - 1],
+                    "M15-U5-31.2: boundary fade toward sky is strictly monotonic");
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // 4. M15-U5-29: Per-probe box parallax correction before blending
+        // -----------------------------------------------------------------
+        {
+            renderer.ClearDynamicReflectionProbes();
+            RenderWorld pWorld;
+            pWorld.SceneRevision = 9104;
+            pWorld.Skybox.Authored = true;
+            pWorld.Skybox.Enabled = false;
+
+            // Off-center reflective plate at (+3.5, 0, 0) viewed straight along -Z -> raw R = (0, 0, +1)
+            pWorld.Meshes.push_back(MakeBoxInstance(201, cubeView, chromeBarMat, {3.5f, 0.0f, 0.0f}, {2.0f, 2.0f, 0.2f}, false));
+            // Behind main camera (+Z = +8): Green panel aligned with probe center (-2, 0, +8),
+            // Red panel aligned with parallax-corrected hit (+3.5, 0, +8)
+            pWorld.Meshes.push_back(MakeBoxInstance(202, cubeView, MakeEmissiveMaterial({0.0f, 1.0f, 0.0f}, 3.0f), {-2.0f, 0.0f, 8.0f}, {4.0f, 8.0f, 0.5f}, false));
+            pWorld.Meshes.push_back(MakeBoxInstance(203, cubeView, MakeEmissiveMaterial({1.0f, 0.0f, 0.0f}, 3.0f), {3.5f, 0.0f, 8.0f}, {4.5f, 8.0f, 0.5f}, false));
+
+            RenderReflectionProbe dynProbe{};
+            dynProbe.EntityID = 5131;
+            dynProbe.Shape = 0;
+            dynProbe.Position = {-2.0f, 0.0f, 0.0f};
+            dynProbe.BoxExtents = {16.0f, 16.0f, 16.0f}; // halfExtents = (8, 8, 8)
+            dynProbe.BlendDistance = 4.0f;
+            dynProbe.Intensity = 1.0f;
+            dynProbe.DynamicCapture = true;
+            dynProbe.CaptureResolution = 64u;
+            dynProbe.CaptureShadows = false;
+            dynProbe.CaptureMode = ReflectionProbeCaptureMode::Manual;
+            dynProbe.ParallaxCorrected = false;
+
+            const auto cap = renderer.CaptureDynamicReflectionProbe(pWorld, dynProbe);
+            RENDER_CHECK(cap.Success && cap.CapturedFaces == 6u, "M15-U5-29: parallax test dynamic capture");
+
+            PerspectiveCamera cam(45.0f, float(renderW) / float(renderH), 0.1f, 100.0f);
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(3.5f, 0.0f, 5.0f), glm::vec3(3.5f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              glm::vec3(3.5f, 0.0f, 5.0f));
+            SceneRenderSettings s{};
+            s.EnableSkybox = false;
+            s.EnableSSR = false;
+
+            // Case A: ParallaxCorrected = false -> raw R=(0,0,+1) hits probe-center +Z wall (-2, 0, +8) = Green
+            pWorld.ReflectionProbes = {dynProbe};
+            std::vector<glm::vec4> rawPixels;
+            RENDER_CHECK(renderHDR(pWorld, cam, s, rawPixels), "M15-U5-29 uncorrected render");
+
+            // Case B: ParallaxCorrected = true (plus overlapping second parallax probe -> Blue/Red composite on shifted wall)
+            dynProbe.ParallaxCorrected = true;
+            RenderReflectionProbe secondParallax = dynProbe;
+            secondParallax.EntityID = 5132;
+            secondParallax.DynamicCapture = false;
+            secondParallax.CubemapPath = "u5e_red.hdr";
+            secondParallax.Intensity = 0.25f;
+            pWorld.ReflectionProbes = {dynProbe, secondParallax};
+            std::vector<glm::vec4> parallaxPixels;
+            RENDER_CHECK(renderHDR(pWorld, cam, s, parallaxPixels), "M15-U5-29 parallax-corrected render");
+
+            uint32_t px = 0, py = 0;
+            RENDER_CHECK(ProjectWorldToPixel(cam, renderW, renderH, {3.5f, 0.0f, 0.1f}, px, py), "U5-E parallax plate proj");
+            const glm::vec3 rawColor = SampleWindowAroundPixel(rawPixels, renderW, renderH, px, py);
+            const glm::vec3 correctedColor = SampleWindowAroundPixel(parallaxPixels, renderW, renderH, px, py);
+            std::cout << "  [U5-E Parallax] raw=(" << rawColor.r << "," << rawColor.g
+                      << ") corrected=(" << correctedColor.r << "," << correctedColor.g << ")\n";
+            RENDER_CHECK(rawColor.g > rawColor.r * 2.5f && rawColor.g > 0.5f,
+                "M15-U5-29: uncorrected ray reflects probe-center +Z Green wall");
+            RENDER_CHECK(correctedColor.r > correctedColor.g * 2.5f && correctedColor.r > 0.5f,
+                "M15-U5-29: per-probe box parallax redirects ray to actual off-axis Red wall before blend");
+            renderer.ClearDynamicReflectionProbes();
+        }
+
+        // -----------------------------------------------------------------
+        // 5. M15-U5-31.3: Missing/unready probe graceful omission & renormalization
+        // -----------------------------------------------------------------
+        {
+            PerspectiveCamera cam(45.0f, float(renderW) / float(renderH), 0.1f, 100.0f);
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              glm::vec3(0.0f, 0.0f, 4.5f));
+
+            RenderWorld world;
+            world.SceneRevision = 9105;
+            world.Skybox.Authored = true;
+            world.Skybox.Enabled = false;
+            world.Meshes.push_back(MakeBoxInstance(301, sphereView, chromeBarMat, {0.0f, 0.0f, 0.0f}, {1.2f, 1.2f, 1.2f}, false));
+
+            RenderReflectionProbe validRed{};
+            validRed.EntityID = 5141;
+            validRed.BoxExtents = {10.0f, 10.0f, 10.0f};
+            validRed.BlendDistance = 2.0f;
+            validRed.Intensity = 1.0f;
+            validRed.CubemapPath = "u5e_red.hdr";
+            world.ReflectionProbes.push_back(validRed);
+
+            SceneRenderSettings s{};
+            s.EnableSkybox = false;
+            s.EnableSSR = false;
+            std::vector<glm::vec4> refPixels;
+            RENDER_CHECK(renderHDR(world, cam, s, refPixels), "M15-U5-31.3 reference valid probe render");
+
+            // Add cold uncaptured Manual dynamic probe overlapping the exact same sphere
+            RenderReflectionProbe missingProbe{};
+            missingProbe.EntityID = 5142;
+            missingProbe.DynamicCapture = true;
+            missingProbe.CaptureMode = ReflectionProbeCaptureMode::Manual;
+            missingProbe.CaptureResolution = 64u;
+            missingProbe.BoxExtents = {10.0f, 10.0f, 10.0f};
+            missingProbe.BlendDistance = 2.0f;
+            world.ReflectionProbes.push_back(missingProbe);
+
+            std::vector<glm::vec4> withMissingPixels;
+            RENDER_CHECK(renderHDR(world, cam, s, withMissingPixels), "M15-U5-31.3 with missing probe render");
+            const auto& rf = renderer.GetLastReflectionFrame();
+            RENDER_CHECK(rf.ActiveProbeCount == 1u && rf.MissingProbeCount == 1u,
+                "M15-U5-31.3: missing unready manual probe is excluded while valid Red probe remains active");
+
+            const glm::vec3 refCenter = SampleWindowAroundPixel(refPixels, renderW, renderH, renderW / 2u, renderH / 2u);
+            const glm::vec3 missCenter = SampleWindowAroundPixel(withMissingPixels, renderW, renderH, renderW / 2u, renderH / 2u);
+            std::cout << "  [U5-E MissingProbe] ref=(" << refCenter.r << "," << refCenter.g
+                      << ") withMissing=(" << missCenter.r << "," << missCenter.g << ")\n";
+            RENDER_CHECK(std::abs(missCenter.r - refCenter.r) < 0.05f && missCenter.r > 0.7f,
+                "M15-U5-31.3: remaining probe renormalizes without darkening when overlapping missing probe");
+        }
+
+        // -----------------------------------------------------------------
+        // 6. M15-U5-31.4: Stale Manual probe retains last ready generation until recapture
+        // -----------------------------------------------------------------
+        {
+            renderer.ClearDynamicReflectionProbes();
+            PerspectiveCamera cam(45.0f, float(renderW) / float(renderH), 0.1f, 100.0f);
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              glm::vec3(0.0f, 0.0f, 5.0f));
+
+            RenderWorld world;
+            world.SceneRevision = 9106;
+            world.Skybox.Authored = true;
+            world.Skybox.Enabled = false;
+            world.Meshes.push_back(MakeBoxInstance(400, sphereView, chromeBarMat, {0.0f, 0.0f, 0.0f}, {1.2f, 1.2f, 1.2f}, false));
+            world.Meshes.push_back(MakeBoxInstance(401, cubeView, MakeEmissiveMaterial({1.0f, 0.0f, 0.0f}, 3.0f), {0.0f, 0.0f, 8.0f}, {12.0f, 12.0f, 0.5f}, false));
+
+            RenderReflectionProbe manualProbe{};
+            manualProbe.EntityID = 400; // excludes center sphere during capture
+            manualProbe.BoxExtents = {16.0f, 16.0f, 16.0f};
+            manualProbe.BlendDistance = 4.0f;
+            manualProbe.DynamicCapture = true;
+            manualProbe.CaptureResolution = 64u;
+            manualProbe.CaptureShadows = false;
+            manualProbe.CaptureMode = ReflectionProbeCaptureMode::Manual;
+            world.ReflectionProbes.push_back(manualProbe);
+
+            SceneRenderSettings s{};
+            s.EnableSkybox = false;
+            s.EnableSSR = false;
+            renderer.RequestDynamicReflectionCapture(manualProbe);
+            std::vector<glm::vec4> redPixels;
+            RENDER_CHECK(renderHDR(world, cam, s, redPixels), "M15-U5-31.4 initial manual Red capture render");
+            const uint64_t initialGen = renderer.GetDynamicReflectionProbe(manualProbe)
+                ? renderer.GetDynamicReflectionProbe(manualProbe)->GenerationID : 0u;
+            RENDER_CHECK(initialGen > 0u, "M15-U5-31.4 manual capture published generation");
+
+            // Edit emissive wall from Red -> Green and bump SceneRevision without triggering manual capture
+            world.Meshes[1].Material.RHIMaterialAsset = MakeEmissiveMaterial({0.0f, 1.0f, 0.0f}, 3.0f);
+            world.SceneRevision = 9107;
+            std::vector<glm::vec4> stalePixels;
+            RENDER_CHECK(renderHDR(world, cam, s, stalePixels), "M15-U5-31.4 stale retained render");
+            const auto& staleFrame = renderer.GetLastReflectionFrame();
+            const glm::vec3 staleCenter = SampleWindowAroundPixel(stalePixels, renderW, renderH, renderW / 2u, renderH / 2u);
+            std::cout << "  [U5-E StaleManual] staleCenter=(" << staleCenter.r << "," << staleCenter.g
+                      << ") staleCount=" << staleFrame.StaleProbeCount << "\n";
+            RENDER_CHECK(staleFrame.ActiveProbeCount == 1u && staleFrame.StaleProbeCount == 1u && staleFrame.CaptureStale &&
+                         staleCenter.r > staleCenter.g * 3.0f,
+                "M15-U5-31.4: stale manual probe retains valid prior Red generation seamlessly");
+
+            // Explicit manual recapture updates cleanly to Green
+            renderer.RequestDynamicReflectionCapture(manualProbe);
+            std::vector<glm::vec4> updatedPixels;
+            RENDER_CHECK(renderHDR(world, cam, s, updatedPixels), "M15-U5-31.4 explicit recapture render");
+            const glm::vec3 freshCenter = SampleWindowAroundPixel(updatedPixels, renderW, renderH, renderW / 2u, renderH / 2u);
+            RENDER_CHECK(!renderer.GetLastReflectionFrame().CaptureStale &&
+                         renderer.GetLastReflectionFrame().StaleProbeCount == 0u &&
+                         freshCenter.g > freshCenter.r * 3.0f,
+                "M15-U5-31.4: explicit recapture transitions cleanly to updated Green generation");
+            renderer.ClearDynamicReflectionProbes();
+        }
+
+        // -----------------------------------------------------------------
+        // 7. M15-U5-30.1 / 30.3 / 31.5: Unified energy policy & SSR hit/miss fallback
+        // -----------------------------------------------------------------
+        {
+            PerspectiveCamera cam(45.0f, float(renderW) / float(renderH), 0.1f, 100.0f);
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 1.6f, 7.5f), glm::vec3(0.0f, 0.2f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              glm::vec3(0.0f, 1.6f, 7.5f));
+
+            // 7a. M15-U5-30.3 Energy Conservation: White wall + White probe + White sky
+            // Total reflected radiance must stay ~1.0 under SSR (no double counting).
+            {
+                RenderWorld energyWorld;
+                energyWorld.SceneRevision = 9108;
+                energyWorld.Skybox.Authored = energyWorld.Skybox.Enabled = energyWorld.Skybox.EnvironmentLighting = true;
+                energyWorld.Skybox.Type = 1;
+                energyWorld.Skybox.HDRPath = "u5e_white.hdr";
+                energyWorld.Meshes.push_back(MakeBoxInstance(501, cubeView, MakeChromeMaterial(0.02f, 1.0f),
+                    {0.0f, 0.0f, 0.0f}, {11.0f, 0.2f, 3.5f}, false));
+                energyWorld.Meshes.push_back(MakeBoxInstance(502, cubeView, MakeEmissiveMaterial({1.0f, 1.0f, 1.0f}, 1.0f),
+                    {-3.2f, 1.5f, -2.5f}, {4.5f, 4.0f, 1.0f}, false));
+
+                RenderReflectionProbe whiteProbe{};
+                whiteProbe.EntityID = 5151;
+                whiteProbe.BoxExtents = {14.0f, 14.0f, 14.0f};
+                whiteProbe.BlendDistance = 4.0f;
+                whiteProbe.Intensity = 1.0f;
+                whiteProbe.ParallaxCorrected = false;
+                whiteProbe.CubemapPath = "u5e_white.hdr";
+                energyWorld.ReflectionProbes.push_back(whiteProbe);
+
+                SceneRenderSettings noSSR{};
+                noSSR.EnableSkybox = true;
+                noSSR.EnableSSR = false;
+                std::vector<glm::vec4> basePixels;
+                RENDER_CHECK(renderHDR(energyWorld, cam, noSSR, basePixels), "M15-U5-30.3 no-SSR energy baseline");
+
+                SceneRenderSettings withSSR = noSSR;
+                withSSR.EnableSSR = true;
+                withSSR.SSRStrength = 1.0f;
+                withSSR.SSRLengthPixels = 14.0f;
+                std::vector<glm::vec4> ssrPixels;
+                RENDER_CHECK(renderHDR(energyWorld, cam, withSSR, ssrPixels), "M15-U5-30.3 SSR energy render");
+                const auto& passes = renderer.GetDiagnostics().GetFrame().Passes;
+                const bool ssrPassRan =
+                    std::any_of(passes.begin(), passes.end(), [](const auto& p) { return p.Name == "SSRCompute"; }) &&
+                    std::any_of(passes.begin(), passes.end(), [](const auto& p) { return p.Name == "SSRApply"; });
+                RENDER_CHECK(ssrPassRan && renderer.GetLastReflectionFrame().State == ReflectionState::AuthoredReady &&
+                             renderer.GetLastReflectionFrame().ActiveProbeCount == 1u,
+                    "M15-U5-30.1: SSRCompute + SSRApply execute alongside active AuthoredReady probe hierarchy");
+
+                uint32_t lx = 0, ly = 0;
+                RENDER_CHECK(ProjectWorldToPixel(cam, renderW, renderH, {-2.5f, 0.1f, 0.5f}, lx, ly), "U5-E energy floor proj");
+                const glm::vec3 baseVal = SampleWindowAroundPixel(basePixels, renderW, renderH, lx, ly, 3u);
+                const glm::vec3 ssrVal = SampleWindowAroundPixel(ssrPixels, renderW, renderH, lx, ly, 3u);
+                std::cout << "  [U5-E Energy] base=(" << baseVal.r << "," << baseVal.g << "," << baseVal.b
+                          << ") withSSR=(" << ssrVal.r << "," << ssrVal.g << "," << ssrVal.b << ")\n";
+                RENDER_CHECK(ssrVal.r <= 1.15f && ssrVal.g <= 1.15f && ssrVal.b <= 1.15f &&
+                             std::abs(ssrVal.r - baseVal.r) < 0.18f,
+                    "M15-U5-30.3: unified energy policy prevents additive SSR double-counting");
+            }
+
+            // 7b. M15-U5-30.1 / 31.5: SSR hit on left bright Green wall vs SSR miss on right falling back to Red probe / Blue sky
+            {
+                RenderWorld hitMissWorld;
+                hitMissWorld.SceneRevision = 9109;
+                hitMissWorld.Skybox.Authored = hitMissWorld.Skybox.Enabled = hitMissWorld.Skybox.EnvironmentLighting = true;
+                hitMissWorld.Skybox.Type = 1;
+                hitMissWorld.Skybox.HDRPath = "u5e_blue.hdr";
+                hitMissWorld.Meshes.push_back(MakeBoxInstance(511, cubeView, MakeChromeMaterial(0.02f, 1.0f),
+                    {0.0f, 0.0f, 0.0f}, {11.0f, 0.2f, 3.5f}, false));
+                // Emissive bright Green wall ONLY on the left half (right half misses into sky)
+                hitMissWorld.Meshes.push_back(MakeBoxInstance(512, cubeView, MakeEmissiveMaterial({0.0f, 6.0f, 0.0f}, 1.0f),
+                    {-3.2f, 1.5f, -2.5f}, {4.5f, 4.0f, 1.0f}, false));
+
+                // Red probe covering left/mid of floor, blending into Blue sky on far right
+                RenderReflectionProbe redProbe{};
+                redProbe.EntityID = 5161;
+                redProbe.Position = {-1.5f, 0.0f, 0.0f};
+                redProbe.BoxExtents = {6.0f, 8.0f, 8.0f}; // core [-4.5..+1.5], fades out across BlendDistance=2.0 -> +3.5
+                redProbe.BlendDistance = 2.0f;
+                redProbe.Intensity = 1.0f;
+                redProbe.ParallaxCorrected = false;
+                redProbe.CubemapPath = "u5e_red.hdr";
+                hitMissWorld.ReflectionProbes.push_back(redProbe);
+
+                SceneRenderSettings noSSR{};
+                noSSR.EnableSkybox = true;
+                noSSR.EnableSSR = false;
+                std::vector<glm::vec4> noSSRPixels;
+                RENDER_CHECK(renderHDR(hitMissWorld, cam, noSSR, noSSRPixels), "M15-U5-31.5 no-SSR baseline");
+
+                SceneRenderSettings withSSR = noSSR;
+                withSSR.EnableSSR = true;
+                withSSR.SSRStrength = 1.0f;
+                withSSR.SSRLengthPixels = 14.0f;
+                std::vector<glm::vec4> ssrPixels;
+                RENDER_CHECK(renderHDR(hitMissWorld, cam, withSSR, ssrPixels), "M15-U5-31.5 SSR hit/miss render");
+
+                uint32_t hlx = 0, hly = 0, mrpx = 0, mrpy = 0, skx = 0, sky = 0;
+                RENDER_CHECK(ProjectWorldToPixel(cam, renderW, renderH, {-2.5f, 0.1f, 0.5f}, hlx, hly) &&
+                             ProjectWorldToPixel(cam, renderW, renderH, {0.5f, 0.1f, 0.5f}, mrpx, mrpy) &&
+                             ProjectWorldToPixel(cam, renderW, renderH, {4.5f, 0.1f, 0.5f}, skx, sky),
+                    "U5-E SSR hit/miss sample projections");
+                const glm::vec3 noSSRL = SampleWindowAroundPixel(noSSRPixels, renderW, renderH, hlx, hly, 3u);
+                const glm::vec3 withSSRL = SampleWindowAroundPixel(ssrPixels, renderW, renderH, hlx, hly, 3u);
+                const glm::vec3 missProbe = SampleWindowAroundPixel(ssrPixels, renderW, renderH, mrpx, mrpy, 3u);
+                const glm::vec3 noSSRMissP = SampleWindowAroundPixel(noSSRPixels, renderW, renderH, mrpx, mrpy, 3u);
+                const glm::vec3 missSky = SampleWindowAroundPixel(ssrPixels, renderW, renderH, skx, sky, 3u);
+                std::cout << "  [U5-E SSR] hitL_no=(" << noSSRL.r << "," << noSSRL.g << ") hitL_on=("
+                          << withSSRL.r << "," << withSSRL.g << ") missProbe=("
+                          << missProbe.r << "," << missProbe.g << "," << missProbe.b << ") missSky=("
+                          << missSky.r << "," << missSky.b << ")\n";
+                RENDER_CHECK(withSSRL.g > noSSRL.g * 2.0f && withSSRL.g > withSSRL.r &&
+                             withSSRL.r < noSSRL.r * 0.65f,
+                    "M15-U5-30.1: SSR hit injects Green reflection proportionally and replaces rather than adds probe Red");
+                RENDER_CHECK(std::abs(missProbe.r - noSSRMissP.r) < 0.08f && missProbe.r > 0.7f,
+                    "M15-U5-31.5: SSR miss inside probe falls back cleanly to Red local probe");
+                RENDER_CHECK(missSky.b > missSky.r * 3.0f && missSky.b > 0.7f,
+                    "M15-U5-31.5: SSR miss outside probe falls back cleanly to Blue sky IBL");
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // 8. P5 exit: With SSR DISABLED, dynamic captured cubemap contains Red object,
+        //    sphere samples captured cubemap, and roughness changes sharpness.
+        // -----------------------------------------------------------------
+        {
+            renderer.ClearDynamicReflectionProbes();
+            RenderWorld p5World;
+            p5World.SceneRevision = 9110;
+            p5World.Skybox.Authored = true;
+            p5World.Skybox.Enabled = false;
+
+            // Emissive bright Red beacon behind camera at -Z = -9.0 (captured in face -Z, never occludes sphere at origin)
+            p5World.Meshes.push_back(MakeBoxInstance(901, cubeView, MakeEmissiveMaterial({1.0f, 0.04f, 0.04f}, 4.0f),
+                {0.0f, 0.0f, -9.0f}, {2.8f, 2.8f, 0.8f}, false));
+
+            auto sphereMeshIdx = p5World.Meshes.size();
+            p5World.Meshes.push_back(MakeBoxInstance(900, sphereView, MakeChromeMaterial(0.05f, 1.0f),
+                {0.0f, 0.0f, 0.0f}, {1.2f, 1.2f, 1.2f}, false));
+
+            RenderReflectionProbe p5Probe{};
+            p5Probe.EntityID = 900; // self-excludes sphere during probe capture
+            p5Probe.BoxExtents = {24.0f, 24.0f, 24.0f};
+            p5Probe.BlendDistance = 4.0f;
+            p5Probe.Intensity = 1.0f;
+            p5Probe.ParallaxCorrected = false;
+            p5Probe.DynamicCapture = true;
+            p5Probe.CaptureResolution = 64u;
+            p5Probe.CaptureShadows = false;
+            p5Probe.CaptureMode = ReflectionProbeCaptureMode::Manual;
+            p5World.ReflectionProbes.push_back(p5Probe);
+
+            const auto capRes = renderer.CaptureDynamicReflectionProbe(p5World, p5Probe);
+            const auto gen = renderer.GetDynamicReflectionProbe(p5Probe);
+            RENDER_CHECK(capRes.Success && gen && device.WaitForCompletion(gen->Completion) && gen->RawCubemap,
+                "P5 exit: dynamic reflection probe captures scene cubemap");
+
+            std::vector<glm::vec4> negZPixels;
+            RENDER_CHECK(ReadCubeFaceRGBA16(*gen->RawCubemap, 5u, negZPixels, 0u), "P5 exit: read captured -Z face");
+            const glm::vec3 negZCenter = SampleWindowAroundPixel(negZPixels, 64u, 64u, 32u, 32u, 2u);
+            std::cout << "  [P5 Exit Cube -Z] center=(" << negZCenter.r << "," << negZCenter.g << "," << negZCenter.b << ")\n";
+            RENDER_CHECK(negZCenter.r > 1.5f && negZCenter.r > negZCenter.g * 5.0f,
+                "P5 exit: captured cubemap -Z face contains the emissive Red object");
+
+            PerspectiveCamera cam(45.0f, float(renderW) / float(renderH), 0.1f, 100.0f);
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, -6.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              glm::vec3(0.0f, 0.0f, -6.0f));
+            RHITexture p5Color;
+            RENDER_CHECK(p5Color.Init(RHITextureDesc::RenderTarget2D(renderW, renderH)), "P5 exit LDR display target");
+            SceneRenderSettings p5Settings{};
+            p5Settings.EnableSSR = false;
+            p5Settings.EnableSkybox = false;
+            p5Settings.EnableShadows = false;
+            p5Settings.EnableParticles = false;
+            p5Settings.EnableStudioLightLobes = false;
+            p5Settings.EnableToneMapping = true;
+
+            float redByRoughness[3]{};
+            const float roughnessLevels[3]{0.05f, 0.40f, 0.85f};
+            for (int r = 0; r < 3; ++r) {
+                p5World.Meshes[sphereMeshIdx].Material.RHIMaterialAsset = MakeChromeMaterial(roughnessLevels[r], 1.0f);
+                renderer.RenderWorldView(p5World, cam, &p5Color, &depthTex, p5Settings);
+                RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() && device.WaitIdle(),
+                    "P5 exit sphere render with SSR disabled");
+                const auto& p5Passes = renderer.GetDiagnostics().GetFrame().Passes;
+                const bool ssrRan = std::any_of(p5Passes.begin(), p5Passes.end(), [](const auto& p) {
+                    return p.Name == "SSRCompute" || p.Name == "SSRApply";
+                });
+                RENDER_CHECK(!ssrRan && renderer.GetLastReflectionFrame().State == ReflectionState::DynamicReady &&
+                             renderer.GetLastReflectionFrame().PrefilterReady &&
+                             renderer.GetLastReflectionFrame().Fallback == ReflectionFallback::None,
+                    "P5 exit: SSR disabled skips SSRCompute/SSRApply and resolves through DynamicReady local probe");
+                std::vector<glm::vec4> outPx;
+                RENDER_CHECK(renderer.GetIntermediateHDRTarget() &&
+                             ReadTexture2DRGBA16(*renderer.GetIntermediateHDRTarget(), outPx) &&
+                             outPx.size() == size_t(renderW) * renderH && AllFiniteNonNegative(outPx),
+                    "P5 exit scene-linear HDR readback before tone mapping");
+                const glm::vec3 center = SampleWindowAroundPixel(outPx, renderW, renderH, renderW / 2u, renderH / 2u, 2u);
+                redByRoughness[r] = center.r;
+            }
+            std::cout << "  [P5 Exit Roughness SSR=OFF] R(0.05)=" << redByRoughness[0]
+                      << " R(0.40)=" << redByRoughness[1]
+                      << " R(0.85)=" << redByRoughness[2] << "\n";
+            RENDER_CHECK(redByRoughness[0] > 1.5f,
+                "P5 exit: with SSR disabled, mirror sphere samples captured Red object brightly in linear HDR");
+            RENDER_CHECK(redByRoughness[0] > redByRoughness[1] * 1.25f &&
+                         redByRoughness[1] > redByRoughness[2] * 1.25f,
+                "P5 exit: roughness sweep (0.05 -> 0.40 -> 0.85) monotonically changes reflection sharpness");
+            renderer.ClearDynamicReflectionProbes();
+        }
+
+        RENDER_CHECK(device.WaitIdle() && Axle::RenderTests::GetRHIValidationErrorCount() == 0,
+            "U5-E zero RHI validation errors across multi-probe & SSR blend tests");
+        std::cout << "[M15ReflectionCaptureGPU] All U5-E multi-probe blend & P5 exit checks passed!\n";
+        return true;
     }
 } // namespace
 
@@ -1479,10 +2210,13 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
             "U5D-R5 deferred capture retries on the next render after synchronization recovers");
     }
 
+    RENDER_CHECK(RunM15MultiProbeBlendTests(renderer, output),
+        "M15-U5-E: multi-probe blend, per-probe parallax, energy policy & P5 exit checks pass");
+
     renderer.ClearDynamicReflectionProbes();
     RENDER_CHECK(device.WaitIdle(), "U5-B wait idle at cleanup");
     RENDER_CHECK(Axle::RenderTests::GetRHIValidationErrorCount() == 0, "U5-B zero RHI validation errors");
-    std::cout << "[M15ReflectionCaptureGPU] All U5-B/U5-C/U5-D native D3D12/Vulkan checks passed!\n";
+    std::cout << "[M15ReflectionCaptureGPU] All U5-B/U5-C/U5-D/U5-E native D3D12/Vulkan checks passed!\n";
     return true;
 }
 

@@ -51,7 +51,6 @@ Texture2D<float>    u_HiZ6           : register(t6, space1);
 Texture2D<float>    u_HiZ7           : register(t7, space1);
 Texture2D<float4>   u_ComputeNormal  : register(t8, space1);
 Texture2D<float4>   u_ComputeColor   : register(t9, space1);
-TextureCube<float4> u_ProbeCubemap   : register(t10, space1);
 SamplerState        u_ComputeSampler : register(s0, space1);
 RWTexture2D<float4> u_ComputeOutput  : register(u0, space2);
 
@@ -161,31 +160,8 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
         }
     }
 
-    // Fallback: Parallax-Corrected Reflection Probe approximation
-    if (confidence < 0.99 && u_ProbePosition.w > 0.5) {
-        float3 worldPos = mul(u_InvView, float4(viewPos, 1.0)).xyz;
-        float3 reflWS = normalize(mul((float3x3)u_InvView, reflDir));
-        float3 probeDir = reflWS;
-
-        if (u_ProbeBoxMin.w > 0.5) {
-            float3 boxMin = u_ProbeBoxMin.xyz;
-            float3 boxMax = u_ProbeBoxMax.xyz;
-            float3 safeR = sign(reflWS) * max(abs(reflWS), 1e-5);
-            float3 invR = 1.0 / safeR;
-            float3 tMin = (boxMin - worldPos) * invR;
-            float3 tMax = (boxMax - worldPos) * invR;
-            float3 t2 = max(tMin, tMax);
-            float tDist = min(t2.x, min(t2.y, t2.z));
-            if (tDist > 0.0) {
-                float3 intersectWS = worldPos + reflWS * tDist;
-                probeDir = normalize(intersectWS - u_ProbePosition.xyz);
-            }
-        }
-        float3 probeColor = u_ProbeCubemap.SampleLevel(u_ComputeSampler, probeDir, 0.0).rgb * u_ProbeBoxMax.w;
-        hitColor = lerp(probeColor, hitColor, confidence);
-        confidence = max(confidence, 0.25 * saturate(u_ProbeBoxMax.w));
-    }
-
+    // Output raw screen-space hit color and geometric confidence [0..1].
+    // Multi-probe parallax and sky fallback are resolved in SSRApply under one energy policy.
     u_ComputeOutput[pixelPos] = float4(hitColor, confidence);
 }
 
@@ -206,11 +182,19 @@ VSOutput VSMain(uint vertexID : SV_VertexID) {
     return output;
 }
 
-Texture2D<float>    u_SceneDepth    : register(t0, space1);
-Texture2D<float4>   u_SSRTexture    : register(t1, space1);
-Texture2D<float4>   u_SceneColor    : register(t2, space1);
-Texture2D<float4>   u_SceneNormal   : register(t3, space1);
-SamplerState        u_LinearSampler : register(s0, space1);
+Texture2D<float>    u_SceneDepth           : register(t0, space1);
+Texture2D<float4>   u_SSRTexture           : register(t1, space1);
+Texture2D<float4>   u_SceneColor           : register(t2, space1);
+Texture2D<float4>   u_SceneNormal          : register(t3, space1);
+TextureCube<float4> u_SkyPrefilterMap      : register(t4, space1);
+TextureCube<float4> u_ReflectionProbeCube0 : register(t5, space1);
+TextureCube<float4> u_ReflectionProbeCube1 : register(t6, space1);
+TextureCube<float4> u_ReflectionProbeCube2 : register(t7, space1);
+TextureCube<float4> u_ReflectionProbeCube3 : register(t8, space1);
+SamplerState        u_LinearSampler        : register(s0, space1);
+
+#define AXLE_REFLECTION_PROBE_CBUFFER_REGISTER b1
+#include "ReflectionProbeCommon.hlsli"
 
 float4 PSMain(VSOutput input) : SV_Target {
     float2 uv = input.TexCoord;
@@ -222,8 +206,13 @@ float4 PSMain(VSOutput input) : SV_Target {
     }
 
     float4 ssrSample = u_SSRTexture.SampleLevel(u_LinearSampler, uv, 0.0);
-    float3 ssrColor = ssrSample.rgb;
+    float3 ssrColor = max(ssrSample.rgb, float3(0.0, 0.0, 0.0));
     float confidence = saturate(ssrSample.a);
+    float ssrStrength = saturate(u_SSRParams.z);
+    float ssrWeight = confidence * ssrStrength;
+    if (ssrWeight <= 1e-4) {
+        return sceneColor;
+    }
 
     float4 normalSample = u_SceneNormal.SampleLevel(u_LinearSampler, uv, 0.0);
     float3 viewPos = ReconstructViewPos(uv, depth);
@@ -246,11 +235,25 @@ float4 PSMain(VSOutput input) : SV_Target {
     }
     float NdotV = max(dot(N, V), 0.001);
 
+    // Replace the already-integrated multi-probe/sky reflection fraction proportionally
+    // to SSR confidence rather than adding SSR on top of existing IBL.
+    float3 worldPos = mul(u_InvView, float4(viewPos, 1.0)).xyz;
+    float3 worldRefl = normalize(mul((float3x3)u_InvView, reflect(-V, N)));
+    float rotAngle = u_ReflectionParams.z;
+    float sinRot = sin(rotAngle), cosRot = cos(rotAngle);
+    float3 rotatedSkyDir = float3(cosRot * worldRefl.x - sinRot * worldRefl.z, worldRefl.y, sinRot * worldRefl.x + cosRot * worldRefl.z);
+    float envIntensity = max(u_ReflectionParams.y, 0.0);
+    float3 skyFallback = ((u_ReflectionHeader.y != 0u)
+        ? u_SkyPrefilterMap.SampleLevel(u_LinearSampler, rotatedSkyDir, 0.0).rgb
+        : (u_ReflectionSkyAmbient.rgb * (1.0 - saturate(float(u_ReflectionHeader.z))))) * envIntensity;
+    MultiProbeBlendResult envEval = EvaluateMultiProbeBlendHLSL(worldPos, worldRefl, 0.0, u_LinearSampler, skyFallback);
+    float3 fallbackEnv = envEval.BlendedEnvColor;
+
     // Fresnel Schlick dielectric factor (F0 = 0.04)
     float3 F0 = float3(0.04, 0.04, 0.04);
     float3 F = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
 
-    float ssrStrength = u_SSRParams.z;
-    float3 finalColor = sceneColor.rgb + ssrColor * (confidence * F * ssrStrength);
-    return float4(finalColor, sceneColor.a);
+    float3 envReplacementDelta = (ssrColor - fallbackEnv) * (ssrWeight * F);
+    float3 finalColor = max(sceneColor.rgb + envReplacementDelta, float3(0.0, 0.0, 0.0));
+    return float4(clamp(finalColor, 0.0, 65000.0), sceneColor.a);
 }

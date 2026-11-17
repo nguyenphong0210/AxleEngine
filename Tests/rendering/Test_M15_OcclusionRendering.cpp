@@ -378,12 +378,17 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
     RHIVertex3D vertices[3];
     vertices[0].Position = {-1, -1, 0.5f}; vertices[1].Position = {3, -1, 0.5f}; vertices[2].Position = {-1, 3, 0.5f};
     for (auto& vertex : vertices) vertex.Normal = {0, 0, 1};
-    RHIBuffer vertexBuffer, sceneBuffer, materialBuffer, cascadeBuffer;
+    RHIBuffer vertexBuffer, sceneBuffer, materialBuffer, cascadeBuffer, reflectionProbeBuffer;
     RENDER_CHECK(vertexBuffer.Init(RHIBufferDesc::Vertex(sizeof(vertices), RHIMemoryLocation::HostUpload)) &&
         vertexBuffer.UpdateData(vertices, sizeof(vertices)), "forward invariance vertex buffer");
     RENDER_CHECK(sceneBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISceneConstants), RHIMemoryLocation::HostUpload)) &&
         materialBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIMaterialConstants), RHIMemoryLocation::HostUpload)) &&
-        cascadeBuffer.Init(RHIBufferDesc::Constant(sizeof(RHICascadeConstants), RHIMemoryLocation::HostUpload)), "forward invariance buffers");
+        cascadeBuffer.Init(RHIBufferDesc::Constant(sizeof(RHICascadeConstants), RHIMemoryLocation::HostUpload)) &&
+        reflectionProbeBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIReflectionProbeBufferData), RHIMemoryLocation::HostUpload)), "forward invariance buffers");
+    {
+        const RHIReflectionProbeBufferData emptyProbes{};
+        RENDER_CHECK(reflectionProbeBuffer.UpdateData(&emptyProbes, sizeof(emptyProbes)), "forward invariance empty reflection probe buffer");
+    }
     std::ofstream evidence(output / "M15_U4AB_forward.txt");
     RENDER_CHECK(evidence.is_open(), "forward invariance evidence");
     enum class Term { Sun, Specular, Ambient, Emissive, Local, Spot, SunAndLocal };
@@ -492,8 +497,12 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
             textures.push_back(RHIMaterial::GetFallbackTexture(RHITextureSlot(slot))->GetSRV());
         textures.insert(textures.end(), {RHIMaterial::GetDefaultBlackTexture()->GetSRV(), RHIMaterial::GetDefaultWhiteTexture()->GetSRV(),
             shadow.GetSRV(), renderer.GetLocalShadows().GetSRV()});
-        RENDER_CHECK(materialSet && visibilitySet && pool.UpdateTextureRange(materialSet, 0, 0, textures) &&
-            pool.UpdateTextureRange(visibilitySet, 0, 0, {visibility.GetSRV(), guide.GetSRV()}), "forward synthetic descriptors");
+        auto* defaultProbeSRV = RHIMaterial::GetDefaultPrefilterCubemap()->GetSRV();
+        RENDER_CHECK(materialSet && visibilitySet && defaultProbeSRV &&
+            pool.UpdateTextureRange(materialSet, 0, 0, textures) &&
+            pool.UpdateTextureRange(visibilitySet, 0, 0, {visibility.GetSRV(), guide.GetSRV()}) &&
+            pool.UpdateTextureRange(visibilitySet, 1, 0, {defaultProbeSRV, defaultProbeSRV, defaultProbeSRV, defaultProbeSRV}),
+            "forward synthetic descriptors");
         RHIDescriptorPool graphPool;
         std::vector<nri::DescriptorSet*> graphSets;
         if (graphMode) {
@@ -518,6 +527,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
                         else if (space == 0 && slot == 2) descriptor = graphMaterialBuffer.GetCBV();
                         else if (space == 0 && slot == 4) descriptor = cascadeBuffer.GetCBV();
                         else if (space == 0 && slot == 5) descriptor = renderer.GetLocalShadows().GetConstantsCBV();
+                        else if (space == 0 && slot == 6) descriptor = reflectionProbeBuffer.GetCBV();
                         else if (space == 3 && slot == 0) descriptor = renderer.GetLightBuffer().GetCBV();
                     } else if (range.descriptorType == nri::DescriptorType::TEXTURE) {
                         if (space == 2 && slot < 3) descriptor = textures[6 + slot];
@@ -525,6 +535,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
                         else if (space == 2 && slot == 4) descriptor = renderer.GetLocalShadows().GetSRV();
                         else if (space == 4 && slot == 0) descriptor = visibility.GetSRV();
                         else if (space == 4 && slot == 1) descriptor = guide.GetSRV();
+                        else if (space == 4 && slot >= 2 && slot < 6) descriptor = defaultProbeSRV;
                     } else if (range.descriptorType == nri::DescriptorType::SAMPLER) {
                         descriptor = slot == 1 ? graphShadowSampler.GetNative() : renderer.GetSampler().GetNative();
                     }
@@ -553,6 +564,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
             commands.SetRootDescriptor(0, sceneBuffer.GetCBV()); commands.SetRootDescriptor(1, renderer.GetLightBuffer().GetCBV());
             commands.SetRootDescriptor(2, materialBuffer.GetCBV()); commands.SetRootDescriptor(3, cascadeBuffer.GetCBV());
             commands.SetRootDescriptor(4, renderer.GetLocalShadows().GetConstantsCBV());
+            commands.SetRootDescriptor(5, reflectionProbeBuffer.GetCBV());
             pool.Bind(commands.GetNative()); commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, 0, materialSet);
             commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, 1, visibilitySet);
             commands.SetRootConstants(0, &object, sizeof(object));

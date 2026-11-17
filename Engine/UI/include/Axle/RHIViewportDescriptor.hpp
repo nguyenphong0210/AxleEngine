@@ -22,6 +22,7 @@ namespace Axle {
         bool IntermediateHDR = false, FXAA = false;
         bool EnableNormal = false, EnableScreenStorage = false;
         bool EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false;
+        bool EnableReflectionTerms = false;
         bool operator==(const RHIViewportDesc&) const = default;
     };
 

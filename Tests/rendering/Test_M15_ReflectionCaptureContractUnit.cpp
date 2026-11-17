@@ -682,14 +682,8 @@ bool RunM15ReflectionCaptureContractUnitTests() {
                      surfaceShader.find("EvaluateMultiProbeBlendHLSL") != std::string::npos,
             "M15-U5-28 / 30.2: ForwardPBR.hlsl and MaterialSurface.hlsl share the canonical multi-probe + sky blend path");
 
-        const std::string ssrShader = ReadText(AXLE_SSR_SHADER_PATH);
-        RENDER_CHECK(!ssrShader.empty() &&
-                     ssrShader.find("#include \"ReflectionProbeCommon.hlsli\"") != std::string::npos &&
-                     ssrShader.find("EvaluateMultiProbeBlendHLSL") != std::string::npos &&
-                     ssrShader.find("envReplacementDelta") != std::string::npos &&
-                     ssrShader.find("(ssrColor - fallbackEnv)") != std::string::npos &&
-                     ssrShader.find("u_ProbeCubemap") == std::string::npos,
-            "M15-U5-30.1 / 30.3 / 31.5: SSR.hlsl replaces fallbackEnv proportionally via (ssrColor - fallbackEnv) under one energy policy");
+        // SSR energy behavior is verified with actual forward terms and native
+        // readbacks, rather than requiring a particular shader expression.
     }
 
     std::cout << "[M15ReflectionCapture] All dynamic reflection capture contract tests passed!\n";

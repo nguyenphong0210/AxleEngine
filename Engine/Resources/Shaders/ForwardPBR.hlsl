@@ -362,7 +362,7 @@ float3 LTC_IntegrateEdge(float3 va, float3 vb) {
     return (cr / len) * acos(dt);
 }
 
-float4 PSMain(PSInput input) : SV_Target0 {
+ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     // 1. Unpack Shading Controls from Object Push Constants
     float tileScale = max(0.01, u_Params.x);
     int shadingMode = (int)u_Params.y;
@@ -798,6 +798,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
     float3 ambientF = FresnelSchlickRoughness(NdotV, F0, roughness);
     float3 ambientKD = (float3(1.0, 1.0, 1.0) - ambientF) * (1.0 - metallic);
     float3 ambient;
+    float3 reflectionEnvironment = 0.0;
+    float3 reflectionResponse = 0.0;
 
     bool hasSplitSumIBL = (u_LightCounts.w == 1u);
     uint envWidth = 0, envHeight = 0, envLevels = 1;
@@ -829,6 +831,9 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 coatEnvironment = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, coatRough, u_EnvironmentSampler, skyCoatEnv).BlendedEnvColor;
         diffuseAmbient *= (1.0-coatF) * (1.0-coatF);
         specularAmbient = (specularAmbient * (1.0-coatF) * (1.0-coatF) + coatEnvironment * coatF) * u_MaterialSurface.w;
+        reflectionEnvironment = specularAmbient * ao;
+        reflectionResponse = ((ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation *
+            (1.0-coatF) * (1.0-coatF) + coatF) * u_MaterialSurface.w * ao;
         ambient = (diffuseAmbient + specularAmbient) * ao;
     } else {
         // Shared analytical environment approximation with seamless local-probe split-sum blend:
@@ -839,6 +844,10 @@ float4 PSMain(PSInput input) : SV_Target0 {
         MultiProbeBlendResult envBlend = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, roughness, u_EnvironmentSampler, float3(0.0, 0.0, 0.0));
         float3 probeSpec = envBlend.ProbeColor * (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation * u_MaterialSurface.w;
         float3 specularAmbient = lerp(analyticalSpec, probeSpec, envBlend.ProbeCoverage);
+        float3 analyticalResponse = ambientF * (1.0 - roughness * 0.5) * ggxEnergyCompensation *
+            (1.0 - saturate(u_LightReserved[0].z));
+        reflectionResponse = lerp(analyticalResponse, (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation,
+            envBlend.ProbeCoverage) * u_MaterialSurface.w;
         if (coatAnisotropy.x > 0.0 && envBlend.ProbeCoverage > 0.0) {
             float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0 - NdotV, 5.0));
             float coatRough = clamp(coatAnisotropy.y, 0.04, 1.0);
@@ -846,7 +855,10 @@ float4 PSMain(PSInput input) : SV_Target0 {
             float coatBlend = coatF * envBlend.ProbeCoverage;
             diffuseAmbient *= (1.0 - coatBlend) * (1.0 - coatBlend);
             specularAmbient = specularAmbient * (1.0 - coatBlend) * (1.0 - coatBlend) + coatProbeEnv * coatBlend * u_MaterialSurface.w;
+            reflectionResponse = reflectionResponse * (1.0 - coatBlend) * (1.0 - coatBlend) + coatBlend * u_MaterialSurface.w;
         }
+        reflectionEnvironment = specularAmbient * ao;
+        reflectionResponse *= ao;
         ambient = (diffuseAmbient + specularAmbient) * ao;
     }
     
@@ -855,6 +867,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 sheenEnv = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, u_Sheen.w, u_EnvironmentSampler, sheenSky).BlendedEnvColor;
         float3 sheenAmbient = sheenEnv * u_Sheen.rgb * pow(1.0 - NdotV, 4.0) * u_MaterialSurface.w;
         ambient += sheenAmbient * ao;
+        reflectionEnvironment += sheenAmbient * ao;
+        reflectionResponse += u_Sheen.rgb * pow(1.0 - NdotV, 4.0) * u_MaterialSurface.w * ao;
     }
     if (u_Subsurface.w > 0.0) {
         float3 sssEnv = (hasSplitSumIBL ? u_IrradianceMap.Sample(u_EnvironmentSampler, RotateEnvironmentDirection(N)).rgb : u_SunLight.AmbientColor.rgb);
@@ -925,8 +939,11 @@ float4 PSMain(PSInput input) : SV_Target0 {
             }
             color=transmitted*u_RefractionTint.rgb*(1.0-fresnel)+color*fresnel;
             if (u_CameraPosition.w<=0.0) color=pow(max(color,0.0),1.0/2.2);
-            return float4(color,1.0);
+            return MakeReflectionSurfaceOutput(float4(color,1.0), 0.0, 0.0);
         }
     }
-    return float4(color, albedo.a);
+    return MakeReflectionSurfaceOutput(float4(color, albedo.a), reflectionEnvironment, reflectionResponse);
 }
+
+float4 PSMain(PSInput input) : SV_Target0 { return EvaluateReflectionSurface(input).Color; }
+ReflectionSurfaceOutput PSReflectionMain(PSInput input) { return EvaluateReflectionSurface(input); }

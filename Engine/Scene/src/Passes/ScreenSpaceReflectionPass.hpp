@@ -17,6 +17,7 @@ namespace Axle::Passes {
     struct ScreenSpaceReflectionResources {
         RenderGraph::Resource SceneColor, Input, SceneDepth, Depth, SceneNormal, Storage;
         std::vector<RenderGraph::Resource> HiZ;
+        RenderGraph::Resource Environment, Response;
     };
 
     struct ScreenSpaceReflectionRecordInputs {

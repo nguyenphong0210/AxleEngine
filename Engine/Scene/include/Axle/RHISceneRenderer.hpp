@@ -366,8 +366,8 @@ namespace Axle {
         nri::Pipeline* GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1,
                                            Axle::SurfaceType surfaceType = Axle::SurfaceType::Opaque,
                                            Axle::CullMode cullMode = Axle::CullMode::None,
-                                           bool depthWrite = true);
-        nri::Pipeline* GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1);
+                                           bool depthWrite = true, bool reflectionTerms = false);
+        nri::Pipeline* GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1, bool reflectionTerms = false);
 
         // Image-Based Lighting (IBL) configuration
         void SetIBLMaps(const std::shared_ptr<RHI::RHITexture>& irradiance,
@@ -476,6 +476,8 @@ namespace Axle {
         RHI::RHITexture* GetIntermediateFXAATarget() const { return GetActiveTarget(RHI::RHIViewTarget::FXAA); }
         RHI::RHITexture* GetOpaqueNormalTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ScreenNormal); }
         RHI::RHITexture* GetScreenStorageTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ScreenStorage); }
+        RHI::RHITexture* GetReflectionEnvironmentTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ReflectionEnvironment); }
+        RHI::RHITexture* GetReflectionResponseTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ReflectionResponse); }
         RHI::RHITexture* GetHiZTarget(uint32_t level) const {
             auto targets = m_ActiveViewTargets.lock(); return targets ? targets->GetHiZ(level) : nullptr;
         }
@@ -693,7 +695,7 @@ namespace Axle {
             uint8_t sampleCount,
             Axle::SurfaceType surfaceType,
             Axle::CullMode cullMode,
-            bool depthWrite);
+            bool depthWrite, bool reflectionTerms = false);
 
         MaterialTextureCache m_MaterialTextures;
         RHI::RHITexture* m_OpaqueSceneColor = nullptr;
@@ -722,6 +724,7 @@ namespace Axle {
 
         RHI::RHIShaderBytecode m_VertexShader;
         RHI::RHIShaderBytecode m_PixelShader;
+        RHI::RHIShaderBytecode m_ReflectionPixelShader;
 
         // Atmospheric Skybox Resources
         RHI::RHIPipelineLayout m_SkyboxPipelineLayout;
@@ -865,7 +868,7 @@ namespace Axle {
         bool m_HasDynamicCaptureBudgetOverride = false;
         // Protect the main view's selected reflections from background cache admission.
         std::vector<std::string> m_ScheduledReflectionProbeKeys;
-        static std::vector<glm::vec3> CollectReflectionSamplePoints(const RenderWorld& world);
+        static std::vector<ReflectionSampleBounds> CollectReflectionSampleBounds(const RenderWorld& world);
         RHIReflectionProbeBufferData BuildReflectionProbeBufferData(
             const ReflectionFrame& reflectionFrame,
             bool useIBL,

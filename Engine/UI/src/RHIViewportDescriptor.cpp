@@ -28,6 +28,7 @@ namespace Axle {
         targets.EnableNormal = desc.EnableNormal;
         targets.EnableScreenStorage = desc.EnableScreenStorage;
         targets.EnableHiZ = desc.EnableHiZ;
+        targets.EnableReflectionTerms = desc.EnableReflectionTerms;
         targets.EnableBloom = desc.EnableBloom;
         targets.EnableGTAO = desc.EnableGTAO;
         targets.EnableAutoExposure = desc.EnableAutoExposure;
@@ -131,7 +132,8 @@ namespace Axle {
         if (!m_OwnsColorTexture) return false;
         auto desc = m_Desc;
         desc.MSAASamples = settings.MSAASamples;
-        desc.IntermediateHDR = settings.EnableToneMapping;
+        desc.EnableReflectionTerms = settings.EnableSSR && settings.MSAASamples == 1;
+        desc.IntermediateHDR = settings.EnableToneMapping || desc.EnableReflectionTerms;
         desc.FXAA = settings.EnableFXAA;
         desc.HistoryCount = settings.EnableTAA ? 2 : 0;
         desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;

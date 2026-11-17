@@ -50,6 +50,9 @@ namespace Axle::RHI {
         if (m_Desc.HDR && !check2D(RHIViewTarget::HDR, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT)) return false;
         if (m_Desc.FXAA && !check2D(RHIViewTarget::FXAA, m_Desc.Width, m_Desc.Height, m_Desc.ColorFormat)) return false;
         if (m_Desc.EnableNormal && !check2D(RHIViewTarget::ScreenNormal, m_Desc.Width, m_Desc.Height, m_Desc.NormalFormat)) return false;
+        if (m_Desc.EnableReflectionTerms &&
+            (!check2D(RHIViewTarget::ReflectionEnvironment, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT) ||
+             !check2D(RHIViewTarget::ReflectionResponse, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT))) return false;
         if (m_Desc.EnableScreenStorage &&
             (!check2D(RHIViewTarget::ScreenStorage, m_Desc.Width, m_Desc.Height,
                       m_Desc.HDR ? RHITextureFormat::RGBA16_FLOAT : m_Desc.ColorFormat) ||
@@ -125,6 +128,9 @@ namespace Axle::RHI {
         if (desc.EnableDepth && (!create(RHIViewTarget::OpaqueDepth, desc.DepthFormat, 1, true) ||
             !create(RHIViewTarget::ParticleDepth, desc.DepthFormat, 1, true))) return false;
         if (desc.EnableNormal && !create(RHIViewTarget::ScreenNormal, desc.NormalFormat, 1, false)) return false;
+        if (desc.EnableReflectionTerms &&
+            (!create(RHIViewTarget::ReflectionEnvironment, RHITextureFormat::RGBA16_FLOAT, 1, false) ||
+             !create(RHIViewTarget::ReflectionResponse, RHITextureFormat::RGBA16_FLOAT, 1, false))) return false;
         if (desc.EnableScreenStorage) {
             auto texture = std::make_unique<RHITexture>();
             auto native = RHITextureDesc::StorageTexture2D(desc.Width, desc.Height, desc.HDR ? RHITextureFormat::RGBA16_FLOAT : desc.ColorFormat, "ViewTarget_ScreenStorage");

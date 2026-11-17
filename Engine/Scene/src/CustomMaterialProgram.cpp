@@ -11,13 +11,14 @@
 namespace Axle {
     nri::Pipeline* CreateCustomMaterialPipeline(const CustomReadyGeneration& generation,
         nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount,
-        SurfaceType surfaceType, CullMode cullMode, bool depthWrite, bool normalPass) {
+        SurfaceType surfaceType, CullMode cullMode, bool depthWrite, bool normalPass, bool reflectionTerms) {
         using namespace RHI;
         if (!generation.PipelineLayout || !generation.PipelineLayout->IsValid()) return nullptr;
         if (normalPass && (!generation.HasNormalPass || !generation.NormalPSBytecode.IsValid())) return nullptr;
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = generation.PipelineLayout.get();
-        gfxDesc.Shaders = { generation.VSBytecode, normalPass ? generation.NormalPSBytecode : generation.PSBytecode };
+        gfxDesc.Shaders = { generation.VSBytecode, normalPass ? generation.NormalPSBytecode :
+            reflectionTerms ? generation.ReflectionPSBytecode : generation.PSBytecode };
 
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
         if (cullMode == Axle::CullMode::Back) {
@@ -42,6 +43,13 @@ namespace Axle {
             gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
         }
         gfxDesc.ColorAttachmentFormats = { colorFormat };
+        if (reflectionTerms) {
+            if (!generation.HasReflectionTerms || normalPass) return nullptr;
+            for (int i = 0; i < 2; ++i) {
+                gfxDesc.ColorAttachments.push_back(RHIBlendAttachmentDesc::Opaque());
+                gfxDesc.ColorAttachmentFormats.push_back(nri::Format::RGBA16_SFLOAT);
+            }
+        }
         gfxDesc.SampleCount = sampleCount;
 
         RHIVertexInputDesc inputDesc;
@@ -275,8 +283,22 @@ namespace Axle {
                 return result;
             }
         }
-        auto mergedReflection = hasNormalPass ? RHI::RHIShaderReflection::Merge({vsResult.Reflection, psResult.Reflection, normalResult.Reflection}) :
-                                               RHI::RHIShaderReflection::Merge({vsResult.Reflection, psResult.Reflection});
+        const bool hasReflectionTerms = key.EntryPointPS == "PSMain" && std::regex_search(vsDesc.Source,
+            std::regex(R"(ReflectionSurfaceOutput\s+PSReflectionMain\s*\()"));
+        RHI::RHIShaderCompileResult reflectionResult;
+        if (hasReflectionTerms) {
+            auto reflectionDesc = psDesc;
+            reflectionDesc.EntryPoint = "PSReflectionMain";
+            reflectionResult = compiler.Compile(reflectionDesc);
+            if (!reflectionResult.Success) {
+                result.Diagnostic = "Reflection companion compilation failed: " + reflectionResult.ErrorMessage;
+                return result;
+            }
+        }
+        std::vector<RHI::RHIShaderReflection> interfaces{vsResult.Reflection, psResult.Reflection};
+        if (hasNormalPass) interfaces.push_back(normalResult.Reflection);
+        if (hasReflectionTerms) interfaces.push_back(reflectionResult.Reflection);
+        auto mergedReflection = RHI::RHIShaderReflection::Merge(interfaces);
         auto validation=CustomShaderInterface::Validate(mergedReflection);
         std::string collision;
         if (!validation.IsValid || CustomShaderInterface::HasVulkanBindingCollision(mergedReflection,collision)) {
@@ -304,6 +326,8 @@ namespace Axle {
         generation->PSBytecode = psResult.Bytecode;
         if (hasNormalPass) generation->NormalPSBytecode = normalResult.Bytecode;
         generation->HasNormalPass = hasNormalPass;
+        generation->HasReflectionTerms = hasReflectionTerms;
+        if (hasReflectionTerms) generation->ReflectionPSBytecode = reflectionResult.Bytecode;
         generation->Reflection = mergedReflection;
         generation->BindingPlan = std::get<MaterialBindingPlan>(planResult);
 
@@ -328,6 +352,10 @@ namespace Axle {
             (!CreateCustomMaterialPipeline(*generation,nri::Format::RGBA16_SFLOAT,nri::Format::D32_SFLOAT,1,SurfaceType::Opaque,CullMode::None,true,true) ||
              !CreateCustomMaterialPipeline(*generation,nri::Format::RGBA16_SFLOAT,nri::Format::D32_SFLOAT,1,SurfaceType::Opaque,CullMode::None,false,true))) {
             result.Diagnostic="Custom material normal pipeline validation failed.";return result;
+        }
+        if (hasReflectionTerms && !CreateCustomMaterialPipeline(*generation,nri::Format::RGBA16_SFLOAT,
+                nri::Format::D32_SFLOAT,1,SurfaceType::Opaque,CullMode::None,true,false,true)) {
+            result.Diagnostic="Custom material reflection pipeline validation failed.";return result;
         }
         result.Success = true;
         result.Generation = generation;

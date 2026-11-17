@@ -98,6 +98,10 @@ namespace Axle {
         bool InsideCore = false;
     };
 
+    struct ReflectionSampleBounds {
+        glm::vec3 Min{0.0f}, Max{0.0f};
+    };
+
     struct ReflectionProbeBasis {
         glm::vec3 Position{ 0.0f };
         glm::vec3 HalfExtents{ 5.0f };
@@ -154,6 +158,9 @@ namespace Axle {
         uint32_t CaptureCompletedFaces=0, CaptureTotalFaces=0;
         uint64_t ActiveGenerationID=0;
         std::vector<ReflectionProbeCandidate> ActiveProbes;
+        // Ranked overflow is retained for native readiness fallback; at most four
+        // ready candidates are ever bound to shaders.
+        std::vector<ReflectionProbeCandidate> AdditionalCandidates;
         uint32_t ActiveProbeCount = 0;
         uint32_t MissingProbeCount = 0;
         uint32_t StaleProbeCount = 0;
@@ -182,11 +189,14 @@ namespace Axle {
         uint32_t CaptureTotalFaces = 0;
         uint64_t ActiveGenerationID = 0;
         std::vector<ReflectionProbePublication> ProbePublications;
+        std::vector<ReflectionProbeCandidate> SelectedCandidates;
+        uint32_t RejectedProbeCount = 0;
     };
     class ReflectionService {
     public:
         ReflectionFrame Prepare(const RenderWorld&, const glm::vec3&, bool enableSSR, uint64_t sceneRevision) const;
-        ReflectionFrame PrepareView(const RenderWorld&, const glm::vec3&, std::span<const glm::vec3> samplePoints, bool enableSSR, uint64_t sceneRevision) const;
+        ReflectionFrame PrepareView(const RenderWorld&, const glm::vec3&, std::span<const glm::vec3> samplePoints,
+            bool enableSSR, uint64_t sceneRevision, std::span<const ReflectionSampleBounds> sampleBounds = {}) const;
         ReflectionFrame ResolvePublication(ReflectionFrame, const ReflectionPublication&, bool ssrAvailable, bool skyIBLAvailable) const;
         ReflectionInvalidation EvaluateInvalidation(const ReflectionInvalidation& changes) const { return changes; }
         ReflectionInvalidation EvaluateInvalidation(

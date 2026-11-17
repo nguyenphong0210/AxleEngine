@@ -369,7 +369,7 @@ namespace Axle {
             if (!m_SSRComputeTextureSet || !m_SSRComputeStorageSet || !m_SSRApplyDescriptorSet) return false;
             if (m_SSRSampler.IsValid()) {
                 if (!m_SSRDescriptorPool.UpdateSampler(m_SSRComputeTextureSet, 3, 0, m_SSRSampler.GetNative()) ||
-                    !m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 6, 0, m_SSRSampler.GetNative())) return false;
+                    !m_SSRDescriptorPool.UpdateSampler(m_SSRApplyDescriptorSet, 5, 0, m_SSRSampler.GetNative())) return false;
             }
         }
 
@@ -786,6 +786,7 @@ namespace Axle {
         m_Pipeline = nullptr;
         m_PipelineHDR = nullptr;
         m_SurfaceNormalPixelShader = {};
+        m_ReflectionPixelShader = {};
         m_SkyboxPipeline = nullptr;
         m_SkyboxPipelineHDR = nullptr;
         m_SkyboxPipelineLayout.Shutdown();
@@ -903,6 +904,14 @@ namespace Axle {
             return false;
         }
         m_PixelShader = psRes.Bytecode;
+        auto reflectionDesc = psDesc;
+        reflectionDesc.EntryPoint = "PSReflectionMain";
+        const auto reflectionRes = compiler.Compile(reflectionDesc);
+        if (!reflectionRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: reflection PS compile failed: {0}", reflectionRes.ErrorMessage);
+            return false;
+        }
+        m_ReflectionPixelShader = reflectionRes.Bytecode;
 
         auto normalShaderPath = FindShaderPath("SurfaceNormal.hlsl");
         if (normalShaderPath.empty() || !std::filesystem::exists(normalShaderPath)) {
@@ -1077,10 +1086,10 @@ namespace Axle {
     nri::Pipeline* RHISceneRenderer::GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount,
                                                          Axle::SurfaceType surfaceType,
                                                          Axle::CullMode cullMode,
-                                                         bool depthWrite) {
+                                                         bool depthWrite, bool reflectionTerms) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_PipelineLayout;
-        gfxDesc.Shaders = { m_VertexShader, m_PixelShader };
+        gfxDesc.Shaders = { m_VertexShader, reflectionTerms ? m_ReflectionPixelShader : m_PixelShader };
 
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
         if (cullMode == Axle::CullMode::Back) {
@@ -1105,6 +1114,12 @@ namespace Axle {
             gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
         }
         gfxDesc.ColorAttachmentFormats = { colorFormat };
+        if (reflectionTerms) {
+            for (int i = 0; i < 2; ++i) {
+                gfxDesc.ColorAttachments.push_back(RHIBlendAttachmentDesc::Opaque());
+                gfxDesc.ColorAttachmentFormats.push_back(nri::Format::RGBA16_SFLOAT);
+            }
+        }
         gfxDesc.SampleCount = sampleCount;
 
         gfxDesc.VertexInput = VertexLayoutContract::GetCanonicalVertexInputDesc();
@@ -1136,8 +1151,8 @@ namespace Axle {
 
     nri::Pipeline* RHISceneRenderer::GetOrCreateCustomPipeline(const CustomReadyGeneration& generation,
         nri::Format colorFormat, nri::Format depthFormat, uint8_t samples,
-        SurfaceType surface, CullMode cull, bool depthWrite) {
-        return CreateCustomMaterialPipeline(generation,colorFormat,depthFormat,samples,surface,cull,depthWrite);
+        SurfaceType surface, CullMode cull, bool depthWrite, bool reflectionTerms) {
+        return CreateCustomMaterialPipeline(generation,colorFormat,depthFormat,samples,surface,cull,depthWrite,false,reflectionTerms);
     }
 
     bool RHISceneRenderer::CreateGraphicsPipeline(RHIDevice& device) {
@@ -1221,7 +1236,7 @@ namespace Axle {
         return m_SkyboxPipelineLayout.Init(layoutDesc);
     }
 
-    nri::Pipeline* RHISceneRenderer::GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount) {
+    nri::Pipeline* RHISceneRenderer::GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount, bool reflectionTerms) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_SkyboxPipelineLayout;
         gfxDesc.Shaders = { m_SkyboxVertexShader, m_SkyboxPixelShader };
@@ -1237,6 +1252,14 @@ namespace Axle {
 
         gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
         gfxDesc.ColorAttachmentFormats = { colorFormat };
+        if (reflectionTerms) {
+            auto ignored = RHIBlendAttachmentDesc::Opaque();
+            ignored.ColorWriteMask = nri::ColorWriteBits::NONE;
+            for (int i = 0; i < 2; ++i) {
+                gfxDesc.ColorAttachments.push_back(ignored);
+                gfxDesc.ColorAttachmentFormats.push_back(nri::Format::RGBA16_SFLOAT);
+            }
+        }
         gfxDesc.SampleCount = sampleCount;
 
         // Empty vertex input layout (full-screen triangle generated via SV_VertexID)
@@ -1840,78 +1863,28 @@ namespace Axle {
 
         if (!m_SSRComputePipelineLayout.Init(compLayoutDesc)) return false;
 
-        // 2. Apply Pipeline Layout:
-        // Root Descriptor [0] b0 space 0: 512-byte RHISSRConstants
-        // Root Descriptor [1] b1 space 0: 512-byte RHIReflectionProbeBufferData
-        nri::RootDescriptorDesc applyRootDescs[2] = {};
-        applyRootDescs[0].registerIndex = 0;
-        applyRootDescs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
-        applyRootDescs[0].shaderStages = nri::StageBits::ALL;
-
-        applyRootDescs[1].registerIndex = 1;
-        applyRootDescs[1].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
-        applyRootDescs[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-
-        // Descriptor Set (space 1):
-        // Range 0: t0 (Depth) -> TEXTURE
-        // Range 1: t1 (SSR Result) -> TEXTURE
-        // Range 2: t2 (Scene Color) -> TEXTURE
-        // Range 3: t3 (Scene Normal) -> TEXTURE
-        // Range 4: t4 (Sky Prefilter Cubemap) -> TEXTURE
-        // Range 5: t5..t8 (Active Reflection Probe Cubemaps 0..3) -> TEXTURE
-        // Range 6: s0 (Sampler) -> SAMPLER
-        nri::DescriptorRangeDesc applyRanges[7] = {};
-        applyRanges[0].baseRegisterIndex = 0;
-        applyRanges[0].descriptorNum = 1;
-        applyRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
-        applyRanges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        applyRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        applyRanges[1].baseRegisterIndex = 1;
-        applyRanges[1].descriptorNum = 1;
-        applyRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
-        applyRanges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        applyRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        applyRanges[2].baseRegisterIndex = 2;
-        applyRanges[2].descriptorNum = 1;
-        applyRanges[2].descriptorType = nri::DescriptorType::TEXTURE;
-        applyRanges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        applyRanges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        applyRanges[3].baseRegisterIndex = 3;
-        applyRanges[3].descriptorNum = 1;
-        applyRanges[3].descriptorType = nri::DescriptorType::TEXTURE;
-        applyRanges[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        applyRanges[3].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        applyRanges[4].baseRegisterIndex = 4;
-        applyRanges[4].descriptorNum = 1;
-        applyRanges[4].descriptorType = nri::DescriptorType::TEXTURE;
-        applyRanges[4].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        applyRanges[4].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        applyRanges[5].baseRegisterIndex = 5;
-        applyRanges[5].descriptorNum = MaxActiveReflectionProbes;
-        applyRanges[5].descriptorType = nri::DescriptorType::TEXTURE;
-        applyRanges[5].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        applyRanges[5].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        applyRanges[6].baseRegisterIndex = 0;
-        applyRanges[6].descriptorNum = 1;
-        applyRanges[6].descriptorType = nri::DescriptorType::SAMPLER;
-        applyRanges[6].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        applyRanges[6].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        // Exact forward reflection terms: five sampled textures and one sampler.
+        nri::RootDescriptorDesc applyRootDesc{};
+        applyRootDesc.registerIndex = 0;
+        applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        applyRootDesc.shaderStages = nri::StageBits::ALL;
+        nri::DescriptorRangeDesc applyRanges[6]{};
+        for (uint32_t i = 0; i < 6; ++i) {
+            applyRanges[i].baseRegisterIndex = i < 5 ? i : 0;
+            applyRanges[i].descriptorNum = 1;
+            applyRanges[i].descriptorType = i < 5 ? nri::DescriptorType::TEXTURE : nri::DescriptorType::SAMPLER;
+            applyRanges[i].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        }
 
         nri::DescriptorSetDesc applyDescSet = {};
         applyDescSet.registerSpace = 1;
         applyDescSet.ranges = applyRanges;
-        applyDescSet.rangeNum = 7;
+        applyDescSet.rangeNum = 6;
 
         nri::PipelineLayoutDesc applyLayoutDesc = {};
         applyLayoutDesc.rootRegisterSpace = 0;
-        applyLayoutDesc.rootDescriptors = applyRootDescs;
-        applyLayoutDesc.rootDescriptorNum = 2;
+        applyLayoutDesc.rootDescriptors = &applyRootDesc;
+        applyLayoutDesc.rootDescriptorNum = 1;
         applyLayoutDesc.descriptorSets = &applyDescSet;
         applyLayoutDesc.descriptorSetNum = 1;
         applyLayoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
@@ -3022,35 +2995,32 @@ namespace Axle {
         }
     }
 
-    std::vector<glm::vec3> RHISceneRenderer::CollectReflectionSamplePoints(const RenderWorld& world) {
-        std::vector<glm::vec3> points;
-        if (world.ReflectionProbes.empty() || world.Meshes.empty()) return points;
-        points.reserve(world.Meshes.size() + world.Meshes.size() * world.ReflectionProbes.size());
+    std::vector<ReflectionSampleBounds> RHISceneRenderer::CollectReflectionSampleBounds(const RenderWorld& world) {
+        std::vector<ReflectionSampleBounds> bounds;
+        if (world.ReflectionProbes.empty()) return bounds;
+        bounds.reserve(world.Meshes.size());
         for (const auto& mesh : world.Meshes) {
-            points.emplace_back(mesh.WorldTransform[3]);
-            if (!mesh.NativeView || !mesh.NativeView->IsValid()) continue;
-            const glm::vec3 bMin = mesh.NativeView->GetBoundingMin();
-            const glm::vec3 bMax = mesh.NativeView->GetBoundingMax();
-            glm::vec3 wMin(std::numeric_limits<float>::max());
-            glm::vec3 wMax(std::numeric_limits<float>::lowest());
-            for (int corner = 0; corner < 8; ++corner) {
-                const glm::vec3 localCorner(
-                    (corner & 1) ? bMax.x : bMin.x,
-                    (corner & 2) ? bMax.y : bMin.y,
-                    (corner & 4) ? bMax.z : bMin.z);
-                const glm::vec3 worldCorner = glm::vec3(mesh.WorldTransform * glm::vec4(localCorner, 1.0f));
-                if (std::isfinite(worldCorner.x) && std::isfinite(worldCorner.y) && std::isfinite(worldCorner.z)) {
-                    wMin = glm::min(wMin, worldCorner);
-                    wMax = glm::max(wMax, worldCorner);
+            glm::vec3 wMin(mesh.WorldTransform[3]), wMax(wMin);
+            const auto view = mesh.NativeView ? mesh.NativeView : mesh.NativeMesh ? mesh.NativeMesh->CaptureView() : nullptr;
+            if (view && view->IsValid()) {
+                const auto bMin = view->GetBoundingMin(), bMax = view->GetBoundingMax();
+                wMin = glm::vec3(std::numeric_limits<float>::max());
+                wMax = glm::vec3(std::numeric_limits<float>::lowest());
+                for (int corner = 0; corner < 8; ++corner) {
+                    const glm::vec3 local((corner & 1) ? bMax.x : bMin.x,
+                        (corner & 2) ? bMax.y : bMin.y, (corner & 4) ? bMax.z : bMin.z);
+                    const auto point = glm::vec3(mesh.WorldTransform * glm::vec4(local, 1.0f));
+                    if (std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z)) {
+                        wMin = glm::min(wMin, point);
+                        wMax = glm::max(wMax, point);
+                    }
                 }
             }
-            if (wMin.x <= wMax.x && wMin.y <= wMax.y && wMin.z <= wMax.z) {
-                for (const auto& probe : world.ReflectionProbes) {
-                    points.push_back(glm::clamp(probe.Position, wMin, wMax));
-                }
-            }
+            if (std::isfinite(wMin.x) && std::isfinite(wMin.y) && std::isfinite(wMin.z) &&
+                std::isfinite(wMax.x) && std::isfinite(wMax.y) && std::isfinite(wMax.z) &&
+                glm::all(glm::lessThanEqual(wMin, wMax))) bounds.push_back({wMin, wMax});
         }
-        return points;
+        return bounds;
     }
 
     RHIReflectionProbeBufferData RHISceneRenderer::BuildReflectionProbeBufferData(
@@ -3110,13 +3080,15 @@ namespace Axle {
             return {{}, "dynamic_probe_suppressed_during_capture"};
         }
 
+        std::vector<ReflectionProbeCandidate> ranked = reflectionFrame.ActiveProbes;
+        ranked.insert(ranked.end(), reflectionFrame.AdditionalCandidates.begin(), reflectionFrame.AdditionalCandidates.end());
         std::vector<RenderReflectionProbe> candidates;
         if (!reflectionFrame.ActiveProbes.empty()) {
             candidates.reserve(reflectionFrame.ActiveProbes.size());
             for (const auto& c : reflectionFrame.ActiveProbes) {
                 candidates.push_back(c.Probe);
-                if (candidates.size() >= MaxActiveReflectionProbes) break;
             }
+            for (const auto& c : reflectionFrame.AdditionalCandidates) candidates.push_back(c.Probe);
         } else if (reflectionFrame.SelectedProbe) {
             candidates.push_back(*reflectionFrame.SelectedProbe);
         }
@@ -3126,9 +3098,11 @@ namespace Axle {
         publication.ProbePublications.resize(candidates.size());
         const uint64_t currentEpoch = m_Device ? m_Device->GetEpoch() : 0;
         bool primarySet = false;
+        uint32_t readyCount = 0;
+        size_t attemptedCount = 0;
 
-        for (size_t idx = candidates.size(); idx > 0; --idx) {
-            const size_t i = idx - 1;
+        for (size_t i = 0; i < candidates.size() && readyCount < MaxActiveReflectionProbes; ++i) {
+            ++attemptedCount;
             const auto& cand = candidates[i];
             auto& entryPub = publication.ProbePublications[i];
             std::shared_ptr<RHITexture> resolvedTexture;
@@ -3141,7 +3115,6 @@ namespace Axle {
                     probeIt->second &&
                     probeIt->second->IsValidForDevice(currentEpoch)) {
                     dynamicProbe = probeIt->second;
-                    dynamicProbe->LastUsedSequence = ++m_CaptureLRUClock;
                 }
 
                 if (const auto statusIt = m_DynamicProbeStatuses.find(probeKey);
@@ -3213,6 +3186,37 @@ namespace Axle {
                     }
                 }
             }
+            if (entryPub.Ready) ++readyCount;
+        }
+
+        // Fill native slots from ready candidates before truncating. Unready
+        // high-ranked probes must not hide a usable lower-ranked fallback.
+        if (!ranked.empty()) {
+            std::vector<RenderReflectionProbe> chosen;
+            std::vector<ReflectionProbePublication> receipts;
+            uint32_t missing = 0;
+            for (size_t i = 0; i < attemptedCount; ++i) {
+                if (!publication.ProbePublications[i].Ready) { ++missing; continue; }
+                chosen.push_back(candidates[i]);
+                publication.SelectedCandidates.push_back(ranked[i]);
+                receipts.push_back(publication.ProbePublications[i]);
+            }
+            for (size_t i = 0; i < attemptedCount && chosen.size() < MaxActiveReflectionProbes; ++i) {
+                if (publication.ProbePublications[i].Ready) continue;
+                chosen.push_back(candidates[i]);
+                publication.SelectedCandidates.push_back(ranked[i]);
+                receipts.push_back(publication.ProbePublications[i]);
+                --missing;
+            }
+            publication.RejectedProbeCount = missing;
+            candidates = std::move(chosen);
+            publication.ProbePublications = std::move(receipts);
+        }
+        for (size_t i = candidates.size(); i > 0; --i) {
+            if (!publication.ProbePublications[i - 1].Ready) continue;
+            const auto it = m_DynamicProbeCaptures.find(ResolveDynamicProbeKey(candidates[i - 1]));
+            if (it != m_DynamicProbeCaptures.end() && it->second)
+                it->second->LastUsedSequence = ++m_CaptureLRUClock;
         }
 
         for (size_t i = 0; i < candidates.size(); ++i) {
@@ -4379,11 +4383,9 @@ namespace Axle {
         std::erase_if(m_ForcedInvalidatedProbes, [&](const auto& item) { return !liveKeys.contains(item.first); });
         std::erase_if(m_FailedDynamicCaptureRevisions, [&](const auto& item) { return !liveKeys.contains(item.first); });
 
-        const auto samplePoints = CollectReflectionSamplePoints(world);
+        const auto samplePoints = CollectReflectionSampleBounds(world);
         const auto previewReflection = m_ReflectionService.PrepareView(
-            world, cameraPosition, samplePoints, requestedSettings.EnableSSR, world.SceneRevision);
-        const auto cameraReflection = m_ReflectionService.Prepare(
-            world, cameraPosition, requestedSettings.EnableSSR, world.SceneRevision);
+            world, cameraPosition, {}, requestedSettings.EnableSSR, world.SceneRevision, samplePoints);
         std::vector<std::string> viewPriorityKeys;
         viewPriorityKeys.reserve(previewReflection.ActiveProbes.size());
         for (const auto& active : previewReflection.ActiveProbes) {
@@ -4392,9 +4394,12 @@ namespace Axle {
             }
         }
         m_ScheduledReflectionProbeKeys.clear();
-        for (const auto& active : cameraReflection.ActiveProbes) {
-            if (active.DynamicCapture) {
+        auto pinCandidates = previewReflection.ActiveProbes;
+        pinCandidates.insert(pinCandidates.end(), previewReflection.AdditionalCandidates.begin(), previewReflection.AdditionalCandidates.end());
+        for (const auto& active : pinCandidates) {
+            if (active.DynamicCapture && GetDynamicReflectionProbe(active.Probe)) {
                 m_ScheduledReflectionProbeKeys.push_back(ResolveDynamicProbeKey(active.Probe));
+                if (m_ScheduledReflectionProbeKeys.size() == MaxActiveReflectionProbes) break;
             }
         }
         struct SelectionGuard {
@@ -4925,7 +4930,15 @@ namespace Axle {
         }
         if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
         const auto backendPolicy = RenderBackendPolicy::FromDevice(m_Device->GetCapabilities());
-        const SceneRenderSettings settings = backendPolicy.ResolveSettings(requestedSettings);
+        SceneRenderSettings settings = backendPolicy.ResolveSettings(requestedSettings);
+        if (settings.EnableSSR && settings.MSAASamples == 1 && !settings.EnableToneMapping) {
+            // Reflection replacement is radiance arithmetic. Preserve the legacy
+            // ACES/gamma output with one final conversion after linear resolve.
+            settings.EnableToneMapping = true;
+            settings.ToneMappingMode = 0;
+            settings.Exposure = 1.0f;
+            settings.Gamma = 2.2f;
+        }
         m_MaterialDiagnostics.clear(); m_MaterialFeedback.clear();
 
         if (!m_CaptureSession.Active && world.ErrorMessage.empty()) {
@@ -4951,10 +4964,10 @@ namespace Axle {
         for (const auto& fallback : backendPolicy.CollectFallbacks(requestedSettings))
             viewCtx.Diagnostics().AddFallback(fallback);
         const auto reflectionSamplePoints = m_CaptureSession.Active
-            ? std::vector<glm::vec3>{}
-            : CollectReflectionSamplePoints(world);
+            ? std::vector<ReflectionSampleBounds>{}
+            : CollectReflectionSampleBounds(world);
         const auto reflectionFrame = m_ReflectionService.PrepareView(
-            world, camera.GetPosition(), reflectionSamplePoints, settings.EnableSSR, world.SceneRevision);
+            world, camera.GetPosition(), {}, settings.EnableSSR, world.SceneRevision, reflectionSamplePoints);
         m_LastReflectionFrame=reflectionFrame;
         const auto giFrame = m_GIService.Prepare(
             world, settings, backendPolicy.Supports(BackendFeature::Compute), world.SceneRevision);
@@ -5010,6 +5023,7 @@ namespace Axle {
         targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
         targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
         targetDesc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
+        targetDesc.EnableReflectionTerms = settings.EnableSSR && settings.MSAASamples == 1;
         targetDesc.EnableBloom = settings.EnableBloom;
         targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
         targetDesc.EnableAutoExposure = settings.EnableAutoExposure;

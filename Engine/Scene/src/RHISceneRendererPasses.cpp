@@ -117,11 +117,12 @@ namespace Axle {
         const auto gtaoStorage = useGTAO ? graph.Import("GTAOStorage", viewTargets->GetGTAO()->GetNative()) : output;
 
         const uint32_t hiZLevelCount = viewTargets->GetHiZLevelCount();
-        const bool useSSR = settings.EnableSSR && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+        bool useSSR = settings.EnableSSR && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_SSRComputePipeline && m_HiZPipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
             m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
             m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr &&
-            hiZLevelCount >= RHIViewTargets::MinSSRHiZLevels;
+            hiZLevelCount >= RHIViewTargets::MinSSRHiZLevels &&
+            viewTargets->Get(RHIViewTarget::ReflectionEnvironment) && viewTargets->Get(RHIViewTarget::ReflectionResponse);
         const bool useHiZVisual = settings.HiZVisualizationLevel >= 0 && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_HiZPipeline &&
             (sceneTargetFormat == nri::Format::RGBA16_SFLOAT ? m_HiZVisualizePipelineHDR != nullptr : m_HiZVisualizePipelineSDR != nullptr) &&
@@ -141,6 +142,8 @@ namespace Axle {
         const auto ssrInput = useSSR ? graph.Import("SSRInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto ssrDepth = needHiZ ? graph.Import("SSRDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto ssrStorage = useSSR ? graph.Import("SSRStorage", m_ScreenStorageTarget->GetNative()) : output;
+        const auto reflectionEnvironment = useSSR ? graph.Import("ReflectionEnvironment", viewTargets->Get(RHIViewTarget::ReflectionEnvironment)->GetNative()) : output;
+        const auto reflectionResponse = useSSR ? graph.Import("ReflectionResponse", viewTargets->Get(RHIViewTarget::ReflectionResponse)->GetNative()) : output;
         std::vector<Graph::Resource> hizResources;
         if (needHiZ) {
             hizResources.reserve(hiZLevelCount);
@@ -360,12 +363,13 @@ namespace Axle {
                 if (!m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants))) return false;
 
                 // 4. Bind Skybox Graphics Pipeline matching active color & depth formats
-                nri::Pipeline* activeSkyboxPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR && activeSampleCount == 1)
+                nri::Pipeline* activeSkyboxPipeline = useSSR ? GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, true) : (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR && activeSampleCount == 1)
                                                           ? m_SkyboxPipelineHDR
                                                           : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline && activeSampleCount == 1)
                                                                 ? m_SkyboxPipeline
                                                                 : GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
-                Commands().SetPipeline(activeSkyboxPipeline ? activeSkyboxPipeline : m_SkyboxPipeline);
+                if (!activeSkyboxPipeline) return false;
+                Commands().SetPipeline(activeSkyboxPipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SkyboxPipelineLayout);
                 if (m_SkyboxConstantBuffer.IsValid() && m_SkyboxConstantBuffer.GetCBV()) {
                     Commands().SetRootDescriptor(0, m_SkyboxConstantBuffer.GetCBV());
@@ -395,7 +399,7 @@ namespace Axle {
             if (item.UseCustomShader && item.CustomGeneration) {
                 auto prepareCustom = [&]() -> bool {
                         const auto& generation=*item.CustomGeneration;
-                        auto* pipeline=GetOrCreateCustomPipeline(generation,sceneTargetFormat,m_CurrentDepthFormat,activeSampleCount,item.SurfaceType,item.CullMode,item.DepthWrite);
+                        auto* pipeline=GetOrCreateCustomPipeline(generation,sceneTargetFormat,m_CurrentDepthFormat,activeSampleCount,item.SurfaceType,item.CullMode,item.DepthWrite,useSSR && item.SurfaceType < SurfaceType::Transparent);
                         if (!pipeline || !generation.PipelineLayout || !generation.PipelineLayout->IsValid()) return false;
                         if (customDrawIndex==m_CustomDraws.size()) m_CustomDraws.push_back(std::make_unique<CustomDrawResources>());
                         item.DrawResourceIndex = static_cast<uint32_t>(customDrawIndex);
@@ -502,11 +506,11 @@ namespace Axle {
                     m_MaterialDiagnostics[entity] = item.Surface.Diagnostic;
                     if (auto feedback = m_MaterialFeedback.find(entity); feedback != m_MaterialFeedback.end()) feedback->second.Generation = 0;
                 }
-                nri::Pipeline* needed = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
+                nri::Pipeline* needed = (!useSSR && sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
                     ? m_PipelineHDR
-                    : (sceneTargetFormat == nri::Format::RGBA8_UNORM && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_Pipeline)
+                    : (!useSSR && sceneTargetFormat == nri::Format::RGBA8_UNORM && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_Pipeline)
                         ? m_Pipeline
-                        : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode, item.DepthWrite);
+                        : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode, item.DepthWrite,useSSR && item.SurfaceType < SurfaceType::Transparent);
 
                 if (!needed) { drawFailed = true; return; }
                 if (materialDrawIndex == m_MaterialDraws.size()) {
@@ -943,11 +947,22 @@ namespace Axle {
 
         addPass("OpaqueAndSky", [&](const RenderPassContext&) -> RenderPassResult {
             if (!beginPass("OpaqueAndSky")) return fail();
-            beginRendering(renderingDesc);
+            auto opaqueRendering = renderingDesc;
+            nri::AttachmentDesc opaqueAttachments[3]{colorAttachment};
+            if (useSSR) {
+                for (uint32_t i = 1; i < 3; ++i) {
+                    opaqueAttachments[i].descriptor = viewTargets->Get(i == 1 ? RHIViewTarget::ReflectionEnvironment : RHIViewTarget::ReflectionResponse)->GetRTV();
+                    opaqueAttachments[i].loadOp = nri::LoadOp::CLEAR;
+                    opaqueAttachments[i].storeOp = nri::StoreOp::STORE;
+                }
+                opaqueRendering.colors = opaqueAttachments;
+                opaqueRendering.colorNum = 3;
+            }
+            beginRendering(opaqueRendering);
             Commands().SetViewport(vp);
             Commands().SetScissor(scissor);
             // Bind Graphics Pipeline & Layout matching active color & depth formats and sample count
-            Commands().SetPipeline(activePipeline);
+            if (!useSSR) Commands().SetPipeline(activePipeline);
             Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
 
             // Bind Root Descriptors: [0] SceneConstants (b1), [1] MultiLightBuffer (b2)
@@ -986,6 +1001,10 @@ namespace Axle {
             return {};
         }, [&](RenderGraph& graph) {
             auto opaqueUses=attachments(Load::Clear);
+            if (useSSR) {
+                opaqueUses.push_back({reflectionEnvironment,Layout::ColorAttachment,Access::Write,Load::Clear});
+                opaqueUses.push_back({reflectionResponse,Layout::ColorAttachment,Access::Write,Load::Clear});
+            }
             if(localAtlas)opaqueUses.push_back({localShadows,Layout::ShaderResource});
             if (shadowAtlas) opaqueUses.push_back({shadows,Layout::ShaderResource});
             graph.AddPass("OpaqueAndSky", std::move(opaqueUses));
@@ -1149,9 +1168,77 @@ namespace Axle {
                 }
             }
             return {};
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            // Configure runs before graph declaration. A raw custom shader may
+            // not export the terms needed for a correct reflection replacement.
+            if (useSSR) for (const auto& mesh : world.Meshes) {
+                if (!mesh.Material.UseCustomShader) continue;
+                CustomProgramKey key;
+                key.ShaderPath = mesh.Material.CustomShaderPath.empty() ? "" :
+                    PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(mesh.Material.CustomShaderPath)).lexically_normal());
+                key.Backend = m_Device->GetBackend();
+                const auto selected = m_CustomProgramCache.SelectProgram(true, key.ShaderPath, key,
+                    m_CustomProgramCache.ComputeFingerprint(key));
+                if (selected.Kind == ProgramSelectionKind::Custom && selected.Generation &&
+                    !selected.Generation->HasReflectionTerms) {
+                    useSSR = false;
+                    viewCtx.Diagnostics().AddFallback("ssr_unavailable: custom shader does not export reflection terms");
+                    break;
+                }
+            }
+            return {};
         });
 
         if (!useGTAO) registerSurfaceNormal();
+
+        addPass("ScreenSpaceReflectionPass", [&](const RenderPassContext&) -> RenderPassResult {
+            // 7.6. Screen-Space Reflections with probe fallback (and optional Hi-Z visualization).
+            const Passes::PassRecordOps ops{
+                beginPass, passUniform,
+                [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                    return bindDescriptorSet(index, set, bindPoint);
+                }, beginRendering, endRendering};
+            if (useSSR) {
+                if (!Passes::ScreenSpaceReflectionPass::Record(*this,
+                    {camera, settings, viewTargets, projZO, sceneTargetTexture, sceneDepthTexture,
+                     sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
+                    return fail();
+            } else if (useHiZVisual) {
+                if (!beginPass("HiZCopy")) return fail();
+                Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
+                if (!Passes::HiZGenerationPass::Record(*this, viewTargets, ops, dispatchCount)) return fail();
+            }
+            if (useHiZVisual && !Passes::HiZGenerationPass::RecordVisualization(
+                *this, {viewTargets, sceneTargetRTV, hiZVisualPipeline, width, height, visLevel}, ops)) {
+                return fail();
+            }
+
+            return {};
+        }, [&](RenderGraph& graph) {
+            if (useSSR) {
+                Passes::ScreenSpaceReflectionPass::Declare(graph, {sceneColor, ssrInput, sceneDepth,
+                    ssrDepth, sceneNormal, ssrStorage, hizResources, reflectionEnvironment, reflectionResponse});
+            } else if (useHiZVisual) {
+                graph.AddPass("HiZCopy", {
+                    {sceneDepth, Layout::CopySource}, {ssrDepth, Layout::CopyDest, Access::Write}});
+                Passes::HiZGenerationPass::Declare(graph, {ssrDepth, hizResources});
+            }
+            if (useHiZVisual) {
+                Passes::HiZGenerationPass::DeclareVisualization(graph, {hizResources[visLevel], sceneColor});
+            }
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (useSSR) {
+                if (!uniform("SSRCompute",sizeof(RHISSRConstants)) || !uniform("SSRApply",sizeof(RHISSRConstants))) return fail();
+                for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
+            } else if (useHiZVisual) {
+                for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
+            }
+            if (useHiZVisual) {
+                hiZVisualPipeline = GetOrCreateHiZVisualizePipeline(sceneTargetFormat);
+                if (!hiZVisualPipeline || !uniform("HiZVisualize", sizeof(RHIHiZConstants))) return fail();
+            }
+            return {};
+        });
 
         if (allowCaptureTransparent) {
         addPass("Transparent", [&](const RenderPassContext&) -> RenderPassResult {
@@ -1348,66 +1435,6 @@ namespace Axle {
             }
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useDDGI && !uniform("DDGIUpdate",sizeof(RHIDDGIConstants))) return fail();
-            return {};
-        });
-
-        addPass("ScreenSpaceReflectionPass", [&](const RenderPassContext&) -> RenderPassResult {
-            // 7.6. Screen-Space Reflections with probe fallback (and optional Hi-Z visualization).
-            const Passes::PassRecordOps ops{
-                beginPass, passUniform,
-                [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
-                    return bindDescriptorSet(index, set, bindPoint);
-                }, beginRendering, endRendering};
-            if (useSSR) {
-                if (!Passes::ScreenSpaceReflectionPass::Record(*this,
-                    {camera, settings, viewTargets, projZO, sceneTargetTexture, sceneDepthTexture,
-                     sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
-                    return fail();
-            } else if (useHiZVisual) {
-                if (!beginPass("HiZCopy")) return fail();
-                Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
-                if (!Passes::HiZGenerationPass::Record(*this, viewTargets, ops, dispatchCount)) return fail();
-            }
-            if (useHiZVisual && !Passes::HiZGenerationPass::RecordVisualization(
-                *this, {viewTargets, sceneTargetRTV, hiZVisualPipeline, width, height, visLevel}, ops)) {
-                return fail();
-            }
-
-            return {};
-        }, [&](RenderGraph& graph) {
-            if (useSSR) {
-                Passes::ScreenSpaceReflectionPass::Declare(graph, {sceneColor, ssrInput, sceneDepth,
-                    ssrDepth, sceneNormal, ssrStorage, hizResources});
-            } else if (useHiZVisual) {
-                graph.AddPass("HiZCopy", {
-                    {sceneDepth, Layout::CopySource}, {ssrDepth, Layout::CopyDest, Access::Write}});
-                Passes::HiZGenerationPass::Declare(graph, {ssrDepth, hizResources});
-            }
-            if (useHiZVisual) {
-                Passes::HiZGenerationPass::DeclareVisualization(graph, {hizResources[visLevel], sceneColor});
-            }
-        }, [&](const RenderPassContext&) -> RenderPassResult {
-            if (useSSR) {
-                if (!uniform("SSRCompute",sizeof(RHISSRConstants)) || !uniform("SSRApply",sizeof(RHISSRConstants))) return fail();
-                for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
-                if (!m_ReflectionProbeBuffer.IsValid() || !graph.DeclareRead("SSRApply", m_ReflectionProbeBuffer.GetCBV())) return fail();
-                auto skyPref = ActivePrefilter();
-                auto defaultProbe = RHIMaterial::GetDefaultPrefilterCubemap();
-                if (!skyPref || !skyPref->IsValid() || !graph.DeclareRead("SSRApply", skyPref->GetSRV())) return fail();
-                if (!defaultProbe || !defaultProbe->IsValid() || !graph.DeclareRead("SSRApply", defaultProbe->GetSRV())) return fail();
-                for (uint32_t slot = 0; slot < MaxActiveReflectionProbes; ++slot) {
-                    const auto& probeTex = m_ActiveReflectionProbePrefilters[slot];
-                    if (probeTex && probeTex->IsValid() && !IsCaptureFeedbackTexture(*probeTex)) {
-                        if (!graph.DeclareRead("SSRApply", probeTex->GetSRV())) return fail();
-                    }
-                }
-            } else if (useHiZVisual) {
-                for (uint32_t i=0; i<hizResources.size(); ++i) if (!uniform("HiZ"+std::to_string(i),sizeof(RHIHiZConstants))) return fail();
-            }
-            if (useHiZVisual) {
-                hiZVisualPipeline = GetOrCreateHiZVisualizePipeline(sceneTargetFormat);
-                if (!hiZVisualPipeline || !uniform("HiZVisualize", sizeof(RHIHiZConstants))) return fail();
-            }
             return {};
         });
 

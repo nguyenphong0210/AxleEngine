@@ -302,6 +302,7 @@ bool RunM15HiZTests(RHISceneRenderer& renderer, const std::filesystem::path& out
             RHIViewTargetDesc desc;
             desc.Width = ext.x; desc.Height = ext.y;
             desc.EnableNormal = desc.EnableScreenStorage = desc.EnableHiZ = true;
+            desc.HDR = desc.EnableReflectionTerms = true;
             RENDER_CHECK(targets->Configure(desc), "odd Hi-Z RHIViewTargets configure");
             RENDER_CHECK(targets->GetHiZUsefulLevelCount() == HiZContract::ComputeUsefulLevelCount(ext.x, ext.y) &&
                 targets->GetHiZLevelCount() == HiZContract::ComputeAllocatedLevelCount(ext.x, ext.y),

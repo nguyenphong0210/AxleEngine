@@ -337,8 +337,9 @@ bool Native(RHIType backend) {
     CHECK(!ssr.empty()&&ssr.size()==red.size());
     CHECK(renderer.GetDiagnostics().GetFrame().TargetGeneration != gtaoGeneration &&
         renderer.GetOpaqueNormalTarget() && renderer.GetHiZTarget(0));
-    CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","SurfaceNormal","Transparent","ParticlesAndPhysics",
-        "SSRCopy","HiZ0","HiZ1","HiZ2","HiZ3","HiZ4","HiZ5","HiZ6","HiZ7", "SSRCompute","SSRApply","Export"}));
+    CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","SurfaceNormal",
+        "SSRCopy","HiZ0","HiZ1","HiZ2","HiZ3","HiZ4","HiZ5","HiZ6","HiZ7", "SSRCompute","SSRApply",
+        "Transparent","ParticlesAndPhysics","ToneMapping","Export"}));
     std::vector<uint8_t> previousHiZ;
     for (uint32_t level = 0; level < 8; ++level) {
         auto* hiz = renderer.GetHiZTarget(level);
@@ -361,8 +362,9 @@ bool Native(RHIType backend) {
     auto ssrWithProbe = render();
     CHECK(!ssrWithProbe.empty() && ssrWithProbe.size() == red.size());
     CHECK(ssrWithProbe != ssr);
-    CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","SurfaceNormal","Transparent","ParticlesAndPhysics",
-        "SSRCopy","HiZ0","HiZ1","HiZ2","HiZ3","HiZ4","HiZ5","HiZ6","HiZ7", "SSRCompute","SSRApply","Export"}));
+    CHECK(passNames()==std::vector<std::string>({"OpaqueAndSky","SurfaceNormal",
+        "SSRCopy","HiZ0","HiZ1","HiZ2","HiZ3","HiZ4","HiZ5","HiZ6","HiZ7", "SSRCompute","SSRApply",
+        "Transparent","ParticlesAndPhysics","ToneMapping","Export"}));
     CHECK(renderer.GetOpaqueNormalTarget() && renderer.GetOpaqueNormalTarget()->IsValid() &&
         Read(*renderer.GetOpaqueNormalTarget(), 8).size() == size_t(width) * width * 8);
     const auto probeGeneration=renderer.GetReflectionFrame().ProbeGeneration;

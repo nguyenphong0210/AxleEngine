@@ -174,7 +174,7 @@ PSInput VSMain(VSInput input) {
     return output;
 }
 
-float4 PSMain(PSInput input) : SV_Target0 {
+ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     MaterialSurface surface = AxleEvaluateMaterial(input.TexCoord);
     float3 base = max(surface.BaseColor, float3(0,0,0));
     float metallic = saturate(surface.Metallic);
@@ -273,6 +273,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
     // Ambient / indirect term scaled by AO; direct and emissive are preserved
     float3 ambientRef = FresnelSchlickRoughness(nv, f0, roughness);
     float3 ambient;
+    float3 reflectionEnvironment = 0.0;
+    float3 reflectionResponse = 0.0;
     float3 reflDir = reflect(-view, normal);
     if (u_LightCounts.w == 1u) {
         uint envWidth, envHeight, envLevels;
@@ -281,11 +283,17 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 ambientF = ambientRef;
         float3 ambientKD = (1.0 - ambientF) * (1.0 - metallic);
         float envIntensity = max(u_LightReserved[0].y, 0.0);
-        float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, normal).rgb * envIntensity;
-        float3 skyPrefiltered = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, reflDir, roughness * maxLod).rgb * envIntensity;
+        float rotation = u_ReflectionParams.z;
+        float sinRot = sin(rotation), cosRot = cos(rotation);
+        float3 skyNormal = float3(cosRot*normal.x-sinRot*normal.z, normal.y, sinRot*normal.x+cosRot*normal.z);
+        float3 skyReflection = float3(cosRot*reflDir.x-sinRot*reflDir.z, reflDir.y, sinRot*reflDir.x+cosRot*reflDir.z);
+        float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, skyNormal).rgb * envIntensity;
+        float3 skyPrefiltered = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, skyReflection, roughness * maxLod).rgb * envIntensity;
         float3 prefiltered = EvaluateMultiProbeBlendHLSL(input.WorldPos, reflDir, roughness, u_EnvironmentSampler, skyPrefiltered).BlendedEnvColor;
         float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(nv, roughness)).rg;
         ambient = (irradiance * base * ambientKD + prefiltered * (ambientF * envBRDF.x + envBRDF.y)) * saturate(surface.AO);
+        reflectionResponse = (ambientF * envBRDF.x + envBRDF.y) * saturate(surface.AO) * screenVisibility.x;
+        reflectionEnvironment = prefiltered * reflectionResponse;
     } else {
         float3 ambientColor = hasMultiLightSun ? u_SunLight.AmbientColor.rgb : max(u_SunColor.rgb, float3(0,0,0));
         float ambientStrength = hasMultiLightSun ? max(u_LightReserved[0].y, 0.0) : max(u_SunColor.w, 0.0);
@@ -294,6 +302,9 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float3 probeSpec = probeBlend.ProbeColor * (ambientRef * envBRDF.x + envBRDF.y);
         float3 skySpec = ambientRef * 0.02 * (1.0 - saturate(u_LightReserved[0].z)) * ambientStrength;
         ambient = (base * 0.03 * (1.0 - metallic) * ambientStrength + lerp(skySpec, probeSpec, probeBlend.ProbeCoverage)) * saturate(surface.AO);
+        reflectionResponse = lerp(ambientRef * 0.02 * (1.0 - saturate(u_LightReserved[0].z)),
+            ambientRef * envBRDF.x + envBRDF.y, probeBlend.ProbeCoverage) * saturate(surface.AO) * screenVisibility.x;
+        reflectionEnvironment = lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * saturate(surface.AO) * screenVisibility.x;
     }
     float3 color = direct + ambient * screenVisibility.x + max(surface.Emission, float3(0,0,0));
     color = clamp(color, 0.0, 65000.0);
@@ -312,8 +323,11 @@ float4 PSMain(PSInput input) : SV_Target0 {
         color = saturate((color * (a * color + b)) / (color * (c * color + d) + e));
         color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
     }
-    return float4(color, 1.0);
+    return MakeReflectionSurfaceOutput(float4(color, 1.0), reflectionEnvironment, reflectionResponse);
 }
+
+float4 PSMain(PSInput input) : SV_Target0 { return EvaluateReflectionSurface(input).Color; }
+ReflectionSurfaceOutput PSReflectionMain(PSInput input) { return EvaluateReflectionSurface(input); }
 
 // Material Graphs use this companion entry point for the screen-space normal
 // producer. It evaluates the same authored graph function and TBN path as the

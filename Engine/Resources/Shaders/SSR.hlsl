@@ -182,78 +182,30 @@ VSOutput VSMain(uint vertexID : SV_VertexID) {
     return output;
 }
 
-Texture2D<float>    u_SceneDepth           : register(t0, space1);
-Texture2D<float4>   u_SSRTexture           : register(t1, space1);
-Texture2D<float4>   u_SceneColor           : register(t2, space1);
-Texture2D<float4>   u_SceneNormal          : register(t3, space1);
-TextureCube<float4> u_SkyPrefilterMap      : register(t4, space1);
-TextureCube<float4> u_ReflectionProbeCube0 : register(t5, space1);
-TextureCube<float4> u_ReflectionProbeCube1 : register(t6, space1);
-TextureCube<float4> u_ReflectionProbeCube2 : register(t7, space1);
-TextureCube<float4> u_ReflectionProbeCube3 : register(t8, space1);
-SamplerState        u_LinearSampler        : register(s0, space1);
-
-#define AXLE_REFLECTION_PROBE_CBUFFER_REGISTER b1
-#include "ReflectionProbeCommon.hlsli"
+Texture2D<float> u_SceneDepth : register(t0, space1);
+Texture2D<float4> u_SSRTexture : register(t1, space1);
+Texture2D<float4> u_SceneColor : register(t2, space1);
+Texture2D<float4> u_EnvironmentSpecular : register(t3, space1);
+Texture2D<float4> u_ReflectionResponse : register(t4, space1);
+SamplerState u_LinearSampler : register(s0, space1);
 
 float4 PSMain(VSOutput input) : SV_Target {
-    float2 uv = input.TexCoord;
-    float depth = u_SceneDepth.SampleLevel(u_LinearSampler, uv, 0.0);
-    float4 sceneColor = u_SceneColor.SampleLevel(u_LinearSampler, uv, 0.0);
+    uint2 size;
+    u_SceneDepth.GetDimensions(size.x, size.y);
+    uint2 pixel = min(uint2(input.Position.xy), size - 1);
+    float depth = u_SceneDepth.Load(int3(pixel, 0));
+    float4 sceneColor = u_SceneColor.Load(int3(pixel, 0));
+    if (depth <= 0.0 || depth >= 0.9999) return sceneColor;
+    float4 hit = u_SSRTexture.Load(int3(pixel, 0));
+    float weight = saturate(hit.a) * saturate(u_SSRParams.z);
+    if (weight <= 1e-4) return sceneColor;
 
-    if (depth >= 0.9999) {
-        return sceneColor;
-    }
-
-    float4 ssrSample = u_SSRTexture.SampleLevel(u_LinearSampler, uv, 0.0);
-    float3 ssrColor = max(ssrSample.rgb, float3(0.0, 0.0, 0.0));
-    float confidence = saturate(ssrSample.a);
-    float ssrStrength = saturate(u_SSRParams.z);
-    float ssrWeight = confidence * ssrStrength;
-    if (ssrWeight <= 1e-4) {
-        return sceneColor;
-    }
-
-    float4 normalSample = u_SceneNormal.SampleLevel(u_LinearSampler, uv, 0.0);
-    float3 viewPos = ReconstructViewPos(uv, depth);
-    float3 V = normalize(-viewPos);
-    float3 N;
-    if (dot(normalSample.xyz, normalSample.xyz) > 0.01) {
-        N = normalize(mul((float3x3)u_View, normalSample.xyz));
-    } else {
-        float2 rcpFrame = u_ScreenSize.zw;
-        float3 pR = ReconstructViewPos(uv + float2(rcpFrame.x, 0.0), u_SceneDepth.SampleLevel(u_LinearSampler, uv + float2(rcpFrame.x, 0.0), 0.0));
-        float3 pL = ReconstructViewPos(uv - float2(rcpFrame.x, 0.0), u_SceneDepth.SampleLevel(u_LinearSampler, uv - float2(rcpFrame.x, 0.0), 0.0));
-        float3 pD = ReconstructViewPos(uv + float2(0.0, rcpFrame.y), u_SceneDepth.SampleLevel(u_LinearSampler, uv + float2(0.0, rcpFrame.y), 0.0));
-        float3 pU = ReconstructViewPos(uv - float2(0.0, rcpFrame.y), u_SceneDepth.SampleLevel(u_LinearSampler, uv - float2(0.0, rcpFrame.y), 0.0));
-        float3 dx = (abs(pR.z - viewPos.z) < abs(pL.z - viewPos.z)) ? (pR - viewPos) : (viewPos - pL);
-        float3 dy = (abs(pD.z - viewPos.z) < abs(pU.z - viewPos.z)) ? (pD - viewPos) : (viewPos - pU);
-        N = normalize(cross(dy, dx));
-        if (dot(N, V) < 0.0) {
-            N = -N;
-        }
-    }
-    float NdotV = max(dot(N, V), 0.001);
-
-    // Replace the already-integrated multi-probe/sky reflection fraction proportionally
-    // to SSR confidence rather than adding SSR on top of existing IBL.
-    float3 worldPos = mul(u_InvView, float4(viewPos, 1.0)).xyz;
-    float3 worldRefl = normalize(mul((float3x3)u_InvView, reflect(-V, N)));
-    float rotAngle = u_ReflectionParams.z;
-    float sinRot = sin(rotAngle), cosRot = cos(rotAngle);
-    float3 rotatedSkyDir = float3(cosRot * worldRefl.x - sinRot * worldRefl.z, worldRefl.y, sinRot * worldRefl.x + cosRot * worldRefl.z);
-    float envIntensity = max(u_ReflectionParams.y, 0.0);
-    float3 skyFallback = ((u_ReflectionHeader.y != 0u)
-        ? u_SkyPrefilterMap.SampleLevel(u_LinearSampler, rotatedSkyDir, 0.0).rgb
-        : (u_ReflectionSkyAmbient.rgb * (1.0 - saturate(float(u_ReflectionHeader.z))))) * envIntensity;
-    MultiProbeBlendResult envEval = EvaluateMultiProbeBlendHLSL(worldPos, worldRefl, 0.0, u_LinearSampler, skyFallback);
-    float3 fallbackEnv = envEval.BlendedEnvColor;
-
-    // Fresnel Schlick dielectric factor (F0 = 0.04)
-    float3 F0 = float3(0.04, 0.04, 0.04);
-    float3 F = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
-
-    float3 envReplacementDelta = (ssrColor - fallbackEnv) * (ssrWeight * F);
-    float3 finalColor = max(sceneColor.rgb + envReplacementDelta, float3(0.0, 0.0, 0.0));
-    return float4(clamp(finalColor, 0.0, 65000.0), sceneColor.a);
+    // Both terms come from this exact opaque fragment's forward evaluation,
+    // including roughness, colored Fresnel, flags, coats/sheen and material/AO
+    // visibility. Diffuse, direct lighting and emission are never replaced.
+    float3 previous = u_EnvironmentSpecular.Load(int3(pixel, 0)).rgb;
+    float3 response = u_ReflectionResponse.Load(int3(pixel, 0)).rgb;
+    float3 replacement = max(hit.rgb, 0.0) * response;
+    float3 color = sceneColor.rgb + weight * (replacement - previous);
+    return float4(clamp(color, 0.0, 65000.0), sceneColor.a);
 }

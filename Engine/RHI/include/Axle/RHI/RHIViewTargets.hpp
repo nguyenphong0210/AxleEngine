@@ -9,7 +9,7 @@ namespace Axle::RHI {
         Color, Depth, MSAAColor, MSAADepth, HDR, FXAA,
         OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1,
         GTAO, Bloom0, Bloom1, Bloom2, Bloom3, Bloom4, Bloom5, Exposure, DDGI,
-        HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, Count
+        HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, ReflectionEnvironment, ReflectionResponse, Count
     };
     struct RHIViewTargetDesc {
         uint32_t Width = 1, Height = 1;
@@ -19,6 +19,7 @@ namespace Axle::RHI {
         uint8_t Samples = 1, HistoryCount = 0;
         bool EnableDepth = true, HDR = false, FXAA = false, OwnPrimary = true, RenderAuxiliary = true;
         bool EnableNormal = false, EnableScreenStorage = false, EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false;
+        bool EnableReflectionTerms = false;
         bool operator==(const RHIViewTargetDesc&) const = default;
     };
     // One view owns its complete target generation. Reconfiguration constructs

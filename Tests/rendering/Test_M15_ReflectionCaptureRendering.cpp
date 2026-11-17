@@ -6,6 +6,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/SceneExtraction.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
@@ -317,7 +318,7 @@ namespace {
         auto renderHDR = [&](const RenderWorld& world, const PerspectiveCamera& cam, const SceneRenderSettings& inSettings,
                              std::vector<glm::vec4>& outPixels) -> bool {
             SceneRenderSettings s = inSettings;
-            s.EnableToneMapping = false;
+            s.EnableToneMapping = true;
             s.EnableShadows = false;
             s.EnableParticles = false;
             s.EnableStudioLightLobes = false;
@@ -325,7 +326,8 @@ namespace {
             if (!renderer.WasLastRenderSuccessful() || renderer.GetDiagnostics().HasErrors() || !device.WaitIdle()) {
                 return false;
             }
-            if (!ReadTexture2DRGBA16(hdrColor, outPixels)) return false;
+            auto* linear = renderer.GetIntermediateHDRTarget();
+            if (!linear || !ReadTexture2DRGBA16(*linear, outPixels)) return false;
             return outPixels.size() == size_t(renderW) * renderH && AllFiniteNonNegative(outPixels);
         };
 
@@ -606,6 +608,12 @@ namespace {
                 "M15-U5-29: uncorrected ray reflects probe-center +Z Green wall");
             RENDER_CHECK(correctedColor.r > correctedColor.g * 2.5f && correctedColor.r > 0.5f,
                 "M15-U5-29: per-probe box parallax redirects ray to actual off-axis Red wall before blend");
+            pWorld.ReflectionProbes[0].Shape = 1;
+            pWorld.ReflectionProbes[0].Radius = 10.0f;
+            RENDER_CHECK(renderHDR(pWorld, cam, s, parallaxPixels), "U5E-R1 sphere parallax native draw");
+            const auto sphereCorrected = SampleWindowAroundPixel(parallaxPixels, renderW, renderH, px, py);
+            RENDER_CHECK(sphereCorrected.r > sphereCorrected.g * 2.5f && sphereCorrected.r > 0.5f,
+                "U5E-R1 sphere parallax redirects the retained world-space cubemap toward the off-axis Red wall");
             renderer.ClearDynamicReflectionProbes();
         }
 
@@ -659,6 +667,21 @@ namespace {
                       << ") withMissing=(" << missCenter.r << "," << missCenter.g << ")\n";
             RENDER_CHECK(std::abs(missCenter.r - refCenter.r) < 0.05f && missCenter.r > 0.7f,
                 "M15-U5-31.3: remaining probe renormalizes without darkening when overlapping missing probe");
+            world.ReflectionProbes.clear();
+            for (int i = 0; i < 4; ++i) {
+                auto p = missingProbe;
+                p.EntityID += i + 10;
+                world.ReflectionProbes.push_back(p);
+            }
+            world.ReflectionProbes.push_back(validRed);
+            RENDER_CHECK(renderHDR(world, cam, s, withMissingPixels) &&
+                         renderer.GetLastReflectionFrame().ActiveProbeCount == 1 &&
+                         renderer.GetLastReflectionFrame().MissingProbeCount == 4 &&
+                         renderer.GetLastReflectionFrame().SelectedProbeEntityID == validRed.EntityID,
+                "U5E-R2 four missing high-ranked candidates cannot hide a ready fifth probe");
+            const auto fallbackCenter = SampleWindowAroundPixel(withMissingPixels, renderW, renderH, renderW / 2u, renderH / 2u);
+            RENDER_CHECK(glm::distance(fallbackCenter, refCenter) < 0.01f,
+                "U5E-R2 overflow readiness fallback preserves the actual reflected radiance");
         }
 
         // -----------------------------------------------------------------
@@ -779,7 +802,7 @@ namespace {
                 std::cout << "  [U5-E Energy] base=(" << baseVal.r << "," << baseVal.g << "," << baseVal.b
                           << ") withSSR=(" << ssrVal.r << "," << ssrVal.g << "," << ssrVal.b << ")\n";
                 RENDER_CHECK(ssrVal.r <= 1.15f && ssrVal.g <= 1.15f && ssrVal.b <= 1.15f &&
-                             std::abs(ssrVal.r - baseVal.r) < 0.18f,
+                             std::abs(ssrVal.r - baseVal.r) < 0.03f,
                     "M15-U5-30.3: unified energy policy prevents additive SSR double-counting");
             }
 
@@ -841,6 +864,105 @@ namespace {
                     "M15-U5-31.5: SSR miss inside probe falls back cleanly to Red local probe");
                 RENDER_CHECK(missSky.b > missSky.r * 3.0f && missSky.b > 0.7f,
                     "M15-U5-31.5: SSR miss outside probe falls back cleanly to Blue sky IBL");
+
+                // A known SSR hit must not change an emissive receiver whose
+                // environment reflections are disabled by its actual material.
+                auto disabled = std::make_shared<RHIMaterial>(hitMissWorld.Meshes[0].Material.RHIMaterialAsset->GetDesc());
+                disabled->GetDesc().EnableEnvironmentReflections = false;
+                disabled->GetDesc().EmissiveColor = {0.3f,0.7f,1.4f};
+                disabled->GetDesc().EmissiveIntensity = 1;
+                hitMissWorld.Meshes[0].Material.RHIMaterialAsset = disabled;
+                std::vector<glm::vec4> protectedBase, protectedSSR, hits;
+                RENDER_CHECK(renderHDR(hitMissWorld, cam, noSSR, protectedBase) &&
+                             renderHDR(hitMissWorld, cam, withSSR, protectedSSR) &&
+                             renderer.GetScreenStorageTarget() && ReadTexture2DRGBA16(*renderer.GetScreenStorageTarget(), hits),
+                    "U5E-R3 disabled environment reflection fixture renders with a real SSR hit");
+                size_t protectedHits = 0;
+                for (uint32_t y = hly - 3; y <= hly + 3; ++y) for (uint32_t x = hlx - 3; x <= hlx + 3; ++x) {
+                    const size_t i = size_t(y) * renderW + x;
+                    if (hits[i].a <= 0.1f) continue;
+                    ++protectedHits;
+                    RENDER_CHECK(glm::distance(glm::vec3(protectedBase[i]), glm::vec3(protectedSSR[i])) < 0.003f &&
+                                 protectedSSR[i].b > 1.0f,
+                        "U5E-R3 SSR preserves disabled environment reflections and HDR emission despite a confident hit");
+                }
+                RENDER_CHECK(protectedHits > 10, "U5E-R3 protection is checked on actual hits, not SSR misses");
+
+                // Canonical graphs must use the same term export. AO=0 removes
+                // indirect response while preserving their authored HDR emission.
+                const auto graphPath = output / "u5e-ssr-zero-ao.hlsl";
+                auto graphSource = AssembleMaterialSurfaceShader(
+                    "cbuffer ReflectionCompanionOnly : register(b8,space5) { float4 u_CompanionScale; };",
+                    "MaterialSurface AxleEvaluateMaterial(float2 uv) { MaterialSurface s=(MaterialSurface)0; "
+                    "s.BaseColor=float3(.8,.5,.1); s.Metallic=1; s.Roughness=.2; s.IOR=1.5; "
+                    "s.AO=0; s.Emission=float3(.3,.7,1.4); return s; }");
+                const std::string companionReturn = "return EvaluateReflectionSurface(input);";
+                const auto companionPosition = graphSource.find(companionReturn);
+                RENDER_CHECK(companionPosition != std::string::npos, "reflection companion fixture entry point");
+                graphSource.replace(companionPosition, companionReturn.size(),
+                    "ReflectionSurfaceOutput result=EvaluateReflectionSurface(input); "
+                    "result.Response.a = 1.0+u_CompanionScale.x; return result;");
+                {
+                    std::ofstream graph(graphPath);
+                    graph << graphSource;
+                    RENDER_CHECK(bool(graph), "U5E-R3 canonical graph fixture source");
+                }
+                hitMissWorld.Meshes[0].Material.UseCustomShader = true;
+                hitMissWorld.Meshes[0].Material.CustomShaderPath = std::filesystem::absolute(graphPath).string();
+                // Enable the native material too: zero graph AO, rather than a
+                // disabled native flag or a built-in fallback, is under test.
+                disabled->GetDesc().EnableEnvironmentReflections = true;
+                disabled->GetDesc().EmissiveIntensity = 0; // Emission is authored by the graph, not its native fallback.
+                const bool graphBaseOK = renderHDR(hitMissWorld, cam, noSSR, protectedBase);
+                const bool graphSSROK = renderHDR(hitMissWorld, cam, withSSR, protectedSSR);
+                for (const auto& [entity, message] : renderer.GetMaterialDiagnostics())
+                    if (!message.empty()) std::cerr << "U5E graph " << entity << ": " << message << '\n';
+                RENDER_CHECK(graphBaseOK && graphSSROK &&
+                             (!renderer.GetMaterialDiagnostics().contains(511) || renderer.GetMaterialDiagnostics().at(511).empty()),
+                    "U5E-R3 real canonical graph SSR renders without a built-in fallback");
+                const auto& graphPasses = renderer.GetDiagnostics().GetFrame().Passes;
+                RENDER_CHECK(std::any_of(graphPasses.begin(), graphPasses.end(), [](const auto& p) { return p.Name == "SSRApply"; }) &&
+                             ReadTexture2DRGBA16(*renderer.GetScreenStorageTarget(), hits),
+                    "U5E-R3 canonical graph executes the actual SSR resolve");
+                protectedHits = 0;
+                for (uint32_t y = hly - 3; y <= hly + 3; ++y) for (uint32_t x = hlx - 3; x <= hlx + 3; ++x) {
+                    const size_t i = size_t(y) * renderW + x;
+                    if (hits[i].a > 0.1f) ++protectedHits;
+                    RENDER_CHECK(glm::distance(glm::vec3(protectedBase[i]), glm::vec3(protectedSSR[i])) < 0.003f &&
+                                 protectedSSR[i].b > 1.0f,
+                        "U5E-R3 canonical graph AO and HDR emission are preserved through SSR");
+                }
+                RENDER_CHECK(protectedHits > 10, "U5E-R3 canonical graph has confident SSR hits on its receiver");
+
+                // A legacy custom shader without the companion takes a named
+                // fallback before declaration, rather than recording half an SSR graph.
+                const auto legacyPath = output / "u5e-ssr-legacy.hlsl";
+                const auto entryPosition = graphSource.find("PSReflectionMain(");
+                RENDER_CHECK(entryPosition != std::string::npos, "legacy custom fixture source");
+                graphSource.replace(entryPosition, std::string("PSReflectionMain").size(), "PSLegacyReflectionMain");
+                const std::string companionOnly = "cbuffer ReflectionCompanionOnly : register(b8,space5) { float4 u_CompanionScale; };";
+                const auto unusedBuffer = graphSource.find(companionOnly);
+                RENDER_CHECK(unusedBuffer != std::string::npos, "legacy fixture unused buffer declaration");
+                graphSource.erase(unusedBuffer, companionOnly.size());
+                const auto unusedRead = graphSource.find("u_CompanionScale.x");
+                RENDER_CHECK(unusedRead != std::string::npos, "legacy fixture unused companion read");
+                graphSource.replace(unusedRead, std::string("u_CompanionScale.x").size(), "0.0");
+                {
+                    std::ofstream legacy(legacyPath);
+                    legacy << graphSource;
+                    RENDER_CHECK(bool(legacy), "legacy shader fixture write");
+                }
+                hitMissWorld.Meshes[0].Material.CustomShaderPath = std::filesystem::absolute(legacyPath).string();
+                RENDER_CHECK(renderHDR(hitMissWorld, cam, withSSR, protectedSSR),
+                    "U5E-R3 legacy custom SSR fallback leaves a complete executable graph");
+                const auto& legacyFrame = renderer.GetDiagnostics().GetFrame();
+                for (const auto& [entity, message] : renderer.GetMaterialDiagnostics())
+                    if (!message.empty()) std::cerr << "U5E legacy " << entity << ": " << message << '\n';
+                for (const auto& f : legacyFrame.Fallbacks) std::cerr << "U5E legacy fallback: " << f << '\n';
+                RENDER_CHECK(std::none_of(legacyFrame.Passes.begin(), legacyFrame.Passes.end(), [](const auto& p) { return p.Name == "SSRApply"; }) &&
+                    std::any_of(legacyFrame.Fallbacks.begin(), legacyFrame.Fallbacks.end(), [](const auto& f) {
+                        return f.find("ssr_unavailable:") != std::string::npos;
+                    }), "U5E-R3 unsupported custom reflection terms produce a named SSR fallback");
             }
         }
 
@@ -1934,7 +2056,9 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
             cacheWorld.Skybox.Authored = true;
             cacheWorld.Skybox.Enabled = false;
             cacheWorld.Meshes.push_back(MakeBoxInstance(
-                5000, cubeView, MakeEmissiveMaterial({4.0f, 4.0f, 4.0f}, 1.0f), {6.0f, 0.0f, 0.0f}, {0.5f, 6.0f, 6.0f}));
+                // Keep geometry outside probe influence so this fixture tests
+                // LRU use order independently of visible-surface probe pins.
+                5000, cubeView, MakeEmissiveMaterial({4.0f, 4.0f, 4.0f}, 1.0f), {500.0f, 500.0f, 500.0f}, {0.5f, 6.0f, 6.0f}));
 
             RenderReflectionProbe probe1{};
             probe1.EntityID = 5001; probe1.Position = {0.0f, 0.0f, 0.0f}; probe1.BoxExtents = {8.0f, 8.0f, 8.0f};

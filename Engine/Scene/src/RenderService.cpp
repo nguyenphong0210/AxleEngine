@@ -269,12 +269,15 @@ namespace Axle {
             if (!color && request.Kind == RenderViewKind::Main) {
                 RHI::RHIViewTargetDesc desc;
                 desc.Width = request.Width; desc.Height = request.Height;
-                desc.Samples = request.Settings.MSAASamples; desc.HDR = request.Settings.EnableToneMapping; desc.FXAA = request.Settings.EnableFXAA;
+                desc.Samples = request.Settings.MSAASamples;
+                desc.HDR = request.Settings.EnableToneMapping || (request.Settings.EnableSSR && request.Settings.MSAASamples == 1);
+                desc.FXAA = request.Settings.EnableFXAA;
                 desc.EnableNormal = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows || request.Settings.EnableSSR);
                 desc.EnableScreenStorage = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows || request.Settings.EnableSSR || request.Settings.EnableVolumetricFog || request.Settings.EnableBloom || request.Settings.EnableAutoExposure);
                 desc.EnableGTAO = request.Settings.EnableGTAO || request.Settings.EnableContactShadows;
                 desc.EnableBloom = request.Settings.EnableBloom;
                 desc.EnableHiZ = request.Settings.EnableSSR || request.Settings.HiZVisualizationLevel >= 0;
+                desc.EnableReflectionTerms = request.Settings.EnableSSR && request.Settings.MSAASamples == 1;
                 desc.EnableAutoExposure = request.Settings.EnableAutoExposure;
                 desc.EnableDDGI = request.Settings.EnableDDGI;
                 if (request.Settings.EnableTAA) desc.HistoryCount = 2;

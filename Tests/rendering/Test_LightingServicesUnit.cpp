@@ -219,6 +219,46 @@ bool RunLightingServiceUnitTests() {
 
     // M15-U5-E (S5.5): Box & sphere influence, multi-probe blend, per-probe parallax, SSR/sky energy policy, missing & stale probes
     {
+        RenderReflectionProbe collapsed;
+        collapsed.WorldTransform = glm::mat4(0.0f);
+        collapsed.WorldTransform[0] = {0,0,1,0};
+        const auto basis = ReflectionService::BuildProbeBasis(collapsed);
+        RENDER_CHECK(std::isfinite(basis.AxisY.x) && std::isfinite(basis.AxisY.y) && std::isfinite(basis.AxisY.z) &&
+                     std::abs(glm::dot(basis.AxisX, basis.AxisY)) < 1e-5f &&
+                     std::abs(glm::length(basis.AxisY) - 1.0f) < 1e-5f,
+            "U5E-R1 degenerate basis fallback stays finite and orthonormal when X is parallel to world Z");
+        RenderWorld prioritized;
+        for (int i = 0; i < 5; ++i) {
+            RenderReflectionProbe p;
+            p.EntityID = 10000 + i;
+            p.DynamicCapture = true;
+            p.Position = {float(i * 100),0,0};
+            prioritized.ReflectionProbes.push_back(p);
+        }
+        const glm::vec3 offscreenPoints[]{{0,0,0},{100,0,0},{200,0,0},{300,0,0}};
+        const auto prioritizedFrame = reflection.PrepareView(prioritized, {400,0,0}, offscreenPoints, false, 1);
+        RENDER_CHECK(prioritizedFrame.ActiveProbes.size() == 4 && prioritizedFrame.SelectedProbeEntityID == 10004 &&
+                     prioritizedFrame.AdditionalCandidates.size() == 1,
+            "U5E-R2 camera probe remains selected when four distant meshes have equal maximum probe scores");
+        RenderWorld boundedWorld;
+        boundedWorld.ReflectionProbes = {prioritized.ReflectionProbes[4]};
+        const ReflectionSampleBounds largeMeshBounds[]{{{-500,-1,-1},{500,1,1}}};
+        const auto boundedFrame = reflection.PrepareView(boundedWorld, {0,0,0}, {}, false, 1, largeMeshBounds);
+        RENDER_CHECK(boundedFrame.SelectedProbeEntityID == 10004,
+            "U5E-R4 bounded mesh selection discovers a probe far from both the mesh origin and camera");
+        RenderWorld rotatedWorld;
+        RenderReflectionProbe slender;
+        slender.DynamicCapture = true;
+        slender.EntityID = 10010;
+        slender.BoxExtents = {20,.2f,2};
+        slender.BlendDistance = .1f;
+        slender.WorldTransform = glm::rotate(glm::mat4(1), glm::radians(45.0f), glm::vec3(0,0,1));
+        rotatedWorld.ReflectionProbes = {slender};
+        const ReflectionSampleBounds intersecting[]{{{4,.1f,-.5f},{5,5,.5f}}};
+        const auto rotatedFrame = reflection.PrepareView(rotatedWorld, {100,100,100}, {}, false, 1, intersecting);
+        RENDER_CHECK(rotatedFrame.SelectedProbeEntityID == slender.EntityID &&
+                     ReflectionService::EvaluateProbeInfluence(slender, {4,4,0}).Coverage == 1,
+            "U5E-R4 rotated slender probe intersecting a mesh is retained despite an out-of-volume world nearest point");
         // M15-U5-27.1: Box influence (interior center, face boundary, rotated OBB, BlendDistance falloff, NaN/zero safety)
         RenderReflectionProbe boxProbe{};
         boxProbe.EntityID = 9001;
@@ -226,6 +266,10 @@ bool RunLightingServiceUnitTests() {
         boxProbe.Position = {0.0f, 0.0f, 0.0f};
         boxProbe.BoxExtents = {4.0f, 4.0f, 4.0f}; // half = (2, 2, 2)
         boxProbe.BlendDistance = 2.0f;
+        const auto faceParallel = ReflectionService::ApplyProbeParallax(boxProbe, {2,0,0}, {0,0,1});
+        RENDER_CHECK(std::abs(faceParallel.x - std::sqrt(0.5f)) < 1e-5f &&
+                     std::abs(faceParallel.z - std::sqrt(0.5f)) < 1e-5f,
+            "U5E-R1 a ray parallel to a box face still exits through the correct slab at the face boundary");
 
         const auto boxCenter = ReflectionService::EvaluateProbeInfluence(boxProbe, {0.0f, 0.0f, 0.0f});
         const auto boxMid = ReflectionService::EvaluateProbeInfluence(boxProbe, {1.0f, 0.0f, 0.0f});

@@ -40,6 +40,21 @@ struct MultiProbeBlendResult {
     uint ContributingCount;
 };
 
+// The opaque forward draw publishes the exact indirect specular it added, plus
+// its material response to incident radiance. SSR replaces only this term.
+struct ReflectionSurfaceOutput {
+    float4 Color : SV_Target0;
+    float4 Environment : SV_Target1;
+    float4 Response : SV_Target2;
+};
+ReflectionSurfaceOutput MakeReflectionSurfaceOutput(float4 color, float3 environment, float3 response) {
+    ReflectionSurfaceOutput result;
+    result.Color = color;
+    result.Environment = float4(clamp(environment, 0.0, 65000.0), 1.0);
+    result.Response = float4(clamp(response, 0.0, 65000.0), 1.0);
+    return result;
+}
+
 float3 SampleReflectionProbeSlot(uint slot, SamplerState envSampler, float3 dir, float lod) {
     switch (min(slot, 3u)) {
         case 0u: return u_ReflectionProbeCube0.SampleLevel(envSampler, dir, lod).rgb;
@@ -124,16 +139,18 @@ float3 ApplyProbeParallaxHLSL(ReflectionProbeGPUData probe, float3 worldPos, flo
         }
     } else {
         float3 halfExtents = max(probe.HalfExtentsAndRadius.xyz, float3(0.001, 0.001, 0.001));
-        float3 safeDir = float3(
-            abs(localDir.x) >= 1e-5 ? localDir.x : (localDir.x < 0.0 ? -1e-5 : 1e-5),
-            abs(localDir.y) >= 1e-5 ? localDir.y : (localDir.y < 0.0 ? -1e-5 : 1e-5),
-            abs(localDir.z) >= 1e-5 ? localDir.z : (localDir.z < 0.0 ? -1e-5 : 1e-5));
-        float3 t0 = (-halfExtents - localPos) / safeDir;
-        float3 t1 = (halfExtents - localPos) / safeDir;
-        float3 tMax = max(t0, t1);
-        float3 tMin = min(t0, t1);
-        float tExit = min(tMax.x, min(tMax.y, tMax.z));
-        float tEnter = max(tMin.x, max(tMin.y, tMin.z));
+        float tEnter = -3.402823466e+38;
+        float tExit = 3.402823466e+38;
+        [unroll] for (uint axis = 0; axis < 3; ++axis) {
+            if (abs(localDir[axis]) < 1e-6) {
+                if (abs(localPos[axis]) > halfExtents[axis]) return unitDir;
+            } else {
+                float t0 = (-halfExtents[axis] - localPos[axis]) / localDir[axis];
+                float t1 = (halfExtents[axis] - localPos[axis]) / localDir[axis];
+                tEnter = max(tEnter, min(t0, t1));
+                tExit = min(tExit, max(t0, t1));
+            }
+        }
         if (tExit > 1e-4 && tExit >= tEnter) {
             float3 hitLocal = localPos + localDir * tExit;
             float hitLenSq = dot(hitLocal, hitLocal);

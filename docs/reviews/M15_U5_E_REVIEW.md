@@ -93,3 +93,8 @@ All builds and checks below were executed after the final code/test edit (`exit 
 
 ### Explicit Scope & Verification Limits
 - Interactive `EDITOR VISUAL` items (`M15-U5-27.2`, `28`, `29`, `30.1`, `31.5`) remain `NOT RUN` and unchecked (`[ ]`) in [PLAN.md](file:///d:/WorkSpace/AxleEngine/docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md), deferred per user direction to the consolidated post-U5 visual pass.
+
+
+## Codex independent review outcome (2026-11-17)
+
+Automated U5-E/P5 scope was accepted after independent repairs to SSR material energy replacement, ready-probe selection, basis/parallax and bounded mesh selection. The original report above remains historical self-verification; its display-mapped FP16 energy values are superseded by genuine scene-linear evidence. See [findings, final executed matrix and acceptance boundaries](M15_U5_E_CODEX_REVIEW.md). Final Debug/Release verification passes 28/28 commands on strict DX12/Vulkan, including real Editor fixture startup. Interactive visual gates remain user-deferred/NOT RUN.

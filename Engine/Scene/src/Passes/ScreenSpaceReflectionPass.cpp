@@ -20,7 +20,7 @@ namespace Axle::Passes {
         }
         graph.AddPass("SSRCompute", std::move(computeUses));
         graph.AddPass("SSRApply", {
-            {r.SceneNormal, Layout::ShaderResource}, {r.Depth, Layout::ShaderResource},
+            {r.Environment, Layout::ShaderResource}, {r.Response, Layout::ShaderResource}, {r.Depth, Layout::ShaderResource},
             {r.Storage, Layout::ShaderResource}, {r.Input, Layout::ShaderResource},
             {r.SceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
     }
@@ -83,24 +83,16 @@ namespace Axle::Passes {
         commands.Dispatch((i.Width + 7) / 8, (i.Height + 7) / 8, 1);
         ++i.DispatchCount;
 
-        auto defaultPrefilter = RHI::RHIMaterial::GetDefaultPrefilterCubemap();
-        auto skyPrefilter = renderer.ActivePrefilter();
-        if (!defaultPrefilter || !defaultPrefilter->IsValid() || !skyPrefilter || !skyPrefilter->IsValid()) return false;
-        std::vector<nri::Descriptor*> probeSRVs(MaxActiveReflectionProbes, defaultPrefilter->GetSRV());
-        for (uint32_t slot = 0; slot < MaxActiveReflectionProbes; ++slot) {
-            const auto& probeTex = renderer.m_ActiveReflectionProbePrefilters[slot];
-            if (probeTex && probeTex->IsValid() && !renderer.IsCaptureFeedbackTexture(*probeTex)) {
-                probeSRVs[slot] = probeTex->GetSRV();
-            }
-        }
+        auto* environment = i.Targets->Get(RHI::RHIViewTarget::ReflectionEnvironment);
+        auto* response = i.Targets->Get(RHI::RHIViewTarget::ReflectionResponse);
+        if (!environment || !response) return false;
         if (!ops.BeginPass("SSRApply") || !ops.Uniform().UpdateData(&constants, sizeof(constants)) ||
             !pool.UpdateTexture(renderer.m_SSRApplyDescriptorSet, 0, 0, depth->GetSRV()) ||
             !pool.UpdateTexture(renderer.m_SSRApplyDescriptorSet, 1, 0, storage->GetSRV()) ||
             !pool.UpdateTexture(renderer.m_SSRApplyDescriptorSet, 2, 0, color->GetSRV()) ||
-            !pool.UpdateTexture(renderer.m_SSRApplyDescriptorSet, 3, 0, normalSRV) ||
-            !pool.UpdateTexture(renderer.m_SSRApplyDescriptorSet, 4, 0, skyPrefilter->GetSRV()) ||
-            !pool.UpdateTextureRange(renderer.m_SSRApplyDescriptorSet, 5, 0, probeSRVs) ||
-            !pool.UpdateSampler(renderer.m_SSRApplyDescriptorSet, 6, 0, renderer.m_SSRSampler.GetNative())) return false;
+            !pool.UpdateTexture(renderer.m_SSRApplyDescriptorSet, 3, 0, environment->GetSRV()) ||
+            !pool.UpdateTexture(renderer.m_SSRApplyDescriptorSet, 4, 0, response->GetSRV()) ||
+            !pool.UpdateSampler(renderer.m_SSRApplyDescriptorSet, 5, 0, renderer.m_SSRSampler.GetNative())) return false;
         nri::Pipeline* applyPipeline = i.SceneTargetFormat == nri::Format::RGBA16_SFLOAT && renderer.m_SSRApplyPipelineHDR
             ? renderer.m_SSRApplyPipelineHDR : renderer.m_SSRApplyPipelineSDR;
         if (!applyPipeline) return false;
@@ -118,7 +110,6 @@ namespace Axle::Passes {
         commands.SetPipeline(applyPipeline);
         commands.SetPipelineLayout(nri::BindPoint::GRAPHICS, renderer.m_SSRApplyPipelineLayout);
         commands.SetRootDescriptor(0, ops.Uniform().GetCBV(), 0, nri::BindPoint::GRAPHICS);
-        commands.SetRootDescriptor(1, renderer.m_ReflectionProbeBuffer.GetCBV(), 0, nri::BindPoint::GRAPHICS);
         pool.Bind(commands.GetNative());
         if (!ops.BindDescriptor(0, renderer.m_SSRApplyDescriptorSet, nri::BindPoint::GRAPHICS)) return false;
         commands.Draw(3, 1, 0, 0);

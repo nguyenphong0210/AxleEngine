@@ -851,50 +851,61 @@ It does not measure driver overhead, shared scratch or externally held generatio
 
 #### S5.5 — Multi-probe selection and blend
 
+**Automated acceptance (2026-11-17):** Delivery `32144635` accepted after Codex
+repairs and separate-context source rechecks. Final Debug/Release builds and
+28/28 commands pass, including native DX12/Vulkan and strict Editor startup with
+the real three-entity fixture. [Full findings, costs and limits](../../reviews/M15_U5_E_CODEX_REVIEW.md).
+Interactive U5-27.2/28/29/30.1/31.5 visuals remain NOT RUN/user-deferred.
+
+The four-slot view selection is bounded and conservative; exact influence is
+evaluated per pixel. SSR replaces exported forward specular in linear HDR before
+transparent composition. Unsupported raw custom companions report fallback.
+The two SSR term targets add 16 bytes/pixel; remaining S5.6 quality work stays open.
+
 - [x] **M15-U5-27.1 — Compute box influence.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on base commit `b77f70d9` (`Debug`/`Release` CPU unit, contract, and native D3D12/Vulkan GPU tests exit `0`). Box C1 `smoothstep` inner/outer influence (`EvaluateProbeInfluence` & `EvaluateProbeInfluenceHLSL` in `ReflectionService.cpp` / `ReflectionProbeCommon.hlsli`) with OBB orthonormal basis and `BlendDistance` YAML/extraction round-trip; see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. CPU/native OBB influence, finite degenerate basis, conservative rotated-mesh bounds, and C1 falloff pass in Debug/Release DX12/Vulkan. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
 - [ ] **M15-U5-27.2 — Compute sphere influence.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` CPU (`Test_LightingServicesUnit.cpp`, `Test_M15_ReflectionCaptureContractUnit.cpp`) and D3D12/Vulkan GPU (`[U5-E SphereOverlap] left=(0.959961,0.172974) mid=(0.869473,0.87334) right=(0.172974,0.959961)` in `Test_M15_ReflectionCaptureRendering.cpp`, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. Sphere influence/overlap and native sphere parallax pass alongside CPU sphere intersection checks in Debug/Release DX12/Vulkan. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
   - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere is smooth with no triangle bands or invalid pixels.
 - [ ] **M15-U5-28 — Blend multiple valid probes without hard seams.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` CPU and D3D12/Vulkan GPU (`MaxActiveReflectionProbes = 4`, reverse-priority LRU stamping, `512B` `RHIReflectionProbeBufferData` `b6`/`u_ReflectionProbeCube0..3`, `[U5-E BoxOverlap]` monotonic Red->Green ramp without hard seam, 5-probe cap check, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. Up to four ready probes blend with per-fragment normalized influence. Camera-first strict ranking, ready overflow publication, and retained view-generation pins pass CPU/native regressions. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
   - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
 - [ ] **M15-U5-29 — Apply parallax correction per probe before blending.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` CPU and D3D12/Vulkan GPU (`ApplyProbeParallax` / `ApplyProbeParallaxHLSL` before per-probe cubemap sampling; `[U5-E Parallax] raw=(0.073623,0.978027) corrected=(0.950684,0.0644263)`, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. Box/sphere correction is applied independently before sampling. CPU exact parallel-slab boundary and finite basis regressions pass; native off-axis fixture changes raw Green 2.94727 to corrected Red 1.71016. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
   - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the numbered/red object appears at the expected reflected location; misses fall back smoothly with no black edge.
 - [ ] **M15-U5-30.1 — Blend probe with SSR confidence.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` CPU and D3D12/Vulkan GPU (`SSR.hlsl` outputs raw hit + confidence, `SSRApply` replaces `EvaluateMultiProbeBlendHLSL` `fallbackEnv` proportionally via `(ssrColor - fallbackEnv) * (ssrWeight * F)`, `[U5-E SSR] hitL_no=(0.959961,0.172974) hitL_on=(0.403046,0.466727)`, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. Opaque forward rendering exports actual environment specular/material response to graph-owned MRTs; SSRApply replaces only that contribution before transparency. Confident native hits preserve reflection-disabled HDR emission and canonical AO=0 emission, including companion-only resource binding. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
   - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
 - [x] **M15-U5-30.2 — Blend probe with sky fallback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` CPU and D3D12/Vulkan GPU (`EvaluateMultiProbeBlendHLSL` blends `lerp(skyFallback, ProbeColor, ProbeCoverage)` across ForwardPBR, MaterialSurface, and SSRApply; `[U5-E BoundarySky] inside=(0.959961,0.172974) edge=(0.90459,0.908594) outside=(0.172974,0.959961)`, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. Probe/sky coverage and authored intensities blend in linear HDR; native boundary transitions are monotonic. Canonical sky sampling now uses the authored rotation consistently with ForwardPBR. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
 - [x] **M15-U5-30.3 — Enforce one energy policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` CPU (`SSRWeight + ProbeWeight + SkyWeight == 1.0f` in `EvaluateEnvironmentBlend`) and D3D12/Vulkan GPU (`[U5-E Energy] base=(0.905273,0.905273,0.905273) withSSR=(0.876614,0.876614,0.876614)` preventing additive SSR double-counting, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. Independent native scene-linear readback gives unit scene radiance .99988 with SSR off and 1.0121 on (delta < .03). Actual material response replaces fixed-F0 subtraction; diffuse/direct/emission remain outside the replacement. Raw custom shaders without a compatible companion use named SSR fallback. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
 - [x] **M15-U5-31.1 — Test overlap.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` CPU (`Test_LightingServicesUnit.cpp`) and D3D12/Vulkan GPU (`[U5-E BoxOverlap]` & `[U5-E SphereOverlap]` + 5-probe 4-slot cap, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. CPU and native box/sphere overlap, normalized weights, four-slot cap and per-fragment blending pass in both configurations/backends. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
 - [x] **M15-U5-31.2 — Test boundary movement.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` CPU and D3D12/Vulkan GPU (`[U5-E BoundarySky]` smooth monotonic fade from probe interior to Blue sky fallback without seam/dip, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. Native scene-linear boundary samples transition from local Red (1.99996,.03125) through mixed (.99668,1.03398) to sky Blue (.03125,2), with monotonic blue fraction. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
 - [x] **M15-U5-31.3 — Test missing probe.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` CPU (`MissingProbeCount`) and D3D12/Vulkan GPU (`[U5-E MissingProbe] ref=(0.959961,0.172974) withMissing=(0.959961,0.172974)`, `ActiveProbeCount == 1`, `MissingProbeCount == 1`, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. Native four-missing/high-ranked probes do not hide a ready fifth: active=1, missing=4, selected identity and reflected radiance are preserved. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
 - [x] **M15-U5-31.4 — Test stale probe.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` CPU and D3D12/Vulkan GPU (`[U5-E StaleManual] staleCenter=(0.978516,0) staleCount=1` retaining Red generation across scene edit until explicit manual recapture to Green, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. Native edited Manual probes retain last-good Red capture, stale diagnostics and generation identity, then publish updated Green after explicit request. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
 - [ ] **M15-U5-31.5 — Test SSR miss.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` D3D12/Vulkan GPU (`[U5-E SSR] missProbe=(0.959961,0.172974,0.172974) missSky=(0.172974,0.959961)`, falling back seamlessly from SSR miss to Red probe inside bounds and Blue sky outside, exit `0`); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Evidence:** Automated PASS after independent Codex review/repairs. SSR misses preserve the scene pixel and fall back to probes or sky: probe Red/Green/Blue (1.99968,.0312453,.031246), sky Red/Blue (.0312463,1.99976). Actual SSRApply and hits are required in the companion tests. See [Codex review and final matrix](../../reviews/M15_U5_E_CODEX_REVIEW.md).
   - **EDITOR VISUAL:** NOT RUN (deferred per user direction to post-U5 consolidated visual pass). Build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
 
 **P5 exit:** with SSR disabled, a captured cubemap contains the red object and the sphere samples it; roughness changes sharpness; invalidation/scheduling/blending/fallback pass.
-  - **Automated status:** Automated PASS (self-verification; independent Codex review pending) on `Debug`/`Release` D3D12 & Vulkan (`[P5 Exit Cube -Z] center=(4,0.159912,0.159912)`, `[P5 Exit Roughness SSR=OFF] R(0.05)=3.29863 R(0.40)=1.09219 R(0.85)=0.138735` linear HDR before tone mapping with `SSRCompute`/`SSRApply` disabled; interactive Editor visual checks remain `NOT RUN` and deferred per user direction); see [U5-E review](../../reviews/M15_U5_E_REVIEW.md).
+  - **Automated status:** Accepted after independent Codex repairs and native Debug/Release DX12/Vulkan verification. With SSR disabled, -Z capture is (4,.159912,.159912); linear HDR sphere Red peaks 3.29863 -> 1.09219 -> .138735 as roughness increases. Interactive visual gates remain open. See [Codex review](../../reviews/M15_U5_E_CODEX_REVIEW.md).
 
 ### U5 / S5.6 — Material-aware SSR and reflection resolve
 

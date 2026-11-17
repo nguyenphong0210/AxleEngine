@@ -1,6 +1,7 @@
 #include <Axle/ReflectionService.hpp>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 namespace Axle {
     namespace {
         bool IsFiniteVec3(const glm::vec3& v) {
@@ -15,7 +16,7 @@ namespace Axle {
         glm::vec3 SafeNormalizeOrFallback(const glm::vec3& v, const glm::vec3& fallback) {
             if (!IsFiniteVec3(v)) return fallback;
             const float lenSq = glm::dot(v, v);
-            if (!(lenSq > 1e-12f)) return fallback;
+            if (!std::isfinite(lenSq) || !(lenSq > 1e-12f)) return fallback;
             return v / std::sqrt(lenSq);
         }
     }
@@ -42,8 +43,8 @@ namespace Axle {
         const glm::vec3 col2(probe.WorldTransform[2]);
         const glm::vec3 x = SafeNormalizeOrFallback(col0, glm::vec3(1.0f, 0.0f, 0.0f));
         const glm::vec3 yOrtho = col1 - x * glm::dot(x, col1);
-        const glm::vec3 yFallback = (std::abs(x.y) < 0.99f) ? glm::normalize(glm::cross(glm::vec3(0.0f, 0.0f, 1.0f), x))
-                                                            : glm::vec3(0.0f, 0.0f, 1.0f);
+        const glm::vec3 reference = std::abs(x.z) < 0.9f ? glm::vec3(0,0,1) : glm::vec3(0,1,0);
+        const glm::vec3 yFallback = glm::normalize(glm::cross(reference, x));
         const glm::vec3 y = SafeNormalizeOrFallback(yOrtho, yFallback);
         const glm::vec3 zCandidate = glm::cross(x, y);
         glm::vec3 z = SafeNormalizeOrFallback(zCandidate, glm::vec3(0.0f, 0.0f, 1.0f));
@@ -130,16 +131,18 @@ namespace Axle {
                 }
             }
         } else {
-            const glm::vec3 safeDir(
-                std::abs(localDir.x) >= 1e-5f ? localDir.x : (localDir.x < 0.0f ? -1e-5f : 1e-5f),
-                std::abs(localDir.y) >= 1e-5f ? localDir.y : (localDir.y < 0.0f ? -1e-5f : 1e-5f),
-                std::abs(localDir.z) >= 1e-5f ? localDir.z : (localDir.z < 0.0f ? -1e-5f : 1e-5f));
-            const glm::vec3 t0 = (-basis.HalfExtents - localPos) / safeDir;
-            const glm::vec3 t1 = (basis.HalfExtents - localPos) / safeDir;
-            const glm::vec3 tMax = glm::max(t0, t1);
-            const glm::vec3 tMin = glm::min(t0, t1);
-            const float tExit = std::min({tMax.x, tMax.y, tMax.z});
-            const float tEnter = std::max({tMin.x, tMin.y, tMin.z});
+            float tEnter = -std::numeric_limits<float>::max();
+            float tExit = std::numeric_limits<float>::max();
+            for (int axis = 0; axis < 3; ++axis) {
+                if (std::abs(localDir[axis]) < 1e-6f) {
+                    if (std::abs(localPos[axis]) > basis.HalfExtents[axis]) return unitRefl;
+                    continue;
+                }
+                const float t0 = (-basis.HalfExtents[axis] - localPos[axis]) / localDir[axis];
+                const float t1 = (basis.HalfExtents[axis] - localPos[axis]) / localDir[axis];
+                tEnter = std::max(tEnter, std::min(t0, t1));
+                tExit = std::min(tExit, std::max(t0, t1));
+            }
             if (tExit > 1e-4f && tExit >= tEnter) {
                 const glm::vec3 hitLocal = localPos + localDir * tExit;
                 correctedLocal = SafeNormalizeOrFallback(hitLocal, localDir);
@@ -217,7 +220,8 @@ namespace Axle {
         const glm::vec3& cameraPosition,
         std::span<const glm::vec3> samplePoints,
         bool enableSSR,
-        uint64_t sceneRevision) const {
+        uint64_t sceneRevision,
+        std::span<const ReflectionSampleBounds> sampleBounds) const {
         ReflectionFrame frame;
         frame.SceneRevision=sceneRevision;
         frame.Fallback=enableSSR ? ReflectionFallback::SSR :
@@ -248,6 +252,29 @@ namespace Axle {
                 maxCoverage = std::max(maxCoverage, ptInf.Coverage);
                 maxBlendWeight = std::max(maxBlendWeight, ptInf.BlendWeight);
             }
+            for (const auto& bounds : sampleBounds) {
+                if (!IsFiniteVec3(bounds.Min) || !IsFiniteVec3(bounds.Max) ||
+                    glm::any(glm::greaterThan(bounds.Min, bounds.Max))) continue;
+                glm::vec3 sample = glm::clamp(probe.Position, bounds.Min, bounds.Max);
+                if (probe.Shape != 1) {
+                    // Enclose mesh bounds in probe space. A world-space nearest
+                    // point can miss a rotated slender box that intersects the
+                    // mesh elsewhere. Conservative selection may include empty
+                    // bounds; the shader still evaluates exact per-pixel influence.
+                    const auto basis = BuildProbeBasis(probe);
+                    const auto center = (bounds.Min + bounds.Max) * 0.5f - basis.Position;
+                    const auto half = (bounds.Max - bounds.Min) * 0.5f;
+                    const glm::vec3 localCenter(glm::dot(center, basis.AxisX),
+                        glm::dot(center, basis.AxisY), glm::dot(center, basis.AxisZ));
+                    const glm::vec3 localHalf(glm::dot(half, glm::abs(basis.AxisX)),
+                        glm::dot(half, glm::abs(basis.AxisY)), glm::dot(half, glm::abs(basis.AxisZ)));
+                    const auto closest = glm::clamp(glm::vec3(0), localCenter-localHalf, localCenter+localHalf);
+                    sample = basis.Position + basis.AxisX*closest.x + basis.AxisY*closest.y + basis.AxisZ*closest.z;
+                }
+                const auto inf = EvaluateProbeInfluence(probe, sample);
+                maxCoverage = std::max(maxCoverage, inf.Coverage);
+                maxBlendWeight = std::max(maxBlendWeight, inf.BlendWeight);
+            }
             if (!(maxCoverage > 0.0f) || !(maxBlendWeight > 0.0f)) continue;
 
             ScoredCandidate entry;
@@ -265,11 +292,14 @@ namespace Axle {
         if (scored.empty()) return frame;
 
         std::stable_sort(scored.begin(), scored.end(), [](const ScoredCandidate& a, const ScoredCandidate& b) {
-            const float diff = a.Candidate.RawBlendWeight - b.Candidate.RawBlendWeight;
-            if (std::abs(diff) > 1e-6f) return a.Candidate.RawBlendWeight > b.Candidate.RawBlendWeight;
+            if (a.CameraWeight != b.CameraWeight) return a.CameraWeight > b.CameraWeight;
+            if (a.Candidate.RawBlendWeight != b.Candidate.RawBlendWeight)
+                return a.Candidate.RawBlendWeight > b.Candidate.RawBlendWeight;
             return a.SourceIndex < b.SourceIndex;
         });
         if (scored.size() > MaxActiveReflectionProbes) {
+            for (size_t i = MaxActiveReflectionProbes; i < scored.size(); ++i)
+                frame.AdditionalCandidates.push_back(scored[i].Candidate);
             scored.resize(MaxActiveReflectionProbes);
         }
 
@@ -304,10 +334,11 @@ namespace Axle {
 
     ReflectionFrame ReflectionService::ResolvePublication(ReflectionFrame frame, const ReflectionPublication& publication,
                                                           bool ssrAvailable, bool skyIBLAvailable) const {
+        if (!publication.SelectedCandidates.empty()) frame.ActiveProbes = publication.SelectedCandidates;
         frame.ProbeGeneration={};
         frame.PrefilterReady=false;
         frame.ActiveProbeCount=0;
-        frame.MissingProbeCount=0;
+        frame.MissingProbeCount=publication.RejectedProbeCount;
         frame.StaleProbeCount=0;
         frame.CapturePending=publication.CapturePending;
         frame.CaptureStale=publication.CaptureStale;

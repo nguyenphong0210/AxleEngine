@@ -48,6 +48,11 @@ float3 ProjectViewToUVZ(float3 viewPos) {
 
 bool ClipScreenRay(float3 startUVZ, float3 endUVZ, out float outTMax) {
     outTMax = 1.0;
+    if (!all(isfinite(startUVZ)) || !all(isfinite(endUVZ)) || any(startUVZ < 0.0) ||
+        any(startUVZ.xy > 1.0) || startUVZ.z > 0.9999) {
+        outTMax = 0.0;
+        return false;
+    }
     float tMin = 0.0;
     float tMax = 1.0;
     float3 d = endUVZ - startUVZ;
@@ -252,12 +257,17 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
         }
 
         uint2 dims = HiZMipDimensions(baseSize, mip);
-        float2 cellF = clamp(pCurr.xy * float2(dims), float2(0.0, 0.0), float2(dims) - 1e-4);
+        // Match HiZ.hlsl: odd trailing rows/columns fold into the last cell.
+        float cellScale = float(1u << mip);
+        float2 cellF = clamp(pCurr.xy * float2(baseSize) / cellScale, float2(0.0, 0.0), float2(dims) - 1e-4);
         uint2 cellIdx = uint2(floor(cellF));
 
         float2 stepSign = float2(dirUVZ.x >= 0.0 ? 1.0 : 0.0, dirUVZ.y >= 0.0 ? 1.0 : 0.0);
         float2 crossOffset = float2(dirUVZ.x >= 0.0 ? 1e-4 : -1e-4, dirUVZ.y >= 0.0 ? 1e-4 : -1e-4);
-        float2 nextEdge = (float2(cellIdx) + stepSign) / float2(dims) + crossOffset * rcpFrame;
+        float2 boundary = (float2(cellIdx) + stepSign) * cellScale;
+        if (dirUVZ.x >= 0.0 && cellIdx.x + 1u == dims.x) boundary.x = baseSize.x;
+        if (dirUVZ.y >= 0.0 && cellIdx.y + 1u == dims.y) boundary.y = baseSize.y;
+        float2 nextEdge = boundary * rcpFrame + crossOffset * rcpFrame;
         float tx = abs(dirUVZ.x) > 1e-7 ? (nextEdge.x - startUVZ.x) / dirUVZ.x : 1.0;
         float ty = abs(dirUVZ.y) > 1e-7 ? (nextEdge.y - startUVZ.y) / dirUVZ.y : 1.0;
         float tNextCell = clamp(max(tCurr + 1e-5, min(tx, ty)), tCurr, 1.0);
@@ -284,7 +294,7 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
             continue;
         }
 
-        // Mip 0: view-space thickness test + 4-step binary hit refinement
+        // Mip 0: view-space thickness test and exact cell-plane hit refinement
         float2 centerUV = (float2(cellIdx) + 0.5) * rcpFrame;
         float3 sceneView = ReconstructViewPos(centerUV, cellMinZ);
         float3 rayEnterView = ReconstructViewPos(pCurr.xy, zEnter);
@@ -296,17 +306,12 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
         bool withinBehind = (min(penEnter, penExit) <= thickness && max(penEnter, penExit) > -1e-4);
 
         if (crosses || withinBehind) {
-            float tLo = tCurr;
-            float tHi = tNextCell;
-            [unroll]
-            for (int b = 0; b < 4; ++b) {
-                float tMid = 0.5 * (tLo + tHi);
-                float3 pMid = startUVZ + dirUVZ * tMid;
-                uint2 mCell = uint2(clamp(pMid.xy * float2(baseSize), float2(0.0, 0.0), float2(baseSize) - 1e-4));
-                float dMid = LoadHiZTexel(0u, mCell, baseSize);
-                if (pMid.z >= dMid) tHi = tMid; else tLo = tMid;
-            }
-            float3 pFinal = startUVZ + dirUVZ * tHi;
+            // Mip-0 depth is constant within this cell. Exact UVZ-plane
+            // refinement works for both increasing and decreasing depth rays.
+            float tHit = crosses && abs(dirUVZ.z) > 1e-7
+                ? clamp((cellMinZ-startUVZ.z)/dirUVZ.z,tCurr,tNextCell)
+                : tCurr;
+            float3 pFinal = startUVZ + dirUVZ * tHit;
             uint2 fCell = uint2(clamp(pFinal.xy * float2(baseSize), float2(0.0, 0.0), float2(baseSize) - 1e-4));
             float finalSceneZ = LoadHiZTexel(0u, fCell, baseSize);
             if (finalSceneZ < 0.9999) {

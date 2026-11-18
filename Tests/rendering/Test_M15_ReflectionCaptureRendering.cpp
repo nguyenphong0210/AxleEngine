@@ -1074,8 +1074,8 @@ namespace {
         auto cubeView = cubeMesh->CaptureView();
         auto sphereView = sphereMesh->CaptureView();
 
-        constexpr uint32_t renderW = 256u;
-        constexpr uint32_t renderH = 256u;
+        uint32_t renderW = 256u;
+        uint32_t renderH = 256u;
         auto targets = std::make_shared<RHIViewTargets>();
         RHIViewTargetDesc vtDesc{};
         vtDesc.Width = renderW;
@@ -1156,6 +1156,93 @@ namespace {
             return true;
         };
 
+        auto verifyTraceParity = [&](const PerspectiveCamera& viewCam, const std::vector<glm::vec4>& storage, bool cameraFacing = false) -> bool {
+            std::vector<std::vector<float>> pyramid;
+            for (uint32_t level = 0; level < std::min(8u, targets->GetHiZUsefulLevelCount()); ++level) {
+                auto* texture = targets->GetHiZ(level);
+                const auto bytes = Axle::RenderTests::ReadTexture(*texture);
+                if (bytes.size() != size_t(texture->GetWidth()) * texture->GetHeight() * sizeof(float)) return false;
+                pyramid.emplace_back(bytes.size()/sizeof(float));
+                std::memcpy(pyramid.back().data(), bytes.data(), bytes.size());
+            }
+            std::vector<glm::vec4> normals;
+            if (!ReadTexture2DRGBA16(*targets->Get(RHIViewTarget::ScreenNormal), normals)) return false;
+            uint32_t centerX = 0, centerY = 0;
+            if (!ProjectWorldToPixel(viewCam, renderW, renderH, {0,0,0}, centerX, centerY)) return false;
+            const auto projection = viewCam.GetProjectionMatrixZO();
+            const auto inverse = glm::inverse(projection);
+            uint32_t checked = 0;
+            for (uint32_t y = centerY-2; y <= centerY+2; ++y) for (uint32_t x = centerX-2; x <= centerX+2; ++x) {
+                const size_t pixel = size_t(y)*renderW+x;
+                const auto ray = SSRRaymarchContract::BuildInitialSSRRay(
+                    (glm::vec2(x,y)+.5f)/glm::vec2(renderW,renderH), pyramid[0][pixel],
+                    glm::normalize(glm::mat3(viewCam.GetViewMatrix())*glm::vec3(normals[pixel])),
+                    projection, inverse, renderW, renderH, uint32_t(pyramid.size()), baseSettings.SSRLengthPixels);
+                const auto cpu = SSRRaymarchContract::TraceHiZDepthBuffer(pyramid,renderW,renderH,ray,projection,inverse,.5f,64);
+                const auto gpu = storage[pixel];
+                if ((cameraFacing && ray.EndView.z <= ray.StartView.z) || !cpu.Hit || gpu.a <= 0 || glm::distance(cpu.HitUV,glm::vec2(gpu)) > .002f ||
+                    std::abs(cpu.HitDistance/std::max(baseSettings.SSRLengthPixels,5.0f)-gpu.z) > .003f ||
+                    std::abs(cpu.Confidence-gpu.a) > .025f) {
+                    std::cout << "  [U5-F Parity FAIL] size=" << renderW << "x" << renderH << " pixel=" << x << "," << y
+                              << " cpu=(" << cpu.HitUV.x << "," << cpu.HitUV.y << "," << cpu.HitDistance << "," << cpu.Confidence
+                              << ") gpu=(" << gpu.x << "," << gpu.y << "," << gpu.z << "," << gpu.a << ")\n";
+                    return false;
+                }
+                ++checked;
+            }
+            std::cout << "  [U5-F Parity] " << renderW << "x" << renderH << " " << checked << " native rays agree in UV, distance and confidence\n";
+            return true;
+        };
+
+        // A tilted mirror sends its ray toward the camera and an offset emitter.
+        // This exercises decreasing depth in the actual production compute pass.
+        {
+            RenderWorld world;
+            world.SceneRevision = 9200;
+            world.Skybox.Authored = true;
+            world.Skybox.Enabled = false;
+            const glm::vec3 outgoing = glm::normalize(glm::vec3(.8f,.1f,.6f));
+            const glm::vec3 normal = glm::normalize(outgoing-glm::normalize(-camPos));
+            auto mirror = MakeBoxInstance(1,cubeView,makeMaterial({1,1,1},1,.04f),{0,0,0},{4,4,.02f},false);
+            const glm::vec3 axis = glm::normalize(glm::cross(glm::vec3(0,0,1),normal));
+            mirror.WorldTransform = glm::rotate(glm::mat4(1),std::acos(normal.z),axis)*glm::scale(glm::mat4(1),glm::vec3(4,4,.02f));
+            world.Meshes.push_back(mirror);
+            world.Meshes.push_back(MakeBoxInstance(2,cubeView,MakeEmissiveMaterial({1,.04f,.04f},5),outgoing*3.0f,{1.5f,1.5f,.5f},false));
+            std::vector<glm::vec4> hdr, storage;
+            RENDER_CHECK(renderScene(world,cam,hdr,&storage) && verifyTraceParity(cam,storage,true),
+                "camera-facing SSR ray agrees with CPU through decreasing-depth refinement");
+            glm::vec4 reflected;
+            RENDER_CHECK(sampleAtWorld(cam,hdr,{0,0,0},reflected), "camera-facing reflection sample");
+            std::cout << "  [U5-F Camera-facing] reflected=(" << reflected.r << "," << reflected.g << "," << reflected.b << ")\n";
+            // A hit may lie on the emitter silhouette. For this subpixel cone,
+            // compare against bilinear scene radiance, not an assumed full texel.
+            std::vector<glm::vec4> response, source;
+            RENDER_CHECK(ReadTexture2DRGBA16(*targets->Get(RHIViewTarget::ReflectionResponse),response) &&
+                ReadTexture2DRGBA16(*targets->Get(RHIViewTarget::OpaqueColor),source), "camera-facing BRDF and pre-resolve radiance");
+            const auto sampleLinear = [&](glm::vec2 uv) {
+                const glm::vec2 p = uv*glm::vec2(renderW,renderH)-.5f;
+                const glm::ivec2 base(glm::floor(p));
+                const glm::vec2 blend = glm::fract(p);
+                const auto tap = [&](int x, int y) { return source[size_t(std::clamp(y,0,int(renderH)-1))*renderW+std::clamp(x,0,int(renderW)-1)]; };
+                return glm::mix(glm::mix(tap(base.x,base.y),tap(base.x+1,base.y),blend.x),
+                    glm::mix(tap(base.x,base.y+1),tap(base.x+1,base.y+1),blend.x),blend.y);
+            };
+            uint32_t px=0, py=0;
+            RENDER_CHECK(ProjectWorldToPixel(cam,renderW,renderH,{0,0,0},px,py), "camera-facing source pixel");
+            float expectedRed = 0;
+            for (uint32_t y=py-2; y<=py+2; ++y) for (uint32_t x=px-2; x<=px+2; ++x) {
+                const auto pixel = size_t(y)*renderW+x;
+                // All emitters are beyond four view-space meters: this upper
+                // bound proves the resolve takes its single bilinear sample.
+                RENDER_CHECK(SSRRaymarchContract::ComputeRoughnessConePixelRadius(.04f,storage[pixel].z*40,4,
+                    cam.GetProjectionMatrixZO(),renderW,renderH) <= .35f, "camera-facing fixture has a subpixel cone");
+                expectedRed += response[pixel].r*storage[pixel].a*sampleLinear(glm::vec2(storage[pixel])).r/25.0f;
+            }
+            std::cout << "  [U5-F Camera-facing] expectedRed=" << expectedRed << "\n";
+            RENDER_CHECK(expectedRed > .01f && std::abs(reflected.r-expectedRed) < expectedRed*.1f && reflected.r > reflected.g*4,
+                "camera-facing reflection resolves emitter radiance with its actual confidence and BRDF response");
+        }
+
         // -----------------------------------------------------------------
         // 1. M15-U5-32.7 / 33.1 / 39.1 / 39.2: Hit, Thickness Pass-Through & Miss Fallback
         // -----------------------------------------------------------------
@@ -1179,6 +1266,17 @@ namespace {
                       << ") hdr=(" << hitHDR.r << "," << hitHDR.g << "," << hitHDR.b << ")\n";
             RENDER_CHECK(hitStorage.a > 0.15f && hitHDR.r > 1.5f && hitHDR.r > hitHDR.g * 5.0f,
                 "M15-U5-32.7 / 39.1: SSR hits Red geometry cleanly with confident ScreenStorage output");
+            RENDER_CHECK(verifyTraceParity(cam, storage), "native SSR agrees with CPU traversal for hit UV, distance and confidence");
+            renderW = vtDesc.Width = 255;
+            renderH = vtDesc.Height = 191;
+            RENDER_CHECK(targets->Configure(vtDesc), "odd-sized native SSR view");
+            PerspectiveCamera oddCam(45, float(renderW)/renderH, .1f, 100);
+            oddCam.SetViewMatrix(cam.GetViewMatrix(), camPos);
+            std::vector<glm::vec4> oddHDR, oddStorage;
+            RENDER_CHECK(renderScene(world, oddCam, oddHDR, &oddStorage) && verifyTraceParity(oddCam, oddStorage),
+                "odd-sized native Hi-Z traversal matches CPU after conservative border folding");
+            renderW = renderH = vtDesc.Width = vtDesc.Height = 256;
+            RENDER_CHECK(targets->Configure(vtDesc), "restore square SSR view");
 
             // Thin foreground bar positioned along screen projection of ray above the reflection path
             world.Meshes.push_back(MakeBoxInstance(3, cubeView, makeMaterial({0.02f, 0.02f, 0.02f}, 0.0f, 0.95f),

@@ -496,11 +496,13 @@ namespace Axle {
         inline constexpr float MaxConeRadiusPixels = 32.0f;
 
         struct RaySetup {
+            glm::vec3 OriginView{0.0f};
             glm::vec3 StartView{0.0f};
             glm::vec3 StartUVZ{0.0f};
             glm::vec3 EndView{0.0f};
             glm::vec3 EndUVZ{0.0f};
             float MaxTraceDist = 0.0f;
+            float MaxDistance = 0.0f;
             uint32_t StartMip = 0u;
             uint32_t MaxUsefulMip = 0u;
             bool Valid = false;
@@ -538,8 +540,7 @@ namespace Axle {
             const glm::mat4& projZO,
             const glm::mat4& invProjZO,
             float thickness,
-            uint32_t maxSteps,
-            float ssrStrength = 1.0f);
+            uint32_t maxSteps);
         float EvaluateRoughnessFade(float roughness);
         float ComputeRoughnessConePixelRadius(
             float roughness,

@@ -1633,6 +1633,9 @@ namespace Axle {
     } // namespace ReflectionCaptureContract
 
     namespace SSRRaymarchContract {
+        static bool IsFiniteVec3(const glm::vec3& value) {
+            return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+        }
         glm::vec3 ProjectViewToUVZ(const glm::vec3& viewPos, const glm::mat4& projZO) {
             const glm::vec4 clip = projZO * glm::vec4(viewPos, 1.0f);
             const float invW = 1.0f / std::max(std::abs(clip.w), 1e-6f);
@@ -1655,6 +1658,12 @@ namespace Axle {
 
         bool ClipScreenRay(const glm::vec3& startUVZ, const glm::vec3& endUVZ, float* outTMax) {
             if (!outTMax) return false;
+            *outTMax = 0;
+            // This contract returns an exit parameter only; the start must
+            // already be inside the frustum, including after normal bias.
+            if (!IsFiniteVec3(startUVZ) || !IsFiniteVec3(endUVZ) ||
+                startUVZ.x < 0 || startUVZ.x > 1 || startUVZ.y < 0 || startUVZ.y > 1 ||
+                startUVZ.z < 0 || startUVZ.z > .9999f) return false;
             float tMin = 0.0f;
             float tMax = 1.0f;
             const glm::vec3 d = endUVZ - startUVZ;
@@ -1694,18 +1703,21 @@ namespace Axle {
             uint32_t usefulHiZLevels,
             float maxDistance) {
             RaySetup setup{};
-            if (width == 0 || height == 0 || depth <= 0.0f || depth >= 0.9999f || maxDistance <= 0.0f) {
+            if (width == 0 || height == 0 || !std::isfinite(depth) || !std::isfinite(maxDistance) ||
+                !std::isfinite(uv.x) || !std::isfinite(uv.y) || !IsFiniteVec3(viewNormal) ||
+                depth <= 0.0f || depth >= 0.9999f || maxDistance <= 0.0f) {
                 return setup;
             }
             const glm::vec3 originView = ReconstructViewPos(uv, depth, invProjZO);
             const float normLen = glm::length(viewNormal);
             const float originLen = glm::length(originView);
-            if (normLen < 1e-5f || originLen < 1e-5f) {
+            if (!std::isfinite(normLen) || !std::isfinite(originLen) || normLen < 1e-5f || originLen < 1e-5f) {
                 return setup;
             }
             const glm::vec3 n = viewNormal / normLen;
             const glm::vec3 vDir = originView / originLen;
             const glm::vec3 reflDir = glm::normalize(glm::reflect(vDir, n));
+            if (glm::dot(reflDir, n) <= 1e-4f) return setup;
 
             const float rcpW = 1.0f / static_cast<float>(width);
             const float rcpH = 1.0f / static_cast<float>(height);
@@ -1720,7 +1732,8 @@ namespace Axle {
                 return setup;
             }
 
-            float traceDist = std::max(maxDistance, 1.0f);
+            const float distanceLimit = std::max(maxDistance, 5.0f);
+            float traceDist = distanceLimit;
             if (reflDir.z > 1e-5f) {
                 traceDist = std::min(traceDist, (-safeNear - startView.z) / reflDir.z);
             }
@@ -1736,11 +1749,14 @@ namespace Axle {
                 return setup;
             }
 
+            setup.OriginView = originView;
             setup.StartView = startView;
             setup.StartUVZ = rawStartUVZ;
-            setup.EndView = startView + reflDir * (traceDist * tMaxClip);
             setup.EndUVZ = glm::mix(rawStartUVZ, rawEndUVZ, tMaxClip);
+            // UVZ interpolation is projective, not a linear view-space distance.
+            setup.EndView = ReconstructViewPos(glm::vec2(setup.EndUVZ), setup.EndUVZ.z, invProjZO);
             setup.MaxTraceDist = traceDist;
+            setup.MaxDistance = distanceLimit;
             setup.StartMip = 0u;
             setup.MaxUsefulMip = usefulHiZLevels > 0u ? std::min(usefulHiZLevels - 1u, 7u) : 0u;
             setup.Valid = true;
@@ -1755,13 +1771,13 @@ namespace Axle {
             const glm::mat4& projZO,
             const glm::mat4& invProjZO,
             float thickness,
-            uint32_t maxSteps,
-            float ssrStrength) {
+            uint32_t maxSteps) {
             (void)projZO;
             HiZTraceResult out{};
             if (!ray.Valid || hiZPyramid.empty() || width == 0 || height == 0 || maxSteps == 0) {
                 return out;
             }
+            maxSteps = std::clamp(maxSteps, 16u, 96u);
             const uint32_t maxAvailMip = std::min(
                 ray.MaxUsefulMip,
                 static_cast<uint32_t>(hiZPyramid.size() - 1u));
@@ -1792,14 +1808,19 @@ namespace Axle {
                 }
 
                 const glm::uvec2 dims = ComputeHiZMipSize(width, height, mip);
+                const float cellScale = float(1u << mip);
                 const glm::vec2 cellF(
-                    std::clamp(pCurr.x * static_cast<float>(dims.x), 0.0f, static_cast<float>(dims.x) - 1e-4f),
-                    std::clamp(pCurr.y * static_cast<float>(dims.y), 0.0f, static_cast<float>(dims.y) - 1e-4f));
+                    std::clamp(pCurr.x * width / cellScale, 0.0f, static_cast<float>(dims.x) - 1e-4f),
+                    std::clamp(pCurr.y * height / cellScale, 0.0f, static_cast<float>(dims.y) - 1e-4f));
                 const glm::uvec2 cellIdx(static_cast<uint32_t>(std::floor(cellF.x)), static_cast<uint32_t>(std::floor(cellF.y)));
 
-                const float edgeX = (static_cast<float>(cellIdx.x) + (dirUVZ.x >= 0.0f ? 1.0f : 0.0f)) / static_cast<float>(dims.x) +
+                // Reduction folds the odd border into the last cell; interior
+                // boundaries remain multiples of 2^mip in base-pixel space.
+                const float boundaryX = dirUVZ.x >= 0 && cellIdx.x + 1 == dims.x ? float(width) : (float(cellIdx.x) + (dirUVZ.x >= 0 ? 1 : 0)) * cellScale;
+                const float boundaryY = dirUVZ.y >= 0 && cellIdx.y + 1 == dims.y ? float(height) : (float(cellIdx.y) + (dirUVZ.y >= 0 ? 1 : 0)) * cellScale;
+                const float edgeX = boundaryX / static_cast<float>(width) +
                                     (dirUVZ.x >= 0.0f ? 1e-4f : -1e-4f) / static_cast<float>(width);
-                const float edgeY = (static_cast<float>(cellIdx.y) + (dirUVZ.y >= 0.0f ? 1.0f : 0.0f)) / static_cast<float>(dims.y) +
+                const float edgeY = boundaryY / static_cast<float>(height) +
                                     (dirUVZ.y >= 0.0f ? 1e-4f : -1e-4f) / static_cast<float>(height);
                 const float tx = std::abs(dirUVZ.x) > 1e-7f ? (edgeX - ray.StartUVZ.x) / dirUVZ.x : 1.0f;
                 const float ty = std::abs(dirUVZ.y) > 1e-7f ? (edgeY - ray.StartUVZ.y) / dirUVZ.y : 1.0f;
@@ -1826,7 +1847,7 @@ namespace Axle {
                     continue;
                 }
 
-                // Mip 0: check view-space penetration thickness & binary refine crossing
+                // Mip 0: check view-space penetration thickness and refine the cell crossing
                 const glm::vec2 centerUV = (glm::vec2(cellIdx) + 0.5f) / glm::vec2(dims);
                 const glm::vec3 sceneView = ReconstructViewPos(centerUV, cellMinZ, invProjZO);
                 const glm::vec3 rayEnterView = ReconstructViewPos(glm::vec2(pCurr.x, pCurr.y), zEnter, invProjZO);
@@ -1838,18 +1859,14 @@ namespace Axle {
                 const bool withinBehind = (std::min(penEnter, penExit) <= safeThickness && std::max(penEnter, penExit) > -1e-4f);
 
                 if (crosses || withinBehind) {
-                    float tLo = tCurr;
-                    float tHi = tNextCell;
-                    for (int b = 0; b < 4; ++b) {
-                        const float tMid = 0.5f * (tLo + tHi);
-                        const glm::vec3 pMid = ray.StartUVZ + dirUVZ * tMid;
-                        const glm::uvec2 mCell(
-                            static_cast<uint32_t>(std::clamp(pMid.x * static_cast<float>(width), 0.0f, static_cast<float>(width) - 1e-4f)),
-                            static_cast<uint32_t>(std::clamp(pMid.y * static_cast<float>(height), 0.0f, static_cast<float>(height) - 1e-4f)));
-                        const float dMid = sampleLevel(0u, mCell);
-                        if (pMid.z >= dMid) tHi = tMid; else tLo = tMid;
-                    }
-                    const glm::vec3 pFinal = ray.StartUVZ + dirUVZ * tHi;
+                    // Depth is constant within a mip-0 texel and UVZ is linear
+                    // along this cell interval. Solve the crossing exactly for
+                    // either depth direction; a fixed binary predicate assumes
+                    // increasing depth and can reject camera-facing crossings.
+                    const float tHit = crosses && std::abs(dirUVZ.z) > 1e-7f
+                        ? std::clamp((cellMinZ-ray.StartUVZ.z)/dirUVZ.z,tCurr,tNextCell)
+                        : tCurr;
+                    const glm::vec3 pFinal = ray.StartUVZ + dirUVZ * tHit;
                     const glm::uvec2 fCell(
                         static_cast<uint32_t>(std::clamp(pFinal.x * static_cast<float>(width), 0.0f, static_cast<float>(width) - 1e-4f)),
                         static_cast<uint32_t>(std::clamp(pFinal.y * static_cast<float>(height), 0.0f, static_cast<float>(height) - 1e-4f)));
@@ -1870,8 +1887,21 @@ namespace Axle {
                             out.Hit = true;
                             out.HitUV = glm::vec2(pFinal.x, pFinal.y);
                             out.HitDepth = finalSceneZ;
-                            out.HitDistance = glm::length(finalSceneView - ray.StartView);
-                            out.Confidence = std::clamp(screenFade * stepFade * std::clamp(ssrStrength, 0.0f, 1.0f), 0.0f, 1.0f);
+                            uint32_t support = 0;
+                            for (const auto offset : {glm::ivec2(-1,0), glm::ivec2(1,0), glm::ivec2(0,-1), glm::ivec2(0,1)}) {
+                                const auto cell = glm::clamp(glm::ivec2(fCell) + offset, glm::ivec2(0), glm::ivec2(width-1,height-1));
+                                const float neighborDepth = sampleLevel(0, glm::uvec2(cell));
+                                if (neighborDepth < .9999f) {
+                                    const float neighborZ = ReconstructViewPos((glm::vec2(cell)+.5f)/glm::vec2(width,height), neighborDepth, invProjZO).z;
+                                    if (std::abs(finalSceneView.z-neighborZ) <= std::max(safeThickness*1.5f,.35f)) ++support;
+                                }
+                            }
+                            const float disocclusionFade = support >= 2 ? 1.0f : (support == 1 ? .65f : .25f);
+                            const auto reflection = glm::normalize(ray.EndView-ray.StartView);
+                            const float cameraFade = 1-smooth(.45f,.98f,reflection.z);
+                            out.HitDistance = glm::length(finalSceneView - ray.OriginView);
+                            const float distanceFade = std::clamp(1-out.HitDistance/std::max(ray.MaxDistance,5.0f)*.25f,0.0f,1.0f);
+                            out.Confidence = std::clamp(screenFade * stepFade * distanceFade * cameraFade * disocclusionFade, 0.0f, 1.0f);
                             return out;
                         }
                     }

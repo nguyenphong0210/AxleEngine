@@ -1,5 +1,7 @@
 # M15-U5-F Delivery & Self-Verification Report (S5.6: Material-Aware SSR and Reflection Resolve)
 
+> Historical Gemini self-verification. Current independent findings, repairs, reruns and acceptance limits are recorded in [the Codex U5-F review](M15_U5_F_CODEX_REVIEW.md). Original values and binary-refinement descriptions below describe the delivery before Codex repairs.
+
 - **Milestone / Package:** `M15-U5-F` (`S5.6`, leaf items `M15-U5-32.1` through `M15-U5-39.6`)
 - **Base Commit:** `c11e6edb` (accepted M15-U5-E baseline)
 - **Implementer:** Gemini (self-verification completed across Debug & Release; pending independent Codex review)

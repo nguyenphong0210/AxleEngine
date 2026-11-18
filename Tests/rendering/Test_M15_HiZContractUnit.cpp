@@ -242,6 +242,8 @@ bool RunM15HiZContractUnitTests() {
             "M15-U5-32.1: ClipScreenRay clips exit rays precisely to screen boundary");
         RENDER_CHECK(!SSRRaymarchContract::ClipScreenRay({1.2f, 0.5f, 0.5f}, {1.8f, 0.5f, 0.5f}, &clippedT),
             "M15-U5-32.1: ClipScreenRay rejects exterior off-screen rays");
+        RENDER_CHECK(!SSRRaymarchContract::ClipScreenRay({1.2f,.5f,.5f},{.5f,.5f,.5f},&clippedT),
+            "exit-only clipping rejects exterior starts even when their segment would enter the screen");
 
         // 5b. M15-U5-32.2..32.7: Synthetic Hi-Z DDA open sky miss vs wall hit vs thickness rejection
         const uint32_t usefulLevels = ComputeUsefulLevelCount(w, h);
@@ -263,9 +265,15 @@ bool RunM15HiZContractUnitTests() {
             glm::vec2(floorUVZ.x, floorUVZ.y), floorUVZ.z, floorNormalView, proj, invProj, w, h, usefulLevels, 30.0f);
         RENDER_CHECK(skyRay.Valid && skyRay.MaxUsefulMip == usefulLevels - 1u,
             "M15-U5-32.2: BuildInitialSSRRay produces valid view/UVZ ray setup");
+        RENDER_CHECK(glm::distance(SSRRaymarchContract::ProjectViewToUVZ(skyRay.EndView, proj), skyRay.EndUVZ) < 1e-4f,
+            "clipped view-space endpoint projects to its UVZ endpoint under perspective");
+        const auto shortRay = SSRRaymarchContract::BuildInitialSSRRay(glm::vec2(floorUVZ),floorUVZ.z,floorNormalView,
+            proj,invProj,w,h,usefulLevels,1);
+        RENDER_CHECK(shortRay.Valid && shortRay.MaxDistance == 5,
+            "CPU and GPU share the five-meter minimum SSR distance policy");
 
         const auto skyRes = SSRRaymarchContract::TraceHiZDepthBuffer(
-            skyPyramid, w, h, skyRay, proj, invProj, 0.5f, 32u, 1.0f);
+            skyPyramid, w, h, skyRay, proj, invProj, 0.5f, 32u);
         RENDER_CHECK(!skyRes.Hit && skyRes.HighestMipReached >= 2u && skyRes.StepsExecuted > 0u && skyRes.StepsExecuted < 32u,
             "M15-U5-32.3 / 32.5: open-sky Hi-Z DDA ascends coarse mips and misses quickly");
 
@@ -285,7 +293,7 @@ bool RunM15HiZContractUnitTests() {
         RENDER_CHECK(BuildMinReductionPyramid(wallDepth, w, h, usefulLevels, wallPyramid, wallExtents),
             "M15-U5-32.7: build synthetic wall-hit Hi-Z pyramid");
         const auto hitRes = SSRRaymarchContract::TraceHiZDepthBuffer(
-            wallPyramid, w, h, skyRay, proj, invProj, 0.5f, 32u, 1.0f);
+            wallPyramid, w, h, skyRay, proj, invProj, 0.5f, 32u);
         RENDER_CHECK(hitRes.Hit && hitRes.HitDistance > 0.2f && hitRes.Confidence > 0.1f &&
                      glm::length(hitRes.HitUV - glm::vec2(wallUVZ.x, wallUVZ.y)) < 0.08f,
             "M15-U5-32.4 / 32.6 / 33.2: Hi-Z DDA descends to mip 0 and refines target intersection accurately");
@@ -303,9 +311,63 @@ bool RunM15HiZContractUnitTests() {
         RENDER_CHECK(BuildMinReductionPyramid(falseBlockDepth, w, h, usefulLevels, falseBlockPyramid, wallExtents),
             "M15-U5-33.1: build thin-blocker behind-ray Hi-Z pyramid");
         const auto rejectedRes = SSRRaymarchContract::TraceHiZDepthBuffer(
-            falseBlockPyramid, w, h, skyRay, proj, invProj, 0.5f, 32u, 1.0f);
+            falseBlockPyramid, w, h, skyRay, proj, invProj, 0.5f, 32u);
         RENDER_CHECK(!rejectedRes.Hit,
             "M15-U5-33.1: thickness check rejects intersection deeper behind surface than thickness");
+
+        // Hierarchical traversal must cover the same blockers as mip-0 DDA at odd extents.
+        for (const auto size : {glm::uvec2(63, 47), glm::uvec2(95, 63)}) {
+          for (int axis = 0; axis < 2; ++axis) for (bool reverse : {false,true}) {
+            SSRRaymarchContract::RaySetup ray{};
+            ray.StartUVZ = {.02f, .5f, SSRRaymarchContract::ProjectViewToUVZ({0,0,-5.1f}, proj).z};
+            ray.EndUVZ = {.98f, .5f, ray.StartUVZ.z};
+            if (axis == 1) {
+                std::swap(ray.StartUVZ.x,ray.StartUVZ.y);
+                std::swap(ray.EndUVZ.x,ray.EndUVZ.y);
+            }
+            if (reverse) std::swap(ray.StartUVZ,ray.EndUVZ);
+            ray.StartView = SSRRaymarchContract::ReconstructViewPos(glm::vec2(ray.StartUVZ), ray.StartUVZ.z, invProj);
+            ray.EndView = SSRRaymarchContract::ReconstructViewPos(glm::vec2(ray.EndUVZ), ray.EndUVZ.z, invProj);
+            ray.MaxUsefulMip = ComputeUsefulLevelCount(size.x, size.y) - 1;
+            ray.OriginView = ray.StartView;
+            ray.MaxDistance = ray.MaxTraceDist = 40;
+            ray.Valid = true;
+            for (uint32_t column = 8; column + 8 < size[axis]; ++column) {
+                std::vector<float> depth(size_t(size.x) * size.y, 1);
+                const float blocker = SSRRaymarchContract::ProjectViewToUVZ({0,0,-5}, proj).z;
+                for (uint32_t row = 0; row < size[1-axis]; ++row)
+                    depth[axis == 0 ? size_t(row)*size.x+column : size_t(column)*size.x+row] = blocker;
+                std::vector<std::vector<float>> pyramid;
+                std::vector<PyramidExtent> sizes;
+                RENDER_CHECK(BuildMinReductionPyramid(depth, size.x, size.y, ray.MaxUsefulMip + 1, pyramid, sizes), "odd SSR fixture pyramid");
+                auto mipZero = ray;
+                mipZero.MaxUsefulMip = 0;
+                const auto reference = SSRRaymarchContract::TraceHiZDepthBuffer(pyramid, size.x, size.y, mipZero, proj, invProj, .5f, 256);
+                const auto hierarchical = SSRRaymarchContract::TraceHiZDepthBuffer(pyramid, size.x, size.y, ray, proj, invProj, .5f, 256);
+                RENDER_CHECK(reference.Hit && hierarchical.Hit && glm::distance(reference.HitUV, hierarchical.HitUV) < .01f,
+                    "odd-resolution Hi-Z traversal cannot skip a one-pixel blocker found by mip-0 DDA");
+            }
+          }
+        }
+
+        // A camera-facing ray can cross a whole thickness band inside one pixel.
+        // Refinement must find that crossing for either sign of depth direction.
+        {
+            constexpr uint32_t depthW = 4, depthH = 256;
+            const float surfaceDepth = SSRRaymarchContract::ProjectViewToUVZ({0,0,-10},proj).z;
+            std::vector<std::vector<float>> pyramid(1,std::vector<float>(depthW*depthH,surfaceDepth));
+            SSRRaymarchContract::RaySetup ray;
+            ray.StartUVZ = {.25f,.5f,SSRRaymarchContract::ProjectViewToUVZ({0,0,-30},proj).z};
+            ray.EndUVZ = {.75f,.5f,SSRRaymarchContract::ProjectViewToUVZ({0,0,-8},proj).z};
+            ray.StartView = SSRRaymarchContract::ReconstructViewPos(glm::vec2(ray.StartUVZ),ray.StartUVZ.z,invProj);
+            ray.EndView = SSRRaymarchContract::ReconstructViewPos(glm::vec2(ray.EndUVZ),ray.EndUVZ.z,invProj);
+            ray.OriginView = ray.StartView;
+            ray.MaxDistance = ray.MaxTraceDist = 40;
+            ray.Valid = true;
+            const auto hit = SSRRaymarchContract::TraceHiZDepthBuffer(pyramid,depthW,depthH,ray,proj,invProj,.5f,64);
+            RENDER_CHECK(hit.Hit && hit.Confidence > 0 && std::abs(hit.HitDepth-surfaceDepth)<1e-5f,
+                "camera-facing rays refine a decreasing-depth crossing instead of rejecting the behind endpoint");
+        }
 
         // 5c. M15-U5-34.2 / 35.4: Full SSRCopy -> HiZ -> SSRColor0..3 -> SSRCompute -> SSRApply RenderGraph chain
         RenderGraph ssrGraph;

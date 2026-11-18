@@ -462,3 +462,13 @@ No tier enables a feature whose data/fallback contract is incomplete.
 Every checkpoint supplies exact commit/source/configuration, Debug/Release builds, physical D3D12/Vulkan results, applicable OpenGL/fallback results, validation logs, deterministic images/readbacks, failure/lifetime behavior, hardware/driver/resolution measurements and known limitations.
 
 M15 is accepted only when [PLAN.md](PLAN.md) U10/S10.5 is complete. Experimental DDGI may be separately deferred; RT is excluded from M15 acceptance and tracked by M16.
+
+The final review is a consolidated audit of the actual integrated architecture,
+every U0-U10 feature and their interactions. Use the
+[U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md) for required source/caller
+traces, requirement/evidence and integration matrices, lifecycle/failure tests,
+actual Editor observations, and cold/warm performance and memory scorecards.
+Package acceptance and architecture-script PASS remain evidence inputs; full
+closure requires the expanded PLAN U10-17.1/17.2 child gates and all other mandatory
+final gates on the corrected baseline. This specification does not release work
+or claim review execution. PLAN remains the only checkbox/status authority.

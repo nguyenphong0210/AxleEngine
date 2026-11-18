@@ -4,6 +4,7 @@
 **Current source reference:** `114438ba` for U4-E (`80e9837a` U4-D, `9028e8d7` U4-C, `020c32ed` U4-A/B, `baaf36d2` U3, `c6245e2e` S1.3); `19ac2a1` remains the historical M14 handoff baseline. This reference and the batch schedule below do not mark any unchecked leaf PASS or release later packages until explicitly assigned in the live exchange.
 **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
 **Detailed implementation notes:** [REMEDIATION_PLAN.md](REMEDIATION_PLAN.md)
+**Final acceptance procedure:** [U10 architecture and feature review](U10_ACCEPTANCE_REVIEW.md)
 **M14 prerequisite review:** [M14 U9 final acceptance](../../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md)
 **Documentation review:** [M15 documentation review](../../reviews/M15_DOCUMENTATION_REVIEW.md)
 
@@ -1497,95 +1498,149 @@ M15 does not contain a ray-tracing Unit. The former U11/P13 checklist is moved t
 
 ### U10 / S10.5 — Final acceptance and rollout
 
-- [ ] **M15-U10-08.1 — Rebuild Editor.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen and matches Runtime/Preview.
-- [ ] **M15-U10-08.2 — Rebuild Runtime.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-08.3 — Rebuild tests.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-09.1 — Run D3D12 fixtures.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-09.2 — Run Vulkan fixtures.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-10.1 — Run OpenGL fixtures.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-10.2 — Run unsupported-capability fixtures.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-11.1 — Inspect smooth sphere.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere is smooth with no triangle bands or invalid pixels.
-- [ ] **M15-U10-11.2 — Inspect roughness sweep.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
-- [ ] **M15-U10-11.3 — Inspect red-object reflection.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
-- [ ] **M15-U10-12.1 — Run resize/minimize/restore.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-12.2 — Run view switch/device reinit.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-12.3 — Run 1000-frame soak.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-13.1 — Capture parity artifacts.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
-- [ ] **M15-U10-13.2 — Report thresholds.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-14.1 — Measure p50/p95/p99/max timings.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-14.2 — Measure memory.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-14.3 — Record 1080p/1440p workload.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-15.1 — Report named lighting passes.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U10-15.2 — Report named GPU/preset.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-15.3 — Separate total frame time.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-16.1 — Record GPU/driver/OS.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-16.2 — Record backend/commit.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-17.1 — Run independent source review.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-17.2 — Run correction recheck.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-18.1 — Attach commit to each completed item.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-18.2 — Attach evidence to each completed item.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-19.1 — Promote PASS features.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-19.2 — Keep failed/deferred features out of defaults.**
-  - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+Final acceptance follows [U10_ACCEPTANCE_REVIEW.md](U10_ACCEPTANCE_REVIEW.md): architecture, every feature, cross-feature integration, lifecycle/failure behavior, actual Editor visuals and measured cost are mandatory review dimensions. The expanded 17.1/17.2 parent items below are derived summaries only; all new children remain NOT RUN until executed under a released U10 task.
 
-**M15 final acceptance:** core items are accepted, optional items are accepted or explicitly deferred, and no required check is silently waived.
+- [ ] **M15-U10-08.1 — Rebuild Editor.**
+  - **PASS when:** Debug/Release Editor binaries build from the final integrated source with exact targets, configuration and binary identity recorded.
+  - **Evidence:** Build commands/exit codes, final commit and binary paths; actual Editor behavior is evaluated by the visual/product gates. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
+- [ ] **M15-U10-08.2 — Rebuild Runtime.**
+  - **PASS when:** Debug/Release Runtime binaries build from the same final source and load the declared acceptance project without silently changing its backend or features.
+  - **Evidence:** Runtime build and launch records, project/settings, backend/adapter, exit codes and binary identity. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-08.3 — Rebuild tests.**
+  - **PASS when:** Every required test executable is rebuilt after its source/dependencies change, and the final consolidated suites run against the corrected baseline.
+  - **Evidence:** Exact targets/commands, final source/configurations, per-command exits and individual test logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-09.1 — Run D3D12 fixtures.**
+  - **PASS when:** Required D3D12 feature and integration fixtures execute on a physical supported GPU with backend fallback disabled; feature assertions and validation outcomes pass.
+  - **Evidence:** Requirement/integration matrix rows, adapter/configuration, actual commands, image/readback artifacts and validation logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-09.2 — Run Vulkan fixtures.**
+  - **PASS when:** Required Vulkan feature and integration fixtures execute on a physical supported GPU with backend fallback disabled; feature assertions and validation outcomes pass.
+  - **Evidence:** Requirement/integration matrix rows, adapter/configuration, actual commands, image/readback artifacts and validation logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-10.1 — Run OpenGL fixtures.**
+  - **PASS when:** OpenGL executes its declared supported path and explicitly diagnoses unsupported M15 features while preserving the defined fallback image and authored settings.
+  - **Evidence:** Capability/support matrix and actual supported/fallback fixture results; no unsupported native-parity claim. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-10.2 — Run unsupported-capability fixtures.**
+  - **PASS when:** Unsupported capability/MSAA/feature combinations exercise the documented rejection or fallback; allocation, recording and UI diagnostics agree and retries remain valid.
+  - **Evidence:** Source-backed support decisions plus real rejection/fallback and recovery fixture outcomes; unavailable required checks remain NOT RUN. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-11.1 — Inspect smooth sphere.**
+  - **PASS when:** Actual Editor inspection closes the required smooth/unoccluded sphere gates, including AO/contact on/off, edges, normals and intended lighting-term preservation.
+  - **Evidence:** Debug/Release project/backend/camera/settings, actual visual observations and paired images; startup is not visual evidence. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
+- [ ] **M15-U10-11.2 — Inspect roughness sweep.**
+  - **PASS when:** Actual Editor inspection and controlled numeric/image comparisons show continuous roughness/metal/F0 behavior across the declared material and lighting paths.
+  - **Evidence:** Frozen sweep fixtures/reference/tolerances, material settings, backend/build and captured observations/images. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
+- [ ] **M15-U10-11.3 — Inspect red-object reflection.**
+  - **PASS when:** The actual captured/reflected colored object appears in the expected directions and roughness levels, with correct planar/SSR/probe/sky fallback and no duplicate energy.
+  - **Evidence:** Editor captures plus applicable native numeric/readback evidence, source/camera/settings and frozen expected results. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
+- [ ] **M15-U10-12.1 — Run resize/minimize/restore.**
+  - **PASS when:** Repeated resize/minimize/restore preserves declared valid output, completion-safe target/descriptor lifetimes and bounded resource behavior; failed reconfiguration recovers explicitly.
+  - **Evidence:** Lifecycle matrix rows with transitions, outcomes, resource/memory measurements and native validation logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-12.2 — Run view switch/device reinit.**
+  - **PASS when:** View switches, camera cuts, scene/settings changes and device reinit invalidate appropriate state without cross-view history or stale epoch reuse; capture and Preview/Runtime remain isolated.
+  - **Evidence:** Actual lifecycle/reset/recovery fixtures, source ownership references, image/history outcomes and resource generation evidence. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-12.3 — Run 1000-frame soak.**
+  - **PASS when:** The declared soak runs at least 120 warm-up and 1,000 measured frames with valid output/history, no unbounded resource/cache growth and no unresolved native validation error.
+  - **Evidence:** Workload/preset/adapter, frame counts, reset/failure schedule, image checks and memory/resource high-water/steady-state logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-13.1 — Capture parity artifacts.**
+  - **PASS when:** Reproducible artifacts compare supported D3D12/Vulkan, builtin/graph and Editor/Preview/Runtime paths in the same defined HDR/display spaces and authored conditions.
+  - **Evidence:** Pairing manifest, final source/binary identity, fixtures/cameras/settings, images/readbacks, quantitative comparisons and reviewer observations. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
+- [ ] **M15-U10-13.2 — Report thresholds.**
+  - **PASS when:** Reference values, numeric/image tolerances and their rationale are frozen before evaluation; legitimate reference changes have independent expected-result evidence.
+  - **Evidence:** Versioned comparison/threshold manifest, actual measurements and discrepancy disposition; no assertion relaxation solely to obtain PASS. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-14.1 — Measure p50/p95/p99/max timings.**
+  - **PASS when:** Release CPU/GPU p50/p95/p99/max are recorded with valid timing/completion provenance for named passes and whole views/frames; cold compile/first-use and warm steady state are separated. Required promoted presets/workloads satisfy their frozen timing budgets; unexplained violations remain FAIL.
+  - **Evidence:** At least 120 warm-up and 1,000 measured frames per declared workload, timing logs, cold/warm cache conditions and comparison against frozen budgets. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-14.2 — Measure memory.**
+  - **PASS when:** Peak/steady memory, per-view targets/histories, probe/cache/update workload and resource counts stay within declared preset budgets, including lifecycle stress.
+  - **Evidence:** Measured memory/resource scorecard, workload/view/update counts, budget values and explicit violation results. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-14.3 — Record 1080p/1440p workload.**
+  - **PASS when:** Release 1080p and 1440p workloads have reproducible scene/camera/quality, geometry/light/probe/update counts and supported feature combinations.
+  - **Evidence:** Workload/preset manifest and actual timing/memory results for each required configuration. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-15.1 — Report named lighting passes.**
+  - **PASS when:** Named lighting-pass scopes match actual pass ownership and execution; all passes included in a lighting-budget claim are enumerated with valid GPU timing.
+  - **Evidence:** Pass/source map, measured scope definitions and per-pass results; no hidden omitted work or double-counted overlapping scopes. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
+- [ ] **M15-U10-15.2 — Report named GPU/preset.**
+  - **PASS when:** Each reported result names the physical GPU/driver/backend, resolution and exact quality/update/sample budgets used.
+  - **Evidence:** Scorecard rows linked to the frozen preset/workload and hardware manifests. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-15.3 — Separate total frame time.**
+  - **PASS when:** The named lighting subset, whole-view GPU scope and total CPU/GPU/present frame behavior are reported separately; the 3.5-5.0 ms lighting target is evaluated only on its named workload/GPU/preset.
+  - **Evidence:** Measured subset and total scope results and budget comparisons; lighting time alone does not establish an FPS claim. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-16.1 — Record GPU/driver/OS.**
+  - **PASS when:** Final evidence identifies physical adapter, driver and OS and records validation/fallback policy for each required backend.
+  - **Evidence:** Hardware/software manifest linked to actual execution logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-16.2 — Record backend/commit.**
+  - **PASS when:** Source, executable/configuration, backend, fixtures/settings and corrected-baseline identity are traceable for every final acceptance result.
+  - **Evidence:** Source/binary/evidence manifest, exact commands and artifact paths; stale results are not relabeled as current execution. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-17.1 — Run independent source review.**
+  - **Derived summary:** PASS only when every child below is PASS; no separate evidence or execution claim. Follow [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+
+- [ ] **M15-U10-17.1.1 — Freeze final review baseline and evidence scope.**
+  - **PASS when:** The integrated source, binaries/configurations, support matrix, required/optional classification, fixture/reference/budget manifests and source-writer boundary are recorded.
+  - **Evidence:** Source/support manifest; every U0-U10 leaf has an owner and planned evidence path.
+
+- [ ] **M15-U10-17.1.2 — Audit layer boundaries and pass/service ownership.**
+  - **PASS when:** Production dataflow respects Scene/Renderer/RHI/UI boundaries and the M15 progressive pass-extraction contract; duplicated algorithms/policies and remaining monolithic feature adapters receive findings.
+  - **Evidence:** Actual module/pass/caller map and source audit, supplemented by architecture checks; see acceptance procedure Section 3.
+
+- [ ] **M15-U10-17.1.3 — Audit GPU resource, graph, view and threading contracts.**
+  - **PASS when:** Generation publication, completion/descriptor lifetime, graph dependencies, view/history isolation, owner-thread boundaries, cache invalidation and failure/retry paths satisfy their contracts.
+  - **Evidence:** Source-to-contract audit plus native lifecycle/failure evidence and validation logs; unresolved violations are findings.
+
+- [ ] **M15-U10-17.1.4 — Audit material, radiometric and feature-policy consistency.**
+  - **PASS when:** Supported fields, spaces/units, reflection/AO energy, exposure/tonemapping, capability/MSAA policy and allocation/declaration/recording agree across builtin/graph and product views.
+  - **Evidence:** Source/caller traces, independent references and supported/fallback parity evidence.
+
+- [ ] **M15-U10-17.1.5 — Audit every U0-U10 feature and atomic requirement.**
+  - **PASS when:** Every atomic leaf is mapped to full implementation/caller paths, actual behavior, independently verified evidence and an explicit disposition; prior package PASS does not bypass integrated-source review.
+  - **Evidence:** Complete requirement-to-evidence matrix covering all feature families in acceptance procedure Section 4.
+
+- [ ] **M15-U10-17.1.6 — Audit cross-feature integration and fallback.**
+  - **PASS when:** All applicable minimum integration scenarios have supported-policy decisions, frozen expected behavior and passing numeric/image/native evidence; required combinations cannot be reclassified unsupported to hide missing behavior.
+  - **Evidence:** Integration matrix from acceptance procedure Section 5, including real rejection/fallback tests for unsupported combinations.
+
+- [ ] **M15-U10-17.1.7 — Audit stability, visual and performance evidence.**
+  - **PASS when:** All required U10-08..16 gates and carried-forward visual checks are reconciled, measurements are valid/current and preset budget violations have explicit dispositions.
+  - **Evidence:** Lifecycle, actual visual, parity and cold/warm timing/memory scorecards; see acceptance procedure Sections 6 and 7.
+
+- [ ] **M15-U10-17.1.8 — Publish consolidated architecture and feature findings.**
+  - **PASS when:** The report accounts for every requirement and discrepancy with stable finding IDs, severity, source/callers, trigger, expected/observed result, owner and resolution path.
+  - **Evidence:** Architecture report, requirement/integration matrices and findings register; no missing required feature is hidden by a summary PASS.
+- [ ] **M15-U10-17.2 — Run correction recheck.**
+  - **Derived summary:** PASS only when every child below is PASS; no separate evidence or execution claim. Follow [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+
+- [ ] **M15-U10-17.2.1 — Repair and track acceptance findings.**
+  - **PASS when:** Findings within the released review scope are corrected in verified coherent checkpoints while preserving required behavior, references and unrelated work.
+  - **Evidence:** Finding-to-correction commits and actual reproduction/verification results; no requirement deletion or assertion weakening solely to obtain PASS.
+
+- [ ] **M15-U10-17.2.2 — Independently recheck significant corrections.**
+  - **PASS when:** A separate-context reviewer inspects significant corrections and affected callers after the latest repair; any further necessary repairs receive focused rechecks.
+  - **Evidence:** Independent recheck report naming exact inspected source and remaining findings; source-only review is not execution evidence.
+
+- [ ] **M15-U10-17.2.3 — Reverify the corrected final integrated baseline.**
+  - **PASS when:** Changed executables are rebuilt and affected checks plus required final consolidated gates pass against the corrected source; evidence provenance is updated.
+  - **Evidence:** Final build/test/visual/measurement records, configurations, commands/results and artifacts; missing mandatory checks stay NOT RUN.
+
+- [ ] **M15-U10-17.2.4 — Reconcile findings and final acceptance decision.**
+  - **PASS when:** Every mandatory leaf and required visual/integration/stability/measurement gate is PASS; missing mandatory behavior blocks closure regardless of severity, with no unresolved P1/P2 blocker or required NOT RUN/BLOCKED check.
+  - **Evidence:** Final requirement/finding register, permitted optional deferrals, known limits, supported defaults and explicit full/partial/not-accepted decision.
+- [ ] **M15-U10-18.1 — Attach commit to each completed item.**
+  - **PASS when:** Every completed atomic leaf names its implementation/correction commit and final reviewed source applicability; derived parents reference child dispositions.
+  - **Evidence:** Complete U0-U10 requirement matrix with no unassigned or silently dropped leaf. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-18.2 — Attach evidence to each completed item.**
+  - **PASS when:** Every completed leaf links independently verified required evidence, references/tolerances, exact execution or interactive observations and associated findings.
+  - **Evidence:** Complete requirement-to-evidence matrix; implementer reports, source rechecks and actual reviewer executions are distinguished. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-19.1 — Promote PASS features.**
+  - **PASS when:** Only features/presets with completed mandatory gates, supported backend behavior and measured budgets are promoted to their declared defaults.
+  - **Evidence:** Final acceptance/support/preset manifest and explicit promotion decisions; opt-in/experimental status remains visible. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+- [ ] **M15-U10-19.2 — Keep failed/deferred features out of defaults.**
+  - **PASS when:** Failed, incomplete or deferred features remain out of defaults with explicit diagnostics/limits; mandatory missing behavior or required unrun checks keep full M15 acceptance open.
+  - **Evidence:** Final findings/gate register, supported-default manifest and tested disable/fallback behavior. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+
+**M15 final acceptance:** every mandatory atomic leaf and required visual, integration, stability and measurement gate is PASS on the corrected integrated source. No missing mandatory behavior, unresolved P1/P2 blocker or required NOT RUN/BLOCKED check remains. Separately permitted optional deferrals and other nonblocking findings are explicit, and only verified supported features are promoted.
 
 ## 5. M15 completion rule
 
@@ -1594,5 +1649,11 @@ P6B/DDGI items are PASS or explicitly DEFERRED, and the final acceptance
 items record Debug/Release builds, native backend evidence, Editor visual review,
 parity artifacts, soak/performance measurements and an independent review. A
 compile, non-empty image or parent heading never substitutes for an item PASS.
+The [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md) defines the required
+architecture audit, complete requirement/evidence matrix, minimum integration and
+lifecycle scenarios, actual visual review, cold/warm performance evidence and
+correction closure. Required deferred visual gates remain open until executed;
+opt-in status alone is not permission to omit required implementation. This
+documentation update does not release U10 work or change an active earlier task.
 
 **Status:** HOLD — this checklist is the execution contract; no M15 implementation is released by this document.

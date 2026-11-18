@@ -207,6 +207,16 @@ Bloom/exposure sourcing, transparency/fog interaction and motion/jitter conventi
 
 ### P12 - Integrate Editor quality controls and perform final acceptance (U10/S10.5, Phase 45.18)
 
+**Consolidated acceptance procedure:** [U10_ACCEPTANCE_REVIEW.md](U10_ACCEPTANCE_REVIEW.md).
+PLAN U10-17.1/17.2 now expands the independent review and correction closure into
+atomic child gates. Audit architecture, each U0-U10 requirement, minimum feature
+interactions, failure/lifecycle behavior and actual visual/performance evidence.
+Maintain a complete requirement-to-source-to-evidence matrix and findings register;
+repair, separately recheck and reverify the final integrated baseline before
+promotion. Earlier automated-only acceptance does not close deferred visuals.
+This is a future acceptance specification, not a U10 implementation release or a
+second progress checklist.
+
 **Depends on:** All packages in the declared M15 delivery; report P6B separately.
 
 **Work:** Finish component creation/Inspector/debug views for lights/probes/fog/GI. Add reproducible Low/Medium/High/Ultra settings with explicit resolution/update/sample budgets and capability diagnostics. Add a Preview mode matching the scene's lights/environment/exposure/features. Keep the isolated studio preview as an alternative. Promote only verified features to defaults. Reuse shared benchmark/image-difference tooling and report all remaining limitations.
@@ -221,10 +231,10 @@ Bloom/exposure sourcing, transparency/fog interaction and motion/jitter conventi
 | Material quality | Smooth sphere; roughness/metallic sweep; graph/built-in matching; local reflection hit/miss/fallback; authored save/reopen. |
 | Temporal/reliability | Camera/object motion, cuts, toggle combinations, resize/minimize/restore, separate views, resource failure/retry, shutdown/reinit and a >=1,000-frame soak. |
 | Parity | For deterministic equivalent outputs, M19 rollout thresholds: PSNR >=40 dB, SSIM >=0.985 and channel error <=4/255; specify the comparison space and separately justify temporal/statistical cases. |
-| Performance | Release 1080p/1440p, fixed scene/camera/settings, proposed 120 warm-up +1,000 measured frames; valid per-pass/aggregate GPU timing, CPU/GPU p50/p95/p99/max, memory and update workloads. |
+| Performance | Release 1080p/1440p, fixed named workloads/presets, at least 120 warm-up +1,000 measured frames per workload; valid per-pass/whole-view timing, CPU/GPU p50/p95/p99/max, memory and update counts. Cold compile/first-use and warm steady state are separate; required presets meet their frozen budgets. |
 | Budget | Report which named lighting passes satisfy the original 3.5-5.0 ms target on the named GPU/preset; report total frame time separately. An FPS goal cannot be inferred from lighting time alone. |
-| Portability | Record GPU/driver/CPU/OS/commit. One available vendor cannot substantiate M19's multi-vendor production-promotion gate. Mark missing hardware runs NOT RUN. |
-| Independent review | One consolidated final source review and focused separate-context recheck of significant Codex corrections under the shared protocol. |
+| Portability | Record tested GPU/driver/CPU/OS/backend/commit. One available vendor does not establish multi-vendor production evidence; required unavailable hardware checks remain NOT RUN. |
+| Independent review | Consolidated architecture and feature-by-feature review with complete requirement/evidence, integration and findings matrices; significant corrections receive separate-context rechecks and corrected-baseline verification. See the U10 acceptance procedure and expanded PLAN 17.1/17.2 children. |
 
 Do not make a blanket performance claim for maximum DDGI/fog/reflection settings if only a lower preset meets budget. Tune quality/cost transparently; do not hide regressions by disabling an effect in the benchmark.
 

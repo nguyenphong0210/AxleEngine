@@ -722,6 +722,7 @@ namespace Axle {
         m_PlanarApplyPipelineLayout.Shutdown();
         m_PlanarApplyVertexShader = {};
         m_PlanarApplyPixelShader = {};
+        m_PlanarCopyPixelShader = {};
         m_PlanarApplyDescriptorSet = nullptr;
         m_PlanarDescriptorPool.Shutdown();
         m_PlanarSampler.Shutdown();
@@ -2101,6 +2102,10 @@ namespace Axle {
             return false;
         }
         m_PlanarApplyPixelShader = psRes.Bytecode;
+        psDesc.EntryPoint = "PSCopyMain";
+        const auto copyRes = compiler.Compile(psDesc);
+        if (!copyRes.Success) return false;
+        m_PlanarCopyPixelShader = copyRes.Bytecode;
 
         return true;
     }
@@ -2136,10 +2141,10 @@ namespace Axle {
         return m_PlanarApplyPipelineLayout.Init(applyLayoutDesc);
     }
 
-    nri::Pipeline* RHISceneRenderer::GetOrCreatePlanarApplyPipeline(nri::Format colorFormat) {
+    nri::Pipeline* RHISceneRenderer::GetOrCreatePlanarApplyPipeline(nri::Format colorFormat, bool copyOnly) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_PlanarApplyPipelineLayout;
-        gfxDesc.Shaders = { m_PlanarApplyVertexShader, m_PlanarApplyPixelShader };
+        gfxDesc.Shaders = { m_PlanarApplyVertexShader, copyOnly ? m_PlanarCopyPixelShader : m_PlanarApplyPixelShader };
 
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
         gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
@@ -2151,7 +2156,7 @@ namespace Axle {
 
         // Convex blend over current HDR scene (`baseLit + prevSpec`) ->
         // `baseLit + lerp(prevSpec, planarSpec, wPlanar)`.
-        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::AlphaBlend() };
+        gfxDesc.ColorAttachments = { copyOnly ? RHIBlendAttachmentDesc::Opaque() : RHIBlendAttachmentDesc::AlphaBlend() };
         gfxDesc.ColorAttachmentFormats = { colorFormat };
         gfxDesc.VertexInput = RHIVertexInputDesc{};
 
@@ -5035,7 +5040,7 @@ namespace Axle {
             policy = *policyOverride;
         } else {
             policy.ResolutionScale = reflector.ResolutionScale;
-            policy.ClipPlaneOffset = reflector.ClipPlaneOffset;
+            // Surface owns the authored clip bias; policy adds no duplicate bias.
             policy.IncludeSkybox = reflector.CaptureSkybox;
             policy.IncludeShadows = reflector.CaptureShadows;
             policy.ExcludeEntityID = reflector.EntityID;
@@ -5048,7 +5053,7 @@ namespace Axle {
         }
 
         // Synchronize prior main/capture/planar submissions before updating shared buffers or scratch targets.
-        RHICompletionToken pendingMainCompletion = m_LastCompletion;
+        RHICompletionToken pendingMainCompletion = m_ViewContext.GetCompletion();
         if (!WaitForDeviceToken(pendingMainCompletion) || !WaitForDeviceToken(m_CaptureLastCompletion) ||
             !WaitForDeviceToken(m_PlanarLastCompletion)) {
             return failCapture("PLANAR_COMPLETION_FAILED: prior submission synchronization failed");
@@ -5099,6 +5104,18 @@ namespace Axle {
         m_PlanarSession.TargetColor = targetColor;
         m_PlanarSession.TargetDepth = targetDepth;
         m_PlanarSession.WorldPlane = mirrored.WorldPlane;
+
+        // Explicit captures may target a currently published view texture.
+        // Once recording can modify its pixels, old metadata no longer owns them.
+        std::erase_if(m_PublishedPlanarCaptures, [&](const auto& item) {
+            if (item.second.PublishedColorHandle != targetColor->GetHandle()) return false;
+            if (auto st = m_PlanarStatuses.find(item.first); st != m_PlanarStatuses.end()) {
+                st->second = {};
+                st->second.LastDiagnostic = "PLANAR_EVICTED: explicit capture replaced published pixels";
+            }
+            return true;
+        });
+        if (m_ActivePlanarResolve.PublishedColorHandle == targetColor->GetHandle()) m_ActivePlanarResolve = {};
 
         RenderWorldView(
             filteredWorld,
@@ -5419,7 +5436,8 @@ namespace Axle {
         }
 
         for (const auto& mesh : world.Meshes) {
-            if (reflector.EntityID != 0 && mesh.EntityID == reflector.EntityID) {
+            if ((reflector.EntityID != 0 && mesh.EntityID == reflector.EntityID) ||
+                (reflector.StableUUID != UUID(0) && mesh.StableUUID == reflector.StableUUID)) {
                 continue;
             }
             const int builtinVal = mesh.BuiltinId ? static_cast<int>(*mesh.BuiltinId) : -1;
@@ -5567,26 +5585,73 @@ namespace Axle {
     }
 
     bool RHISceneRenderer::PublishPlanarScratchCopy(RHITexture& srcColor, RHITexture& dstColor, std::string* outDiagnostic) {
-        if (!m_Device || !m_Device->CanSubmit() || !srcColor.IsValid() || !dstColor.IsValid() ||
-            srcColor.GetWidth() != dstColor.GetWidth() || srcColor.GetHeight() != dstColor.GetHeight()) {
-            if (outDiagnostic) *outDiagnostic = "PLANAR_PUBLISH_COPY_INVALID: scratch/target mismatch";
-            return false;
-        }
-        if (ScopedRHIFault::Invoke("PlanarPublishCopy", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS) {
-            if (outDiagnostic) *outDiagnostic = "PLANAR_PUBLISH_COPY_FAULT: copy submission blocked";
-            return false;
-        }
+        auto fail = [&](const char* reason) { if (outDiagnostic) *outDiagnostic = reason; return false; };
+        if (!m_Device || !m_Device->CanSubmit() || !srcColor.IsValid() || !dstColor.IsValid())
+            return fail("PLANAR_PUBLISH_COPY_INVALID: invalid scratch/target");
+        if (ScopedRHIFault::Invoke("PlanarPublishCopy", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS)
+            return fail("PLANAR_PUBLISH_COPY_FAULT: publication blocked");
+
+        // GPU work only touches a fresh candidate. Submission/wait failures must
+        // never mutate the last-good published image or its generation receipt.
+        RHITexture candidate;
+        auto desc = RHITextureDesc::RenderTarget2D(dstColor.GetWidth(), dstColor.GetHeight(),
+            dstColor.GetFormat(), "PlanarPublicationCandidate");
+        if (!candidate.Init(desc)) return fail("PLANAR_PUBLISH_ALLOC_FAILED");
         RHICommandBuffer cmd;
-        if (!cmd.Init() || !cmd.Begin()) {
-            if (outDiagnostic) *outDiagnostic = "PLANAR_PUBLISH_COPY_FAILED: unable to initialize copy command buffer";
-            return false;
+        if (!cmd.Init() || !cmd.Begin()) return fail("PLANAR_PUBLISH_COPY_FAILED");
+        RHIDescriptorPool copyPool;
+        RHIBuffer copyConstants;
+        if (srcColor.GetWidth() == candidate.GetWidth() && srcColor.GetHeight() == candidate.GetHeight()) {
+            cmd.CopyTexture(*candidate.GetNative(), nullptr, *srcColor.GetNative(), nullptr);
+            cmd.TransitionTexture(candidate.GetNative(), RHIResourceLayout::CopyDest, RHIResourceLayout::ShaderResource);
+        } else {
+            // The view setting is a resolution cap; each reflector can capture
+            // at a lower resolution without reallocating the main view generation.
+            auto* pipeline = GetOrCreatePlanarApplyPipeline(ToNRIFormat(candidate.GetFormat()), true);
+            RHIDescriptorPoolDesc poolDesc;
+            poolDesc.MaxDescriptorSets = 1; poolDesc.MaxTextures = 6; poolDesc.MaxSamplers = 1;
+            if (!pipeline || !copyPool.Init(poolDesc) ||
+                !copyConstants.Init(RHIBufferDesc::Constant(sizeof(RHIPlanarReflectionConstants), RHIMemoryLocation::HostUpload)))
+                return fail("PLANAR_RESAMPLE_SETUP_FAILED");
+            auto* set = copyPool.AllocateDescriptorSet(m_PlanarApplyPipelineLayout, 0);
+            if (!set) return fail("PLANAR_RESAMPLE_DESCRIPTOR_FAILED");
+            for (uint32_t slot = 0; slot < 6; ++slot)
+                if (!copyPool.UpdateTexture(set, slot, 0, srcColor.GetSRV())) return fail("PLANAR_RESAMPLE_DESCRIPTOR_FAILED");
+            if (!copyPool.UpdateSampler(set, 6, 0, m_PlanarSampler.GetNative())) return fail("PLANAR_RESAMPLE_SAMPLER_FAILED");
+            cmd.TransitionTexture(srcColor.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResource);
+            cmd.TransitionTexture(candidate.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+            nri::AttachmentDesc attachment{}; attachment.descriptor = candidate.GetRTV();
+            attachment.loadOp = nri::LoadOp::CLEAR; attachment.storeOp = nri::StoreOp::STORE;
+            nri::RenderingDesc rendering{}; rendering.colors = &attachment; rendering.colorNum = 1;
+            cmd.BeginRendering(rendering);
+            cmd.SetViewport({0, 0, float(candidate.GetWidth()), float(candidate.GetHeight()), 0, 1});
+            cmd.SetScissor({0, 0, static_cast<nri::Dim_t>(candidate.GetWidth()), static_cast<nri::Dim_t>(candidate.GetHeight())});
+            cmd.SetPipeline(pipeline);
+            cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PlanarApplyPipelineLayout);
+            cmd.SetRootDescriptor(0, copyConstants.GetCBV());
+            copyPool.Bind(cmd.GetNative());
+            cmd.SetDescriptorSet(nri::BindPoint::GRAPHICS, 0, set);
+            cmd.Draw(3, 1, 0, 0);
+            cmd.EndRendering();
+            cmd.TransitionTexture(candidate.GetNative(), RHIResourceLayout::ColorAttachment, RHIResourceLayout::ShaderResource);
         }
-        cmd.CopyTexture(*dstColor.GetNative(), nullptr, *srcColor.GetNative(), nullptr);
-        cmd.TransitionTexture(dstColor.GetNative(), RHIResourceLayout::CopyDest, RHIResourceLayout::ShaderResource);
-        if (!cmd.End() || !cmd.Submit() || !m_Device->WaitIdle()) {
-            if (outDiagnostic) *outDiagnostic = "PLANAR_PUBLISH_COPY_SUBMIT_FAILED: GPU copy submit or wait failed";
-            return false;
-        }
+        if (!cmd.End() || !cmd.Submit() || !m_Device->WaitIdle())
+            return fail("PLANAR_PUBLISH_COPY_SUBMIT_FAILED");
+        if (ScopedRHIFault::Invoke("PlanarPublishAfterSubmit", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS)
+            return fail("PLANAR_PUBLISH_AFTER_SUBMIT_FAILED");
+        const auto retiredHandle = dstColor.GetHandle();
+        dstColor = std::move(candidate);
+        // Metadata is not a cache of pixels. Retire every receipt for the
+        // overwritten slot, so A -> B -> A cannot reuse B's pixels as A.
+        std::erase_if(m_PublishedPlanarCaptures, [&](const auto& value) {
+            if (value.second.PublishedColorHandle != retiredHandle) return false;
+            if (auto st = m_PlanarStatuses.find(value.first); st != m_PlanarStatuses.end()) {
+                st->second.HasCapture = false; st->second.ActiveGenerationID = 0;
+                st->second.State = PlanarCaptureLifecycleState::Idle;
+                st->second.LastDiagnostic = "PLANAR_EVICTED: published view slot replaced";
+            }
+            return true;
+        });
         return true;
     }
 
@@ -5610,6 +5675,7 @@ namespace Axle {
         std::unordered_set<std::string> liveKeys;
         const RenderPlanarReflector* primaryReflector = nullptr;
         float bestDistanceSq = std::numeric_limits<float>::max();
+        bool primaryValid = false;
         for (const auto& reflector : world.PlanarReflectors) {
             if (!reflector.Enabled) {
                 continue;
@@ -5617,8 +5683,13 @@ namespace Axle {
             liveKeys.insert(ResolvePlanarReflectorKey(reflector));
             const glm::vec3 d = reflector.Position - mainCamera.GetPosition();
             const float distSq = glm::dot(d, d);
-            if (!primaryReflector || distSq < bestDistanceSq) {
+            const auto surface = PlanarReflectionContract::BuildSurfaceFromReflector(reflector);
+            const bool valid = PlanarReflectionContract::BuildMirroredCamera(mainCamera, surface).Valid;
+            // An invalid or back-facing nearby surface must not hide a valid mirror.
+            // Keep an invalid candidate only when there is no usable surface, for diagnostics.
+            if (!primaryReflector || (valid && !primaryValid) || (valid == primaryValid && distSq < bestDistanceSq)) {
                 primaryReflector = &reflector;
+                primaryValid = valid;
                 bestDistanceSq = distSq;
             }
         }
@@ -5639,8 +5710,11 @@ namespace Axle {
         }
 
         const uint64_t currentEpoch = m_Device->GetEpoch();
-        const uint32_t targetW = dstColor->GetWidth();
-        const uint32_t targetH = dstColor->GetHeight();
+        const float componentScale = std::isfinite(primaryReflector->ResolutionScale)
+            ? std::clamp(primaryReflector->ResolutionScale, 0.25f, 1.0f) : 0.5f;
+        const float captureScale = std::min(viewTargets->GetDesc().PlanarResolutionScale, componentScale);
+        const uint32_t targetW = RHIViewTargets::ComputePlanarTargetDimension(viewTargets->GetDesc().Width, captureScale);
+        const uint32_t targetH = RHIViewTargets::ComputePlanarTargetDimension(viewTargets->GetDesc().Height, captureScale);
         const std::string key = ResolvePlanarReflectorKey(*primaryReflector);
         const PlanarReflectionContract::PlanarReflectionDomainStamps currentStamps =
             ComputePlanarCaptureDomainStamps(world, mainCamera, *primaryReflector, targetW, targetH, requestedSettings);
@@ -5649,9 +5723,7 @@ namespace Axle {
         const bool hasPrevious =
             (existingIt != m_PublishedPlanarCaptures.end() &&
              existingIt->second.DeviceEpoch == currentEpoch &&
-             existingIt->second.PublishedColorHandle == dstColor->GetHandle() &&
-             existingIt->second.TargetWidth == targetW &&
-             existingIt->second.TargetHeight == targetH);
+             existingIt->second.PublishedColorHandle == dstColor->GetHandle());
 
         const bool forcedInvalidation = m_ForcedInvalidatedPlanar.contains(key);
         const bool manualRequested = m_RequestedManualPlanarCaptures.contains(key);
@@ -5686,7 +5758,7 @@ namespace Axle {
             if (hasPrevious) {
                 m_ActivePlanarResolve.ValidForResolve = true;
                 m_ActivePlanarResolve.ReflectorKey = key;
-                m_ActivePlanarResolve.Reflector = existingIt->second.Reflector;
+                m_ActivePlanarResolve.Reflector = *primaryReflector; // Resolve-only controls remain live even for stale/manual captures.
                 m_ActivePlanarResolve.ReflectedViewProj = existingIt->second.ReflectedViewProj;
                 m_ActivePlanarResolve.PublishedColorHandle = existingIt->second.PublishedColorHandle;
             }
@@ -5737,9 +5809,10 @@ namespace Axle {
             return;
         }
 
-        auto failScheduled = [&](const std::string& diagnostic) {
+        auto failScheduled = [&](const std::string& diagnostic, bool retryable = true) {
             m_RequestedManualPlanarCaptures.erase(key);
-            m_FailedPlanarCaptureRevisions[key] = currentStamps.CombinedStamp;
+            if (retryable) m_FailedPlanarCaptureRevisions.erase(key);
+            else m_FailedPlanarCaptureRevisions[key] = currentStamps.CombinedStamp;
             ++m_PlanarCacheStats.FailedCaptures;
             status.State = PlanarCaptureLifecycleState::Failed;
             status.Failed = true;
@@ -5755,7 +5828,7 @@ namespace Axle {
             PlanarReflectionContract::BuildSurfaceFromReflector(*primaryReflector);
         PlanarReflectionContract::PlanarReflectionPolicy policy;
         policy.ResolutionScale = primaryReflector->ResolutionScale;
-        policy.ClipPlaneOffset = primaryReflector->ClipPlaneOffset;
+        // Surface owns the authored clip bias.
         policy.IncludeSkybox = primaryReflector->CaptureSkybox;
         policy.IncludeShadows = primaryReflector->CaptureShadows;
         policy.ExcludeEntityID = primaryReflector->EntityID;
@@ -5763,7 +5836,7 @@ namespace Axle {
         const PlanarReflectionContract::MirroredCameraResult mirrored =
             PlanarReflectionContract::BuildMirroredCamera(mainCamera, surface, policy);
         if (!surface.Valid || !mirrored.Valid) {
-            failScheduled(mirrored.Diagnostic.empty() ? "PLANAR_CAMERA_INVALID" : mirrored.Diagnostic);
+            failScheduled(mirrored.Diagnostic.empty() ? "PLANAR_CAMERA_INVALID" : mirrored.Diagnostic, false);
             return;
         }
 

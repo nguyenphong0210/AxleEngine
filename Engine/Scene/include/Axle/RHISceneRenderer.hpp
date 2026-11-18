@@ -708,7 +708,7 @@ namespace Axle {
         bool CompilePlanarShaders(RHI::RHIDevice& device);
         bool CreatePlanarPipelineLayout(RHI::RHIDevice& device);
         bool CreatePlanarPipeline(RHI::RHIDevice& device);
-        nri::Pipeline* GetOrCreatePlanarApplyPipeline(nri::Format colorFormat);
+        nri::Pipeline* GetOrCreatePlanarApplyPipeline(nri::Format colorFormat, bool copyOnly = false);
         bool SynchronizePlanarCaptureCacheState(const RenderWorld& world);
         bool PublishPlanarScratchCopy(RHI::RHITexture& srcColor, RHI::RHITexture& dstColor, std::string* outDiagnostic);
         void SchedulePlanarReflectionCaptures(
@@ -1004,6 +1004,7 @@ namespace Axle {
         RHI::RHIResourceRef<nri::Pipeline> m_PlanarApplyPipelineHDR;
         RHI::RHIShaderBytecode m_PlanarApplyVertexShader;
         RHI::RHIShaderBytecode m_PlanarApplyPixelShader;
+        RHI::RHIShaderBytecode m_PlanarCopyPixelShader;
         RHI::RHISampler m_PlanarSampler;
         RHI::RHIDescriptorPool m_PlanarDescriptorPool;
         nri::DescriptorSet* m_PlanarApplyDescriptorSet = nullptr;

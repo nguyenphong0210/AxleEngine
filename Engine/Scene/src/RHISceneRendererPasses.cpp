@@ -1316,7 +1316,7 @@ namespace Axle {
                 }, beginRendering, endRendering};
             if (!Passes::PlanarReflectionPass::Record(*this,
                 {camera, settings, m_ActivePlanarResolve.Reflector,
-                 m_ActivePlanarResolve.ReflectedViewProj, viewTargets,
+                 m_ActivePlanarResolve.ReflectedViewProj, projZO, viewTargets,
                  sceneTargetTexture, sceneDepthTexture, sceneTargetRTV, sceneTargetFormat,
                  width, height, !useSSR, !useSSR && !useHiZVisual}, ops)) {
                 return fail();

@@ -99,12 +99,12 @@ namespace Axle::Passes {
         RHIPlanarReflectionConstants constants{};
         constants.View = i.Camera.GetViewMatrix();
         constants.InvView = glm::inverse(constants.View);
-        constants.InvProjection = glm::inverse(i.Camera.GetProjectionMatrixZO());
+        constants.InvProjection = glm::inverse(i.ProjectionZO);
         constants.ReflectedViewProj = i.ReflectedViewProj;
-        constants.PlaneWorld = surface.WorldPlane();
+        constants.PlaneWorld = glm::vec4(surface.Normal, -glm::dot(surface.Normal, surface.Position)); // Geometric receiver plane, without capture clipping bias.
         constants.PlaneOriginExtent = glm::vec4(surface.Position, surface.HalfExtents.x);
         constants.PlaneTangentExtent = glm::vec4(surface.Tangent, surface.HalfExtents.y);
-        constants.PlaneBitangentFade = glm::vec4(surface.Bitangent, surface.EdgeFadeDistance);
+        constants.PlaneBitangentFade = glm::vec4(surface.Bitangent, std::min(surface.EdgeFadeDistance, std::min(surface.HalfExtents.x, surface.HalfExtents.y)));
         constants.PlanarParams = glm::vec4(
             strength,
             maxRoughness,

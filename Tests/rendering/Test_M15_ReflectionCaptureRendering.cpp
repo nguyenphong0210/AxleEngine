@@ -3174,7 +3174,7 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         planarWorld.Skybox.Enabled = false;
 
         RenderPlanarReflector reflector{};
-        reflector.EntityID = 8000;
+        reflector.EntityID = 0; // Valid first EnTT index, identified by StableUUID.
         reflector.StableUUID = 808000ULL;
         reflector.Position = {0.0f, 0.0f, -4.0f};
         reflector.Normal = {0.0f, 1.0f, 0.0f};
@@ -3185,10 +3185,12 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         reflector.CaptureShadows = false;
         planarWorld.PlanarReflectors.push_back(reflector);
 
-        // 1. Self-reflector floor mesh (bright red): MUST be excluded by EntityID self-exclusion.
+        // 1. Self-reflector at EnTT index zero: stable identity must exclude its bright red geometry.
         planarWorld.Meshes.push_back(MakeBoxInstance(
-            8000, cubeMesh->CaptureView(), MakeEmissiveMaterial({8.0f, 0.0f, 0.0f}, 1.0f, SurfaceType::Opaque, CullMode::None),
+            0, cubeMesh->CaptureView(), MakeEmissiveMaterial({8.0f, 0.0f, 0.0f}, 1.0f, SurfaceType::Opaque, CullMode::None),
             {0.0f, 0.0f, -4.0f}, {8.0f, 0.1f, 8.0f}, false));
+
+        planarWorld.Meshes.back().StableUUID = reflector.StableUUID;
 
         // 2. Behind-mirror blocker cube (bright blue, closer to mirrored camera at y=-1,z=-2):
         //    MUST be eliminated by ZO oblique near-plane clipping (M15-U5-46.6).
@@ -3570,6 +3572,15 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         RENDER_CHECK(retainedCenter.g > 1.0f && retainedCenter.b < 0.25f,
             "M15-U5-46.7: published PlanarColor retains last-good green pixels across scratch/publish failure");
 
+        // Retry unchanged automatic input after a transient failure, without a manual request.
+        renderer.RenderWorldView(failingBlueWorld, cam,
+            retentionTargets->Get(RHIViewTarget::Color)->GetNative(), retentionTargets->Get(RHIViewTarget::Color)->GetRTV(),
+            retentionTargets->Get(RHIViewTarget::Depth)->GetNative(), retentionTargets->Get(RHIViewTarget::Depth)->GetDSV(),
+            128, 128, baseSettings, nullptr, retentionTargets);
+        const auto automaticRecovery = renderer.GetPlanarReflectionStatus(failingBlueWorld.PlanarReflectors.front());
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && automaticRecovery && !automaticRecovery->Failed &&
+            automaticRecovery->ActiveGenerationID > goodGenId,
+            "M15-U5-46.7: unchanged automatic input retries and recovers from a transient publication failure");
         renderer.RequestPlanarReflectionCapture(failingBlueWorld.PlanarReflectors.front());
         renderer.RenderWorldView(
             failingBlueWorld, cam,
@@ -3587,6 +3598,157 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         const glm::vec3 recoveredCenter = AverageRegion(recoveredPlanarPixels, 64, 24, 28, 40, 44);
         RENDER_CHECK(recoveredCenter.b > 1.0f && recoveredCenter.g < 0.25f,
             "M15-U5-46.7: recovery updates PlanarColor to new blue scene");
+        const auto publishedBeforeFailure = retentionTargets->GetPlanarColor()->GetHandle();
+        const auto recoveredId = stRecovered->ActiveGenerationID;
+        goodGreenWorld.SceneRevision = 972;
+        {
+            ScopedRHIFault afterSubmit([](std::string_view op) -> std::optional<nri::Result> {
+                if (op == "PlanarPublishAfterSubmit") return nri::Result::FAILURE;
+                return {};
+            });
+            renderer.RenderWorldView(goodGreenWorld, cam,
+                retentionTargets->Get(RHIViewTarget::Color)->GetNative(), retentionTargets->Get(RHIViewTarget::Color)->GetRTV(),
+                retentionTargets->Get(RHIViewTarget::Depth)->GetNative(), retentionTargets->Get(RHIViewTarget::Depth)->GetDSV(),
+                128, 128, baseSettings, nullptr, retentionTargets);
+        }
+        const auto postSubmitStatus = renderer.GetPlanarReflectionStatus(goodGreenWorld.PlanarReflectors.front());
+        std::vector<glm::vec4> postSubmitPixels;
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && postSubmitStatus && postSubmitStatus->Failed &&
+            postSubmitStatus->PreservedPreviousGeneration && postSubmitStatus->ActiveGenerationID == recoveredId &&
+            retentionTargets->GetPlanarColor()->GetHandle() == publishedBeforeFailure &&
+            ReadTexture2DRGBA16(*retentionTargets->GetPlanarColor(), postSubmitPixels),
+            "M15-U5-46.7: a failure after GPU submission preserves the actual old texture generation");
+        const auto postSubmitCenter = AverageRegion(postSubmitPixels, 64, 24, 28, 40, 44);
+        RENDER_CHECK(postSubmitCenter.b > 1.0f && postSubmitCenter.g < 0.25f,
+            "M15-U5-46.7: post-submit publication failure retains old blue pixels");
+
+        // Capture resolution and clip bias are authored controls, not just serialized metadata.
+        goodGreenWorld.PlanarReflectors.front().ResolutionScale = 0.25f;
+        goodGreenWorld.PlanarReflectors.front().ClipPlaneOffset = 0.03f;
+        ++goodGreenWorld.SceneRevision;
+        {
+            ScopedRHIFault resizeFailure([](std::string_view op) -> std::optional<nri::Result> {
+                if (op == "PlanarPublishCopy") return nri::Result::FAILURE;
+                return {};
+            });
+            renderer.RenderWorldView(goodGreenWorld, cam,
+                retentionTargets->Get(RHIViewTarget::Color)->GetNative(), retentionTargets->Get(RHIViewTarget::Color)->GetRTV(),
+                retentionTargets->Get(RHIViewTarget::Depth)->GetNative(), retentionTargets->Get(RHIViewTarget::Depth)->GetDSV(),
+                128, 128, baseSettings, nullptr, retentionTargets);
+        }
+        const auto resizedFailure = renderer.GetPlanarReflectionStatus(goodGreenWorld.PlanarReflectors.front());
+        RENDER_CHECK(resizedFailure && resizedFailure->Failed && resizedFailure->HasCapture &&
+            resizedFailure->PreservedPreviousGeneration && resizedFailure->ActiveGenerationID == recoveredId &&
+            retentionTargets->GetPlanarColor()->GetHandle() == publishedBeforeFailure,
+            "M15-U5-46.7: changing capture resolution retains the last-good publication on failure");
+        renderer.RenderWorldView(goodGreenWorld, cam,
+            retentionTargets->Get(RHIViewTarget::Color)->GetNative(), retentionTargets->Get(RHIViewTarget::Color)->GetRTV(),
+            retentionTargets->Get(RHIViewTarget::Depth)->GetNative(), retentionTargets->Get(RHIViewTarget::Depth)->GetDSV(),
+            128, 128, baseSettings, nullptr, retentionTargets);
+        const auto quarterStatus = renderer.GetPlanarReflectionStatus(goodGreenWorld.PlanarReflectors.front());
+        const auto& quarterCapture = renderer.GetLastPlanarCaptureResult();
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && quarterStatus && quarterStatus->TargetWidth == 32 &&
+            quarterCapture.TargetWidth == 32 && std::abs(quarterCapture.WorldPlane.w + 0.03f) < 1e-5f,
+            "M15-U5-46.1 / 46.3: authored quarter-resolution capture and single clip bias are effective");
+        std::vector<glm::vec4> biasedHDR;
+        RENDER_CHECK(renderer.GetIntermediateHDRTarget() &&
+            ReadTexture2DRGBA16(*renderer.GetIntermediateHDRTarget(), biasedHDR),
+            "M15-U5-46.5: biased mirror HDR readback");
+        const auto biasedMirror = AverageRegion(biasedHDR, 128, mx0, my0, mx1, my1);
+        RENDER_CHECK(biasedMirror.g > 1.0f && biasedMirror.b < 0.25f,
+            "M15-U5-46.5: capture clip offset does not displace the receiver plane or erase reflection");
+
+        // Two different reflected cameras share one view publication slot.
+        renderer.ClearPlanarReflectionCaptures();
+        auto alternating = buildResolveWorld({0.0f, 8.0f, 0.0f}, {0.0f, 1.5f, -7.0f}, 0.04f, PlanarReflectionCaptureMode::Automatic);
+        auto secondMirror = alternating.PlanarReflectors.front();
+        secondMirror.EntityID = 8199; secondMirror.StableUUID = 881999ULL;
+        secondMirror.Position = {10.0f, 2.0f, -4.0f};
+        secondMirror.Normal = {0.0f, 0.0f, 1.0f};
+        secondMirror.Tangent = {1.0f, 0.0f, 0.0f};
+        secondMirror.ClipToExtents = false;
+        alternating.PlanarReflectors.push_back(secondMirror);
+        alternating.Meshes.push_back(MakeBoxInstance(8200, cubeMesh->CaptureView(),
+            MakeEmissiveMaterial({0.0f, 0.0f, 8.0f}, 1.0f, SurfaceType::Opaque, CullMode::None),
+            {0.0f, -1.5f, -1.0f}, {5.0f, 2.0f, 2.0f}, false));
+        auto samplePublication = [&](glm::vec3& sample) {
+            renderer.RenderWorldView(alternating, cam,
+                retentionTargets->Get(RHIViewTarget::Color)->GetNative(), retentionTargets->Get(RHIViewTarget::Color)->GetRTV(),
+                retentionTargets->Get(RHIViewTarget::Depth)->GetNative(), retentionTargets->Get(RHIViewTarget::Depth)->GetDSV(),
+                128, 128, baseSettings, nullptr, retentionTargets);
+            std::vector<glm::vec4> pixels;
+            if (!renderer.WasLastRenderSuccessful() || !ReadTexture2DRGBA16(*retentionTargets->GetPlanarColor(), pixels)) return false;
+            sample = AverageRegion(pixels, 64, 24, 28, 40, 44);
+            return true;
+        };
+        glm::vec3 firstA, capturedB, secondA;
+        RENDER_CHECK(samplePublication(firstA), "M15-U5-46.7: first mirror A publication");
+        alternating.PlanarReflectors[1].Position.x = 0.0f;
+        RENDER_CHECK(samplePublication(capturedB), "M15-U5-46.7: mirror B replaces shared slot");
+        alternating.PlanarReflectors[1].Position.x = 10.0f;
+        RENDER_CHECK(samplePublication(secondA), "M15-U5-46.7: mirror A selected again");
+        // A nearby surface whose front side faces away must not suppress A.
+        auto invalidNearby = alternating.PlanarReflectors.front();
+        invalidNearby.EntityID = 8201; invalidNearby.StableUUID = 882001;
+        invalidNearby.Position = cam.GetPosition() + glm::vec3(0, 0.1f, 0);
+        alternating.PlanarReflectors.push_back(invalidNearby);
+        glm::vec3 withInvalid;
+        RENDER_CHECK(samplePublication(withInvalid) && withInvalid.g > 1.0f,
+            "M15-U5-46.3: a closer back-facing mirror does not suppress a usable reflector");
+        std::cout << "[M15Planar ABA] A=" << firstA.g << " B=" << capturedB.b << " A-again=" << secondA.g << "\n";
+        RENDER_CHECK(firstA.g > 1.0f && capturedB.b > 1.0f && secondA.g > 1.0f && secondA.b < 0.25f,
+            "M15-U5-46.7: A-B-A does not reuse a metadata receipt whose pixels were overwritten by B");
+
+        // Read linear HDR at partial confidence: saturated SDR screenshots cannot
+        // prove convex energy or retention of emission in the receiver material.
+        renderer.ClearPlanarReflectionCaptures();
+        auto energyWorld = buildResolveWorld({0, 8, 0}, {0, 1.5f, -7}, 0.04f, PlanarReflectionCaptureMode::Manual);
+        auto energyMaterial = std::make_shared<RHIMaterial>(energyWorld.Meshes.front().Material.RHIMaterialAsset->GetDesc());
+        energyMaterial->SetEmissiveColor({2, 0, 0});
+        energyMaterial->SetEmissiveIntensity(1);
+        energyWorld.Meshes.front().Material.RHIMaterialAsset = energyMaterial;
+        for (bool enableSSR : {false, true}) {
+            auto energyDesc = retDesc;
+            energyDesc.EnableScreenStorage = enableSSR;
+            energyDesc.EnableHiZ = enableSSR;
+            RENDER_CHECK(retentionTargets->Configure(energyDesc), "M15-U5-46.5: configure declared SSR dependencies");
+            renderer.RequestPlanarReflectionCapture(energyWorld.PlanarReflectors.front());
+            uint64_t energyGeneration = 0;
+            glm::vec3 values[3];
+            for (int step = 0; step < 3; ++step) {
+                energyWorld.PlanarReflectors.front().Intensity = 0.5f * step;
+                auto energySettings = baseSettings;
+                energySettings.EnableSSR = enableSSR;
+                renderer.RenderWorldView(energyWorld, cam,
+                    retentionTargets->Get(RHIViewTarget::Color)->GetNative(), retentionTargets->Get(RHIViewTarget::Color)->GetRTV(),
+                    retentionTargets->Get(RHIViewTarget::Depth)->GetNative(), retentionTargets->Get(RHIViewTarget::Depth)->GetDSV(),
+                    128, 128, energySettings, nullptr, retentionTargets);
+                const auto st = renderer.GetPlanarReflectionStatus(energyWorld.PlanarReflectors.front());
+                std::vector<glm::vec4> hdr;
+                RENDER_CHECK(renderer.WasLastRenderSuccessful() && st && st->HasCapture &&
+                    ReadTexture2DRGBA16(*renderer.GetIntermediateHDRTarget(), hdr),
+                    "M15-U5-46.5: partial-confidence HDR readback");
+                if (!energyGeneration) energyGeneration = st->ActiveGenerationID;
+                RENDER_CHECK(st->ActiveGenerationID == energyGeneration,
+                    "M15-U5-46.7: manual capture keeps its generation while live intensity changes");
+                values[step] = AverageRegion(hdr, 128, mx0, my0, mx1, my1);
+            }
+            const auto error = glm::abs(values[1] - 0.5f * (values[0] + values[2]));
+            std::cout << "[M15Planar Energy] SSR=" << enableSSR << " half-error=" << error.r << "," << error.g << "," << error.b << "\n";
+            RENDER_CHECK(glm::all(glm::lessThan(error, glm::vec3(0.02f))) &&
+                values[2].g > values[0].g + 1.0f && values[0].r > 1.9f && values[2].r > 1.9f,
+                "M15-U5-46.5: confidence .5 is the HDR midpoint with SSR on/off and receiver emission retained");
+        }
+        // Public direct capture may overwrite the view's exposed target. Its
+        // old scheduled receipt must not remain valid for the new pixels.
+        auto directWorld = energyWorld;
+        directWorld.Meshes.back().Material.RHIMaterialAsset = MakeEmissiveMaterial({0, 0, 8}, 1, SurfaceType::Opaque, CullMode::None);
+        const auto directCapture = renderer.CapturePlanarReflection(directWorld, cam, directWorld.PlanarReflectors.front(),
+            retentionTargets->GetPlanarColor(), retentionTargets->GetPlanarDepth(), baseSettings);
+        const auto overwrittenStatus = renderer.GetPlanarReflectionStatus(energyWorld.PlanarReflectors.front());
+        RENDER_CHECK(directCapture.Success && overwrittenStatus && !overwrittenStatus->HasCapture,
+            "M15-U5-46.7: explicit overwrite retires the scheduled cache receipt");
+
     }
 
     renderer.ClearPlanarReflectionCaptures();

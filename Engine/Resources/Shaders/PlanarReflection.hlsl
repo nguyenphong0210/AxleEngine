@@ -176,3 +176,9 @@ float4 PSMain(VSOutput input) : SV_Target {
     float3 composed = SanitizeHDRColor(baseLit + planarSpec);
     return float4(composed, wPlanar);
 }
+
+
+// Resample a lower-resolution capture into a fresh unpublished destination.
+float4 PSCopyMain(VSOutput input) : SV_Target {
+    return float4(SanitizeHDRColor(u_PlanarColor.SampleLevel(u_LinearSampler, input.TexCoord, 0.0).rgb), 1.0);
+}

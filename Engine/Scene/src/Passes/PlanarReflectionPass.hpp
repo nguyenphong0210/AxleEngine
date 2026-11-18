@@ -32,6 +32,7 @@ namespace Axle::Passes {
         const SceneRenderSettings& Settings;
         const RenderPlanarReflector& Reflector;
         const glm::mat4& ReflectedViewProj;
+        const glm::mat4& ProjectionZO;
         const std::shared_ptr<RHI::RHIViewTargets>& Targets;
         nri::Texture* SceneTarget = nullptr;
         nri::Texture* SceneDepthTarget = nullptr;

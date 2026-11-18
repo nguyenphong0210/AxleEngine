@@ -950,7 +950,7 @@ namespace Axle {
                 return result;
             }
             const glm::vec3 nCenter = glm::normalize(centerNormal);
-            result.SpatialWeight = std::exp(-glm::dot(deltaFullResPx, deltaFullResPx) / (2.0f * 1.35f * 1.35f));
+            result.SpatialWeight = std::exp(-glm::dot(deltaFullResPx, deltaFullResPx) / (2.0f * 2.8f * 2.8f));
 
             const float centerZ = std::abs(centerPos.z);
             const float depthDiff = std::abs(centerZ - std::abs(tapPos.z));

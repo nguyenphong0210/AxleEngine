@@ -333,6 +333,44 @@ bool RunM15OcclusionSphereTests(RHISceneRenderer& renderer, const RenderWorld& w
             "sphere-on-floor outer floor margin has no 4m-cutoff floating dark halo");
         RENDER_CHECK(sphereRimCount > 20 && minSphereRimAO >= 0.88f,
             "sphere upper/lateral grazing silhouette has no dark rim bleed from floor or self-occlusion");
+
+        // Smoothness / anti-grain check on hovered sphere (0.11m above floor) + glossy floor contact zone:
+        floorWorld.Meshes[0].WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.11f, 0.0f));
+        floorMatDesc.Roughness = 0.15f;
+        floorMat = std::make_shared<RHIMaterial>(floorMatDesc);
+        floorWorld.Meshes[1].Material.RHIMaterialAsset = floorMat;
+        renderer.RenderWorldView(floorWorld, floorCamera, targets->Get(RHIViewTarget::Color), targets->Get(RHIViewTarget::Depth), floorSettings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() &&
+                     Read(*targets->GetGTAOResolved(), resolvedAO) &&
+                     Read(*targets->Get(RHIViewTarget::ScreenNormal), floorNormals) &&
+                     Read(*targets->Get(RHIViewTarget::OpaqueDepth), floorDepth),
+            "hovered sphere glossy-floor smoothness readback");
+        double laplacianSum = 0.0;
+        float maxLaplacian = 0.0f;
+        size_t smoothSamples = 0;
+        for (uint32_t y = 2; y + 2 < size; ++y) {
+            for (uint32_t x = 2; x + 2 < size; ++x) {
+                const size_t idx = size_t(y) * size + x;
+                const float d = floorDepth[idx].x;
+                if (floorNormals[idx].w < 0.5f || floorNormals[idx].y <= 0.95f || d <= 0.0f || d >= 0.9999f) continue;
+                const glm::vec4 clip(2.0f * (x + 0.5f) / size - 1.0f, 1.0f - 2.0f * (y + 0.5f) / size, d, 1.0f);
+                const glm::vec4 wh = invVP * clip;
+                const glm::vec3 wp = glm::vec3(wh) / wh.w;
+                if (std::abs(wp.y + 1.0f) >= 0.05f || std::hypot(wp.x, wp.z) > 1.3f) continue;
+                const size_t nL = idx - 1, nR = idx + 1, nU = idx - size, nD = idx + size;
+                if (floorNormals[nL].y <= 0.95f || floorNormals[nR].y <= 0.95f ||
+                    floorNormals[nU].y <= 0.95f || floorNormals[nD].y <= 0.95f) continue;
+                const float lap = std::abs(resolvedAO[idx].x - 0.25f * (resolvedAO[nL].x + resolvedAO[nR].x + resolvedAO[nU].x + resolvedAO[nD].x));
+                laplacianSum += lap;
+                maxLaplacian = std::max(maxLaplacian, lap);
+                ++smoothSamples;
+            }
+        }
+        const double meanLaplacian = smoothSamples > 0 ? laplacianSum / smoothSamples : 1.0;
+        evidence << "hovered_contact_smooth samples=" << smoothSamples << " mean_laplacian=" << meanLaplacian
+                 << " max_laplacian=" << maxLaplacian << '\n';
+        RENDER_CHECK(smoothSamples > 15 && meanLaplacian < 0.015 && maxLaplacian < 0.08f,
+            "hovered sphere floor contact AO is smooth without high-frequency stochastic grain");
     }
     return true;
 }

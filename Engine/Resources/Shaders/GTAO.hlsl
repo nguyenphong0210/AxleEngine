@@ -29,13 +29,24 @@ float3 ReconstructViewPos(float2 uv, float depth) {
     return viewPos.xyz / max(abs(viewPos.w), 1e-6);
 }
 
-// Interleaved spatial noise hash for spatial jittering
+// Stratified 4x4 Bayer dithering so neighboring half-res texels complement
+// each other without low-frequency clumping when TAA is off.
+float SampleBayer4x4(uint2 pixelPos) {
+    static const float kBayer[16] = {
+         0.0 / 16.0,  8.0 / 16.0,  2.0 / 16.0, 10.0 / 16.0,
+        12.0 / 16.0,  4.0 / 16.0, 14.0 / 16.0,  6.0 / 16.0,
+         3.0 / 16.0, 11.0 / 16.0,  1.0 / 16.0,  9.0 / 16.0,
+        15.0 / 16.0,  7.0 / 16.0, 13.0 / 16.0,  5.0 / 16.0
+    };
+    return kBayer[(pixelPos.y & 3u) * 4u + (pixelPos.x & 3u)];
+}
+
 float SpatialHash(uint2 pixelPos) {
-    return frac(52.9829189 * frac(dot(float2(pixelPos), float2(0.06711056, 0.00583715))));
+    return SampleBayer4x4(pixelPos);
 }
 
 float SpatialStepHash(uint2 pixelPos) {
-    return frac(52.9829189 * frac(dot(float2(pixelPos) + float2(17.0, 31.0), float2(0.06711056, 0.00583715))));
+    return SampleBayer4x4(uint2(pixelPos.y + 2u, pixelPos.x + 1u));
 }
 
 // =============================================================================
@@ -144,8 +155,8 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     if (strength > 0.001 && dot(viewNormal, viewDir) > 0.0) {
         float noise = SpatialHash(pixelPos);
         float stepNoise = SpatialStepHash(pixelPos);
-        const int NUM_SLICES = 4;
-        const int NUM_STEPS = 4;
+        const int NUM_SLICES = 6;
+        const int NUM_STEPS = 5;
         float totalOcclusion = 0.0;
         float totalWeight = 0.0;
 
@@ -347,7 +358,9 @@ void CSUpsample(uint3 dispatchThreadId : SV_DispatchThreadID) {
 
     float2 occlusionSum = float2(0.0, 0.0);
     float weightSum = 0.0;
-    const float invTwoSigmaSq = 1.0 / (2.0 * 1.35 * 1.35);
+    // Span the full 4x4 half-res Bayer cycle (~8 full-res px) inside continuous surfaces
+    // so stratified AO noise averages smooth while normal/depth edges stay crisp.
+    const float invTwoSigmaSq = 1.0 / (2.0 * 2.8 * 2.8);
 
     [unroll] for (int dy = -1; dy <= 2; ++dy) {
         [unroll] for (int dx = -1; dx <= 2; ++dx) {

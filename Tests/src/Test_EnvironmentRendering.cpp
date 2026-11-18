@@ -280,7 +280,7 @@ bool Native(RHIType backend) {
     CHECK(!gtao.empty()&&gtao.size()==red.size());
     const auto gtaoGeneration = renderer.GetDiagnostics().GetFrame().TargetGeneration;
     CHECK(gtaoGeneration && renderer.GetOpaqueNormalTarget() && renderer.GetHiZTarget(0) == nullptr);
-    CHECK(passNames()==std::vector<std::string>({"SurfaceNormalPrepass","GTAOCompute","OpaqueAndSky","Transparent","ParticlesAndPhysics","Export"}));
+    CHECK(passNames()==std::vector<std::string>({"SurfaceNormalPrepass","GTAOCompute","GTAOUpsample","OpaqueAndSky","Transparent","ParticlesAndPhysics","Export"}));
     CHECK(renderer.GetLastGPUTimestampMilliseconds() > 0.0);
     auto* normalTarget = renderer.GetOpaqueNormalTarget();
     CHECK(normalTarget && normalTarget->IsValid());
@@ -937,7 +937,7 @@ bool Native(RHIType backend) {
     settings.EnableGTAO = true;
     const auto graphAOOutput = render();
     CHECK(!graphAOOutput.empty() && requireGraph());
-    CHECK(passNames() == std::vector<std::string>({"SurfaceNormalPrepass", "GTAOCompute", "OpaqueAndSky", "Transparent", "ParticlesAndPhysics", "Export"}));
+    CHECK(passNames() == std::vector<std::string>({"SurfaceNormalPrepass", "GTAOCompute", "GTAOUpsample", "OpaqueAndSky", "Transparent", "ParticlesAndPhysics", "Export"}));
     CHECK(graphAOOutput == graphParityOutput); // Direct-only radiance is AO invariant.
     CHECK(renderer.GetOpaqueNormalTarget());
     const auto graphNormal = Read(*renderer.GetOpaqueNormalTarget(), 8);

@@ -855,17 +855,22 @@ namespace Axle {
         // Ground Truth Ambient Occlusion (GTAO) & Contact Shadows Resources
         RHI::RHIPipelineLayout m_GTAOComputePipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_GTAOComputePipeline;
+        RHI::RHIPipelineLayout m_GTAOUpsamplePipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_GTAOUpsamplePipeline;
         RHI::RHIPipelineLayout m_GTAOApplyPipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_GTAOApplyPipelineSDR;
         RHI::RHIResourceRef<nri::Pipeline> m_GTAOApplyPipelineHDR;
         RHI::RHIBuffer m_GTAOConstantBuffer;
         RHI::RHIShaderBytecode m_GTAOComputeShader;
+        RHI::RHIShaderBytecode m_GTAOUpsampleShader;
         RHI::RHIShaderBytecode m_GTAOApplyVertexShader;
         RHI::RHIShaderBytecode m_GTAOApplyPixelShader;
         RHI::RHISampler m_GTAOSampler;
         RHI::RHIDescriptorPool m_GTAODescriptorPool;
         nri::DescriptorSet* m_GTAOComputeTextureSet = nullptr;
         nri::DescriptorSet* m_GTAOComputeStorageSet = nullptr;
+        nri::DescriptorSet* m_GTAOUpsampleTextureSet = nullptr;
+        nri::DescriptorSet* m_GTAOUpsampleStorageSet = nullptr;
         nri::DescriptorSet* m_GTAOApplyDescriptorSet = nullptr;
 
         // Screen-Space Reflections (SSR) & Reflection Probes Resources

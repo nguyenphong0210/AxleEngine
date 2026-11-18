@@ -314,6 +314,34 @@ namespace Axle {
         //    remain stable without faceting, halos, disocclusion bleeding, or NaNs.
         bool VerifyDeformedMeshOcclusionStability(const DeformedVertexSample& sample, float backgroundDepth,
                                                  const glm::mat4& viewMatrix, const glm::mat4& projMatrix);
+
+        // =====================================================================
+        // M15-U4-GTAO-HALO-FIX: World-Space Falloff, Normal-Depth Upsample, Specular & Multi-Bounce
+        // =====================================================================
+        struct NormalDepthBilateralTapResult {
+            float SpatialWeight = 0.0f;
+            float DepthWeight = 0.0f;
+            float NormalWeight = 0.0f;
+            float TotalWeight = 0.0f;
+            bool IsEdgeRejected = false;
+        };
+
+        // Smooth cubic distance falloff for GTAO horizon samples:
+        // 1 inside falloffStart, smoothly decaying to 0 at worldRadius.
+        float EvaluateGTAODistanceFalloff(float distance, float worldRadius, float falloffStartFraction);
+
+        // Lagarde/de Rousiers specular occlusion factor preserving unoccluded Fresnel grazing (ao=1)
+        // and blocking corner IBL leaks (ao=0) while attenuating tight smooth crevices by (NdotV, roughness).
+        float ComputeSpecularOcclusion(float NdotV, float ao, float roughness);
+
+        // Jimenez multi-bounce colored AO approximation blended by strength in [0, 1].
+        glm::vec3 ComputeMultiBounceAO(float ao, const glm::vec3& albedo, float strength = 1.0f);
+
+        // Evaluates subpixel spatial + plane-depth + normal edge-stopping bilateral weight matching GTAO CSUpsample.
+        NormalDepthBilateralTapResult EvaluateNormalDepthBilateralWeight(
+            const glm::vec3& centerPos, const glm::vec3& centerNormal,
+            const glm::vec3& tapPos, const glm::vec3& tapNormal, bool hasTapNormal,
+            const glm::vec2& deltaFullResPx);
     }
 
     // =========================================================================

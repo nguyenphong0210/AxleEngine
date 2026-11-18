@@ -136,10 +136,12 @@ bool RunM15OcclusionContractUnitTests() {
         RENDER_CHECK(!fwdSource.empty() && !matSource.empty(),
             "M15-U4-03.1: shader sources for ForwardPBR and MaterialSurface loaded successfully");
 
-        // Verify ForwardPBR.hlsl restricts AO to ambient
-        RENDER_CHECK(fwdSource.find("ambient = (diffuseAmbient + specularAmbient) * envIntensity * ao") != std::string::npos ||
-                     fwdSource.find("* ao") != std::string::npos,
-            "M15-U4-03.1: ForwardPBR scales ambient terms by ao");
+        // Verify ForwardPBR.hlsl restricts AO to ambient (separated diffuse multi-bounce and specular occlusion)
+        RENDER_CHECK(fwdSource.find("diffuseAO") != std::string::npos &&
+                     fwdSource.find("specAO") != std::string::npos &&
+                     fwdSource.find("ComputeMultiBounceAO(ao") != std::string::npos &&
+                     fwdSource.find("ComputeSpecularOcclusion(NdotV, ao") != std::string::npos,
+            "M15-U4-03.1: ForwardPBR scales ambient diffuse/specular terms by AO helpers");
         RENDER_CHECK(fwdSource.find("float3 color = ambient + Lo + emissive;") != std::string::npos,
             "M15-U4-03.1: ForwardPBR adds direct light (Lo) and emissive unscaled by ao");
 
@@ -880,6 +882,81 @@ bool RunM15OcclusionContractUnitTests() {
         }
     }
 
-    std::cout << "  [M15Occlusion] All M15-U4 (U4-01 through U4-07.2) occlusion contract tests passed successfully.\n";
+    // =========================================================================
+    // 12. M15-U4-GTAO-HALO-FIX: World-Space Falloff, Normal-Depth Upsample, Specular & Multi-Bounce
+    // =========================================================================
+    {
+        std::cout << "  [M15Occlusion] Verifying M15-U4-GTAO-HALO-FIX contracts...\n";
+        using namespace Axle::OcclusionContract;
+
+        // 12.1: Distance falloff smoothly attenuates distant blockers to 0 at worldRadius
+        const float r = 1.6f;
+        const float startFrac = 0.2f;
+        const float fNear = EvaluateGTAODistanceFalloff(0.05f, r, startFrac);
+        const float fMid = EvaluateGTAODistanceFalloff(0.90f, r, startFrac);
+        const float fEdge = EvaluateGTAODistanceFalloff(1.50f, r, startFrac);
+        const float fBeyond = EvaluateGTAODistanceFalloff(1.60f, r, startFrac);
+        const float fFar = EvaluateGTAODistanceFalloff(4.0f, r, startFrac);
+        RENDER_CHECK(std::abs(fNear - 1.0f) < 1e-5f && fMid > fEdge && fMid < 1.0f && fEdge > 0.0f &&
+                     fBeyond == 0.0f && fFar == 0.0f,
+            "GTAO world-space distance falloff decays smoothly to zero at worldRadius");
+        RENDER_CHECK(EvaluateGTAODistanceFalloff(0.0f, r, startFrac) == 0.0f &&
+                     EvaluateGTAODistanceFalloff(std::numeric_limits<float>::quiet_NaN(), r, startFrac) == 0.0f,
+            "GTAO distance falloff handles zero and nonfinite inputs safely");
+
+        // 12.2: Specular occlusion preserves open silhouettes (ao=1), seals closed corners (ao=0), never NaN
+        for (float nv : {0.0f, 0.05f, 0.3f, 1.0f}) {
+            for (float rough : {0.04f, 0.25f, 0.6f, 1.0f}) {
+                const float s1 = ComputeSpecularOcclusion(nv, 1.0f, rough);
+                const float s0 = ComputeSpecularOcclusion(nv, 0.0f, rough);
+                const float sMid = ComputeSpecularOcclusion(nv, 0.5f, rough);
+                RENDER_CHECK(std::isfinite(s1) && std::isfinite(s0) && std::isfinite(sMid) &&
+                             std::abs(s1 - 1.0f) < 1e-5f && s0 == 0.0f && sMid >= 0.0f && sMid <= 1.0f,
+                    "ComputeSpecularOcclusion preserves unoccluded edges and closed corners without NaN");
+            }
+        }
+        RENDER_CHECK(std::abs(ComputeSpecularOcclusion(1.0f, 0.5f, 0.5f) - 0.5f) < 0.002f,
+            "ComputeSpecularOcclusion stays near-linear on front-facing medium-roughness surfaces");
+
+        // 12.3: Multi-bounce colored AO
+        const glm::vec3 warmAlbedo(0.85f, 0.78f, 0.45f);
+        const glm::vec3 mb0 = ComputeMultiBounceAO(0.0f, warmAlbedo, 1.0f);
+        const glm::vec3 mb1 = ComputeMultiBounceAO(1.0f, warmAlbedo, 1.0f);
+        const glm::vec3 mbLinear = ComputeMultiBounceAO(0.5f, warmAlbedo, 0.0f);
+        const glm::vec3 mbActive = ComputeMultiBounceAO(0.5f, warmAlbedo, 1.0f);
+        RENDER_CHECK(mb0 == glm::vec3(0.0f) && glm::distance(mb1, glm::vec3(1.0f)) < 1e-5f &&
+                     glm::distance(mbLinear, glm::vec3(0.5f)) < 1e-5f &&
+                     mbActive.x > 0.5f && mbActive.x > mbActive.z && mbActive.x <= 1.0f,
+            "ComputeMultiBounceAO conserves bounced colored indirect diffuse while remaining neutral at 0 and 1");
+
+        // 12.4: Normal + plane-depth bilateral edge rejection across sphere silhouette vs floor
+        const glm::vec3 floorPos(0.0f, -1.0f, -5.0f);
+        const glm::vec3 floorNormal(0.0f, 1.0f, 0.0f);
+        const glm::vec3 sphereRimPos(-0.08f, -0.92f, -4.92f); // Only ~8cm depth separation
+        const glm::vec3 sphereRimNormal = glm::normalize(glm::vec3(-0.98f, 0.15f, 0.12f));
+        const auto silhouetteTap = EvaluateNormalDepthBilateralWeight(
+            sphereRimPos, sphereRimNormal, floorPos, floorNormal, true, glm::vec2(1.0f, 0.0f));
+        RENDER_CHECK(silhouetteTap.IsEdgeRejected && silhouetteTap.NormalWeight == 0.0f && silhouetteTap.TotalWeight == 0.0f,
+            "Normal-depth bilateral weight rejects floor-to-sphere-rim bleed even at shallow depth separation");
+
+        const glm::vec3 sphereNeighborPos = sphereRimPos + glm::vec3(0.01f, 0.04f, -0.02f);
+        const glm::vec3 sphereNeighborNormal = glm::normalize(glm::vec3(-0.96f, 0.22f, 0.17f));
+        const auto curvedTap = EvaluateNormalDepthBilateralWeight(
+            sphereRimPos, sphereRimNormal, sphereNeighborPos, sphereNeighborNormal, true, glm::vec2(0.5f, 0.5f));
+        RENDER_CHECK(!curvedTap.IsEdgeRejected && curvedTap.TotalWeight > 0.4f,
+            "Normal-depth bilateral weight preserves continuous weight along curved sphere surfaces");
+
+        // 12.5: Shader and RHI target wiring verification
+        const std::string gtaoSource = ReadShaderSource(AXLE_GTAO_SHADER_PATH);
+        const std::string occSource = ReadShaderSource(AXLE_OCCLUSION_SHADER_PATH);
+        const std::string rhiTargetsSource = ReadShaderSource(AXLE_RHI_VIEW_TARGETS_SOURCE_PATH);
+        RENDER_CHECK(gtaoSource.find("void CSUpsample(") != std::string::npos &&
+                     gtaoSource.find("EvaluateGTAODistanceFalloff(") != std::string::npos &&
+                     occSource.find("occlusionSize.x == sceneSize.x && occlusionSize.y == sceneSize.y") != std::string::npos &&
+                     rhiTargetsSource.find("RHIViewTarget::GTAOResolved") != std::string::npos,
+            "GTAO pipeline wires world-space falloff, CSUpsample normal-depth bilateral resolve, and full-res forward target");
+    }
+
+    std::cout << "  [M15Occlusion] All M15-U4 (U4-01 through U4-07.2 + Halo Fix) occlusion contract tests passed successfully.\n";
     return true;
 }

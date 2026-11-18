@@ -893,6 +893,92 @@ namespace Axle {
             return true;
         }
 
+        float EvaluateGTAODistanceFalloff(float distance, float worldRadius, float falloffStartFraction) {
+            if (!std::isfinite(distance) || !std::isfinite(worldRadius) || !std::isfinite(falloffStartFraction) ||
+                distance <= 0.0f || worldRadius <= 0.0f) {
+                return 0.0f;
+            }
+            const float safeRadius = std::max(worldRadius, 0.05f);
+            if (distance >= safeRadius) return 0.0f;
+            const float startFrac = std::clamp(falloffStartFraction, 0.05f, 0.95f);
+            const float startDist = safeRadius * startFrac;
+            const float t = std::clamp((safeRadius - distance) / std::max(safeRadius - startDist, 1e-4f), 0.0f, 1.0f);
+            return t * t * (3.0f - 2.0f * t);
+        }
+
+        float ComputeSpecularOcclusion(float NdotV, float ao, float roughness) {
+            if (!std::isfinite(NdotV) || !std::isfinite(ao) || !std::isfinite(roughness)) return 1.0f;
+            const float safeAO = std::clamp(ao, 0.0f, 1.0f);
+            const float safeNdotV = std::clamp(NdotV, 0.0f, 1.0f);
+            const float safeRoughness = std::clamp(roughness, 0.04f, 1.0f);
+            const float exponent = std::exp2(-16.0f * safeRoughness - 1.0f);
+            const float term = std::pow(std::max(safeNdotV + safeAO, 1e-5f), exponent) - 1.0f + safeAO;
+            return std::clamp(term, 0.0f, 1.0f);
+        }
+
+        glm::vec3 ComputeMultiBounceAO(float ao, const glm::vec3& albedo, float strength) {
+            if (!std::isfinite(ao) || !std::isfinite(strength)) return glm::vec3(1.0f);
+            const float safeAO = std::clamp(ao, 0.0f, 1.0f);
+            const float safeStrength = std::clamp(strength, 0.0f, 1.0f);
+            const glm::vec3 safeAlbedo = glm::clamp(glm::vec3(
+                std::isfinite(albedo.x) ? albedo.x : 0.0f,
+                std::isfinite(albedo.y) ? albedo.y : 0.0f,
+                std::isfinite(albedo.z) ? albedo.z : 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
+            const glm::vec3 a = 2.0404f * safeAlbedo - 0.3324f;
+            const glm::vec3 b = -4.7951f * safeAlbedo + 0.6417f;
+            const glm::vec3 c = 2.7552f * safeAlbedo + 0.6903f;
+            const glm::vec3 bounced = glm::clamp(glm::max(glm::vec3(safeAO), ((safeAO * a + b) * safeAO + c) * safeAO),
+                                                 glm::vec3(0.0f), glm::vec3(1.0f));
+            return glm::mix(glm::vec3(safeAO), bounced, safeStrength);
+        }
+
+        NormalDepthBilateralTapResult EvaluateNormalDepthBilateralWeight(
+            const glm::vec3& centerPos, const glm::vec3& centerNormal,
+            const glm::vec3& tapPos, const glm::vec3& tapNormal, bool hasTapNormal,
+            const glm::vec2& deltaFullResPx) {
+            NormalDepthBilateralTapResult result{};
+            for (int i = 0; i < 3; ++i) {
+                if (!std::isfinite(centerPos[i]) || !std::isfinite(centerNormal[i]) ||
+                    !std::isfinite(tapPos[i]) || (hasTapNormal && !std::isfinite(tapNormal[i]))) {
+                    result.IsEdgeRejected = true;
+                    return result;
+                }
+            }
+            if (!std::isfinite(deltaFullResPx.x) || !std::isfinite(deltaFullResPx.y) ||
+                glm::dot(centerNormal, centerNormal) < 1e-8f) {
+                result.IsEdgeRejected = true;
+                return result;
+            }
+            const glm::vec3 nCenter = glm::normalize(centerNormal);
+            result.SpatialWeight = std::exp(-glm::dot(deltaFullResPx, deltaFullResPx) / (2.0f * 1.35f * 1.35f));
+
+            const float centerZ = std::abs(centerPos.z);
+            const float depthDiff = std::abs(centerZ - std::abs(tapPos.z));
+            const float planeDist = std::abs(glm::dot(tapPos - centerPos, nCenter));
+            const float effectiveDist = std::min(planeDist, depthDiff);
+            const float depthSigma = 0.02f * std::max(centerZ, 0.1f) + 0.005f;
+            result.DepthWeight = std::exp(-effectiveDist / depthSigma);
+
+            float normalWeight = 1.0f;
+            if (hasTapNormal && glm::dot(tapNormal, tapNormal) >= 1e-8f) {
+                const float ndot = glm::dot(nCenter, glm::normalize(tapNormal));
+                if (ndot < 0.25f) {
+                    result.NormalWeight = 0.0f;
+                    result.IsEdgeRejected = true;
+                    return result;
+                }
+                normalWeight = std::pow(std::clamp(ndot, 0.0f, 1.0f), 12.0f);
+            }
+            result.NormalWeight = normalWeight;
+
+            if (result.DepthWeight < 1e-3f) {
+                result.IsEdgeRejected = true;
+                return result;
+            }
+            result.TotalWeight = result.SpatialWeight * result.DepthWeight * result.NormalWeight;
+            return result;
+        }
+
     } // namespace OcclusionContract
 
     // =========================================================================

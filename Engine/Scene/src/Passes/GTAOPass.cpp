@@ -13,8 +13,15 @@ namespace Axle::Passes {
             const uint32_t width = i.Targets->GetGTAO()->GetWidth();
             const uint32_t height = i.Targets->GetGTAO()->GetHeight();
             constants.ScreenSize = glm::vec4(float(width), float(height), 1.0f / width, 1.0f / height);
+            const float maxRadiusPx = std::max(i.Settings.GTAORadiusPixels * 2.0f, 16.0f);
+            const float projRadiusScale = 0.5f * static_cast<float>(height) * std::abs(i.ProjectionZO[1][1]);
             constants.GTAOParams = glm::vec4(i.Settings.GTAORadiusPixels * 0.5f,
-                i.Settings.EnableGTAO ? i.Settings.GTAOStrength : 0.0f, 0.0025f, 2.0f);
+                i.Settings.EnableGTAO ? i.Settings.GTAOStrength : 0.0f, 0.0025f, std::max(0.1f, i.Settings.GTAOPower));
+            constants.Reserved[0] = glm::vec4(
+                std::max(0.05f, i.Settings.GTAOWorldRadius),
+                projRadiusScale,
+                std::clamp(i.Settings.GTAOFalloffStart, 0.05f, 0.95f),
+                maxRadiusPx);
             if (i.World.DirectionalLight && i.Settings.EnableContactShadows) {
                 const auto direction = i.World.DirectionalLight->Direction;
                 const glm::vec3 sunDir = glm::dot(direction, direction) > 1e-12f ? glm::normalize(direction) : glm::vec3(0, 1, 0);
@@ -30,11 +37,15 @@ namespace Axle::Passes {
         graph.AddPass("GTAOCompute", {
             {r.Depth, RHI::RHIResourceLayout::ShaderResource}, {r.SceneNormal, RHI::RHIResourceLayout::ShaderResource},
             {r.Storage, RHI::RHIResourceLayout::ShaderResourceStorage, RenderGraph::Access::Write}});
+        graph.AddPass("GTAOUpsample", {
+            {r.Depth, RHI::RHIResourceLayout::ShaderResource}, {r.SceneNormal, RHI::RHIResourceLayout::ShaderResource},
+            {r.Storage, RHI::RHIResourceLayout::ShaderResource},
+            {r.ResolvedStorage, RHI::RHIResourceLayout::ShaderResourceStorage, RenderGraph::Access::Write}});
     }
 
     bool GTAOPass::RecordPreLighting(RHISceneRenderer& renderer, const GTAORecordInputs& i,
                                      const PassRecordOps& ops) {
-        return RecordCompute(renderer, i, ops);
+        return RecordCompute(renderer, i, ops) && RecordUpsample(renderer, i, ops);
     }
 
     void GTAOPass::Declare(RenderGraph& graph, const GTAOResources& r) {
@@ -131,6 +142,45 @@ namespace Axle::Passes {
         if (!ops.BindDescriptor(0, renderer.m_GTAOComputeTextureSet, nri::BindPoint::COMPUTE) ||
             !ops.BindDescriptor(1, renderer.m_GTAOComputeStorageSet, nri::BindPoint::COMPUTE)) return false;
         commands.Dispatch((gtaoWidth + 7) / 8, (gtaoHeight + 7) / 8, 1);
+        ++i.DispatchCount;
+
+        return commands.IsRecording();
+    }
+
+    bool GTAOPass::RecordUpsample(RHISceneRenderer& renderer, const GTAORecordInputs& i,
+                                  const PassRecordOps& ops) {
+        auto& commands = renderer.Commands();
+        auto* depth = renderer.m_OpaqueSceneDepth;
+        auto* halfTarget = i.Targets->GetGTAO();
+        auto* resolvedTarget = i.Targets->GetGTAOResolved();
+        if (!depth || !halfTarget || !resolvedTarget ||
+            !depth->IsValid() || !halfTarget->IsValid() || !resolvedTarget->IsValid() ||
+            !renderer.m_GTAOUpsamplePipeline) {
+            return false;
+        }
+        if (!ops.BeginPass("GTAOUpsample")) return false;
+        auto constants = BuildConstants(i);
+        const uint32_t fullWidth = resolvedTarget->GetWidth();
+        const uint32_t fullHeight = resolvedTarget->GetHeight();
+        constants.ScreenSize = glm::vec4(static_cast<float>(fullWidth), static_cast<float>(fullHeight),
+            1.0f / static_cast<float>(fullWidth), 1.0f / static_cast<float>(fullHeight));
+        if (!ops.Uniform().UpdateData(&constants, sizeof(constants))) return false;
+
+        auto& pool = renderer.m_GTAODescriptorPool;
+        if (!pool.UpdateTexture(renderer.m_GTAOUpsampleTextureSet, 0, 0, depth->GetSRV())) return false;
+        nri::Descriptor* normalSRV = renderer.m_OpaqueSceneNormal && renderer.m_OpaqueSceneNormal->IsValid()
+            ? renderer.m_OpaqueSceneNormal->GetSRV() : RHI::RHIMaterial::GetDefaultBlackTexture()->GetSRV();
+        if (!pool.UpdateTexture(renderer.m_GTAOUpsampleTextureSet, 1, 0, normalSRV) ||
+            !pool.UpdateTexture(renderer.m_GTAOUpsampleTextureSet, 2, 0, halfTarget->GetSRV()) ||
+            !pool.UpdateSampler(renderer.m_GTAOUpsampleTextureSet, 3, 0, renderer.m_GTAOSampler.GetNative()) ||
+            !pool.UpdateStorageTexture(renderer.m_GTAOUpsampleStorageSet, 0, 0, resolvedTarget->GetUAV())) return false;
+        commands.SetPipeline(renderer.m_GTAOUpsamplePipeline);
+        commands.SetPipelineLayout(nri::BindPoint::COMPUTE, renderer.m_GTAOUpsamplePipelineLayout);
+        commands.SetRootDescriptor(0, ops.Uniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
+        pool.Bind(commands.GetNative());
+        if (!ops.BindDescriptor(0, renderer.m_GTAOUpsampleTextureSet, nri::BindPoint::COMPUTE) ||
+            !ops.BindDescriptor(1, renderer.m_GTAOUpsampleStorageSet, nri::BindPoint::COMPUTE)) return false;
+        commands.Dispatch((fullWidth + 7) / 8, (fullHeight + 7) / 8, 1);
         ++i.DispatchCount;
 
         return commands.IsRecording();

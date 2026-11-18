@@ -8,7 +8,7 @@ namespace Axle::RHI {
     enum class RHIViewTarget : uint8_t {
         Color, Depth, MSAAColor, MSAADepth, HDR, FXAA,
         OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1,
-        GTAO, Bloom0, Bloom1, Bloom2, Bloom3, Bloom4, Bloom5, Exposure, DDGI,
+        GTAO, GTAOResolved, Bloom0, Bloom1, Bloom2, Bloom3, Bloom4, Bloom5, Exposure, DDGI,
         HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, ReflectionEnvironment, ReflectionResponse,
         SSRColor0, SSRColor1, SSRColor2, SSRColor3, PlanarColor, PlanarDepth, Count
     };
@@ -60,6 +60,7 @@ namespace Axle::RHI {
         uint32_t GetHiZLevelCount() const { return m_HiZAllocatedLevels; }
         uint32_t GetHiZUsefulLevelCount() const { return m_HiZUsefulLevels; }
         RHITexture* GetGTAO() const { return Get(RHIViewTarget::GTAO); }
+        RHITexture* GetGTAOResolved() const { return Get(RHIViewTarget::GTAOResolved); }
         RHITexture* GetExposure() const { return Get(RHIViewTarget::Exposure); }
         RHITexture* GetDDGI() const { return Get(RHIViewTarget::DDGI); }
         RHITexture* GetBloom(uint32_t level) const {

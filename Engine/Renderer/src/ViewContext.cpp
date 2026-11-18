@@ -21,6 +21,12 @@ namespace Axle {
         mix(settings.EnableToneMapping);
         mix(settings.EnableFXAA);
         mix(settings.EnableGTAO);
+        mix(settings.GTAORadiusPixels);
+        mix(settings.GTAOStrength);
+        mix(settings.GTAOWorldRadius);
+        mix(settings.GTAOFalloffStart);
+        mix(settings.GTAOPower);
+        mix(settings.GTAOMultiBounce);
         mix(settings.EnableContactShadows);
         mix(settings.EnableSSR);
         mix(settings.EnablePlanarReflections);

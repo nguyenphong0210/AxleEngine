@@ -42,6 +42,25 @@ float3 FresnelSchlickRoughness(float cosTheta, float3 F0, float roughness) {
     return F0 + (maxRef - F0) * pow(saturate(1.0 - cosTheta), 5.0);
 }
 
+// 6. Specular Occlusion & Multi-Bounce Ambient Conservation
+float ComputeSpecularOcclusion(float NdotV, float ao, float roughness) {
+    float safeAO = saturate(ao);
+    float safeNdotV = saturate(NdotV);
+    float safeRoughness = clamp(roughness, 0.04, 1.0);
+    float exponent = exp2(-16.0 * safeRoughness - 1.0);
+    return saturate(pow(max(safeNdotV + safeAO, 1e-5), exponent) - 1.0 + safeAO);
+}
+
+float3 ComputeMultiBounceAO(float ao, float3 albedo, float strength) {
+    float safeAO = saturate(ao);
+    float3 safeAlbedo = saturate(albedo);
+    float3 a = 2.0404 * safeAlbedo - 0.3324;
+    float3 b = -4.7951 * safeAlbedo + 0.6417;
+    float3 c = 2.7552 * safeAlbedo + 0.6903;
+    float3 bounced = saturate(max(float3(safeAO, safeAO, safeAO), ((safeAO * a + b) * safeAO + c) * safeAO));
+    return lerp(float3(safeAO, safeAO, safeAO), bounced, saturate(strength));
+}
+
 // =============================================================================
 // LTC Rectangular & Disk Area Light Contract (M15-U5-40 .. M15-U5-45)
 // Matches Axle::AreaLightLTCContract in Engine/Renderer/src/RenderContracts.cpp.

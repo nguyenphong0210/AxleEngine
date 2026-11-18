@@ -197,6 +197,143 @@ bool RunM15OcclusionSphereTests(RHISceneRenderer& renderer, const RenderWorld& w
         }
     }
     RENDER_CHECK(GetRHIValidationErrorCount() == 0, "sphere fixture native validation");
+
+    // M15-U4-GTAO-HALO-FIX: Sphere-on-floor halo regression (actual prepass + compute + normal-depth CSUpsample + ForwardPBR).
+    {
+        auto floorMesh = std::make_shared<RHIMesh>();
+        std::vector<RHIVertex3D> floorVerts(4);
+        const glm::vec2 corners[]{{-12.0f, -12.0f}, {12.0f, -12.0f}, {12.0f, 12.0f}, {-12.0f, 12.0f}};
+        for (size_t k = 0; k < 4; ++k) {
+            floorVerts[k].Position = {corners[k].x, -1.0f, corners[k].y};
+            floorVerts[k].Normal = {0.0f, 1.0f, 0.0f};
+            floorVerts[k].Tangent = {1.0f, 0.0f, 0.0f, 1.0f};
+            floorVerts[k].TexCoord = (corners[k] + 12.0f) / 24.0f;
+        }
+        const std::vector<uint32_t> floorIndices{0, 2, 1, 0, 3, 2};
+        RENDER_CHECK(floorMesh->Init(floorVerts, floorIndices, "U4HaloFloor"), "halo regression floor mesh");
+
+        RHIMaterialDesc glossySphereDesc;
+        glossySphereDesc.BaseColor = {0.82f, 0.76f, 0.56f, 1.0f};
+        glossySphereDesc.Metallic = 0.0f;
+        glossySphereDesc.Roughness = 0.25f;
+        auto glossySphereMat = std::make_shared<RHIMaterial>(glossySphereDesc);
+
+        RHIMaterialDesc floorMatDesc;
+        floorMatDesc.BaseColor = {0.74f, 0.76f, 0.80f, 1.0f};
+        floorMatDesc.Metallic = 0.0f;
+        floorMatDesc.Roughness = 0.8f;
+        floorMatDesc.CullMode = CullMode::None;
+        auto floorMat = std::make_shared<RHIMaterial>(floorMatDesc);
+
+        RenderWorld floorWorld = world;
+        floorWorld.Meshes[0].Material.RHIMaterialAsset = glossySphereMat;
+        RenderMeshInstance floorInst;
+        floorInst.EntityID = 4202;
+        floorInst.NativeView = floorMesh->CaptureView();
+        floorInst.Material.RHIMaterialAsset = floorMat;
+        floorWorld.Meshes.push_back(floorInst);
+
+        const glm::vec3 camPos(0.0f, 1.5f, 5.2f);
+        PerspectiveCamera floorCamera(55.0f, 1.0f, 0.1f, 100.0f);
+        floorCamera.SetViewMatrix(glm::lookAtRH(camPos, glm::vec3(0.0f, -0.25f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), camPos);
+
+        auto targets = std::make_shared<RHIViewTargets>();
+        RHIViewTargetDesc td;
+        td.Width = td.Height = size;
+        td.HDR = true;
+
+        SceneRenderSettings floorSettings = settings;
+        floorSettings.EnableToneMapping = true;
+        floorSettings.EnableFXAA = floorSettings.EnableTAA = floorSettings.EnableContactShadows = false;
+        std::vector<glm::vec4> hdrOff, hdrOn, resolvedAO, floorNormals, floorDepth;
+
+        floorSettings.EnableGTAO = false;
+        td.EnableNormal = td.EnableGTAO = td.EnableScreenStorage = false;
+        RENDER_CHECK(targets->Configure(td), "halo regression baseline targets");
+        renderer.RenderWorldView(floorWorld, floorCamera, targets->Get(RHIViewTarget::Color), targets->Get(RHIViewTarget::Depth), floorSettings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() &&
+                     Read(*targets->Get(RHIViewTarget::HDR), hdrOff), "halo regression baseline render");
+
+        floorSettings.EnableGTAO = true;
+        td.EnableNormal = td.EnableGTAO = td.EnableScreenStorage = true;
+        RENDER_CHECK(targets->Configure(td), "halo regression GTAO targets");
+        renderer.RenderWorldView(floorWorld, floorCamera, targets->Get(RHIViewTarget::Color), targets->Get(RHIViewTarget::Depth), floorSettings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() &&
+                     targets->GetGTAOResolved() &&
+                     Read(*targets->Get(RHIViewTarget::HDR), hdrOn) &&
+                     Read(*targets->GetGTAOResolved(), resolvedAO) &&
+                     Read(*targets->Get(RHIViewTarget::ScreenNormal), floorNormals) &&
+                     Read(*targets->Get(RHIViewTarget::OpaqueDepth), floorDepth),
+            "halo regression GTAO render and readbacks");
+
+        for (const auto label : {"off", "ao"}) {
+            const auto& img = (label[0] == 'o') ? hdrOff : hdrOn;
+            std::ofstream ppm(output / (std::string("M15_U4D_sphere_floor-") + label + ".ppm"), std::ios::binary);
+            ppm << "P6\n" << size << ' ' << size << "\n255\n";
+            for (const auto& px : img) {
+                for (int c = 0; c < 3; ++c) {
+                    const float x = std::max(px[c], 0.0f);
+                    const float m = std::clamp((x * (2.51f * x + .03f)) / (x * (2.43f * x + .59f) + .14f), 0.0f, 1.0f);
+                    const auto b = static_cast<unsigned char>(std::lround(std::pow(m, 1.0f / 2.2f) * 255));
+                    ppm.write(reinterpret_cast<const char*>(&b), 1);
+                }
+            }
+        }
+
+        const glm::mat4 invVP = glm::inverse(floorCamera.GetProjectionMatrixZO() * floorCamera.GetViewMatrix());
+        float minFloorContactAO = 1.0f;
+        float minMidOverhangFloorAO = 1.0f;
+        float minLateralFloorHaloAO = 1.0f;
+        float minSphereRimAO = 1.0f;
+        size_t floorContactCount = 0, midOverhangCount = 0, lateralFloorCount = 0, sphereRimCount = 0;
+
+        for (uint32_t y = 0; y < size; ++y) {
+            for (uint32_t x = 0; x < size; ++x) {
+                const size_t idx = size_t(y) * size + x;
+                const auto& norm = floorNormals[idx];
+                const float d = floorDepth[idx].x;
+                const float aoVal = resolvedAO[idx].x;
+                RENDER_CHECK(std::isfinite(aoVal) && aoVal >= 0.0f && aoVal <= 1.0f, "finite bounded sphere-floor resolved AO");
+                if (norm.w < 0.5f || d <= 0.0f || d >= 0.9999f) continue;
+
+                const glm::vec4 clip(2.0f * (x + 0.5f) / size - 1.0f, 1.0f - 2.0f * (y + 0.5f) / size, d, 1.0f);
+                const glm::vec4 wh = invVP * clip;
+                const glm::vec3 wp = glm::vec3(wh) / wh.w;
+                const float radialXZ = std::hypot(wp.x, wp.z);
+
+                if (norm.y > 0.95f && std::abs(wp.y + 1.0f) < 0.05f) {
+                    if (radialXZ < 0.70f) {
+                        minFloorContactAO = std::min(minFloorContactAO, aoVal);
+                        ++floorContactCount;
+                    } else if (radialXZ >= 1.50f && radialXZ < 2.25f) {
+                        minMidOverhangFloorAO = std::min(minMidOverhangFloorAO, aoVal);
+                        ++midOverhangCount;
+                    } else if (radialXZ >= 2.25f && radialXZ <= 3.40f) {
+                        minLateralFloorHaloAO = std::min(minLateralFloorHaloAO, aoVal);
+                        ++lateralFloorCount;
+                    }
+                } else if (glm::length(wp) < 1.10f && wp.y > -0.20f) {
+                    const float NdotV = glm::dot(glm::normalize(glm::vec3(norm)), glm::normalize(camPos - wp));
+                    if (NdotV > 0.02f && NdotV < 0.42f) {
+                        minSphereRimAO = std::min(minSphereRimAO, aoVal);
+                        ++sphereRimCount;
+                    }
+                }
+            }
+        }
+        evidence << "sphere_floor contact_samples=" << floorContactCount << " min_contact_ao=" << minFloorContactAO
+                 << " mid_samples=" << midOverhangCount << " min_mid_ao=" << minMidOverhangFloorAO
+                 << " lateral_samples=" << lateralFloorCount << " min_lateral_ao=" << minLateralFloorHaloAO
+                 << " rim_samples=" << sphereRimCount << " min_rim_ao=" << minSphereRimAO << '\n';
+        RENDER_CHECK(floorContactCount > 10 && minFloorContactAO < 0.90f && minFloorContactAO > 0.05f,
+            "sphere-on-floor base contact exhibits genuine non-crushed AO");
+        RENDER_CHECK(midOverhangCount > 20 && minMidOverhangFloorAO >= 0.75f,
+            "sphere-on-floor overhang belt fades smoothly without harsh black ring");
+        RENDER_CHECK(lateralFloorCount > 20 && minLateralFloorHaloAO >= 0.95f,
+            "sphere-on-floor outer floor margin has no 4m-cutoff floating dark halo");
+        RENDER_CHECK(sphereRimCount > 20 && minSphereRimAO >= 0.88f,
+            "sphere upper/lateral grazing silhouette has no dark rim bleed from floor or self-occlusion");
+    }
     return true;
 }
 
@@ -222,15 +359,21 @@ bool RunM15OcclusionDispatchTests(RHISceneRenderer& renderer, const RenderWorld&
         renderer.RenderWorldView(world, camera, targets->Get(RHIViewTarget::Color), targets->Get(RHIViewTarget::Depth), settings, nullptr, targets);
         RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors(), "odd GTAO production render");
         auto* ao = targets->GetGTAO();
+        auto* aoResolved = targets->GetGTAOResolved();
         RENDER_CHECK(ao && ao->GetWidth() == std::max(1u, extent.x >> 1) && ao->GetHeight() == std::max(1u, extent.y >> 1), "actual odd GTAO storage extent");
-        std::vector<glm::vec4> values;
-        RENDER_CHECK(Read(*ao, values), "odd GTAO half-float readback");
+        RENDER_CHECK(aoResolved && aoResolved->GetWidth() == extent.x && aoResolved->GetHeight() == extent.y, "actual odd full-res resolved GTAO storage extent");
+        std::vector<glm::vec4> values, resolvedValues;
+        RENDER_CHECK(Read(*ao, values) && Read(*aoResolved, resolvedValues), "odd GTAO half-float readback");
         for (const auto value : values)
             RENDER_CHECK(std::isfinite(value.x) && value.x >= 0 && value.x <= 1 &&
                 std::isfinite(value.y) && value.y >= 0 && value.y <= 1, "all dispatched AO/contact texels are finite and bounded");
+        for (const auto value : resolvedValues)
+            RENDER_CHECK(std::isfinite(value.x) && value.x >= 0 && value.x <= 1 &&
+                std::isfinite(value.y) && value.y >= 0 && value.y <= 1, "all resolved full-res AO/contact texels are finite and bounded");
         RENDER_CHECK(GetRHIValidationErrorCount() == 0, "odd GTAO dispatch and reconstruction have no validation errors");
-        evidence << extent.x << 'x' << extent.y << " -> " << ao->GetWidth() << 'x' << ao->GetHeight()
-            << " finite_texels=" << values.size() << '\n';
+        evidence << extent.x << 'x' << extent.y << " -> half=" << ao->GetWidth() << 'x' << ao->GetHeight()
+            << " full=" << aoResolved->GetWidth() << 'x' << aoResolved->GetHeight()
+            << " finite_texels=" << resolvedValues.size() << '\n';
     }
     std::cout << "PASS M15-U4-C native GTAO dispatch and reconstruction: 1x1, 3x5, 127x63, 1919x1079\n";
     return true;
@@ -367,6 +510,123 @@ bool RunM15OcclusionRenderingTests(const std::filesystem::path& output) {
         RENDER_CHECK(maxError < 2e-5f, "production bilateral reconstruction preserves each surface and neutral unmatched fallback");
     }
     std::cout << "PASS M15-U4-C production GTAO reconstruction: edge isolation, reversed visibility, thin fallback, odd and minimal extents\n";
+
+    // M15-U4-GTAO-HALO-FIX: Validate CSUpsample normal & plane-depth edge isolation directly on GPU.
+    {
+        compile.EntryPoint = "CSUpsample";
+        compile.Stage = RHIShaderStage::Compute;
+        const auto upsampleCS = RHIShaderCompiler::Get().Compile(compile);
+        RENDER_CHECK(upsampleCS.Success, "compile production GTAO CSUpsample shader");
+
+        nri::RootDescriptorDesc upRoot{};
+        upRoot.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        upRoot.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        nri::DescriptorRangeDesc upInputs[4]{}, upStorage{};
+        for (uint32_t k = 0; k < 4; ++k) {
+            upInputs[k].baseRegisterIndex = k < 3 ? k : 0;
+            upInputs[k].descriptorNum = 1;
+            upInputs[k].shaderStages = nri::StageBits::COMPUTE_SHADER;
+            upInputs[k].descriptorType = k < 3 ? nri::DescriptorType::TEXTURE : nri::DescriptorType::SAMPLER;
+        }
+        upStorage.descriptorNum = 1;
+        upStorage.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        upStorage.descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        nri::DescriptorSetDesc upSets[2]{};
+        upSets[0].registerSpace = 1; upSets[0].ranges = upInputs; upSets[0].rangeNum = 4;
+        upSets[1].registerSpace = 2; upSets[1].ranges = &upStorage; upSets[1].rangeNum = 1;
+        nri::PipelineLayoutDesc upLayoutDesc{};
+        upLayoutDesc.rootDescriptors = &upRoot; upLayoutDesc.rootDescriptorNum = 1;
+        upLayoutDesc.descriptorSets = upSets; upLayoutDesc.descriptorSetNum = 2;
+        upLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        RHIPipelineLayout upLayout;
+        RENDER_CHECK(upLayout.Init(upLayoutDesc), "GTAO CSUpsample fixture layout");
+        RHIComputePipelineDesc upPsoDesc;
+        upPsoDesc.Layout = &upLayout;
+        upPsoDesc.ComputeShader = upsampleCS.Bytecode;
+        auto* upPipeline = cache.GetOrCreateComputePipeline(upPsoDesc);
+        RENDER_CHECK(upPipeline, "GTAO CSUpsample pipeline");
+
+        for (const glm::uvec2 ext : {glm::uvec2(16, 16), glm::uvec2(17, 13)}) {
+            const uint32_t hw = std::max(1u, ext.x >> 1), hh = std::max(1u, ext.y >> 1);
+            std::vector<float> upDepths(size_t(ext.x) * ext.y);
+            std::vector<glm::vec4> upNorms(size_t(ext.x) * ext.y);
+            const glm::vec3 rimNorm = glm::normalize(glm::vec3(-0.96f, 0.20f, 0.15f));
+            const glm::vec3 floorNorm(0.0f, 1.0f, 0.0f);
+            for (uint32_t y = 0; y < ext.y; ++y) {
+                for (uint32_t x = 0; x < ext.x; ++x) {
+                    const bool rim = x < ext.x / 2;
+                    // Only 0.025 normalized depth apart (0.192 vs 0.200 -> 8cm at Z~2m):
+                    // shallow enough that depth-only 0.05*Z would bleed, yet normal edge must isolate!
+                    upDepths[size_t(y) * ext.x + x] = rim ? 0.192f : 0.200f;
+                    upNorms[size_t(y) * ext.x + x] = glm::vec4(rim ? rimNorm : floorNorm, 1.0f);
+                }
+            }
+            std::vector<glm::vec4> upHalf(size_t(hw) * hh);
+            for (uint32_t y = 0; y < hh; ++y) {
+                for (uint32_t x = 0; x < hw; ++x) {
+                    const uint32_t sx = uint32_t((uint64_t(2 * x + 1) * ext.x) / (2 * hw));
+                    const bool rim = sx < ext.x / 2;
+                    upHalf[size_t(y) * hw + x] = glm::vec4(rim ? 1.0f : 0.15f, 1.0f, 0.0f, 0.0f);
+                }
+            }
+            RHITexture dTex, nTex, hTex, outTex;
+            auto dDesc = RHITextureDesc::RenderTarget2D(ext.x, ext.y, RHITextureFormat::R32_FLOAT);
+            dDesc.Usage = RHITextureUsage::ShaderResource;
+            RENDER_CHECK(dTex.Init(dDesc), "upsample depth");
+            dDesc.Format = RHITextureFormat::RGBA32_FLOAT;
+            RENDER_CHECK(nTex.Init(dDesc), "upsample normal");
+            dDesc.Width = hw; dDesc.Height = hh;
+            RENDER_CHECK(hTex.Init(dDesc) &&
+                outTex.Init(RHITextureDesc::StorageTexture2D(ext.x, ext.y, RHITextureFormat::RGBA16_FLOAT)) &&
+                Upload(dTex, upDepths.data(), 4) && Upload(nTex, upNorms.data(), 16) && Upload(hTex, upHalf.data(), 16),
+                "upsample inputs");
+
+            RHIGTAOConstants upConsts{};
+            upConsts.InvProjection[2][2] = 10.0f;
+            upConsts.ScreenSize = {float(ext.x), float(ext.y), 1.0f / ext.x, 1.0f / ext.y};
+            RENDER_CHECK(uniform.UpdateData(&upConsts, sizeof(upConsts)), "upsample constants");
+            RHIDescriptorPool upPool;
+            RENDER_CHECK(upPool.Init(), "upsample descriptor pool");
+            auto* tSet = upPool.AllocateDescriptorSet(upLayout, 0);
+            auto* sSet = upPool.AllocateDescriptorSet(upLayout, 1);
+            RENDER_CHECK(tSet && sSet &&
+                upPool.UpdateTexture(tSet, 0, 0, dTex.GetSRV()) &&
+                upPool.UpdateTexture(tSet, 1, 0, nTex.GetSRV()) &&
+                upPool.UpdateTexture(tSet, 2, 0, hTex.GetSRV()) &&
+                upPool.UpdateSampler(tSet, 3, 0, sampler.GetNative()) &&
+                upPool.UpdateStorageTexture(sSet, 0, 0, outTex.GetUAV()), "upsample bindings");
+
+            RHICommandBuffer cmd;
+            RENDER_CHECK(cmd.Init() && cmd.Begin(), "upsample cmd");
+            cmd.TransitionTexture(outTex.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ShaderResourceStorage);
+            cmd.SetPipeline(upPipeline);
+            cmd.SetPipelineLayout(nri::BindPoint::COMPUTE, upLayout);
+            cmd.SetRootDescriptor(0, uniform.GetCBV(), 0, nri::BindPoint::COMPUTE);
+            upPool.Bind(cmd.GetNative());
+            cmd.SetDescriptorSet(nri::BindPoint::COMPUTE, 0, tSet);
+            nri::SetDescriptorSetDesc outBind{};
+            outBind.bindPoint = nri::BindPoint::COMPUTE;
+            outBind.setIndex = 1;
+            outBind.descriptorSet = sSet;
+            device.GetNRICore().CmdSetDescriptorSet(*cmd.GetNative(), outBind);
+            cmd.Dispatch((ext.x + 7) / 8, (ext.y + 7) / 8, 1);
+            std::vector<glm::vec4> upActual;
+            RENDER_CHECK(cmd.End() && cmd.Submit() && device.WaitIdle() && Read(outTex, upActual), "upsample readback");
+            for (uint32_t y = 0; y < ext.y; ++y) {
+                for (uint32_t x = 0; x < ext.x; ++x) {
+                    const bool rim = x < ext.x / 2;
+                    const float aoOut = upActual[size_t(y) * ext.x + x].x;
+                    RENDER_CHECK(std::isfinite(aoOut), "finite upsample output");
+                    if (rim) {
+                        RENDER_CHECK(aoOut >= 0.99f, "CSUpsample isolates sphere-rim normal from shallow adjacent floor AO bleed");
+                    } else {
+                        RENDER_CHECK(std::abs(aoOut - 0.15f) < 0.02f, "CSUpsample isolates floor AO cleanly without sphere bleed");
+                    }
+                }
+            }
+        }
+        std::cout << "PASS M15-U4-GTAO-HALO-FIX CSUpsample: normal and plane-depth edge isolation on even and odd extents\n";
+    }
     return true;
 }
 

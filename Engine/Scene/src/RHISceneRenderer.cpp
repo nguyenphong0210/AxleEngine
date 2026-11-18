@@ -337,10 +337,14 @@ namespace Axle {
         } else {
             m_GTAOComputeTextureSet = m_GTAODescriptorPool.AllocateDescriptorSet(m_GTAOComputePipelineLayout, 0);
             m_GTAOComputeStorageSet = m_GTAODescriptorPool.AllocateDescriptorSet(m_GTAOComputePipelineLayout, 1);
+            m_GTAOUpsampleTextureSet = m_GTAODescriptorPool.AllocateDescriptorSet(m_GTAOUpsamplePipelineLayout, 0);
+            m_GTAOUpsampleStorageSet = m_GTAODescriptorPool.AllocateDescriptorSet(m_GTAOUpsamplePipelineLayout, 1);
             m_GTAOApplyDescriptorSet = m_GTAODescriptorPool.AllocateDescriptorSet(m_GTAOApplyPipelineLayout, 0);
-            if (!m_GTAOComputeTextureSet || !m_GTAOComputeStorageSet || !m_GTAOApplyDescriptorSet) return false;
+            if (!m_GTAOComputeTextureSet || !m_GTAOComputeStorageSet ||
+                !m_GTAOUpsampleTextureSet || !m_GTAOUpsampleStorageSet || !m_GTAOApplyDescriptorSet) return false;
             if (m_GTAOSampler.IsValid()) {
                 if (!m_GTAODescriptorPool.UpdateSampler(m_GTAOComputeTextureSet, 2, 0, m_GTAOSampler.GetNative()) ||
+                    !m_GTAODescriptorPool.UpdateSampler(m_GTAOUpsampleTextureSet, 3, 0, m_GTAOSampler.GetNative()) ||
                     !m_GTAODescriptorPool.UpdateSampler(m_GTAOApplyDescriptorSet, 3, 0, m_GTAOSampler.GetNative())) return false;
             }
         }
@@ -668,13 +672,17 @@ namespace Axle {
         m_IntermediateFXAATarget = nullptr;
 
         m_GTAOComputePipeline = nullptr;
+        m_GTAOUpsamplePipeline = nullptr;
         m_GTAOApplyPipelineSDR = nullptr;
         m_GTAOApplyPipelineHDR = nullptr;
         m_GTAOComputePipelineLayout.Shutdown();
+        m_GTAOUpsamplePipelineLayout.Shutdown();
         m_GTAOApplyPipelineLayout.Shutdown();
         m_GTAOConstantBuffer.Shutdown();
         m_GTAOComputeTextureSet = nullptr;
         m_GTAOComputeStorageSet = nullptr;
+        m_GTAOUpsampleTextureSet = nullptr;
+        m_GTAOUpsampleStorageSet = nullptr;
         m_GTAOApplyDescriptorSet = nullptr;
         m_GTAODescriptorPool.Shutdown();
         m_GTAOSampler.Shutdown();
@@ -1634,6 +1642,15 @@ namespace Axle {
         }
         m_GTAOComputeShader = csRes.Bytecode;
 
+        RHIShaderCompileDesc upsampleCsDesc = csDesc;
+        upsampleCsDesc.EntryPoint = "CSUpsample";
+        auto upsampleCsRes = compiler.Compile(upsampleCsDesc);
+        if (!upsampleCsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile GTAO Upsample CS: {0}", upsampleCsRes.ErrorMessage);
+            return false;
+        }
+        m_GTAOUpsampleShader = upsampleCsRes.Bytecode;
+
         // 2. Vertex Shader: VSMain
         RHIShaderCompileDesc vsDesc = csDesc;
         vsDesc.EntryPoint = "VSMain";
@@ -1718,6 +1735,34 @@ namespace Axle {
 
         if (!m_GTAOComputePipelineLayout.Init(compLayoutDesc)) return false;
 
+        // 1b. Full-Resolution Bilateral Upsample Pipeline Layout:
+        // Set 0 (space 1): t0 Depth, t1 Normal, t2 HalfResGTAO, s0 Sampler
+        // Set 1 (space 2): u0 ResolvedGTAO
+        nri::DescriptorRangeDesc upsampleTexRanges[4] = {};
+        for (uint32_t idx = 0; idx < 4; ++idx) {
+            upsampleTexRanges[idx].baseRegisterIndex = idx < 3 ? idx : 0;
+            upsampleTexRanges[idx].descriptorNum = 1;
+            upsampleTexRanges[idx].descriptorType = idx < 3 ? nri::DescriptorType::TEXTURE : nri::DescriptorType::SAMPLER;
+            upsampleTexRanges[idx].shaderStages = nri::StageBits::COMPUTE_SHADER;
+            upsampleTexRanges[idx].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        }
+        nri::DescriptorSetDesc upsampleDescSets[2] = {};
+        upsampleDescSets[0].registerSpace = 1;
+        upsampleDescSets[0].ranges = upsampleTexRanges;
+        upsampleDescSets[0].rangeNum = 4;
+        upsampleDescSets[1].registerSpace = 2;
+        upsampleDescSets[1].ranges = compStorageRanges;
+        upsampleDescSets[1].rangeNum = 1;
+
+        nri::PipelineLayoutDesc upsampleLayoutDesc = {};
+        upsampleLayoutDesc.rootRegisterSpace = 0;
+        upsampleLayoutDesc.rootDescriptors = &compRootDesc;
+        upsampleLayoutDesc.rootDescriptorNum = 1;
+        upsampleLayoutDesc.descriptorSets = upsampleDescSets;
+        upsampleLayoutDesc.descriptorSetNum = 2;
+        upsampleLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        if (!m_GTAOUpsamplePipelineLayout.Init(upsampleLayoutDesc)) return false;
+
         // 2. Apply Pipeline Layout:
         // Root Descriptor [0] b0 space 0: 256-byte RHIGTAOConstants
         nri::RootDescriptorDesc applyRootDesc = {};
@@ -1799,10 +1844,16 @@ namespace Axle {
         compDesc.ComputeShader = m_GTAOComputeShader;
         m_GTAOComputePipeline = cache.GetOrCreateComputePipeline(compDesc);
 
+        RHIComputePipelineDesc upsampleDesc;
+        upsampleDesc.Layout = &m_GTAOUpsamplePipelineLayout;
+        upsampleDesc.ComputeShader = m_GTAOUpsampleShader;
+        m_GTAOUpsamplePipeline = cache.GetOrCreateComputePipeline(upsampleDesc);
+
         m_GTAOApplyPipelineSDR = GetOrCreateGTAOApplyPipeline(nri::Format::RGBA8_UNORM);
         m_GTAOApplyPipelineHDR = GetOrCreateGTAOApplyPipeline(nri::Format::RGBA16_SFLOAT);
 
-        return m_GTAOComputePipeline != nullptr && m_GTAOApplyPipelineSDR != nullptr && m_GTAOApplyPipelineHDR != nullptr;
+        return m_GTAOComputePipeline != nullptr && m_GTAOUpsamplePipeline != nullptr &&
+               m_GTAOApplyPipelineSDR != nullptr && m_GTAOApplyPipelineHDR != nullptr;
     }
 
     bool RHISceneRenderer::CompileSSRShaders(RHIDevice& device) {

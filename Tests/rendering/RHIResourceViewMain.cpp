@@ -265,7 +265,9 @@ static bool Run(RHIType backend) {
     RENDER_CHECK(draw(), "M14 Editor feature mix renders with explicit viewport-owned targets");
     const auto targets = view.GetTargets();
     RENDER_CHECK(targets->GetGTAO() && targets->GetGTAO()->GetWidth() == 32 &&
-        targets->GetHiZ(7) && targets->GetBloom(5), "viewport publishes half-resolution GTAO and complete Hi-Z/bloom levels");
+        targets->GetGTAOResolved() && targets->GetGTAOResolved()->GetWidth() == 64 &&
+        targets->GetGTAOResolved()->GetHeight() == 64 &&
+        targets->GetHiZ(7) && targets->GetBloom(5), "viewport publishes half-res GTAO, full-res resolved GTAO, and complete Hi-Z/bloom levels");
     RENDER_CHECK(!ReadTexture(*view.GetColorTexture()).empty(), "M14 explicit viewport output can be read back");
     settings.EnableAutoExposure = settings.EnableDDGI = true;
     RENDER_CHECK(draw() && view.GetTargets()->GetExposure() && view.GetTargets()->GetDDGI(),
@@ -306,8 +308,9 @@ static bool Run(RHIType backend) {
     settings.EnableGTAO = settings.EnableContactShadows = settings.EnableSSR = settings.EnableBloom = false;
     settings.EnableAutoExposure = settings.EnableDDGI = false;
     settings.EnableToneMapping = settings.EnableFXAA = false;
-    RENDER_CHECK(draw() && !view.GetTargets()->GetGTAO() && !view.GetTargets()->GetHiZ(0) &&
-        !view.GetTargets()->GetBloom(0), "disabling effects replaces the complete target generation and recovers baseline");
+    RENDER_CHECK(draw() && !view.GetTargets()->GetGTAO() && !view.GetTargets()->GetGTAOResolved() &&
+        !view.GetTargets()->GetHiZ(0) && !view.GetTargets()->GetBloom(0),
+        "disabling effects replaces the complete target generation and recovers baseline");
     {
         unsigned count = 0;
         ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {

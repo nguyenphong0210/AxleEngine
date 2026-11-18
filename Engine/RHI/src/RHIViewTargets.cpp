@@ -75,7 +75,8 @@ namespace Axle::RHI {
             (!check2D(RHIViewTarget::ScreenStorage, m_Desc.Width, m_Desc.Height,
                       m_Desc.HDR ? RHITextureFormat::RGBA16_FLOAT : m_Desc.ColorFormat) ||
              !Get(RHIViewTarget::ScreenStorage)->GetUAV())) return false;
-        if (m_Desc.EnableGTAO && (!check2D(RHIViewTarget::GTAO, std::max(1u, m_Desc.Width >> 1), std::max(1u, m_Desc.Height >> 1), RHITextureFormat::RGBA16_FLOAT) || !Get(RHIViewTarget::GTAO)->GetUAV())) return false;
+        if (m_Desc.EnableGTAO && (!check2D(RHIViewTarget::GTAO, std::max(1u, m_Desc.Width >> 1), std::max(1u, m_Desc.Height >> 1), RHITextureFormat::RGBA16_FLOAT) || !Get(RHIViewTarget::GTAO)->GetUAV() ||
+            !check2D(RHIViewTarget::GTAOResolved, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT) || !Get(RHIViewTarget::GTAOResolved)->GetUAV())) return false;
         for (uint32_t level = 0; m_Desc.EnableBloom && level < 6; ++level) {
             uint32_t width = std::max(1u, m_Desc.Width >> (level + 1));
             uint32_t height = std::max(1u, m_Desc.Height >> (level + 1));
@@ -208,6 +209,13 @@ namespace Axle::RHI {
                 "ViewTarget_GTAO_HalfRes");
             if (!texture->Init(native)) return false;
             candidate.m_Textures[static_cast<size_t>(RHIViewTarget::GTAO)] = std::move(texture);
+
+            auto resolvedTexture = std::make_unique<RHITexture>();
+            auto resolvedNative = RHITextureDesc::StorageTexture2D(
+                desc.Width, desc.Height, RHITextureFormat::RGBA16_FLOAT,
+                "ViewTarget_GTAO_Resolved");
+            if (!resolvedTexture->Init(resolvedNative)) return false;
+            candidate.m_Textures[static_cast<size_t>(RHIViewTarget::GTAOResolved)] = std::move(resolvedTexture);
         }
         if (desc.EnableBloom) {
             uint32_t bloomWidth = std::max(1u, desc.Width >> 1);

@@ -85,7 +85,7 @@ bool RunM15OcclusionSurfaceTests(RHISceneRenderer& renderer, const std::filesyst
     };
     std::ofstream evidence(output / "M15_U4E_surfaces.txt");
     RENDER_CHECK(evidence.is_open(), "U4-E evidence");
-    std::vector<glm::vec4> hdr, normals, ao, depth;
+    std::vector<glm::vec4> hdr, normals, ao, aoResolved, depth;
     auto capture = [&](const std::string& name) {
         std::ofstream image(output / ("M15_U4E_" + name + ".ppm"), std::ios::binary);
         image << "P6\n" << size << ' ' << size << "\n255\n";
@@ -108,9 +108,12 @@ bool RunM15OcclusionSurfaceTests(RHISceneRenderer& renderer, const std::filesyst
         for (auto p : hdr) for (int c = 0; c < 4; ++c) RENDER_CHECK(std::isfinite(p[c]), "finite mapped/deformed HDR RGBA");
         if (readGuides) {
             RENDER_CHECK(Read(*targets->Get(RHIViewTarget::ScreenNormal), normals) &&
-                Read(*targets->GetGTAO(), ao) && Read(*targets->Get(RHIViewTarget::OpaqueDepth), depth), "U4-E actual normal/visibility/depth readbacks");
+                Read(*targets->GetGTAO(), ao) && targets->GetGTAOResolved() &&
+                Read(*targets->GetGTAOResolved(), aoResolved) &&
+                Read(*targets->Get(RHIViewTarget::OpaqueDepth), depth), "U4-E actual normal/visibility/depth readbacks");
             for (auto p : normals) for (int c = 0; c < 4; ++c) RENDER_CHECK(std::isfinite(p[c]), "finite mapped ScreenNormal");
             for (auto p : ao) RENDER_CHECK(std::isfinite(p.x) && std::isfinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1, "bounded mapped AO/contact");
+            for (auto p : aoResolved) RENDER_CHECK(std::isfinite(p.x) && std::isfinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1, "bounded full-res resolved AO/contact");
             for (auto p : depth) RENDER_CHECK(std::isfinite(p.x) && p.x >= 0 && p.x <= 1, "finite deformed depth");
         }
         if (world.Meshes[0].Material.UseCustomShader) {
@@ -262,7 +265,7 @@ bool RunM15OcclusionSurfaceTests(RHISceneRenderer& renderer, const std::filesyst
             } else RENDER_CHECK(normals[i].w == 1 && std::abs(p.z + 1) < .001f, "disoccluded depth belongs to the real rear receiver");
         }
         RENDER_CHECK(covered > 400, "deformed fixture is actually drawn");
-        const auto reference = hdr, oldAO = ao;
+        const auto reference = hdr, oldAO = ao, oldResolvedAO = aoResolved;
         float minimumAO = 1;
         for (auto p : ao) minimumAO = std::min(minimumAO, p.x);
         RENDER_CHECK(minimumAO < .95f, "moving mesh genuinely occludes the rear receiver");
@@ -270,6 +273,7 @@ bool RunM15OcclusionSurfaceTests(RHISceneRenderer& renderer, const std::filesyst
         targets = std::make_shared<RHIViewTargets>();
         RENDER_CHECK(targets->Configure(desc) && render() && compare(reference), "current deformed image matches a fresh view without stale occlusion");
         for (size_t i = 0; i < ao.size(); ++i) RENDER_CHECK(glm::distance(glm::vec2(ao[i]), glm::vec2(oldAO[i])) < .001f, "no stale AO/contact after disocclusion");
+        for (size_t i = 0; i < aoResolved.size(); ++i) RENDER_CHECK(glm::distance(glm::vec2(aoResolved[i]), glm::vec2(oldResolvedAO[i])) < .001f, "no stale full-res resolved AO/contact after disocclusion");
         evidence << "offset=" << offset << " covered=" << covered << " disoccluded=" << disoccluded << " min_ao=" << minimumAO << '\n';
     }
     RENDER_CHECK(disoccluded > 400, "animated sequence really reveals previously covered pixels");

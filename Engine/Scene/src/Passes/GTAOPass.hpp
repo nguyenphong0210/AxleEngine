@@ -15,7 +15,7 @@ namespace Axle {
 
 namespace Axle::Passes {
     struct GTAOResources {
-        RenderGraph::Resource SceneColor, Input, SceneDepth, Depth, SceneNormal, Storage;
+        RenderGraph::Resource SceneColor, Input, SceneDepth, Depth, SceneNormal, Storage, ResolvedStorage;
     };
 
     struct GTAORecordInputs {
@@ -48,5 +48,7 @@ namespace Axle::Passes {
     private:
         static bool RecordCompute(RHISceneRenderer& renderer, const GTAORecordInputs& inputs,
                                   const PassRecordOps& ops);
+        static bool RecordUpsample(RHISceneRenderer& renderer, const GTAORecordInputs& inputs,
+                                   const PassRecordOps& ops);
     };
 }

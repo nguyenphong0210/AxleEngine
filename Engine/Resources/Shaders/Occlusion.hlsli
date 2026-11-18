@@ -64,7 +64,11 @@ float2 AxleForwardVisibility(float3 position, float4x4 projection, float2 enable
     // Non-depth-writing or otherwise unrepresented fragments cannot borrow
     // visibility from the surface behind them.
     if (abs(fragmentZ - guideZ) > 0.001 * max(abs(fragmentZ), 0.1)) return float2(1.0, 1.0);
-    float2 value = saturate(AxleReconstructOcclusion(u_ForwardOcclusionDepth, u_ForwardOcclusion, pixel, unproject));
+    uint2 occlusionSize;
+    u_ForwardOcclusion.GetDimensions(occlusionSize.x, occlusionSize.y);
+    float2 value = (occlusionSize.x == sceneSize.x && occlusionSize.y == sceneSize.y)
+        ? saturate(u_ForwardOcclusion.Load(int3(pixel, 0)))
+        : saturate(AxleReconstructOcclusion(u_ForwardOcclusionDepth, u_ForwardOcclusion, pixel, unproject));
     // Separated lighting consumes true visibility. Soft floors belong only to
     // the retained bounded post-composite fallback in GTAO.hlsl.
     return float2(enabled.x > 0.0 ? value.x : 1.0,

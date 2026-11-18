@@ -307,6 +307,11 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     float3 reflectionEnvironment = 0.0;
     float3 reflectionResponse = 0.0;
     float3 reflDir = reflect(-view, normal);
+    float combinedAO = saturate(surface.AO) * screenVisibility.x;
+    float3 diffuseAO = ComputeMultiBounceAO(combinedAO, base, saturate(u_LightReserved[1].w));
+    float specAO = ComputeSpecularOcclusion(nv, combinedAO, roughness);
+    float3 diffuseRatio = (screenVisibility.x > 1e-4) ? (diffuseAO / screenVisibility.x) : float3(0.0, 0.0, 0.0);
+    float specRatio = (screenVisibility.x > 1e-4) ? (specAO / screenVisibility.x) : 0.0;
     if (u_LightCounts.w == 1u) {
         uint envWidth, envHeight, envLevels;
         u_PrefilterMap.GetDimensions(0, envWidth, envHeight, envLevels);
@@ -322,8 +327,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float3 skyPrefiltered = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, skyReflection, roughness * maxLod).rgb * envIntensity;
         float3 prefiltered = EvaluateMultiProbeBlendHLSL(input.WorldPos, reflDir, roughness, u_EnvironmentSampler, skyPrefiltered).BlendedEnvColor;
         float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(nv, roughness)).rg;
-        ambient = (irradiance * base * ambientKD + prefiltered * (ambientF * envBRDF.x + envBRDF.y)) * saturate(surface.AO);
-        reflectionResponse = (ambientF * envBRDF.x + envBRDF.y) * saturate(surface.AO) * screenVisibility.x;
+        ambient = irradiance * base * ambientKD * diffuseRatio + prefiltered * (ambientF * envBRDF.x + envBRDF.y) * specRatio;
+        reflectionResponse = (ambientF * envBRDF.x + envBRDF.y) * specAO;
         reflectionEnvironment = prefiltered * reflectionResponse;
     } else {
         float3 ambientColor = hasMultiLightSun ? u_SunLight.AmbientColor.rgb : max(u_SunColor.rgb, float3(0,0,0));
@@ -332,9 +337,9 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(nv, roughness)).rg;
         float3 probeSpec = probeBlend.ProbeColor * (ambientRef * envBRDF.x + envBRDF.y);
         float3 skySpec = ambientRef * 0.02 * (1.0 - saturate(u_LightReserved[0].z)) * ambientStrength;
-        ambient = (base * 0.03 * (1.0 - metallic) * ambientStrength + lerp(skySpec, probeSpec, probeBlend.ProbeCoverage)) * saturate(surface.AO);
-        reflectionResponse = (ambientRef * envBRDF.x + envBRDF.y) * saturate(surface.AO) * screenVisibility.x;
-        reflectionEnvironment = lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * saturate(surface.AO) * screenVisibility.x;
+        ambient = base * 0.03 * (1.0 - metallic) * ambientStrength * diffuseRatio + lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * specRatio;
+        reflectionResponse = (ambientRef * envBRDF.x + envBRDF.y) * specAO;
+        reflectionEnvironment = lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * specAO;
     }
     float3 color = direct + ambient * screenVisibility.x + max(surface.Emission, float3(0,0,0));
     color = clamp(color, 0.0, 65000.0);

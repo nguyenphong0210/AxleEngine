@@ -803,6 +803,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     float3 R = reflect(-V, N);
     float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(max(NdotV, 0.0), roughness)).rg;
     float envIntensity = max(u_LightReserved[0].y, 0.0);
+    float3 diffuseAO = ComputeMultiBounceAO(ao, albedo.rgb, saturate(u_LightReserved[1].w));
+    float specAO = ComputeSpecularOcclusion(NdotV, ao, roughness);
 
     if (hasSplitSumIBL) {
         // Image-Based Lighting (IBL) via Split-Sum Approximation + Multi-Probe Blend
@@ -820,14 +822,15 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
 
         float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0-NdotV, 5.0));
         float coatRough = clamp(coatAnisotropy.y, 0.04, 1.0);
+        float coatSpecAO = coatAnisotropy.x > 0.0 ? ComputeSpecularOcclusion(NdotV, ao, coatRough) : specAO;
         float3 skyCoatEnv = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), coatRough * MAX_REFLECTION_LOD).rgb * envIntensity;
         float3 coatEnvironment = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, coatRough, u_EnvironmentSampler, skyCoatEnv).BlendedEnvColor;
         diffuseAmbient *= (1.0-coatF) * (1.0-coatF);
-        specularAmbient = (specularAmbient * (1.0-coatF) * (1.0-coatF) + coatEnvironment * coatF) * u_MaterialSurface.w;
-        reflectionEnvironment = specularAmbient * ao;
+        specularAmbient = (specularAmbient * (1.0-coatF) * (1.0-coatF) * specAO + coatEnvironment * coatF * coatSpecAO) * u_MaterialSurface.w;
+        reflectionEnvironment = specularAmbient;
         reflectionResponse = ((ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation *
-            (1.0-coatF) * (1.0-coatF) + coatF) * u_MaterialSurface.w * ao;
-        ambient = (diffuseAmbient + specularAmbient) * ao;
+            (1.0-coatF) * (1.0-coatF) * specAO + coatF * coatSpecAO) * u_MaterialSurface.w;
+        ambient = diffuseAmbient * diffuseAO + specularAmbient;
     } else {
         // Shared analytical environment approximation with seamless local-probe split-sum blend:
         // local probes carry their own authored Intensity even when world sky/ambient is zero.
@@ -836,35 +839,36 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float3 analyticalSpec = ambientColor * ambientF * (1.0 - roughness * 0.5) * u_MaterialSurface.w * ggxEnergyCompensation * (1.0 - saturate(u_LightReserved[0].z)) * envIntensity;
         MultiProbeBlendResult envBlend = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, roughness, u_EnvironmentSampler, float3(0.0, 0.0, 0.0));
         float3 probeSpec = envBlend.ProbeColor * (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation * u_MaterialSurface.w;
-        float3 specularAmbient = lerp(analyticalSpec, probeSpec, envBlend.ProbeCoverage);
+        float3 specularAmbient = lerp(analyticalSpec, probeSpec, envBlend.ProbeCoverage) * specAO;
         // True split-sum BRDF reflectance drives dynamic SSR hits even in unlit dark rooms without sky IBL.
-        reflectionResponse = (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation * u_MaterialSurface.w;
+        reflectionResponse = (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation * u_MaterialSurface.w * specAO;
         if (coatAnisotropy.x > 0.0 && envBlend.ProbeCoverage > 0.0) {
             float coatF = saturate(coatAnisotropy.x) * (0.04 + 0.96 * pow(1.0 - NdotV, 5.0));
             float coatRough = clamp(coatAnisotropy.y, 0.04, 1.0);
+            float coatSpecAO = ComputeSpecularOcclusion(NdotV, ao, coatRough);
             float3 coatProbeEnv = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, coatRough, u_EnvironmentSampler, float3(0.0, 0.0, 0.0)).ProbeColor;
             float coatBlend = coatF * envBlend.ProbeCoverage;
             diffuseAmbient *= (1.0 - coatBlend) * (1.0 - coatBlend);
-            specularAmbient = specularAmbient * (1.0 - coatBlend) * (1.0 - coatBlend) + coatProbeEnv * coatBlend * u_MaterialSurface.w;
-            reflectionResponse = reflectionResponse * (1.0 - coatBlend) * (1.0 - coatBlend) + coatBlend * u_MaterialSurface.w;
+            specularAmbient = specularAmbient * (1.0 - coatBlend) * (1.0 - coatBlend) + coatProbeEnv * coatBlend * u_MaterialSurface.w * coatSpecAO;
+            reflectionResponse = reflectionResponse * (1.0 - coatBlend) * (1.0 - coatBlend) + coatBlend * u_MaterialSurface.w * coatSpecAO;
         }
-        reflectionEnvironment = specularAmbient * ao;
-        reflectionResponse *= ao;
-        ambient = (diffuseAmbient + specularAmbient) * ao;
+        reflectionEnvironment = specularAmbient;
+        ambient = diffuseAmbient * diffuseAO + specularAmbient;
     }
     
     if (u_Sheen.w >= 0.0) {
+        float sheenSpecAO = ComputeSpecularOcclusion(NdotV, ao, u_Sheen.w);
         float3 sheenSky = (hasSplitSumIBL ? u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), u_Sheen.w * MAX_REFLECTION_LOD).rgb : u_SunLight.AmbientColor.rgb) * envIntensity;
         float3 sheenEnv = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, u_Sheen.w, u_EnvironmentSampler, sheenSky).BlendedEnvColor;
         float3 sheenAmbient = sheenEnv * u_Sheen.rgb * pow(1.0 - NdotV, 4.0) * u_MaterialSurface.w;
-        ambient += sheenAmbient * ao;
-        reflectionEnvironment += sheenAmbient * ao;
-        reflectionResponse += u_Sheen.rgb * pow(1.0 - NdotV, 4.0) * u_MaterialSurface.w * ao;
+        ambient += sheenAmbient * sheenSpecAO;
+        reflectionEnvironment += sheenAmbient * sheenSpecAO;
+        reflectionResponse += u_Sheen.rgb * pow(1.0 - NdotV, 4.0) * u_MaterialSurface.w * sheenSpecAO;
     }
     if (u_Subsurface.w > 0.0) {
         float3 sssEnv = (hasSplitSumIBL ? u_IrradianceMap.Sample(u_EnvironmentSampler, RotateEnvironmentDirection(N)).rgb : u_SunLight.AmbientColor.rgb);
         float3 sssAmbient = sssEnv * albedo.rgb * u_Subsurface.rgb * u_Subsurface.w * 0.5 * (1.0 - metallic);
-        ambient += sssAmbient * max(u_LightReserved[0].y, 0.0) * ao;
+        ambient += sssAmbient * max(u_LightReserved[0].y, 0.0) * diffuseAO;
     }
     
     // 10. Total Radiance Accumulation (Linear HDR Radiance)

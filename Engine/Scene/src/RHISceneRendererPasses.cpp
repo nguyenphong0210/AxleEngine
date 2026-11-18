@@ -120,9 +120,12 @@ namespace Axle {
         const bool useGTAO = (settings.EnableGTAO || settings.EnableContactShadows) && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid() &&
             m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() && m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
-            viewTargets->GetGTAO() && viewTargets->GetGTAO()->IsValid() && viewTargets->GetGTAO()->GetUAV() != nullptr;
+            m_GTAOComputePipeline && m_GTAOUpsamplePipeline &&
+            viewTargets->GetGTAO() && viewTargets->GetGTAO()->IsValid() && viewTargets->GetGTAO()->GetUAV() != nullptr &&
+            viewTargets->GetGTAOResolved() && viewTargets->GetGTAOResolved()->IsValid() && viewTargets->GetGTAOResolved()->GetUAV() != nullptr;
         const auto gtaoDepth = useGTAO ? graph.Import("GTAODepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto gtaoStorage = useGTAO ? graph.Import("GTAOStorage", viewTargets->GetGTAO()->GetNative()) : output;
+        const auto gtaoResolvedStorage = useGTAO ? graph.Import("GTAOResolvedStorage", viewTargets->GetGTAOResolved()->GetNative()) : output;
 
         const uint32_t hiZLevelCount = viewTargets->GetHiZLevelCount();
         bool useSSR = settings.EnableSSR && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
@@ -504,7 +507,7 @@ namespace Axle {
                                 } else if(range.descriptorType==nri::DescriptorType::TEXTURE) {
                                     for(size_t i=0;i<item.TextureRequests.size();++i) if(item.TextureRequests[i].Address==address) descriptor=resource.Textures[i]->GetSRV();
                                     if (!descriptor && address.RegisterSpace == 4) {
-                                        if (address.RegisterIndex == 0) descriptor=useGTAO?viewTargets->GetGTAO()->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
+                                        if (address.RegisterIndex == 0) descriptor=useGTAO?viewTargets->GetGTAOResolved()->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                                         else if (address.RegisterIndex == 1) descriptor=useGTAO?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                                         else if (address.RegisterIndex >= 2 && address.RegisterIndex < 2u + MaxActiveReflectionProbes) {
                                             const uint32_t probeIdx = address.RegisterIndex - 2u;
@@ -754,6 +757,7 @@ namespace Axle {
             lightData.ReservedHeader[0].x = settings.EnableStudioLightLobes ? 0.0f : 1.0f;
             lightData.ReservedHeader[1].y = useGTAO && settings.EnableGTAO ? 1.0f : 0.0f;
             lightData.ReservedHeader[1].z = useGTAO && settings.EnableContactShadows && world.DirectionalLight ? 1.0f : 0.0f;
+            lightData.ReservedHeader[1].w = useGTAO && settings.EnableGTAO ? std::clamp(settings.GTAOMultiBounce, 0.0f, 1.0f) : 0.0f;
             auto* neutral = RHIMaterial::GetDefaultWhiteTexture().get();
             auto* defaultPrefilter = RHIMaterial::GetDefaultPrefilterCubemap().get();
             if (!neutral || !defaultPrefilter) return fail();
@@ -765,7 +769,7 @@ namespace Axle {
                 }
             }
             if (!m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 0, 0,
-                    {useGTAO ? viewTargets->GetGTAO()->GetSRV() : neutral->GetSRV(),
+                    {useGTAO ? viewTargets->GetGTAOResolved()->GetSRV() : neutral->GetSRV(),
                      useGTAO ? m_OpaqueSceneDepth->GetSRV() : neutral->GetSRV()}) ||
                 !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 1, 0, probeSRVs)) return fail();
             if (!useGTAO && (settings.EnableGTAO || settings.EnableContactShadows))
@@ -994,9 +998,10 @@ namespace Axle {
             return {};
         }, [&](RenderGraph& graph) {
             if (useGTAO) Passes::GTAOPass::DeclarePreLighting(graph,
-                {sceneColor, output, sceneDepth, gtaoDepth, sceneNormal, gtaoStorage});
+                {sceneColor, output, sceneDepth, gtaoDepth, sceneNormal, gtaoStorage, gtaoResolvedStorage});
         }, [&](const RenderPassContext&) -> RenderPassResult {
-            if (useGTAO && !uniform("GTAOCompute", sizeof(RHIGTAOConstants))) return fail();
+            if (useGTAO && (!uniform("GTAOCompute", sizeof(RHIGTAOConstants)) ||
+                            !uniform("GTAOUpsample", sizeof(RHIGTAOConstants)))) return fail();
             return {};
         });
 

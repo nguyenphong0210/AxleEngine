@@ -39,6 +39,10 @@ namespace Axle {
         float FXAAEdgeThresholdMin = 0.0833f;
         float GTAORadiusPixels = 8.0f;
         float GTAOStrength = 1.0f;
+        float GTAOWorldRadius = 1.6f;
+        float GTAOFalloffStart = 0.2f;
+        float GTAOPower = 1.0f;
+        float GTAOMultiBounce = 1.0f;
         float ContactShadowLengthPixels = 32.0f;
         float ContactShadowStrength = 1.0f;
         float SSRLengthPixels = 64.0f;

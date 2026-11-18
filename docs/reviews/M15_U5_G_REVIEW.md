@@ -68,3 +68,8 @@
   - `python scripts/check_architecture.py`: `Files scanned: 613; CMake files: 25; AXLE_ARCH_CHECK PASS` (exit `0`).
   - `git diff --check`: exit `0`.
   - `python scripts/agent_exchange.py validate`: PASS after exchange update.
+
+
+## Independent Codex outcome (2026-11-18)
+
+Automated S5.7 accepted after repairs; see [independent review](M15_U5_G_CODEX_REVIEW.md) for all 15 requirement dispositions, source corrections, actual verification and open visual gates. This historical self-verification is retained; the analytic 8x8 table, octagon contour and diffuse-only numerical evidence above are superseded by the reviewed implementation.

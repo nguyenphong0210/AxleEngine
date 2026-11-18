@@ -10,6 +10,13 @@
 #include <chrono>
 #include <thread>
 #include <atomic>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#undef ERROR // WinGDI macro collides with nri::Message::ERROR.
+#endif
 
 namespace Axle::RHI {
     static std::atomic<uint64_t> s_ValidationErrors{0};
@@ -500,6 +507,23 @@ namespace Axle::RHI {
         return false;
     }
 
+    static void SleepForFencePoll(std::chrono::steady_clock::duration remaining) {
+        using namespace std::chrono;
+        const auto delay = std::min(remaining, steady_clock::duration(milliseconds(1)));
+#ifdef _WIN32
+        // Sleep(1) can round up to a full scheduler tick at each fence. A local
+        // waitable timer keeps polling bounded without changing the process timer period.
+        static thread_local const std::unique_ptr<void, decltype(&CloseHandle)> timer(
+            CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                   TIMER_MODIFY_STATE | SYNCHRONIZE), CloseHandle);
+        LARGE_INTEGER due{};
+        due.QuadPart = -std::max<int64_t>(1, duration_cast<nanoseconds>(delay).count() / 100);
+        if (timer && SetWaitableTimer(timer.get(), &due, 0, nullptr, nullptr, FALSE) &&
+            WaitForSingleObject(timer.get(), 1) != WAIT_FAILED) return;
+#endif
+        std::this_thread::sleep_for(delay);
+    }
+
     bool RHIDevice::WaitForFence(nri::Fence* fence, uint64_t value, uint32_t timeoutMilliseconds) {
         if (!value) return true;
         if (!m_Resources.IsOwnerThread()) return false;
@@ -513,8 +537,9 @@ namespace Axle::RHI {
             });
             if (result != nri::Result::SUCCESS) return false;
             if (completed >= value) return true;
-            if (std::chrono::steady_clock::now() >= deadline) break;
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= deadline) break;
+            SleepForFencePoll(deadline - now);
         } while (true);
         return ObserveResult(nri::Result::NOT_READY, "WaitFence", "completion deadline", true);
     }

@@ -303,14 +303,13 @@ namespace Axle {
         };
         std::vector<PreparedParticle> preparedParticles;
         std::string activeGraphPass;
-        std::unordered_map<std::string, std::unique_ptr<RHIBuffer>> passUniforms;
+        std::unordered_map<std::string, RHIBuffer*> passUniforms;
         auto passUniform = [&]() -> RHIBuffer& { return *passUniforms.at(activeGraphPass); };
-            auto uniform = [&](const std::string& name, size_t size) {
-                auto buffer=std::make_unique<RHIBuffer>();
-                if (!buffer->Init(RHIBufferDesc::Constant(size,RHIMemoryLocation::HostUpload,name+"Constants")) ||
-                    !graph.DeclareRead(name,buffer->GetCBV())) return false;
-                passUniforms.emplace(name,std::move(buffer)); return true;
-            };
+        auto uniform = [&](const std::string& name, size_t size) {
+            auto* buffer = viewCtx.PreparePassUniform(name, size);
+            if (!buffer || !graph.DeclareRead(name, buffer->GetCBV())) return false;
+            return passUniforms.emplace(name, buffer).second;
+        };
         auto beginPass = [&](std::string_view name) {
             EndGPUTimestampPass();
             if (diagnosticsPassActive) {

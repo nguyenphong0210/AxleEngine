@@ -348,6 +348,15 @@ bool Native(RHIType backend) {
         "SSRCopy","HiZ0","HiZ1","HiZ2","HiZ3","HiZ4","HiZ5","HiZ6","HiZ7",
         "SSRColor0","SSRColor1","SSRColor2","SSRColor3","SSRCompute","SSRApply",
         "Transparent","ParticlesAndPhysics","ToneMapping","Export"}));
+    {
+        unsigned passAllocations = 0;
+        ScopedRHIFault countAllocations([&](std::string_view op) -> std::optional<nri::Result> {
+            if (op == "AllocateBufferMemory" && ScopedRHIOperation::Resource().ends_with("Constants"))
+                ++passAllocations;
+            return {};
+        });
+        CHECK(render() == ssr && passAllocations == 0);
+    }
     std::vector<uint8_t> previousHiZ;
     for (uint32_t level = 0; level < 8; ++level) {
         auto* hiz = renderer.GetHiZTarget(level);

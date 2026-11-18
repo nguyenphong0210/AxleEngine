@@ -60,7 +60,7 @@ namespace Axle::RHI {
         frame.UniformViews.clear();
         device.GetResources().CollectAfterDrain();
         if (frame.Descriptors.IsValid()) {
-            frame.Descriptors.Reset();
+            if (frame.Descriptors.GetAllocatedSetCount()) frame.Descriptors.Reset();
         } else {
             RHIDescriptorPool descriptors;
             if (!descriptors.Init(frame.Descriptors.GetDesc())) return false;

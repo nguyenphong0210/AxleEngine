@@ -6372,7 +6372,7 @@ namespace Axle {
             }
         }
         m_LastDrawCallCount = 0;
-        m_CustomDescriptorPool.Reset(); // The preceding RenderScene submission completed before reuse.
+        if (m_CustomDescriptorPool.GetAllocatedSetCount()) m_CustomDescriptorPool.Reset();
         m_LastRenderedEntityCount = 0;
         m_LastStreamedTransformBytes = 0;
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Axle/RHI/RHIFrameContext.hpp>
+#include <Axle/RHI/RHIBuffer.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/ViewRequest.hpp>
 #include <Axle/TemporalService.hpp>
@@ -8,6 +9,7 @@
 #include <Axle/RenderDiagnostics.hpp>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 
 namespace Axle {
 
@@ -86,6 +88,7 @@ namespace Axle {
         bool BeginFrame(uint32_t timeoutMilliseconds = 2000);
         bool EndFrameAndSubmit();
         bool AbandonFrame();
+        RHI::RHIBuffer* PreparePassUniform(const std::string& passName, uint64_t bytes);
         bool IsFrameActive() const { return m_FrameActive; }
         void SetJitter(const glm::vec2& jitter) { m_Input.Jitter = jitter; }
 
@@ -120,6 +123,7 @@ namespace Axle {
         ViewContextInput m_Input;
         ViewResetReason m_ResetReasons = ViewResetReason::None;
         RHI::RHIFrameContext m_Frame;
+        std::unordered_map<std::string, RHI::RHIBuffer> m_PassUniforms;
         TemporalService m_Temporal;
         PostProcessService m_PostProcess;
         RenderDiagnostics m_Diagnostics;

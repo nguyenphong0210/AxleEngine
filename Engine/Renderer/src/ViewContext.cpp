@@ -72,6 +72,7 @@ namespace Axle {
 
     void ViewContext::Shutdown() {
         if (m_FrameActive) m_Frame.Abandon();
+        m_PassUniforms.clear();
         m_Frame = RHI::RHIFrameContext{};
         m_FrameActive = false;
         m_Initialized = false;
@@ -170,6 +171,19 @@ namespace Axle {
         const auto targets = m_Input.Targets;
         m_Diagnostics.BeginFrame(m_FrameIndex, targets ? targets->GetGeneration() : 0);
         return true;
+    }
+
+    RHI::RHIBuffer* ViewContext::PreparePassUniform(const std::string& passName, uint64_t bytes) {
+        if (!m_FrameActive || !bytes) return nullptr;
+        auto& buffer = m_PassUniforms[passName];
+        // BeginFrame waits for this view's last submission. An independent
+        // recording can still pin the old generation and must retain its bytes.
+        if (!buffer.IsValid() || buffer.GetSize() < bytes ||
+            RHI::RHIDevice::Get().GetResources().IsInUse(buffer.AcquireLease())) {
+            const auto desc = RHI::RHIBufferDesc::Constant(bytes, RHI::RHIMemoryLocation::HostUpload, passName + "Constants");
+            if (!buffer.Init(desc)) return nullptr;
+        }
+        return &buffer;
     }
 
     bool ViewContext::EndFrameAndSubmit() {

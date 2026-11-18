@@ -642,6 +642,8 @@ namespace Axle {
             glm::vec3 Bitangent{ 0.0f, 0.0f, 1.0f };
             glm::vec2 HalfExtents{ 5.0f, 5.0f };
             float ClipPlaneOffset = 0.0f;
+            float CaptureNearPlane = 0.1f;
+            float CaptureFarPlane = 1000.0f;
             float EdgeFadeDistance = DefaultEdgeFadeDistance;
             float MaxRoughness = DefaultMaxRoughness;
             float Intensity = 1.0f;
@@ -709,7 +711,7 @@ namespace Axle {
             const glm::vec3& worldPos,
             const glm::vec3& normalWS,
             float roughness,
-            float maxRoughnessOverride = -1.0f);
+            float maxRoughnessOverride = -1.0f, float viewDistance = 0.0f, float globalStrength = 1.0f);
         glm::uvec2 ComputeScaledTargetExtent(uint32_t baseWidth, uint32_t baseHeight, float resolutionScale);
         SceneRenderSettings SanitizeCaptureSettings(
             const SceneRenderSettings& mainSettings,

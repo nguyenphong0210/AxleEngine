@@ -2433,7 +2433,7 @@ namespace Axle {
             glm::vec3 SafeNormalize(const glm::vec3& v, const glm::vec3& fallback) {
                 if (!IsFiniteVec3(v)) return fallback;
                 const float lenSq = glm::dot(v, v);
-                if (lenSq <= 1e-12f) return fallback;
+                if (!std::isfinite(lenSq) || lenSq <= 1e-12f) return fallback;
                 return v * (1.0f / std::sqrt(lenSq));
             }
         } // namespace
@@ -2458,6 +2458,8 @@ namespace Axle {
             surface.HalfExtents = glm::vec2(
                 std::isfinite(reflector.HalfExtents.x) ? std::max(0.01f, reflector.HalfExtents.x) : 5.0f,
                 std::isfinite(reflector.HalfExtents.y) ? std::max(0.01f, reflector.HalfExtents.y) : 5.0f);
+            surface.CaptureNearPlane = std::isfinite(reflector.CaptureNearPlane) ? std::max(0.01f, reflector.CaptureNearPlane) : 0.1f;
+            surface.CaptureFarPlane = std::isfinite(reflector.CaptureFarPlane) ? std::max(surface.CaptureNearPlane + 0.1f, reflector.CaptureFarPlane) : 1000.0f;
             surface.ClipPlaneOffset = std::isfinite(reflector.ClipPlaneOffset) ? reflector.ClipPlaneOffset : 0.0f;
             surface.EdgeFadeDistance = std::isfinite(reflector.EdgeFadeDistance) ? std::max(0.0f, reflector.EdgeFadeDistance) : DefaultEdgeFadeDistance;
             surface.MaxRoughness = std::isfinite(reflector.MaxRoughness) ? std::clamp(reflector.MaxRoughness, 0.02f, 1.0f) : DefaultMaxRoughness;
@@ -2465,8 +2467,8 @@ namespace Axle {
             surface.ClipToExtents = reflector.ClipToExtents;
             surface.Valid = reflector.Enabled &&
                             IsFiniteMat4(surface.WorldTransform) &&
-                            IsFiniteVec3(surface.Position) &&
-                            IsFiniteVec3(surface.Normal);
+                            IsFiniteVec3(reflector.Position) &&
+                            IsFiniteVec3(reflector.Normal);
             return surface;
         }
 
@@ -2608,17 +2610,24 @@ namespace Axle {
             const glm::vec4 worldPlane = clippedSurface.WorldPlane();
 
             PerspectiveCamera mirroredCam = mainCamera;
+            // Capture depth range is authored independently from the main view.
+            if (mainCamera.GetProjectionType() == CameraProjectionType::Orthographic)
+                mirroredCam.SetOrthographic(mainCamera.GetOrthographicSize(), mainCamera.GetAspectRatio(), surface.CaptureNearPlane, surface.CaptureFarPlane);
+            else
+                mirroredCam.SetPerspective(mainCamera.GetFOV(), mainCamera.GetAspectRatio(), surface.CaptureNearPlane, surface.CaptureFarPlane);
             mirroredCam.SetViewMatrix(mirroredView, mirroredPos);
-            const glm::mat4 baseProjZO = mainCamera.GetUnclippedProjectionMatrixZO();
+            const glm::mat4 baseProjZO = mirroredCam.GetUnclippedProjectionMatrixZO();
 
             glm::vec4 viewPlane{};
             bool obliqueApplied = false;
             glm::mat4 obliqueGL = mainCamera.GetProjectionMatrix();
             const glm::mat4 obliqueZO = BuildObliqueClipProjectionZO(
                 baseProjZO, mirroredView, worldPlane, &viewPlane, &obliqueApplied, &obliqueGL);
-            if (obliqueApplied) {
-                mirroredCam.SetCustomProjection(obliqueGL, obliqueZO);
+            if (!obliqueApplied) {
+                result.Diagnostic = "PLANAR_CLIP_INVALID: oblique clipping could not be constructed";
+                return result;
             }
+            mirroredCam.SetCustomProjection(obliqueGL, obliqueZO);
 
             result.Valid = true;
             result.ObliqueClippingApplied = obliqueApplied;
@@ -2635,15 +2644,19 @@ namespace Axle {
             const glm::vec3& worldPos,
             const glm::vec3& normalWS,
             float roughness,
-            float maxRoughnessOverride) {
+            float maxRoughnessOverride, float viewDistance, float globalStrength) {
             if (!surface.Valid || !IsFiniteVec3(worldPos) || !IsFiniteVec3(normalWS)) return 0.0f;
             const float nDot = glm::dot(SafeNormalize(normalWS, glm::vec3(0.0f, 1.0f, 0.0f)), surface.Normal);
-            const float normalWeight = std::clamp((nDot - 0.5f) / 0.4f, 0.0f, 1.0f);
+            auto smooth = [](float lo, float hi, float value) {
+                const float t = std::clamp((value - lo) / (hi - lo), 0.0f, 1.0f);
+                return t * t * (3.0f - 2.0f * t);
+            };
+            const float normalWeight = smooth(0.95f, 0.995f, nDot);
             if (normalWeight <= 0.0f) return 0.0f;
 
             const float planeDist = std::abs(glm::dot(surface.Normal, worldPos - surface.Position));
-            const float thicknessTolerance = std::max(0.15f, surface.EdgeFadeDistance);
-            const float planeWeight = 1.0f - std::clamp(planeDist / thicknessTolerance, 0.0f, 1.0f);
+            const float thicknessTolerance = std::max(0.02f, 0.002f * std::max(viewDistance, 0.0f));
+            const float planeWeight = 1.0f - smooth(thicknessTolerance * 0.5f, thicknessTolerance, planeDist);
             if (planeWeight <= 0.0f) return 0.0f;
 
             float extentWeight = 1.0f;
@@ -2658,15 +2671,15 @@ namespace Axle {
                 if (fade > 1e-4f) {
                     const float marginU = std::clamp((surface.HalfExtents.x - localU) / fade, 0.0f, 1.0f);
                     const float marginV = std::clamp((surface.HalfExtents.y - localV) / fade, 0.0f, 1.0f);
-                    extentWeight = std::min(marginU, marginV);
+                    extentWeight = smooth(0.0f, 1.0f, std::min(marginU, marginV));
                 }
             }
 
             const float maxRough = (maxRoughnessOverride > 0.0f)
-                ? std::clamp(maxRoughnessOverride, 0.02f, 1.0f)
+                ? std::min(surface.MaxRoughness, std::clamp(maxRoughnessOverride, 0.02f, 1.0f))
                 : surface.MaxRoughness;
             const float safeRough = std::clamp(roughness, 0.0f, 1.0f);
-            const float fadeStart = maxRough * 0.55f;
+            const float fadeStart = maxRough * 0.65f;
             float roughWeight = 1.0f;
             if (safeRough >= maxRough) {
                 roughWeight = 0.0f;
@@ -2675,7 +2688,7 @@ namespace Axle {
                 roughWeight = 1.0f - (t * t * (3.0f - 2.0f * t));
             }
 
-            return std::clamp(normalWeight * planeWeight * extentWeight * roughWeight * surface.Intensity, 0.0f, 1.0f);
+            return std::clamp(normalWeight * planeWeight * extentWeight * roughWeight * std::clamp(surface.Intensity, 0.0f, 2.0f) * std::clamp(globalStrength, 0.0f, 2.0f), 0.0f, 1.0f);
         }
 
         glm::uvec2 ComputeScaledTargetExtent(uint32_t baseWidth, uint32_t baseHeight, float resolutionScale) {
@@ -2757,7 +2770,10 @@ namespace Axle {
             if (policy.IncludeOpaqueAndCutout) out.Skins = sourceWorld.Skins;
             out.Meshes.reserve(sourceWorld.Meshes.size());
             for (const auto& mesh : sourceWorld.Meshes) {
-                if (mesh.EntityID != 0u && excludedIds.count(static_cast<uint64_t>(mesh.EntityID)) > 0u) {
+                // EnTT entity index zero is valid; its stable identity still
+                // excludes the receiver without excluding anonymous meshes.
+                const bool isReflector = reflector.StableUUID != UUID(0) && mesh.StableUUID == reflector.StableUUID;
+                if (isReflector || (mesh.EntityID != 0u && excludedIds.count(static_cast<uint64_t>(mesh.EntityID)) > 0u)) {
                     continue;
                 }
                 const ResolvedSurface surface = MaterialResolver::Resolve(mesh.Material);

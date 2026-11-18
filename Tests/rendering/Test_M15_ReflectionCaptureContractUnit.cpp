@@ -1054,6 +1054,33 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         RENDER_CHECK(exactApplied && maxZOErr < 1e-5f,
             "M15-U5-46.6: ZO oblique clip on camera near plane equals standard perspectiveRH_ZO");
 
+        auto authored = floorRefl;
+        authored.ClipPlaneOffset = 0.03f;
+        authored.CaptureNearPlane = 0.4f;
+        authored.CaptureFarPlane = 20.0f;
+        const auto authoredSurface = PlanarReflectionContract::BuildSurfaceFromReflector(authored);
+        const auto authoredCamera = PlanarReflectionContract::BuildMirroredCamera(mainCam, authoredSurface, capturePolicy);
+        RENDER_CHECK(authoredCamera.Valid && std::abs(authoredCamera.WorldPlane.w + 0.03f) < 1e-5f &&
+            std::abs(authoredCamera.Camera.GetNearClip() - 0.4f) < 1e-5f &&
+            std::abs(authoredCamera.Camera.GetFarClip() - 20.0f) < 1e-5f,
+            "M15-U5-46.1 / 46.2: authored capture bias and depth range control the mirrored camera");
+        const glm::vec3 obliqueNormal = glm::normalize(glm::vec3(std::sqrt(1.0f - 0.98f * 0.98f), 0.98f, 0.0f));
+        const float smoothNormal = PlanarReflectionContract::EvaluatePlanarReflectionConfidence(
+            floorSurface, floorSurface.Position, obliqueNormal, 0.05f);
+        RENDER_CHECK(std::abs(smoothNormal - 0.7407407f) < 0.001f &&
+            PlanarReflectionContract::EvaluatePlanarReflectionConfidence(
+                floorSurface, floorSurface.Position + floorSurface.Normal * 0.03f, floorSurface.Normal, 0.05f) == 0.0f,
+            "M15-U5-46.5: CPU normal and geometric-plane confidence match shader smoothstep thresholds");
+
+        auto smallSurface = authoredSurface;
+        smallSurface.HalfExtents = {0.1f, 0.1f};
+        smallSurface.EdgeFadeDistance = 0.2f;
+        RENDER_CHECK(std::abs(PlanarReflectionContract::EvaluatePlanarReflectionConfidence(
+            smallSurface, smallSurface.Position, smallSurface.Normal, 0.0f) - 1.0f) < 0.001f &&
+            PlanarReflectionContract::EvaluatePlanarReflectionConfidence(
+                smallSurface, smallSurface.Position, smallSurface.Normal, 0.6f, 1.0f) == 0.0f,
+            "M15-U5-46.5: oversized edge fade and global roughness cap match native resolve");
+
         // Camera behind plane must fail cleanly
         PerspectiveCamera behindCam = mainCam;
         behindCam.SetViewMatrix(glm::mat4(1.0f), {0.0f, -1.0f, 0.0f});
@@ -1083,6 +1110,15 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         const RenderWorld capWorld = PlanarReflectionContract::FilterCaptureWorld(srcWorld, floorRefl, capturePolicy);
         RENDER_CHECK(capWorld.PlanarReflectors.empty() && capWorld.Meshes.size() == 1 && capWorld.Meshes[0].EntityID == 501u,
             "M15-U5-46.2 / 46.6: FilterCaptureWorld disables nested reflectors and excludes self-reflector entity");
+
+        auto zeroIndexReflector = floorRefl;
+        zeroIndexReflector.EntityID = 0;
+        zeroIndexReflector.StableUUID = UUID(505);
+        srcWorld.Meshes.front().EntityID = 0;
+        srcWorld.Meshes.front().StableUUID = zeroIndexReflector.StableUUID;
+        const auto zeroIndexCapture = PlanarReflectionContract::FilterCaptureWorld(srcWorld, zeroIndexReflector, {});
+        RENDER_CHECK(zeroIndexCapture.Meshes.size() == 1 && zeroIndexCapture.Meshes.front().EntityID == 501,
+            "M15-U5-46.6: stable UUID excludes a receiver at valid EnTT entity index zero");
 
         // Confidence, edge fade & roughness rolloff
         const float cCenterSmooth = PlanarReflectionContract::EvaluatePlanarReflectionConfidence(

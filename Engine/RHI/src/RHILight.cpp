@@ -115,11 +115,31 @@ namespace Axle::RHI {
         uint32_t count = static_cast<uint32_t>(m_Data.ReservedHeader[1].x);
         if (count >= 2) return false;
 
-        float intensity = light.TwoSided ? -std::abs(light.Intensity) : std::abs(light.Intensity);
-        m_Data.RectLights[count].PositionAndWidth = glm::vec4(light.Position, light.Width);
-        m_Data.RectLights[count].DirectionAndHeight = glm::vec4(glm::normalize(light.Direction), light.Height);
-        m_Data.RectLights[count].UpAndRange = glm::vec4(glm::normalize(light.Up), light.Range);
-        m_Data.RectLights[count].ColorAndIntensity = glm::vec4(light.Color, intensity);
+        auto safeNormalize = [](const glm::vec3& v, const glm::vec3& fallback) {
+            const float lenSq = glm::dot(v, v);
+            if (!std::isfinite(lenSq) || lenSq <= 1e-12f) return fallback;
+            return v * (1.0f / std::sqrt(lenSq));
+        };
+        const glm::vec3 dir = safeNormalize(light.Direction, glm::vec3(0.0f, 0.0f, -1.0f));
+        const glm::vec3 orthoFallback = (std::abs(dir.y) < 0.99f) ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+        const glm::vec3 orthoCandidate = light.Up - dir * glm::dot(light.Up, dir);
+        const glm::vec3 up = safeNormalize(orthoCandidate, safeNormalize(glm::cross(orthoFallback, dir), glm::vec3(0.0f, 1.0f, 0.0f)));
+
+        const float width = (std::isfinite(light.Width) && light.Width > 0.01f) ? light.Width : 0.01f;
+        const float height = (std::isfinite(light.Height) && light.Height > 0.01f) ? light.Height : 0.01f;
+        const float signedHeight = (light.Shape == 1u) ? -height : height;
+        const float range = (std::isfinite(light.Range) && light.Range > 0.0f) ? light.Range : 0.0f;
+        const float absIntensity = std::isfinite(light.Intensity) ? std::abs(light.Intensity) : 0.0f;
+        const float intensity = light.TwoSided ? -absIntensity : absIntensity;
+        const glm::vec3 safeColor(
+            (std::isfinite(light.Color.r) && light.Color.r > 0.0f) ? light.Color.r : 0.0f,
+            (std::isfinite(light.Color.g) && light.Color.g > 0.0f) ? light.Color.g : 0.0f,
+            (std::isfinite(light.Color.b) && light.Color.b > 0.0f) ? light.Color.b : 0.0f);
+
+        m_Data.RectLights[count].PositionAndWidth = glm::vec4(light.Position, width);
+        m_Data.RectLights[count].DirectionAndHeight = glm::vec4(dir, signedHeight);
+        m_Data.RectLights[count].UpAndRange = glm::vec4(up, range);
+        m_Data.RectLights[count].ColorAndIntensity = glm::vec4(safeColor, intensity);
 
         m_Data.ReservedHeader[1].x = static_cast<float>(count + 1);
 

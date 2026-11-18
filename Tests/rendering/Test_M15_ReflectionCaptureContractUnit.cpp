@@ -46,6 +46,10 @@ using namespace Axle::ReflectionCaptureContract;
 #define AXLE_REFLECTION_PROBE_COMMON_SHADER_PATH "Engine/Resources/Shaders/ReflectionProbeCommon.hlsli"
 #endif
 
+#ifndef AXLE_PBR_COMMON_SHADER_PATH
+#define AXLE_PBR_COMMON_SHADER_PATH "Engine/Resources/Shaders/PBRCommon.hlsli"
+#endif
+
 namespace {
     std::string ReadText(const char* path) {
         std::ifstream file(path);
@@ -725,6 +729,162 @@ bool RunM15ReflectionCaptureContractUnitTests() {
                      surfaceShader.find("MakeMaterialReflectionSurfaceOutput") != std::string::npos &&
                      surfaceShader.find("reflectionResponse *= 0.02") == std::string::npos,
             "M15-U5-35.2 / 35.4: Shaders declare material reflection roughness/flag channel, SSRColor0..3, and calibrated resolve");
+    }
+
+    // 9. M15-U5-G / U5-H (S5.7): Validated LTC tables, rectangle/disk horizon-clipped
+    //    contour integrals, units/orientation/sidedness/range, and numerical quadrature parity.
+    {
+        const auto ltcTables = AreaLightLTCContract::BuildValidatedLTCTables();
+        std::string tableReason;
+        RENDER_CHECK(AreaLightLTCContract::ValidateLTCTables(ltcTables, &tableReason),
+            ("M15-U5-40: LTC tables satisfy determinant, range, finiteness, and identity invariants: " + tableReason).c_str());
+
+        // Bilinear lookup continuity across roughness and view angle
+        const glm::vec4 sampleLowR = AreaLightLTCContract::SampleLTC1(0.10f, 0.90f);
+        const glm::vec4 sampleMidR = AreaLightLTCContract::SampleLTC1(0.45f, 0.60f);
+        const glm::vec4 sampleDiff = AreaLightLTCContract::SampleLTC1(1.00f, 1.00f);
+        const glm::vec4 ltc2Normal = AreaLightLTCContract::SampleLTC2(0.15f, 0.95f);
+        const glm::vec4 ltc2Grazing = AreaLightLTCContract::SampleLTC2(0.15f, 0.10f);
+        RENDER_CHECK(std::abs(sampleDiff.x - 1.0f) < 1e-4f && std::abs(sampleDiff.y) < 1e-4f &&
+                     std::abs(sampleDiff.z) < 1e-4f && std::abs(sampleDiff.w - 1.0f) < 1e-4f &&
+                     (sampleLowR.x * sampleLowR.w - sampleLowR.y * sampleLowR.z) > 0.0f &&
+                     (sampleMidR.x * sampleMidR.w - sampleMidR.y * sampleMidR.z) > 0.0f &&
+                     ltc2Grazing.y > ltc2Normal.y && ltc2Normal.x > 0.7f,
+            "M15-U5-40: SampleLTC1/LTC2 interpolate smoothly and satisfy GGX identity/Fresnel limits");
+
+        // Orthonormal basis resilience for non-unit or collinear Up vectors (M15-U5-41.3)
+        glm::vec3 bRight, bUp, bDir;
+        AreaLightLTCContract::ComputeOrthonormalAreaBasis({0.0f, -3.0f, 4.0f}, {0.0f, -3.0f, 4.0f}, bRight, bUp, bDir);
+        RENDER_CHECK(std::abs(glm::length(bRight) - 1.0f) < 1e-4f &&
+                     std::abs(glm::length(bUp) - 1.0f) < 1e-4f &&
+                     std::abs(glm::length(bDir) - 1.0f) < 1e-4f &&
+                     std::abs(glm::dot(bRight, bUp)) < 1e-4f &&
+                     std::abs(glm::dot(bRight, bDir)) < 1e-4f &&
+                     std::abs(glm::dot(bUp, bDir)) < 1e-4f,
+            "M15-U5-41.3: ComputeOrthonormalAreaBasis handles collinear Up safely");
+
+        auto makeFrame = [](AreaLightShape shape) {
+            LightingRectFrame f{};
+            f.Position = {0.0f, 2.5f, -3.0f};
+            f.Direction = glm::normalize(glm::vec3(0.0f, -2.5f, 3.0f));
+            f.Up = {0.0f, 1.0f, 0.0f};
+            f.Width = 2.0f;
+            f.Height = 2.0f;
+            f.Range = 20.0f;
+            f.Color = {1.0f, 1.0f, 1.0f};
+            f.SignedIntensity = 20.0f;
+            f.Shape = shape;
+            f.ShadowPolicy = AreaLightShadowPolicy::UnshadowedAnalyticLTC;
+            return f;
+        };
+
+        const glm::vec3 P(0.0f, 0.0f, 0.0f);
+        const glm::vec3 N(0.0f, 1.0f, 0.0f);
+        const glm::vec3 V = glm::normalize(glm::vec3(0.0f, 2.5f, 3.0f));
+
+        // Rectangle vs Disk area ratio (~pi/4 for square W==H) & elliptical rotation test (M15-U5-41.1, 41.2)
+        const auto rectEval = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            makeFrame(AreaLightShape::Rectangle), P, N, V, {0.8f, 0.8f, 0.8f}, 0.0f, 0.5f);
+        const auto diskEval = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            makeFrame(AreaLightShape::Disk), P, N, V, {0.8f, 0.8f, 0.8f}, 0.0f, 0.5f);
+        const float ffRatio = diskEval.DiffuseFormFactor / std::max(rectEval.DiffuseFormFactor, 1e-6f);
+        RENDER_CHECK(rectEval.DiffuseFormFactor > 0.02f && diskEval.DiffuseFormFactor > 0.02f &&
+                     ffRatio > 0.72f && ffRatio < 0.84f,
+            "M15-U5-41.1 / 41.2: Circular disk form factor matches pi/4 area ratio relative to enclosing square");
+
+        // Elliptical aspect vs circular disk symmetry
+        LightingRectFrame circleA = makeFrame(AreaLightShape::Disk);
+        LightingRectFrame circleB = makeFrame(AreaLightShape::Disk);
+        circleB.Up = glm::normalize(glm::cross(circleB.Direction, glm::vec3(1.0f, 0.0f, 0.0f)));
+        const auto cEvalA = AreaLightLTCContract::EvaluateLTCAreaLightCPU(circleA, P, N, V, {0.8f, 0.8f, 0.8f}, 0.0f, 0.5f);
+        const auto cEvalB = AreaLightLTCContract::EvaluateLTCAreaLightCPU(circleB, P, N, V, {0.8f, 0.8f, 0.8f}, 0.0f, 0.5f);
+        RENDER_CHECK(std::abs(cEvalA.DiffuseFormFactor - cEvalB.DiffuseFormFactor) < 0.002f,
+            "M15-U5-41.2: Equal-diameter disk emitter is invariant under tangent basis rotation");
+
+        // Horizon-straddling wall emitter intersecting floor y=0 (M15-U5-41.1, 42.1)
+        LightingRectFrame straddling = makeFrame(AreaLightShape::Rectangle);
+        straddling.Position = {0.0f, 0.0f, -2.0f};
+        straddling.Direction = {0.0f, 0.0f, 1.0f};
+        straddling.Up = {0.0f, 1.0f, 0.0f};
+        straddling.Width = 2.0f;
+        straddling.Height = 4.0f; // spans y in [-2, +2], so bottom half is below y=0 horizon
+        const auto horizonEval = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            straddling, P, N, V, {0.9f, 0.9f, 0.9f}, 0.0f, 0.6f);
+        const auto horizonRef = AreaLightLTCContract::EvaluateAreaLightNumericalReferenceCPU(
+            straddling, P, N, V, {0.9f, 0.9f, 0.9f}, 0.0f, 0.6f, 32u);
+        RENDER_CHECK(horizonEval.DiffuseFormFactor > 0.01f &&
+                     std::abs(horizonEval.DiffuseFormFactor - horizonRef.DiffuseFormFactor) < 0.01f,
+            "M15-U5-41.1 / 42.1 / 45.3: Horizon-straddling quad clips cleanly to z>=0 and matches 32x32 quadrature");
+
+        // One-sided back-face culling vs TwoSided symmetry & finite Range cutoff (M15-U5-41.4)
+        LightingRectFrame oneSidedBack = makeFrame(AreaLightShape::Rectangle);
+        oneSidedBack.Direction = -oneSidedBack.Direction;
+        const auto oneBackEval = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            oneSidedBack, P, N, V, {1.0f, 1.0f, 1.0f}, 0.0f, 0.5f);
+        oneSidedBack.SignedIntensity = -oneSidedBack.SignedIntensity;
+        const auto twoBackEval = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            oneSidedBack, P, N, V, {1.0f, 1.0f, 1.0f}, 0.0f, 0.5f);
+        RENDER_CHECK(oneBackEval.TotalRadiance == glm::vec3(0.0f) &&
+                     std::abs(twoBackEval.DiffuseFormFactor - rectEval.DiffuseFormFactor) < 1e-4f,
+            "M15-U5-41.4: One-sided emitter yields 0 behind light plane while TwoSided is symmetric");
+
+        LightingRectFrame outOfRange = makeFrame(AreaLightShape::Disk);
+        outOfRange.Range = 2.5f; // emitter at (0, 2.5, -3) is ~3.9m away (> 2.5m)
+        const auto rangedEval = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            outOfRange, P, N, V, {1.0f, 1.0f, 1.0f}, 0.0f, 0.5f);
+        RENDER_CHECK(rangedEval.TotalRadiance == glm::vec3(0.0f) && rangedEval.RangeAttenuation == 0.0f,
+            "M15-U5-41.4: Finite Range cuts off energy cleanly beyond emitter distance");
+
+        // Roughness, view-angle & metallic partition sweep (M15-U5-42.1, 42.2, 45.1)
+        const auto metalLowR = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            makeFrame(AreaLightShape::Rectangle), P, N, V, {1.0f, 0.71f, 0.29f}, 1.0f, 0.08f);
+        const auto metalMidR = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            makeFrame(AreaLightShape::Rectangle), P, N, V, {1.0f, 0.71f, 0.29f}, 1.0f, 0.35f);
+        const auto metalHighR = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            makeFrame(AreaLightShape::Rectangle), P, N, V, {1.0f, 0.71f, 0.29f}, 1.0f, 0.80f);
+        RENDER_CHECK(metalLowR.DiffuseRadiance == glm::vec3(0.0f) &&
+                     metalLowR.SpecularRadiance.r > metalMidR.SpecularRadiance.r * 1.2f &&
+                     metalMidR.SpecularRadiance.r > metalHighR.SpecularRadiance.r * 1.2f &&
+                     metalLowR.SpecularRadiance.r > metalLowR.SpecularRadiance.b * 2.0f,
+            "M15-U5-42.2 / 45.1: Metallic area light response has zero diffuse, tinted F0, and monotonic roughness falloff");
+
+        // Emitter tilt & 32x32 numerical quadrature reference agreement (M15-U5-45.2, 45.3)
+        LightingRectFrame facing = makeFrame(AreaLightShape::Disk);
+        facing.Position = {0.0f, 2.0f, 0.0f};
+        facing.Direction = {0.0f, -1.0f, 0.0f};
+        facing.Up = {0.0f, 0.0f, 1.0f};
+        LightingRectFrame tilted45 = facing;
+        tilted45.Direction = glm::normalize(glm::vec3(0.7071f, -0.7071f, 0.0f));
+        const auto facingLTC = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            facing, P, N, glm::normalize(glm::vec3(0.0f, 1.0f, 0.5f)), {0.8f, 0.8f, 0.8f}, 0.0f, 0.55f);
+        const auto facingRef = AreaLightLTCContract::EvaluateAreaLightNumericalReferenceCPU(
+            facing, P, N, glm::normalize(glm::vec3(0.0f, 1.0f, 0.5f)), {0.8f, 0.8f, 0.8f}, 0.0f, 0.55f, 32u);
+        const auto tiltedLTC = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+            tilted45, P, N, glm::normalize(glm::vec3(0.0f, 1.0f, 0.5f)), {0.8f, 0.8f, 0.8f}, 0.0f, 0.55f);
+        const auto tiltedRef = AreaLightLTCContract::EvaluateAreaLightNumericalReferenceCPU(
+            tilted45, P, N, glm::normalize(glm::vec3(0.0f, 1.0f, 0.5f)), {0.8f, 0.8f, 0.8f}, 0.0f, 0.55f, 32u);
+        RENDER_CHECK(tiltedLTC.DiffuseFormFactor < facingLTC.DiffuseFormFactor * 0.90f &&
+                     std::abs(facingLTC.DiffuseFormFactor - facingRef.DiffuseFormFactor) < 0.015f &&
+                     std::abs(tiltedLTC.DiffuseFormFactor - tiltedRef.DiffuseFormFactor) < 0.015f,
+            "M15-U5-45.2 / 45.3: Tilted emitter decreases irradiance and LTC matches 32x32 numerical quadrature");
+
+        // Explicit unshadowed shadow policy contract (M15-U5-43)
+        RENDER_CHECK(RectLightComponent{}.ShadowPolicy == AreaLightShadowPolicy::UnshadowedAnalyticLTC &&
+                     RenderRectLight{}.ShadowPolicy == AreaLightShadowPolicy::UnshadowedAnalyticLTC,
+            "M15-U5-43: Area lights default to explicit UnshadowedAnalyticLTC policy");
+
+        // Shader contract source verification (M15-U5-40..42)
+        const std::string pbrCommon = ReadText(AXLE_PBR_COMMON_SHADER_PATH);
+        const std::string forwardShader = ReadText(AXLE_FORWARD_PBR_SHADER_PATH);
+        const std::string surfaceShader = ReadText(AXLE_MATERIAL_SURFACE_SHADER_PATH);
+        RENDER_CHECK(!pbrCommon.empty() && !forwardShader.empty() && !surfaceShader.empty() &&
+                     pbrCommon.find("EvaluateLTCAreaLightTerms") != std::string::npos &&
+                     pbrCommon.find("LTC_ClipPolygonZ0") != std::string::npos &&
+                     pbrCommon.find("SampleLTC1") != std::string::npos &&
+                     pbrCommon.find("SampleLTC2") != std::string::npos &&
+                     forwardShader.find("EvaluateLTCAreaLightTerms") != std::string::npos &&
+                     surfaceShader.find("EvaluateLTCAreaLightTerms") != std::string::npos,
+            "M15-U5-40..42: PBRCommon.hlsli, ForwardPBR.hlsl and MaterialSurface.hlsl share validated LTC area-light evaluation");
     }
 
     std::cout << "[M15ReflectionCapture] All dynamic reflection capture contract tests passed!\n";

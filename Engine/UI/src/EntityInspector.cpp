@@ -1017,6 +1017,23 @@ namespace Axle {
             drawLocalShadows(slc.Shadows);
         }, /*canRemove=*/ true);
 
+        // Rect / Area Light Component (LTC)
+        DrawComponent<RectLightComponent>("Area Light (LTC)", entity, [&](RectLightComponent& rlc) {
+            ImGui::Checkbox("Enabled", &rlc.Enabled);
+            const char* shapeLabels[] = { "Rectangle", "Disk" };
+            int shapeIdx = (rlc.Shape == AreaLightShape::Disk) ? 1 : 0;
+            if (ImGui::Combo("Shape", &shapeIdx, shapeLabels, 2)) {
+                rlc.Shape = (shapeIdx == 1) ? AreaLightShape::Disk : AreaLightShape::Rectangle;
+            }
+            ImGui::ColorEdit3("Light Color", glm::value_ptr(rlc.Color));
+            ImGui::DragFloat("Intensity", &rlc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f");
+            ImGui::DragFloat("Width", &rlc.Width, 0.05f, 0.01f, 100.0f, "%.2f m");
+            ImGui::DragFloat("Height", &rlc.Height, 0.05f, 0.01f, 100.0f, "%.2f m");
+            ImGui::DragFloat("Range", &rlc.Range, 0.5f, 0.1f, 500.0f, "%.1f m");
+            ImGui::Checkbox("Two-Sided", &rlc.TwoSided);
+            ImGui::TextDisabled("Shadow Policy: Unshadowed Analytic LTC");
+        }, /*canRemove=*/ true);
+
         // Camera Component
         DrawComponent<CameraComponent>("Camera", entity, [&](CameraComponent& cam) {
             ImGui::DragFloat("Field of View", &cam.FOV, 0.5f, 10.0f, 150.0f, "%.1f deg");
@@ -1949,6 +1966,11 @@ namespace Axle {
             "Rendering", "SpotLightComponent", "Directional cone spot light source",
             entity.HasComponent<SpotLightComponent>(), true,
             [&]() { entity.AddComponent<SpotLightComponent>(); }
+        });
+        items.push_back({
+            "Rendering", "RectLightComponent", "LTC rectangular or disk area light source",
+            entity.HasComponent<RectLightComponent>(), true,
+            [&]() { entity.AddComponent<RectLightComponent>(); }
         });
         items.push_back({
             "Rendering", "SkyboxComponent", "Procedural atmospheric Rayleigh/Mie sky dome",

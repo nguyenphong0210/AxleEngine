@@ -125,16 +125,17 @@ bool RunM15BRDFReferenceUnitTests() {
                  Compensation(0.8, 0.0) == 1.0 &&
                  Compensation(0.8, std::numeric_limits<double>::quiet_NaN()) == 1.0,
         "neutral, floor/cap and malformed-LUT fallback are explicit");
-    RENDER_CHECK(Count(source, "MaterialDistribution(N,") == 4 &&
-                 Count(source, "MaterialGeometry(N,") == 4 &&
-                 Count(source, "ggxEnergyCompensation;") >= 5 &&
+    RENDER_CHECK(Count(source, "MaterialDistribution(N,") == 3 &&
+                 Count(source, "MaterialGeometry(N,") == 3 &&
+                 Count(source, "ggxEnergyCompensation;") >= 4 &&
+                 source.find("EvaluateLTCAreaLightTerms(") != std::string::npos &&
                  source.find("return 1.0 / max(PI * axes.x * axes.y * d * d, 1e-8);") != std::string::npos &&
                  source.find("return 1.0 / (1.0 + AnisotropicLambda(N,V,T,B,axes) + AnisotropicLambda(N,L,T,B,axes));") != std::string::npos &&
                  source.find("float ggxSingleScatterEnergy = ggxDFG.x + ggxDFG.y;") != std::string::npos &&
                  source.find("!isfinite(ggxSingleScatterEnergy)") != std::string::npos &&
                  source.find("ggxSingleScatterEnergy = clamp(ggxSingleScatterEnergy, 0.05, 1.0);") != std::string::npos &&
                  source.find("min(1.0 + F0 * (1.0 / ggxSingleScatterEnergy - 1.0), 8.0)") != std::string::npos,
-        "sun, point, spot, rect and ambient paths use GGX and finite compensation");
+        "sun, point, spot and ambient paths use GGX + finite compensation and area lights use LTC");
 
     // U1-02.2: neutral dielectric F0, RGB metal F0, and continuous mixtures.
     const glm::vec3 gold(0.85f, 0.52f, 0.13f);
@@ -166,7 +167,7 @@ bool RunM15BRDFReferenceUnitTests() {
                  source.find("metallic = clamp(orm.b * metallic, 0.0, 1.0);") != std::string::npos &&
                  source.find("u_MetallicMap.Sample(u_Sampler, uv).r") != std::string::npos &&
                  Count(source, "FresnelSchlick(max(dot(H, V), 0.0), F0)") == 3 &&
-                 source.find("FresnelSchlick(VdotH_spec, F0)") != std::string::npos &&
+                 source.find("EvaluateLTCAreaLightTerms(") != std::string::npos &&
                  source.find("FresnelSchlickRoughness(NdotV, F0, roughness)") != std::string::npos,
         "all direct and ambient shader paths consume the shared material F0");
 

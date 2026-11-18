@@ -3462,7 +3462,7 @@ namespace Axle {
             hashShadow(light.Shadows);
         }
         for (const auto& light : world.RectLights) {
-            mixVal(stamps.LightingStamp, light.EntityID, light.Position, light.Direction, light.Up, light.Color, light.Intensity, light.Width, light.Height, light.Range, light.TwoSided);
+            mixVal(stamps.LightingStamp, light.EntityID, light.Position, light.Direction, light.Up, light.Color, light.Intensity, light.Width, light.Height, light.Range, light.TwoSided, light.Shape, light.ShadowPolicy);
         }
 
         const auto& sky = world.Skybox;

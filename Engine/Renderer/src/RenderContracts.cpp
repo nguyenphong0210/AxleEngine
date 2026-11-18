@@ -1943,4 +1943,491 @@ namespace Axle {
         }
     } // namespace SSRRaymarchContract
 
+    namespace AreaLightLTCContract {
+        namespace {
+            constexpr float kPi = 3.14159265358979323846f;
+            constexpr float kLocalIntensityScale = 0.05f;
+            // Radius multiplier giving an inscribed/scaled regular octagon the exact area pi*a*b of an ellipse/disk.
+            constexpr float kDiskOctagonRadiusScale = 1.05392891358724f; // sqrt(pi / (2 * sqrt(2)))
+
+            float SafeClampRoughness(float r) {
+                return std::isfinite(r) ? std::clamp(r, 0.04f, 1.0f) : 0.5f;
+            }
+
+            float SafeClampNdotV(float nv) {
+                return std::isfinite(nv) ? std::clamp(nv, 0.0f, 1.0f) : 0.5f;
+            }
+
+            glm::vec3 SafeNormalize(const glm::vec3& v, const glm::vec3& fallback) {
+                const float lenSq = glm::dot(v, v);
+                if (!std::isfinite(lenSq) || lenSq <= 1e-12f) {
+                    return fallback;
+                }
+                return v * (1.0f / std::sqrt(lenSq));
+            }
+
+            float EvaluateLTCContourIntegral(
+                const std::vector<glm::vec3>& shadingPoly,
+                const glm::vec4& ltc1,
+                bool twoSided) {
+                if (shadingPoly.size() < 3) {
+                    return 0.0f;
+                }
+
+                // First clip against the physical surface horizon (L.z >= 0 in shading tangent frame).
+                std::vector<glm::vec3> upperPoly = ClipPolygonToHorizon(shadingPoly);
+                if (upperPoly.size() < 3) {
+                    return 0.0f;
+                }
+
+                // Apply inverse LTC matrix M^-1 (identity if ltc1 == (1, 0, 0, 1)).
+                std::vector<glm::vec3> warpedPoly;
+                warpedPoly.reserve(upperPoly.size());
+                for (const glm::vec3& p : upperPoly) {
+                    warpedPoly.emplace_back(
+                        ltc1.x * p.x + ltc1.y * p.z,
+                        p.y,
+                        ltc1.z * p.x + ltc1.w * p.z);
+                }
+
+                // Clip against the warped clamped-cosine support plane (w.z >= 0).
+                std::vector<glm::vec3> clipped = ClipPolygonToHorizon(warpedPoly);
+                if (clipped.size() < 3) {
+                    return 0.0f;
+                }
+
+                for (glm::vec3& v : clipped) {
+                    const float lenSq = glm::dot(v, v);
+                    v = (lenSq > 1e-12f) ? (v / std::sqrt(lenSq)) : glm::vec3(0.0f, 0.0f, 1.0f);
+                }
+
+                glm::vec3 sum(0.0f);
+                const size_t n = clipped.size();
+                for (size_t i = 0; i < n; ++i) {
+                    sum += IntegrateEdgeVector(clipped[i], clipped[(i + 1) % n]);
+                }
+
+                const float formFactor = sum.z;
+                if (!std::isfinite(formFactor)) {
+                    return 0.0f;
+                }
+                return twoSided ? std::abs(formFactor) : std::max(0.0f, formFactor);
+            }
+        } // namespace
+
+        glm::vec4 EvaluateLTC1GridPoint(uint32_t roughIdx, uint32_t viewIdx) {
+            const uint32_t ix = std::min(roughIdx, kTableDim - 1u);
+            const uint32_t iy = std::min(viewIdx, kTableDim - 1u);
+            const float r = 0.04f + (static_cast<float>(ix) / static_cast<float>(kTableDim - 1u)) * 0.96f;
+            const float v = static_cast<float>(iy) / static_cast<float>(kTableDim - 1u);
+            const float ndotv = std::clamp(1.0f - v * v, 0.001f, 1.0f);
+            const float thetaV = std::acos(ndotv);
+            const float alpha = std::clamp(r * r, 0.01f, 1.0f);
+
+            // Off-specular GGX peak shift toward normal as roughness increases; thetaP = 0 at r = 1.
+            const float thetaP = thetaV * (1.0f - alpha);
+            const float cp = std::cos(thetaP);
+            const float sp = std::sin(thetaP);
+
+            // Effective reflection-lobe half-widths along in-plane (U) and out-of-plane (T2).
+            const float alphaX = std::clamp((2.0f * alpha) / (1.0f + alpha), 0.02f, 1.0f);
+            const float alphaY = std::clamp(glm::mix(alphaX * std::max(ndotv, 0.25f), alphaX, alpha), 0.02f, 1.0f);
+            const float ratio = alphaY / std::max(alphaX, 1e-4f);
+
+            return glm::vec4(ratio * cp, ratio * sp, -alphaY * sp, alphaY * cp);
+        }
+
+        glm::vec4 EvaluateLTC2GridPoint(uint32_t roughIdx, uint32_t viewIdx) {
+            const uint32_t ix = std::min(roughIdx, kTableDim - 1u);
+            const uint32_t iy = std::min(viewIdx, kTableDim - 1u);
+            const float r = 0.04f + (static_cast<float>(ix) / static_cast<float>(kTableDim - 1u)) * 0.96f;
+            const float v = static_cast<float>(iy) / static_cast<float>(kTableDim - 1u);
+            const float ndotv = std::clamp(1.0f - v * v, 0.001f, 1.0f);
+
+            const glm::vec4 c0(-1.0f, -0.0275f, -0.572f, 0.022f);
+            const glm::vec4 c1(1.0f, 0.0425f, 1.04f, -0.04f);
+            const glm::vec4 rv = r * c0 + c1;
+            const float a004 = std::min(rv.x * rv.x, std::exp2(-9.28f * ndotv)) * rv.x + rv.y;
+            const glm::vec2 ab = glm::vec2(-1.04f, 1.04f) * a004 + glm::vec2(rv.z, rv.w);
+
+            const float fresnelTerm = std::clamp(ab.y, 0.0f, 0.99f);
+            const float ggxNorm = std::clamp(ab.x + ab.y, 0.05f, 1.0f);
+            const float sphereFormFactor = 1.0f - 0.1f * v * (1.0f - r);
+            return glm::vec4(ggxNorm, fresnelTerm, sphereFormFactor, 0.0f);
+        }
+
+        LTCTables BuildValidatedLTCTables() {
+            LTCTables out;
+            for (uint32_t iy = 0; iy < kTableDim; ++iy) {
+                for (uint32_t ix = 0; ix < kTableDim; ++ix) {
+                    const size_t idx = static_cast<size_t>(iy) * kTableDim + ix;
+                    out.LTC1[idx] = EvaluateLTC1GridPoint(ix, iy);
+                    out.LTC2[idx] = EvaluateLTC2GridPoint(ix, iy);
+                }
+            }
+            return out;
+        }
+
+        bool ValidateLTCTables(const LTCTables& tables, std::string* outReason) {
+            for (uint32_t iy = 0; iy < kTableDim; ++iy) {
+                for (uint32_t ix = 0; ix < kTableDim; ++ix) {
+                    const size_t idx = static_cast<size_t>(iy) * kTableDim + ix;
+                    const glm::vec4& l1 = tables.LTC1[idx];
+                    const glm::vec4& l2 = tables.LTC2[idx];
+                    for (int c = 0; c < 4; ++c) {
+                        if (!std::isfinite(l1[c]) || !std::isfinite(l2[c])) {
+                            if (outReason) *outReason = "non-finite LTC table entry";
+                            return false;
+                        }
+                    }
+                    const float det = l1.x * l1.w - l1.y * l1.z;
+                    if (!std::isfinite(det) || det <= 1e-6f) {
+                        if (outReason) *outReason = "singular or inverted LTC1 transform matrix";
+                        return false;
+                    }
+                    if (l2.x <= 0.0f || l2.x > 1.0001f || l2.y < 0.0f || l2.y > 1.0001f || l2.z <= 0.0f) {
+                        if (outReason) *outReason = "LTC2 directional albedo out of physical [0, 1] bounds";
+                        return false;
+                    }
+                }
+            }
+            // Diffuse identity check at maximum roughness (ix = kTableDim - 1, iy = 0).
+            const glm::vec4& roughNormal = tables.LTC1[kTableDim - 1u];
+            if (std::abs(roughNormal.x - 1.0f) > 1e-4f || std::abs(roughNormal.y) > 1e-4f ||
+                std::abs(roughNormal.z) > 1e-4f || std::abs(roughNormal.w - 1.0f) > 1e-4f) {
+                if (outReason) *outReason = "LTC1 fails identity convergence at roughness = 1.0";
+                return false;
+            }
+            if (outReason) outReason->clear();
+            return true;
+        }
+
+        glm::vec4 SampleLTC1(float roughness, float NdotV) {
+            const float u = std::clamp((SafeClampRoughness(roughness) - 0.04f) / 0.96f, 0.0f, 1.0f);
+            const float v = std::clamp(std::sqrt(std::max(0.0f, 1.0f - SafeClampNdotV(NdotV))), 0.0f, 1.0f);
+            const float gx = u * static_cast<float>(kTableDim - 1u);
+            const float gy = v * static_cast<float>(kTableDim - 1u);
+            const uint32_t ix0 = std::min(static_cast<uint32_t>(std::floor(gx)), kTableDim - 1u);
+            const uint32_t iy0 = std::min(static_cast<uint32_t>(std::floor(gy)), kTableDim - 1u);
+            const uint32_t ix1 = std::min(ix0 + 1u, kTableDim - 1u);
+            const uint32_t iy1 = std::min(iy0 + 1u, kTableDim - 1u);
+            const float fx = gx - static_cast<float>(ix0);
+            const float fy = gy - static_cast<float>(iy0);
+
+            const glm::vec4 c00 = EvaluateLTC1GridPoint(ix0, iy0);
+            const glm::vec4 c10 = EvaluateLTC1GridPoint(ix1, iy0);
+            const glm::vec4 c01 = EvaluateLTC1GridPoint(ix0, iy1);
+            const glm::vec4 c11 = EvaluateLTC1GridPoint(ix1, iy1);
+            return glm::mix(glm::mix(c00, c10, fx), glm::mix(c01, c11, fx), fy);
+        }
+
+        glm::vec4 SampleLTC2(float roughness, float NdotV) {
+            const float u = std::clamp((SafeClampRoughness(roughness) - 0.04f) / 0.96f, 0.0f, 1.0f);
+            const float v = std::clamp(std::sqrt(std::max(0.0f, 1.0f - SafeClampNdotV(NdotV))), 0.0f, 1.0f);
+            const float gx = u * static_cast<float>(kTableDim - 1u);
+            const float gy = v * static_cast<float>(kTableDim - 1u);
+            const uint32_t ix0 = std::min(static_cast<uint32_t>(std::floor(gx)), kTableDim - 1u);
+            const uint32_t iy0 = std::min(static_cast<uint32_t>(std::floor(gy)), kTableDim - 1u);
+            const uint32_t ix1 = std::min(ix0 + 1u, kTableDim - 1u);
+            const uint32_t iy1 = std::min(iy0 + 1u, kTableDim - 1u);
+            const float fx = gx - static_cast<float>(ix0);
+            const float fy = gy - static_cast<float>(iy0);
+
+            const glm::vec4 c00 = EvaluateLTC2GridPoint(ix0, iy0);
+            const glm::vec4 c10 = EvaluateLTC2GridPoint(ix1, iy0);
+            const glm::vec4 c01 = EvaluateLTC2GridPoint(ix0, iy1);
+            const glm::vec4 c11 = EvaluateLTC2GridPoint(ix1, iy1);
+            return glm::mix(glm::mix(c00, c10, fx), glm::mix(c01, c11, fx), fy);
+        }
+
+        glm::vec3 IntegrateEdgeVector(const glm::vec3& v1, const glm::vec3& v2) {
+            const float x = std::clamp(glm::dot(v1, v2), -0.999999f, 0.999999f);
+            const float y = std::abs(x);
+            const float a = 0.8543985f + (0.4965155f + 0.0145206f * y) * y;
+            const float b = 3.4175940f + (4.1616724f + y) * y;
+            const float v = a / b;
+            const float thetaSinTheta = (x > 0.0f)
+                ? v
+                : (0.5f / std::sqrt(std::max(1.0f - x * x, 1e-7f)) - v);
+            return glm::cross(v1, v2) * thetaSinTheta;
+        }
+
+        std::vector<glm::vec3> ClipPolygonToHorizon(const std::vector<glm::vec3>& poly) {
+            std::vector<glm::vec3> out;
+            const size_t n = poly.size();
+            if (n < 3) {
+                return out;
+            }
+            out.reserve(n + 4);
+            for (size_t i = 0; i < n; ++i) {
+                const glm::vec3& curr = poly[i];
+                const glm::vec3& next = poly[(i + 1) % n];
+                const bool currAbove = (curr.z >= 0.0f);
+                const bool nextAbove = (next.z >= 0.0f);
+                if (currAbove) {
+                    out.push_back(curr);
+                    if (!nextAbove) {
+                        const float denom = curr.z - next.z;
+                        const float t = (std::abs(denom) > 1e-7f) ? (curr.z / denom) : 0.0f;
+                        glm::vec3 clipped = glm::mix(curr, next, std::clamp(t, 0.0f, 1.0f));
+                        clipped.z = 0.0f;
+                        out.push_back(clipped);
+                    }
+                } else if (nextAbove) {
+                    const float denom = next.z - curr.z;
+                    const float t = (std::abs(denom) > 1e-7f) ? (-curr.z / denom) : 0.0f;
+                    glm::vec3 clipped = glm::mix(curr, next, std::clamp(t, 0.0f, 1.0f));
+                    clipped.z = 0.0f;
+                    out.push_back(clipped);
+                }
+            }
+            return out;
+        }
+
+        void ComputeOrthonormalAreaBasis(
+            const glm::vec3& rawDir,
+            const glm::vec3& rawUp,
+            glm::vec3& outRight,
+            glm::vec3& outUp,
+            glm::vec3& outDir) {
+            outDir = SafeNormalize(rawDir, glm::vec3(0.0f, 0.0f, -1.0f));
+            const glm::vec3 fallbackUpAxis = (std::abs(outDir.y) < 0.99f)
+                ? glm::vec3(0.0f, 1.0f, 0.0f)
+                : glm::vec3(1.0f, 0.0f, 0.0f);
+            const glm::vec3 orthoCandidate = rawUp - outDir * glm::dot(rawUp, outDir);
+            outUp = SafeNormalize(orthoCandidate, SafeNormalize(glm::cross(fallbackUpAxis, outDir), glm::vec3(0.0f, 1.0f, 0.0f)));
+            outRight = SafeNormalize(glm::cross(outDir, outUp), glm::vec3(1.0f, 0.0f, 0.0f));
+            outUp = SafeNormalize(glm::cross(outRight, outDir), outUp);
+        }
+
+        float ComputeEmitterClosestDistance(const LightingRectFrame& light, const glm::vec3& worldPos) {
+            glm::vec3 right, up, dir;
+            ComputeOrthonormalAreaBasis(light.Direction, light.Up, right, up, dir);
+            const float halfW = std::max(std::isfinite(light.Width) ? light.Width * 0.5f : 0.005f, 0.005f);
+            const float halfH = std::max(std::isfinite(light.Height) ? light.Height * 0.5f : 0.005f, 0.005f);
+            const glm::vec3 rel = worldPos - light.Position;
+            float u = glm::dot(rel, right);
+            float v = glm::dot(rel, up);
+            if (light.Shape == AreaLightShape::Disk) {
+                const float nx = u / halfW;
+                const float ny = v / halfH;
+                const float radial = std::sqrt(nx * nx + ny * ny);
+                if (radial > 1.0f) {
+                    u = (nx / radial) * halfW;
+                    v = (ny / radial) * halfH;
+                }
+            } else {
+                u = std::clamp(u, -halfW, halfW);
+                v = std::clamp(v, -halfH, halfH);
+            }
+            const glm::vec3 closestPt = light.Position + right * u + up * v;
+            const float d = glm::length(worldPos - closestPt);
+            return std::isfinite(d) ? d : 0.0f;
+        }
+
+        AreaLightEvaluation EvaluateLTCAreaLightCPU(
+            const LightingRectFrame& light,
+            const glm::vec3& worldPos,
+            const glm::vec3& normalWS,
+            const glm::vec3& viewDirWS,
+            const glm::vec3& baseColor,
+            float metallic,
+            float roughness) {
+            AreaLightEvaluation result;
+            const float range = std::isfinite(light.Range) ? light.Range : 0.0f;
+            const float absIntensity = std::isfinite(light.SignedIntensity) ? std::abs(light.SignedIntensity) : 0.0f;
+            if (range <= 1e-3f || absIntensity <= 0.0f) {
+                return result;
+            }
+
+            glm::vec3 lightRight, lightUp, lightDir;
+            ComputeOrthonormalAreaBasis(light.Direction, light.Up, lightRight, lightUp, lightDir);
+
+            const bool twoSided = (light.SignedIntensity < 0.0f);
+            const float dirDot = glm::dot(worldPos - light.Position, lightDir);
+            if (!twoSided && dirDot <= 0.0f) {
+                return result;
+            }
+
+            const float closestDist = ComputeEmitterClosestDistance(light, worldPos);
+            if (closestDist >= range) {
+                return result;
+            }
+            const float ratio = std::clamp(closestDist / range, 0.0f, 1.0f);
+            const float win = std::max(0.0f, 1.0f - ratio * ratio * ratio * ratio);
+            result.RangeAttenuation = win * win;
+
+            const glm::vec3 N = SafeNormalize(normalWS, glm::vec3(0.0f, 1.0f, 0.0f));
+            const glm::vec3 V = SafeNormalize(viewDirWS, N);
+            const float NdotV = std::clamp(glm::dot(N, V), 0.001f, 1.0f);
+            const float safeRoughness = SafeClampRoughness(roughness);
+            const float safeMetallic = std::clamp(metallic, 0.0f, 1.0f);
+
+            const glm::vec3 tangentRaw = V - N * glm::dot(N, V);
+            const glm::vec3 fallbackTangentAxis = (std::abs(N.y) < 0.99f)
+                ? glm::vec3(0.0f, 1.0f, 0.0f)
+                : glm::vec3(1.0f, 0.0f, 0.0f);
+            const glm::vec3 T1 = SafeNormalize(tangentRaw, SafeNormalize(glm::cross(fallbackTangentAxis, N), glm::vec3(1.0f, 0.0f, 0.0f)));
+            const glm::vec3 T2 = SafeNormalize(glm::cross(N, T1), glm::vec3(0.0f, 0.0f, 1.0f));
+
+            const float halfW = std::max(std::isfinite(light.Width) ? light.Width * 0.5f : 0.005f, 0.005f);
+            const float halfH = std::max(std::isfinite(light.Height) ? light.Height * 0.5f : 0.005f, 0.005f);
+
+            std::vector<glm::vec3> shadingPoly;
+            auto pushWorldVertex = [&](const glm::vec3& wp) {
+                const glm::vec3 rel = wp - worldPos;
+                shadingPoly.emplace_back(glm::dot(rel, T1), glm::dot(rel, T2), glm::dot(rel, N));
+            };
+
+            if (light.Shape == AreaLightShape::Disk) {
+                shadingPoly.reserve(8);
+                for (int k = 0; k < 8; ++k) {
+                    const float angle = (static_cast<float>(k) + 0.5f) * (kPi * 0.25f);
+                    const float cx = std::cos(angle) * kDiskOctagonRadiusScale;
+                    const float cy = std::sin(angle) * kDiskOctagonRadiusScale;
+                    pushWorldVertex(light.Position + lightRight * (halfW * cx) + lightUp * (halfH * cy));
+                }
+            } else {
+                shadingPoly.reserve(4);
+                pushWorldVertex(light.Position - lightRight * halfW - lightUp * halfH);
+                pushWorldVertex(light.Position + lightRight * halfW - lightUp * halfH);
+                pushWorldVertex(light.Position + lightRight * halfW + lightUp * halfH);
+                pushWorldVertex(light.Position - lightRight * halfW + lightUp * halfH);
+            }
+
+            result.DiffuseFormFactor = EvaluateLTCContourIntegral(shadingPoly, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), twoSided);
+            const glm::vec4 ltc1 = SampleLTC1(safeRoughness, NdotV);
+            const glm::vec4 ltc2 = SampleLTC2(safeRoughness, NdotV);
+            result.SpecularFormFactor = EvaluateLTCContourIntegral(shadingPoly, ltc1, twoSided);
+
+            const glm::vec3 safeAlbedo = glm::max(baseColor, glm::vec3(0.0f));
+            const glm::vec3 F0 = SSRRaymarchContract::ComputeSpecularF0(safeAlbedo, safeMetallic);
+            result.SpecularAlbedo = F0 * ltc2.x + (glm::vec3(1.0f) - F0) * ltc2.y;
+
+            const glm::vec3 kD = glm::max(glm::vec3(1.0f) - result.SpecularAlbedo, glm::vec3(0.0f)) * (1.0f - safeMetallic);
+            const glm::vec3 lightRadiance = glm::max(light.Color, glm::vec3(0.0f)) * (absIntensity * result.RangeAttenuation * kLocalIntensityScale);
+
+            result.DiffuseRadiance = kD * safeAlbedo * result.DiffuseFormFactor * lightRadiance;
+            result.SpecularRadiance = result.SpecularAlbedo * result.SpecularFormFactor * lightRadiance;
+            result.TotalRadiance = result.DiffuseRadiance + result.SpecularRadiance;
+            return result;
+        }
+
+        AreaLightEvaluation EvaluateAreaLightNumericalReferenceCPU(
+            const LightingRectFrame& light,
+            const glm::vec3& worldPos,
+            const glm::vec3& normalWS,
+            const glm::vec3& viewDirWS,
+            const glm::vec3& baseColor,
+            float metallic,
+            float roughness,
+            uint32_t samplesPerAxis) {
+            AreaLightEvaluation result;
+            const uint32_t gridN = std::clamp(samplesPerAxis, 8u, 128u);
+            const float range = std::isfinite(light.Range) ? light.Range : 0.0f;
+            const float absIntensity = std::isfinite(light.SignedIntensity) ? std::abs(light.SignedIntensity) : 0.0f;
+            if (range <= 1e-3f || absIntensity <= 0.0f) {
+                return result;
+            }
+
+            glm::vec3 lightRight, lightUp, lightDir;
+            ComputeOrthonormalAreaBasis(light.Direction, light.Up, lightRight, lightUp, lightDir);
+
+            const bool twoSided = (light.SignedIntensity < 0.0f);
+            const float dirDot = glm::dot(worldPos - light.Position, lightDir);
+            if (!twoSided && dirDot <= 0.0f) {
+                return result;
+            }
+
+            const float closestDist = ComputeEmitterClosestDistance(light, worldPos);
+            if (closestDist >= range) {
+                return result;
+            }
+            const float ratio = std::clamp(closestDist / range, 0.0f, 1.0f);
+            const float win = std::max(0.0f, 1.0f - ratio * ratio * ratio * ratio);
+            result.RangeAttenuation = win * win;
+
+            const glm::vec3 N = SafeNormalize(normalWS, glm::vec3(0.0f, 1.0f, 0.0f));
+            const glm::vec3 V = SafeNormalize(viewDirWS, N);
+            const float NdotV = std::clamp(glm::dot(N, V), 0.001f, 1.0f);
+            const float safeRoughness = SafeClampRoughness(roughness);
+            const float safeMetallic = std::clamp(metallic, 0.0f, 1.0f);
+            const float alpha = safeRoughness * safeRoughness;
+            const float a2 = alpha * alpha;
+
+            const glm::vec3 safeAlbedo = glm::max(baseColor, glm::vec3(0.0f));
+            const glm::vec3 F0 = SSRRaymarchContract::ComputeSpecularF0(safeAlbedo, safeMetallic);
+            const float halfW = std::max(std::isfinite(light.Width) ? light.Width * 0.5f : 0.005f, 0.005f);
+            const float halfH = std::max(std::isfinite(light.Height) ? light.Height * 0.5f : 0.005f, 0.005f);
+
+            float diffuseSum = 0.0f;
+            glm::vec3 specIntegral(0.0f);
+
+            for (uint32_t iy = 0; iy < gridN; ++iy) {
+                for (uint32_t ix = 0; ix < gridN; ++ix) {
+                    glm::vec3 samplePos;
+                    float sampleArea = 0.0f;
+                    if (light.Shape == AreaLightShape::Disk) {
+                        const float u = (static_cast<float>(ix) + 0.5f) / static_cast<float>(gridN);
+                        const float v = (static_cast<float>(iy) + 0.5f) / static_cast<float>(gridN);
+                        const float angle = 2.0f * kPi * v;
+                        const float lx = halfW * u * std::cos(angle);
+                        const float ly = halfH * u * std::sin(angle);
+                        samplePos = light.Position + lightRight * lx + lightUp * ly;
+                        const float dU = 1.0f / static_cast<float>(gridN);
+                        const float dTheta = (2.0f * kPi) / static_cast<float>(gridN);
+                        sampleArea = (halfW * halfH) * u * dU * dTheta;
+                    } else {
+                        const float u = ((static_cast<float>(ix) + 0.5f) / static_cast<float>(gridN)) * 2.0f - 1.0f;
+                        const float v = ((static_cast<float>(iy) + 0.5f) / static_cast<float>(gridN)) * 2.0f - 1.0f;
+                        samplePos = light.Position + lightRight * (halfW * u) + lightUp * (halfH * v);
+                        sampleArea = (4.0f * halfW * halfH) / static_cast<float>(gridN * gridN);
+                    }
+
+                    const glm::vec3 toSample = samplePos - worldPos;
+                    const float distSq = glm::dot(toSample, toSample);
+                    if (distSq <= 1e-8f) {
+                        continue;
+                    }
+                    const float invDist = 1.0f / std::sqrt(distSq);
+                    const glm::vec3 L = toSample * invDist;
+                    const float NdotL = std::max(glm::dot(N, L), 0.0f);
+                    const float rawEmitterCos = glm::dot(-L, lightDir);
+                    const float emitterCos = twoSided ? std::abs(rawEmitterCos) : std::max(rawEmitterCos, 0.0f);
+                    if (NdotL <= 0.0f || emitterCos <= 0.0f) {
+                        continue;
+                    }
+
+                    const float dOmega = (emitterCos * sampleArea) / distSq;
+                    diffuseSum += (NdotL * dOmega) / kPi;
+
+                    const glm::vec3 H = SafeNormalize(V + L, N);
+                    const float NdotH = std::max(glm::dot(N, H), 0.0f);
+                    const float VdotH = std::max(glm::dot(V, H), 0.0f);
+                    const float denomD = (NdotH * NdotH) * (a2 - 1.0f) + 1.0f;
+                    const float D = a2 / std::max(kPi * denomD * denomD, 1e-8f);
+                    const float ggxV = NdotL * std::sqrt(NdotV * NdotV * (1.0f - a2) + a2);
+                    const float ggxL = NdotV * std::sqrt(NdotL * NdotL * (1.0f - a2) + a2);
+                    const float vis = 0.5f / std::max(ggxV + ggxL, 1e-5f);
+                    const glm::vec3 F = F0 + (glm::vec3(1.0f) - F0) * std::pow(std::clamp(1.0f - VdotH, 0.0f, 1.0f), 5.0f);
+                    specIntegral += (D * vis * F) * NdotL * dOmega;
+                }
+            }
+
+            result.DiffuseFormFactor = diffuseSum;
+            const glm::vec4 ltc2 = SampleLTC2(safeRoughness, NdotV);
+            result.SpecularAlbedo = F0 * ltc2.x + (glm::vec3(1.0f) - F0) * ltc2.y;
+            const glm::vec3 safeDenom = glm::max(result.SpecularAlbedo, glm::vec3(1e-4f));
+            result.SpecularFormFactor = (specIntegral.r / safeDenom.r + specIntegral.g / safeDenom.g + specIntegral.b / safeDenom.b) / 3.0f;
+
+            const glm::vec3 kD = glm::max(glm::vec3(1.0f) - result.SpecularAlbedo, glm::vec3(0.0f)) * (1.0f - safeMetallic);
+            const glm::vec3 lightRadiance = glm::max(light.Color, glm::vec3(0.0f)) * (absIntensity * result.RangeAttenuation * kLocalIntensityScale);
+
+            result.DiffuseRadiance = kD * safeAlbedo * result.DiffuseFormFactor * lightRadiance;
+            result.SpecularRadiance = specIntegral * lightRadiance;
+            result.TotalRadiance = result.DiffuseRadiance + result.SpecularRadiance;
+            return result;
+        }
+    } // namespace AreaLightLTCContract
+
 } // namespace Axle

@@ -88,14 +88,28 @@ namespace Axle {
         for (const auto& light : world.RectLights) {
             if (rectIndex >= MaxLightingRectLights) break;
             auto& packed=frame.RectLights[rectIndex++];
-            packed.Position=light.Position;
-            packed.Width=light.Width;
-            packed.Direction=light.Direction;
-            packed.Height=light.Height;
-            packed.Up=light.Up;
-            packed.Range=light.Range;
-            packed.Color=light.Color;
-            packed.SignedIntensity=light.TwoSided ? -std::abs(light.Intensity) : std::abs(light.Intensity);
+            auto safeDir = [](const glm::vec3& v, const glm::vec3& fallback) {
+                const float lenSq = glm::dot(v, v);
+                return (std::isfinite(lenSq) && lenSq > 1e-12f) ? (v * (1.0f / std::sqrt(lenSq))) : fallback;
+            };
+            const glm::vec3 dir = safeDir(light.Direction, {0.0f, 0.0f, -1.0f});
+            const glm::vec3 upFallbackAxis = (std::abs(dir.y) < 0.99f) ? glm::vec3{0.0f, 1.0f, 0.0f} : glm::vec3{1.0f, 0.0f, 0.0f};
+            const glm::vec3 orthoUp = safeDir(light.Up - dir * glm::dot(light.Up, dir),
+                safeDir(glm::cross(upFallbackAxis, dir), {0.0f, 1.0f, 0.0f}));
+            packed.Position = light.Position;
+            packed.Width = (std::isfinite(light.Width) && light.Width > 0.01f) ? light.Width : 0.01f;
+            packed.Direction = dir;
+            packed.Height = (std::isfinite(light.Height) && light.Height > 0.01f) ? light.Height : 0.01f;
+            packed.Up = orthoUp;
+            packed.Range = (std::isfinite(light.Range) && light.Range > 0.0f) ? light.Range : 0.0f;
+            packed.Color = glm::vec3(
+                (std::isfinite(light.Color.r) && light.Color.r > 0.0f) ? light.Color.r : 0.0f,
+                (std::isfinite(light.Color.g) && light.Color.g > 0.0f) ? light.Color.g : 0.0f,
+                (std::isfinite(light.Color.b) && light.Color.b > 0.0f) ? light.Color.b : 0.0f);
+            const float safeIntensity = ArtistIntensity(std::isfinite(light.Intensity) ? std::abs(light.Intensity) : 0.0f);
+            packed.SignedIntensity = light.TwoSided ? -safeIntensity : safeIntensity;
+            packed.Shape = light.Shape;
+            packed.ShadowPolicy = AreaLightShadowPolicy::UnshadowedAnalyticLTC;
         }
         frame.RectCount=rectIndex;
 

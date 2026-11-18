@@ -116,6 +116,19 @@ namespace Axle::RenderTests {
         slc.Range = 40.0f;
         slc.Shadows.NearPlane=.15f;slc.Shadows.FilterRadius=2;
 
+        // Area Light (LTC Disk / Rect)
+        Entity rectEntity = scene.CreateEntity("AreaDisk");
+        auto& rtc = rectEntity.GetComponent<TransformComponent>();
+        rtc.Translation = glm::vec3(-2.0f, 4.0f, 1.0f);
+        auto& rlc = rectEntity.AddComponent<RectLightComponent>();
+        rlc.Shape = AreaLightShape::Disk;
+        rlc.Color = glm::vec3(0.9f, 0.7f, 0.5f);
+        rlc.Intensity = 25.0f;
+        rlc.Width = 3.5f;
+        rlc.Height = 1.8f;
+        rlc.Range = 22.0f;
+        rlc.TwoSided = true;
+
         // Skybox
         Entity sky = scene.CreateEntity("Sky");
         auto& sc = sky.AddComponent<SkyboxComponent>();
@@ -136,11 +149,35 @@ namespace Axle::RenderTests {
         RENDER_CHECK(world.GetSpotLightCount() == 1, "Spot light extracted");
         RENDER_CHECK(glm::distance(world.SpotLights[0].Position, glm::vec3(5.0f, 10.0f, 5.0f)) < 0.001f, "Spot light position matches world transform");
         RENDER_CHECK(world.SpotLights[0].Range == 40.0f, "Spot light range matches");
+        RENDER_CHECK(world.RectLights.size() == 1 &&
+                     world.RectLights[0].Shape == AreaLightShape::Disk &&
+                     Near(world.RectLights[0].Width, 3.5f) &&
+                     Near(world.RectLights[0].Height, 1.8f) &&
+                     Near(world.RectLights[0].Range, 22.0f) &&
+                     world.RectLights[0].TwoSided &&
+                     world.RectLights[0].ShadowPolicy == AreaLightShadowPolicy::UnshadowedAnalyticLTC,
+            "M15-U5-44.1 / 44.2: RectLightComponent extracts Shape, dimensions, range, sidedness, and shadow policy");
         RENDER_CHECK(!world.PointLights[0].Shadows.CastShadows&&world.PointLights[0].Shadows.Bias==.004f,"Point shadow controls extracted");
         RENDER_CHECK(world.SpotLights[0].Shadows.NearPlane==.15f&&world.SpotLights[0].Shadows.FilterRadius==2,"Spot shadow controls extracted");
-        Scene reopened;RENDER_CHECK(SceneSerializer(&reopened).DeserializeFromString(SceneSerializer(&scene).SerializeToString()),"Local light shadow controls reopen");
+        const std::string savedSceneText = SceneSerializer(&scene).SerializeToString();
+        Scene reopened;RENDER_CHECK(SceneSerializer(&reopened).DeserializeFromString(savedSceneText),"Local light shadow & area-light controls reopen");
         const auto restored=ExtractRenderWorld(reopened);
         RENDER_CHECK(!restored.PointLights[0].Shadows.CastShadows&&restored.PointLights[0].Shadows.Bias==.004f&&restored.SpotLights[0].Shadows.NearPlane==.15f&&restored.SpotLights[0].Shadows.FilterRadius==2,"Local light shadow controls survive scene persistence");
+        RENDER_CHECK(restored.RectLights.size() == 1 && restored.RectLights[0].Shape == AreaLightShape::Disk &&
+                     Near(restored.RectLights[0].Width, 3.5f) && restored.RectLights[0].TwoSided,
+            "M15-U5-44.3: RectLightComponent Shape=Disk and parameters survive scene round-trip");
+
+        // Legacy scene without Shape: must default safely to Rectangle
+        std::string legacyRectYaml = savedSceneText;
+        const auto shapePos = legacyRectYaml.find("      Shape: Disk\n");
+        RENDER_CHECK(shapePos != std::string::npos, "SceneSerializer writes explicit Shape field for RectLightComponent");
+        legacyRectYaml.erase(shapePos, std::string("      Shape: Disk\n").size());
+        Scene legacyRectScene;
+        RENDER_CHECK(SceneSerializer(&legacyRectScene).DeserializeFromString(legacyRectYaml),
+            "M15-U5-44.3: Legacy RectLight YAML without Shape field loads cleanly");
+        const auto legacyRestored = ExtractRenderWorld(legacyRectScene);
+        RENDER_CHECK(legacyRestored.RectLights.size() == 1 && legacyRestored.RectLights[0].Shape == AreaLightShape::Rectangle,
+            "M15-U5-44.3: Omitted RectLight Shape defaults to Rectangle");
 
         const auto assemblyPath=std::filesystem::temp_directory_path()/
             ("axle-local-light-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".axle");
@@ -150,19 +187,29 @@ namespace Axle::RenderTests {
             a.CastShadows==b.CastShadows&&Near(a.Bias,b.Bias)&&Near(a.SlopeBias,b.SlopeBias)&&
             Near(a.NormalBias,b.NormalBias)&&Near(a.FilterRadius,b.FilterRadius)&&Near(a.NearPlane,b.NearPlane);};
         auto& assemblySpot=lamp.AddComponent<SpotLightComponent>();
+        auto& assemblyRect=lamp.AddComponent<RectLightComponent>();
+        assemblyRect.Shape=AreaLightShape::Disk; assemblyRect.Width=2.75f; assemblyRect.Height=1.25f;
+        assemblyRect.Range=18.5f; assemblyRect.TwoSided=true; assemblyRect.Intensity=14.0f;
         plc.Shadows={false,.012f,.023f,.034f,1.25f,.15f};
         assemblySpot.Shadows={true,.045f,.056f,.067f,.75f,.2f};
         RENDER_CHECK(AssemblySerializer::Serialize(assemblyPath,lamp),"Export local-light assembly");
         Scene assemblyScene;auto imported=AssemblySerializer::Deserialize(assemblyPath,&assemblyScene);
         RENDER_CHECK(imported&&verifyShadows(imported.GetComponent<PointLightComponent>().Shadows,plc.Shadows)&&
-            verifyShadows(imported.GetComponent<SpotLightComponent>().Shadows,assemblySpot.Shadows),"Entity assembly round-trip keeps every local-shadow field");
+            verifyShadows(imported.GetComponent<SpotLightComponent>().Shadows,assemblySpot.Shadows)&&
+            imported.HasComponent<RectLightComponent>()&&
+            imported.GetComponent<RectLightComponent>().Shape==AreaLightShape::Disk&&
+            Near(imported.GetComponent<RectLightComponent>().Width,2.75f)&&
+            imported.GetComponent<RectLightComponent>().TwoSided,"Entity assembly round-trip keeps local-shadow and area-light fields");
         auto assembly=AssemblySerializer::LoadAssemblyData(assemblyPath);
-        RENDER_CHECK(assembly.IsValid&&assembly.RootNode.HasPointLight&&assembly.RootNode.HasSpotLight&&
-            verifyShadows(assembly.RootNode.PointLight.Shadows,plc.Shadows)&&verifyShadows(assembly.RootNode.SpotLight.Shadows,assemblySpot.Shadows),"Assembly Editor data keeps local lights and shadows");
+        RENDER_CHECK(assembly.IsValid&&assembly.RootNode.HasPointLight&&assembly.RootNode.HasSpotLight&&assembly.RootNode.HasRectLight&&
+            assembly.RootNode.RectLight.Shape==AreaLightShape::Disk&&
+            verifyShadows(assembly.RootNode.PointLight.Shadows,plc.Shadows)&&verifyShadows(assembly.RootNode.SpotLight.Shadows,assemblySpot.Shadows),"Assembly Editor data keeps local lights, shadows, and area light");
         RENDER_CHECK(AssemblySerializer::SaveAssemblyData(assemblyPath,assembly),"Save local-light assembly data");
         const auto savedAssembly=AssemblySerializer::LoadAssemblyData(assemblyPath);
-        RENDER_CHECK(savedAssembly.IsValid&&savedAssembly.RootNode.HasPointLight&&savedAssembly.RootNode.HasSpotLight&&
-            verifyShadows(savedAssembly.RootNode.PointLight.Shadows,plc.Shadows)&&verifyShadows(savedAssembly.RootNode.SpotLight.Shadows,assemblySpot.Shadows),"Assembly Editor save preserves shadow fields");
+        RENDER_CHECK(savedAssembly.IsValid&&savedAssembly.RootNode.HasPointLight&&savedAssembly.RootNode.HasSpotLight&&savedAssembly.RootNode.HasRectLight&&
+            savedAssembly.RootNode.RectLight.Shape==AreaLightShape::Disk&&
+            Near(savedAssembly.RootNode.RectLight.Height,1.25f)&&
+            verifyShadows(savedAssembly.RootNode.PointLight.Shadows,plc.Shadows)&&verifyShadows(savedAssembly.RootNode.SpotLight.Shadows,assemblySpot.Shadows),"Assembly Editor save preserves shadow and area-light fields");
         const auto validAssembly=FileSystem::ReadTextFile(assemblyPath);
         for(const auto* invalid:{"invalid","1e9999"}) {
             auto corrupt=[&](std::string text){const auto start=text.find("ShadowBias:");

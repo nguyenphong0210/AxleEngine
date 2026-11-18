@@ -5,6 +5,7 @@
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/SceneRenderSettings.hpp>
 #include <Axle/RenderWorld.hpp>
+#include <Axle/LightingService.hpp>
 #include <Axle/RHI/RHICommon.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
@@ -550,6 +551,73 @@ namespace Axle {
             uint32_t width,
             uint32_t height);
         glm::vec3 ComputeSpecularF0(const glm::vec3& baseColor, float metallic);
+    }
+
+    // =========================================================================
+    // 8. LTC Rectangular & Disk Area Light Contracts (M15-U5-40..45.3)
+    // =========================================================================
+    namespace AreaLightLTCContract {
+        static constexpr uint32_t kTableDim = 8u;
+        static constexpr uint32_t kTableSize = kTableDim * kTableDim;
+        static constexpr uint32_t kMaxClipVertices = 16u;
+
+        struct LTCTables {
+            // Row-major [viewIdx * kTableDim + roughIdx]:
+            // LTC1 stores inverse transform M^-1 = (m00, m02, m20, m22) with M^-1[1][1] = 1.
+            // LTC2 stores directional albedo / norm = (ggxNorm, fresnelTerm, sphereFormFactor, 0).
+            std::array<glm::vec4, kTableSize> LTC1{};
+            std::array<glm::vec4, kTableSize> LTC2{};
+        };
+
+        struct AreaLightEvaluation {
+            float DiffuseFormFactor = 0.0f;
+            float SpecularFormFactor = 0.0f;
+            float RangeAttenuation = 0.0f;
+            glm::vec3 SpecularAlbedo{ 0.0f };
+            glm::vec3 DiffuseRadiance{ 0.0f };
+            glm::vec3 SpecularRadiance{ 0.0f };
+            glm::vec3 TotalRadiance{ 0.0f };
+        };
+
+        glm::vec4 EvaluateLTC1GridPoint(uint32_t roughIdx, uint32_t viewIdx);
+        glm::vec4 EvaluateLTC2GridPoint(uint32_t roughIdx, uint32_t viewIdx);
+        LTCTables BuildValidatedLTCTables();
+        bool ValidateLTCTables(const LTCTables& tables, std::string* outReason = nullptr);
+
+        glm::vec4 SampleLTC1(float roughness, float NdotV);
+        glm::vec4 SampleLTC2(float roughness, float NdotV);
+
+        glm::vec3 IntegrateEdgeVector(const glm::vec3& v1, const glm::vec3& v2);
+        std::vector<glm::vec3> ClipPolygonToHorizon(const std::vector<glm::vec3>& poly);
+        void ComputeOrthonormalAreaBasis(
+            const glm::vec3& rawDir,
+            const glm::vec3& rawUp,
+            glm::vec3& outRight,
+            glm::vec3& outUp,
+            glm::vec3& outDir);
+        float ComputeEmitterClosestDistance(
+            const LightingRectFrame& light,
+            const glm::vec3& worldPos);
+
+        AreaLightEvaluation EvaluateLTCAreaLightCPU(
+            const LightingRectFrame& light,
+            const glm::vec3& worldPos,
+            const glm::vec3& normalWS,
+            const glm::vec3& viewDirWS,
+            const glm::vec3& baseColor,
+            float metallic,
+            float roughness);
+
+        // Dense 32x32 surface quadrature reference over the emitter domain.
+        AreaLightEvaluation EvaluateAreaLightNumericalReferenceCPU(
+            const LightingRectFrame& light,
+            const glm::vec3& worldPos,
+            const glm::vec3& normalWS,
+            const glm::vec3& viewDirWS,
+            const glm::vec3& baseColor,
+            float metallic,
+            float roughness,
+            uint32_t samplesPerAxis = 32u);
     }
 
 } // namespace Axle

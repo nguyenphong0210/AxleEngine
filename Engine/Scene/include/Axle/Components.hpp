@@ -998,6 +998,8 @@ namespace Axle {
 
     struct RectLightComponent {
         bool Enabled = true;
+        AreaLightShape Shape = AreaLightShape::Rectangle;
+        AreaLightShadowPolicy ShadowPolicy = AreaLightShadowPolicy::UnshadowedAnalyticLTC;
         glm::vec3 Color{ 1.0f, 1.0f, 1.0f };
         float Intensity = 10.0f;
         float Width = 2.0f;
@@ -1006,8 +1008,8 @@ namespace Axle {
         bool TwoSided = false;
 
         RectLightComponent() = default;
-        RectLightComponent(const glm::vec3& color, float intensity = 10.0f, float width = 2.0f, float height = 1.0f, float range = 20.0f)
-            : Color(color), Intensity(intensity), Width(width), Height(height), Range(range) {}
+        RectLightComponent(const glm::vec3& color, float intensity = 10.0f, float width = 2.0f, float height = 1.0f, float range = 20.0f, AreaLightShape shape = AreaLightShape::Rectangle)
+            : Shape(shape), Color(color), Intensity(intensity), Width(width), Height(height), Range(range) {}
     };
 
     struct VolumetricFogComponent {

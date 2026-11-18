@@ -341,7 +341,7 @@ namespace Axle::UIIcons {
 
         if (entity.HasComponent<CameraComponent>()) {
             DrawCameraIcon(dl, pos, size);
-        } else if (entity.HasComponent<DirectionalLightComponent>() || entity.HasComponent<PointLightComponent>() || entity.HasComponent<SpotLightComponent>()) {
+        } else if (entity.HasComponent<DirectionalLightComponent>() || entity.HasComponent<PointLightComponent>() || entity.HasComponent<SpotLightComponent>() || entity.HasComponent<RectLightComponent>()) {
             DrawLightIcon(dl, pos, size);
         } else if (entity.HasComponent<UICanvasComponent>()) {
             DrawUIIcon(dl, pos, size);

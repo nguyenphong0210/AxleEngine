@@ -3,6 +3,7 @@
 #include <Axle/ReflectionService.hpp>
 #include <Axle/GIService.hpp>
 #include <Axle/PostProcessService.hpp>
+#include <Axle/RHI/RHILight.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 #include <fstream>
@@ -709,6 +710,54 @@ bool RunLightingServiceUnitTests() {
         "ToneMapping.hlsl enforces positive exposure fallback to 1.0");
     RENDER_CHECK(toneSource.find("float3 exposed = hdrColor * exposure;")!=std::string::npos,
         "ToneMapping.hlsl applies linear radiometric exposure scaling before tonemapping");
+
+    // M15-U5-G / S5.7: Area light shape, sanitization, orthonormalization, unshadowed policy, and 64B GPU packing
+    {
+        RenderWorld areaWorld;
+        RenderRectLight diskLight{};
+        diskLight.Position = {1.0f, 3.0f, -2.0f};
+        diskLight.Direction = {0.0f, -2.0f, 0.0f};
+        diskLight.Up = {0.0f, -2.0f, 0.0f}; // deliberately collinear and non-unit
+        diskLight.Width = -1.0f;            // deliberately invalid non-positive
+        diskLight.Height = std::numeric_limits<float>::quiet_NaN();
+        diskLight.Range = 25.0f;
+        diskLight.Intensity = 18.0f;
+        diskLight.TwoSided = true;
+        diskLight.Shape = AreaLightShape::Disk;
+        areaWorld.RectLights.push_back(diskLight);
+
+        const auto areaFrame = lighting.BuildFrame(areaWorld, settings, ShadowPublication{true, true, cascade, local});
+        RENDER_CHECK(areaFrame.RectCount == 1 &&
+                     areaFrame.RectLights[0].Shape == AreaLightShape::Disk &&
+                     areaFrame.RectLights[0].ShadowPolicy == AreaLightShadowPolicy::UnshadowedAnalyticLTC &&
+                     areaFrame.RectLights[0].SignedIntensity == -18.0f &&
+                     areaFrame.RectLights[0].Width >= 0.01f &&
+                     areaFrame.RectLights[0].Height >= 0.01f &&
+                     std::abs(glm::length(areaFrame.RectLights[0].Direction) - 1.0f) < 1e-4f &&
+                     std::abs(glm::length(areaFrame.RectLights[0].Up) - 1.0f) < 1e-4f &&
+                     std::abs(glm::dot(areaFrame.RectLights[0].Direction, areaFrame.RectLights[0].Up)) < 1e-4f,
+            "M15-U5-41.2 / 41.3 / 43: LightingService preserves Disk shape, sanitizes dims/NaNs, and orthonormalizes collinear Up");
+
+        RHI::RHIMultiLightBuffer multiBuffer;
+        RHI::RHIRectLight rhiDisk{};
+        rhiDisk.Position = {0.0f, 2.0f, -4.0f};
+        rhiDisk.Direction = {0.0f, -1.0f, 0.0f};
+        rhiDisk.Up = {0.0f, 0.0f, 1.0f};
+        rhiDisk.Width = 2.5f;
+        rhiDisk.Height = 1.5f;
+        rhiDisk.Range = 20.0f;
+        rhiDisk.Intensity = 12.0f;
+        rhiDisk.TwoSided = false;
+        rhiDisk.Shape = 1u;
+        RENDER_CHECK(multiBuffer.AddRectLight(rhiDisk) &&
+                     sizeof(RHI::RHIGPURectLight) == 64u &&
+                     sizeof(RHI::RHIMultiLightBufferData) == 2304u &&
+                     multiBuffer.GetData().ReservedHeader[1].x == 1.0f &&
+                     Axle::RenderTests::Near(multiBuffer.GetData().RectLights[0].PositionAndWidth.w, 2.5f) &&
+                     Axle::RenderTests::Near(multiBuffer.GetData().RectLights[0].DirectionAndHeight.w, -1.5f) &&
+                     multiBuffer.GetData().RectLights[0].ColorAndIntensity.w == 12.0f,
+            "M15-U5-44.2: RHIMultiLightBuffer encodes Disk shape in negative DirectionAndHeight.w within 64B/2304B layout");
+    }
 
     std::cout << "  [LightingServices] Lighting/reflection/GI boundary tests passed.\n";
     return true;

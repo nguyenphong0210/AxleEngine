@@ -354,14 +354,6 @@ float3 DecodeMaterialNormal(float2 rg,float strength) {
     return normalize(n);
 }
 
-float3 LTC_IntegrateEdge(float3 va, float3 vb) {
-    float3 cr = cross(va, vb);
-    float len = length(cr);
-    if (len < 1e-6) return float3(0.0, 0.0, 0.0);
-    float dt = clamp(dot(va, vb), -1.0, 1.0);
-    return (cr / len) * acos(dt);
-}
-
 ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     // 1. Unpack Shading Controls from Object Push Constants
     float tileScale = max(0.01, u_Params.x);
@@ -713,84 +705,35 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         }
     }
 
-    // 8b. Rect Area Lights (LTC Polygonal Diffuse & Representative Point Specular)
+    // 8b. Rect / Disk Area Lights (Validated LTC Diffuse & Specular, M15-U5-40..45)
     uint numRectLights = min((uint)u_LightReserved[1].x, 2u);
     for (uint r = 0; r < numRectLights; ++r) {
         RectLightData rLight = u_RectLights[r];
-        float3 lightPos = rLight.PositionAndWidth.xyz;
-        float  halfWidth = rLight.PositionAndWidth.w * 0.5;
-        float3 lightDir = normalize(rLight.DirectionAndHeight.xyz);
-        float  halfHeight = rLight.DirectionAndHeight.w * 0.5;
-        float3 lightUp = normalize(rLight.UpAndRange.xyz);
-        float  range = rLight.UpAndRange.w;
-        float3 lightColor = rLight.ColorAndIntensity.xyz;
-        float  rawIntensity = rLight.ColorAndIntensity.w;
-        bool   twoSided = (rawIntensity < 0.0);
-        float  intensity = abs(rawIntensity);
+        LTCAreaLightResult ltc = EvaluateLTCAreaLightTerms(
+            rLight.PositionAndWidth,
+            rLight.DirectionAndHeight,
+            rLight.UpAndRange,
+            rLight.ColorAndIntensity,
+            input.WorldPos,
+            N,
+            V,
+            albedo.rgb,
+            metallic,
+            roughness,
+            F0,
+            LOCAL_INTENSITY_SCALE);
+        if (ltc.RangeAttenuation <= 0.0) continue;
 
-        float3 toLight = lightPos - input.WorldPos;
-        float dist = length(toLight);
-        if (dist > range || range <= 0.001) continue;
+        float3 centerDir = rLight.PositionAndWidth.xyz - input.WorldPos;
+        float centerLenSq = dot(centerDir, centerDir);
+        float3 L_center = (centerLenSq > 1e-8) ? (centerDir * rsqrt(centerLenSq)) : N;
+        float NdotL_center = max(dot(N, L_center), 0.0);
 
-        // Front-facing test for one-sided rect light
-        float dirDot = dot(-toLight, lightDir);
-        if (!twoSided && dirDot <= 0.0) continue;
-
-        // Tangent space for rect quad
-        float3 lightRight = normalize(cross(lightDir, lightUp));
-        lightUp = cross(lightRight, lightDir);
-
-        // Quad 4 vertices in world space
-        float3 p0 = lightPos - lightRight * halfWidth - lightUp * halfHeight;
-        float3 p1 = lightPos + lightRight * halfWidth - lightUp * halfHeight;
-        float3 p2 = lightPos + lightRight * halfWidth + lightUp * halfHeight;
-        float3 p3 = lightPos - lightRight * halfWidth + lightUp * halfHeight;
-
-        // Spherical polygon irradiance integration (Heitz 2016 LTC diffuse)
-        float3 v0 = normalize(p0 - input.WorldPos);
-        float3 v1 = normalize(p1 - input.WorldPos);
-        float3 v2 = normalize(p2 - input.WorldPos);
-        float3 v3 = normalize(p3 - input.WorldPos);
-
-        float3 F_diff = LTC_IntegrateEdge(v0, v1) + LTC_IntegrateEdge(v1, v2) + LTC_IntegrateEdge(v2, v3) + LTC_IntegrateEdge(v3, v0);
-        float diffuseIrradiance = max(0.0, dot(F_diff, N)) / (2.0 * PI);
-
-        // Specular: Karis representative point on rectangle
-        float3 R_vec = reflect(-V, N);
-        float denom = dot(R_vec, lightDir);
-        float3 specPos = lightPos;
-        if (abs(denom) > 1e-5) {
-            float t = dot(lightPos - input.WorldPos, lightDir) / denom;
-            if (t > 0.0) {
-                float3 hitPoint = input.WorldPos + R_vec * t;
-                float3 diff = hitPoint - lightPos;
-                float px = clamp(dot(diff, lightRight), -halfWidth, halfWidth);
-                float py = clamp(dot(diff, lightUp), -halfHeight, halfHeight);
-                specPos = lightPos + lightRight * px + lightUp * py;
-            }
-        }
-        float3 L_spec = normalize(specPos - input.WorldPos);
-        float3 H_spec = normalize(V + L_spec);
-        float NdotL_spec = max(dot(N, L_spec), 0.0);
-        float NdotH_spec = max(dot(N, H_spec), 0.0);
-        float VdotH_spec = max(dot(V, H_spec), 0.0);
-
-        float NDF_spec = MaterialDistribution(N, H_spec, tangent, bitangent, roughness, coatAnisotropy.z);
-        float G_spec = MaterialGeometry(N, V, L_spec, tangent, bitangent, roughness, coatAnisotropy.z);
-        float3 F_spec = FresnelSchlick(VdotH_spec, F0);
-        float3 specBRDF = (NDF_spec * G_spec * F_spec) / (4.0 * NdotV * max(NdotL_spec, 0.001) + 0.001) * ggxEnergyCompensation;
-
-        float atten = saturate(1.0 - (dist / range)) * saturate(1.0 - (dist / range)) / (dist * dist + 1.0);
-        float3 radiance = lightColor * (intensity * atten * LOCAL_INTENSITY_SCALE);
-
-        float3 kS_rect = F_spec;
-        float3 kD_rect = (float3(1.0, 1.0, 1.0) - kS_rect) * (1.0 - metallic);
-        float3 diffContrib = kD_rect * albedo.rgb * diffuseIrradiance;
-        float3 specContrib = specBRDF * NdotL_spec * u_MaterialSurface.z;
-
-        Lo += ApplyClearcoat(diffContrib + specContrib, N, V, L_spec, max(NdotL_spec, 0.001), coatAnisotropy.x, coatAnisotropy.y) * radiance;
+        float3 diffContrib = ltc.DiffuseLighting;
+        float3 specContrib = ltc.SpecularLighting * u_MaterialSurface.z;
+        Lo += ApplyClearcoat(diffContrib + specContrib, N, V, L_center, max(NdotL_center, 0.001), coatAnisotropy.x, coatAnisotropy.y) * ltc.Radiance;
         if (u_Subsurface.w > 0.0) {
-            Lo += diffuseIrradiance * u_Subsurface.rgb * u_Subsurface.w * (1.0 - metallic) * lightColor * (intensity * atten * LOCAL_INTENSITY_SCALE);
+            Lo += ltc.DiffuseFormFactor * u_Subsurface.rgb * u_Subsurface.w * (1.0 - metallic) * ltc.Radiance;
         }
     }
 

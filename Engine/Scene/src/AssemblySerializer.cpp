@@ -284,6 +284,20 @@ namespace Axle {
                 WriteLocalShadows(fout,slc.Shadows);
             }
 
+            // RectLightComponent
+            if (entity.HasComponent<RectLightComponent>()) {
+                auto& rlc = entity.GetComponent<RectLightComponent>();
+                fout << "    RectLightComponent:\n";
+                fout << "      Enabled: " << (rlc.Enabled ? "true" : "false") << "\n";
+                fout << "      Shape: " << (rlc.Shape == AreaLightShape::Disk ? "Disk" : "Rectangle") << "\n";
+                fout << "      Color: [ " << rlc.Color.r << " , " << rlc.Color.g << " , " << rlc.Color.b << " ]\n";
+                fout << "      Intensity: " << rlc.Intensity << "\n";
+                fout << "      Width: " << rlc.Width << "\n";
+                fout << "      Height: " << rlc.Height << "\n";
+                fout << "      Range: " << rlc.Range << "\n";
+                fout << "      TwoSided: " << (rlc.TwoSided ? "true" : "false") << "\n";
+            }
+
 
             // SkeletalMeshComponent
             if (entity.HasComponent<SkeletalMeshComponent>()) {
@@ -393,6 +407,9 @@ namespace Axle {
         bool HasSpotLight = false;
         SpotLightComponent SpotLight;
 
+        bool HasRectLight = false;
+        RectLightComponent RectLight;
+
 
 
         bool HasSkeletalMesh = false;
@@ -421,6 +438,7 @@ namespace Axle {
         AudioSource,
         PointLight,
         SpotLight,
+        RectLight,
         SkeletalMesh,
         Animator,
         Hierarchy,
@@ -502,6 +520,7 @@ namespace Axle {
                 if (trimmed == "AudioSourceComponent:") { flushCustom(); currentSection = AsmSection::AudioSource; current.HasAudioSource = true; continue; }
                 if (trimmed == "PointLightComponent:") { flushCustom(); currentSection = AsmSection::PointLight; current.HasPointLight = true; continue; }
                 if (trimmed == "SpotLightComponent:") { flushCustom(); currentSection = AsmSection::SpotLight; current.HasSpotLight = true; continue; }
+                if (trimmed == "RectLightComponent:") { flushCustom(); currentSection = AsmSection::RectLight; current.HasRectLight = true; continue; }
                 if (trimmed == "SkeletalMeshComponent:") { flushCustom(); currentSection = AsmSection::SkeletalMesh; current.HasSkeletalMesh = true; continue; }
                 if (trimmed == "AnimatorComponent:") { flushCustom(); currentSection = AsmSection::Animator; current.HasAnimator = true; continue; }
                 if (trimmed == "HierarchyComponent:") { flushCustom(); currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
@@ -695,6 +714,31 @@ namespace Axle {
                         try { current.SpotLight.InnerConeAngle = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
                     } else if (trimmed.rfind("OuterConeAngle:", 0) == 0) {
                         try { current.SpotLight.OuterConeAngle = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
+                    }
+                    break;
+                }
+                case AsmSection::RectLight: {
+                    if (trimmed.rfind("Enabled:", 0) == 0) {
+                        current.RectLight.Enabled = (Trim(trimmed.substr(8)) == "true");
+                    } else if (trimmed.rfind("Shape:", 0) == 0) {
+                        std::string shapeStr = Trim(trimmed.substr(6));
+                        current.RectLight.Shape = (shapeStr == "Disk" || shapeStr == "1")
+                            ? AreaLightShape::Disk
+                            : AreaLightShape::Rectangle;
+                    } else if (trimmed.rfind("Color:", 0) == 0) {
+                        float r = 1, g = 1, b = 1;
+                        sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
+                        current.RectLight.Color = glm::vec3(r, g, b);
+                    } else if (trimmed.rfind("Intensity:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(10))); if (std::isfinite(v)) current.RectLight.Intensity = std::max(0.0f, v); } catch (...) {}
+                    } else if (trimmed.rfind("Width:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(6))); if (std::isfinite(v)) current.RectLight.Width = std::max(0.01f, v); } catch (...) {}
+                    } else if (trimmed.rfind("Height:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(7))); if (std::isfinite(v)) current.RectLight.Height = std::max(0.01f, v); } catch (...) {}
+                    } else if (trimmed.rfind("Range:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(6))); if (std::isfinite(v)) current.RectLight.Range = std::max(0.0f, v); } catch (...) {}
+                    } else if (trimmed.rfind("TwoSided:", 0) == 0) {
+                        current.RectLight.TwoSided = (Trim(trimmed.substr(9)) == "true");
                     }
                     break;
                 }
@@ -977,6 +1021,11 @@ namespace Axle {
                 entity.AddComponent<SpotLightComponent>(raw.SpotLight);
             }
 
+            // RectLightComponent
+            if (raw.HasRectLight) {
+                entity.AddComponent<RectLightComponent>(raw.RectLight);
+            }
+
 
             // SkeletalMeshComponent
             if (raw.HasSkeletalMesh) {
@@ -1229,6 +1278,7 @@ namespace Axle {
             node.Material = raw.Material;
             node.HasPointLight=raw.HasPointLight;node.PointLight=raw.PointLight;
             node.HasSpotLight=raw.HasSpotLight;node.SpotLight=raw.SpotLight;
+            node.HasRectLight=raw.HasRectLight;node.RectLight=raw.RectLight;
             node.HasSkeletalMesh = raw.HasSkeletalMesh;
             node.SkeletalMesh = raw.SkeletalMesh;
             node.HasAnimator = raw.HasAnimator;
@@ -1331,6 +1381,18 @@ namespace Axle {
             out << "      InnerConeAngle: " << light.InnerConeAngle << "\n";
             out << "      OuterConeAngle: " << light.OuterConeAngle << "\n";
             WriteLocalShadows(out,light.Shadows);
+        }
+        if (node.HasRectLight) {
+            const auto& light=node.RectLight;
+            out << "    RectLightComponent:\n";
+            out << "      Enabled: " << (light.Enabled?"true":"false") << "\n";
+            out << "      Shape: " << (light.Shape == AreaLightShape::Disk ? "Disk" : "Rectangle") << "\n";
+            out << "      Color: [ " << light.Color.r << " , " << light.Color.g << " , " << light.Color.b << " ]\n";
+            out << "      Intensity: " << light.Intensity << "\n";
+            out << "      Width: " << light.Width << "\n";
+            out << "      Height: " << light.Height << "\n";
+            out << "      Range: " << light.Range << "\n";
+            out << "      TwoSided: " << (light.TwoSided?"true":"false") << "\n";
         }
 
         if (node.HasSkeletalMesh) {

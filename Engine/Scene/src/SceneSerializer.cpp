@@ -341,6 +341,7 @@ namespace Axle {
                 auto& rlc = entity.GetComponent<RectLightComponent>();
                 ss << "    RectLightComponent:\n";
                 ss << "      Enabled: " << (rlc.Enabled ? "true" : "false") << "\n";
+                ss << "      Shape: " << (rlc.Shape == AreaLightShape::Disk ? "Disk" : "Rectangle") << "\n";
                 ss << "      Color: [ " << rlc.Color.r << " , " << rlc.Color.g << " , " << rlc.Color.b << " ]\n";
                 ss << "      Intensity: " << rlc.Intensity << "\n";
                 ss << "      Width: " << rlc.Width << "\n";
@@ -1126,18 +1127,23 @@ namespace Axle {
                         auto& rlc = currentEntity.GetComponent<RectLightComponent>();
                         if (trimmed.rfind("Enabled:", 0) == 0) {
                             rlc.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("Shape:", 0) == 0) {
+                            std::string shapeStr = Trim(trimmed.substr(6));
+                            rlc.Shape = (shapeStr == "Disk" || shapeStr == "1")
+                                ? AreaLightShape::Disk
+                                : AreaLightShape::Rectangle;
                         } else if (trimmed.rfind("Color:", 0) == 0) {
                             float r = 1, g = 1, b = 1;
                             sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
                             rlc.Color = glm::vec3(r, g, b);
                         } else if (trimmed.rfind("Intensity:", 0) == 0) {
-                            rlc.Intensity = std::stof(Trim(trimmed.substr(10)));
+                            try { float v = std::stof(Trim(trimmed.substr(10))); if (std::isfinite(v)) rlc.Intensity = std::max(0.0f, v); } catch (...) {}
                         } else if (trimmed.rfind("Width:", 0) == 0) {
-                            rlc.Width = std::stof(Trim(trimmed.substr(6)));
+                            try { float v = std::stof(Trim(trimmed.substr(6))); if (std::isfinite(v)) rlc.Width = std::max(0.01f, v); } catch (...) {}
                         } else if (trimmed.rfind("Height:", 0) == 0) {
-                            rlc.Height = std::stof(Trim(trimmed.substr(7)));
+                            try { float v = std::stof(Trim(trimmed.substr(7))); if (std::isfinite(v)) rlc.Height = std::max(0.01f, v); } catch (...) {}
                         } else if (trimmed.rfind("Range:", 0) == 0) {
-                            rlc.Range = std::stof(Trim(trimmed.substr(6)));
+                            try { float v = std::stof(Trim(trimmed.substr(6))); if (std::isfinite(v)) rlc.Range = std::max(0.0f, v); } catch (...) {}
                         } else if (trimmed.rfind("TwoSided:", 0) == 0) {
                             rlc.TwoSided = (Trim(trimmed.substr(9)) == "true");
                         }

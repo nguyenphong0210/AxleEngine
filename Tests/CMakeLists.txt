@@ -532,6 +532,7 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
       AXLE_CUBEMAP_PREFILTER_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/CubemapPrefilter.hlsl"
       AXLE_SSR_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/SSR.hlsl"
       AXLE_REFLECTION_PROBE_COMMON_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ReflectionProbeCommon.hlsli"
+      AXLE_PBR_COMMON_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/PBRCommon.hlsli"
       AXLE_SCENE_PASSES_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RHISceneRendererPasses.cpp"
       AXLE_GTAO_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/GTAOPass.cpp"
       AXLE_RHI_VIEW_TARGETS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/RHI/src/RHIViewTargets.cpp"

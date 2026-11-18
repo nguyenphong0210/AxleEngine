@@ -31,6 +31,8 @@ namespace Axle {
         PointLightComponent PointLight;
         bool HasSpotLight = false;
         SpotLightComponent SpotLight;
+        bool HasRectLight = false;
+        RectLightComponent RectLight;
         bool HasSkeletalMesh = false;
         SkeletalMeshComponent SkeletalMesh;
         bool HasAnimator = false;

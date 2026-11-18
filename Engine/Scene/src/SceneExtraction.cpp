@@ -208,17 +208,31 @@ namespace Axle {
             const auto& rl = rectLightView.get<RectLightComponent>(entity);
             if (!rl.Enabled) continue;
             glm::mat4 worldMat = scene.GetWorldTransform(entity);
+            auto safeNormalize = [](const glm::vec3& v, const glm::vec3& fallback) {
+                const float lenSq = glm::dot(v, v);
+                return (std::isfinite(lenSq) && lenSq > 1e-12f) ? (v * (1.0f / std::sqrt(lenSq))) : fallback;
+            };
+            const glm::mat3 basis(worldMat);
+            const glm::vec3 rawDir = basis * glm::vec3(0.0f, 0.0f, -1.0f);
+            const glm::vec3 rawUp = basis * glm::vec3(0.0f, 1.0f, 0.0f);
+            const glm::vec3 dir = safeNormalize(rawDir, glm::vec3(0.0f, 0.0f, -1.0f));
+            const glm::vec3 fallbackUpAxis = (std::abs(dir.y) < 0.99f) ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+            const glm::vec3 orthoUp = safeNormalize(rawUp - dir * glm::dot(rawUp, dir),
+                safeNormalize(glm::cross(fallbackUpAxis, dir), glm::vec3(0.0f, 1.0f, 0.0f)));
+
             RenderRectLight rrl;
             rrl.EntityID = static_cast<uint32_t>(entity);
             rrl.Position = glm::vec3(worldMat[3]);
-            rrl.Direction = glm::normalize(glm::mat3(worldMat) * glm::vec3(0.0f, 0.0f, -1.0f));
-            rrl.Up = glm::normalize(glm::mat3(worldMat) * glm::vec3(0.0f, 1.0f, 0.0f));
+            rrl.Direction = dir;
+            rrl.Up = orthoUp;
             rrl.Color = rl.Color;
             rrl.Intensity = rl.Intensity;
             rrl.Width = rl.Width;
             rrl.Height = rl.Height;
             rrl.Range = rl.Range;
             rrl.TwoSided = rl.TwoSided;
+            rrl.Shape = rl.Shape;
+            rrl.ShadowPolicy = rl.ShadowPolicy;
             world.RectLights.push_back(rrl);
         }
 

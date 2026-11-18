@@ -1010,53 +1010,59 @@ Codex review covers the delivery named **U5-F** (`21a3e25e`, U5-32.1..39.6), inc
 
 ### U5 / S5.7 — LTC rectangular and disk area lights
 
-- [ ] **M15-U5-40 — Add validated LTC transform/amplitude tables or reproducible generation.**
+> **Checkpoint note (`M15-U5-G` / batch row `U5-H`, base `2c7e5cab`):** Since `U5-F` (`21a3e25e` + Codex review `2c7e5cab`) completed and accepted all `S5.6` leaf items (`32.1..39.6`), this checkpoint implements and self-verifies `S5.7` (`M15-U5-40` through `M15-U5-45.3`, pending independent Codex review). Interactive `EDITOR VISUAL` checks (`43`, `44.4`, `45.1`) remain open `[ ]` / `NOT RUN (deferred per user direction to post-U5 consolidated visual pass)`.
+
+- [x] **M15-U5-40 — Add validated LTC transform/amplitude tables or reproducible generation.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-41.1 — Implement rectangle emitter.**
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). Reproducible 8x8 `LTC1`/`LTC2` grid evaluators & `BuildValidatedLTCTables`/`ValidateLTCTables` implemented identically in [`RenderContracts.hpp`](Engine/Renderer/include/Axle/RenderContracts.hpp) / [`RenderContracts.cpp`](Engine/Renderer/src/RenderContracts.cpp) (`AreaLightLTCContract`) and [`PBRCommon.hlsli`](Engine/Resources/Shaders/PBRCommon.hlsli) (`EvaluateLTC1GridPoint`/`EvaluateLTC2GridPoint`/`SampleLTC1`/`SampleLTC2`). Verified by `AxleRenderUnitTests` (`--m15-reflection-capture-contract` & full CPU suite), `M15ReflectionCaptureContract` CTest (9/9 Debug & Release), and native DX12/Vulkan parity (`build/Gemini-U5G-results.json`).
+- [x] **M15-U5-41.1 — Implement rectangle emitter.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-41.2 — Implement disk emitter.**
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). Two-stage horizon-clipped quad contour integration implemented in [`RenderContracts.cpp`](Engine/Renderer/src/RenderContracts.cpp) and [`PBRCommon.hlsli`](Engine/Resources/Shaders/PBRCommon.hlsli); verified on CPU (including horizon-straddling wall quad vs 32x32 quadrature) and native DX12/Vulkan (`gpuRect=0.0466199` vs `cpuRect=0.0472238`).
+- [x] **M15-U5-41.2 — Implement disk emitter.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-41.3 — Validate units/orientation.**
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). Area-preserving horizon-clipped octagon contour (`kDiskOctagonRadiusScale`) & closest-ellipse distance implemented in [`RenderContracts.cpp`](Engine/Renderer/src/RenderContracts.cpp) and [`PBRCommon.hlsli`](Engine/Resources/Shaders/PBRCommon.hlsli); verified via pi/4 square-vs-disk solid-angle ratio, basis-rotation invariance, and native DX12/Vulkan (`gpuDisk=0.0371838` vs `cpuDisk=0.0376753`).
+- [x] **M15-U5-41.3 — Validate units/orientation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-41.4 — Validate sidedness/range.**
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). Collinear/non-unit `Up`/`Direction` orthonormalization and positive dimension/intensity sanitization implemented across [`SceneExtraction.cpp`](Engine/Scene/src/SceneExtraction.cpp), [`LightingService.cpp`](Engine/Renderer/src/LightingService.cpp), [`RHILight.cpp`](Engine/RHI/src/RHILight.cpp), [`RenderContracts.cpp`](Engine/Renderer/src/RenderContracts.cpp), and [`PBRCommon.hlsli`](Engine/Resources/Shaders/PBRCommon.hlsli); verified by `Test_LightingServicesUnit.cpp` and `Test_M15_ReflectionCaptureContractUnit.cpp`.
+- [x] **M15-U5-41.4 — Validate sidedness/range.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-42.1 — Integrate diffuse area response.**
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). One-sided back-face culling (`dirDot <= 0`), symmetric `TwoSided` (`SignedIntensity < 0`) evaluation, and smooth finite closest-point `Range` window cutoff verified across CPU contract tests and native DX12/Vulkan (`RunM15AreaLightLTCTests`, Debug & Release exit 0).
+- [x] **M15-U5-42.1 — Integrate diffuse area response.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-42.2 — Integrate specular area response.**
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). Horizon-clipped diffuse contour integral `(1 - specAlbedo) * (1 - metallic)` integrated via `EvaluateLTCAreaLightTerms` across both [`ForwardPBR.hlsl`](Engine/Resources/Shaders/ForwardPBR.hlsl) and [`MaterialSurface.hlsl`](Engine/Resources/Shaders/MaterialSurface.hlsl); native DX12/Vulkan parity `builtIn=0.0509644` vs `graph=0.0509644`.
+- [x] **M15-U5-42.2 — Integrate specular area response.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). Warped LTC1 inverse-matrix contour + LTC2 split-sum F0 specular integrated across [`ForwardPBR.hlsl`](Engine/Resources/Shaders/ForwardPBR.hlsl) and [`MaterialSurface.hlsl`](Engine/Resources/Shaders/MaterialSurface.hlsl); native metallic roughness sweep (`peak=1.80074 -> 0.813867 -> 0.0759985`) and zero-diffuse metallic partition verified on CPU and DX12/Vulkan.
 - [ ] **M15-U5-43 — Define area-light shadow policy separately.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
-- [ ] **M15-U5-44.1 — Complete component path.**
+  - **Evidence:** **Automated PASS** (`AreaLightShadowPolicy::UnshadowedAnalyticLTC` on `RectLightComponent`/`RenderRectLight`/`LightingRectFrame`; area lights allocate 0 local shadow atlas tiles in `LightingService::BuildFrame` and read-only policy text displays in [`EntityInspector.cpp`](Engine/UI/src/EntityInspector.cpp); verified by Debug/Release CPU + native GPU + strict `AxleEditor.exe` startup checks). **EDITOR VISUAL: NOT RUN (deferred per user direction to consolidated post-U5 visual pass).**
+- [x] **M15-U5-44.1 — Complete component path.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-44.2 — Complete extraction path.**
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). `AreaLightShape` (`Rectangle`/`Disk`) and `AreaLightShadowPolicy::UnshadowedAnalyticLTC` added in [`LocalShadowSettings.hpp`](Engine/Renderer/include/Axle/LocalShadowSettings.hpp) and [`Components.hpp`](Engine/Scene/include/Axle/Components.hpp) (`RectLightComponent`); runtime copy codec and duplicate paths verified.
+- [x] **M15-U5-44.2 — Complete extraction path.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-44.3 — Complete serialization/runtime path.**
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). Extracted through [`SceneExtraction.cpp`](Engine/Scene/src/SceneExtraction.cpp) -> [`RenderWorld.hpp`](Engine/Renderer/include/Axle/RenderWorld.hpp) -> [`LightingService.cpp`](Engine/Renderer/src/LightingService.cpp) -> [`RHISceneRendererPasses.cpp`](Engine/Scene/src/RHISceneRendererPasses.cpp) -> [`RHILight.cpp`](Engine/RHI/src/RHILight.cpp) (preserving 64B `RHIGPURectLight` / 2304B `RHIMultiLightBufferData` layout) and included in `ComputeLightingStamp` in [`RHISceneRenderer.cpp`](Engine/Scene/src/RHISceneRenderer.cpp); verified by `Test_RenderWorldExtractionUnit.cpp` and `Test_LightingServicesUnit.cpp`.
+- [x] **M15-U5-44.3 — Complete serialization/runtime path.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). [`SceneSerializer.cpp`](Engine/Scene/src/SceneSerializer.cpp) serializes/deserializes `Shape:` cleanly (defaulting omitted legacy scenes to `Rectangle`), and [`AssemblySerializer.hpp`](Engine/Scene/include/Axle/AssemblySerializer.hpp) / [`AssemblySerializer.cpp`](Engine/Scene/src/AssemblySerializer.cpp) add complete `[RectLight]` support across export/import/assembly-data paths; round-trips verified in `Test_RenderWorldExtractionUnit.cpp`.
 - [ ] **M15-U5-44.4 — Complete Inspector path.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen and matches Runtime/Preview.
+  - **Evidence:** **Automated PASS** (`DrawComponent<RectLightComponent>("Area Light (LTC)", ...)` with `Enabled`, `Shape` combo, `Color`, `Intensity`, `Width`, `Height`, `Range`, `TwoSided`, and policy label + `Add Component` entry in [`EntityInspector.cpp`](Engine/UI/src/EntityInspector.cpp); creation menus in [`SceneHierarchyPanel.cpp`](Engine/UI/src/SceneHierarchyPanel.cpp) and icon in [`UIVectorIcons.hpp`](Engine/UI/include/Axle/UIVectorIcons.hpp); Debug/Release `AxleEditor.exe` strict empty + U4E startup PASS on DX12 and Vulkan). **EDITOR VISUAL: NOT RUN (deferred per user direction to consolidated post-U5 visual pass).**
 - [ ] **M15-U5-45.1 — Compare roughness/view angles.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: roughness broadens highlights/reflections continuously.
-- [ ] **M15-U5-45.2 — Compare emitter angles.**
+  - **Evidence:** **Automated PASS** (CPU roughness sweep + LTC2 view-angle Fresnel + native DX12/Vulkan metallic roughness sweep `peak=(1.80074, 0.813867, 0.0759985)`, `wing=(0.000546646, 0.00694962, 0.0280804)` across `r = 0.08, 0.35, 0.75`). **EDITOR VISUAL: NOT RUN (deferred per user direction to consolidated post-U5 visual pass).**
+- [x] **M15-U5-45.2 — Compare emitter angles.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U5-45.3 — Compare numerical reference.**
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). CPU (`0 deg: 0.199934` vs `45 deg: 0.171469`) and native DX12/Vulkan tilted emitter checks verify monotonic irradiance reduction with tilt angle.
+- [x] **M15-U5-45.3 — Compare numerical reference.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Automated self-verification PASS (pending independent Codex review). `EvaluateLTCAreaLightCPU` agrees with 32x32 surface quadrature `EvaluateAreaLightNumericalReferenceCPU` within `< 0.015` across facing (`0.199934` vs `0.200018`), tilted (`0.171469` within `0.015` of quadrature), and horizon-straddling emitters, and CPU matches native DX12/Vulkan GPU within ~1.3%.
 
 **Exit:** shape/roughness-correct, finite highlights without duplicate emitter energy.
+  - **Automated status:** Implemented and self-verified across Debug/Release CPU + native D3D12/Vulkan + strict Editor startup checks (32/32 matrix exit `0`, architecture & exchange checks PASS); pending independent Codex review. Interactive Editor visual gates (`43`, `44.4`, `45.1`) remain open `[ ]` (deferred per user direction to post-U5 consolidated visual pass). See [Gemini U5-G review](../../reviews/M15_U5_G_REVIEW.md).
 
 ### U5 / S5.8 — Planar reflection
 

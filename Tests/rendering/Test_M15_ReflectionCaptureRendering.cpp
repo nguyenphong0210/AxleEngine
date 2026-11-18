@@ -1486,6 +1486,276 @@ namespace {
         std::cout << "[M15MaterialSSR] All U5-F (S5.6) native D3D12/Vulkan material SSR checks passed!\n";
         return true;
     }
+
+    // =========================================================================
+    // M15-U5-G / U5-H (S5.7): LTC Rectangular and Disk Area Lights GPU Suite
+    // =========================================================================
+    bool RunM15AreaLightLTCTests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
+        std::cout << "[M15AreaLightLTC] Running native D3D12/Vulkan U5-G (S5.7) LTC area-light checks...\n";
+        auto& device = RHIDevice::Get();
+
+        auto cubeMesh = RHIMesh::CreateCube(1.0f);
+        RENDER_CHECK(cubeMesh && cubeMesh->IsValid(), "U5-G fixture cube mesh");
+        auto cubeView = cubeMesh->CaptureView();
+
+        constexpr uint32_t kSize = 256u;
+        RHIViewTargetDesc vtDesc{};
+        vtDesc.Width = kSize;
+        vtDesc.Height = kSize;
+        vtDesc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
+        vtDesc.HDR = true;
+        auto targets = std::make_shared<RHIViewTargets>();
+        RENDER_CHECK(targets->Configure(vtDesc), "U5-G view targets configure");
+
+        auto makeMaterial = [](const glm::vec3& albedo, float metallic, float roughness) {
+            RHIMaterialDesc d{};
+            d.CullMode = CullMode::None;
+            d.BaseColor = glm::vec4(albedo, 1.0f);
+            d.Metallic = metallic;
+            d.Roughness = roughness;
+            d.AO = 1.0f;
+            d.EnableEnvironmentReflections = false;
+            return std::make_shared<RHIMaterial>(d);
+        };
+
+        PerspectiveCamera cam(45.0f, 1.0f, 0.1f, 100.0f);
+        const glm::vec3 camPos(0.0f, 3.0f, 6.0f);
+        const glm::vec3 camTarget(0.0f, 0.0f, 0.0f);
+        cam.SetViewMatrix(glm::lookAtRH(camPos, camTarget, glm::vec3(0.0f, 1.0f, 0.0f)), camPos);
+
+        SceneRenderSettings settings{};
+        settings.EnableSSR = false;
+        settings.EnableGTAO = false;
+        settings.EnableContactShadows = false;
+        settings.EnableSkybox = false;
+        settings.EnableShadows = false;
+        settings.EnableParticles = false;
+        settings.EnableStudioLightLobes = false;
+        settings.EnableToneMapping = true;
+
+        auto renderHDR = [&](const RenderWorld& world, std::vector<glm::vec4>& outHDR) -> bool {
+            renderer.RenderWorldView(world, cam, targets->Get(RHIViewTarget::Color), targets->Get(RHIViewTarget::Depth),
+                                     settings, nullptr, targets);
+            if (!renderer.WasLastRenderSuccessful() || renderer.GetDiagnostics().HasErrors() || !device.WaitIdle()) {
+                return false;
+            }
+            auto* linear = renderer.GetIntermediateHDRTarget();
+            return linear && ReadTexture2DRGBA16(*linear, outHDR) &&
+                   outHDR.size() == size_t(kSize) * kSize && AllFiniteNonNegative(outHDR);
+        };
+
+        auto sampleWorld = [&](const std::vector<glm::vec4>& img, const glm::vec3& wp, glm::vec4& outSample, uint32_t halfExtent = 2u) -> bool {
+            uint32_t px = 0, py = 0;
+            if (!ProjectWorldToPixel(cam, kSize, kSize, wp, px, py)) return false;
+            glm::vec4 sum(0.0f);
+            uint32_t count = 0;
+            const uint32_t x0 = px > halfExtent ? px - halfExtent : 0u;
+            const uint32_t y0 = py > halfExtent ? py - halfExtent : 0u;
+            const uint32_t x1 = std::min(kSize, px + halfExtent + 1u);
+            const uint32_t y1 = std::min(kSize, py + halfExtent + 1u);
+            for (uint32_t y = y0; y < y1; ++y) {
+                for (uint32_t x = x0; x < x1; ++x) {
+                    sum += img[size_t(y) * kSize + x];
+                    ++count;
+                }
+            }
+            outSample = count > 0 ? sum / float(count) : glm::vec4(0.0f);
+            return true;
+        };
+
+        const glm::vec3 lightPos(0.0f, 2.0f, -4.0f);
+        const glm::vec3 lightDir = glm::normalize(glm::vec3(0.0f) - lightPos);
+        const glm::vec3 lightUp = glm::normalize(glm::cross(glm::vec3(1.0f, 0.0f, 0.0f), lightDir));
+
+        auto makeAreaLight = [&](AreaLightShape shape, float intensity, bool twoSided = false, float range = 25.0f) {
+            RenderRectLight rl{};
+            rl.EntityID = 801;
+            rl.Position = lightPos;
+            rl.Direction = lightDir;
+            rl.Up = lightUp;
+            rl.Color = glm::vec3(1.0f, 0.95f, 0.85f);
+            rl.Intensity = intensity;
+            rl.Width = 2.0f;
+            rl.Height = 2.0f;
+            rl.Range = range;
+            rl.TwoSided = twoSided;
+            rl.Shape = shape;
+            rl.ShadowPolicy = AreaLightShadowPolicy::UnshadowedAnalyticLTC;
+            return rl;
+        };
+
+        // -----------------------------------------------------------------
+        // 1. M15-U5-41.1 / 41.2 / 42.1 / 42.2 / 45.1:
+        //    Roughness sweep + Rectangle vs Disk + GPU vs CPU LTC parity
+        // -----------------------------------------------------------------
+        {
+            RenderWorld world;
+            world.SceneRevision = 9400;
+            world.Skybox.Authored = true;
+            world.Skybox.Enabled = false;
+            world.RectLights.push_back(makeAreaLight(AreaLightShape::Rectangle, 40.0f));
+            world.Meshes.push_back(MakeBoxInstance(1, cubeView, makeMaterial({0.95f, 0.95f, 0.95f}, 1.0f, 0.08f),
+                {0.0f, -0.05f, 0.0f}, {18.0f, 0.1f, 18.0f}, false));
+
+            const float roughnessLevels[3]{0.08f, 0.35f, 0.75f};
+            glm::vec4 rectPeak[3]{}, rectWing[3]{};
+            for (int i = 0; i < 3; ++i) {
+                world.Meshes[0].Material.RHIMaterialAsset = makeMaterial({0.95f, 0.95f, 0.95f}, 1.0f, roughnessLevels[i]);
+                ++world.SceneRevision;
+                std::vector<glm::vec4> hdr;
+                RENDER_CHECK(renderHDR(world, hdr), "U5-G rectangle roughness sweep render");
+                RENDER_CHECK(sampleWorld(hdr, {0.0f, 0.0f, 0.0f}, rectPeak[i]) &&
+                             sampleWorld(hdr, {1.6f, 0.0f, 0.25f}, rectWing[i]),
+                    "U5-G rectangle roughness sweep sample");
+            }
+            std::cout << "  [U5-G Rect Metallic Sweep] peak=(" << rectPeak[0].r << ", " << rectPeak[1].r << ", " << rectPeak[2].r
+                      << ") wing=(" << rectWing[0].r << ", " << rectWing[1].r << ", " << rectWing[2].r << ")\n";
+            RENDER_CHECK(rectPeak[0].r > 0.3f &&
+                         rectPeak[0].r > rectPeak[1].r * 1.2f &&
+                         rectPeak[1].r > rectPeak[2].r * 1.2f,
+                "M15-U5-42.2 / 45.1: GPU LTC specular peak decreases monotonically with roughness");
+            const float wingRatioSmooth = rectWing[0].r / std::max(rectPeak[0].r, 1e-4f);
+            const float wingRatioRough = rectWing[2].r / std::max(rectPeak[2].r, 1e-4f);
+            RENDER_CHECK(wingRatioRough > wingRatioSmooth * 1.5f,
+                "M15-U5-45.1: Rough LTC highlight broadens angular lobe relative to peak");
+
+            // Compare Disk vs Rectangle on diffuse dielectric floor (clear area ratio ~pi/4)
+            world.Meshes[0].Material.RHIMaterialAsset = makeMaterial({0.85f, 0.85f, 0.85f}, 0.0f, 0.80f);
+            world.RectLights[0] = makeAreaLight(AreaLightShape::Rectangle, 40.0f);
+            ++world.SceneRevision;
+            std::vector<glm::vec4> rectDiffHDR, diskDiffHDR;
+            glm::vec4 rectCenter(0.0f), diskCenter(0.0f);
+            RENDER_CHECK(renderHDR(world, rectDiffHDR) && sampleWorld(rectDiffHDR, {0.0f, 0.0f, 0.0f}, rectCenter),
+                "U5-G diffuse rectangle render");
+
+            world.RectLights[0] = makeAreaLight(AreaLightShape::Disk, 40.0f);
+            ++world.SceneRevision;
+            RENDER_CHECK(renderHDR(world, diskDiffHDR) && sampleWorld(diskDiffHDR, {0.0f, 0.0f, 0.0f}, diskCenter),
+                "U5-G diffuse disk render");
+
+            LightingService lighting;
+            const auto frameRect = lighting.BuildFrame(world, settings);
+            world.RectLights[0] = makeAreaLight(AreaLightShape::Rectangle, 40.0f);
+            const auto frameRectActual = lighting.BuildFrame(world, settings);
+            const glm::vec3 viewAtCenter = glm::normalize(camPos);
+            const auto cpuRect = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+                frameRectActual.RectLights[0], {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, viewAtCenter,
+                {0.85f, 0.85f, 0.85f}, 0.0f, 0.80f);
+            const auto cpuDisk = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+                frameRect.RectLights[0], {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, viewAtCenter,
+                {0.85f, 0.85f, 0.85f}, 0.0f, 0.80f);
+
+            std::cout << "  [U5-G Rect vs Disk] gpuRect=" << rectCenter.r << " cpuRect=" << cpuRect.TotalRadiance.r
+                      << " gpuDisk=" << diskCenter.r << " cpuDisk=" << cpuDisk.TotalRadiance.r << "\n";
+            RENDER_CHECK(frameRect.RectCount == 1 && frameRect.SpotCount == 0 && frameRect.PointCount == 0,
+                "M15-U5-43: area lights occupy RectLights without local shadow atlas tiles");
+            RENDER_CHECK(diskCenter.r > 0.02f && rectCenter.r > diskCenter.r * 1.15f && rectCenter.r < diskCenter.r * 1.45f,
+                "M15-U5-41.1 / 41.2: GPU Disk vs Rectangle reproduces physical pi/4 solid-angle ratio");
+            RENDER_CHECK(std::abs(rectCenter.r - cpuRect.TotalRadiance.r) < cpuRect.TotalRadiance.r * 0.08f &&
+                         std::abs(diskCenter.r - cpuDisk.TotalRadiance.r) < cpuDisk.TotalRadiance.r * 0.08f,
+                "M15-U5-40 / 45.3: GPU ForwardPBR LTC matches CPU AreaLightLTCContract within tight tolerance");
+        }
+
+        // -----------------------------------------------------------------
+        // 2. M15-U5-41.3 / 41.4 / 45.2: Orientation, Sidedness, Range Cutoff
+        // -----------------------------------------------------------------
+        {
+            RenderWorld sidedWorld;
+            sidedWorld.SceneRevision = 9410;
+            sidedWorld.Skybox.Authored = true;
+            sidedWorld.Skybox.Enabled = false;
+            sidedWorld.Meshes.push_back(MakeBoxInstance(2, cubeView, makeMaterial({0.85f, 0.85f, 0.85f}, 0.0f, 0.70f),
+                {0.0f, -0.05f, 0.0f}, {18.0f, 0.1f, 18.0f}, false));
+
+            // One-sided facing away (-lightDir) -> must be dark!
+            auto awayOneSided = makeAreaLight(AreaLightShape::Rectangle, 40.0f, false, 25.0f);
+            awayOneSided.Direction = -lightDir;
+            sidedWorld.RectLights.push_back(awayOneSided);
+            std::vector<glm::vec4> awayHDR, twoSidedHDR, tiltedHDR, outOfRangeHDR;
+            glm::vec4 awayC(0.0f), twoC(0.0f), tiltedC(0.0f), rangeC(0.0f);
+            RENDER_CHECK(renderHDR(sidedWorld, awayHDR) && sampleWorld(awayHDR, {0.0f, 0.0f, 0.0f}, awayC),
+                "U5-G one-sided away frame");
+            RENDER_CHECK(awayC.r < 0.002f && awayC.g < 0.002f && awayC.b < 0.002f,
+                "M15-U5-41.4: One-sided area light facing away illuminates zero");
+
+            // Flip TwoSided = true on exact same away-facing orientation -> must illuminate brightly!
+            sidedWorld.RectLights[0].TwoSided = true;
+            ++sidedWorld.SceneRevision;
+            RENDER_CHECK(renderHDR(sidedWorld, twoSidedHDR) && sampleWorld(twoSidedHDR, {0.0f, 0.0f, 0.0f}, twoC),
+                "U5-G two-sided away frame");
+            RENDER_CHECK(twoC.r > 0.03f && twoC.r < 0.08f,
+                "M15-U5-41.4: Two-sided area light illuminates back hemisphere cleanly");
+
+            // Range strictly shorter than closest distance (4.47m > 2.0m) -> must be zero!
+            sidedWorld.RectLights[0] = makeAreaLight(AreaLightShape::Rectangle, 40.0f, false, 2.0f);
+            ++sidedWorld.SceneRevision;
+            RENDER_CHECK(renderHDR(sidedWorld, outOfRangeHDR) && sampleWorld(outOfRangeHDR, {0.0f, 0.0f, 0.0f}, rangeC),
+                "U5-G range cutoff frame");
+            RENDER_CHECK(rangeC.r < 0.002f && rangeC.g < 0.002f && rangeC.b < 0.002f,
+                "M15-U5-41.4: Finite Range cuts off area light energy completely beyond range");
+
+            // Emitter tilt angle comparison: head-on vs grazing tilted emitter
+            sidedWorld.RectLights[0] = makeAreaLight(AreaLightShape::Disk, 40.0f, false, 25.0f);
+            sidedWorld.RectLights[0].Direction = glm::normalize(glm::vec3(0.0f, -0.88f, -0.30f));
+            ++sidedWorld.SceneRevision;
+            RENDER_CHECK(renderHDR(sidedWorld, tiltedHDR) && sampleWorld(tiltedHDR, {0.0f, 0.0f, 0.0f}, tiltedC),
+                "U5-G tilted emitter frame");
+            RENDER_CHECK(tiltedC.r > 0.001f && tiltedC.r < twoC.r * 0.5f,
+                "M15-U5-45.2: Grazing emitter tilt angle reduces projected irradiance monotonically");
+        }
+
+        // -----------------------------------------------------------------
+        // 3. M15-U5-42.1 / 42.2 / 44: MaterialGraph MaterialSurface LTC Parity
+        // -----------------------------------------------------------------
+        {
+            const auto graphPath = output / "u5g-area-light-surface.hlsl";
+            const std::string graphSource = AssembleMaterialSurfaceShader(
+                "",
+                "MaterialSurface AxleEvaluateMaterial(float2 uv) { MaterialSurface s=(MaterialSurface)0; "
+                "s.BaseColor=float3(0.85,0.85,0.85); s.Metallic=0.0; s.Roughness=0.55; s.IOR=1.5; "
+                "s.AO=1.0; s.Emission=float3(0.0,0.0,0.0); return s; }");
+            {
+                std::ofstream out(graphPath);
+                out << graphSource;
+                RENDER_CHECK(bool(out), "U5-G MaterialSurface fixture write");
+            }
+
+            RenderWorld graphWorld;
+            graphWorld.SceneRevision = 9420;
+            graphWorld.Skybox.Authored = true;
+            graphWorld.Skybox.Enabled = false;
+            graphWorld.RectLights.push_back(makeAreaLight(AreaLightShape::Disk, 40.0f));
+
+            auto parityMat = makeMaterial({0.85f, 0.85f, 0.85f}, 0.0f, 0.55f);
+            parityMat->GetDesc().EnableEnvironmentReflections = true;
+            auto builtInFloor = MakeBoxInstance(880, cubeView, parityMat,
+                {0.0f, -0.05f, 0.0f}, {18.0f, 0.1f, 18.0f}, false);
+            graphWorld.Meshes.push_back(builtInFloor);
+            std::vector<glm::vec4> builtInHDR, graphHDR;
+            glm::vec4 builtInC(0.0f), graphC(0.0f);
+            RENDER_CHECK(renderHDR(graphWorld, builtInHDR) && sampleWorld(builtInHDR, {0.0f, 0.0f, 0.0f}, builtInC),
+                "U5-G built-in parity reference frame");
+
+            graphWorld.Meshes[0].Material.UseCustomShader = true;
+            graphWorld.Meshes[0].Material.CustomShaderPath = std::filesystem::absolute(graphPath).string();
+            ++graphWorld.SceneRevision;
+            RENDER_CHECK(renderHDR(graphWorld, graphHDR) && sampleWorld(graphHDR, {0.0f, 0.0f, 0.0f}, graphC),
+                "U5-G MaterialSurface LTC disk frame");
+            if (renderer.GetMaterialDiagnostics().contains(880) && !renderer.GetMaterialDiagnostics().at(880).empty()) {
+                std::cout << "  [U5-G MaterialDiagnostic] " << renderer.GetMaterialDiagnostics().at(880) << "\n";
+            }
+            RENDER_CHECK(!renderer.GetMaterialDiagnostics().contains(880) || renderer.GetMaterialDiagnostics().at(880).empty(),
+                "M15-U5-42.1: MaterialSurface compiles cleanly with EvaluateLTCAreaLightTerms without descriptor regression");
+            std::cout << "  [U5-G MaterialSurface Parity] builtIn=" << builtInC.r << " graph=" << graphC.r << "\n";
+            RENDER_CHECK(graphC.r > 0.02f && std::abs(graphC.r - builtInC.r) < builtInC.r * 0.05f,
+                "M15-U5-42.1 / 42.2: MaterialSurface and ForwardPBR share identical LTC disk/rect shading");
+        }
+
+        RENDER_CHECK(device.WaitIdle() && Axle::RenderTests::GetRHIValidationErrorCount() == 0,
+            "U5-G zero RHI validation errors across all LTC area-light tests");
+        std::cout << "[M15AreaLightLTC] All U5-G (S5.7) native D3D12/Vulkan LTC area-light checks passed!\n";
+        return true;
+    }
 } // namespace
 
 bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
@@ -2764,6 +3034,9 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
 
     RENDER_CHECK(RunM15MaterialSSRTests(renderer, output),
         "M15-U5-F: material-aware SSR, Hi-Z DDA, roughness cone pyramid, F0 & dynamic checks pass");
+
+    RENDER_CHECK(RunM15AreaLightLTCTests(renderer, output),
+        "M15-U5-G / S5.7: LTC rectangular/disk area lights, orientation, sidedness, range & MaterialSurface parity pass");
 
     renderer.ClearDynamicReflectionProbes();
     RENDER_CHECK(device.WaitIdle(), "U5-B wait idle at cleanup");

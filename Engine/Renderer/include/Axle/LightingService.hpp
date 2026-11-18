@@ -55,6 +55,8 @@ namespace Axle {
         float Range=0.0f;
         glm::vec3 Color{0.0f};
         float SignedIntensity=0.0f;
+        AreaLightShape Shape=AreaLightShape::Rectangle;
+        AreaLightShadowPolicy ShadowPolicy=AreaLightShadowPolicy::UnshadowedAnalyticLTC;
     };
     struct LightingFrame {
         LightingFrameStatus Status=LightingFrameStatus::Supported;

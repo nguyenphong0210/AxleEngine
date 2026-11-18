@@ -104,6 +104,7 @@ namespace Axle::RHI {
         float Height = 1.0f;
         float Range = 20.0f;
         bool TwoSided = false;
+        uint32_t Shape = 0; // 0 = Rectangle, 1 = Disk
     };
 
     // -------------------------------------------------------------------------
@@ -135,7 +136,7 @@ namespace Axle::RHI {
 
     struct alignas(16) RHIGPURectLight {
         glm::vec4 PositionAndWidth{ 0.0f, 0.0f, 0.0f, 0.0f };      // xyz: Pos, w: Width
-        glm::vec4 DirectionAndHeight{ 0.0f, 0.0f, -1.0f, 0.0f };   // xyz: Normal/Dir, w: Height
+        glm::vec4 DirectionAndHeight{ 0.0f, 0.0f, -1.0f, 0.0f };   // xyz: Normal/Dir, w: SignedHeight (negative if Disk)
         glm::vec4 UpAndRange{ 0.0f, 1.0f, 0.0f, 0.0f };           // xyz: Up, w: Range
         glm::vec4 ColorAndIntensity{ 1.0f, 1.0f, 1.0f, 0.0f };    // xyz: Color, w: Intensity (sign: negative if two-sided)
     }; // 64 bytes

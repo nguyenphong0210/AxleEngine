@@ -768,8 +768,9 @@ namespace Axle {
             for (uint32_t i=0; i<lightingFrame.RectCount; ++i) {
                 const auto& source=lightingFrame.RectLights[i];
                 auto& target=lightData.RectLights[i];
+                const float signedHeight = (source.Shape == AreaLightShape::Disk) ? -source.Height : source.Height;
                 target.PositionAndWidth = glm::vec4(source.Position, source.Width);
-                target.DirectionAndHeight = glm::vec4(source.Direction, source.Height);
+                target.DirectionAndHeight = glm::vec4(source.Direction, signedHeight);
                 target.UpAndRange = glm::vec4(source.Up, source.Range);
                 target.ColorAndIntensity = glm::vec4(source.Color, source.SignedIntensity);
             }

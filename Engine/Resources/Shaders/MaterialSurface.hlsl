@@ -260,6 +260,25 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
             (spot.DirectionAndIntensity.w * attenuation * 0.05);
         direct += (localDiffuse + localSpec) * radiance * localNl;
     }
+    [loop] for (uint r = 0u; r < min((uint)u_LightReserved[1].x, 2u); ++r) {
+        RectLightData rLight = u_RectLights[r];
+        LTCAreaLightResult ltc = EvaluateLTCAreaLightTerms(
+            rLight.PositionAndWidth,
+            rLight.DirectionAndHeight,
+            rLight.UpAndRange,
+            rLight.ColorAndIntensity,
+            input.WorldPos,
+            normal,
+            view,
+            base,
+            metallic,
+            roughness,
+            f0,
+            0.05);
+        if (ltc.RangeAttenuation > 0.0) {
+            direct += (ltc.DiffuseLighting + ltc.SpecularLighting) * ltc.Radiance;
+        }
+    }
 
     // Clearcoat layer evaluation
     float coat = saturate(surface.Clearcoat);

@@ -363,6 +363,12 @@ namespace Axle {
                 spotLight.AddComponent<SpotLightComponent>();
                 m_SelectedEntity = spotLight;
             }
+            if (ImGui::MenuItem("Area Light (LTC)")) {
+                auto rectLight = m_Scene->CreateEntity("Area Light");
+                rectLight.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 4.0f, 0.0f);
+                rectLight.AddComponent<RectLightComponent>();
+                m_SelectedEntity = rectLight;
+            }
             ImGui::EndMenu();
         }
 
@@ -1004,6 +1010,12 @@ namespace Axle {
                     auto light = m_Scene->CreateEntity("Spot Light");
                     light.SetParent(entity);
                     light.AddComponent<SpotLightComponent>();
+                    m_SelectedEntity = light;
+                }
+                if (ImGui::MenuItem("Area Light (LTC)")) {
+                    auto light = m_Scene->CreateEntity("Area Light");
+                    light.SetParent(entity);
+                    light.AddComponent<RectLightComponent>();
                     m_SelectedEntity = light;
                 }
                 ImGui::EndMenu();

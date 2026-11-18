@@ -167,6 +167,8 @@ namespace Axle {
         float Height = 1.0f;
         float Range = 20.0f;
         bool TwoSided = false;
+        AreaLightShape Shape = AreaLightShape::Rectangle;
+        AreaLightShadowPolicy ShadowPolicy = AreaLightShadowPolicy::UnshadowedAnalyticLTC;
     };
 
     struct RenderVolumetricFog {

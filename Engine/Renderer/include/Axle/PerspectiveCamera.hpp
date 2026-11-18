@@ -36,6 +36,9 @@ namespace Axle {
         // Zero-to-One ([0, 1]) Depth Clip variants for Direct3D 12 and Vulkan
         const glm::mat4& GetProjectionMatrixZO() const { return m_ProjectionMatrixZO; }
         const glm::mat4& GetViewProjectionMatrixZO() const { return m_ViewProjectionMatrixZO; }
+        const glm::mat4& GetUnclippedProjectionMatrixZO() const { return m_UnclippedProjectionMatrixZO; }
+        bool HasCustomProjection() const { return m_HasCustomProjection; }
+        void SetCustomProjection(const glm::mat4& projectionMatrix, const glm::mat4& projectionMatrixZO);
 
         float GetNearClip() const { return m_NearClip; }
         float GetFarClip() const { return m_FarClip; }
@@ -51,9 +54,11 @@ namespace Axle {
         CameraProjectionType m_ProjectionType = CameraProjectionType::Perspective;
         glm::mat4 m_ProjectionMatrix{ 1.0f };
         glm::mat4 m_ProjectionMatrixZO{ 1.0f };
+        glm::mat4 m_UnclippedProjectionMatrixZO{ 1.0f };
         glm::mat4 m_ViewMatrix{ 1.0f };
         glm::mat4 m_ViewProjectionMatrix{ 1.0f };
         glm::mat4 m_ViewProjectionMatrixZO{ 1.0f };
+        bool m_HasCustomProjection = false;
 
         glm::vec3 m_Position{ 0.0f, 0.0f, 3.5f };
         glm::vec3 m_Rotation{ 0.0f, 0.0f, 0.0f }; // Degrees

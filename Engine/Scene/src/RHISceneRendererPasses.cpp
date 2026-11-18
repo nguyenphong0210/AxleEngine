@@ -85,9 +85,15 @@ namespace Axle {
         const bool captureActive = m_CaptureSession.Active &&
             m_CaptureSession.CandidateCubemap && m_CaptureSession.CandidateCubemap->IsValid() &&
             m_CaptureSession.SourceFace && m_CaptureSession.SourceFace->IsValid();
-        const bool allowCaptureTransparent = !captureActive || m_CaptureSession.IncludeTransparent;
-        const bool allowCaptureParticlesAndOverlays = !captureActive ||
-            m_CaptureSession.IncludeParticles || m_CaptureSession.IncludeEditorOverlays;
+        const bool planarActive = m_PlanarSession.Active &&
+            m_PlanarSession.TargetColor && m_PlanarSession.TargetColor->IsValid();
+        const bool reverseWinding = m_PlanarSession.Active && m_PlanarSession.ReverseWinding;
+        const bool captureLinearHdr = captureActive || planarActive;
+        const bool allowCaptureTransparent = (!captureActive || m_CaptureSession.IncludeTransparent) &&
+                                             (!planarActive || m_PlanarSession.IncludeTransparent);
+        const bool allowCaptureParticlesAndOverlays =
+            (!captureActive || m_CaptureSession.IncludeParticles || m_CaptureSession.IncludeEditorOverlays) &&
+            (!planarActive || m_PlanarSession.IncludeParticles || m_PlanarSession.IncludeEditorOverlays);
         const auto captureOriented = captureActive && m_CaptureSession.FlipHorizontal &&
             m_CaptureSession.OrientedFace && m_CaptureSession.OrientedFace->IsValid()
             ? graph.Import("CaptureOriented", m_CaptureSession.OrientedFace->GetNative()) : output;
@@ -357,7 +363,12 @@ namespace Axle {
 
                 // 3. Setup 256-byte CBV aligned constant buffer
                 RHISkyboxConstants skyboxConstants{};
-                skyboxConstants.InvViewProjection = glm::inverse(sceneConstants.ViewProjection);
+                glm::mat4 skyboxProjZO = camera.GetUnclippedProjectionMatrixZO();
+                if (settings.EnableTAA) {
+                    skyboxProjZO[2][0] += 2.0f * jitterX;
+                    skyboxProjZO[2][1] += 2.0f * jitterY;
+                }
+                skyboxConstants.InvViewProjection = glm::inverse(skyboxProjZO * camera.GetViewMatrix());
                 skyboxConstants.CameraPosition = sceneConstants.CameraPosition;
                 skyboxConstants.SunDirection = glm::vec4(sunDir, sunElev);
                 const float sunIntensity = world.DirectionalLight.has_value()
@@ -366,8 +377,8 @@ namespace Axle {
                 skyboxConstants.ZenithColor = glm::vec4(activeSkybox.ZenithColor, sunsetFactor);
                 skyboxConstants.HorizonColor = glm::vec4(activeSkybox.HorizonColor, activeSkybox.Turbidity);
                 skyboxConstants.GroundColor = glm::vec4(activeSkybox.GroundColor, activeSkybox.Exposure);
-                // If Tone Mapping is enabled or dynamic cubemap capture is active, output linear HDR sky radiance (-1.0f mode)
-                const bool linearHdrOutput = settings.EnableToneMapping || captureActive;
+                // If Tone Mapping is enabled or dynamic capture/planar is active, output linear HDR sky radiance (-1.0f mode)
+                const bool linearHdrOutput = settings.EnableToneMapping || captureLinearHdr;
                 float skyboxToneMode = linearHdrOutput ? -1.0f : static_cast<float>(settings.ToneMappingMode);
                 skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, skyboxToneMode, linearHdrOutput ? 1.0f : settings.Gamma);
 
@@ -419,7 +430,7 @@ namespace Axle {
             if (item.UseCustomShader && item.CustomGeneration) {
                 auto prepareCustom = [&]() -> bool {
                         const auto& generation=*item.CustomGeneration;
-                        auto* pipeline=GetOrCreateCustomPipeline(generation,sceneTargetFormat,m_CurrentDepthFormat,activeSampleCount,item.SurfaceType,item.CullMode,item.DepthWrite,useSSR && item.SurfaceType < SurfaceType::Transparent);
+                        auto* pipeline=GetOrCreateCustomPipeline(generation,sceneTargetFormat,m_CurrentDepthFormat,activeSampleCount,item.SurfaceType,item.CullMode,item.DepthWrite,useSSR && item.SurfaceType < SurfaceType::Transparent,reverseWinding);
                         if (!pipeline || !generation.PipelineLayout || !generation.PipelineLayout->IsValid()) return false;
                         if (customDrawIndex==m_CustomDraws.size()) m_CustomDraws.push_back(std::make_unique<CustomDrawResources>());
                         item.DrawResourceIndex = static_cast<uint32_t>(customDrawIndex);
@@ -526,11 +537,11 @@ namespace Axle {
                     m_MaterialDiagnostics[entity] = item.Surface.Diagnostic;
                     if (auto feedback = m_MaterialFeedback.find(entity); feedback != m_MaterialFeedback.end()) feedback->second.Generation = 0;
                 }
-                nri::Pipeline* needed = (!useSSR && sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
+                nri::Pipeline* needed = (!reverseWinding && !useSSR && sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
                     ? m_PipelineHDR
-                    : (!useSSR && sceneTargetFormat == nri::Format::RGBA8_UNORM && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_Pipeline)
+                    : (!reverseWinding && !useSSR && sceneTargetFormat == nri::Format::RGBA8_UNORM && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_Pipeline)
                         ? m_Pipeline
-                        : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode, item.DepthWrite,useSSR && item.SurfaceType < SurfaceType::Transparent);
+                        : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode, item.DepthWrite,useSSR && item.SurfaceType < SurfaceType::Transparent,reverseWinding);
 
                 if (!needed) { drawFailed = true; return; }
                 if (materialDrawIndex == m_MaterialDraws.size()) {
@@ -710,7 +721,7 @@ namespace Axle {
             sceneConstants.ViewProjection = viewProjZO;
             sceneConstants.View = camera.GetViewMatrix();
             sceneConstants.Projection = projZO;
-            sceneConstants.CameraPosition = glm::vec4(camera.GetPosition(), (settings.EnableToneMapping || captureActive) ? 1.0f : 0.0f);
+            sceneConstants.CameraPosition = glm::vec4(camera.GetPosition(), (settings.EnableToneMapping || captureLinearHdr) ? 1.0f : 0.0f);
             sceneConstants.AmbientLight = glm::vec4(0.22f, 0.25f, 0.32f, lighting.AmbientIntensity);
             sceneConstants.SunDirection = glm::vec4(lighting.SunDirection,0.0f);
             sceneConstants.SunColor = glm::vec4(1.0f, 0.98f, 0.92f, 1.0f);
@@ -852,7 +863,7 @@ namespace Axle {
                 if (!beginPass(normalPassName))
                     return RenderPassResult::Failed("SurfaceNormal: graph begin failed");
                 auto* normalPipeline = GetOrCreateSurfaceNormalPipeline(
-                    RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()), m_CurrentDepthFormat, useGTAO);
+                    RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()), m_CurrentDepthFormat, useGTAO, CullMode::None, reverseWinding);
                 if (!normalPipeline)
                     return RenderPassResult::Failed("SurfaceNormal: pipeline creation failed");
 
@@ -892,7 +903,7 @@ namespace Axle {
                         auto* customNormalPipeline = CreateCustomMaterialPipeline(
                             *item.CustomGeneration, RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()),
                             m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode,
-                            useGTAO && item.DepthWrite, true);
+                            useGTAO && item.DepthWrite, true, false, reverseWinding);
                         if (!customNormalPipeline) {
                             endRendering();
                             return RenderPassResult::Failed("SurfaceNormal: custom graph normal pipeline creation failed");
@@ -916,7 +927,7 @@ namespace Axle {
                     } else if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
                         const auto& resource = *m_MaterialDraws[item.DrawResourceIndex];
                         auto* itemNormalPipeline = GetOrCreateSurfaceNormalPipeline(
-                            RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()), m_CurrentDepthFormat, useGTAO, item.CullMode);
+                            RHI::ToNRIFormat(m_OpaqueSceneNormal->GetFormat()), m_CurrentDepthFormat, useGTAO, item.CullMode, reverseWinding);
                         if (!itemNormalPipeline) { endRendering(); return fail(); }
                         Commands().SetPipeline(itemNormalPipeline);
                         Commands().SetRootDescriptor(2, resource.Constants.GetCBV());
@@ -1641,6 +1652,12 @@ namespace Axle {
         }
         viewCtx.Temporal().Commit(viewProjZO, useTAA);
         m_LocalShadows.OnSubmitted();
+        if (m_PlanarSession.Active) {
+            m_PlanarLastCompletion = viewCtx.GetCompletion();
+            m_PlanarRenderSucceeded = static_cast<bool>(m_PlanarLastCompletion);
+            viewCtx.Diagnostics().SetCounters(m_LastDrawCallCount, dispatchCount);
+            return m_PlanarRenderSucceeded;
+        }
         if (m_CaptureSession.Active) {
             m_CaptureLastCompletion = viewCtx.GetCompletion();
             m_CaptureRenderSucceeded = static_cast<bool>(m_CaptureLastCompletion);

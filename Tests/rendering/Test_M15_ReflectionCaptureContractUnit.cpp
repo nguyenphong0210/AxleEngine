@@ -8,6 +8,9 @@
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/RHISceneRenderer.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
+#include <Axle/ViewContext.hpp>
+#include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -938,6 +941,181 @@ bool RunM15ReflectionCaptureContractUnitTests() {
                      forwardShader.find("EvaluateLTCAreaLightTerms") != std::string::npos &&
                      surfaceShader.find("EvaluateLTCAreaLightTerms") != std::string::npos,
             "M15-U5-40..42: PBRCommon.hlsli, ForwardPBR.hlsl and MaterialSurface.hlsl share validated LTC area-light evaluation");
+    }
+
+    // 10. M15-U5-H1 (S5.8 Part 1): Planar surface contract, mirrored camera, ZO oblique clip projection,
+    //     RHIViewTargets extent computation, policy filtering, and domain invalidation.
+    {
+        RenderPlanarReflector floorRefl{};
+        floorRefl.EntityID = 500;
+        floorRefl.StableUUID = 900500ULL;
+        floorRefl.Position = {0.0f, 0.0f, -4.0f};
+        floorRefl.Normal = {0.0f, 1.0f, 0.0f};
+        floorRefl.Tangent = {1.0f, 0.0f, 0.0f};
+        floorRefl.Bitangent = {0.0f, 0.0f, 1.0f};
+        floorRefl.HalfExtents = {4.0f, 4.0f};
+        floorRefl.ResolutionScale = 0.5f;
+        floorRefl.EdgeFadeDistance = 0.25f;
+        floorRefl.MaxRoughness = 0.45f;
+
+        const PlanarReflectionContract::PlanarReflectionSurface floorSurface =
+            PlanarReflectionContract::BuildSurfaceFromReflector(floorRefl);
+        RENDER_CHECK(floorSurface.Valid &&
+                     glm::length(floorSurface.Normal - glm::vec3(0.0f, 1.0f, 0.0f)) < 1e-5f,
+            "M15-U5-46.1: BuildSurfaceFromReflector constructs orthonormal valid surface");
+
+        const glm::vec3 samplePt(1.25f, 3.5f, -5.0f);
+        const glm::vec3 reflectedPt = PlanarReflectionContract::ReflectPoint(floorSurface, samplePt);
+        const glm::vec3 doubleReflected = PlanarReflectionContract::ReflectPoint(floorSurface, reflectedPt);
+        RENDER_CHECK(glm::length(reflectedPt - glm::vec3(1.25f, -3.5f, -5.0f)) < 1e-4f &&
+                     glm::length(doubleReflected - samplePt) < 1e-4f,
+            "M15-U5-46.1: ReflectPoint reflects across plane and is an exact involution");
+
+        const glm::mat4 reflMat = PlanarReflectionContract::BuildReflectionMatrix(floorSurface);
+        const glm::mat4 reflSq = reflMat * reflMat;
+        float maxIdentityErr = 0.0f;
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                maxIdentityErr = std::max(maxIdentityErr, std::abs(reflSq[c][r] - (c == r ? 1.0f : 0.0f)));
+            }
+        }
+        RENDER_CHECK(std::abs(glm::determinant(glm::mat3(reflMat)) + 1.0f) < 1e-4f && maxIdentityErr < 1e-4f,
+            "M15-U5-46.1 / 46.2: reflection matrix has det == -1 and R^2 == I");
+
+        // Camera in front of plane: mirrored view, winding flip, and ZO oblique near-plane clip test
+        PerspectiveCamera mainCam(60.0f, 16.0f / 9.0f, 0.1f, 200.0f);
+        mainCam.SetViewMatrix(
+            glm::lookAt(glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 0.0f, -4.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(0.0f, 2.0f, 0.0f));
+        PlanarReflectionContract::PlanarReflectionPolicy capturePolicy;
+        const auto mirrored = PlanarReflectionContract::BuildMirroredCamera(mainCam, floorSurface, capturePolicy);
+        RENDER_CHECK(mirrored.Valid && mirrored.ReverseWinding && mirrored.ObliqueClippingApplied &&
+                     glm::length(mirrored.Camera.GetPosition() - glm::vec3(0.0f, -2.0f, 0.0f)) < 1e-4f &&
+                     glm::determinant(glm::mat3(mirrored.Camera.GetViewMatrix())) < 0.0f,
+            "M15-U5-46.2: BuildMirroredCamera derives reflected position/view and sets ReverseWinding=true");
+
+        // Virtual-image projection invariant: mirrored view * real point == main view * reflected point
+        const glm::vec4 viewRealInMirrored = mirrored.Camera.GetViewMatrix() * glm::vec4(samplePt, 1.0f);
+        const glm::vec4 viewReflInMain = mainCam.GetViewMatrix() * glm::vec4(reflectedPt, 1.0f);
+        RENDER_CHECK(glm::length(glm::vec3(viewRealInMirrored) - glm::vec3(viewReflInMain)) < 1e-4f,
+            "M15-U5-46.2: mirrored view maps real point identically to main view seeing virtual reflection");
+
+        // Verify ZO oblique clip matrix places mirror plane at z_ndc == 0, clips behind (< 0), keeps in front [0, 1]
+        const glm::mat4 mvpObliqueZO = mirrored.Camera.GetViewProjectionMatrixZO();
+        auto evalZndc = [&](const glm::vec3& p) {
+            const glm::vec4 clip = mvpObliqueZO * glm::vec4(p, 1.0f);
+            return clip.z / clip.w;
+        };
+        const float zOnPlane = evalZndc({0.0f, 0.0f, -4.0f});
+        const float zBehindPlane = evalZndc({0.0f, -1.0f, -2.0f});
+        const float zInFrontNear = evalZndc({0.0f, 0.5f, -5.0f});
+        const float zInFrontFar = evalZndc({0.0f, 20.0f, -50.0f});
+        RENDER_CHECK(std::abs(zOnPlane) < 1e-4f && zBehindPlane < -0.05f &&
+                     zInFrontNear > 0.0f && zInFrontNear <= 1.0f &&
+                     zInFrontFar > zInFrontNear && zInFrontFar <= 1.0001f,
+            "M15-U5-46.6: ZO oblique clip maps mirror plane to z_ndc=0, clips behind (<0), preserves in-front [0,1]");
+
+        // Tilted mirror plane (35 deg X rotation) + identity limit check against standard perspectiveRH_ZO
+        RenderPlanarReflector tiltedRefl = floorRefl;
+        tiltedRefl.Position = {1.0f, 1.5f, -3.0f};
+        const float tiltRad = glm::radians(35.0f);
+        tiltedRefl.Normal = glm::normalize(glm::vec3(0.2f, std::cos(tiltRad), std::sin(tiltRad)));
+        const auto tiltedSurface = PlanarReflectionContract::BuildSurfaceFromReflector(tiltedRefl);
+        PerspectiveCamera tiltedCam(50.0f, 1.3333f, 0.1f, 150.0f);
+        tiltedCam.SetViewMatrix(
+            glm::lookAt(glm::vec3(1.5f, 3.0f, 2.0f), tiltedRefl.Position, glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(1.5f, 3.0f, 2.0f));
+        const auto tiltedMirrored = PlanarReflectionContract::BuildMirroredCamera(tiltedCam, tiltedSurface, capturePolicy);
+        const glm::mat4 tiltedVP = tiltedMirrored.Camera.GetViewProjectionMatrixZO();
+        const glm::vec3 tiltedOnPlane = tiltedRefl.Position + tiltedSurface.Tangent * 0.8f;
+        const glm::vec3 tiltedBehind = tiltedRefl.Position - tiltedSurface.Normal * 0.75f;
+        const glm::vec3 tiltedFront = tiltedRefl.Position + tiltedSurface.Normal * 2.0f;
+        const glm::vec4 cOn = tiltedVP * glm::vec4(tiltedOnPlane, 1.0f);
+        const glm::vec4 cBehind = tiltedVP * glm::vec4(tiltedBehind, 1.0f);
+        const glm::vec4 cFront = tiltedVP * glm::vec4(tiltedFront, 1.0f);
+        RENDER_CHECK(tiltedMirrored.Valid && tiltedMirrored.ObliqueClippingApplied &&
+                     std::abs(cOn.z / cOn.w) < 1e-4f &&
+                     (cBehind.z / cBehind.w) < -0.01f &&
+                     (cFront.z / cFront.w) > 0.0f && (cFront.z / cFront.w) <= 1.0001f,
+            "M15-U5-46.6: tilted oblique ZO projection clips behind-plane geometry and preserves in-front depth order");
+
+        // Identity limit: near-plane C_view = (0, 0, -1, -near) reproduces glm::perspectiveRH_ZO
+        const glm::mat4 stdZO = glm::perspectiveRH_ZO(glm::radians(60.0f), 1.5f, 0.25f, 100.0f);
+        bool exactApplied = false;
+        glm::mat4 exactGL{};
+        const glm::mat4 exactOblique = PlanarReflectionContract::BuildObliqueClipProjectionZO(
+            stdZO, glm::mat4(1.0f), glm::vec4(0.0f, 0.0f, -1.0f, -0.25f), nullptr, &exactApplied, &exactGL);
+        float maxZOErr = 0.0f;
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                maxZOErr = std::max(maxZOErr, std::abs(exactOblique[c][r] - stdZO[c][r]));
+            }
+        }
+        RENDER_CHECK(exactApplied && maxZOErr < 1e-5f,
+            "M15-U5-46.6: ZO oblique clip on camera near plane equals standard perspectiveRH_ZO");
+
+        // Camera behind plane must fail cleanly
+        PerspectiveCamera behindCam = mainCam;
+        behindCam.SetViewMatrix(glm::mat4(1.0f), {0.0f, -1.0f, 0.0f});
+        const auto invalidMirrored = PlanarReflectionContract::BuildMirroredCamera(behindCam, floorSurface, capturePolicy);
+        RENDER_CHECK(!invalidMirrored.Valid && !invalidMirrored.Diagnostic.empty(),
+            "M15-U5-46.2: camera behind reflector plane is explicitly rejected with diagnostic");
+
+        // Recursion prevention & entity self-exclusion
+        SceneRenderSettings noisySettings;
+        noisySettings.EnablePlanarReflections = true;
+        noisySettings.EnableSSR = true;
+        noisySettings.EnableTAA = true;
+        noisySettings.MSAASamples = 4;
+        const SceneRenderSettings cleanCapture = PlanarReflectionContract::SanitizeCaptureSettings(noisySettings, capturePolicy);
+        RENDER_CHECK(!cleanCapture.EnablePlanarReflections && !cleanCapture.EnableSSR &&
+                     !cleanCapture.EnableTAA && cleanCapture.MSAASamples == 1u,
+            "M15-U5-46.2: SanitizeCaptureSettings disables planar recursion, SSR, TAA and MSAA");
+
+        RenderWorld srcWorld;
+        srcWorld.PlanarReflectors.push_back(floorRefl);
+        RenderMeshInstance mirrorMesh{};
+        mirrorMesh.EntityID = 500;
+        RenderMeshInstance sceneMesh{};
+        sceneMesh.EntityID = 501;
+        srcWorld.Meshes.push_back(mirrorMesh);
+        srcWorld.Meshes.push_back(sceneMesh);
+        const RenderWorld capWorld = PlanarReflectionContract::FilterCaptureWorld(srcWorld, floorRefl, capturePolicy);
+        RENDER_CHECK(capWorld.PlanarReflectors.empty() && capWorld.Meshes.size() == 1 && capWorld.Meshes[0].EntityID == 501u,
+            "M15-U5-46.2 / 46.6: FilterCaptureWorld disables nested reflectors and excludes self-reflector entity");
+
+        // Confidence, edge fade & roughness rolloff
+        const float cCenterSmooth = PlanarReflectionContract::EvaluatePlanarReflectionConfidence(
+            floorSurface, {0.0f, 0.0f, -4.0f}, {0.0f, 1.0f, 0.0f}, 0.05f);
+        const float cEdgeFade = PlanarReflectionContract::EvaluatePlanarReflectionConfidence(
+            floorSurface, {3.9f, 0.0f, -4.0f}, {0.0f, 1.0f, 0.0f}, 0.05f);
+        const float cOutsideExtent = PlanarReflectionContract::EvaluatePlanarReflectionConfidence(
+            floorSurface, {4.5f, 0.0f, -4.0f}, {0.0f, 1.0f, 0.0f}, 0.05f);
+        const float cRoughCutoff = PlanarReflectionContract::EvaluatePlanarReflectionConfidence(
+            floorSurface, {0.0f, 0.0f, -4.0f}, {0.0f, 1.0f, 0.0f}, 0.50f);
+        RENDER_CHECK(cCenterSmooth > 0.99f && cEdgeFade > 0.0f && cEdgeFade < 0.6f &&
+                     cOutsideExtent == 0.0f && cRoughCutoff == 0.0f,
+            "M15-U5-46.1 / 46.5 / 46.6: planar confidence fades at extents and cuts off outside plane or high roughness");
+
+        // Extent scaling, feature hash & invalidation flags
+        const glm::uvec2 halfExtent = PlanarReflectionContract::ComputeScaledTargetExtent(1919u, 1079u, 0.5f);
+        RENDER_CHECK(halfExtent.x == 960u && halfExtent.y == 540u &&
+                     RHI::RHIViewTargets::ComputePlanarTargetDimension(100u, 0.1f) == 25u &&
+                     RHI::RHIViewTargets::ComputePlanarTargetDimension(0u, 0.5f) == 0u,
+            "M15-U5-46.3: planar target scaling clamps safely to [0.25, 1.0] and handles odd extents");
+
+        SceneRenderSettings basePlanarSettings;
+        SceneRenderSettings activePlanarSettings;
+        activePlanarSettings.EnablePlanarReflections = true;
+        RENDER_CHECK(HashViewFeaturePolicy(basePlanarSettings) != HashViewFeaturePolicy(activePlanarSettings),
+            "M15-U5-46.3: HashViewFeaturePolicy tracks EnablePlanarReflections changes");
+
+        PlanarReflectionContract::PlanarReflectionDomainStamps s0{};
+        s0.PlaneStamp = 1; s0.CameraStamp = 1; s0.TargetWidth = 640; s0.TargetHeight = 360;
+        auto sMoved = s0; sMoved.CameraStamp = 2;
+        const auto invCam = PlanarReflectionContract::EvaluateInvalidation(s0, sMoved, false);
+        RENDER_CHECK(invCam.AnyChange() && invCam.CameraChanged && !invCam.PlaneChanged && !invCam.TargetExtentChanged,
+            "M15-U5-46.7: PlanarReflectionInvalidation isolates per-domain change signals");
     }
 
     std::cout << "[M15ReflectionCapture] All dynamic reflection capture contract tests passed!\n";

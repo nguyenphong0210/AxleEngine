@@ -11,7 +11,8 @@
 namespace Axle {
     nri::Pipeline* CreateCustomMaterialPipeline(const CustomReadyGeneration& generation,
         nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount,
-        SurfaceType surfaceType, CullMode cullMode, bool depthWrite, bool normalPass, bool reflectionTerms) {
+        SurfaceType surfaceType, CullMode cullMode, bool depthWrite, bool normalPass, bool reflectionTerms,
+        bool reverseWinding) {
         using namespace RHI;
         if (!generation.PipelineLayout || !generation.PipelineLayout->IsValid()) return nullptr;
         if (normalPass && (!generation.HasNormalPass || !generation.NormalPSBytecode.IsValid())) return nullptr;
@@ -28,7 +29,7 @@ namespace Axle {
         } else {
             gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
         }
-        gfxDesc.Rasterizer.FrontCounterClockwise = true;
+        gfxDesc.Rasterizer.FrontCounterClockwise = !reverseWinding;
 
         gfxDesc.DepthStencil.DepthTestEnable = true;
         gfxDesc.DepthStencil.DepthWriteEnable = depthWrite;

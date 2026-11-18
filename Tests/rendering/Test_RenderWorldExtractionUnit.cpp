@@ -7,6 +7,7 @@
 #include <Axle/SceneLighting.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/AssemblySerializer.hpp>
+#include <Axle/ComponentCodec.hpp>
 #include <Axle/FileSystem.hpp>
 #include <chrono>
 
@@ -129,6 +130,21 @@ namespace Axle::RenderTests {
         rlc.Range = 22.0f;
         rlc.TwoSided = true;
 
+        // Planar Reflector
+        Entity planarEntity = scene.CreateEntity("FloorMirror");
+        auto& prtc = planarEntity.GetComponent<TransformComponent>();
+        prtc.Translation = glm::vec3(0.0f, 1.25f, -3.0f);
+        auto& prc = planarEntity.AddComponent<PlanarReflectionComponent>();
+        prc.HalfExtents = glm::vec2(6.5f, 4.25f);
+        prc.ResolutionScale = 0.75f;
+        prc.ClipPlaneOffset = 0.02f;
+        prc.EdgeFadeDistance = 0.35f;
+        prc.MaxRoughness = 0.6f;
+        prc.Intensity = 0.9f;
+        prc.CaptureShadows = false;
+        prc.ClipToExtents = false;
+        prc.CaptureMode = PlanarReflectionCaptureMode::Manual;
+
         // Skybox
         Entity sky = scene.CreateEntity("Sky");
         auto& sc = sky.AddComponent<SkyboxComponent>();
@@ -157,6 +173,17 @@ namespace Axle::RenderTests {
                      world.RectLights[0].TwoSided &&
                      world.RectLights[0].ShadowPolicy == AreaLightShadowPolicy::UnshadowedAnalyticLTC,
             "M15-U5-44.1 / 44.2: RectLightComponent extracts Shape, dimensions, range, sidedness, and shadow policy");
+        RENDER_CHECK(world.PlanarReflectors.size() == 1 &&
+                     glm::distance(world.PlanarReflectors[0].Position, glm::vec3(0.0f, 1.25f, -3.0f)) < 1e-4f &&
+                     Near(world.PlanarReflectors[0].HalfExtents.x, 6.5f) &&
+                     Near(world.PlanarReflectors[0].HalfExtents.y, 4.25f) &&
+                     Near(world.PlanarReflectors[0].ResolutionScale, 0.75f) &&
+                     Near(world.PlanarReflectors[0].ClipPlaneOffset, 0.02f) &&
+                     Near(world.PlanarReflectors[0].MaxRoughness, 0.6f) &&
+                     !world.PlanarReflectors[0].CaptureShadows &&
+                     !world.PlanarReflectors[0].ClipToExtents &&
+                     world.PlanarReflectors[0].CaptureMode == PlanarReflectionCaptureMode::Manual,
+            "M15-U5-46.1: PlanarReflectionComponent extracts plane basis, extents, resolution scale and policy flags");
         RENDER_CHECK(!world.PointLights[0].Shadows.CastShadows&&world.PointLights[0].Shadows.Bias==.004f,"Point shadow controls extracted");
         RENDER_CHECK(world.SpotLights[0].Shadows.NearPlane==.15f&&world.SpotLights[0].Shadows.FilterRadius==2,"Spot shadow controls extracted");
         const std::string savedSceneText = SceneSerializer(&scene).SerializeToString();
@@ -166,6 +193,29 @@ namespace Axle::RenderTests {
         RENDER_CHECK(restored.RectLights.size() == 1 && restored.RectLights[0].Shape == AreaLightShape::Disk &&
                      Near(restored.RectLights[0].Width, 3.5f) && restored.RectLights[0].TwoSided,
             "M15-U5-44.3: RectLightComponent Shape=Disk and parameters survive scene round-trip");
+        RENDER_CHECK(restored.PlanarReflectors.size() == 1 &&
+                     Near(restored.PlanarReflectors[0].HalfExtents.x, 6.5f) &&
+                     Near(restored.PlanarReflectors[0].ResolutionScale, 0.75f) &&
+                     !restored.PlanarReflectors[0].CaptureShadows &&
+                     restored.PlanarReflectors[0].CaptureMode == PlanarReflectionCaptureMode::Manual,
+            "M15-U5-46.1: PlanarReflectionComponent survives SceneSerializer round-trip");
+
+        // RuntimeComponentCodec duplicate/copy round-trip
+        RegisterRuntimeComponentCodecs();
+        auto clonedMirror = scene.CreateEntity("ClonedMirror");
+        std::unordered_map<UUID, entt::entity> uuidMap;
+        ComponentCopyContext copyCtx{
+            scene.GetRegistry(),
+            static_cast<entt::entity>(clonedMirror),
+            scene.GetRegistry(),
+            static_cast<entt::entity>(planarEntity),
+            uuidMap
+        };
+        ComponentCodecRegistry::Get().CopyAllComponents(copyCtx);
+        RENDER_CHECK(clonedMirror.HasComponent<PlanarReflectionComponent>() &&
+                     Near(clonedMirror.GetComponent<PlanarReflectionComponent>().ResolutionScale, 0.75f) &&
+                     clonedMirror.GetComponent<PlanarReflectionComponent>().CaptureMode == PlanarReflectionCaptureMode::Manual,
+            "M15-U5-46.1: RuntimeComponentCodec clones PlanarReflectionComponent fields");
 
         // Legacy scene without Shape: must default safely to Rectangle
         std::string legacyRectYaml = savedSceneText;
@@ -188,6 +238,9 @@ namespace Axle::RenderTests {
             Near(a.NormalBias,b.NormalBias)&&Near(a.FilterRadius,b.FilterRadius)&&Near(a.NearPlane,b.NearPlane);};
         auto& assemblySpot=lamp.AddComponent<SpotLightComponent>();
         auto& assemblyRect=lamp.AddComponent<RectLightComponent>();
+        auto& assemblyPlanar=lamp.AddComponent<PlanarReflectionComponent>();
+        assemblyPlanar.HalfExtents={7.25f,3.5f}; assemblyPlanar.ResolutionScale=0.8f;
+        assemblyPlanar.MaxRoughness=0.55f; assemblyPlanar.CaptureMode=PlanarReflectionCaptureMode::Manual;
         assemblyRect.Shape=AreaLightShape::Disk; assemblyRect.Width=2.75f; assemblyRect.Height=1.25f;
         assemblyRect.Range=18.5f; assemblyRect.TwoSided=true; assemblyRect.Intensity=14.0f;
         plc.Shadows={false,.012f,.023f,.034f,1.25f,.15f};
@@ -199,17 +252,23 @@ namespace Axle::RenderTests {
             imported.HasComponent<RectLightComponent>()&&
             imported.GetComponent<RectLightComponent>().Shape==AreaLightShape::Disk&&
             Near(imported.GetComponent<RectLightComponent>().Width,2.75f)&&
-            imported.GetComponent<RectLightComponent>().TwoSided,"Entity assembly round-trip keeps local-shadow and area-light fields");
+            imported.GetComponent<RectLightComponent>().TwoSided&&
+            imported.HasComponent<PlanarReflectionComponent>()&&
+            Near(imported.GetComponent<PlanarReflectionComponent>().HalfExtents.x,7.25f)&&
+            Near(imported.GetComponent<PlanarReflectionComponent>().ResolutionScale,0.8f)&&
+            imported.GetComponent<PlanarReflectionComponent>().CaptureMode==PlanarReflectionCaptureMode::Manual,"Entity assembly round-trip keeps local-shadow, area-light and planar reflection fields");
         auto assembly=AssemblySerializer::LoadAssemblyData(assemblyPath);
         RENDER_CHECK(assembly.IsValid&&assembly.RootNode.HasPointLight&&assembly.RootNode.HasSpotLight&&assembly.RootNode.HasRectLight&&
+            assembly.RootNode.HasPlanarReflection&&Near(assembly.RootNode.PlanarReflection.ResolutionScale,0.8f)&&
             assembly.RootNode.RectLight.Shape==AreaLightShape::Disk&&
-            verifyShadows(assembly.RootNode.PointLight.Shadows,plc.Shadows)&&verifyShadows(assembly.RootNode.SpotLight.Shadows,assemblySpot.Shadows),"Assembly Editor data keeps local lights, shadows, and area light");
+            verifyShadows(assembly.RootNode.PointLight.Shadows,plc.Shadows)&&verifyShadows(assembly.RootNode.SpotLight.Shadows,assemblySpot.Shadows),"Assembly Editor data keeps local lights, shadows, area light and planar reflection");
         RENDER_CHECK(AssemblySerializer::SaveAssemblyData(assemblyPath,assembly),"Save local-light assembly data");
         const auto savedAssembly=AssemblySerializer::LoadAssemblyData(assemblyPath);
         RENDER_CHECK(savedAssembly.IsValid&&savedAssembly.RootNode.HasPointLight&&savedAssembly.RootNode.HasSpotLight&&savedAssembly.RootNode.HasRectLight&&
+            savedAssembly.RootNode.HasPlanarReflection&&Near(savedAssembly.RootNode.PlanarReflection.MaxRoughness,0.55f)&&
             savedAssembly.RootNode.RectLight.Shape==AreaLightShape::Disk&&
             Near(savedAssembly.RootNode.RectLight.Height,1.25f)&&
-            verifyShadows(savedAssembly.RootNode.PointLight.Shadows,plc.Shadows)&&verifyShadows(savedAssembly.RootNode.SpotLight.Shadows,assemblySpot.Shadows),"Assembly Editor save preserves shadow and area-light fields");
+            verifyShadows(savedAssembly.RootNode.PointLight.Shadows,plc.Shadows)&&verifyShadows(savedAssembly.RootNode.SpotLight.Shadows,assemblySpot.Shadows),"Assembly Editor save preserves shadow, area-light and planar reflection fields");
         const auto validAssembly=FileSystem::ReadTextFile(assemblyPath);
         for(const auto* invalid:{"invalid","1e9999"}) {
             auto corrupt=[&](std::string text){const auto start=text.find("ShadowBias:");

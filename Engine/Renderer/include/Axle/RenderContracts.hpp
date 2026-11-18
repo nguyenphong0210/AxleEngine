@@ -620,4 +620,141 @@ namespace Axle {
             uint32_t samplesPerAxis = 32u);
     }
 
+    // =========================================================================
+    // 9. Planar Reflection Surface, Mirrored Camera & Clipping Contracts (M15-U5-46)
+    // =========================================================================
+    namespace PlanarReflectionContract {
+        inline constexpr float MinResolutionScale = 0.25f;
+        inline constexpr float MaxResolutionScale = 1.0f;
+        inline constexpr float DefaultResolutionScale = 0.5f;
+        inline constexpr float DefaultMaxRoughness = 0.45f;
+        inline constexpr float DefaultEdgeFadeDistance = 0.15f;
+        inline constexpr float DefaultMinCameraPlaneDistance = 0.005f;
+
+        struct PlanarReflectionSurface {
+            uint64_t EntityID = 0;
+            UUID StableUUID = 0;
+            glm::mat4 WorldTransform{ 1.0f };
+            glm::vec3 Position{ 0.0f };
+            glm::vec3 Normal{ 0.0f, 1.0f, 0.0f };
+            glm::vec3 Tangent{ 1.0f, 0.0f, 0.0f };
+            glm::vec3 Bitangent{ 0.0f, 0.0f, 1.0f };
+            glm::vec2 HalfExtents{ 5.0f, 5.0f };
+            float ClipPlaneOffset = 0.0f;
+            float EdgeFadeDistance = DefaultEdgeFadeDistance;
+            float MaxRoughness = DefaultMaxRoughness;
+            float Intensity = 1.0f;
+            bool ClipToExtents = true;
+            bool Valid = false;
+
+            // Canonical world plane (nx, ny, nz, d) in meters:
+            // dot(Normal, p) + d >= 0 is kept in front of the mirror.
+            glm::vec4 WorldPlane() const {
+                return glm::vec4(Normal, -glm::dot(Normal, Position) - ClipPlaneOffset);
+            }
+        };
+
+        struct PlanarReflectionPolicy {
+            float ResolutionScale = DefaultResolutionScale;
+            float ClipPlaneOffset = 0.0f;
+            float MinCameraPlaneDistance = DefaultMinCameraPlaneDistance;
+            bool IncludeOpaqueAndCutout = true;
+            bool IncludeSkybox = true;
+            bool IncludeShadows = true;
+            bool IncludeTransparent = false;
+            bool IncludeParticles = false;
+            bool IncludeEditorOverlays = false;
+            bool AllowSSR = false;
+            bool AllowPlanarReflections = false;
+            bool AllowDynamicProbes = false;
+            bool IsolateMainViewTAA = true;
+            uint64_t ExcludeEntityID = 0;
+            std::vector<uint64_t> AdditionalExcludedEntityIDs;
+        };
+
+        struct MirroredCameraResult {
+            bool Valid = false;
+            bool ObliqueClippingApplied = false;
+            bool ReverseWinding = false;
+            float CameraSignedDistance = 0.0f;
+            PerspectiveCamera Camera;
+            glm::mat4 ReflectionMatrix{ 1.0f };
+            glm::vec4 WorldPlane{ 0.0f, 1.0f, 0.0f, 0.0f };
+            glm::vec4 ViewPlane{ 0.0f, 0.0f, -1.0f, 0.0f };
+            std::string Diagnostic;
+        };
+
+        struct PlanarReflectionDomainStamps {
+            uint64_t PlaneStamp = 0;
+            uint64_t CameraStamp = 0;
+            uint64_t GeometryStamp = 0;
+            uint64_t MaterialStamp = 0;
+            uint64_t LightingStamp = 0;
+            uint64_t AssetStamp = 0;
+            uint64_t SettingsStamp = 0;
+            uint64_t SceneRevision = 0;
+            uint64_t SceneInstanceID = 0;
+            uint64_t SceneLifetimeEpoch = 0;
+            uint64_t DeviceEpoch = 0;
+            uint32_t TargetWidth = 0;
+            uint32_t TargetHeight = 0;
+            uint64_t CombinedStamp = 0;
+        };
+
+        struct PlanarReflectionInvalidation {
+            bool PlaneChanged = false;
+            bool CameraChanged = false;
+            bool SceneRevisionChanged = false;
+            bool GeometryChanged = false;
+            bool MaterialChanged = false;
+            bool LightingChanged = false;
+            bool AssetChanged = false;
+            bool SettingsChanged = false;
+            bool TargetExtentChanged = false;
+            bool DeviceEpochChanged = false;
+            bool ManualRequested = false;
+
+            bool AnyChange() const {
+                return PlaneChanged || CameraChanged || SceneRevisionChanged || GeometryChanged ||
+                       MaterialChanged || LightingChanged || AssetChanged || SettingsChanged ||
+                       TargetExtentChanged || DeviceEpochChanged || ManualRequested;
+            }
+        };
+
+        PlanarReflectionSurface BuildSurfaceFromReflector(const RenderPlanarReflector& reflector);
+        float SignedDistanceToPlane(const PlanarReflectionSurface& surface, const glm::vec3& pointWS);
+        glm::vec3 ReflectPoint(const PlanarReflectionSurface& surface, const glm::vec3& pointWS);
+        glm::vec3 ReflectDirection(const PlanarReflectionSurface& surface, const glm::vec3& dirWS);
+        glm::mat4 BuildReflectionMatrix(const PlanarReflectionSurface& surface);
+        glm::mat4 BuildObliqueClipProjectionZO(
+            const glm::mat4& projZO,
+            const glm::mat4& mirroredView,
+            const glm::vec4& worldPlane,
+            glm::vec4* outViewPlane = nullptr,
+            bool* outApplied = nullptr,
+            glm::mat4* outObliqueGL = nullptr);
+        MirroredCameraResult BuildMirroredCamera(
+            const PerspectiveCamera& mainCamera,
+            const PlanarReflectionSurface& surface,
+            const PlanarReflectionPolicy& policy = PlanarReflectionPolicy{});
+        float EvaluatePlanarReflectionConfidence(
+            const PlanarReflectionSurface& surface,
+            const glm::vec3& worldPos,
+            const glm::vec3& normalWS,
+            float roughness,
+            float maxRoughnessOverride = -1.0f);
+        glm::uvec2 ComputeScaledTargetExtent(uint32_t baseWidth, uint32_t baseHeight, float resolutionScale);
+        SceneRenderSettings SanitizeCaptureSettings(
+            const SceneRenderSettings& mainSettings,
+            const PlanarReflectionPolicy& policy);
+        RenderWorld FilterCaptureWorld(
+            const RenderWorld& sourceWorld,
+            const RenderPlanarReflector& reflector,
+            const PlanarReflectionPolicy& policy);
+        PlanarReflectionInvalidation EvaluateInvalidation(
+            const PlanarReflectionDomainStamps& published,
+            const PlanarReflectionDomainStamps& current,
+            bool manualRequested = false);
+    }
+
 } // namespace Axle

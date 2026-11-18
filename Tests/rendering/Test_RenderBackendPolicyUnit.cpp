@@ -116,6 +116,7 @@ namespace Axle::RenderTests {
         authored.EnableGTAO = true;
         authored.EnableContactShadows = true;
         authored.EnableSSR = true;
+        authored.EnablePlanarReflections = true;
         authored.EnableVolumetricFog = true;
         authored.EnableDDGI = true;
         authored.EnableFXAA = true;
@@ -123,7 +124,7 @@ namespace Axle::RenderTests {
         const auto resolvedGL = gl.ResolveSettings(authored);
         RENDER_CHECK(resolvedGL.MSAASamples == 1 && !resolvedGL.EnableToneMapping && !resolvedGL.EnableBloom &&
                      !resolvedGL.EnableAutoExposure && !resolvedGL.EnableTAA && !resolvedGL.EnableFXAA &&
-                     !resolvedGL.EnableGTAO && !resolvedGL.EnableSSR && !resolvedGL.EnableDDGI,
+                     !resolvedGL.EnableGTAO && !resolvedGL.EnableSSR && !resolvedGL.EnablePlanarReflections && !resolvedGL.EnableDDGI,
                      "OpenGL fallback resolves unsupported post and compute features without mutating authored settings");
         RENDER_CHECK(gl.CollectFallbacks(authored).size() >= 7, "OpenGL fallback reports explicit feature reasons");
 

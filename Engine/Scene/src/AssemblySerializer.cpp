@@ -298,6 +298,25 @@ namespace Axle {
                 fout << "      TwoSided: " << (rlc.TwoSided ? "true" : "false") << "\n";
             }
 
+            // PlanarReflectionComponent
+            if (entity.HasComponent<PlanarReflectionComponent>()) {
+                const auto& prc = entity.GetComponent<PlanarReflectionComponent>();
+                fout << "    PlanarReflectionComponent:\n";
+                fout << "      Enabled: " << (prc.Enabled ? "true" : "false") << "\n";
+                fout << "      HalfExtents: [ " << prc.HalfExtents.x << " , " << prc.HalfExtents.y << " ]\n";
+                fout << "      ResolutionScale: " << prc.ResolutionScale << "\n";
+                fout << "      ClipPlaneOffset: " << prc.ClipPlaneOffset << "\n";
+                fout << "      EdgeFadeDistance: " << prc.EdgeFadeDistance << "\n";
+                fout << "      MaxRoughness: " << prc.MaxRoughness << "\n";
+                fout << "      Intensity: " << prc.Intensity << "\n";
+                fout << "      CaptureNearPlane: " << prc.CaptureNearPlane << "\n";
+                fout << "      CaptureFarPlane: " << prc.CaptureFarPlane << "\n";
+                fout << "      CaptureShadows: " << (prc.CaptureShadows ? "true" : "false") << "\n";
+                fout << "      CaptureSkybox: " << (prc.CaptureSkybox ? "true" : "false") << "\n";
+                fout << "      ClipToExtents: " << (prc.ClipToExtents ? "true" : "false") << "\n";
+                fout << "      CaptureMode: " << PlanarReflectionCaptureModeToString(prc.CaptureMode) << "\n";
+            }
+
 
             // SkeletalMeshComponent
             if (entity.HasComponent<SkeletalMeshComponent>()) {
@@ -410,6 +429,9 @@ namespace Axle {
         bool HasRectLight = false;
         RectLightComponent RectLight;
 
+        bool HasPlanarReflection = false;
+        PlanarReflectionComponent PlanarReflection;
+
 
 
         bool HasSkeletalMesh = false;
@@ -439,6 +461,7 @@ namespace Axle {
         PointLight,
         SpotLight,
         RectLight,
+        PlanarReflection,
         SkeletalMesh,
         Animator,
         Hierarchy,
@@ -521,6 +544,7 @@ namespace Axle {
                 if (trimmed == "PointLightComponent:") { flushCustom(); currentSection = AsmSection::PointLight; current.HasPointLight = true; continue; }
                 if (trimmed == "SpotLightComponent:") { flushCustom(); currentSection = AsmSection::SpotLight; current.HasSpotLight = true; continue; }
                 if (trimmed == "RectLightComponent:") { flushCustom(); currentSection = AsmSection::RectLight; current.HasRectLight = true; continue; }
+                if (trimmed == "PlanarReflectionComponent:") { flushCustom(); currentSection = AsmSection::PlanarReflection; current.HasPlanarReflection = true; continue; }
                 if (trimmed == "SkeletalMeshComponent:") { flushCustom(); currentSection = AsmSection::SkeletalMesh; current.HasSkeletalMesh = true; continue; }
                 if (trimmed == "AnimatorComponent:") { flushCustom(); currentSection = AsmSection::Animator; current.HasAnimator = true; continue; }
                 if (trimmed == "HierarchyComponent:") { flushCustom(); currentSection = AsmSection::Hierarchy; current.HasHierarchy = true; continue; }
@@ -739,6 +763,38 @@ namespace Axle {
                         try { float v = std::stof(Trim(trimmed.substr(6))); if (std::isfinite(v)) current.RectLight.Range = std::max(0.0f, v); } catch (...) {}
                     } else if (trimmed.rfind("TwoSided:", 0) == 0) {
                         current.RectLight.TwoSided = (Trim(trimmed.substr(9)) == "true");
+                    }
+                    break;
+                }
+                case AsmSection::PlanarReflection: {
+                    if (trimmed.rfind("Enabled:", 0) == 0) {
+                        current.PlanarReflection.Enabled = (Trim(trimmed.substr(8)) == "true");
+                    } else if (trimmed.rfind("HalfExtents:", 0) == 0) {
+                        float hx = 5.0f, hy = 5.0f;
+                        sscanf(trimmed.c_str(), "HalfExtents: [ %f , %f ]", &hx, &hy);
+                        if (std::isfinite(hx) && std::isfinite(hy)) current.PlanarReflection.HalfExtents = glm::vec2(std::max(0.01f, hx), std::max(0.01f, hy));
+                    } else if (trimmed.rfind("ResolutionScale:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(16))); if (std::isfinite(v)) current.PlanarReflection.ResolutionScale = std::clamp(v, 0.25f, 1.0f); } catch (...) {}
+                    } else if (trimmed.rfind("ClipPlaneOffset:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(16))); if (std::isfinite(v)) current.PlanarReflection.ClipPlaneOffset = v; } catch (...) {}
+                    } else if (trimmed.rfind("EdgeFadeDistance:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(17))); if (std::isfinite(v)) current.PlanarReflection.EdgeFadeDistance = std::max(0.0f, v); } catch (...) {}
+                    } else if (trimmed.rfind("MaxRoughness:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(13))); if (std::isfinite(v)) current.PlanarReflection.MaxRoughness = std::clamp(v, 0.02f, 1.0f); } catch (...) {}
+                    } else if (trimmed.rfind("Intensity:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(10))); if (std::isfinite(v)) current.PlanarReflection.Intensity = std::clamp(v, 0.0f, 10.0f); } catch (...) {}
+                    } else if (trimmed.rfind("CaptureNearPlane:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(17))); if (std::isfinite(v)) current.PlanarReflection.CaptureNearPlane = std::max(0.01f, v); } catch (...) {}
+                    } else if (trimmed.rfind("CaptureFarPlane:", 0) == 0) {
+                        try { float v = std::stof(Trim(trimmed.substr(16))); if (std::isfinite(v)) current.PlanarReflection.CaptureFarPlane = std::max(0.1f, v); } catch (...) {}
+                    } else if (trimmed.rfind("CaptureShadows:", 0) == 0) {
+                        current.PlanarReflection.CaptureShadows = (Trim(trimmed.substr(15)) == "true");
+                    } else if (trimmed.rfind("CaptureSkybox:", 0) == 0) {
+                        current.PlanarReflection.CaptureSkybox = (Trim(trimmed.substr(14)) == "true");
+                    } else if (trimmed.rfind("ClipToExtents:", 0) == 0) {
+                        current.PlanarReflection.ClipToExtents = (Trim(trimmed.substr(14)) == "true");
+                    } else if (trimmed.rfind("CaptureMode:", 0) == 0) {
+                        current.PlanarReflection.CaptureMode = StringToPlanarReflectionCaptureMode(Trim(trimmed.substr(12)));
                     }
                     break;
                 }
@@ -1026,6 +1082,11 @@ namespace Axle {
                 entity.AddComponent<RectLightComponent>(raw.RectLight);
             }
 
+            // PlanarReflectionComponent
+            if (raw.HasPlanarReflection) {
+                entity.AddComponent<PlanarReflectionComponent>(raw.PlanarReflection);
+            }
+
 
             // SkeletalMeshComponent
             if (raw.HasSkeletalMesh) {
@@ -1279,6 +1340,7 @@ namespace Axle {
             node.HasPointLight=raw.HasPointLight;node.PointLight=raw.PointLight;
             node.HasSpotLight=raw.HasSpotLight;node.SpotLight=raw.SpotLight;
             node.HasRectLight=raw.HasRectLight;node.RectLight=raw.RectLight;
+            node.HasPlanarReflection=raw.HasPlanarReflection;node.PlanarReflection=raw.PlanarReflection;
             node.HasSkeletalMesh = raw.HasSkeletalMesh;
             node.SkeletalMesh = raw.SkeletalMesh;
             node.HasAnimator = raw.HasAnimator;
@@ -1393,6 +1455,23 @@ namespace Axle {
             out << "      Height: " << light.Height << "\n";
             out << "      Range: " << light.Range << "\n";
             out << "      TwoSided: " << (light.TwoSided?"true":"false") << "\n";
+        }
+        if (node.HasPlanarReflection) {
+            const auto& pr = node.PlanarReflection;
+            out << "    PlanarReflectionComponent:\n";
+            out << "      Enabled: " << (pr.Enabled ? "true" : "false") << "\n";
+            out << "      HalfExtents: [ " << pr.HalfExtents.x << " , " << pr.HalfExtents.y << " ]\n";
+            out << "      ResolutionScale: " << pr.ResolutionScale << "\n";
+            out << "      ClipPlaneOffset: " << pr.ClipPlaneOffset << "\n";
+            out << "      EdgeFadeDistance: " << pr.EdgeFadeDistance << "\n";
+            out << "      MaxRoughness: " << pr.MaxRoughness << "\n";
+            out << "      Intensity: " << pr.Intensity << "\n";
+            out << "      CaptureNearPlane: " << pr.CaptureNearPlane << "\n";
+            out << "      CaptureFarPlane: " << pr.CaptureFarPlane << "\n";
+            out << "      CaptureShadows: " << (pr.CaptureShadows ? "true" : "false") << "\n";
+            out << "      CaptureSkybox: " << (pr.CaptureSkybox ? "true" : "false") << "\n";
+            out << "      ClipToExtents: " << (pr.ClipToExtents ? "true" : "false") << "\n";
+            out << "      CaptureMode: " << PlanarReflectionCaptureModeToString(pr.CaptureMode) << "\n";
         }
 
         if (node.HasSkeletalMesh) {

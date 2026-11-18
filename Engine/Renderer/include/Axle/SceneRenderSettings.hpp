@@ -18,6 +18,7 @@ namespace Axle {
         bool EnableGTAO = false;
         bool EnableContactShadows = false;
         bool EnableSSR = false;
+        bool EnablePlanarReflections = false;
         bool EnableVolumetricFog = false;
         bool EnableDDGI = false;
         bool EnableBloom = false;
@@ -67,6 +68,11 @@ namespace Axle {
         uint32_t ReflectionCaptureMaxFacesPerFrame = 6u;
         uint32_t ReflectionCaptureMaxProbesPerFrame = 1u;
         uint64_t ReflectionCaptureCacheBudgetBytes = 64ull * 1024ull * 1024ull;
+
+        // Planar reflection policy controls (M15-U5-46)
+        float PlanarReflectionResolutionScale = 0.5f;
+        float PlanarReflectionStrength = 1.0f;
+        float PlanarReflectionMaxRoughness = 0.45f;
     };
 
 }

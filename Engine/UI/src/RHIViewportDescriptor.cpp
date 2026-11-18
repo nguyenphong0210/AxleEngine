@@ -1,6 +1,7 @@
 #include <Axle/RHIViewportDescriptor.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#include <algorithm>
 
 namespace Axle {
 
@@ -29,6 +30,8 @@ namespace Axle {
         targets.EnableScreenStorage = desc.EnableScreenStorage;
         targets.EnableHiZ = desc.EnableHiZ;
         targets.EnableReflectionTerms = desc.EnableReflectionTerms;
+        targets.EnablePlanarReflection = desc.EnablePlanarReflection;
+        targets.PlanarResolutionScale = desc.PlanarResolutionScale;
         targets.EnableBloom = desc.EnableBloom;
         targets.EnableGTAO = desc.EnableGTAO;
         targets.EnableAutoExposure = desc.EnableAutoExposure;
@@ -133,6 +136,12 @@ namespace Axle {
         auto desc = m_Desc;
         desc.MSAASamples = settings.MSAASamples;
         desc.EnableReflectionTerms = settings.EnableSSR && settings.MSAASamples == 1;
+        desc.EnablePlanarReflection = settings.EnablePlanarReflections;
+        desc.PlanarResolutionScale = desc.EnablePlanarReflection
+            ? std::clamp(settings.PlanarReflectionResolutionScale,
+                         RHI::RHIViewTargets::MinPlanarResolutionScale,
+                         RHI::RHIViewTargets::MaxPlanarResolutionScale)
+            : 0.5f;
         desc.IntermediateHDR = settings.EnableToneMapping || desc.EnableReflectionTerms;
         desc.FXAA = settings.EnableFXAA;
         desc.HistoryCount = settings.EnableTAA ? 2 : 0;

@@ -114,7 +114,8 @@ namespace Axle {
         // Initialize mesh registry
         if (!RHIMeshRegistry::Get().Init()) return false;
 
-        if (!m_ViewContext.Init() || !m_CaptureViewContext.Init() || !m_CascadedShadows.Init() || !m_LocalShadows.Init()) return false;
+        if (!m_ViewContext.Init() || !m_CaptureViewContext.Init() || !m_PlanarViewContext.Init() ||
+            !m_CascadedShadows.Init() || !m_LocalShadows.Init()) return false;
 
         if (device.GetCapabilities().TimestampFrequencyHz && device.GetNRICore().CreateQueryPool) {
             nri::QueryPoolDesc timestampDesc{};
@@ -681,6 +682,16 @@ namespace Axle {
         m_HiZDescriptorPool.Shutdown();
         m_HiZSampler.Shutdown();
 
+        if (m_PlanarLastCompletion) {
+            if (m_Device && m_PlanarLastCompletion.Epoch == m_Device->GetEpoch()) {
+                m_Device->WaitForCompletion(m_PlanarLastCompletion);
+            }
+            m_PlanarLastCompletion = {};
+        }
+        m_PlanarRenderSucceeded = false;
+        m_PlanarSession = {};
+        m_PlanarScratchViewTargets.reset();
+        m_LastPlanarCaptureResult = {};
         if (m_CaptureLastCompletion) {
             if (m_Device && m_CaptureLastCompletion.Epoch == m_Device->GetEpoch()) {
                 m_Device->WaitForCompletion(m_CaptureLastCompletion);
@@ -853,6 +864,7 @@ namespace Axle {
         m_NextGPUTimestampSlot = 0;
         m_LastGPUTimingFrame = {};
         m_LastGPUTimestampMilliseconds = 0.0;
+        m_PlanarViewContext.Shutdown();
         m_CaptureViewContext.Shutdown();
         m_ViewContext.Shutdown();
         m_Device = nullptr;
@@ -1098,7 +1110,8 @@ namespace Axle {
     nri::Pipeline* RHISceneRenderer::GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount,
                                                          Axle::SurfaceType surfaceType,
                                                          Axle::CullMode cullMode,
-                                                         bool depthWrite, bool reflectionTerms) {
+                                                         bool depthWrite, bool reflectionTerms,
+                                                         bool reverseWinding) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_PipelineLayout;
         gfxDesc.Shaders = { m_VertexShader, reflectionTerms ? m_ReflectionPixelShader : m_PixelShader };
@@ -1111,7 +1124,7 @@ namespace Axle {
         } else {
             gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
         }
-        gfxDesc.Rasterizer.FrontCounterClockwise = true;
+        gfxDesc.Rasterizer.FrontCounterClockwise = !reverseWinding;
 
         gfxDesc.DepthStencil.DepthTestEnable = true;
         gfxDesc.DepthStencil.DepthWriteEnable = depthWrite;
@@ -1141,7 +1154,7 @@ namespace Axle {
     }
 
     nri::Pipeline* RHISceneRenderer::GetOrCreateSurfaceNormalPipeline(nri::Format colorFormat, nri::Format depthFormat,
-                                                                    bool preLighting, CullMode cull) {
+                                                                    bool preLighting, CullMode cull, bool reverseWinding) {
         if (!m_SurfaceNormalPixelShader.IsValid() || !m_VertexShader.IsValid()) return nullptr;
 
         RHIGraphicsPipelineDesc gfxDesc;
@@ -1149,7 +1162,7 @@ namespace Axle {
         gfxDesc.Shaders = { m_VertexShader, m_SurfaceNormalPixelShader };
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
         gfxDesc.Rasterizer.CullMode = cull == CullMode::Back ? nri::CullMode::BACK : cull == CullMode::Front ? nri::CullMode::FRONT : nri::CullMode::NONE;
-        gfxDesc.Rasterizer.FrontCounterClockwise = true;
+        gfxDesc.Rasterizer.FrontCounterClockwise = !reverseWinding;
         gfxDesc.DepthStencil.DepthTestEnable = true;
         gfxDesc.DepthStencil.DepthWriteEnable = preLighting;
         gfxDesc.DepthStencil.DepthCompareOp = preLighting ? nri::CompareOp::LESS : nri::CompareOp::EQUAL;
@@ -1163,8 +1176,8 @@ namespace Axle {
 
     nri::Pipeline* RHISceneRenderer::GetOrCreateCustomPipeline(const CustomReadyGeneration& generation,
         nri::Format colorFormat, nri::Format depthFormat, uint8_t samples,
-        SurfaceType surface, CullMode cull, bool depthWrite, bool reflectionTerms) {
-        return CreateCustomMaterialPipeline(generation,colorFormat,depthFormat,samples,surface,cull,depthWrite,false,reflectionTerms);
+        SurfaceType surface, CullMode cull, bool depthWrite, bool reflectionTerms, bool reverseWinding) {
+        return CreateCustomMaterialPipeline(generation,colorFormat,depthFormat,samples,surface,cull,depthWrite,false,reflectionTerms,reverseWinding);
     }
 
     bool RHISceneRenderer::CreateGraphicsPipeline(RHIDevice& device) {
@@ -3343,6 +3356,11 @@ namespace Axle {
     }
 
     bool RHISceneRenderer::IsCaptureFeedbackTexture(const RHITexture& texture) const {
+        if (m_PlanarSession.Active &&
+            m_PlanarSession.TargetColor &&
+            m_PlanarSession.TargetColor->GetNative() == texture.GetNative()) {
+            return true;
+        }
         if (!m_CaptureSession.Active) return false;
         if (m_CaptureSession.CandidateCubemap && m_CaptureSession.CandidateCubemap->GetNative() == texture.GetNative()) return true;
         for (const auto& handle : m_DynamicCaptureTextures)
@@ -3714,6 +3732,16 @@ namespace Axle {
     }
 
     void RHISceneRenderer::ClearDynamicReflectionProbes() {
+        if (m_PlanarLastCompletion) {
+            if (m_Device && m_PlanarLastCompletion.Epoch == m_Device->GetEpoch()) {
+                m_Device->WaitForCompletion(m_PlanarLastCompletion);
+            }
+            m_PlanarLastCompletion = {};
+        }
+        m_PlanarRenderSucceeded = false;
+        m_PlanarSession = {};
+        m_PlanarScratchViewTargets.reset();
+        m_LastPlanarCaptureResult = {};
         if (m_CaptureLastCompletion) {
             if (m_Device && m_CaptureLastCompletion.Epoch == m_Device->GetEpoch()) {
                 m_Device->WaitForCompletion(m_CaptureLastCompletion);
@@ -3965,6 +3993,7 @@ namespace Axle {
 
     struct CaptureViewStateGuard {
         RHISceneRenderer& Renderer;
+        RHISceneRenderer::PlanarCaptureSessionState SavedPlanarSession;
         RHIEnvironment SavedEnvironment;
         bool SavedPreparedManualIBL;
         nri::Format SavedColorFormat;
@@ -4000,6 +4029,7 @@ namespace Axle {
 
         explicit CaptureViewStateGuard(RHISceneRenderer& r)
             : Renderer(r)
+            , SavedPlanarSession(r.m_PlanarSession)
             , SavedEnvironment(r.m_Environment)
             , SavedPreparedManualIBL(r.m_PreparedManualIBL)
             , SavedColorFormat(r.m_CurrentColorFormat)
@@ -4035,6 +4065,7 @@ namespace Axle {
 
         ~CaptureViewStateGuard() {
             Renderer.m_CaptureSession = {};
+            Renderer.m_PlanarSession = SavedPlanarSession;
             Renderer.m_Environment = std::move(SavedEnvironment);
             Renderer.m_PreparedManualIBL = SavedPreparedManualIBL;
             Renderer.m_BoundIBL = {}; // Descriptor inputs were changed by capture preparation.
@@ -4793,6 +4824,176 @@ namespace Axle {
         }
     }
 
+    PlanarReflectionCaptureResult RHISceneRenderer::CapturePlanarReflection(
+        const RenderWorld& world,
+        const PerspectiveCamera& mainCamera,
+        const RenderPlanarReflector& reflector,
+        RHI::RHITexture* targetColor,
+        RHI::RHITexture* targetDepth,
+        const SceneRenderSettings& settings,
+        const PlanarReflectionContract::PlanarReflectionPolicy* policyOverride) {
+        PlanarReflectionCaptureResult result{};
+        result.ReflectorEntityID = reflector.EntityID;
+        result.ReflectorUUID = reflector.StableUUID;
+        auto finish = [&](const PlanarReflectionCaptureResult& out) {
+            m_LastPlanarCaptureResult = out;
+            return out;
+        };
+        auto failCapture = [&](const std::string& diagnostic) {
+            result.Success = false;
+            result.Diagnostic = diagnostic;
+            return finish(result);
+        };
+
+        if (!m_Initialized || !m_Device || !m_Device->CanSubmit()) {
+            return failCapture("PLANAR_CAPTURE_NOT_READY: renderer device cannot submit");
+        }
+        if (m_PlanarSession.Active) {
+            return failCapture("PLANAR_RECURSION_BLOCKED: planar capture cannot re-enter itself");
+        }
+        if (!world.ErrorMessage.empty()) {
+            return failCapture("PLANAR_WORLD_INVALID: " + world.ErrorMessage);
+        }
+        if (!targetColor || !targetColor->IsValid() || !targetColor->GetRTV() ||
+            !targetDepth || !targetDepth->IsValid() || !targetDepth->GetDSV()) {
+            return failCapture("PLANAR_TARGET_INVALID: valid planar color RTV and depth DSV required");
+        }
+        const uint64_t currentEpoch = m_Device->GetEpoch();
+        if (targetColor->GetHandle().Epoch != currentEpoch || targetDepth->GetHandle().Epoch != currentEpoch) {
+            return failCapture("PLANAR_TARGET_EPOCH_MISMATCH: planar target generation belongs to a stale device epoch");
+        }
+        if (targetColor->GetWidth() == 0u || targetColor->GetHeight() == 0u ||
+            targetColor->GetWidth() != targetDepth->GetWidth() ||
+            targetColor->GetHeight() != targetDepth->GetHeight() ||
+            targetColor->GetDesc().SampleCount != 1u || targetDepth->GetDesc().SampleCount != 1u) {
+            return failCapture("PLANAR_TARGET_MISMATCH: planar color and depth must be single-sample with matching extents");
+        }
+
+        const PlanarReflectionContract::PlanarReflectionSurface surface =
+            PlanarReflectionContract::BuildSurfaceFromReflector(reflector);
+        PlanarReflectionContract::PlanarReflectionPolicy policy;
+        if (policyOverride) {
+            policy = *policyOverride;
+        } else {
+            policy.ResolutionScale = reflector.ResolutionScale;
+            policy.ClipPlaneOffset = reflector.ClipPlaneOffset;
+            policy.IncludeSkybox = reflector.CaptureSkybox;
+            policy.IncludeShadows = reflector.CaptureShadows;
+            policy.ExcludeEntityID = reflector.EntityID;
+        }
+
+        const PlanarReflectionContract::MirroredCameraResult mirrored =
+            PlanarReflectionContract::BuildMirroredCamera(mainCamera, surface, policy);
+        if (!mirrored.Valid) {
+            return failCapture(mirrored.Diagnostic.empty() ? "PLANAR_CAMERA_INVALID" : mirrored.Diagnostic);
+        }
+
+        // Synchronize prior main/capture/planar submissions before updating shared buffers or scratch targets.
+        RHICompletionToken pendingMainCompletion = m_LastCompletion;
+        if (!WaitForDeviceToken(pendingMainCompletion) || !WaitForDeviceToken(m_CaptureLastCompletion) ||
+            !WaitForDeviceToken(m_PlanarLastCompletion)) {
+            return failCapture("PLANAR_COMPLETION_FAILED: prior submission synchronization failed");
+        }
+
+        const uint32_t targetW = targetColor->GetWidth();
+        const uint32_t targetH = targetColor->GetHeight();
+        RHI::RHIViewTargetDesc scratchDesc{};
+        scratchDesc.Width = targetW;
+        scratchDesc.Height = targetH;
+        scratchDesc.ColorFormat = targetColor->GetFormat();
+        scratchDesc.DepthFormat = targetDepth->GetFormat();
+        scratchDesc.EnableDepth = true;
+        scratchDesc.Samples = 1u;
+        scratchDesc.OwnPrimary = false;
+        scratchDesc.EnablePlanarReflection = false;
+        if (!m_PlanarScratchViewTargets) {
+            m_PlanarScratchViewTargets = std::make_shared<RHI::RHIViewTargets>();
+        }
+        if (!m_PlanarScratchViewTargets->IsValid() ||
+            m_PlanarScratchViewTargets->GetDesc() != scratchDesc ||
+            !m_PlanarScratchViewTargets->Get(RHI::RHIViewTarget::Color) ||
+            m_PlanarScratchViewTargets->Get(RHI::RHIViewTarget::Color)->GetNative() != targetColor->GetNative() ||
+            !m_PlanarScratchViewTargets->Get(RHI::RHIViewTarget::Depth) ||
+            m_PlanarScratchViewTargets->Get(RHI::RHIViewTarget::Depth)->GetNative() != targetDepth->GetNative()) {
+            if (!m_PlanarScratchViewTargets->Configure(scratchDesc, targetColor, targetDepth)) {
+                return failCapture("PLANAR_SCRATCH_TARGETS_FAILED: unable to configure planar capture view targets");
+            }
+        }
+
+        const auto backendPolicy = RenderBackendPolicy::FromDevice(m_Device->GetCapabilities());
+        const SceneRenderSettings captureSettings = backendPolicy.ResolveSettings(
+            PlanarReflectionContract::SanitizeCaptureSettings(settings, policy));
+        const RenderWorld filteredWorld = PlanarReflectionContract::FilterCaptureWorld(world, reflector, policy);
+
+        CaptureViewStateGuard viewStateGuard(*this);
+        m_CurrentColorFormat = RHI::ToNRIFormat(targetColor->GetFormat());
+        m_CurrentDepthFormat = RHI::ToNRIFormat(targetDepth->GetFormat());
+        m_CurrentMSAASamples = 1u;
+
+        m_PlanarSession = {};
+        m_PlanarSession.Active = true;
+        m_PlanarSession.ReverseWinding = mirrored.ReverseWinding;
+        m_PlanarSession.IncludeTransparent = policy.IncludeTransparent;
+        m_PlanarSession.IncludeParticles = policy.IncludeParticles;
+        m_PlanarSession.IncludeEditorOverlays = policy.IncludeEditorOverlays;
+        m_PlanarSession.ExcludeEntityID = reflector.EntityID;
+        m_PlanarSession.TargetColor = targetColor;
+        m_PlanarSession.TargetDepth = targetDepth;
+        m_PlanarSession.WorldPlane = mirrored.WorldPlane;
+
+        RenderWorldView(
+            filteredWorld,
+            mirrored.Camera,
+            targetColor->GetNative(),
+            targetColor->GetRTV(),
+            targetDepth->GetNative(),
+            targetDepth->GetDSV(),
+            targetW,
+            targetH,
+            captureSettings,
+            nullptr,
+            m_PlanarScratchViewTargets);
+
+        m_PlanarSession = {};
+        if (!m_PlanarRenderSucceeded || !m_PlanarLastCompletion || !WaitForDeviceToken(m_PlanarLastCompletion)) {
+            return failCapture("PLANAR_CAPTURE_RENDER_FAILED: planar scene render or completion failed");
+        }
+
+        result.Success = true;
+        result.ObliqueClippingApplied = mirrored.ObliqueClippingApplied;
+        result.ReverseWindingApplied = mirrored.ReverseWinding;
+        result.TargetWidth = targetW;
+        result.TargetHeight = targetH;
+        result.WorldPlane = mirrored.WorldPlane;
+        result.ViewPlane = mirrored.ViewPlane;
+        return finish(result);
+    }
+
+    PlanarReflectionCaptureResult RHISceneRenderer::CapturePlanarReflectionToTargets(
+        const RenderWorld& world,
+        const PerspectiveCamera& mainCamera,
+        const RenderPlanarReflector& reflector,
+        RHI::RHIViewTargets& viewTargets,
+        const SceneRenderSettings& settings,
+        const PlanarReflectionContract::PlanarReflectionPolicy* policyOverride) {
+        if (!viewTargets.Validate() || !viewTargets.GetDesc().EnablePlanarReflection) {
+            PlanarReflectionCaptureResult fail{};
+            fail.ReflectorEntityID = reflector.EntityID;
+            fail.ReflectorUUID = reflector.StableUUID;
+            fail.Diagnostic = "PLANAR_TARGETS_DISABLED: RHIViewTargets does not enable valid planar targets";
+            m_LastPlanarCaptureResult = fail;
+            return fail;
+        }
+        return CapturePlanarReflection(
+            world,
+            mainCamera,
+            reflector,
+            viewTargets.GetPlanarColor(),
+            viewTargets.GetPlanarDepth(),
+            settings,
+            policyOverride);
+    }
+
     void RHISceneRenderer::ConsumeReadyGPUTimestamps() {
         if (!m_Device) return;
         GPUTimingFrame newest;
@@ -4982,7 +5183,13 @@ namespace Axle {
                                        PhysicsScene* physicsScene,
                                        std::shared_ptr<RHI::RHIViewTargets> viewTargets)
     {
-        if (!m_CaptureSession.Active) {
+        if (m_PlanarSession.Active) {
+            m_PlanarRenderSucceeded = false;
+            m_PlanarLastCompletion = {};
+        } else if (m_CaptureSession.Active) {
+            m_CaptureRenderSucceeded = false;
+            m_CaptureLastCompletion = {};
+        } else {
             ConsumeReadyGPUTimestamps();
             m_LastRenderSucceeded = false;
             m_LastCompletion = {};
@@ -4992,9 +5199,12 @@ namespace Axle {
                 }
                 m_CaptureLastCompletion = {};
             }
-        } else {
-            m_CaptureRenderSucceeded = false;
-            m_CaptureLastCompletion = {};
+            if (m_PlanarLastCompletion) {
+                if (m_Device && m_PlanarLastCompletion.Epoch == m_Device->GetEpoch()) {
+                    if (!m_Device->WaitForCompletion(m_PlanarLastCompletion)) return;
+                }
+                m_PlanarLastCompletion = {};
+            }
         }
         if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
         const auto backendPolicy = RenderBackendPolicy::FromDevice(m_Device->GetCapabilities());
@@ -5009,7 +5219,8 @@ namespace Axle {
         }
         m_MaterialDiagnostics.clear(); m_MaterialFeedback.clear();
 
-        if (!m_CaptureSession.Active && world.ErrorMessage.empty()) {
+        const bool isSubCapture = m_CaptureSession.Active || m_PlanarSession.Active;
+        if (!isSubCapture && world.ErrorMessage.empty()) {
             ScheduleDynamicReflectionCaptures(world, camera.GetPosition(), requestedSettings);
         }
 
@@ -5019,19 +5230,19 @@ namespace Axle {
         viewInput.Height = height;
         viewInput.Camera = camera;
         viewInput.Settings = settings;
-        viewInput.Targets = viewTargets ? viewTargets : (m_CaptureSession.Active ? std::shared_ptr<RHI::RHIViewTargets>{} : m_ImplicitViewTargets);
+        viewInput.Targets = viewTargets ? viewTargets : (isSubCapture ? std::shared_ptr<RHI::RHIViewTargets>{} : m_ImplicitViewTargets);
         viewInput.FeatureGeneration = HashViewFeaturePolicy(settings);
         viewInput.SceneRevision = world.SceneRevision;
         // Effective material identity is published by the live pass schedule.
         viewInput.MaterialGeneration = viewCtx.GetInput().MaterialGeneration;
         viewCtx.Observe(viewInput, m_Device->GetEpoch());
         if (!world.ErrorMessage.empty() || !viewCtx.BeginFrame()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
-        if (!m_CaptureSession.Active) {
+        if (!isSubCapture) {
             ConsumeReadyGPUTimestamps();
         }
         for (const auto& fallback : backendPolicy.CollectFallbacks(requestedSettings))
             viewCtx.Diagnostics().AddFallback(fallback);
-        const auto reflectionSamplePoints = m_CaptureSession.Active
+        const auto reflectionSamplePoints = isSubCapture
             ? std::vector<ReflectionSampleBounds>{}
             : CollectReflectionSampleBounds(world);
         const auto reflectionFrame = m_ReflectionService.PrepareView(
@@ -5044,12 +5255,14 @@ namespace Axle {
             viewCtx.Diagnostics().AddFallback(giFrame.Diagnostic);
         auto rollback = std::unique_ptr<RHISceneRenderer, std::function<void(RHISceneRenderer*)>>(this,
             [&](auto*) {
-                const bool succeeded = m_CaptureSession.Active ? m_CaptureRenderSucceeded : m_LastRenderSucceeded;
+                const bool succeeded = m_PlanarSession.Active
+                    ? m_PlanarRenderSucceeded
+                    : (m_CaptureSession.Active ? m_CaptureRenderSucceeded : m_LastRenderSucceeded);
                 if (!succeeded) {
                     viewCtx.AbandonFrame();
                 }
             });
-        if (!m_CaptureSession.Active) {
+        if (!isSubCapture) {
             BeginGPUTimestampFrame();
         } else {
             m_ActiveGPUTimestampSlot = static_cast<size_t>(-1);
@@ -5092,6 +5305,13 @@ namespace Axle {
         targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
         targetDesc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
         targetDesc.EnableReflectionTerms = settings.EnableSSR && settings.MSAASamples == 1;
+        const bool enablePlanarTargets = settings.EnablePlanarReflections && !isSubCapture;
+        targetDesc.EnablePlanarReflection = enablePlanarTargets;
+        targetDesc.PlanarResolutionScale = enablePlanarTargets
+            ? std::clamp(settings.PlanarReflectionResolutionScale,
+                         RHI::RHIViewTargets::MinPlanarResolutionScale,
+                         RHI::RHIViewTargets::MaxPlanarResolutionScale)
+            : 0.5f;
         targetDesc.EnableBloom = settings.EnableBloom;
         targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
         targetDesc.EnableAutoExposure = settings.EnableAutoExposure;
@@ -5103,7 +5323,7 @@ namespace Axle {
             if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
                 (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||
                 (viewTargets->Get(RHIViewTarget::Depth) && viewTargets->Get(RHIViewTarget::Depth)->GetNative() != depthTarget)) { rejectTargets(); return; }
-            if (!m_CaptureSession.Active) {
+            if (!isSubCapture) {
                 m_ImplicitViewTargets.reset(); m_ImplicitViewColor = {};
             }
         } else {
@@ -5154,11 +5374,14 @@ namespace Axle {
         } else if (useFXAA) {
             sceneTargetTexture = m_IntermediateFXAATarget->GetNative(); sceneTargetRTV = m_IntermediateFXAATarget->GetRTV();
         }
-        nri::Pipeline* activePipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_PipelineHDR && activeSampleCount == 1)
+        const bool reverseCaptureWinding = m_PlanarSession.Active && m_PlanarSession.ReverseWinding;
+        nri::Pipeline* activePipeline = (!reverseCaptureWinding && sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_PipelineHDR && activeSampleCount == 1)
                                             ? m_PipelineHDR
-                                            : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_Pipeline && activeSampleCount == 1)
+                                            : (!reverseCaptureWinding && sceneTargetFormat == nri::Format::RGBA8_UNORM && m_Pipeline && activeSampleCount == 1)
                                                   ? m_Pipeline
-                                                  : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
+                                                  : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount,
+                                                                        Axle::SurfaceType::Opaque, Axle::CullMode::None, true, false,
+                                                                        reverseCaptureWinding);
         if (!activePipeline) { rejectTargets(); return; }
 
         const auto passCapabilities = backendPolicy.GetPassCapabilities();

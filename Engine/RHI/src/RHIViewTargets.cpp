@@ -2,9 +2,19 @@
 #include <Axle/RHI/RHIDevice.hpp>
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 
 namespace Axle::RHI {
     namespace { std::atomic<uint64_t> s_NextViewGeneration{1}; }
+
+    uint32_t RHIViewTargets::ComputePlanarTargetDimension(uint32_t extent, float scale) {
+        if (extent == 0u) return 0u;
+        const float clamped = std::isfinite(scale)
+            ? std::clamp(scale, MinPlanarResolutionScale, MaxPlanarResolutionScale)
+            : 0.5f;
+        const auto scaled = static_cast<uint32_t>(std::lround(static_cast<double>(extent) * static_cast<double>(clamped)));
+        return std::clamp(scaled, 1u, extent);
+    }
 
     uint32_t RHIViewTargets::ComputeUsefulHiZLevelCount(uint32_t width, uint32_t height) {
         if (width == 0 || height == 0) return 0;
@@ -96,19 +106,46 @@ namespace Axle::RHI {
         }
         if (m_Desc.HistoryCount > 0 && !check2D(RHIViewTarget::History0, m_Desc.Width, m_Desc.Height, sceneFormat)) return false;
         if (m_Desc.HistoryCount > 1 && !check2D(RHIViewTarget::History1, m_Desc.Width, m_Desc.Height, sceneFormat)) return false;
+        if (m_Desc.EnablePlanarReflection) {
+            if (!std::isfinite(m_Desc.PlanarResolutionScale) ||
+                m_Desc.PlanarResolutionScale < MinPlanarResolutionScale ||
+                m_Desc.PlanarResolutionScale > MaxPlanarResolutionScale) {
+                return false;
+            }
+            const uint32_t planarW = ComputePlanarTargetDimension(m_Desc.Width, m_Desc.PlanarResolutionScale);
+            const uint32_t planarH = ComputePlanarTargetDimension(m_Desc.Height, m_Desc.PlanarResolutionScale);
+            if (planarW == 0u || planarH == 0u ||
+                !check2D(RHIViewTarget::PlanarColor, planarW, planarH, RHITextureFormat::RGBA16_FLOAT) ||
+                (m_Desc.EnableDepth && !check2D(RHIViewTarget::PlanarDepth, planarW, planarH, m_Desc.DepthFormat))) {
+                return false;
+            }
+        } else {
+            if (Get(RHIViewTarget::PlanarColor) != nullptr || Get(RHIViewTarget::PlanarDepth) != nullptr) {
+                return false;
+            }
+        }
         return true;
     }
     bool RHIViewTargets::Configure(const RHIViewTargetDesc& desc, const RHITexture* externalColor, const RHITexture* externalDepth) {
         if (!desc.Width || !desc.Height || desc.HistoryCount > 2 ||
             (desc.Samples != 1 && desc.Samples != 2 && desc.Samples != 4 && desc.Samples != 8)) return false;
+        if (desc.EnablePlanarReflection &&
+            (!std::isfinite(desc.PlanarResolutionScale) ||
+             desc.PlanarResolutionScale < MinPlanarResolutionScale ||
+             desc.PlanarResolutionScale > MaxPlanarResolutionScale)) {
+            return false;
+        }
         RHIViewTargets candidate; candidate.m_Desc = desc;
-        auto create = [&](RHIViewTarget slot, RHITextureFormat format, uint8_t samples, bool depth) {
+        auto createSized = [&](RHIViewTarget slot, uint32_t w, uint32_t h, RHITextureFormat format, uint8_t samples, bool depth) {
             auto texture = std::make_unique<RHITexture>();
-            auto native = depth ? RHITextureDesc::DepthStencil2D(desc.Width, desc.Height, format) :
-                RHITextureDesc::RenderTarget2D(desc.Width, desc.Height, format);
+            auto native = depth ? RHITextureDesc::DepthStencil2D(w, h, format) :
+                RHITextureDesc::RenderTarget2D(w, h, format);
             native.SampleCount = samples; native.DebugName = "ViewTarget_" + std::to_string(static_cast<unsigned>(slot));
             if (!texture->Init(native)) return false;
             candidate.m_Textures[static_cast<size_t>(slot)] = std::move(texture); return true;
+        };
+        auto create = [&](RHIViewTarget slot, RHITextureFormat format, uint8_t samples, bool depth) {
+            return createSized(slot, desc.Width, desc.Height, format, samples, depth);
         };
         auto import = [&](RHIViewTarget slot, const RHITexture& texture, RHITextureFormat format) {
             if (!texture.IsValid() || texture.GetWidth() != desc.Width || texture.GetHeight() != desc.Height ||
@@ -121,7 +158,7 @@ namespace Axle::RHI {
         if (externalDepth) { if (!desc.EnableDepth || !import(RHIViewTarget::Depth, *externalDepth, desc.DepthFormat)) return false; }
         else if (desc.OwnPrimary && desc.EnableDepth && !create(RHIViewTarget::Depth, desc.DepthFormat, 1, true)) return false;
         if (!desc.RenderAuxiliary) {
-            if (desc.Samples != 1 || desc.HistoryCount || desc.HDR || desc.FXAA) return false;
+            if (desc.Samples != 1 || desc.HistoryCount || desc.HDR || desc.FXAA || desc.EnablePlanarReflection) return false;
             candidate.m_Initialized = true;
             candidate.m_Generation = s_NextViewGeneration.fetch_add(1);
             if (!candidate.Validate()) return false;
@@ -139,6 +176,14 @@ namespace Axle::RHI {
         if (desc.EnableReflectionTerms &&
             (!create(RHIViewTarget::ReflectionEnvironment, RHITextureFormat::RGBA16_FLOAT, 1, false) ||
              !create(RHIViewTarget::ReflectionResponse, RHITextureFormat::RGBA16_FLOAT, 1, false))) return false;
+        if (desc.EnablePlanarReflection) {
+            const uint32_t planarW = ComputePlanarTargetDimension(desc.Width, desc.PlanarResolutionScale);
+            const uint32_t planarH = ComputePlanarTargetDimension(desc.Height, desc.PlanarResolutionScale);
+            if (!createSized(RHIViewTarget::PlanarColor, planarW, planarH, RHITextureFormat::RGBA16_FLOAT, 1, false) ||
+                (desc.EnableDepth && !createSized(RHIViewTarget::PlanarDepth, planarW, planarH, desc.DepthFormat, 1, true))) {
+                return false;
+            }
+        }
         if (desc.EnableReflectionTerms) {
             for (uint32_t level = 0; level < 4; ++level) {
                 const uint32_t colorWidth = std::max(1u, desc.Width >> (level + 1u));

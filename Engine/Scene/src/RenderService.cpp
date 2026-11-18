@@ -278,6 +278,12 @@ namespace Axle {
                 desc.EnableBloom = request.Settings.EnableBloom;
                 desc.EnableHiZ = request.Settings.EnableSSR || request.Settings.HiZVisualizationLevel >= 0;
                 desc.EnableReflectionTerms = request.Settings.EnableSSR && request.Settings.MSAASamples == 1;
+                desc.EnablePlanarReflection = request.Settings.EnablePlanarReflections;
+                desc.PlanarResolutionScale = desc.EnablePlanarReflection
+                    ? std::clamp(request.Settings.PlanarReflectionResolutionScale,
+                                 RHI::RHIViewTargets::MinPlanarResolutionScale,
+                                 RHI::RHIViewTargets::MaxPlanarResolutionScale)
+                    : 0.5f;
                 desc.EnableAutoExposure = request.Settings.EnableAutoExposure;
                 desc.EnableDDGI = request.Settings.EnableDDGI;
                 if (request.Settings.EnableTAA) desc.HistoryCount = 2;

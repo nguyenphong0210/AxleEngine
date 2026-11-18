@@ -3161,6 +3161,135 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
     RENDER_CHECK(RunM15AreaLightLTCTests(renderer, output),
         "M15-U5-G / S5.7: LTC rectangular/disk area lights, orientation, sidedness, range & MaterialSurface parity pass");
 
+    // M15-U5-H1 (S5.8 Part 1): Native D3D12/Vulkan Planar Reflection Capture, Winding & ZO Oblique Clipping Tests
+    {
+        auto& deviceRef = RHIDevice::Get();
+        const uint64_t epoch = deviceRef.GetEpoch();
+        auto cubeMesh = RHIMesh::CreateCube(1.0f);
+        RENDER_CHECK(cubeMesh && cubeMesh->IsValid(), "M15-U5-H1: cube mesh created");
+
+        RenderWorld planarWorld;
+        planarWorld.SceneRevision = 901;
+        planarWorld.Skybox.Authored = true;
+        planarWorld.Skybox.Enabled = false;
+
+        RenderPlanarReflector reflector{};
+        reflector.EntityID = 8000;
+        reflector.StableUUID = 808000ULL;
+        reflector.Position = {0.0f, 0.0f, -4.0f};
+        reflector.Normal = {0.0f, 1.0f, 0.0f};
+        reflector.Tangent = {1.0f, 0.0f, 0.0f};
+        reflector.Bitangent = {0.0f, 0.0f, 1.0f};
+        reflector.HalfExtents = {6.0f, 6.0f};
+        reflector.ResolutionScale = 0.5f;
+        reflector.CaptureShadows = false;
+        planarWorld.PlanarReflectors.push_back(reflector);
+
+        // 1. Self-reflector floor mesh (bright red): MUST be excluded by EntityID self-exclusion.
+        planarWorld.Meshes.push_back(MakeBoxInstance(
+            8000, cubeMesh->CaptureView(), MakeEmissiveMaterial({8.0f, 0.0f, 0.0f}, 1.0f, SurfaceType::Opaque, CullMode::None),
+            {0.0f, 0.0f, -4.0f}, {8.0f, 0.1f, 8.0f}, false));
+
+        // 2. Behind-mirror blocker cube (bright blue, closer to mirrored camera at y=-1,z=-2):
+        //    MUST be eliminated by ZO oblique near-plane clipping (M15-U5-46.6).
+        planarWorld.Meshes.push_back(MakeBoxInstance(
+            8001, cubeMesh->CaptureView(), MakeEmissiveMaterial({0.0f, 0.0f, 8.0f}, 1.0f, SurfaceType::Opaque, CullMode::None),
+            {0.0f, -1.0f, -2.0f}, {1.6f, 0.8f, 1.6f}, false));
+
+        // 3. Single-sided in-front target cube (bright green, CullMode::Back at y=+1,z=-6):
+        //    Requires reflected determinant FrontCounterClockwise flip (ReverseWinding) NOT to cull front faces!
+        planarWorld.Meshes.push_back(MakeBoxInstance(
+            8002, cubeMesh->CaptureView(), MakeEmissiveMaterial({0.0f, 8.0f, 0.0f}, 1.0f, SurfaceType::Opaque, CullMode::Back),
+            {0.0f, 1.0f, -6.0f}, {3.0f, 2.0f, 3.0f}, false));
+
+        PerspectiveCamera mainCam(50.0f, 1.0f, 0.1f, 100.0f);
+        mainCam.SetViewMatrix(
+            glm::lookAt(glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 0.0f, -4.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(0.0f, 2.0f, 0.0f));
+
+        SceneRenderSettings viewSettings;
+        viewSettings.EnableSkybox = false;
+        viewSettings.EnableShadows = false;
+        viewSettings.EnableStudioLightLobes = false;
+        viewSettings.EnablePlanarReflections = true;
+        viewSettings.PlanarReflectionResolutionScale = 0.5f;
+        viewSettings.ClearColor = {0.0f, 0.0f, 0.0f, 1.0f};
+
+        auto viewTargets = std::make_shared<RHIViewTargets>();
+        RHIViewTargetDesc vtDesc{};
+        vtDesc.Width = 128;
+        vtDesc.Height = 128;
+        vtDesc.ColorFormat = renderer.GetRenderTargetColorFormat();
+        vtDesc.DepthFormat = renderer.GetRenderTargetDepthFormat();
+        vtDesc.EnableDepth = true;
+        vtDesc.EnablePlanarReflection = true;
+        vtDesc.PlanarResolutionScale = 0.5f;
+        vtDesc.HistoryCount = 2;
+        RENDER_CHECK(viewTargets->Configure(vtDesc) && viewTargets->Validate() &&
+                     viewTargets->GetPlanarColor()->GetWidth() == 64 &&
+                     viewTargets->GetPlanarColor()->GetHeight() == 64 &&
+                     viewTargets->GetPlanarColor()->GetHandle().Epoch == epoch,
+            "M15-U5-46.3: main view RHIViewTargets configures 64x64 PlanarColor + PlanarDepth");
+
+        SceneRenderSettings mainPassSettings = viewSettings;
+        mainPassSettings.EnableTAA = true;
+        mainPassSettings.EnableToneMapping = false;
+        renderer.RenderWorldView(
+            planarWorld, mainCam,
+            viewTargets->Get(RHIViewTarget::Color)->GetNative(), viewTargets->Get(RHIViewTarget::Color)->GetRTV(),
+            viewTargets->Get(RHIViewTarget::Depth)->GetNative(), viewTargets->Get(RHIViewTarget::Depth)->GetDSV(),
+            128, 128, mainPassSettings, nullptr, viewTargets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful(), "M15-U5-H1: initial main RenderWorldView succeeds");
+        const uint64_t mainFrameBefore = renderer.GetMainViewContext().GetFrameIndex();
+        const uint32_t planarFrameBefore = static_cast<uint32_t>(renderer.GetPlanarViewContext().GetFrameIndex());
+        const uint64_t taaCommitsBefore = renderer.GetMainViewContext().Temporal().GetCommittedFrameCount();
+        const bool taaValidBefore = renderer.GetMainViewContext().Temporal().IsHistoryValid();
+
+        const auto capRes = renderer.CapturePlanarReflectionToTargets(
+            planarWorld, mainCam, reflector, *viewTargets, viewSettings);
+        RENDER_CHECK(capRes.Success && capRes.ObliqueClippingApplied && capRes.ReverseWindingApplied &&
+                     capRes.TargetWidth == 64 && capRes.TargetHeight == 64,
+            "M15-U5-46.2 / 46.6: native planar capture succeeds with oblique clipping & reverse winding");
+
+        // ViewContext isolation check: main frame index & TAA committed history must NOT be mutated by planar capture
+        RENDER_CHECK(renderer.GetMainViewContext().GetFrameIndex() == mainFrameBefore &&
+                     renderer.GetMainViewContext().Temporal().GetCommittedFrameCount() == taaCommitsBefore &&
+                     renderer.GetMainViewContext().Temporal().IsHistoryValid() == taaValidBefore &&
+                     renderer.GetPlanarViewContext().GetFrameIndex() == planarFrameBefore + 1,
+            "M15-U5-46.2: planar capture runs in isolated m_PlanarViewContext without mutating main ViewContext");
+
+        std::vector<glm::vec4> planarPixels;
+        RENDER_CHECK(ReadTexture2DRGBA16(*viewTargets->GetPlanarColor(), planarPixels),
+            "M15-U5-H1: read back native PlanarColor RGBA16F");
+        const glm::vec3 center = AverageRegion(planarPixels, 64, 24, 24, 40, 40);
+        std::cout << "[M15PlanarGPU] Center RGBA16=(" << center.r << ", " << center.g << ", " << center.b << ")\n";
+        RENDER_CHECK(center.g > 2.0f && center.r < 0.25f && center.b < 0.25f,
+            "M15-U5-46.2 / 46.6: single-sided reflected green cube rendered with behind-mirror blue cube clipped and self-mirror excluded");
+
+        // Behind-plane camera rejection & target resize capture check
+        PerspectiveCamera behindCam = mainCam;
+        behindCam.SetViewMatrix(glm::mat4(1.0f), {0.0f, -0.5f, 0.0f});
+        const auto behindRes = renderer.CapturePlanarReflectionToTargets(
+            planarWorld, behindCam, reflector, *viewTargets, viewSettings);
+        RENDER_CHECK(!behindRes.Success && behindRes.Diagnostic.find("PLANAR_CAMERA_BEHIND_PLANE") != std::string::npos,
+            "M15-U5-46.2: native capture rejects camera behind mirror plane cleanly");
+
+        vtDesc.Width = 96;
+        vtDesc.Height = 64;
+        RENDER_CHECK(viewTargets->Configure(vtDesc) && viewTargets->Validate() &&
+                     viewTargets->GetPlanarColor()->GetWidth() == 48 && viewTargets->GetPlanarColor()->GetHeight() == 32,
+            "M15-U5-46.3: resize updates PlanarColor/PlanarDepth atomically to 48x32");
+        const auto resizedRes = renderer.CapturePlanarReflectionToTargets(
+            planarWorld, mainCam, reflector, *viewTargets, viewSettings);
+        std::vector<glm::vec4> resizedPixels;
+        RENDER_CHECK(resizedRes.Success && resizedRes.TargetWidth == 48 && resizedRes.TargetHeight == 32 &&
+                     ReadTexture2DRGBA16(*viewTargets->GetPlanarColor(), resizedPixels),
+            "M15-U5-46.3: resized planar target captures cleanly");
+        const glm::vec3 resizedCenter = AverageRegion(resizedPixels, 48, 18, 12, 30, 20);
+        RENDER_CHECK(resizedCenter.g > 2.0f && resizedCenter.r < 0.25f && resizedCenter.b < 0.25f,
+            "M15-U5-46.3: resized planar reflection preserves clipped single-sided reflection");
+    }
+
     renderer.ClearDynamicReflectionProbes();
     RENDER_CHECK(device.WaitIdle(), "U5-B wait idle at cleanup");
     RENDER_CHECK(Axle::RenderTests::GetRHIValidationErrorCount() == 0, "U5-B zero RHI validation errors");
@@ -3209,7 +3338,22 @@ bool RunM15ReflectionDeviceResetTests(const RHIDeviceDesc& initDesc) {
     }
 
     RENDER_CHECK(device.WaitIdle(), "M15-U5-26.3 wait idle before shutdown");
+    auto planarResetTargets = std::make_shared<RHIViewTargets>();
+    {
+        RHIViewTargetDesc pvtDesc{};
+        pvtDesc.Width = 64;
+        pvtDesc.Height = 64;
+        pvtDesc.ColorFormat = RHITextureFormat::RGBA16_FLOAT;
+        pvtDesc.DepthFormat = RHITextureFormat::D32_FLOAT;
+        pvtDesc.EnableDepth = true;
+        pvtDesc.EnablePlanarReflection = true;
+        pvtDesc.PlanarResolutionScale = 0.5f;
+        RENDER_CHECK(planarResetTargets->Configure(pvtDesc) && planarResetTargets->Validate(),
+            "M15-U5-46.3: configure planar targets on epochBefore");
+    }
     device.Shutdown();
+    RENDER_CHECK(!planarResetTargets->IsValid(),
+        "M15-U5-46.3: shutting down RHI device invalidates planar RHIViewTargets");
     RENDER_CHECK(!staleGeneration->Cubemap->IsValid() &&
                  !staleGeneration->IsValidForDevice(epochBefore),
         "M15-U5-26.3: shutting down RHI device invalidates prior dynamic probe generation");
@@ -3235,6 +3379,43 @@ bool RunM15ReflectionDeviceResetTests(const RHIDeviceDesc& initDesc) {
                      ReadCubeFaceRGBA16(*newGeneration->Cubemap, 0u, pixels) &&
                      AverageRegion(pixels, 32u, 14u, 14u, 18u, 18u).g > 2.0f,
             "M15-U5-26.3: post-reset capture runs cleanly on new epoch with zero validation errors");
+
+        RHIViewTargetDesc pvtAfterDesc{};
+        pvtAfterDesc.Width = 64;
+        pvtAfterDesc.Height = 64;
+        pvtAfterDesc.ColorFormat = RHITextureFormat::RGBA16_FLOAT;
+        pvtAfterDesc.DepthFormat = RHITextureFormat::D32_FLOAT;
+        pvtAfterDesc.EnableDepth = true;
+        pvtAfterDesc.EnablePlanarReflection = true;
+        pvtAfterDesc.PlanarResolutionScale = 0.5f;
+        RENDER_CHECK(planarResetTargets->Configure(pvtAfterDesc) && planarResetTargets->Validate() &&
+                     planarResetTargets->GetPlanarColor()->GetHandle().Epoch == epochAfter,
+            "M15-U5-46.3: planar RHIViewTargets reconfigures cleanly on epochAfter");
+        RenderPlanarReflector resetPlanar{};
+        resetPlanar.EntityID = 6099;
+        resetPlanar.Position = {0.0f, 0.0f, -4.0f};
+        resetPlanar.Normal = {0.0f, 1.0f, 0.0f};
+        resetPlanar.CaptureShadows = false;
+        PerspectiveCamera resetCam(50.0f, 1.0f, 0.1f, 100.0f);
+        resetCam.SetViewMatrix(
+            glm::lookAt(glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 0.0f, -4.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(0.0f, 2.0f, 0.0f));
+        RenderWorld planarAfterWorld;
+        planarAfterWorld.SceneRevision = 902;
+        planarAfterWorld.Skybox.Authored = true;
+        planarAfterWorld.Skybox.Enabled = false;
+        auto greenCube = RHIMesh::CreateCube(1.0f);
+        RENDER_CHECK(greenCube && greenCube->IsValid(), "M15-U5-46.3: epochAfter green cube created");
+        planarAfterWorld.Meshes.push_back(MakeBoxInstance(
+            6098, greenCube->CaptureView(), MakeEmissiveMaterial({0.0f, 8.0f, 0.0f}, 1.0f, SurfaceType::Opaque, CullMode::Back),
+            {0.0f, 1.0f, -6.0f}, {3.0f, 2.0f, 3.0f}, false));
+        const auto planarAfterCap = resetRenderer.CapturePlanarReflectionToTargets(
+            planarAfterWorld, resetCam, resetPlanar, *planarResetTargets);
+        std::vector<glm::vec4> afterPixels;
+        RENDER_CHECK(planarAfterCap.Success &&
+                     ReadTexture2DRGBA16(*planarResetTargets->GetPlanarColor(), afterPixels) &&
+                     AverageRegion(afterPixels, 32u, 10u, 10u, 22u, 22u).g > 2.0f,
+            "M15-U5-46.3: post-reset planar capture executes cleanly on new epoch");
         resetRenderer.Shutdown();
     }
 

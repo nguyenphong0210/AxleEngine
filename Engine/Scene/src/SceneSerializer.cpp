@@ -336,6 +336,25 @@ namespace Axle {
                 ss << "      BlendDistance: " << rpc.BlendDistance << "\n";
             }
 
+            // PlanarReflectionComponent
+            if (entity.HasComponent<PlanarReflectionComponent>()) {
+                const auto& prc = entity.GetComponent<PlanarReflectionComponent>();
+                ss << "    PlanarReflectionComponent:\n";
+                ss << "      Enabled: " << (prc.Enabled ? "true" : "false") << "\n";
+                ss << "      HalfExtents: [ " << prc.HalfExtents.x << " , " << prc.HalfExtents.y << " ]\n";
+                ss << "      ResolutionScale: " << prc.ResolutionScale << "\n";
+                ss << "      ClipPlaneOffset: " << prc.ClipPlaneOffset << "\n";
+                ss << "      EdgeFadeDistance: " << prc.EdgeFadeDistance << "\n";
+                ss << "      MaxRoughness: " << prc.MaxRoughness << "\n";
+                ss << "      Intensity: " << prc.Intensity << "\n";
+                ss << "      CaptureNearPlane: " << prc.CaptureNearPlane << "\n";
+                ss << "      CaptureFarPlane: " << prc.CaptureFarPlane << "\n";
+                ss << "      CaptureShadows: " << (prc.CaptureShadows ? "true" : "false") << "\n";
+                ss << "      CaptureSkybox: " << (prc.CaptureSkybox ? "true" : "false") << "\n";
+                ss << "      ClipToExtents: " << (prc.ClipToExtents ? "true" : "false") << "\n";
+                ss << "      CaptureMode: " << PlanarReflectionCaptureModeToString(prc.CaptureMode) << "\n";
+            }
+
             // RectLightComponent
             if (entity.HasComponent<RectLightComponent>()) {
                 auto& rlc = entity.GetComponent<RectLightComponent>();
@@ -648,6 +667,7 @@ namespace Axle {
             PointLight,
             SpotLight,
             ReflectionProbe,
+            PlanarReflection,
             RectLight,
             VolumetricFog,
             DDGIProbeGrid,
@@ -742,6 +762,12 @@ namespace Axle {
                 currentSection = ComponentSection::ReflectionProbe;
                 if (!currentEntity.HasComponent<ReflectionProbeComponent>()) {
                     currentEntity.AddComponent<ReflectionProbeComponent>();
+                }
+            } else if (trimmed == "PlanarReflectionComponent:") {
+                flushCustomSection();
+                currentSection = ComponentSection::PlanarReflection;
+                if (!currentEntity.HasComponent<PlanarReflectionComponent>()) {
+                    currentEntity.AddComponent<PlanarReflectionComponent>();
                 }
             } else if (trimmed == "RectLightComponent:") {
                 flushCustomSection();
@@ -1117,6 +1143,42 @@ namespace Axle {
                             rpc.CaptureMode = StringToReflectionProbeCaptureMode(Trim(trimmed.substr(12)));
                         } else if (trimmed.rfind("BlendDistance:", 0) == 0) {
                             rpc.BlendDistance = std::max(0.0f, std::stof(Trim(trimmed.substr(14))));
+                        }
+                        break;
+                    }
+                    case ComponentSection::PlanarReflection: {
+                        if (!currentEntity.HasComponent<PlanarReflectionComponent>()) {
+                            currentEntity.AddComponent<PlanarReflectionComponent>();
+                        }
+                        auto& prc = currentEntity.GetComponent<PlanarReflectionComponent>();
+                        if (trimmed.rfind("Enabled:", 0) == 0) {
+                            prc.Enabled = (Trim(trimmed.substr(8)) == "true");
+                        } else if (trimmed.rfind("HalfExtents:", 0) == 0) {
+                            float hx = 5.0f, hy = 5.0f;
+                            sscanf(trimmed.c_str(), "HalfExtents: [ %f , %f ]", &hx, &hy);
+                            if (std::isfinite(hx) && std::isfinite(hy)) prc.HalfExtents = glm::vec2(std::max(0.01f, hx), std::max(0.01f, hy));
+                        } else if (trimmed.rfind("ResolutionScale:", 0) == 0) {
+                            try { float v = std::stof(Trim(trimmed.substr(16))); if (std::isfinite(v)) prc.ResolutionScale = std::clamp(v, 0.25f, 1.0f); } catch (...) {}
+                        } else if (trimmed.rfind("ClipPlaneOffset:", 0) == 0) {
+                            try { float v = std::stof(Trim(trimmed.substr(16))); if (std::isfinite(v)) prc.ClipPlaneOffset = v; } catch (...) {}
+                        } else if (trimmed.rfind("EdgeFadeDistance:", 0) == 0) {
+                            try { float v = std::stof(Trim(trimmed.substr(17))); if (std::isfinite(v)) prc.EdgeFadeDistance = std::max(0.0f, v); } catch (...) {}
+                        } else if (trimmed.rfind("MaxRoughness:", 0) == 0) {
+                            try { float v = std::stof(Trim(trimmed.substr(13))); if (std::isfinite(v)) prc.MaxRoughness = std::clamp(v, 0.02f, 1.0f); } catch (...) {}
+                        } else if (trimmed.rfind("Intensity:", 0) == 0) {
+                            try { float v = std::stof(Trim(trimmed.substr(10))); if (std::isfinite(v)) prc.Intensity = std::clamp(v, 0.0f, 10.0f); } catch (...) {}
+                        } else if (trimmed.rfind("CaptureNearPlane:", 0) == 0) {
+                            try { float v = std::stof(Trim(trimmed.substr(17))); if (std::isfinite(v)) prc.CaptureNearPlane = std::max(0.01f, v); } catch (...) {}
+                        } else if (trimmed.rfind("CaptureFarPlane:", 0) == 0) {
+                            try { float v = std::stof(Trim(trimmed.substr(16))); if (std::isfinite(v)) prc.CaptureFarPlane = std::max(0.1f, v); } catch (...) {}
+                        } else if (trimmed.rfind("CaptureShadows:", 0) == 0) {
+                            prc.CaptureShadows = (Trim(trimmed.substr(15)) == "true");
+                        } else if (trimmed.rfind("CaptureSkybox:", 0) == 0) {
+                            prc.CaptureSkybox = (Trim(trimmed.substr(14)) == "true");
+                        } else if (trimmed.rfind("ClipToExtents:", 0) == 0) {
+                            prc.ClipToExtents = (Trim(trimmed.substr(14)) == "true");
+                        } else if (trimmed.rfind("CaptureMode:", 0) == 0) {
+                            prc.CaptureMode = StringToPlanarReflectionCaptureMode(Trim(trimmed.substr(12)));
                         }
                         break;
                     }

@@ -58,7 +58,8 @@ namespace Axle {
 
     nri::Pipeline* CreateCustomMaterialPipeline(const CustomReadyGeneration& generation,
         nri::Format colorFormat, nri::Format depthFormat, uint8_t samples,
-        SurfaceType surface, CullMode cull, bool depthWrite, bool normalPass = false, bool reflectionTerms = false);
+        SurfaceType surface, CullMode cull, bool depthWrite, bool normalPass = false, bool reflectionTerms = false,
+        bool reverseWinding = false);
 
     enum class ProgramSelectionKind : uint8_t {
         BuiltIn = 0,

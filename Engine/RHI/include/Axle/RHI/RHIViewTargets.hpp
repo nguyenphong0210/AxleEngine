@@ -10,7 +10,7 @@ namespace Axle::RHI {
         OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1,
         GTAO, Bloom0, Bloom1, Bloom2, Bloom3, Bloom4, Bloom5, Exposure, DDGI,
         HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, ReflectionEnvironment, ReflectionResponse,
-        SSRColor0, SSRColor1, SSRColor2, SSRColor3, Count
+        SSRColor0, SSRColor1, SSRColor2, SSRColor3, PlanarColor, PlanarDepth, Count
     };
     struct RHIViewTargetDesc {
         uint32_t Width = 1, Height = 1;
@@ -21,6 +21,8 @@ namespace Axle::RHI {
         bool EnableDepth = true, HDR = false, FXAA = false, OwnPrimary = true, RenderAuxiliary = true;
         bool EnableNormal = false, EnableScreenStorage = false, EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false;
         bool EnableReflectionTerms = false;
+        bool EnablePlanarReflection = false;
+        float PlanarResolutionScale = 0.5f;
         bool operator==(const RHIViewTargetDesc&) const = default;
     };
     // One view owns its complete target generation. Reconfiguration constructs
@@ -29,6 +31,8 @@ namespace Axle::RHI {
     public:
         static constexpr uint32_t MaxHiZLevels = 16;
         static constexpr uint32_t MinSSRHiZLevels = 8;
+        static constexpr float MinPlanarResolutionScale = 0.25f;
+        static constexpr float MaxPlanarResolutionScale = 1.0f;
 
         // Number of natural floor-halving reduction levels from full extent down to 1x1.
         // Returns 0 for invalid zero extents.
@@ -36,6 +40,8 @@ namespace Axle::RHI {
         // Total Hi-Z levels allocated by a view target: at least MinSSRHiZLevels for SSR
         // static descriptor compatibility, expanding up to UsefulHiZLevelCount for large views.
         static uint32_t ComputeAllocatedHiZLevelCount(uint32_t width, uint32_t height);
+        // Scaled single-dimension extent for planar reflection targets.
+        static uint32_t ComputePlanarTargetDimension(uint32_t extent, float scale);
 
         bool Configure(const RHIViewTargetDesc& desc, const RHITexture* externalColor = nullptr,
                        const RHITexture* externalDepth = nullptr);
@@ -62,6 +68,8 @@ namespace Axle::RHI {
         RHITexture* GetSSRColor(uint32_t level) const {
             return level < 4 ? Get(static_cast<RHIViewTarget>(static_cast<uint8_t>(RHIViewTarget::SSRColor0) + level)) : nullptr;
         }
+        RHITexture* GetPlanarColor() const { return Get(RHIViewTarget::PlanarColor); }
+        RHITexture* GetPlanarDepth() const { return Get(RHIViewTarget::PlanarDepth); }
         const RHIViewTargetDesc& GetDesc() const { return m_Desc; }
         uint64_t GetGeneration() const { return m_Generation; }
         bool IsValid() const;

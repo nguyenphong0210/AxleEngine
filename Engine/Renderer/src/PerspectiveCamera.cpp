@@ -16,18 +16,21 @@ namespace Axle {
 
     void PerspectiveCamera::SetPerspective(f32 fovDegrees, f32 aspectRatio, f32 nearClip, f32 farClip) {
         m_ProjectionType = CameraProjectionType::Perspective;
+        m_HasCustomProjection = false;
         m_FOV = fovDegrees;
         m_AspectRatio = aspectRatio;
         m_NearClip = nearClip;
         m_FarClip = farClip;
         m_ProjectionMatrix = glm::perspective(glm::radians(fovDegrees), aspectRatio, nearClip, farClip);
         m_ProjectionMatrixZO = glm::perspectiveRH_ZO(glm::radians(fovDegrees), aspectRatio, nearClip, farClip);
+        m_UnclippedProjectionMatrixZO = m_ProjectionMatrixZO;
         m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
         m_ViewProjectionMatrixZO = m_ProjectionMatrixZO * m_ViewMatrix;
     }
 
     void PerspectiveCamera::SetOrthographic(f32 size, f32 aspectRatio, f32 nearClip, f32 farClip) {
         m_ProjectionType = CameraProjectionType::Orthographic;
+        m_HasCustomProjection = false;
         m_OrthographicSize = size;
         m_AspectRatio = aspectRatio;
         m_NearClip = nearClip;
@@ -40,6 +43,15 @@ namespace Axle {
 
         m_ProjectionMatrix = glm::ortho(orthoLeft, orthoRight, orthoBottom, orthoTop, nearClip, farClip);
         m_ProjectionMatrixZO = glm::orthoRH_ZO(orthoLeft, orthoRight, orthoBottom, orthoTop, nearClip, farClip);
+        m_UnclippedProjectionMatrixZO = m_ProjectionMatrixZO;
+        m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
+        m_ViewProjectionMatrixZO = m_ProjectionMatrixZO * m_ViewMatrix;
+    }
+
+    void PerspectiveCamera::SetCustomProjection(const glm::mat4& projectionMatrix, const glm::mat4& projectionMatrixZO) {
+        m_HasCustomProjection = true;
+        m_ProjectionMatrix = projectionMatrix;
+        m_ProjectionMatrixZO = projectionMatrixZO;
         m_ViewProjectionMatrix = m_ProjectionMatrix * m_ViewMatrix;
         m_ViewProjectionMatrixZO = m_ProjectionMatrixZO * m_ViewMatrix;
     }

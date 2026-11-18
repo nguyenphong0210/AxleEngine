@@ -202,6 +202,60 @@ namespace Axle {
             world.ReflectionProbes.push_back(rprobe);
         }
 
+        // 4.1b. Planar Reflectors extraction (M15-U5-46)
+        auto planarView = registry.view<TransformComponent, PlanarReflectionComponent>();
+        for (auto entity : planarView) {
+            const auto& pr = planarView.get<PlanarReflectionComponent>(entity);
+            if (!pr.Enabled) continue;
+            glm::mat4 worldMat = scene.GetWorldTransform(entity);
+            auto safeNormalize = [](const glm::vec3& v, const glm::vec3& fallback) {
+                const float lenSq = glm::dot(v, v);
+                return (std::isfinite(lenSq) && lenSq > 1e-12f) ? (v * (1.0f / std::sqrt(lenSq))) : fallback;
+            };
+            const glm::mat3 basis(worldMat);
+            const float basisDet = glm::determinant(basis);
+            const glm::mat3 normalMat = (std::isfinite(basisDet) && std::abs(basisDet) > 1e-8f)
+                ? glm::transpose(glm::inverse(basis))
+                : basis;
+            const glm::vec3 n = safeNormalize(normalMat * glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            const glm::vec3 rawT = basis * glm::vec3(1.0f, 0.0f, 0.0f);
+            glm::vec3 orthoT = rawT - n * glm::dot(rawT, n);
+            if (glm::dot(orthoT, orthoT) <= 1e-10f) {
+                const glm::vec3 fallbackAxis = (std::abs(n.y) < 0.99f) ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(0.0f, 0.0f, 1.0f);
+                orthoT = glm::cross(fallbackAxis, n);
+            }
+            const glm::vec3 t = safeNormalize(orthoT, glm::vec3(1.0f, 0.0f, 0.0f));
+            const glm::vec3 b = safeNormalize(glm::cross(n, t), glm::vec3(0.0f, 0.0f, 1.0f));
+
+            RenderPlanarReflector rpr;
+            rpr.EntityID = static_cast<uint32_t>(entity);
+            if (registry.all_of<IDComponent>(entity)) {
+                rpr.StableUUID = registry.get<IDComponent>(entity).ID;
+                world.EntityToStableUUID[static_cast<uint32_t>(entity)] = rpr.StableUUID;
+            }
+            rpr.Enabled = pr.Enabled;
+            rpr.WorldTransform = worldMat;
+            rpr.Position = glm::vec3(worldMat[3]);
+            rpr.Normal = n;
+            rpr.Tangent = t;
+            rpr.Bitangent = b;
+            rpr.HalfExtents = glm::vec2(
+                std::isfinite(pr.HalfExtents.x) ? std::max(0.01f, pr.HalfExtents.x) : 5.0f,
+                std::isfinite(pr.HalfExtents.y) ? std::max(0.01f, pr.HalfExtents.y) : 5.0f);
+            rpr.ResolutionScale = std::isfinite(pr.ResolutionScale) ? std::clamp(pr.ResolutionScale, 0.25f, 1.0f) : 0.5f;
+            rpr.ClipPlaneOffset = std::isfinite(pr.ClipPlaneOffset) ? pr.ClipPlaneOffset : 0.0f;
+            rpr.EdgeFadeDistance = std::isfinite(pr.EdgeFadeDistance) ? std::max(0.0f, pr.EdgeFadeDistance) : 0.15f;
+            rpr.MaxRoughness = std::isfinite(pr.MaxRoughness) ? std::clamp(pr.MaxRoughness, 0.02f, 1.0f) : 0.45f;
+            rpr.Intensity = std::isfinite(pr.Intensity) ? std::clamp(pr.Intensity, 0.0f, 10.0f) : 1.0f;
+            rpr.CaptureNearPlane = std::isfinite(pr.CaptureNearPlane) ? std::max(0.01f, pr.CaptureNearPlane) : 0.1f;
+            rpr.CaptureFarPlane = std::isfinite(pr.CaptureFarPlane) ? std::max(rpr.CaptureNearPlane + 0.1f, pr.CaptureFarPlane) : 1000.0f;
+            rpr.CaptureShadows = pr.CaptureShadows;
+            rpr.CaptureSkybox = pr.CaptureSkybox;
+            rpr.ClipToExtents = pr.ClipToExtents;
+            rpr.CaptureMode = pr.CaptureMode;
+            world.PlanarReflectors.push_back(rpr);
+        }
+
         // 4.2. Rect Lights extraction
         auto rectLightView = registry.view<TransformComponent, RectLightComponent>();
         for (auto entity : rectLightView) {

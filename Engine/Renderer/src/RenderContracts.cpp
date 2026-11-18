@@ -2412,4 +2412,385 @@ namespace Axle {
         }
     } // namespace AreaLightLTCContract
 
+    // =========================================================================
+    // 9. Planar Reflection Surface, Mirrored Camera & Clipping Contracts (M15-U5-46)
+    // =========================================================================
+    namespace PlanarReflectionContract {
+        namespace {
+            bool IsFiniteVec3(const glm::vec3& v) {
+                return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+            }
+
+            bool IsFiniteMat4(const glm::mat4& m) {
+                for (int c = 0; c < 4; ++c) {
+                    for (int r = 0; r < 4; ++r) {
+                        if (!std::isfinite(m[c][r])) return false;
+                    }
+                }
+                return true;
+            }
+
+            glm::vec3 SafeNormalize(const glm::vec3& v, const glm::vec3& fallback) {
+                if (!IsFiniteVec3(v)) return fallback;
+                const float lenSq = glm::dot(v, v);
+                if (lenSq <= 1e-12f) return fallback;
+                return v * (1.0f / std::sqrt(lenSq));
+            }
+        } // namespace
+
+        PlanarReflectionSurface BuildSurfaceFromReflector(const RenderPlanarReflector& reflector) {
+            PlanarReflectionSurface surface;
+            surface.EntityID = reflector.EntityID;
+            surface.StableUUID = reflector.StableUUID;
+            surface.WorldTransform = reflector.WorldTransform;
+            surface.Position = IsFiniteVec3(reflector.Position) ? reflector.Position : glm::vec3(0.0f);
+
+            const glm::vec3 n = SafeNormalize(reflector.Normal, glm::vec3(0.0f, 1.0f, 0.0f));
+            const glm::vec3 rawT = IsFiniteVec3(reflector.Tangent) ? reflector.Tangent : glm::vec3(1.0f, 0.0f, 0.0f);
+            glm::vec3 orthoT = rawT - n * glm::dot(rawT, n);
+            if (glm::dot(orthoT, orthoT) <= 1e-10f) {
+                const glm::vec3 fallbackAxis = (std::abs(n.y) < 0.99f) ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+                orthoT = glm::cross(fallbackAxis, n);
+            }
+            surface.Normal = n;
+            surface.Tangent = SafeNormalize(orthoT, glm::vec3(1.0f, 0.0f, 0.0f));
+            surface.Bitangent = SafeNormalize(glm::cross(surface.Normal, surface.Tangent), glm::vec3(0.0f, 0.0f, 1.0f));
+            surface.HalfExtents = glm::vec2(
+                std::isfinite(reflector.HalfExtents.x) ? std::max(0.01f, reflector.HalfExtents.x) : 5.0f,
+                std::isfinite(reflector.HalfExtents.y) ? std::max(0.01f, reflector.HalfExtents.y) : 5.0f);
+            surface.ClipPlaneOffset = std::isfinite(reflector.ClipPlaneOffset) ? reflector.ClipPlaneOffset : 0.0f;
+            surface.EdgeFadeDistance = std::isfinite(reflector.EdgeFadeDistance) ? std::max(0.0f, reflector.EdgeFadeDistance) : DefaultEdgeFadeDistance;
+            surface.MaxRoughness = std::isfinite(reflector.MaxRoughness) ? std::clamp(reflector.MaxRoughness, 0.02f, 1.0f) : DefaultMaxRoughness;
+            surface.Intensity = std::isfinite(reflector.Intensity) ? std::clamp(reflector.Intensity, 0.0f, 10.0f) : 1.0f;
+            surface.ClipToExtents = reflector.ClipToExtents;
+            surface.Valid = reflector.Enabled &&
+                            IsFiniteMat4(surface.WorldTransform) &&
+                            IsFiniteVec3(surface.Position) &&
+                            IsFiniteVec3(surface.Normal);
+            return surface;
+        }
+
+        float SignedDistanceToPlane(const PlanarReflectionSurface& surface, const glm::vec3& pointWS) {
+            if (!surface.Valid || !IsFiniteVec3(pointWS)) return 0.0f;
+            return glm::dot(surface.Normal, pointWS - surface.Position);
+        }
+
+        glm::vec3 ReflectPoint(const PlanarReflectionSurface& surface, const glm::vec3& pointWS) {
+            if (!surface.Valid || !IsFiniteVec3(pointWS)) return pointWS;
+            const float dist = glm::dot(surface.Normal, pointWS - surface.Position);
+            return pointWS - (2.0f * dist) * surface.Normal;
+        }
+
+        glm::vec3 ReflectDirection(const PlanarReflectionSurface& surface, const glm::vec3& dirWS) {
+            if (!surface.Valid || !IsFiniteVec3(dirWS)) return dirWS;
+            return dirWS - (2.0f * glm::dot(surface.Normal, dirWS)) * surface.Normal;
+        }
+
+        glm::mat4 BuildReflectionMatrix(const PlanarReflectionSurface& surface) {
+            if (!surface.Valid) return glm::mat4(1.0f);
+            const glm::vec3 n = surface.Normal;
+            const float d = -glm::dot(n, surface.Position);
+            glm::mat4 refl(1.0f);
+            refl[0][0] = 1.0f - 2.0f * n.x * n.x;
+            refl[1][0] = -2.0f * n.x * n.y;
+            refl[2][0] = -2.0f * n.x * n.z;
+            refl[3][0] = -2.0f * d * n.x;
+
+            refl[0][1] = -2.0f * n.y * n.x;
+            refl[1][1] = 1.0f - 2.0f * n.y * n.y;
+            refl[2][1] = -2.0f * n.y * n.z;
+            refl[3][1] = -2.0f * d * n.y;
+
+            refl[0][2] = -2.0f * n.z * n.x;
+            refl[1][2] = -2.0f * n.z * n.y;
+            refl[2][2] = 1.0f - 2.0f * n.z * n.z;
+            refl[3][2] = -2.0f * d * n.z;
+            return refl;
+        }
+
+        glm::mat4 BuildObliqueClipProjectionZO(
+            const glm::mat4& projZO,
+            const glm::mat4& mirroredView,
+            const glm::vec4& worldPlane,
+            glm::vec4* outViewPlane,
+            bool* outApplied,
+            glm::mat4* outObliqueGL) {
+            if (outApplied) *outApplied = false;
+            if (outObliqueGL) *outObliqueGL = projZO;
+
+            if (!IsFiniteMat4(projZO) || !IsFiniteMat4(mirroredView)) {
+                return projZO;
+            }
+            const float detView = glm::determinant(glm::mat3(mirroredView));
+            const float detProj = glm::determinant(projZO);
+            if (!std::isfinite(detView) || std::abs(detView) < 1e-6f ||
+                !std::isfinite(detProj) || std::abs(detProj) < 1e-12f) {
+                return projZO;
+            }
+
+            const glm::mat4 invView = glm::inverse(mirroredView);
+            const glm::vec4 rawViewPlane = glm::transpose(invView) * worldPlane;
+            const float nLen = glm::length(glm::vec3(rawViewPlane));
+            if (!std::isfinite(nLen) || nLen < 1e-6f) {
+                return projZO;
+            }
+            const glm::vec4 viewPlane = rawViewPlane / nLen;
+            if (outViewPlane) *outViewPlane = viewPlane;
+
+            // Find the opposite far frustum corner in view space corresponding to z_ndc = 1 (ZO far plane).
+            const float sgnX = ((viewPlane.x * projZO[0][0]) >= 0.0f) ? 1.0f : -1.0f;
+            const float sgnY = ((viewPlane.y * projZO[1][1]) >= 0.0f) ? 1.0f : -1.0f;
+            glm::vec4 q = glm::inverse(projZO) * glm::vec4(sgnX, sgnY, 1.0f, 1.0f);
+            if (!std::isfinite(q.w) || std::abs(q.w) < 1e-6f) {
+                return projZO;
+            }
+            q /= q.w;
+
+            const glm::vec4 row3(projZO[0][3], projZO[1][3], projZO[2][3], projZO[3][3]);
+            const float row3DotQ = glm::dot(row3, q);
+            const float planeDotQ = glm::dot(viewPlane, q);
+            if (!std::isfinite(row3DotQ) || !std::isfinite(planeDotQ) ||
+                row3DotQ <= 1e-4f || planeDotQ <= 1e-4f) {
+                return projZO;
+            }
+
+            // ZO near plane lies at z_clip = M2 . p = 0 and keeps z_clip >= 0.
+            // Scaling viewPlane by (row3 . q) / (viewPlane . q) preserves the far plane at z_clip = w_clip.
+            const glm::vec4 scaledPlane = viewPlane * (row3DotQ / planeDotQ);
+            glm::mat4 obliqueZO = projZO;
+            obliqueZO[0][2] = scaledPlane.x;
+            obliqueZO[1][2] = scaledPlane.y;
+            obliqueZO[2][2] = scaledPlane.z;
+            obliqueZO[3][2] = scaledPlane.w;
+            if (!IsFiniteMat4(obliqueZO)) {
+                return projZO;
+            }
+
+            if (outObliqueGL) {
+                glm::mat4 obliqueGL = obliqueZO;
+                const glm::vec4 glRow2 = 2.0f * scaledPlane - row3;
+                obliqueGL[0][2] = glRow2.x;
+                obliqueGL[1][2] = glRow2.y;
+                obliqueGL[2][2] = glRow2.z;
+                obliqueGL[3][2] = glRow2.w;
+                *outObliqueGL = obliqueGL;
+            }
+            if (outApplied) *outApplied = true;
+            return obliqueZO;
+        }
+
+        MirroredCameraResult BuildMirroredCamera(
+            const PerspectiveCamera& mainCamera,
+            const PlanarReflectionSurface& surface,
+            const PlanarReflectionPolicy& policy) {
+            MirroredCameraResult result;
+            if (!surface.Valid) {
+                result.Diagnostic = "PLANAR_SURFACE_INVALID: non-finite or disabled reflector surface";
+                return result;
+            }
+            const float signedDist = SignedDistanceToPlane(surface, mainCamera.GetPosition());
+            result.CameraSignedDistance = signedDist;
+            if (!std::isfinite(signedDist) || signedDist <= std::max(1e-5f, policy.MinCameraPlaneDistance)) {
+                result.Diagnostic = "PLANAR_CAMERA_BEHIND_PLANE: camera must remain on the front side of the reflector plane";
+                return result;
+            }
+
+            const glm::mat4 reflMatrix = BuildReflectionMatrix(surface);
+            const glm::mat4 mirroredView = mainCamera.GetViewMatrix() * reflMatrix;
+            const glm::vec3 mirroredPos = ReflectPoint(surface, mainCamera.GetPosition());
+            if (!IsFiniteMat4(mirroredView) || !IsFiniteVec3(mirroredPos)) {
+                result.Diagnostic = "PLANAR_CAMERA_INVALID: mirrored transform is non-finite";
+                return result;
+            }
+
+            PlanarReflectionSurface clippedSurface = surface;
+            clippedSurface.ClipPlaneOffset = surface.ClipPlaneOffset + policy.ClipPlaneOffset;
+            const glm::vec4 worldPlane = clippedSurface.WorldPlane();
+
+            PerspectiveCamera mirroredCam = mainCamera;
+            mirroredCam.SetViewMatrix(mirroredView, mirroredPos);
+            const glm::mat4 baseProjZO = mainCamera.GetUnclippedProjectionMatrixZO();
+
+            glm::vec4 viewPlane{};
+            bool obliqueApplied = false;
+            glm::mat4 obliqueGL = mainCamera.GetProjectionMatrix();
+            const glm::mat4 obliqueZO = BuildObliqueClipProjectionZO(
+                baseProjZO, mirroredView, worldPlane, &viewPlane, &obliqueApplied, &obliqueGL);
+            if (obliqueApplied) {
+                mirroredCam.SetCustomProjection(obliqueGL, obliqueZO);
+            }
+
+            result.Valid = true;
+            result.ObliqueClippingApplied = obliqueApplied;
+            result.ReverseWinding = (glm::determinant(glm::mat3(mirroredView)) < 0.0f);
+            result.Camera = mirroredCam;
+            result.ReflectionMatrix = reflMatrix;
+            result.WorldPlane = worldPlane;
+            result.ViewPlane = viewPlane;
+            return result;
+        }
+
+        float EvaluatePlanarReflectionConfidence(
+            const PlanarReflectionSurface& surface,
+            const glm::vec3& worldPos,
+            const glm::vec3& normalWS,
+            float roughness,
+            float maxRoughnessOverride) {
+            if (!surface.Valid || !IsFiniteVec3(worldPos) || !IsFiniteVec3(normalWS)) return 0.0f;
+            const float nDot = glm::dot(SafeNormalize(normalWS, glm::vec3(0.0f, 1.0f, 0.0f)), surface.Normal);
+            const float normalWeight = std::clamp((nDot - 0.5f) / 0.4f, 0.0f, 1.0f);
+            if (normalWeight <= 0.0f) return 0.0f;
+
+            const float planeDist = std::abs(glm::dot(surface.Normal, worldPos - surface.Position));
+            const float thicknessTolerance = std::max(0.15f, surface.EdgeFadeDistance);
+            const float planeWeight = 1.0f - std::clamp(planeDist / thicknessTolerance, 0.0f, 1.0f);
+            if (planeWeight <= 0.0f) return 0.0f;
+
+            float extentWeight = 1.0f;
+            if (surface.ClipToExtents) {
+                const glm::vec3 rel = worldPos - surface.Position;
+                const float localU = std::abs(glm::dot(rel, surface.Tangent));
+                const float localV = std::abs(glm::dot(rel, surface.Bitangent));
+                if (localU >= surface.HalfExtents.x || localV >= surface.HalfExtents.y) {
+                    return 0.0f;
+                }
+                const float fade = std::clamp(surface.EdgeFadeDistance, 0.0f, std::min(surface.HalfExtents.x, surface.HalfExtents.y));
+                if (fade > 1e-4f) {
+                    const float marginU = std::clamp((surface.HalfExtents.x - localU) / fade, 0.0f, 1.0f);
+                    const float marginV = std::clamp((surface.HalfExtents.y - localV) / fade, 0.0f, 1.0f);
+                    extentWeight = std::min(marginU, marginV);
+                }
+            }
+
+            const float maxRough = (maxRoughnessOverride > 0.0f)
+                ? std::clamp(maxRoughnessOverride, 0.02f, 1.0f)
+                : surface.MaxRoughness;
+            const float safeRough = std::clamp(roughness, 0.0f, 1.0f);
+            const float fadeStart = maxRough * 0.55f;
+            float roughWeight = 1.0f;
+            if (safeRough >= maxRough) {
+                roughWeight = 0.0f;
+            } else if (safeRough > fadeStart) {
+                const float t = (safeRough - fadeStart) / std::max(maxRough - fadeStart, 1e-4f);
+                roughWeight = 1.0f - (t * t * (3.0f - 2.0f * t));
+            }
+
+            return std::clamp(normalWeight * planeWeight * extentWeight * roughWeight * surface.Intensity, 0.0f, 1.0f);
+        }
+
+        glm::uvec2 ComputeScaledTargetExtent(uint32_t baseWidth, uint32_t baseHeight, float resolutionScale) {
+            return {
+                RHI::RHIViewTargets::ComputePlanarTargetDimension(baseWidth, resolutionScale),
+                RHI::RHIViewTargets::ComputePlanarTargetDimension(baseHeight, resolutionScale)
+            };
+        }
+
+        SceneRenderSettings SanitizeCaptureSettings(
+            const SceneRenderSettings& mainSettings,
+            const PlanarReflectionPolicy& policy) {
+            SceneRenderSettings out = mainSettings;
+            out.MSAASamples = 1u;
+            out.EnableToneMapping = false;
+            out.ToneMappingMode = 3; // Linear HDR output preserved in PlanarColor RGBA16F
+            out.EnableFXAA = false;
+            out.EnableBloom = false;
+            out.EnableAutoExposure = false;
+            out.EnableTAA = false;
+            out.EnableSSR = policy.AllowSSR;
+            out.EnablePlanarReflections = policy.AllowPlanarReflections;
+            out.EnableGTAO = false;
+            out.EnableContactShadows = false;
+            out.EnableVolumetricFog = false;
+            out.EnableDDGI = false;
+            out.HiZVisualizationLevel = -1;
+            out.Wireframe = policy.IncludeEditorOverlays ? mainSettings.Wireframe : false;
+            out.ShowPhysicsDebug = policy.IncludeEditorOverlays ? mainSettings.ShowPhysicsDebug : false;
+            out.EnableSkybox = policy.IncludeSkybox && mainSettings.EnableSkybox;
+            out.EnableParticles = policy.IncludeParticles && mainSettings.EnableParticles;
+            out.EnableShadows = policy.IncludeShadows && mainSettings.EnableShadows;
+            return out;
+        }
+
+        RenderWorld FilterCaptureWorld(
+            const RenderWorld& sourceWorld,
+            const RenderPlanarReflector& reflector,
+            const PlanarReflectionPolicy& policy) {
+            RenderWorld out;
+            out.Camera = sourceWorld.Camera;
+            out.DirectionalLight = sourceWorld.DirectionalLight;
+            out.AdditionalDirectionalLights = sourceWorld.AdditionalDirectionalLights;
+            out.PointLights = sourceWorld.PointLights;
+            out.SpotLights = sourceWorld.SpotLights;
+            out.RectLights = sourceWorld.RectLights;
+            out.Skybox = sourceWorld.Skybox;
+            out.Skybox.Enabled = policy.IncludeSkybox && reflector.CaptureSkybox && sourceWorld.Skybox.Enabled;
+            out.EntityToStableUUID = sourceWorld.EntityToStableUUID;
+            out.SceneRevision = sourceWorld.SceneRevision;
+            out.SceneInstanceID = sourceWorld.SceneInstanceID;
+            out.SceneLifetimeEpoch = sourceWorld.SceneLifetimeEpoch;
+            out.TotalEntities = sourceWorld.TotalEntities;
+
+            // Recursion disabled: nested planar reflectors are stripped inside a planar capture.
+            out.PlanarReflectors.clear();
+            if (!policy.AllowDynamicProbes) {
+                out.ReflectionProbes.clear();
+            } else {
+                out.ReflectionProbes = sourceWorld.ReflectionProbes;
+            }
+            if (policy.IncludeParticles) out.Particles = sourceWorld.Particles;
+            if (policy.IncludeEditorOverlays) out.DebugLines = sourceWorld.DebugLines;
+
+            if (!(policy.IncludeShadows && reflector.CaptureShadows)) {
+                if (out.DirectionalLight.has_value()) out.DirectionalLight->CastsShadows = false;
+                for (auto& dl : out.AdditionalDirectionalLights) dl.CastsShadows = false;
+                for (auto& pl : out.PointLights) pl.Shadows.CastShadows = false;
+                for (auto& sl : out.SpotLights) sl.Shadows.CastShadows = false;
+            }
+
+            std::unordered_set<uint64_t> excludedIds;
+            if (reflector.EntityID != 0u) excludedIds.insert(reflector.EntityID);
+            if (policy.ExcludeEntityID != 0u) excludedIds.insert(policy.ExcludeEntityID);
+            for (uint64_t id : policy.AdditionalExcludedEntityIDs) {
+                if (id != 0u) excludedIds.insert(id);
+            }
+
+            if (policy.IncludeOpaqueAndCutout) out.Skins = sourceWorld.Skins;
+            out.Meshes.reserve(sourceWorld.Meshes.size());
+            for (const auto& mesh : sourceWorld.Meshes) {
+                if (mesh.EntityID != 0u && excludedIds.count(static_cast<uint64_t>(mesh.EntityID)) > 0u) {
+                    continue;
+                }
+                const ResolvedSurface surface = MaterialResolver::Resolve(mesh.Material);
+                const bool isTransparent =
+                    (surface.Surface == SurfaceType::Transparent || surface.Surface == SurfaceType::Additive);
+                if (isTransparent && !policy.IncludeTransparent) continue;
+                if (!isTransparent && !policy.IncludeOpaqueAndCutout) continue;
+                out.Meshes.push_back(mesh);
+            }
+            return out;
+        }
+
+        PlanarReflectionInvalidation EvaluateInvalidation(
+            const PlanarReflectionDomainStamps& published,
+            const PlanarReflectionDomainStamps& current,
+            bool manualRequested) {
+            PlanarReflectionInvalidation out;
+            out.PlaneChanged = (published.PlaneStamp != current.PlaneStamp);
+            out.CameraChanged = (published.CameraStamp != current.CameraStamp);
+            out.SceneRevisionChanged = (published.SceneRevision != current.SceneRevision) ||
+                                       (published.SceneInstanceID != current.SceneInstanceID) ||
+                                       (published.SceneLifetimeEpoch != current.SceneLifetimeEpoch);
+            out.GeometryChanged = (published.GeometryStamp != current.GeometryStamp);
+            out.MaterialChanged = (published.MaterialStamp != current.MaterialStamp);
+            out.LightingChanged = (published.LightingStamp != current.LightingStamp);
+            out.AssetChanged = (published.AssetStamp != current.AssetStamp);
+            out.SettingsChanged = (published.SettingsStamp != current.SettingsStamp);
+            out.TargetExtentChanged = (published.TargetWidth != current.TargetWidth) ||
+                                      (published.TargetHeight != current.TargetHeight);
+            out.DeviceEpochChanged = (published.DeviceEpoch != current.DeviceEpoch);
+            out.ManualRequested = manualRequested;
+            return out;
+        }
+    } // namespace PlanarReflectionContract
+
 } // namespace Axle

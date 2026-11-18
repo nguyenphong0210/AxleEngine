@@ -58,6 +58,10 @@ namespace Axle {
         struct ReflectionCapturePolicy;
     }
 
+    namespace PlanarReflectionContract {
+        struct PlanarReflectionPolicy;
+    }
+
     class Scene;
     class PhysicsScene;
     class RHIParticleRenderer;
@@ -256,6 +260,19 @@ namespace Axle {
         std::string Diagnostic;
     };
 
+    struct PlanarReflectionCaptureResult {
+        bool Success = false;
+        bool ObliqueClippingApplied = false;
+        bool ReverseWindingApplied = false;
+        uint32_t TargetWidth = 0;
+        uint32_t TargetHeight = 0;
+        uint64_t ReflectorEntityID = 0;
+        UUID ReflectorUUID = 0;
+        glm::vec4 WorldPlane{ 0.0f, 1.0f, 0.0f, 0.0f };
+        glm::vec4 ViewPlane{ 0.0f, 0.0f, -1.0f, 0.0f };
+        std::string Diagnostic;
+    };
+
     class RHISceneRenderer {
         friend class Passes::GTAOPass;
         friend class Passes::HiZGenerationPass;
@@ -348,6 +365,11 @@ namespace Axle {
         const RHI::RHIBuffer& GetReflectionProbeBuffer() const { return m_ReflectionProbeBuffer; }
         bool WasLastRenderSuccessful() const { return m_LastRenderSucceeded; }
         RHI::RHICompletionToken GetLastCompletion() const { return m_LastCompletion; }
+        const ViewContext& GetMainViewContext() const { return m_ViewContext; }
+        const ViewContext& GetPlanarViewContext() const { return m_PlanarViewContext; }
+        bool WasLastPlanarCaptureSuccessful() const { return m_PlanarRenderSucceeded; }
+        RHI::RHICompletionToken GetLastPlanarCaptureCompletion() const { return m_PlanarLastCompletion; }
+        const PlanarReflectionCaptureResult& GetLastPlanarCaptureResult() const { return m_LastPlanarCaptureResult; }
         const auto& GetMaterialDiagnostics() const { return m_MaterialDiagnostics; }
         // Apply reflected CPU schema/status on the scene owner after extraction
         // and rendering. Entity IDs are checked against the snapshot's UUIDs.
@@ -367,7 +389,8 @@ namespace Axle {
         nri::Pipeline* GetOrCreatePipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1,
                                            Axle::SurfaceType surfaceType = Axle::SurfaceType::Opaque,
                                            Axle::CullMode cullMode = Axle::CullMode::None,
-                                           bool depthWrite = true, bool reflectionTerms = false);
+                                           bool depthWrite = true, bool reflectionTerms = false,
+                                           bool reverseWinding = false);
         nri::Pipeline* GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1, bool reflectionTerms = false);
 
         // Image-Based Lighting (IBL) configuration
@@ -408,6 +431,23 @@ namespace Axle {
         void ClearDynamicReflectionProbes();
         const ReflectionFrame& GetLastReflectionFrame() const { return m_LastReflectionFrame; }
         const DynamicReflectionCaptureResult& GetLastDynamicCaptureResult() const { return m_LastDynamicCaptureResult; }
+
+        // Independent mirrored planar reflection capture (M15-U5-46.1..46.3, 46.6)
+        PlanarReflectionCaptureResult CapturePlanarReflection(
+            const RenderWorld& world,
+            const PerspectiveCamera& mainCamera,
+            const RenderPlanarReflector& reflector,
+            RHI::RHITexture* targetColor,
+            RHI::RHITexture* targetDepth,
+            const SceneRenderSettings& settings = SceneRenderSettings{},
+            const PlanarReflectionContract::PlanarReflectionPolicy* policyOverride = nullptr);
+        PlanarReflectionCaptureResult CapturePlanarReflectionToTargets(
+            const RenderWorld& world,
+            const PerspectiveCamera& mainCamera,
+            const RenderPlanarReflector& reflector,
+            RHI::RHIViewTargets& viewTargets,
+            const SceneRenderSettings& settings = SceneRenderSettings{},
+            const PlanarReflectionContract::PlanarReflectionPolicy* policyOverride = nullptr);
 
         // Procedural Atmospheric Skybox pass configuration
         void SetSkyboxParameters(const SkyboxComponent& skybox) { m_SkyboxParams = skybox; }
@@ -601,7 +641,8 @@ namespace Axle {
         bool CreatePipelineLayout(RHI::RHIDevice& device);
         bool CreateGraphicsPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateSurfaceNormalPipeline(nri::Format colorFormat, nri::Format depthFormat,
-                                                       bool preLighting = false, CullMode cull = CullMode::None);
+                                                       bool preLighting = false, CullMode cull = CullMode::None,
+                                                       bool reverseWinding = false);
 
         bool CompileSkyboxShaders(RHI::RHIDevice& device);
         bool CreateSkyboxPipelineLayout(RHI::RHIDevice& device);
@@ -696,7 +737,8 @@ namespace Axle {
             uint8_t sampleCount,
             Axle::SurfaceType surfaceType,
             Axle::CullMode cullMode,
-            bool depthWrite, bool reflectionTerms = false);
+            bool depthWrite, bool reflectionTerms = false,
+            bool reverseWinding = false);
 
         MaterialTextureCache m_MaterialTextures;
         RHI::RHITexture* m_OpaqueSceneColor = nullptr;
@@ -859,6 +901,20 @@ namespace Axle {
             RHI::RHITexture* OrientedFace = nullptr;
         };
         CaptureSessionState m_CaptureSession;
+        struct PlanarCaptureSessionState {
+            bool Active = false;
+            bool ReverseWinding = false;
+            bool IncludeTransparent = false;
+            bool IncludeParticles = false;
+            bool IncludeEditorOverlays = false;
+            uint64_t ExcludeEntityID = 0;
+            RHI::RHITexture* TargetColor = nullptr;
+            RHI::RHITexture* TargetDepth = nullptr;
+            glm::vec4 WorldPlane{ 0.0f, 1.0f, 0.0f, 0.0f };
+        };
+        PlanarCaptureSessionState m_PlanarSession;
+        std::shared_ptr<RHI::RHIViewTargets> m_PlanarScratchViewTargets;
+        PlanarReflectionCaptureResult m_LastPlanarCaptureResult;
         struct PendingCaptureJob;
         std::unordered_map<std::string, std::shared_ptr<DynamicReflectionProbeGeneration>> m_DynamicProbeCaptures;
         std::unordered_map<std::string, std::unique_ptr<PendingCaptureJob>> m_PendingDynamicCaptures;
@@ -993,6 +1049,7 @@ namespace Axle {
 
         ViewContext m_ViewContext;
         ViewContext m_CaptureViewContext;
+        ViewContext m_PlanarViewContext;
         RenderPassScheduler m_PassScheduler;
         // Policy services are view execution collaborators.  The renderer
         // keeps the facade for compatibility, while policy and fallback state
@@ -1003,13 +1060,21 @@ namespace Axle {
         LightingFrame m_LastLightingFrame;
         ReflectionFrame m_LastReflectionFrame;
         GIFrame m_LastGIFrame;
-        ViewContext& ActiveViewContext() { return m_CaptureSession.Active ? m_CaptureViewContext : m_ViewContext; }
-        const ViewContext& ActiveViewContext() const { return m_CaptureSession.Active ? m_CaptureViewContext : m_ViewContext; }
+        ViewContext& ActiveViewContext() {
+            if (m_PlanarSession.Active) return m_PlanarViewContext;
+            return m_CaptureSession.Active ? m_CaptureViewContext : m_ViewContext;
+        }
+        const ViewContext& ActiveViewContext() const {
+            if (m_PlanarSession.Active) return m_PlanarViewContext;
+            return m_CaptureSession.Active ? m_CaptureViewContext : m_ViewContext;
+        }
         RHI::RHICommandBuffer& Commands() { return *ActiveViewContext().Commands(); }
         bool m_LastRenderSucceeded = false;
         RHI::RHICompletionToken m_LastCompletion;
         bool m_CaptureRenderSucceeded = false;
         RHI::RHICompletionToken m_CaptureLastCompletion;
+        bool m_PlanarRenderSucceeded = false;
+        RHI::RHICompletionToken m_PlanarLastCompletion;
         std::unordered_map<uint32_t, std::string> m_MaterialDiagnostics;
         struct MaterialFeedback {
             std::vector<ShaderPropertyInstance> Properties;

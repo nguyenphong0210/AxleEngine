@@ -100,4 +100,23 @@ namespace Axle {
         if (str == "Manual" || str == "manual") return ReflectionProbeCaptureMode::Manual;
         return ReflectionProbeCaptureMode::Automatic;
     }
+
+    // Planar reflection capture scheduling policy (M15-U5-46)
+    enum class PlanarReflectionCaptureMode : uint8_t {
+        Automatic = 0, // Updates when plane, camera, scene, material or lighting stamps change
+        Manual    = 1  // Retains existing capture until explicit capture or manual request
+    };
+
+    inline const char* PlanarReflectionCaptureModeToString(PlanarReflectionCaptureMode mode) {
+        switch (mode) {
+            case PlanarReflectionCaptureMode::Manual: return "Manual";
+            case PlanarReflectionCaptureMode::Automatic:
+            default:                                  return "Automatic";
+        }
+    }
+
+    inline PlanarReflectionCaptureMode StringToPlanarReflectionCaptureMode(std::string_view str) {
+        if (str == "Manual" || str == "manual") return PlanarReflectionCaptureMode::Manual;
+        return PlanarReflectionCaptureMode::Automatic;
+    }
 }

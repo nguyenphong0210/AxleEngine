@@ -522,6 +522,60 @@ static bool TargetSets(RHIType backend) {
     RENDER_CHECK(!oldLive, "completed frame releases the retired color generation");
     RENDER_CHECK(!externalLive, "completed frame releases the retired external generation");
 
+    // M15-U5-46.3: RHIViewTargets planar reflection color/depth lifecycle, resize & fault isolation
+    {
+        RHIViewTargets planarTargets;
+        RHIViewTargetDesc planarDesc;
+        planarDesc.Width = 32;
+        planarDesc.Height = 20;
+        planarDesc.EnableDepth = true;
+        planarDesc.EnablePlanarReflection = true;
+        planarDesc.PlanarResolutionScale = 0.5f;
+        RENDER_CHECK(planarTargets.Configure(planarDesc) && planarTargets.Validate() &&
+                     planarTargets.GetPlanarColor() && planarTargets.GetPlanarColor()->IsValid() &&
+                     planarTargets.GetPlanarColor()->GetWidth() == 16 && planarTargets.GetPlanarColor()->GetHeight() == 10 &&
+                     planarTargets.GetPlanarColor()->GetFormat() == RHITextureFormat::RGBA16_FLOAT &&
+                     planarTargets.GetPlanarColor()->GetRTV() && planarTargets.GetPlanarColor()->GetSRV() &&
+                     planarTargets.GetPlanarDepth() && planarTargets.GetPlanarDepth()->IsValid() &&
+                     planarTargets.GetPlanarDepth()->GetWidth() == 16 && planarTargets.GetPlanarDepth()->GetHeight() == 10 &&
+                     planarTargets.GetPlanarDepth()->GetDSV(),
+            "M15-U5-46.3: RHIViewTargets allocates scaled PlanarColor (RGBA16F) and PlanarDepth (D32F)");
+
+        const auto planarGenBeforeResize = planarTargets.GetGeneration();
+        planarDesc.Width = 19;
+        planarDesc.Height = 11;
+        RENDER_CHECK(planarTargets.Configure(planarDesc) && planarTargets.Validate() &&
+                     planarTargets.GetGeneration() != planarGenBeforeResize &&
+                     planarTargets.GetPlanarColor()->GetWidth() == 10 && planarTargets.GetPlanarColor()->GetHeight() == 6 &&
+                     planarTargets.GetPlanarDepth()->GetWidth() == 10 && planarTargets.GetPlanarDepth()->GetHeight() == 6,
+            "M15-U5-46.3: resizing planar view targets scales dimensions cleanly and publishes new generation");
+
+        const auto goodGen = planarTargets.GetGeneration();
+        auto badScale = planarDesc;
+        badScale.PlanarResolutionScale = 0.1f;
+        RENDER_CHECK(!planarTargets.Configure(badScale) && planarTargets.GetGeneration() == goodGen && planarTargets.Validate(),
+            "M15-U5-46.3: invalid planar scale preserves last-good generation");
+
+        bool planarOomHit = false;
+        {
+            ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
+                if (op == "CreateTexture" && ScopedRHIOperation::Resource() ==
+                    "ViewTarget_" + std::to_string(static_cast<unsigned>(RHIViewTarget::PlanarDepth))) {
+                    planarOomHit = true;
+                    return nri::Result::OUT_OF_MEMORY;
+                }
+                return {};
+            });
+            auto resized = planarDesc;
+            resized.Width = 24;
+            resized.Height = 16;
+            RENDER_CHECK(!planarTargets.Configure(resized) && planarOomHit &&
+                         planarTargets.GetGeneration() == goodGen && planarTargets.Validate() &&
+                         planarTargets.GetPlanarColor()->GetWidth() == 10,
+                "M15-U5-46.3: planar OOM fault preserves previous validated target generation");
+        }
+    }
+
     return StorageMipViews();
 }
 

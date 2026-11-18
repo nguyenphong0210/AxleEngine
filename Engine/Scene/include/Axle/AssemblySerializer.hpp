@@ -33,6 +33,8 @@ namespace Axle {
         SpotLightComponent SpotLight;
         bool HasRectLight = false;
         RectLightComponent RectLight;
+        bool HasPlanarReflection = false;
+        PlanarReflectionComponent PlanarReflection;
         bool HasSkeletalMesh = false;
         SkeletalMeshComponent SkeletalMesh;
         bool HasAnimator = false;

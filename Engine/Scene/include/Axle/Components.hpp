@@ -996,6 +996,22 @@ namespace Axle {
             : BoxExtents(extents), Intensity(intensity), ParallaxCorrected(parallax) {}
     };
 
+    struct PlanarReflectionComponent {
+        bool Enabled = true;
+        glm::vec2 HalfExtents{ 5.0f, 5.0f };
+        float ResolutionScale = 0.5f;
+        float ClipPlaneOffset = 0.0f;
+        float EdgeFadeDistance = 0.15f;
+        float MaxRoughness = 0.45f;
+        float Intensity = 1.0f;
+        float CaptureNearPlane = 0.1f;
+        float CaptureFarPlane = 1000.0f;
+        bool CaptureShadows = true;
+        bool CaptureSkybox = true;
+        bool ClipToExtents = true;
+        PlanarReflectionCaptureMode CaptureMode = PlanarReflectionCaptureMode::Automatic;
+    };
+
     struct RectLightComponent {
         bool Enabled = true;
         AreaLightShape Shape = AreaLightShape::Rectangle;

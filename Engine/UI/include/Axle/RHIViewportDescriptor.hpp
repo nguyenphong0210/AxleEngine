@@ -23,6 +23,8 @@ namespace Axle {
         bool EnableNormal = false, EnableScreenStorage = false;
         bool EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false;
         bool EnableReflectionTerms = false;
+        bool EnablePlanarReflection = false;
+        float PlanarResolutionScale = 0.5f;
         bool operator==(const RHIViewportDesc&) const = default;
     };
 

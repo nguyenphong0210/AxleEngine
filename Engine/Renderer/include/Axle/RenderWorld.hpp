@@ -171,6 +171,29 @@ namespace Axle {
         AreaLightShadowPolicy ShadowPolicy = AreaLightShadowPolicy::UnshadowedAnalyticLTC;
     };
 
+    struct RenderPlanarReflector {
+        uint64_t EntityID = 0;
+        UUID StableUUID = 0;
+        bool Enabled = true;
+        glm::mat4 WorldTransform{ 1.0f };
+        glm::vec3 Position{ 0.0f };
+        glm::vec3 Normal{ 0.0f, 1.0f, 0.0f };
+        glm::vec3 Tangent{ 1.0f, 0.0f, 0.0f };
+        glm::vec3 Bitangent{ 0.0f, 0.0f, 1.0f };
+        glm::vec2 HalfExtents{ 5.0f, 5.0f };
+        float ResolutionScale = 0.5f;
+        float ClipPlaneOffset = 0.0f;
+        float EdgeFadeDistance = 0.15f;
+        float MaxRoughness = 0.45f;
+        float Intensity = 1.0f;
+        float CaptureNearPlane = 0.1f;
+        float CaptureFarPlane = 1000.0f;
+        bool CaptureShadows = true;
+        bool CaptureSkybox = true;
+        bool ClipToExtents = true;
+        PlanarReflectionCaptureMode CaptureMode = PlanarReflectionCaptureMode::Automatic;
+    };
+
     struct RenderVolumetricFog {
         bool Enabled = false;
         float Density = 0.02f;
@@ -250,6 +273,7 @@ namespace Axle {
             SpotLights.clear();
             ReflectionProbes.clear();
             RectLights.clear();
+            PlanarReflectors.clear();
             VolumetricFog.reset();
             DDGIProbeGrid.reset();
             EntityToStableUUID.clear();
@@ -286,6 +310,7 @@ namespace Axle {
         std::vector<RenderSpotLight> SpotLights;
         std::vector<RenderReflectionProbe> ReflectionProbes;
         std::vector<RenderRectLight> RectLights;
+        std::vector<RenderPlanarReflector> PlanarReflectors;
         std::optional<RenderVolumetricFog> VolumetricFog;
         std::optional<RenderDDGIProbeGrid> DDGIProbeGrid;
         RenderSkyboxData Skybox;

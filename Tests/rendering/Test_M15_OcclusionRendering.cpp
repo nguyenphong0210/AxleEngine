@@ -371,6 +371,99 @@ bool RunM15OcclusionSphereTests(RHISceneRenderer& renderer, const RenderWorld& w
                  << " max_laplacian=" << maxLaplacian << '\n';
         RENDER_CHECK(smoothSamples > 15 && meanLaplacian < 0.015 && maxLaplacian < 0.08f,
             "hovered sphere floor contact AO is smooth without high-frequency stochastic grain");
+
+        // M15-U4-CONTACT-SUN-FACING-FIX: Camera looking directly toward directional sun above floor.
+        // Open sun-lit floor across the entire depth range must stay neutral (no horizontal shadow band),
+        // while the sphere resting on the floor still casts a genuine contact shadow in its base footprint.
+        floorWorld.Meshes[0].WorldTransform = glm::mat4(1.0f);
+        floorWorld.Meshes[1].Material.RHIMaterialAsset = floorMat;
+        RenderDirectionalLight sun{};
+        sun.Direction = glm::normalize(glm::vec3(0.0f, 0.766044f, -0.642788f)); // ~50 deg elevation forward (-Z)
+        sun.Intensity = 1.0f;
+        sun.Color = {1.0f, 0.98f, 0.94f};
+        floorWorld.DirectionalLight = sun;
+
+        floorSettings.EnableContactShadows = true;
+        renderer.RenderWorldView(floorWorld, floorCamera, targets->Get(RHIViewTarget::Color), targets->Get(RHIViewTarget::Depth), floorSettings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() &&
+                     Read(*targets->GetGTAOResolved(), resolvedAO) &&
+                     Read(*targets->Get(RHIViewTarget::ScreenNormal), floorNormals) &&
+                     Read(*targets->Get(RHIViewTarget::OpaqueDepth), floorDepth),
+            "sun-facing contact shadow readbacks");
+
+        float minOpenFloorContact = 1.0f;
+        glm::vec3 worstOpenWP(0.0f);
+        glm::uvec2 worstOpenXY(0u);
+        float minSphereLitContact = 1.0f;
+        float minBaseShadowContact = 1.0f;
+        size_t openFloorSamples = 0, sphereLitSamples = 0, baseShadowSamples = 0;
+
+        for (uint32_t y = 0; y < size; ++y) {
+            for (uint32_t x = 0; x < size; ++x) {
+                const size_t idx = size_t(y) * size + x;
+                const auto& norm = floorNormals[idx];
+                const float d = floorDepth[idx].x;
+                const float contactVal = resolvedAO[idx].y;
+                RENDER_CHECK(std::isfinite(contactVal) && contactVal >= 0.0f && contactVal <= 1.0f,
+                    "bounded sun-facing resolved contact visibility");
+                if (norm.w < 0.5f || d <= 0.0f || d >= 0.9999f) continue;
+
+                const glm::vec4 clip(2.0f * (x + 0.5f) / size - 1.0f, 1.0f - 2.0f * (y + 0.5f) / size, d, 1.0f);
+                const glm::vec4 wh = invVP * clip;
+                const glm::vec3 wp = glm::vec3(wh) / wh.w;
+
+                if (norm.y > 0.95f && std::abs(wp.y + 1.0f) < 0.05f) {
+                    if (std::abs(wp.x) < 0.45f && wp.z > 0.10f && wp.z < 0.85f) {
+                        minBaseShadowContact = std::min(minBaseShadowContact, contactVal);
+                        ++baseShadowSamples;
+                    } else if (std::abs(wp.x) > 1.35f || wp.z < -0.15f || wp.z > 2.25f) {
+                        if (contactVal < minOpenFloorContact) {
+                            minOpenFloorContact = contactVal;
+                            worstOpenWP = wp;
+                            worstOpenXY = {x, y};
+                        }
+                        ++openFloorSamples;
+                    }
+                } else if (glm::length(wp) < 1.10f && wp.y > 0.25f &&
+                           glm::dot(glm::normalize(glm::vec3(norm)), sun.Direction) > 0.20f) {
+                    minSphereLitContact = std::min(minSphereLitContact, contactVal);
+                    ++sphereLitSamples;
+                }
+            }
+        }
+        evidence << "sun_facing open_samples=" << openFloorSamples << " min_open_contact=" << minOpenFloorContact
+                 << " worst_open_px=" << worstOpenXY.x << "," << worstOpenXY.y
+                 << " worst_open_wp=(" << worstOpenWP.x << "," << worstOpenWP.y << "," << worstOpenWP.z << ")"
+                 << " base_samples=" << baseShadowSamples << " min_base_contact=" << minBaseShadowContact
+                 << " sphere_lit_samples=" << sphereLitSamples << " min_sphere_contact=" << minSphereLitContact << '\n';
+        RENDER_CHECK(openFloorSamples > 200 && minOpenFloorContact >= 0.99f,
+            "open floor facing toward the sun has zero false horizontal contact-shadow band");
+        RENDER_CHECK(baseShadowSamples > 5 && minBaseShadowContact < 0.85f,
+            "sphere base casts genuine contact shadow toward camera when facing the sun");
+        RENDER_CHECK(sphereLitSamples > 20 && minSphereLitContact >= 0.98f,
+            "sun-lit convex sphere surface exhibits no contact-shadow self-occlusion");
+
+        // Also test a pure open floor (no caster) at a shallow grazing sun-facing angle across the entire foreground.
+        RenderWorld flatWorld = floorWorld;
+        flatWorld.Meshes.erase(flatWorld.Meshes.begin());
+        const glm::vec3 shallowCam(0.0f, 0.25f, 6.2f);
+        PerspectiveCamera shallowCamera(55.0f, 1.0f, 0.1f, 100.0f);
+        shallowCamera.SetViewMatrix(glm::lookAtRH(shallowCam, glm::vec3(0.0f, -0.75f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), shallowCam);
+        renderer.RenderWorldView(flatWorld, shallowCamera, targets->Get(RHIViewTarget::Color), targets->Get(RHIViewTarget::Depth), floorSettings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() &&
+                     Read(*targets->GetGTAOResolved(), resolvedAO) &&
+                     Read(*targets->Get(RHIViewTarget::ScreenNormal), floorNormals),
+            "empty shallow sun-facing floor contact readback");
+        float minEmptyFloorContact = 1.0f;
+        size_t emptyFloorSamples = 0;
+        for (size_t idx = 0; idx < resolvedAO.size(); ++idx) {
+            if (floorNormals[idx].w < 0.5f || floorNormals[idx].y <= 0.95f) continue;
+            minEmptyFloorContact = std::min(minEmptyFloorContact, resolvedAO[idx].y);
+            ++emptyFloorSamples;
+        }
+        evidence << "empty_shallow_floor samples=" << emptyFloorSamples << " min_contact=" << minEmptyFloorContact << '\n';
+        RENDER_CHECK(emptyFloorSamples > 1000 && minEmptyFloorContact >= 0.999f,
+            "shallow empty floor facing toward the sun has zero false horizontal shadow band");
     }
     return true;
 }

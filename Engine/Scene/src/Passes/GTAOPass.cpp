@@ -10,6 +10,7 @@ namespace Axle::Passes {
             RHIGTAOConstants constants{};
             constants.InvProjection = glm::inverse(i.ProjectionZO);
             constants.View = i.Camera.GetViewMatrix();
+            constants.Projection = i.ProjectionZO;
             const uint32_t width = i.Targets->GetGTAO()->GetWidth();
             const uint32_t height = i.Targets->GetGTAO()->GetHeight();
             constants.ScreenSize = glm::vec4(float(width), float(height), 1.0f / width, 1.0f / height);
@@ -27,7 +28,7 @@ namespace Axle::Passes {
                 const glm::vec3 sunDir = glm::dot(direction, direction) > 1e-12f ? glm::normalize(direction) : glm::vec3(0, 1, 0);
                 constants.SunDirView = glm::vec4(glm::mat3(i.Camera.GetViewMatrix()) * sunDir, 1.0f);
                 constants.ContactParams = glm::vec4(i.Settings.ContactShadowLengthPixels * 0.5f, 16.0f,
-                    i.Settings.ContactShadowStrength, 0.02f);
+                    i.Settings.ContactShadowStrength, 0.05f);
             }
             return constants;
         }

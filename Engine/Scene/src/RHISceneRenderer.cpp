@@ -1678,7 +1678,7 @@ namespace Axle {
 
     bool RHISceneRenderer::CreateGTAOPipelineLayout(RHIDevice& device) {
         // 1. Compute Pipeline Layout:
-        // Root Descriptor [0] b0 space 0: 256-byte RHIGTAOConstants
+        // Root Descriptor [0] b0 space 0: 512-byte RHIGTAOConstants
         nri::RootDescriptorDesc compRootDesc = {};
         compRootDesc.registerIndex = 0;
         compRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
@@ -1764,7 +1764,7 @@ namespace Axle {
         if (!m_GTAOUpsamplePipelineLayout.Init(upsampleLayoutDesc)) return false;
 
         // 2. Apply Pipeline Layout:
-        // Root Descriptor [0] b0 space 0: 256-byte RHIGTAOConstants
+        // Root Descriptor [0] b0 space 0: 512-byte RHIGTAOConstants
         nri::RootDescriptorDesc applyRootDesc = {};
         applyRootDesc.registerIndex = 0;
         applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;

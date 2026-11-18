@@ -310,6 +310,10 @@ bool RunM15OcclusionContractUnitTests() {
         const std::string gtaoShaderSource = ReadShaderSource(AXLE_GTAO_SHADER_PATH);
         RENDER_CHECK(gtaoShaderSource.find("if (u_SunDirView.w > 0.5 && u_ContactParams.z > 0.001)") != std::string::npos,
             "M15-U4-04.1: GTAO compute shader activates contact raymarch only when sun is present (u_SunDirView.w > 0.5) and strength > 0");
+        RENDER_CHECK(gtaoPassSource.find("constants.Projection = i.ProjectionZO;") != std::string::npos &&
+                     gtaoShaderSource.find("ProjectViewToUVZ(") != std::string::npos &&
+                     gtaoShaderSource.find("dot(delta, viewNormal) <= planeBias") != std::string::npos,
+            "M15-U4-04.1: Contact shadows project view-space rays through camera projection and reject tangent-plane self-occlusion");
     }
 
     // =========================================================================

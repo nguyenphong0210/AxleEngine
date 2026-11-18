@@ -13,11 +13,12 @@
 cbuffer GTAOConstants : register(b0, space0) {
     float4x4 u_InvProjection;
     float4x4 u_View;
+    float4x4 u_Projection;
     float4   u_ScreenSize;      // (width, height, 1.0 / width, 1.0 / height)
     float4   u_GTAOParams;      // (radius pixels, strength, depth bias, power)
     float4   u_SunDirView;      // (xyz: view-space sun dir, w: sun enabled)
     float4   u_ContactParams;   // (max distance px, steps, strength, thickness)
-    float4   u_Padding[4];      // Total 256 bytes aligned
+    float4   u_Padding[16];     // Total 512 bytes aligned
 };
 
 // -----------------------------------------------------------------------------
@@ -27,6 +28,13 @@ float3 ReconstructViewPos(float2 uv, float depth) {
     float4 clip = float4(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, depth, 1.0);
     float4 viewPos = mul(u_InvProjection, clip);
     return viewPos.xyz / max(abs(viewPos.w), 1e-6);
+}
+
+float3 ProjectViewToUVZ(float3 viewPos) {
+    float4 clip = mul(u_Projection, float4(viewPos, 1.0));
+    float invW = 1.0 / max(abs(clip.w), 1e-6);
+    float3 ndc = clip.xyz * invW;
+    return float3(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5, ndc.z);
 }
 
 // Stratified 4x4 Bayer dithering so neighboring half-res texels complement
@@ -219,36 +227,72 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
         float3 lightDirView = normalize(u_SunDirView.xyz);
         float NdotL = dot(viewNormal, lightDirView);
 
-        if (NdotL > 0.0) {
-            float maxDistPx = max(u_ContactParams.x, 4.0);
+        if (NdotL > 0.001) {
+            float maxDistPx = max(u_ContactParams.x * 2.0, 8.0);
             int stepCount = max((int)u_ContactParams.y, 8);
             float shadowStrength = u_ContactParams.z;
-            float thickness = max(u_ContactParams.w, 0.02);
 
-            float3 rayStart = viewPos + viewNormal * (depthBias * 2.0);
-            float blockerAccum = 0.0;
+            float viewDepth = abs(viewPos.z);
+            float projX = max(abs(u_Projection[0][0]), 1e-4);
+            float projY = max(abs(u_Projection[1][1]), 1e-4);
+            float texelWorldSize = viewDepth * max(1.0 / (0.5 * float(sceneSize.x) * projX),
+                                                   1.0 / (0.5 * float(sceneSize.y) * projY));
 
-            for (int s = 1; s <= stepCount; ++s) {
-                float t = float(s) / float(stepCount);
-                float stepDist = t * (maxDistPx * 0.05); // world-space scale
-                float3 rayPos = rayStart + lightDirView * stepDist;
+            float startBias = max(depthBias * 2.0, texelWorldSize + 0.0015 * viewDepth);
+            float3 rayStart = viewPos + viewNormal * startBias;
 
-                // Project rayPos back to screen UV (Y is inverted between view space and screen UV)
-                float2 rayUV = uv + float2(lightDirView.x, -lightDirView.y) * (t * maxDistPx * rcpFrame);
-                if (any(rayUV < 0.0) || any(rayUV > 1.0)) break;
+            float targetWorldLength = maxDistPx * texelWorldSize * 1.5;
+            float rayLength = clamp(targetWorldLength, 0.20, 0.04 * maxDistPx);
 
-                float sampleDepth = u_ComputeDepth.SampleLevel(u_ComputeSampler, rayUV, 0.0);
-                if (sampleDepth >= 0.9999) continue;
-
-                float3 samplePos = ReconstructViewPos(rayUV, sampleDepth);
-                float zDiff = samplePos.z - rayPos.z;
-
-                if (zDiff > 0.002 && zDiff < thickness) {
-                    blockerAccum = max(blockerAccum, 1.0 - (zDiff / thickness));
+            bool isPerspective = abs(u_Projection[2][3]) > 1e-4;
+            bool validRay = !isPerspective;
+            if (isPerspective) {
+                float nearViewZ = abs(ReconstructViewPos(float2(0.5, 0.5), 0.0).z);
+                float safeNear = max(nearViewZ * 1.1, 0.02);
+                if (rayStart.z < -safeNear) {
+                    if (lightDirView.z > 1e-5) {
+                        rayLength = min(rayLength, (-safeNear - rayStart.z) / lightDirView.z);
+                    }
+                    validRay = rayLength > 0.005;
                 }
             }
 
-            contactShadow = 1.0 - saturate(blockerAccum * shadowStrength);
+            if (validRay) {
+                float3 rayEnd = rayStart + lightDirView * rayLength;
+                float thickness = max(max(u_ContactParams.w, 0.06), 0.12 + 0.025 * viewDepth);
+                float zBias = max(0.002, texelWorldSize * 0.5 + 0.001 * viewDepth);
+                float stepDither = SpatialStepHash(pixelPos);
+                float blockerAccum = 0.0;
+
+                for (int s = 1; s <= stepCount; ++s) {
+                    float t = (float(s) - 0.75 + 0.75 * stepDither) / float(stepCount);
+                    float3 rayPos = lerp(rayStart, rayEnd, t);
+
+                    float3 rayUVZ = ProjectViewToUVZ(rayPos);
+                    if (any(rayUVZ.xy < 0.0) || any(rayUVZ.xy > 1.0) || rayUVZ.z <= 0.0 || rayUVZ.z >= 0.9999) break;
+
+                    uint2 tapPixel = min(uint2(rayUVZ.xy * float2(sceneSize)), sceneSize - 1);
+                    if (all(tapPixel == sourcePixel)) continue;
+
+                    float sampleDepth = u_ComputeDepth.Load(int3(tapPixel, 0));
+                    if (sampleDepth <= 0.0 || sampleDepth >= 0.9999) continue;
+
+                    float2 tapUV = (float2(tapPixel) + 0.5) / float2(sceneSize);
+                    float3 samplePos = ReconstructViewPos(tapUV, sampleDepth);
+                    float3 delta = samplePos - viewPos;
+                    float planeBias = max(0.003, 0.0015 * viewDepth) + 0.01 * length(delta);
+                    if (dot(delta, viewNormal) <= planeBias) continue;
+
+                    float zDiff = samplePos.z - rayPos.z;
+                    if (zDiff > zBias && zDiff < thickness) {
+                        float depthFade = 1.0 - (zDiff / thickness);
+                        float rayFade = 1.0 - smoothstep(0.70, 1.0, t);
+                        blockerAccum = max(blockerAccum, depthFade * rayFade);
+                    }
+                }
+
+                contactShadow = 1.0 - saturate(blockerAccum * shadowStrength * smoothstep(0.0, 0.08, NdotL));
+            }
         }
     }
 

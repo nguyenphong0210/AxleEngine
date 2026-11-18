@@ -91,17 +91,18 @@ namespace Axle {
     };
     static_assert(sizeof(RHIToneMappingConstants) == 256, "RHIToneMappingConstants must be 256 bytes aligned!");
 
-    // 256-byte CBV aligned constants for GTAO & Contact Shadows pass
+    // 512-byte CBV aligned constants for GTAO & Contact Shadows pass
     struct alignas(256) RHIGTAOConstants {
         glm::mat4 InvProjection{ 1.0f };                                          // 64 bytes
         glm::mat4 View{ 1.0f };                                                   // 64 bytes
+        glm::mat4 Projection{ 1.0f };                                             // 64 bytes
         glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // 16 bytes: (width, height, 1/w, 1/h)
         glm::vec4 GTAOParams{ 8.0f, 1.0f, 0.0025f, 2.0f };                        // 16 bytes: (radius px, strength, depth bias, power)
         glm::vec4 SunDirView{ 0.0f, 0.0f, 0.0f, 0.0f };                           // 16 bytes: (xyz: view-space dir, w: enabled)
-        glm::vec4 ContactParams{ 16.0f, 16.0f, 1.0f, 0.02f };                     // 16 bytes: (max dist px, steps, strength, thickness)
-        glm::vec4 Reserved[4]{};                                                  // 64 bytes padding -> Total: 256 bytes
+        glm::vec4 ContactParams{ 16.0f, 16.0f, 1.0f, 0.05f };                     // 16 bytes: (max dist px, steps, strength, thickness)
+        glm::vec4 Reserved[16]{};                                                 // 256 bytes padding -> Total: 512 bytes
     };
-    static_assert(sizeof(RHIGTAOConstants) == 256, "RHIGTAOConstants must be 256 bytes aligned!");
+    static_assert(sizeof(RHIGTAOConstants) == 512, "RHIGTAOConstants must be 512 bytes aligned!");
 
     // 256-byte CBV aligned constants for SSR & Reflection Probes pass
     struct alignas(256) RHISSRConstants {

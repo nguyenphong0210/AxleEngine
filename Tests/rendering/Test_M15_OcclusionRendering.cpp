@@ -892,7 +892,8 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
         RENDER_CHECK(materialSet && visibilitySet && defaultProbeSRV &&
             pool.UpdateTextureRange(materialSet, 0, 0, textures) &&
             pool.UpdateTextureRange(visibilitySet, 0, 0, {visibility.GetSRV(), guide.GetSRV()}) &&
-            pool.UpdateTextureRange(visibilitySet, 1, 0, {defaultProbeSRV, defaultProbeSRV, defaultProbeSRV, defaultProbeSRV}),
+            pool.UpdateTextureRange(visibilitySet, 1, 0, {defaultProbeSRV, defaultProbeSRV, defaultProbeSRV, defaultProbeSRV}) &&
+            pool.UpdateTexture(visibilitySet, 2, 0, renderer.GetAreaLightLTC().GetSRV()),
             "forward synthetic descriptors");
         RHIDescriptorPool graphPool;
         std::vector<nri::DescriptorSet*> graphSets;
@@ -927,6 +928,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
                         else if (space == 4 && slot == 0) descriptor = visibility.GetSRV();
                         else if (space == 4 && slot == 1) descriptor = guide.GetSRV();
                         else if (space == 4 && slot >= 2 && slot < 6) descriptor = defaultProbeSRV;
+                        else if (space == 4 && slot == 6) descriptor = renderer.GetAreaLightLTC().GetSRV();
                     } else if (range.descriptorType == nri::DescriptorType::SAMPLER) {
                         descriptor = slot == 1 ? graphShadowSampler.GetNative() : renderer.GetSampler().GetNative();
                     }

@@ -509,6 +509,7 @@ namespace Axle {
                                     if (!descriptor && address.RegisterSpace == 4) {
                                         if (address.RegisterIndex == 0) descriptor=useGTAO?viewTargets->GetGTAOResolved()->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                                         else if (address.RegisterIndex == 1) descriptor=useGTAO?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
+                                        else if (address.RegisterIndex == 6) descriptor=m_AreaLightLTC.GetSRV();
                                         else if (address.RegisterIndex >= 2 && address.RegisterIndex < 2u + MaxActiveReflectionProbes) {
                                             const uint32_t probeIdx = address.RegisterIndex - 2u;
                                             const auto& probeTex = m_ActiveReflectionProbePrefilters[probeIdx];

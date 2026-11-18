@@ -23,7 +23,7 @@ namespace Axle {
             static constexpr std::string_view space4Names[]{
                 "u_ForwardOcclusion", "u_ForwardOcclusionDepth",
                 "u_ReflectionProbeCube0", "u_ReflectionProbeCube1",
-                "u_ReflectionProbeCube2", "u_ReflectionProbeCube3"
+                "u_ReflectionProbeCube2", "u_ReflectionProbeCube3", "u_AreaLightLTC"
             };
             return resource.BindPoint < std::size(space4Names) && resource.Name == space4Names[resource.BindPoint];
         }

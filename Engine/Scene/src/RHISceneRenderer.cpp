@@ -54,6 +54,33 @@ namespace Axle {
     using namespace Axle::RHI;
     static constexpr uint32_t ForwardTextureCount=static_cast<uint32_t>(RHITextureSlot::Count)+7;
 
+    static bool InitAreaLightLTC(RHIDevice& device, RHITexture& texture) {
+        using namespace AreaLightLTCContract;
+        RHITextureDesc desc;
+        desc.Width = kTableDim;
+        desc.Height = 2 * kTableDim;
+        desc.Format = RHITextureFormat::RGBA32_FLOAT;
+        desc.Usage = RHITextureUsage::ShaderResource | RHITextureUsage::CopyDest;
+        desc.DebugName = "AreaLightLTC";
+        if (!texture.Init(desc)) return false;
+
+        // Upload the same fitted values used by the CPU reference, stacked in row-major order.
+        static_assert(sizeof(glm::vec4) == 4 * sizeof(float));
+        static_assert(offsetof(LTCTables, LTC2) == kTableSize * sizeof(glm::vec4));
+        const auto tables = BuildValidatedLTCTables();
+        nri::TextureSubresourceUploadDesc data{};
+        data.slices = &tables;
+        data.sliceNum = 1;
+        data.rowPitch = desc.Width * sizeof(glm::vec4);
+        data.slicePitch = desc.Height * data.rowPitch;
+        nri::TextureUploadDesc upload{};
+        upload.texture = texture.GetNative();
+        upload.subresources = &data;
+        upload.planes = nri::PlaneBits::COLOR;
+        upload.after = {nri::AccessBits::SHADER_RESOURCE, nri::Layout::SHADER_RESOURCE, nri::StageBits::FRAGMENT_SHADER};
+        return device.UploadData(&upload, 1, nullptr, 0) == nri::Result::SUCCESS;
+    }
+
     static std::filesystem::path FindShaderPath(const std::string& shaderFileName) {
         // 1. Try Asset Path resolution
         auto path = FileSystem::ResolveAssetPath("shaders/" + shaderFileName);
@@ -215,6 +242,8 @@ namespace Axle {
         auto neutralOcclusion = RHIMaterial::GetDefaultWhiteTexture();
         auto defaultProbePrefilter = RHIMaterial::GetDefaultPrefilterCubemap();
         if (!m_ForwardOcclusionDescriptorSet || !neutralOcclusion || !defaultProbePrefilter ||
+            !InitAreaLightLTC(device, m_AreaLightLTC) ||
+            !m_DescriptorPool.UpdateTexture(m_ForwardOcclusionDescriptorSet, 2, 0, m_AreaLightLTC.GetSRV()) ||
             !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 0, 0,
                 {neutralOcclusion->GetSRV(), neutralOcclusion->GetSRV()}) ||
             !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 1, 0,
@@ -899,6 +928,7 @@ namespace Axle {
         m_MaterialTextures.Clear();
         m_DefaultDescriptorSet = nullptr;
         m_ForwardOcclusionDescriptorSet = nullptr;
+        m_AreaLightLTC.Shutdown();
         m_IrradianceMap = nullptr;
         m_PrefilterMap = nullptr;
         m_BRDFLUT = nullptr;
@@ -1081,7 +1111,7 @@ namespace Axle {
         samplers[3].desc=RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge).ToNRIDesc();
         samplers[3].shaderStages=nri::StageBits::FRAGMENT_SHADER;
 
-        nri::DescriptorRangeDesc occlusionAndProbeRanges[2]{};
+        nri::DescriptorRangeDesc occlusionAndProbeRanges[3]{};
         occlusionAndProbeRanges[0].baseRegisterIndex = 0;
         occlusionAndProbeRanges[0].descriptorNum = 2;
         occlusionAndProbeRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
@@ -1093,13 +1123,18 @@ namespace Axle {
         occlusionAndProbeRanges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         occlusionAndProbeRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
+        occlusionAndProbeRanges[2].baseRegisterIndex = 6; // u_AreaLightLTC
+        occlusionAndProbeRanges[2].descriptorNum = 1;
+        occlusionAndProbeRanges[2].descriptorType = nri::DescriptorType::TEXTURE;
+        occlusionAndProbeRanges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
         nri::DescriptorSetDesc descriptorSets[2]{};
         descriptorSets[0].registerSpace = 1;
         descriptorSets[0].ranges = ranges;
         descriptorSets[0].rangeNum = 1;
         descriptorSets[1].registerSpace = 4;
         descriptorSets[1].ranges = occlusionAndProbeRanges;
-        descriptorSets[1].rangeNum = 2;
+        descriptorSets[1].rangeNum = 3;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;

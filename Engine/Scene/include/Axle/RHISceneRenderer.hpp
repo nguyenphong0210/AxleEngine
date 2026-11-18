@@ -383,6 +383,7 @@ namespace Axle {
         const RHICascadedShadows& GetCascadedShadows() const { return m_CascadedShadows; }
         RHICascadedShadows& GetCascadedShadows() { return m_CascadedShadows; }
         const RHI::RHIBuffer& GetReflectionProbeBuffer() const { return m_ReflectionProbeBuffer; }
+        const RHI::RHITexture& GetAreaLightLTC() const { return m_AreaLightLTC; }
         bool WasLastRenderSuccessful() const { return m_LastRenderSucceeded; }
         RHI::RHICompletionToken GetLastCompletion() const { return m_LastCompletion; }
         const ViewContext& GetMainViewContext() const { return m_ViewContext; }
@@ -761,6 +762,7 @@ namespace Axle {
         RHI::RHIDescriptorPool m_DescriptorPool;
         nri::DescriptorSet* m_DefaultDescriptorSet = nullptr;
         nri::DescriptorSet* m_ForwardOcclusionDescriptorSet = nullptr;
+        RHI::RHITexture m_AreaLightLTC;
         struct MaterialDrawResources {
             RHI::RHIBuffer Constants;
             nri::DescriptorSet* Set = nullptr;

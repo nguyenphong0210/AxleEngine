@@ -65,60 +65,36 @@ float3 ComputeMultiBounceAO(float ao, float3 albedo, float strength) {
 // LTC Rectangular & Disk Area Light Contract (M15-U5-40 .. M15-U5-45)
 // Matches Axle::AreaLightLTCContract in Engine/Renderer/src/RenderContracts.cpp.
 // =============================================================================
-#define LTC_UINT3 uint3
-#include "LTCTables.inc"
-#undef LTC_UINT3
+// The upper 64 rows hold the fitted matrices, the lower 64 their amplitudes.
+Texture2D<float4> u_AreaLightLTC : register(t6, space4);
 
-float4 EvaluateLTC1GridPoint(uint roughIdx, uint viewIdx) {
-    uint3 packed = kLTCPacked[min(viewIdx, 63u) * 64u + min(roughIdx, 63u)];
-    return float4(f16tof32(packed.x & 65535u), f16tof32(packed.x >> 16),
-                  f16tof32(packed.y & 65535u), f16tof32(packed.y >> 16));
-}
-float4 EvaluateLTC2GridPoint(uint roughIdx, uint viewIdx) {
-    uint packed = kLTCPacked[min(viewIdx, 63u) * 64u + min(roughIdx, 63u)].z;
-    return float4(f16tof32(packed & 65535u), f16tof32(packed >> 16), 0.0, 0.0);
+float4 SampleLTCTable(float roughness, float NdotV, uint firstRow) {
+    float safeR = clamp(roughness, 0.04, 1.0);
+    float safeNV = clamp(NdotV, 0.0, 1.0);
+    float u = saturate(safeR);
+    float v = saturate(sqrt(max(0.0, 1.0 - safeNV)));
+    float gx = u * 63.0;
+    float gy = v * 63.0;
+    uint ix0 = min((uint)floor(gx), 63u);
+    uint iy0 = min((uint)floor(gy), 63u);
+    uint ix1 = min(ix0 + 1u, 63u);
+    uint iy1 = min(iy0 + 1u, 63u);
+    float fx = gx - float(ix0);
+    float fy = gy - float(iy0);
+
+    float4 c00 = u_AreaLightLTC.Load(int3(ix0, firstRow + iy0, 0));
+    float4 c10 = u_AreaLightLTC.Load(int3(ix1, firstRow + iy0, 0));
+    float4 c01 = u_AreaLightLTC.Load(int3(ix0, firstRow + iy1, 0));
+    float4 c11 = u_AreaLightLTC.Load(int3(ix1, firstRow + iy1, 0));
+    return lerp(lerp(c00, c10, fx), lerp(c01, c11, fx), fy);
 }
 
 float4 SampleLTC1(float roughness, float NdotV) {
-    float safeR = clamp(roughness, 0.04, 1.0);
-    float safeNV = clamp(NdotV, 0.0, 1.0);
-    float u = saturate(safeR);
-    float v = saturate(sqrt(max(0.0, 1.0 - safeNV)));
-    float gx = u * 63.0;
-    float gy = v * 63.0;
-    uint ix0 = min((uint)floor(gx), 63u);
-    uint iy0 = min((uint)floor(gy), 63u);
-    uint ix1 = min(ix0 + 1u, 63u);
-    uint iy1 = min(iy0 + 1u, 63u);
-    float fx = gx - float(ix0);
-    float fy = gy - float(iy0);
-
-    float4 c00 = EvaluateLTC1GridPoint(ix0, iy0);
-    float4 c10 = EvaluateLTC1GridPoint(ix1, iy0);
-    float4 c01 = EvaluateLTC1GridPoint(ix0, iy1);
-    float4 c11 = EvaluateLTC1GridPoint(ix1, iy1);
-    return lerp(lerp(c00, c10, fx), lerp(c01, c11, fx), fy);
+    return SampleLTCTable(roughness, NdotV, 0);
 }
 
 float4 SampleLTC2(float roughness, float NdotV) {
-    float safeR = clamp(roughness, 0.04, 1.0);
-    float safeNV = clamp(NdotV, 0.0, 1.0);
-    float u = saturate(safeR);
-    float v = saturate(sqrt(max(0.0, 1.0 - safeNV)));
-    float gx = u * 63.0;
-    float gy = v * 63.0;
-    uint ix0 = min((uint)floor(gx), 63u);
-    uint iy0 = min((uint)floor(gy), 63u);
-    uint ix1 = min(ix0 + 1u, 63u);
-    uint iy1 = min(iy0 + 1u, 63u);
-    float fx = gx - float(ix0);
-    float fy = gy - float(iy0);
-
-    float4 c00 = EvaluateLTC2GridPoint(ix0, iy0);
-    float4 c10 = EvaluateLTC2GridPoint(ix1, iy0);
-    float4 c01 = EvaluateLTC2GridPoint(ix0, iy1);
-    float4 c11 = EvaluateLTC2GridPoint(ix1, iy1);
-    return lerp(lerp(c00, c10, fx), lerp(c01, c11, fx), fy);
+    return SampleLTCTable(roughness, NdotV, 64);
 }
 
 float3 LTC_IntegrateEdgeVec(float3 v1, float3 v2) {

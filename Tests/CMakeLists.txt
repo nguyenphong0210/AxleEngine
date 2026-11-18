@@ -531,6 +531,8 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
       AXLE_CUBEMAP_CAPTURE_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/CubemapCapture.hlsl"
       AXLE_CUBEMAP_PREFILTER_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/CubemapPrefilter.hlsl"
       AXLE_SSR_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/SSR.hlsl"
+      AXLE_PLANAR_REFLECTION_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/PlanarReflection.hlsl"
+      AXLE_PLANAR_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/PlanarReflectionPass.cpp"
       AXLE_REFLECTION_PROBE_COMMON_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/ReflectionProbeCommon.hlsli"
       AXLE_PBR_COMMON_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/PBRCommon.hlsli"
       AXLE_SCENE_PASSES_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RHISceneRendererPasses.cpp"

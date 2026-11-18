@@ -115,6 +115,7 @@ private:
     bool m_ShowPhysicsDebug = false;
     // Advanced Post-Processing & Lighting Features (Group 1)
     bool m_EnableSSR = true;
+    bool m_EnablePlanarReflections = true;
     bool m_EnableGTAO = true;
     bool m_EnableBloom = true;
     bool m_EnableContactShadows = true;

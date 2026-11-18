@@ -54,6 +54,85 @@ namespace Axle {
         }
     };
 
+    enum class PlanarCaptureLifecycleState : uint8_t {
+        Idle = 0,
+        Ready,
+        Stale,
+        Failed
+    };
+
+    struct PlanarReflectionDomainStamps {
+        uint64_t PlaneStamp = 0;
+        uint64_t CameraStamp = 0;
+        uint64_t GeometryStamp = 0;
+        uint64_t MaterialStamp = 0;
+        uint64_t LightingStamp = 0;
+        uint64_t AssetStamp = 0;
+        uint64_t SettingsStamp = 0;
+        uint64_t SceneRevision = 0;
+        uint64_t SceneInstanceID = 0;
+        uint64_t SceneLifetimeEpoch = 0;
+        uint64_t DeviceEpoch = 0;
+        uint32_t TargetWidth = 0;
+        uint32_t TargetHeight = 0;
+        uint64_t CombinedStamp = 0;
+
+        bool operator==(const PlanarReflectionDomainStamps&) const = default;
+    };
+
+    struct PlanarReflectionInvalidation {
+        bool PlaneChanged = false;
+        bool CameraChanged = false;
+        bool SceneRevisionChanged = false;
+        bool GeometryChanged = false;
+        bool MaterialChanged = false;
+        bool LightingChanged = false;
+        bool AssetChanged = false;
+        bool SettingsChanged = false;
+        bool TargetExtentChanged = false;
+        bool DeviceEpochChanged = false;
+        bool ManualRequested = false;
+
+        bool AnyChange() const {
+            return PlaneChanged || CameraChanged || SceneRevisionChanged || GeometryChanged ||
+                   MaterialChanged || LightingChanged || AssetChanged || SettingsChanged ||
+                   TargetExtentChanged || DeviceEpochChanged || ManualRequested;
+        }
+    };
+
+    struct PlanarReflectionCaptureStatus {
+        std::string ReflectorKey;
+        uint64_t EntityID = 0;
+        UUID StableUUID = 0;
+        PlanarReflectionCaptureMode CaptureMode = PlanarReflectionCaptureMode::Automatic;
+        PlanarCaptureLifecycleState State = PlanarCaptureLifecycleState::Idle;
+        bool HasCapture = false;
+        bool Stale = false;
+        bool Failed = false;
+        bool ManualRefreshRequired = false;
+        bool PreservedPreviousGeneration = false;
+        bool ObliqueClippingApplied = false;
+        bool ReverseWindingApplied = false;
+        uint64_t ActiveGenerationID = 0;
+        uint64_t ActiveInputStamp = 0;
+        uint64_t TargetInputStamp = 0;
+        uint32_t TargetWidth = 0;
+        uint32_t TargetHeight = 0;
+        PlanarReflectionInvalidation PendingInvalidation{};
+        std::string LastDiagnostic;
+    };
+
+    struct PlanarReflectionCacheStats {
+        uint32_t ActiveEntries = 0;
+        uint32_t StaleEntries = 0;
+        uint32_t FailedEntries = 0;
+        uint64_t CurrentGenerationID = 0;
+        uint64_t SuccessfulCaptures = 0;
+        uint64_t CacheHits = 0;
+        uint64_t InvalidatedCaptures = 0;
+        uint64_t FailedCaptures = 0;
+    };
+
     struct DynamicReflectionProbeStatus {
         std::string ProbeKey;
         uint64_t EntityID = 0;

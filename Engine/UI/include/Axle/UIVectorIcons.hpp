@@ -317,6 +317,21 @@ namespace Axle::UIIcons {
         dl->AddLine(ImVec2(lineX0, pos.y + size * 0.74f), ImVec2(lineX0 + size * 0.30f, pos.y + size * 0.74f), lineCol, 1.1f);
     }
 
+    inline void DrawReflectionPlaneIcon(ImDrawList* dl, ImVec2 pos, float size) {
+        ImU32 frameCol = IM_COL32(85, 200, 235, 255);
+        ImU32 fillCol = IM_COL32(85, 200, 235, 70);
+        ImVec2 pts[4] = {
+            ImVec2(pos.x + size * 0.14f, pos.y + size * 0.62f),
+            ImVec2(pos.x + size * 0.44f, pos.y + size * 0.34f),
+            ImVec2(pos.x + size * 0.88f, pos.y + size * 0.34f),
+            ImVec2(pos.x + size * 0.58f, pos.y + size * 0.62f)
+        };
+        dl->AddQuadFilled(pts[0], pts[1], pts[2], pts[3], fillCol);
+        dl->AddPolyline(pts, 4, frameCol, ImDrawFlags_Closed, 1.3f);
+        ImVec2 rayBase(pos.x + size * 0.51f, pos.y + size * 0.48f);
+        dl->AddLine(rayBase, ImVec2(pos.x + size * 0.51f, pos.y + size * 0.14f), frameCol, 1.2f);
+    }
+
     inline void DrawDefaultEntityIcon(ImDrawList* dl, ImVec2 pos, float size) {
         ImU32 col = IM_COL32(165, 175, 185, 240);
         // Modern Unity GameObject minimalist diamond ring
@@ -343,6 +358,8 @@ namespace Axle::UIIcons {
             DrawCameraIcon(dl, pos, size);
         } else if (entity.HasComponent<DirectionalLightComponent>() || entity.HasComponent<PointLightComponent>() || entity.HasComponent<SpotLightComponent>() || entity.HasComponent<RectLightComponent>()) {
             DrawLightIcon(dl, pos, size);
+        } else if (entity.HasComponent<PlanarReflectionComponent>()) {
+            DrawReflectionPlaneIcon(dl, pos, size);
         } else if (entity.HasComponent<UICanvasComponent>()) {
             DrawUIIcon(dl, pos, size);
         } else if (entity.HasComponent<AudioSourceComponent>()) {
@@ -370,6 +387,8 @@ namespace Axle::UIIcons {
             DrawCameraIcon(dl, pos, size);
         } else if (name.find("Light") != std::string::npos) {
             DrawLightIcon(dl, pos, size);
+        } else if (name.find("Planar") != std::string::npos || name.find("Reflection") != std::string::npos) {
+            DrawReflectionPlaneIcon(dl, pos, size);
         } else if (name.find("Mesh") != std::string::npos) {
             DrawMeshIcon(dl, pos, size);
         } else if (name.find("Audio") != std::string::npos) {

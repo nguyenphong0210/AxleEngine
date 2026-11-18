@@ -1069,32 +1069,35 @@ Codex review covers the delivery named **U5-F** (`21a3e25e`, U5-32.1..39.6), inc
 
 Planar reflection is the deterministic raster path for a selected reflective plane. It uses a separate capture ViewContext and target generation so the main view history, camera jitter and scheduler state are never re-entered recursively.
 
-- [ ] **M15-U5-46.1 — Freeze planar surface contract.**
+- [x] **M15-U5-46.1 — Freeze planar surface contract.**
   - **PASS when:** the plane transform, normal, clip distance, source view and reflection confidence are represented explicitly and use the canonical surface units.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path.
-- [ ] **M15-U5-46.2 — Create independent mirrored capture ViewContext.**
+  - **Evidence:** Implemented in H1 (`bb20102b`) + H2 (`RenderContracts.hpp`/`.cpp`, `RHISceneRenderer.hpp`/`.cpp`, `PlanarReflection.hlsl`); Debug/Release `AxleRenderUnitTests --m15-reflection-capture-contract` & `M15ReflectionCaptureContract` CTest PASS. See [S5.8 Review](../../reviews/M15_U5_H_REVIEW.md).
+- [x] **M15-U5-46.2 — Create independent mirrored capture ViewContext.**
   - **PASS when:** the mirrored camera is derived from the plane, recursion is disabled, and capture state cannot mutate the parent view history.
-  - **Evidence:** record source commit and a focused capture-context test.
-- [ ] **M15-U5-46.3 — Allocate planar color/depth targets and graph edges.**
+  - **Evidence:** Implemented in H1 (`bb20102b`) (`m_PlanarViewContext`, `FilterCaptureWorld`, `BuildMirroredCamera`, recursion guard) + H2 (`SchedulePlanarReflectionCaptures` before `viewCtx.BeginFrame()`); isolated `FrameIndex`/TAA verification PASS on Debug/Release native D3D12 & Vulkan (`AxleEnvironmentRenderingTests`). See [S5.8 Review](../../reviews/M15_U5_H_REVIEW.md).
+- [x] **M15-U5-46.3 — Allocate planar color/depth targets and graph edges.**
   - **PASS when:** resize, format, lifetime and completion dependencies are declared through RenderGraph/RHIViewTargets.
-  - **Evidence:** record graph validation, resize and device-reset results.
-- [ ] **M15-U5-46.4 — Register a dedicated PlanarReflectionPass.**
+  - **Evidence:** Implemented in H1 (`bb20102b`) (`PlanarColor` RGBA16F + `PlanarDepth` D32F in `RHIViewTargets`, resize/scale `[0.25, 1.0]`) + H2 policy parity across `RenderService`, `RHIViewportDescriptor`, `RHISceneRenderer`; Vulkan `targets` & D3D12/Vulkan `storage` `AxleRHIResourceViewTests` PASS Debug/Release (`dx12 targets` blocked post-display-sleep by 3-adapter `HasOutput() == false` in NRI; passed earlier at `15:29:36` when 4 adapters were active). See [S5.8 Review](../../reviews/M15_U5_H_REVIEW.md).
+- [x] **M15-U5-46.4 — Register a dedicated PlanarReflectionPass.**
   - **PASS when:** capture, resolve and release are scheduled as explicit passes without callback recursion or hidden resource reads.
-  - **Evidence:** record pass registration and scheduler execution logs.
+  - **Evidence:** Implemented in H2 (`Engine/Scene/src/Passes/PlanarReflectionPass.hpp`/`.cpp`, `RHISceneRendererPasses.cpp`) declaring explicit `PlanarCopy` (when SSR copy inactive), `PlanarResolve`, and `PlanarRelease` (`{"PlanarResolve"}`) DAG edges; verified via CPU contract inspection and Debug/Release D3D12 & Vulkan `AxleEnvironmentRenderingTests` PASS with zero RHI validation errors. See [S5.8 Review](../../reviews/M15_U5_H_REVIEW.md).
 - [ ] **M15-U5-46.5 — Resolve planar energy and fallback.**
   - **PASS when:** planar confidence is blended once with SSR, local probe and sky IBL according to the shared reflection energy policy.
   - **EDITOR VISUAL:** capture a fixed view with planar reflection enabled and disabled; no black edge or duplicate highlight is allowed.
-- [ ] **M15-U5-46.6 — Validate oblique clipping, edges and self-intersection.**
-  - **PASS when:** the reflected plane excludes geometry behind the mirror, clips at the declared extent and avoids self-reflection artifacts.
-  - **Evidence:** record edge, grazing-angle and self-intersection fixtures.
-- [ ] **M15-U5-46.7 — Validate invalidation and failure retention.**
+  - **Evidence:** **Automated PASS (awaiting independent Codex review).** Implemented unified convex `Planar -> SSR -> LocalProbe -> SkyIBL` resolve via `PlanarReflection.hlsl` + `AlphaBlend` (`baseLit = OpaqueColor - Environment`); verified on Debug/Release D3D12 & Vulkan (`Mirror ON RGBA8=(0, 0.996078, 0)` vs OFF fallback, combined SSR+Planar, and `MaxRoughness` fallback to SSR and SkyIBL). **EDITOR VISUAL: NOT RUN (user-deferred to consolidated post-U5 visual pass).** See [S5.8 Review](../../reviews/M15_U5_H_REVIEW.md).
+- [x] **M15-U5-46.6 — Validate oblique clipping, edges and self-intersection.**
+  - **PASS when:** the reflected plane excludes geometry behind the mirror, clips at the declared extent and avoids self-intersection artifacts.
+  - **Evidence:** Implemented in H1 (`bb20102b`) + H2 (`BuildObliqueClipProjectionZO`, `ReverseWinding` pipeline winding inversion across built-in/normal/custom pipelines, `ExcludeEntityID`, quad extent fade & `PlanarReflection.hlsl` plane/extent gates); native D3D12 & Vulkan GPU checks PASS (`[M15PlanarGPU] Center RGBA16=(0, 8, 0)` with red self-mirror excluded & blue behind-plane cube clipped). See [S5.8 Review](../../reviews/M15_U5_H_REVIEW.md).
+- [x] **M15-U5-46.7 — Validate invalidation and failure retention.**
   - **PASS when:** plane/camera/scene/material/light changes invalidate the capture and a failed update retains last-good data or an explicit fallback.
-  - **Evidence:** record generation and failure-path tests.
+  - **Evidence:** Implemented in H2 (`ComputePlanarCaptureDomainStamps`, `SchedulePlanarReflectionCaptures` scratch capture + `PublishPlanarScratchCopy` commit, `Automatic` vs `Manual` modes, `RequestPlanarReflectionCapture`, `InvalidatePlanarReflection`); verified on Debug/Release D3D12 & Vulkan for cache hit reuse, material/revision invalidation, `Manual` Idle/Ready/Stale/Refresh lifecycle, and `ScopedRHIFault("PlanarPublishCopy")` last-good pixel retention and clean recovery. See [S5.8 Review](../../reviews/M15_U5_H_REVIEW.md).
 - [ ] **M15-U5-46.8 — Complete Editor and native evidence.**
   - **PASS when:** Debug/Release Editor evidence and deterministic image/readback comparison agree with the native fixture.
   - **EDITOR VISUAL:** show the same camera with planar reflection on and off and the relevant Rendering Features policy visible.
+  - **Evidence:** **Automated PASS on Vulkan Editor + Assembly UI + native D3D12/Vulkan (DX12 SwapChain environment-blocked by 3-adapter `HasOutput() == false`; awaiting independent Codex review).** Wired `EntityInspector`, `SceneHierarchyPanel`, `UIVectorIcons`, `AssemblyEditorPanel`, and `EditorLayer` (`m_EnablePlanarReflections`); Debug/Release `PluginSessionTests` (Assembly Editor preview/edit/save/remove round-trip), native D3D12/Vulkan `AxleEnvironmentRenderingTests`, and Debug/Release Vulkan strict Editor startup (`--verify-empty-startup`, `U4E.axleproj`) PASS (`fallback=none`); DX12 strict Editor SwapChain blocked in unattended display-sleep 3-adapter state. **EDITOR VISUAL: NOT RUN (user-deferred to consolidated post-U5 visual pass).** See [S5.8 Review](../../reviews/M15_U5_H_REVIEW.md).
 
 **Exit:** a planar mirror produces stable, clipped reflection with explicit SSR/probe/IBL fallback and no recursive capture.
+  - **Automated status:** S5.8 implemented in two sequential commits (**H1** `bb20102b` + **H2** pending independent Codex review). On H2 final state, all CPU/CTest (`9/9` Debug & Release), `PluginSessionTests`, `Bake`, DX12/Vulkan `storage` & Vulkan `targets`, Vulkan strict Editor startup (`4/4`), and native DX12/Vulkan GPU `AxleEnvironmentRenderingTests` (`4/4`) checks PASS (`28/34` total matrix; the 6 DX12 SwapChain runs are blocked in current unattended 3-adapter `HasOutput() == false` display state, with `dbg_rv_dx12_targets` observed passing at `15:29:36` when 4 adapters were attached). Interactive Editor visual gates `46.5` and `46.8` remain user-deferred. See [S5.8 Review](../../reviews/M15_U5_H_REVIEW.md).
 
 ### U6 / S6.1–S6.3 — Volumetric fog and atmosphere
 

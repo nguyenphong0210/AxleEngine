@@ -39,6 +39,7 @@
 
 #include <memory>
 #include <array>
+#include <optional>
 #include <string>
 #include <glm/glm.hpp>
 
@@ -48,6 +49,7 @@ namespace Axle {
         class GTAOPass;
         class HiZGenerationPass;
         class ScreenSpaceReflectionPass;
+        class PlanarReflectionPass;
         class FroxelFogPass;
         class PostProcessPass;
         struct ReflectionCaptureTargets;
@@ -136,6 +138,22 @@ namespace Axle {
         RHIGPUReflectionProbe Probes[MaxActiveReflectionProbes]{};
     };
     static_assert(sizeof(RHIReflectionProbeBufferData) == 512, "RHIReflectionProbeBufferData must be 512 bytes aligned!");
+
+    // 256-byte CBV aligned constants for Planar Reflection unified resolve pass
+    struct alignas(256) RHIPlanarReflectionConstants {
+        glm::mat4 View{ 1.0f };                                        // 64 bytes
+        glm::mat4 InvView{ 1.0f };                                     // 64 bytes
+        glm::mat4 InvProjection{ 1.0f };                               // 64 bytes
+        glm::mat4 ReflectedViewProj{ 1.0f };                           // 64 bytes
+        glm::vec4 PlaneWorld{ 0.0f, 1.0f, 0.0f, 0.0f };                // 16 bytes
+        glm::vec4 PlaneOriginExtent{ 0.0f, 0.0f, 0.0f, 5.0f };         // 16 bytes
+        glm::vec4 PlaneTangentExtent{ 1.0f, 0.0f, 0.0f, 5.0f };        // 16 bytes
+        glm::vec4 PlaneBitangentFade{ 0.0f, 0.0f, 1.0f, 0.15f };       // 16 bytes
+        glm::vec4 PlanarParams{ 1.0f, 0.45f, 0.02f, 1.0f };            // 16 bytes
+        glm::vec4 PlanarScreenSize{ 1280.0f, 720.0f, 640.0f, 360.0f }; // 16 bytes
+        glm::vec4 Padding[10]{};                                       // 160 bytes -> 512 bytes total
+    };
+    static_assert(sizeof(RHIPlanarReflectionConstants) == 512, "RHIPlanarReflectionConstants must be 512 bytes aligned!");
 
     // 256-byte CBV aligned constants for one Hi-Z depth reduction level.
     struct alignas(256) RHIHiZConstants {
@@ -277,6 +295,7 @@ namespace Axle {
         friend class Passes::GTAOPass;
         friend class Passes::HiZGenerationPass;
         friend class Passes::ScreenSpaceReflectionPass;
+        friend class Passes::PlanarReflectionPass;
         friend class Passes::FroxelFogPass;
         friend class Passes::PostProcessPass;
         friend class Passes::ReflectionCapturePass;
@@ -448,6 +467,26 @@ namespace Axle {
             RHI::RHIViewTargets& viewTargets,
             const SceneRenderSettings& settings = SceneRenderSettings{},
             const PlanarReflectionContract::PlanarReflectionPolicy* policyOverride = nullptr);
+        static std::string ResolvePlanarReflectorKey(const RenderPlanarReflector& reflector);
+        static std::string ResolvePlanarReflectorKey(uint64_t entityID, UUID stableUUID = 0);
+        void RequestPlanarReflectionCapture(const std::string& reflectorKey);
+        void RequestPlanarReflectionCapture(uint64_t entityID, UUID stableUUID = 0);
+        void RequestPlanarReflectionCapture(const RenderPlanarReflector& reflector);
+        void InvalidatePlanarReflection(const std::string& reflectorKey, const std::string& reason = "manual_invalidation");
+        void InvalidatePlanarReflection(uint64_t entityID, UUID stableUUID = 0, const std::string& reason = "manual_invalidation");
+        void InvalidatePlanarReflection(const RenderPlanarReflector& reflector, const std::string& reason = "manual_invalidation");
+        std::optional<PlanarReflectionCaptureStatus> GetPlanarReflectionStatus(const std::string& reflectorKey) const;
+        std::optional<PlanarReflectionCaptureStatus> GetPlanarReflectionStatus(uint64_t entityID, UUID stableUUID = 0) const;
+        std::optional<PlanarReflectionCaptureStatus> GetPlanarReflectionStatus(const RenderPlanarReflector& reflector) const;
+        PlanarReflectionCacheStats GetPlanarReflectionCacheStats() const;
+        void ClearPlanarReflectionCaptures();
+        PlanarReflectionDomainStamps ComputePlanarCaptureDomainStamps(
+            const RenderWorld& world,
+            const PerspectiveCamera& mainCamera,
+            const RenderPlanarReflector& reflector,
+            uint32_t targetWidth,
+            uint32_t targetHeight,
+            const SceneRenderSettings& settings) const;
 
         // Procedural Atmospheric Skybox pass configuration
         void SetSkyboxParameters(const SkyboxComponent& skybox) { m_SkyboxParams = skybox; }
@@ -665,6 +704,18 @@ namespace Axle {
         bool CreateSSRPipelineLayout(RHI::RHIDevice& device);
         bool CreateSSRPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateSSRApplyPipeline(nri::Format colorFormat);
+
+        bool CompilePlanarShaders(RHI::RHIDevice& device);
+        bool CreatePlanarPipelineLayout(RHI::RHIDevice& device);
+        bool CreatePlanarPipeline(RHI::RHIDevice& device);
+        nri::Pipeline* GetOrCreatePlanarApplyPipeline(nri::Format colorFormat);
+        bool SynchronizePlanarCaptureCacheState(const RenderWorld& world);
+        bool PublishPlanarScratchCopy(RHI::RHITexture& srcColor, RHI::RHITexture& dstColor, std::string* outDiagnostic);
+        void SchedulePlanarReflectionCaptures(
+            const RenderWorld& world,
+            const PerspectiveCamera& mainCamera,
+            const SceneRenderSettings& requestedSettings,
+            RHI::RHIViewTargets* viewTargets);
 
         bool CompileHiZShaders(RHI::RHIDevice& device);
         bool CreateHiZPipelineLayout(RHI::RHIDevice& device);
@@ -946,6 +997,54 @@ namespace Axle {
         bool m_CaptureInProgress = false;
         std::vector<RHI::RHIResourceHandle> m_DynamicCaptureTextures;
         DynamicReflectionCaptureResult m_LastDynamicCaptureResult;
+
+        // Planar Reflection Resolve & Transactional Capture Cache Resources (M15-U5-46)
+        RHI::RHIPipelineLayout m_PlanarApplyPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_PlanarApplyPipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_PlanarApplyPipelineHDR;
+        RHI::RHIShaderBytecode m_PlanarApplyVertexShader;
+        RHI::RHIShaderBytecode m_PlanarApplyPixelShader;
+        RHI::RHISampler m_PlanarSampler;
+        RHI::RHIDescriptorPool m_PlanarDescriptorPool;
+        nri::DescriptorSet* m_PlanarApplyDescriptorSet = nullptr;
+
+        struct PublishedPlanarEntry {
+            std::string ReflectorKey;
+            uint64_t EntityID = 0;
+            UUID StableUUID = 0;
+            uint64_t GenerationID = 0;
+            uint64_t SceneInstanceID = 0;
+            uint64_t SceneLifetimeEpoch = 0;
+            uint64_t DeviceEpoch = 0;
+            RHI::RHIResourceHandle PublishedColorHandle{};
+            uint32_t TargetWidth = 0;
+            uint32_t TargetHeight = 0;
+            PlanarReflectionDomainStamps DomainStamps{};
+            RenderPlanarReflector Reflector{};
+            PerspectiveCamera MirroredCamera;
+            glm::mat4 ReflectedViewProj{ 1.0f };
+            bool ObliqueClippingApplied = false;
+            bool ReverseWindingApplied = false;
+        };
+        struct ActivePlanarResolveState {
+            bool ValidForResolve = false;
+            std::string ReflectorKey;
+            RenderPlanarReflector Reflector{};
+            glm::mat4 ReflectedViewProj{ 1.0f };
+            RHI::RHIResourceHandle PublishedColorHandle{};
+        };
+        std::unordered_map<std::string, PublishedPlanarEntry> m_PublishedPlanarCaptures;
+        std::unordered_map<std::string, PlanarReflectionCaptureStatus> m_PlanarStatuses;
+        std::unordered_map<std::string, bool> m_RequestedManualPlanarCaptures;
+        std::unordered_map<std::string, std::string> m_ForcedInvalidatedPlanar;
+        std::unordered_map<std::string, uint64_t> m_FailedPlanarCaptureRevisions;
+        RHI::RHITexture m_PlanarPublishScratchColor;
+        RHI::RHITexture m_PlanarPublishScratchDepth;
+        uint64_t m_NextPlanarGenerationID = 1;
+        uint64_t m_ActivePlanarSceneInstanceID = 0;
+        uint64_t m_ActivePlanarSceneLifetimeEpoch = 0;
+        PlanarReflectionCacheStats m_PlanarCacheStats{};
+        ActivePlanarResolveState m_ActivePlanarResolve{};
 
         // Volumetric Fog & Atmospheric Media Resources
         RHI::RHIPipelineLayout m_FogComputePipelineLayout;

@@ -88,6 +88,8 @@ namespace Axle {
                 if (!flush()) return false;
                 node.HasRectLight = entity.HasComponent<RectLightComponent>();
                 if (node.HasRectLight) node.RectLight = entity.GetComponent<RectLightComponent>();
+                node.HasPlanarReflection = entity.HasComponent<PlanarReflectionComponent>();
+                if (node.HasPlanarReflection) node.PlanarReflection = entity.GetComponent<PlanarReflectionComponent>();
                 node.PassiveSections = std::move(sections); node.AuthoredUUID = entity.GetUUID();
             }
             for (auto& child : node.Children) if (!capture(child)) return false;
@@ -194,6 +196,9 @@ namespace Axle {
 
                 if (node.HasRectLight) {
                     ent.AddComponent<RectLightComponent>(node.RectLight);
+                }
+                if (node.HasPlanarReflection) {
+                    ent.AddComponent<PlanarReflectionComponent>(node.PlanarReflection);
                 }
 
                 if (node.HasSkeletalMesh) {

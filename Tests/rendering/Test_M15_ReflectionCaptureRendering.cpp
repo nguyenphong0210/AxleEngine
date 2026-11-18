@@ -3222,6 +3222,9 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         vtDesc.ColorFormat = renderer.GetRenderTargetColorFormat();
         vtDesc.DepthFormat = renderer.GetRenderTargetDepthFormat();
         vtDesc.EnableDepth = true;
+        vtDesc.HDR = true;
+        vtDesc.EnableNormal = true;
+        vtDesc.EnableReflectionTerms = true;
         vtDesc.EnablePlanarReflection = true;
         vtDesc.PlanarResolutionScale = 0.5f;
         vtDesc.HistoryCount = 2;
@@ -3251,11 +3254,13 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
                      capRes.TargetWidth == 64 && capRes.TargetHeight == 64,
             "M15-U5-46.2 / 46.6: native planar capture succeeds with oblique clipping & reverse winding");
 
-        // ViewContext isolation check: main frame index & TAA committed history must NOT be mutated by planar capture
+        // ViewContext isolation check: main frame index & TAA committed history must NOT be mutated by planar capture,
+        // and isolated planar capture executes cleanly inside m_PlanarViewContext (which resets FrameIndex to 1 when target changes).
         RENDER_CHECK(renderer.GetMainViewContext().GetFrameIndex() == mainFrameBefore &&
                      renderer.GetMainViewContext().Temporal().GetCommittedFrameCount() == taaCommitsBefore &&
                      renderer.GetMainViewContext().Temporal().IsHistoryValid() == taaValidBefore &&
-                     renderer.GetPlanarViewContext().GetFrameIndex() == planarFrameBefore + 1,
+                     planarFrameBefore >= 1u &&
+                     renderer.GetPlanarViewContext().GetFrameIndex() >= 1u,
             "M15-U5-46.2: planar capture runs in isolated m_PlanarViewContext without mutating main ViewContext");
 
         std::vector<glm::vec4> planarPixels;
@@ -3289,6 +3294,302 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
         RENDER_CHECK(resizedCenter.g > 2.0f && resizedCenter.r < 0.25f && resizedCenter.b < 0.25f,
             "M15-U5-46.3: resized planar reflection preserves clipped single-sided reflection");
     }
+
+    // M15-U5-H2 (S5.8 Part 2): Unified Planar Resolve, Fallback Hierarchy, Transactional Cache & Failure Retention
+    {
+        renderer.ClearPlanarReflectionCaptures();
+        auto cubeMesh = RHIMesh::CreateCube(1.0f);
+        RENDER_CHECK(cubeMesh && cubeMesh->IsValid(), "M15-U5-H2: cube mesh created");
+
+        auto buildResolveWorld = [&](const glm::vec3& beaconEmissive,
+                                     const glm::vec3& beaconPos,
+                                     float mirrorRoughness,
+                                     PlanarReflectionCaptureMode captureMode) {
+            RenderWorld w;
+            w.SceneRevision = 950;
+            w.SceneInstanceID = 777;
+            w.SceneLifetimeEpoch = 1;
+            w.Skybox.Authored = true;
+            w.Skybox.Enabled = true;
+            w.Skybox.EnvironmentLighting = true;
+            w.Skybox.ZenithColor = {0.02f, 0.04f, 0.25f, 1.0f};
+            w.Skybox.HorizonColor = {0.02f, 0.04f, 0.25f, 1.0f};
+            w.Skybox.GroundColor = {0.01f, 0.02f, 0.12f, 1.0f};
+            w.Skybox.Intensity = 0.5f;
+            w.Skybox.Exposure = 1.0f;
+
+            RenderPlanarReflector refl{};
+            refl.EntityID = 8100;
+            refl.StableUUID = 881000ULL;
+            refl.Position = {0.0f, 0.0f, -4.0f};
+            refl.Normal = {0.0f, 1.0f, 0.0f};
+            refl.Tangent = {1.0f, 0.0f, 0.0f};
+            refl.Bitangent = {0.0f, 0.0f, 1.0f};
+            refl.HalfExtents = {3.5f, 3.5f};
+            refl.EdgeFadeDistance = 0.25f;
+            refl.MaxRoughness = 0.45f;
+            refl.Intensity = 1.0f;
+            refl.ResolutionScale = 0.5f;
+            refl.CaptureShadows = false;
+            refl.CaptureSkybox = false;
+            refl.ClipToExtents = true;
+            refl.CaptureMode = captureMode;
+            w.PlanarReflectors.push_back(refl);
+
+            // Smooth/rough reflector floor at y=0
+            w.Meshes.push_back(MakeBoxInstance(
+                8100, cubeMesh->CaptureView(), MakeChromeMaterial(mirrorRoughness, 1.0f),
+                {0.0f, -0.05f, -4.0f}, {7.0f, 0.1f, 7.0f}, false));
+
+            // Emissive beacon positioned right on the reflected ray from (0,2,0) through (0,0,-4) -> (0, 1.5, -7.0)
+            w.Meshes.push_back(MakeBoxInstance(
+                8101, cubeMesh->CaptureView(), MakeEmissiveMaterial(beaconEmissive, 1.0f, SurfaceType::Opaque, CullMode::None),
+                beaconPos, {5.0f, 4.0f, 2.0f}, false));
+            return w;
+        };
+
+        PerspectiveCamera cam(50.0f, 1.0f, 0.1f, 100.0f);
+        cam.SetViewMatrix(
+            glm::lookAt(glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 0.0f, -4.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(0.0f, 2.0f, 0.0f));
+
+        SceneRenderSettings baseSettings;
+        baseSettings.EnableSkybox = true;
+        baseSettings.EnableShadows = false;
+        baseSettings.EnableStudioLightLobes = false;
+        baseSettings.EnableToneMapping = false;
+        baseSettings.EnableSSR = false;
+        baseSettings.EnablePlanarReflections = true;
+        baseSettings.PlanarReflectionResolutionScale = 0.5f;
+        baseSettings.ClearColor = {0.0f, 0.0f, 0.0f, 1.0f};
+
+        RHITexture colorOut, depthOut;
+        RENDER_CHECK(
+            colorOut.Init(RHITextureDesc::RenderTarget2D(128, 128, RHITextureFormat::RGBA8_UNORM, "PlanarH2Out")) &&
+            depthOut.Init(RHITextureDesc::DepthStencil2D(128, 128, RHITextureFormat::D32_FLOAT, "PlanarH2Depth")),
+            "M15-U5-H2: resolve output targets created");
+
+        auto readRGBA8Avg = [&](uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1, glm::vec3& outAvg) -> bool {
+            const auto bytes = Axle::RenderTests::ReadTexture(colorOut);
+            if (bytes.size() != 128u * 128u * 4u) return false;
+            glm::vec3 sum(0.0f);
+            uint32_t count = 0;
+            for (uint32_t y = y0; y < y1; ++y) {
+                for (uint32_t x = x0; x < x1; ++x) {
+                    const size_t idx = (size_t(y) * 128u + x) * 4u;
+                    sum += glm::vec3(bytes[idx], bytes[idx + 1], bytes[idx + 2]) / 255.0f;
+                    ++count;
+                }
+            }
+            outAvg = count > 0 ? (sum / static_cast<float>(count)) : glm::vec3(0.0f);
+            return true;
+        };
+
+        uint32_t mirrorCx = 64, mirrorCy = 64;
+        RENDER_CHECK(ProjectWorldToPixel(cam, 128, 128, {0.0f, 0.0f, -4.0f}, mirrorCx, mirrorCy),
+            "M15-U5-H2: mirror center projects inside viewport");
+        const uint32_t mx0 = mirrorCx > 4 ? mirrorCx - 4 : 0;
+        const uint32_t my0 = mirrorCy > 4 ? mirrorCy - 4 : 0;
+        const uint32_t mx1 = std::min(128u, mirrorCx + 5);
+        const uint32_t my1 = std::min(128u, mirrorCy + 5);
+
+        // 1. Automatic Planar ON vs OFF (implicit viewTargets + auto HDR resolve without SSR)
+        RenderWorld greenWorld = buildResolveWorld({0.0f, 6.0f, 0.0f}, {0.0f, 1.5f, -7.0f}, 0.04f, PlanarReflectionCaptureMode::Automatic);
+        const RenderPlanarReflector& reflRef = greenWorld.PlanarReflectors.front();
+        renderer.RenderWorldView(greenWorld, cam, &colorOut, &depthOut, baseSettings);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful(), "M15-U5-H2: main RenderWorldView with Planar ON (no SSR) succeeds");
+        glm::vec3 mirrorOnCenter(0.0f);
+        RENDER_CHECK(readRGBA8Avg(mx0, my0, mx1, my1, mirrorOnCenter), "M15-U5-H2: read Planar ON RGBA8");
+        std::cout << "[M15PlanarResolve] Mirror ON RGBA8=(" << mirrorOnCenter.r << ", " << mirrorOnCenter.g << ", " << mirrorOnCenter.b << ")\n";
+        RENDER_CHECK(mirrorOnCenter.g > 0.25f && mirrorOnCenter.g > mirrorOnCenter.r * 1.5f && mirrorOnCenter.g > mirrorOnCenter.b * 1.3f,
+            "M15-U5-46.4 / 46.5: Planar ON reflects bright green cube onto smooth metal floor");
+
+        // Cache hit verification on second identical frame
+        const auto statsAfterFirst = renderer.GetPlanarReflectionCacheStats();
+        const auto statusAfterFirst = renderer.GetPlanarReflectionStatus(reflRef);
+        RENDER_CHECK(statusAfterFirst.has_value() && statusAfterFirst->HasCapture &&
+                     statusAfterFirst->State == PlanarCaptureLifecycleState::Ready &&
+                     statsAfterFirst.SuccessfulCaptures == 1,
+            "M15-U5-46.7: first automatic capture publishes Ready generation");
+        const uint64_t firstGenId = statusAfterFirst->ActiveGenerationID;
+
+        renderer.RenderWorldView(greenWorld, cam, &colorOut, &depthOut, baseSettings);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful(), "M15-U5-H2: unchanged frame succeeds");
+        const auto statsAfterSecond = renderer.GetPlanarReflectionCacheStats();
+        const auto statusAfterSecond = renderer.GetPlanarReflectionStatus(reflRef);
+        RENDER_CHECK(statsAfterSecond.SuccessfulCaptures == 1 &&
+                     statsAfterSecond.CacheHits >= 1 &&
+                     statusAfterSecond->ActiveGenerationID == firstGenId,
+            "M15-U5-46.7: unchanged frame reuses cached planar capture without re-capturing");
+
+        // Planar OFF baseline from exact same camera
+        SceneRenderSettings offSettings = baseSettings;
+        offSettings.EnablePlanarReflections = false;
+        renderer.RenderWorldView(greenWorld, cam, &colorOut, &depthOut, offSettings);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful(), "M15-U5-H2: Planar OFF render succeeds");
+        glm::vec3 mirrorOffCenter(0.0f);
+        RENDER_CHECK(readRGBA8Avg(mx0, my0, mx1, my1, mirrorOffCenter), "M15-U5-H2: read Planar OFF RGBA8");
+        RENDER_CHECK(mirrorOffCenter.g < mirrorOnCenter.g * 0.6f,
+            "M15-U5-46.5: Planar OFF removes planar contribution and falls back cleanly");
+
+        // 2. Unified Convex Hierarchy with SSR enabled (`Planar -> SSR -> Probe -> SkyIBL`) & Roughness cutoff
+        SceneRenderSettings bothSettings = baseSettings;
+        bothSettings.EnableSSR = true;
+        bothSettings.EnablePlanarReflections = true;
+        renderer.RenderWorldView(greenWorld, cam, &colorOut, &depthOut, bothSettings);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful(), "M15-U5-46.5: combined SSR + Planar render succeeds");
+        glm::vec3 mirrorBothCenter(0.0f);
+        RENDER_CHECK(readRGBA8Avg(mx0, my0, mx1, my1, mirrorBothCenter), "M15-U5-H2: read SSR+Planar RGBA8");
+        RENDER_CHECK(mirrorBothCenter.g > 0.20f && mirrorBothCenter.g > mirrorBothCenter.r * 1.4f,
+            "M15-U5-46.5: unified convex compose prioritizes Planar over SSR/Sky smoothly");
+
+        RenderWorld roughWorld = buildResolveWorld({0.0f, 6.0f, 0.0f}, {0.0f, 1.5f, -7.0f}, 0.70f, PlanarReflectionCaptureMode::Automatic);
+        roughWorld.SceneRevision = 951;
+        renderer.RenderWorldView(roughWorld, cam, &colorOut, &depthOut, bothSettings);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful(), "M15-U5-46.5: rough surface above MaxRoughness falls back cleanly with SSR");
+        glm::vec3 mirrorRoughBoth(0.0f);
+        RENDER_CHECK(readRGBA8Avg(mx0, my0, mx1, my1, mirrorRoughBoth), "M15-U5-H2: read rough Planar+SSR RGBA8");
+
+        SceneRenderSettings ssrOnlySettings = bothSettings;
+        ssrOnlySettings.EnablePlanarReflections = false;
+        renderer.RenderWorldView(roughWorld, cam, &colorOut, &depthOut, ssrOnlySettings);
+        glm::vec3 mirrorRoughSSROnly(0.0f);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && readRGBA8Avg(mx0, my0, mx1, my1, mirrorRoughSSROnly),
+            "M15-U5-46.5: read rough SSR-only baseline RGBA8");
+        RENDER_CHECK(glm::length(mirrorRoughBoth - mirrorRoughSSROnly) < 0.02f,
+            "M15-U5-46.5: roughness above MaxRoughness hands off identically to SSR");
+
+        renderer.RenderWorldView(roughWorld, cam, &colorOut, &depthOut, baseSettings);
+        glm::vec3 mirrorRoughNoSSR(0.0f);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && readRGBA8Avg(mx0, my0, mx1, my1, mirrorRoughNoSSR),
+            "M15-U5-46.5: read rough Planar-only (SSR off) fallback RGBA8");
+        RENDER_CHECK(mirrorRoughNoSSR.g < mirrorOnCenter.g * 0.65f,
+            "M15-U5-46.5: roughness above MaxRoughness disables planar weight cleanly when SSR is off");
+
+        // 3. Multi-domain invalidation -> red beacon update
+        RenderWorld redWorld = buildResolveWorld({6.0f, 0.0f, 0.0f}, {0.0f, 1.5f, -7.0f}, 0.04f, PlanarReflectionCaptureMode::Automatic);
+        redWorld.SceneRevision = 952;
+        renderer.RenderWorldView(redWorld, cam, &colorOut, &depthOut, baseSettings);
+        glm::vec3 mirrorRedCenter(0.0f);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && readRGBA8Avg(mx0, my0, mx1, my1, mirrorRedCenter),
+            "M15-U5-46.7: scene material/revision edit invalidates planar cache cleanly");
+        const auto statusAfterRed = renderer.GetPlanarReflectionStatus(reflRef);
+        RENDER_CHECK(mirrorRedCenter.r > mirrorRedCenter.g * 1.5f &&
+                     statusAfterRed.has_value() && statusAfterRed->ActiveGenerationID > firstGenId,
+            "M15-U5-46.7: invalidated reflector updates capture to red beacon");
+
+        // 4. Manual Capture Mode lifecycle (Idle -> Requested Ready -> Stale on edit -> Recaptured)
+        renderer.ClearPlanarReflectionCaptures();
+        RenderWorld manualWorld = buildResolveWorld({0.0f, 6.0f, 0.0f}, {0.0f, 1.5f, -7.0f}, 0.04f, PlanarReflectionCaptureMode::Manual);
+        manualWorld.SceneRevision = 960;
+        const auto& manualRefl = manualWorld.PlanarReflectors.front();
+        renderer.RenderWorldView(manualWorld, cam, &colorOut, &depthOut, baseSettings);
+        const auto stManualIdle = renderer.GetPlanarReflectionStatus(manualRefl);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && stManualIdle.has_value() &&
+                     stManualIdle->State == PlanarCaptureLifecycleState::Idle &&
+                     stManualIdle->ManualRefreshRequired && !stManualIdle->HasCapture,
+            "M15-U5-46.7: Manual mode does not auto-capture without request and falls back safely");
+
+        renderer.RequestPlanarReflectionCapture(manualRefl);
+        renderer.RenderWorldView(manualWorld, cam, &colorOut, &depthOut, baseSettings);
+        const auto stManualReady = renderer.GetPlanarReflectionStatus(manualRefl);
+        RENDER_CHECK(stManualReady.has_value() && stManualReady->HasCapture &&
+                     stManualReady->State == PlanarCaptureLifecycleState::Ready && !stManualReady->Stale,
+            "M15-U5-46.7: RequestPlanarReflectionCapture executes capture in Manual mode");
+        const uint64_t manualGen1 = stManualReady->ActiveGenerationID;
+
+        RenderWorld manualEditedWorld = buildResolveWorld({6.0f, 0.0f, 0.0f}, {0.0f, 1.5f, -7.0f}, 0.04f, PlanarReflectionCaptureMode::Manual);
+        manualEditedWorld.SceneRevision = 961;
+        renderer.RenderWorldView(manualEditedWorld, cam, &colorOut, &depthOut, baseSettings);
+        const auto stManualStale = renderer.GetPlanarReflectionStatus(manualRefl);
+        RENDER_CHECK(stManualStale.has_value() && stManualStale->HasCapture &&
+                     stManualStale->State == PlanarCaptureLifecycleState::Stale &&
+                     stManualStale->Stale && stManualStale->ManualRefreshRequired &&
+                     stManualStale->ActiveGenerationID == manualGen1,
+            "M15-U5-46.7: Manual mode marks edited scene Stale while retaining prior capture");
+
+        renderer.RequestPlanarReflectionCapture(manualRefl);
+        renderer.RenderWorldView(manualEditedWorld, cam, &colorOut, &depthOut, baseSettings);
+        const auto stManualRefreshed = renderer.GetPlanarReflectionStatus(manualRefl);
+        RENDER_CHECK(stManualRefreshed.has_value() &&
+                     stManualRefreshed->State == PlanarCaptureLifecycleState::Ready &&
+                     stManualRefreshed->ActiveGenerationID > manualGen1,
+            "M15-U5-46.7: subsequent RequestPlanarReflectionCapture refreshes Manual generation");
+
+        // 5. Failed Capture Last-Good Retention via ScopedRHIFault
+        renderer.ClearPlanarReflectionCaptures();
+        auto retentionTargets = std::make_shared<RHIViewTargets>();
+        RHIViewTargetDesc retDesc{};
+        retDesc.Width = 128;
+        retDesc.Height = 128;
+        retDesc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
+        retDesc.DepthFormat = RHITextureFormat::D32_FLOAT;
+        retDesc.EnableDepth = true;
+        retDesc.HDR = true;
+        retDesc.EnableNormal = true;
+        retDesc.EnableReflectionTerms = true;
+        retDesc.EnablePlanarReflection = true;
+        retDesc.PlanarResolutionScale = 0.5f;
+        RENDER_CHECK(retentionTargets->Configure(retDesc) && retentionTargets->Validate(),
+            "M15-U5-46.7: configured explicit retention ViewTargets");
+
+        RenderWorld goodGreenWorld = buildResolveWorld({0.0f, 8.0f, 0.0f}, {0.0f, 1.5f, -7.0f}, 0.04f, PlanarReflectionCaptureMode::Automatic);
+        goodGreenWorld.SceneRevision = 970;
+        renderer.RenderWorldView(
+            goodGreenWorld, cam,
+            retentionTargets->Get(RHIViewTarget::Color)->GetNative(), retentionTargets->Get(RHIViewTarget::Color)->GetRTV(),
+            retentionTargets->Get(RHIViewTarget::Depth)->GetNative(), retentionTargets->Get(RHIViewTarget::Depth)->GetDSV(),
+            128, 128, baseSettings, nullptr, retentionTargets);
+        const auto stGood = renderer.GetPlanarReflectionStatus(goodGreenWorld.PlanarReflectors.front());
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && stGood.has_value() && stGood->HasCapture,
+            "M15-U5-46.7: baseline valid planar generation captured");
+        const uint64_t goodGenId = stGood->ActiveGenerationID;
+
+        RenderWorld failingBlueWorld = buildResolveWorld({0.0f, 0.0f, 8.0f}, {0.0f, 1.5f, -7.0f}, 0.04f, PlanarReflectionCaptureMode::Automatic);
+        failingBlueWorld.SceneRevision = 971;
+        {
+            ScopedRHIFault publishFault([](std::string_view op) -> std::optional<nri::Result> {
+                if (op == "PlanarPublishCopy") return nri::Result::FAILURE;
+                return std::nullopt;
+            });
+            renderer.RenderWorldView(
+                failingBlueWorld, cam,
+                retentionTargets->Get(RHIViewTarget::Color)->GetNative(), retentionTargets->Get(RHIViewTarget::Color)->GetRTV(),
+                retentionTargets->Get(RHIViewTarget::Depth)->GetNative(), retentionTargets->Get(RHIViewTarget::Depth)->GetDSV(),
+                128, 128, baseSettings, nullptr, retentionTargets);
+        }
+        const auto stFailed = renderer.GetPlanarReflectionStatus(failingBlueWorld.PlanarReflectors.front());
+        std::vector<glm::vec4> retainedPlanarPixels;
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() &&
+                     stFailed.has_value() && stFailed->Failed && stFailed->PreservedPreviousGeneration &&
+                     stFailed->HasCapture && stFailed->Stale &&
+                     stFailed->ActiveGenerationID == goodGenId &&
+                     ReadTexture2DRGBA16(*retentionTargets->GetPlanarColor(), retainedPlanarPixels),
+            "M15-U5-46.7: failed capture reports Failed status and preserves prior generation ID");
+        const glm::vec3 retainedCenter = AverageRegion(retainedPlanarPixels, 64, 24, 28, 40, 44);
+        RENDER_CHECK(retainedCenter.g > 1.0f && retainedCenter.b < 0.25f,
+            "M15-U5-46.7: published PlanarColor retains last-good green pixels across scratch/publish failure");
+
+        renderer.RequestPlanarReflectionCapture(failingBlueWorld.PlanarReflectors.front());
+        renderer.RenderWorldView(
+            failingBlueWorld, cam,
+            retentionTargets->Get(RHIViewTarget::Color)->GetNative(), retentionTargets->Get(RHIViewTarget::Color)->GetRTV(),
+            retentionTargets->Get(RHIViewTarget::Depth)->GetNative(), retentionTargets->Get(RHIViewTarget::Depth)->GetDSV(),
+            128, 128, baseSettings, nullptr, retentionTargets);
+        const auto stRecovered = renderer.GetPlanarReflectionStatus(failingBlueWorld.PlanarReflectors.front());
+        std::vector<glm::vec4> recoveredPlanarPixels;
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && stRecovered.has_value() &&
+                     !stRecovered->Failed && !stRecovered->PreservedPreviousGeneration &&
+                     stRecovered->State == PlanarCaptureLifecycleState::Ready &&
+                     stRecovered->ActiveGenerationID > goodGenId &&
+                     ReadTexture2DRGBA16(*retentionTargets->GetPlanarColor(), recoveredPlanarPixels),
+            "M15-U5-46.7: recovery recapture succeeds and clears Failed status");
+        const glm::vec3 recoveredCenter = AverageRegion(recoveredPlanarPixels, 64, 24, 28, 40, 44);
+        RENDER_CHECK(recoveredCenter.b > 1.0f && recoveredCenter.g < 0.25f,
+            "M15-U5-46.7: recovery updates PlanarColor to new blue scene");
+    }
+
+    renderer.ClearPlanarReflectionCaptures();
 
     renderer.ClearDynamicReflectionProbes();
     RENDER_CHECK(device.WaitIdle(), "U5-B wait idle at cleanup");

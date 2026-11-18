@@ -135,7 +135,7 @@ namespace Axle {
         if (!m_OwnsColorTexture) return false;
         auto desc = m_Desc;
         desc.MSAASamples = settings.MSAASamples;
-        desc.EnableReflectionTerms = settings.EnableSSR && settings.MSAASamples == 1;
+        desc.EnableReflectionTerms = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
         desc.EnablePlanarReflection = settings.EnablePlanarReflections;
         desc.PlanarResolutionScale = desc.EnablePlanarReflection
             ? std::clamp(settings.PlanarReflectionResolutionScale,
@@ -150,8 +150,8 @@ namespace Axle {
         desc.EnableBloom = settings.EnableBloom;
         desc.EnableAutoExposure = settings.EnableAutoExposure;
         desc.EnableDDGI = settings.EnableDDGI;
-        desc.EnableNormal = desc.EnableGTAO || settings.EnableSSR;
-        desc.EnableScreenStorage = desc.EnableNormal || settings.EnableVolumetricFog ||
+        desc.EnableNormal = desc.EnableGTAO || settings.EnableSSR || settings.EnablePlanarReflections;
+        desc.EnableScreenStorage = desc.EnableGTAO || settings.EnableSSR || settings.EnableVolumetricFog ||
             settings.EnableBloom || settings.EnableAutoExposure;
         if (desc == m_Desc && IsValid()) return true;
         return Recreate(desc);

@@ -85,6 +85,10 @@ namespace Axle {
         uint32_t PickEntity(const std::shared_ptr<Scene>& scene, const PerspectiveCamera& camera,
                             uint32_t width, uint32_t height, uint32_t x, uint32_t y) const;
         void SetUseIBL(bool enabled);
+        std::optional<PlanarReflectionCaptureStatus> GetPlanarReflectionStatus(uint64_t entityID, UUID stableUUID = 0) const;
+        PlanarReflectionCacheStats GetPlanarReflectionCacheStats() const;
+        void RequestPlanarReflectionCapture(uint64_t entityID, UUID stableUUID = 0);
+        void InvalidatePlanarReflection(uint64_t entityID, UUID stableUUID = 0, const std::string& reason = "manual_invalidation");
 
         // Capabilities and honest diagnostics
         RendererCapabilities GetActiveCapabilities() const;

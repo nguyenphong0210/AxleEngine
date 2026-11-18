@@ -1518,6 +1518,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     renderSettings.EnableGTAO = m_EnableGTAO;
     renderSettings.EnableContactShadows = m_EnableContactShadows;
     renderSettings.EnableSSR = m_EnableSSR;
+    renderSettings.EnablePlanarReflections = m_EnablePlanarReflections;
     renderSettings.EnableBloom = m_EnableBloom;
     renderSettings.EnableVolumetricFog = m_EnableVolumetricFog;
     renderSettings.EnableAutoExposure = m_EnableAutoExposure;
@@ -1884,6 +1885,11 @@ void EditorLayer::RenderToolbar() {
             ImGui::TextDisabled("Viewport Post-Processing & Lighting");
             ImGui::Separator();
             ImGui::Checkbox("Screen-Space Reflections (SSR)", &m_EnableSSR);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Real-time screen-space reflections raymarched in depth space with cubemap fallback.");
+            ImGui::Checkbox("Planar Reflections", &m_EnablePlanarReflections);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Mirrored planar reflections with oblique clipping and SSR/Probe/Sky fallback.");
             ImGui::Checkbox("Ambient Occlusion (GTAO)", &m_EnableGTAO);
             ImGui::Checkbox("Contact Shadows", &m_EnableContactShadows);
             ImGui::Checkbox("Physically Based Bloom", &m_EnableBloom);
@@ -2087,6 +2093,7 @@ void EditorLayer::OnImGuiRender() {
             }
             if (ImGui::BeginMenu("Rendering Features")) {
                 ImGui::MenuItem("Screen-Space Reflections (SSR)", nullptr, &m_EnableSSR);
+                ImGui::MenuItem("Planar Reflections", nullptr, &m_EnablePlanarReflections);
                 ImGui::MenuItem("Ambient Occlusion (GTAO)", nullptr, &m_EnableGTAO);
                 ImGui::MenuItem("Contact Shadows", nullptr, &m_EnableContactShadows);
                 ImGui::MenuItem("Physically Based Bloom", nullptr, &m_EnableBloom);

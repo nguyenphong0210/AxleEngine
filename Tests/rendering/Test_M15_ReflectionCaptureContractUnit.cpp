@@ -1116,6 +1116,44 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         const auto invCam = PlanarReflectionContract::EvaluateInvalidation(s0, sMoved, false);
         RENDER_CHECK(invCam.AnyChange() && invCam.CameraChanged && !invCam.PlaneChanged && !invCam.TargetExtentChanged,
             "M15-U5-46.7: PlanarReflectionInvalidation isolates per-domain change signals");
+
+        // H2 Resolve shader, RenderGraph pass, and policy parity inspection
+        const auto readText = [](const char* path) {
+            std::ifstream in(path);
+            std::stringstream ss;
+            if (in.is_open()) ss << in.rdbuf();
+            return ss.str();
+        };
+        const std::string planarShader = readText(AXLE_PLANAR_REFLECTION_SHADER_PATH);
+        const std::string planarPassSrc = readText(AXLE_PLANAR_PASS_SOURCE_PATH);
+        const std::string scenePassesSrc = readText(AXLE_SCENE_PASSES_SOURCE_PATH);
+        const std::string renderServiceSrc = readText(AXLE_RENDER_SERVICE_SOURCE_PATH);
+        RENDER_CHECK(!planarShader.empty() &&
+                     planarShader.find("VSMain") != std::string::npos &&
+                     planarShader.find("PSMain") != std::string::npos &&
+                     planarShader.find("u_ReflectedViewProj") != std::string::npos &&
+                     planarShader.find("u_OpaqueColor") != std::string::npos &&
+                     planarShader.find("u_EnvironmentSpecular") != std::string::npos &&
+                     planarShader.find("u_ReflectionResponse") != std::string::npos &&
+                     planarShader.find("u_PlanarColor") != std::string::npos &&
+                     planarShader.find("SanitizeHDRColor") != std::string::npos &&
+                     planarShader.find("baseLit + planarSpec") != std::string::npos,
+            "M15-U5-46.5: PlanarReflection.hlsl implements sanitized unified convex resolve");
+        RENDER_CHECK(!planarPassSrc.empty() &&
+                     planarPassSrc.find("PlanarCopy") != std::string::npos &&
+                     planarPassSrc.find("PlanarResolve") != std::string::npos &&
+                     planarPassSrc.find("PlanarRelease") != std::string::npos &&
+                     planarPassSrc.find("GetOrCreatePlanarApplyPipeline") != std::string::npos,
+            "M15-U5-46.4: PlanarReflectionPass declares explicit copy/resolve/release DAG edges");
+        RENDER_CHECK(scenePassesSrc.find("PlanarReflectionPass::Declare") != std::string::npos &&
+                     scenePassesSrc.find("PlanarReflectionPass::Record") != std::string::npos &&
+                     renderServiceSrc.find("EnablePlanarReflections") != std::string::npos,
+            "M15-U5-46.4 / 46.5: RHISceneRendererPasses and RenderService wire PlanarReflectionPass and target policy parity");
+
+        PlanarReflectionCaptureStatus st{};
+        st.State = PlanarCaptureLifecycleState::Idle;
+        RENDER_CHECK(st.State == PlanarCaptureLifecycleState::Idle && !st.HasCapture && !st.Failed,
+            "M15-U5-46.7: PlanarReflectionCaptureStatus defaults cleanly to Idle");
     }
 
     std::cout << "[M15ReflectionCapture] All dynamic reflection capture contract tests passed!\n";

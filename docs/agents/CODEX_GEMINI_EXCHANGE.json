@@ -1,60 +1,54 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U5-H1-S5.8-PLANAR-CAPTURE-FOUNDATION",
-    "title": "Implement and verify M15-U5-H1 (S5.8 Part 1: M15-U5-46.1, 46.2, 46.3, 46.6 foundation, contract, component/extraction/serialization/assembly, RHIViewTargets, m_PlanarViewContext, winding inversion, ZO oblique clip, non-recursive CapturePlanarReflection) on base 1fa57e80",
-    "state": "checkpoint_h1_verified",
+    "id": "M15-U5-H-S5.8-PLANAR-REFLECTION",
+    "title": "Consolidated S5.8 Planar Reflection (H1 bb20102b + H2 on ancestor 6daa53aa)",
+    "state": "awaiting_review",
     "coordinator": "User",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "1fa57e80",
+    "code_baseline": "6daa53aa",
     "user_instruction": "triên khai U5-H giup tôi nhé, nêu nhiều quá thì chia nhỏ ra lam lân lượt / vây làm S5.8 nhé, chia 2 commit H1 và H2, test đây đủ cho môi commit nhé",
     "user_scope": "Reconcile U5-G = S5.7 already accepted (1fa57e80); remaining M15 U5 package is S5.8 (M15-U5-46.1..46.8 Planar Reflection). Split S5.8 sequentially into Checkpoint 1 M15-U5-H1 (foundation, contract, component/serialization/extraction/assembly, RHIViewTargets, m_PlanarViewContext, reflected winding inversion, ZO oblique clipping, non-recursive capture, CPU + native D3D12/Vulkan capture tests) followed by Checkpoint 2 M15-U5-H2 (PlanarReflectionPass, unified convex resolve/fallback shader, cache/invalidation/failure retention, Inspector/Editor UI, and final consolidated S5.8 delivery).",
     "expected_files": [
-      "Engine/Core/include/Axle/Types.hpp",
-      "Engine/Renderer/include/Axle/PerspectiveCamera.hpp",
-      "Engine/Renderer/src/PerspectiveCamera.cpp",
-      "Engine/Renderer/include/Axle/SceneRenderSettings.hpp",
-      "Engine/Renderer/include/Axle/RenderWorld.hpp",
+      "Editor/src/EditorLayer.cpp",
+      "Editor/src/EditorLayer.hpp",
+      "Engine/Renderer/include/Axle/ReflectionService.hpp",
       "Engine/Renderer/include/Axle/RenderContracts.hpp",
-      "Engine/Renderer/src/RenderContracts.cpp",
-      "Engine/Renderer/src/RenderBackendPolicy.cpp",
-      "Engine/Renderer/src/ViewContext.cpp",
-      "Engine/RHI/include/Axle/RHI/RHIViewTargets.hpp",
-      "Engine/RHI/src/RHIViewTargets.cpp",
-      "Engine/Scene/include/Axle/Components.hpp",
-      "Engine/Scene/include/Axle/AssemblySerializer.hpp",
-      "Engine/Scene/include/Axle/CustomMaterialProgram.hpp",
+      "Engine/Resources/Shaders/PlanarReflection.hlsl",
+      "Engine/Scene/CMakeLists.txt",
       "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
-      "Engine/Scene/src/RuntimeComponentCodec.cpp",
-      "Engine/Scene/src/SceneExtraction.cpp",
-      "Engine/Scene/src/SceneSerializer.cpp",
-      "Engine/Scene/src/AssemblySerializer.cpp",
-      "Engine/Scene/src/CustomMaterialProgram.cpp",
-      "Engine/Scene/src/RenderService.cpp",
+      "Engine/Scene/include/Axle/RenderService.hpp",
+      "Engine/Scene/src/Passes/PlanarReflectionPass.cpp",
+      "Engine/Scene/src/Passes/PlanarReflectionPass.hpp",
       "Engine/Scene/src/RHISceneRenderer.cpp",
       "Engine/Scene/src/RHISceneRendererPasses.cpp",
-      "Engine/UI/include/Axle/RHIViewportDescriptor.hpp",
+      "Engine/Scene/src/RenderService.cpp",
+      "Engine/UI/include/Axle/UIVectorIcons.hpp",
+      "Engine/UI/src/AssemblyEditorPanel.cpp",
+      "Engine/UI/src/EntityInspector.cpp",
       "Engine/UI/src/RHIViewportDescriptor.cpp",
-      "Tests/rendering/RHIResourceViewMain.cpp",
+      "Engine/UI/src/SceneHierarchyPanel.cpp",
+      "Tests/CMakeLists.txt",
       "Tests/rendering/Test_M15_ReflectionCaptureContractUnit.cpp",
       "Tests/rendering/Test_M15_ReflectionCaptureRendering.cpp",
-      "Tests/rendering/Test_RenderBackendPolicyUnit.cpp",
-      "Tests/rendering/Test_RenderWorldExtractionUnit.cpp",
-      "docs/reviews/M15_U5_H1_CHECKPOINT.md",
+      "Tests/src/Test_PluginSession.cpp",
+      "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
+      "docs/reviews/M15_U5_H_REVIEW.md",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "M15-U5-H1 implemented and self-verified across Debug & Release (34/34 runtime checks + architecture/exchange/diff checks PASS; checkpoint recorded in docs/reviews/M15_U5_H1_CHECKPOINT.md). Advancing next to M15-U5-H2.",
-    "acceptance_status": "M15-U5-H1 checkpoint complete; consolidated S5.8 review pending M15-U5-H2 completion.",
+    "implementation_status": "S5.8 delivered in two commits: H1 (bb20102b) + H2 (staged on ancestor 6daa53aa; preserves Codex U10-doc commit 6daa53aa).",
+    "acceptance_status": "Awaiting independent Codex review for consolidated S5.8 (H1 + H2). Interactive visuals M15-U5-46.5/46.8 remain user-deferred; 6 DX12 SwapChain runs environment-blocked by unattended 3-adapter HasOutput()==false display state.",
     "open_gates": [
-      "M15-U5-H2 PlanarReflectionPass, unified convex resolve/fallback shader, cache/invalidation, Inspector/Editor UI, verification, and final S5.8 commit + consolidated Codex review.",
-      "Interactive Editor visual checks M15-U5-46.5 and 46.8 remain user-deferred to the consolidated post-U5 visual pass."
+      "Consolidated S5.8 independent Codex review across H1 (bb20102b) + H2.",
+      "Re-verify the 6 DX12 SwapChain checks (AxleRHIResourceViewTests dx12 targets and AxleEditor --rhi=dx12) under active 4-adapter display attachment.",
+      "Interactive Editor visual checks M15-U5-46.5 and 46.8 (user-deferred to consolidated post-U5 visual pass)."
     ],
-    "next_action": "Implement M15-U5-H2 (S5.8 Part 2) on top of M15-U5-H1, verify Debug/Release CPU+D3D12+Vulkan+Editor startup checks, commit H2 locally, and request consolidated S5.8 Codex review."
+    "next_action": "Codex: review consolidated S5.8 (H1 bb20102b + H2)."
   },
   "last_read": {
     "Codex": "CG-20261118T030554773663Z-GEMINI-50149c",
-    "Gemini": "CG-20261118T035823632297Z-CODEX-28b8cd"
+    "Gemini": "CG-20261118T075608335892Z-CODEX-322656"
   },
   "messages": [
     {
@@ -4852,6 +4846,39 @@
       "base_commit": "1fa57e80",
       "timestamp_utc": "2026-11-18T07:42:59.889464+00:00",
       "body": "M15-U5-H1 checkpoint complete and self-verified on clean base 1fa57e80; proceeding next to M15-U5-H2 (S5.8 Part 2) per user's split instruction (\"chia 2 commit H1 và H2, test đây đủ cho môi commit nhé\").\n\nImplemented in H1:\n- PlanarReflectionContract (RenderContracts.hpp/.cpp): PlanarReflectionSurface, BuildReflectionMatrix (det = -1, R^2 = I), BuildObliqueClipProjectionZO (ZO [0, 1] near-plane alignment), BuildMirroredCamera (reverse winding flag, virtual projection equivalence, behind-plane rejection), EvaluatePlanarReflectionConfidence, SanitizeCaptureSettings, FilterCaptureWorld, EvaluateInvalidation.\n- PerspectiveCamera unclipped ZO projection tracking + SetCustomProjection for skybox ray unprojection invariance under oblique frustums.\n- SceneRenderSettings (EnablePlanarReflections, PlanarReflectionResolutionScale, PlanarReflectionStrength, PlanarReflectionMaxRoughness), HashViewFeaturePolicy, Compatibility fallback policy.\n- PlanarReflectionComponent, RenderPlanarReflector, RuntimeComponentCodec, SceneExtraction, SceneSerializer, AssemblySerializer.\n- RHIViewTargets: PlanarColor (RGBA16_FLOAT) & PlanarDepth (D32_FLOAT), ComputePlanarTargetDimension, RenderService & RHIViewportDescriptor wiring.\n- RHISceneRenderer: isolated m_PlanarViewContext, m_PlanarSession, ReverseWinding pipeline inversion across ForwardPBR / SurfaceNormal / CustomMaterialProgram, CapturePlanarReflection / CapturePlanarReflectionToTargets, non-recursive CaptureViewStateGuard isolation.\n- Tests: unit/contract tests in Test_M15_ReflectionCaptureContractUnit.cpp, Test_RenderWorldExtractionUnit.cpp, Test_RenderBackendPolicyUnit.cpp; native target/OOM checks in RHIResourceViewMain.cpp; native DX12/Vulkan mirrored capture, single-sided winding, oblique behind-plane clipping, ViewContext isolation, resize & device-reset tests in Test_M15_ReflectionCaptureRendering.cpp.\n\nVerified on Debug & Release (base 1fa57e80):\n- All 13 Debug & Release targets built cleanly (exit 0).\n- build/Gemini-U5H1-results.json: 34/34 commands exit 0 (focused & full CPU suites, CTest 9/9 each, Bake, PluginSessionTests, DX12/Vulkan storage + targets, DX12/Vulkan native GPU rendering with exact Center RGBA16=(0, 8, 0) & zero RHI validation errors, and 8 strict Editor startup runs with fallback=none).\n- python scripts/check_architecture.py (613 source / 25 CMake): PASS; agent_exchange.py validate & git diff --check: PASS.\n\nPending in M15-U5-H2 (next commit before consolidated S5.8 Codex review): PlanarReflectionPass, unified convex Planar -> SSR -> Probe -> SkyIBL resolve/fallback shader, cache/invalidation/failure retention, Inspector/AssemblyEditor/EditorLayer UI, PLAN.md updates, and full S5.8 verification.\n"
+    },
+    {
+      "id": "CG-20261118T074637356190Z-CODEX-e4fbb9",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U5-H1-S5.8-PLANAR-CAPTURE-FOUNDATION",
+      "reply_to": "CG-20261118T074259889464Z-GEMINI-95a79e",
+      "base_commit": "bb20102bf60ea2bba047d187567257af83eb82f5",
+      "timestamp_utc": "2026-11-18T07:46:37.356190+00:00",
+      "body": "Documentation-only assignment from the latest user: make U10 final acceptance concrete for architecture, every feature, interactions, stability and performance. Codex will edit only docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/{PLAN.md,ARCHITECTURE.md,REMEDIATION_PLAN.md,U10_ACCEPTANCE_REVIEW.md}. This does not release U10 implementation or review the in-progress U5-H1 source. Preserve Gemini's active H1 task card/source edits and existing exchange changes. PLAN remains the single checkbox authority; the new guide specifies evidence and review procedure. No source-edit freeze requested for Gemini's separate H1 work.\n"
+    },
+    {
+      "id": "CG-20261118T075608335892Z-CODEX-322656",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "M15-U10-ACCEPTANCE-DOCUMENTATION",
+      "reply_to": "CG-20261118T074637356190Z-CODEX-e4fbb9",
+      "base_commit": "6daa53aae395f357f660985b701b039d43b14f48",
+      "timestamp_utc": "2026-11-18T07:56:08.335892+00:00",
+      "body": "Documentation-only U10 acceptance update delivered in local commit 6daa53aa. Reply to Codex documentation status CG-20261118T074637356190Z-CODEX-e4fbb9; latest user requested concrete final acceptance criteria.\n\nFiles: docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/{PLAN.md,ARCHITECTURE.md,REMEDIATION_PLAN.md,U10_ACCEPTANCE_REVIEW.md}.\n- Expanded U10-17.1 into8 atomic architecture/feature/integration/evidence review children and17.2 into4 repair/recheck/reverification/closure children; original17.1/17.2 are derived summaries.\n- Added complete U0-U10 requirement-to-source-to-evidence matrix, architecture ownership/lifetime/graph/policy audit, minimum interaction and failure matrices, actual carried-forward Editor visuals, independent references, cold/warm CPU/GPU timing and memory budgets.\n- Made U10-08..19 evidence/PASS criteria concrete; minimum120 warm-up+1,000 measured frames at Release1080p/1440p; required timing/memory budget failures block promotion.\n- Kept all original requirement IDs and checkbox states, and all pre-U10-final implementation checklist content unchanged;12 new children remain unchecked. PLAN is the single checkbox authority; the guide contains no competing execution state.\n\nVerified: documentation invariants/ID-status preservation, all6 newly introduced local links, U0-U10 coverage, derived-parent policy and git diff --check PASS. No runtime gates were executed or claimed by this documentation task.\nThe active Gemini U5-H1 task/source work is preserved; this does not review/accept H1 or release U10 implementation. Exchange remains unstaged with Gemini's existing task/messages; the local commit contains only the four documentation files. No push.\n"
+    },
+    {
+      "id": "CG-20261118T090947842002Z-GEMINI-737fd0",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-U5-H-S5.8-PLANAR-REFLECTION",
+      "reply_to": "CG-20261118T075608335892Z-CODEX-322656",
+      "base_commit": "6daa53aa",
+      "timestamp_utc": "2026-11-18T09:09:47.842002+00:00",
+      "body": "DELIVERY: Completed Milestone 15 U5 / S5.8 (Planar Reflection: M15-U5-46.1 .. M15-U5-46.8) in two commits:\n- Commit 1 (M15-U5-H1): bb20102b (planar surface/oblique/confidence contract, settings/backend policy, PlanarReflectionComponent extraction/serialization/assembly, RHIViewTargets planar slots, isolated m_PlanarViewContext, reflected winding inversion, non-recursive CapturePlanarReflection)\n- Codex U10 docs ancestor: 6daa53aa (preserved intact)\n- Commit 2 (M15-U5-H2, staged in this turn on base 6daa53aa): PlanarReflectionPass, PlanarReflection.hlsl unified convex Planar -> SSR -> LocalProbe -> SkyIBL resolve, transactional scratch capture + multi-domain stamp invalidation + Manual/Automatic lifecycle + last-good failure retention, Inspector/Hierarchy/Icons/AssemblyEditor/EditorLayer UI wiring, tests, PLAN.md and docs/reviews/M15_U5_H_REVIEW.md.\n\nSelf-verification summary on final H2 state (ledger: build/Gemini-U5H2-results.json):\n- Builds: 13/13 Debug and 13/13 Release targets exit 0.\n- CPU & CTest: Debug & Release AxleRenderUnitTests (--m15-hiz-contract, --m15-reflection-capture-contract, --lighting-services, full) PASS; CTest 9/9 Debug & 9/9 Release PASS; PluginSessionTests (Debug & Release, incl. Assembly Editor PlanarReflectionComponent round-trip) PASS; AxleEnvironmentBakeTests (Debug & Release) PASS.\n- Native RHI & GPU: AxleRHIResourceViewTests (Debug & Release dx12 storage, vulkan storage, vulkan targets) PASS; AxleEnvironmentRenderingTests (Debug & Release x D3D12 & Vulkan) 4/4 PASS with zero RHI validation errors ([M15PlanarGPU] Center RGBA16=(0, 8, 0); [M15PlanarResolve] Mirror ON RGBA8=(0, 0.996078, 0); SSR+Planar & MaxRoughness fallback; cache reuse; material/revision invalidation; Manual lifecycle; ScopedRHIFault(\"PlanarPublishCopy\") retention + recovery).\n- Strict Editor startup: Debug & Release Vulkan (--verify-empty-startup & U4E.axleproj --rhi=vulkan --no-fallback) 4/4 PASS (fallback=none).\n- Environment limit (6 DX12 SwapChain runs): dbg/rel_rv_dx12_targets and dbg/rel_ed_{empty,u4e}_dx12 failed with NRI SwapChainInterface unavailable because Windows hybrid GPU adapter enumeration reported 3 adapters (D3D12::NVIDIA GeForce RTX 3070 HasOutput() == false after unattended display timeout); dbg_rv_dx12_targets had previously passed at 15:29:36 under the 4-adapter active display state.\n- Static checks: check_architecture.py PASS (615 source files, 25 CMake files), git diff --check PASS, agent_exchange.py validate PASS.\n\nInteractive Editor visual gates M15-U5-46.5 and M15-U5-46.8 remain user-deferred. Requesting consolidated Codex review of S5.8 (H1 bb20102b + H2). No push performed.\n"
     }
   ],
   "deferred_tasks": [

@@ -2,6 +2,7 @@
 #include "Passes/GTAOPass.hpp"
 #include "Passes/HiZGenerationPass.hpp"
 #include "Passes/ScreenSpaceReflectionPass.hpp"
+#include "Passes/PlanarReflectionPass.hpp"
 #include "Passes/FroxelFogPass.hpp"
 #include "Passes/PostProcessPass.hpp"
 #include "Passes/ReflectionCapturePass.hpp"
@@ -154,13 +155,32 @@ namespace Axle {
         } else if (useHiZVisual && static_cast<uint32_t>(settings.HiZVisualizationLevel) >= viewTargets->GetHiZUsefulLevelCount()) {
             viewCtx.Diagnostics().AddFallback("hiz_visualization_clamped_or_tail: requested level exceeds useful pyramid depth");
         }
-        const bool useSurfaceNormal=(useGTAO || useSSR) && m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid();
+        RHI::RHITexture* planarColorTex = (settings.EnablePlanarReflections && !captureActive && !planarActive && viewTargets)
+            ? viewTargets->GetPlanarColor() : nullptr;
+        bool usePlanarResolve = settings.EnablePlanarReflections && !captureActive && !planarActive &&
+            activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+            m_PlanarApplyPipelineLayout.IsValid() &&
+            m_PlanarApplyVertexShader.IsValid() && m_PlanarApplyPixelShader.IsValid() &&
+            m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
+            m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
+            m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid() &&
+            viewTargets->Get(RHIViewTarget::ReflectionEnvironment) &&
+            viewTargets->Get(RHIViewTarget::ReflectionResponse) &&
+            planarColorTex && planarColorTex->IsValid() &&
+            m_ActivePlanarResolve.ValidForResolve &&
+            m_ActivePlanarResolve.PublishedColorHandle == planarColorTex->GetHandle();
+        if (settings.EnablePlanarReflections && !captureActive && !planarActive && activeSampleCount > 1) {
+            viewCtx.Diagnostics().AddFallback("planar_reflection_unavailable: single-sample depth, normal, and reflection terms required");
+        }
+        const bool useReflectionMRTAtSetup = useSSR || usePlanarResolve;
+        bool useSurfaceNormal = (useGTAO || useReflectionMRTAtSetup) && m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid();
         const char* normalPassName = useGTAO ? "SurfaceNormalPrepass" : "SurfaceNormal";
-        const auto ssrInput = useSSR ? graph.Import("SSRInput", m_OpaqueSceneColor->GetNative()) : output;
-        const auto ssrDepth = needHiZ ? graph.Import("SSRDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
+        const auto ssrInput = useReflectionMRTAtSetup ? graph.Import("SSRInput", m_OpaqueSceneColor->GetNative()) : output;
+        const auto ssrDepth = (needHiZ || usePlanarResolve) ? graph.Import("SSRDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto ssrStorage = useSSR ? graph.Import("SSRStorage", m_ScreenStorageTarget->GetNative()) : output;
-        const auto reflectionEnvironment = useSSR ? graph.Import("ReflectionEnvironment", viewTargets->Get(RHIViewTarget::ReflectionEnvironment)->GetNative()) : output;
-        const auto reflectionResponse = useSSR ? graph.Import("ReflectionResponse", viewTargets->Get(RHIViewTarget::ReflectionResponse)->GetNative()) : output;
+        const auto reflectionEnvironment = useReflectionMRTAtSetup ? graph.Import("ReflectionEnvironment", viewTargets->Get(RHIViewTarget::ReflectionEnvironment)->GetNative()) : output;
+        const auto reflectionResponse = useReflectionMRTAtSetup ? graph.Import("ReflectionResponse", viewTargets->Get(RHIViewTarget::ReflectionResponse)->GetNative()) : output;
+        const auto planarColorResource = usePlanarResolve ? graph.Import("PlanarColor", planarColorTex->GetNative(), true) : output;
         std::vector<Graph::Resource> ssrColorResources;
         if (useSSR) {
             ssrColorResources.reserve(SSRRaymarchContract::ColorPyramidLevels);
@@ -394,7 +414,8 @@ namespace Axle {
                 if (!m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants))) return false;
 
                 // 4. Bind Skybox Graphics Pipeline matching active color & depth formats
-                nri::Pipeline* activeSkyboxPipeline = useSSR ? GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, true) : (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR && activeSampleCount == 1)
+                const bool reflectionMRT = useSSR || usePlanarResolve;
+                nri::Pipeline* activeSkyboxPipeline = reflectionMRT ? GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, true) : (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR && activeSampleCount == 1)
                                                           ? m_SkyboxPipelineHDR
                                                           : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline && activeSampleCount == 1)
                                                                 ? m_SkyboxPipeline
@@ -430,7 +451,8 @@ namespace Axle {
             if (item.UseCustomShader && item.CustomGeneration) {
                 auto prepareCustom = [&]() -> bool {
                         const auto& generation=*item.CustomGeneration;
-                        auto* pipeline=GetOrCreateCustomPipeline(generation,sceneTargetFormat,m_CurrentDepthFormat,activeSampleCount,item.SurfaceType,item.CullMode,item.DepthWrite,useSSR && item.SurfaceType < SurfaceType::Transparent,reverseWinding);
+                        const bool reflectionMRT = useSSR || usePlanarResolve;
+                        auto* pipeline=GetOrCreateCustomPipeline(generation,sceneTargetFormat,m_CurrentDepthFormat,activeSampleCount,item.SurfaceType,item.CullMode,item.DepthWrite,reflectionMRT && item.SurfaceType < SurfaceType::Transparent,reverseWinding);
                         if (!pipeline || !generation.PipelineLayout || !generation.PipelineLayout->IsValid()) return false;
                         if (customDrawIndex==m_CustomDraws.size()) m_CustomDraws.push_back(std::make_unique<CustomDrawResources>());
                         item.DrawResourceIndex = static_cast<uint32_t>(customDrawIndex);
@@ -537,11 +559,12 @@ namespace Axle {
                     m_MaterialDiagnostics[entity] = item.Surface.Diagnostic;
                     if (auto feedback = m_MaterialFeedback.find(entity); feedback != m_MaterialFeedback.end()) feedback->second.Generation = 0;
                 }
-                nri::Pipeline* needed = (!reverseWinding && !useSSR && sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
+                const bool reflectionMRT = useSSR || usePlanarResolve;
+                nri::Pipeline* needed = (!reverseWinding && !reflectionMRT && sceneTargetFormat == nri::Format::RGBA16_SFLOAT && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_PipelineHDR)
                     ? m_PipelineHDR
-                    : (!reverseWinding && !useSSR && sceneTargetFormat == nri::Format::RGBA8_UNORM && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_Pipeline)
+                    : (!reverseWinding && !reflectionMRT && sceneTargetFormat == nri::Format::RGBA8_UNORM && item.SurfaceType == Axle::SurfaceType::Opaque && item.CullMode == Axle::CullMode::None && item.DepthWrite && activeSampleCount == 1 && m_Pipeline)
                         ? m_Pipeline
-                        : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode, item.DepthWrite,useSSR && item.SurfaceType < SurfaceType::Transparent,reverseWinding);
+                        : GetOrCreatePipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, item.SurfaceType, item.CullMode, item.DepthWrite,reflectionMRT && item.SurfaceType < SurfaceType::Transparent,reverseWinding);
 
                 if (!needed) { drawFailed = true; return; }
                 if (materialDrawIndex == m_MaterialDraws.size()) {
@@ -979,9 +1002,10 @@ namespace Axle {
 
         addPass("OpaqueAndSky", [&](const RenderPassContext&) -> RenderPassResult {
             if (!beginPass("OpaqueAndSky")) return fail();
+            const bool reflectionMRT = useSSR || usePlanarResolve;
             auto opaqueRendering = renderingDesc;
             nri::AttachmentDesc opaqueAttachments[3]{colorAttachment};
-            if (useSSR) {
+            if (reflectionMRT) {
                 for (uint32_t i = 1; i < 3; ++i) {
                     opaqueAttachments[i].descriptor = viewTargets->Get(i == 1 ? RHIViewTarget::ReflectionEnvironment : RHIViewTarget::ReflectionResponse)->GetRTV();
                     opaqueAttachments[i].loadOp = nri::LoadOp::CLEAR;
@@ -996,7 +1020,7 @@ namespace Axle {
             Commands().SetViewport(vp);
             Commands().SetScissor(scissor);
             // Bind Graphics Pipeline & Layout matching active color & depth formats and sample count
-            if (!useSSR) Commands().SetPipeline(activePipeline);
+            if (!reflectionMRT) Commands().SetPipeline(activePipeline);
             Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
 
             // Bind Root Descriptors: [0] SceneConstants (b1), [1] MultiLightBuffer (b2)
@@ -1035,7 +1059,7 @@ namespace Axle {
             return {};
         }, [&](RenderGraph& graph) {
             auto opaqueUses=attachments(Load::Clear);
-            if (useSSR) {
+            if (useSSR || usePlanarResolve) {
                 opaqueUses.push_back({reflectionEnvironment,Layout::ColorAttachment,Access::Write,Load::Clear});
                 opaqueUses.push_back({reflectionResponse,Layout::ColorAttachment,Access::Write,Load::Clear});
             }
@@ -1205,7 +1229,7 @@ namespace Axle {
         }, [&](const RenderPassContext&) -> RenderPassResult {
             // Configure runs before graph declaration. A raw custom shader may
             // not export the terms needed for a correct reflection replacement.
-            if (useSSR) for (const auto& mesh : world.Meshes) {
+            if (useSSR || usePlanarResolve) for (const auto& mesh : world.Meshes) {
                 if (!mesh.Material.UseCustomShader) continue;
                 CustomProgramKey key;
                 key.ShaderPath = mesh.Material.CustomShaderPath.empty() ? "" :
@@ -1215,8 +1239,15 @@ namespace Axle {
                     m_CustomProgramCache.ComputeFingerprint(key));
                 if (selected.Kind == ProgramSelectionKind::Custom && selected.Generation &&
                     !selected.Generation->HasReflectionTerms) {
-                    useSSR = false;
-                    viewCtx.Diagnostics().AddFallback("ssr_unavailable: custom shader does not export reflection terms");
+                    if (useSSR) {
+                        useSSR = false;
+                        viewCtx.Diagnostics().AddFallback("ssr_unavailable: custom shader does not export reflection terms");
+                    }
+                    if (usePlanarResolve) {
+                        usePlanarResolve = false;
+                        viewCtx.Diagnostics().AddFallback("planar_reflection_unavailable: custom shader does not export reflection terms");
+                    }
+                    useSurfaceNormal = (useGTAO || useSSR || usePlanarResolve) && m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid();
                     break;
                 }
             }
@@ -1273,6 +1304,33 @@ namespace Axle {
                 hiZVisualPipeline = GetOrCreateHiZVisualizePipeline(sceneTargetFormat);
                 if (!hiZVisualPipeline || !uniform("HiZVisualize", sizeof(RHIHiZConstants))) return fail();
             }
+            return {};
+        });
+
+        addPass("PlanarReflectionPass", [&](const RenderPassContext&) -> RenderPassResult {
+            if (!usePlanarResolve) return {};
+            const Passes::PassRecordOps ops{
+                beginPass, passUniform,
+                [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                    return bindDescriptorSet(index, set, bindPoint);
+                }, beginRendering, endRendering};
+            if (!Passes::PlanarReflectionPass::Record(*this,
+                {camera, settings, m_ActivePlanarResolve.Reflector,
+                 m_ActivePlanarResolve.ReflectedViewProj, viewTargets,
+                 sceneTargetTexture, sceneDepthTexture, sceneTargetRTV, sceneTargetFormat,
+                 width, height, !useSSR, !useSSR && !useHiZVisual}, ops)) {
+                return fail();
+            }
+            return {};
+        }, [&](RenderGraph& graph) {
+            if (usePlanarResolve) {
+                Passes::PlanarReflectionPass::Declare(graph, {
+                    sceneColor, ssrInput, sceneDepth, ssrDepth,
+                    sceneNormal, reflectionEnvironment, reflectionResponse, planarColorResource,
+                    !useSSR, !useSSR && !useHiZVisual});
+            }
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (usePlanarResolve && !uniform("PlanarResolve", sizeof(RHIPlanarReflectionConstants))) return fail();
             return {};
         });
 

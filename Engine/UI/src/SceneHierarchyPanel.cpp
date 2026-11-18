@@ -369,6 +369,12 @@ namespace Axle {
                 rectLight.AddComponent<RectLightComponent>();
                 m_SelectedEntity = rectLight;
             }
+            if (ImGui::MenuItem("Planar Reflector")) {
+                auto planar = m_Scene->CreateEntity("Planar Reflector");
+                planar.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 0.0f, 0.0f);
+                planar.AddComponent<PlanarReflectionComponent>();
+                m_SelectedEntity = planar;
+            }
             ImGui::EndMenu();
         }
 
@@ -1017,6 +1023,12 @@ namespace Axle {
                     light.SetParent(entity);
                     light.AddComponent<RectLightComponent>();
                     m_SelectedEntity = light;
+                }
+                if (ImGui::MenuItem("Planar Reflector")) {
+                    auto planar = m_Scene->CreateEntity("Planar Reflector");
+                    planar.SetParent(entity);
+                    planar.AddComponent<PlanarReflectionComponent>();
+                    m_SelectedEntity = planar;
                 }
                 ImGui::EndMenu();
             }

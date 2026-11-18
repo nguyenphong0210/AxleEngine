@@ -6,6 +6,7 @@
 #include <Axle/SceneRenderSettings.hpp>
 #include <Axle/RenderWorld.hpp>
 #include <Axle/LightingService.hpp>
+#include <Axle/ReflectionService.hpp>
 #include <Axle/RHI/RHICommon.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
@@ -684,42 +685,8 @@ namespace Axle {
             std::string Diagnostic;
         };
 
-        struct PlanarReflectionDomainStamps {
-            uint64_t PlaneStamp = 0;
-            uint64_t CameraStamp = 0;
-            uint64_t GeometryStamp = 0;
-            uint64_t MaterialStamp = 0;
-            uint64_t LightingStamp = 0;
-            uint64_t AssetStamp = 0;
-            uint64_t SettingsStamp = 0;
-            uint64_t SceneRevision = 0;
-            uint64_t SceneInstanceID = 0;
-            uint64_t SceneLifetimeEpoch = 0;
-            uint64_t DeviceEpoch = 0;
-            uint32_t TargetWidth = 0;
-            uint32_t TargetHeight = 0;
-            uint64_t CombinedStamp = 0;
-        };
-
-        struct PlanarReflectionInvalidation {
-            bool PlaneChanged = false;
-            bool CameraChanged = false;
-            bool SceneRevisionChanged = false;
-            bool GeometryChanged = false;
-            bool MaterialChanged = false;
-            bool LightingChanged = false;
-            bool AssetChanged = false;
-            bool SettingsChanged = false;
-            bool TargetExtentChanged = false;
-            bool DeviceEpochChanged = false;
-            bool ManualRequested = false;
-
-            bool AnyChange() const {
-                return PlaneChanged || CameraChanged || SceneRevisionChanged || GeometryChanged ||
-                       MaterialChanged || LightingChanged || AssetChanged || SettingsChanged ||
-                       TargetExtentChanged || DeviceEpochChanged || ManualRequested;
-            }
-        };
+        using ::Axle::PlanarReflectionDomainStamps;
+        using ::Axle::PlanarReflectionInvalidation;
 
         PlanarReflectionSurface BuildSurfaceFromReflector(const RenderPlanarReflector& reflector);
         float SignedDistanceToPlane(const PlanarReflectionSurface& surface, const glm::vec3& pointWS);

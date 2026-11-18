@@ -270,14 +270,16 @@ namespace Axle {
                 RHI::RHIViewTargetDesc desc;
                 desc.Width = request.Width; desc.Height = request.Height;
                 desc.Samples = request.Settings.MSAASamples;
-                desc.HDR = request.Settings.EnableToneMapping || (request.Settings.EnableSSR && request.Settings.MSAASamples == 1);
+                desc.HDR = request.Settings.EnableToneMapping ||
+                    ((request.Settings.EnableSSR || request.Settings.EnablePlanarReflections) && request.Settings.MSAASamples == 1);
                 desc.FXAA = request.Settings.EnableFXAA;
-                desc.EnableNormal = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows || request.Settings.EnableSSR);
+                desc.EnableNormal = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows ||
+                    request.Settings.EnableSSR || request.Settings.EnablePlanarReflections);
                 desc.EnableScreenStorage = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows || request.Settings.EnableSSR || request.Settings.EnableVolumetricFog || request.Settings.EnableBloom || request.Settings.EnableAutoExposure);
                 desc.EnableGTAO = request.Settings.EnableGTAO || request.Settings.EnableContactShadows;
                 desc.EnableBloom = request.Settings.EnableBloom;
                 desc.EnableHiZ = request.Settings.EnableSSR || request.Settings.HiZVisualizationLevel >= 0;
-                desc.EnableReflectionTerms = request.Settings.EnableSSR && request.Settings.MSAASamples == 1;
+                desc.EnableReflectionTerms = (request.Settings.EnableSSR || request.Settings.EnablePlanarReflections) && request.Settings.MSAASamples == 1;
                 desc.EnablePlanarReflection = request.Settings.EnablePlanarReflections;
                 desc.PlanarResolutionScale = desc.EnablePlanarReflection
                     ? std::clamp(request.Settings.PlanarReflectionResolutionScale,
@@ -367,6 +369,24 @@ namespace Axle {
 
     void RenderService::SetUseIBL(bool enabled) {
         if (m_RHIRenderer) m_RHIRenderer->SetUseIBL(enabled);
+    }
+
+    std::optional<PlanarReflectionCaptureStatus> RenderService::GetPlanarReflectionStatus(
+        uint64_t entityID, UUID stableUUID) const {
+        if (!m_RHIRenderer) return std::nullopt;
+        return m_RHIRenderer->GetPlanarReflectionStatus(entityID, stableUUID);
+    }
+
+    PlanarReflectionCacheStats RenderService::GetPlanarReflectionCacheStats() const {
+        return m_RHIRenderer ? m_RHIRenderer->GetPlanarReflectionCacheStats() : PlanarReflectionCacheStats{};
+    }
+
+    void RenderService::RequestPlanarReflectionCapture(uint64_t entityID, UUID stableUUID) {
+        if (m_RHIRenderer) m_RHIRenderer->RequestPlanarReflectionCapture(entityID, stableUUID);
+    }
+
+    void RenderService::InvalidatePlanarReflection(uint64_t entityID, UUID stableUUID, const std::string& reason) {
+        if (m_RHIRenderer) m_RHIRenderer->InvalidatePlanarReflection(entityID, stableUUID, reason);
     }
 
     RHI::RHITexture* RenderService::GetDefaultMainColorTarget() const {

@@ -1,6 +1,7 @@
 #include <Axle/RHISceneRenderer.hpp>
 #include "RHISceneRendererPasses.hpp"
 #include "Passes/ReflectionCapturePass.hpp"
+#include "Passes/PlanarReflectionPass.hpp"
 #include <Axle/Path.hpp>
 #include <Axle/RenderGraph.hpp>
 #include <Axle/SceneLighting.hpp>
@@ -384,6 +385,30 @@ namespace Axle {
 
         if (!m_SSRConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHISSRConstants), RHIMemoryLocation::HostUpload, "SSRConstantsBuffer"))) return false;
 
+        // Initialize Planar Reflection Unified Resolve Pipeline & Resources (M15-U5-46)
+        if (!CompilePlanarShaders(device) || !CreatePlanarPipelineLayout(device) || !CreatePlanarPipeline(device)) {
+            return false;
+        }
+        if (!m_PlanarSampler.Init(RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Clamp Sampler for Planar Reflection.");
+            return false;
+        }
+        RHIDescriptorPoolDesc planarPoolDesc;
+        planarPoolDesc.MaxDescriptorSets = 4;
+        planarPoolDesc.MaxTextures = 16;
+        planarPoolDesc.MaxSamplers = 4;
+        if (!m_PlanarDescriptorPool.Init(planarPoolDesc)) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Planar Reflection Descriptor Pool.");
+            return false;
+        }
+        m_PlanarApplyDescriptorSet = m_PlanarDescriptorPool.AllocateDescriptorSet(m_PlanarApplyPipelineLayout, 0);
+        if (!m_PlanarApplyDescriptorSet) {
+            return false;
+        }
+        if (!m_PlanarDescriptorPool.UpdateSampler(m_PlanarApplyDescriptorSet, 6, 0, m_PlanarSampler.GetNative())) {
+            return false;
+        }
+
         // Initialize the independently allocated Hi-Z reduction levels used by
         // SSR. Keeping each level as its own storage texture avoids backend
         // specific multi-mip UAV view restrictions.
@@ -692,6 +717,26 @@ namespace Axle {
         m_PlanarSession = {};
         m_PlanarScratchViewTargets.reset();
         m_LastPlanarCaptureResult = {};
+        m_PlanarApplyPipelineSDR = nullptr;
+        m_PlanarApplyPipelineHDR = nullptr;
+        m_PlanarApplyPipelineLayout.Shutdown();
+        m_PlanarApplyVertexShader = {};
+        m_PlanarApplyPixelShader = {};
+        m_PlanarApplyDescriptorSet = nullptr;
+        m_PlanarDescriptorPool.Shutdown();
+        m_PlanarSampler.Shutdown();
+        m_PlanarPublishScratchColor.Shutdown();
+        m_PlanarPublishScratchDepth.Shutdown();
+        m_PublishedPlanarCaptures.clear();
+        m_PlanarStatuses.clear();
+        m_RequestedManualPlanarCaptures.clear();
+        m_ForcedInvalidatedPlanar.clear();
+        m_FailedPlanarCaptureRevisions.clear();
+        m_NextPlanarGenerationID = 1;
+        m_ActivePlanarSceneInstanceID = 0;
+        m_ActivePlanarSceneLifetimeEpoch = 0;
+        m_PlanarCacheStats = {};
+        m_ActivePlanarResolve = {};
         if (m_CaptureLastCompletion) {
             if (m_Device && m_CaptureLastCompletion.Epoch == m_Device->GetEpoch()) {
                 m_Device->WaitForCompletion(m_CaptureLastCompletion);
@@ -2005,6 +2050,119 @@ namespace Axle {
 
         return m_SSRComputePipeline != nullptr && m_SSRDownsamplePipeline != nullptr &&
             m_SSRApplyPipelineSDR != nullptr && m_SSRApplyPipelineHDR != nullptr;
+    }
+
+    bool RHISceneRenderer::CompilePlanarShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        auto shaderPath = FindShaderPath("PlanarReflection.hlsl");
+        if (shaderPath.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate PlanarReflection.hlsl!");
+            return false;
+        }
+
+        std::string shaderSource;
+        std::ifstream file(shaderPath);
+        if (file.is_open()) {
+            std::stringstream ss;
+            ss << file.rdbuf();
+            shaderSource = ss.str();
+        }
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to read PlanarReflection.hlsl!");
+            return false;
+        }
+
+        const RHIShaderFormat format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan)
+            ? RHIShaderFormat::SPIRV
+            : RHIShaderFormat::DXIL;
+
+        RHIShaderCompileDesc vsDesc;
+        vsDesc.Source = shaderSource;
+        vsDesc.SourcePath = PathToUtf8(shaderPath);
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        vsDesc.HLSLVersion = "2021";
+        vsDesc.ShaderModel = "6_0";
+        vsDesc.Format = format;
+        vsDesc.Optimization = true;
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile Planar VS: {0}", vsRes.ErrorMessage);
+            return false;
+        }
+        m_PlanarApplyVertexShader = vsRes.Bytecode;
+
+        RHIShaderCompileDesc psDesc = vsDesc;
+        psDesc.EntryPoint = "PSMain";
+        psDesc.Stage = RHIShaderStage::Fragment;
+        auto psRes = compiler.Compile(psDesc);
+        if (!psRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile Planar PS: {0}", psRes.ErrorMessage);
+            return false;
+        }
+        m_PlanarApplyPixelShader = psRes.Bytecode;
+
+        return true;
+    }
+
+    bool RHISceneRenderer::CreatePlanarPipelineLayout(RHIDevice& device) {
+        (void)device;
+        nri::RootDescriptorDesc applyRootDesc{};
+        applyRootDesc.registerIndex = 0;
+        applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        applyRootDesc.shaderStages = nri::StageBits::ALL;
+
+        nri::DescriptorRangeDesc applyRanges[7]{};
+        for (uint32_t i = 0; i < 7; ++i) {
+            applyRanges[i].baseRegisterIndex = i < 6 ? i : 0;
+            applyRanges[i].descriptorNum = 1;
+            applyRanges[i].descriptorType = i < 6 ? nri::DescriptorType::TEXTURE : nri::DescriptorType::SAMPLER;
+            applyRanges[i].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        }
+
+        nri::DescriptorSetDesc applyDescSet{};
+        applyDescSet.registerSpace = 1;
+        applyDescSet.ranges = applyRanges;
+        applyDescSet.rangeNum = 7;
+
+        nri::PipelineLayoutDesc applyLayoutDesc{};
+        applyLayoutDesc.rootRegisterSpace = 0;
+        applyLayoutDesc.rootDescriptors = &applyRootDesc;
+        applyLayoutDesc.rootDescriptorNum = 1;
+        applyLayoutDesc.descriptorSets = &applyDescSet;
+        applyLayoutDesc.descriptorSetNum = 1;
+        applyLayoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+
+        return m_PlanarApplyPipelineLayout.Init(applyLayoutDesc);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreatePlanarApplyPipeline(nri::Format colorFormat) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_PlanarApplyPipelineLayout;
+        gfxDesc.Shaders = { m_PlanarApplyVertexShader, m_PlanarApplyPixelShader };
+
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+
+        gfxDesc.DepthStencil.DepthTestEnable = false;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+
+        // Convex blend over current HDR scene (`baseLit + prevSpec`) ->
+        // `baseLit + lerp(prevSpec, planarSpec, wPlanar)`.
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::AlphaBlend() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+
+        return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    bool RHISceneRenderer::CreatePlanarPipeline(RHIDevice& device) {
+        (void)device;
+        m_PlanarApplyPipelineSDR = GetOrCreatePlanarApplyPipeline(nri::Format::RGBA8_UNORM);
+        m_PlanarApplyPipelineHDR = GetOrCreatePlanarApplyPipeline(nri::Format::RGBA16_SFLOAT);
+        return m_PlanarApplyPipelineSDR != nullptr && m_PlanarApplyPipelineHDR != nullptr;
     }
 
     bool RHISceneRenderer::CompileHiZShaders(RHIDevice& device) {
@@ -3742,6 +3900,7 @@ namespace Axle {
         m_PlanarSession = {};
         m_PlanarScratchViewTargets.reset();
         m_LastPlanarCaptureResult = {};
+        ClearPlanarReflectionCaptures();
         if (m_CaptureLastCompletion) {
             if (m_Device && m_CaptureLastCompletion.Epoch == m_Device->GetEpoch()) {
                 m_Device->WaitForCompletion(m_CaptureLastCompletion);
@@ -4994,6 +5153,713 @@ namespace Axle {
             policyOverride);
     }
 
+    std::string RHISceneRenderer::ResolvePlanarReflectorKey(const RenderPlanarReflector& reflector) {
+        if (reflector.StableUUID != 0) {
+            return "planar:uuid:" + std::to_string(static_cast<uint64_t>(reflector.StableUUID));
+        }
+        if (reflector.EntityID != 0) {
+            return "planar:entity:" + std::to_string(reflector.EntityID);
+        }
+        const auto px = std::bit_cast<uint32_t>(reflector.Position.x);
+        const auto py = std::bit_cast<uint32_t>(reflector.Position.y);
+        const auto pz = std::bit_cast<uint32_t>(reflector.Position.z);
+        return "planar:anon:" + std::to_string(px) + ":" + std::to_string(py) + ":" + std::to_string(pz);
+    }
+
+    std::string RHISceneRenderer::ResolvePlanarReflectorKey(uint64_t entityID, UUID stableUUID) {
+        RenderPlanarReflector key{};
+        key.EntityID = entityID;
+        key.StableUUID = stableUUID;
+        return ResolvePlanarReflectorKey(key);
+    }
+
+    void RHISceneRenderer::RequestPlanarReflectionCapture(const std::string& reflectorKey) {
+        m_RequestedManualPlanarCaptures[reflectorKey] = true;
+        m_FailedPlanarCaptureRevisions.erase(reflectorKey);
+        if (auto it = m_PlanarStatuses.find(reflectorKey); it != m_PlanarStatuses.end()) {
+            it->second.ManualRefreshRequired = false;
+            it->second.Failed = false;
+            it->second.LastDiagnostic = "PLANAR_CAPTURE_REQUESTED";
+        }
+    }
+
+    void RHISceneRenderer::RequestPlanarReflectionCapture(uint64_t entityID, UUID stableUUID) {
+        RequestPlanarReflectionCapture(ResolvePlanarReflectorKey(entityID, stableUUID));
+    }
+
+    void RHISceneRenderer::RequestPlanarReflectionCapture(const RenderPlanarReflector& reflector) {
+        RequestPlanarReflectionCapture(ResolvePlanarReflectorKey(reflector));
+    }
+
+    void RHISceneRenderer::InvalidatePlanarReflection(const std::string& reflectorKey, const std::string& reason) {
+        const std::string diag = reason.empty() ? std::string("manual_invalidation") : reason;
+        m_ForcedInvalidatedPlanar[reflectorKey] = diag;
+        m_FailedPlanarCaptureRevisions.erase(reflectorKey);
+        if (auto it = m_PlanarStatuses.find(reflectorKey); it != m_PlanarStatuses.end()) {
+            it->second.Stale = true;
+            if (it->second.HasCapture) {
+                it->second.State = PlanarCaptureLifecycleState::Stale;
+            }
+            it->second.LastDiagnostic = diag;
+        }
+    }
+
+    void RHISceneRenderer::InvalidatePlanarReflection(uint64_t entityID, UUID stableUUID, const std::string& reason) {
+        InvalidatePlanarReflection(ResolvePlanarReflectorKey(entityID, stableUUID), reason);
+    }
+
+    void RHISceneRenderer::InvalidatePlanarReflection(const RenderPlanarReflector& reflector, const std::string& reason) {
+        InvalidatePlanarReflection(ResolvePlanarReflectorKey(reflector), reason);
+    }
+
+    std::optional<PlanarReflectionCaptureStatus> RHISceneRenderer::GetPlanarReflectionStatus(
+        const std::string& reflectorKey) const {
+        const auto it = m_PlanarStatuses.find(reflectorKey);
+        if (it == m_PlanarStatuses.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
+    std::optional<PlanarReflectionCaptureStatus> RHISceneRenderer::GetPlanarReflectionStatus(
+        uint64_t entityID, UUID stableUUID) const {
+        return GetPlanarReflectionStatus(ResolvePlanarReflectorKey(entityID, stableUUID));
+    }
+
+    std::optional<PlanarReflectionCaptureStatus> RHISceneRenderer::GetPlanarReflectionStatus(
+        const RenderPlanarReflector& reflector) const {
+        return GetPlanarReflectionStatus(ResolvePlanarReflectorKey(reflector));
+    }
+
+    PlanarReflectionCacheStats RHISceneRenderer::GetPlanarReflectionCacheStats() const {
+        PlanarReflectionCacheStats stats = m_PlanarCacheStats;
+        stats.ActiveEntries = static_cast<uint32_t>(m_PublishedPlanarCaptures.size());
+        stats.StaleEntries = 0;
+        stats.FailedEntries = 0;
+        for (const auto& [key, status] : m_PlanarStatuses) {
+            (void)key;
+            if (status.Failed) {
+                ++stats.FailedEntries;
+            } else if (status.Stale) {
+                ++stats.StaleEntries;
+            }
+        }
+        return stats;
+    }
+
+    void RHISceneRenderer::ClearPlanarReflectionCaptures() {
+        if (m_PlanarLastCompletion) {
+            if (m_Device && m_PlanarLastCompletion.Epoch == m_Device->GetEpoch()) {
+                m_Device->WaitForCompletion(m_PlanarLastCompletion);
+            }
+            m_PlanarLastCompletion = {};
+        }
+        m_PlanarPublishScratchColor.Shutdown();
+        m_PlanarPublishScratchDepth.Shutdown();
+        m_PublishedPlanarCaptures.clear();
+        m_PlanarStatuses.clear();
+        m_RequestedManualPlanarCaptures.clear();
+        m_ForcedInvalidatedPlanar.clear();
+        m_FailedPlanarCaptureRevisions.clear();
+        m_NextPlanarGenerationID = 1;
+        m_ActivePlanarSceneInstanceID = 0;
+        m_ActivePlanarSceneLifetimeEpoch = 0;
+        m_PlanarCacheStats = {};
+        m_ActivePlanarResolve = {};
+    }
+
+    PlanarReflectionDomainStamps RHISceneRenderer::ComputePlanarCaptureDomainStamps(
+        const RenderWorld& world,
+        const PerspectiveCamera& mainCamera,
+        const RenderPlanarReflector& reflector,
+        uint32_t targetWidth,
+        uint32_t targetHeight,
+        const SceneRenderSettings& settings) const {
+        auto mixBytes = [](uint64_t& hash, const void* data, size_t size) {
+            const auto* bytes = reinterpret_cast<const uint8_t*>(data);
+            for (size_t i = 0; i < size; ++i) {
+                hash ^= bytes[i];
+                hash *= 1099511628211ull;
+            }
+        };
+        auto mixVal = [&](uint64_t& hash, const auto&... values) {
+            (mixBytes(hash, &values, sizeof(values)), ...);
+        };
+        auto mixText = [&](uint64_t& hash, const std::string& value) {
+            mixVal(hash, value.size());
+            for (char c : value) {
+                mixVal(hash, c);
+            }
+        };
+        auto mixFileTime = [&](uint64_t& hash, const std::string& path) {
+            mixText(hash, path);
+            if (path.empty()) return;
+            std::error_code error;
+            const auto time = std::filesystem::last_write_time(FileSystem::ResolveAssetPath(PathFromUtf8(path)), error);
+            mixVal(hash, error.value());
+            if (!error) {
+                mixVal(hash, time.time_since_epoch().count());
+            }
+        };
+
+        constexpr uint64_t kFNVOffset = 1469598103934665603ull;
+        PlanarReflectionContract::PlanarReflectionDomainStamps stamps{};
+        stamps.PlaneStamp = kFNVOffset;
+        stamps.CameraStamp = kFNVOffset;
+        stamps.GeometryStamp = kFNVOffset;
+        stamps.MaterialStamp = kFNVOffset;
+        stamps.LightingStamp = kFNVOffset;
+        stamps.AssetStamp = kFNVOffset;
+        stamps.SettingsStamp = kFNVOffset;
+        stamps.SceneRevision = world.SceneRevision;
+        stamps.SceneInstanceID = world.SceneInstanceID;
+        stamps.SceneLifetimeEpoch = world.SceneLifetimeEpoch;
+        stamps.DeviceEpoch = m_Device ? m_Device->GetEpoch() : 0ull;
+        stamps.TargetWidth = targetWidth;
+        stamps.TargetHeight = targetHeight;
+
+        mixVal(stamps.PlaneStamp,
+            reflector.EntityID,
+            static_cast<uint64_t>(reflector.StableUUID),
+            reflector.Enabled,
+            reflector.WorldTransform,
+            reflector.Position,
+            reflector.Normal,
+            reflector.Tangent,
+            reflector.Bitangent,
+            reflector.HalfExtents,
+            reflector.ClipPlaneOffset,
+            reflector.ClipToExtents);
+
+        const glm::mat4 camView = mainCamera.GetViewMatrix();
+        const glm::mat4 camProj = mainCamera.GetProjectionMatrixZO();
+        mixVal(stamps.CameraStamp,
+            mainCamera.GetPosition(),
+            mainCamera.GetFOV(),
+            mainCamera.GetAspectRatio(),
+            mainCamera.GetNearClip(),
+            mainCamera.GetFarClip(),
+            camView,
+            camProj);
+
+        mixVal(stamps.SettingsStamp,
+            reflector.ResolutionScale,
+            reflector.CaptureNearPlane,
+            reflector.CaptureFarPlane,
+            reflector.CaptureShadows,
+            reflector.CaptureSkybox,
+            static_cast<uint8_t>(reflector.CaptureMode),
+            reflector.EdgeFadeDistance,
+            reflector.MaxRoughness,
+            reflector.Intensity,
+            settings.EnableShadows,
+            settings.EnableSkybox,
+            settings.EnableStudioLightLobes);
+
+        mixVal(stamps.AssetStamp, stamps.DeviceEpoch);
+        for (const auto& texture : {m_IrradianceMap, m_PrefilterMap, m_BRDFLUT}) {
+            const auto handle = texture ? texture->GetHandle() : RHIResourceHandle{};
+            mixVal(stamps.AssetStamp, handle.Epoch, handle.Slot, handle.Generation);
+        }
+
+        mixVal(stamps.LightingStamp,
+            m_UseIBL,
+            m_IBLAllowed,
+            settings.EnableShadows,
+            settings.EnableSkybox,
+            settings.LocalShadowResolution,
+            settings.MaxShadowedPointLights,
+            settings.MaxShadowedSpotLights,
+            settings.LocalShadowDistance,
+            settings.ShadowCascadeCount,
+            settings.EnableStudioLightLobes);
+        const auto hashDirectional = [&](const RenderDirectionalLight& light) {
+            mixVal(stamps.LightingStamp,
+                light.Direction, light.Color, light.Intensity, light.AmbientIntensity, light.SolarAngularRadius,
+                light.CastsShadows, light.ShadowQuality, light.ShadowBias, light.ShadowSlopeBias,
+                light.ShadowNormalBias, light.ShadowFilterRadius, light.MaxShadowDistance, light.CascadeSplitLambda);
+        };
+        mixVal(stamps.LightingStamp, world.DirectionalLight.has_value());
+        if (world.DirectionalLight) {
+            hashDirectional(*world.DirectionalLight);
+        }
+        mixVal(stamps.LightingStamp, world.AdditionalDirectionalLights.size());
+        for (const auto& light : world.AdditionalDirectionalLights) {
+            hashDirectional(light);
+        }
+        const auto hashShadow = [&](const LocalShadowSettings& s) {
+            mixVal(stamps.LightingStamp, s.CastShadows, s.Bias, s.SlopeBias, s.NormalBias, s.FilterRadius, s.NearPlane);
+        };
+        mixVal(stamps.LightingStamp, world.PointLights.size(), world.SpotLights.size(), world.RectLights.size());
+        for (const auto& light : world.PointLights) {
+            mixVal(stamps.LightingStamp, light.EntityID, light.Position, light.Color, light.Intensity, light.Radius, light.Falloff);
+            hashShadow(light.Shadows);
+        }
+        for (const auto& light : world.SpotLights) {
+            mixVal(stamps.LightingStamp, light.EntityID, light.Position, light.Direction, light.Color, light.Intensity, light.Range, light.InnerAngle, light.OuterAngle);
+            hashShadow(light.Shadows);
+        }
+        for (const auto& light : world.RectLights) {
+            mixVal(stamps.LightingStamp, light.EntityID, light.Position, light.Direction, light.Up, light.Color, light.Intensity, light.Width, light.Height, light.Range, light.TwoSided, light.Shape, light.ShadowPolicy);
+        }
+        const auto& sky = world.Skybox;
+        mixVal(stamps.LightingStamp,
+            sky.Authored, sky.Enabled, sky.EnvironmentLighting, sky.SyncWithSun, sky.CustomAzimuth, sky.CustomElevation,
+            sky.HemisphereAmbient, sky.SunSize, sky.SunGlow, sky.Turbidity, sky.Type, sky.SunDirection, sky.SunColor,
+            sky.ZenithColor, sky.HorizonColor, sky.GroundColor, sky.Intensity, sky.Exposure, sky.EnvironmentRotation);
+        if (!sky.HDRPath.empty()) {
+            mixText(stamps.LightingStamp, sky.HDRPath);
+        }
+        mixFileTime(stamps.AssetStamp, sky.HDRPath);
+        if (!sky.Authored) {
+            mixVal(stamps.LightingStamp,
+                m_SkyboxParams.Enabled, m_SkyboxParams.Type, m_SkyboxParams.Intensity, m_SkyboxParams.Exposure,
+                m_SkyboxParams.ZenithColor, m_SkyboxParams.HorizonColor, m_SkyboxParams.GroundColor, m_SkyboxParams.SunSize,
+                m_SkyboxParams.SunGlow, m_SkyboxParams.Turbidity, m_SkyboxParams.EnvironmentRotation);
+        }
+
+        for (const auto& mesh : world.Meshes) {
+            if (reflector.EntityID != 0 && mesh.EntityID == reflector.EntityID) {
+                continue;
+            }
+            const int builtinVal = mesh.BuiltinId ? static_cast<int>(*mesh.BuiltinId) : -1;
+            mixVal(stamps.GeometryStamp,
+                mesh.EntityID,
+                static_cast<uint64_t>(mesh.StableUUID),
+                mesh.WorldTransform,
+                mesh.CastsShadows,
+                mesh.MeshSourceUUID,
+                builtinVal);
+            mixText(stamps.GeometryStamp, mesh.MeshURI);
+
+            const auto surface = MaterialResolver::Resolve(mesh.Material);
+            mixVal(stamps.MaterialStamp,
+                mesh.EntityID,
+                surface.Generation,
+                static_cast<uint64_t>(mesh.Material.MaterialUUID),
+                mesh.Material.AlbedoColor,
+                mesh.Material.SecondaryColor,
+                mesh.Material.TileScale,
+                mesh.Material.PatternMode,
+                mesh.Material.Roughness,
+                mesh.Material.Metallic,
+                mesh.Material.Emission,
+                mesh.Material.UVScale,
+                mesh.Material.UVOffset,
+                mesh.Material.AO,
+                mesh.Material.UseAlbedoMap,
+                mesh.Material.UseCustomShader);
+            mixText(stamps.MaterialStamp, mesh.Material.MaterialPath);
+            mixText(stamps.MaterialStamp, mesh.Material.CustomShaderPath);
+
+            for (const auto& binding : surface.Textures) {
+                mixText(stamps.MaterialStamp, binding.Path);
+                mixFileTime(stamps.AssetStamp, binding.Path);
+            }
+
+            const auto view = mesh.NativeView ? mesh.NativeView : mesh.NativeMesh ? mesh.NativeMesh->CaptureView() : nullptr;
+            const auto handle = view ? view->GetVertexHandle() : RHIResourceHandle{};
+            mixVal(stamps.AssetStamp, handle.Epoch, handle.Slot, handle.Generation);
+            const auto indices = view ? view->GetIndexHandle() : RHIResourceHandle{};
+            mixVal(stamps.AssetStamp, indices.Epoch, indices.Slot, indices.Generation);
+
+            mixFileTime(stamps.AssetStamp, mesh.Material.CustomShaderPath);
+            if (mesh.Material.UseCustomShader && !mesh.Material.CustomShaderPath.empty()) {
+                CustomProgramKey key;
+                key.ShaderPath = PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(mesh.Material.CustomShaderPath)).lexically_normal());
+                key.Backend = m_Device ? m_Device->GetBackend() : RHIType::None;
+                mixText(stamps.AssetStamp, m_CustomProgramCache.ComputeFingerprint(key));
+            }
+            for (const auto& property : mesh.Material.CustomProperties) {
+                mixText(stamps.MaterialStamp, property.Desc.Name);
+                mixVal(stamps.MaterialStamp, property.FloatVal, property.Vec4Val, property.IntVal, property.BoolVal);
+                mixFileTime(stamps.AssetStamp, property.TexturePath);
+            }
+        }
+
+        for (const auto& skin : world.Skins) {
+            mixVal(stamps.GeometryStamp,
+                static_cast<bool>(skin.GLMesh != nullptr),
+                skin.WorldTransform,
+                skin.Color,
+                skin.CastsShadows,
+                skin.BoneMatrices.size());
+            for (const auto& bone : skin.BoneMatrices) {
+                mixVal(stamps.GeometryStamp, bone);
+            }
+        }
+
+        stamps.CombinedStamp = kFNVOffset;
+        mixVal(stamps.CombinedStamp,
+            stamps.PlaneStamp,
+            stamps.CameraStamp,
+            stamps.SceneRevision,
+            stamps.SceneInstanceID,
+            stamps.SceneLifetimeEpoch,
+            stamps.GeometryStamp,
+            stamps.MaterialStamp,
+            stamps.LightingStamp,
+            stamps.AssetStamp,
+            stamps.SettingsStamp,
+            stamps.DeviceEpoch,
+            stamps.TargetWidth,
+            stamps.TargetHeight);
+        if (stamps.CombinedStamp == 0) {
+            stamps.CombinedStamp = 1;
+        }
+        return stamps;
+    }
+
+    bool RHISceneRenderer::SynchronizePlanarCaptureCacheState(const RenderWorld& world) {
+        const uint64_t currentEpoch = m_Device ? m_Device->GetEpoch() : 0;
+        if (m_PlanarLastCompletion) {
+            if (m_Device && currentEpoch != 0 && m_PlanarLastCompletion.Epoch == currentEpoch) {
+                if (!m_Device->WaitForCompletion(m_PlanarLastCompletion)) return false;
+            }
+            m_PlanarLastCompletion = {};
+        }
+
+        const bool sceneReplaced =
+            (world.SceneInstanceID != 0 && m_ActivePlanarSceneInstanceID != 0 &&
+             (world.SceneInstanceID != m_ActivePlanarSceneInstanceID ||
+              (world.SceneLifetimeEpoch != 0 && m_ActivePlanarSceneLifetimeEpoch != 0 &&
+               world.SceneLifetimeEpoch != m_ActivePlanarSceneLifetimeEpoch)));
+
+        std::vector<std::pair<std::string, std::string>> evictions;
+        for (const auto& [key, entry] : m_PublishedPlanarCaptures) {
+            if (currentEpoch != 0 && entry.DeviceEpoch != currentEpoch) {
+                evictions.emplace_back(key, "PLANAR_EVICTED: device epoch reset");
+                continue;
+            }
+            const bool entrySceneMismatch =
+                (world.SceneInstanceID != 0 && entry.SceneInstanceID != 0 &&
+                 (entry.SceneInstanceID != world.SceneInstanceID ||
+                  (world.SceneLifetimeEpoch != 0 && entry.SceneLifetimeEpoch != 0 &&
+                   entry.SceneLifetimeEpoch != world.SceneLifetimeEpoch)));
+            if (sceneReplaced || entrySceneMismatch) {
+                evictions.emplace_back(key, "PLANAR_EVICTED: retired scene replaced");
+            }
+        }
+        for (const auto& [key, reason] : evictions) {
+            m_PublishedPlanarCaptures.erase(key);
+            if (auto st = m_PlanarStatuses.find(key); st != m_PlanarStatuses.end()) {
+                st->second.HasCapture = false;
+                st->second.Stale = false;
+                st->second.PreservedPreviousGeneration = false;
+                st->second.ActiveGenerationID = 0;
+                st->second.ActiveInputStamp = 0;
+                st->second.State = PlanarCaptureLifecycleState::Idle;
+                st->second.LastDiagnostic = reason;
+            }
+        }
+
+        if (sceneReplaced) {
+            m_PlanarStatuses.clear();
+            m_RequestedManualPlanarCaptures.clear();
+            m_ForcedInvalidatedPlanar.clear();
+            m_FailedPlanarCaptureRevisions.clear();
+        }
+        if (world.SceneInstanceID != 0) {
+            m_ActivePlanarSceneInstanceID = world.SceneInstanceID;
+            m_ActivePlanarSceneLifetimeEpoch = world.SceneLifetimeEpoch;
+        }
+        return true;
+    }
+
+    bool RHISceneRenderer::PublishPlanarScratchCopy(RHITexture& srcColor, RHITexture& dstColor, std::string* outDiagnostic) {
+        if (!m_Device || !m_Device->CanSubmit() || !srcColor.IsValid() || !dstColor.IsValid() ||
+            srcColor.GetWidth() != dstColor.GetWidth() || srcColor.GetHeight() != dstColor.GetHeight()) {
+            if (outDiagnostic) *outDiagnostic = "PLANAR_PUBLISH_COPY_INVALID: scratch/target mismatch";
+            return false;
+        }
+        if (ScopedRHIFault::Invoke("PlanarPublishCopy", [] { return nri::Result::SUCCESS; }) != nri::Result::SUCCESS) {
+            if (outDiagnostic) *outDiagnostic = "PLANAR_PUBLISH_COPY_FAULT: copy submission blocked";
+            return false;
+        }
+        RHICommandBuffer cmd;
+        if (!cmd.Init() || !cmd.Begin()) {
+            if (outDiagnostic) *outDiagnostic = "PLANAR_PUBLISH_COPY_FAILED: unable to initialize copy command buffer";
+            return false;
+        }
+        cmd.CopyTexture(*dstColor.GetNative(), nullptr, *srcColor.GetNative(), nullptr);
+        cmd.TransitionTexture(dstColor.GetNative(), RHIResourceLayout::CopyDest, RHIResourceLayout::ShaderResource);
+        if (!cmd.End() || !cmd.Submit() || !m_Device->WaitIdle()) {
+            if (outDiagnostic) *outDiagnostic = "PLANAR_PUBLISH_COPY_SUBMIT_FAILED: GPU copy submit or wait failed";
+            return false;
+        }
+        return true;
+    }
+
+    void RHISceneRenderer::SchedulePlanarReflectionCaptures(
+        const RenderWorld& world,
+        const PerspectiveCamera& mainCamera,
+        const SceneRenderSettings& requestedSettings,
+        RHI::RHIViewTargets* viewTargets) {
+        m_ActivePlanarResolve = {};
+        if (!m_Initialized || !m_Device || !m_Device->CanSubmit()) {
+            return;
+        }
+        auto mainCompletion = m_ViewContext.GetCompletion();
+        if (mainCompletion && mainCompletion.Epoch == m_Device->GetEpoch() && !WaitForDeviceToken(mainCompletion)) {
+            return;
+        }
+        if (!SynchronizePlanarCaptureCacheState(world)) {
+            return;
+        }
+
+        std::unordered_set<std::string> liveKeys;
+        const RenderPlanarReflector* primaryReflector = nullptr;
+        float bestDistanceSq = std::numeric_limits<float>::max();
+        for (const auto& reflector : world.PlanarReflectors) {
+            if (!reflector.Enabled) {
+                continue;
+            }
+            liveKeys.insert(ResolvePlanarReflectorKey(reflector));
+            const glm::vec3 d = reflector.Position - mainCamera.GetPosition();
+            const float distSq = glm::dot(d, d);
+            if (!primaryReflector || distSq < bestDistanceSq) {
+                primaryReflector = &reflector;
+                bestDistanceSq = distSq;
+            }
+        }
+        std::erase_if(m_PublishedPlanarCaptures, [&](const auto& item) { return !liveKeys.contains(item.first); });
+        std::erase_if(m_PlanarStatuses, [&](const auto& item) { return !liveKeys.contains(item.first); });
+        std::erase_if(m_RequestedManualPlanarCaptures, [&](const auto& item) { return !liveKeys.contains(item.first); });
+        std::erase_if(m_ForcedInvalidatedPlanar, [&](const auto& item) { return !liveKeys.contains(item.first); });
+        std::erase_if(m_FailedPlanarCaptureRevisions, [&](const auto& item) { return !liveKeys.contains(item.first); });
+
+        if (!primaryReflector || !requestedSettings.EnablePlanarReflections ||
+            !viewTargets || !viewTargets->IsValid() || !viewTargets->GetDesc().EnablePlanarReflection) {
+            return;
+        }
+        RHITexture* dstColor = viewTargets->GetPlanarColor();
+        RHITexture* dstDepth = viewTargets->GetPlanarDepth();
+        if (!dstColor || !dstColor->IsValid() || !dstDepth || !dstDepth->IsValid()) {
+            return;
+        }
+
+        const uint64_t currentEpoch = m_Device->GetEpoch();
+        const uint32_t targetW = dstColor->GetWidth();
+        const uint32_t targetH = dstColor->GetHeight();
+        const std::string key = ResolvePlanarReflectorKey(*primaryReflector);
+        const PlanarReflectionContract::PlanarReflectionDomainStamps currentStamps =
+            ComputePlanarCaptureDomainStamps(world, mainCamera, *primaryReflector, targetW, targetH, requestedSettings);
+
+        const auto existingIt = m_PublishedPlanarCaptures.find(key);
+        const bool hasPrevious =
+            (existingIt != m_PublishedPlanarCaptures.end() &&
+             existingIt->second.DeviceEpoch == currentEpoch &&
+             existingIt->second.PublishedColorHandle == dstColor->GetHandle() &&
+             existingIt->second.TargetWidth == targetW &&
+             existingIt->second.TargetHeight == targetH);
+
+        const bool forcedInvalidation = m_ForcedInvalidatedPlanar.contains(key);
+        const bool manualRequested = m_RequestedManualPlanarCaptures.contains(key);
+        PlanarReflectionContract::PlanarReflectionInvalidation invalidation;
+        if (hasPrevious) {
+            invalidation = PlanarReflectionContract::EvaluateInvalidation(
+                existingIt->second.DomainStamps, currentStamps, manualRequested);
+        } else {
+            invalidation = PlanarReflectionContract::PlanarReflectionInvalidation{
+                true, true, true, true, true, true, true, true, true, true, manualRequested};
+        }
+        const bool needsCapture = !hasPrevious || invalidation.AnyChange() || forcedInvalidation;
+
+        auto& status = m_PlanarStatuses[key];
+        status.ReflectorKey = key;
+        status.EntityID = primaryReflector->EntityID;
+        status.StableUUID = primaryReflector->StableUUID;
+        status.CaptureMode = primaryReflector->CaptureMode;
+        status.HasCapture = hasPrevious;
+        status.ActiveGenerationID = hasPrevious ? existingIt->second.GenerationID : 0;
+        status.ActiveInputStamp = hasPrevious ? existingIt->second.DomainStamps.CombinedStamp : 0;
+        status.TargetInputStamp = currentStamps.CombinedStamp;
+        status.TargetWidth = targetW;
+        status.TargetHeight = targetH;
+        status.PendingInvalidation = needsCapture ? invalidation : PlanarReflectionContract::PlanarReflectionInvalidation{};
+        if (hasPrevious) {
+            status.ObliqueClippingApplied = existingIt->second.ObliqueClippingApplied;
+            status.ReverseWindingApplied = existingIt->second.ReverseWindingApplied;
+        }
+
+        auto activateExistingResolve = [&] {
+            if (hasPrevious) {
+                m_ActivePlanarResolve.ValidForResolve = true;
+                m_ActivePlanarResolve.ReflectorKey = key;
+                m_ActivePlanarResolve.Reflector = existingIt->second.Reflector;
+                m_ActivePlanarResolve.ReflectedViewProj = existingIt->second.ReflectedViewProj;
+                m_ActivePlanarResolve.PublishedColorHandle = existingIt->second.PublishedColorHandle;
+            }
+        };
+
+        if (primaryReflector->CaptureMode == PlanarReflectionCaptureMode::Manual && !manualRequested) {
+            status.ManualRefreshRequired = needsCapture;
+            status.Stale = hasPrevious && needsCapture;
+            if (needsCapture) {
+                if (!status.Failed) {
+                    status.State = hasPrevious ? PlanarCaptureLifecycleState::Stale : PlanarCaptureLifecycleState::Idle;
+                    status.LastDiagnostic = hasPrevious
+                        ? (forcedInvalidation ? m_ForcedInvalidatedPlanar[key] : std::string("PLANAR_STALE: manual reflector awaiting capture"))
+                        : std::string("PLANAR_MANUAL_IDLE: awaiting manual capture request");
+                }
+            } else {
+                status.State = PlanarCaptureLifecycleState::Ready;
+                status.Failed = false;
+                status.PreservedPreviousGeneration = false;
+                status.LastDiagnostic.clear();
+                ++m_PlanarCacheStats.CacheHits;
+            }
+            activateExistingResolve();
+            return;
+        }
+
+        if (!needsCapture) {
+            status.State = PlanarCaptureLifecycleState::Ready;
+            status.Stale = false;
+            status.Failed = false;
+            status.ManualRefreshRequired = false;
+            status.PreservedPreviousGeneration = false;
+            status.LastDiagnostic.clear();
+            ++m_PlanarCacheStats.CacheHits;
+            activateExistingResolve();
+            return;
+        }
+
+        if (const auto failedIt = m_FailedPlanarCaptureRevisions.find(key);
+            failedIt != m_FailedPlanarCaptureRevisions.end() &&
+            failedIt->second == currentStamps.CombinedStamp &&
+            !manualRequested) {
+            status.State = PlanarCaptureLifecycleState::Failed;
+            status.Failed = true;
+            status.Stale = hasPrevious;
+            status.PreservedPreviousGeneration = hasPrevious;
+            activateExistingResolve();
+            return;
+        }
+
+        auto failScheduled = [&](const std::string& diagnostic) {
+            m_RequestedManualPlanarCaptures.erase(key);
+            m_FailedPlanarCaptureRevisions[key] = currentStamps.CombinedStamp;
+            ++m_PlanarCacheStats.FailedCaptures;
+            status.State = PlanarCaptureLifecycleState::Failed;
+            status.Failed = true;
+            status.HasCapture = hasPrevious;
+            status.Stale = hasPrevious;
+            status.ManualRefreshRequired = (primaryReflector->CaptureMode == PlanarReflectionCaptureMode::Manual);
+            status.PreservedPreviousGeneration = hasPrevious;
+            status.LastDiagnostic = diagnostic;
+            activateExistingResolve();
+        };
+
+        const PlanarReflectionContract::PlanarReflectionSurface surface =
+            PlanarReflectionContract::BuildSurfaceFromReflector(*primaryReflector);
+        PlanarReflectionContract::PlanarReflectionPolicy policy;
+        policy.ResolutionScale = primaryReflector->ResolutionScale;
+        policy.ClipPlaneOffset = primaryReflector->ClipPlaneOffset;
+        policy.IncludeSkybox = primaryReflector->CaptureSkybox;
+        policy.IncludeShadows = primaryReflector->CaptureShadows;
+        policy.ExcludeEntityID = primaryReflector->EntityID;
+
+        const PlanarReflectionContract::MirroredCameraResult mirrored =
+            PlanarReflectionContract::BuildMirroredCamera(mainCamera, surface, policy);
+        if (!surface.Valid || !mirrored.Valid) {
+            failScheduled(mirrored.Diagnostic.empty() ? "PLANAR_CAMERA_INVALID" : mirrored.Diagnostic);
+            return;
+        }
+
+        if (!m_PlanarPublishScratchColor.IsValid() ||
+            m_PlanarPublishScratchColor.GetHandle().Epoch != currentEpoch ||
+            m_PlanarPublishScratchColor.GetWidth() != targetW ||
+            m_PlanarPublishScratchColor.GetHeight() != targetH ||
+            m_PlanarPublishScratchColor.GetFormat() != dstColor->GetFormat()) {
+            RHITextureDesc scratchColorDesc = RHITextureDesc::RenderTarget2D(
+                targetW, targetH, dstColor->GetFormat(), "PlanarPublishScratchColor");
+            if (!m_PlanarPublishScratchColor.Init(scratchColorDesc)) {
+                failScheduled("PLANAR_SCRATCH_ALLOC_FAILED: unable to allocate planar scratch color target");
+                return;
+            }
+        }
+        if (!m_PlanarPublishScratchDepth.IsValid() ||
+            m_PlanarPublishScratchDepth.GetHandle().Epoch != currentEpoch ||
+            m_PlanarPublishScratchDepth.GetWidth() != targetW ||
+            m_PlanarPublishScratchDepth.GetHeight() != targetH ||
+            m_PlanarPublishScratchDepth.GetFormat() != dstDepth->GetFormat()) {
+            RHITextureDesc scratchDepthDesc = RHITextureDesc::DepthStencil2D(
+                targetW, targetH, dstDepth->GetFormat(), "PlanarPublishScratchDepth");
+            if (!m_PlanarPublishScratchDepth.Init(scratchDepthDesc)) {
+                failScheduled("PLANAR_SCRATCH_DEPTH_ALLOC_FAILED: unable to allocate planar scratch depth target");
+                return;
+            }
+        }
+
+        const PlanarReflectionCaptureResult capRes = CapturePlanarReflection(
+            world,
+            mainCamera,
+            *primaryReflector,
+            &m_PlanarPublishScratchColor,
+            &m_PlanarPublishScratchDepth,
+            requestedSettings,
+            &policy);
+        if (!capRes.Success) {
+            failScheduled(capRes.Diagnostic.empty() ? "PLANAR_CAPTURE_FAILED" : capRes.Diagnostic);
+            return;
+        }
+
+        std::string copyDiag;
+        if (!PublishPlanarScratchCopy(m_PlanarPublishScratchColor, *dstColor, &copyDiag)) {
+            failScheduled(copyDiag);
+            return;
+        }
+
+        m_RequestedManualPlanarCaptures.erase(key);
+        m_ForcedInvalidatedPlanar.erase(key);
+        m_FailedPlanarCaptureRevisions.erase(key);
+
+        PublishedPlanarEntry entry{};
+        entry.ReflectorKey = key;
+        entry.EntityID = primaryReflector->EntityID;
+        entry.StableUUID = primaryReflector->StableUUID;
+        entry.GenerationID = m_NextPlanarGenerationID++;
+        entry.SceneInstanceID = world.SceneInstanceID;
+        entry.SceneLifetimeEpoch = world.SceneLifetimeEpoch;
+        entry.DeviceEpoch = currentEpoch;
+        entry.PublishedColorHandle = dstColor->GetHandle();
+        entry.TargetWidth = targetW;
+        entry.TargetHeight = targetH;
+        entry.DomainStamps = currentStamps;
+        entry.Reflector = *primaryReflector;
+        entry.MirroredCamera = mirrored.Camera;
+        entry.ReflectedViewProj = mirrored.Camera.GetProjectionMatrixZO() * mirrored.Camera.GetViewMatrix();
+        entry.ObliqueClippingApplied = capRes.ObliqueClippingApplied;
+        entry.ReverseWindingApplied = capRes.ReverseWindingApplied;
+        m_PublishedPlanarCaptures[key] = entry;
+
+        if (hasPrevious && invalidation.AnyChange()) {
+            ++m_PlanarCacheStats.InvalidatedCaptures;
+        }
+        ++m_PlanarCacheStats.SuccessfulCaptures;
+        m_PlanarCacheStats.CurrentGenerationID = entry.GenerationID;
+
+        status.State = PlanarCaptureLifecycleState::Ready;
+        status.HasCapture = true;
+        status.Stale = false;
+        status.Failed = false;
+        status.ManualRefreshRequired = false;
+        status.PreservedPreviousGeneration = false;
+        status.ObliqueClippingApplied = entry.ObliqueClippingApplied;
+        status.ReverseWindingApplied = entry.ReverseWindingApplied;
+        status.ActiveGenerationID = entry.GenerationID;
+        status.ActiveInputStamp = currentStamps.CombinedStamp;
+        status.PendingInvalidation = {};
+        status.LastDiagnostic.clear();
+
+        m_ActivePlanarResolve.ValidForResolve = true;
+        m_ActivePlanarResolve.ReflectorKey = key;
+        m_ActivePlanarResolve.Reflector = entry.Reflector;
+        m_ActivePlanarResolve.ReflectedViewProj = entry.ReflectedViewProj;
+        m_ActivePlanarResolve.PublishedColorHandle = entry.PublishedColorHandle;
+    }
+
     void RHISceneRenderer::ConsumeReadyGPUTimestamps() {
         if (!m_Device) return;
         GPUTimingFrame newest;
@@ -5209,7 +6075,7 @@ namespace Axle {
         if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
         const auto backendPolicy = RenderBackendPolicy::FromDevice(m_Device->GetCapabilities());
         SceneRenderSettings settings = backendPolicy.ResolveSettings(requestedSettings);
-        if (settings.EnableSSR && settings.MSAASamples == 1 && !settings.EnableToneMapping) {
+        if ((settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1 && !settings.EnableToneMapping) {
             // Reflection replacement is radiance arithmetic. Preserve the legacy
             // ACES/gamma output with one final conversion after linear resolve.
             settings.EnableToneMapping = true;
@@ -5220,8 +6086,75 @@ namespace Axle {
         m_MaterialDiagnostics.clear(); m_MaterialFeedback.clear();
 
         const bool isSubCapture = m_CaptureSession.Active || m_PlanarSession.Active;
-        if (!isSubCapture && world.ErrorMessage.empty()) {
+        bool useMSAA = (settings.MSAASamples > 1);
+        uint8_t activeSampleCount = useMSAA ? settings.MSAASamples : 1;
+        bool useToneMap = settings.EnableToneMapping;
+        bool useFXAA = settings.EnableFXAA;
+        nri::Texture* sceneDepthTexture = depthTarget;
+
+        RHIViewTargetDesc targetDesc;
+        targetDesc.Width = width;
+        targetDesc.Height = height;
+        targetDesc.ColorFormat = FromNRIFormat(m_CurrentColorFormat);
+        targetDesc.DepthFormat = FromNRIFormat(m_CurrentDepthFormat);
+        targetDesc.EnableDepth = sceneDepthTexture != nullptr;
+        targetDesc.Samples = activeSampleCount;
+        targetDesc.HDR = useToneMap;
+        targetDesc.FXAA = useFXAA;
+        targetDesc.OwnPrimary = false;
+        targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows ||
+            settings.EnableSSR || settings.EnablePlanarReflections);
+        targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows ||
+            settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
+        targetDesc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
+        targetDesc.EnableReflectionTerms = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
+        const bool enablePlanarTargets = settings.EnablePlanarReflections && !isSubCapture;
+        targetDesc.EnablePlanarReflection = enablePlanarTargets;
+        targetDesc.PlanarResolutionScale = enablePlanarTargets
+            ? std::clamp(settings.PlanarReflectionResolutionScale,
+                         RHI::RHIViewTargets::MinPlanarResolutionScale,
+                         RHI::RHIViewTargets::MaxPlanarResolutionScale)
+            : 0.5f;
+        targetDesc.EnableBloom = settings.EnableBloom;
+        targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
+        targetDesc.EnableAutoExposure = settings.EnableAutoExposure;
+        targetDesc.EnableDDGI = settings.EnableDDGI;
+        if (settings.EnableTAA) targetDesc.HistoryCount = 2;
+
+        if (!world.ErrorMessage.empty()) {
+            AXLE_CORE_ERROR("View frame acquisition failed");
+            return;
+        }
+        if (viewTargets) {
+            auto expected = targetDesc;
+            expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
+            expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
+            if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
+                (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||
+                (viewTargets->Get(RHIViewTarget::Depth) && viewTargets->Get(RHIViewTarget::Depth)->GetNative() != depthTarget)) {
+                return;
+            }
+            if (!isSubCapture) {
+                m_ImplicitViewTargets.reset();
+                m_ImplicitViewColor = {};
+            }
+        } else {
+            const auto identity = m_Device->GetResources().AcquireNative(colorTarget).GetHandle();
+            if (!m_ImplicitViewTargets || !m_ImplicitViewTargets->IsValid() ||
+                m_ImplicitViewTargets->GetDesc() != targetDesc || m_ImplicitViewColor != identity) {
+                auto candidate = std::make_shared<RHIViewTargets>();
+                if (!candidate->Configure(targetDesc)) {
+                    return;
+                }
+                m_ImplicitViewTargets = std::move(candidate);
+                m_ImplicitViewColor = identity;
+            }
+            viewTargets = m_ImplicitViewTargets;
+        }
+
+        if (!isSubCapture) {
             ScheduleDynamicReflectionCaptures(world, camera.GetPosition(), requestedSettings);
+            SchedulePlanarReflectionCaptures(world, camera, requestedSettings, viewTargets.get());
         }
 
         ViewContext& viewCtx = ActiveViewContext();
@@ -5230,13 +6163,13 @@ namespace Axle {
         viewInput.Height = height;
         viewInput.Camera = camera;
         viewInput.Settings = settings;
-        viewInput.Targets = viewTargets ? viewTargets : (isSubCapture ? std::shared_ptr<RHI::RHIViewTargets>{} : m_ImplicitViewTargets);
+        viewInput.Targets = viewTargets;
         viewInput.FeatureGeneration = HashViewFeaturePolicy(settings);
         viewInput.SceneRevision = world.SceneRevision;
         // Effective material identity is published by the live pass schedule.
         viewInput.MaterialGeneration = viewCtx.GetInput().MaterialGeneration;
         viewCtx.Observe(viewInput, m_Device->GetEpoch());
-        if (!world.ErrorMessage.empty() || !viewCtx.BeginFrame()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
+        if (!viewCtx.BeginFrame()) { AXLE_CORE_ERROR("View frame acquisition failed"); return; }
         if (!isSubCapture) {
             ConsumeReadyGPUTimestamps();
         }
@@ -5285,56 +6218,12 @@ namespace Axle {
         m_LastStreamedTransformBytes = 0;
 
         // Determine whether intermediate targets are used for MSAA, Tone Mapping & FXAA
-        bool useMSAA = (settings.MSAASamples > 1);
-        uint8_t activeSampleCount = useMSAA ? settings.MSAASamples : 1;
-        bool useToneMap = settings.EnableToneMapping;
-        bool useFXAA = settings.EnableFXAA;
-
         nri::Texture* sceneTargetTexture = colorTarget;
         nri::Descriptor* sceneTargetRTV = colorRTV;
-        nri::Texture* sceneDepthTexture = depthTarget;
         nri::Descriptor* sceneDepthDSV = depthDSV;
         nri::Format sceneTargetFormat = m_CurrentColorFormat;
 
         auto rejectTargets = [&] { viewCtx.AbandonFrame(); };
-        RHIViewTargetDesc targetDesc; targetDesc.Width = width; targetDesc.Height = height;
-        targetDesc.ColorFormat = FromNRIFormat(m_CurrentColorFormat); targetDesc.DepthFormat = FromNRIFormat(m_CurrentDepthFormat);
-        targetDesc.EnableDepth = sceneDepthTexture != nullptr; targetDesc.Samples = activeSampleCount;
-        targetDesc.HDR = useToneMap; targetDesc.FXAA = useFXAA; targetDesc.OwnPrimary = false;
-        targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
-        targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
-        targetDesc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
-        targetDesc.EnableReflectionTerms = settings.EnableSSR && settings.MSAASamples == 1;
-        const bool enablePlanarTargets = settings.EnablePlanarReflections && !isSubCapture;
-        targetDesc.EnablePlanarReflection = enablePlanarTargets;
-        targetDesc.PlanarResolutionScale = enablePlanarTargets
-            ? std::clamp(settings.PlanarReflectionResolutionScale,
-                         RHI::RHIViewTargets::MinPlanarResolutionScale,
-                         RHI::RHIViewTargets::MaxPlanarResolutionScale)
-            : 0.5f;
-        targetDesc.EnableBloom = settings.EnableBloom;
-        targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
-        targetDesc.EnableAutoExposure = settings.EnableAutoExposure;
-        targetDesc.EnableDDGI = settings.EnableDDGI;
-        if (settings.EnableTAA) targetDesc.HistoryCount = 2;
-        if (viewTargets) {
-            auto expected = targetDesc; expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
-            expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
-            if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
-                (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||
-                (viewTargets->Get(RHIViewTarget::Depth) && viewTargets->Get(RHIViewTarget::Depth)->GetNative() != depthTarget)) { rejectTargets(); return; }
-            if (!isSubCapture) {
-                m_ImplicitViewTargets.reset(); m_ImplicitViewColor = {};
-            }
-        } else {
-            const auto identity = m_Device->GetResources().AcquireNative(colorTarget).GetHandle();
-            if (!m_ImplicitViewTargets || !m_ImplicitViewTargets->IsValid() || m_ImplicitViewTargets->GetDesc() != targetDesc || m_ImplicitViewColor != identity) {
-                auto candidate = std::make_shared<RHIViewTargets>();
-                if (!candidate->Configure(targetDesc)) { rejectTargets(); return; }
-                m_ImplicitViewTargets = std::move(candidate); m_ImplicitViewColor = identity;
-            }
-            viewTargets = m_ImplicitViewTargets;
-        }
         m_ActiveViewTargets = viewTargets;
         m_MSAAColorTarget = viewTargets->Get(RHIViewTarget::MSAAColor); m_MSAADepthTarget = viewTargets->Get(RHIViewTarget::MSAADepth);
         m_IntermediateHDRTarget = viewTargets->Get(RHIViewTarget::HDR); m_IntermediateFXAATarget = viewTargets->Get(RHIViewTarget::FXAA);

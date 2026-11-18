@@ -63,6 +63,7 @@ add_library(AxleScene STATIC
     src/Passes/GTAOPass.cpp
     src/Passes/HiZGenerationPass.cpp
     src/Passes/ScreenSpaceReflectionPass.cpp
+    src/Passes/PlanarReflectionPass.cpp
     src/Passes/FroxelFogPass.cpp
     src/Passes/PostProcessPass.cpp
     src/Passes/ReflectionCapturePass.cpp

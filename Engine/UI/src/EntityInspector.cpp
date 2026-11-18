@@ -13,6 +13,7 @@
 #include <Axle/AssetManager.hpp>
 #include <Axle/MaterialCache.hpp>
 #include <Axle/SceneRenderBridge.hpp>
+#include <Axle/RenderService.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/AudioEngine.hpp>
@@ -1034,6 +1035,66 @@ namespace Axle {
             ImGui::TextDisabled("Shadow Policy: Unshadowed Analytic LTC");
         }, /*canRemove=*/ true);
 
+        // Planar Reflection Component (M15-U5-46)
+        DrawComponent<PlanarReflectionComponent>("Planar Reflection", entity, [&](PlanarReflectionComponent& prc) {
+            ImGui::Checkbox("Enabled", &prc.Enabled);
+            if (ImGui::DragFloat2("Half Extents (m)", glm::value_ptr(prc.HalfExtents), 0.1f, 0.05f, 500.0f, "%.2f")) {
+                prc.HalfExtents = glm::max(prc.HalfExtents, glm::vec2(0.05f));
+            }
+            ImGui::SliderFloat("Resolution Scale", &prc.ResolutionScale, 0.25f, 1.0f, "%.2f");
+            ImGui::DragFloat("Clip Plane Offset", &prc.ClipPlaneOffset, 0.005f, -1.0f, 1.0f, "%.3f");
+            ImGui::SliderFloat("Edge Fade (m)", &prc.EdgeFadeDistance, 0.0f, 5.0f, "%.2f");
+            ImGui::SliderFloat("Max Roughness", &prc.MaxRoughness, 0.02f, 1.0f, "%.2f");
+            ImGui::SliderFloat("Intensity", &prc.Intensity, 0.0f, 2.0f, "%.2f");
+            ImGui::DragFloat("Capture Near", &prc.CaptureNearPlane, 0.01f, 0.01f, 10.0f, "%.3f");
+            ImGui::DragFloat("Capture Far", &prc.CaptureFarPlane, 1.0f, 1.0f, 10000.0f, "%.1f");
+            ImGui::Checkbox("Capture Shadows", &prc.CaptureShadows);
+            ImGui::Checkbox("Capture Skybox", &prc.CaptureSkybox);
+            ImGui::Checkbox("Clip To Extents", &prc.ClipToExtents);
+
+            const char* modeItems[] = { "Automatic", "Manual" };
+            int modeIdx = (prc.CaptureMode == PlanarReflectionCaptureMode::Manual) ? 1 : 0;
+            if (ImGui::Combo("Capture Mode", &modeIdx, modeItems, 2)) {
+                prc.CaptureMode = (modeIdx == 1)
+                    ? PlanarReflectionCaptureMode::Manual
+                    : PlanarReflectionCaptureMode::Automatic;
+            }
+
+            const uint64_t entityKeyID = static_cast<uint64_t>(static_cast<uint32_t>(entity));
+            const UUID entityUUID = entity.GetUUID();
+            auto& renderService = RenderService::Get();
+            if (const auto status = renderService.GetPlanarReflectionStatus(entityKeyID, entityUUID)) {
+                const char* stateLabel = "Idle";
+                switch (status->State) {
+                    case PlanarCaptureLifecycleState::Idle: stateLabel = "Idle"; break;
+                    case PlanarCaptureLifecycleState::Ready: stateLabel = "Ready"; break;
+                    case PlanarCaptureLifecycleState::Stale: stateLabel = "Stale"; break;
+                    case PlanarCaptureLifecycleState::Failed: stateLabel = "Failed"; break;
+                }
+                ImGui::TextDisabled("Status: %s | Gen %llu | %ux%u",
+                    stateLabel,
+                    static_cast<unsigned long long>(status->ActiveGenerationID),
+                    status->TargetWidth,
+                    status->TargetHeight);
+                if (status->PreservedPreviousGeneration) {
+                    ImGui::TextDisabled("Fallback: Last-good capture preserved");
+                }
+                if (!status->LastDiagnostic.empty()) {
+                    ImGui::TextDisabled("Note: %s", status->LastDiagnostic.c_str());
+                }
+            } else {
+                ImGui::TextDisabled("Status: Idle (no active render status yet)");
+            }
+
+            if (ImGui::Button("Capture Now")) {
+                renderService.RequestPlanarReflectionCapture(entityKeyID, entityUUID);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Invalidate")) {
+                renderService.InvalidatePlanarReflection(entityKeyID, entityUUID, "inspector_manual_invalidate");
+            }
+        }, /*canRemove=*/ true);
+
         // Camera Component
         DrawComponent<CameraComponent>("Camera", entity, [&](CameraComponent& cam) {
             ImGui::DragFloat("Field of View", &cam.FOV, 0.5f, 10.0f, 150.0f, "%.1f deg");
@@ -1971,6 +2032,11 @@ namespace Axle {
             "Rendering", "RectLightComponent", "LTC rectangular or disk area light source",
             entity.HasComponent<RectLightComponent>(), true,
             [&]() { entity.AddComponent<RectLightComponent>(); }
+        });
+        items.push_back({
+            "Rendering", "PlanarReflectionComponent", "Single-sided real-time planar mirror reflection plane",
+            entity.HasComponent<PlanarReflectionComponent>(), true,
+            [&]() { entity.AddComponent<PlanarReflectionComponent>(); }
         });
         items.push_back({
             "Rendering", "SkyboxComponent", "Procedural atmospheric Rayleigh/Mie sky dome",

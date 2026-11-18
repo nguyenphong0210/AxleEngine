@@ -86,6 +86,8 @@ namespace Axle {
                     } else if (!current.SectionName.empty()) current.Lines.push_back(line);
                 }
                 if (!flush()) return false;
+                node.HasRectLight = entity.HasComponent<RectLightComponent>();
+                if (node.HasRectLight) node.RectLight = entity.GetComponent<RectLightComponent>();
                 node.PassiveSections = std::move(sections); node.AuthoredUUID = entity.GetUUID();
             }
             for (auto& child : node.Children) if (!capture(child)) return false;
@@ -188,6 +190,10 @@ namespace Axle {
                 if (node.HasMaterial) {
                     auto& mat = ent.AddComponent<MaterialComponent>();
                     mat = node.Material;
+                }
+
+                if (node.HasRectLight) {
+                    ent.AddComponent<RectLightComponent>(node.RectLight);
                 }
 
                 if (node.HasSkeletalMesh) {

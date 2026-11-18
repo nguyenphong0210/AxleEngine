@@ -15,6 +15,7 @@
 #include <Axle/Path.hpp>
 #include <Axle/UI/UIParser.hpp>
 #include <Axle/AssemblyEditorPanel.hpp>
+#include <Axle/SceneExtraction.hpp>
 #include <imgui.h>
 #include <chrono>
 #include <fstream>
@@ -130,10 +131,23 @@ int Run(int argc, wchar_t** argv) {
             AssemblyNode nested; addData(nested,20000); data.RootNode.Children[0].Children.push_back(std::move(nested));
             auto* deep = &data.RootNode.Children[1];
             for(unsigned i=0;i<20;++i) { AssemblyNode child; addData(child,30000+i); deep->Children.push_back(std::move(child)); deep=&deep->Children.back(); }
+            data.RootNode.HasRectLight = true;
+            data.RootNode.RectLight.Shape = AreaLightShape::Disk;
+            data.RootNode.RectLight.Width = 3.0f;
             const auto file = root / "assets/Wide.axle"; CHECK(AssemblySerializer::SaveAssemblyData(file,data));
             AssemblyEditorPanel panel; panel.SetAssembly(file); CHECK(panel.GetAssemblyData().IsValid);
             const auto preview = panel.GetPreviewScene(); CHECK(preview && preview->GetEntityByUUID(UUID(20000)) && preview->GetEntityByUUID(UUID(10200)));
+            auto previewLamp = preview->GetEntityByUUID(UUID(10000));
+            CHECK(previewLamp && previewLamp.HasComponent<RectLightComponent>());
+            CHECK(previewLamp.GetComponent<RectLightComponent>().Shape == AreaLightShape::Disk);
+            CHECK(ExtractRenderWorld(*preview).RectLights.size() == 1);
+            previewLamp.GetComponent<RectLightComponent>().Width = 4.5f;
             CHECK(panel.SaveDocument()); auto saved = AssemblySerializer::LoadAssemblyData(file);
+            CHECK(saved.RootNode.HasRectLight && saved.RootNode.RectLight.Width == 4.5f);
+            CHECK(saved.RootNode.RectLight.Shape == AreaLightShape::Disk);
+            previewLamp.RemoveComponent<RectLightComponent>();
+            CHECK(panel.SaveDocument());
+            CHECK(!AssemblySerializer::LoadAssemblyData(file).RootNode.HasRectLight);
             ExtensionDocument first, last;
             const auto& a = saved.RootNode.Children[0].Children[0].PassiveSections.front();
             const auto& b = saved.RootNode.Children[100].PassiveSections.front();

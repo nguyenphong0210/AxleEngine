@@ -403,6 +403,10 @@ The capture camera is mirrored across the authored plane and uses an oblique cli
 
 The planar target is invalidated by plane, camera, scene, geometry, material, light, resize and device-epoch changes. The parent view history is never reused by the capture view, and a failed update retains a last-good target only for the declared generation or falls back explicitly.
 
+S5.8 selects one valid front-side reflector per view, then uses distance to choose among valid candidates. Other surfaces retain the shared SSR/probe/sky fallback; the view does not promise simultaneous multi-plane resolve. Capture uses the component depth range and the lower of component resolution scale and the global view cap. A lower-resolution scratch image is resampled into a fresh publication at the view's allocated planar extent. Clip bias affects capture clipping once; receiver confidence uses the unbiased geometric plane and actual jittered main-view projection.
+
+Publication replaces the native color generation only after candidate submission and completion succeed. The old image remains untouched on failure, including after resolution edits, and every receipt for a replaced slot is retired. Explicit captures into an exposed published target also retire its scheduled receipts. Transient failures retry on unchanged inputs; deterministic invalid-camera failures may wait for input changes. Manual/stale captures retain their captured projection while current intensity, extent, edge and roughness controls remain live at resolve. See the [consolidated Codex review](../../reviews/M15_U5_H_CODEX_REVIEW.md) for requirement evidence and open visual gates.
+
 ## 8. Lighting and visibility
 
 - Directional/point/spot lights share units, shadows and BRDF inputs.

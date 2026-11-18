@@ -1,5 +1,7 @@
 # M15-U5-H1 Checkpoint — Planar Reflection Foundation, Contract, Targets & Mirrored Capture
 
+> Historical Gemini delivery/self-verification. Superseded for independent review, correction commits, final 34/34 results and remaining visual gates by the [consolidated Codex review](M15_U5_H_CODEX_REVIEW.md).
+
 Date: 2026-11-18
 Base commit: `1fa57e80` (`docs(m15): record U5-G independent review and feature coverage`)
 Scope covered: **S5.8 Part 1 (`M15-U5-46.1`, `46.2`, `46.3`, capture/oblique/winding portion of `46.6`)**

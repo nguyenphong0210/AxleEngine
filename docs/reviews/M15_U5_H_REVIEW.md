@@ -1,5 +1,7 @@
 # M15-U5-H (S5.8) Planar Reflection — Consolidated Delivery & Verification Report
 
+> Historical Gemini delivery/self-verification. Superseded for independent review, correction commits, final 34/34 results and remaining visual gates by the [consolidated Codex review](M15_U5_H_CODEX_REVIEW.md).
+
 Date: 2026-11-18
 Milestone / Scope: **M15 U5 / S5.8 — Planar Reflection (`M15-U5-46.1` .. `M15-U5-46.8`)**
 Commits:

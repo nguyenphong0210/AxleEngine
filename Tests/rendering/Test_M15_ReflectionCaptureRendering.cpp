@@ -1654,6 +1654,51 @@ namespace {
             RENDER_CHECK(std::abs(rectCenter.r - cpuRect.TotalRadiance.r) < cpuRect.TotalRadiance.r * 0.08f &&
                          std::abs(diskCenter.r - cpuDisk.TotalRadiance.r) < cpuDisk.TotalRadiance.r * 0.08f,
                 "M15-U5-40 / 45.3: GPU ForwardPBR LTC matches CPU AreaLightLTCContract within tight tolerance");
+            // Validate actual GPU specular against independently integrated GGX, not a copied LTC evaluator.
+            for (AreaLightShape shape : {AreaLightShape::Rectangle, AreaLightShape::Disk}) {
+                world.RectLights[0] = makeAreaLight(shape, 40.0f);
+                for (float rough : {0.35f, 0.75f}) {
+                    world.Meshes[0].Material.RHIMaterialAsset = makeMaterial(glm::vec3(1.0f), 1.0f, rough);
+                    ++world.SceneRevision;
+                    std::vector<glm::vec4> specHDR;
+                    glm::vec4 specCenter;
+                    RENDER_CHECK(renderHDR(world, specHDR) && sampleWorld(specHDR, glm::vec3(0.0f), specCenter),
+                        "U5-G native GGX specular reference fixture");
+                    const auto frame = lighting.BuildFrame(world, settings);
+                    const auto reference = AreaLightLTCContract::EvaluateAreaLightNumericalReferenceCPU(
+                        frame.RectLights[0], glm::vec3(0.0f), {0.0f, 1.0f, 0.0f}, viewAtCenter,
+                        glm::vec3(1.0f), 1.0f, rough, 128u);
+                    std::cout << "  [U5-G Native Specular Reference] shape=" << int(shape) << " r=" << rough
+                              << " gpu=" << specCenter.r << " ggx=" << reference.SpecularRadiance.r << "\n";
+                    RENDER_CHECK(std::abs(specCenter.r - reference.SpecularRadiance.r) <
+                        0.20f * reference.SpecularRadiance.r + 0.002f,
+                        "M15-U5-42.2 / 45.3: native specular matches independent GGX integration");
+                }
+            }
+
+            // Eccentric disk: an analytically known nearest point distinguishes Euclidean from radial range.
+            const glm::vec2 boundary(4.0f / std::sqrt(2.0f), 1.0f / std::sqrt(2.0f));
+            const glm::vec2 exterior = boundary + 2.0f * glm::normalize(glm::vec2(boundary.x / 16.0f, boundary.y));
+            auto eccentric = makeAreaLight(AreaLightShape::Disk, 100.0f);
+            eccentric.Direction = {0.0f, -1.0f, 0.0f};
+            eccentric.Up = {0.0f, 0.0f, 1.0f};
+            // right=cross(-Y,+Z)=-X, up=+Z. Origin has local coordinates exterior and plane distance 3.
+            eccentric.Position = {exterior.x, 3.0f, -exterior.y};
+            eccentric.Width = 8.0f; eccentric.Height = 2.0f; eccentric.Range = 5.0f;
+            world.RectLights[0] = eccentric;
+            world.Meshes[0].Material.RHIMaterialAsset = makeMaterial(glm::vec3(0.85f), 0.0f, 0.8f);
+            ++world.SceneRevision;
+            std::vector<glm::vec4> ellipseHDR; glm::vec4 ellipseCenter;
+            RENDER_CHECK(renderHDR(world, ellipseHDR) && sampleWorld(ellipseHDR, glm::vec3(0.0f), ellipseCenter),
+                "U5-G eccentric disk range render");
+            const auto ellipseFrame = lighting.BuildFrame(world, settings);
+            const auto ellipseCPU = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+                ellipseFrame.RectLights[0], glm::vec3(0.0f), {0.0f, 1.0f, 0.0f}, viewAtCenter,
+                glm::vec3(0.85f), 0.0f, 0.8f);
+            RENDER_CHECK(ellipseCenter.r > 0.001f &&
+                std::abs(ellipseCenter.r - ellipseCPU.TotalRadiance.r) < 0.08f * ellipseCPU.TotalRadiance.r,
+                "M15-U5-41.4: eccentric disk range CPU/HLSL parity");
+
         }
 
         // -----------------------------------------------------------------
@@ -1704,6 +1749,48 @@ namespace {
                 "M15-U5-45.2: Grazing emitter tilt angle reduces projected irradiance monotonically");
         }
 
+        // Authored anisotropy and tangent rotation must survive the isotropic LTC upgrade.
+        {
+            RenderWorld anisotropic;
+            anisotropic.SceneRevision = 9418;
+            anisotropic.Skybox.Authored = true;
+            anisotropic.Skybox.Enabled = false;
+            anisotropic.RectLights.push_back(makeAreaLight(AreaLightShape::Rectangle, 40.0f));
+            auto material = makeMaterial(glm::vec3(0.95f), 1.0f, 0.35f);
+            material->GetDesc().AnisotropyStrength = 0.8f;
+            anisotropic.Meshes.push_back(MakeBoxInstance(881, cubeView, material,
+                {0.0f, -0.05f, 0.0f}, {18.0f, 0.1f, 18.0f}, false));
+            std::vector<glm::vec4> first, rotated, isotropic;
+            RENDER_CHECK(renderHDR(anisotropic, first), "U5-G anisotropic area fixture");
+            material->GetDesc().AnisotropyRotation = 0.25f; // Authored rotation is in turns: quarter turn.
+            ++anisotropic.SceneRevision;
+            RENDER_CHECK(renderHDR(anisotropic, rotated), "U5-G rotated anisotropic area fixture");
+            material->GetDesc().AnisotropyStrength = 0.0f;
+            ++anisotropic.SceneRevision;
+            RENDER_CHECK(renderHDR(anisotropic, isotropic), "U5-G isotropic area fixture");
+            material->GetDesc().AnisotropyStrength = 0.001f;
+            ++anisotropic.SceneRevision;
+            std::vector<glm::vec4> nearZero;
+            RENDER_CHECK(renderHDR(anisotropic, nearZero), "U5-G near-zero anisotropy fixture");
+            double zeroEnergy = 0.0, zeroDifference = 0.0;
+            for (size_t pixel = 0; pixel < isotropic.size(); ++pixel) {
+                zeroEnergy += isotropic[pixel].r;
+                zeroDifference += std::abs(isotropic[pixel].r - nearZero[pixel].r);
+            }
+            RENDER_CHECK(zeroDifference < zeroEnergy * 0.001,
+                "M15-U5-42.2: anisotropy estimator transitions continuously at zero strength");
+            double energy = 0.0, rotationDifference = 0.0, strengthDifference = 0.0;
+            for (size_t pixel = 0; pixel < first.size(); ++pixel) {
+                energy += first[pixel].r;
+                rotationDifference += std::abs(first[pixel].r - rotated[pixel].r);
+                strengthDifference += std::abs(first[pixel].r - isotropic[pixel].r);
+            }
+            std::cout << "  [U5-G Anisotropy] rotationDelta=" << rotationDifference
+                      << " strengthDelta=" << strengthDifference << " energy=" << energy << "\n";
+            RENDER_CHECK(energy > 1.0 && rotationDifference > energy * 0.05 && strengthDifference > energy * 0.05,
+                "M15-U5-42.2: area specular retains authored anisotropy strength and tangent rotation");
+        }
+
         // -----------------------------------------------------------------
         // 3. M15-U5-42.1 / 42.2 / 44: MaterialGraph MaterialSurface LTC Parity
         // -----------------------------------------------------------------
@@ -1749,6 +1836,38 @@ namespace {
             std::cout << "  [U5-G MaterialSurface Parity] builtIn=" << builtInC.r << " graph=" << graphC.r << "\n";
             RENDER_CHECK(graphC.r > 0.02f && std::abs(graphC.r - builtInC.r) < builtInC.r * 0.05f,
                 "M15-U5-42.1 / 42.2: MaterialSurface and ForwardPBR share identical LTC disk/rect shading");
+            // With no sun, area clearcoat must still add its own fitted lobe in both material paths.
+            const auto coatGraphPath = output / "u5g-area-coat-surface.hlsl";
+            const auto coatSource = AssembleMaterialSurfaceShader("",
+                "MaterialSurface AxleEvaluateMaterial(float2 uv) { MaterialSurface s=(MaterialSurface)0; "
+                "s.BaseColor=float3(0.85,0.85,0.85); s.Metallic=0.0; s.Roughness=0.55; s.IOR=1.5; "
+                "s.AO=1.0; s.Clearcoat=0.8; s.ClearcoatRoughness=0.25; return s; }");
+            { std::ofstream file(coatGraphPath); file << coatSource; RENDER_CHECK(bool(file), "U5-G coat graph write"); }
+            auto coatMaterial = makeMaterial(glm::vec3(0.85f), 0.0f, 0.55f);
+            coatMaterial->GetDesc().ClearcoatStrength = 0.8f;
+            coatMaterial->GetDesc().ClearcoatRoughness = 0.25f;
+            graphWorld.Meshes[0].Material.UseCustomShader = false;
+            graphWorld.Meshes[0].Material.RHIMaterialAsset = coatMaterial;
+            ++graphWorld.SceneRevision;
+            std::vector<glm::vec4> builtinCoatHDR, graphCoatHDR;
+            glm::vec4 builtinCoat, graphCoat;
+            RENDER_CHECK(renderHDR(graphWorld, builtinCoatHDR) && sampleWorld(builtinCoatHDR, glm::vec3(0.0f), builtinCoat),
+                "U5-G builtin coat area frame");
+            // The graph authors its own coat; native-only authored controls would intentionally reject it.
+            auto graphCoatMaterial = makeMaterial(glm::vec3(0.85f), 0.0f, 0.55f);
+            graphCoatMaterial->GetDesc().EnableEnvironmentReflections = true; // Keep native-only policy controls neutral.
+            graphWorld.Meshes[0].Material.RHIMaterialAsset = graphCoatMaterial;
+            graphWorld.Meshes[0].Material.UseCustomShader = true;
+            graphWorld.Meshes[0].Material.CustomShaderPath = std::filesystem::absolute(coatGraphPath).string();
+            ++graphWorld.SceneRevision;
+            RENDER_CHECK(renderHDR(graphWorld, graphCoatHDR) && sampleWorld(graphCoatHDR, glm::vec3(0.0f), graphCoat),
+                "U5-G canonical coat area frame");
+            std::cout << "  [U5-G Area Coat] builtin=" << builtinCoat.r << " graph=" << graphCoat.r
+                      << " base=" << builtInC.r << "\n";
+            RENDER_CHECK(builtinCoat.r > builtInC.r * 1.1f && std::abs(graphCoat.r - builtinCoat.r) < builtinCoat.r * 0.05f &&
+                (!renderer.GetMaterialDiagnostics().contains(880) || renderer.GetMaterialDiagnostics().at(880).empty()),
+                "M15-U5-42.2: area clearcoat adds a sun-independent LTC lobe with canonical material parity");
+
         }
 
         RENDER_CHECK(device.WaitIdle() && Axle::RenderTests::GetRHIValidationErrorCount() == 0,
@@ -1757,6 +1876,10 @@ namespace {
         return true;
     }
 } // namespace
+
+bool RunM15AreaLightRenderingTests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
+    return RunM15AreaLightLTCTests(renderer, output);
+}
 
 bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
     std::cout << "[M15ReflectionCaptureGPU] Running native D3D12/Vulkan U5-B/U5-C/U5-D dynamic capture tests...\n";

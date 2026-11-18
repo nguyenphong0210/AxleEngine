@@ -46,55 +46,31 @@ float3 FresnelSchlickRoughness(float cosTheta, float3 F0, float roughness) {
 // LTC Rectangular & Disk Area Light Contract (M15-U5-40 .. M15-U5-45)
 // Matches Axle::AreaLightLTCContract in Engine/Renderer/src/RenderContracts.cpp.
 // =============================================================================
+#define LTC_UINT3 uint3
+#include "LTCTables.inc"
+#undef LTC_UINT3
+
 float4 EvaluateLTC1GridPoint(uint roughIdx, uint viewIdx) {
-    uint ix = min(roughIdx, 7u);
-    uint iy = min(viewIdx, 7u);
-    float r = 0.04 + (float(ix) / 7.0) * 0.96;
-    float v = float(iy) / 7.0;
-    float ndotv = clamp(1.0 - v * v, 0.001, 1.0);
-    float thetaV = acos(ndotv);
-    float alpha = clamp(r * r, 0.01, 1.0);
-
-    float thetaP = thetaV * (1.0 - alpha);
-    float cp = cos(thetaP);
-    float sp = sin(thetaP);
-
-    float alphaX = clamp((2.0 * alpha) / (1.0 + alpha), 0.02, 1.0);
-    float alphaY = clamp(lerp(alphaX * max(ndotv, 0.25), alphaX, alpha), 0.02, 1.0);
-    float ratio = alphaY / max(alphaX, 1e-4);
-    return float4(ratio * cp, ratio * sp, -alphaY * sp, alphaY * cp);
+    uint3 packed = kLTCPacked[min(viewIdx, 63u) * 64u + min(roughIdx, 63u)];
+    return float4(f16tof32(packed.x & 65535u), f16tof32(packed.x >> 16),
+                  f16tof32(packed.y & 65535u), f16tof32(packed.y >> 16));
 }
-
 float4 EvaluateLTC2GridPoint(uint roughIdx, uint viewIdx) {
-    uint ix = min(roughIdx, 7u);
-    uint iy = min(viewIdx, 7u);
-    float r = 0.04 + (float(ix) / 7.0) * 0.96;
-    float v = float(iy) / 7.0;
-    float ndotv = clamp(1.0 - v * v, 0.001, 1.0);
-
-    float4 c0 = float4(-1.0, -0.0275, -0.572, 0.022);
-    float4 c1 = float4(1.0, 0.0425, 1.04, -0.04);
-    float4 rv = r * c0 + c1;
-    float a004 = min(rv.x * rv.x, exp2(-9.28 * ndotv)) * rv.x + rv.y;
-    float2 ab = float2(-1.04, 1.04) * a004 + rv.zw;
-
-    float fresnelTerm = clamp(ab.y, 0.0, 0.99);
-    float ggxNorm = clamp(ab.x + ab.y, 0.05, 1.0);
-    float sphereFormFactor = 1.0 - 0.1 * v * (1.0 - r);
-    return float4(ggxNorm, fresnelTerm, sphereFormFactor, 0.0);
+    uint packed = kLTCPacked[min(viewIdx, 63u) * 64u + min(roughIdx, 63u)].z;
+    return float4(f16tof32(packed & 65535u), f16tof32(packed >> 16), 0.0, 0.0);
 }
 
 float4 SampleLTC1(float roughness, float NdotV) {
     float safeR = clamp(roughness, 0.04, 1.0);
     float safeNV = clamp(NdotV, 0.0, 1.0);
-    float u = saturate((safeR - 0.04) / 0.96);
+    float u = saturate(safeR);
     float v = saturate(sqrt(max(0.0, 1.0 - safeNV)));
-    float gx = u * 7.0;
-    float gy = v * 7.0;
-    uint ix0 = min((uint)floor(gx), 7u);
-    uint iy0 = min((uint)floor(gy), 7u);
-    uint ix1 = min(ix0 + 1u, 7u);
-    uint iy1 = min(iy0 + 1u, 7u);
+    float gx = u * 63.0;
+    float gy = v * 63.0;
+    uint ix0 = min((uint)floor(gx), 63u);
+    uint iy0 = min((uint)floor(gy), 63u);
+    uint ix1 = min(ix0 + 1u, 63u);
+    uint iy1 = min(iy0 + 1u, 63u);
     float fx = gx - float(ix0);
     float fy = gy - float(iy0);
 
@@ -108,14 +84,14 @@ float4 SampleLTC1(float roughness, float NdotV) {
 float4 SampleLTC2(float roughness, float NdotV) {
     float safeR = clamp(roughness, 0.04, 1.0);
     float safeNV = clamp(NdotV, 0.0, 1.0);
-    float u = saturate((safeR - 0.04) / 0.96);
+    float u = saturate(safeR);
     float v = saturate(sqrt(max(0.0, 1.0 - safeNV)));
-    float gx = u * 7.0;
-    float gy = v * 7.0;
-    uint ix0 = min((uint)floor(gx), 7u);
-    uint iy0 = min((uint)floor(gy), 7u);
-    uint ix1 = min(ix0 + 1u, 7u);
-    uint iy1 = min(iy0 + 1u, 7u);
+    float gx = u * 63.0;
+    float gy = v * 63.0;
+    uint ix0 = min((uint)floor(gx), 63u);
+    uint iy0 = min((uint)floor(gy), 63u);
+    uint ix1 = min(ix0 + 1u, 63u);
+    uint iy1 = min(iy0 + 1u, 63u);
     float fx = gx - float(ix0);
     float fy = gy - float(iy0);
 
@@ -136,9 +112,9 @@ float3 LTC_IntegrateEdgeVec(float3 v1, float3 v2) {
     return cross(v1, v2) * thetaSinTheta;
 }
 
-void LTC_ClipPolygonZ0(float3 inPoly[12], uint inCount, out float3 outPoly[12], out uint outCount) {
+void LTC_ClipPolygonZ0(float3 inPoly[36], uint inCount, out float3 outPoly[36], out uint outCount) {
     outCount = 0u;
-    [unroll] for (uint k = 0u; k < 12u; ++k) {
+    [unroll] for (uint k = 0u; k < 36u; ++k) {
         outPoly[k] = float3(0.0, 0.0, 0.0);
     }
     if (inCount < 3u) return;
@@ -150,15 +126,15 @@ void LTC_ClipPolygonZ0(float3 inPoly[12], uint inCount, out float3 outPoly[12], 
         bool currAbove = (curr.z >= 0.0);
         bool nextAbove = (next.z >= 0.0);
         if (currAbove) {
-            if (outCount < 12u) outPoly[outCount++] = curr;
-            if (!nextAbove && outCount < 12u) {
+            if (outCount < 36u) outPoly[outCount++] = curr;
+            if (!nextAbove && outCount < 36u) {
                 float denom = curr.z - next.z;
                 float t = (abs(denom) > 1e-7) ? saturate(curr.z / denom) : 0.0;
                 float3 clipped = lerp(curr, next, t);
                 clipped.z = 0.0;
                 outPoly[outCount++] = clipped;
             }
-        } else if (nextAbove && outCount < 12u) {
+        } else if (nextAbove && outCount < 36u) {
             float denom = next.z - curr.z;
             float t = (abs(denom) > 1e-7) ? saturate(-curr.z / denom) : 0.0;
             float3 clipped = lerp(curr, next, t);
@@ -168,11 +144,11 @@ void LTC_ClipPolygonZ0(float3 inPoly[12], uint inCount, out float3 outPoly[12], 
     }
 }
 
-float LTC_EvaluateContourFormFactor(float3 upperPoly[12], uint upperCount, float4 ltc1, bool twoSided) {
+float LTC_EvaluateContourFormFactor(float3 upperPoly[36], uint upperCount, float4 ltc1, bool twoSided) {
     if (upperCount < 3u) return 0.0;
 
-    float3 warpedPoly[12];
-    [unroll] for (uint w = 0u; w < 12u; ++w) {
+    float3 warpedPoly[36];
+    [unroll] for (uint w = 0u; w < 36u; ++w) {
         warpedPoly[w] = float3(0.0, 0.0, 0.0);
     }
     [loop] for (uint i = 0u; i < upperCount; ++i) {
@@ -180,7 +156,7 @@ float LTC_EvaluateContourFormFactor(float3 upperPoly[12], uint upperCount, float
         warpedPoly[i] = float3(ltc1.x * p.x + ltc1.y * p.z, p.y, ltc1.z * p.x + ltc1.w * p.z);
     }
 
-    float3 clipped[12];
+    float3 clipped[36];
     uint clippedCount = 0u;
     LTC_ClipPolygonZ0(warpedPoly, upperCount, clipped, clippedCount);
     if (clippedCount < 3u) return 0.0;
@@ -262,10 +238,20 @@ LTCAreaLightResult EvaluateLTCAreaLightTerms(
     if (isDisk) {
         float nx = lu / halfWidth;
         float ny = lv / halfHeight;
-        float radial = sqrt(nx * nx + ny * ny);
-        if (radial > 1.0) {
-            lu = (nx / radial) * halfWidth;
-            lv = (ny / radial) * halfHeight;
+        if (nx * nx + ny * ny > 1.0) {
+            float a2 = halfWidth * halfWidth;
+            float b2 = halfHeight * halfHeight;
+            float lo = 0.0;
+            float hi = length(float2(halfWidth * lu, halfHeight * lv));
+            [loop] for (uint iteration = 0u; iteration < 24u; ++iteration) {
+                float lambda = (lo + hi) * 0.5;
+                float x = halfWidth * lu / (lambda + a2);
+                float y = halfHeight * lv / (lambda + b2);
+                if (x * x + y * y > 1.0) lo = lambda;
+                else hi = lambda;
+            }
+            lu = a2 * lu / (hi + a2);
+            lv = b2 * lv / (hi + b2);
         }
     } else {
         lu = clamp(lu, -halfWidth, halfWidth);
@@ -288,18 +274,18 @@ LTCAreaLightResult EvaluateLTCAreaLightTerms(
     float3 T1 = (tLenSq > 1e-8) ? (tangentRaw * rsqrt(tLenSq)) : normalize(cross(fallbackT, N));
     float3 T2 = normalize(cross(N, T1));
 
-    float3 shadingPoly[12];
-    [unroll] for (uint z = 0u; z < 12u; ++z) {
+    float3 shadingPoly[36];
+    [unroll] for (uint z = 0u; z < 36u; ++z) {
         shadingPoly[z] = float3(0.0, 0.0, 0.0);
     }
     uint vertCount = 0u;
     if (isDisk) {
-        vertCount = 8u;
-        const float kOctScale = 1.05392891;
-        [unroll] for (uint k = 0u; k < 8u; ++k) {
-            float angle = (float(k) + 0.5) * (PI * 0.25);
-            float cx = cos(angle) * kOctScale;
-            float cy = sin(angle) * kOctScale;
+        vertCount = 32u;
+        const float kDiskScale = 1.00322263;
+        [unroll] for (uint k = 0u; k < 32u; ++k) {
+            float angle = (float(k) + 0.5) * (PI * 0.0625);
+            float cx = cos(angle) * kDiskScale;
+            float cy = sin(angle) * kDiskScale;
             float3 rel = (lightPos + lightRight * (halfWidth * cx) + lightUp * (halfHeight * cy)) - worldPos;
             shadingPoly[k] = float3(dot(rel, T1), dot(rel, T2), dot(rel, N));
         }
@@ -315,14 +301,14 @@ LTCAreaLightResult EvaluateLTCAreaLightTerms(
         shadingPoly[3] = float3(dot(p3, T1), dot(p3, T2), dot(p3, N));
     }
 
-    float3 upperPoly[12];
+    float3 upperPoly[36];
     uint upperCount = 0u;
     LTC_ClipPolygonZ0(shadingPoly, vertCount, upperPoly, upperCount);
     if (upperCount < 3u) return outRes;
 
     // Diffuse contour integral (upperPoly is already clipped to L.z >= 0).
-    float3 diffVec[12];
-    [unroll] for (uint d = 0u; d < 12u; ++d) {
+    float3 diffVec[36];
+    [unroll] for (uint d = 0u; d < 36u; ++d) {
         diffVec[d] = float3(0.0, 0.0, 0.0);
     }
     [loop] for (uint i = 0u; i < upperCount; ++i) {

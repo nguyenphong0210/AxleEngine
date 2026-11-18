@@ -16,6 +16,11 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${native_forward
 file(READ "${native_forward_source}" AXLE_NATIVE_FORWARD)
 file(READ "${native_local_shadow}" AXLE_NATIVE_LOCAL_SHADOW)
 file(READ "${native_forward_common}" AXLE_NATIVE_FORWARD_COMMON)
+set(native_ltc_source "${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/LTCTables.inc")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${native_ltc_source}")
+file(READ "${native_ltc_source}" AXLE_NATIVE_LTC)
+string(REPLACE "#include \"LTCTables.inc\"" "${AXLE_NATIVE_LTC}" AXLE_NATIVE_FORWARD_COMMON "${AXLE_NATIVE_FORWARD_COMMON}")
+
 string(REPLACE "#include \"PBRCommon.hlsli\"" "${AXLE_NATIVE_FORWARD_COMMON}" AXLE_NATIVE_FORWARD "${AXLE_NATIVE_FORWARD}")
 string(REPLACE "#include \"LocalShadows.hlsli\"" "${AXLE_NATIVE_LOCAL_SHADOW}" AXLE_NATIVE_FORWARD "${AXLE_NATIVE_FORWARD}")
 string(REPLACE "#include \"Occlusion.hlsli\"" "${AXLE_NATIVE_OCCLUSION}" AXLE_NATIVE_FORWARD "${AXLE_NATIVE_FORWARD}")

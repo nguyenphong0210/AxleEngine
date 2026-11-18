@@ -260,6 +260,7 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
             (spot.DirectionAndIntensity.w * attenuation * 0.05);
         direct += (localDiffuse + localSpec) * radiance * localNl;
     }
+    float3 areaDirect = 0.0;
     [loop] for (uint r = 0u; r < min((uint)u_LightReserved[1].x, 2u); ++r) {
         RectLightData rLight = u_RectLights[r];
         LTCAreaLightResult ltc = EvaluateLTCAreaLightTerms(
@@ -276,7 +277,16 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
             f0,
             0.05);
         if (ltc.RangeAttenuation > 0.0) {
-            direct += (ltc.DiffuseLighting + ltc.SpecularLighting) * ltc.Radiance;
+            float3 areaLighting = ltc.DiffuseLighting + ltc.SpecularLighting;
+            float areaCoat = saturate(surface.Clearcoat);
+            if (areaCoat > 0.0) {
+                LTCAreaLightResult coatLTC = EvaluateLTCAreaLightTerms(
+                    rLight.PositionAndWidth, rLight.DirectionAndHeight, rLight.UpAndRange, rLight.ColorAndIntensity,
+                    input.WorldPos, normal, view, 1.0, 1.0, clamp(surface.ClearcoatRoughness, 0.04, 1.0), 0.04, 0.05);
+                float3 attenuation = 1.0 - areaCoat * coatLTC.SpecularAlbedo;
+                areaLighting = areaLighting * attenuation * attenuation + areaCoat * coatLTC.SpecularLighting;
+            }
+            areaDirect += areaLighting * ltc.Radiance;
         }
     }
 
@@ -288,6 +298,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float coatBRDF = DistributionGGX(normal, halfVector, coatRoughness) * GeometrySmith(normal, view, light, coatRoughness) * coatF / max(4.0 * nv * max(nl, 0.001), 0.0001);
         direct = direct * (1.0 - coat * coatF) * (1.0 - coat * coatF) + coat * coatBRDF * directLight;
     }
+
+    direct += areaDirect; // Area clearcoat was integrated with each emitter, independent of sun direction.
 
     // Ambient / indirect term scaled by AO; direct and emissive are preserved
     float3 ambientRef = FresnelSchlickRoughness(nv, f0, roughness);

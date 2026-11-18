@@ -737,7 +737,7 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         const auto ltcTables = AreaLightLTCContract::BuildValidatedLTCTables();
         std::string tableReason;
         RENDER_CHECK(AreaLightLTCContract::ValidateLTCTables(ltcTables, &tableReason),
-            ("M15-U5-40: LTC tables satisfy determinant, range, finiteness, and identity invariants: " + tableReason).c_str());
+            ("M15-U5-40: LTC tables satisfy determinant, range and finiteness invariants: " + tableReason).c_str());
 
         // Bilinear lookup continuity across roughness and view angle
         const glm::vec4 sampleLowR = AreaLightLTCContract::SampleLTC1(0.10f, 0.90f);
@@ -745,12 +745,11 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         const glm::vec4 sampleDiff = AreaLightLTCContract::SampleLTC1(1.00f, 1.00f);
         const glm::vec4 ltc2Normal = AreaLightLTCContract::SampleLTC2(0.15f, 0.95f);
         const glm::vec4 ltc2Grazing = AreaLightLTCContract::SampleLTC2(0.15f, 0.10f);
-        RENDER_CHECK(std::abs(sampleDiff.x - 1.0f) < 1e-4f && std::abs(sampleDiff.y) < 1e-4f &&
-                     std::abs(sampleDiff.z) < 1e-4f && std::abs(sampleDiff.w - 1.0f) < 1e-4f &&
+        RENDER_CHECK(sampleDiff.x > 0.0f && sampleDiff.w > 0.0f &&
                      (sampleLowR.x * sampleLowR.w - sampleLowR.y * sampleLowR.z) > 0.0f &&
                      (sampleMidR.x * sampleMidR.w - sampleMidR.y * sampleMidR.z) > 0.0f &&
                      ltc2Grazing.y > ltc2Normal.y && ltc2Normal.x > 0.7f,
-            "M15-U5-40: SampleLTC1/LTC2 interpolate smoothly and satisfy GGX identity/Fresnel limits");
+            "M15-U5-40: SampleLTC1/LTC2 interpolate smoothly and satisfy fitted GGX determinant/Fresnel limits");
 
         // Orthonormal basis resilience for non-unit or collinear Up vectors (M15-U5-41.3)
         glm::vec3 bRight, bUp, bDir;
@@ -801,6 +800,25 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         RENDER_CHECK(std::abs(cEvalA.DiffuseFormFactor - cEvalB.DiffuseFormFactor) < 0.002f,
             "M15-U5-41.2: Equal-diameter disk emitter is invariant under tangent basis rotation");
 
+        // A circular disk must not acquire an eight-sided sharp specular outline when its tangent rotates.
+        LightingRectFrame edgeDisk = makeFrame(AreaLightShape::Disk);
+        edgeDisk.Position = {1.0f, 3.0f, 0.0f};
+        edgeDisk.Direction = {0.0f, -1.0f, 0.0f};
+        float minimumEdgeSpecular = 1000.0f, maximumEdgeSpecular = 0.0f;
+        for (int phase = 0; phase < 5; ++phase) {
+            const float angle = float(phase) * 3.14159265359f / 64.0f; // Include phases between contour vertices.
+            edgeDisk.Up = {std::sin(angle), 0.0f, std::cos(angle)};
+            const auto rotatedEdge = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+                edgeDisk, P, N, N, glm::vec3(1.0f), 1.0f, 0.15f);
+            minimumEdgeSpecular = std::min(minimumEdgeSpecular, rotatedEdge.SpecularRadiance.r);
+            maximumEdgeSpecular = std::max(maximumEdgeSpecular, rotatedEdge.SpecularRadiance.r);
+        }
+        std::cout << "[U5-G Disk Edge Rotation] minimum=" << minimumEdgeSpecular
+                  << " maximum=" << maximumEdgeSpecular << "\n";
+        RENDER_CHECK(minimumEdgeSpecular > 0.01f &&
+                     maximumEdgeSpecular - minimumEdgeSpecular < 0.03f * maximumEdgeSpecular,
+            "M15-U5-41.2 / 45.1: circular disk sharp reflection is stable under emitter tangent rotation");
+
         // Horizon-straddling wall emitter intersecting floor y=0 (M15-U5-41.1, 42.1)
         LightingRectFrame straddling = makeFrame(AreaLightShape::Rectangle);
         straddling.Position = {0.0f, 0.0f, -2.0f};
@@ -835,6 +853,17 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         RENDER_CHECK(rangedEval.TotalRadiance == glm::vec3(0.0f) && rangedEval.RangeAttenuation == 0.0f,
             "M15-U5-41.4: Finite Range cuts off energy cleanly beyond emitter distance");
 
+        LightingRectFrame ellipse = makeFrame(AreaLightShape::Disk);
+        ellipse.Position = glm::vec3(0.0f);
+        ellipse.Direction = {0.0f, 0.0f, -1.0f};
+        ellipse.Up = {0.0f, 1.0f, 0.0f};
+        ellipse.Width = 8.0f; ellipse.Height = 2.0f;
+        const glm::vec2 boundary(4.0f / std::sqrt(2.0f), 1.0f / std::sqrt(2.0f));
+        const glm::vec2 exterior = boundary + 2.0f * glm::normalize(glm::vec2(boundary.x / 16.0f, boundary.y));
+        RENDER_CHECK(std::abs(AreaLightLTCContract::ComputeEmitterClosestDistance(
+            ellipse, {exterior.x, exterior.y, -3.0f}) - std::sqrt(13.0f)) < 1e-4f,
+            "M15-U5-41.4: elliptical disk range uses Euclidean closest point at off-axis positions");
+
         // Roughness, view-angle & metallic partition sweep (M15-U5-42.1, 42.2, 45.1)
         const auto metalLowR = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
             makeFrame(AreaLightShape::Rectangle), P, N, V, {1.0f, 0.71f, 0.29f}, 1.0f, 0.08f);
@@ -867,6 +896,30 @@ bool RunM15ReflectionCaptureContractUnitTests() {
                      std::abs(facingLTC.DiffuseFormFactor - facingRef.DiffuseFormFactor) < 0.015f &&
                      std::abs(tiltedLTC.DiffuseFormFactor - tiltedRef.DiffuseFormFactor) < 0.015f,
             "M15-U5-45.2 / 45.3: Tilted emitter decreases irradiance and LTC matches 32x32 numerical quadrature");
+
+        // Independent specular reference: table finiteness and diffuse parity do not validate a GGX fit.
+        for (AreaLightShape shape : {AreaLightShape::Rectangle, AreaLightShape::Disk}) {
+            for (float nv : {1.0f, 0.6f, 0.3f}) {
+                for (float rough : {0.35f, 0.55f, 0.8f}) {
+                    const glm::vec3 view(std::sqrt(1.0f - nv * nv), nv, 0.0f);
+                    LightingRectFrame referenceLight = makeFrame(shape);
+                    referenceLight.Position = glm::vec3(-view.x, view.y, 0.0f) * 3.0f;
+                    referenceLight.Direction = -glm::normalize(referenceLight.Position);
+                    referenceLight.Width = 1.5f;
+                    referenceLight.Height = 1.5f;
+                    const auto fitted = AreaLightLTCContract::EvaluateLTCAreaLightCPU(
+                        referenceLight, P, N, view, glm::vec3(1.0f), 1.0f, rough);
+                    const auto integrated = AreaLightLTCContract::EvaluateAreaLightNumericalReferenceCPU(
+                        referenceLight, P, N, view, glm::vec3(1.0f), 1.0f, rough, 128u);
+                    std::cout << "[U5-G Specular Reference] shape=" << int(shape) << " nv=" << nv
+                              << " r=" << rough << " ltc=" << fitted.SpecularRadiance.r
+                              << " ggx=" << integrated.SpecularRadiance.r << "\n";
+                    RENDER_CHECK(std::abs(fitted.SpecularRadiance.r - integrated.SpecularRadiance.r) <
+                                 0.20f * integrated.SpecularRadiance.r + 0.002f,
+                        "M15-U5-40 / 42.2 / 45.3: specular LTC agrees with independent dense GGX integration");
+                }
+            }
+        }
 
         // Explicit unshadowed shadow policy contract (M15-U5-43)
         RENDER_CHECK(RectLightComponent{}.ShadowPolicy == AreaLightShadowPolicy::UnshadowedAnalyticLTC &&

@@ -1,3 +1,4 @@
+#include <glm/gtc/packing.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/Material.hpp>
 #include <Axle/ResolvedSurface.hpp>
@@ -1947,8 +1948,8 @@ namespace Axle {
         namespace {
             constexpr float kPi = 3.14159265358979323846f;
             constexpr float kLocalIntensityScale = 0.05f;
-            // Radius multiplier giving an inscribed/scaled regular octagon the exact area pi*a*b of an ellipse/disk.
-            constexpr float kDiskOctagonRadiusScale = 1.05392891358724f; // sqrt(pi / (2 * sqrt(2)))
+            // Area-preserving 32-segment disk contour; bounded angular error also for sharp reflections.
+            constexpr float kDiskRadiusScale = 1.00322263f; // sqrt(pi / (16 * sin(pi/16)))
 
             float SafeClampRoughness(float r) {
                 return std::isfinite(r) ? std::clamp(r, 0.04f, 1.0f) : 0.5f;
@@ -2015,45 +2016,20 @@ namespace Axle {
             }
         } // namespace
 
+        namespace {
+#define LTC_UINT3 glm::uvec3
+#include "../../Resources/Shaders/LTCTables.inc"
+#undef LTC_UINT3
+        }
+
         glm::vec4 EvaluateLTC1GridPoint(uint32_t roughIdx, uint32_t viewIdx) {
-            const uint32_t ix = std::min(roughIdx, kTableDim - 1u);
-            const uint32_t iy = std::min(viewIdx, kTableDim - 1u);
-            const float r = 0.04f + (static_cast<float>(ix) / static_cast<float>(kTableDim - 1u)) * 0.96f;
-            const float v = static_cast<float>(iy) / static_cast<float>(kTableDim - 1u);
-            const float ndotv = std::clamp(1.0f - v * v, 0.001f, 1.0f);
-            const float thetaV = std::acos(ndotv);
-            const float alpha = std::clamp(r * r, 0.01f, 1.0f);
-
-            // Off-specular GGX peak shift toward normal as roughness increases; thetaP = 0 at r = 1.
-            const float thetaP = thetaV * (1.0f - alpha);
-            const float cp = std::cos(thetaP);
-            const float sp = std::sin(thetaP);
-
-            // Effective reflection-lobe half-widths along in-plane (U) and out-of-plane (T2).
-            const float alphaX = std::clamp((2.0f * alpha) / (1.0f + alpha), 0.02f, 1.0f);
-            const float alphaY = std::clamp(glm::mix(alphaX * std::max(ndotv, 0.25f), alphaX, alpha), 0.02f, 1.0f);
-            const float ratio = alphaY / std::max(alphaX, 1e-4f);
-
-            return glm::vec4(ratio * cp, ratio * sp, -alphaY * sp, alphaY * cp);
+            const auto p = kLTCPacked[std::min(viewIdx, kTableDim - 1u) * kTableDim + std::min(roughIdx, kTableDim - 1u)];
+            return glm::vec4(glm::unpackHalf2x16(p.x), glm::unpackHalf2x16(p.y));
         }
 
         glm::vec4 EvaluateLTC2GridPoint(uint32_t roughIdx, uint32_t viewIdx) {
-            const uint32_t ix = std::min(roughIdx, kTableDim - 1u);
-            const uint32_t iy = std::min(viewIdx, kTableDim - 1u);
-            const float r = 0.04f + (static_cast<float>(ix) / static_cast<float>(kTableDim - 1u)) * 0.96f;
-            const float v = static_cast<float>(iy) / static_cast<float>(kTableDim - 1u);
-            const float ndotv = std::clamp(1.0f - v * v, 0.001f, 1.0f);
-
-            const glm::vec4 c0(-1.0f, -0.0275f, -0.572f, 0.022f);
-            const glm::vec4 c1(1.0f, 0.0425f, 1.04f, -0.04f);
-            const glm::vec4 rv = r * c0 + c1;
-            const float a004 = std::min(rv.x * rv.x, std::exp2(-9.28f * ndotv)) * rv.x + rv.y;
-            const glm::vec2 ab = glm::vec2(-1.04f, 1.04f) * a004 + glm::vec2(rv.z, rv.w);
-
-            const float fresnelTerm = std::clamp(ab.y, 0.0f, 0.99f);
-            const float ggxNorm = std::clamp(ab.x + ab.y, 0.05f, 1.0f);
-            const float sphereFormFactor = 1.0f - 0.1f * v * (1.0f - r);
-            return glm::vec4(ggxNorm, fresnelTerm, sphereFormFactor, 0.0f);
+            const auto p = kLTCPacked[std::min(viewIdx, kTableDim - 1u) * kTableDim + std::min(roughIdx, kTableDim - 1u)];
+            return glm::vec4(glm::unpackHalf2x16(p.z), 0.0f, 0.0f);
         }
 
         LTCTables BuildValidatedLTCTables() {
@@ -2081,29 +2057,24 @@ namespace Axle {
                         }
                     }
                     const float det = l1.x * l1.w - l1.y * l1.z;
-                    if (!std::isfinite(det) || det <= 1e-6f) {
+                    if (!std::isfinite(det) || det <= 0.0f) {
                         if (outReason) *outReason = "singular or inverted LTC1 transform matrix";
                         return false;
                     }
-                    if (l2.x <= 0.0f || l2.x > 1.0001f || l2.y < 0.0f || l2.y > 1.0001f || l2.z <= 0.0f) {
+                    if (l2.x <= 0.0f || l2.x > 1.02f || l2.y < 0.0f || l2.y > 1.0001f) {
                         if (outReason) *outReason = "LTC2 directional albedo out of physical [0, 1] bounds";
                         return false;
                     }
                 }
             }
-            // Diffuse identity check at maximum roughness (ix = kTableDim - 1, iy = 0).
-            const glm::vec4& roughNormal = tables.LTC1[kTableDim - 1u];
-            if (std::abs(roughNormal.x - 1.0f) > 1e-4f || std::abs(roughNormal.y) > 1e-4f ||
-                std::abs(roughNormal.z) > 1e-4f || std::abs(roughNormal.w - 1.0f) > 1e-4f) {
-                if (outReason) *outReason = "LTC1 fails identity convergence at roughness = 1.0";
-                return false;
-            }
+            // A GGX fit at roughness=1 is not a diffuse identity transform.
+            // Accuracy is checked against independent GGX quadrature in contract tests.
             if (outReason) outReason->clear();
             return true;
         }
 
         glm::vec4 SampleLTC1(float roughness, float NdotV) {
-            const float u = std::clamp((SafeClampRoughness(roughness) - 0.04f) / 0.96f, 0.0f, 1.0f);
+            const float u = std::clamp(SafeClampRoughness(roughness), 0.0f, 1.0f);
             const float v = std::clamp(std::sqrt(std::max(0.0f, 1.0f - SafeClampNdotV(NdotV))), 0.0f, 1.0f);
             const float gx = u * static_cast<float>(kTableDim - 1u);
             const float gy = v * static_cast<float>(kTableDim - 1u);
@@ -2122,7 +2093,7 @@ namespace Axle {
         }
 
         glm::vec4 SampleLTC2(float roughness, float NdotV) {
-            const float u = std::clamp((SafeClampRoughness(roughness) - 0.04f) / 0.96f, 0.0f, 1.0f);
+            const float u = std::clamp(SafeClampRoughness(roughness), 0.0f, 1.0f);
             const float v = std::clamp(std::sqrt(std::max(0.0f, 1.0f - SafeClampNdotV(NdotV))), 0.0f, 1.0f);
             const float gx = u * static_cast<float>(kTableDim - 1u);
             const float gy = v * static_cast<float>(kTableDim - 1u);
@@ -2211,10 +2182,21 @@ namespace Axle {
             if (light.Shape == AreaLightShape::Disk) {
                 const float nx = u / halfW;
                 const float ny = v / halfH;
-                const float radial = std::sqrt(nx * nx + ny * ny);
-                if (radial > 1.0f) {
-                    u = (nx / radial) * halfW;
-                    v = (ny / radial) * halfH;
+                if (nx * nx + ny * ny > 1.0f) {
+                    // Euclidean projection onto an ellipse, not radial projection.
+                    const float a2 = halfW * halfW;
+                    const float b2 = halfH * halfH;
+                    float lo = 0.0f;
+                    float hi = glm::length(glm::vec2(halfW * u, halfH * v));
+                    for (int iteration = 0; iteration < 24; ++iteration) {
+                        const float lambda = (lo + hi) * 0.5f;
+                        const float x = halfW * u / (lambda + a2);
+                        const float y = halfH * v / (lambda + b2);
+                        if (x * x + y * y > 1.0f) lo = lambda;
+                        else hi = lambda;
+                    }
+                    u = a2 * u / (hi + a2);
+                    v = b2 * v / (hi + b2);
                 }
             } else {
                 u = std::clamp(u, -halfW, halfW);
@@ -2280,11 +2262,11 @@ namespace Axle {
             };
 
             if (light.Shape == AreaLightShape::Disk) {
-                shadingPoly.reserve(8);
-                for (int k = 0; k < 8; ++k) {
-                    const float angle = (static_cast<float>(k) + 0.5f) * (kPi * 0.25f);
-                    const float cx = std::cos(angle) * kDiskOctagonRadiusScale;
-                    const float cy = std::sin(angle) * kDiskOctagonRadiusScale;
+                shadingPoly.reserve(32);
+                for (int k = 0; k < 32; ++k) {
+                    const float angle = (static_cast<float>(k) + 0.5f) * (kPi * 0.0625f);
+                    const float cx = std::cos(angle) * kDiskRadiusScale;
+                    const float cy = std::sin(angle) * kDiskRadiusScale;
                     pushWorldVertex(light.Position + lightRight * (halfW * cx) + lightUp * (halfH * cy));
                 }
             } else {

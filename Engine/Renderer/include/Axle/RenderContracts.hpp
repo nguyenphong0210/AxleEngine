@@ -557,14 +557,14 @@ namespace Axle {
     // 8. LTC Rectangular & Disk Area Light Contracts (M15-U5-40..45.3)
     // =========================================================================
     namespace AreaLightLTCContract {
-        static constexpr uint32_t kTableDim = 8u;
+        static constexpr uint32_t kTableDim = 64u;
         static constexpr uint32_t kTableSize = kTableDim * kTableDim;
-        static constexpr uint32_t kMaxClipVertices = 16u;
+        static constexpr uint32_t kMaxClipVertices = 36u;
 
         struct LTCTables {
             // Row-major [viewIdx * kTableDim + roughIdx]:
             // LTC1 stores inverse transform M^-1 = (m00, m02, m20, m22) with M^-1[1][1] = 1.
-            // LTC2 stores directional albedo / norm = (ggxNorm, fresnelTerm, sphereFormFactor, 0).
+            // LTC2 stores directional albedo / norm = (ggxNorm, fresnelTerm, 0, 0); unused upstream channels are omitted.
             std::array<glm::vec4, kTableSize> LTC1{};
             std::array<glm::vec4, kTableSize> LTC2{};
         };

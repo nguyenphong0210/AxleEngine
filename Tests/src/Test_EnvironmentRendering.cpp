@@ -33,6 +33,7 @@ bool RunM15OcclusionHorizonTests(const std::filesystem::path& output);
 bool RunM15OcclusionSurfaceTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15OcclusionForwardTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15HiZTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
+bool RunM15AreaLightRenderingTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15ReflectionCaptureTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15ReflectionDeviceResetTests(const Axle::RHI::RHIDeviceDesc& initDesc);
 bool RunM15OcclusionSphereTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
@@ -46,6 +47,7 @@ namespace {
 using namespace Axle;
 using namespace Axle::RHI;
 std::filesystem::path Output;
+bool AreaLightsOnly = false;
 
 bool TimestampProbe(uint64_t& ticks, double& milliseconds) {
     auto& device = RHIDevice::Get();
@@ -219,6 +221,11 @@ bool Native(RHIType backend) {
     TextureDescriptor authored; authored.Type="CubemapHDR"; authored.Source="red.hdr";
     CHECK(TextureDescriptor::Save((Output/"sky.axleasset").string(),authored));
     RHISceneRenderer renderer; CHECK(renderer.Init(device,false));
+    if (AreaLightsOnly) {
+        const bool ok = RunM15AreaLightRenderingTests(renderer, Output);
+        renderer.Shutdown();
+        return ok && device.WaitIdle() && GetRHIValidationErrorCount() == 0;
+    }
     CHECK(RunM15OcclusionRenderingTests(Output));
     CHECK(RunM15OcclusionHorizonTests(Output));
     auto& environment=renderer.GetEnvironment(); EnvironmentBakeSettings bake;
@@ -1054,7 +1061,8 @@ bool Native(RHIType backend) {
 }
 }
 int main(int argc,char** argv) {
-    if(argc!=3)return 2;
+    if(argc!=3 && argc!=4)return 2;
+    if(argc==4) { if(std::string(argv[3])!="--m15-area-lights") return 2; AreaLightsOnly=true; }
     Output=std::filesystem::absolute(argv[2]);std::filesystem::create_directories(Output);
     try { return (std::string(argv[1])=="gl"?OpenGL():Native(std::string(argv[1])=="vulkan"?RHIType::Vulkan:RHIType::Direct3D12))&&GetRHIValidationErrorCount()==0?0:1; }
     catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}

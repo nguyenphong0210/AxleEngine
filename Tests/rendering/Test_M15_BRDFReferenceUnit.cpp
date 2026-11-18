@@ -125,9 +125,9 @@ bool RunM15BRDFReferenceUnitTests() {
                  Compensation(0.8, 0.0) == 1.0 &&
                  Compensation(0.8, std::numeric_limits<double>::quiet_NaN()) == 1.0,
         "neutral, floor/cap and malformed-LUT fallback are explicit");
-    RENDER_CHECK(Count(source, "MaterialDistribution(N,") == 3 &&
-                 Count(source, "MaterialGeometry(N,") == 3 &&
-                 Count(source, "ggxEnergyCompensation;") >= 4 &&
+    RENDER_CHECK(Count(source, "MaterialDistribution(N,") == 4 &&
+                 Count(source, "MaterialGeometry(N,") == 4 &&
+                 Count(source, "ggxEnergyCompensation;") >= 5 &&
                  source.find("EvaluateLTCAreaLightTerms(") != std::string::npos &&
                  source.find("return 1.0 / max(PI * axes.x * axes.y * d * d, 1e-8);") != std::string::npos &&
                  source.find("return 1.0 / (1.0 + AnisotropicLambda(N,V,T,B,axes) + AnisotropicLambda(N,L,T,B,axes));") != std::string::npos &&
@@ -135,7 +135,7 @@ bool RunM15BRDFReferenceUnitTests() {
                  source.find("!isfinite(ggxSingleScatterEnergy)") != std::string::npos &&
                  source.find("ggxSingleScatterEnergy = clamp(ggxSingleScatterEnergy, 0.05, 1.0);") != std::string::npos &&
                  source.find("min(1.0 + F0 * (1.0 / ggxSingleScatterEnergy - 1.0), 8.0)") != std::string::npos,
-        "sun, point, spot and ambient paths use GGX + finite compensation and area lights use LTC");
+        "sun, point, spot, ambient and anisotropic area paths retain GGX compensation alongside fitted area LTC");
 
     // U1-02.2: neutral dielectric F0, RGB metal F0, and continuous mixtures.
     const glm::vec3 gold(0.85f, 0.52f, 0.13f);

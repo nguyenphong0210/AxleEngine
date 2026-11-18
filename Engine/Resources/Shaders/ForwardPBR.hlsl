@@ -323,6 +323,46 @@ float MaterialGeometry(float3 N, float3 V, float3 L, float3 T, float3 B, float r
     float2 axes = AnisotropicAxes(roughness,anisotropy);
     return 1.0 / (1.0 + AnisotropicLambda(N,V,T,B,axes) + AnisotropicLambda(N,L,T,B,axes));
 }
+// The fitted LTC is isotropic. Preserve authored anisotropic material response with
+// the existing representative-point approximation until an anisotropic LTC fit is available.
+float3 EvaluateAnisotropicAreaSpecular(RectLightData light, float3 P, float3 N, float3 V,
+    float3 T, float3 B, float roughness, float anisotropy, float3 F0, float diffuseFormFactor) {
+    float3 D = normalize(light.DirectionAndHeight.xyz);
+    float3 U = normalize(light.UpAndRange.xyz);
+    float3 R = normalize(cross(D, U));
+    U = cross(R, D);
+    float3 center = light.PositionAndWidth.xyz;
+    float3 samplePosition = center;
+    float denominator = dot(reflect(-V, N), D);
+    if (abs(denominator) > 1e-5) {
+        float distance = dot(center - P, D) / denominator;
+        if (distance > 0.0) samplePosition = P + reflect(-V, N) * distance;
+    }
+    float2 halfSize = max(float2(light.PositionAndWidth.w, abs(light.DirectionAndHeight.w)) * 0.5, 0.005);
+    float2 local = float2(dot(samplePosition - center, R), dot(samplePosition - center, U));
+    if (light.DirectionAndHeight.w < 0.0) {
+        float radius = length(local / halfSize);
+        if (radius > 1.0) local /= radius;
+    } else {
+        local = clamp(local, -halfSize, halfSize);
+    }
+    samplePosition = center + R * local.x + U * local.y;
+    float3 toPoint = samplePosition - P;
+    float pointLength = length(toPoint);
+    if (pointLength < 1e-5) return 0.0;
+    float3 L = toPoint / pointLength;
+    float nl = saturate(dot(N, L));
+    float nv = max(dot(N, V), 0.001);
+    float3 H = normalize(V + L);
+    float3 brdf = MaterialDistribution(N, H, T, B, roughness, anisotropy) *
+        MaterialGeometry(N, V, L, T, B, roughness, anisotropy) *
+        FresnelSchlick(saturate(dot(V, H)), F0) / max(4.0 * nv * nl, 0.001);
+    float centerLength = length(center - P);
+    float centerNl = centerLength > 1e-5 ? saturate(dot(N, (center - P) / centerLength)) : 1.0;
+    float solidAngle = min(2.0 * PI, PI * diffuseFormFactor / max(centerNl, 0.05));
+    return brdf * nl * solidAngle;
+}
+
 float D_Charlie(float NdotH, float roughness) {
     float invAlpha = 1.0 / max(roughness, 0.001);
     float sin2H = max(1.0 - NdotH * NdotH, 0.0078125);
@@ -724,14 +764,24 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
             LOCAL_INTENSITY_SCALE);
         if (ltc.RangeAttenuation <= 0.0) continue;
 
-        float3 centerDir = rLight.PositionAndWidth.xyz - input.WorldPos;
-        float centerLenSq = dot(centerDir, centerDir);
-        float3 L_center = (centerLenSq > 1e-8) ? (centerDir * rsqrt(centerLenSq)) : N;
-        float NdotL_center = max(dot(N, L_center), 0.0);
-
         float3 diffContrib = ltc.DiffuseLighting;
-        float3 specContrib = ltc.SpecularLighting * u_MaterialSurface.z;
-        Lo += ApplyClearcoat(diffContrib + specContrib, N, V, L_center, max(NdotL_center, 0.001), coatAnisotropy.x, coatAnisotropy.y) * ltc.Radiance;
+        float3 areaSpecular = ltc.SpecularLighting;
+        if (abs(coatAnisotropy.z) > 0.00001) {
+            float3 anisotropicSpecular = EvaluateAnisotropicAreaSpecular(rLight, input.WorldPos, N, V,
+                tangent, bitangent, roughness, coatAnisotropy.z, F0, ltc.DiffuseFormFactor);
+            float anisotropyBlend = smoothstep(0.0, 0.1, abs(coatAnisotropy.z));
+            areaSpecular = lerp(areaSpecular, anisotropicSpecular, anisotropyBlend * anisotropyBlend);
+        }
+        float3 areaLighting = diffContrib + areaSpecular * u_MaterialSurface.z * ggxEnergyCompensation;
+        float coat = saturate(coatAnisotropy.x) * u_MaterialSurface.z;
+        if (coat > 0.0) {
+            LTCAreaLightResult coatLTC = EvaluateLTCAreaLightTerms(
+                rLight.PositionAndWidth, rLight.DirectionAndHeight, rLight.UpAndRange, rLight.ColorAndIntensity,
+                input.WorldPos, N, V, 1.0, 1.0, clamp(coatAnisotropy.y, 0.04, 1.0), 0.04, LOCAL_INTENSITY_SCALE);
+            float3 attenuation = 1.0 - coat * coatLTC.SpecularAlbedo;
+            areaLighting = areaLighting * attenuation * attenuation + coat * coatLTC.SpecularLighting;
+        }
+        Lo += areaLighting * ltc.Radiance;
         if (u_Subsurface.w > 0.0) {
             Lo += ltc.DiffuseFormFactor * u_Subsurface.rgb * u_Subsurface.w * (1.0 - metallic) * ltc.Radiance;
         }

@@ -100,6 +100,35 @@ mandatory. Freeze Gemini source edits during Codex review/repair in the shared
 checkout. These roles do not authorize vendor upgrades, later features, pushes or
 automatic invocation of another session. Missing required checks remain NOT RUN.
 
+## Feature completeness in every review
+
+User decision, 2026-11-18: every review must explicitly audit feature
+completeness across the entire assigned scope, including when implementation is
+split into smaller checkpoints. Reviewing only the submitted diff or passing
+existing tests is insufficient.
+
+- Derive the review checklist from the latest user requirements, the released
+  plan requirement IDs and applicable technical contracts. Reconcile task-name
+  changes and package splits against the original requirements; every requirement
+  must have an owner/checkpoint and a final review disposition.
+- Include a requirement-to-evidence table in the review report: requirement ID
+  or explicit user requirement, implementation/caller paths, independently
+  verified evidence, and PASS, MISSING, FAIL or NOT RUN status. Distinguish the
+  implementer's reported evidence from the reviewer's actual verification.
+- Inspect complete affected feature paths, including Engine/Runtime/Editor,
+  material variants, extraction, serialization/assembly, supported backends,
+  resource lifetime, failure/fallback behavior and integration boundaries where
+  applicable. Verify that repairs preserve other required behavior.
+- Repair missing or incomplete features within the authorized review scope;
+  do not remove requirements, weaken assertions or silently narrow scope to
+  obtain acceptance. Requirements outside the released scope remain explicit
+  follow-up items rather than implicitly authorizing later packages.
+- MISSING or FAIL requirements prevent acceptance of the affected scope.
+  Required checks without execution evidence remain NOT RUN. User-deferred
+  checks stay open and are listed separately; automated-only acceptance must
+  never be described as full feature acceptance. Every requirement must be
+  accounted for before closing the review.
+
 ## Explicitly delegated multi-package runs
 
 A user may explicitly activate a concrete package/phase range and delegate

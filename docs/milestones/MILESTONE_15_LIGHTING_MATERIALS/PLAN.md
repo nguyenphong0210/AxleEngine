@@ -1119,7 +1119,7 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 
 ### U6 / S6.1–S6.3 — Volumetric fog and atmosphere
 
-> **Execution schedule note (2026-11-19).** U6-A established froxel allocation, quality tiers, and initial VRAM figures. U6-B verified static 3D integration and passed the previously open D3D12 windowed checks. The `M15-U6-02.2` Editor visual gate requires Debug and Release captures. [U6 batch schedule](#u6-execution-batches-u6-a-through-u6-e) · [U6-A review](../../reviews/M15_U6_A_REVIEW.md) · [U6-B review](../../reviews/M15_U6_B_REVIEW.md)
+> **Execution schedule note (2026-11-19).** U6-A established froxel allocation, quality tiers, and initial VRAM figures. U6-B verified static 3D integration and the D3D12 windowed checks. U6-C verified light and shadow injection, including Debug and Release Editor slit captures. [U6 batch schedule](#u6-execution-batches-u6-a-through-u6-e) · [U6-A review](../../reviews/M15_U6_A_REVIEW.md) · [U6-B review](../../reviews/M15_U6_B_REVIEW.md) · [U6-C review](../../reviews/M15_U6_C_REVIEW.md)
 
 - [x] **M15-U6-01.1 — Allocate froxel resources.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
@@ -1130,9 +1130,10 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 - [x] **M15-U6-02.1 — Inject density/media.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - Debug and Release D3D12/Vulkan readback verifies 3D injection, component priority and the native RGBA16F storage contract. [U6-B review](../../reviews/M15_U6_B_REVIEW.md)
-- [ ] **M15-U6-02.2 — Inject light/shadow visibility.**
+- [x] **M15-U6-02.2 — Inject light/shadow visibility.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
+  - Native D3D12 and Vulkan tests verify directional and local lighting with the real atlases and the unshadowed fallback. Debug and Release D3D12 Editor captures show the bounded shaft and Console `Error 0`. [U6-C evidence](../../reviews/M15_U6_C_REVIEW.md)
 - [x] **M15-U6-03.1 — Integrate scattering/extinction.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - Native 3D integration and linear composition pass homogeneous, partial-slice, stratified boundary and distant opaque depth fixtures. [U6-B review](../../reviews/M15_U6_B_REVIEW.md)
@@ -1160,12 +1161,12 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 - [x] **M15-U6-06 — Remove invented sun fallback and emit diagnostics.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - Native fixtures verify unlit extinction, zero added radiance, explicit diagnostics and recovery after a fog descriptor allocation failure. [U6-B review](../../reviews/M15_U6_B_REVIEW.md)
-- [ ] **M15-U6-07.1 — Test wall occlusion.**
+- [x] **M15-U6-07.1 — Test wall occlusion.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U6-07.2 — Test shafts.**
+  - Debug and Release D3D12 and Vulkan readbacks verify CSM and local wall occlusion, including a blocked froxel at a narrow spotlight edge. [U6-C evidence](../../reviews/M15_U6_C_REVIEW.md)
+- [x] **M15-U6-07.2 — Test shafts.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - All bright sample-row columns stay within the slit plus the filter margin. The same geometry emits zero shaft radiance without a directional light. [U6-C evidence](../../reviews/M15_U6_C_REVIEW.md)
 - [ ] **M15-U6-07.3 — Test camera motion.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

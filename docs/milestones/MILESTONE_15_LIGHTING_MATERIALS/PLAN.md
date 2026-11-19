@@ -1140,15 +1140,15 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 - [x] **M15-U6-03.2 — Validate physical units.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - CPU analytic and fine-step quadrature comparisons verify Beer–Lambert distance in meters and Henyey–Greenstein phase. Native readbacks agree in Debug and Release on both backends. [U6-B review](../../reviews/M15_U6_B_REVIEW.md)
-- [ ] **M15-U6-04.1 — Add temporal reprojection.**
+- [x] **M15-U6-04.1 — Add temporal reprojection.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U6-04.2 — Add temporal rejection.**
+  - Native ping-pong and HDR readbacks confirm world-space history reuse and static fallback. [U6-D verification](../../reviews/M15_U6_D_VERIFICATION.md)
+- [x] **M15-U6-04.2 — Add temporal rejection.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U6-04.3 — Add invalidation.**
+  - GPU readbacks verify former frustum and fog depth rejection, current-neighborhood bounds and preserved extinction. [U6-D verification](../../reviews/M15_U6_D_VERIFICATION.md)
+- [x] **M15-U6-04.3 — Add invalidation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - Native and ViewContext tests cover first-frame, cut, view generation, scene, device epoch, feature settings and failed-frame invalidation. [U6-D verification](../../reviews/M15_U6_D_VERIFICATION.md)
 - [ ] **M15-U6-05.1 — Define transparent/depth interaction.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
@@ -1167,12 +1167,12 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 - [x] **M15-U6-07.2 — Test shafts.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - All bright sample-row columns stay within the slit plus the filter margin. The same geometry emits zero shaft radiance without a directional light. [U6-C evidence](../../reviews/M15_U6_C_REVIEW.md)
-- [ ] **M15-U6-07.3 — Test camera motion.**
+- [x] **M15-U6-07.3 — Test camera motion.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U6-07.4 — Test resize.**
+  - Controlled camera translation matches the predicted history address. Rotation after a light goes dark leaves zero measured trail. [U6-D verification](../../reviews/M15_U6_D_VERIFICATION.md)
+- [x] **M15-U6-07.4 — Test resize.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - Resizing a live view target and changing the fog quality tier both seed a fresh volume before reuse. [U6-D verification](../../reviews/M15_U6_D_VERIFICATION.md)
 - [ ] **M15-U6-07.5 — Measure memory.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - Initial U6-A scorecards cover all four tiers on native D3D12 and Vulkan. Final integrated VRAM reconciliation is part of U6-E. [U6-A review](../../reviews/M15_U6_A_REVIEW.md)

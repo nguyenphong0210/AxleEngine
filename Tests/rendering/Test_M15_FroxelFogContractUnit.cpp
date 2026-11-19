@@ -1,6 +1,8 @@
 #include "RenderTestCommon.hpp"
 #include <Axle/RenderContracts.hpp>
 #include <Axle/RenderBackendPolicy.hpp>
+#include <Axle/LightingService.hpp>
+#include <Axle/RenderWorld.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/SceneRenderSettings.hpp>
@@ -29,6 +31,14 @@ using namespace Axle::FroxelFogContract;
 
 #ifndef AXLE_SCENE_RENDERER_SOURCE_PATH
 #define AXLE_SCENE_RENDERER_SOURCE_PATH "Engine/Scene/src/RHISceneRenderer.cpp"
+#endif
+
+#ifndef AXLE_VOLUMETRIC_FOG_SHADER_PATH
+#define AXLE_VOLUMETRIC_FOG_SHADER_PATH "Engine/Resources/Shaders/VolumetricFog.hlsl"
+#endif
+
+#ifndef AXLE_FROXEL_FOG_PASS_SOURCE_PATH
+#define AXLE_FROXEL_FOG_PASS_SOURCE_PATH "Engine/Scene/src/Passes/FroxelFogPass.cpp"
 #endif
 
 namespace {
@@ -285,6 +295,201 @@ bool RunM15FroxelFogContractUnitTests() {
             "M15-U6-01.1: RHIViewTargets and all three view-target builders share ResolveViewTargetOptions");
     }
 
-    std::cout << "[M15FroxelFog] All Unit 6 Batch A contract tests PASSED.\n";
+    // 6. M15-U6-05.3 & 06: ResolveMediaState removes clamps and invented fallbacks
+    {
+        LightingService lightingSvc;
+
+        RenderWorld unlitWorld;
+        SceneRenderSettings unlitSettings;
+        unlitSettings.EnableVolumetricFog = true;
+        unlitSettings.FogDensity = 0.0f;
+        unlitSettings.FogHeightFalloff = 0.0f;
+        unlitSettings.FogNearDistance = 0.25f;
+        unlitSettings.FogMaxDistance = 100.0f;
+        const auto unlitFrame = lightingSvc.BuildFrame(unlitWorld, unlitSettings);
+        const auto zeroMedia = ResolveMediaState(unlitWorld, unlitSettings, unlitFrame);
+        RENDER_CHECK(zeroMedia.Valid &&
+                     zeroMedia.Density == 0.0f &&
+                     zeroMedia.HeightFalloff == 0.0f &&
+                     zeroMedia.EffectiveBaseDensity == 0.0f &&
+                     !zeroMedia.HasDirectionalSun &&
+                     !zeroMedia.HasAmbientLight &&
+                     zeroMedia.SunRadiance == glm::vec3(0.0f) &&
+                     zeroMedia.AmbientRadiance == glm::vec3(0.0f) &&
+                     zeroMedia.Diagnostic.find("froxel_fog_no_directional_sun") != std::string::npos,
+            "M15-U6-05.3 / 06: zero density & falloff are unclamped and unlit scenes have zero radiance with explicit diagnostic");
+
+        // Zero intensity on world component also collapses EffectiveBaseDensity to exact zero
+        RenderWorld zeroIntensityWorld;
+        zeroIntensityWorld.VolumetricFog = RenderVolumetricFog{
+            .Enabled = true,
+            .Density = 0.12f,
+            .HeightFalloff = 0.0f,
+            .ScatteringAsymmetry = 0.65f,
+            .Color = glm::vec3(0.6f, 0.7f, 0.9f),
+            .MaxDistance = 80.0f,
+            .Intensity = 0.0f
+        };
+        const auto zeroIntMedia = ResolveMediaState(zeroIntensityWorld, unlitSettings, lightingSvc.BuildFrame(zeroIntensityWorld, unlitSettings));
+        RENDER_CHECK(zeroIntMedia.Valid && zeroIntMedia.FromWorldComponent &&
+                     std::abs(zeroIntMedia.Density - 0.12f) < 1e-6f &&
+                     zeroIntMedia.Intensity == 0.0f &&
+                     zeroIntMedia.EffectiveBaseDensity == 0.0f,
+            "M15-U6-05.3: VolumetricFog Intensity=0 zeros EffectiveBaseDensity cleanly");
+
+        // Active DirectionalLight uses unit toward-light direction and artist-to-radiance scale
+        RenderWorld litWorld;
+        RenderDirectionalLight sun;
+        sun.Direction = glm::normalize(glm::vec3(1.0f, 2.0f, -1.0f));
+        sun.Color = glm::vec3(1.0f, 0.9f, 0.75f);
+        sun.Intensity = 2.0f;
+        sun.AmbientIntensity = 0.08f;
+        litWorld.DirectionalLight = sun;
+        litWorld.VolumetricFog = RenderVolumetricFog{
+            .Enabled = true,
+            .Density = 0.05f,
+            .HeightFalloff = 0.25f,
+            .ScatteringAsymmetry = 0.7f,
+            .Color = glm::vec3(0.8f, 0.85f, 0.95f),
+            .MaxDistance = 64.0f,
+            .Intensity = 1.5f
+        };
+        const auto litFrame = lightingSvc.BuildFrame(litWorld, unlitSettings);
+        const auto litMedia = ResolveMediaState(litWorld, unlitSettings, litFrame);
+        const glm::vec3 expectedRadiance = sun.Color * (sun.Intensity * 100000.0f * DirectLuxToRadiance);
+        RENDER_CHECK(litMedia.Valid && litMedia.HasDirectionalSun && litMedia.HasAmbientLight &&
+                     glm::length(litMedia.SunDirectionToLight - sun.Direction) < 1e-5f &&
+                     glm::length(litMedia.SunRadiance - expectedRadiance) < 1e-4f &&
+                     std::abs(litMedia.EffectiveBaseDensity - (0.05f * 1.5f)) < 1e-6f,
+            "M15-U6-03.2 / 06: directional sun preserves toward-light sign and scene-linear radiance calibration");
+
+        // Invalid authored MaxDistance triggers diagnostic fallback to settings range
+        RenderWorld badDistWorld = litWorld;
+        badDistWorld.VolumetricFog->MaxDistance = 0.1f; // <= nearDistance
+        const auto fallbackMedia = ResolveMediaState(badDistWorld, unlitSettings, litFrame);
+        RENDER_CHECK(fallbackMedia.Valid && fallbackMedia.AuthoredMaxDistanceInvalidFallback &&
+                     std::abs(fallbackMedia.MaxDistance - unlitSettings.FogMaxDistance) < 1e-5f &&
+                     fallbackMedia.Diagnostic.find("froxel_fog_depth_fallback") != std::string::npos,
+            "M15-U6-06: invalid authored VolumetricFog MaxDistance falls back cleanly with explicit diagnostic");
+
+        SceneRenderSettings invalidSettings = unlitSettings;
+        invalidSettings.FogMaxDistance = 0.1f;
+        const auto disabledMedia = ResolveMediaState(badDistWorld, invalidSettings, litFrame);
+        RENDER_CHECK(!disabledMedia.Valid &&
+                     disabledMedia.Diagnostic.find("froxel_fog_disabled:invalid_depth_range") != std::string::npos,
+            "M15-U6-06: invalid global depth range disables fog explicitly with diagnostic");
+    }
+
+    // 7. M15-U6-03.2: Henyey-Greenstein phase normalization & anisotropy ordering
+    {
+        constexpr double kPi = 3.14159265358979323846;
+        const float iso = EvaluateHenyeyGreenstein(0.37f, 0.0f);
+        RENDER_CHECK(std::abs(iso - static_cast<float>(1.0 / (4.0 * kPi))) < 1e-6f,
+            "M15-U6-03.2: Henyey-Greenstein g=0 equals 1/(4*pi) across all angles");
+
+        const float fwd = EvaluateHenyeyGreenstein(1.0f, 0.7f);
+        const float side = EvaluateHenyeyGreenstein(0.0f, 0.7f);
+        const float back = EvaluateHenyeyGreenstein(-1.0f, 0.7f);
+        RENDER_CHECK(fwd > side && side > back && fwd > 5.0f * back,
+            "M15-U6-03.2: forward scattering g=0.7 peaks cleanly along +cosTheta and decreases monotonically");
+
+        for (float g : { -0.75f, 0.0f, 0.7f, 0.95f }) {
+            double integral = 0.0;
+            constexpr int N = 100000;
+            const double du = 2.0 / static_cast<double>(N);
+            for (int k = 0; k < N; ++k) {
+                const float u = static_cast<float>(-1.0 + (static_cast<double>(k) + 0.5) * du);
+                integral += 2.0 * kPi * static_cast<double>(EvaluateHenyeyGreenstein(u, g)) * du;
+            }
+            RENDER_CHECK(std::abs(integral - 1.0) < 1e-3,
+                "M15-U6-03.2: Henyey-Greenstein integrates to 1 over the unit sphere");
+        }
+    }
+
+    // 8. M15-U6-03.1 & 03.2: Beer-Lambert integration & 3D froxel slice quadrature vs analytic/reference
+    {
+        LightingService lightingSvc;
+        RenderWorld world;
+        RenderDirectionalLight sun;
+        sun.Direction = glm::normalize(glm::vec3(0.0f, 0.4f, -0.9f));
+        sun.Color = glm::vec3(1.0f, 0.95f, 0.85f);
+        sun.Intensity = 1.5f;
+        sun.AmbientIntensity = 0.05f;
+        world.DirectionalLight = sun;
+
+        SceneRenderSettings settings;
+        settings.EnableVolumetricFog = true;
+        settings.FogDensity = 0.06f;
+        settings.FogHeightFalloff = 0.0f;
+        settings.FogScattering = 0.65f;
+        settings.FogColor = glm::vec3(0.75f, 0.85f, 0.95f);
+        settings.FogNearDistance = 0.25f;
+        settings.FogMaxDistance = 100.0f;
+
+        const auto uniformMedia = ResolveMediaState(world, settings, lightingSvc.BuildFrame(world, settings));
+        const glm::vec3 rayOrigin{ 0.0f, 1.5f, 0.0f };
+        const glm::vec3 obliqueRay{ 0.35f, 0.15f, -1.0f };
+        const float rayLen = glm::length(obliqueRay);
+        const glm::vec3 unitRay = obliqueRay / rayLen;
+
+        const float boundaryZ48 = SliceBoundaryToViewDistance(48u, 64u, settings.FogNearDistance, settings.FogMaxDistance);
+        const auto froxelBoundary = EvaluateFroxelColumnQuadrature(uniformMedia, rayOrigin, obliqueRay, 64u, boundaryZ48);
+        const auto analyticBoundary = EvaluateAnalyticHomogeneousFog(uniformMedia, unitRay, boundaryZ48, rayLen);
+        RENDER_CHECK(std::abs(froxelBoundary.Transmittance - analyticBoundary.Transmittance) < 1e-5f &&
+                     glm::length(froxelBoundary.InScattering - analyticBoundary.InScattering) < 1e-5f,
+            "M15-U6-03.1 / 03.2: 64-slice froxel quadrature at slice boundary matches analytic Beer-Lambert to <1e-5");
+
+        const auto froxelUniform = EvaluateFroxelColumnQuadrature(uniformMedia, rayOrigin, obliqueRay, 64u, 45.0f);
+        const auto analyticUniform = EvaluateAnalyticHomogeneousFog(uniformMedia, unitRay, 45.0f, rayLen);
+        RENDER_CHECK(std::abs(froxelUniform.Transmittance - analyticUniform.Transmittance) < 3e-3f &&
+                     glm::length(froxelUniform.InScattering - analyticUniform.InScattering) < 3e-3f,
+            "M15-U6-03.1 / 03.2: 64-slice froxel trilinear interpolation between slices closely matches analytic Beer-Lambert");
+
+        // Height-falloff scenario against 2048-step continuous quadrature reference
+        settings.FogHeightFalloff = 0.3f;
+        settings.FogDensity = 0.12f;
+        const auto falloffMedia = ResolveMediaState(world, settings, lightingSvc.BuildFrame(world, settings));
+        const auto froxelFalloff = EvaluateFroxelColumnQuadrature(falloffMedia, rayOrigin, obliqueRay, 64u, 60.0f);
+        const auto refFalloff = EvaluateReferenceRayQuadrature(falloffMedia, rayOrigin, obliqueRay, 60.0f, 2048u);
+        RENDER_CHECK(std::abs(froxelFalloff.Transmittance - refFalloff.Transmittance) < 5e-3f &&
+                     glm::length(froxelFalloff.InScattering - refFalloff.InScattering) < 5e-3f,
+            "M15-U6-03.1 / 03.2: 64-slice exponential froxel quadrature matches 2048-step height-falloff reference");
+
+        // Zero-density and small optical depth Taylor edge check
+        const auto tinyStep = EvaluateHomogeneousFogStep(glm::vec3(0.4f, 0.5f, 0.6f), 1e-6f, 0.1f);
+        const auto zeroStep = EvaluateHomogeneousFogStep(glm::vec3(0.4f, 0.5f, 0.6f), 0.0f, 1.0f);
+        RENDER_CHECK(std::abs(tinyStep.Transmittance - std::exp(-1e-7f)) < 1e-7f &&
+                     glm::length(tinyStep.InScattering - glm::vec3(0.04f, 0.05f, 0.06f)) < 1e-5f &&
+                     zeroStep.Transmittance == 1.0f &&
+                     glm::length(zeroStep.InScattering - glm::vec3(0.4f, 0.5f, 0.6f)) < 1e-6f,
+            "M15-U6-03.2: small optical depth Taylor stabilization avoids 0/0 underflow");
+
+        // Unlit absorptive medium: sigmaT > 0 attenuates transmittance without inventing in-scattering
+        RenderWorld absorptiveOnlyWorld;
+        const auto absorptiveMedia = ResolveMediaState(absorptiveOnlyWorld, settings, lightingSvc.BuildFrame(absorptiveOnlyWorld, settings));
+        const auto unlitFroxel = EvaluateFroxelColumnQuadrature(absorptiveMedia, rayOrigin, obliqueRay, 64u, 40.0f);
+        RENDER_CHECK(unlitFroxel.InScattering == glm::vec3(0.0f) &&
+                     unlitFroxel.Transmittance < 0.99f && unlitFroxel.Transmittance > 0.0f,
+            "M15-U6-06: unlit medium produces zero in-scattering while preserving Beer-Lambert extinction");
+    }
+
+    // 9. Canonical shader & pass source parity checks
+    {
+        const std::string fogShaderSrc = ReadText(AXLE_VOLUMETRIC_FOG_SHADER_PATH);
+        const std::string fogPassSrc = ReadText(AXLE_FROXEL_FOG_PASS_SOURCE_PATH);
+        RENDER_CHECK(fogShaderSrc.find("CSInjectMedia") != std::string::npos &&
+                     fogShaderSrc.find("CSIntegrate") != std::string::npos &&
+                     fogShaderSrc.find("HenyeyGreenstein") != std::string::npos &&
+                     fogShaderSrc.find("0.0001") == std::string::npos &&
+                     fogShaderSrc.find("0.001f") == std::string::npos &&
+                     fogPassSrc.find("FogInject") != std::string::npos &&
+                     fogPassSrc.find("FogIntegrate") != std::string::npos &&
+                     fogPassSrc.find("ResolveMediaState") != std::string::npos &&
+                     fogPassSrc.find("0.45f, 0.85f, 0.25f") == std::string::npos &&
+                     fogPassSrc.find("-glm::normalize") == std::string::npos,
+            "M15-U6-02.1 / 05.3 / 06: VolumetricFog.hlsl and FroxelFogPass.cpp match 3D froxel architecture without clamps or invented sun");
+    }
+
+    std::cout << "[M15FroxelFog] All Unit 6 Batch A & Batch B contract tests PASSED.\n";
     return true;
 }

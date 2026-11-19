@@ -767,6 +767,33 @@ namespace Axle {
         inline constexpr float DefaultNearDistance = 0.25f;
         inline constexpr float DefaultMaxDistance = 100.0f;
         inline constexpr float MaxAllowedDistance = 2000.0f;
+        inline constexpr float DirectLuxToRadiance = 0.000035f; // Matches ForwardPBR / LightingService sun calibration
+        inline constexpr float MaxAsymmetry = 0.95f;
+
+        struct FroxelMediaState {
+            bool Valid = false;
+            bool FromWorldComponent = false;
+            float Density = 0.0f;                 // Extinction sigma_t base at y <= 0 (1/m), unclamped at 0
+            float HeightFalloff = 0.0f;           // Exponential height decay rate (1/m), unclamped at 0
+            float ScatteringAsymmetry = 0.0f;     // Henyey-Greenstein g clamped to [-MaxAsymmetry, MaxAsymmetry]
+            glm::vec3 Albedo{ 0.0f };             // Single-scattering albedo tint >= 0
+            float Intensity = 0.0f;               // Medium density/scattering intensity multiplier >= 0
+            float EffectiveBaseDensity = 0.0f;    // Density * Intensity (0 when either is 0)
+            float NearDistance = DefaultNearDistance;
+            float MaxDistance = DefaultMaxDistance;
+            bool HasDirectionalSun = false;       // True iff world authored an active positive-illuminance sun
+            glm::vec3 SunDirectionToLight{ 0.0f, 1.0f, 0.0f }; // Unit vector pointing toward sun light
+            glm::vec3 SunRadiance{ 0.0f };        // Linear scene sun radiance (0 when !HasDirectionalSun)
+            bool HasAmbientLight = false;         // True iff authored lighting/environment has positive ambient
+            glm::vec3 AmbientRadiance{ 0.0f };    // Linear scene ambient radiance (0 when unlit)
+            bool AuthoredMaxDistanceInvalidFallback = false;
+            std::string Diagnostic;
+        };
+
+        struct FroxelSampleIntegral {
+            glm::vec3 InScattering{ 0.0f };
+            float Transmittance = 1.0f;
+        };
 
         struct FroxelMemoryBudget {
             RHI::RHIFroxelGridExtent Extent;
@@ -800,6 +827,27 @@ namespace Axle {
         // Use backend-resolved settings so every owner builds the same target generation.
         void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture, bool hasDepth,
                                       bool& outEnable, uint8_t& outQuality);
+
+        // U6-B physical medium, lighting & analytic/quadrature reference evaluators.
+        FroxelMediaState ResolveMediaState(const RenderWorld& world,
+                                           const SceneRenderSettings& settings,
+                                           const LightingFrame& lightingFrame);
+        float EvaluateHenyeyGreenstein(float cosTheta, float asymmetryG);
+        FroxelSampleIntegral EvaluateHomogeneousFogStep(const glm::vec3& inScatterPerMeter, float sigmaT, float pathLength);
+        FroxelSampleIntegral EvaluateAnalyticHomogeneousFog(const FroxelMediaState& state,
+                                                            const glm::vec3& rayDirWS,
+                                                            float viewZ,
+                                                            float rayLengthPerUnitZ = 1.0f);
+        FroxelSampleIntegral EvaluateFroxelColumnQuadrature(const FroxelMediaState& state,
+                                                            const glm::vec3& rayOriginWS,
+                                                            const glm::vec3& rayDirWorldPerUnitZ,
+                                                            uint32_t sliceCount,
+                                                            float targetViewZ);
+        FroxelSampleIntegral EvaluateReferenceRayQuadrature(const FroxelMediaState& state,
+                                                            const glm::vec3& rayOriginWS,
+                                                            const glm::vec3& rayDirWorldPerUnitZ,
+                                                            float targetViewZ,
+                                                            uint32_t quadratureSteps = 2048u);
     }
 
 } // namespace Axle

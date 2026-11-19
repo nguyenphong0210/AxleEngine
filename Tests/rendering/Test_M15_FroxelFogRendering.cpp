@@ -1,6 +1,7 @@
 #include "OcclusionTestSupport.hpp"
 #include "RHIReadback.hpp"
 #include <Axle/RHISceneRenderer.hpp>
+#include <Axle/LightingService.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/RenderGraph.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
@@ -323,6 +324,86 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
         }
     }
 
+    // Wait: local helper functions placed cleanly for U6-B suites below
+    auto Read2DRGBA16F = [&](RHITexture& texture, std::vector<glm::vec4>& outPixels) -> bool {
+        if (!texture.IsValid() || texture.GetFormat() != RHITextureFormat::RGBA16_FLOAT) return false;
+        const auto alignment = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice()).memoryAlignment;
+        const auto align = [](uint32_t value, uint32_t step) { return (value + step - 1u) / step * step; };
+        const uint32_t width = texture.GetWidth();
+        const uint32_t height = texture.GetHeight();
+        nri::TextureDataLayoutDesc layout{};
+        layout.rowPitch = align(width * 8u, alignment.uploadBufferTextureRow);
+        layout.slicePitch = align(layout.rowPitch * height, alignment.uploadBufferTextureSlice);
+
+        RHIBufferDesc bufDesc{};
+        bufDesc.Size = layout.slicePitch;
+        bufDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
+        RHIBuffer readback;
+        RHICommandBuffer commands;
+        if (!readback.Init(bufDesc) || !commands.Init() || !commands.Begin()) return false;
+
+        commands.TransitionTexture(texture.GetNative(), RHIResourceLayout::ShaderResource, RHIResourceLayout::CopySource);
+        nri::TextureRegionDesc region{};
+        region.width = static_cast<nri::Dim_t>(width);
+        region.height = static_cast<nri::Dim_t>(height);
+        region.depth = 1u;
+        region.planes = nri::PlaneBits::COLOR;
+        commands.ReadbackTextureToBuffer(*readback.GetNative(), layout, *texture.GetNative(), region);
+        commands.TransitionTexture(texture.GetNative(), RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
+        if (!commands.End() || !commands.Submit() || !device.WaitIdle()) return false;
+
+        const auto* data = static_cast<const uint8_t*>(readback.Map());
+        if (!data) return false;
+        outPixels.resize(size_t(width) * height);
+        for (uint32_t y = 0; y < height; ++y) {
+            for (uint32_t x = 0; x < width; ++x) {
+                uint32_t packed[2]{};
+                std::memcpy(packed, data + size_t(y) * layout.rowPitch + size_t(x) * 8u, 8u);
+                outPixels[size_t(y) * width + x] = glm::vec4(
+                    glm::unpackHalf2x16(packed[0]),
+                    glm::unpackHalf2x16(packed[1]));
+            }
+        }
+        readback.Unmap();
+        return true;
+    };
+
+    auto ComputeRayDirWorldPerUnitZ = [](const glm::mat4& invProj, const glm::mat4& invView, const glm::vec2& uv) {
+        const glm::vec4 clip(uv.x * 2.0f - 1.0f, (1.0f - uv.y) * 2.0f - 1.0f, 0.5f, 1.0f);
+        const glm::vec4 vp = invProj * clip;
+        const glm::vec3 viewPos = glm::vec3(vp) / std::max(std::abs(vp.w), 1e-6f);
+        const glm::vec3 rayView = viewPos / std::max(-viewPos.z, 1e-6f);
+        return glm::mat3(invView) * rayView;
+    };
+
+    auto HasFallbackPrefix = [](const RenderFrameDiagnostics& frame, const std::string& needle) {
+        for (const auto& f : frame.Fallbacks) {
+            if (f.find(needle) != std::string::npos) return true;
+        }
+        return false;
+    };
+
+    auto HasPassNamed = [](const RenderFrameDiagnostics& frame, const std::string& name) {
+        for (const auto& p : frame.Passes) {
+            if (p.Name == name && p.Status == DiagnosticStatus::Success) return true;
+        }
+        return false;
+    };
+
+    auto SampleHDRBlockAvg = [](const std::vector<glm::vec4>& pixels, uint32_t width, uint32_t cx, uint32_t cy) {
+        glm::vec3 sum(0.0f);
+        uint32_t count = 0;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const uint32_t sx = static_cast<uint32_t>(std::max<int>(0, static_cast<int>(cx) + dx));
+                const uint32_t sy = static_cast<uint32_t>(std::max<int>(0, static_cast<int>(cy) + dy));
+                sum += glm::vec3(pixels[size_t(sy) * width + sx]);
+                ++count;
+            }
+        }
+        return sum / static_cast<float>(count);
+    };
+
     // -------------------------------------------------------------------------
     // 2. M15-U6-01.2 & M15-U6-07.5: RHISceneRenderer froxel target allocation across
     //    quality tiers + native device memory budget scorecard.
@@ -400,6 +481,437 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
         }
         scorecard.close();
         RENDER_CHECK(scorecard.good(), "M15-U6-07.5: complete memory scorecard written");
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. M15-U6-B Native GPU Verification:
+    //    - 3D froxel media injection (CSInjectMedia) & slice integration (CSIntegrate)
+    //    - Analytic homogeneous & continuous height-falloff quadrature agreement
+    //    - Henyey-Greenstein forward vs backward asymmetry & world component override
+    //    - Zero-density & zero-intensity HDR preservation (no clamp, no washout)
+    //    - Unlit scene extinction without invented directional/ambient glow + diagnostics
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t kViewW = 1280u;
+        constexpr uint32_t kViewH = 720u;
+        RHITexture hdrColor, hdrDepth;
+        RENDER_CHECK(hdrColor.Init(RHITextureDesc::RenderTarget2D(kViewW, kViewH, RHITextureFormat::RGBA8_UNORM, "U6B_Display")) &&
+                     hdrDepth.Init(RHITextureDesc::DepthStencil2D(kViewW, kViewH)),
+            "M15-U6-B: display render target & D32 depth target init");
+
+        RHIViewTargetDesc vtDesc{};
+        vtDesc.Width = kViewW;
+        vtDesc.Height = kViewH;
+        vtDesc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
+        vtDesc.HDR = true;
+        vtDesc.OwnPrimary = false;
+        vtDesc.EnableScreenStorage = true;
+        vtDesc.EnableVolumetricFog = true;
+        vtDesc.FroxelQuality = static_cast<uint8_t>(FroxelFogQuality::High);
+        auto targets = std::make_shared<RHIViewTargets>();
+        RENDER_CHECK(targets->Configure(vtDesc) && targets->Validate(),
+            "M15-U6-B: view targets configured for High froxel grid (160x90x64)");
+
+        auto* scatteringVol = targets->GetFroxelScattering();
+        auto* integratedVol = targets->GetFroxelIntegrated();
+        RENDER_CHECK(scatteringVol && integratedVol &&
+                     scatteringVol->GetWidth() == 160u &&
+                     scatteringVol->GetHeight() == 90u &&
+                     scatteringVol->GetDepth() == 64u,
+            "M15-U6-02.1: 160x90x64 FroxelScattering & FroxelIntegrated targets ready");
+
+        auto cubeMesh = RHIMesh::CreateCube(1.0f);
+        RENDER_CHECK(cubeMesh && cubeMesh->IsValid(), "M15-U6-B: emissive wall cube fixture created");
+        auto cubeView = cubeMesh->CaptureView();
+
+        RHIMaterialDesc wallDesc{};
+        wallDesc.SurfaceType = SurfaceType::Opaque;
+        wallDesc.CullMode = CullMode::None;
+        wallDesc.BaseColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        wallDesc.Metallic = 1.0f;
+        wallDesc.Roughness = 1.0f;
+        wallDesc.EmissiveColor = glm::vec3(2.4f, 1.2f, 0.6f);
+        wallDesc.EmissiveIntensity = 1.0f;
+        auto emissiveWallMat = std::make_shared<RHIMaterial>(wallDesc);
+
+        const auto makeBaseSettings = []() {
+            SceneRenderSettings s{};
+            s.EnableSkybox = false;
+            s.EnableShadows = false;
+            s.EnableParticles = false;
+            s.EnableToneMapping = true;
+            s.EnableFXAA = false;
+            s.EnableBloom = false;
+            s.EnableGTAO = false;
+            s.EnableSSR = false;
+            s.EnableAutoExposure = false;
+            s.EnableStudioLightLobes = false;
+            s.EnableVolumetricFog = true;
+            s.FogQuality = FroxelFogQuality::High;
+            s.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            s.FogNearDistance = 0.25f;
+            s.FogMaxDistance = 100.0f;
+            s.FogDensity = 0.0f;
+            s.FogHeightFalloff = 0.0f;
+            s.FogScattering = 0.5f;
+            s.FogColor = glm::vec3(0.75f, 0.85f, 0.95f);
+            return s;
+        };
+
+        auto renderAndReadHDR = [&](const RenderWorld& world,
+                                    const PerspectiveCamera& camera,
+                                    const SceneRenderSettings& settings,
+                                    std::vector<glm::vec4>& outHDR,
+                                    RenderFrameDiagnostics& outDiag) -> bool {
+            renderer.RenderWorldView(
+                world, camera, &hdrColor, &hdrDepth, settings, nullptr,
+                settings.EnableVolumetricFog ? targets : nullptr);
+            outDiag = renderer.GetDiagnostics().GetFrame();
+            if (!renderer.WasLastRenderSuccessful() || renderer.GetDiagnostics().HasErrors() || !device.WaitIdle()) {
+                return false;
+            }
+            auto* linearHDR = renderer.GetIntermediateHDRTarget();
+            return linearHDR && Read2DRGBA16F(*linearHDR, outHDR) && outHDR.size() == size_t(kViewW) * kViewH;
+        };
+
+        LightingService lightingSvc;
+        std::ofstream physicsLog(output / "M15_U6B_froxel_physics.txt");
+        RENDER_CHECK(physicsLog.is_open(), "M15-U6-B: physics verification log created");
+        physicsLog << "backend=" << (device.GetBackend() == RHIType::Vulkan ? "Vulkan" : "D3D12") << "\n";
+
+        PerspectiveCamera cam(60.0f, float(kViewW) / float(kViewH), 0.1f, 300.0f);
+        const glm::vec3 camPos(0.0f, 1.5f, 0.0f);
+        cam.SetViewMatrix(glm::lookAtRH(camPos, glm::vec3(0.0f, 1.5f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f)), camPos);
+        const glm::mat4 invView = glm::inverse(cam.GetViewMatrix());
+        const glm::mat4 invProj = glm::inverse(cam.GetProjectionMatrixZO());
+
+        // Wall placed at z = -40.0m (cube [-0.5, +0.5] centered at z = -40.5m)
+        RenderMeshInstance wallInst{};
+        wallInst.EntityID = 9001u;
+        wallInst.NativeView = cubeView;
+        wallInst.Material.RHIMaterialAsset = emissiveWallMat;
+        wallInst.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -40.5f)),
+                                             glm::vec3(200.0f, 200.0f, 1.0f));
+        wallInst.CastsShadows = false;
+
+        RenderWorld litWallWorld;
+        litWallWorld.SceneRevision = 9201u;
+        RenderDirectionalLight sun{};
+        sun.Direction = glm::normalize(glm::vec3(0.3f, 0.6f, -0.7f));
+        sun.Color = glm::vec3(1.0f, 0.95f, 0.85f);
+        sun.Intensity = 2.0f;
+        sun.AmbientIntensity = 0.04f;
+        litWallWorld.DirectionalLight = sun;
+        litWallWorld.Meshes.push_back(wallInst);
+
+        // Baseline: Fog OFF on linear HDR scene
+        SceneRenderSettings offSettings = makeBaseSettings();
+        offSettings.EnableVolumetricFog = false;
+        std::vector<glm::vec4> hdrOffPixels;
+        RenderFrameDiagnostics diag;
+        RENDER_CHECK(renderAndReadHDR(litWallWorld, cam, offSettings, hdrOffPixels, diag),
+            "M15-U6-B: Fog-OFF HDR baseline renders cleanly");
+        const glm::vec3 wallBaselineHDR = SampleHDRBlockAvg(hdrOffPixels, kViewW, kViewW / 2u, kViewH / 2u);
+        RENDER_CHECK(wallBaselineHDR.r > 2.0f && wallBaselineHDR.g > 1.0f && wallBaselineHDR.b > 0.4f,
+            "M15-U6-B: HDR RGBA16F baseline preserves scene radiance > 1.0");
+
+        // -----------------------------------------------------------------
+        // Case A (M15-U6-02.1 / 03.1 / 03.2): Homogeneous 3D Froxel Physics
+        // -----------------------------------------------------------------
+        {
+            SceneRenderSettings uniformSettings = makeBaseSettings();
+            uniformSettings.FogDensity = 0.04f;
+            uniformSettings.FogHeightFalloff = 0.0f;
+            uniformSettings.FogScattering = 0.5f;
+            uniformSettings.FogColor = glm::vec3(0.75f, 0.85f, 0.95f);
+
+            std::vector<glm::vec4> hdrUniform;
+            RENDER_CHECK(renderAndReadHDR(litWallWorld, cam, uniformSettings, hdrUniform, diag),
+                "M15-U6-02.1: 3D froxel fog render completes");
+            RENDER_CHECK(HasPassNamed(diag, "FogCopy") &&
+                         HasPassNamed(diag, "FogInject") &&
+                         HasPassNamed(diag, "FogIntegrate") &&
+                         HasPassNamed(diag, "FogApply"),
+                "M15-U6-02.1: RenderGraph executes FogCopy -> FogInject -> FogIntegrate -> FogApply");
+
+            const auto media = FroxelFogContract::ResolveMediaState(
+                litWallWorld, uniformSettings, lightingSvc.BuildFrame(litWallWorld, uniformSettings));
+
+            const uint32_t centerFX = 80u, centerFY = 45u;
+            const uint32_t offFX = 20u, offFY = 15u;
+            const glm::vec2 centerUV((float(centerFX) + 0.5f) / 160.0f, (float(centerFY) + 0.5f) / 90.0f);
+            const glm::vec2 offUV((float(offFX) + 0.5f) / 160.0f, (float(offFY) + 0.5f) / 90.0f);
+            const glm::vec3 centerRay = ComputeRayDirWorldPerUnitZ(invProj, invView, centerUV);
+            const glm::vec3 offRay = ComputeRayDirWorldPerUnitZ(invProj, invView, offUV);
+
+            for (uint32_t z : { 0u, 15u, 31u, 47u, 63u }) {
+                std::vector<glm::vec4> scatSlice, intSlice;
+                RENDER_CHECK(Read3DSliceRGBA16F(*scatteringVol, z, scatSlice) &&
+                             Read3DSliceRGBA16F(*integratedVol, z, intSlice),
+                    "M15-U6-02.1 / 03.1: read FroxelScattering & FroxelIntegrated Z slices");
+
+                auto checkFroxelCoord = [&](uint32_t fx, uint32_t fy, const glm::vec3& rayPerUnitZ,
+                                            float& outT, const char* label) -> bool {
+                    const size_t idx = size_t(fy) * 160u + fx;
+                    const glm::vec4 gpuScat = scatSlice[idx];
+                    const glm::vec4 gpuInt = intSlice[idx];
+
+                    const glm::vec3 unitRay = glm::normalize(rayPerUnitZ);
+                    const float cosTheta = glm::dot(unitRay, media.SunDirectionToLight);
+                    const float phase = FroxelFogContract::EvaluateHenyeyGreenstein(cosTheta, media.ScatteringAsymmetry);
+                    const glm::vec3 expectedInScatPerMeter = (media.Albedo * media.EffectiveBaseDensity) *
+                        (media.SunRadiance * phase + media.AmbientRadiance);
+
+                    const float zEnd = FroxelFogContract::SliceBoundaryToViewDistance(
+                        z + 1u, 64u, media.NearDistance, media.MaxDistance);
+                    const auto analytic = FroxelFogContract::EvaluateAnalyticHomogeneousFog(
+                        media, unitRay, zEnd, glm::length(rayPerUnitZ));
+
+                    const bool scatOk =
+                        glm::length(glm::vec3(gpuScat) - expectedInScatPerMeter) < 3e-3f &&
+                        std::abs(gpuScat.a - media.EffectiveBaseDensity) < 5e-4f;
+                    const bool intOk =
+                        glm::length(glm::vec3(gpuInt) - analytic.InScattering) < 4e-3f &&
+                        std::abs(gpuInt.a - analytic.Transmittance) < 4e-3f;
+                    RENDER_CHECK(scatOk && intOk, label);
+                    outT = gpuInt.a;
+                    return true;
+                };
+
+                float centerT = 1.0f, offT = 1.0f;
+                RENDER_CHECK(checkFroxelCoord(centerFX, centerFY, centerRay, centerT,
+                    "M15-U6-02.1 / 03.1 / 03.2: center froxel scattering & integrated integral match analytic Beer-Lambert") &&
+                             checkFroxelCoord(offFX, offFY, offRay, offT,
+                    "M15-U6-03.2: off-axis oblique froxel ray matches Euclidean ds analytic Beer-Lambert"),
+                    "M15-U6-02.1 / 03.1 / 03.2: froxel slice readback assertions");
+                if (z >= 31u) {
+                    RENDER_CHECK(offT < centerT,
+                        "M15-U6-03.2: off-axis oblique froxel has strictly lower transmittance than center ray");
+                }
+            }
+
+            const glm::vec3 gpuCenterHDR = SampleHDRBlockAvg(hdrUniform, kViewW, kViewW / 2u, kViewH / 2u);
+            const auto analytic40 = FroxelFogContract::EvaluateAnalyticHomogeneousFog(
+                media, glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f)), 40.0f, 1.0f);
+            const glm::vec3 expectedHDR40 = wallBaselineHDR * analytic40.Transmittance + analytic40.InScattering;
+            RENDER_CHECK(glm::length(gpuCenterHDR - expectedHDR40) < 0.03f,
+                "M15-U6-03.1 / 03.2: final composited HDR center pixel at z=40m matches analytic transmittance & in-scattering");
+
+            physicsLog << "caseA_wall_base=(" << wallBaselineHDR.r << "," << wallBaselineHDR.g << "," << wallBaselineHDR.b << ") "
+                       << "gpu_hdr=(" << gpuCenterHDR.r << "," << gpuCenterHDR.g << "," << gpuCenterHDR.b << ") "
+                       << "ref_hdr=(" << expectedHDR40.r << "," << expectedHDR40.g << "," << expectedHDR40.b << ")\n";
+        }
+
+        // -----------------------------------------------------------------
+        // Case B (M15-U6-03.2): Height-Falloff Density & Reference Quadrature
+        // -----------------------------------------------------------------
+        {
+            RenderWorld heightWorld;
+            heightWorld.SceneRevision = 9202u;
+            heightWorld.DirectionalLight = sun;
+
+            PerspectiveCamera pitchedCam(60.0f, float(kViewW) / float(kViewH), 0.1f, 300.0f);
+            const glm::vec3 pitchedOrigin(0.0f, 4.0f, 0.0f);
+            pitchedCam.SetViewMatrix(glm::lookAtRH(pitchedOrigin, glm::vec3(0.0f, 1.0f, -10.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                                     pitchedOrigin);
+            const glm::mat4 pInvView = glm::inverse(pitchedCam.GetViewMatrix());
+            const glm::mat4 pInvProj = glm::inverse(pitchedCam.GetProjectionMatrixZO());
+
+            SceneRenderSettings heightSettings = makeBaseSettings();
+            heightSettings.ClearColor = glm::vec4(0.5f, 0.4f, 0.3f, 1.0f);
+            heightSettings.FogDensity = 0.12f;
+            heightSettings.FogHeightFalloff = 0.25f;
+            heightSettings.FogScattering = 0.4f;
+            heightSettings.FogMaxDistance = 80.0f;
+
+            std::vector<glm::vec4> hdrHeight;
+            RENDER_CHECK(renderAndReadHDR(heightWorld, pitchedCam, heightSettings, hdrHeight, diag),
+                "M15-U6-03.2: height-falloff HDR sky render succeeds");
+
+            const auto media = FroxelFogContract::ResolveMediaState(
+                heightWorld, heightSettings, lightingSvc.BuildFrame(heightWorld, heightSettings));
+            const glm::vec3 centerRay = ComputeRayDirWorldPerUnitZ(pInvProj, pInvView, glm::vec2(0.5f, 0.5f));
+            const auto refSky = FroxelFogContract::EvaluateReferenceRayQuadrature(
+                media, pitchedOrigin, centerRay, media.MaxDistance, 2048u);
+            const glm::vec3 expectedSkyHDR = glm::vec3(heightSettings.ClearColor) * refSky.Transmittance + refSky.InScattering;
+            const glm::vec3 gpuSkyHDR = SampleHDRBlockAvg(hdrHeight, kViewW, kViewW / 2u, kViewH / 2u);
+            RENDER_CHECK(glm::length(gpuSkyHDR - expectedSkyHDR) < 0.02f,
+                "M15-U6-03.2: GPU height-falloff HDR pixel matches 2048-step reference ray quadrature");
+
+            physicsLog << "caseB_gpu_hdr=(" << gpuSkyHDR.r << "," << gpuSkyHDR.g << "," << gpuSkyHDR.b << ") "
+                       << "ref_hdr=(" << expectedSkyHDR.r << "," << expectedSkyHDR.g << "," << expectedSkyHDR.b << ")\n";
+        }
+
+        // -----------------------------------------------------------------
+        // Case C (M15-U6-03.2): Henyey-Greenstein Forward vs Backward + Component Override
+        // -----------------------------------------------------------------
+        {
+            RenderWorld phaseWorld;
+            phaseWorld.SceneRevision = 9203u;
+            RenderDirectionalLight forwardSun{};
+            forwardSun.Direction = glm::normalize(glm::vec3(0.0f, 0.15f, -1.0f));
+            forwardSun.Color = glm::vec3(1.0f, 0.96f, 0.90f);
+            forwardSun.Intensity = 3.0f;
+            forwardSun.AmbientIntensity = 0.0f;
+            phaseWorld.DirectionalLight = forwardSun;
+            phaseWorld.VolumetricFog = RenderVolumetricFog{
+                .Enabled = true,
+                .Density = 0.05f,
+                .HeightFalloff = 0.0f,
+                .ScatteringAsymmetry = 0.72f,
+                .Color = glm::vec3(0.85f, 0.9f, 1.0f),
+                .MaxDistance = 80.0f,
+                .Intensity = 1.4f
+            };
+
+            // Global settings deliberately conflict so VolumetricFogComponent override is proven
+            SceneRenderSettings phaseSettings = makeBaseSettings();
+            phaseSettings.FogDensity = 0.001f;
+            phaseSettings.FogScattering = 0.0f;
+            phaseSettings.FogMaxDistance = 25.0f;
+
+            PerspectiveCamera camToward(60.0f, float(kViewW) / float(kViewH), 0.1f, 300.0f);
+            camToward.SetViewMatrix(glm::lookAtRH(camPos, camPos + glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f)), camPos);
+            PerspectiveCamera camAway(60.0f, float(kViewW) / float(kViewH), 0.1f, 300.0f);
+            camAway.SetViewMatrix(glm::lookAtRH(camPos, camPos + glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f)), camPos);
+
+            std::vector<glm::vec4> hdrToward, hdrAway;
+            RENDER_CHECK(renderAndReadHDR(phaseWorld, camToward, phaseSettings, hdrToward, diag),
+                "M15-U6-03.2: forward-looking Henyey-Greenstein render succeeds");
+            const glm::vec3 fwdGlow = SampleHDRBlockAvg(hdrToward, kViewW, kViewW / 2u, kViewH / 2u);
+            RENDER_CHECK(renderAndReadHDR(phaseWorld, camAway, phaseSettings, hdrAway, diag),
+                "M15-U6-03.2: away-looking Henyey-Greenstein render succeeds");
+            const glm::vec3 backGlow = SampleHDRBlockAvg(hdrAway, kViewW, kViewW / 2u, kViewH / 2u);
+
+            const float cosFwd = glm::dot(glm::vec3(0.0f, 0.0f, -1.0f), forwardSun.Direction);
+            const float expectedRatio =
+                FroxelFogContract::EvaluateHenyeyGreenstein(cosFwd, 0.72f) /
+                FroxelFogContract::EvaluateHenyeyGreenstein(-cosFwd, 0.72f);
+            const float measuredRatio = fwdGlow.r / std::max(backGlow.r, 1e-6f);
+            RENDER_CHECK(fwdGlow.r > 10.0f * backGlow.r &&
+                         std::abs(measuredRatio - expectedRatio) / expectedRatio < 0.03f,
+                "M15-U6-03.2: component-overridden fog produces exact forward-vs-back Henyey-Greenstein scattering ratio");
+
+            physicsLog << "caseC_fwd=" << fwdGlow.r << " back=" << backGlow.r
+                       << " measured_ratio=" << measuredRatio << " expected_ratio=" << expectedRatio << "\n";
+        }
+
+        // -----------------------------------------------------------------
+        // Case D (M15-U6-05.3): Zero Density & Zero Intensity Exact HDR Identity
+        // -----------------------------------------------------------------
+        {
+            auto verifyExactZeroIdentity = [&](const RenderWorld& world, const SceneRenderSettings& settings, const char* label) -> bool {
+                std::vector<glm::vec4> hdrZero;
+                RENDER_CHECK(renderAndReadHDR(world, cam, settings, hdrZero, diag), label);
+
+                for (uint32_t z : { 0u, 31u, 63u }) {
+                    std::vector<glm::vec4> scatSlice, intSlice;
+                    RENDER_CHECK(Read3DSliceRGBA16F(*scatteringVol, z, scatSlice) &&
+                                 Read3DSliceRGBA16F(*integratedVol, z, intSlice),
+                        "M15-U6-05.3: read froxel slices under zero density/intensity");
+                    const glm::vec4 centerScat = scatSlice[size_t(45u) * 160u + 80u];
+                    const glm::vec4 centerInt = intSlice[size_t(45u) * 160u + 80u];
+                    RENDER_CHECK(centerScat == glm::vec4(0.0f, 0.0f, 0.0f, 0.0f) &&
+                                 centerInt == glm::vec4(0.0f, 0.0f, 0.0f, 1.0f),
+                        "M15-U6-05.3: zero density/intensity injects (0,0,0,0) and integrates to exact (0,0,0,1)");
+                }
+
+                float maxDiff = 0.0f;
+                for (size_t p = 0; p < hdrZero.size(); ++p) {
+                    const glm::vec3 d = glm::abs(glm::vec3(hdrZero[p]) - glm::vec3(hdrOffPixels[p]));
+                    maxDiff = std::max({ maxDiff, d.r, d.g, d.b });
+                }
+                RENDER_CHECK(maxDiff < 1e-4f,
+                    "M15-U6-05.3: zero density/intensity preserves RGBA16F linear HDR image identically to Fog-OFF");
+                return true;
+            };
+
+            SceneRenderSettings zeroDensitySettings = makeBaseSettings();
+            zeroDensitySettings.FogDensity = 0.0f;
+            RENDER_CHECK(verifyExactZeroIdentity(litWallWorld, zeroDensitySettings, "M15-U6-05.3: Density=0 HDR render completes"),
+                "M15-U6-05.3: zero density HDR identity");
+
+            RenderWorld zeroIntWorld = litWallWorld;
+            zeroIntWorld.VolumetricFog = RenderVolumetricFog{
+                .Enabled = true,
+                .Density = 0.12f,
+                .HeightFalloff = 0.0f,
+                .ScatteringAsymmetry = 0.6f,
+                .Color = glm::vec3(0.8f, 0.9f, 1.0f),
+                .MaxDistance = 90.0f,
+                .Intensity = 0.0f
+            };
+            SceneRenderSettings positiveFallbackSettings = makeBaseSettings();
+            positiveFallbackSettings.FogDensity = 0.08f;
+            RENDER_CHECK(verifyExactZeroIdentity(zeroIntWorld, positiveFallbackSettings, "M15-U6-05.3: Intensity=0 HDR render completes"),
+                "M15-U6-05.3: zero intensity HDR identity");
+        }
+
+        // -----------------------------------------------------------------
+        // Case E (M15-U6-06): Unlit Scene No Invented Sun/Ambient + Diagnostics
+        // -----------------------------------------------------------------
+        {
+            RenderWorld unlitAbsorptiveWorld;
+            unlitAbsorptiveWorld.SceneRevision = 9205u;
+            unlitAbsorptiveWorld.Meshes.push_back(wallInst); // Emissive wall only, NO DirectionalLight, NO Skybox
+
+            SceneRenderSettings unlitSettings = makeBaseSettings();
+            unlitSettings.FogDensity = 0.04f;
+            unlitSettings.FogHeightFalloff = 0.0f;
+            unlitSettings.FogMaxDistance = 100.0f;
+
+            std::vector<glm::vec4> hdrUnlitFogOff;
+            auto unlitOffSettings = unlitSettings;
+            unlitOffSettings.EnableVolumetricFog = false;
+            RENDER_CHECK(renderAndReadHDR(unlitAbsorptiveWorld, cam, unlitOffSettings, hdrUnlitFogOff, diag),
+                "M15-U6-06: unlit emissive Fog-OFF baseline renders");
+            const glm::vec3 unlitWallBase = SampleHDRBlockAvg(hdrUnlitFogOff, kViewW, kViewW / 2u, kViewH / 2u);
+
+            std::vector<glm::vec4> hdrUnlitFogOn;
+            RENDER_CHECK(renderAndReadHDR(unlitAbsorptiveWorld, cam, unlitSettings, hdrUnlitFogOn, diag),
+                "M15-U6-06: unlit absorptive fog render succeeds");
+            RENDER_CHECK(HasFallbackPrefix(diag, "froxel_fog_no_directional_sun"),
+                "M15-U6-06: unlit fog records explicit froxel_fog_no_directional_sun diagnostic");
+
+            std::vector<glm::vec4> scatSlice, intSlice;
+            RENDER_CHECK(Read3DSliceRGBA16F(*scatteringVol, 47u, scatSlice) &&
+                         Read3DSliceRGBA16F(*integratedVol, 47u, intSlice),
+                "M15-U6-06: read unlit froxel slices");
+            const glm::vec4 unlitScat = scatSlice[size_t(45u) * 160u + 80u];
+            const glm::vec4 unlitInt = intSlice[size_t(45u) * 160u + 80u];
+            RENDER_CHECK(glm::vec3(unlitScat) == glm::vec3(0.0f) &&
+                         std::abs(unlitScat.a - 0.04f) < 5e-4f &&
+                         glm::vec3(unlitInt) == glm::vec3(0.0f) &&
+                         unlitInt.a > 0.0f && unlitInt.a < 0.99f,
+                "M15-U6-06: unlit scene has exact zero in-scattering while retaining Beer-Lambert extinction");
+
+            const glm::vec3 gpuUnlitHDR = SampleHDRBlockAvg(hdrUnlitFogOn, kViewW, kViewW / 2u, kViewH / 2u);
+            const glm::vec3 expectedUnlitHDR = unlitWallBase * std::exp(-0.04f * 40.0f);
+            RENDER_CHECK(glm::length(gpuUnlitHDR - expectedUnlitHDR) < 0.02f,
+                "M15-U6-06: unlit fog attenuates emissive HDR wall purely by Beer-Lambert without fake sun glow");
+
+            // Invalid authored MaxDistance fallback emits froxel_fog_depth_fallback without failing render
+            RenderWorld badDistWorld = litWallWorld;
+            badDistWorld.VolumetricFog = RenderVolumetricFog{
+                .Enabled = true,
+                .Density = 0.03f,
+                .HeightFalloff = 0.0f,
+                .ScatteringAsymmetry = 0.5f,
+                .Color = glm::vec3(0.8f, 0.8f, 0.8f),
+                .MaxDistance = 0.05f,
+                .Intensity = 1.0f
+            };
+            std::vector<glm::vec4> hdrFallback;
+            RENDER_CHECK(renderAndReadHDR(badDistWorld, cam, unlitSettings, hdrFallback, diag) &&
+                         HasFallbackPrefix(diag, "froxel_fog_depth_fallback"),
+                "M15-U6-06: invalid authored MaxDistance falls back cleanly and emits froxel_fog_depth_fallback");
+
+            physicsLog << "caseE_unlit_gpu=(" << gpuUnlitHDR.r << "," << gpuUnlitHDR.g << "," << gpuUnlitHDR.b << ") "
+                       << "expected=(" << expectedUnlitHDR.r << "," << expectedUnlitHDR.g << "," << expectedUnlitHDR.b << ")\n";
+        }
+
+        physicsLog.close();
+        RENDER_CHECK(physicsLog.good(), "M15-U6-B: physics verification log flushed cleanly");
     }
 
     return device.WaitIdle() && GetRHIValidationErrorCount() == 0;

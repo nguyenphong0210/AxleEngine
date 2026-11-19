@@ -3132,6 +3132,243 @@ namespace Axle {
             outQuality = outEnable ? ResolveQualityTier(settings.FogQuality) : RHI::RHIViewTargets::DefaultFroxelQualityTier;
         }
 
+        namespace {
+            float SanitizeNonNegative(float value) {
+                return (std::isfinite(value) && value > 0.0f) ? value : 0.0f;
+            }
+
+            glm::vec3 SanitizeNonNegativeVec3(const glm::vec3& value) {
+                return { SanitizeNonNegative(value.x), SanitizeNonNegative(value.y), SanitizeNonNegative(value.z) };
+            }
+
+            void AppendDiagnostic(std::string& dst, std::string_view msg) {
+                if (msg.empty()) return;
+                if (!dst.empty()) dst += "; ";
+                dst.append(msg);
+            }
+
+            glm::vec3 ComputeStepInScatterPerMeter(const FroxelMediaState& state,
+                                                   float worldY,
+                                                   float phaseSun) {
+                const float heightAboveGround = std::max(worldY, 0.0f);
+                const float localDensity = state.EffectiveBaseDensity * std::exp(-heightAboveGround * state.HeightFalloff);
+                if (!(localDensity > 0.0f)) return {};
+                const glm::vec3 scatterCoeff = state.Albedo * localDensity;
+                const glm::vec3 incomingRadiance =
+                    (state.HasDirectionalSun ? state.SunRadiance * phaseSun : glm::vec3(0.0f)) +
+                    (state.HasAmbientLight ? state.AmbientRadiance : glm::vec3(0.0f));
+                return scatterCoeff * incomingRadiance;
+            }
+        }
+
+        FroxelMediaState ResolveMediaState(const RenderWorld& world,
+                                           const SceneRenderSettings& settings,
+                                           const LightingFrame& lightingFrame) {
+            FroxelMediaState state;
+            const bool useWorld = world.VolumetricFog && world.VolumetricFog->Enabled;
+            state.FromWorldComponent = useWorld;
+
+            const float rawDensity = useWorld ? world.VolumetricFog->Density : settings.FogDensity;
+            const float rawFalloff = useWorld ? world.VolumetricFog->HeightFalloff : settings.FogHeightFalloff;
+            const float rawAsymmetry = useWorld ? world.VolumetricFog->ScatteringAsymmetry : settings.FogScattering;
+            const glm::vec3 rawColor = useWorld ? world.VolumetricFog->Color : settings.FogColor;
+            const float rawIntensity = useWorld ? world.VolumetricFog->Intensity : 1.0f;
+            const float rawMaxDistance = useWorld ? world.VolumetricFog->MaxDistance : settings.FogMaxDistance;
+
+            state.Density = SanitizeNonNegative(rawDensity);
+            state.HeightFalloff = SanitizeNonNegative(rawFalloff);
+            state.ScatteringAsymmetry = std::isfinite(rawAsymmetry)
+                ? std::clamp(rawAsymmetry, -MaxAsymmetry, MaxAsymmetry) : 0.0f;
+            state.Albedo = SanitizeNonNegativeVec3(rawColor);
+            state.Intensity = SanitizeNonNegative(rawIntensity);
+            state.EffectiveBaseDensity = state.Density * state.Intensity;
+
+            float nearZ = 0.0f, farZ = 0.0f;
+            if (!ResolveDepthRange(settings.FogNearDistance, rawMaxDistance, nearZ, farZ)) {
+                if (useWorld && ResolveDepthRange(settings.FogNearDistance, settings.FogMaxDistance, nearZ, farZ)) {
+                    state.AuthoredMaxDistanceInvalidFallback = true;
+                    AppendDiagnostic(state.Diagnostic, "froxel_fog_depth_fallback: invalid authored VolumetricFog MaxDistance");
+                } else {
+                    state.Valid = false;
+                    AppendDiagnostic(state.Diagnostic, "froxel_fog_disabled:invalid_depth_range");
+                    return state;
+                }
+            }
+            state.Valid = true;
+            state.NearDistance = nearZ;
+            state.MaxDistance = farZ;
+
+            const bool authoredSun = (lightingFrame.DirectionalCount > 0u) && world.DirectionalLight.has_value();
+            if (authoredSun && std::isfinite(lightingFrame.Sun.Illuminance) && lightingFrame.Sun.Illuminance > 0.0f) {
+                const float lenSq = glm::dot(lightingFrame.Sun.Direction, lightingFrame.Sun.Direction);
+                if (std::isfinite(lenSq) && lenSq > 1e-12f) {
+                    state.HasDirectionalSun = true;
+                    state.SunDirectionToLight = lightingFrame.Sun.Direction * (1.0f / std::sqrt(lenSq));
+                    state.SunRadiance = SanitizeNonNegativeVec3(lightingFrame.Sun.Color) *
+                        (lightingFrame.Sun.Illuminance * DirectLuxToRadiance);
+                }
+            }
+            if (!state.HasDirectionalSun) {
+                AppendDiagnostic(state.Diagnostic,
+                    "froxel_fog_no_directional_sun: unlit scattering uses authored environment or zero radiance");
+            }
+
+            if (std::isfinite(lightingFrame.Sun.AmbientIntensity) && lightingFrame.Sun.AmbientIntensity > 0.0f) {
+                const glm::vec3 amb = SanitizeNonNegativeVec3(lightingFrame.Sun.AmbientColor) * lightingFrame.Sun.AmbientIntensity;
+                if (amb.r > 0.0f || amb.g > 0.0f || amb.b > 0.0f) {
+                    state.HasAmbientLight = true;
+                    state.AmbientRadiance = amb;
+                }
+            }
+            return state;
+        }
+
+        float EvaluateHenyeyGreenstein(float cosTheta, float asymmetryG) {
+            constexpr double kPi = 3.14159265358979323846;
+            const double c = std::isfinite(cosTheta) ? std::clamp(static_cast<double>(cosTheta), -1.0, 1.0) : 0.0;
+            const double g = std::isfinite(asymmetryG)
+                ? std::clamp(static_cast<double>(asymmetryG), -static_cast<double>(MaxAsymmetry), static_cast<double>(MaxAsymmetry))
+                : 0.0;
+            const double g2 = g * g;
+            const double denom = std::max(1.0 + g2 - 2.0 * g * c, 1e-12);
+            return static_cast<float>((1.0 - g2) / (4.0 * kPi * denom * std::sqrt(denom)));
+        }
+
+        FroxelSampleIntegral EvaluateHomogeneousFogStep(const glm::vec3& inScatterPerMeter, float sigmaT, float pathLength) {
+            FroxelSampleIntegral result;
+            if (!(pathLength > 0.0f) || !(sigmaT > 0.0f)) {
+                if (pathLength > 0.0f) {
+                    result.InScattering = glm::max(inScatterPerMeter, glm::vec3(0.0f)) * pathLength;
+                }
+                return result;
+            }
+            const float opticalDepth = sigmaT * pathLength;
+            const float stepT = std::exp(-opticalDepth);
+            const float integFactor = (opticalDepth > 1e-4f)
+                ? ((1.0f - stepT) / sigmaT)
+                : (pathLength * (1.0f - 0.5f * opticalDepth + (1.0f / 6.0f) * opticalDepth * opticalDepth));
+            result.InScattering = glm::max(inScatterPerMeter, glm::vec3(0.0f)) * integFactor;
+            result.Transmittance = stepT;
+            return result;
+        }
+
+        FroxelSampleIntegral EvaluateAnalyticHomogeneousFog(const FroxelMediaState& state,
+                                                            const glm::vec3& rayDirWS,
+                                                            float viewZ,
+                                                            float rayLengthPerUnitZ) {
+            FroxelSampleIntegral result;
+            if (!state.Valid || !(state.EffectiveBaseDensity > 0.0f) || !(viewZ > state.NearDistance)) return result;
+            const float dirLenSq = glm::dot(rayDirWS, rayDirWS);
+            if (!std::isfinite(dirLenSq) || !(dirLenSq > 1e-12f) || !std::isfinite(rayLengthPerUnitZ) || !(rayLengthPerUnitZ > 0.0f)) {
+                return result;
+            }
+            const glm::vec3 unitRay = rayDirWS * (1.0f / std::sqrt(dirLenSq));
+            const float clampedZ = std::min(viewZ, state.MaxDistance);
+            const float pathLength = (clampedZ - state.NearDistance) * rayLengthPerUnitZ;
+            const float phaseSun = state.HasDirectionalSun
+                ? EvaluateHenyeyGreenstein(glm::dot(unitRay, state.SunDirectionToLight), state.ScatteringAsymmetry)
+                : 0.0f;
+            const glm::vec3 incomingRadiance =
+                (state.HasDirectionalSun ? state.SunRadiance * phaseSun : glm::vec3(0.0f)) +
+                (state.HasAmbientLight ? state.AmbientRadiance : glm::vec3(0.0f));
+            const float sigmaT = state.EffectiveBaseDensity;
+            const glm::vec3 inScatterPerMeter = (state.Albedo * sigmaT) * incomingRadiance;
+            return EvaluateHomogeneousFogStep(inScatterPerMeter, sigmaT, pathLength);
+        }
+
+        FroxelSampleIntegral EvaluateFroxelColumnQuadrature(const FroxelMediaState& state,
+                                                            const glm::vec3& rayOriginWS,
+                                                            const glm::vec3& rayDirWorldPerUnitZ,
+                                                            uint32_t sliceCount,
+                                                            float targetViewZ) {
+            FroxelSampleIntegral out;
+            if (!state.Valid || sliceCount == 0u || !(state.EffectiveBaseDensity > 0.0f) || !(targetViewZ > state.NearDistance)) {
+                return out;
+            }
+            const float rayLenPerUnitZ = glm::length(rayDirWorldPerUnitZ);
+            if (!std::isfinite(rayLenPerUnitZ) || !(rayLenPerUnitZ > 0.0f)) return out;
+            const glm::vec3 unitRay = rayDirWorldPerUnitZ * (1.0f / rayLenPerUnitZ);
+            const float phaseSun = state.HasDirectionalSun
+                ? EvaluateHenyeyGreenstein(glm::dot(unitRay, state.SunDirectionToLight), state.ScatteringAsymmetry)
+                : 0.0f;
+
+            const float clampedZ = std::min(targetViewZ, state.MaxDistance);
+            const float ratio = ViewDistanceToSliceCoord(clampedZ, sliceCount, state.NearDistance, state.MaxDistance);
+            const float slicePos = ratio * static_cast<float>(sliceCount);
+            const uint32_t lowIdx = slicePos < 1.0f
+                ? 0u
+                : std::min<uint32_t>(static_cast<uint32_t>(std::floor(slicePos)) - 1u, sliceCount - 1u);
+            const uint32_t highIdx = std::min(lowIdx + 1u, sliceCount - 1u);
+
+            FroxelSampleIntegral lowState, highState;
+            glm::vec3 accumScatter(0.0f);
+            float accumTrans = 1.0f;
+            for (uint32_t iz = 0u; iz <= highIdx; ++iz) {
+                const float z0 = SliceBoundaryToViewDistance(iz, sliceCount, state.NearDistance, state.MaxDistance);
+                const float zCenter = SliceCenterToViewDistance(iz, sliceCount, state.NearDistance, state.MaxDistance);
+                const float z1 = SliceBoundaryToViewDistance(iz + 1u, sliceCount, state.NearDistance, state.MaxDistance);
+                const float ds = (z1 - z0) * rayLenPerUnitZ;
+                const glm::vec3 sampleWS = rayOriginWS + rayDirWorldPerUnitZ * zCenter;
+                const float height = std::max(sampleWS.y, 0.0f);
+                const float sigmaT = state.EffectiveBaseDensity * std::exp(-height * state.HeightFalloff);
+                const glm::vec3 scatterPerM = ComputeStepInScatterPerMeter(state, sampleWS.y, phaseSun);
+                const auto step = EvaluateHomogeneousFogStep(scatterPerM, sigmaT, ds);
+                accumScatter += accumTrans * step.InScattering;
+                accumTrans *= step.Transmittance;
+                if (iz == lowIdx) {
+                    lowState = { accumScatter, accumTrans };
+                }
+                if (iz == highIdx) {
+                    highState = { accumScatter, accumTrans };
+                }
+            }
+            if (slicePos < 1.0f) {
+                return { lowState.InScattering * slicePos, glm::mix(1.0f, lowState.Transmittance, slicePos) };
+            }
+            const float frac = std::clamp(slicePos - static_cast<float>(lowIdx + 1u), 0.0f, 1.0f);
+            return {
+                glm::mix(lowState.InScattering, highState.InScattering, frac),
+                glm::mix(lowState.Transmittance, highState.Transmittance, frac)
+            };
+        }
+
+        FroxelSampleIntegral EvaluateReferenceRayQuadrature(const FroxelMediaState& state,
+                                                            const glm::vec3& rayOriginWS,
+                                                            const glm::vec3& rayDirWorldPerUnitZ,
+                                                            float targetViewZ,
+                                                            uint32_t quadratureSteps) {
+            FroxelSampleIntegral accum;
+            if (!state.Valid || quadratureSteps == 0u || !(state.EffectiveBaseDensity > 0.0f) || !(targetViewZ > state.NearDistance)) {
+                return accum;
+            }
+            const float rayLenPerUnitZ = glm::length(rayDirWorldPerUnitZ);
+            if (!std::isfinite(rayLenPerUnitZ) || !(rayLenPerUnitZ > 0.0f)) return accum;
+            const glm::vec3 unitRay = rayDirWorldPerUnitZ * (1.0f / rayLenPerUnitZ);
+            const float phaseSun = state.HasDirectionalSun
+                ? EvaluateHenyeyGreenstein(glm::dot(unitRay, state.SunDirectionToLight), state.ScatteringAsymmetry)
+                : 0.0f;
+
+            const double zStart = static_cast<double>(state.NearDistance);
+            const double zEnd = static_cast<double>(std::min(targetViewZ, state.MaxDistance));
+            const double dz = (zEnd - zStart) / static_cast<double>(quadratureSteps);
+            const float ds = static_cast<float>(dz * static_cast<double>(rayLenPerUnitZ));
+            double accumT = 1.0;
+            glm::dvec3 accumS(0.0);
+            for (uint32_t i = 0u; i < quadratureSteps; ++i) {
+                const float zMid = static_cast<float>(zStart + (static_cast<double>(i) + 0.5) * dz);
+                const glm::vec3 sampleWS = rayOriginWS + rayDirWorldPerUnitZ * zMid;
+                const float height = std::max(sampleWS.y, 0.0f);
+                const float sigmaT = state.EffectiveBaseDensity * std::exp(-height * state.HeightFalloff);
+                const glm::vec3 scatterPerM = ComputeStepInScatterPerMeter(state, sampleWS.y, phaseSun);
+                const auto step = EvaluateHomogeneousFogStep(scatterPerM, sigmaT, ds);
+                accumS += accumT * glm::dvec3(step.InScattering);
+                accumT *= static_cast<double>(step.Transmittance);
+            }
+            accum.InScattering = glm::vec3(accumS);
+            accum.Transmittance = static_cast<float>(accumT);
+            return accum;
+        }
+
     } // namespace FroxelFogContract
 
 } // namespace Axle

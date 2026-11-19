@@ -521,24 +521,8 @@ namespace Axle {
             return false;
         }
 
-        RHIDescriptorPoolDesc fogPoolDesc;
-        fogPoolDesc.MaxDescriptorSets = 16;
-        fogPoolDesc.MaxTextures = 64;
-        fogPoolDesc.MaxSamplers = 16;
-        fogPoolDesc.MaxStorageTextures = 16;
-        fogPoolDesc.MaxConstantBuffers = 16;
-        if (!m_FogDescriptorPool.Init(fogPoolDesc)) {
-            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Fog Descriptor Pool!");
+        if (!EnsureFogDescriptorSets()) {
             return false;
-        } else {
-            m_FogComputeTextureSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogComputePipelineLayout, 0);
-            m_FogComputeStorageSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogComputePipelineLayout, 1);
-            m_FogApplyDescriptorSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogApplyPipelineLayout, 0);
-            if (!m_FogComputeTextureSet || !m_FogComputeStorageSet || !m_FogApplyDescriptorSet) return false;
-            if (m_FogSampler.IsValid()) {
-                if (!m_FogDescriptorPool.UpdateSampler(m_FogComputeTextureSet, 1, 0, m_FogSampler.GetNative()) ||
-                    !m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 2, 0, m_FogSampler.GetNative())) return false;
-            }
         }
 
         if (!m_FogConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIVolumetricFogConstants), RHIMemoryLocation::HostUpload, "FogConstantsBuffer"))) return false;
@@ -827,14 +811,21 @@ namespace Axle {
         m_CaptureDownsampleComputeShader = {};
         m_CapturePrefilterComputeShader = {};
 
-        m_FogComputePipeline = nullptr;
+        m_FogInjectPipeline = nullptr;
+        m_FogIntegratePipeline = nullptr;
         m_FogApplyPipelineSDR = nullptr;
         m_FogApplyPipelineHDR = nullptr;
-        m_FogComputePipelineLayout.Shutdown();
+        m_FogInjectPipelineLayout.Shutdown();
+        m_FogIntegratePipelineLayout.Shutdown();
         m_FogApplyPipelineLayout.Shutdown();
         m_FogConstantBuffer.Shutdown();
-        m_FogComputeTextureSet = nullptr;
-        m_FogComputeStorageSet = nullptr;
+        m_FogInjectShader = {};
+        m_FogIntegrateShader = {};
+        m_FogApplyVertexShader = {};
+        m_FogApplyPixelShader = {};
+        m_FogInjectStorageSet = nullptr;
+        m_FogIntegrateTextureSet = nullptr;
+        m_FogIntegrateStorageSet = nullptr;
         m_FogApplyDescriptorSet = nullptr;
         m_FogDescriptorPool.Shutdown();
         m_FogSampler.Shutdown();
@@ -2743,136 +2734,109 @@ namespace Axle {
         }
 
         RHIShaderFormat format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        auto compileEntry = [&](const char* entryPoint, RHIShaderStage stage, RHI::RHIShaderBytecode& outBytecode) -> bool {
+            RHIShaderCompileDesc desc;
+            desc.Source = shaderSource;
+            desc.SourcePath = PathToUtf8(shaderPath);
+            desc.EntryPoint = entryPoint;
+            desc.Stage = stage;
+            desc.HLSLVersion = "2021";
+            desc.ShaderModel = "6_0";
+            desc.Format = format;
+            desc.Optimization = true;
+            auto res = compiler.Compile(desc);
+            if (!res.Success) {
+                AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile VolumetricFog {0}: {1}", entryPoint, res.ErrorMessage);
+                return false;
+            }
+            outBytecode = res.Bytecode;
+            return true;
+        };
 
-        // 1. Compute Shader: CSMain
-        RHIShaderCompileDesc csDesc;
-        csDesc.Source = shaderSource;
-        csDesc.SourcePath = PathToUtf8(shaderPath);
-        csDesc.EntryPoint = "CSMain";
-        csDesc.Stage = RHIShaderStage::Compute;
-        csDesc.HLSLVersion = "2021";
-        csDesc.ShaderModel = "6_0";
-        csDesc.Format = format;
-        csDesc.Optimization = true;
-
-        auto csRes = compiler.Compile(csDesc);
-        if (!csRes.Success) {
-            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile VolumetricFog CS: {0}", csRes.ErrorMessage);
-            return false;
-        }
-        m_FogComputeShader = csRes.Bytecode;
-
-        // 2. Vertex Shader: VSMain
-        RHIShaderCompileDesc vsDesc = csDesc;
-        vsDesc.EntryPoint = "VSMain";
-        vsDesc.Stage = RHIShaderStage::Vertex;
-        auto vsRes = compiler.Compile(vsDesc);
-        if (!vsRes.Success) {
-            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile VolumetricFog VS: {0}", vsRes.ErrorMessage);
-            return false;
-        }
-        m_FogApplyVertexShader = vsRes.Bytecode;
-
-        // 3. Pixel Shader: PSMain
-        RHIShaderCompileDesc psDesc = csDesc;
-        psDesc.EntryPoint = "PSMain";
-        psDesc.Stage = RHIShaderStage::Fragment;
-        auto psRes = compiler.Compile(psDesc);
-        if (!psRes.Success) {
-            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile VolumetricFog PS: {0}", psRes.ErrorMessage);
-            return false;
-        }
-        m_FogApplyPixelShader = psRes.Bytecode;
-
-        return true;
+        return compileEntry("CSInjectMedia", RHIShaderStage::Compute, m_FogInjectShader) &&
+               compileEntry("CSIntegrate", RHIShaderStage::Compute, m_FogIntegrateShader) &&
+               compileEntry("VSMain", RHIShaderStage::Vertex, m_FogApplyVertexShader) &&
+               compileEntry("PSMain", RHIShaderStage::Fragment, m_FogApplyPixelShader);
     }
 
     bool RHISceneRenderer::CreateFogPipelineLayout(RHIDevice& device) {
-        // 1. Compute Pipeline Layout:
-        // Root Descriptor [0] b0 space 0: 512-byte RHIVolumetricFogConstants
+        auto makeRange = [](uint32_t baseRegister, nri::DescriptorType type, nri::StageBits stages) {
+            nri::DescriptorRangeDesc range = {};
+            range.baseRegisterIndex = baseRegister;
+            range.descriptorNum = 1;
+            range.descriptorType = type;
+            range.shaderStages = stages;
+            range.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+            return range;
+        };
+
+        // Shared Root Descriptor [0] b0 space 0: 512-byte RHIVolumetricFogConstants
         nri::RootDescriptorDesc compRootDesc = {};
         compRootDesc.registerIndex = 0;
         compRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         compRootDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
 
-        // Set 0 (space 1):
-        // Range 0: t0 (Depth) -> TEXTURE
-        // Range 1: s0 (Linear Sampler) -> SAMPLER
-        nri::DescriptorRangeDesc compTexRanges[2] = {};
-        compTexRanges[0].baseRegisterIndex = 0;
-        compTexRanges[0].descriptorNum = 1;
-        compTexRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
-        compTexRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
-        compTexRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        // 1. Inject Media Layout: Set 0 (space 2): u0 (FroxelScattering UAV)
+        nri::DescriptorRangeDesc injectStorageRange = makeRange(0, nri::DescriptorType::STORAGE_TEXTURE, nri::StageBits::COMPUTE_SHADER);
+        nri::DescriptorSetDesc injectDescSet = {};
+        injectDescSet.registerSpace = 2;
+        injectDescSet.ranges = &injectStorageRange;
+        injectDescSet.rangeNum = 1;
 
-        compTexRanges[1].baseRegisterIndex = 0;
-        compTexRanges[1].descriptorNum = 1;
-        compTexRanges[1].descriptorType = nri::DescriptorType::SAMPLER;
-        compTexRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
-        compTexRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::PipelineLayoutDesc injectLayoutDesc = {};
+        injectLayoutDesc.rootRegisterSpace = 0;
+        injectLayoutDesc.rootDescriptors = &compRootDesc;
+        injectLayoutDesc.rootDescriptorNum = 1;
+        injectLayoutDesc.descriptorSets = &injectDescSet;
+        injectLayoutDesc.descriptorSetNum = 1;
+        injectLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        if (!m_FogInjectPipelineLayout.Init(injectLayoutDesc)) return false;
 
-        // Set 1 (space 2):
-        // Range 0: u0 (Storage Output) -> STORAGE_TEXTURE
-        nri::DescriptorRangeDesc compStorageRanges[1] = {};
-        compStorageRanges[0].baseRegisterIndex = 0;
-        compStorageRanges[0].descriptorNum = 1;
-        compStorageRanges[0].descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
-        compStorageRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
-        compStorageRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        // 2. Integrate Layout:
+        // Set 0 (space 1): t2 (FroxelScattering SRV)
+        // Set 1 (space 2): u0 (FroxelIntegrated UAV)
+        nri::DescriptorRangeDesc integrateTexRange = makeRange(2, nri::DescriptorType::TEXTURE, nri::StageBits::COMPUTE_SHADER);
+        nri::DescriptorRangeDesc integrateStorageRange = makeRange(0, nri::DescriptorType::STORAGE_TEXTURE, nri::StageBits::COMPUTE_SHADER);
+        nri::DescriptorSetDesc integrateDescSets[2] = {};
+        integrateDescSets[0].registerSpace = 1;
+        integrateDescSets[0].ranges = &integrateTexRange;
+        integrateDescSets[0].rangeNum = 1;
+        integrateDescSets[1].registerSpace = 2;
+        integrateDescSets[1].ranges = &integrateStorageRange;
+        integrateDescSets[1].rangeNum = 1;
 
-        nri::DescriptorSetDesc compDescSets[2] = {};
-        compDescSets[0].registerSpace = 1;
-        compDescSets[0].ranges = compTexRanges;
-        compDescSets[0].rangeNum = 2;
+        nri::PipelineLayoutDesc integrateLayoutDesc = {};
+        integrateLayoutDesc.rootRegisterSpace = 0;
+        integrateLayoutDesc.rootDescriptors = &compRootDesc;
+        integrateLayoutDesc.rootDescriptorNum = 1;
+        integrateLayoutDesc.descriptorSets = integrateDescSets;
+        integrateLayoutDesc.descriptorSetNum = 2;
+        integrateLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        if (!m_FogIntegratePipelineLayout.Init(integrateLayoutDesc)) return false;
 
-        compDescSets[1].registerSpace = 2;
-        compDescSets[1].ranges = compStorageRanges;
-        compDescSets[1].rangeNum = 1;
-
-        nri::PipelineLayoutDesc compLayoutDesc = {};
-        compLayoutDesc.rootRegisterSpace = 0;
-        compLayoutDesc.rootDescriptors = &compRootDesc;
-        compLayoutDesc.rootDescriptorNum = 1;
-        compLayoutDesc.descriptorSets = compDescSets;
-        compLayoutDesc.descriptorSetNum = 2;
-        compLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
-
-        if (!m_FogComputePipelineLayout.Init(compLayoutDesc)) return false;
-
-        // 2. Apply Pipeline Layout:
+        // 3. Apply Pipeline Layout:
         // Root Descriptor [0] b0 space 0: 512-byte RHIVolumetricFogConstants
         nri::RootDescriptorDesc applyRootDesc = {};
         applyRootDesc.registerIndex = 0;
         applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         applyRootDesc.shaderStages = nri::StageBits::ALL;
 
-        // Descriptor Set (space 1):
-        // Range 0: t0 (Scene Color) -> TEXTURE
-        // Range 1: t1 (Fog Result) -> TEXTURE
-        // Range 2: s0 (Sampler) -> SAMPLER
-        nri::DescriptorRangeDesc applyRanges[3] = {};
-        applyRanges[0].baseRegisterIndex = 0;
-        applyRanges[0].descriptorNum = 1;
-        applyRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
-        applyRanges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        applyRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        applyRanges[1].baseRegisterIndex = 1;
-        applyRanges[1].descriptorNum = 1;
-        applyRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
-        applyRanges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        applyRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        applyRanges[2].baseRegisterIndex = 0;
-        applyRanges[2].descriptorNum = 1;
-        applyRanges[2].descriptorType = nri::DescriptorType::SAMPLER;
-        applyRanges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        applyRanges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        // Set 0 (space 1):
+        // Range 0: t0 (Scene Color)
+        // Range 1: t1 (Scene Depth)
+        // Range 2: t2 (Froxel Integrated 3D Volume)
+        // Range 3: s0 (Linear Sampler)
+        nri::DescriptorRangeDesc applyRanges[4] = {
+            makeRange(0, nri::DescriptorType::TEXTURE, nri::StageBits::FRAGMENT_SHADER),
+            makeRange(1, nri::DescriptorType::TEXTURE, nri::StageBits::FRAGMENT_SHADER),
+            makeRange(2, nri::DescriptorType::TEXTURE, nri::StageBits::FRAGMENT_SHADER),
+            makeRange(0, nri::DescriptorType::SAMPLER, nri::StageBits::FRAGMENT_SHADER),
+        };
 
         nri::DescriptorSetDesc applyDescSet = {};
         applyDescSet.registerSpace = 1;
         applyDescSet.ranges = applyRanges;
-        applyDescSet.rangeNum = 3;
+        applyDescSet.rangeNum = 4;
 
         nri::PipelineLayoutDesc applyLayoutDesc = {};
         applyLayoutDesc.rootRegisterSpace = 0;
@@ -2883,6 +2847,54 @@ namespace Axle {
         applyLayoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_FogApplyPipelineLayout.Init(applyLayoutDesc);
+    }
+
+    bool RHISceneRenderer::EnsureFogDescriptorSets() {
+        auto& resources = RHIDevice::Get().GetResources();
+        const bool hasAllSets = m_FogInjectStorageSet && m_FogIntegrateTextureSet &&
+                                m_FogIntegrateStorageSet && m_FogApplyDescriptorSet;
+        if (hasAllSets && m_FogDescriptorPool.IsValid()) {
+            bool anyInUse = false;
+            for (nri::DescriptorSet* set : { m_FogInjectStorageSet, m_FogIntegrateTextureSet, m_FogIntegrateStorageSet, m_FogApplyDescriptorSet }) {
+                auto lease = resources.AcquireNative(set);
+                if (!lease.IsLive() || resources.IsInUse(lease)) {
+                    anyInUse = true;
+                    break;
+                }
+            }
+            if (!anyInUse) {
+                return true;
+            }
+        }
+
+        RHIDescriptorPoolDesc fogPoolDesc;
+        fogPoolDesc.DebugName = "FogDescriptorPool";
+        fogPoolDesc.MaxDescriptorSets = 16;
+        fogPoolDesc.MaxTextures = 64;
+        fogPoolDesc.MaxSamplers = 16;
+        fogPoolDesc.MaxStorageTextures = 16;
+        fogPoolDesc.MaxConstantBuffers = 16;
+        if (!m_FogDescriptorPool.Init(fogPoolDesc)) {
+            m_FogInjectStorageSet = nullptr;
+            m_FogIntegrateTextureSet = nullptr;
+            m_FogIntegrateStorageSet = nullptr;
+            m_FogApplyDescriptorSet = nullptr;
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Fog Descriptor Pool!");
+            return false;
+        }
+
+        m_FogInjectStorageSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogInjectPipelineLayout, 0);
+        m_FogIntegrateTextureSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogIntegratePipelineLayout, 0);
+        m_FogIntegrateStorageSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogIntegratePipelineLayout, 1);
+        m_FogApplyDescriptorSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogApplyPipelineLayout, 0);
+        if (!m_FogInjectStorageSet || !m_FogIntegrateTextureSet || !m_FogIntegrateStorageSet || !m_FogApplyDescriptorSet) {
+            return false;
+        }
+        if (m_FogSampler.IsValid() &&
+            !m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 3, 0, m_FogSampler.GetNative())) {
+            return false;
+        }
+        return true;
     }
 
     nri::Pipeline* RHISceneRenderer::GetOrCreateFogApplyPipeline(nri::Format colorFormat) {
@@ -2908,15 +2920,24 @@ namespace Axle {
 
     bool RHISceneRenderer::CreateFogPipeline(RHIDevice& device) {
         auto& cache = RHIPipelineCache::Get();
-        RHIComputePipelineDesc compDesc;
-        compDesc.Layout = &m_FogComputePipelineLayout;
-        compDesc.ComputeShader = m_FogComputeShader;
-        m_FogComputePipeline = cache.GetOrCreateComputePipeline(compDesc);
+
+        RHIComputePipelineDesc injectDesc;
+        injectDesc.Layout = &m_FogInjectPipelineLayout;
+        injectDesc.ComputeShader = m_FogInjectShader;
+        m_FogInjectPipeline = cache.GetOrCreateComputePipeline(injectDesc);
+
+        RHIComputePipelineDesc integrateDesc;
+        integrateDesc.Layout = &m_FogIntegratePipelineLayout;
+        integrateDesc.ComputeShader = m_FogIntegrateShader;
+        m_FogIntegratePipeline = cache.GetOrCreateComputePipeline(integrateDesc);
 
         m_FogApplyPipelineSDR = GetOrCreateFogApplyPipeline(nri::Format::RGBA8_UNORM);
         m_FogApplyPipelineHDR = GetOrCreateFogApplyPipeline(nri::Format::RGBA16_SFLOAT);
 
-        return m_FogComputePipeline != nullptr && m_FogApplyPipelineSDR != nullptr && m_FogApplyPipelineHDR != nullptr;
+        return m_FogInjectPipeline != nullptr &&
+               m_FogIntegratePipeline != nullptr &&
+               m_FogApplyPipelineSDR != nullptr &&
+               m_FogApplyPipelineHDR != nullptr;
     }
 
     bool RHISceneRenderer::CompileBloomShaders(RHIDevice& device) {

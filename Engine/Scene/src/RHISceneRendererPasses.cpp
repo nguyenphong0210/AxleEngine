@@ -203,14 +203,6 @@ namespace Axle {
             }
         }
 
-        const bool useFog = settings.EnableVolumetricFog && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
-            m_FogComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
-            m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
-            m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
-        const auto fogInput = useFog ? graph.Import("FogInput", m_OpaqueSceneColor->GetNative()) : output;
-        const auto fogDepth = useFog ? graph.Import("FogDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
-        const auto fogStorage = useFog ? graph.Import("FogStorage", m_ScreenStorageTarget->GetNative()) : output;
-
         const bool useBloom = settings.EnableBloom && activeSampleCount == 1 &&
             m_BloomComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
             m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
@@ -263,6 +255,35 @@ namespace Axle {
         Graph::Resource shadows = output, localShadows = output;
         auto lightingFrame = m_LightingService.BuildFrame(world, settings);
         const auto& lighting = lightingFrame.Scene;
+        const auto froxelMedia = settings.EnableVolumetricFog
+            ? FroxelFogContract::ResolveMediaState(world, settings, lightingFrame)
+            : FroxelFogContract::FroxelMediaState{};
+        auto* froxelScatteringTex = viewTargets ? viewTargets->GetFroxelScattering() : nullptr;
+        auto* froxelIntegratedTex = viewTargets ? viewTargets->GetFroxelIntegrated() : nullptr;
+        const bool froxelTargetsReady = froxelScatteringTex && froxelScatteringTex->IsValid() &&
+            froxelScatteringTex->GetUAV() != nullptr && froxelScatteringTex->GetSRV() != nullptr &&
+            froxelIntegratedTex && froxelIntegratedTex->IsValid() &&
+            froxelIntegratedTex->GetUAV() != nullptr && froxelIntegratedTex->GetSRV() != nullptr;
+        const bool fogPipelinesReady = m_FogInjectPipeline != nullptr && m_FogIntegratePipeline != nullptr &&
+            m_FogApplyPipelineLayout.IsValid() && m_FogApplyPipelineSDR != nullptr && m_FogApplyPipelineHDR != nullptr;
+        const bool useFog = settings.EnableVolumetricFog && froxelMedia.Valid && activeSampleCount == 1 &&
+            sceneDepthTexture && sceneDepthDSV &&
+            m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
+            m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
+            froxelTargetsReady && fogPipelinesReady;
+        if (settings.EnableVolumetricFog) {
+            if (!froxelMedia.Valid && !froxelMedia.Diagnostic.empty()) {
+                viewCtx.Diagnostics().AddFallback(froxelMedia.Diagnostic);
+            } else if (!useFog && !captureActive && !planarActive) {
+                viewCtx.Diagnostics().AddFallback("froxel_fog_unavailable:missing_froxel_targets_or_pipelines");
+            } else if (useFog && !froxelMedia.Diagnostic.empty()) {
+                viewCtx.Diagnostics().AddFallback(froxelMedia.Diagnostic);
+            }
+        }
+        const auto fogInput = useFog ? graph.Import("FogInput", m_OpaqueSceneColor->GetNative()) : output;
+        const auto fogDepth = useFog ? graph.Import("FogDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
+        const auto fogScattering = useFog ? graph.Import("FogScattering", froxelScatteringTex->GetNative()) : output;
+        const auto fogIntegrated = useFog ? graph.Import("FogIntegrated", froxelIntegratedTex->GetNative()) : output;
         ReflectionPublication reflectionPublication;
         RHISceneConstants sceneConstants;
         // 3. Begin Rendering Pass
@@ -1546,19 +1567,20 @@ namespace Axle {
                         return bindDescriptorSet(index, set, bindPoint);
                     }, beginRendering, endRendering};
                 if (!Passes::FroxelFogPass::Record(*this,
-                    {world, camera, settings, projZO, sceneTargetTexture, sceneDepthTexture,
-                     sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
+                    {world, camera, settings, lightingFrame, projZO, viewTargets.get(), sceneTargetTexture,
+                     sceneDepthTexture, sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
                     return fail();
             }
 
             return {};
         }, [&](RenderGraph& graph) {
             if (useFog) {
-                Passes::FroxelFogPass::Declare(graph, {sceneColor, fogInput, sceneDepth, fogDepth, fogStorage});
+                Passes::FroxelFogPass::Declare(graph, {sceneColor, fogInput, sceneDepth, fogDepth, fogScattering, fogIntegrated});
             }
         }, [&](const RenderPassContext&) -> RenderPassResult {
-            if (useFog && (!uniform("FogCompute",sizeof(RHIVolumetricFogConstants)) ||
-                !uniform("FogApply",sizeof(RHIVolumetricFogConstants)))) return fail();
+            if (useFog && (!uniform("FogInject", sizeof(RHIVolumetricFogConstants)) ||
+                !uniform("FogIntegrate", sizeof(RHIVolumetricFogConstants)) ||
+                !uniform("FogApply", sizeof(RHIVolumetricFogConstants)))) return fail();
             return {};
         });
 

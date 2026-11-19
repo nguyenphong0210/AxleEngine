@@ -541,6 +541,8 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
       AXLE_RHI_VIEW_TARGETS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/RHI/src/RHIViewTargets.cpp"
       AXLE_RHI_VIEWPORT_DESCRIPTOR_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/UI/src/RHIViewportDescriptor.cpp"
       AXLE_SCENE_RENDERER_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RHISceneRenderer.cpp"
+      AXLE_VOLUMETRIC_FOG_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/VolumetricFog.hlsl"
+      AXLE_FROXEL_FOG_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/FroxelFogPass.cpp"
       AXLE_RENDER_CAPABILITIES_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Renderer/src/RenderCapabilities.cpp"
       AXLE_RENDER_SERVICE_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RenderService.cpp")
 target_link_libraries(AxleRenderUnitTests PRIVATE

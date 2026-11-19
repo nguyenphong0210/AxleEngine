@@ -1481,6 +1481,161 @@ namespace {
             std::cout << "  [U5-F Dynamic] f0=(" << left0.r << "," << mid0.r << ") f1=(" << left1.r << "," << mid1.r << ")\n";
         }
 
+        // -----------------------------------------------------------------
+        // 5. M15-U5-39.7: Zoomed Sphere-Floor Contact & Underside SSR Smoothness (TAA Off)
+        // -----------------------------------------------------------------
+        {
+            auto zoomSphere = RHIMesh::CreateSphere(0.5f, 32, 48);
+            RENDER_CHECK(zoomSphere && zoomSphere->IsValid(), "U5-F 39.7 zoomed sphere mesh");
+            auto zoomSphereView = zoomSphere->CaptureView();
+
+            constexpr uint32_t zoomW = 512u;
+            constexpr uint32_t zoomH = 512u;
+            auto zoomTargets = std::make_shared<RHIViewTargets>();
+            RHIViewTargetDesc zoomVT{};
+            zoomVT.Width = zoomW;
+            zoomVT.Height = zoomH;
+            zoomVT.ColorFormat = RHITextureFormat::RGBA8_UNORM;
+            zoomVT.EnableNormal = true;
+            zoomVT.EnableGTAO = true;
+            zoomVT.EnableScreenStorage = true;
+            zoomVT.EnableHiZ = true;
+            zoomVT.HDR = true;
+            zoomVT.EnableReflectionTerms = true;
+            RENDER_CHECK(zoomTargets->Configure(zoomVT), "U5-F 39.7 zoom RHIViewTargets configure");
+
+            RenderWorld zoomWorld;
+            zoomWorld.SceneRevision = 9240;
+            zoomWorld.Skybox.Authored = true;
+            zoomWorld.Skybox.Enabled = true;
+            zoomWorld.Skybox.EnvironmentLighting = true;
+            zoomWorld.Skybox.Type = 0;
+            zoomWorld.DirectionalLight = RenderDirectionalLight{};
+            zoomWorld.DirectionalLight->Direction = glm::normalize(glm::vec3(0.4f, 0.85f, 0.35f));
+            zoomWorld.DirectionalLight->Color = glm::vec3(1.0f, 0.98f, 0.95f);
+            zoomWorld.DirectionalLight->Intensity = 5.0f;
+
+            // Glossy conductor plane (y = 0) + Metal_Gold sphere resting tangent at y = 0 (center y = 0.5)
+            zoomWorld.Meshes.push_back(MakeBoxInstance(40, cubeView, makeMaterial({0.72f, 0.80f, 0.90f}, 1.0f, 0.12f),
+                {0.0f, -0.05f, 0.0f}, {16.0f, 0.1f, 16.0f}, false));
+            zoomWorld.Meshes.push_back(MakeBoxInstance(41, zoomSphereView, makeMaterial({1.0f, 0.78f, 0.34f}, 1.0f, 0.22f),
+                {0.0f, 0.50f, 0.0f}, {1.0f, 1.0f, 1.0f}, false));
+
+            PerspectiveCamera zoomCam(45.0f, 1.0f, 0.05f, 100.0f);
+            const glm::vec3 zoomPos(0.0f, 0.24f, 1.35f);
+            const glm::vec3 zoomTarget(0.0f, 0.28f, 0.0f);
+            zoomCam.SetViewMatrix(glm::lookAtRH(zoomPos, zoomTarget, glm::vec3(0.0f, 1.0f, 0.0f)), zoomPos);
+
+            SceneRenderSettings zoomSettings = baseSettings;
+            zoomSettings.EnableSSR = true;
+            zoomSettings.EnableGTAO = true;
+            zoomSettings.EnableContactShadows = true;
+            zoomSettings.EnableSkybox = true;
+            zoomSettings.EnableShadows = false;
+            zoomSettings.EnableTAA = false;
+            zoomSettings.EnableFXAA = false;
+
+            renderer.RenderWorldView(zoomWorld, zoomCam, zoomTargets->Get(RHIViewTarget::Color),
+                                     zoomTargets->Get(RHIViewTarget::Depth), zoomSettings, nullptr, zoomTargets);
+            RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() && device.WaitIdle(),
+                "U5-F 39.7 zoomed contact render succeeded");
+
+            std::vector<glm::vec4> zoomHDR, zoomStorage, zoomOpaque;
+            auto* linearHDR = renderer.GetIntermediateHDRTarget();
+            auto* storageTex = zoomTargets->Get(RHIViewTarget::ScreenStorage);
+            auto* opaqueTex = zoomTargets->Get(RHIViewTarget::OpaqueColor);
+            RENDER_CHECK(linearHDR && ReadTexture2DRGBA16(*linearHDR, zoomHDR) &&
+                         zoomHDR.size() == size_t(zoomW) * zoomH && AllFiniteNonNegative(zoomHDR) &&
+                         storageTex && ReadTexture2DRGBA16(*storageTex, zoomStorage) &&
+                         zoomStorage.size() == size_t(zoomW) * zoomH &&
+                         opaqueTex && ReadTexture2DRGBA16(*opaqueTex, zoomOpaque) &&
+                         zoomOpaque.size() == size_t(zoomW) * zoomH,
+                "U5-F 39.7 zoomed HDR, opaque, and SSR storage readback valid");
+
+            const auto lumAt = [&](const std::vector<glm::vec4>& buf, uint32_t x, uint32_t y) {
+                const auto& c = buf[size_t(y) * zoomW + x];
+                return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+            };
+
+            // Measure sphere contact bottom pixel to anchor both underside and floor bands reliably.
+            uint32_t contactX = 0, contactY = 0;
+            uint32_t underTopX = 0, underTopY = 0;
+            uint32_t floorBottomX = 0, floorBottomY = 0;
+            RENDER_CHECK(ProjectWorldToPixel(zoomCam, zoomW, zoomH, {0.0f, 0.0f, 0.0f}, contactX, contactY) &&
+                         ProjectWorldToPixel(zoomCam, zoomW, zoomH, {0.0f, 0.25f, 0.433f}, underTopX, underTopY) &&
+                         ProjectWorldToPixel(zoomCam, zoomW, zoomH, {0.0f, 0.0f, 0.45f}, floorBottomX, floorBottomY),
+                "U5-F 39.7 project sphere underside and floor contact anchor points");
+
+            // 5a. Sphere underside vertical Laplacian (detects concentric contour/step bands on lower gold hemisphere)
+            const uint32_t uX0 = zoomW / 2 - 48u;
+            const uint32_t uX1 = zoomW / 2 + 48u;
+            const uint32_t uY0 = std::max(4u, underTopY + 6u);
+            const uint32_t uY1 = (contactY > uY0 + 18u) ? (contactY - 10u) : (uY0 + 18u);
+            double underLapSum = 0.0, underLumSum = 0.0;
+            uint32_t underCount = 0u, underSSRCount = 0u;
+            for (uint32_t y = uY0; y <= uY1; ++y) {
+                for (uint32_t x = uX0; x <= uX1; ++x) {
+                    const float lC = lumAt(zoomHDR, x, y);
+                    const float lU = lumAt(zoomHDR, x, y - 1u);
+                    const float lD = lumAt(zoomHDR, x, y + 1u);
+                    underLapSum += std::abs(lC - 0.5f * (lU + lD));
+                    underLumSum += lC;
+                    if (zoomStorage[size_t(y) * zoomW + x].a > 0.10f) ++underSSRCount;
+                    ++underCount;
+                }
+            }
+            const float underMeanLum = float(underLumSum / std::max(1u, underCount));
+            const float underRelLap = float(underLapSum / std::max(1u, underCount)) / std::max(underMeanLum, 0.01f);
+
+            // 5b. Floor contact reflection band directly beneath sphere bottom (detects vertical combed streaks)
+            const uint32_t fX0 = zoomW / 2 - 56u;
+            const uint32_t fX1 = zoomW / 2 + 56u;
+            const uint32_t fY0 = std::min(zoomH - 6u, contactY + 4u);
+            const uint32_t fY1 = std::min(zoomH - 4u, std::max(fY0 + 24u, floorBottomY));
+            double floorLapSum = 0.0, floorLumSum = 0.0;
+            double opFloorLapSum = 0.0, opFloorLumSum = 0.0;
+            float floorMaxHorizJump = 0.0f;
+            uint32_t floorCount = 0u, floorHitCount = 0u;
+            for (uint32_t y = fY0; y <= fY1; ++y) {
+                for (uint32_t x = fX0; x <= fX1; ++x) {
+                    const float lC = lumAt(zoomHDR, x, y);
+                    const float lL = lumAt(zoomHDR, x - 1u, y);
+                    const float lR = lumAt(zoomHDR, x + 1u, y);
+                    floorLapSum += std::abs(lC - 0.5f * (lL + lR));
+                    floorLumSum += lC;
+                    floorMaxHorizJump = std::max(floorMaxHorizJump, std::abs(lC - lL) / std::max(lC, 0.05f));
+
+                    const float oC = lumAt(zoomOpaque, x, y);
+                    const float oL = lumAt(zoomOpaque, x - 1u, y);
+                    const float oR = lumAt(zoomOpaque, x + 1u, y);
+                    opFloorLapSum += std::abs(oC - 0.5f * (oL + oR));
+                    opFloorLumSum += oC;
+
+                    if (zoomStorage[size_t(y) * zoomW + x].a > 0.05f) ++floorHitCount;
+                    ++floorCount;
+                }
+            }
+            const float floorMeanLum = float(floorLumSum / std::max(1u, floorCount));
+            const float floorRelHorizLap = float(floorLapSum / std::max(1u, floorCount)) / std::max(floorMeanLum, 0.01f);
+            const float opFloorMeanLum = float(opFloorLumSum / std::max(1u, floorCount));
+            const float opFloorRelHorizLap = float(opFloorLapSum / std::max(1u, floorCount)) / std::max(opFloorMeanLum, 0.01f);
+            const float floorHitCoverage = float(floorHitCount) / float(std::max(1u, floorCount));
+
+            std::cout << "  [U5-F Zoomed Contact] underSSR=" << underSSRCount << "/" << underCount
+                      << " underRelLap=" << underRelLap
+                      << " opaqueFloorHorizLap=" << opFloorRelHorizLap
+                      << " floorHitCov=" << floorHitCoverage
+                      << " floorHorizLap=" << floorRelHorizLap
+                      << " floorMaxJump=" << floorMaxHorizJump << "\n";
+
+            RENDER_CHECK(underSSRCount > underCount / 4u && underRelLap < 0.008f,
+                "M15-U5-39.7: Zoomed Metal_Gold underside SSR reflection stays free of concentric contour banding");
+            RENDER_CHECK(opFloorRelHorizLap < 0.008f,
+                "M15-U5-39.7: Zoomed floor pre-SSR GTAO contact zone stays free of periodic Bayer column striping");
+            RENDER_CHECK(floorHitCoverage > 0.55f && floorRelHorizLap < 0.008f && floorMaxHorizJump < 0.35f,
+                "M15-U5-39.7: Zoomed floor contact SSR reflection stays cohesive without vertical barcode streaking");
+        }
+
         RENDER_CHECK(device.WaitIdle() && Axle::RenderTests::GetRHIValidationErrorCount() == 0,
             "U5-F zero RHI validation errors across all material SSR tests");
         std::cout << "[M15MaterialSSR] All U5-F (S5.6) native D3D12/Vulkan material SSR checks passed!\n";

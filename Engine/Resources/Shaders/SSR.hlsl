@@ -160,6 +160,32 @@ float LoadHiZTexel(uint mip, uint2 cell, uint2 baseSize) {
     }
 }
 
+bool TrySampleContinuousHiZ0Depth(float2 sampleUV, uint2 baseSize, float safeThickness, out float outDepth) {
+    outDepth = 1.0;
+    float2 tc = sampleUV * float2(baseSize) - 0.5;
+    int maxX = int(baseSize.x) - 1;
+    int maxY = int(baseSize.y) - 1;
+    int x0 = clamp(int(floor(tc.x)), 0, maxX);
+    int y0 = clamp(int(floor(tc.y)), 0, maxY);
+    int x1 = min(x0 + 1, maxX);
+    int y1 = min(y0 + 1, maxY);
+    float fx = saturate(tc.x - float(x0));
+    float fy = saturate(tc.y - float(y0));
+    float d00 = LoadHiZTexel(0u, uint2(x0, y0), baseSize);
+    float d10 = LoadHiZTexel(0u, uint2(x1, y0), baseSize);
+    float d01 = LoadHiZTexel(0u, uint2(x0, y1), baseSize);
+    float d11 = LoadHiZTexel(0u, uint2(x1, y1), baseSize);
+    float dMin = min(min(d00, d10), min(d01, d11));
+    float dMax = max(max(d00, d10), max(d01, d11));
+    if (dMax >= 0.9999 || dMin <= 0.0) return false;
+    float zAtMin = ReconstructViewPos(sampleUV, dMin).z;
+    float zAtMax = ReconstructViewPos(sampleUV, dMax).z;
+    float maxContDiff = clamp(abs(zAtMin) * 0.08 + 0.05, 0.05, min(safeThickness * 0.65, 0.35));
+    if (abs(zAtMin - zAtMax) > maxContDiff) return false;
+    outDepth = lerp(lerp(d00, d10, fx), lerp(d01, d11, fx), fy);
+    return true;
+}
+
 [numthreads(8, 8, 1)]
 void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     uint2 pixelPos = dispatchThreadId.xy;
@@ -206,7 +232,7 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     float texelWorldSize = abs(originView.z) * max(
         rcpFrame.x / max(abs(u_Projection[0][0]), 1e-4),
         rcpFrame.y / max(abs(u_Projection[1][1]), 1e-4));
-    float3 startView = originView + viewNormal * max(0.01, texelWorldSize * 1.5);
+    float3 startView = originView + viewNormal * max(0.0015, texelWorldSize * 1.5);
 
     float nearViewZ = abs(ReconstructViewPos(float2(0.5, 0.5), 0.0).z);
     float safeNear = max(nearViewZ * 1.25, 0.05);
@@ -239,7 +265,8 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     float3 dirUVZ = endUVZ - startUVZ;
 
     float pxLen = max(1.0, length(dirUVZ.xy * float2(baseSize)));
-    float tCurr = min(0.5, 1.25 / pxLen);
+    float minOriginT = min(0.5, 1.25 / pxLen);
+    float tCurr = minOriginT;
     uint maxMip = clamp((uint)u_SSRExtra.x, 0u, 7u);
     uint mip = 0u;
     uint maxSteps = clamp((uint)u_SSRParams.y, 16u, 96u);
@@ -319,8 +346,61 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
                 float3 finalRayView = ReconstructViewPos(pFinal.xy, pFinal.z);
                 float finalPen = finalSceneView.z - finalRayView.z;
                 if (finalPen <= thickness && finalPen >= -0.05) {
+                    // Continuous sub-texel refinement across cliff-free mip-0 surfaces to eliminate
+                    // discrete texel-row staircase beats and near-contact ripples.
+                    float tA = max(minOriginT, tCurr - 1.25 / pxLen);
+                    float tB = tNextCell;
+                    float3 pA = startUVZ + dirUVZ * tA;
+                    float3 pB = startUVZ + dirUVZ * tB;
+                    float contDA = 0.0;
+                    float contDB = 0.0;
+                    if (tB > tA + 1e-6 &&
+                        TrySampleContinuousHiZ0Depth(pA.xy, baseSize, thickness, contDA) &&
+                        TrySampleContinuousHiZ0Depth(pB.xy, baseSize, thickness, contDB)) {
+                        float zSceneA = ReconstructViewPos(pA.xy, contDA).z;
+                        float zSceneB = ReconstructViewPos(pB.xy, contDB).z;
+                        float gapA = ReconstructViewPos(pA.xy, pA.z).z - zSceneA;
+                        float gapB = ReconstructViewPos(pB.xy, pB.z).z - zSceneB;
+                        if (abs(zSceneA - zSceneB) <= thickness &&
+                            gapA * gapB <= 0.0 &&
+                            abs(gapA) <= thickness &&
+                            abs(gapB) <= thickness &&
+                            abs(gapA - gapB) > 1e-6) {
+                            [unroll]
+                            for (int b = 0; b < 4; ++b) {
+                                float tMid = 0.5 * (tA + tB);
+                                float3 pMid = startUVZ + dirUVZ * tMid;
+                                float dMid = 0.0;
+                                if (!TrySampleContinuousHiZ0Depth(pMid.xy, baseSize, thickness, dMid)) break;
+                                float gapMid = ReconstructViewPos(pMid.xy, pMid.z).z - ReconstructViewPos(pMid.xy, dMid).z;
+                                if ((gapMid >= 0.0) == (gapA >= 0.0)) {
+                                    tA = tMid;
+                                    gapA = gapMid;
+                                } else {
+                                    tB = tMid;
+                                    gapB = gapMid;
+                                }
+                            }
+                            float alpha = saturate(abs(gapA) / max(abs(gapA - gapB), 1e-6));
+                            float tRefined = tA + (tB - tA) * alpha;
+                            float3 pRefined = startUVZ + dirUVZ * tRefined;
+                            float dRefined = 0.0;
+                            if (TrySampleContinuousHiZ0Depth(pRefined.xy, baseSize, thickness, dRefined)) {
+                                float3 refinedSceneView = ReconstructViewPos(pRefined.xy, dRefined);
+                                float3 refinedRayView = ReconstructViewPos(pRefined.xy, pRefined.z);
+                                float refinedPen = refinedSceneView.z - refinedRayView.z;
+                                if (refinedPen <= thickness && refinedPen >= -0.05) {
+                                    pFinal = pRefined;
+                                    finalSceneZ = dRefined;
+                                    finalSceneView = refinedSceneView;
+                                    fCell = uint2(clamp(pFinal.xy * float2(baseSize), float2(0.0, 0.0), float2(baseSize) - 1e-4));
+                                }
+                            }
+                        }
+                    }
+
                     // Edge & disocclusion support check across 4 orthogonal neighbor texels
-                    uint support = 0u;
+                    float supportSum = 0.0;
                     int2 fInt = int2(fCell);
                     int2 maxInt = int2(baseSize) - int2(1, 1);
                     int2 offsets[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
@@ -331,18 +411,16 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
                         float nDepth = LoadHiZTexel(0u, nCell, baseSize);
                         if (nDepth < 0.9999) {
                             float nZ = ReconstructViewPos((float2(nCell) + 0.5) * rcpFrame, nDepth).z;
-                            if (abs(finalSceneView.z - nZ) <= edgeTol) {
-                                ++support;
-                            }
+                            supportSum += 1.0 - smoothstep(edgeTol * 0.35, edgeTol * 1.35, abs(finalSceneView.z - nZ));
                         }
                     }
-                    float disocclusionFade = (support >= 2u) ? 1.0 : (support == 1u ? 0.65 : 0.25);
+                    float disocclusionFade = lerp(0.25, 1.0, smoothstep(0.2, 2.2, supportSum));
 
                     float2 dCoords = smoothstep(0.0, 0.12, pFinal.xy) * (1.0 - smoothstep(0.88, 1.0, pFinal.xy));
                     float screenFade = saturate(dCoords.x * dCoords.y);
                     float hitDistMeters = length(finalSceneView - originView);
-                    float distFade = saturate(1.0 - (hitDistMeters / maxDist) * 0.25) *
-                                     saturate(1.0 - float(step) / float(maxSteps));
+                    float stepFade = saturate(float(int(maxSteps) - int(step)) / 6.0);
+                    float distFade = saturate(1.0 - (hitDistMeters / maxDist) * 0.25) * stepFade;
                     float cameraFade = saturate(1.0 - smoothstep(0.45, 0.98, reflDir.z));
 
                     hitUV = pFinal.xy;
@@ -407,6 +485,85 @@ float3 SampleSSRColorTrilinear(float2 uv, float lod) {
     return lerp(SampleSSRColorMip(uv, m0), SampleSSRColorMip(uv, m1), fracLod);
 }
 
+bool EvaluateSSRTap(
+    uint2 tapPixel,
+    float roughness,
+    float ssrScale,
+    float maxDist,
+    float2 projScale,
+    float maxConePx,
+    bool useConeFilter,
+    out float3 outRadiance,
+    out float outWeight)
+{
+    outRadiance = float3(0.0, 0.0, 0.0);
+    outWeight = 0.0;
+
+    float4 hit = u_SSRTexture.Load(int3(tapPixel, 0));
+    float weight = saturate(hit.a) * ssrScale;
+    if (weight <= 1e-4) {
+        return false;
+    }
+
+    float2 hitUV = saturate(hit.xy);
+    float hitDepth = u_SceneDepth.SampleLevel(u_LinearSampler, hitUV, 0.0);
+    if (hitDepth >= 0.9999 || hitDepth <= 0.0) {
+        return false;
+    }
+
+    float hitDistMeters = hit.z * maxDist;
+    float3 hitViewPos = ReconstructViewPos(hitUV, hitDepth);
+
+    // Filter hit over HDR color pyramid footprint driven by GGX roughness cone aperture
+    float coneTan = clamp(roughness * roughness * 0.75, 0.0, 0.75);
+    float worldConeRadius = coneTan * hitDistMeters;
+    float pixelRadius = clamp(max(projScale.x, projScale.y) * worldConeRadius / max(abs(hitViewPos.z), 0.1), 0.0, maxConePx);
+
+    float mipLod = clamp(log2(max(pixelRadius * 0.5, 1.0)), 0.0, 4.0);
+    float2 uvRadius = float2(pixelRadius, pixelRadius) * u_ScreenSize.zw;
+
+    static const float2 coneOffsets[8] = {
+        float2( 1.0,  0.0) * 0.45,
+        float2(-1.0,  0.0) * 0.45,
+        float2( 0.0,  1.0) * 0.45,
+        float2( 0.0, -1.0) * 0.45,
+        float2( 0.7071,  0.7071) * 0.90,
+        float2(-0.7071,  0.7071) * 0.90,
+        float2( 0.7071, -0.7071) * 0.90,
+        float2(-0.7071, -0.7071) * 0.90
+    };
+
+    float3 accumColor = SampleSSRColorTrilinear(hitUV, mipLod);
+    float accumWeight = 1.0;
+    float coneBlend = useConeFilter ? smoothstep(0.10, 0.75, pixelRadius) : 0.0;
+    if (coneBlend > 1e-4 && roughness > 0.045) {
+        // Continuous sky/depth acceptance across pyramid mip transitions avoids contour steps on curved surfaces.
+        float skyTapWeight = lerp(0.0, 0.35, smoothstep(0.75, 2.0, mipLod));
+        float relaxDepth = smoothstep(0.75, 1.75, mipLod);
+        [unroll]
+        for (uint t = 0; t < 8u; ++t) {
+            float2 tapUV = clamp(hitUV + coneOffsets[t] * uvRadius, float2(0.001, 0.001), float2(0.999, 0.999));
+            float tapDepth = u_SceneDepth.SampleLevel(u_LinearSampler, tapUV, 0.0);
+            float tapDepthWeight = 1.0;
+            if (tapDepth >= 0.9999) {
+                tapDepthWeight = skyTapWeight;
+            } else {
+                float tapZ = ReconstructViewPos(tapUV, tapDepth).z;
+                float depthGate = exp(-abs(tapZ - hitViewPos.z) / max(0.5, abs(hitViewPos.z) * 0.15));
+                tapDepthWeight = lerp(depthGate, 1.0, relaxDepth);
+            }
+            float spatialW = ((t < 4u) ? 0.65 : 0.40) * coneBlend;
+            float w = spatialW * tapDepthWeight;
+            accumColor += SampleSSRColorTrilinear(tapUV, mipLod) * w;
+            accumWeight += w;
+        }
+    }
+
+    outRadiance = max(accumColor / max(accumWeight, 1e-4), 0.0);
+    outWeight = weight;
+    return true;
+}
+
 float4 PSMain(VSOutput input) : SV_Target {
     uint2 size;
     u_SceneDepth.GetDimensions(size.x, size.y);
@@ -424,68 +581,110 @@ float4 PSMain(VSOutput input) : SV_Target {
         return sceneColor;
     }
 
-    float4 hit = u_SSRTexture.Load(int3(pixel, 0));
     float roughness = clamp(abs(signedRoughness), 0.04, 1.0);
     float roughnessFade = 1.0 - smoothstep(0.65, 0.98, roughness);
-    float weight = saturate(hit.a) * saturate(u_SSRParams.z) * roughnessFade;
-    if (weight <= 1e-4) return sceneColor;
-
-    float2 hitUV = saturate(hit.xy);
-    float hitDepth = u_SceneDepth.SampleLevel(u_LinearSampler, hitUV, 0.0);
-    if (hitDepth >= 0.9999) return sceneColor;
+    float ssrScale = saturate(u_SSRParams.z) * roughnessFade;
+    if (ssrScale <= 1e-4) return sceneColor;
 
     float maxDist = max(u_SSRParams.x, 5.0);
-    float hitDistMeters = hit.z * maxDist;
-    float3 hitViewPos = ReconstructViewPos(hitUV, hitDepth);
-
-    // Filter hit over HDR color pyramid footprint driven by GGX roughness cone aperture
-    float coneTan = clamp(roughness * roughness * 0.75, 0.0, 0.75);
-    float worldConeRadius = coneTan * hitDistMeters;
     float2 projScale = float2(abs(u_Projection[0][0]), abs(u_Projection[1][1])) * 0.5 * u_ScreenSize.xy;
     float maxConePx = u_SSRExtra.y > 0.0 ? u_SSRExtra.y : 32.0;
-    float pixelRadius = clamp(max(projScale.x, projScale.y) * worldConeRadius / max(abs(hitViewPos.z), 0.1), 0.0, maxConePx);
 
-    float mipLod = clamp(log2(max(pixelRadius * 0.5, 1.0)), 0.0, 4.0);
-    float2 uvRadius = float2(pixelRadius, pixelRadius) * u_ScreenSize.zw;
+    float3 centerRadiance = float3(0.0, 0.0, 0.0);
+    float centerWeight = 0.0;
+    bool centerValid = EvaluateSSRTap(
+        pixel, roughness, ssrScale, maxDist, projScale, maxConePx, true, centerRadiance, centerWeight);
 
-    // Deterministic 9-tap concentric disk over bracketing HDR pyramid levels (zero stochastic shimmer)
-    static const float2 coneOffsets[8] = {
-        float2( 1.0,  0.0) * 0.45,
-        float2(-1.0,  0.0) * 0.45,
-        float2( 0.0,  1.0) * 0.45,
-        float2( 0.0, -1.0) * 0.45,
-        float2( 0.7071,  0.7071) * 0.90,
-        float2(-0.7071,  0.7071) * 0.90,
-        float2( 0.7071, -0.7071) * 0.90,
-        float2(-0.7071, -0.7071) * 0.90
-    };
+    // Keep exact single-tap sharp mirror parity at min roughness (0.04); enable cross-bilateral
+    // spatial resolve on glossier surfaces to suppress TAA-off DDA streaking and contour variance.
+    float spatialBlend = smoothstep(0.045, 0.10, roughness);
+    float finalWeight = centerWeight;
+    float3 finalRadiance = centerRadiance;
 
-    float3 accumColor = SampleSSRColorTrilinear(hitUV, mipLod);
-    float accumWeight = 1.0;
-    if (pixelRadius > 0.35) {
+    if (spatialBlend > 1e-4) {
+        static const int2 neighborOffsets[24] = {
+            int2( 1,  0), int2(-1,  0), int2( 0,  1), int2( 0, -1),
+            int2( 1,  1), int2(-1,  1), int2( 1, -1), int2(-1, -1),
+            int2( 2,  0), int2(-2,  0), int2( 0,  2), int2( 0, -2),
+            int2( 2,  2), int2(-2,  2), int2( 2, -2), int2(-2, -2),
+            int2( 3,  0), int2(-3,  0), int2( 0,  3), int2( 0, -3),
+            int2( 4,  0), int2(-4,  0), int2( 0,  4), int2( 0, -4)
+        };
+        static const float neighborWeights[24] = {
+            0.90, 0.90, 0.90, 0.90,
+            0.78, 0.78, 0.78, 0.78,
+            0.65, 0.65, 0.65, 0.65,
+            0.42, 0.42, 0.42, 0.42,
+            0.40, 0.40, 0.40, 0.40,
+            0.25, 0.25, 0.25, 0.25
+        };
+
+        float centerViewZ = ReconstructViewPos((float2(pixel) + 0.5) * u_ScreenSize.zw, depth).z;
+        int2 maxPixel = int2(size) - int2(1, 1);
+        int2 pL = max(int2(pixel) - int2(1, 0), int2(0, 0));
+        int2 pR = min(int2(pixel) + int2(1, 0), maxPixel);
+        int2 pU = max(int2(pixel) - int2(0, 1), int2(0, 0));
+        int2 pD = min(int2(pixel) + int2(0, 1), maxPixel);
+        float dL = u_SceneDepth.Load(int3(pL, 0));
+        float dR = u_SceneDepth.Load(int3(pR, 0));
+        float dU = u_SceneDepth.Load(int3(pU, 0));
+        float dD = u_SceneDepth.Load(int3(pD, 0));
+        float zL = (dL > 0.0 && dL < 0.9999) ? ReconstructViewPos((float2(pL) + 0.5) * u_ScreenSize.zw, dL).z : centerViewZ;
+        float zR = (dR > 0.0 && dR < 0.9999) ? ReconstructViewPos((float2(pR) + 0.5) * u_ScreenSize.zw, dR).z : centerViewZ;
+        float zU = (dU > 0.0 && dU < 0.9999) ? ReconstructViewPos((float2(pU) + 0.5) * u_ScreenSize.zw, dU).z : centerViewZ;
+        float zD = (dD > 0.0 && dD < 0.9999) ? ReconstructViewPos((float2(pD) + 0.5) * u_ScreenSize.zw, dD).z : centerViewZ;
+        float dzdx = (abs(zR - centerViewZ) < abs(centerViewZ - zL)) ? (zR - centerViewZ) : (centerViewZ - zL);
+        float dzdy = (abs(zD - centerViewZ) < abs(centerViewZ - zU)) ? (zD - centerViewZ) : (centerViewZ - zU);
+
+        float depthTol = 0.015 * abs(centerViewZ) + 0.008;
+        float totalSurfaceWeight = 1.0;
+        float weightSum = centerValid ? centerWeight : 0.0;
+        float3 radianceSum = centerValid ? (centerRadiance * centerWeight) : float3(0.0, 0.0, 0.0);
+
         [unroll]
-        for (uint t = 0; t < 8u; ++t) {
-            float2 tapUV = clamp(hitUV + coneOffsets[t] * uvRadius, float2(0.001, 0.001), float2(0.999, 0.999));
-            float tapDepth = u_SceneDepth.SampleLevel(u_LinearSampler, tapUV, 0.0);
-            float tapDepthWeight = 1.0;
-            if (tapDepth >= 0.9999) {
-                tapDepthWeight = mipLod >= 1.5 ? 0.35 : 0.0;
-            } else if (mipLod < 1.25) {
-                float tapZ = ReconstructViewPos(tapUV, tapDepth).z;
-                tapDepthWeight = exp(-abs(tapZ - hitViewPos.z) / max(0.5, abs(hitViewPos.z) * 0.15));
+        for (uint n = 0; n < 24u; ++n) {
+            int2 nCoord = int2(pixel) + neighborOffsets[n];
+            if (any(nCoord < int2(0, 0)) || any(nCoord > maxPixel)) continue;
+            uint2 nPixel = uint2(nCoord);
+            float nDepth = u_SceneDepth.Load(int3(nPixel, 0));
+            if (nDepth <= 0.0 || nDepth >= 0.9999) continue;
+            float4 nEnv = u_EnvironmentSpecular.Load(int3(nPixel, 0));
+            if (nEnv.a <= 0.0) continue;
+
+            float roughDiff = abs(abs(nEnv.a) - roughness);
+            if (roughDiff > 0.08) continue;
+
+            float nViewZ = ReconstructViewPos((float2(nPixel) + 0.5) * u_ScreenSize.zw, nDepth).z;
+            float predictedViewZ = centerViewZ + dzdx * float(neighborOffsets[n].x) + dzdy * float(neighborOffsets[n].y);
+            float planeDiff = abs(nViewZ - predictedViewZ);
+            float surfW = neighborWeights[n] *
+                          exp(-planeDiff / depthTol) *
+                          exp(-roughDiff / 0.04);
+            if (surfW <= 1e-4) continue;
+
+            totalSurfaceWeight += surfW;
+            float3 nRadiance = float3(0.0, 0.0, 0.0);
+            float nWeight = 0.0;
+            if (EvaluateSSRTap(nPixel, roughness, ssrScale, maxDist, projScale, maxConePx, false, nRadiance, nWeight)) {
+                weightSum += surfW * nWeight;
+                radianceSum += surfW * nWeight * nRadiance;
             }
-            float spatialW = (t < 4u) ? 0.65 : 0.40;
-            float w = spatialW * tapDepthWeight;
-            accumColor += SampleSSRColorTrilinear(tapUV, mipLod) * w;
-            accumWeight += w;
+        }
+
+        float gatheredWeight = weightSum / max(totalSurfaceWeight, 1e-4);
+        if (weightSum > 1e-5) {
+            float3 gatheredRadiance = radianceSum / weightSum;
+            finalWeight = lerp(centerValid ? centerWeight : 0.0, gatheredWeight, spatialBlend);
+            finalRadiance = centerValid ? lerp(centerRadiance, gatheredRadiance, spatialBlend) : gatheredRadiance;
         }
     }
-    float3 filteredHitColor = accumColor / max(accumWeight, 1e-4);
+
+    if (finalWeight <= 1e-4) return sceneColor;
 
     // Replace only the prior indirect specular term exported by the opaque material pass
     // using the exact Fresnel/F0/metallic/BRDF/AO response. Diffuse, direct & emission stay untouched.
     float3 previous = envSample.rgb;
-    float3 replacement = max(filteredHitColor, 0.0) * response;
-    float3 color = sceneColor.rgb + weight * (replacement - previous);
+    float3 replacement = max(finalRadiance, 0.0) * response;
+    float3 color = sceneColor.rgb + finalWeight * (replacement - previous);
     return float4(clamp(color, 0.0, 65000.0), sceneColor.a);
 }

@@ -1811,7 +1811,7 @@ namespace Axle {
             const float texelWorldSize = std::abs(originView.z) * std::max(
                 rcpW / std::max(std::abs(projZO[0][0]), 1e-4f),
                 rcpH / std::max(std::abs(projZO[1][1]), 1e-4f));
-            const glm::vec3 startView = originView + n * std::max(0.01f, texelWorldSize * 1.5f);
+            const glm::vec3 startView = originView + n * std::max(0.0015f, texelWorldSize * 1.5f);
 
             const float nearViewZ = std::abs(ReconstructViewPos(glm::vec2(0.5f, 0.5f), 0.0f, invProjZO).z);
             const float safeNear = std::max(nearViewZ * 1.25f, 0.05f);
@@ -1884,6 +1884,30 @@ namespace Axle {
                 const uint32_t cy = std::min(cell.y, dims.y - 1u);
                 return hiZPyramid[level][size_t(cy) * dims.x + cx];
             };
+            const auto trySampleContinuousHiZ0Depth = [&](const glm::vec2& sampleUV, float& outDepth) -> bool {
+                const glm::vec2 tc = sampleUV * glm::vec2(static_cast<float>(width), static_cast<float>(height)) - glm::vec2(0.5f);
+                const int maxX = static_cast<int>(width) - 1;
+                const int maxY = static_cast<int>(height) - 1;
+                const int x0 = std::clamp(static_cast<int>(std::floor(tc.x)), 0, maxX);
+                const int y0 = std::clamp(static_cast<int>(std::floor(tc.y)), 0, maxY);
+                const int x1 = std::min(x0 + 1, maxX);
+                const int y1 = std::min(y0 + 1, maxY);
+                const float fx = std::clamp(tc.x - static_cast<float>(x0), 0.0f, 1.0f);
+                const float fy = std::clamp(tc.y - static_cast<float>(y0), 0.0f, 1.0f);
+                const float d00 = sampleLevel(0u, glm::uvec2(x0, y0));
+                const float d10 = sampleLevel(0u, glm::uvec2(x1, y0));
+                const float d01 = sampleLevel(0u, glm::uvec2(x0, y1));
+                const float d11 = sampleLevel(0u, glm::uvec2(x1, y1));
+                const float dMin = std::min({d00, d10, d01, d11});
+                const float dMax = std::max({d00, d10, d01, d11});
+                if (dMax >= 0.9999f || dMin <= 0.0f) return false;
+                const float zAtMin = ReconstructViewPos(sampleUV, dMin, invProjZO).z;
+                const float zAtMax = ReconstructViewPos(sampleUV, dMax, invProjZO).z;
+                const float maxContDiff = std::clamp(std::abs(zAtMin) * 0.08f + 0.05f, 0.05f, std::min(safeThickness * 0.65f, 0.35f));
+                if (std::abs(zAtMin - zAtMax) > maxContDiff) return false;
+                outDepth = glm::mix(glm::mix(d00, d10, fx), glm::mix(d01, d11, fx), fy);
+                return true;
+            };
 
             for (uint32_t step = 0; step < maxSteps && tCurr < 1.0f; ++step) {
                 ++out.StepsExecuted;
@@ -1953,16 +1977,70 @@ namespace Axle {
                     const float tHit = crosses && std::abs(dirUVZ.z) > 1e-7f
                         ? std::clamp((cellMinZ-ray.StartUVZ.z)/dirUVZ.z,tCurr,tNextCell)
                         : tCurr;
-                    const glm::vec3 pFinal = ray.StartUVZ + dirUVZ * tHit;
-                    const glm::uvec2 fCell(
+                    glm::vec3 pFinal = ray.StartUVZ + dirUVZ * tHit;
+                    glm::uvec2 fCell(
                         static_cast<uint32_t>(std::clamp(pFinal.x * static_cast<float>(width), 0.0f, static_cast<float>(width) - 1e-4f)),
                         static_cast<uint32_t>(std::clamp(pFinal.y * static_cast<float>(height), 0.0f, static_cast<float>(height) - 1e-4f)));
-                    const float finalSceneZ = sampleLevel(0u, fCell);
+                    float finalSceneZ = sampleLevel(0u, fCell);
                     if (finalSceneZ < 0.9999f) {
-                        const glm::vec3 finalSceneView = ReconstructViewPos(glm::vec2(pFinal.x, pFinal.y), finalSceneZ, invProjZO);
+                        glm::vec3 finalSceneView = ReconstructViewPos(glm::vec2(pFinal.x, pFinal.y), finalSceneZ, invProjZO);
                         const glm::vec3 finalRayView = ReconstructViewPos(glm::vec2(pFinal.x, pFinal.y), pFinal.z, invProjZO);
-                        const float finalPen = finalSceneView.z - finalRayView.z;
+                        float finalPen = finalSceneView.z - finalRayView.z;
                         if (finalPen <= safeThickness && finalPen >= -0.05f) {
+                            // Continuous sub-texel refinement across cliff-free mip-0 surfaces to remove
+                            // discrete texel-row staircase beats and contact-seam ripples.
+                            float tA = std::max(minOriginT, tCurr - 1.25f / pxLen);
+                            float tB = tNextCell;
+                            const glm::vec3 pA = ray.StartUVZ + dirUVZ * tA;
+                            const glm::vec3 pB = ray.StartUVZ + dirUVZ * tB;
+                            float contDA = 0.0f, contDB = 0.0f;
+                            if (tB > tA + 1e-6f &&
+                                trySampleContinuousHiZ0Depth(glm::vec2(pA.x, pA.y), contDA) &&
+                                trySampleContinuousHiZ0Depth(glm::vec2(pB.x, pB.y), contDB)) {
+                                const float zSceneA = ReconstructViewPos(glm::vec2(pA.x, pA.y), contDA, invProjZO).z;
+                                const float zSceneB = ReconstructViewPos(glm::vec2(pB.x, pB.y), contDB, invProjZO).z;
+                                float gapA = ReconstructViewPos(glm::vec2(pA.x, pA.y), pA.z, invProjZO).z - zSceneA;
+                                float gapB = ReconstructViewPos(glm::vec2(pB.x, pB.y), pB.z, invProjZO).z - zSceneB;
+                                if (std::abs(zSceneA - zSceneB) <= safeThickness &&
+                                    gapA * gapB <= 0.0f &&
+                                    std::abs(gapA) <= safeThickness &&
+                                    std::abs(gapB) <= safeThickness &&
+                                    std::abs(gapA - gapB) > 1e-6f) {
+                                    for (int b = 0; b < 4; ++b) {
+                                        const float tMid = 0.5f * (tA + tB);
+                                        const glm::vec3 pMid = ray.StartUVZ + dirUVZ * tMid;
+                                        float dMid = 0.0f;
+                                        if (!trySampleContinuousHiZ0Depth(glm::vec2(pMid.x, pMid.y), dMid)) break;
+                                        const float gapMid = ReconstructViewPos(glm::vec2(pMid.x, pMid.y), pMid.z, invProjZO).z -
+                                                             ReconstructViewPos(glm::vec2(pMid.x, pMid.y), dMid, invProjZO).z;
+                                        if ((gapMid >= 0.0f) == (gapA >= 0.0f)) {
+                                            tA = tMid;
+                                            gapA = gapMid;
+                                        } else {
+                                            tB = tMid;
+                                            gapB = gapMid;
+                                        }
+                                    }
+                                    const float alpha = std::clamp(std::abs(gapA) / std::max(std::abs(gapA - gapB), 1e-6f), 0.0f, 1.0f);
+                                    const float tRefined = tA + (tB - tA) * alpha;
+                                    const glm::vec3 pRefined = ray.StartUVZ + dirUVZ * tRefined;
+                                    float dRefined = 0.0f;
+                                    if (trySampleContinuousHiZ0Depth(glm::vec2(pRefined.x, pRefined.y), dRefined)) {
+                                        const glm::vec3 refinedSceneView = ReconstructViewPos(glm::vec2(pRefined.x, pRefined.y), dRefined, invProjZO);
+                                        const glm::vec3 refinedRayView = ReconstructViewPos(glm::vec2(pRefined.x, pRefined.y), pRefined.z, invProjZO);
+                                        const float refinedPen = refinedSceneView.z - refinedRayView.z;
+                                        if (refinedPen <= safeThickness && refinedPen >= -0.05f) {
+                                            pFinal = pRefined;
+                                            finalSceneZ = dRefined;
+                                            finalSceneView = refinedSceneView;
+                                            finalPen = refinedPen;
+                                            fCell = glm::uvec2(
+                                                static_cast<uint32_t>(std::clamp(pFinal.x * static_cast<float>(width), 0.0f, static_cast<float>(width) - 1e-4f)),
+                                                static_cast<uint32_t>(std::clamp(pFinal.y * static_cast<float>(height), 0.0f, static_cast<float>(height) - 1e-4f)));
+                                        }
+                                    }
+                                }
+                            }
                             const auto smooth = [](float edge0, float edge1, float x) {
                                 const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
                                 return t * t * (3.0f - 2.0f * t);
@@ -1970,20 +2048,21 @@ namespace Axle {
                             const float fadeX = smooth(0.0f, 0.12f, pFinal.x) * (1.0f - smooth(0.88f, 1.0f, pFinal.x));
                             const float fadeY = smooth(0.0f, 0.12f, pFinal.y) * (1.0f - smooth(0.88f, 1.0f, pFinal.y));
                             const float screenFade = std::clamp(fadeX * fadeY, 0.0f, 1.0f);
-                            const float stepFade = std::clamp(1.0f - static_cast<float>(step) / static_cast<float>(maxSteps), 0.0f, 1.0f);
+                            const float stepFade = std::clamp(static_cast<float>(maxSteps - step) / 6.0f, 0.0f, 1.0f);
                             out.Hit = true;
                             out.HitUV = glm::vec2(pFinal.x, pFinal.y);
                             out.HitDepth = finalSceneZ;
-                            uint32_t support = 0;
+                            float supportSum = 0.0f;
+                            const float edgeTol = std::max(safeThickness * 1.5f, 0.35f);
                             for (const auto offset : {glm::ivec2(-1,0), glm::ivec2(1,0), glm::ivec2(0,-1), glm::ivec2(0,1)}) {
                                 const auto cell = glm::clamp(glm::ivec2(fCell) + offset, glm::ivec2(0), glm::ivec2(width-1,height-1));
                                 const float neighborDepth = sampleLevel(0, glm::uvec2(cell));
                                 if (neighborDepth < .9999f) {
                                     const float neighborZ = ReconstructViewPos((glm::vec2(cell)+.5f)/glm::vec2(width,height), neighborDepth, invProjZO).z;
-                                    if (std::abs(finalSceneView.z-neighborZ) <= std::max(safeThickness*1.5f,.35f)) ++support;
+                                    supportSum += 1.0f - smooth(edgeTol * 0.35f, edgeTol * 1.35f, std::abs(finalSceneView.z - neighborZ));
                                 }
                             }
-                            const float disocclusionFade = support >= 2 ? 1.0f : (support == 1 ? .65f : .25f);
+                            const float disocclusionFade = 0.25f + 0.75f * smooth(0.2f, 2.2f, supportSum);
                             const auto reflection = glm::normalize(ray.EndView-ray.StartView);
                             const float cameraFade = 1-smooth(.45f,.98f,reflection.z);
                             out.HitDistance = glm::length(finalSceneView - ray.OriginView);

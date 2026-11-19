@@ -514,18 +514,11 @@ namespace Axle {
         }
 
         // Initialize Volumetric Fog & Atmospheric Participating Media Resources
-        if (!CompileFogShaders(device) || !CreateFogPipelineLayout(device) || !CreateFogPipeline(device)) return false;
-
-        if (!m_FogSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
-            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Linear Clamp Sampler for Fog.");
-            return false;
+        if (!CompileFogShaders(device) || !CreateFogPipelineLayout(device) || !CreateFogPipeline(device) ||
+            !m_FogSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Froxel fog GPU resources are unavailable");
         }
 
-        if (!EnsureFogDescriptorSets()) {
-            return false;
-        }
-
-        if (!m_FogConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIVolumetricFogConstants), RHIMemoryLocation::HostUpload, "FogConstantsBuffer"))) return false;
 
         // Initialize Physically Based Pyramid / Kawase Bloom Resources
         if (!CompileBloomShaders(device) || !CreateBloomPipelineLayout(device) || !CreateBloomPipeline(device)) return false;
@@ -818,7 +811,6 @@ namespace Axle {
         m_FogInjectPipelineLayout.Shutdown();
         m_FogIntegratePipelineLayout.Shutdown();
         m_FogApplyPipelineLayout.Shutdown();
-        m_FogConstantBuffer.Shutdown();
         m_FogInjectShader = {};
         m_FogIntegrateShader = {};
         m_FogApplyVertexShader = {};
@@ -2770,7 +2762,7 @@ namespace Axle {
             return range;
         };
 
-        // Shared Root Descriptor [0] b0 space 0: 512-byte RHIVolumetricFogConstants
+        // Shared root descriptor b0, space 0.
         nri::RootDescriptorDesc compRootDesc = {};
         compRootDesc.registerIndex = 0;
         compRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
@@ -2815,7 +2807,7 @@ namespace Axle {
         if (!m_FogIntegratePipelineLayout.Init(integrateLayoutDesc)) return false;
 
         // 3. Apply Pipeline Layout:
-        // Root Descriptor [0] b0 space 0: 512-byte RHIVolumetricFogConstants
+        // Root descriptor b0, space 0.
         nri::RootDescriptorDesc applyRootDesc = {};
         applyRootDesc.registerIndex = 0;
         applyRootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
@@ -2825,18 +2817,20 @@ namespace Axle {
         // Range 0: t0 (Scene Color)
         // Range 1: t1 (Scene Depth)
         // Range 2: t2 (Froxel Integrated 3D Volume)
-        // Range 3: s0 (Linear Sampler)
-        nri::DescriptorRangeDesc applyRanges[4] = {
+        // Range 3: t3 (Froxel Scattering 3D Volume)
+        // Range 4: s0 (Linear Sampler)
+        nri::DescriptorRangeDesc applyRanges[] = {
             makeRange(0, nri::DescriptorType::TEXTURE, nri::StageBits::FRAGMENT_SHADER),
             makeRange(1, nri::DescriptorType::TEXTURE, nri::StageBits::FRAGMENT_SHADER),
             makeRange(2, nri::DescriptorType::TEXTURE, nri::StageBits::FRAGMENT_SHADER),
+            makeRange(3, nri::DescriptorType::TEXTURE, nri::StageBits::FRAGMENT_SHADER),
             makeRange(0, nri::DescriptorType::SAMPLER, nri::StageBits::FRAGMENT_SHADER),
         };
 
         nri::DescriptorSetDesc applyDescSet = {};
         applyDescSet.registerSpace = 1;
         applyDescSet.ranges = applyRanges;
-        applyDescSet.rangeNum = 4;
+        applyDescSet.rangeNum = std::size(applyRanges);
 
         nri::PipelineLayoutDesc applyLayoutDesc = {};
         applyLayoutDesc.rootRegisterSpace = 0;
@@ -2874,26 +2868,21 @@ namespace Axle {
         fogPoolDesc.MaxSamplers = 16;
         fogPoolDesc.MaxStorageTextures = 16;
         fogPoolDesc.MaxConstantBuffers = 16;
-        if (!m_FogDescriptorPool.Init(fogPoolDesc)) {
-            m_FogInjectStorageSet = nullptr;
-            m_FogIntegrateTextureSet = nullptr;
-            m_FogIntegrateStorageSet = nullptr;
-            m_FogApplyDescriptorSet = nullptr;
-            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize Fog Descriptor Pool!");
+        RHIDescriptorPool candidate;
+        if (!candidate.Init(fogPoolDesc)) return false;
+        auto* inject = candidate.AllocateDescriptorSet(m_FogInjectPipelineLayout, 0);
+        auto* integrateInput = candidate.AllocateDescriptorSet(m_FogIntegratePipelineLayout, 0);
+        auto* integrateOutput = candidate.AllocateDescriptorSet(m_FogIntegratePipelineLayout, 1);
+        auto* apply = candidate.AllocateDescriptorSet(m_FogApplyPipelineLayout, 0);
+        if (!inject || !integrateInput || !integrateOutput || !apply ||
+            !candidate.UpdateSampler(apply, 4, 0, m_FogSampler.GetNative())) {
             return false;
         }
-
-        m_FogInjectStorageSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogInjectPipelineLayout, 0);
-        m_FogIntegrateTextureSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogIntegratePipelineLayout, 0);
-        m_FogIntegrateStorageSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogIntegratePipelineLayout, 1);
-        m_FogApplyDescriptorSet = m_FogDescriptorPool.AllocateDescriptorSet(m_FogApplyPipelineLayout, 0);
-        if (!m_FogInjectStorageSet || !m_FogIntegrateTextureSet || !m_FogIntegrateStorageSet || !m_FogApplyDescriptorSet) {
-            return false;
-        }
-        if (m_FogSampler.IsValid() &&
-            !m_FogDescriptorPool.UpdateSampler(m_FogApplyDescriptorSet, 3, 0, m_FogSampler.GetNative())) {
-            return false;
-        }
+        m_FogDescriptorPool = std::move(candidate);
+        m_FogInjectStorageSet = inject;
+        m_FogIntegrateTextureSet = integrateInput;
+        m_FogIntegrateStorageSet = integrateOutput;
+        m_FogApplyDescriptorSet = apply;
         return true;
     }
 
@@ -6255,9 +6244,16 @@ namespace Axle {
         if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
         const auto backendPolicy = RenderBackendPolicy::FromDevice(m_Device->GetCapabilities());
         SceneRenderSettings settings = backendPolicy.ResolveSettings(requestedSettings);
-        if ((settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1 && !settings.EnableToneMapping) {
-            // Reflection replacement is radiance arithmetic. Preserve the legacy
-            // ACES/gamma output with one final conversion after linear resolve.
+        const bool isSubCapture = m_CaptureSession.Active || m_PlanarSession.Active;
+        const auto* fog = world.VolumetricFog ? &*world.VolumetricFog : nullptr;
+        bool enableFroxelTargets = false;
+        uint8_t froxelQuality = RHIViewTargets::DefaultFroxelQualityTier;
+        FroxelFogContract::ResolveViewTargetOptions(
+            settings, isSubCapture, depthTarget != nullptr, enableFroxelTargets, froxelQuality, fog);
+        const bool linearFog = enableFroxelTargets && FroxelFogContract::RequiresLinearColor(settings, fog);
+        const bool linearReflections = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
+        if ((linearReflections || linearFog) && !settings.EnableToneMapping) {
+            // Compose scene radiance before the legacy ACES/gamma conversion.
             settings.EnableToneMapping = true;
             settings.ToneMappingMode = 0;
             settings.Exposure = 1.0f;
@@ -6265,7 +6261,6 @@ namespace Axle {
         }
         m_MaterialDiagnostics.clear(); m_MaterialFeedback.clear();
 
-        const bool isSubCapture = m_CaptureSession.Active || m_PlanarSession.Active;
         bool useMSAA = (settings.MSAASamples > 1);
         uint8_t activeSampleCount = useMSAA ? settings.MSAASamples : 1;
         bool useToneMap = settings.EnableToneMapping;
@@ -6285,7 +6280,7 @@ namespace Axle {
         targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows ||
             settings.EnableSSR || settings.EnablePlanarReflections);
         targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows ||
-            settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
+            settings.EnableSSR || settings.EnableBloom || settings.EnableAutoExposure);
         targetDesc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
         targetDesc.EnableReflectionTerms = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
         const bool enablePlanarTargets = settings.EnablePlanarReflections && !isSubCapture;
@@ -6299,8 +6294,8 @@ namespace Axle {
         targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
         targetDesc.EnableAutoExposure = settings.EnableAutoExposure;
         targetDesc.EnableDDGI = settings.EnableDDGI;
-        FroxelFogContract::ResolveViewTargetOptions(
-            settings, isSubCapture, targetDesc.EnableDepth, targetDesc.EnableVolumetricFog, targetDesc.FroxelQuality);
+        targetDesc.EnableVolumetricFog = enableFroxelTargets;
+        targetDesc.FroxelQuality = froxelQuality;
         if (settings.EnableTAA) targetDesc.HistoryCount = 2;
 
         if (!world.ErrorMessage.empty()) {

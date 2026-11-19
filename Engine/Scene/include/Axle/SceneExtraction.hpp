@@ -13,6 +13,7 @@ namespace Axle {
     };
 
     bool ResolveRenderWorldResources(RenderWorld& world);
+    std::optional<RenderVolumetricFog> ExtractVolumetricFog(const Scene& scene);
 
     // Extracts an immutable RenderWorld snapshot from a Scene.
     // Captures owned material/pose/particle values on the scene owner thread.

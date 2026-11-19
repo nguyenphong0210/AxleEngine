@@ -167,21 +167,18 @@ namespace Axle {
 
     // 256-byte CBV aligned constants for 3D Froxel Volumetric Fog pass
     struct alignas(256) RHIVolumetricFogConstants {
-        glm::mat4 View{ 1.0f };                                                    // 64 bytes
-        glm::mat4 InvView{ 1.0f };                                                 // 64 bytes
-        glm::mat4 Projection{ 1.0f };                                              // 64 bytes
-        glm::mat4 InvProjection{ 1.0f };                                           // 64 bytes
-        glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f };  // 16 bytes
-        glm::vec4 SunDirectionIntensity{ 0.0f, 1.0f, 0.0f, 0.0f };                 // 16 bytes (xyz: dir toward sun, w: active 0|1)
-        glm::vec4 SunRadiance{ 0.0f, 0.0f, 0.0f, 0.0f };                           // 16 bytes (rgb: linear radiance)
-        glm::vec4 FogParams{ 0.0f, 0.0f, 0.7f, 100.0f };                           // 16 bytes (density, falloff, g, farZ)
-        glm::vec4 FogColorIntensity{ 0.8f, 0.85f, 0.9f, 1.0f };                    // 16 bytes (albedo rgb, intensity w)
-        glm::vec4 FroxelGridParams{ 160.0f, 90.0f, 64.0f, 0.25f };                 // 16 bytes (gridW, gridH, gridD, nearZ)
-        glm::vec4 AmbientRadiance{ 0.0f, 0.0f, 0.0f, 0.0f };                       // 16 bytes (rgb: ambient radiance, w: temporalBlendAlpha)
-        glm::vec4 FroxelDepthParams{ 5.9914645f, 0.25f, 100.0f, 0.0f };            // 16 bytes (log(far/near), nearZ, farZ, reserved)
-        glm::vec4 Reserved[8]{};                                                   // 128 bytes -> 512 bytes total
+        glm::mat4 InvView{1.0f};
+        glm::mat4 InvProjection{1.0f};
+        glm::vec4 ScreenSize{};              // Width, height, reciprocal width and height
+        glm::vec4 SunDirectionIntensity{};   // Direction toward light and enabled flag
+        glm::vec4 SunRadiance{};
+        glm::vec4 FogParams{};               // Effective density, height falloff, anisotropy
+        glm::vec4 FogAlbedo{};
+        glm::vec4 FroxelGridParams{};        // Grid extent and orthographic flag
+        glm::vec4 AmbientRadiance{};
+        glm::vec4 FroxelDepthParams{};       // Log depth ratio, near and far
     };
-    static_assert(sizeof(RHIVolumetricFogConstants) == 512, "RHIVolumetricFogConstants must be 512 bytes aligned!");
+    static_assert(sizeof(RHIVolumetricFogConstants) == 256);
 
     // 256-byte CBV aligned constants for FXAA 3.11 post-processing pass
     struct alignas(256) RHIFXAAConstants {
@@ -1066,7 +1063,6 @@ namespace Axle {
         RHI::RHIPipelineLayout m_FogApplyPipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_FogApplyPipelineSDR;
         RHI::RHIResourceRef<nri::Pipeline> m_FogApplyPipelineHDR;
-        RHI::RHIBuffer m_FogConstantBuffer;
         RHI::RHIShaderBytecode m_FogInjectShader;
         RHI::RHIShaderBytecode m_FogIntegrateShader;
         RHI::RHIShaderBytecode m_FogApplyVertexShader;

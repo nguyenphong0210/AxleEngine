@@ -23,6 +23,7 @@ namespace Axle::Passes {
             {r.Input, Layout::ShaderResource},
             {r.Depth, Layout::ShaderResource},
             {r.FroxelIntegrated, Layout::ShaderResource},
+            {r.FroxelScattering, Layout::ShaderResource},
             {r.SceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
     }
 
@@ -49,27 +50,19 @@ namespace Axle::Passes {
             return false;
         }
 
-        const auto media = FroxelFogContract::ResolveMediaState(i.World, i.Settings, i.Lighting);
-        if (!media.Valid) {
-            return false;
-        }
-        if (!renderer.EnsureFogDescriptorSets()) {
-            return false;
-        }
+        const auto& media = i.Media;
 
         RHIVolumetricFogConstants constants{};
-        constants.View = i.Camera.GetViewMatrix();
-        constants.InvView = glm::inverse(constants.View);
-        constants.Projection = i.ProjectionZO;
+        constants.InvView = glm::inverse(i.Camera.GetViewMatrix());
         constants.InvProjection = glm::inverse(i.ProjectionZO);
         constants.ScreenSize = glm::vec4(static_cast<float>(i.Width), static_cast<float>(i.Height),
             1.0f / static_cast<float>(i.Width), 1.0f / static_cast<float>(i.Height));
         constants.SunDirectionIntensity = glm::vec4(media.SunDirectionToLight, media.HasDirectionalSun ? 1.0f : 0.0f);
         constants.SunRadiance = glm::vec4(media.SunRadiance, 0.0f);
-        constants.FogParams = glm::vec4(media.Density, media.HeightFalloff, media.ScatteringAsymmetry, media.MaxDistance);
-        constants.FogColorIntensity = glm::vec4(media.Albedo, media.Intensity);
+        constants.FogParams = glm::vec4(media.EffectiveBaseDensity, media.HeightFalloff, media.ScatteringAsymmetry, 0.0f);
+        constants.FogAlbedo = glm::vec4(media.Albedo, 0.0f);
         constants.FroxelGridParams = glm::vec4(static_cast<float>(gridW), static_cast<float>(gridH),
-            static_cast<float>(gridD), media.NearDistance);
+            static_cast<float>(gridD), i.Camera.IsOrthographic() ? 1.0f : 0.0f);
         constants.AmbientRadiance = glm::vec4(media.AmbientRadiance, 0.0f);
         const float logRatio = std::log(media.MaxDistance / media.NearDistance);
         constants.FroxelDepthParams = glm::vec4(logRatio, media.NearDistance, media.MaxDistance, 0.0f);
@@ -112,7 +105,7 @@ namespace Axle::Passes {
             !pool.UpdateTexture(renderer.m_FogApplyDescriptorSet, 0, 0, color->GetSRV()) ||
             !pool.UpdateTexture(renderer.m_FogApplyDescriptorSet, 1, 0, depth->GetSRV()) ||
             !pool.UpdateTexture(renderer.m_FogApplyDescriptorSet, 2, 0, integrated->GetSRV()) ||
-            !pool.UpdateSampler(renderer.m_FogApplyDescriptorSet, 3, 0, renderer.m_FogSampler.GetNative())) {
+            !pool.UpdateTexture(renderer.m_FogApplyDescriptorSet, 3, 0, scattering->GetSRV())) {
             return false;
         }
         nri::Pipeline* applyPipeline = renderer.m_FogApplyPipelineHDR;

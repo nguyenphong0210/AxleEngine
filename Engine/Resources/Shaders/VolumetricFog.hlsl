@@ -9,26 +9,27 @@
 #endif
 
 cbuffer VolumetricFogConstants : register(b0, space0) {
-    float4x4 u_View;
     float4x4 u_InvView;
-    float4x4 u_Projection;
     float4x4 u_InvProjection;
     float4   u_ScreenSize;              // (viewW, viewH, 1/viewW, 1/viewH)
     float4   u_SunDirectionIntensity;   // (xyz: unit dir toward sun, w: sun present 0 or 1)
     float4   u_SunRadiance;             // (rgb: scene-linear sun radiance, w: 0)
-    float4   u_FogParams;               // (x: density [1/m], y: height falloff [1/m], z: g, w: farZ)
-    float4   u_FogColorIntensity;       // (rgb: single-scatter albedo, w: intensity multiplier)
-    float4   u_FroxelGridParams;        // (x: gridW, y: gridH, z: gridD, w: nearZ)
-    float4   u_AmbientRadiance;         // (rgb: authored scene ambient radiance, w: temporalBlendAlpha)
+    float4   u_FogParams;               // (x: effective extinction [1/m], y: height falloff [1/m], z: g)
+    float4   u_FogAlbedo;               // (rgb: single-scattering albedo)
+    float4   u_FroxelGridParams;        // (x: gridW, y: gridH, z: gridD, w: orthographic flag)
+    float4   u_AmbientRadiance;         // (rgb: authored scene ambient radiance)
     float4   u_FroxelDepthParams;       // (x: log(farZ / nearZ), y: nearZ, z: farZ, w: reserved)
-    float4   u_Reserved[8];             // Total 512 bytes aligned
 };
 
 Texture2D<float4>   u_SceneColor    : register(t0, space1);
 Texture2D<float>    u_SceneDepth    : register(t1, space1);
 Texture3D<float4>   u_FroxelVolume  : register(t2, space1);
+Texture3D<float4>   u_FroxelMedia   : register(t3, space1);
 SamplerState        u_LinearSampler : register(s0, space1);
 
+#if defined(__spirv__)
+[[vk::image_format("rgba16f")]]
+#endif
 RWTexture3D<float4> u_FroxelOutput  : register(u0, space2);
 
 float3 ReconstructViewPos(float2 uv, float depth) {
@@ -37,9 +38,13 @@ float3 ReconstructViewPos(float2 uv, float depth) {
     return viewPos.xyz / max(abs(viewPos.w), 1e-6);
 }
 
-float3 ReconstructViewRayPerUnitZ(float2 uv) {
+void ReconstructWorldRay(float2 uv, out float3 originWS, out float3 directionPerUnitZ) {
     float3 viewPos = ReconstructViewPos(uv, 0.5);
-    return viewPos / max(-viewPos.z, 1e-6);
+    bool orthographic = u_FroxelGridParams.w > 0.5;
+    float3 originView = orthographic ? float3(viewPos.xy, 0.0) : float3(0.0, 0.0, 0.0);
+    float3 directionView = orthographic ? float3(0.0, 0.0, -1.0) : viewPos / max(-viewPos.z, 1e-6);
+    originWS = mul(u_InvView, float4(originView, 1.0)).xyz;
+    directionPerUnitZ = mul((float3x3)u_InvView, directionView);
 }
 
 // Henyey-Greenstein Mie phase function: normalized on S^2.
@@ -52,12 +57,29 @@ float HenyeyGreenstein(float cosTheta, float g) {
     return (1.0 - g2) / (4.0 * float(M_PI) * denom * sqrt(denom));
 }
 
-float SliceBoundaryDepth(float boundaryIdx, float sliceCount, float nearZ, float logRatio) {
-    return nearZ * exp(logRatio * (boundaryIdx / max(sliceCount, 1.0)));
+float SliceDepth(float slicePosition, float sliceCount) {
+    return u_FroxelDepthParams.y * exp(u_FroxelDepthParams.x * (slicePosition / sliceCount));
 }
 
-float SliceCenterDepth(uint sliceIdx, float sliceCount, float nearZ, float logRatio) {
-    return nearZ * exp(logRatio * ((float(sliceIdx) + 0.5) / max(sliceCount, 1.0)));
+float BeerLambertSeries(float opticalDepth) {
+    return 1.0 - 0.5 * opticalDepth + (1.0 / 6.0) * opticalDepth * opticalDepth;
+}
+
+float AbsorbedFraction(float opticalDepth) {
+    return opticalDepth > 1e-3
+        ? 1.0 - exp(-opticalDepth)
+        : opticalDepth * BeerLambertSeries(opticalDepth);
+}
+
+float4 IntegrateSegment(float4 media, float distanceMeters) {
+    float extinction = max(media.a, 0.0);
+    float opticalDepth = extinction * distanceMeters;
+    float transmittance = exp(-opticalDepth);
+    // Taylor expansion of (1 - exp(-t)) / t avoids cancellation at small t.
+    float weight = opticalDepth > 1e-3
+        ? (1.0 - transmittance) / extinction
+        : distanceMeters * BeerLambertSeries(opticalDepth);
+    return float4(max(media.rgb, 0.0) * weight, transmittance);
 }
 
 // =============================================================================
@@ -72,29 +94,23 @@ void CSInjectMedia(uint3 dtid : SV_DispatchThreadID) {
         max((uint)round(u_FroxelGridParams.z), 1u));
     if (dtid.x >= gridDims.x || dtid.y >= gridDims.y || dtid.z >= gridDims.z) return;
 
-    float baseDensity = max(u_FogParams.x, 0.0);
-    float fogIntensity = max(u_FogColorIntensity.w, 0.0);
-    float effectiveBaseDensity = baseDensity * fogIntensity;
+    float effectiveBaseDensity = u_FogParams.x;
     if (effectiveBaseDensity <= 0.0) {
         u_FroxelOutput[dtid] = float4(0.0, 0.0, 0.0, 0.0);
         return;
     }
 
-    float heightFalloff = max(u_FogParams.y, 0.0);
-    float g = clamp(u_FogParams.z, -0.95, 0.95);
-    float3 fogAlbedo = max(u_FogColorIntensity.rgb, float3(0.0, 0.0, 0.0));
-    float nearZ = max(u_FroxelDepthParams.y, 1e-4);
-    float logRatio = max(u_FroxelDepthParams.x, 1e-6);
+    float heightFalloff = u_FogParams.y;
+    float g = u_FogParams.z;
+    float3 fogAlbedo = u_FogAlbedo.rgb;
 
     float2 uv = (float2(dtid.xy) + 0.5) / float2(gridDims.xy);
-    float3 rayView = ReconstructViewRayPerUnitZ(uv);
-    float3 rayDirWorldPerUnitZ = mul((float3x3)u_InvView, rayView);
-    float rayLen = length(rayDirWorldPerUnitZ);
-    float3 unitRayWS = rayDirWorldPerUnitZ / max(rayLen, 1e-6);
-    float3 camPosWS = mul(u_InvView, float4(0.0, 0.0, 0.0, 1.0)).xyz;
+    float3 originWS, rayDirWorldPerUnitZ;
+    ReconstructWorldRay(uv, originWS, rayDirWorldPerUnitZ);
+    float3 unitRayWS = normalize(rayDirWorldPerUnitZ);
 
-    float zCenter = SliceCenterDepth(dtid.z, float(gridDims.z), nearZ, logRatio);
-    float3 sampleWS = camPosWS + rayDirWorldPerUnitZ * zCenter;
+    float zCenter = SliceDepth(float(dtid.z) + 0.5, float(gridDims.z));
+    float3 sampleWS = originWS + rayDirWorldPerUnitZ * zCenter;
     float heightAboveGround = max(sampleWS.y, 0.0);
     float localDensity = effectiveBaseDensity * exp(-heightAboveGround * heightFalloff);
 
@@ -106,9 +122,7 @@ void CSInjectMedia(uint3 dtid : SV_DispatchThreadID) {
     }
 
     float3 inScatterPerMeter = (fogAlbedo * localDensity) * incomingRadiance;
-    u_FroxelOutput[dtid] = float4(
-        min(inScatterPerMeter, float3(65000.0, 65000.0, 65000.0)),
-        min(localDensity, 65000.0));
+    u_FroxelOutput[dtid] = float4(min(inScatterPerMeter, 65504.0), localDensity);
 }
 
 // =============================================================================
@@ -124,12 +138,9 @@ void CSIntegrate(uint3 dtid : SV_DispatchThreadID) {
     if (dtid.x >= gridDims.x || dtid.y >= gridDims.y) return;
 
     float2 uv = (float2(dtid.xy) + 0.5) / float2(gridDims.xy);
-    float3 rayView = ReconstructViewRayPerUnitZ(uv);
-    float3 rayDirWorldPerUnitZ = mul((float3x3)u_InvView, rayView);
+    float3 originWS, rayDirWorldPerUnitZ;
+    ReconstructWorldRay(uv, originWS, rayDirWorldPerUnitZ);
     float rayLen = length(rayDirWorldPerUnitZ);
-
-    float nearZ = max(u_FroxelDepthParams.y, 1e-4);
-    float logRatio = max(u_FroxelDepthParams.x, 1e-6);
 
     float3 accumInScatter = float3(0.0, 0.0, 0.0);
     float accumTransmittance = 1.0;
@@ -137,31 +148,16 @@ void CSIntegrate(uint3 dtid : SV_DispatchThreadID) {
     [loop]
     for (uint iz = 0u; iz < gridDims.z; ++iz) {
         float4 media = u_FroxelVolume.Load(int4(int(dtid.x), int(dtid.y), int(iz), 0));
-        float3 inScatterPerMeter = max(media.rgb, float3(0.0, 0.0, 0.0));
-        float sigmaT = max(media.a, 0.0);
-
-        float z0 = SliceBoundaryDepth(float(iz), float(gridDims.z), nearZ, logRatio);
-        float z1 = SliceBoundaryDepth(float(iz + 1u), float(gridDims.z), nearZ, logRatio);
+        float z0 = SliceDepth(float(iz), float(gridDims.z));
+        float z1 = SliceDepth(float(iz + 1u), float(gridDims.z));
         float ds = max(z1 - z0, 0.0) * rayLen;
 
-        float stepTransmittance = 1.0;
-        float3 stepInScatter = float3(0.0, 0.0, 0.0);
-        if (sigmaT > 0.0 && ds > 0.0) {
-            float opticalDepth = sigmaT * ds;
-            stepTransmittance = exp(-opticalDepth);
-            float sliceIntegFactor = (opticalDepth > 1e-4)
-                ? ((1.0 - stepTransmittance) / sigmaT)
-                : (ds * (1.0 - 0.5 * opticalDepth + (1.0 / 6.0) * opticalDepth * opticalDepth));
-            stepInScatter = inScatterPerMeter * sliceIntegFactor;
-        } else if (ds > 0.0) {
-            stepInScatter = inScatterPerMeter * ds;
-        }
-
-        accumInScatter += accumTransmittance * stepInScatter;
-        accumTransmittance *= stepTransmittance;
+        float4 step = IntegrateSegment(media, ds);
+        accumInScatter += accumTransmittance * step.rgb;
+        accumTransmittance *= step.a;
 
         u_FroxelOutput[uint3(dtid.x, dtid.y, iz)] = float4(
-            min(accumInScatter, float3(65000.0, 65000.0, 65000.0)),
+            min(accumInScatter, 65504.0),
             clamp(accumTransmittance, 0.0, 1.0));
     }
 }
@@ -171,14 +167,12 @@ void CSIntegrate(uint3 dtid : SV_DispatchThreadID) {
 // =============================================================================
 struct VSOutput {
     float4 Position : SV_Position;
-    float2 TexCoord : TEXCOORD0;
 };
 
 VSOutput VSMain(uint vertexID : SV_VertexID) {
     VSOutput output;
     float2 uv = float2((vertexID << 1) & 2, vertexID & 2);
     output.Position = float4(uv * 2.0f - 1.0f, 0.0f, 1.0f);
-    output.TexCoord = float2(uv.x, 1.0f - uv.y);
     return output;
 }
 
@@ -187,38 +181,48 @@ float4 PSMain(VSOutput input) : SV_Target {
     int2 pixelCoord = clamp(int2(input.Position.xy), int2(0, 0), maxCoord);
     float4 sceneColor = u_SceneColor.Load(int3(pixelCoord, 0));
 
-    float effectiveDensity = max(u_FogParams.x, 0.0) * max(u_FogColorIntensity.w, 0.0);
-    if (effectiveDensity <= 0.0) {
+    if (u_FogParams.x <= 0.0) {
         return sceneColor;
     }
 
     float2 uv = (float2(pixelCoord) + 0.5) * u_ScreenSize.zw;
     float depth = u_SceneDepth.Load(int3(pixelCoord, 0));
-    float nearZ = max(u_FroxelDepthParams.y, 1e-4);
-    float farZ = max(u_FroxelDepthParams.z, nearZ * 1.001);
-    float logRatio = max(u_FroxelDepthParams.x, 1e-6);
-    float gridD = max(u_FroxelGridParams.z, 1.0);
+    float nearZ = u_FroxelDepthParams.y;
+    float farZ = u_FroxelDepthParams.z;
+    float logRatio = u_FroxelDepthParams.x;
+    float gridD = u_FroxelGridParams.z;
 
-    float pixelViewZ = (depth >= 0.999999) ? farZ : max(-ReconstructViewPos(uv, depth).z, 0.0);
+    float pixelViewZ = depth >= 1.0 ? farZ : -ReconstructViewPos(uv, depth).z;
     if (pixelViewZ <= nearZ) {
         return sceneColor;
     }
 
-    float clampedZ = clamp(pixelViewZ, nearZ, farZ);
-    float sliceRatio = saturate(log(clampedZ / nearZ) / logRatio);
-    float slicePos = sliceRatio * gridD;
-
     float4 fogSample;
-    if (slicePos < 1.0) {
-        float4 slice1 = u_FroxelVolume.SampleLevel(u_LinearSampler, float3(uv, 0.5 / gridD), 0.0);
-        fogSample = lerp(float4(0.0, 0.0, 0.0, 1.0), slice1, slicePos);
+    if (pixelViewZ >= farZ) {
+        fogSample = u_FroxelVolume.SampleLevel(u_LinearSampler, float3(uv, 1.0 - 0.5 / gridD), 0.0);
     } else {
-        float wCoord = clamp((slicePos - 0.5) / gridD, 0.5 / gridD, (gridD - 0.5) / gridD);
-        fogSample = u_FroxelVolume.SampleLevel(u_LinearSampler, float3(uv, wCoord), 0.0);
+        float slice = min(floor(saturate(log(pixelViewZ / nearZ) / logRatio) * gridD), gridD - 1.0);
+        fogSample = float4(0.0, 0.0, 0.0, 1.0);
+        if (slice > 0.0) {
+            fogSample = u_FroxelVolume.SampleLevel(u_LinearSampler, float3(uv, (slice - 0.5) / gridD), 0.0);
+        }
+        // Keep both XY-filtered endpoints continuous across slice boundaries.
+        // The Beer-Lambert weight evaluates the partial distance inside the slice.
+        float3 sampleUV = float3(uv, (slice + 0.5) / gridD);
+        float extinction = max(u_FroxelMedia.SampleLevel(u_LinearSampler, sampleUV, 0.0).a, 0.0);
+        float4 sliceEnd = u_FroxelVolume.SampleLevel(u_LinearSampler, sampleUV, 0.0);
+        float3 originWS, directionPerUnitZ;
+        ReconstructWorldRay(uv, originWS, directionPerUnitZ);
+        float z0 = SliceDepth(slice, gridD);
+        float span = SliceDepth(slice + 1.0, gridD) - z0;
+        float fraction = span > 0.0 ? saturate((pixelViewZ - z0) / span) : 0.0;
+        float tau = extinction * span * length(directionPerUnitZ);
+        float weight = tau > 0.0 ? AbsorbedFraction(tau * fraction) / AbsorbedFraction(tau) : fraction;
+        fogSample = lerp(fogSample, sliceEnd, saturate(weight));
     }
 
     float3 inScattering = max(fogSample.rgb, float3(0.0, 0.0, 0.0));
     float transmittance = saturate(fogSample.a);
-    float3 finalColor = sceneColor.rgb * transmittance + inScattering;
+    float3 finalColor = min(sceneColor.rgb * transmittance + inScattering, 65504.0);
     return float4(finalColor, sceneColor.a);
 }

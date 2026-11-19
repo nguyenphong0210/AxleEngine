@@ -15,6 +15,7 @@
 #include <Axle/AssetManager.hpp>
 #include <Axle/MaterialCache.hpp>
 #include <Axle/SceneRenderBridge.hpp>
+#include <Axle/SceneExtraction.hpp>
 #include <Axle/AssetCooker.hpp>
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/Project.hpp>
@@ -1533,7 +1534,8 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     request.Camera = activeCamera; request.Settings = renderSettings; request.PhysicsScene = m_PhysicsScene.get();
     request.Name = "Editor main view";
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
-        if (!m_RHIViewport->SetRenderOptions(renderSettings)) {
+        const auto fog = renderSettings.EnableVolumetricFog ? Axle::ExtractVolumetricFog(*m_Scene) : std::nullopt;
+        if (!m_RHIViewport->SetRenderOptions(renderSettings, fog ? &*fog : nullptr)) {
             ++m_FailedViewCount;
             AXLE_ERROR("Editor view failed: viewport target configuration failed");
             return;

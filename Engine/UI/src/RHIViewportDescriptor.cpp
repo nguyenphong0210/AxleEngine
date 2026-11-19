@@ -140,7 +140,7 @@ namespace Axle {
         return Recreate(desc);
     }
 
-    bool RHIViewportDescriptor::SetRenderOptions(const SceneRenderSettings& requestedSettings) {
+    bool RHIViewportDescriptor::SetRenderOptions(const SceneRenderSettings& requestedSettings, const RenderVolumetricFog* fog) {
         if (!m_OwnsColorTexture) return false;
         const auto settings = RenderBackendPolicy::FromDevice(RHI::RHIDevice::Get().GetCapabilities()).ResolveSettings(requestedSettings);
         auto desc = m_Desc;
@@ -152,7 +152,6 @@ namespace Axle {
                          RHI::RHIViewTargets::MinPlanarResolutionScale,
                          RHI::RHIViewTargets::MaxPlanarResolutionScale)
             : 0.5f;
-        desc.IntermediateHDR = settings.EnableToneMapping || desc.EnableReflectionTerms;
         desc.FXAA = settings.EnableFXAA;
         desc.HistoryCount = settings.EnableTAA ? 2 : 0;
         desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
@@ -161,10 +160,12 @@ namespace Axle {
         desc.EnableAutoExposure = settings.EnableAutoExposure;
         desc.EnableDDGI = settings.EnableDDGI;
         desc.EnableNormal = desc.EnableGTAO || settings.EnableSSR || settings.EnablePlanarReflections;
-        desc.EnableScreenStorage = desc.EnableGTAO || settings.EnableSSR || settings.EnableVolumetricFog ||
+        desc.EnableScreenStorage = desc.EnableGTAO || settings.EnableSSR ||
             settings.EnableBloom || settings.EnableAutoExposure;
         FroxelFogContract::ResolveViewTargetOptions(
-            settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality);
+            settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality, fog);
+        desc.IntermediateHDR = settings.EnableToneMapping || desc.EnableReflectionTerms ||
+            (desc.EnableVolumetricFog && FroxelFogContract::RequiresLinearColor(settings, fog));
         if (desc == m_Desc && IsValid()) return true;
         return Recreate(desc);
     }

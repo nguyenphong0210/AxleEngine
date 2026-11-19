@@ -663,8 +663,19 @@ static bool TargetSets(RHIType backend) {
                      !second.GetTargets()->GetFroxelScattering(),
             "Switching the viewport to MSAA releases single-sample froxel resources");
         RENDER_CHECK(second.SetRenderOptions(fogSettings) &&
-                     second.GetTargets()->GetFroxelScattering(),
+                     second.GetTargets()->GetFroxelScattering() && second.GetDesc().IntermediateHDR &&
+                     !second.GetDesc().EnableScreenStorage,
             "Restoring single-sample fog options reconstructs the viewport volumes");
+
+        RenderVolumetricFog authored;
+        authored.Enabled = true;
+        authored.MaxDistance = 50.0f;
+        authored.Density = 0.05f;
+        authored.Intensity = 0.0f;
+        fogSettings.FogMaxDistance = fogSettings.FogNearDistance;
+        RENDER_CHECK(second.SetRenderOptions(fogSettings, &authored) &&
+                     second.GetTargets()->GetFroxelScattering() && !second.GetDesc().IntermediateHDR,
+            "Viewport honors the component range and preserves the SDR path for zero intensity");
 
         fogSettings.EnableVolumetricFog = false;
         RENDER_CHECK(second.SetRenderOptions(fogSettings) &&

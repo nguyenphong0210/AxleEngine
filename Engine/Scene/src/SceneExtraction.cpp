@@ -13,6 +13,24 @@
 
 namespace Axle {
 
+    std::optional<RenderVolumetricFog> ExtractVolumetricFog(const Scene& scene) {
+        const auto view = scene.GetRegistry().view<VolumetricFogComponent>();
+        for (const auto entity : view) {
+            const auto& fog = view.get<VolumetricFogComponent>(entity);
+            if (!fog.Enabled) continue;
+            RenderVolumetricFog result;
+            result.Enabled = true;
+            result.Density = fog.Density;
+            result.HeightFalloff = fog.HeightFalloff;
+            result.ScatteringAsymmetry = fog.ScatteringAsymmetry;
+            result.Color = fog.Color;
+            result.MaxDistance = fog.MaxDistance;
+            result.Intensity = fog.Intensity;
+            return result;
+        }
+        return std::nullopt;
+    }
+
     static void ResolveParticleMaterial(RenderParticleData& batch) {
         batch.Config.Collision.WorldRaycast=nullptr;
         batch.Material=ParticleMaterialAdapter::Resolve(batch.Config,batch.Resources,[](const auto& path) {
@@ -291,21 +309,7 @@ namespace Axle {
         }
 
         // 4.3. Volumetric Fog extraction
-        auto fogView = registry.view<VolumetricFogComponent>();
-        for (auto entity : fogView) {
-            const auto& fog = fogView.get<VolumetricFogComponent>(entity);
-            if (!fog.Enabled) continue;
-            RenderVolumetricFog rvf;
-            rvf.Enabled = true;
-            rvf.Density = fog.Density;
-            rvf.HeightFalloff = fog.HeightFalloff;
-            rvf.ScatteringAsymmetry = fog.ScatteringAsymmetry;
-            rvf.Color = fog.Color;
-            rvf.MaxDistance = fog.MaxDistance;
-            rvf.Intensity = fog.Intensity;
-            world.VolumetricFog = rvf;
-            break;
-        }
+        world.VolumetricFog = ExtractVolumetricFog(scene);
 
         // 4.4. DDGI Probe Grid extraction
         auto ddgiView = registry.view<TransformComponent, DDGIProbeGridComponent>();

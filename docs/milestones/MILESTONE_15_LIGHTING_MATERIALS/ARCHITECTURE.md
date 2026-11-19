@@ -246,16 +246,17 @@ flowchart TD
     I0 --> I1["HiZ1 ... HiZ7"]
     I1 --> J["PlanarReflectionCapture -> PlanarReflectionResolve"]
     J --> K["SSRCompute -> SSRApply"]
-    K --> L["FogCopy -> FogCompute -> FogApply"]
+    K --> L["FogCopy -> FogInject -> FogIntegrate -> FogApply"]
     L --> M["Bloom copy/down/up/apply"]
     M --> N["AutoExposure"]
     N --> O["TAA resolve/copy"]
     O --> P["ToneMapping"]
     P --> Q["FXAA"]
     Q --> R["Export / presentation target"]
-    Z["RHIViewTargets: color, depth, normal, storage, HiZ, planar, history, AO, bloom, exposure, DDGI"] -. feeds .-> B
+    Z["RHIViewTargets: color, depth, normal, storage, HiZ, planar, history, AO, froxels, bloom, exposure, DDGI"] -. feeds .-> B
     Z -. feeds .-> G
     Z -. feeds .-> J
+    Z -. feeds .-> L
     Z -. feeds .-> O
 ```
 

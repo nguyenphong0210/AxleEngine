@@ -95,6 +95,26 @@ static bool Service(RHIType backend) {
                 fog.Settings.FogNearDistance = request.Settings.FogNearDistance;
                 RENDER_CHECK(service.RenderView(world, fog).Success && froxelAllocations == 2,
                     "A corrected depth range restores froxel allocation through RenderService");
+
+                const auto colorWithFog = service.GetDefaultMainColorTarget()->GetHandle();
+                auto fogEntity = scene.CreateEntity("Authored fog");
+                auto& component = fogEntity.AddComponent<VolumetricFogComponent>();
+                component.Density = 2.0f;
+                component.Intensity = 1.0f;
+                component.MaxDistance = 20.0f;
+                fog.Settings.FogMaxDistance = fog.Settings.FogNearDistance;
+                fog.Settings.FogDensity = 0.0f;
+                RENDER_CHECK(service.RenderView(scene, fog).Success && froxelAllocations == 2 &&
+                             service.GetDefaultMainColorTarget()->GetHandle() == colorWithFog,
+                    "A valid scene fog component supplies depth and density to the owned view");
+                const auto attenuated = ReadTexture(*service.GetDefaultMainColorTarget());
+                RENDER_CHECK(attenuated.size() == green.size() && attenuated[center + 1] + 20 < green[center + 1],
+                    "Authored density attenuates scene geometry through RenderService");
+
+                component.Intensity = 0.0f;
+                RENDER_CHECK(service.RenderView(scene, fog).Success && froxelAllocations == 3 &&
+                             ReadTexture(*service.GetDefaultMainColorTarget()) == green,
+                    "A zero-intensity component preserves the legacy SDR output byte for byte");
             }
             Scene empty;
             auto emptyRequest = request; emptyRequest.Settings.ClearColor = {0,0,1,1};

@@ -270,15 +270,14 @@ namespace Axle {
             }
             if (!color && request.Kind == RenderViewKind::Main) {
                 const auto settings = RenderBackendPolicy::FromDevice(device.GetCapabilities()).ResolveSettings(request.Settings);
+                const auto* fog = prepared.VolumetricFog ? &*prepared.VolumetricFog : nullptr;
                 RHI::RHIViewTargetDesc desc;
                 desc.Width = request.Width; desc.Height = request.Height;
                 desc.Samples = settings.MSAASamples;
-                desc.HDR = settings.EnableToneMapping ||
-                    ((settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1);
                 desc.FXAA = settings.EnableFXAA;
                 desc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows ||
                     settings.EnableSSR || settings.EnablePlanarReflections);
-                desc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
+                desc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableBloom || settings.EnableAutoExposure);
                 desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
                 desc.EnableBloom = settings.EnableBloom;
                 desc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
@@ -292,7 +291,9 @@ namespace Axle {
                 desc.EnableAutoExposure = settings.EnableAutoExposure;
                 desc.EnableDDGI = settings.EnableDDGI;
                 FroxelFogContract::ResolveViewTargetOptions(
-                    settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality);
+                    settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality, fog);
+                desc.HDR = settings.EnableToneMapping || desc.EnableReflectionTerms ||
+                    (desc.EnableVolumetricFog && FroxelFogContract::RequiresLinearColor(settings, fog));
                 if (settings.EnableTAA) desc.HistoryCount = 2;
                 if (!m_DefaultMainTargets || !m_DefaultMainTargets->IsValid() || m_DefaultMainTargets->GetDesc() != desc) {
                     auto candidate = std::make_shared<RHI::RHIViewTargets>();

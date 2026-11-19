@@ -3124,14 +3124,6 @@ namespace Axle {
             return true;
         }
 
-        void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture, bool hasDepth,
-                                      bool& outEnable, uint8_t& outQuality) {
-            float nearZ = 0.0f, farZ = 0.0f;
-            outEnable = settings.EnableVolumetricFog && !isSubCapture && hasDepth && settings.MSAASamples == 1u &&
-                ResolveDepthRange(settings.FogNearDistance, settings.FogMaxDistance, nearZ, farZ);
-            outQuality = outEnable ? ResolveQualityTier(settings.FogQuality) : RHI::RHIViewTargets::DefaultFroxelQualityTier;
-        }
-
         namespace {
             float SanitizeNonNegative(float value) {
                 return (std::isfinite(value) && value > 0.0f) ? value : 0.0f;
@@ -3139,6 +3131,23 @@ namespace Axle {
 
             glm::vec3 SanitizeNonNegativeVec3(const glm::vec3& value) {
                 return { SanitizeNonNegative(value.x), SanitizeNonNegative(value.y), SanitizeNonNegative(value.z) };
+            }
+
+            float EffectiveDensity(float density, float intensity) {
+                constexpr double maxHalf = 65504.0;
+                return static_cast<float>(std::min(maxHalf,
+                    static_cast<double>(SanitizeNonNegative(density)) * SanitizeNonNegative(intensity)));
+            }
+
+            bool ResolveMediaDepthRange(const SceneRenderSettings& settings, const RenderVolumetricFog* authored,
+                                        float& nearZ, float& farZ, bool& usedFallback) {
+                usedFallback = false;
+                if (authored && authored->Enabled) {
+                    if (ResolveDepthRange(settings.FogNearDistance, authored->MaxDistance, nearZ, farZ))
+                        return true;
+                    usedFallback = true;
+                }
+                return ResolveDepthRange(settings.FogNearDistance, settings.FogMaxDistance, nearZ, farZ);
             }
 
             void AppendDiagnostic(std::string& dst, std::string_view msg) {
@@ -3161,6 +3170,21 @@ namespace Axle {
             }
         }
 
+        void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture, bool hasDepth,
+                                      bool& outEnable, uint8_t& outQuality, const RenderVolumetricFog* authored) {
+            float nearZ = 0.0f, farZ = 0.0f;
+            bool usedFallback = false;
+            outEnable = settings.EnableVolumetricFog && !isSubCapture && hasDepth && settings.MSAASamples == 1u &&
+                ResolveMediaDepthRange(settings, authored, nearZ, farZ, usedFallback);
+            outQuality = outEnable ? ResolveQualityTier(settings.FogQuality) : RHI::RHIViewTargets::DefaultFroxelQualityTier;
+        }
+
+        bool RequiresLinearColor(const SceneRenderSettings& settings, const RenderVolumetricFog* authored) {
+            return authored && authored->Enabled
+                ? EffectiveDensity(authored->Density, authored->Intensity) > 0.0f
+                : EffectiveDensity(settings.FogDensity, 1.0f) > 0.0f;
+        }
+
         FroxelMediaState ResolveMediaState(const RenderWorld& world,
                                            const SceneRenderSettings& settings,
                                            const LightingFrame& lightingFrame) {
@@ -3173,30 +3197,25 @@ namespace Axle {
             const float rawAsymmetry = useWorld ? world.VolumetricFog->ScatteringAsymmetry : settings.FogScattering;
             const glm::vec3 rawColor = useWorld ? world.VolumetricFog->Color : settings.FogColor;
             const float rawIntensity = useWorld ? world.VolumetricFog->Intensity : 1.0f;
-            const float rawMaxDistance = useWorld ? world.VolumetricFog->MaxDistance : settings.FogMaxDistance;
-
             state.Density = SanitizeNonNegative(rawDensity);
             state.HeightFalloff = SanitizeNonNegative(rawFalloff);
             state.ScatteringAsymmetry = std::isfinite(rawAsymmetry)
                 ? std::clamp(rawAsymmetry, -MaxAsymmetry, MaxAsymmetry) : 0.0f;
-            state.Albedo = SanitizeNonNegativeVec3(rawColor);
+            state.Albedo = glm::min(SanitizeNonNegativeVec3(rawColor), glm::vec3(1.0f));
             state.Intensity = SanitizeNonNegative(rawIntensity);
-            state.EffectiveBaseDensity = state.Density * state.Intensity;
+            state.EffectiveBaseDensity = EffectiveDensity(state.Density, state.Intensity);
 
-            float nearZ = 0.0f, farZ = 0.0f;
-            if (!ResolveDepthRange(settings.FogNearDistance, rawMaxDistance, nearZ, farZ)) {
-                if (useWorld && ResolveDepthRange(settings.FogNearDistance, settings.FogMaxDistance, nearZ, farZ)) {
-                    state.AuthoredMaxDistanceInvalidFallback = true;
-                    AppendDiagnostic(state.Diagnostic, "froxel_fog_depth_fallback: invalid authored VolumetricFog MaxDistance");
-                } else {
-                    state.Valid = false;
-                    AppendDiagnostic(state.Diagnostic, "froxel_fog_disabled:invalid_depth_range");
-                    return state;
-                }
+            bool usedFallback = false;
+            if (!ResolveMediaDepthRange(settings, useWorld ? &*world.VolumetricFog : nullptr,
+                                        state.NearDistance, state.MaxDistance, usedFallback)) {
+                state.Diagnostic = "froxel_fog_disabled:invalid_depth_range";
+                return state;
+            }
+            if (usedFallback) {
+                state.AuthoredMaxDistanceInvalidFallback = true;
+                AppendDiagnostic(state.Diagnostic, "froxel_fog_depth_fallback: invalid authored VolumetricFog MaxDistance");
             }
             state.Valid = true;
-            state.NearDistance = nearZ;
-            state.MaxDistance = farZ;
 
             const bool authoredSun = (lightingFrame.DirectionalCount > 0u) && world.DirectionalLight.has_value();
             if (authoredSun && std::isfinite(lightingFrame.Sun.Illuminance) && lightingFrame.Sun.Illuminance > 0.0f) {
@@ -3293,43 +3312,21 @@ namespace Axle {
                 : 0.0f;
 
             const float clampedZ = std::min(targetViewZ, state.MaxDistance);
-            const float ratio = ViewDistanceToSliceCoord(clampedZ, sliceCount, state.NearDistance, state.MaxDistance);
-            const float slicePos = ratio * static_cast<float>(sliceCount);
-            const uint32_t lowIdx = slicePos < 1.0f
-                ? 0u
-                : std::min<uint32_t>(static_cast<uint32_t>(std::floor(slicePos)) - 1u, sliceCount - 1u);
-            const uint32_t highIdx = std::min(lowIdx + 1u, sliceCount - 1u);
-
-            FroxelSampleIntegral lowState, highState;
-            glm::vec3 accumScatter(0.0f);
-            float accumTrans = 1.0f;
-            for (uint32_t iz = 0u; iz <= highIdx; ++iz) {
+            for (uint32_t iz = 0u; iz < sliceCount; ++iz) {
                 const float z0 = SliceBoundaryToViewDistance(iz, sliceCount, state.NearDistance, state.MaxDistance);
+                if (z0 >= clampedZ) break;
                 const float zCenter = SliceCenterToViewDistance(iz, sliceCount, state.NearDistance, state.MaxDistance);
                 const float z1 = SliceBoundaryToViewDistance(iz + 1u, sliceCount, state.NearDistance, state.MaxDistance);
-                const float ds = (z1 - z0) * rayLenPerUnitZ;
+                const float ds = (std::min(z1, clampedZ) - z0) * rayLenPerUnitZ;
                 const glm::vec3 sampleWS = rayOriginWS + rayDirWorldPerUnitZ * zCenter;
                 const float height = std::max(sampleWS.y, 0.0f);
                 const float sigmaT = state.EffectiveBaseDensity * std::exp(-height * state.HeightFalloff);
                 const glm::vec3 scatterPerM = ComputeStepInScatterPerMeter(state, sampleWS.y, phaseSun);
                 const auto step = EvaluateHomogeneousFogStep(scatterPerM, sigmaT, ds);
-                accumScatter += accumTrans * step.InScattering;
-                accumTrans *= step.Transmittance;
-                if (iz == lowIdx) {
-                    lowState = { accumScatter, accumTrans };
-                }
-                if (iz == highIdx) {
-                    highState = { accumScatter, accumTrans };
-                }
+                out.InScattering += out.Transmittance * step.InScattering;
+                out.Transmittance *= step.Transmittance;
             }
-            if (slicePos < 1.0f) {
-                return { lowState.InScattering * slicePos, glm::mix(1.0f, lowState.Transmittance, slicePos) };
-            }
-            const float frac = std::clamp(slicePos - static_cast<float>(lowIdx + 1u), 0.0f, 1.0f);
-            return {
-                glm::mix(lowState.InScattering, highState.InScattering, frac),
-                glm::mix(lowState.Transmittance, highState.Transmittance, frac)
-            };
+            return out;
         }
 
         FroxelSampleIntegral EvaluateReferenceRayQuadrature(const FroxelMediaState& state,
@@ -3351,18 +3348,17 @@ namespace Axle {
             const double zStart = static_cast<double>(state.NearDistance);
             const double zEnd = static_cast<double>(std::min(targetViewZ, state.MaxDistance));
             const double dz = (zEnd - zStart) / static_cast<double>(quadratureSteps);
-            const float ds = static_cast<float>(dz * static_cast<double>(rayLenPerUnitZ));
+            const double ds = dz * rayLenPerUnitZ;
+            const glm::dvec3 source = glm::dvec3(state.Albedo) *
+                (glm::dvec3(state.SunRadiance) * static_cast<double>(phaseSun) + glm::dvec3(state.AmbientRadiance));
             double accumT = 1.0;
             glm::dvec3 accumS(0.0);
             for (uint32_t i = 0u; i < quadratureSteps; ++i) {
-                const float zMid = static_cast<float>(zStart + (static_cast<double>(i) + 0.5) * dz);
-                const glm::vec3 sampleWS = rayOriginWS + rayDirWorldPerUnitZ * zMid;
-                const float height = std::max(sampleWS.y, 0.0f);
-                const float sigmaT = state.EffectiveBaseDensity * std::exp(-height * state.HeightFalloff);
-                const glm::vec3 scatterPerM = ComputeStepInScatterPerMeter(state, sampleWS.y, phaseSun);
-                const auto step = EvaluateHomogeneousFogStep(scatterPerM, sigmaT, ds);
-                accumS += accumT * glm::dvec3(step.InScattering);
-                accumT *= static_cast<double>(step.Transmittance);
+                const double zMid = zStart + (static_cast<double>(i) + 0.5) * dz;
+                const double height = std::max(rayOriginWS.y + rayDirWorldPerUnitZ.y * zMid, 0.0);
+                const double tau = state.EffectiveBaseDensity * std::exp(-height * state.HeightFalloff) * ds;
+                accumS += accumT * (-std::expm1(-tau)) * source;
+                accumT *= std::exp(-tau);
             }
             accum.InScattering = glm::vec3(accumS);
             accum.Transmittance = static_cast<float>(accumT);

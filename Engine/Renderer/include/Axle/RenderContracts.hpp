@@ -776,9 +776,9 @@ namespace Axle {
             float Density = 0.0f;                 // Extinction sigma_t base at y <= 0 (1/m), unclamped at 0
             float HeightFalloff = 0.0f;           // Exponential height decay rate (1/m), unclamped at 0
             float ScatteringAsymmetry = 0.0f;     // Henyey-Greenstein g clamped to [-MaxAsymmetry, MaxAsymmetry]
-            glm::vec3 Albedo{ 0.0f };             // Single-scattering albedo tint >= 0
+            glm::vec3 Albedo{ 0.0f };             // Single-scattering albedo in [0, 1]
             float Intensity = 0.0f;               // Medium density/scattering intensity multiplier >= 0
-            float EffectiveBaseDensity = 0.0f;    // Density * Intensity (0 when either is 0)
+            float EffectiveBaseDensity = 0.0f;    // Density * Intensity in the volume's representable range
             float NearDistance = DefaultNearDistance;
             float MaxDistance = DefaultMaxDistance;
             bool HasDirectionalSun = false;       // True iff world authored an active positive-illuminance sun
@@ -826,7 +826,8 @@ namespace Axle {
         bool ValidateResourcePolicy(const RHI::RHIViewTargetDesc& desc, const FroxelFogResourcePolicy& policy, std::string* outReason = nullptr);
         // Use backend-resolved settings so every owner builds the same target generation.
         void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture, bool hasDepth,
-                                      bool& outEnable, uint8_t& outQuality);
+                                      bool& outEnable, uint8_t& outQuality, const RenderVolumetricFog* authored = nullptr);
+        bool RequiresLinearColor(const SceneRenderSettings& settings, const RenderVolumetricFog* authored);
 
         // U6-B physical medium, lighting & analytic/quadrature reference evaluators.
         FroxelMediaState ResolveMediaState(const RenderWorld& world,

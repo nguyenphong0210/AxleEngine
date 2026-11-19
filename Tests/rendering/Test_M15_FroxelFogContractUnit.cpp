@@ -484,7 +484,7 @@ bool RunM15FroxelFogContractUnitTests() {
                      fogShaderSrc.find("0.001f") == std::string::npos &&
                      fogPassSrc.find("FogInject") != std::string::npos &&
                      fogPassSrc.find("FogIntegrate") != std::string::npos &&
-                     fogPassSrc.find("ResolveMediaState") != std::string::npos &&
+                     fogPassSrc.find("i.Media") != std::string::npos &&
                      fogPassSrc.find("0.45f, 0.85f, 0.25f") == std::string::npos &&
                      fogPassSrc.find("-glm::normalize") == std::string::npos,
             "M15-U6-02.1 / 05.3 / 06: VolumetricFog.hlsl and FroxelFogPass.cpp match 3D froxel architecture without clamps or invented sun");

@@ -265,17 +265,18 @@ namespace Axle {
             froxelIntegratedTex && froxelIntegratedTex->IsValid() &&
             froxelIntegratedTex->GetUAV() != nullptr && froxelIntegratedTex->GetSRV() != nullptr;
         const bool fogPipelinesReady = m_FogInjectPipeline != nullptr && m_FogIntegratePipeline != nullptr &&
-            m_FogApplyPipelineLayout.IsValid() && m_FogApplyPipelineSDR != nullptr && m_FogApplyPipelineHDR != nullptr;
+            m_FogApplyPipelineLayout.IsValid() && m_FogApplyPipelineSDR != nullptr && m_FogApplyPipelineHDR != nullptr &&
+            m_FogSampler.IsValid();
         const bool useFog = settings.EnableVolumetricFog && froxelMedia.Valid && activeSampleCount == 1 &&
             sceneDepthTexture && sceneDepthDSV &&
             m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
             m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
-            froxelTargetsReady && fogPipelinesReady;
+            froxelTargetsReady && fogPipelinesReady && EnsureFogDescriptorSets();
         if (settings.EnableVolumetricFog) {
             if (!froxelMedia.Valid && !froxelMedia.Diagnostic.empty()) {
                 viewCtx.Diagnostics().AddFallback(froxelMedia.Diagnostic);
             } else if (!useFog && !captureActive && !planarActive) {
-                viewCtx.Diagnostics().AddFallback("froxel_fog_unavailable:missing_froxel_targets_or_pipelines");
+                viewCtx.Diagnostics().AddFallback("froxel_fog_unavailable:targets_or_gpu_resources");
             } else if (useFog && !froxelMedia.Diagnostic.empty()) {
                 viewCtx.Diagnostics().AddFallback(froxelMedia.Diagnostic);
             }
@@ -1567,7 +1568,7 @@ namespace Axle {
                         return bindDescriptorSet(index, set, bindPoint);
                     }, beginRendering, endRendering};
                 if (!Passes::FroxelFogPass::Record(*this,
-                    {world, camera, settings, lightingFrame, projZO, viewTargets.get(), sceneTargetTexture,
+                    {froxelMedia, camera, projZO, viewTargets.get(), sceneTargetTexture,
                      sceneDepthTexture, sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
                     return fail();
             }

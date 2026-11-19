@@ -114,6 +114,7 @@ namespace Axle {
             resolved.EnableToneMapping = false;
             resolved.EnableBloom = false;
             resolved.EnableAutoExposure = false;
+            resolved.EnableVolumetricFog = false;
         }
         if (!Supports(BackendFeature::FXAA)) resolved.EnableFXAA = false;
         if (!Supports(BackendFeature::Compute) || !Supports(BackendFeature::StorageTextures)) {
@@ -148,7 +149,9 @@ namespace Axle {
         if (authored.EnablePlanarReflections && !resolved.EnablePlanarReflections) reasons.push_back("planar_reflections_disabled:compatibility_backend");
         if (authored.HiZVisualizationLevel >= 0 && resolved.HiZVisualizationLevel < 0)
             reasons.push_back("hiz_visualization_disabled:compute_or_storage_unavailable");
-        if (authored.EnableVolumetricFog && !resolved.EnableVolumetricFog) reasons.push_back("volumetric_fog_disabled:compute_or_storage_unavailable");
+        if (authored.EnableVolumetricFog && !resolved.EnableVolumetricFog)
+            reasons.push_back(Supports(BackendFeature::HDRFormats) ? "volumetric_fog_disabled:compute_or_storage_unavailable" :
+                "volumetric_fog_disabled:linear_hdr_unavailable");
         if (authored.EnableDDGI && !resolved.EnableDDGI) reasons.push_back("ddgi_disabled:compute_or_storage_unavailable");
         return reasons;
     }

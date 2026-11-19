@@ -6,10 +6,8 @@
 
 namespace Axle {
     class RHISceneRenderer;
-    class RenderWorld;
     class PerspectiveCamera;
-    struct LightingFrame;
-    struct SceneRenderSettings;
+    namespace FroxelFogContract { struct FroxelMediaState; }
 }
 
 namespace Axle::RHI {
@@ -22,10 +20,8 @@ namespace Axle::Passes {
     };
 
     struct FroxelFogRecordInputs {
-        const RenderWorld& World;
+        const FroxelFogContract::FroxelMediaState& Media;
         const PerspectiveCamera& Camera;
-        const SceneRenderSettings& Settings;
-        const LightingFrame& Lighting;
         const glm::mat4& ProjectionZO;
         RHI::RHIViewTargets* Targets;
         nri::Texture* SceneTarget;

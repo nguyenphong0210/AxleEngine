@@ -6,6 +6,7 @@
 #include <Axle/RenderGraph.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/RHI/RHIDescriptorPool.hpp>
+#include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/RHI/RHIShader.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
@@ -80,6 +81,9 @@ cbuffer FroxelProbeCB : register(b0, space0) {
     float4 u_SampleParams; // x=wCoord
 };
 
+#if defined(__spirv__)
+[[vk::image_format("rgba16f")]]
+#endif
 RWTexture3D<float4> u_Out3D : register(u0, space2);
 
 [numthreads(4, 4, 2)]
@@ -94,6 +98,9 @@ void CSWrite3D(uint3 dtid : SV_DispatchThreadID) {
 
 Texture3D<float4> u_In3D : register(t0, space1);
 SamplerState u_LinearSampler : register(s0, space1);
+#if defined(__spirv__)
+[[vk::image_format("rgba16f")]]
+#endif
 RWTexture2D<float4> u_Out2D : register(u0, space2);
 
 [numthreads(4, 4, 1)]
@@ -433,7 +440,7 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
             vtDesc.Width = viewW;
             vtDesc.Height = viewH;
             vtDesc.OwnPrimary = false;
-            vtDesc.EnableScreenStorage = true;
+            vtDesc.HDR = true;
             vtDesc.EnableVolumetricFog = true;
             vtDesc.FroxelQuality = tier;
 
@@ -454,8 +461,27 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                     "M15-U6-01.2: froxel target matches expected tier dimensions");
             }
 
+            if (tier == 0u) {
+                bool faultReached = false;
+                {
+                    ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+                        if (operation == "CreateDescriptorPool" && ScopedRHIOperation::Resource() == "FogDescriptorPool") {
+                            faultReached = true;
+                            return nri::Result::OUT_OF_MEMORY;
+                        }
+                        return {};
+                    });
+                    renderer.RenderWorldView(world, camera, &color, &depth, settings, nullptr, targets);
+                }
+                const auto& diag = renderer.GetDiagnostics().GetFrame();
+                RENDER_CHECK(faultReached && renderer.WasLastRenderSuccessful() &&
+                             HasFallbackPrefix(diag, "froxel_fog_unavailable") && !HasPassNamed(diag, "FogApply"),
+                    "An unavailable fog descriptor pool leaves the scene renderable and reports the fallback");
+            }
             renderer.RenderWorldView(world, camera, &color, &depth, settings, nullptr, targets);
-            RENDER_CHECK(renderer.WasLastRenderSuccessful(),
+            const auto& diag = renderer.GetDiagnostics().GetFrame();
+            RENDER_CHECK(renderer.WasLastRenderSuccessful() && HasPassNamed(diag, "FogApply") &&
+                         HasPassNamed(diag, "ToneMapping"),
                 "M15-U6-01.2: RHISceneRenderer renders cleanly with tier froxel view targets");
         }
 
@@ -505,7 +531,6 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
         vtDesc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
         vtDesc.HDR = true;
         vtDesc.OwnPrimary = false;
-        vtDesc.EnableScreenStorage = true;
         vtDesc.EnableVolumetricFog = true;
         vtDesc.FroxelQuality = static_cast<uint8_t>(FroxelFogQuality::High);
         auto targets = std::make_shared<RHIViewTargets>();
@@ -768,7 +793,7 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
             SceneRenderSettings phaseSettings = makeBaseSettings();
             phaseSettings.FogDensity = 0.001f;
             phaseSettings.FogScattering = 0.0f;
-            phaseSettings.FogMaxDistance = 25.0f;
+            phaseSettings.FogMaxDistance = phaseSettings.FogNearDistance;
 
             PerspectiveCamera camToward(60.0f, float(kViewW) / float(kViewH), 0.1f, 300.0f);
             camToward.SetViewMatrix(glm::lookAtRH(camPos, camPos + glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f)), camPos);
@@ -816,12 +841,7 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                         "M15-U6-05.3: zero density/intensity injects (0,0,0,0) and integrates to exact (0,0,0,1)");
                 }
 
-                float maxDiff = 0.0f;
-                for (size_t p = 0; p < hdrZero.size(); ++p) {
-                    const glm::vec3 d = glm::abs(glm::vec3(hdrZero[p]) - glm::vec3(hdrOffPixels[p]));
-                    maxDiff = std::max({ maxDiff, d.r, d.g, d.b });
-                }
-                RENDER_CHECK(maxDiff < 1e-4f,
+                RENDER_CHECK(hdrZero == hdrOffPixels,
                     "M15-U6-05.3: zero density/intensity preserves RGBA16F linear HDR image identically to Fog-OFF");
                 return true;
             };
@@ -908,6 +928,78 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
 
             physicsLog << "caseE_unlit_gpu=(" << gpuUnlitHDR.r << "," << gpuUnlitHDR.g << "," << gpuUnlitHDR.b << ") "
                        << "expected=(" << expectedUnlitHDR.r << "," << expectedUnlitHDR.g << "," << expectedUnlitHDR.b << ")\n";
+        }
+
+        // Dense fog against a wall inside the first slice. Orthographic rays have
+        // different origins but identical path lengths across the screen.
+        {
+            auto ortho = cam;
+            ortho.SetOrthographic(160.0f, float(kViewW) / float(kViewH), 0.1f, 300.0f);
+            auto settings = makeBaseSettings();
+            settings.FogNearDistance = 20.0f;
+            settings.FogDensity = 4.0f;
+            const float z1 = FroxelFogContract::SliceBoundaryToViewDistance(1, 64,
+                settings.FogNearDistance, settings.FogMaxDistance);
+            const float wallZ = (settings.FogNearDistance + z1) * 0.5f;
+            RenderWorld world;
+            auto wall = wallInst;
+            wall.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), {0.0f, 1.5f, -wallZ - 0.5f}),
+                                             glm::vec3(500.0f, 500.0f, 1.0f));
+            world.Meshes.push_back(wall);
+            std::vector<glm::vec4> pixels;
+            RENDER_CHECK(renderAndReadHDR(world, ortho, settings, pixels, diag),
+                "Orthographic dense fog renders against an opaque surface inside the first slice");
+            const glm::vec3 expected = wallBaselineHDR *
+                std::exp(-settings.FogDensity * (wallZ - settings.FogNearDistance));
+            const auto center = SampleHDRBlockAvg(pixels, kViewW, kViewW / 2, kViewH / 2);
+            const auto offAxis = SampleHDRBlockAvg(pixels, kViewW, kViewW / 8, kViewH / 2);
+            RENDER_CHECK(glm::length(center - expected) < 0.012f &&
+                         glm::length(offAxis - expected) < 0.012f,
+                "Partial first slice follows Beer-Lambert at center and off axis in an orthographic view");
+            physicsLog << "partial_orthographic center=" << center.r << " off_axis=" << offAxis.r
+                       << " expected=" << expected.r << '\n';
+
+            ortho.SetViewMatrix(glm::mat4(1.0f), glm::vec3(0.0f));
+            settings.FogHeightFalloff = 4.0f;
+            auto sampleBoundary = [&](float z, glm::vec3& sample) {
+                world.Meshes.front().WorldTransform[3].z = -z - 0.5f;
+                if (!renderAndReadHDR(world, ortho, settings, pixels, diag)) return false;
+                sample = SampleHDRBlockAvg(pixels, kViewW, kViewW / 2, kViewH / 2);
+                return true;
+            };
+            glm::vec3 before, after;
+            RENDER_CHECK(sampleBoundary(z1 - 0.001f, before) && sampleBoundary(z1 + 0.001f, after) &&
+                         glm::length(before - after) < 0.015f,
+                "XY filtering stays continuous across a depth boundary in strongly stratified fog");
+            const auto upper = SampleHDRBlockAvg(pixels, kViewW, kViewW / 2, kViewH / 4);
+            const auto lower = SampleHDRBlockAvg(pixels, kViewW, kViewW / 2, 3 * kViewH / 4);
+            RENDER_CHECK(upper.r > 2.0f && lower.r < 0.4f,
+                "Orthographic columns inject local density at their distinct world-space origins");
+            physicsLog << "stratified_boundary before=" << before.r << " after=" << after.r << '\n';
+        }
+
+        // A finite depth in the last few D32 values still belongs to the wall.
+        {
+            auto farCamera = cam;
+            farCamera.SetPerspective(60.0f, float(kViewW) / float(kViewH), 0.1f, 200.0f);
+            auto settings = makeBaseSettings();
+            settings.FogDensity = 0.004f;
+            settings.FogMaxDistance = 600.0f;
+            constexpr float wallZ = 199.9f;
+            RenderWorld world;
+            auto wall = wallInst;
+            wall.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), {0.0f, 1.5f, -wallZ - 0.025f}),
+                                             glm::vec3(800.0f, 800.0f, 0.05f));
+            world.Meshes.push_back(wall);
+            std::vector<glm::vec4> pixels;
+            RENDER_CHECK(renderAndReadHDR(world, farCamera, settings, pixels, diag),
+                "Distant opaque surface renders near the camera far clip");
+            const auto center = SampleHDRBlockAvg(pixels, kViewW, kViewW / 2, kViewH / 2);
+            const glm::vec3 expected = wallBaselineHDR *
+                std::exp(-settings.FogDensity * (wallZ - settings.FogNearDistance));
+            RENDER_CHECK(glm::length(center - expected) < 0.012f,
+                "Finite D32 depth near 1 uses the opaque surface distance");
+            physicsLog << "distant_surface center=" << center.r << " expected=" << expected.r << '\n';
         }
 
         physicsLog.close();

@@ -514,9 +514,14 @@ namespace Axle {
         }
 
         // Initialize Volumetric Fog & Atmospheric Participating Media Resources
+        if (m_CascadedShadows.IsSupported() && m_LocalShadows.IsSupported()) {
+            ScopedRHIOperation operation("FogShadowSampler");
+            if (!m_FogShadowSampler.Init(RHISamplerDesc::ShadowPCF())) {
+                AXLE_CORE_WARN("RHISceneRenderer: Froxel fog shadow sampling is unavailable");
+            }
+        }
         if (!CompileFogShaders(device) || !CreateFogPipelineLayout(device) || !CreateFogPipeline(device) ||
-            !m_FogSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge)) ||
-            !m_FogShadowSampler.Init(RHISamplerDesc::ShadowPCF())) {
+            !m_FogSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge))) {
             AXLE_CORE_WARN("RHISceneRenderer: Froxel fog GPU resources are unavailable");
         }
 
@@ -2739,6 +2744,8 @@ namespace Axle {
             desc.ShaderModel = "6_0";
             desc.Format = format;
             desc.Optimization = true;
+            if (!m_FogShadowSampler.IsValid())
+                desc.Macros.push_back({"AXLE_FOG_SHADOWS_DISABLED", "1"});
             auto res = compiler.Compile(desc);
             if (!res.Success) {
                 AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile VolumetricFog {0}: {1}", entryPoint, res.ErrorMessage);
@@ -2803,11 +2810,12 @@ namespace Axle {
         injectDescSets[1].rangeNum = 1;
 
         nri::PipelineLayoutDesc injectLayoutDesc = {};
+        const bool injectShadows = m_FogShadowSampler.IsValid();
         injectLayoutDesc.rootRegisterSpace = 0;
         injectLayoutDesc.rootDescriptors = injectRoots;
-        injectLayoutDesc.rootDescriptorNum = std::size(injectRoots);
-        injectLayoutDesc.descriptorSets = injectDescSets;
-        injectLayoutDesc.descriptorSetNum = std::size(injectDescSets);
+        injectLayoutDesc.rootDescriptorNum = injectShadows ? std::size(injectRoots) : 2;
+        injectLayoutDesc.descriptorSets = injectShadows ? injectDescSets : &injectDescSets[1];
+        injectLayoutDesc.descriptorSetNum = injectShadows ? std::size(injectDescSets) : 1;
         injectLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
         if (!m_FogInjectPipelineLayout.Init(injectLayoutDesc)) return false;
 
@@ -2871,16 +2879,18 @@ namespace Axle {
     }
 
     bool RHISceneRenderer::EnsureFogDescriptorSets() {
-        if (!m_FogSampler.IsValid() || !m_FogShadowSampler.IsValid()) {
+        if (!m_FogSampler.IsValid()) {
             return false;
         }
+        const bool injectShadows = m_FogShadowSampler.IsValid();
         auto& resources = RHIDevice::Get().GetResources();
-        const bool hasAllSets = m_FogInjectTextureSet && m_FogInjectStorageSet &&
+        const bool hasAllSets = (!injectShadows || m_FogInjectTextureSet) && m_FogInjectStorageSet &&
                                 m_FogIntegrateTextureSet && m_FogIntegrateStorageSet && m_FogApplyDescriptorSet;
         if (hasAllSets && m_FogDescriptorPool.IsValid()) {
             bool anyInUse = false;
             for (nri::DescriptorSet* set : { m_FogInjectTextureSet, m_FogInjectStorageSet,
                                              m_FogIntegrateTextureSet, m_FogIntegrateStorageSet, m_FogApplyDescriptorSet }) {
+                if (!set) continue;
                 auto lease = resources.AcquireNative(set);
                 if (!lease.IsLive() || resources.IsInUse(lease)) {
                     anyInUse = true;
@@ -2901,13 +2911,14 @@ namespace Axle {
         fogPoolDesc.MaxConstantBuffers = 16;
         RHIDescriptorPool candidate;
         if (!candidate.Init(fogPoolDesc)) return false;
-        auto* injectTexture = candidate.AllocateDescriptorSet(m_FogInjectPipelineLayout, 0);
-        auto* injectStorage = candidate.AllocateDescriptorSet(m_FogInjectPipelineLayout, 1);
+        auto* injectTexture = injectShadows ? candidate.AllocateDescriptorSet(m_FogInjectPipelineLayout, 0) : nullptr;
+        auto* injectStorage = candidate.AllocateDescriptorSet(m_FogInjectPipelineLayout, injectShadows ? 1 : 0);
         auto* integrateInput = candidate.AllocateDescriptorSet(m_FogIntegratePipelineLayout, 0);
         auto* integrateOutput = candidate.AllocateDescriptorSet(m_FogIntegratePipelineLayout, 1);
         auto* apply = candidate.AllocateDescriptorSet(m_FogApplyPipelineLayout, 0);
-        if (!injectTexture || !injectStorage || !integrateInput || !integrateOutput || !apply ||
-            !candidate.UpdateSampler(injectTexture, 2, 0, m_FogShadowSampler.GetNative()) ||
+        if (!injectStorage || !integrateInput || !integrateOutput || !apply ||
+            (injectShadows && (!injectTexture ||
+                !candidate.UpdateSampler(injectTexture, 2, 0, m_FogShadowSampler.GetNative()))) ||
             !candidate.UpdateSampler(apply, 4, 0, m_FogSampler.GetNative())) {
             return false;
         }

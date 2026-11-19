@@ -1,0 +1,74 @@
+# AxleFileIdentity: 1 16933897577863113601
+Scene: Froxel Slit
+Entities:
+  - Entity: 9401
+    TagComponent:
+      Tag: Audit camera
+    TransformComponent:
+      Translation: [0, 1.5, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FOV: 60
+      NearClip: 0.1
+      FarClip: 300
+  - Entity: 9402
+    TagComponent:
+      Tag: Directional sun
+    DirectionalLightComponent:
+      Color: [1, 0.96, 0.88]
+      Intensity: 3.5
+      AmbientIntensity: 0
+      Azimuth: 180
+      Elevation: 14.036
+      CastShadows: true
+      MaxShadowDistance: 60
+      ShadowQuality: 1
+  - Entity: 9403
+    TagComponent:
+      Tag: Fog medium
+    VolumetricFogComponent:
+      Enabled: true
+      Density: 0.04
+      HeightFalloff: 0
+      ScatteringAsymmetry: 0.5
+      Color: [0.95, 0.92, 0.85]
+      MaxDistance: 30
+      Intensity: 1
+  - Entity: 9404
+    TagComponent:
+      Tag: Left slit blocker
+    TransformComponent:
+      Translation: [-9.4, 1.5, -24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [17.2, 24, 1.5]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [0.01, 0.01, 0.01, 1]
+    MaterialComponent:
+      AlbedoColor: [0.01, 0.01, 0.01, 1]
+      Metallic: 0
+      Roughness: 1
+      SurfaceType: Opaque
+      CullMode: None
+      DepthWrite: true
+  - Entity: 9405
+    TagComponent:
+      Tag: Right slit blocker
+    TransformComponent:
+      Translation: [9.4, 1.5, -24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [17.2, 24, 1.5]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+      PatternMode: 3
+      Color1: [0.01, 0.01, 0.01, 1]
+    MaterialComponent:
+      AlbedoColor: [0.01, 0.01, 0.01, 1]
+      Metallic: 0
+      Roughness: 1
+      SurfaceType: Opaque
+      CullMode: None
+      DepthWrite: true

@@ -83,18 +83,11 @@ namespace Axle::Passes {
 
         auto& pool = renderer.m_FogDescriptorPool;
         nri::Descriptor* lightCBV = renderer.m_LightBuffer.IsValid() ? renderer.m_LightBuffer.GetCBV() : nullptr;
-        nri::Descriptor* cascadeCBV = renderer.m_CascadedShadows.GetConstantsCBV();
-        nri::Descriptor* localShadowCBV = renderer.m_LocalShadows.GetConstantsCBV();
-        nri::Descriptor* cascadeSRV = renderer.m_CascadedShadows.GetSRV();
-        nri::Descriptor* localShadowSRV = renderer.m_LocalShadows.GetSRV();
-        if (!lightCBV || !cascadeCBV || !localShadowCBV || !cascadeSRV || !localShadowSRV ||
-            !renderer.m_FogShadowSampler.IsValid() || !renderer.m_FogInjectTextureSet || !renderer.m_FogInjectStorageSet) {
+        if (!lightCBV || !renderer.m_FogInjectStorageSet) {
             return false;
         }
 
         if (!ops.BeginPass("FogInject") || !ops.Uniform().UpdateData(&constants, sizeof(constants)) ||
-            !pool.UpdateTexture(renderer.m_FogInjectTextureSet, 0, 0, cascadeSRV) ||
-            !pool.UpdateTexture(renderer.m_FogInjectTextureSet, 1, 0, localShadowSRV) ||
             !pool.UpdateStorageTexture(renderer.m_FogInjectStorageSet, 0, 0, scattering->GetUAV())) {
             return false;
         }
@@ -102,11 +95,23 @@ namespace Axle::Passes {
         commands.SetPipelineLayout(nri::BindPoint::COMPUTE, renderer.m_FogInjectPipelineLayout);
         commands.SetRootDescriptor(0, ops.Uniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
         commands.SetRootDescriptor(1, lightCBV, 0, nri::BindPoint::COMPUTE);
-        commands.SetRootDescriptor(2, cascadeCBV, 0, nri::BindPoint::COMPUTE);
-        commands.SetRootDescriptor(3, localShadowCBV, 0, nri::BindPoint::COMPUTE);
         pool.Bind(commands.GetNative());
-        if (!ops.BindDescriptor(0, renderer.m_FogInjectTextureSet, nri::BindPoint::COMPUTE) ||
-            !ops.BindDescriptor(1, renderer.m_FogInjectStorageSet, nri::BindPoint::COMPUTE)) {
+        const bool injectShadows = renderer.m_FogShadowSampler.IsValid();
+        if (injectShadows) {
+            auto* cascadeCBV = renderer.m_CascadedShadows.GetConstantsCBV();
+            auto* localShadowCBV = renderer.m_LocalShadows.GetConstantsCBV();
+            auto* cascadeAtlas = renderer.m_CascadedShadows.GetSampledAtlas();
+            auto* localAtlas = renderer.m_LocalShadows.GetSampledAtlas();
+            if (!cascadeCBV || !localShadowCBV || !cascadeAtlas || !localAtlas ||
+                !pool.UpdateTexture(renderer.m_FogInjectTextureSet, 0, 0, cascadeAtlas->GetSRV()) ||
+                !pool.UpdateTexture(renderer.m_FogInjectTextureSet, 1, 0, localAtlas->GetSRV()) ||
+                !ops.BindDescriptor(0, renderer.m_FogInjectTextureSet, nri::BindPoint::COMPUTE)) {
+                return false;
+            }
+            commands.SetRootDescriptor(2, cascadeCBV, 0, nri::BindPoint::COMPUTE);
+            commands.SetRootDescriptor(3, localShadowCBV, 0, nri::BindPoint::COMPUTE);
+        }
+        if (!ops.BindDescriptor(injectShadows ? 1 : 0, renderer.m_FogInjectStorageSet, nri::BindPoint::COMPUTE)) {
             return false;
         }
         commands.Dispatch((gridW + 3u) / 4u, (gridH + 3u) / 4u, (gridD + 3u) / 4u);

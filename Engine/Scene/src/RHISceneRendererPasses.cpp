@@ -266,10 +266,8 @@ namespace Axle {
             froxelIntegratedTex->GetUAV() != nullptr && froxelIntegratedTex->GetSRV() != nullptr;
         const bool fogPipelinesReady = m_FogInjectPipeline != nullptr && m_FogIntegratePipeline != nullptr &&
             m_FogApplyPipelineLayout.IsValid() && m_FogApplyPipelineSDR != nullptr && m_FogApplyPipelineHDR != nullptr &&
-            m_FogSampler.IsValid() && m_FogShadowSampler.IsValid() &&
-            m_LightBuffer.IsValid() && m_LightBuffer.GetCBV() != nullptr &&
-            m_CascadedShadows.GetSRV() != nullptr && m_CascadedShadows.GetConstantsCBV() != nullptr &&
-            m_LocalShadows.GetSRV() != nullptr && m_LocalShadows.GetConstantsCBV() != nullptr;
+            m_FogSampler.IsValid() && m_LightBuffer.IsValid() && m_LightBuffer.GetCBV() != nullptr;
+        const bool injectFogShadows = m_FogShadowSampler.IsValid();
         const bool useFog = settings.EnableVolumetricFog && froxelMedia.Valid && activeSampleCount == 1 &&
             sceneDepthTexture && sceneDepthDSV &&
             m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
@@ -283,6 +281,8 @@ namespace Axle {
             } else if (useFog && !froxelMedia.Diagnostic.empty()) {
                 viewCtx.Diagnostics().AddFallback(froxelMedia.Diagnostic);
             }
+            if (useFog && settings.EnableShadows && !injectFogShadows)
+                viewCtx.Diagnostics().AddFallback("froxel_shadows_unavailable:unshadowed_lighting");
         }
         const auto fogInput = useFog ? graph.Import("FogInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto fogDepth = useFog ? graph.Import("FogDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
@@ -1581,15 +1581,16 @@ namespace Axle {
             if (useFog) {
                 Passes::FroxelFogPass::Declare(graph, {
                     sceneColor, fogInput, sceneDepth, fogDepth, fogScattering, fogIntegrated,
-                    shadows, localShadows, shadowAtlas != nullptr, localAtlas != nullptr});
+                    shadows, localShadows, injectFogShadows && shadowAtlas, injectFogShadows && localAtlas});
             }
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useFog && (!uniform("FogInject", sizeof(RHIVolumetricFogConstants)) ||
                 !uniform("FogIntegrate", sizeof(RHIVolumetricFogConstants)) ||
                 !uniform("FogApply", sizeof(RHIVolumetricFogConstants)) ||
-                !graph.DeclareRead("FogInject", m_LightBuffer.GetCBV()) ||
-                !graph.DeclareRead("FogInject", m_CascadedShadows.GetConstantsCBV()) ||
-                !graph.DeclareRead("FogInject", m_LocalShadows.GetConstantsCBV()))) return fail();
+                !graph.DeclareRead("FogInject", m_LightBuffer.GetCBV()))) return fail();
+            if (useFog && injectFogShadows &&
+                (!graph.DeclareRead("FogInject", m_CascadedShadows.GetConstantsCBV()) ||
+                 !graph.DeclareRead("FogInject", m_LocalShadows.GetConstantsCBV()))) return fail();
             return {};
         });
 

@@ -62,6 +62,7 @@ cbuffer MultiLightBuffer : register(b2, space0) {
     FogRectLightData       u_RectLights[2];
 };
 
+#if !defined(AXLE_FOG_SHADOWS_DISABLED)
 // Matches RHICascadeConstants (register b4, space0).
 cbuffer CascadeReceiver : register(b4, space0) {
     float4x4 u_CascadeMatrices[4];
@@ -78,15 +79,18 @@ cbuffer LocalShadowReceiver : register(b5, space0) {
     int4     u_LocalShadowViews[8];
     float4   u_LocalShadowAtlas; // (1/atlasSize, activeViewCount, 0, 0)
 };
+#endif
 
 Texture2D<float4>   u_SceneColor       : register(t0, space1);
 Texture2D<float>    u_SceneDepth       : register(t1, space1);
 Texture3D<float4>   u_FroxelVolume     : register(t2, space1);
 Texture3D<float4>   u_FroxelMedia      : register(t3, space1);
+SamplerState           u_LinearSampler : register(s0, space1);
+#if !defined(AXLE_FOG_SHADOWS_DISABLED)
 Texture2D<float>    u_CascadeDepth     : register(t4, space1);
 Texture2D<float>    u_LocalShadowDepth : register(t5, space1);
-SamplerState           u_LinearSampler : register(s0, space1);
 SamplerComparisonState u_ShadowSampler : register(s1, space1);
+#endif
 
 #if defined(__spirv__)
 [[vk::image_format("rgba16f")]]
@@ -146,6 +150,14 @@ float4 IntegrateSegment(float4 media, float distanceMeters) {
 // =============================================================================
 // Shadow Atlas Sampling Helpers (CSM + Local Point/Spot Shadows)
 // =============================================================================
+struct FroxelShadowSamples {
+    float3 FirstPosition;
+    float3 PositionStep;
+    float FirstDepth;
+    float DepthStep;
+};
+
+#if !defined(AXLE_FOG_SHADOWS_DISABLED)
 float SampleAtlasTileVolumetricPCF(Texture2D<float> depthAtlas,
                                    float2 uv,
                                    float2 tileMin,
@@ -215,9 +227,7 @@ float LocalShadowVisibilityVolumetric(int view, float3 worldPos, float3 dirTowar
         u_LocalShadowDepth, uv, tile.xy, tile.xy + tile.z, texel * 0.5, texel * max(bias.w, 0.0), projected.z);
 }
 
-float PointShadowVisibilityVolumetric(uint index, float3 lightPos, float3 worldPos, float3 dirTowardLight) {
-    int first = u_LocalShadowViews[index / 4u][index % 4u];
-    if (first < 0 || first >= (int)u_LocalShadowAtlas.y) return 1.0;
+float PointShadowVisibilityVolumetric(int first, float3 lightPos, float3 worldPos, float3 dirTowardLight) {
     float3 direction = (worldPos + dirTowardLight * u_LocalShadowBias[first].x) - lightPos;
     float3 axis = abs(direction);
     int face;
@@ -227,7 +237,44 @@ float PointShadowVisibilityVolumetric(uint index, float3 lightPos, float3 worldP
     return LocalShadowVisibilityVolumetric(first + face, worldPos, dirTowardLight);
 }
 
-void AccumulatePointLights(float3 sampleWS, float3 unitRayWS, float g, inout float3 incomingRadiance) {
+float AverageCascadeVisibility(FroxelShadowSamples samples) {
+    if (u_CascadeAtlas.x <= 0.0) return 1.0;
+    float visibility = 0.0;
+    [unroll]
+    for (uint k = 0u; k < 4u; ++k) {
+        visibility += EvaluateCascadeVolumetricShadow(
+            samples.FirstPosition + float(k) * samples.PositionStep, samples.FirstDepth + float(k) * samples.DepthStep);
+    }
+    return visibility * 0.25;
+}
+
+float AverageLocalShadowVisibility(int first, float3 lightPos, FroxelShadowSamples samples,
+                                   float3 center, float3 centerToLight, float range,
+                                   bool isPointLight, float3 spotDirection, float cosOuter) {
+    int last = first + (isPointLight ? 5 : 0);
+    if (first < 0 || last >= (int)u_LocalShadowAtlas.y) return 1.0;
+    float visibility = 0.0;
+    uint sampleCount = 0u;
+    [unroll]
+    for (uint k = 0u; k < 4u; ++k) {
+        float3 worldPos = samples.FirstPosition + float(k) * samples.PositionStep;
+        float3 towardLight = lightPos - worldPos;
+        float lenSq = dot(towardLight, towardLight);
+        if (lenSq <= 1e-8 || lenSq >= range * range) continue;
+        float3 L = towardLight * rsqrt(lenSq);
+        if (!isPointLight && dot(-L, spotDirection) <= cosOuter) continue;
+        visibility += isPointLight ? PointShadowVisibilityVolumetric(first, lightPos, worldPos, L)
+                                   : LocalShadowVisibilityVolumetric(first, worldPos, L);
+        ++sampleCount;
+    }
+    if (sampleCount > 0u) return visibility / float(sampleCount);
+    return isPointLight ? PointShadowVisibilityVolumetric(first, lightPos, center, centerToLight)
+                        : LocalShadowVisibilityVolumetric(first, center, centerToLight);
+}
+#endif
+
+void AccumulatePointLights(float3 sampleWS, float3 unitRayWS, float g, FroxelShadowSamples shadowSamples,
+                           inout float3 incomingRadiance) {
     uint numPointLights = min(u_LightCounts.x, 16u);
     [loop]
     for (uint p = 0u; p < numPointLights; ++p) {
@@ -244,7 +291,7 @@ void AccumulatePointLights(float3 sampleWS, float3 unitRayWS, float g, inout flo
             if (radius <= 0.0) continue;
             float3 lightVec = pLight.PositionAndRadius.xyz - sampleWS;
             float dist = length(lightVec);
-            if (dist >= radius || dist <= 1e-5) continue;
+            if (dist >= radius || dist <= 1e-4) continue;
             float3 L = lightVec / dist;
 
             float minRadius = max(0.0025, pLight.Params.y);
@@ -257,7 +304,11 @@ void AccumulatePointLights(float3 sampleWS, float3 unitRayWS, float g, inout flo
             if (falloffExp > 0.1 && abs(falloffExp - 1.0) > 0.01) {
                 attenuation = pow(max(attenuation, 0.0), falloffExp);
             }
-            float vis = PointShadowVisibilityVolumetric(p, pLight.PositionAndRadius.xyz, sampleWS, L);
+            float vis = 1.0;
+#if !defined(AXLE_FOG_SHADOWS_DISABLED)
+            vis = AverageLocalShadowVisibility(u_LocalShadowViews[p / 4u][p % 4u],
+                pLight.PositionAndRadius.xyz, shadowSamples, sampleWS, L, radius, true, 0.0, 0.0);
+#endif
             if (vis <= 0.0) continue;
             float phase = HenyeyGreenstein(dot(unitRayWS, L), g);
             incomingRadiance += max(pLight.ColorAndIntensity.rgb, float3(0.0, 0.0, 0.0)) *
@@ -266,7 +317,8 @@ void AccumulatePointLights(float3 sampleWS, float3 unitRayWS, float g, inout flo
     }
 }
 
-void AccumulateSpotLights(float3 sampleWS, float3 unitRayWS, float g, inout float3 incomingRadiance) {
+void AccumulateSpotLights(float3 sampleWS, float3 unitRayWS, float g, FroxelShadowSamples shadowSamples,
+                          inout float3 incomingRadiance) {
     uint numSpotLights = min(u_LightCounts.y, 16u);
     [loop]
     for (uint s = 0u; s < numSpotLights; ++s) {
@@ -275,7 +327,7 @@ void AccumulateSpotLights(float3 sampleWS, float3 unitRayWS, float g, inout floa
         if (range <= 0.0) continue;
         float3 lightVec = sLight.PositionAndRange.xyz - sampleWS;
         float dist = length(lightVec);
-        if (dist >= range || dist <= 1e-5) continue;
+        if (dist >= range || dist <= 1e-4) continue;
         float3 L = lightVec / dist;
 
         float dirLenSq = dot(sLight.DirectionAndIntensity.xyz, sLight.DirectionAndIntensity.xyz);
@@ -286,7 +338,7 @@ void AccumulateSpotLights(float3 sampleWS, float3 unitRayWS, float g, inout floa
         float cosOuter = sLight.AngleParams.x;
         if (cosTheta <= cosOuter) continue;
 
-        float spotAtten = saturate((cosTheta - cosOuter) / max(1e-5, cosInner - cosOuter));
+        float spotAtten = saturate((cosTheta - cosOuter) / max(1e-4, cosInner - cosOuter));
         spotAtten = spotAtten * spotAtten;
         float distSq = max(dist * dist, 0.0025);
         float ratio = dist / range;
@@ -294,8 +346,11 @@ void AccumulateSpotLights(float3 sampleWS, float3 unitRayWS, float g, inout floa
         float window = saturate(1.0 - ratio4);
         float distAtten = (window * window) / distSq;
 
-        int shadowView = u_LocalShadowViews[4u + (s / 4u)][s % 4u];
-        float vis = LocalShadowVisibilityVolumetric(shadowView, sampleWS, L);
+        float vis = 1.0;
+#if !defined(AXLE_FOG_SHADOWS_DISABLED)
+        vis = AverageLocalShadowVisibility(u_LocalShadowViews[4u + s / 4u][s % 4u],
+            sLight.PositionAndRange.xyz, shadowSamples, sampleWS, L, range, false, spotDir, cosOuter);
+#endif
         if (vis <= 0.0) continue;
 
         float phase = HenyeyGreenstein(dot(unitRayWS, L), g);
@@ -315,7 +370,7 @@ void AccumulateRectLights(float3 sampleWS, float3 unitRayWS, float g, inout floa
         if (range <= 1e-3 || intensity <= 0.0) continue;
         float3 lightVec = rLight.PositionAndWidth.xyz - sampleWS;
         float dist = length(lightVec);
-        if (dist >= range || dist <= 1e-5) continue;
+        if (dist >= range || dist <= 1e-4) continue;
         float3 L = lightVec / dist;
 
         float dirLenSq = dot(rLight.DirectionAndHeight.xyz, rLight.DirectionAndHeight.xyz);
@@ -330,7 +385,8 @@ void AccumulateRectLights(float3 sampleWS, float3 unitRayWS, float g, inout floa
         float h = max(abs(rLight.DirectionAndHeight.w), 0.01);
         float area = w * h * (isDisk ? (float(M_PI) * 0.25) : 1.0);
         float eqRadiusSq = area / float(M_PI);
-        float solidAngleFactor = 2.0 * (1.0 - dist * rsqrt(dist * dist + eqRadiusSq)) * emitCos;
+        float slant = sqrt(dist * dist + eqRadiusSq);
+        float solidAngleFactor = 2.0 * eqRadiusSq / (slant * (slant + dist)) * emitCos;
 
         float ratio = saturate(dist / range);
         float ratio4 = ratio * ratio * ratio * ratio;
@@ -342,25 +398,13 @@ void AccumulateRectLights(float3 sampleWS, float3 unitRayWS, float g, inout floa
     }
 }
 
-void EvaluateVolumetricScatteringAtSample(float3 sampleWS,
-                                          float viewDepth,
-                                          float3 unitRayWS,
-                                          float effectiveBaseDensity,
-                                          float heightFalloff,
-                                          float g,
-                                          float3 fogAlbedo,
-                                          out float outLocalDensity,
-                                          out float3 outInScatterPerMeter) {
-    float heightAboveGround = max(sampleWS.y, 0.0);
-    outLocalDensity = effectiveBaseDensity * exp(-heightAboveGround * heightFalloff);
-    if (outLocalDensity <= 0.0) {
-        outInScatterPerMeter = float3(0.0, 0.0, 0.0);
-        return;
-    }
-
+float3 EvaluateVolumetricLighting(float3 sampleWS, float3 unitRayWS, float g, FroxelShadowSamples shadowSamples) {
     float3 incomingRadiance = max(u_AmbientRadiance.rgb, float3(0.0, 0.0, 0.0));
     if (u_SunDirectionIntensity.w > 0.5) {
-        float sunVis = EvaluateCascadeVolumetricShadow(sampleWS, viewDepth);
+        float sunVis = 1.0;
+#if !defined(AXLE_FOG_SHADOWS_DISABLED)
+        sunVis = AverageCascadeVisibility(shadowSamples);
+#endif
         if (sunVis > 0.0) {
             float cosTheta = dot(unitRayWS, normalize(u_SunDirectionIntensity.xyz));
             float phase = HenyeyGreenstein(cosTheta, g);
@@ -368,11 +412,11 @@ void EvaluateVolumetricScatteringAtSample(float3 sampleWS,
         }
     }
 
-    AccumulatePointLights(sampleWS, unitRayWS, g, incomingRadiance);
-    AccumulateSpotLights(sampleWS, unitRayWS, g, incomingRadiance);
+    AccumulatePointLights(sampleWS, unitRayWS, g, shadowSamples, incomingRadiance);
+    AccumulateSpotLights(sampleWS, unitRayWS, g, shadowSamples, incomingRadiance);
     AccumulateRectLights(sampleWS, unitRayWS, g, incomingRadiance);
 
-    outInScatterPerMeter = (fogAlbedo * outLocalDensity) * incomingRadiance;
+    return incomingRadiance;
 }
 
 // =============================================================================
@@ -402,37 +446,25 @@ void CSInjectMedia(uint3 dtid : SV_DispatchThreadID) {
     ReconstructWorldRay(uv, originWS, rayDirWorldPerUnitZ);
     float3 unitRayWS = normalize(rayDirWorldPerUnitZ);
 
-    bool hasShadowMaps = ((u_SunDirectionIntensity.w > 0.5) && ((uint)u_CascadeAtlas.x > 0u)) ||
-                         (((uint)u_LocalShadowAtlas.y > 0u) && ((u_LightCounts.x > 0u) || (u_LightCounts.y > 0u)));
-
-    float3 accumScatter = float3(0.0, 0.0, 0.0);
-    float accumDensity = 0.0;
-    if (hasShadowMaps) {
-        float z0 = SliceDepth(float(dtid.z), float(gridDims.z));
-        float z1 = SliceDepth(float(dtid.z + 1u), float(gridDims.z));
-        [unroll]
-        for (uint k = 0u; k < 4u; ++k) {
-            float zSample = lerp(z0, z1, (float(k) + 0.5) * 0.25);
-            float3 sampleWS = originWS + rayDirWorldPerUnitZ * zSample;
-            float sampleDensity = 0.0;
-            float3 sampleScatter = float3(0.0, 0.0, 0.0);
-            EvaluateVolumetricScatteringAtSample(
-                sampleWS, zSample, unitRayWS, effectiveBaseDensity, heightFalloff, g, fogAlbedo,
-                sampleDensity, sampleScatter);
-            accumDensity += sampleDensity;
-            accumScatter += sampleScatter;
-        }
-        accumDensity *= 0.25;
-        accumScatter *= 0.25;
-    } else {
-        float zCenter = SliceDepth(float(dtid.z) + 0.5, float(gridDims.z));
-        float3 sampleWS = originWS + rayDirWorldPerUnitZ * zCenter;
-        EvaluateVolumetricScatteringAtSample(
-            sampleWS, zCenter, unitRayWS, effectiveBaseDensity, heightFalloff, g, fogAlbedo,
-            accumDensity, accumScatter);
+    float zCenter = SliceDepth(float(dtid.z) + 0.5, float(gridDims.z));
+    float3 sampleWS = originWS + rayDirWorldPerUnitZ * zCenter;
+    float density = effectiveBaseDensity * exp(-max(sampleWS.y, 0.0) * heightFalloff);
+    if (density <= 0.0) {
+        u_FroxelOutput[dtid] = 0.0;
+        return;
     }
 
-    u_FroxelOutput[dtid] = float4(min(accumScatter, 65504.0), accumDensity);
+    // Shadow sampling changes incident light, while the medium and each light's
+    // unoccluded attenuation retain the same center evaluation for every view.
+    float z0 = SliceDepth(float(dtid.z), float(gridDims.z));
+    float z1 = SliceDepth(float(dtid.z + 1u), float(gridDims.z));
+    FroxelShadowSamples shadowSamples;
+    shadowSamples.DepthStep = (z1 - z0) * 0.25;
+    shadowSamples.FirstDepth = z0 + shadowSamples.DepthStep * 0.5;
+    shadowSamples.FirstPosition = originWS + rayDirWorldPerUnitZ * shadowSamples.FirstDepth;
+    shadowSamples.PositionStep = rayDirWorldPerUnitZ * shadowSamples.DepthStep;
+    float3 incoming = EvaluateVolumetricLighting(sampleWS, unitRayWS, g, shadowSamples);
+    u_FroxelOutput[dtid] = float4(min(fogAlbedo * density * incoming, 65504.0), density);
 }
 
 // =============================================================================

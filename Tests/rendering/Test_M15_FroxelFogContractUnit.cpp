@@ -615,7 +615,8 @@ bool RunM15FroxelFogContractUnitTests() {
                      scenePassesSrc.find("graph.DeclareRead(\"FogInject\", m_LightBuffer.GetCBV())") != std::string::npos &&
                      scenePassesSrc.find("graph.DeclareRead(\"FogInject\", m_CascadedShadows.GetConstantsCBV())") != std::string::npos &&
                      scenePassesSrc.find("graph.DeclareRead(\"FogInject\", m_LocalShadows.GetConstantsCBV())") != std::string::npos &&
-                     scenePassesSrc.find("shadowAtlas != nullptr, localAtlas != nullptr") != std::string::npos,
+                     scenePassesSrc.find("injectFogShadows && shadowAtlas, injectFogShadows && localAtlas") != std::string::npos &&
+                     fogShaderSrc.find("AXLE_FOG_SHADOWS_DISABLED") != std::string::npos,
             "M15-U6-02.2: U6-C VolumetricFog.hlsl, FroxelFogPass.cpp, and RHISceneRendererPasses.cpp shadow/light bindings match");
     }
 

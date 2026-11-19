@@ -3477,7 +3477,8 @@ namespace Axle {
             const float h = std::max(light.Height, 0.01f);
             const float area = w * h * ((light.Shape == AreaLightShape::Disk) ? (kPi * 0.25f) : 1.0f);
             const float eqRadiusSq = area / kPi;
-            const float solidAngleFactor = 2.0f * (1.0f - dist / std::sqrt(dist * dist + eqRadiusSq)) * emitCos;
+            const float slant = std::sqrt(dist * dist + eqRadiusSq);
+            const float solidAngleFactor = 2.0f * eqRadiusSq / (slant * (slant + dist)) * emitCos;
             const float ratio = std::clamp(dist / light.Range, 0.0f, 1.0f);
             const float ratio4 = ratio * ratio * ratio * ratio;
             const float win = std::clamp(1.0f - ratio4, 0.0f, 1.0f);

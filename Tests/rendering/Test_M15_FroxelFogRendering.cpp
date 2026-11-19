@@ -1068,7 +1068,7 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                 settings.EnableShadows = true;
                 settings.ShadowCascadeCount = 4;
                 settings.FogDensity = 0.03f;
-                settings.FogHeightFalloff = 0.0f;
+                settings.FogHeightFalloff = 0.3f;
                 settings.FogScattering = 0.0f;
                 settings.FogColor = glm::vec3(0.9f, 0.9f, 0.9f);
                 settings.FogNearDistance = 0.25f;
@@ -1103,6 +1103,13 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                              Read3DSliceRGBA16F(*scatteringVol, kBg, bgOn),
                     "M15-U6-07.1 (CSM): render shadowed blocker scene");
 
+                const auto sameExtinction = [](const auto& a, const auto& b) {
+                    return std::equal(a.begin(), a.end(), b.begin(), b.end(),
+                        [](const glm::vec4& lhs, const glm::vec4& rhs) { return lhs.a == rhs.a; });
+                };
+                RENDER_CHECK(sameExtinction(fgOff, fgOn) && sameExtinction(bgOff, bgOn),
+                    "Enabling shadow maps leaves the entire stratified medium extinction slice unchanged");
+
                 const glm::vec3 sFgOff = froxelAt(fgOff, fx, fy);
                 const glm::vec3 sFgOn = froxelAt(fgOn, fx, fy);
                 const glm::vec3 sBgOff = froxelAt(bgOff, fx, fy);
@@ -1122,6 +1129,29 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                 shadowLog << "csm fg_off=" << glm::length(sFgOff) << " fg_on=" << glm::length(sFgOn)
                           << " bg_off=" << glm::length(sBgOff) << " bg_on=" << glm::length(sBgOn)
                           << " hdr_off=" << glm::length(pixOff) << " hdr_on=" << glm::length(pixOn) << '\n';
+
+                RHISceneRenderer fallbackRenderer;
+                bool faultReached = false;
+                {
+                    ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+                        if (operation == "CreateSampler" && ScopedRHIOperation::Resource() == "FogShadowSampler") {
+                            faultReached = true;
+                            return nri::Result::OUT_OF_MEMORY;
+                        }
+                        return {};
+                    });
+                    RENDER_CHECK(fallbackRenderer.Init(device, false) && faultReached,
+                        "A failed fog comparison sampler leaves the renderer available");
+                }
+                fallbackRenderer.RenderWorldView(world, cam, &hdrColor, &hdrDepth, settings, nullptr, targets);
+                std::vector<glm::vec4> fallbackSlice;
+                RENDER_CHECK(fallbackRenderer.WasLastRenderSuccessful() &&
+                             fallbackRenderer.GetCascadedShadows().IsActive() &&
+                             HasFallbackPrefix(fallbackRenderer.GetDiagnostics().GetFrame(), "froxel_shadows_unavailable") &&
+                             HasPassNamed(fallbackRenderer.GetDiagnostics().GetFrame(), "FogApply") &&
+                             Read3DSliceRGBA16F(*scatteringVol, kBg, fallbackSlice) && fallbackSlice == bgOff,
+                    "Fog with no comparison sampler matches the unshadowed volume while surface CSM remains active");
+                fallbackRenderer.Shutdown();
             }
 
             // C2. M15-U6-07.1 & 02.2: Local shadowed spot light & point light wall occlusion
@@ -1195,6 +1225,29 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                           << " shd_off=" << glm::length(vSpotShdOff) << " shd_on=" << glm::length(vSpotShdOn)
                           << " hdr_shd_on=" << glm::length(hSpotShdOn) << "/" << glm::length(hSpotShdOff) << '\n';
 
+                // The outer cone crosses this slice. Samples outside the cone
+                // must not contribute neutral visibility to the blocked center.
+                RenderWorld edgeWorld;
+                auto edgeSpot = spotWorld.SpotLights.front();
+                froxelSample(80u, 45u, kMid, settings.FogNearDistance, settings.FogMaxDistance, sampleWS, rayWS);
+                edgeSpot.Position = sampleWS + glm::vec3(-6.0f, 0.0f, 5.7f * std::tan(glm::radians(6.0f)));
+                edgeSpot.Direction = glm::vec3(1.0f, 0.0f, 0.0f);
+                edgeSpot.InnerAngle = edgeSpot.OuterAngle = 6.0f;
+                edgeWorld.SpotLights.push_back(edgeSpot);
+                edgeWorld.Meshes.push_back(makeBlocker(9212u, sampleWS - glm::vec3(3.0f, 0.0f, 0.0f),
+                    {0.5f, 20.0f, 20.0f}));
+                RENDER_CHECK(renderAndReadHDR(edgeWorld, cam, offSettings, hdrOff, diag) &&
+                             Read3DSliceRGBA16F(*scatteringVol, kMid, volOff) &&
+                             renderAndReadHDR(edgeWorld, cam, settings, hdrOn, diag) &&
+                             renderer.GetLocalShadows().IsActive() &&
+                             Read3DSliceRGBA16F(*scatteringVol, kMid, volOn),
+                    "Render the same narrow spotlight cone boundary with shadows off and on");
+                const float edgeOff = glm::length(froxelAt(volOff, 80u, 45u));
+                const float edgeOn = glm::length(froxelAt(volOn, 80u, 45u));
+                RENDER_CHECK(edgeOff > 0.01f && edgeOn < 0.05f * edgeOff,
+                    "Unlit taps beyond a narrow spot frustum cannot leak into a blocked froxel");
+                shadowLog << "spot_edge off=" << edgeOff << " on=" << edgeOn << '\n';
+
                 // C2b: Point light at (0, 1.5, -15) with blocker wall on +X at x=+2.5
                 RenderWorld pointWorld;
                 RenderPointLight point{};
@@ -1204,6 +1257,9 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                 point.Intensity = 4000.0f;
                 point.Color = glm::vec3(0.25f, 0.75f, 1.0f);
                 point.Shadows.CastShadows = true;
+                RenderDirectionalLight disabledDirectional{};
+                disabledDirectional.Intensity = 0.0f;
+                pointWorld.AdditionalDirectionalLights.push_back(disabledDirectional);
                 pointWorld.PointLights.push_back(point);
                 pointWorld.Meshes.push_back(makeBlocker(9221u, {1.0f, 1.5f, -15.0f}, {0.6f, 16.0f, 20.0f}));
 
@@ -1215,7 +1271,8 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
 
                 RENDER_CHECK(renderAndReadHDR(pointWorld, cam, settings, hdrOn, diag) &&
                              renderer.GetLocalShadows().IsActive() &&
-                             renderer.GetLocalShadows().GetFrame().PointViews[0] >= 0 &&
+                             renderer.GetLocalShadows().GetFrame().PointViews[0] == -1 &&
+                             renderer.GetLocalShadows().GetFrame().PointViews[1] >= 0 &&
                              Read3DSliceRGBA16F(*scatteringVol, kMid, volOn),
                     "M15-U6-07.1 (Point): render shadowed point blocker fog");
 
@@ -1223,7 +1280,7 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                 constexpr uint32_t fxPtShadow = 115u; // u = 0.72 (behind wall at x=+2.5)
                 froxelSample(fxPtLit, 45u, kMid, settings.FogNearDistance, settings.FogMaxDistance, sampleWS, rayWS);
                 const glm::vec3 cpuPtLit = FroxelFogContract::EvaluatePointLightInScatter(
-                    ptMedia, ptLighting.PointLights[0], sampleWS, rayWS, 1.0f);
+                    ptMedia, ptLighting.PointLights[1], sampleWS, rayWS, 1.0f);
                 const glm::vec3 vPtLitOff = froxelAt(volOff, fxPtLit, 45u);
                 const glm::vec3 vPtLitOn = froxelAt(volOn, fxPtLit, 45u);
                 const glm::vec3 vPtShdOff = froxelAt(volOff, fxPtShadow, 45u);
@@ -1277,6 +1334,39 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                              glm::length(gpuRect - cpuRect) < 0.05f * glm::length(cpuRect),
                     "M15-U6-02.2: GPU rect area light froxel scatter matches CPU contract");
                 shadowLog << "rect cpu=" << glm::length(cpuRect) << " gpu=" << glm::length(gpuRect) << '\n';
+
+                rectWorld.RectLights.front().Shape = AreaLightShape::Disk;
+                rectWorld.RectLights.front().TwoSided = true;
+                rectWorld.RectLights.front().Direction = -rl.Direction;
+                RENDER_CHECK(renderAndReadHDR(rectWorld, cam, settings, hdrRect, diag) &&
+                             Read3DSliceRGBA16F(*scatteringVol, kMid, volRect),
+                    "Render a two-sided disk through its back face");
+                const auto diskLighting = lightingSvc.BuildFrame(rectWorld, settings);
+                const auto cpuDisk = FroxelFogContract::EvaluateRectLightInScatter(rectMedia,
+                    diskLighting.RectLights[0], sampleWS, rayWS);
+                const auto gpuDisk = froxelAt(volRect, 80u, 45u);
+                RENDER_CHECK(glm::length(cpuDisk) > 0.0f && glm::length(gpuDisk) < glm::length(gpuRect) &&
+                             glm::length(gpuDisk - cpuDisk) < 0.05f * glm::length(cpuDisk),
+                    "Disk uses its smaller emitter area and the two-sided flag");
+
+                RenderWorld directionalWorld;
+                RenderDirectionalLight secondary;
+                secondary.Direction = glm::vec3(0.0f, 0.0f, -1.0f);
+                secondary.Intensity = 2.0f;
+                directionalWorld.AdditionalDirectionalLights.push_back(secondary);
+                RENDER_CHECK(renderAndReadHDR(directionalWorld, cam, settings, hdrRect, diag) &&
+                             Read3DSliceRGBA16F(*scatteringVol, kMid, volRect),
+                    "Render a packed additional directional light without a primary sun");
+                const auto secondaryLighting = lightingSvc.BuildFrame(directionalWorld, settings);
+                const auto cpuSecondary = FroxelFogContract::EvaluatePointLightInScatter(rectMedia,
+                    secondaryLighting.PointLights[0], sampleWS, rayWS);
+                const auto gpuSecondary = froxelAt(volRect, 80u, 45u);
+                RENDER_CHECK(glm::length(cpuSecondary) > 0.01f &&
+                             glm::length(gpuSecondary - cpuSecondary) < 0.05f * glm::length(cpuSecondary),
+                    "A packed additional directional light contributes its authored radiance");
+                shadowLog << "disk cpu=" << glm::length(cpuDisk) << " gpu=" << glm::length(gpuDisk)
+                          << " additional_directional cpu=" << glm::length(cpuSecondary)
+                          << " gpu=" << glm::length(gpuSecondary) << '\n';
             }
 
             // C4. M15-U6-07.2: Bounded light shafts through blocker slit & zero shafts without directional sun
@@ -1324,6 +1414,22 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                              glm::length(hLeft) < 0.15f * glm::length(hCenter) &&
                              glm::length(hRight) < 0.15f * glm::length(hCenter),
                     "M15-U6-07.2: blocker slit produces bright bounded center light shaft with dark left and right shadows");
+
+                glm::vec3 centerPosition, neighborPosition, ray;
+                froxelSample(80u, 45u, kSlit, settings.FogNearDistance, settings.FogMaxDistance, centerPosition, ray);
+                froxelSample(81u, 45u, kSlit, settings.FogNearDistance, settings.FogMaxDistance, neighborPosition, ray);
+                const float slitWithFilterMargin = 0.8f + 2.0f * std::abs(neighborPosition.x - centerPosition.x);
+                unsigned brightColumns = 0u;
+                for (uint32_t x = 0; x < 160u; ++x) {
+                    if (glm::length(froxelAt(volShafts, x, 45u)) <= 0.15f * glm::length(vCenter)) continue;
+                    glm::vec3 position;
+                    froxelSample(x, 45u, kSlit, settings.FogNearDistance, settings.FogMaxDistance, position, ray);
+                    RENDER_CHECK(std::abs(position.x) <= slitWithFilterMargin,
+                        "Bright shaft columns stay within the geometric slit plus the filter margin");
+                    ++brightColumns;
+                }
+                RENDER_CHECK(brightColumns >= 2u, "The slit produces a shaft wider than one froxel");
+                shadowLog << "shaft_bright_columns=" << brightColumns << '\n';
 
                 // Remove directional light completely on the identical slit geometry -> zero shafts
                 slitWorld.DirectionalLight.reset();

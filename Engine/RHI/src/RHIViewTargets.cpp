@@ -5,7 +5,15 @@
 #include <cmath>
 
 namespace Axle::RHI {
-    namespace { std::atomic<uint64_t> s_NextViewGeneration{1}; }
+    namespace {
+        std::atomic<uint64_t> s_NextViewGeneration{1};
+        constexpr std::array<RHIViewTarget, 4> kFroxelSlots = {
+            RHIViewTarget::FroxelScattering,
+            RHIViewTarget::FroxelIntegrated,
+            RHIViewTarget::FroxelHistory0,
+            RHIViewTarget::FroxelHistory1
+        };
+    }
 
     uint32_t RHIViewTargets::ComputePlanarTargetDimension(uint32_t extent, float scale) {
         if (extent == 0u) return 0u;
@@ -32,6 +40,36 @@ namespace Axle::RHI {
     uint32_t RHIViewTargets::ComputeAllocatedHiZLevelCount(uint32_t width, uint32_t height) {
         const uint32_t useful = ComputeUsefulHiZLevelCount(width, height);
         return useful == 0 ? 0 : std::min(MaxHiZLevels, std::max(MinSSRHiZLevels, useful));
+    }
+
+    RHIFroxelGridExtent RHIViewTargets::ComputeFroxelGridExtent(uint32_t width, uint32_t height, uint8_t qualityTier) {
+        if (width == 0u || height == 0u || qualityTier > MaxFroxelQualityTier) return {};
+        struct FroxelTierConfig {
+            uint32_t MaxWidth;
+            uint32_t MaxHeight;
+            uint32_t DepthSlices;
+            uint32_t MinTilePixels;
+        };
+        static constexpr FroxelTierConfig kTiers[MaxFroxelQualityTier + 1] = {
+            {  80u,  45u, 32u, 16u }, // 0: Low
+            { 128u,  72u, 48u, 10u }, // 1: Medium
+            { 160u,  90u, 64u,  8u }, // 2: High (reference 160x90x64)
+            { 240u, 135u, 96u,  8u }  // 3: Ultra
+        };
+        const auto& tier = kTiers[qualityTier];
+        const double maxTileScale = 1.0 / static_cast<double>(tier.MinTilePixels);
+        const double fitScale = std::min({
+            maxTileScale,
+            static_cast<double>(tier.MaxWidth) / static_cast<double>(width),
+            static_cast<double>(tier.MaxHeight) / static_cast<double>(height)
+        });
+        const uint32_t froxelW = std::clamp(
+            static_cast<uint32_t>(std::lround(static_cast<double>(width) * fitScale)),
+            1u, tier.MaxWidth);
+        const uint32_t froxelH = std::clamp(
+            static_cast<uint32_t>(std::lround(static_cast<double>(height) * fitScale)),
+            1u, tier.MaxHeight);
+        return { froxelW, froxelH, tier.DepthSlices };
     }
 
     bool RHIViewTargets::IsValid() const {
@@ -125,11 +163,39 @@ namespace Axle::RHI {
                 return false;
             }
         }
+        const auto check3D = [&](RHIViewTarget slot, const RHIFroxelGridExtent& extent, RHITextureFormat format) {
+            auto* texture = Get(slot);
+            return texture && texture->IsValid() &&
+                   texture->GetWidth() == extent.Width &&
+                   texture->GetHeight() == extent.Height &&
+                   texture->GetDepth() == extent.Depth &&
+                   texture->GetMipCount() == 1u &&
+                   texture->GetDesc().ArrayLayers == 1u &&
+                   texture->GetDesc().SampleCount == 1u &&
+                   texture->GetFormat() == format &&
+                   texture->GetSRV() != nullptr &&
+                   texture->GetUAV() != nullptr;
+        };
+        if (m_Desc.FroxelQuality > MaxFroxelQualityTier) return false;
+        if (m_Desc.EnableVolumetricFog) {
+            if (m_Desc.Samples != 1u) return false;
+            const auto froxelExtent = ComputeFroxelGridExtent(m_Desc.Width, m_Desc.Height, m_Desc.FroxelQuality);
+            if (!froxelExtent.Width || !froxelExtent.Height || !froxelExtent.Depth) return false;
+            for (const auto slot : kFroxelSlots) {
+                if (!check3D(slot, froxelExtent, RHITextureFormat::RGBA16_FLOAT)) return false;
+            }
+        } else {
+            for (const auto slot : kFroxelSlots) {
+                if (Get(slot) != nullptr) return false;
+            }
+        }
         return true;
     }
     bool RHIViewTargets::Configure(const RHIViewTargetDesc& desc, const RHITexture* externalColor, const RHITexture* externalDepth) {
         if (!desc.Width || !desc.Height || desc.HistoryCount > 2 ||
             (desc.Samples != 1 && desc.Samples != 2 && desc.Samples != 4 && desc.Samples != 8)) return false;
+        if (desc.FroxelQuality > MaxFroxelQualityTier) return false;
+        if (desc.EnableVolumetricFog && desc.Samples != 1) return false;
         if (desc.EnablePlanarReflection &&
             (!std::isfinite(desc.PlanarResolutionScale) ||
              desc.PlanarResolutionScale < MinPlanarResolutionScale ||
@@ -159,7 +225,8 @@ namespace Axle::RHI {
         if (externalDepth) { if (!desc.EnableDepth || !import(RHIViewTarget::Depth, *externalDepth, desc.DepthFormat)) return false; }
         else if (desc.OwnPrimary && desc.EnableDepth && !create(RHIViewTarget::Depth, desc.DepthFormat, 1, true)) return false;
         if (!desc.RenderAuxiliary) {
-            if (desc.Samples != 1 || desc.HistoryCount || desc.HDR || desc.FXAA || desc.EnablePlanarReflection) return false;
+            if (desc.Samples != 1 || desc.HistoryCount || desc.HDR || desc.FXAA ||
+                desc.EnablePlanarReflection || desc.EnableVolumetricFog) return false;
             candidate.m_Initialized = true;
             candidate.m_Generation = s_NextViewGeneration.fetch_add(1);
             if (!candidate.Validate()) return false;
@@ -265,6 +332,18 @@ namespace Axle::RHI {
         }
         for (uint8_t i = 0; i < desc.HistoryCount; ++i)
             if (!create(i ? RHIViewTarget::History1 : RHIViewTarget::History0, sceneColor, 1, false)) return false;
+        if (desc.EnableVolumetricFog) {
+            const auto froxelExtent = ComputeFroxelGridExtent(desc.Width, desc.Height, desc.FroxelQuality);
+            if (!froxelExtent.Width || !froxelExtent.Height || !froxelExtent.Depth) return false;
+            for (const auto slot : kFroxelSlots) {
+                auto texture = std::make_unique<RHITexture>();
+                auto native = RHITextureDesc::StorageTexture3D(
+                    froxelExtent.Width, froxelExtent.Height, froxelExtent.Depth, RHITextureFormat::RGBA16_FLOAT,
+                    "ViewTarget_" + std::to_string(static_cast<unsigned>(slot)));
+                if (!texture->Init(native)) return false;
+                candidate.m_Textures[static_cast<size_t>(slot)] = std::move(texture);
+            }
+        }
         candidate.m_Initialized = true;
         candidate.m_Generation = s_NextViewGeneration.fetch_add(1);
         if (!candidate.Validate()) return false;

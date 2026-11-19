@@ -754,4 +754,62 @@ namespace Axle {
             bool manualRequested = false);
     }
 
+    // =========================================================================
+    // 10. Volumetric Froxel Fog Resources, Depth Slice & Tier Contracts (M15-U6-A)
+    // =========================================================================
+    namespace FroxelFogContract {
+        inline constexpr uint32_t ReferenceGridWidth = 160u;
+        inline constexpr uint32_t ReferenceGridHeight = 90u;
+        inline constexpr uint32_t ReferenceGridDepth = 64u;
+        inline constexpr uint32_t VolumeCount = 4u; // Scattering, Integrated, History0, History1
+        inline constexpr uint64_t BytesPerFroxelRGBA16F = 8ull;
+        inline constexpr float MinNearDistance = 0.05f;
+        inline constexpr float DefaultNearDistance = 0.25f;
+        inline constexpr float DefaultMaxDistance = 100.0f;
+        inline constexpr float MaxAllowedDistance = 2000.0f;
+
+        struct FroxelTierSpec {
+            FroxelFogQuality Quality = FroxelFogQuality::High;
+            const char* Name = "High";
+            uint32_t MaxWidth = ReferenceGridWidth;
+            uint32_t MaxHeight = ReferenceGridHeight;
+            uint32_t DepthSlices = ReferenceGridDepth;
+            uint32_t MinTilePixels = 8u;
+        };
+
+        struct FroxelMemoryBudget {
+            RHI::RHIFroxelGridExtent Extent;
+            uint64_t FroxelCount = 0;
+            uint64_t VolumeBytesPerTexture = 0;
+            uint32_t AllocatedVolumeCount = VolumeCount;
+            uint64_t TotalLogicalBytes = 0;
+            bool DeviceQueryAvailable = false;
+            uint64_t DeviceBytesPerTexture = 0;
+            uint64_t DeviceAllocationAlignment = 0;
+            uint64_t TotalDeviceReportedBytes = 0;
+        };
+
+        struct FroxelFogResourcePolicy {
+            FroxelFogQuality Quality = FroxelFogQuality::High;
+            float NearDistance = DefaultNearDistance;
+            float MaxDistance = DefaultMaxDistance;
+            uint64_t MaxBudgetBytes = 128ull * 1024ull * 1024ull;
+            bool RequireSingleSample = true;
+            bool RequireAuxiliaryTargets = true;
+        };
+
+        uint32_t GetQualityTierCount();
+        FroxelTierSpec GetTierSpec(FroxelFogQuality quality);
+        RHI::RHIFroxelGridExtent ComputeGridExtent(uint32_t viewWidth, uint32_t viewHeight, FroxelFogQuality quality);
+        bool ResolveDepthRange(float nearDistance, float maxDistance, float& outNear, float& outFar);
+        float SliceBoundaryToViewDistance(uint32_t sliceBoundary, uint32_t sliceCount, float nearDistance, float maxDistance);
+        float SliceCenterToViewDistance(uint32_t sliceIndex, uint32_t sliceCount, float nearDistance, float maxDistance);
+        float EvaluateSliceThickness(uint32_t sliceIndex, uint32_t sliceCount, float nearDistance, float maxDistance);
+        float ViewDistanceToSliceCoord(float viewDistance, uint32_t sliceCount, float nearDistance, float maxDistance);
+        float SliceCoordToViewDistance(float sliceCoord, float nearDistance, float maxDistance);
+        FroxelMemoryBudget EstimateMemoryBudget(uint32_t viewWidth, uint32_t viewHeight, FroxelFogQuality quality, bool queryDevice = false);
+        bool ValidateResourcePolicy(const RHI::RHIViewTargetDesc& desc, const FroxelFogResourcePolicy& policy, std::string* outReason = nullptr);
+        void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture, bool& outEnable, uint8_t& outQuality);
+    }
+
 } // namespace Axle

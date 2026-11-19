@@ -188,6 +188,7 @@ namespace Axle::RHI {
             srvView.mipNum = static_cast<nri::Dim_t>(desc.MipLevels);
             srvView.layerOffset = 0;
             srvView.layerNum = static_cast<nri::Dim_t>(desc.ArrayLayers);
+            if (desc.Depth > 1) srvView.sliceNum = static_cast<nri::Dim_t>(desc.Depth);
 
             res = ScopedRHIFault::Invoke("CreateTextureSRV", [&] { return core.CreateTextureView(srvView, m_SRV); });
             if (res != nri::Result::SUCCESS || !m_SRV) {

@@ -418,6 +418,95 @@ static bool StorageMipViews() {
                 "mid-mip UAV creation fault cleans up partial cubemap resources without leaks");
         }
     }
+
+    // M15-U6-01.1 / 01.2 / 07.5: Native 3D froxel StorageTexture3D SRV+UAV, QueryMemoryRequirements,
+    // tier scaling (Low..Ultra + 160x90x64 reference), resize, invalid input & fault isolation.
+    {
+        RHITexture volume3D;
+        const auto volDesc = RHITextureDesc::StorageTexture3D(
+            16u, 12u, 8u, RHITextureFormat::RGBA16_FLOAT, "TestFroxelStorage3D");
+        RENDER_CHECK(volume3D.Init(volDesc) && volume3D.IsValid() &&
+                     volume3D.GetWidth() == 16u && volume3D.GetHeight() == 12u && volume3D.GetDepth() == 8u &&
+                     volume3D.GetSRV() != nullptr && volume3D.GetUAV() != nullptr,
+            "M15-U6-01.1: StorageTexture3D allocates 3D RGBA16F volume with valid SRV and UAV");
+        nri::MemoryDesc memDesc{};
+        RENDER_CHECK(RHITexture::QueryMemoryRequirements(volDesc, memDesc) &&
+                     memDesc.size >= 16ull * 12ull * 8ull * 8ull,
+            "M15-U6-07.5: 3D texture memory query reports non-zero device allocation >= logical bytes");
+
+        RHITexture retained3D = volume3D.RetainGeneration();
+        const auto volHandle = volume3D.GetHandle();
+        volume3D.Shutdown();
+        RENDER_CHECK(retained3D.IsValid() && retained3D.GetSRV() && retained3D.GetUAV() &&
+                     device.GetResources().Acquire(volHandle).IsLive(),
+            "M15-U6-01.1: RetainGeneration preserves 3D SRV/UAV after wrapper shutdown");
+        retained3D.Shutdown();
+        RENDER_CHECK(!device.GetResources().Acquire(volHandle).IsLive(),
+            "M15-U6-01.1: releasing retained 3D volume frees views and texture");
+
+        RHIViewTargets froxelTargets;
+        RHIViewTargetDesc vtDesc;
+        vtDesc.Width = 1920u;
+        vtDesc.Height = 1080u;
+        vtDesc.EnableVolumetricFog = true;
+        vtDesc.FroxelQuality = 2u; // High: 160x90x64
+        RENDER_CHECK(froxelTargets.Configure(vtDesc) && froxelTargets.Validate(),
+            "M15-U6-01.1 / 01.2: RHIViewTargets configures 1080p High froxel targets");
+        for (const RHIViewTarget slot : {
+                 RHIViewTarget::FroxelScattering, RHIViewTarget::FroxelIntegrated,
+                 RHIViewTarget::FroxelHistory0, RHIViewTarget::FroxelHistory1 }) {
+            auto* tex = froxelTargets.Get(slot);
+            RENDER_CHECK(tex && tex->IsValid() &&
+                         tex->GetWidth() == 160u && tex->GetHeight() == 90u && tex->GetDepth() == 64u &&
+                         tex->GetFormat() == RHITextureFormat::RGBA16_FLOAT &&
+                         tex->GetSRV() != nullptr && tex->GetUAV() != nullptr,
+                "M15-U6-01.1 / 01.2: 1080p High tier allocates exact 160x90x64 3D RGBA16F volumes");
+        }
+
+        const auto genHigh = froxelTargets.GetGeneration();
+        vtDesc.FroxelQuality = 0u; // Low: 80x45x32
+        RENDER_CHECK(froxelTargets.Configure(vtDesc) && froxelTargets.Validate() &&
+                     froxelTargets.GetGeneration() != genHigh &&
+                     froxelTargets.GetFroxelScattering()->GetWidth() == 80u &&
+                     froxelTargets.GetFroxelScattering()->GetHeight() == 45u &&
+                     froxelTargets.GetFroxelScattering()->GetDepth() == 32u,
+            "M15-U6-01.2: switching froxel quality tier publishes resized 80x45x32 generation");
+
+        const auto genLow = froxelTargets.GetGeneration();
+        auto badTier = vtDesc;
+        badTier.FroxelQuality = 9u;
+        auto badMsaa = vtDesc;
+        badMsaa.Samples = 4u;
+        RENDER_CHECK(!froxelTargets.Configure(badTier) && !froxelTargets.Configure(badMsaa) &&
+                     froxelTargets.GetGeneration() == genLow && froxelTargets.Validate(),
+            "M15-U6-01.1 / 01.2: invalid tier or MSAA froxel request preserves last-good generation");
+
+        bool froxelOomHit = false;
+        {
+            ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
+                if (op == "CreateTexture" && ScopedRHIOperation::Resource() ==
+                    "ViewTarget_" + std::to_string(static_cast<unsigned>(RHIViewTarget::FroxelHistory1))) {
+                    froxelOomHit = true;
+                    return nri::Result::OUT_OF_MEMORY;
+                }
+                return {};
+            });
+            auto resized = vtDesc;
+            resized.Width = 1280u;
+            resized.Height = 720u;
+            resized.FroxelQuality = 2u;
+            RENDER_CHECK(!froxelTargets.Configure(resized) && froxelOomHit &&
+                         froxelTargets.GetGeneration() == genLow && froxelTargets.Validate() &&
+                         froxelTargets.GetFroxelScattering()->GetWidth() == 80u,
+                "M15-U6-01.1: OOM during froxel resize preserves prior validated 3D target generation");
+        }
+
+        vtDesc.EnableVolumetricFog = false;
+        RENDER_CHECK(froxelTargets.Configure(vtDesc) && froxelTargets.Validate() &&
+                     !froxelTargets.GetFroxelScattering() && !froxelTargets.GetFroxelIntegrated() &&
+                     !froxelTargets.GetFroxelHistory(0) && !froxelTargets.GetFroxelHistory(1),
+            "M15-U6-01.1: disabling volumetric fog allocates zero 3D froxel targets");
+    }
     return true;
 }
 
@@ -524,6 +613,31 @@ static bool TargetSets(RHIType backend) {
     const bool externalLive = device.GetResources().Acquire(externalHandle).IsLive();
     RENDER_CHECK(!oldLive, "completed frame releases the retired color generation");
     RENDER_CHECK(!externalLive, "completed frame releases the retired external generation");
+
+    // M15-U6-01.1 / 01.2: RHIViewportDescriptor SetRenderOptions allocates and releases 3D froxel targets
+    {
+        SceneRenderSettings fogSettings;
+        fogSettings.EnableVolumetricFog = true;
+        fogSettings.FogQuality = FroxelFogQuality::Low;
+        RENDER_CHECK(second.SetRenderOptions(fogSettings) &&
+                     second.GetTargets()->GetFroxelScattering() &&
+                     second.GetTargets()->GetFroxelIntegrated() &&
+                     second.GetTargets()->GetFroxelHistory(0) &&
+                     second.GetTargets()->GetFroxelHistory(1) &&
+                     second.GetTargets()->GetFroxelScattering()->GetDepth() == 32u,
+            "M15-U6-01.1 / 01.2: RHIViewportDescriptor SetRenderOptions allocates Low 3D froxel targets");
+
+        fogSettings.FogQuality = FroxelFogQuality::High;
+        RENDER_CHECK(second.SetRenderOptions(fogSettings) &&
+                     second.GetTargets()->GetFroxelScattering()->GetDepth() == 64u,
+            "M15-U6-01.2: RHIViewportDescriptor SetRenderOptions updates 3D froxel targets when tier changes");
+
+        fogSettings.EnableVolumetricFog = false;
+        RENDER_CHECK(second.SetRenderOptions(fogSettings) &&
+                     !second.GetTargets()->GetFroxelScattering() &&
+                     !second.GetTargets()->GetFroxelHistory(1),
+            "M15-U6-01.1: RHIViewportDescriptor releases 3D froxel targets when volumetric fog is disabled");
+    }
 
     // M15-U5-46.3: RHIViewTargets planar reflection color/depth lifecycle, resize & fault isolation
     {

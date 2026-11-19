@@ -6278,6 +6278,8 @@ namespace Axle {
         targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
         targetDesc.EnableAutoExposure = settings.EnableAutoExposure;
         targetDesc.EnableDDGI = settings.EnableDDGI;
+        FroxelFogContract::ResolveViewTargetOptions(
+            settings, isSubCapture, targetDesc.EnableVolumetricFog, targetDesc.FroxelQuality);
         if (settings.EnableTAA) targetDesc.HistoryCount = 2;
 
         if (!world.ErrorMessage.empty()) {

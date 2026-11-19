@@ -1,4 +1,5 @@
 #include <Axle/RenderService.hpp>
+#include <Axle/RenderContracts.hpp>
 #include <Axle/RHIObjectPicker.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/Window.hpp>
@@ -288,6 +289,8 @@ namespace Axle {
                     : 0.5f;
                 desc.EnableAutoExposure = request.Settings.EnableAutoExposure;
                 desc.EnableDDGI = request.Settings.EnableDDGI;
+                FroxelFogContract::ResolveViewTargetOptions(
+                    request.Settings, false, desc.EnableVolumetricFog, desc.FroxelQuality);
                 if (request.Settings.EnableTAA) desc.HistoryCount = 2;
                 if (!m_DefaultMainTargets || !m_DefaultMainTargets->IsValid() || m_DefaultMainTargets->GetDesc() != desc) {
                     auto candidate = std::make_shared<RHI::RHIViewTargets>();

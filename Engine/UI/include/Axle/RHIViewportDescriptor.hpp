@@ -25,6 +25,8 @@ namespace Axle {
         bool EnableReflectionTerms = false;
         bool EnablePlanarReflection = false;
         float PlanarResolutionScale = 0.5f;
+        bool EnableVolumetricFog = false;
+        uint8_t FroxelQuality = 2;
         bool operator==(const RHIViewportDesc&) const = default;
     };
 

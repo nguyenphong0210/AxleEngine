@@ -35,6 +35,9 @@ namespace Axle {
         mix(settings.PlanarReflectionMaxRoughness);
         mix(settings.HiZVisualizationLevel);
         mix(settings.EnableVolumetricFog);
+        mix(settings.FogQuality);
+        mix(settings.FogNearDistance);
+        mix(settings.FogMaxDistance);
         mix(settings.EnableDDGI);
         mix(settings.EnableBloom);
         mix(settings.EnableAutoExposure);

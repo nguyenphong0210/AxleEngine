@@ -2,6 +2,7 @@
 #include <Axle/RenderContracts.hpp>
 #include <Axle/Material.hpp>
 #include <Axle/ResolvedSurface.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 #include <algorithm>
@@ -2973,5 +2974,159 @@ namespace Axle {
             return out;
         }
     } // namespace PlanarReflectionContract
+
+    // =========================================================================
+    // 10. Volumetric Froxel Fog Resources, Depth Slice & Tier Contracts (M15-U6-A)
+    // =========================================================================
+    namespace FroxelFogContract {
+
+        namespace {
+            constexpr FroxelTierSpec kTierSpecs[4] = {
+                { FroxelFogQuality::Low,    "Low",     80u,  45u, 32u, 16u },
+                { FroxelFogQuality::Medium, "Medium", 128u,  72u, 48u, 10u },
+                { FroxelFogQuality::High,   "High",   160u,  90u, 64u,  8u },
+                { FroxelFogQuality::Ultra,  "Ultra",  240u, 135u, 96u,  8u }
+            };
+
+            float EvaluateExponentialDepth(float nearZ, float farZ, double normalizedSlice) {
+                return static_cast<float>(
+                    static_cast<double>(nearZ) * std::pow(static_cast<double>(farZ) / static_cast<double>(nearZ), normalizedSlice));
+            }
+        }
+
+        uint32_t GetQualityTierCount() {
+            return static_cast<uint32_t>(std::size(kTierSpecs));
+        }
+
+        FroxelTierSpec GetTierSpec(FroxelFogQuality quality) {
+            const auto index = static_cast<uint32_t>(quality);
+            if (index >= GetQualityTierCount()) return kTierSpecs[static_cast<uint32_t>(FroxelFogQuality::High)];
+            return kTierSpecs[index];
+        }
+
+        RHI::RHIFroxelGridExtent ComputeGridExtent(uint32_t viewWidth, uint32_t viewHeight, FroxelFogQuality quality) {
+            const auto index = static_cast<uint32_t>(quality);
+            if (index > RHI::RHIViewTargets::MaxFroxelQualityTier) return {};
+            return RHI::RHIViewTargets::ComputeFroxelGridExtent(viewWidth, viewHeight, static_cast<uint8_t>(index));
+        }
+
+        bool ResolveDepthRange(float nearDistance, float maxDistance, float& outNear, float& outFar) {
+            if (!std::isfinite(nearDistance) || !std::isfinite(maxDistance)) return false;
+            if (nearDistance < MinNearDistance || maxDistance <= nearDistance || maxDistance > MaxAllowedDistance) {
+                return false;
+            }
+            outNear = nearDistance;
+            outFar = maxDistance;
+            return true;
+        }
+
+        float SliceBoundaryToViewDistance(uint32_t sliceBoundary, uint32_t sliceCount, float nearDistance, float maxDistance) {
+            float nearZ = 0.0f, farZ = 0.0f;
+            if (sliceCount == 0u || sliceBoundary > sliceCount || !ResolveDepthRange(nearDistance, maxDistance, nearZ, farZ)) {
+                return 0.0f;
+            }
+            return EvaluateExponentialDepth(nearZ, farZ, static_cast<double>(sliceBoundary) / static_cast<double>(sliceCount));
+        }
+
+        float SliceCenterToViewDistance(uint32_t sliceIndex, uint32_t sliceCount, float nearDistance, float maxDistance) {
+            float nearZ = 0.0f, farZ = 0.0f;
+            if (sliceCount == 0u || sliceIndex >= sliceCount || !ResolveDepthRange(nearDistance, maxDistance, nearZ, farZ)) {
+                return 0.0f;
+            }
+            return EvaluateExponentialDepth(nearZ, farZ, (static_cast<double>(sliceIndex) + 0.5) / static_cast<double>(sliceCount));
+        }
+
+        float EvaluateSliceThickness(uint32_t sliceIndex, uint32_t sliceCount, float nearDistance, float maxDistance) {
+            if (sliceCount == 0u || sliceIndex >= sliceCount) return 0.0f;
+            const float z0 = SliceBoundaryToViewDistance(sliceIndex, sliceCount, nearDistance, maxDistance);
+            const float z1 = SliceBoundaryToViewDistance(sliceIndex + 1u, sliceCount, nearDistance, maxDistance);
+            if (!(z1 > z0)) return 0.0f;
+            return z1 - z0;
+        }
+
+        float ViewDistanceToSliceCoord(float viewDistance, uint32_t sliceCount, float nearDistance, float maxDistance) {
+            float nearZ = 0.0f, farZ = 0.0f;
+            if (sliceCount == 0u || !std::isfinite(viewDistance) || !ResolveDepthRange(nearDistance, maxDistance, nearZ, farZ)) {
+                return 0.0f;
+            }
+            const double clampedZ = std::clamp(static_cast<double>(viewDistance), static_cast<double>(nearZ), static_cast<double>(farZ));
+            const double ratio = std::log(clampedZ / static_cast<double>(nearZ)) / std::log(static_cast<double>(farZ) / static_cast<double>(nearZ));
+            return static_cast<float>(std::clamp(ratio, 0.0, 1.0));
+        }
+
+        float SliceCoordToViewDistance(float sliceCoord, float nearDistance, float maxDistance) {
+            float nearZ = 0.0f, farZ = 0.0f;
+            if (!std::isfinite(sliceCoord) || !ResolveDepthRange(nearDistance, maxDistance, nearZ, farZ)) {
+                return 0.0f;
+            }
+            const double clamped = std::clamp(static_cast<double>(sliceCoord), 0.0, 1.0);
+            return static_cast<float>(static_cast<double>(nearZ) * std::pow(static_cast<double>(farZ) / static_cast<double>(nearZ), clamped));
+        }
+
+        FroxelMemoryBudget EstimateMemoryBudget(uint32_t viewWidth, uint32_t viewHeight, FroxelFogQuality quality, bool queryDevice) {
+            FroxelMemoryBudget budget;
+            budget.Extent = ComputeGridExtent(viewWidth, viewHeight, quality);
+            if (!budget.Extent.Width || !budget.Extent.Height || !budget.Extent.Depth) {
+                budget.AllocatedVolumeCount = 0u;
+                return budget;
+            }
+            budget.FroxelCount = static_cast<uint64_t>(budget.Extent.Width) *
+                                 static_cast<uint64_t>(budget.Extent.Height) *
+                                 static_cast<uint64_t>(budget.Extent.Depth);
+            budget.VolumeBytesPerTexture = budget.FroxelCount * BytesPerFroxelRGBA16F;
+            budget.AllocatedVolumeCount = VolumeCount;
+            budget.TotalLogicalBytes = budget.VolumeBytesPerTexture * static_cast<uint64_t>(VolumeCount);
+
+            if (queryDevice && RHI::RHIDevice::Get().CanCreateResources()) {
+                nri::MemoryDesc memDesc{};
+                const auto texDesc = RHI::RHITextureDesc::StorageTexture3D(
+                    budget.Extent.Width, budget.Extent.Height, budget.Extent.Depth,
+                    RHI::RHITextureFormat::RGBA16_FLOAT, "FroxelBudgetProbe");
+                if (RHI::RHITexture::QueryMemoryRequirements(texDesc, memDesc) && memDesc.size > 0u) {
+                    budget.DeviceQueryAvailable = true;
+                    budget.DeviceBytesPerTexture = memDesc.size;
+                    budget.DeviceAllocationAlignment = memDesc.alignment;
+                    budget.TotalDeviceReportedBytes = memDesc.size * static_cast<uint64_t>(VolumeCount);
+                }
+            }
+            return budget;
+        }
+
+        bool ValidateResourcePolicy(const RHI::RHIViewTargetDesc& desc, const FroxelFogResourcePolicy& policy, std::string* outReason) {
+            auto fail = [&](std::string msg) {
+                if (outReason) *outReason = std::move(msg);
+                return false;
+            };
+            if (!desc.Width || !desc.Height) return fail("View extent must be non-zero for froxel resources");
+            if (policy.RequireAuxiliaryTargets && !desc.RenderAuxiliary) return fail("Froxel resources require auxiliary view targets");
+            if (policy.RequireSingleSample && desc.Samples != 1u) return fail("Froxel resources require single-sample depth (MSAASamples == 1)");
+            if (desc.FroxelQuality > RHI::RHIViewTargets::MaxFroxelQualityTier ||
+                static_cast<uint32_t>(policy.Quality) > RHI::RHIViewTargets::MaxFroxelQualityTier) {
+                return fail("Froxel quality tier is out of supported range [0..3]");
+            }
+            float nearZ = 0.0f, farZ = 0.0f;
+            if (!ResolveDepthRange(policy.NearDistance, policy.MaxDistance, nearZ, farZ)) {
+                return fail("Froxel depth range [near, max] is invalid or non-finite");
+            }
+            const auto budget = EstimateMemoryBudget(desc.Width, desc.Height, static_cast<FroxelFogQuality>(desc.FroxelQuality), false);
+            if (!budget.FroxelCount || !budget.TotalLogicalBytes) {
+                return fail("Computed froxel grid extent is empty");
+            }
+            if (policy.MaxBudgetBytes > 0u && budget.TotalLogicalBytes > policy.MaxBudgetBytes) {
+                return fail("Froxel logical VRAM budget exceeds configured limit");
+            }
+            if (outReason) outReason->clear();
+            return true;
+        }
+
+        void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture, bool& outEnable, uint8_t& outQuality) {
+            outEnable = !isSubCapture && settings.EnableVolumetricFog && settings.MSAASamples == 1u;
+            const auto rawTier = static_cast<uint8_t>(settings.FogQuality);
+            outQuality = outEnable
+                ? std::min(rawTier, RHI::RHIViewTargets::MaxFroxelQualityTier)
+                : static_cast<uint8_t>(FroxelFogQuality::High);
+        }
+
+    } // namespace FroxelFogContract
 
 } // namespace Axle

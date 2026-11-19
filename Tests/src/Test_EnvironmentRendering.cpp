@@ -35,6 +35,7 @@ bool RunM15OcclusionForwardTests(Axle::RHISceneRenderer& renderer, const std::fi
 bool RunM15HiZTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15AreaLightRenderingTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15ReflectionCaptureTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
+bool RunM15FroxelFogTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15ReflectionDeviceResetTests(const Axle::RHI::RHIDeviceDesc& initDesc);
 bool RunM15OcclusionSphereTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
                               const Axle::PerspectiveCamera& camera, Axle::SceneRenderSettings settings,
@@ -228,6 +229,7 @@ bool Native(RHIType backend) {
     }
     CHECK(RunM15OcclusionRenderingTests(Output));
     CHECK(RunM15OcclusionHorizonTests(Output));
+    CHECK(RunM15FroxelFogTests(renderer, Output));
     auto& environment=renderer.GetEnvironment(); EnvironmentBakeSettings bake;
     bake.EnvironmentSize=16; bake.IrradianceSize=4; bake.PrefilterSize=16; bake.PrefilterMips=5; bake.BRDFSize=16; bake.Samples=64;
     CHECK(environment.SetBakeSettings(bake));

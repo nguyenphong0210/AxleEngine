@@ -129,6 +129,17 @@ namespace Axle::RHI {
             return desc;
         }
 
+        static RHITextureDesc StorageTexture3D(uint32_t width, uint32_t height, uint32_t depth, RHITextureFormat format = RHITextureFormat::RGBA16_FLOAT, const std::string& name = "StorageTexture3D") {
+            RHITextureDesc desc;
+            desc.Width = width;
+            desc.Height = height;
+            desc.Depth = depth;
+            desc.Format = format;
+            desc.Usage = RHITextureUsage::ShaderResource | RHITextureUsage::Storage;
+            desc.DebugName = name;
+            return desc;
+        }
+
         static RHITextureDesc Cubemap(uint32_t size, uint32_t mipLevels = 1, RHITextureFormat format = RHITextureFormat::RGBA8_UNORM, const std::string& name = "RHICubemap") {
             RHITextureDesc desc;
             desc.Width = size;
@@ -182,6 +193,7 @@ namespace Axle::RHI {
         const RHITextureDesc& GetDesc() const { return m_Desc; }
         uint32_t GetWidth() const { return m_Desc.Width; }
         uint32_t GetHeight() const { return m_Desc.Height; }
+        uint32_t GetDepth() const { return m_Desc.Depth; }
         uint32_t GetMipCount() const { return m_Desc.MipLevels; }
         RHITextureFormat GetFormat() const { return m_Desc.Format; }
 

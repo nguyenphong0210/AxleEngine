@@ -10,7 +10,14 @@ namespace Axle::RHI {
         OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1,
         GTAO, GTAOResolved, Bloom0, Bloom1, Bloom2, Bloom3, Bloom4, Bloom5, Exposure, DDGI,
         HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, ReflectionEnvironment, ReflectionResponse,
-        SSRColor0, SSRColor1, SSRColor2, SSRColor3, PlanarColor, PlanarDepth, Count
+        SSRColor0, SSRColor1, SSRColor2, SSRColor3, PlanarColor, PlanarDepth,
+        FroxelScattering, FroxelIntegrated, FroxelHistory0, FroxelHistory1, Count
+    };
+    struct RHIFroxelGridExtent {
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+        uint32_t Depth = 0;
+        bool operator==(const RHIFroxelGridExtent&) const = default;
     };
     struct RHIViewTargetDesc {
         uint32_t Width = 1, Height = 1;
@@ -23,6 +30,8 @@ namespace Axle::RHI {
         bool EnableReflectionTerms = false;
         bool EnablePlanarReflection = false;
         float PlanarResolutionScale = 0.5f;
+        bool EnableVolumetricFog = false;
+        uint8_t FroxelQuality = 2; // 0: Low, 1: Medium, 2: High (160x90x64 reference), 3: Ultra
         bool operator==(const RHIViewTargetDesc&) const = default;
     };
     // One view owns its complete target generation. Reconfiguration constructs
@@ -33,6 +42,7 @@ namespace Axle::RHI {
         static constexpr uint32_t MinSSRHiZLevels = 8;
         static constexpr float MinPlanarResolutionScale = 0.25f;
         static constexpr float MaxPlanarResolutionScale = 1.0f;
+        static constexpr uint8_t MaxFroxelQualityTier = 3;
 
         // Number of natural floor-halving reduction levels from full extent down to 1x1.
         // Returns 0 for invalid zero extents.
@@ -42,6 +52,9 @@ namespace Axle::RHI {
         static uint32_t ComputeAllocatedHiZLevelCount(uint32_t width, uint32_t height);
         // Scaled single-dimension extent for planar reflection targets.
         static uint32_t ComputePlanarTargetDimension(uint32_t extent, float scale);
+        // Bounded 3D froxel grid dimensions for a view extent and quality tier [0..3].
+        // Tier 2 (High) resolves to 160x90x64 at 720p/1080p/1440p; invalid inputs return {0, 0, 0}.
+        static RHIFroxelGridExtent ComputeFroxelGridExtent(uint32_t width, uint32_t height, uint8_t qualityTier);
 
         bool Configure(const RHIViewTargetDesc& desc, const RHITexture* externalColor = nullptr,
                        const RHITexture* externalDepth = nullptr);
@@ -71,6 +84,11 @@ namespace Axle::RHI {
         }
         RHITexture* GetPlanarColor() const { return Get(RHIViewTarget::PlanarColor); }
         RHITexture* GetPlanarDepth() const { return Get(RHIViewTarget::PlanarDepth); }
+        RHITexture* GetFroxelScattering() const { return Get(RHIViewTarget::FroxelScattering); }
+        RHITexture* GetFroxelIntegrated() const { return Get(RHIViewTarget::FroxelIntegrated); }
+        RHITexture* GetFroxelHistory(uint32_t slot) const {
+            return slot < 2 ? Get(slot == 0 ? RHIViewTarget::FroxelHistory0 : RHIViewTarget::FroxelHistory1) : nullptr;
+        }
         const RHIViewTargetDesc& GetDesc() const { return m_Desc; }
         uint64_t GetGeneration() const { return m_Generation; }
         bool IsValid() const;

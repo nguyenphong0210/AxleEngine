@@ -690,6 +690,10 @@ bool RHIResourceService::BuildTextureBarriers(const void* commands, const nri::T
             barrier.layerOffset = static_cast<uint16_t>((index / state.Mips) % state.Layers); barrier.layerNum = 1;
             barrier.planes = state.Planes[index / (static_cast<size_t>(state.Mips) * state.Layers)];
             auto& device = RHIDevice::Get();
+            if (device.IsNativeReady() && resource.GetHandle().Epoch == device.GetEpoch() &&
+                device.GetNRICore().GetTextureDesc(*request.texture).type == nri::TextureType::TEXTURE_3D) {
+                barrier.layerNum = nri::REMAINING;
+            }
             if (before.layout == nri::Layout::UNDEFINED && after.layout != nri::Layout::UNDEFINED &&
                 after.layout != nri::Layout::COPY_DESTINATION && device.GetBackend() == RHIType::Direct3D12 && device.IsNativeReady() &&
                 resource.GetHandle().Epoch == device.GetEpoch()) {

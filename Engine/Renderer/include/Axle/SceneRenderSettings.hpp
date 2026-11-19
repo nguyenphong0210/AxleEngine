@@ -4,6 +4,13 @@
 #include <cstdint>
 
 namespace Axle {
+    enum class FroxelFogQuality : uint8_t {
+        Low    = 0,
+        Medium = 1,
+        High   = 2, // Documented 160x90x64 reference tier
+        Ultra  = 3
+    };
+
     struct SceneRenderSettings {
         bool EnableShadows = true;
         uint32_t LocalShadowResolution = 512; // One tile; bounded 4x4 atlas.
@@ -52,7 +59,9 @@ namespace Axle {
         float FogHeightFalloff = 0.1f;
         float FogScattering = 0.7f;
         glm::vec3 FogColor{ 0.8f, 0.85f, 0.9f };
+        float FogNearDistance = 0.25f;
         float FogMaxDistance = 100.0f;
+        FroxelFogQuality FogQuality = FroxelFogQuality::High;
         float DDGIMultiplier = 1.0f;
         float BloomThreshold = 1.0f;
         float BloomIntensity = 0.8f;

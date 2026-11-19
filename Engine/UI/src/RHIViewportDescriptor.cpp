@@ -1,4 +1,5 @@
 #include <Axle/RHIViewportDescriptor.hpp>
+#include <Axle/RenderContracts.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <algorithm>
@@ -32,6 +33,8 @@ namespace Axle {
         targets.EnableReflectionTerms = desc.EnableReflectionTerms;
         targets.EnablePlanarReflection = desc.EnablePlanarReflection;
         targets.PlanarResolutionScale = desc.PlanarResolutionScale;
+        targets.EnableVolumetricFog = desc.EnableVolumetricFog;
+        targets.FroxelQuality = desc.FroxelQuality;
         targets.EnableBloom = desc.EnableBloom;
         targets.EnableGTAO = desc.EnableGTAO;
         targets.EnableAutoExposure = desc.EnableAutoExposure;
@@ -153,6 +156,8 @@ namespace Axle {
         desc.EnableNormal = desc.EnableGTAO || settings.EnableSSR || settings.EnablePlanarReflections;
         desc.EnableScreenStorage = desc.EnableGTAO || settings.EnableSSR || settings.EnableVolumetricFog ||
             settings.EnableBloom || settings.EnableAutoExposure;
+        FroxelFogContract::ResolveViewTargetOptions(
+            settings, false, desc.EnableVolumetricFog, desc.FroxelQuality);
         if (desc == m_Desc && IsValid()) return true;
         return Recreate(desc);
     }

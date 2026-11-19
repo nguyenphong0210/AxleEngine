@@ -174,7 +174,11 @@ namespace {
             "float3 rust="+b.TextureSymbol+".Sample("+b.SamplerSymbol+",tiled).rgb;\n"
             "MaterialSurface s; s.BaseColor=lerp(metal,rust,"+ParameterSymbol(source,"RustAmount")+")*"+ParameterSymbol(source,"BaseColorTint")+";\n"
             "s.Metallic="+ParameterSymbol(source,"BaseMetallic")+";s.Roughness="+ParameterSymbol(source,"BaseRoughness")+";\n"
-            "s.Normal=float3(0,0,1);s.Emission=float3(0,0,0);s.AO=1;return s;}\n";
+            "s.Normal=float3(0,0,1);s.Emission=float3(0,0,0);s.AO=1;\n"
+            "s.Clearcoat=0;s.ClearcoatRoughness=0.04;s.Anisotropy=0;s.AnisotropyRotation=0;\n"
+            "s.SheenColor=float3(0,0,0);s.SheenRoughness=-1;\n"
+            "s.SubsurfaceColor=float3(0,0,0);s.SubsurfaceRadius=0;\n"
+            "s.AbsorptionColor=float3(0,0,0);s.IOR=1.5;s.Dispersion=0;s.FeatureFlags=0u;return s;}\n";
         return AssembleMaterialSurfaceShader(source.Declarations,function);
     }
 
@@ -274,6 +278,8 @@ namespace {
         sampleNode.Inputs[0].Default->Components={0.5f,0.5f};Property(sampleNode,"texturePath")="textures/filter.png";
         oracle.Nodes.push_back(sampleNode);oracle.Connections.push_back({{2,"rgb"},{1,"Emission"},{}});
         sun.GetComponent<DirectionalLightComponent>().Intensity=0;
+        // Compare texture filtering in linear radiance with an explicit identity output transform.
+        settings.EnableToneMapping=true;settings.ToneMappingMode=3;settings.Gamma=1;
         CHECK(WritePNG(assets/"textures/filter.png",2,1,{0,0,0,255,255,255,255,255}));
         CompiledMaterialGraphProgram oracleProgram;CHECK(Compile(oracle,format,oracleProgram));
         const auto filterSource=assets/"filter.hlsl";CHECK(FileSystem::WriteTextFileAtomically(filterSource,oracleProgram.HLSL));

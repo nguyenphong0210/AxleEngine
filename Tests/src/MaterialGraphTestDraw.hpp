@@ -1,12 +1,15 @@
 #pragma once
 #include <Axle/MaterialGraphRuntime.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
+#include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
+#include <algorithm>
 #include <cstring>
 
 namespace Axle::Tests {
 using namespace RHI;
-// Returned-bytecode fixture shared in shape with C12-03, now populating actual
-// texture/sampler descriptors through the production resource writer.
+// Returned-bytecode fixture shared across MaterialGraph GPU tests, populating
+// authored descriptors via MaterialGraphRuntime and binding neutral engine inputs.
 inline std::vector<uint8_t> DrawMaterialGraph(std::shared_ptr<const MaterialGraphReadyGeneration> generation,
                           const MaterialGraphInstance& instance={},std::function<void()> beforeSubmit={}, const EngineMaterialValues* lighting=nullptr, bool minify=false) {
     auto& device=RHIDevice::Get();
@@ -14,9 +17,21 @@ inline std::vector<uint8_t> DrawMaterialGraph(std::shared_ptr<const MaterialGrap
     if(lighting)engine=*lighting;
     auto resolved=MaterialGraphRuntime::ResolveSurface(*generation,instance,engine);
     auto* surface=std::get_if<ResolvedShaderSurface>(&resolved);if(!surface)return {};
-    const auto* buffers=&surface->Constants;
+    auto packed=surface->Constants;
+    // Standalone bytecode draws provide neutral renderer-owned light, shadow,
+    // probe, occlusion and LTC bindings when referenced by MaterialSurface.
+    for(const auto& reflected:generation->Program.Reflection.ConstantBuffers) {
+        if(!IsMaterialSurfaceEngineBuffer(reflected))continue;
+        const bool alreadyPacked=std::any_of(packed.Buffers.begin(),packed.Buffers.end(),[&](const auto& entry) {
+            return entry.Address==ShaderAddress{reflected.Space,reflected.BindPoint};
+        });
+        if(alreadyPacked)continue;
+        packed.Buffers.push_back({reflected.Name,{reflected.Space,reflected.BindPoint},
+                                  std::vector<uint8_t>((reflected.Size+255u)&~255u,0)});
+    }
+    const auto* buffers=&packed;
     constexpr uint32_t width=64;
-    RHITexture color,depth;RHIBuffer readback;RHIBufferDesc read;read.Size=width*width*4;read.MemoryLocation=RHIMemoryLocation::HostReadback;
+    RHITexture color,depth,shadowDepth;RHIBuffer readback;RHIBufferDesc read;read.Size=width*width*4;read.MemoryLocation=RHIMemoryLocation::HostReadback;
     if(!color.Init(RHITextureDesc::RenderTarget2D(width,width))||!depth.Init(RHITextureDesc::DepthStencil2D(width,width))||!readback.Init(read))return {};
     std::vector<RHIVertex3D> vertices(3);
     vertices[0].Position={-1,-1,0.5f};vertices[1].Position={0,1,0.5f};vertices[2].Position={1,-1,0.5f};
@@ -28,20 +43,67 @@ inline std::vector<uint8_t> DrawMaterialGraph(std::shared_ptr<const MaterialGrap
     for(size_t i=0;i<constants.size();++i)if(!constants[i].Init(RHIBufferDesc::Constant(buffers->Buffers[i].Bytes.size()))||
         !constants[i].UpdateData(buffers->Buffers[i].Bytes.data(),buffers->Buffers[i].Bytes.size()))return {};
     const auto& native=*generation->Native;
-    std::vector<nri::DescriptorSet*> sets;
-    for(size_t i=0;i<native.LayoutDescription.DescriptorSets.size();++i) {
-        auto* set=pool.AllocateDescriptorSet(*native.PipelineLayout,static_cast<uint32_t>(i));if(!set)return {};sets.push_back(set);
-        const auto& desc=native.LayoutDescription.DescriptorSets[i];
-        for(size_t r=0;r<desc.Ranges.size();++r) {
-            if(desc.Ranges[r].descriptorType!=nri::DescriptorType::CONSTANT_BUFFER)continue;
-            nri::Descriptor* descriptor=nullptr;
-            for(size_t b=0;b<constants.size();++b)if(buffers->Buffers[b].Address==ShaderAddress{desc.RegisterSpace,desc.Ranges[r].baseRegisterIndex})descriptor=constants[b].GetCBV();
-            if(!descriptor||!pool.UpdateTexture(set,static_cast<uint32_t>(r),0,descriptor))return {};
-        }
+    std::vector<nri::DescriptorSet*> sets(native.LayoutDescription.DescriptorSets.size(),nullptr);
+    for(size_t i=0;i<sets.size();++i) {
+        sets[i]=pool.AllocateDescriptorSet(*native.PipelineLayout,static_cast<uint32_t>(i));
+        if(!sets[i])return {};
     }
     if(!MaterialGraphRuntime::WriteResourceDescriptors(*generation,pool,sets))return {};
+    RHISampler linear,shadow;
+    const auto& engineResources=generation->Program.Reflection.Resources;
+    const bool needLinearSampler=std::any_of(engineResources.begin(),engineResources.end(),[](const auto& value) {
+        return IsMaterialSurfaceEngineResource(value)&&value.Type==RHIResourceType::Sampler&&value.Name!="u_ShadowSampler";
+    });
+    const bool needShadowSampler=std::any_of(engineResources.begin(),engineResources.end(),[](const auto& value) {
+        return IsMaterialSurfaceEngineResource(value)&&value.Type==RHIResourceType::Sampler&&value.Name=="u_ShadowSampler";
+    });
+    const bool needShadowDepth=std::any_of(engineResources.begin(),engineResources.end(),[](const auto& value) {
+        return IsMaterialSurfaceEngineResource(value)&&value.Type==RHIResourceType::Texture&&
+            (value.Name=="u_CascadeDepth"||value.Name=="u_LocalShadowDepth");
+    });
+    if((needLinearSampler&&!linear.Init(RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge)))||
+       (needShadowSampler&&!shadow.Init(RHISamplerDesc::ShadowPCF()))||
+       (needShadowDepth&&!shadowDepth.Init(RHITextureDesc::DepthStencil2D(2,2,RHITextureFormat::D32_FLOAT,"MaterialGraphTestShadowDepth"))))return {};
+    for(size_t i=0;i<native.LayoutDescription.DescriptorSets.size();++i) {
+        const auto& desc=native.LayoutDescription.DescriptorSets[i];
+        for(size_t r=0;r<desc.Ranges.size();++r) {
+            const auto& range=desc.Ranges[r];
+            nri::Descriptor* descriptor=nullptr;
+            if(range.descriptorType==nri::DescriptorType::CONSTANT_BUFFER) {
+                for(size_t b=0;b<constants.size();++b)if(buffers->Buffers[b].Address==ShaderAddress{desc.RegisterSpace,range.baseRegisterIndex})descriptor=constants[b].GetCBV();
+            } else {
+                const auto resource=std::find_if(engineResources.begin(),engineResources.end(),[&](const auto& value) {
+                    return value.Space==desc.RegisterSpace&&value.BindPoint==range.baseRegisterIndex&&
+                        ((range.descriptorType==nri::DescriptorType::TEXTURE&&value.Type==RHIResourceType::Texture)||
+                         (range.descriptorType==nri::DescriptorType::SAMPLER&&value.Type==RHIResourceType::Sampler));
+                });
+                if(resource==engineResources.end())return {};
+                if(!IsMaterialSurfaceEngineResource(*resource))continue;
+                if(range.descriptorType==nri::DescriptorType::SAMPLER)
+                    descriptor=resource->Name=="u_ShadowSampler"?shadow.GetNative():linear.GetNative();
+                else if(resource->Name=="u_CascadeDepth"||resource->Name=="u_LocalShadowDepth")
+                    descriptor=shadowDepth.GetSRV();
+                else {
+                    const bool cube=resource->Name=="u_IrradianceMap"||resource->Name=="u_PrefilterMap"||
+                                    resource->Name.starts_with("u_ReflectionProbeCube");
+                    auto texture=cube?RHIMaterial::GetDefaultPrefilterCubemap():RHIMaterial::GetDefaultWhiteTexture();
+                    if(!texture)return {};
+                    descriptor=texture->GetSRV();
+                }
+            }
+            if(!descriptor||!pool.UpdateTexture(sets[i],static_cast<uint32_t>(r),0,descriptor))return {};
+        }
+    }
     auto* pipeline=MaterialGraphRuntime::GetPipeline(*generation);if(!pipeline)return {};
     RHICommandBuffer commands;if(!commands.Init()||!commands.Begin(pool.GetNative()))return {};
+    if(shadowDepth.IsValid()) {
+        commands.TransitionTexture(shadowDepth.GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::DepthStencilWrite);
+        nri::RenderingDesc shadowClear{};shadowClear.depth.descriptor=shadowDepth.GetDSV();
+        shadowClear.depth.loadOp=nri::LoadOp::CLEAR;shadowClear.depth.storeOp=nri::StoreOp::STORE;
+        shadowClear.depth.clearValue.depthStencil.depth=1.0f;
+        commands.BeginRendering(shadowClear);commands.EndRendering();
+        commands.TransitionTexture(shadowDepth.GetNative(),RHIResourceLayout::DepthStencilWrite,RHIResourceLayout::ShaderResource);
+    }
     commands.TransitionTexture(color.GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::ColorAttachment);
     commands.TransitionTexture(depth.GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::DepthStencilWrite);
     nri::AttachmentDesc attachment{};attachment.descriptor=color.GetRTV();attachment.loadOp=nri::LoadOp::CLEAR;attachment.storeOp=nri::StoreOp::STORE;

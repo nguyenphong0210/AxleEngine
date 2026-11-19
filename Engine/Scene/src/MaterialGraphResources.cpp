@@ -1,4 +1,5 @@
 #include <Axle/MaterialGraphRuntime.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <algorithm>
 
 namespace Axle {
@@ -74,6 +75,13 @@ bool MaterialGraphRuntime::WriteResourceDescriptors(const MaterialGraphReadyGene
         for(size_t rangeIndex=0;rangeIndex<set.Ranges.size();++rangeIndex) {
             const auto& range=set.Ranges[rangeIndex];const ShaderAddress address{set.RegisterSpace,range.baseRegisterIndex};
             if(range.descriptorType==nri::DescriptorType::CONSTANT_BUFFER)continue;
+            const auto reflected=std::find_if(generation.Program.Reflection.Resources.begin(),
+                generation.Program.Reflection.Resources.end(),[&](const auto& resource) {
+                    return resource.Space==address.RegisterSpace && resource.BindPoint==address.RegisterIndex &&
+                        ((range.descriptorType==nri::DescriptorType::TEXTURE && resource.Type==RHI::RHIResourceType::Texture) ||
+                         (range.descriptorType==nri::DescriptorType::SAMPLER && resource.Type==RHI::RHIResourceType::Sampler));
+                });
+            if(reflected!=generation.Program.Reflection.Resources.end() && IsMaterialSurfaceEngineResource(*reflected))continue;
             nri::Descriptor* descriptor=nullptr;
             if(range.descriptorType==nri::DescriptorType::TEXTURE)
                 for(const auto& texture:generation.Textures)if(texture.Address==address && texture.Texture->IsValid())descriptor=texture.Texture->GetSRV();

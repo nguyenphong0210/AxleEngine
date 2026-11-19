@@ -1119,14 +1119,14 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 
 ### U6 / S6.1–S6.3 — Volumetric fog and atmosphere
 
-> **Execution schedule note (2026-11-19):** See [U6 Execution Batches](#u6-execution-batches-u6-a-through-u6-e) for the `U6-A`..`U6-E` breakdown pairing implementation checkpoints with `M15-U6-07.*` verification gates. All 19 leaves below remain open/unreleased until assigned in [CODEX_GEMINI_EXCHANGE.json](../../agents/CODEX_GEMINI_EXCHANGE.json); `M15-U6-02.2`'s `EDITOR VISUAL` gate stays open until Debug/Release Editor captures are inspected.
+> **Execution schedule note (2026-11-19).** The U6-A review records the froxel allocation and tier results, initial VRAM figures, and the open D3D12 windowed check. The `M15-U6-02.2` Editor visual gate requires Debug and Release captures. [U6 batch schedule](#u6-execution-batches-u6-a-through-u6-e) · [U6-A review](../../reviews/M15_U6_A_REVIEW.md)
 
-- [ ] **M15-U6-01.1 — Allocate froxel resources.**
+- [x] **M15-U6-01.1 — Allocate froxel resources.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U6-01.2 — Scale froxel quality tiers.**
+  - Debug and Release CPU and native D3D12/Vulkan tests passed 3D SRV/UAV readback, depth policy, resize, late OOM rollback and device-epoch recreation. Vulkan viewport lifecycle passed. [U6-A review and D3D12 windowed limit](../../reviews/M15_U6_A_REVIEW.md)
+- [x] **M15-U6-01.2 — Scale froxel quality tiers.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - Debug and Release CPU and native D3D12/Vulkan checks passed all four tiers, including the High reference grid of 160 × 90 × 64. [U6-A review](../../reviews/M15_U6_A_REVIEW.md)
 - [ ] **M15-U6-02.1 — Inject density/media.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
@@ -1174,7 +1174,7 @@ Planar reflection is the deterministic raster path for a selected reflective pla
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
 - [ ] **M15-U6-07.5 — Measure memory.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - Initial U6-A scorecards cover all four tiers on native D3D12 and Vulkan. Final integrated VRAM reconciliation is part of U6-E. [U6-A review](../../reviews/M15_U6_A_REVIEW.md)
 - [ ] **M15-U6-07.6 — Measure cost.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.

@@ -69,7 +69,7 @@ namespace Axle {
             uint32_t MipLevels = 0, ArrayLayers = 0, SampleCount = 0;
             uint32_t UsageBits = 0, StructureStride = 0, MemoryType = 0;
             uint64_t SizeBytes = 0, Alignment = 1, Granularity = 1;
-            bool IsCubeMap = false, ByteAddress = false, MustBeDedicated = false;
+            bool IsCubeMap = false, Is3D = false, ByteAddress = false, MustBeDedicated = false;
             bool operator==(const CompatibilityKey&) const = default;
         };
         struct Lifetime {

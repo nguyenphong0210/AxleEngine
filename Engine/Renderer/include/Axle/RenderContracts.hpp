@@ -768,15 +768,6 @@ namespace Axle {
         inline constexpr float DefaultMaxDistance = 100.0f;
         inline constexpr float MaxAllowedDistance = 2000.0f;
 
-        struct FroxelTierSpec {
-            FroxelFogQuality Quality = FroxelFogQuality::High;
-            const char* Name = "High";
-            uint32_t MaxWidth = ReferenceGridWidth;
-            uint32_t MaxHeight = ReferenceGridHeight;
-            uint32_t DepthSlices = ReferenceGridDepth;
-            uint32_t MinTilePixels = 8u;
-        };
-
         struct FroxelMemoryBudget {
             RHI::RHIFroxelGridExtent Extent;
             uint64_t FroxelCount = 0;
@@ -790,16 +781,13 @@ namespace Axle {
         };
 
         struct FroxelFogResourcePolicy {
-            FroxelFogQuality Quality = FroxelFogQuality::High;
             float NearDistance = DefaultNearDistance;
             float MaxDistance = DefaultMaxDistance;
             uint64_t MaxBudgetBytes = 128ull * 1024ull * 1024ull;
-            bool RequireSingleSample = true;
-            bool RequireAuxiliaryTargets = true;
         };
 
         uint32_t GetQualityTierCount();
-        FroxelTierSpec GetTierSpec(FroxelFogQuality quality);
+        const RHI::RHIFroxelTierSpec& GetTierSpec(FroxelFogQuality quality);
         RHI::RHIFroxelGridExtent ComputeGridExtent(uint32_t viewWidth, uint32_t viewHeight, FroxelFogQuality quality);
         bool ResolveDepthRange(float nearDistance, float maxDistance, float& outNear, float& outFar);
         float SliceBoundaryToViewDistance(uint32_t sliceBoundary, uint32_t sliceCount, float nearDistance, float maxDistance);
@@ -809,7 +797,9 @@ namespace Axle {
         float SliceCoordToViewDistance(float sliceCoord, float nearDistance, float maxDistance);
         FroxelMemoryBudget EstimateMemoryBudget(uint32_t viewWidth, uint32_t viewHeight, FroxelFogQuality quality, bool queryDevice = false);
         bool ValidateResourcePolicy(const RHI::RHIViewTargetDesc& desc, const FroxelFogResourcePolicy& policy, std::string* outReason = nullptr);
-        void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture, bool& outEnable, uint8_t& outQuality);
+        // Use backend-resolved settings so every owner builds the same target generation.
+        void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture, bool hasDepth,
+                                      bool& outEnable, uint8_t& outQuality);
     }
 
 } // namespace Axle

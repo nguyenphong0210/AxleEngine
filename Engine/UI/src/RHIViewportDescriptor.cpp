@@ -1,6 +1,8 @@
 #include <Axle/RHIViewportDescriptor.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/Log.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <algorithm>
 
@@ -131,11 +133,16 @@ namespace Axle {
             m_Desc.EnableScreenStorage == enableScreenStorage && IsValid()) return true;
         auto desc = m_Desc; desc.MSAASamples = samples; desc.IntermediateHDR = hdr; desc.FXAA = fxaa;
         desc.HistoryCount = historyCount; desc.EnableNormal = enableNormal; desc.EnableScreenStorage = enableScreenStorage;
+        if (samples != 1) {
+            desc.EnableVolumetricFog = false;
+            desc.FroxelQuality = RHI::RHIViewTargets::DefaultFroxelQualityTier;
+        }
         return Recreate(desc);
     }
 
-    bool RHIViewportDescriptor::SetRenderOptions(const SceneRenderSettings& settings) {
+    bool RHIViewportDescriptor::SetRenderOptions(const SceneRenderSettings& requestedSettings) {
         if (!m_OwnsColorTexture) return false;
+        const auto settings = RenderBackendPolicy::FromDevice(RHI::RHIDevice::Get().GetCapabilities()).ResolveSettings(requestedSettings);
         auto desc = m_Desc;
         desc.MSAASamples = settings.MSAASamples;
         desc.EnableReflectionTerms = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
@@ -157,7 +164,7 @@ namespace Axle {
         desc.EnableScreenStorage = desc.EnableGTAO || settings.EnableSSR || settings.EnableVolumetricFog ||
             settings.EnableBloom || settings.EnableAutoExposure;
         FroxelFogContract::ResolveViewTargetOptions(
-            settings, false, desc.EnableVolumetricFog, desc.FroxelQuality);
+            settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality);
         if (desc == m_Desc && IsValid()) return true;
         return Recreate(desc);
     }

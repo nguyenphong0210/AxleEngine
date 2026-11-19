@@ -398,6 +398,8 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                           << " align=" << budget.DeviceAllocationAlignment << "\n";
             }
         }
+        scorecard.close();
+        RENDER_CHECK(scorecard.good(), "M15-U6-07.5: complete memory scorecard written");
     }
 
     return device.WaitIdle() && GetRHIValidationErrorCount() == 0;

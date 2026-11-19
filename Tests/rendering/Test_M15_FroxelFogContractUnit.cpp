@@ -50,7 +50,7 @@ bool RunM15FroxelFogContractUnitTests() {
             160u, 90u, 64u, RHI::RHITextureFormat::RGBA16_FLOAT, "FroxelRef");
         RENDER_CHECK(texDesc.Width == 160u && texDesc.Height == 90u && texDesc.Depth == 64u &&
                      texDesc.MipLevels == 1u && texDesc.ArrayLayers == 1u && texDesc.SampleCount == 1u &&
-                     !texDesc.IsCubeMap &&
+                     texDesc.IsVolume && !texDesc.IsCubeMap &&
                      texDesc.Format == RHI::RHITextureFormat::RGBA16_FLOAT &&
                      (texDesc.Usage & RHI::RHITextureUsage::ShaderResource) &&
                      (texDesc.Usage & RHI::RHITextureUsage::Storage),
@@ -65,7 +65,7 @@ bool RunM15FroxelFogContractUnitTests() {
         SceneRenderSettings settings;
         bool enable = true;
         uint8_t quality = 99u;
-        ResolveViewTargetOptions(settings, false, enable, quality);
+        ResolveViewTargetOptions(settings, false, true, enable, quality);
         RENDER_CHECK(!enable && quality == static_cast<uint8_t>(FroxelFogQuality::High),
             "M15-U6-01.1: disabled volumetric fog allocates no froxel targets and normalizes tier");
 
@@ -73,11 +73,11 @@ bool RunM15FroxelFogContractUnitTests() {
         for (uint8_t q = 0; q <= RHI::RHIViewTargets::MaxFroxelQualityTier; ++q) {
             settings.FogQuality = static_cast<FroxelFogQuality>(q);
             settings.MSAASamples = 1u;
-            ResolveViewTargetOptions(settings, false, enable, quality);
+            ResolveViewTargetOptions(settings, false, true, enable, quality);
             RENDER_CHECK(enable && quality == q,
                 "M15-U6-01.1 / 01.2: single-sample main view forwards requested froxel quality tier");
 
-            ResolveViewTargetOptions(settings, true, enable, quality);
+            ResolveViewTargetOptions(settings, true, true, enable, quality);
             RENDER_CHECK(!enable && quality == static_cast<uint8_t>(FroxelFogQuality::High),
                 "M15-U6-01.1: sub-capture views suppress froxel allocation");
         }
@@ -85,10 +85,20 @@ bool RunM15FroxelFogContractUnitTests() {
         for (uint8_t msaa : { uint8_t{2}, uint8_t{4}, uint8_t{8} }) {
             settings.MSAASamples = msaa;
             settings.FogQuality = FroxelFogQuality::Ultra;
-            ResolveViewTargetOptions(settings, false, enable, quality);
+            ResolveViewTargetOptions(settings, false, true, enable, quality);
             RENDER_CHECK(!enable,
                 "M15-U6-01.1: MSAA views do not allocate unusable single-sample 3D froxel targets");
         }
+        settings.MSAASamples = 1u;
+        settings.FogQuality = static_cast<FroxelFogQuality>(255u);
+        ResolveViewTargetOptions(settings, false, true, enable, quality);
+        RENDER_CHECK(enable && quality == static_cast<uint8_t>(FroxelFogQuality::High),
+            "Invalid authored quality falls back to the reference tier");
+        ResolveViewTargetOptions(settings, false, false, enable, quality);
+        RENDER_CHECK(!enable, "Depthless views allocate no froxel targets");
+        settings.FogNearDistance = std::numeric_limits<float>::quiet_NaN();
+        ResolveViewTargetOptions(settings, false, true, enable, quality);
+        RENDER_CHECK(!enable, "An invalid depth range suppresses 3D froxel allocation");
     }
 
     // 2. M15-U6-01.1: ValidateResourcePolicy rejects invalid configurations and enforces budgets
@@ -133,6 +143,9 @@ bool RunM15FroxelFogContractUnitTests() {
         badFar.MaxDistance = policy.NearDistance;
         RENDER_CHECK(!ValidateResourcePolicy(validDesc, badFar, &reason),
             "M15-U6-01.1: rejects far distance <= near distance");
+        badFar.MaxDistance = std::nextafter(policy.NearDistance, std::numeric_limits<float>::infinity());
+        RENDER_CHECK(!ValidateResourcePolicy(validDesc, badFar, &reason),
+            "M15-U6-01.1: rejects a depth interval too narrow to represent distinct float slices");
 
         auto tightBudget = policy;
         tightBudget.MaxBudgetBytes = 8ull * 1024ull * 1024ull;
@@ -175,9 +188,9 @@ bool RunM15FroxelFogContractUnitTests() {
                 const auto spec = GetTierSpec(q);
                 RENDER_CHECK(contractExtent == rhiExtent &&
                              contractExtent.Width >= 1u && contractExtent.Height >= 1u &&
-                             contractExtent.Width <= spec.MaxWidth &&
-                             contractExtent.Height <= spec.MaxHeight &&
-                             contractExtent.Depth == spec.DepthSlices,
+                             contractExtent.Width <= spec.Limit.Width &&
+                             contractExtent.Height <= spec.Limit.Height &&
+                             contractExtent.Depth == spec.Limit.Depth,
                     "M15-U6-01.2: FroxelFogContract and RHIViewTargets agree and stay within bounded tier caps");
                 const uint64_t totalFroxels = uint64_t(contractExtent.Width) * contractExtent.Height * contractExtent.Depth;
                 RENDER_CHECK(totalFroxels > prevTotalFroxels,
@@ -190,7 +203,7 @@ bool RunM15FroxelFogContractUnitTests() {
         constexpr float nearZ = 0.25f;
         constexpr float farZ = 100.0f;
         for (uint8_t tier = 0u; tier < 4u; ++tier) {
-            const uint32_t slices = GetTierSpec(static_cast<FroxelFogQuality>(tier)).DepthSlices;
+            const uint32_t slices = GetTierSpec(static_cast<FroxelFogQuality>(tier)).Limit.Depth;
             const float zStart = SliceBoundaryToViewDistance(0u, slices, nearZ, farZ);
             const float zEnd = SliceBoundaryToViewDistance(slices, slices, nearZ, farZ);
             RENDER_CHECK(std::abs(zStart - nearZ) < 1e-5f && std::abs(zEnd - farZ) < 1e-4f,

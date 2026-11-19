@@ -88,6 +88,9 @@ namespace Axle::RHI {
         RHITextureFormat Format = RHITextureFormat::RGBA8_UNORM;
         RHITextureUsage Usage = RHITextureUsage::ShaderResource | RHITextureUsage::ColorAttachment;
         std::string DebugName = "RHITexture";
+        bool IsVolume = false; // Also identifies a 3D texture with a single depth slice.
+
+        bool Is3D() const { return IsVolume || Depth > 1; }
 
         static RHITextureDesc RenderTarget2D(uint32_t width, uint32_t height, RHITextureFormat format = RHITextureFormat::RGBA8_UNORM, const std::string& name = "RenderTarget2D") {
             RHITextureDesc desc;
@@ -134,6 +137,7 @@ namespace Axle::RHI {
             desc.Width = width;
             desc.Height = height;
             desc.Depth = depth;
+            desc.IsVolume = true;
             desc.Format = format;
             desc.Usage = RHITextureUsage::ShaderResource | RHITextureUsage::Storage;
             desc.DebugName = name;

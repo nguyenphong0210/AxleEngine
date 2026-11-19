@@ -7,7 +7,7 @@
 namespace Axle {
     bool IsSurfaceTextureBinding(const RHI::RHITexture& texture) {
         const auto& desc = texture.GetDesc();
-        return texture.IsValid() && texture.GetSRV() && desc.Depth == 1 && desc.ArrayLayers == 1 &&
+        return texture.IsValid() && texture.GetSRV() && !desc.Is3D() && desc.ArrayLayers == 1 &&
             desc.SampleCount == 1 && !desc.IsCubeMap && desc.Format != RHI::RHITextureFormat::R32_UINT;
     }
 

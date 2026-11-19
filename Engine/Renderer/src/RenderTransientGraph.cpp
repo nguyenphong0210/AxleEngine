@@ -42,11 +42,11 @@ namespace Axle {
                 desc.MipLevels > maxMips || desc.Usage == Usage::None ||
                 (static_cast<uint32_t>(desc.Usage) & ~127u) ||
                 (desc.SampleCount != 1 && desc.SampleCount != 2 && desc.SampleCount != 4 && desc.SampleCount != 8) ||
-                (desc.SampleCount > 1 && (desc.MipLevels != 1 || desc.Depth > 1 ||
+                (desc.SampleCount > 1 && (desc.MipLevels != 1 || desc.Is3D() ||
                     (desc.Usage & Usage::Storage) || (desc.Usage & Usage::HostTransfer))) ||
                 ((desc.Usage & Usage::DepthStencil) && !depthFormat) ||
                 (depthFormat && ((desc.Usage & Usage::ColorAttachment) || (desc.Usage & Usage::Storage))) ||
-                (desc.Depth > 1 && (desc.ArrayLayers != 1 || desc.IsCubeMap || (desc.Usage & Usage::DepthStencil))) ||
+                (desc.Is3D() && (desc.ArrayLayers != 1 || desc.IsCubeMap || (desc.Usage & Usage::DepthStencil))) ||
                 (desc.IsCubeMap && (desc.Width != desc.Height || desc.ArrayLayers != 6 || desc.SampleCount != 1))) return false;
 
             minimumBytes = 0;
@@ -159,7 +159,7 @@ namespace Axle {
                 if (!TextureDescription(t, minimumBytes)) return fail("Invalid or overflowing texture description: " + desc.Name);
                 key.Format = t.Format; key.Width = t.Width; key.Height = t.Height; key.Depth = t.Depth;
                 key.MipLevels = t.MipLevels; key.ArrayLayers = t.ArrayLayers; key.SampleCount = t.SampleCount;
-                key.IsCubeMap = t.IsCubeMap; key.UsageBits = static_cast<uint32_t>(t.Usage);
+                key.IsCubeMap = t.IsCubeMap; key.Is3D = t.Is3D(); key.UsageBits = static_cast<uint32_t>(t.Usage);
             } else {
                 const auto& b = std::get<RHI::RHIBufferDesc>(desc.Description);
                 if (!BufferDescription(b)) return fail("Invalid buffer description: " + desc.Name);

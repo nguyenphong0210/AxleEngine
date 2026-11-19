@@ -6279,7 +6279,7 @@ namespace Axle {
         targetDesc.EnableAutoExposure = settings.EnableAutoExposure;
         targetDesc.EnableDDGI = settings.EnableDDGI;
         FroxelFogContract::ResolveViewTargetOptions(
-            settings, isSubCapture, targetDesc.EnableVolumetricFog, targetDesc.FroxelQuality);
+            settings, isSubCapture, targetDesc.EnableDepth, targetDesc.EnableVolumetricFog, targetDesc.FroxelQuality);
         if (settings.EnableTAA) targetDesc.HistoryCount = 2;
 
         if (!world.ErrorMessage.empty()) {
@@ -6336,6 +6336,15 @@ namespace Axle {
         }
         for (const auto& fallback : backendPolicy.CollectFallbacks(requestedSettings))
             viewCtx.Diagnostics().AddFallback(fallback);
+        if (settings.EnableVolumetricFog && !isSubCapture) {
+            if (!targetDesc.EnableVolumetricFog) {
+                if (!targetDesc.EnableDepth) viewCtx.Diagnostics().AddFallback("froxel_targets_disabled:missing_depth");
+                else if (activeSampleCount != 1) viewCtx.Diagnostics().AddFallback("froxel_targets_disabled:multisampled_depth");
+                else viewCtx.Diagnostics().AddFallback("froxel_targets_disabled:invalid_depth_range");
+            } else if (targetDesc.FroxelQuality != static_cast<uint8_t>(settings.FogQuality)) {
+                viewCtx.Diagnostics().AddFallback("froxel_quality_fallback:high");
+            }
+        }
         const auto reflectionSamplePoints = isSubCapture
             ? std::vector<ReflectionSampleBounds>{}
             : CollectReflectionSampleBounds(world);

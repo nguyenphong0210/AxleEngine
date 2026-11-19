@@ -71,6 +71,31 @@ static bool Service(RHIType backend) {
                 RENDER_CHECK(pixels.size() == red.size() && pixels[center] > pixels[center+1]+20 && pixels[center] > pixels[center+2]+20,
                     "actual post-processing graph retains authored red geometry");
             }
+            {
+                auto fog = request;
+                fog.Settings.EnableVolumetricFog = true;
+                fog.Settings.FogQuality = FroxelFogQuality::Low;
+                const auto historyName = "ViewTarget_" + std::to_string(static_cast<unsigned>(RHIViewTarget::FroxelHistory1));
+                unsigned froxelAllocations = 0;
+                ScopedRHIFault observe([&](std::string_view operation) -> std::optional<nri::Result> {
+                    if (operation == "CreateTexture" && ScopedRHIOperation::Resource() == historyName)
+                        ++froxelAllocations;
+                    return {};
+                });
+                RENDER_CHECK(service.RenderView(world, fog).Success && froxelAllocations == 1,
+                    "RenderService default main view creates the requested froxel targets and submits");
+                const auto fogColor = service.GetDefaultMainColorTarget()->GetHandle();
+                RENDER_CHECK(service.RenderView(world, fog).Success && froxelAllocations == 1 &&
+                             service.GetDefaultMainColorTarget()->GetHandle() == fogColor,
+                    "An identical view reuses its froxel target generation");
+                fog.Settings.FogNearDistance = fog.Settings.FogMaxDistance;
+                RENDER_CHECK(service.RenderView(world, fog).Success && froxelAllocations == 1 &&
+                             service.GetDefaultMainColorTarget()->GetHandle() != fogColor,
+                    "An invalid froxel depth range submits with a new view generation without 3D resources");
+                fog.Settings.FogNearDistance = request.Settings.FogNearDistance;
+                RENDER_CHECK(service.RenderView(world, fog).Success && froxelAllocations == 2,
+                    "A corrected depth range restores froxel allocation through RenderService");
+            }
             Scene empty;
             auto emptyRequest = request; emptyRequest.Settings.ClearColor = {0,0,1,1};
             RENDER_CHECK(service.RenderView(empty,emptyRequest).Success, "empty scene still records a clear/export view");

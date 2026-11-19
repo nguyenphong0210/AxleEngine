@@ -99,7 +99,8 @@ namespace Axle::RHI {
         const auto& limits = core.GetDeviceDesc(*dev);
         const auto format = ToNRIFormat(desc.Format);
         const bool depthFormat = desc.Format == RHITextureFormat::D32_FLOAT || desc.Format == RHITextureFormat::D24_UNORM_S8_UINT;
-        const uint32_t dimLimit = desc.Depth > 1 ? limits.dimensions.texture3DMaxDim : limits.dimensions.texture2DMaxDim;
+        const bool isVolume = desc.Is3D();
+        const uint32_t dimLimit = isVolume ? limits.dimensions.texture3DMaxDim : limits.dimensions.texture2DMaxDim;
         const uint32_t nativeLimit = std::numeric_limits<nri::Dim_t>::max();
         uint32_t maxMips = 0;
         for (auto dim = std::max({desc.Width, desc.Height, desc.Depth}); dim; dim >>= 1) ++maxMips;
@@ -108,12 +109,12 @@ namespace Axle::RHI {
             desc.Depth > std::min(dimLimit, nativeLimit) || desc.ArrayLayers > limits.dimensions.textureLayerMaxNum ||
             desc.MipLevels > maxMips || format == nri::Format::UNKNOWN ||
             (static_cast<uint32_t>(desc.Usage) & ~127u) || desc.Usage == RHITextureUsage::None ||
-            (desc.Depth > 1 && (desc.ArrayLayers != 1 || desc.IsCubeMap || (desc.Usage & RHITextureUsage::DepthStencil))) ||
+            (isVolume && (desc.ArrayLayers != 1 || desc.IsCubeMap || (desc.Usage & RHITextureUsage::DepthStencil))) ||
             (desc.IsCubeMap && (desc.Width != desc.Height || desc.ArrayLayers != 6 || desc.SampleCount != 1)) ||
             ((desc.Usage & RHITextureUsage::DepthStencil) && !depthFormat) ||
             (depthFormat && ((desc.Usage & RHITextureUsage::ColorAttachment) || (desc.Usage & RHITextureUsage::Storage))) ||
             (desc.SampleCount != 1 && desc.SampleCount != 2 && desc.SampleCount != 4 && desc.SampleCount != 8) ||
-            (desc.SampleCount > 1 && (desc.Depth > 1 || desc.MipLevels != 1 || (desc.Usage & RHITextureUsage::HostTransfer))) ||
+            (desc.SampleCount > 1 && (isVolume || desc.MipLevels != 1 || (desc.Usage & RHITextureUsage::HostTransfer))) ||
             (desc.SampleCount > 1 && (desc.Usage & RHITextureUsage::Storage)) ||
             (((desc.Usage & RHITextureUsage::ColorAttachment) || (desc.Usage & RHITextureUsage::DepthStencil)) &&
                 (desc.Width > limits.dimensions.attachmentMaxDim || desc.Height > limits.dimensions.attachmentMaxDim ||
@@ -123,7 +124,7 @@ namespace Axle::RHI {
         }
         // Pinned NRI attaches sliced-3D metadata to these Vulkan views, which
         // cannot legally span mip levels. Reject rather than silently narrow the SRV.
-        if (desc.Depth > 1 && desc.MipLevels > 1 && (desc.Usage & RHITextureUsage::ShaderResource) &&
+        if (isVolume && desc.MipLevels > 1 && (desc.Usage & RHITextureUsage::ShaderResource) &&
             rhiDevice.GetBackend() == RHIType::Vulkan)
             return rhiDevice.ObserveResult(nri::Result::UNSUPPORTED, "ValidateTextureDesc", "Vulkan multi-mip 3D shader views are unsupported by pinned NRI");
         const auto support = rhiDevice.GetTextureFormatSupport(format);
@@ -143,7 +144,7 @@ namespace Axle::RHI {
         }
 
         nri::TextureDesc texDesc = {};
-        texDesc.type = (desc.Depth > 1) ? nri::TextureType::TEXTURE_3D : nri::TextureType::TEXTURE_2D;
+        texDesc.type = isVolume ? nri::TextureType::TEXTURE_3D : nri::TextureType::TEXTURE_2D;
         texDesc.usage = ToNRITextureUsage(desc.Usage);
         texDesc.format = ToNRIFormat(desc.Format);
         texDesc.width = static_cast<nri::Dim_t>(desc.Width);
@@ -188,7 +189,7 @@ namespace Axle::RHI {
             srvView.mipNum = static_cast<nri::Dim_t>(desc.MipLevels);
             srvView.layerOffset = 0;
             srvView.layerNum = static_cast<nri::Dim_t>(desc.ArrayLayers);
-            if (desc.Depth > 1) srvView.sliceNum = static_cast<nri::Dim_t>(desc.Depth);
+            if (isVolume) srvView.sliceNum = static_cast<nri::Dim_t>(desc.Depth);
 
             res = ScopedRHIFault::Invoke("CreateTextureSRV", [&] { return core.CreateTextureView(srvView, m_SRV); });
             if (res != nri::Result::SUCCESS || !m_SRV) {
@@ -199,7 +200,7 @@ namespace Axle::RHI {
 
             if (desc.MipLevels == 1) {
                 m_MipSRVs.push_back(m_SRV);
-            } else if (desc.Depth == 1) {
+            } else if (!isVolume) {
                 m_MipSRVs.resize(desc.MipLevels, nullptr);
                 for (uint32_t mip = 0; mip < desc.MipLevels; ++mip) {
                     nri::TextureViewDesc mipSrvView = srvView;
@@ -264,7 +265,7 @@ namespace Axle::RHI {
             uavView.layerOffset = 0;
             uavView.layerNum = static_cast<nri::Dim_t>(desc.ArrayLayers);
             // NRI's REMAINING sentinel resolves to the base depth, not the mip depth.
-            if (desc.Depth > 1) uavView.sliceNum = static_cast<nri::Dim_t>(desc.Depth);
+            if (isVolume) uavView.sliceNum = static_cast<nri::Dim_t>(desc.Depth);
 
             res = ScopedRHIFault::Invoke("CreateTextureUAV", [&] { return core.CreateTextureView(uavView, m_UAV); });
             if (res != nri::Result::SUCCESS || !m_UAV) {
@@ -279,7 +280,7 @@ namespace Axle::RHI {
                 nri::TextureViewDesc mipUavView = uavView;
                 mipUavView.mipOffset = static_cast<nri::Dim_t>(mip);
                 mipUavView.mipNum = 1;
-                if (desc.Depth > 1)
+                if (isVolume)
                     mipUavView.sliceNum = static_cast<nri::Dim_t>(std::max(1u, desc.Depth >> mip));
                 res = ScopedRHIFault::Invoke("CreateTextureUAV", [&] { return core.CreateTextureView(mipUavView, m_MipUAVs[mip]); });
                 if (res != nri::Result::SUCCESS || !m_MipUAVs[mip]) {

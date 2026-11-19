@@ -16,6 +16,7 @@ namespace Axle::RHI {
         if (const auto* x = std::get_if<RHITextureDesc>(&a)) {
             const auto& y = std::get<RHITextureDesc>(b);
             return x->Width == y.Width && x->Height == y.Height && x->Depth == y.Depth &&
+                x->Is3D() == y.Is3D() &&
                 x->MipLevels == y.MipLevels && x->ArrayLayers == y.ArrayLayers && x->SampleCount == y.SampleCount &&
                 x->IsCubeMap == y.IsCubeMap && x->Format == y.Format && x->Usage == y.Usage;
         }
@@ -35,7 +36,9 @@ namespace Axle::RHI {
         if (view.Texture) {
             const auto& requested = std::get<RHITextureDesc>(view.Description);
             const auto& actual = device.GetNRICore().GetTextureDesc(*view.Texture);
-            return actual.width == requested.Width && actual.height == requested.Height && actual.depth == requested.Depth &&
+            const auto expectedType = requested.Is3D() ? nri::TextureType::TEXTURE_3D : nri::TextureType::TEXTURE_2D;
+            return actual.type == expectedType &&
+                actual.width == requested.Width && actual.height == requested.Height && actual.depth == requested.Depth &&
                 actual.mipNum == requested.MipLevels && actual.layerNum == requested.ArrayLayers && actual.sampleNum == requested.SampleCount &&
                 actual.format == ToNRIFormat(requested.Format) && actual.usage == ToNRITextureUsage(requested.Usage);
         }

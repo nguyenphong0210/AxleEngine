@@ -10,7 +10,9 @@
 #include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Entity.hpp>
+#include <Axle/ResolvedSurface.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
+#include <Axle/RHI/RHITransientResources.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <imgui.h>
 #include <algorithm>
@@ -443,6 +445,18 @@ static bool StorageMipViews() {
         retained3D.Shutdown();
         RENDER_CHECK(!device.GetResources().Acquire(volHandle).IsLive(),
             "M15-U6-01.1: releasing retained 3D volume frees views and texture");
+        RHITexture singleSlice;
+        RENDER_CHECK(singleSlice.Init(RHITextureDesc::StorageTexture3D(8, 8, 1)) &&
+                     device.GetNRICore().GetTextureDesc(*singleSlice.GetNative()).type == nri::TextureType::TEXTURE_3D &&
+                     singleSlice.GetSRV() && singleSlice.GetUAV(),
+            "A one-slice storage volume still has native 3D views");
+        auto view = MakeTransientView(singleSlice);
+        const auto image = RHITextureDesc::StorageTexture2D(8, 8, RHITextureFormat::RGBA16_FLOAT);
+        RENDER_CHECK(ValidateTransientView(view) && !SameTransientDescription(view.Description, image) &&
+                     !IsSurfaceTextureBinding(singleSlice),
+            "One-slice volume is distinct from a 2D texture in transient and material bindings");
+        view.Description = image;
+        RENDER_CHECK(!ValidateTransientView(view), "A native 3D volume cannot satisfy a 2D import declaration");
 
         RHIViewTargets froxelTargets;
         RHIViewTargetDesc vtDesc;
@@ -477,11 +491,21 @@ static bool StorageMipViews() {
         badTier.FroxelQuality = 9u;
         auto badMsaa = vtDesc;
         badMsaa.Samples = 4u;
+        auto noDepth = vtDesc;
+        noDepth.EnableDepth = false;
+        auto noAuxiliary = vtDesc;
+        noAuxiliary.RenderAuxiliary = false;
         RENDER_CHECK(!froxelTargets.Configure(badTier) && !froxelTargets.Configure(badMsaa) &&
+                     !froxelTargets.Configure(noDepth) && !froxelTargets.Configure(noAuxiliary) &&
                      froxelTargets.GetGeneration() == genLow && froxelTargets.Validate(),
-            "M15-U6-01.1 / 01.2: invalid tier or MSAA froxel request preserves last-good generation");
+            "M15-U6-01.1 / 01.2: invalid froxel requests preserve the last-good generation");
 
         bool froxelOomHit = false;
+        auto resized = vtDesc;
+        resized.Width = 320u;
+        resized.Height = 180u;
+        resized.FroxelQuality = 2u;
+        auto oldHistory = froxelTargets.GetFroxelHistory(1)->RetainGeneration();
         {
             ScopedRHIFault fault([&](std::string_view op) -> std::optional<nri::Result> {
                 if (op == "CreateTexture" && ScopedRHIOperation::Resource() ==
@@ -491,15 +515,18 @@ static bool StorageMipViews() {
                 }
                 return {};
             });
-            auto resized = vtDesc;
-            resized.Width = 1280u;
-            resized.Height = 720u;
-            resized.FroxelQuality = 2u;
             RENDER_CHECK(!froxelTargets.Configure(resized) && froxelOomHit &&
                          froxelTargets.GetGeneration() == genLow && froxelTargets.Validate() &&
                          froxelTargets.GetFroxelScattering()->GetWidth() == 80u,
                 "M15-U6-01.1: OOM during froxel resize preserves prior validated 3D target generation");
         }
+        RENDER_CHECK(froxelTargets.Configure(resized) && froxelTargets.Validate() &&
+                     froxelTargets.GetGeneration() != genLow &&
+                     froxelTargets.GetFroxelHistory(1)->GetWidth() == 40u &&
+                     froxelTargets.GetFroxelHistory(1)->GetHeight() == 23u &&
+                     froxelTargets.GetFroxelHistory(1)->GetDepth() == 64u &&
+                     oldHistory.IsValid() && oldHistory.GetDepth() == 32u,
+            "A successful retry publishes the resized generation and preserves retained history");
 
         vtDesc.EnableVolumetricFog = false;
         RENDER_CHECK(froxelTargets.Configure(vtDesc) && froxelTargets.Validate() &&
@@ -632,6 +659,13 @@ static bool TargetSets(RHIType backend) {
                      second.GetTargets()->GetFroxelScattering()->GetDepth() == 64u,
             "M15-U6-01.2: RHIViewportDescriptor SetRenderOptions updates 3D froxel targets when tier changes");
 
+        RENDER_CHECK(second.SetRenderOptions(2, false, false) &&
+                     !second.GetTargets()->GetFroxelScattering(),
+            "Switching the viewport to MSAA releases single-sample froxel resources");
+        RENDER_CHECK(second.SetRenderOptions(fogSettings) &&
+                     second.GetTargets()->GetFroxelScattering(),
+            "Restoring single-sample fog options reconstructs the viewport volumes");
+
         fogSettings.EnableVolumetricFog = false;
         RENDER_CHECK(second.SetRenderOptions(fogSettings) &&
                      !second.GetTargets()->GetFroxelScattering() &&
@@ -696,6 +730,28 @@ static bool TargetSets(RHIType backend) {
     return StorageMipViews();
 }
 
+static bool FroxelEpoch(const RHIDeviceDesc& desc) {
+    auto& device = RHIDevice::Get();
+    RHIViewTargets targets;
+    RHIViewTargetDesc view;
+    view.Width = 32;
+    view.Height = 24;
+    view.EnableVolumetricFog = true;
+    RENDER_CHECK(targets.Configure(view) && targets.Validate(), "Froxel targets allocated in the original epoch");
+    const auto previousGeneration = targets.GetGeneration();
+    const auto previousEpoch = device.GetEpoch();
+    auto previousHistory = targets.GetFroxelHistory(1)->RetainGeneration();
+    RENDER_CHECK(device.Shutdown() && !targets.IsValid() && !previousHistory.IsValid(),
+        "Replacing the device invalidates the original froxel generation and retained history");
+    RENDER_CHECK(device.Init(desc) && device.GetEpoch() != previousEpoch &&
+                 targets.Configure(view) && targets.Validate() &&
+                 targets.GetGeneration() != previousGeneration &&
+                 targets.GetFroxelHistory(1)->GetHandle().Epoch == device.GetEpoch() &&
+                 !previousHistory.IsValid(),
+        "The same view descriptor allocates fresh froxel volumes after device restart");
+    return true;
+}
+
 int main(int argc, char** argv) {
     Axle::RenderTests::ConfigureFailureReporting();
     Log::Init();
@@ -708,7 +764,7 @@ int main(int argc, char** argv) {
     desc.Headless = storageOnly;
     auto& device = RHIDevice::Get();
     bool ok = device.Init(desc) && device.GetBackend() == desc.PreferredBackend && !device.IsSoftwareAdapter();
-    try { if (ok) ok = storageOnly ? StorageMipViews() : argc > 2 && std::string(argv[2]) == "targets" ? TargetSets(desc.PreferredBackend) :
+    try { if (ok) ok = storageOnly ? StorageMipViews() && FroxelEpoch(desc) : argc > 2 && std::string(argv[2]) == "targets" ? TargetSets(desc.PreferredBackend) :
         argc > 2 && std::string(argv[2]) == "leases" ? GUILeases(desc.PreferredBackend) :
         argc > 2 && std::string(argv[2]) == "epoch" ? EpochOwnership(desc.PreferredBackend) :
         argc > 2 && std::string(argv[2]) == "errors" ? UIErrors(desc.PreferredBackend) : Run(desc.PreferredBackend); }

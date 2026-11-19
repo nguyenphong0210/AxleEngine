@@ -670,6 +670,11 @@ bool RHIResourceService::BuildTextureBarriers(const void* commands, const nri::T
     auto found = pending.find(target);
     if (found == pending.end()) found = pending.emplace(target, RHIPendingState{resource, target->State.Version, target->State}).first;
     auto& state = found->second.State;
+    auto& device = RHIDevice::Get();
+    const bool currentDevice = device.IsNativeReady() && resource.GetHandle().Epoch == device.GetEpoch();
+    // Vulkan expands the remaining layers to include all depth slices of a 3D image.
+    const bool wholeVolume = currentDevice && device.GetBackend() == RHIType::Vulkan &&
+        device.GetNRICore().GetTextureDesc(*request.texture).type == nri::TextureType::TEXTURE_3D;
     bool changed = false;
     for (auto index : indices) {
         const auto before = state.Textures[index];
@@ -687,16 +692,11 @@ bool RHIResourceService::BuildTextureBarriers(const void* commands, const nri::T
             barrier.before = before;
             barrier.after = after;
             barrier.mipOffset = static_cast<uint16_t>(index % state.Mips); barrier.mipNum = 1;
-            barrier.layerOffset = static_cast<uint16_t>((index / state.Mips) % state.Layers); barrier.layerNum = 1;
+            barrier.layerOffset = static_cast<uint16_t>((index / state.Mips) % state.Layers);
+            barrier.layerNum = wholeVolume ? nri::REMAINING : 1;
             barrier.planes = state.Planes[index / (static_cast<size_t>(state.Mips) * state.Layers)];
-            auto& device = RHIDevice::Get();
-            if (device.IsNativeReady() && resource.GetHandle().Epoch == device.GetEpoch() &&
-                device.GetNRICore().GetTextureDesc(*request.texture).type == nri::TextureType::TEXTURE_3D) {
-                barrier.layerNum = nri::REMAINING;
-            }
             if (before.layout == nri::Layout::UNDEFINED && after.layout != nri::Layout::UNDEFINED &&
-                after.layout != nri::Layout::COPY_DESTINATION && device.GetBackend() == RHIType::Direct3D12 && device.IsNativeReady() &&
-                resource.GetHandle().Epoch == device.GetEpoch()) {
+                after.layout != nri::Layout::COPY_DESTINATION && currentDevice && device.GetBackend() == RHIType::Direct3D12) {
                 const auto& desc = device.GetNRICore().GetTextureDesc(*request.texture);
                 nri::AccessLayoutStage initialization{};
                 if (desc.usage & nri::TextureUsageBits::COLOR_ATTACHMENT)

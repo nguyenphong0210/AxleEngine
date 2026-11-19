@@ -1,4 +1,5 @@
 #include <Axle/RenderService.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/RHIObjectPicker.hpp>
 #include <Axle/Log.hpp>
@@ -268,30 +269,31 @@ namespace Axle {
                 color = targets->Get(RHI::RHIViewTarget::Color); depth = targets->Get(RHI::RHIViewTarget::Depth);
             }
             if (!color && request.Kind == RenderViewKind::Main) {
+                const auto settings = RenderBackendPolicy::FromDevice(device.GetCapabilities()).ResolveSettings(request.Settings);
                 RHI::RHIViewTargetDesc desc;
                 desc.Width = request.Width; desc.Height = request.Height;
-                desc.Samples = request.Settings.MSAASamples;
-                desc.HDR = request.Settings.EnableToneMapping ||
-                    ((request.Settings.EnableSSR || request.Settings.EnablePlanarReflections) && request.Settings.MSAASamples == 1);
-                desc.FXAA = request.Settings.EnableFXAA;
-                desc.EnableNormal = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows ||
-                    request.Settings.EnableSSR || request.Settings.EnablePlanarReflections);
-                desc.EnableScreenStorage = (request.Settings.EnableGTAO || request.Settings.EnableContactShadows || request.Settings.EnableSSR || request.Settings.EnableVolumetricFog || request.Settings.EnableBloom || request.Settings.EnableAutoExposure);
-                desc.EnableGTAO = request.Settings.EnableGTAO || request.Settings.EnableContactShadows;
-                desc.EnableBloom = request.Settings.EnableBloom;
-                desc.EnableHiZ = request.Settings.EnableSSR || request.Settings.HiZVisualizationLevel >= 0;
-                desc.EnableReflectionTerms = (request.Settings.EnableSSR || request.Settings.EnablePlanarReflections) && request.Settings.MSAASamples == 1;
-                desc.EnablePlanarReflection = request.Settings.EnablePlanarReflections;
+                desc.Samples = settings.MSAASamples;
+                desc.HDR = settings.EnableToneMapping ||
+                    ((settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1);
+                desc.FXAA = settings.EnableFXAA;
+                desc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows ||
+                    settings.EnableSSR || settings.EnablePlanarReflections);
+                desc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableVolumetricFog || settings.EnableBloom || settings.EnableAutoExposure);
+                desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
+                desc.EnableBloom = settings.EnableBloom;
+                desc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
+                desc.EnableReflectionTerms = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
+                desc.EnablePlanarReflection = settings.EnablePlanarReflections;
                 desc.PlanarResolutionScale = desc.EnablePlanarReflection
-                    ? std::clamp(request.Settings.PlanarReflectionResolutionScale,
+                    ? std::clamp(settings.PlanarReflectionResolutionScale,
                                  RHI::RHIViewTargets::MinPlanarResolutionScale,
                                  RHI::RHIViewTargets::MaxPlanarResolutionScale)
                     : 0.5f;
-                desc.EnableAutoExposure = request.Settings.EnableAutoExposure;
-                desc.EnableDDGI = request.Settings.EnableDDGI;
+                desc.EnableAutoExposure = settings.EnableAutoExposure;
+                desc.EnableDDGI = settings.EnableDDGI;
                 FroxelFogContract::ResolveViewTargetOptions(
-                    request.Settings, false, desc.EnableVolumetricFog, desc.FroxelQuality);
-                if (request.Settings.EnableTAA) desc.HistoryCount = 2;
+                    settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality);
+                if (settings.EnableTAA) desc.HistoryCount = 2;
                 if (!m_DefaultMainTargets || !m_DefaultMainTargets->IsValid() || m_DefaultMainTargets->GetDesc() != desc) {
                     auto candidate = std::make_shared<RHI::RHIViewTargets>();
                     if (!candidate->Configure(desc)) return fail("Default view target creation failed; previous generation retained");

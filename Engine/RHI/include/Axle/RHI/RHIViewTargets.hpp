@@ -19,6 +19,11 @@ namespace Axle::RHI {
         uint32_t Depth = 0;
         bool operator==(const RHIFroxelGridExtent&) const = default;
     };
+    struct RHIFroxelTierSpec {
+        RHIFroxelGridExtent Limit;
+        uint32_t MinTilePixels;
+        const char* Name;
+    };
     struct RHIViewTargetDesc {
         uint32_t Width = 1, Height = 1;
         RHITextureFormat ColorFormat = RHITextureFormat::RGBA8_UNORM;
@@ -43,6 +48,7 @@ namespace Axle::RHI {
         static constexpr float MinPlanarResolutionScale = 0.25f;
         static constexpr float MaxPlanarResolutionScale = 1.0f;
         static constexpr uint8_t MaxFroxelQualityTier = 3;
+        static constexpr uint8_t DefaultFroxelQualityTier = 2;
 
         // Number of natural floor-halving reduction levels from full extent down to 1x1.
         // Returns 0 for invalid zero extents.
@@ -55,6 +61,7 @@ namespace Axle::RHI {
         // Bounded 3D froxel grid dimensions for a view extent and quality tier [0..3].
         // Tier 2 (High) resolves to 160x90x64 at 720p/1080p/1440p; invalid inputs return {0, 0, 0}.
         static RHIFroxelGridExtent ComputeFroxelGridExtent(uint32_t width, uint32_t height, uint8_t qualityTier);
+        static const RHIFroxelTierSpec* GetFroxelTierSpec(uint8_t qualityTier);
 
         bool Configure(const RHIViewTargetDesc& desc, const RHITexture* externalColor = nullptr,
                        const RHITexture* externalDepth = nullptr);

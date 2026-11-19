@@ -6,6 +6,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 #include <algorithm>
+#include <limits>
 #include <unordered_set>
 
 namespace Axle {
@@ -2981,12 +2982,14 @@ namespace Axle {
     namespace FroxelFogContract {
 
         namespace {
-            constexpr FroxelTierSpec kTierSpecs[4] = {
-                { FroxelFogQuality::Low,    "Low",     80u,  45u, 32u, 16u },
-                { FroxelFogQuality::Medium, "Medium", 128u,  72u, 48u, 10u },
-                { FroxelFogQuality::High,   "High",   160u,  90u, 64u,  8u },
-                { FroxelFogQuality::Ultra,  "Ultra",  240u, 135u, 96u,  8u }
-            };
+            static_assert(static_cast<uint8_t>(FroxelFogQuality::High) == RHI::RHIViewTargets::DefaultFroxelQualityTier);
+            static_assert(static_cast<uint8_t>(FroxelFogQuality::Ultra) == RHI::RHIViewTargets::MaxFroxelQualityTier);
+
+            uint8_t ResolveQualityTier(FroxelFogQuality quality) {
+                const auto tier = static_cast<uint8_t>(quality);
+                return tier <= RHI::RHIViewTargets::MaxFroxelQualityTier
+                    ? tier : RHI::RHIViewTargets::DefaultFroxelQualityTier;
+            }
 
             float EvaluateExponentialDepth(float nearZ, float farZ, double normalizedSlice) {
                 return static_cast<float>(
@@ -2995,13 +2998,11 @@ namespace Axle {
         }
 
         uint32_t GetQualityTierCount() {
-            return static_cast<uint32_t>(std::size(kTierSpecs));
+            return RHI::RHIViewTargets::MaxFroxelQualityTier + 1u;
         }
 
-        FroxelTierSpec GetTierSpec(FroxelFogQuality quality) {
-            const auto index = static_cast<uint32_t>(quality);
-            if (index >= GetQualityTierCount()) return kTierSpecs[static_cast<uint32_t>(FroxelFogQuality::High)];
-            return kTierSpecs[index];
+        const RHI::RHIFroxelTierSpec& GetTierSpec(FroxelFogQuality quality) {
+            return *RHI::RHIViewTargets::GetFroxelTierSpec(ResolveQualityTier(quality));
         }
 
         RHI::RHIFroxelGridExtent ComputeGridExtent(uint32_t viewWidth, uint32_t viewHeight, FroxelFogQuality quality) {
@@ -3015,6 +3016,11 @@ namespace Axle {
             if (nearDistance < MinNearDistance || maxDistance <= nearDistance || maxDistance > MaxAllowedDistance) {
                 return false;
             }
+            // Each half-slice step must exceed one float ULP so both boundaries
+            // and centers remain distinct, even at the highest depth resolution.
+            static const double minDepthRatio = std::pow(
+                1.0 + std::numeric_limits<float>::epsilon(), 2u * GetTierSpec(FroxelFogQuality::Ultra).Limit.Depth);
+            if (static_cast<double>(maxDistance) <= static_cast<double>(nearDistance) * minDepthRatio) return false;
             outNear = nearDistance;
             outFar = maxDistance;
             return true;
@@ -3060,7 +3066,7 @@ namespace Axle {
                 return 0.0f;
             }
             const double clamped = std::clamp(static_cast<double>(sliceCoord), 0.0, 1.0);
-            return static_cast<float>(static_cast<double>(nearZ) * std::pow(static_cast<double>(farZ) / static_cast<double>(nearZ), clamped));
+            return EvaluateExponentialDepth(nearZ, farZ, clamped);
         }
 
         FroxelMemoryBudget EstimateMemoryBudget(uint32_t viewWidth, uint32_t viewHeight, FroxelFogQuality quality, bool queryDevice) {
@@ -3098,10 +3104,9 @@ namespace Axle {
                 return false;
             };
             if (!desc.Width || !desc.Height) return fail("View extent must be non-zero for froxel resources");
-            if (policy.RequireAuxiliaryTargets && !desc.RenderAuxiliary) return fail("Froxel resources require auxiliary view targets");
-            if (policy.RequireSingleSample && desc.Samples != 1u) return fail("Froxel resources require single-sample depth (MSAASamples == 1)");
-            if (desc.FroxelQuality > RHI::RHIViewTargets::MaxFroxelQualityTier ||
-                static_cast<uint32_t>(policy.Quality) > RHI::RHIViewTargets::MaxFroxelQualityTier) {
+            if (!desc.RenderAuxiliary) return fail("Froxel resources require auxiliary view targets");
+            if (!desc.EnableDepth || desc.Samples != 1u) return fail("Froxel resources require single-sample depth");
+            if (desc.FroxelQuality > RHI::RHIViewTargets::MaxFroxelQualityTier) {
                 return fail("Froxel quality tier is out of supported range [0..3]");
             }
             float nearZ = 0.0f, farZ = 0.0f;
@@ -3119,12 +3124,12 @@ namespace Axle {
             return true;
         }
 
-        void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture, bool& outEnable, uint8_t& outQuality) {
-            outEnable = !isSubCapture && settings.EnableVolumetricFog && settings.MSAASamples == 1u;
-            const auto rawTier = static_cast<uint8_t>(settings.FogQuality);
-            outQuality = outEnable
-                ? std::min(rawTier, RHI::RHIViewTargets::MaxFroxelQualityTier)
-                : static_cast<uint8_t>(FroxelFogQuality::High);
+        void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture, bool hasDepth,
+                                      bool& outEnable, uint8_t& outQuality) {
+            float nearZ = 0.0f, farZ = 0.0f;
+            outEnable = settings.EnableVolumetricFog && !isSubCapture && hasDepth && settings.MSAASamples == 1u &&
+                ResolveDepthRange(settings.FogNearDistance, settings.FogMaxDistance, nearZ, farZ);
+            outQuality = outEnable ? ResolveQualityTier(settings.FogQuality) : RHI::RHIViewTargets::DefaultFroxelQualityTier;
         }
 
     } // namespace FroxelFogContract

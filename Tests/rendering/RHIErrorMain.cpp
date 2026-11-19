@@ -33,6 +33,7 @@ static bool Start(RHIType backend) {
 static bool Native(RHIType backend) {
     auto& device = RHIDevice::Get();
     RENDER_CHECK(Start(backend), "strict physical backend");
+    RENDER_CHECK(!device.GetFirstError(), "clean headless startup leaves no stale error");
     {
         RHITexture texture;
         auto desc = RHITextureDesc::RenderTarget2D(8, 8); desc.DebugName = "failure-name";

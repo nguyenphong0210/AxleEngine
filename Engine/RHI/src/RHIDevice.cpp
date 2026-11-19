@@ -335,12 +335,15 @@ namespace Axle::RHI {
         res = ScopedRHIFault::Invoke("StreamerInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::StreamerInterface), &interfaces.Streamer); });
         if (res != nri::Result::SUCCESS || !interfaces.Streamer.CreateStreamer)
             return reject("StreamerInterface");
-        res = ScopedRHIFault::Invoke("SwapChainInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::SwapChainInterface), &interfaces.SwapChain); });
+        auto probeOptionalInterface = [&](std::string_view operation, auto&& query) {
+            return desc.Headless ? query() : ScopedRHIFault::Invoke(operation, query);
+        };
+        res = probeOptionalInterface("SwapChainInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::SwapChainInterface), &interfaces.SwapChain); });
         if (!desc.Headless && (res != nri::Result::SUCCESS || !interfaces.SwapChain.CreateSwapChain || !interfaces.SwapChain.QueuePresent))
             return reject("SwapChainInterface");
         if (res != nri::Result::SUCCESS) interfaces.SwapChain = {};
         if (backend == RHIType::Vulkan) {
-            res = ScopedRHIFault::Invoke("WrapperVKInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::WrapperVKInterface), &interfaces.WrapperVK); });
+            res = probeOptionalInterface("WrapperVKInterface", [&] { return nri::nriGetInterface(*device, NRI_INTERFACE(nri::WrapperVKInterface), &interfaces.WrapperVK); });
             if (!desc.Headless && (res != nri::Result::SUCCESS || !interfaces.WrapperVK.GetInstanceVK ||
                 !interfaces.WrapperVK.GetPhysicalDeviceVK || !interfaces.WrapperVK.GetInstanceProcAddrVK || !interfaces.WrapperVK.GetQueueFamilyIndexVK))
                 return reject("WrapperVKInterface");

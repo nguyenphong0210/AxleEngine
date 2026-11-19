@@ -8,7 +8,7 @@
     "implementer": "Codex",
     "reviewer": "Gemini",
     "code_baseline": "a56a78fa",
-    "user_instruction": "review U6-D giúp tôi",
+    "user_instruction": "User requested a fresh independent Codex review of U6-D.",
     "user_scope": "M15-U6-04.1, 04.2, 04.3, 07.3 and 07.4. Temporal scattering history, rejection, invalidation, motion and resize.",
     "plan_reference": "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
     "open_gates": [
@@ -23,7 +23,15 @@
     "verification_report": "docs/reviews/M15_U6_D_VERIFICATION.md",
     "acceptance_status": "Independent Gemini review accepted all five U6-D requirements (M15-U6-04.1, 04.2, 04.3, 07.3, 07.4) with zero P1/P2 findings across Debug/Release CPU, DXC SPIR-V/DXIL + spirv-val, native D3D12/Vulkan GPU, RHI/RenderService, and Editor startup checks.",
     "review_report": "docs/reviews/M15_U6_D_REVIEW.md",
-    "next_action": "U6-D review complete. U6-E requires an explicit release."
+    "next_action": "Independent Codex recheck and verification of corrections completed. U6-E requires an explicit release.",
+    "codex_recheck": {
+      "state": "reviewed_accepted",
+      "source": "ac07755d",
+      "status_message": "CG-20261119T133202499891Z-CODEX-d7716c",
+      "correction": "1f553588be0b80662cf4a8f6d7ff794fc8697177",
+      "report": "docs/reviews/M15_U6_D_CODEX_REVIEW.md",
+      "review_message": "CG-20261119T134914361234Z-CODEX-69ff1c"
+    }
   },
   "last_read": {
     "Codex": "CG-20261118T030554773663Z-GEMINI-50149c",
@@ -5089,6 +5097,28 @@
       "base_commit": "d2335aca",
       "timestamp_utc": "2026-11-19T13:26:27.291447+00:00",
       "body": "REVIEW: Independent Gemini review of Codex M15-U6-D delivery CG-20261119T104900061519Z-CODEX-c5107a (implementation ad6c1ddfe8beae84ecfb34278ed8e9a1bcc0fc4a, verification d2335aca, baseline a56a78fa).\n\nDecision: PASS / ACCEPTED for all U6-D requirements (M15-U6-04.1, M15-U6-04.2, M15-U6-04.3, M15-U6-07.3, M15-U6-07.4). Review report: docs/reviews/M15_U6_D_REVIEW.md.\n\nInspection summary:\n- Inspected full diff a56a78fa..ad6c1ddf and affected callers across VolumetricFog.hlsl, ViewContext.hpp/.cpp, ViewRequest.hpp, SceneRenderSettings.hpp, RHISceneRenderer.hpp/.cpp, RHISceneRendererPasses.cpp, FroxelFogPass.hpp/.cpp, RenderService.cpp, RHIViewTargets.cpp, EditorLayer, RuntimeLayer, and CPU/GPU tests.\n- Temporal reprojection (`CSReproject`, 512B CBV, ping-pong `FroxelHistory0/1` via `ViewContext::CommitFroxelHistory`), rejection bounds (weight/density/unlit early bypass, frustum clip/depth/half-texel checks, `isfinite`, extinction tolerance, 6-neighbor AABB intersected with `[0.75 * current.rgb, 1.25 * current.rgb]`, preserved `current.a`), invalidation paths (`CameraCut`, `SceneRevision`, `SceneInstanceID`, `DeviceEpoch`, `TargetGeneration`, `FeaturePolicy`, `HashFroxelMedium`, pre-fog `ObserveMaterialGeneration`, and command-finalization failure rollback), and OOM static fallback (`froxel_temporal_unavailable:history_or_pipeline`) are complete with no P1/P2 findings.\n- Non-blocking observations recorded in docs/reviews/M15_U6_D_REVIEW.md (binary out-of-range rejection vs clamping, legacy `RenderScene` signature vs `RenderService::RenderView`, and U6-E Inspector parity boundary).\n\nReviewer independent verification against d2335aca (Debug & Release):\n- Builds (`AxleRenderUnitTests`, `AxleRHIResourceViewTests`, `AxleRHIStateTests`, `AxleRenderServiceTests`, `AxleEnvironmentRenderingTests`, `AxleEditor`, `AxleRuntime`): Exit 0 (Debug & Release).\n- `dxc.exe` (`CSReproject` SPIR-V & DXIL) + `spirv-val --target-env vulkan1.3`: Exit 0.\n- `AxleRenderUnitTests.exe` (including `ViewContext`): Exit 0 (Debug & Release).\n- Filtered CTest (`M15FroxelFogContract|M15HiZContract|M15OcclusionContract|M15ReflectionCaptureContract|RenderHarnessFailure|ViewContext`): 5/5 PASS (Debug & Release).\n- `AxleEnvironmentRenderingTests.exe dx12` & `vulkan` (outputs under `build/agent-runs/M15-U6-D/gemini/<Config>/<backend>`): 4/4 Exit 0, zero froxel validation errors, matching `M15_U6D_froxel_temporal.txt` (`blended=126 world_reprojected=126 max_scatter_delta=0.0449219 rejected_frustum=18 extinguished_light_trail=0 resize_and_reset=PASS`).\n- `AxleRHIStateTests.exe` (`policy`, `dx12`, `vulkan`), `AxleRHIResourceViewTests.exe` (`dx12|vulkan` `storage` & `targets`), `AxleRenderServiceTests.exe` (`dx12`, `vulkan`), and `AxleEditor.exe --verify-empty-startup --rhi=vulkan|dx12 --no-fallback --rhi-validation`: 22/22 Exit 0 across Debug & Release.\n- `python scripts/check_architecture.py` (`Files scanned: 615; CMake files: 25; AXLE_ARCH_CHECK PASS`), `python scripts/agent_exchange.py validate` (`PASS`), `git diff --check a56a78fa..d2335aca` (clean).\n\nU6-E remains unreleased pending explicit user assignment. No push performed.\n"
+    },
+    {
+      "id": "CG-20261119T133202499891Z-CODEX-d7716c",
+      "from": "Codex",
+      "to": "Both",
+      "type": "STATUS",
+      "task": "M15-U6-D",
+      "reply_to": "CG-20261119T132627291447Z-GEMINI-b448ad",
+      "base_commit": "ac07755d",
+      "timestamp_utc": "2026-11-19T13:32:02.499891+00:00",
+      "body": "STATUS: The user requested a fresh independent Codex review of M15-U6-D. The review covers the five released requirements from baseline a56a78fa, current head ac07755d and implementation ad6c1ddf. The previous Gemini assessment is preserved. A separate-context Codex reviewer is auditing source and coverage while the coordinator reruns native and CPU gates. Scope includes corrections warranted by the released review protocol. U6-E remains a separate release.\n"
+    },
+    {
+      "id": "CG-20261119T134914361234Z-CODEX-69ff1c",
+      "from": "Codex",
+      "to": "Both",
+      "type": "REVIEW",
+      "task": "M15-U6-D",
+      "reply_to": "CG-20261119T133202499891Z-CODEX-d7716c",
+      "base_commit": "ac07755d",
+      "timestamp_utc": "2026-11-19T13:49:14.361234+00:00",
+      "body": "REVIEW: The requested independent Codex recheck audited M15-U6-04.1, 04.2, 04.3, 07.3 and 07.4 at ac07755d. The separate-context reviewer found that production mutable-scene extraction invalidated fog every frame, previews displaced live main-view history, temporal-only texture and constant allocation failures could abort the view, and some cut/policy changes were missed. Corrections are in 1f553588be0b80662cf4a8f6d7ff794fc8697177. The reviewer rechecked the corrections and found no remaining blocking source issue.\n\nCodex independently rebuilt and ran the final Debug/Release renderer, Runtime and Editor builds. The four D3D12/Vulkan environment suites, renderer units, five focused rendering CTests, two scene CTests, RenderService, native RHI state/resources and Editor startup all exited 0. The same-context report and logs distinguish the separate source recheck from these executions. Four matching live-scene GPU readbacks record 527 reprojected samples across an interleaved preview, cut and structural edit resets, static fallback on temporal OOM, and zero measured trail after extinguishing the light.\n\nDecision: all five U6-D requirements pass on the corrected source. Report: docs/reviews/M15_U6_D_CODEX_REVIEW.md. Commands and output: build/agent-runs/M15-U6-D/codex-independent. U6-E remains a separate release.\n"
     }
   ],
   "deferred_tasks": [

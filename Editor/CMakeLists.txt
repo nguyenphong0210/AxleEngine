@@ -1,6 +1,7 @@
 add_executable(AxleEditor
     src/Main.cpp
     src/EditorLayer.cpp
+    src/EditorPreferences.cpp
     src/RuntimeBuild.cpp
     src/PluginBuild.cpp
     src/OwnedProcess.cpp

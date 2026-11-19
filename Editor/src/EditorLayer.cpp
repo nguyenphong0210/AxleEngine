@@ -1979,6 +1979,9 @@ void EditorLayer::OnImGuiRender() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
+            if (ImGui::MenuItem("Editor Preferences...")) {
+                m_EditorPreferences.Open();
+            }
             if (ImGui::MenuItem("Plugins...")) {
                 m_ShowPluginsPanel = true;
             }
@@ -2158,6 +2161,8 @@ void EditorLayer::OnImGuiRender() {
         }
         ImGui::EndMainMenuBar();
     }
+
+    m_EditorPreferences.Draw(Axle::Application::Get().GetWindow());
 
     // 2. Render Fixed Toolbar directly beneath Main Menu Bar
     RenderToolbar();

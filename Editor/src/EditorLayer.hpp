@@ -1,4 +1,5 @@
 #pragma once
+#include "EditorPreferences.hpp"
 #include <Axle/Layer.hpp>
 #include <Axle/PerspectiveCameraController.hpp>
 #include <Axle/Shader.hpp>
@@ -301,6 +302,8 @@ private:
     std::future<Axle::RuntimeBuildResult> m_RuntimeBuildFuture;
     std::shared_ptr<std::atomic_bool> m_RuntimeBuildCancel;
     Axle::CookSettings m_PendingExportSettings;
+
+    Axle::EditorPreferences m_EditorPreferences;
 
     // Project Settings & Graphics RHI Switching (Phase 33 Step 6)
     bool m_ShowProjectSettingsModal = false;

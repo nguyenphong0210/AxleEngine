@@ -1,5 +1,6 @@
 #include "EditorStartup.hpp"
 #include "EditorStartupConfig.hpp"
+#include "EditorPreferences.hpp"
 #include <Axle/Application.hpp>
 #include <Axle/Log.hpp>
 #include <Axle/ImGuiLayer.hpp>
@@ -326,7 +327,7 @@ int EditorMain(int argc, char** argv) {
             .Name = "Axle Editor",
             .Width = 1280,
             .Height = 720,
-            .VSync = true,
+            .VSync = Axle::EditorPreferences::LoadVSync(),
             .Maximized = true,
             .GraphicsBackend = activeAPI,
             .RendererInitCallback = [](void* proc) {

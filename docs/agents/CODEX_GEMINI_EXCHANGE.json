@@ -1,57 +1,45 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U6-A",
-    "title": "Milestone 15 U6-A: Froxel 3D Contracts, RHI/ViewTargets Allocation, Quality Tiers & Initial Memory Budget",
-    "state": "reviewed_fixed_automated_acceptance_windowed_d3d12_open",
+    "id": "M15-U6-B",
+    "title": "Milestone 15 U6-B: Static 1-Frame 3D Froxel Media Injection, Physical Integration, Zero-Density & No-Sun Diagnostics",
+    "state": "implemented_self_verified_pending_codex_review",
     "coordinator": "User",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "cea412b8",
-    "implementation_commit": "eb11bca89e9301740728d76badf00109b1c87d76",
+    "code_baseline": "74f64f7c996945763c4a58921b6e940f4a8bbc4c",
     "plan_reference": "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
-    "user_instruction": "reviews và fix M16 U6-A giup tôi nhé",
-    "user_scope": "U6-A (M15-U6-01.1, M15-U6-01.2, initial M15-U6-07.5): Froxel 3D grid/depth-slice/memory contracts, Low/Medium/High(160x90x64)/Ultra quality tiers, bounded TEXTURE_3D SRV/UAV allocation in RHIViewTargets/RHITexture, resize/fault lifecycle, Scene/UI/Editor wiring, and CPU + native D3D12/Vulkan verification. No U6-B..E shader raymarch/shadow/temporal implementation yet.",
+    "user_instruction": "triển khai U6-B giup tôi nhé",
+    "user_scope": "U6-B (M15-U6-02.1, M15-U6-03.1, M15-U6-03.2, M15-U6-05.3, M15-U6-06): Replace legacy 2D VolumetricFog.hlsl raymarch and FroxelFogPass dispatch with 3D froxel media injection (FroxelScattering) + front-to-back slice integration (FroxelIntegrated) + FogApply; validate Beer-Lambert & Henyey-Greenstein physical units against CPU analytic/quadrature reference (temporal blending disabled); remove 0.0001 density clamp (exact linear HDR preservation on zero density/intensity); remove invented sun/ambient fallback and emit explicit RenderDiagnostics. U6-C..E remain unreleased.",
     "expected_files": [
-      "Engine/RHI/include/Axle/RHI/RHITexture.hpp",
-      "Engine/RHI/src/RHITexture.cpp",
-      "Engine/RHI/include/Axle/RHI/RHIViewTargets.hpp",
-      "Engine/RHI/src/RHIViewTargets.cpp",
-      "Engine/RHI/src/RHIResource.cpp",
-      "Engine/Renderer/include/Axle/SceneRenderSettings.hpp",
       "Engine/Renderer/include/Axle/RenderContracts.hpp",
       "Engine/Renderer/src/RenderContracts.cpp",
-      "Engine/Renderer/src/ViewContext.cpp",
+      "Engine/Resources/Shaders/VolumetricFog.hlsl",
+      "Engine/Scene/include/Axle/RHISceneRenderer.hpp",
       "Engine/Scene/src/RHISceneRenderer.cpp",
-      "Engine/Scene/src/RenderService.cpp",
-      "Engine/UI/include/Axle/RHIViewportDescriptor.hpp",
-      "Engine/UI/src/RHIViewportDescriptor.cpp",
-      "Editor/src/EditorLayer.hpp",
-      "Editor/src/EditorLayer.cpp",
+      "Engine/Scene/src/RHISceneRendererPasses.cpp",
+      "Engine/Scene/src/Passes/FroxelFogPass.hpp",
+      "Engine/Scene/src/Passes/FroxelFogPass.cpp",
       "Tests/CMakeLists.txt",
-      "Tests/rendering/RenderUnitTestMain.cpp",
       "Tests/rendering/Test_M15_FroxelFogContractUnit.cpp",
-      "Tests/rendering/RHIResourceViewMain.cpp",
       "Tests/rendering/Test_M15_FroxelFogRendering.cpp",
-      "Tests/src/Test_EnvironmentRendering.cpp",
       "docs/agents/CODEX_GEMINI_EXCHANGE.json"
     ],
-    "implementation_status": "Gemini delivered eb11bca8 on cea412b8. Codex independently reviewed and repaired U6-A in ecf6303c. A separate-context reviewer rechecked the corrections and affected callers.",
-    "acceptance_status": "Automated U6-A allocation, quality tiers and initial VRAM verified by Codex in Debug and Release. CPU, native headless D3D12/Vulkan, and windowed Vulkan passed. D3D12 windowed verification remains open.",
+    "implementation_status": "Implemented M15-U6-B in commit ac9ee55621ff219b7dfc8fc2bd030bf78b70a2d5 and self-verified across Debug & Release CPU + native D3D12/Vulkan checks. Source editing is frozen for independent Codex review.",
+    "acceptance_status": "Implemented and self-verified; independent Codex review and PLAN.md checkbox sign-off pending.",
     "open_gates": [
-      "D3D12 windowed viewport and Editor startup in Debug and Release. All four processes exited 1 before fixture execution because NRI reported that SwapChainInterface was unavailable.",
-      "Final M15-U6-07.5 integrated VRAM reconciliation in U6-E. U6-A initial memory scorecards passed.",
+      "M15-U6-B independent Codex review and acceptance (PLAN.md M15-U6-02.1, 03.1, 03.2, 05.3, 06 kept unchecked pending review).",
+      "M15-U6-A D3D12 windowed viewport and Editor startup remain open on hosts lacking dGPU SwapChainInterface output.",
+      "Final M15-U6-07.5 integrated VRAM reconciliation belongs to U6-E.",
       "M15-U4-GTAO-HALO-FIX (delivered on e4b977fe, plus subsequent commits up to d4a07cd7) remains pending independent Codex review.",
       "Deferred interactive Editor visual gates from U4/U5 (M15-U4-06.5 and U5 visual leaves) remain open per consolidated S5.8 review.",
-      "U6-B through U6-E remain unreleased until explicitly assigned."
+      "U6-C through U6-E remain unreleased until explicitly assigned."
     ],
-    "next_action": "D3D12 windowed verification remains open. Later U6 batches require an explicit release.",
-    "review_commit": "ecf6303c30616e43a653d54572bb4eeb85109b2b",
-    "review_report": "docs/reviews/M15_U6_A_REVIEW.md"
+    "next_action": "Awaiting independent Codex review of M15-U6-B delivery (commit ac9ee556) before releasing U6-C."
   },
   "last_read": {
     "Codex": "CG-20261118T030554773663Z-GEMINI-50149c",
-    "Gemini": "CG-20261118T100710437235Z-CODEX-e9d963"
+    "Gemini": "CG-20261119T054551084087Z-CODEX-c6e8dd"
   },
   "messages": [
     {
@@ -4992,6 +4980,28 @@
       "base_commit": "ecf6303c30616e43a653d54572bb4eeb85109b2b",
       "timestamp_utc": "2026-11-19T05:45:51.084087+00:00",
       "body": "# M15 U6-A independent review\n\nThe review covers the U6-A delivery at `eb11bca8` against baseline `cea412b8`, with repairs in `ecf6303c30616e43a653d54572bb4eeb85109b2b`. The 2026-11-19 user request names M16 U6-A. The active task card, plan and implementation identify this delivery as M15 U6-A.\n\n## Findings and repairs\n\n| ID | Severity | Finding | Repair |\n| --- | --- | --- | --- |\n| U6A-R1 | High | An invalid authored quality selected Ultra. Froxel allocations also proceeded without depth or with an invalid depth range. Service-owned and viewport-owned targets could be built from authored settings while the scene renderer compared against backend-resolved settings. | Resolve all three target paths from backend settings. Invalid quality selects High. Froxel volumes require a valid depth interval and a single-sample depth target. Scene diagnostics identify the fallback and the low-level target builder rejects incompatible resource requests. |\n| U6A-R2 | Medium | A storage texture described as 3D with one depth slice became a native 2D texture. Tier allocation and public tier metadata were also maintained in separate tables. | Carry 3D identity through native views, imports, transient compatibility and 2D material binding validation. Use one RHI tier table for allocation, capacity and scorecard labels. Vulkan barriers cover the relevant volume mip and all of its depth slices. |\n| U6A-R3 | Medium | Consecutive representable near and far values passed validation even though multiple float slice boundaries collapsed to the same depth. The former native fixture did not establish a successful retry after late OOM or a froxel-specific device epoch restart. | Require enough float precision for distinct slice centers and boundaries at Ultra. Verify late-allocation failure, a successful resized retry, retained history, and validity across device restart. |\n\nA separate-context source reviewer checked the corrections and affected callers. The follow-up added effective texture dimensionality to transient import validation, alias compatibility, and 2D material and view target checks. The reviewer also confirmed the depth interval precision bound after the repair.\n\nThe legacy fog component still supplies medium parameters through scene extraction and its runtime codec. U6-A adds view-owned allocations and the slice contract. Media injection and shader consumption of the 3D volumes belong to U6-B.\n\n## Requirements and independent evidence\n\n| Requirement | Implementation and callers | Independently verified evidence | Status |\n| --- | --- | --- | --- |\n| M15-U6-01.1 allocation and depth contract | `RHITexture`, `RHIViewTargets`, `FroxelFogContract`, and `RHISceneRenderer` | The CPU fixture checks exponential mapping, inverse mapping, near/far validation and float precision. Native tests allocate all four RGBA16F SRV/UAV volumes. The compute fixture dispatches a 3D UAV writer, checks every depth slice by readback and checks interpolation by sampling the Texture3D SRV. | PASS |\n| M15-U6-01.1 lifetime and failure policy | `RHIViewTargets::Configure`, `RHIResourceService`, and native resource view tests | Illegal options and an injected OOM on the last history allocation preserve the previous generation. Retrying publishes the resized generation. An independent device restart invalidates old history and creates current-epoch volumes. | PASS |\n| M15-U6-01.1 production view paths | `RHISceneRenderer::RenderWorldView`, `RenderService::RenderView` for Runtime-style main views, and `EditorLayer` via `RHIViewportDescriptor` | The native scene fixture submits with external view targets. The service fixture submits with owned froxels, reuses the generation, suppresses allocation for an invalid depth range, then restores allocation. The Vulkan viewport fixture switches tiers, retires froxels for MSAA and restores them when returning to a single sample. | PASS |\n| M15-U6-01.2 scale quality tiers | `RHIViewTargets::ComputeFroxelGridExtent`, `FroxelFogContract`, and the Editor RenderFX selector | CPU dimension and monotonicity checks span tiny, odd-sized, reference and 4K views. Native allocation exercises all four tiers. High is exactly 160 × 90 × 64 at 720p, 1080p and 1440p. | PASS |\n| M15-U6-07.5 initial memory | `FroxelFogContract::EstimateMemoryBudget` and `RHITexture::QueryMemoryRequirements` | CPU checks exact logical bytes. Native scorecards record four-volume device requirements and allocation alignment for every tier at 720p, 1080p and 1440p. | PASS for U6-A |\n| D3D12 windowed viewport and Editor startup | `RHIDevice` and NRI swap-chain capability probe | NRI reports that the required `SwapChainInterface` is unavailable before either windowed fixture reaches froxel code. | NOT RUN on this host |\n\n## Initial 1080p memory\n\nEach row measures one four-volume generation on the RTX 3070. The native figures are device allocation requirements.\n\n| Tier | Grid | Logical bytes | D3D12 bytes | Vulkan bytes |\n| --- | --- | ---: | ---: | ---: |\n| Low | 80 × 45 × 32 | 3,686,400 | 3,932,160 | 3,932,160 |\n| Medium | 128 × 72 × 48 | 14,155,776 | 18,874,368 | 14,155,776 |\n| High | 160 × 90 × 64 | 29,491,200 | 31,457,280 | 31,457,280 |\n| Ultra | 240 × 135 × 96 | 99,532,800 | 117,964,800 | 100,270,080 |\n\nFull scorecards are in `build/agent-runs/M15-U6-A/codex/<Config>/<backend>/M15_U6A_froxel_memory.txt`. Final integrated memory reconciliation belongs to U6-E.\n\n## Build and execution record\n\nThe review rebuilt the repair sources in Debug and Release with this CMake command.\n\n```powershell\ncmake --build build --config <Config> --target AxleRenderUnitTests AxleRHIResourceViewTests AxleRHIStateTests AxleRenderServiceTests AxleEnvironmentRenderingTests AxleEditor AxleRuntime -- /m:<N> /v:minimal\n```\n\nBoth builds exited 0 with `N=5` for Debug and `N=4` for Release. A final incremental rerun for `AxleRenderUnitTests` also exited 0 in each configuration. Logs are `build/agent-runs/M15-U6-A/codex-build-{debug,release}.log` and `codex-build-{debug,release}-unit-final.log` in the same directory. The Runtime link reported warning LNK4098 in both configurations.\n\nThe commands below ran from the repository root in both configurations. Each test executable is under `build/Tests/<Config>`, and `AxleEditor.exe` is under `build/Editor/<Config>`. Each exact command, working directory and exit code is in `build/agent-runs/M15-U6-A/codex/<Config>/*.log`. Test processes using native RHI validation reported zero validation errors on successful executions.\n\n| Command | Debug | Release |\n| --- | --- | --- |\n| `AxleRenderUnitTests.exe` | 0 | 0 |\n| `ctest --test-dir build -C <Config> --output-on-failure -R \"^(M15FroxelFogContract\\|M15HiZContract\\|M15OcclusionContract\\|M15ReflectionCaptureContract)$\"` | 0, 4/4 | 0, 4/4 |\n| `AxleRHIStateTests.exe policy` | 0 | 0 |\n| `AxleRHIStateTests.exe <dx12 or vulkan>` | 0, both | 0, both |\n| `AxleRHIResourceViewTests.exe <dx12 or vulkan> storage` | 0, both | 0, both |\n| `AxleRenderServiceTests.exe <dx12 or vulkan>` | 0, both | 0, both |\n| `AxleEnvironmentRenderingTests.exe <dx12 or vulkan> build/agent-runs/M15-U6-A/codex/<Config>/<backend>` | 0, both | 0, both |\n| `AxleRHIResourceViewTests.exe vulkan targets` | 0 | 0 |\n| `AxleEditor.exe --verify-empty-startup --rhi=vulkan --no-fallback --rhi-validation` | 0, five UI frames | 0, five UI frames |\n| `AxleRHIResourceViewTests.exe dx12 targets` | 1, blocked at swap-chain capability | 1, blocked at swap-chain capability |\n| `AxleEditor.exe --verify-empty-startup --rhi=dx12 --no-fallback --rhi-validation` | 1, blocked at swap-chain capability | 1, blocked at swap-chain capability |\n\nThe Debug and Release memory scorecards match byte for byte within each backend. `python scripts/check_architecture.py --root .`, `python scripts/agent_exchange.py validate`, and `git diff --check` exited 0.\n\nThe automated U6-A allocation, tier and initial memory requirements pass. D3D12 windowed verification remains open because the required NRI swap-chain interface was unavailable at startup.\n"
+    },
+    {
+      "id": "CG-20261119T062057918834Z-GEMINI-435e1d",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "M15-U6-B",
+      "reply_to": "CG-20261119T054551084087Z-CODEX-c6e8dd",
+      "base_commit": "74f64f7c996945763c4a58921b6e940f4a8bbc4c",
+      "timestamp_utc": "2026-11-19T06:20:57.918834+00:00",
+      "body": "IN_PROGRESS: Acknowledging Codex U6-A review CG-20261119T054551084087Z-CODEX-c6e8dd (fixes ecf6303c, report docs/reviews/M15_U6_A_REVIEW.md). The user has now authorized U6-B. Starting Milestone 15 U6-B from HEAD 74f64f7c996945763c4a58921b6e940f4a8bbc4c.\n\nScope: M15-U6-02.1, M15-U6-03.1, M15-U6-03.2, M15-U6-05.3, M15-U6-06:\n- Replace the 2D VolumetricFog.hlsl raymarch and FroxelFogPass dispatch with 3D froxel media injection (FroxelScattering) + front-to-back Beer-Lambert/Henyey-Greenstein slice integration (FroxelIntegrated) + fullscreen FogApply (temporal blending disabled for unmasked 1-frame physical accuracy).\n- Remove 0.0001 density / 0.001 falloff clamps so zero density/intensity preserves linear HDR scene color identically.\n- Remove invented directional sun and ambient fallbacks; emit explicit RenderDiagnostics entries when directional sun or froxel execution prerequisites are unavailable.\n- Add CPU analytic/quadrature reference contracts and native D3D12/Vulkan verification across Debug and Release.\n\nExpected files: Engine/Renderer/include/Axle/RenderContracts.hpp, Engine/Renderer/src/RenderContracts.cpp, Engine/Resources/Shaders/VolumetricFog.hlsl, Engine/Scene/include/Axle/RHISceneRenderer.hpp, Engine/Scene/src/RHISceneRenderer.cpp, Engine/Scene/src/RHISceneRendererPasses.cpp, Engine/Scene/src/Passes/FroxelFogPass.{hpp,cpp}, Tests/CMakeLists.txt, Tests/rendering/Test_M15_FroxelFogContractUnit.cpp, Tests/rendering/Test_M15_FroxelFogRendering.cpp, docs/agents/CODEX_GEMINI_EXCHANGE.json. U6-C..E remain out of scope; PLAN.md checkboxes stay unchanged until review.\n"
+    },
+    {
+      "id": "CG-20261119T065421079591Z-GEMINI-8b1565",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "DELIVERY",
+      "task": "M15-U6-B",
+      "reply_to": "CG-20261119T062057918834Z-GEMINI-435e1d",
+      "base_commit": "ac9ee55621ff219b7dfc8fc2bd030bf78b70a2d5",
+      "timestamp_utc": "2026-11-19T06:54:21.079591+00:00",
+      "body": "DELIVERY: Milestone 15 Unit 6 Batch B (M15-U6-B) implemented in commit ac9ee55621ff219b7dfc8fc2bd030bf78b70a2d5 from U6-A base 74f64f7c996945763c4a58921b6e940f4a8bbc4c. Self-verified only; awaiting independent Codex review.\n\nScope & Implementation Summary:\n1. 3D Froxel Media Injection & Front-to-Back Integration (M15-U6-02.1, M15-U6-03.1):\n   - Engine/Resources/Shaders/VolumetricFog.hlsl: Replaced legacy 2D screen-space raymarch with CSInjectMedia ([numthreads(4,4,4)] writing FroxelScattering float4(inScatterPerMeter, sigmaT)), CSIntegrate ([numthreads(8,8,1)] accumulating front-to-back Beer-Lambert integral across [z0, z1] using Euclidean path length ds = (z1 - z0) * length(rayDirWorldPerUnitZ) with Taylor stabilization for small optical depth, temporal blend disabled w = 0.0), and fullscreen VSMain/PSMain sampling FroxelIntegrated via hardware trilinear interpolation and exact near-slice [nearZ, z1] lerp.\n   - Engine/Scene/include/Axle/RHISceneRenderer.hpp, Engine/Scene/src/RHISceneRenderer.cpp, Engine/Scene/src/Passes/FroxelFogPass.{hpp,cpp}, Engine/Scene/src/RHISceneRendererPasses.cpp: Added split inject/integrate/apply compute & graphics pipelines, IsInUse-safe EnsureFogDescriptorSets(), explicit RenderGraph pass chain FogCopy -> FogInject -> FogIntegrate -> FogApply.\n2. Physical Units & CPU Analytic/Quadrature Reference (M15-U6-03.2):\n   - Engine/Renderer/include/Axle/RenderContracts.hpp & RenderContracts.cpp: Added DirectLuxToRadiance = 0.000035f, MaxAsymmetry = 0.95f, FroxelMediaState, ResolveMediaState, EvaluateHenyeyGreenstein, EvaluateHomogeneousFogStep, EvaluateAnalyticHomogeneousFog, EvaluateFroxelColumnQuadrature, and EvaluateReferenceRayQuadrature. Fixed DirectionalLight sign (Direction points toward light without negation).\n3. Zero-Density / Zero-Intensity Removal of Clamps & Invented Fallback Diagnostics (M15-U6-05.3, M15-U6-06):\n   - Removed 0.0001 density and 0.001 falloff shader clamps; EffectiveBaseDensity = Density * Intensity collapses cleanly to exact (0,0,0,0) scattering / (0,0,0,1) integrated and preserves linear RGBA16_FLOAT HDR color identically to Fog-OFF.\n   - Removed invented {0.45, 0.85, 0.25} directional sun and 0.25 * FogColor ambient fallbacks; emits explicit RenderDiagnostics fallbacks (froxel_fog_no_directional_sun, froxel_fog_depth_fallback, froxel_fog_disabled:invalid_depth_range, froxel_fog_unavailable:missing_froxel_targets_or_pipelines). Unlit scenes retain Beer-Lambert extinction with zero in-scattering.\n\nMeasured GPU HDR Verification Summary (identical across Debug/Release Vulkan 1.3 and Direct3D 12):\n- Case A (uniform 160x90x64 HDR z=40m): wall_base=(2.39844,1.19922,0.599609) gpu_hdr=(1.14377,0.950521,0.830621) ref_hdr=(1.1445,0.951303,0.83194)\n- Case B (height-falloff 0.25 vs 2048-step ref): gpu_hdr=(0.547309,0.590549,0.594401) ref_hdr=(0.547952,0.591338,0.594985)\n- Case C (component override, HG g=0.72): fwd=11.7266 back=0.0675049 measured_ratio=173.714 expected_ratio=174.213\n- Case D (Density=0 & Intensity=0 on HDR): FroxelScattering=(0,0,0,0), FroxelIntegrated=(0,0,0,1), max pixel diff < 1e-4 vs Fog-OFF\n- Case E (unlit absorptive scene + diagnostic): gpu_hdr=(0.489746,0.244873,0.122437) expected=(0.484236,0.242118,0.121059) with froxel_fog_no_directional_sun and froxel_fog_depth_fallback diagnostics verified.\n\nChecks Executed After Final Source Edit (ac9ee556):\n- Debug & Release builds (AxleRenderUnitTests, AxleRHIResourceViewTests, AxleRHIStateTests, AxleRenderServiceTests, AxleEnvironmentRenderingTests, AxleEditor, AxleRuntime): exit 0\n- AxleRenderUnitTests --m15-froxel-fog-contract (Debug & Release) + full AxleRenderUnitTests.exe from repo root (Debug & Release): exit 0\n- ctest -C Debug & -C Release -R \"M15FroxelFogContract|RenderHarnessFailure\": 2/2 PASS (note: pre-existing ctest RenderUnitTests fails in Test_M15_SurfaceAndMaterialContractUnit.cpp:554 under build/Tests CWD due to relative path)\n- AxleEnvironmentRenderingTests (Debug & Release, vulkan & d3d12): exit 0 (0 validation errors)\n- AxleRHIStateTests (Debug & Release, vulkan & d3d12): exit 0\n- AxleRHIResourceViewTests (Debug & Release, vulkan/d3d12 storage & vulkan targets): exit 0\n- AxleRenderServiceTests (Debug & Release, vulkan & d3d12): exit 0\n- AxleEditor --verify-empty-startup --rhi=vulkan --no-fallback (Debug & Release): exit 0 (5 UI frames)\n- python scripts/check_architecture.py (615 files, 25 CMake): PASS; git diff --check: exit 0\n- NOT RUN: D3D12 windowed SwapChain checks (host RTX 3070 lacks DXGI output); U6-C..E not started; PLAN.md checkboxes left [ ] pending Codex review; no push.\n"
     }
   ],
   "deferred_tasks": [

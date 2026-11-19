@@ -1054,7 +1054,7 @@ namespace Axle {
         PlanarReflectionCacheStats m_PlanarCacheStats{};
         ActivePlanarResolveState m_ActivePlanarResolve{};
 
-        // Volumetric Fog & Atmospheric Media Resources (3D Froxel U6-B)
+        // Volumetric Fog & Atmospheric Media Resources (3D Froxel U6-B / U6-C)
         bool EnsureFogDescriptorSets();
         RHI::RHIPipelineLayout m_FogInjectPipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_FogInjectPipeline;
@@ -1068,7 +1068,9 @@ namespace Axle {
         RHI::RHIShaderBytecode m_FogApplyVertexShader;
         RHI::RHIShaderBytecode m_FogApplyPixelShader;
         RHI::RHISampler m_FogSampler;
+        RHI::RHISampler m_FogShadowSampler;
         RHI::RHIDescriptorPool m_FogDescriptorPool;
+        nri::DescriptorSet* m_FogInjectTextureSet = nullptr;
         nri::DescriptorSet* m_FogInjectStorageSet = nullptr;
         nri::DescriptorSet* m_FogIntegrateTextureSet = nullptr;
         nri::DescriptorSet* m_FogIntegrateStorageSet = nullptr;

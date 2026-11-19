@@ -768,6 +768,7 @@ namespace Axle {
         inline constexpr float DefaultMaxDistance = 100.0f;
         inline constexpr float MaxAllowedDistance = 2000.0f;
         inline constexpr float DirectLuxToRadiance = 0.000035f; // Matches ForwardPBR / LightingService sun calibration
+        inline constexpr float LocalIntensityScale = 0.05f;     // Matches ForwardPBR LOCAL_INTENSITY_SCALE
         inline constexpr float MaxAsymmetry = 0.95f;
 
         struct FroxelMediaState {
@@ -849,6 +850,22 @@ namespace Axle {
                                                             const glm::vec3& rayDirWorldPerUnitZ,
                                                             float targetViewZ,
                                                             uint32_t quadratureSteps = 2048u);
+
+        // U6-C local light volumetric in-scattering reference evaluators (matching VolumetricFog.hlsl).
+        glm::vec3 EvaluatePointLightInScatter(const FroxelMediaState& state,
+                                              const LightingPointFrame& light,
+                                              const glm::vec3& sampleWS,
+                                              const glm::vec3& unitRayWS,
+                                              float shadowVisibility = 1.0f);
+        glm::vec3 EvaluateSpotLightInScatter(const FroxelMediaState& state,
+                                             const LightingSpotFrame& light,
+                                             const glm::vec3& sampleWS,
+                                             const glm::vec3& unitRayWS,
+                                             float shadowVisibility = 1.0f);
+        glm::vec3 EvaluateRectLightInScatter(const FroxelMediaState& state,
+                                             const LightingRectFrame& light,
+                                             const glm::vec3& sampleWS,
+                                             const glm::vec3& unitRayWS);
     }
 
 } // namespace Axle

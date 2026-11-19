@@ -490,6 +490,135 @@ bool RunM15FroxelFogContractUnitTests() {
             "M15-U6-02.1 / 05.3 / 06: VolumetricFog.hlsl and FroxelFogPass.cpp match 3D froxel architecture without clamps or invented sun");
     }
 
-    std::cout << "[M15FroxelFog] All Unit 6 Batch A & Batch B contract tests PASSED.\n";
+    // 10. M15-U6-C: Light & Shadow Sampling (Point, Spot, Rect/Disk & CSM/LocalShadow Contract)
+    {
+        LightingService lightingSvc;
+        RenderWorld unlitWorld;
+        SceneRenderSettings settings{};
+        settings.EnableVolumetricFog = true;
+        settings.FogDensity = 0.05f;
+        settings.FogHeightFalloff = 0.0f;
+        settings.FogScattering = 0.6f;
+        settings.FogColor = glm::vec3(0.8f, 0.9f, 1.0f);
+        const auto media = ResolveMediaState(unlitWorld, settings, lightingSvc.BuildFrame(unlitWorld, settings));
+        RENDER_CHECK(media.Valid && std::abs(LocalIntensityScale - 0.05f) < 1e-6f,
+            "M15-U6-02.2: media baseline and LocalIntensityScale constant match ForwardPBR contract");
+
+        // Point light scattering: range cutoff, inverse-square decay, shadow factor & directional mode
+        LightingPointFrame point{};
+        point.Position = glm::vec3(0.0f, 0.0f, -10.0f);
+        point.Radius = 15.0f;
+        point.Color = glm::vec3(1.0f, 0.5f, 0.25f);
+        point.Intensity = 40.0f;
+        point.Falloff = 1.0f;
+        point.MinRadius = 0.2f;
+        point.Directional = false;
+
+        const glm::vec3 unitRay = glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f));
+        const glm::vec3 sampleNear = glm::vec3(0.0f, 0.0f, -12.0f);
+        const glm::vec3 sampleFar = glm::vec3(0.0f, 0.0f, -26.0f);
+        const glm::vec3 pointLit = EvaluatePointLightInScatter(media, point, sampleNear, unitRay, 1.0f);
+        const glm::vec3 pointHalfShadow = EvaluatePointLightInScatter(media, point, sampleNear, unitRay, 0.5f);
+        const glm::vec3 pointOccluded = EvaluatePointLightInScatter(media, point, sampleNear, unitRay, 0.0f);
+        const glm::vec3 pointOutOfRange = EvaluatePointLightInScatter(media, point, sampleFar, unitRay, 1.0f);
+        RENDER_CHECK(pointLit.r > pointLit.g && pointLit.g > pointLit.b && pointLit.b > 0.0f &&
+                     glm::length(pointHalfShadow - 0.5f * pointLit) < 1e-6f &&
+                     pointOccluded == glm::vec3(0.0f) &&
+                     pointOutOfRange == glm::vec3(0.0f),
+            "M15-U6-02.2 / 07.1: point light in-scattering obeys color ratio, range cutoff, and shadow visibility scaling");
+
+        LightingPointFrame extraDir{};
+        extraDir.Position = glm::vec3(0.0f, 0.0f, 1.0f); // Direction toward light = -normalize(Position) -> -Z
+        extraDir.Color = glm::vec3(0.4f, 0.8f, 1.0f);
+        extraDir.Intensity = 20.0f;
+        extraDir.Directional = true;
+        const glm::vec3 dirSampleA = EvaluatePointLightInScatter(media, extraDir, sampleNear, unitRay, 1.0f);
+        const glm::vec3 dirSampleB = EvaluatePointLightInScatter(media, extraDir, sampleFar, unitRay, 1.0f);
+        RENDER_CHECK(dirSampleA.b > 0.0f && glm::length(dirSampleA - dirSampleB) < 1e-6f,
+            "M15-U6-02.2: Directional-mode light entry scatters uniformly without inverse-square position attenuation");
+
+        // Spot light scattering: inner cone plateau, smooth outer falloff, cone culling, shadow attenuation
+        LightingSpotFrame spot{};
+        spot.Position = glm::vec3(0.0f, 0.0f, -5.0f);
+        spot.Direction = glm::vec3(0.0f, 0.0f, -1.0f);
+        spot.Range = 25.0f;
+        spot.Intensity = 60.0f;
+        spot.Color = glm::vec3(1.0f, 0.85f, 0.7f);
+        spot.CosInnerAngle = std::cos(glm::radians(15.0f));
+        spot.CosOuterAngle = std::cos(glm::radians(30.0f));
+        spot.Falloff = 1.0f;
+
+        const glm::vec3 spotAxisPt = glm::vec3(0.0f, 0.0f, -10.0f); // 5m down -Z axis (angle 0)
+        const float midAngle = glm::radians(22.5f);
+        const glm::vec3 spotMidPt = spot.Position + 5.0f * glm::vec3(std::sin(midAngle), 0.0f, -std::cos(midAngle));
+        const float outAngle = glm::radians(35.0f);
+        const glm::vec3 spotOutPt = spot.Position + 5.0f * glm::vec3(std::sin(outAngle), 0.0f, -std::cos(outAngle));
+
+        const glm::vec3 spotCenter = EvaluateSpotLightInScatter(media, spot, spotAxisPt, unitRay, 1.0f);
+        const glm::vec3 spotMid = EvaluateSpotLightInScatter(media, spot, spotMidPt, unitRay, 1.0f);
+        const glm::vec3 spotOutside = EvaluateSpotLightInScatter(media, spot, spotOutPt, unitRay, 1.0f);
+        const glm::vec3 spotShadowed = EvaluateSpotLightInScatter(media, spot, spotAxisPt, unitRay, 0.0f);
+        RENDER_CHECK(spotCenter.r > spotMid.r && spotMid.r > 0.0f &&
+                     spotOutside == glm::vec3(0.0f) &&
+                     spotShadowed == glm::vec3(0.0f),
+            "M15-U6-02.2 / 07.1: spot light in-scattering decays smoothly between inner and outer cone and zeroes under shadow");
+
+        // Rect & Disk area lights: backface culling, two-sided symmetry, disk pi/4 area ratio
+        LightingRectFrame rect{};
+        rect.Position = glm::vec3(0.0f, 0.0f, -10.0f);
+        rect.Direction = glm::vec3(0.0f, 0.0f, -1.0f);
+        rect.Up = glm::vec3(0.0f, 1.0f, 0.0f);
+        rect.Width = 4.0f;
+        rect.Height = 2.0f;
+        rect.Range = 20.0f;
+        rect.Color = glm::vec3(0.9f, 0.95f, 1.0f);
+        rect.SignedIntensity = 25.0f;
+        rect.Shape = AreaLightShape::Rectangle;
+
+        const glm::vec3 frontPt = glm::vec3(0.0f, 0.0f, -14.0f);
+        const glm::vec3 backPt = glm::vec3(0.0f, 0.0f, -6.0f);
+        const glm::vec3 rectFront = EvaluateRectLightInScatter(media, rect, frontPt, unitRay);
+        const glm::vec3 rectBack = EvaluateRectLightInScatter(media, rect, backPt, unitRay);
+
+        rect.SignedIntensity = -25.0f;
+        const glm::vec3 twoSidedFront = EvaluateRectLightInScatter(media, rect, frontPt, unitRay);
+        const glm::vec3 twoSidedBack = EvaluateRectLightInScatter(media, rect, backPt, unitRay);
+
+        rect.SignedIntensity = 25.0f;
+        rect.Shape = AreaLightShape::Disk;
+        const glm::vec3 diskFront = EvaluateRectLightInScatter(media, rect, frontPt, unitRay);
+        RENDER_CHECK(rectFront.b > 0.0f &&
+                     rectBack == glm::vec3(0.0f) &&
+                     glm::length(twoSidedFront - rectFront) < 1e-6f &&
+                     twoSidedBack.b > 0.0f &&
+                     diskFront.b > 0.0f && diskFront.b < rectFront.b,
+            "M15-U6-02.2: area rect/disk in-scattering enforces single-sided backface rejection and disk area factor");
+
+        // Canonical U6-C shader & RenderGraph wiring parity
+        const std::string fogShaderSrc = ReadText(AXLE_VOLUMETRIC_FOG_SHADER_PATH);
+        const std::string fogPassSrc = ReadText(AXLE_FROXEL_FOG_PASS_SOURCE_PATH);
+        const std::string scenePassesSrc = ReadText(AXLE_SCENE_PASSES_SOURCE_PATH);
+        RENDER_CHECK(fogShaderSrc.find("MultiLightBuffer") != std::string::npos &&
+                     fogShaderSrc.find("CascadeReceiver") != std::string::npos &&
+                     fogShaderSrc.find("LocalShadowReceiver") != std::string::npos &&
+                     fogShaderSrc.find("u_CascadeDepth") != std::string::npos &&
+                     fogShaderSrc.find("u_LocalShadowDepth") != std::string::npos &&
+                     fogShaderSrc.find("u_ShadowSampler") != std::string::npos &&
+                     fogShaderSrc.find("EvaluateCascadeVolumetricShadow") != std::string::npos &&
+                     fogShaderSrc.find("PointShadowVisibilityVolumetric") != std::string::npos &&
+                     fogShaderSrc.find("AccumulatePointLights") != std::string::npos &&
+                     fogShaderSrc.find("AccumulateSpotLights") != std::string::npos &&
+                     fogShaderSrc.find("AccumulateRectLights") != std::string::npos &&
+                     fogPassSrc.find("r.UseCascadeAtlas") != std::string::npos &&
+                     fogPassSrc.find("r.UseLocalShadowAtlas") != std::string::npos &&
+                     fogPassSrc.find("m_FogInjectTextureSet") != std::string::npos &&
+                     scenePassesSrc.find("graph.DeclareRead(\"FogInject\", m_LightBuffer.GetCBV())") != std::string::npos &&
+                     scenePassesSrc.find("graph.DeclareRead(\"FogInject\", m_CascadedShadows.GetConstantsCBV())") != std::string::npos &&
+                     scenePassesSrc.find("graph.DeclareRead(\"FogInject\", m_LocalShadows.GetConstantsCBV())") != std::string::npos &&
+                     scenePassesSrc.find("shadowAtlas != nullptr, localAtlas != nullptr") != std::string::npos,
+            "M15-U6-02.2: U6-C VolumetricFog.hlsl, FroxelFogPass.cpp, and RHISceneRendererPasses.cpp shadow/light bindings match");
+    }
+
+    std::cout << "[M15FroxelFog] All Unit 6 Batch A, B & C contract tests PASSED.\n";
     return true;
 }

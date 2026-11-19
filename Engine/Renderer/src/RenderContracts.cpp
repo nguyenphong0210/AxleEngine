@@ -3365,6 +3365,128 @@ namespace Axle {
             return accum;
         }
 
+        namespace {
+            glm::vec3 EvaluateLocalScatteringCoeff(const FroxelMediaState& state, const glm::vec3& sampleWS) {
+                if (!state.Valid || !(state.EffectiveBaseDensity > 0.0f)) return {};
+                const float heightAboveGround = std::max(sampleWS.y, 0.0f);
+                const float localDensity = state.EffectiveBaseDensity * std::exp(-heightAboveGround * state.HeightFalloff);
+                return SanitizeNonNegativeVec3(state.Albedo) * std::max(localDensity, 0.0f);
+            }
+        }
+
+        glm::vec3 EvaluatePointLightInScatter(const FroxelMediaState& state,
+                                              const LightingPointFrame& light,
+                                              const glm::vec3& sampleWS,
+                                              const glm::vec3& unitRayWS,
+                                              float shadowVisibility) {
+            const glm::vec3 sigmaS = EvaluateLocalScatteringCoeff(state, sampleWS);
+            if (!(sigmaS.x > 0.0f || sigmaS.y > 0.0f || sigmaS.z > 0.0f)) return {};
+            const float dirLenSq = glm::dot(unitRayWS, unitRayWS);
+            if (!std::isfinite(dirLenSq) || !(dirLenSq > 1e-12f)) return {};
+            const glm::vec3 rayDir = unitRayWS * (1.0f / std::sqrt(dirLenSq));
+            if (light.Directional) {
+                const float lLenSq = glm::dot(light.Position, light.Position);
+                if (!std::isfinite(lLenSq) || !(lLenSq > 1e-12f)) return {};
+                const glm::vec3 L = light.Position * (1.0f / std::sqrt(lLenSq));
+                const float phase = EvaluateHenyeyGreenstein(glm::dot(rayDir, L), state.ScatteringAsymmetry);
+                return sigmaS * SanitizeNonNegativeVec3(light.Color) * (SanitizeNonNegative(light.Intensity) * phase);
+            }
+            if (!std::isfinite(light.Radius) || !(light.Radius > 0.0f)) return {};
+            const glm::vec3 lightVec = light.Position - sampleWS;
+            const float dist = glm::length(lightVec);
+            if (!std::isfinite(dist) || !(dist < light.Radius) || !(dist > 1e-4f)) return {};
+            const glm::vec3 L = lightVec / dist;
+            const float minRadiusSq = std::max(0.0025f, light.MinRadius * light.MinRadius);
+            const float distSq = std::max(dist * dist, minRadiusSq);
+            const float ratio = dist / light.Radius;
+            const float ratio4 = ratio * ratio * ratio * ratio;
+            const float window = std::clamp(1.0f - ratio4, 0.0f, 1.0f);
+            float attenuation = (window * window) / distSq;
+            if (light.Falloff > 0.1f && std::abs(light.Falloff - 1.0f) > 0.01f) {
+                attenuation = std::pow(std::max(attenuation, 0.0f), light.Falloff);
+            }
+            const float phase = EvaluateHenyeyGreenstein(glm::dot(rayDir, L), state.ScatteringAsymmetry);
+            const float vis = std::isfinite(shadowVisibility) ? std::clamp(shadowVisibility, 0.0f, 1.0f) : 1.0f;
+            return sigmaS * SanitizeNonNegativeVec3(light.Color) *
+                (SanitizeNonNegative(light.Intensity) * attenuation * LocalIntensityScale * phase * vis);
+        }
+
+        glm::vec3 EvaluateSpotLightInScatter(const FroxelMediaState& state,
+                                             const LightingSpotFrame& light,
+                                             const glm::vec3& sampleWS,
+                                             const glm::vec3& unitRayWS,
+                                             float shadowVisibility) {
+            const glm::vec3 sigmaS = EvaluateLocalScatteringCoeff(state, sampleWS);
+            if (!(sigmaS.x > 0.0f || sigmaS.y > 0.0f || sigmaS.z > 0.0f) ||
+                !std::isfinite(light.Range) || !(light.Range > 0.0f)) {
+                return {};
+            }
+            const float dirLenSq = glm::dot(unitRayWS, unitRayWS);
+            if (!std::isfinite(dirLenSq) || !(dirLenSq > 1e-12f)) return {};
+            const glm::vec3 rayDir = unitRayWS * (1.0f / std::sqrt(dirLenSq));
+            const glm::vec3 lightVec = light.Position - sampleWS;
+            const float dist = glm::length(lightVec);
+            if (!std::isfinite(dist) || !(dist < light.Range) || !(dist > 1e-4f)) return {};
+            const glm::vec3 L = lightVec / dist;
+            const float spotLen = glm::length(light.Direction);
+            if (!std::isfinite(spotLen) || !(spotLen > 1e-5f)) return {};
+            const glm::vec3 spotDir = light.Direction / spotLen;
+            const float cosCone = glm::dot(-L, spotDir);
+            if (!(cosCone > light.CosOuterAngle)) return {};
+            float spotAtten = std::clamp(
+                (cosCone - light.CosOuterAngle) / std::max(1e-4f, light.CosInnerAngle - light.CosOuterAngle),
+                0.0f, 1.0f);
+            spotAtten *= spotAtten;
+            const float distSq = std::max(dist * dist, 0.0025f);
+            const float ratio = dist / light.Range;
+            const float ratio4 = ratio * ratio * ratio * ratio;
+            const float window = std::clamp(1.0f - ratio4, 0.0f, 1.0f);
+            const float distAtten = (window * window) / distSq;
+            const float phase = EvaluateHenyeyGreenstein(glm::dot(rayDir, L), state.ScatteringAsymmetry);
+            const float vis = std::isfinite(shadowVisibility) ? std::clamp(shadowVisibility, 0.0f, 1.0f) : 1.0f;
+            return sigmaS * SanitizeNonNegativeVec3(light.Color) *
+                (SanitizeNonNegative(light.Intensity) * distAtten * spotAtten * LocalIntensityScale * phase * vis);
+        }
+
+        glm::vec3 EvaluateRectLightInScatter(const FroxelMediaState& state,
+                                             const LightingRectFrame& light,
+                                             const glm::vec3& sampleWS,
+                                             const glm::vec3& unitRayWS) {
+            constexpr float kPi = 3.14159265358979323846f;
+            const glm::vec3 sigmaS = EvaluateLocalScatteringCoeff(state, sampleWS);
+            const float intensity = std::isfinite(light.SignedIntensity) ? std::abs(light.SignedIntensity) : 0.0f;
+            const bool twoSided = light.SignedIntensity < 0.0f;
+            if (!(sigmaS.x > 0.0f || sigmaS.y > 0.0f || sigmaS.z > 0.0f) ||
+                !std::isfinite(light.Range) || !(light.Range > 1e-3f) || !(intensity > 0.0f)) {
+                return {};
+            }
+            const float dirLenSq = glm::dot(unitRayWS, unitRayWS);
+            if (!std::isfinite(dirLenSq) || !(dirLenSq > 1e-12f)) return {};
+            const glm::vec3 rayDir = unitRayWS * (1.0f / std::sqrt(dirLenSq));
+            const glm::vec3 lightVec = light.Position - sampleWS;
+            const float dist = glm::length(lightVec);
+            if (!std::isfinite(dist) || !(dist < light.Range) || !(dist > 1e-4f)) return {};
+            const glm::vec3 L = lightVec / dist;
+            const float emitLen = glm::length(light.Direction);
+            const glm::vec3 lightDir = (std::isfinite(emitLen) && emitLen > 1e-6f)
+                ? (light.Direction / emitLen) : glm::vec3(0.0f, 0.0f, -1.0f);
+            const float signedForward = glm::dot(-L, lightDir);
+            if (!twoSided && !(signedForward > 0.0f)) return {};
+            const float emitCos = twoSided ? std::abs(signedForward) : std::max(signedForward, 0.0f);
+            const float w = std::max(light.Width, 0.01f);
+            const float h = std::max(light.Height, 0.01f);
+            const float area = w * h * ((light.Shape == AreaLightShape::Disk) ? (kPi * 0.25f) : 1.0f);
+            const float eqRadiusSq = area / kPi;
+            const float solidAngleFactor = 2.0f * (1.0f - dist / std::sqrt(dist * dist + eqRadiusSq)) * emitCos;
+            const float ratio = std::clamp(dist / light.Range, 0.0f, 1.0f);
+            const float ratio4 = ratio * ratio * ratio * ratio;
+            const float win = std::clamp(1.0f - ratio4, 0.0f, 1.0f);
+            const float rangeAtten = win * win;
+            const float phase = EvaluateHenyeyGreenstein(glm::dot(rayDir, L), state.ScatteringAsymmetry);
+            return sigmaS * SanitizeNonNegativeVec3(light.Color) *
+                (intensity * rangeAtten * LocalIntensityScale * solidAngleFactor * phase);
+        }
+
     } // namespace FroxelFogContract
 
 } // namespace Axle

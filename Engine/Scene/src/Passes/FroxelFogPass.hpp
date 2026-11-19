@@ -17,6 +17,9 @@ namespace Axle::RHI {
 namespace Axle::Passes {
     struct FroxelFogResources {
         RenderGraph::Resource SceneColor, Input, SceneDepth, Depth, FroxelScattering, FroxelIntegrated;
+        RenderGraph::Resource CascadeAtlas{}, LocalShadowAtlas{};
+        bool UseCascadeAtlas = false;
+        bool UseLocalShadowAtlas = false;
     };
 
     struct FroxelFogRecordInputs {

@@ -3,6 +3,8 @@
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 namespace Axle::Passes {
     void FroxelFogPass::Declare(RenderGraph& graph, const FroxelFogResources& r) {
@@ -14,8 +16,16 @@ namespace Axle::Passes {
             {r.Input, Layout::CopyDest, Access::Write},
             {r.SceneDepth, Layout::CopySource},
             {r.Depth, Layout::CopyDest, Access::Write}});
-        graph.AddPass("FogInject", {
-            {r.FroxelScattering, Layout::ShaderResourceStorage, Access::Write}});
+        std::vector<RenderGraph::Use> injectUsages;
+        injectUsages.reserve(3);
+        if (r.UseCascadeAtlas) {
+            injectUsages.push_back({r.CascadeAtlas, Layout::ShaderResource});
+        }
+        if (r.UseLocalShadowAtlas) {
+            injectUsages.push_back({r.LocalShadowAtlas, Layout::ShaderResource});
+        }
+        injectUsages.push_back({r.FroxelScattering, Layout::ShaderResourceStorage, Access::Write});
+        graph.AddPass("FogInject", std::move(injectUsages));
         graph.AddPass("FogIntegrate", {
             {r.FroxelScattering, Layout::ShaderResource},
             {r.FroxelIntegrated, Layout::ShaderResourceStorage, Access::Write}});
@@ -72,16 +82,33 @@ namespace Axle::Passes {
         commands.CopyTexture(*depth->GetNative(), nullptr, *i.SceneDepthTarget, nullptr);
 
         auto& pool = renderer.m_FogDescriptorPool;
+        nri::Descriptor* lightCBV = renderer.m_LightBuffer.IsValid() ? renderer.m_LightBuffer.GetCBV() : nullptr;
+        nri::Descriptor* cascadeCBV = renderer.m_CascadedShadows.GetConstantsCBV();
+        nri::Descriptor* localShadowCBV = renderer.m_LocalShadows.GetConstantsCBV();
+        nri::Descriptor* cascadeSRV = renderer.m_CascadedShadows.GetSRV();
+        nri::Descriptor* localShadowSRV = renderer.m_LocalShadows.GetSRV();
+        if (!lightCBV || !cascadeCBV || !localShadowCBV || !cascadeSRV || !localShadowSRV ||
+            !renderer.m_FogShadowSampler.IsValid() || !renderer.m_FogInjectTextureSet || !renderer.m_FogInjectStorageSet) {
+            return false;
+        }
 
         if (!ops.BeginPass("FogInject") || !ops.Uniform().UpdateData(&constants, sizeof(constants)) ||
+            !pool.UpdateTexture(renderer.m_FogInjectTextureSet, 0, 0, cascadeSRV) ||
+            !pool.UpdateTexture(renderer.m_FogInjectTextureSet, 1, 0, localShadowSRV) ||
             !pool.UpdateStorageTexture(renderer.m_FogInjectStorageSet, 0, 0, scattering->GetUAV())) {
             return false;
         }
         commands.SetPipeline(renderer.m_FogInjectPipeline);
         commands.SetPipelineLayout(nri::BindPoint::COMPUTE, renderer.m_FogInjectPipelineLayout);
         commands.SetRootDescriptor(0, ops.Uniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
+        commands.SetRootDescriptor(1, lightCBV, 0, nri::BindPoint::COMPUTE);
+        commands.SetRootDescriptor(2, cascadeCBV, 0, nri::BindPoint::COMPUTE);
+        commands.SetRootDescriptor(3, localShadowCBV, 0, nri::BindPoint::COMPUTE);
         pool.Bind(commands.GetNative());
-        if (!ops.BindDescriptor(0, renderer.m_FogInjectStorageSet, nri::BindPoint::COMPUTE)) return false;
+        if (!ops.BindDescriptor(0, renderer.m_FogInjectTextureSet, nri::BindPoint::COMPUTE) ||
+            !ops.BindDescriptor(1, renderer.m_FogInjectStorageSet, nri::BindPoint::COMPUTE)) {
+            return false;
+        }
         commands.Dispatch((gridW + 3u) / 4u, (gridH + 3u) / 4u, (gridD + 3u) / 4u);
         ++i.DispatchCount;
 

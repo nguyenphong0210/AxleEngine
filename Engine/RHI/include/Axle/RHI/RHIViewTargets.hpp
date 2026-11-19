@@ -24,6 +24,8 @@ namespace Axle::RHI {
         uint32_t MinTilePixels;
         const char* Name;
     };
+    enum class FroxelHistoryPolicy { Required, AllowStaticFog };
+
     struct RHIViewTargetDesc {
         uint32_t Width = 1, Height = 1;
         RHITextureFormat ColorFormat = RHITextureFormat::RGBA8_UNORM;
@@ -64,7 +66,8 @@ namespace Axle::RHI {
         static const RHIFroxelTierSpec* GetFroxelTierSpec(uint8_t qualityTier);
 
         bool Configure(const RHIViewTargetDesc& desc, const RHITexture* externalColor = nullptr,
-                       const RHITexture* externalDepth = nullptr);
+                       const RHITexture* externalDepth = nullptr,
+                       FroxelHistoryPolicy fogHistory = FroxelHistoryPolicy::Required);
         RHITexture* Get(RHIViewTarget target) const {
             const auto slot = static_cast<size_t>(target); return slot < m_Textures.size() ? m_Textures[slot].get() : nullptr;
         }

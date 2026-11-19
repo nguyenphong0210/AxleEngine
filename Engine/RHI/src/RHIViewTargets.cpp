@@ -181,9 +181,14 @@ namespace Axle::RHI {
             if (!m_Desc.EnableDepth || m_Desc.Samples != 1u) return false;
             const auto froxelExtent = ComputeFroxelGridExtent(m_Desc.Width, m_Desc.Height, m_Desc.FroxelQuality);
             if (!froxelExtent.Width || !froxelExtent.Height || !froxelExtent.Depth) return false;
-            for (const auto slot : kFroxelSlots) {
-                if (!check3D(slot, froxelExtent, RHITextureFormat::RGBA16_FLOAT)) return false;
-            }
+            const auto validFroxel = [&](RHIViewTarget slot) {
+                return check3D(slot, froxelExtent, RHITextureFormat::RGBA16_FLOAT);
+            };
+            if (!validFroxel(RHIViewTarget::FroxelScattering) || !validFroxel(RHIViewTarget::FroxelIntegrated))
+                return false;
+            if ((GetFroxelHistory(0) || GetFroxelHistory(1)) &&
+                (!validFroxel(RHIViewTarget::FroxelHistory0) || !validFroxel(RHIViewTarget::FroxelHistory1)))
+                return false;
         } else {
             for (const auto slot : kFroxelSlots) {
                 if (Get(slot) != nullptr) return false;
@@ -191,7 +196,8 @@ namespace Axle::RHI {
         }
         return true;
     }
-    bool RHIViewTargets::Configure(const RHIViewTargetDesc& desc, const RHITexture* externalColor, const RHITexture* externalDepth) {
+    bool RHIViewTargets::Configure(const RHIViewTargetDesc& desc, const RHITexture* externalColor,
+                                   const RHITexture* externalDepth, FroxelHistoryPolicy fogHistory) {
         if (!desc.Width || !desc.Height || desc.HistoryCount > 2 ||
             (desc.Samples != 1 && desc.Samples != 2 && desc.Samples != 4 && desc.Samples != 8)) return false;
         if (desc.FroxelQuality > MaxFroxelQualityTier) return false;
@@ -335,13 +341,22 @@ namespace Axle::RHI {
         if (desc.EnableVolumetricFog) {
             const auto froxelExtent = ComputeFroxelGridExtent(desc.Width, desc.Height, desc.FroxelQuality);
             if (!froxelExtent.Width || !froxelExtent.Height || !froxelExtent.Depth) return false;
-            for (const auto slot : kFroxelSlots) {
+            const auto createFroxel = [&](RHIViewTarget slot) {
                 auto texture = std::make_unique<RHITexture>();
                 auto native = RHITextureDesc::StorageTexture3D(
                     froxelExtent.Width, froxelExtent.Height, froxelExtent.Depth, RHITextureFormat::RGBA16_FLOAT,
                     "ViewTarget_" + std::to_string(static_cast<unsigned>(slot)));
                 if (!texture->Init(native)) return false;
                 candidate.m_Textures[static_cast<size_t>(slot)] = std::move(texture);
+                return true;
+            };
+            if (!createFroxel(RHIViewTarget::FroxelScattering) || !createFroxel(RHIViewTarget::FroxelIntegrated))
+                return false;
+            if (!createFroxel(RHIViewTarget::FroxelHistory0) || !createFroxel(RHIViewTarget::FroxelHistory1)) {
+                if (fogHistory == FroxelHistoryPolicy::Required || !RHIDevice::Get().CanCreateResources())
+                    return false;
+                candidate.m_Textures[static_cast<size_t>(RHIViewTarget::FroxelHistory0)].reset();
+                candidate.m_Textures[static_cast<size_t>(RHIViewTarget::FroxelHistory1)].reset();
             }
         }
         candidate.m_Initialized = true;

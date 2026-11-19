@@ -42,7 +42,8 @@ namespace Axle {
         targets.EnableAutoExposure = desc.EnableAutoExposure;
         targets.EnableDDGI = desc.EnableDDGI;
         m_Targets = std::make_shared<RHI::RHIViewTargets>();
-        return m_Targets->Configure(targets) && RegisterWithImGui();
+        return m_Targets->Configure(targets, nullptr, nullptr, RHI::FroxelHistoryPolicy::AllowStaticFog) &&
+            RegisterWithImGui();
     }
 
     bool RHIViewportDescriptor::Recreate(const RHIViewportDesc& desc) {

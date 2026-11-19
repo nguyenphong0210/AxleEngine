@@ -8,6 +8,7 @@
 #include <Axle/PostProcessService.hpp>
 #include <Axle/RenderDiagnostics.hpp>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <unordered_map>
 
@@ -111,8 +112,8 @@ namespace Axle {
         std::shared_ptr<RHI::RHIViewTargets> GetTargets() const { return m_Input.Targets; }
         uint64_t GetDeviceEpoch() const { return m_DeviceEpoch; }
 
-        const FroxelHistoryFrame& GetFroxelHistory() const { return m_FroxelHistory; }
-        void CommitFroxelHistory(const FroxelHistoryFrame& frame) { m_FroxelHistory = frame; }
+        FroxelHistoryFrame GetFroxelHistory() const;
+        void CommitFroxelHistory(const FroxelHistoryFrame& frame);
 
         TemporalService& Temporal() { return m_Temporal; }
         const TemporalService& Temporal() const { return m_Temporal; }
@@ -137,7 +138,15 @@ namespace Axle {
         RHI::RHIFrameContext m_Frame;
         std::unordered_map<std::string, RHI::RHIBuffer> m_PassUniforms;
         TemporalService m_Temporal;
-        FroxelHistoryFrame m_FroxelHistory;
+        struct FroxelHistoryEntry {
+            FroxelHistoryFrame Frame;
+            uint64_t TargetGeneration, SceneRevision, SceneInstanceID, FeatureGeneration, MaterialGeneration;
+            uint32_t Width, Height;
+            RenderViewKind Kind;
+        };
+        // Concurrently live view targets retain their own history without being kept alive here.
+        using ViewTargetIdentity = std::weak_ptr<RHI::RHIViewTargets>;
+        std::map<ViewTargetIdentity, FroxelHistoryEntry, std::owner_less<ViewTargetIdentity>> m_FroxelHistories;
         PostProcessService m_PostProcess;
         RenderDiagnostics m_Diagnostics;
     };

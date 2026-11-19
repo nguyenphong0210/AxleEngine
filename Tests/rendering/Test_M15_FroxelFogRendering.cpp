@@ -1,6 +1,9 @@
 #include "OcclusionTestSupport.hpp"
 #include "RHIReadback.hpp"
 #include <Axle/RHISceneRenderer.hpp>
+#include <Axle/RenderService.hpp>
+#include <Axle/Components.hpp>
+#include <Axle/Entity.hpp>
 #include <Axle/LightingService.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/RenderGraph.hpp>
@@ -1607,19 +1610,23 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                      std::any_of(raw.begin(), raw.end(), [](const auto& value) { return value.r > 0.0f; }),
             "M15-U6-04.2: lit near-slice history is rejected outside the old fog depth range inside the camera clip planes");
 
-        RENDER_CHECK(seedFrame(true), "M15-U6-04.3: explicit camera cut seeds history");
+        RENDER_CHECK(seedFrame(true) && diag.GetFrame().FrameIndex == 0,
+            "M15-U6-04.3: explicit camera cut seeds history");
         RENDER_CHECK(render() && read(1, moved), "M15-U6-04.3: history resumes after the cut");
         ++world.SceneRevision;
-        RENDER_CHECK(seedFrame(), "M15-U6-04.3: scene revision seeds history");
+        RENDER_CHECK(seedFrame() && diag.GetFrame().FrameIndex == 0,
+            "M15-U6-04.3: scene revision seeds history");
         RENDER_CHECK(render(), "U6-D: accumulate before replacing the scene");
         ++world.SceneInstanceID;
-        RENDER_CHECK(seedFrame(), "M15-U6-04.3: distinct scene instance with same revision seeds history");
+        RENDER_CHECK(seedFrame() && diag.GetFrame().FrameIndex == 0,
+            "M15-U6-04.3: distinct scene instance with same revision seeds history");
         RENDER_CHECK(render(), "U6-D: accumulate before editing the authored medium");
         world.VolumetricFog->Density *= 1.35f;
         RENDER_CHECK(seedFrame(), "M15-U6-04.3: authored fog edits seed history without a scene revision");
         RENDER_CHECK(render(), "U6-D: accumulate before changing feature policy");
         settings.EnableShadows = true;
-        RENDER_CHECK(seedFrame(), "M15-U6-04.3: feature policy change seeds history");
+        RENDER_CHECK(seedFrame() && diag.GetFrame().FrameIndex == 0,
+            "M15-U6-04.3: feature policy change seeds history");
         RENDER_CHECK(render(), "U6-D: accumulate before disabling fog");
         settings.EnableVolumetricFog = false;
         RENDER_CHECK(render() && !HasPassNamed(diag.GetFrame(), "FogReproject"),
@@ -1674,10 +1681,133 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
             "M15-U6-04.1: missing temporal pipeline retains static fog and reports the fallback");
         staticFogRenderer.Shutdown();
 
+        // Render through the same mutable scene adapter used by Editor and Runtime.
+        RenderService service;
+        RENDER_CHECK(service.Init(), "U6-D: initialize production RenderService for scene extraction");
+        Scene scene;
+        auto lightEntity = scene.CreateEntity("Temporal fog point light");
+        lightEntity.GetComponent<TransformComponent>().Translation = light.Position;
+        auto& point = lightEntity.AddComponent<PointLightComponent>();
+        point.Intensity = 80.0f;
+        point.Radius = light.Radius;
+        auto fogEntity = scene.CreateEntity("Authored temporal fog");
+        auto& medium = fogEntity.AddComponent<VolumetricFogComponent>();
+        medium.Density = world.VolumetricFog->Density;
+        medium.HeightFalloff = world.VolumetricFog->HeightFalloff;
+        medium.ScatteringAsymmetry = 0.0f;
+        medium.Color = glm::vec3(1.0f);
+        medium.MaxDistance = 36.0f;
+
+        ViewRequest request;
+        request.Width = desc.Width;
+        request.Height = desc.Height;
+        request.Settings = settings;
+        request.ViewTargets = targets;
+        request.ColorTarget = &color;
+        request.DepthTarget = &depth;
+        position = {0.0f, 3.0f, 0.0f};
+        pose();
+        request.Camera = camera;
+
+        bool uniformOom = false;
+        {
+            ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+                if (operation == "CreateBuffer" && ScopedRHIOperation::Resource() == "FogReprojectConstants") {
+                    uniformOom = true;
+                    return nri::Result::OUT_OF_MEMORY;
+                }
+                return {};
+            });
+            RENDER_CHECK(service.RenderView(scene, request).Success && uniformOom,
+                "M15-U6-04.1: a temporal constant allocation failure preserves the production view");
+        }
+        RENDER_CHECK(service.RenderView(scene, request).Success && read(0, seed) && seed == raw,
+            "M15-U6-04.1: temporal reprojection recovers after the optional constant allocation");
+        const auto sceneRevision = scene.GetSceneGeneration();
+        const auto transformRevision = scene.GetTransformRevision();
+
+        auto previewDesc = desc;
+        previewDesc.OwnPrimary = true;
+        previewDesc.EnableVolumetricFog = false;
+        previewDesc.FroxelQuality = RHIViewTargets::DefaultFroxelQualityTier;
+        auto previewTargets = std::make_shared<RHIViewTargets>();
+        RENDER_CHECK(previewTargets->Configure(previewDesc), "U6-D: allocate a separate preview view");
+        ViewRequest preview = request;
+        preview.Kind = RenderViewKind::AssetPreview;
+        preview.Settings.EnableVolumetricFog = false;
+        preview.ViewTargets = previewTargets;
+        preview.ColorTarget = nullptr;
+        preview.DepthTarget = nullptr;
+        Scene previewScene;
+        RENDER_CHECK(service.RenderView(previewScene, preview).Success,
+            "U6-D: interleave a real preview render between main view frames");
+
+        const auto* mainVolume = targets->GetFroxelScattering();
+        const float depthAtSlice = FroxelFogContract::SliceCenterToViewDistance(
+            slice, mainVolume->GetDepth(), settings.FogNearDistance, medium.MaxDistance);
+        position.x += 2.0f * float(shift) * depthAtSlice /
+            (float(mainVolume->GetWidth()) * camera.GetProjectionMatrixZO()[0][0]);
+        pose();
+        request.Camera = camera;
+        point.Intensity *= 1.025f;
+        RENDER_CHECK(service.RenderView(scene, request).Success && read(1, moved) &&
+                     seed.size() == raw.size() && moved.size() == raw.size() &&
+                     scene.GetSceneGeneration() == sceneRevision && scene.GetTransformRevision() > transformRevision,
+            "M15-U6-07.3: render the moved live scene after an interleaved preview");
+        uint32_t productionReprojected = 0;
+        const uint32_t mainWidth = mainVolume->GetWidth();
+        for (size_t i = 0; i < raw.size(); ++i) {
+            RENDER_CHECK(moved[i].a == raw[i].a && raw[i].a > 0.0f,
+                "M15-U6-07.3: the production view writes current extinction to the opposite slot");
+            if (i % mainWidth + shift >= mainWidth || moved[i].r == raw[i].r) continue;
+            const float expected = glm::mix(raw[i].r, seed[i + shift].r, settings.FogTemporalWeight);
+            if (std::abs(moved[i].r - expected) <= std::max(expected * 0.001f, 1e-6f))
+                ++productionReprojected;
+        }
+        RENDER_CHECK(productionReprojected > 0,
+            "M15-U6-07.3: real scene extraction and an interleaved preview preserve world-space history reuse");
+        request.CameraCut = true;
+        RENDER_CHECK(service.RenderView(scene, request).Success && read(0, moved) && moved == raw,
+            "M15-U6-04.3: RenderService forwards an explicit cut in the same live scene");
+        request.CameraCut = false;
+        const auto cutSeed = moved;
+        scene.CreateEntity("Structural edit");
+        point.Intensity *= 0.9f;
+        RENDER_CHECK(service.RenderView(scene, request).Success && read(0, moved) &&
+                     moved == raw && moved != cutSeed && scene.GetSceneGeneration() != sceneRevision,
+            "M15-U6-04.3: a structural scene edit invalidates real view history");
+
+        bool historyOom = false;
+        const auto historyName = "ViewTarget_" + std::to_string(static_cast<unsigned>(RHIViewTarget::FroxelHistory1));
+        auto staticTargets = std::make_shared<RHIViewTargets>();
+        {
+            ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+                if (operation == "CreateTexture" && ScopedRHIOperation::Resource() == historyName) {
+                    historyOom = true;
+                    return nri::Result::OUT_OF_MEMORY;
+                }
+                return {};
+            });
+            RENDER_CHECK(staticTargets->Configure(desc, nullptr, nullptr, FroxelHistoryPolicy::AllowStaticFog) &&
+                         historyOom && staticTargets->Validate() && !staticTargets->GetFroxelHistory(0) &&
+                         !staticTargets->GetFroxelHistory(1),
+                "M15-U6-04.1: a history texture allocation failure publishes a valid static-only target");
+        }
+        renderer.RenderWorldView(world, camera, &color, &depth, settings, nullptr, staticTargets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && HasPassNamed(diag.GetFrame(), "FogApply") &&
+                     !HasPassNamed(diag.GetFrame(), "FogReproject") &&
+                     HasFallbackPrefix(diag.GetFrame(), "froxel_temporal_unavailable"),
+            "M15-U6-04.1: allocation fallback retains visible static fog and reports the lost history");
+        RENDER_CHECK(staticTargets->Configure(desc) && staticTargets->GetFroxelHistory(0) && staticTargets->GetFroxelHistory(1),
+            "M15-U6-04.1: target reconfiguration can restore the full history pair");
+        service.Shutdown();
+
         std::ofstream temporalLog(output / "M15_U6D_froxel_temporal.txt");
         temporalLog << "blended=" << blended << " world_reprojected=" << confirmedReprojected
                     << " max_scatter_delta=" << maximumDelta << " rejected_frustum=" << shift * gridH
-                    << " extinguished_light_trail=0 resize_and_reset=PASS\n";
+                    << " extinguished_light_trail=0 resize_and_reset=PASS"
+                    << " production_reprojected=" << productionReprojected
+                    << " production_cut_and_scene_reset=PASS temporal_oom_fallbacks=PASS\n";
         temporalLog.close();
         RENDER_CHECK(temporalLog.good(), "M15-U6-D: temporal readback evidence written");
     }

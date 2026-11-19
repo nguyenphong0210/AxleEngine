@@ -313,6 +313,7 @@ namespace Axle {
         FroxelHistoryFrame nextFog;
         RHITexture* fogHistoryRead = nullptr;
         RHITexture* fogHistoryWrite = nullptr;
+        RHIBuffer* fogReprojectUniform = nullptr;
         const float historyWeight = std::isfinite(settings.FogTemporalWeight)
             ? std::clamp(settings.FogTemporalWeight, 0.0f, 0.9f) : 0.0f;
         if (useFog && historyWeight > 0.0f) {
@@ -324,10 +325,11 @@ namespace Axle {
             };
             auto* history0 = viewTargets->GetFroxelHistory(0);
             auto* history1 = viewTargets->GetFroxelHistory(1);
-            if (m_FogReprojectTextureSet && m_FogReprojectStorageSet && ready(history0) && ready(history1)) {
+            if (m_FogReprojectTextureSet && m_FogReprojectStorageSet && ready(history0) && ready(history1))
+                fogReprojectUniform = viewCtx.PreparePassUniform("FogReproject", sizeof(RHIVolumetricFogConstants));
+            if (fogReprojectUniform) {
                 const auto mediumKey = HashFroxelMedium(froxelMedia, camera.GetProjectionMatrixZO());
-                const bool reuse = previousFog.Valid && viewCtx.GetFrameIndex() != 0 &&
-                    previousFog.MediumKey == mediumKey;
+                const bool reuse = previousFog.Valid && previousFog.MediumKey == mediumKey;
                 const auto& viewMatrix = camera.GetViewMatrix();
                 nextFog.ViewProjection = viewProjZO;
                 nextFog.ViewDepthRow = -glm::vec4(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2], viewMatrix[3][2]);
@@ -337,7 +339,7 @@ namespace Axle {
                 if (reuse) fogHistoryRead = previousFog.Slot == 0 ? history0 : history1;
                 fogHistoryWrite = nextFog.Slot == 0 ? history0 : history1;
             } else {
-                viewCtx.Diagnostics().AddFallback("froxel_temporal_unavailable:history_or_pipeline");
+                viewCtx.Diagnostics().AddFallback("froxel_temporal_unavailable:history_or_gpu_resources");
             }
         }
         const auto fogHistoryInput = fogHistoryRead
@@ -390,10 +392,12 @@ namespace Axle {
         std::string activeGraphPass;
         std::unordered_map<std::string, RHIBuffer*> passUniforms;
         auto passUniform = [&]() -> RHIBuffer& { return *passUniforms.at(activeGraphPass); };
-        auto uniform = [&](const std::string& name, size_t size) {
-            auto* buffer = viewCtx.PreparePassUniform(name, size);
+        auto declareUniform = [&](const std::string& name, RHIBuffer* buffer) {
             if (!buffer || !graph.DeclareRead(name, buffer->GetCBV())) return false;
             return passUniforms.emplace(name, buffer).second;
+        };
+        auto uniform = [&](const std::string& name, size_t size) {
+            return declareUniform(name, viewCtx.PreparePassUniform(name, size));
         };
         auto beginPass = [&](std::string_view name) {
             EndGPUTimestampPass();
@@ -1656,7 +1660,7 @@ namespace Axle {
                     }, beginRendering, endRendering};
                 if (!Passes::FroxelFogPass::Record(*this,
                     {froxelMedia, camera, projZO, viewTargets.get(),
-                     viewCtx.GetFrameIndex() != 0 ? fogHistoryRead : nullptr, fogHistoryWrite,
+                     viewCtx.GetFroxelHistory().Valid ? fogHistoryRead : nullptr, fogHistoryWrite,
                      previousFog, historyWeight, sceneTargetTexture,
                      sceneDepthTexture, sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
                     return fail();
@@ -1675,7 +1679,7 @@ namespace Axle {
                 !uniform("FogIntegrate", sizeof(RHIVolumetricFogConstants)) ||
                 !uniform("FogApply", sizeof(RHIVolumetricFogConstants)) ||
                 !graph.DeclareRead("FogInject", m_LightBuffer.GetCBV()))) return fail();
-            if (fogHistoryWrite && !uniform("FogReproject", sizeof(RHIVolumetricFogConstants))) return fail();
+            if (fogReprojectUniform && !declareUniform("FogReproject", fogReprojectUniform)) return fail();
             if (useFog && injectFogShadows &&
                 (!graph.DeclareRead("FogInject", m_CascadedShadows.GetConstantsCBV()) ||
                  !graph.DeclareRead("FogInject", m_LocalShadows.GetConstantsCBV()))) return fail();

@@ -484,6 +484,7 @@ namespace Axle {
         }
 
         world.SceneRevision = scene.GetTransformRevision();
+        world.ViewSceneRevision = scene.GetSceneGeneration();
         world.SceneInstanceID = scene.GetInstanceId();
         const auto sceneLifetime = scene.GetLifetime();
         world.SceneLifetimeEpoch = sceneLifetime ? sceneLifetime->Epoch.load(std::memory_order_relaxed) : 0;

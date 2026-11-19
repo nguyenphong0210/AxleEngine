@@ -346,7 +346,8 @@ namespace Axle {
                              const SceneRenderSettings& settings = SceneRenderSettings{},
                              PhysicsScene* physicsScene = nullptr,
                              std::shared_ptr<RHI::RHIViewTargets> viewTargets = {},
-                             bool cameraCut = false);
+                             bool cameraCut = false,
+                             RenderViewKind viewKind = RenderViewKind::Main);
 
         // Render an immutable RenderWorld snapshot into specific native render targets
         void RenderWorldView(const RenderWorld& world,
@@ -359,7 +360,8 @@ namespace Axle {
                              const SceneRenderSettings& settings = SceneRenderSettings{},
                              PhysicsScene* physicsScene = nullptr,
                              std::shared_ptr<RHI::RHIViewTargets> viewTargets = {},
-                             bool cameraCut = false);
+                             bool cameraCut = false,
+                             RenderViewKind viewKind = RenderViewKind::Main);
 
         // Performance & Telemetry metrics
         uint32_t GetDrawCallCount() const { return m_LastDrawCallCount; }

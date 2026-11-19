@@ -297,7 +297,8 @@ namespace Axle {
                 if (settings.EnableTAA) desc.HistoryCount = 2;
                 if (!m_DefaultMainTargets || !m_DefaultMainTargets->IsValid() || m_DefaultMainTargets->GetDesc() != desc) {
                     auto candidate = std::make_shared<RHI::RHIViewTargets>();
-                    if (!candidate->Configure(desc)) return fail("Default view target creation failed; previous generation retained");
+                    if (!candidate->Configure(desc, nullptr, nullptr, RHI::FroxelHistoryPolicy::AllowStaticFog))
+                        return fail("Default view target creation failed; previous generation retained");
                     m_DefaultMainTargets = std::move(candidate);
                 }
                 targets = m_DefaultMainTargets;
@@ -309,7 +310,8 @@ namespace Axle {
             if (depth && (!depth->IsValid() || !depth->GetDSV() || depth->GetHandle().Epoch != m_Epoch ||
                 depth->GetWidth() != request.Width || depth->GetHeight() != request.Height || depth->GetDesc().SampleCount != 1))
                 return fail("Invalid, stale or mismatched view depth target");
-            m_RHIRenderer->RenderWorldView(prepared, request.Camera, color, depth, request.Settings, request.PhysicsScene, targets, request.CameraCut);
+            m_RHIRenderer->RenderWorldView(prepared, request.Camera, color, depth, request.Settings,
+                                           request.PhysicsScene, targets, request.CameraCut, request.Kind);
             if (!m_RHIRenderer->WasLastRenderSuccessful()) {
                 const auto& diagnostic=m_RHIRenderer->GetCascadedShadows().GetDiagnostic();
                 return fail(diagnostic.empty()?"View preparation, recording or submission failed":diagnostic);

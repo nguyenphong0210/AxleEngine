@@ -13,6 +13,8 @@ namespace Axle {
         };
         mix(settings.EnableShadows);
         mix(settings.LocalShadowResolution);
+        mix(settings.LocalShadowDistance);
+        mix(settings.ShadowCascadeCount);
         mix(settings.MaxShadowedSpotLights);
         mix(settings.MaxShadowedPointLights);
         mix(settings.EnableSkybox);
@@ -75,7 +77,7 @@ namespace Axle {
         m_HasInput = false;
         m_ResetReasons = ViewResetReason::Initial;
         m_Temporal.Reset();
-        m_FroxelHistory = {};
+        m_FroxelHistories.clear();
         m_PostProcess.Reset();
         m_Diagnostics.BeginFrame(0);
         return true;
@@ -95,7 +97,7 @@ namespace Axle {
         m_ResetReasons = ViewResetReason::None;
         m_Input = ViewContextInput{};
         m_Temporal.Reset();
-        m_FroxelHistory = {};
+        m_FroxelHistories.clear();
         m_PostProcess.Reset();
         m_Diagnostics.BeginFrame(0);
     }
@@ -122,11 +124,13 @@ namespace Axle {
         m_DeviceEpoch = deviceEpoch;
         m_HasInput = true;
         m_ResetReasons = reasons;
+        if (Any(reasons & ViewResetReason::DeviceEpoch)) m_FroxelHistories.clear();
+        std::erase_if(m_FroxelHistories, [](const auto& entry) { return entry.first.expired(); });
+        if (input.CameraCut || !GetFroxelHistory().Valid) m_FroxelHistories.erase(m_TargetIdentity);
         if (Any(reasons & (ViewResetReason::Initial | ViewResetReason::Resize | ViewResetReason::ViewSwitch |
                            ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
                            ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
             m_FrameIndex = 0;
-            m_FroxelHistory = {};
             m_Temporal.Reset(static_cast<uint32_t>(reasons));
             m_PostProcess.Reset();
         }
@@ -146,14 +150,37 @@ namespace Axle {
         return changed;
     }
 
+    FroxelHistoryFrame ViewContext::GetFroxelHistory() const {
+        const auto it = m_FroxelHistories.find(m_TargetIdentity);
+        if (it == m_FroxelHistories.end()) return {};
+        const auto& entry = it->second;
+        if (entry.TargetGeneration != m_TargetGeneration || entry.SceneRevision != m_Input.SceneRevision ||
+            entry.SceneInstanceID != m_Input.SceneInstanceID || entry.FeatureGeneration != m_Input.FeatureGeneration ||
+            entry.Width != m_Input.Width || entry.Height != m_Input.Height || entry.Kind != m_Input.Kind)
+            return {};
+        return entry.Frame;
+    }
+
+    void ViewContext::CommitFroxelHistory(const FroxelHistoryFrame& frame) {
+        if (!frame.Valid || m_TargetIdentity.expired()) {
+            m_FroxelHistories.erase(m_TargetIdentity);
+            return;
+        }
+        m_FroxelHistories.insert_or_assign(m_TargetIdentity, FroxelHistoryEntry{
+            frame, m_TargetGeneration, m_Input.SceneRevision, m_Input.SceneInstanceID,
+            m_Input.FeatureGeneration, m_Input.MaterialGeneration, m_Input.Width, m_Input.Height, m_Input.Kind});
+    }
+
     bool ViewContext::ObserveMaterialGeneration(uint64_t generation) {
+        const auto history = m_FroxelHistories.find(m_TargetIdentity);
+        if (history != m_FroxelHistories.end() && history->second.MaterialGeneration != generation)
+            m_FroxelHistories.erase(history);
         m_Diagnostics.SetMaterialGeneration(generation);
         if (m_Input.MaterialGeneration == generation) return false;
         m_Input.MaterialGeneration = generation;
         m_ResetReasons |= ViewResetReason::MaterialGeneration;
         m_FrameIndex = 0;
         m_Temporal.InvalidateContents();
-        m_FroxelHistory = {};
         m_Diagnostics.SetFrameIndex(m_FrameIndex);
         // Keep the frame's selected output/AA policy while restarting adaptation.
         const bool configured = m_PostProcess.IsConfigured();
@@ -169,7 +196,8 @@ namespace Axle {
                           ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
                           ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
             m_FrameIndex = 0;
-            m_FroxelHistory = {};
+            if (Any(reason & ViewResetReason::DeviceEpoch)) m_FroxelHistories.clear();
+            else m_FroxelHistories.erase(m_TargetIdentity);
             m_Temporal.Reset(static_cast<uint32_t>(reason));
             m_PostProcess.Reset();
         }
@@ -205,7 +233,7 @@ namespace Axle {
     bool ViewContext::EndFrameAndSubmit() {
         if (!m_FrameActive || !m_Frame.End() || !m_Frame.Submit()) {
             m_FrameActive = false;
-            m_FroxelHistory = {};
+            m_FroxelHistories.erase(m_TargetIdentity);
             m_Input.Targets.reset();
             return false;
         }
@@ -222,7 +250,7 @@ namespace Axle {
     bool ViewContext::AbandonFrame() {
         if (!m_FrameActive) return true;
         const bool result = m_Frame.Abandon();
-        m_FroxelHistory = {};
+        m_FroxelHistories.erase(m_TargetIdentity);
         m_FrameActive = false;
         m_Input.Targets.reset();
         return result;

@@ -1406,6 +1406,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
                     float yaw = glm::degrees(std::atan2(-fwd.x, -fwd.z));
                     m_CameraController->SetPosition(camPos);
                     m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
+                    m_PendingViewCameraCut = true;
                 }
             }
             m_F2KeyWasPressed = true;
@@ -1535,7 +1536,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     request.Kind = Axle::RenderViewKind::Main; request.Width = m_ViewportWidth; request.Height = m_ViewportHeight;
     request.Camera = activeCamera; request.Settings = renderSettings; request.PhysicsScene = m_PhysicsScene.get();
     request.Name = "Editor main view";
-    request.CameraCut = viewCamera != m_LastViewCamera;
+    request.CameraCut = m_PendingViewCameraCut || viewCamera != m_LastViewCamera;
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
         const auto fog = renderSettings.EnableVolumetricFog ? Axle::ExtractVolumetricFog(*m_Scene) : std::nullopt;
         if (!m_RHIViewport->SetRenderOptions(renderSettings, fog ? &*fog : nullptr)) {
@@ -1553,6 +1554,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     } else {
         ++m_SuccessfulViewCount;
         m_LastViewCamera = viewCamera;
+        m_PendingViewCameraCut = false;
     }
 
 }
@@ -1875,6 +1877,7 @@ void EditorLayer::RenderToolbar() {
                     float yaw = glm::degrees(std::atan2(-fwd.x, -fwd.z));
                     m_CameraController->SetPosition(camPos);
                     m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
+                    m_PendingViewCameraCut = true;
                 }
             }
         }
@@ -2147,6 +2150,7 @@ void EditorLayer::OnImGuiRender() {
                         float yaw = glm::degrees(std::atan2(-fwd.x, -fwd.z));
                         m_CameraController->SetPosition(camPos);
                         m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
+                        m_PendingViewCameraCut = true;
                     }
                 }
             }

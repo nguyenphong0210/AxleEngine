@@ -8,6 +8,14 @@ bool RunViewContextUnitTests() {
     using Axle::ViewResetReason;
     using Axle::RenderViewKind;
 
+    Axle::SceneRenderSettings fogSettings;
+    const auto initialPolicy = Axle::HashViewFeaturePolicy(fogSettings);
+    fogSettings.LocalShadowDistance += 10.0f;
+    const auto localPolicy = Axle::HashViewFeaturePolicy(fogSettings);
+    --fogSettings.ShadowCascadeCount;
+    RENDER_CHECK(initialPolicy != localPolicy && localPolicy != Axle::HashViewFeaturePolicy(fogSettings),
+        "Shadow selection and cascade policy changes invalidate view history");
+
     std::cout << "  [ViewContext] Running view identity, reset and frame ownership tests...\n";
     ViewContext context;
     RENDER_CHECK(!context.IsInitialized(), "ViewContext starts uninitialized");

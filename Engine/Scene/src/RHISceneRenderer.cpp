@@ -6276,7 +6276,8 @@ namespace Axle {
                                            RHITexture* depthTarget,
                                            const SceneRenderSettings& settings,
                                            PhysicsScene* physicsScene,
-                                           std::shared_ptr<RHI::RHIViewTargets> viewTargets, bool cameraCut)
+                                           std::shared_ptr<RHI::RHIViewTargets> viewTargets, bool cameraCut,
+                                           RenderViewKind viewKind)
     {
         ConsumeReadyGPUTimestamps();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
@@ -6294,7 +6295,7 @@ namespace Axle {
                         nativeColor, colorRTV,
                         nativeDepth, depthDSV,
                         colorTarget->GetWidth(), colorTarget->GetHeight(),
-                        settings, physicsScene, viewTargets, cameraCut);
+                        settings, physicsScene, viewTargets, cameraCut, viewKind);
     }
 
     void RHISceneRenderer::RenderWorldView(const RenderWorld& world,
@@ -6306,7 +6307,8 @@ namespace Axle {
                                        uint32_t width, uint32_t height,
                                        const SceneRenderSettings& requestedSettings,
                                        PhysicsScene* physicsScene,
-                                       std::shared_ptr<RHI::RHIViewTargets> viewTargets, bool cameraCut)
+                                       std::shared_ptr<RHI::RHIViewTargets> viewTargets, bool cameraCut,
+                                       RenderViewKind viewKind)
     {
         if (m_PlanarSession.Active) {
             m_PlanarRenderSucceeded = false;
@@ -6410,7 +6412,7 @@ namespace Axle {
             if (!m_ImplicitViewTargets || !m_ImplicitViewTargets->IsValid() ||
                 m_ImplicitViewTargets->GetDesc() != targetDesc || m_ImplicitViewColor != identity) {
                 auto candidate = std::make_shared<RHIViewTargets>();
-                if (!candidate->Configure(targetDesc)) {
+                if (!candidate->Configure(targetDesc, nullptr, nullptr, FroxelHistoryPolicy::AllowStaticFog)) {
                     return;
                 }
                 m_ImplicitViewTargets = std::move(candidate);
@@ -6426,13 +6428,14 @@ namespace Axle {
 
         ViewContext& viewCtx = ActiveViewContext();
         ViewContextInput viewInput;
+        viewInput.Kind = viewKind;
         viewInput.Width = width;
         viewInput.Height = height;
         viewInput.Camera = camera;
         viewInput.Settings = settings;
         viewInput.Targets = viewTargets;
         viewInput.FeatureGeneration = HashViewFeaturePolicy(settings);
-        viewInput.SceneRevision = world.SceneRevision;
+        viewInput.SceneRevision = world.ViewSceneRevision.value_or(world.SceneRevision);
         viewInput.SceneInstanceID = world.SceneInstanceID;
         viewInput.CameraCut = cameraCut;
         // Effective material identity is published by the live pass schedule.

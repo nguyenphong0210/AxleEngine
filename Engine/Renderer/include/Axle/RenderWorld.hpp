@@ -280,6 +280,7 @@ namespace Axle {
             Camera = RenderCamera{};
             Skybox = RenderSkyboxData{};
             SceneRevision = 0;
+            ViewSceneRevision.reset();
             SceneInstanceID = 0;
             SceneLifetimeEpoch = 0;
             TotalEntities = 0;
@@ -320,5 +321,7 @@ namespace Axle {
         uint64_t SceneInstanceID = 0;
         uint64_t SceneLifetimeEpoch = 0;
         uint32_t TotalEntities = 0;
+        // Extracted scenes keep view resets tied to structural edits, separate from pose publication.
+        std::optional<uint64_t> ViewSceneRevision;
     };
 }

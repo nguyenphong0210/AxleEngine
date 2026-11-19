@@ -436,6 +436,7 @@ namespace Axle {
     }
 
     void Scene::BeforeComponentRemove(entt::entity entity, entt::id_type type) {
+        ++m_SceneGeneration;
         if (type == entt::type_hash<NativeScriptComponent>::value()) SceneScriptBridge::TeardownEntityScript(*this, entity);
         if (type == entt::type_hash<RigidBody3D>::value() || type == entt::type_hash<CollisionShape3D>::value())
             ScenePhysicsBridge::TeardownEntityPhysics(*this, entity, m_RuntimePhysicsScene);
@@ -445,6 +446,7 @@ namespace Axle {
     }
 
     void Scene::AfterComponentAdd(entt::entity entity, entt::id_type type) {
+        ++m_SceneGeneration;
         if (m_RuntimePhysicsScene && (type == entt::type_hash<RigidBody3D>::value() || type == entt::type_hash<CollisionShape3D>::value()))
             m_PendingPhysicsEntities.insert(entity);
     }

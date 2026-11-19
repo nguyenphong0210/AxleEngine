@@ -40,6 +40,7 @@ namespace Axle {
         entity.AddComponent<TagComponent>(name.empty() ? "Entity" : name);
         entity.AddComponent<TransformComponent>();
         entity.AddComponent<HierarchyComponent>();
+        ++m_SceneGeneration;
         return entity;
     }
 
@@ -247,6 +248,7 @@ namespace Axle {
             }
         }
 
+        if (childHC.Parent != parentID) ++m_SceneGeneration;
         childHC.Parent = parentID;
 
         // Link into new parent's children vector

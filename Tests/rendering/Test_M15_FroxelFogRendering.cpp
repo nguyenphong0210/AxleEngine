@@ -573,6 +573,7 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
             s.EnableStudioLightLobes = false;
             s.EnableVolumetricFog = true;
             s.FogQuality = FroxelFogQuality::High;
+            s.FogTemporalWeight = 0.0f;
             s.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
             s.FogNearDistance = 0.25f;
             s.FogMaxDistance = 100.0f;
@@ -1457,6 +1458,228 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
             shadowLog.close();
             RENDER_CHECK(shadowLog.good(), "M15-U6-C: shadow verification log flushed cleanly");
         }
+    }
+
+    // M15-U6-D: observe production history and current media independently.
+    {
+        RHITexture color, depth;
+        RHIViewTargetDesc desc{};
+        desc.Width = 256;
+        desc.Height = 144;
+        desc.OwnPrimary = false;
+        desc.HDR = true;
+        desc.EnableVolumetricFog = true;
+        desc.FroxelQuality = static_cast<uint8_t>(FroxelFogQuality::Low);
+        auto targets = std::make_shared<RHIViewTargets>();
+        const auto configure = [&]() {
+            return targets->Configure(desc) && targets->Validate() &&
+                color.Init(RHITextureDesc::RenderTarget2D(desc.Width, desc.Height)) &&
+                depth.Init(RHITextureDesc::DepthStencil2D(desc.Width, desc.Height));
+        };
+        RENDER_CHECK(configure(), "U6-D: configure initial Low fog targets");
+
+        SceneRenderSettings settings;
+        settings.EnableSkybox = settings.EnableShadows = settings.EnableParticles = false;
+        settings.EnableToneMapping = true;
+        settings.EnableGTAO = settings.EnableBloom = false;
+        settings.EnableFXAA = settings.EnableAutoExposure = settings.EnableSSR = false;
+        settings.EnableStudioLightLobes = false;
+        settings.EnableVolumetricFog = true;
+        settings.FogQuality = FroxelFogQuality::Low;
+        settings.FogNearDistance = 0.5f;
+        settings.FogMaxDistance = 36.0f;
+        settings.FogTemporalWeight = 0.8f;
+
+        PerspectiveCamera camera(60.0f, float(desc.Width) / desc.Height, 0.1f, 100.0f);
+        glm::vec3 position(0.0f, 3.0f, 0.0f);
+        auto pose = [&](glm::vec3 direction = {0, 0, -1}) {
+            camera.SetViewMatrix(glm::lookAtRH(position, position + direction, {0, 1, 0}), position);
+        };
+        pose();
+
+        RenderWorld world;
+        world.SceneInstanceID = 22;
+        world.SceneRevision = 1;
+        world.VolumetricFog = RenderVolumetricFog{true, 0.12f, 0.16f, 0.0f, glm::vec3(1.0f), 36.0f, 1.0f};
+        world.PointLights.emplace_back();
+        auto& light = world.PointLights.back();
+        light.Position = {3.0f, 4.0f, -9.0f};
+        light.Intensity = 80.0f;
+        light.Radius = 15.0f;
+
+        auto render = [&](bool cameraCut = false) {
+            renderer.RenderWorldView(world, camera, &color, &depth, settings, nullptr,
+                                     settings.EnableVolumetricFog ? targets : nullptr, cameraCut);
+            return renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() && device.WaitIdle();
+        };
+        const auto& diag = renderer.GetDiagnostics();
+        constexpr uint32_t slice = 18;
+        std::vector<glm::vec4> raw, seed, moved;
+        const auto read = [&](uint32_t slot, std::vector<glm::vec4>& history) {
+            return Read3DSliceRGBA16F(*targets->GetFroxelScattering(), slice, raw) &&
+                   Read3DSliceRGBA16F(*targets->GetFroxelHistory(slot), slice, history);
+        };
+        const auto seedFrame = [&](bool cameraCut = false) {
+            std::vector<glm::vec4> fresh;
+            return render(cameraCut) && HasPassNamed(diag.GetFrame(), "FogReproject") &&
+                read(0, fresh) && fresh == raw;
+        };
+
+        RENDER_CHECK(render() && HasPassNamed(diag.GetFrame(), "FogReproject") &&
+                     diag.GetFrame().FrameIndex == 0 && read(0, seed) && seed == raw,
+            "M15-U6-04.1: first frame seeds history slot 0 with exactly the current raw media");
+
+        const auto* volume = targets->GetFroxelScattering();
+        const uint32_t gridW = volume->GetWidth(), gridH = volume->GetHeight();
+        const float z = FroxelFogContract::SliceCenterToViewDistance(
+            slice, volume->GetDepth(), settings.FogNearDistance, settings.FogMaxDistance);
+        constexpr uint32_t shift = 2;
+        position.x += 2.0f * float(shift) * z / (float(gridW) * camera.GetProjectionMatrixZO()[0][0]);
+        pose();
+        light.Intensity *= 1.025f; // A modest change makes accepted history measurable.
+        RENDER_CHECK(render() && read(1, moved) && seed.size() == moved.size(),
+            "M15-U6-07.3: camera translation writes the opposite history slot");
+
+        std::vector<glm::vec4> above, below;
+        RENDER_CHECK(Read3DSliceRGBA16F(*targets->GetFroxelScattering(), slice - 1, below) &&
+                     Read3DSliceRGBA16F(*targets->GetFroxelScattering(), slice + 1, above),
+            "M15-U6-04.2: read the adjacent raw depth slices for neighborhood bounds");
+        uint32_t blended = 0, confirmedReprojected = 0;
+        float maximumDelta = 0.0f;
+        for (uint32_t y = 0; y < gridH; ++y) {
+            for (uint32_t x = 0; x < gridW; ++x) {
+                const size_t i = size_t(y) * gridW + x;
+                const float current = raw[i].r;
+                const float actual = moved[i].r;
+                const float lo = std::min({current, below[i].r, above[i].r,
+                    raw[x > 0 ? i - 1 : i].r, raw[x + 1 < gridW ? i + 1 : i].r,
+                    raw[y > 0 ? i - gridW : i].r, raw[y + 1 < gridH ? i + gridW : i].r});
+                const float hi = std::max({current, below[i].r, above[i].r,
+                    raw[x > 0 ? i - 1 : i].r, raw[x + 1 < gridW ? i + 1 : i].r,
+                    raw[y > 0 ? i - gridW : i].r, raw[y + 1 < gridH ? i + gridW : i].r});
+                RENDER_CHECK(std::isfinite(actual) && moved[i].a == raw[i].a && actual >= lo && actual <= hi &&
+                             std::abs(actual - current) <= current * 0.20f + 1e-5f,
+                    "M15-U6-04.2: history is finite, bounded by current neighbors and preserves extinction");
+                if (x + shift >= gridW) {
+                    RENDER_CHECK(moved[i] == raw[i], "M15-U6-04.2: newly exposed columns reject history outside the old frustum");
+                    continue;
+                }
+                if (actual == current) continue;
+                ++blended;
+                maximumDelta = std::max(maximumDelta, std::abs(actual - current));
+                const float expected = glm::mix(current, seed[i + shift].r, settings.FogTemporalWeight);
+                const float sameIndex = glm::mix(current, seed[i].r, settings.FogTemporalWeight);
+                if (std::abs(actual - expected) <= std::max(expected * 0.001f, 1e-6f) &&
+                    std::abs(actual - sameIndex) > std::max(expected * 0.01f, 1e-5f))
+                    ++confirmedReprojected;
+            }
+        }
+        std::cout << "  [U6-D Temporal] blended=" << blended << " world_reprojected=" << confirmedReprojected
+                  << " max_scatter_delta=" << maximumDelta << '\n';
+        RENDER_CHECK(blended > 0 && confirmedReprojected > 0,
+            "M15-U6-07.3: accepted history matches world-space reprojection under motion and differs from same-index blending");
+
+        std::vector<glm::vec4> temporalHDR, staticHDR;
+        RENDER_CHECK(Read2DRGBA16F(*renderer.GetIntermediateHDRTarget(), temporalHDR),
+            "M15-U6-04.1: capture the composed linear HDR output with reused history");
+        settings.FogTemporalWeight = 0.0f;
+        RENDER_CHECK(render() && !HasPassNamed(diag.GetFrame(), "FogReproject") &&
+                     Read2DRGBA16F(*renderer.GetIntermediateHDRTarget(), staticHDR) && temporalHDR != staticHDR,
+            "M15-U6-04.1: history affects the composed output and zero weight bypasses temporal filtering");
+        settings.FogTemporalWeight = 0.8f;
+        RENDER_CHECK(seedFrame(), "U6-D: re-enabling temporal filtering seeds fresh lit history");
+
+        pose({0.14f, 0.0f, -1.0f});
+        light.Intensity = 0.0f;
+        RENDER_CHECK(render() && read(1, moved) && moved == raw &&
+                     std::all_of(raw.begin(), raw.end(), [](const auto& value) { return value.r == 0.0f; }),
+            "M15-U6-07.3: rotation after extinguishing the light leaves no scattering trail");
+
+        light.Intensity = 75.0f;
+        pose();
+        RENDER_CHECK(seedFrame(true), "U6-D: seed a straight-ahead view for the fog-range rejection test");
+        position.z += 0.15f;
+        pose();
+        light.Intensity *= 1.025f;
+        RENDER_CHECK(render() &&
+                     Read3DSliceRGBA16F(*targets->GetFroxelScattering(), 0, raw) &&
+                     Read3DSliceRGBA16F(*targets->GetFroxelHistory(1), 0, moved) && moved == raw &&
+                     std::any_of(raw.begin(), raw.end(), [](const auto& value) { return value.r > 0.0f; }),
+            "M15-U6-04.2: lit near-slice history is rejected outside the old fog depth range inside the camera clip planes");
+
+        RENDER_CHECK(seedFrame(true), "M15-U6-04.3: explicit camera cut seeds history");
+        RENDER_CHECK(render() && read(1, moved), "M15-U6-04.3: history resumes after the cut");
+        ++world.SceneRevision;
+        RENDER_CHECK(seedFrame(), "M15-U6-04.3: scene revision seeds history");
+        RENDER_CHECK(render(), "U6-D: accumulate before replacing the scene");
+        ++world.SceneInstanceID;
+        RENDER_CHECK(seedFrame(), "M15-U6-04.3: distinct scene instance with same revision seeds history");
+        RENDER_CHECK(render(), "U6-D: accumulate before editing the authored medium");
+        world.VolumetricFog->Density *= 1.35f;
+        RENDER_CHECK(seedFrame(), "M15-U6-04.3: authored fog edits seed history without a scene revision");
+        RENDER_CHECK(render(), "U6-D: accumulate before changing feature policy");
+        settings.EnableShadows = true;
+        RENDER_CHECK(seedFrame(), "M15-U6-04.3: feature policy change seeds history");
+        RENDER_CHECK(render(), "U6-D: accumulate before disabling fog");
+        settings.EnableVolumetricFog = false;
+        RENDER_CHECK(render() && !HasPassNamed(diag.GetFrame(), "FogReproject"),
+            "U6-D: disabled fog skips temporal work");
+        settings.EnableVolumetricFog = true;
+        RENDER_CHECK(seedFrame(), "M15-U6-04.3: re-enabled fog starts without old history");
+
+        RENDER_CHECK(render(), "U6-D: accumulate before resizing");
+        const auto oldGeneration = targets->GetGeneration();
+        desc.Width = 320;
+        desc.Height = 180;
+        RENDER_CHECK(configure() && targets->GetGeneration() != oldGeneration && seedFrame() &&
+                     diag.GetFrame().FrameIndex == 0,
+            "M15-U6-07.4: resizing the same view target wrapper resets history before the first new frame");
+        RENDER_CHECK(render() && read(1, moved) && moved.size() == raw.size(),
+            "M15-U6-07.4: opposite slot uses the resized grid on the second frame");
+        settings.FogQuality = FroxelFogQuality::Medium;
+        desc.FroxelQuality = static_cast<uint8_t>(settings.FogQuality);
+        RENDER_CHECK(configure() && seedFrame(), "M15-U6-07.4: changing grid tier starts with a fresh volume");
+
+        bool faultReached = false;
+        {
+            ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+                if (operation == "EndCommandBuffer") {
+                    faultReached = true;
+                    return nri::Result::FAILURE;
+                }
+                return {};
+            });
+            renderer.RenderWorldView(world, camera, &color, &depth, settings, nullptr, targets);
+        }
+        RENDER_CHECK(faultReached && !renderer.WasLastRenderSuccessful() && seedFrame(),
+            "M15-U6-04.3: a frame that fails command finalization cannot publish history");
+
+        RHISceneRenderer staticFogRenderer;
+        bool layoutFaultReached = false;
+        {
+            ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
+                if (operation == "CreatePipelineLayout" && ScopedRHIOperation::Resource() == "FogReprojectLayout") {
+                    layoutFaultReached = true;
+                    return nri::Result::OUT_OF_MEMORY;
+                }
+                return {};
+            });
+            RENDER_CHECK(staticFogRenderer.Init(), "U6-D: renderer initializes without a temporal pipeline layout");
+        }
+        staticFogRenderer.RenderWorldView(world, camera, &color, &depth, settings, nullptr, targets);
+        const auto& fallback = staticFogRenderer.GetDiagnostics().GetFrame();
+        RENDER_CHECK(layoutFaultReached && staticFogRenderer.WasLastRenderSuccessful() &&
+                     HasPassNamed(fallback, "FogApply") && !HasPassNamed(fallback, "FogReproject") &&
+                     HasFallbackPrefix(fallback, "froxel_temporal_unavailable"),
+            "M15-U6-04.1: missing temporal pipeline retains static fog and reports the fallback");
+        staticFogRenderer.Shutdown();
+
+        std::ofstream temporalLog(output / "M15_U6D_froxel_temporal.txt");
+        temporalLog << "blended=" << blended << " world_reprojected=" << confirmedReprojected
+                    << " max_scatter_delta=" << maximumDelta << " rejected_frustum=" << shift * gridH
+                    << " extinguished_light_trail=0 resize_and_reset=PASS\n";
+        temporalLog.close();
+        RENDER_CHECK(temporalLog.good(), "M15-U6-D: temporal readback evidence written");
     }
 
     return device.WaitIdle() && GetRHIValidationErrorCount() == 0;

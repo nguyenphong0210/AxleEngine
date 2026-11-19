@@ -54,6 +54,15 @@ namespace Axle {
         uint64_t MaterialGeneration = 0;
         uint64_t FeatureGeneration = 0;
         bool CameraCut = false;
+        uint64_t SceneInstanceID = 0;
+    };
+
+    struct FroxelHistoryFrame {
+        glm::mat4 ViewProjection{1.0f};
+        glm::vec4 ViewDepthRow{0.0f};
+        uint64_t MediumKey = 0;
+        uint32_t Slot = 0;
+        bool Valid = false;
     };
 
     // Owns one view's frame recording, target generation identity, reset state
@@ -102,6 +111,9 @@ namespace Axle {
         std::shared_ptr<RHI::RHIViewTargets> GetTargets() const { return m_Input.Targets; }
         uint64_t GetDeviceEpoch() const { return m_DeviceEpoch; }
 
+        const FroxelHistoryFrame& GetFroxelHistory() const { return m_FroxelHistory; }
+        void CommitFroxelHistory(const FroxelHistoryFrame& frame) { m_FroxelHistory = frame; }
+
         TemporalService& Temporal() { return m_Temporal; }
         const TemporalService& Temporal() const { return m_Temporal; }
         PostProcessService& PostProcess() { return m_PostProcess; }
@@ -125,6 +137,7 @@ namespace Axle {
         RHI::RHIFrameContext m_Frame;
         std::unordered_map<std::string, RHI::RHIBuffer> m_PassUniforms;
         TemporalService m_Temporal;
+        FroxelHistoryFrame m_FroxelHistory;
         PostProcessService m_PostProcess;
         RenderDiagnostics m_Diagnostics;
     };

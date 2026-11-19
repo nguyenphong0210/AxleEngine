@@ -177,8 +177,11 @@ namespace Axle {
         glm::vec4 FroxelGridParams{};        // Grid extent and orthographic flag
         glm::vec4 AmbientRadiance{};
         glm::vec4 FroxelDepthParams{};       // Log depth ratio, near and far
+        glm::mat4 PrevViewProjection{1.0f};
+        glm::vec4 PrevViewDepthRow{};
+        glm::vec4 TemporalParams{};          // History weight (zero for seed frames)
     };
-    static_assert(sizeof(RHIVolumetricFogConstants) == 256);
+    static_assert(sizeof(RHIVolumetricFogConstants) == 512);
 
     // 256-byte CBV aligned constants for FXAA 3.11 post-processing pass
     struct alignas(256) RHIFXAAConstants {
@@ -342,7 +345,8 @@ namespace Axle {
                              RHI::RHITexture* depthTarget = nullptr,
                              const SceneRenderSettings& settings = SceneRenderSettings{},
                              PhysicsScene* physicsScene = nullptr,
-                             std::shared_ptr<RHI::RHIViewTargets> viewTargets = {});
+                             std::shared_ptr<RHI::RHIViewTargets> viewTargets = {},
+                             bool cameraCut = false);
 
         // Render an immutable RenderWorld snapshot into specific native render targets
         void RenderWorldView(const RenderWorld& world,
@@ -354,7 +358,8 @@ namespace Axle {
                              uint32_t width, uint32_t height,
                              const SceneRenderSettings& settings = SceneRenderSettings{},
                              PhysicsScene* physicsScene = nullptr,
-                             std::shared_ptr<RHI::RHIViewTargets> viewTargets = {});
+                             std::shared_ptr<RHI::RHIViewTargets> viewTargets = {},
+                             bool cameraCut = false);
 
         // Performance & Telemetry metrics
         uint32_t GetDrawCallCount() const { return m_LastDrawCallCount; }
@@ -1058,12 +1063,15 @@ namespace Axle {
         bool EnsureFogDescriptorSets();
         RHI::RHIPipelineLayout m_FogInjectPipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_FogInjectPipeline;
+        RHI::RHIPipelineLayout m_FogReprojectPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_FogReprojectPipeline;
         RHI::RHIPipelineLayout m_FogIntegratePipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_FogIntegratePipeline;
         RHI::RHIPipelineLayout m_FogApplyPipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_FogApplyPipelineSDR;
         RHI::RHIResourceRef<nri::Pipeline> m_FogApplyPipelineHDR;
         RHI::RHIShaderBytecode m_FogInjectShader;
+        RHI::RHIShaderBytecode m_FogReprojectShader;
         RHI::RHIShaderBytecode m_FogIntegrateShader;
         RHI::RHIShaderBytecode m_FogApplyVertexShader;
         RHI::RHIShaderBytecode m_FogApplyPixelShader;
@@ -1072,6 +1080,8 @@ namespace Axle {
         RHI::RHIDescriptorPool m_FogDescriptorPool;
         nri::DescriptorSet* m_FogInjectTextureSet = nullptr;
         nri::DescriptorSet* m_FogInjectStorageSet = nullptr;
+        nri::DescriptorSet* m_FogReprojectTextureSet = nullptr;
+        nri::DescriptorSet* m_FogReprojectStorageSet = nullptr;
         nri::DescriptorSet* m_FogIntegrateTextureSet = nullptr;
         nri::DescriptorSet* m_FogIntegrateStorageSet = nullptr;
         nri::DescriptorSet* m_FogApplyDescriptorSet = nullptr;

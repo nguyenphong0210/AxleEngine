@@ -179,9 +179,11 @@ namespace Axle {
 
         // 3. Resolve Primary Game Camera
         PerspectiveCamera activeCamera = m_Camera;
+        entt::entity viewCamera = entt::null;
         if (m_Scene) {
             Entity camEntity = m_Scene->GetPrimaryCameraEntity();
             if (camEntity && camEntity.HasComponent<CameraComponent>()) {
+                viewCamera = static_cast<entt::entity>(camEntity);
                 const auto& camComp = camEntity.GetComponent<CameraComponent>();
                 glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
                 const float aspect = (m_WindowHeight > 0) ? (static_cast<float>(m_WindowWidth) / static_cast<float>(m_WindowHeight)) : (16.0f / 9.0f);
@@ -206,9 +208,11 @@ namespace Axle {
             request.PhysicsScene = m_PhysicsScene.get();
             request.GLTargetFBO = nullptr;
             request.Name = "RuntimeGameView";
+            request.CameraCut = viewCamera != m_LastViewCamera;
 
             const auto result = RenderService::Get().RenderView(*m_Scene, request);
             if (!result.Success) throw std::runtime_error("Runtime view failed: " + result.ErrorMessage);
+            m_LastViewCamera = viewCamera;
         }
 
         // 5. Render In-Game UI & HUD via Hardware Canvas2D (Zero-ImGui Shipping Runtime)

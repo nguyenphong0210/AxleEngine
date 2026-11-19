@@ -175,6 +175,7 @@ private:
     // Camera Viewport Mode (Phase 20.4: Game View vs Eject Free-Fly)
     bool m_UseEditorCameraInPlay = false;
     bool m_ActiveCameraIsSceneCamera = false;
+    entt::entity m_LastViewCamera = entt::null;
     bool m_F2KeyWasPressed = false;
 
     // Viewport 2D UI Edit Mode & Grid Snapping (Phase 34 Step 7.3)

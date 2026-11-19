@@ -51,6 +51,19 @@ bool RunViewContextUnitTests() {
                  (reasons & ViewResetReason::DeviceEpoch) != ViewResetReason::None,
         "view switch, scene/material/feature generations, camera cut and device epoch are independent reset reasons");
 
+    context.CommitFroxelHistory({glm::mat4(1.0f), glm::vec4(0.0f), 1, 1, true});
+    resized.CameraCut = false;
+    RENDER_CHECK(context.Observe(resized, 8) == ViewResetReason::None && context.GetFroxelHistory().Valid,
+        "unchanged view keeps submitted froxel history");
+    ++resized.SceneInstanceID;
+    reasons = context.Observe(resized, 8);
+    RENDER_CHECK(reasons == ViewResetReason::SceneRevision && !context.GetFroxelHistory().Valid,
+        "scene instance identity invalidates fog even when scene revision stays the same");
+    context.CommitFroxelHistory({glm::mat4(1.0f), glm::vec4(0.0f), 1, 1, true});
+    reasons = context.Observe(resized, 9);
+    RENDER_CHECK(reasons == ViewResetReason::DeviceEpoch && !context.GetFroxelHistory().Valid,
+        "device epoch invalidates fog even when all view inputs stay the same");
+
     context.RequestReset(ViewResetReason::TargetGeneration);
     RENDER_CHECK((context.GetResetReasons() & ViewResetReason::TargetGeneration) != ViewResetReason::None,
         "explicit target-generation reset is retained");
@@ -59,11 +72,12 @@ bool RunViewContextUnitTests() {
 
     resized.CameraCut = false;
     resized.Settings.EnableToneMapping = true; resized.Settings.Exposure = 2;
-    context.Observe(resized, 8);
+    context.Observe(resized, 9);
     context.PostProcess().BeginFrame(resized.Settings, true);
     context.Temporal().Begin(2, {0.1f,0.2f}); context.Temporal().Commit(glm::mat4(1), true);
+    context.CommitFroxelHistory({glm::mat4(1.0f), glm::vec4(0.0f), 1, 1, true});
     const auto imported = context.Temporal().Begin(2, {0.2f,0.3f});
-    RENDER_CHECK(imported.HistoryValid && context.ObserveMaterialGeneration(99),
+    RENDER_CHECK(imported.HistoryValid && context.ObserveMaterialGeneration(99) && !context.GetFroxelHistory().Valid,
         "live effective material identity changes invalidate prior history");
     const auto invalidated = context.Temporal().Begin(2, {0.2f,0.3f});
     RENDER_CHECK(!invalidated.HistoryValid && !invalidated.MotionValid && !invalidated.DisocclusionValid &&

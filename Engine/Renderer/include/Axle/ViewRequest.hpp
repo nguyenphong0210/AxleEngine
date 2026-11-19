@@ -39,6 +39,7 @@ namespace Axle {
         PhysicsScene* PhysicsScene = nullptr;
 
         std::string Name = "DefaultView";
+        bool CameraCut = false; // Set on the first request after a discontinuous camera change.
     };
 
     struct RenderResult {

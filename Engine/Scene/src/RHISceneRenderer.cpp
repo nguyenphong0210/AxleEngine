@@ -811,18 +811,23 @@ namespace Axle {
         m_CapturePrefilterComputeShader = {};
 
         m_FogInjectPipeline = nullptr;
+        m_FogReprojectPipeline = nullptr;
         m_FogIntegratePipeline = nullptr;
         m_FogApplyPipelineSDR = nullptr;
         m_FogApplyPipelineHDR = nullptr;
         m_FogInjectPipelineLayout.Shutdown();
+        m_FogReprojectPipelineLayout.Shutdown();
         m_FogIntegratePipelineLayout.Shutdown();
         m_FogApplyPipelineLayout.Shutdown();
         m_FogInjectShader = {};
+        m_FogReprojectShader = {};
         m_FogIntegrateShader = {};
         m_FogApplyVertexShader = {};
         m_FogApplyPixelShader = {};
         m_FogInjectTextureSet = nullptr;
         m_FogInjectStorageSet = nullptr;
+        m_FogReprojectTextureSet = nullptr;
+        m_FogReprojectStorageSet = nullptr;
         m_FogIntegrateTextureSet = nullptr;
         m_FogIntegrateStorageSet = nullptr;
         m_FogApplyDescriptorSet = nullptr;
@@ -2755,10 +2760,12 @@ namespace Axle {
             return true;
         };
 
-        return compileEntry("CSInjectMedia", RHIShaderStage::Compute, m_FogInjectShader) &&
-               compileEntry("CSIntegrate", RHIShaderStage::Compute, m_FogIntegrateShader) &&
-               compileEntry("VSMain", RHIShaderStage::Vertex, m_FogApplyVertexShader) &&
-               compileEntry("PSMain", RHIShaderStage::Fragment, m_FogApplyPixelShader);
+        if (!compileEntry("CSInjectMedia", RHIShaderStage::Compute, m_FogInjectShader) ||
+            !compileEntry("CSIntegrate", RHIShaderStage::Compute, m_FogIntegrateShader) ||
+            !compileEntry("VSMain", RHIShaderStage::Vertex, m_FogApplyVertexShader) ||
+            !compileEntry("PSMain", RHIShaderStage::Fragment, m_FogApplyPixelShader)) return false;
+        compileEntry("CSReproject", RHIShaderStage::Compute, m_FogReprojectShader);
+        return true;
     }
 
     bool RHISceneRenderer::CreateFogPipelineLayout(RHIDevice& device) {
@@ -2841,6 +2848,22 @@ namespace Axle {
         integrateLayoutDesc.shaderStages = nri::StageBits::COMPUTE_SHADER;
         if (!m_FogIntegratePipelineLayout.Init(integrateLayoutDesc)) return false;
 
+        // Reproject: current scattering and previous history (space 1), next history (space 2).
+        nri::DescriptorRangeDesc reprojectTexRanges[] = {
+            integrateTexRange,
+            makeRange(3, nri::DescriptorType::TEXTURE, nri::StageBits::COMPUTE_SHADER),
+            makeRange(0, nri::DescriptorType::SAMPLER, nri::StageBits::COMPUTE_SHADER),
+        };
+        nri::DescriptorSetDesc reprojectSets[] = {integrateDescSets[0], integrateDescSets[1]};
+        reprojectSets[0].ranges = reprojectTexRanges;
+        reprojectSets[0].rangeNum = std::size(reprojectTexRanges);
+        auto reprojectLayout = integrateLayoutDesc;
+        reprojectLayout.descriptorSets = reprojectSets;
+        if (m_FogReprojectShader.IsValid()) {
+            ScopedRHIOperation operation("FogReprojectLayout");
+            m_FogReprojectPipelineLayout.Init(reprojectLayout);
+        }
+
         // 3. Apply Pipeline Layout:
         // Root descriptor b0, space 0.
         nri::RootDescriptorDesc applyRootDesc = {};
@@ -2885,10 +2908,12 @@ namespace Axle {
         const bool injectShadows = m_FogShadowSampler.IsValid();
         auto& resources = RHIDevice::Get().GetResources();
         const bool hasAllSets = (!injectShadows || m_FogInjectTextureSet) && m_FogInjectStorageSet &&
+                                (!m_FogReprojectPipeline || (m_FogReprojectTextureSet && m_FogReprojectStorageSet)) &&
                                 m_FogIntegrateTextureSet && m_FogIntegrateStorageSet && m_FogApplyDescriptorSet;
         if (hasAllSets && m_FogDescriptorPool.IsValid()) {
             bool anyInUse = false;
             for (nri::DescriptorSet* set : { m_FogInjectTextureSet, m_FogInjectStorageSet,
+                                             m_FogReprojectTextureSet, m_FogReprojectStorageSet,
                                              m_FogIntegrateTextureSet, m_FogIntegrateStorageSet, m_FogApplyDescriptorSet }) {
                 if (!set) continue;
                 auto lease = resources.AcquireNative(set);
@@ -2922,9 +2947,22 @@ namespace Axle {
             !candidate.UpdateSampler(apply, 4, 0, m_FogSampler.GetNative())) {
             return false;
         }
+        nri::DescriptorSet* reprojectInput = nullptr;
+        nri::DescriptorSet* reprojectOutput = nullptr;
+        if (m_FogReprojectPipeline) {
+            reprojectInput = candidate.AllocateDescriptorSet(m_FogReprojectPipelineLayout, 0);
+            reprojectOutput = candidate.AllocateDescriptorSet(m_FogReprojectPipelineLayout, 1);
+            if (!reprojectInput || !reprojectOutput ||
+                !candidate.UpdateSampler(reprojectInput, 2, 0, m_FogSampler.GetNative())) {
+                reprojectInput = nullptr;
+                reprojectOutput = nullptr;
+            }
+        }
         m_FogDescriptorPool = std::move(candidate);
         m_FogInjectTextureSet = injectTexture;
         m_FogInjectStorageSet = injectStorage;
+        m_FogReprojectTextureSet = reprojectInput;
+        m_FogReprojectStorageSet = reprojectOutput;
         m_FogIntegrateTextureSet = integrateInput;
         m_FogIntegrateStorageSet = integrateOutput;
         m_FogApplyDescriptorSet = apply;
@@ -2959,6 +2997,13 @@ namespace Axle {
         injectDesc.Layout = &m_FogInjectPipelineLayout;
         injectDesc.ComputeShader = m_FogInjectShader;
         m_FogInjectPipeline = cache.GetOrCreateComputePipeline(injectDesc);
+
+        if (m_FogReprojectPipelineLayout.IsValid()) {
+            RHIComputePipelineDesc reprojectDesc;
+            reprojectDesc.Layout = &m_FogReprojectPipelineLayout;
+            reprojectDesc.ComputeShader = m_FogReprojectShader;
+            m_FogReprojectPipeline = cache.GetOrCreateComputePipeline(reprojectDesc);
+        }
 
         RHIComputePipelineDesc integrateDesc;
         integrateDesc.Layout = &m_FogIntegratePipelineLayout;
@@ -6231,7 +6276,7 @@ namespace Axle {
                                            RHITexture* depthTarget,
                                            const SceneRenderSettings& settings,
                                            PhysicsScene* physicsScene,
-                                           std::shared_ptr<RHI::RHIViewTargets> viewTargets)
+                                           std::shared_ptr<RHI::RHIViewTargets> viewTargets, bool cameraCut)
     {
         ConsumeReadyGPUTimestamps();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
@@ -6249,7 +6294,7 @@ namespace Axle {
                         nativeColor, colorRTV,
                         nativeDepth, depthDSV,
                         colorTarget->GetWidth(), colorTarget->GetHeight(),
-                        settings, physicsScene, viewTargets);
+                        settings, physicsScene, viewTargets, cameraCut);
     }
 
     void RHISceneRenderer::RenderWorldView(const RenderWorld& world,
@@ -6261,7 +6306,7 @@ namespace Axle {
                                        uint32_t width, uint32_t height,
                                        const SceneRenderSettings& requestedSettings,
                                        PhysicsScene* physicsScene,
-                                       std::shared_ptr<RHI::RHIViewTargets> viewTargets)
+                                       std::shared_ptr<RHI::RHIViewTargets> viewTargets, bool cameraCut)
     {
         if (m_PlanarSession.Active) {
             m_PlanarRenderSucceeded = false;
@@ -6388,6 +6433,8 @@ namespace Axle {
         viewInput.Targets = viewTargets;
         viewInput.FeatureGeneration = HashViewFeaturePolicy(settings);
         viewInput.SceneRevision = world.SceneRevision;
+        viewInput.SceneInstanceID = world.SceneInstanceID;
+        viewInput.CameraCut = cameraCut;
         // Effective material identity is published by the live pass schedule.
         viewInput.MaterialGeneration = viewCtx.GetInput().MaterialGeneration;
         viewCtx.Observe(viewInput, m_Device->GetEpoch());

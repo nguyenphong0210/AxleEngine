@@ -52,6 +52,7 @@ namespace Axle {
         SimulationDriver m_SimulationDriver;
 
         PerspectiveCamera m_Camera;
+        entt::entity m_LastViewCamera = entt::null;
         Canvas2D m_Canvas;
         bool m_IsPaused = false;
         bool m_PrevMouseDown = false;

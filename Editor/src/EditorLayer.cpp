@@ -1491,11 +1491,13 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     Axle::PerspectiveCamera activeCamera = m_CameraController->GetCamera();
     bool usingEditorCamera = (m_SceneState != SceneState::Play || m_UseEditorCameraInPlay);
     m_ActiveCameraIsSceneCamera = false;
+    entt::entity viewCamera = entt::null;
 
     if (!usingEditorCamera && m_Scene) {
         Axle::Entity camEntity = m_Scene->GetPrimaryCameraEntity();
         if (camEntity && camEntity.HasComponent<Axle::CameraComponent>()) {
             m_ActiveCameraIsSceneCamera = true;
+            viewCamera = static_cast<entt::entity>(camEntity);
             const auto& camComp = camEntity.GetComponent<Axle::CameraComponent>();
             glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
 
@@ -1533,6 +1535,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     request.Kind = Axle::RenderViewKind::Main; request.Width = m_ViewportWidth; request.Height = m_ViewportHeight;
     request.Camera = activeCamera; request.Settings = renderSettings; request.PhysicsScene = m_PhysicsScene.get();
     request.Name = "Editor main view";
+    request.CameraCut = viewCamera != m_LastViewCamera;
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
         const auto fog = renderSettings.EnableVolumetricFog ? Axle::ExtractVolumetricFog(*m_Scene) : std::nullopt;
         if (!m_RHIViewport->SetRenderOptions(renderSettings, fog ? &*fog : nullptr)) {
@@ -1547,7 +1550,10 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     if (!result.Success) {
         ++m_FailedViewCount;
         AXLE_ERROR("Editor view failed: {0}", result.ErrorMessage);
-    } else ++m_SuccessfulViewCount;
+    } else {
+        ++m_SuccessfulViewCount;
+        m_LastViewCamera = viewCamera;
+    }
 
 }
 

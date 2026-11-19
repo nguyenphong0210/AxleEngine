@@ -26,14 +26,22 @@ namespace Axle::Passes {
         }
         injectUsages.push_back({r.FroxelScattering, Layout::ShaderResourceStorage, Access::Write});
         graph.AddPass("FogInject", std::move(injectUsages));
+        if (r.Reproject) {
+            std::vector<RenderGraph::Use> reprojectUsages{
+                {r.FroxelScattering, Layout::ShaderResource},
+                {r.HistoryWrite, Layout::ShaderResourceStorage, Access::Write}};
+            if (r.HasHistory) reprojectUsages.push_back({r.HistoryRead, Layout::ShaderResource});
+            graph.AddPass("FogReproject", std::move(reprojectUsages));
+        }
+        const auto media = r.Reproject ? r.HistoryWrite : r.FroxelScattering;
         graph.AddPass("FogIntegrate", {
-            {r.FroxelScattering, Layout::ShaderResource},
+            {media, Layout::ShaderResource},
             {r.FroxelIntegrated, Layout::ShaderResourceStorage, Access::Write}});
         graph.AddPass("FogApply", {
             {r.Input, Layout::ShaderResource},
             {r.Depth, Layout::ShaderResource},
             {r.FroxelIntegrated, Layout::ShaderResource},
-            {r.FroxelScattering, Layout::ShaderResource},
+            {media, Layout::ShaderResource},
             {r.SceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
     }
 
@@ -77,6 +85,12 @@ namespace Axle::Passes {
         const float logRatio = std::log(media.MaxDistance / media.NearDistance);
         constants.FroxelDepthParams = glm::vec4(logRatio, media.NearDistance, media.MaxDistance, 0.0f);
 
+        if (i.HistoryRead) {
+            constants.PrevViewProjection = i.Previous.ViewProjection;
+            constants.PrevViewDepthRow = i.Previous.ViewDepthRow;
+            constants.TemporalParams.x = i.HistoryWeight;
+        }
+
         if (!ops.BeginPass("FogCopy")) return false;
         commands.CopyTexture(*color->GetNative(), nullptr, *i.SceneTarget, nullptr);
         commands.CopyTexture(*depth->GetNative(), nullptr, *i.SceneDepthTarget, nullptr);
@@ -117,8 +131,31 @@ namespace Axle::Passes {
         commands.Dispatch((gridW + 3u) / 4u, (gridH + 3u) / 4u, (gridD + 3u) / 4u);
         ++i.DispatchCount;
 
+        const auto* resolved = scattering;
+        if (i.HistoryWrite) {
+            // Seed frames bind the already-defined current volume in place of unread history.
+            const auto* previous = i.HistoryRead ? i.HistoryRead : scattering;
+            if (!ops.BeginPass("FogReproject") || !ops.Uniform().UpdateData(&constants, sizeof(constants)) ||
+                !pool.UpdateTexture(renderer.m_FogReprojectTextureSet, 0, 0, scattering->GetSRV()) ||
+                !pool.UpdateTexture(renderer.m_FogReprojectTextureSet, 1, 0, previous->GetSRV()) ||
+                !pool.UpdateStorageTexture(renderer.m_FogReprojectStorageSet, 0, 0, i.HistoryWrite->GetUAV())) {
+                return false;
+            }
+            commands.SetPipeline(renderer.m_FogReprojectPipeline);
+            commands.SetPipelineLayout(nri::BindPoint::COMPUTE, renderer.m_FogReprojectPipelineLayout);
+            commands.SetRootDescriptor(0, ops.Uniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
+            pool.Bind(commands.GetNative());
+            if (!ops.BindDescriptor(0, renderer.m_FogReprojectTextureSet, nri::BindPoint::COMPUTE) ||
+                !ops.BindDescriptor(1, renderer.m_FogReprojectStorageSet, nri::BindPoint::COMPUTE)) {
+                return false;
+            }
+            commands.Dispatch((gridW + 3u) / 4u, (gridH + 3u) / 4u, (gridD + 3u) / 4u);
+            ++i.DispatchCount;
+            resolved = i.HistoryWrite;
+        }
+
         if (!ops.BeginPass("FogIntegrate") || !ops.Uniform().UpdateData(&constants, sizeof(constants)) ||
-            !pool.UpdateTexture(renderer.m_FogIntegrateTextureSet, 0, 0, scattering->GetSRV()) ||
+            !pool.UpdateTexture(renderer.m_FogIntegrateTextureSet, 0, 0, resolved->GetSRV()) ||
             !pool.UpdateStorageTexture(renderer.m_FogIntegrateStorageSet, 0, 0, integrated->GetUAV())) {
             return false;
         }
@@ -137,7 +174,7 @@ namespace Axle::Passes {
             !pool.UpdateTexture(renderer.m_FogApplyDescriptorSet, 0, 0, color->GetSRV()) ||
             !pool.UpdateTexture(renderer.m_FogApplyDescriptorSet, 1, 0, depth->GetSRV()) ||
             !pool.UpdateTexture(renderer.m_FogApplyDescriptorSet, 2, 0, integrated->GetSRV()) ||
-            !pool.UpdateTexture(renderer.m_FogApplyDescriptorSet, 3, 0, scattering->GetSRV())) {
+            !pool.UpdateTexture(renderer.m_FogApplyDescriptorSet, 3, 0, resolved->GetSRV())) {
             return false;
         }
         nri::Pipeline* applyPipeline = renderer.m_FogApplyPipelineHDR;

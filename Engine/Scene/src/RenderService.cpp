@@ -309,7 +309,7 @@ namespace Axle {
             if (depth && (!depth->IsValid() || !depth->GetDSV() || depth->GetHandle().Epoch != m_Epoch ||
                 depth->GetWidth() != request.Width || depth->GetHeight() != request.Height || depth->GetDesc().SampleCount != 1))
                 return fail("Invalid, stale or mismatched view depth target");
-            m_RHIRenderer->RenderWorldView(prepared, request.Camera, color, depth, request.Settings, request.PhysicsScene, targets);
+            m_RHIRenderer->RenderWorldView(prepared, request.Camera, color, depth, request.Settings, request.PhysicsScene, targets, request.CameraCut);
             if (!m_RHIRenderer->WasLastRenderSuccessful()) {
                 const auto& diagnostic=m_RHIRenderer->GetCascadedShadows().GetDiagnostic();
                 return fail(diagnostic.empty()?"View preparation, recording or submission failed":diagnostic);

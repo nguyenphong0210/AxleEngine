@@ -38,6 +38,13 @@ namespace Axle {
         mix(settings.FogQuality);
         mix(settings.FogNearDistance);
         mix(settings.FogMaxDistance);
+        mix(settings.FogTemporalWeight);
+        mix(settings.FogDensity);
+        mix(settings.FogHeightFalloff);
+        mix(settings.FogScattering);
+        mix(settings.FogColor.x);
+        mix(settings.FogColor.y);
+        mix(settings.FogColor.z);
         mix(settings.EnableDDGI);
         mix(settings.EnableBloom);
         mix(settings.EnableAutoExposure);
@@ -68,6 +75,7 @@ namespace Axle {
         m_HasInput = false;
         m_ResetReasons = ViewResetReason::Initial;
         m_Temporal.Reset();
+        m_FroxelHistory = {};
         m_PostProcess.Reset();
         m_Diagnostics.BeginFrame(0);
         return true;
@@ -87,6 +95,7 @@ namespace Axle {
         m_ResetReasons = ViewResetReason::None;
         m_Input = ViewContextInput{};
         m_Temporal.Reset();
+        m_FroxelHistory = {};
         m_PostProcess.Reset();
         m_Diagnostics.BeginFrame(0);
     }
@@ -97,7 +106,8 @@ namespace Axle {
         if (m_HasInput) {
             if (input.Width != m_Input.Width || input.Height != m_Input.Height) reasons |= ViewResetReason::Resize;
             if (input.Kind != m_Input.Kind) reasons |= ViewResetReason::ViewSwitch;
-            if (input.SceneRevision != m_Input.SceneRevision) reasons |= ViewResetReason::SceneRevision;
+            if (input.SceneRevision != m_Input.SceneRevision || input.SceneInstanceID != m_Input.SceneInstanceID)
+                reasons |= ViewResetReason::SceneRevision;
             if (input.MaterialGeneration != m_Input.MaterialGeneration) reasons |= ViewResetReason::MaterialGeneration;
             if (input.FeatureGeneration != m_Input.FeatureGeneration) reasons |= ViewResetReason::FeaturePolicy;
             const auto priorTargets = m_TargetIdentity.lock();
@@ -116,6 +126,7 @@ namespace Axle {
                            ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
                            ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
             m_FrameIndex = 0;
+            m_FroxelHistory = {};
             m_Temporal.Reset(static_cast<uint32_t>(reasons));
             m_PostProcess.Reset();
         }
@@ -142,6 +153,7 @@ namespace Axle {
         m_ResetReasons |= ViewResetReason::MaterialGeneration;
         m_FrameIndex = 0;
         m_Temporal.InvalidateContents();
+        m_FroxelHistory = {};
         m_Diagnostics.SetFrameIndex(m_FrameIndex);
         // Keep the frame's selected output/AA policy while restarting adaptation.
         const bool configured = m_PostProcess.IsConfigured();
@@ -157,6 +169,7 @@ namespace Axle {
                           ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
                           ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
             m_FrameIndex = 0;
+            m_FroxelHistory = {};
             m_Temporal.Reset(static_cast<uint32_t>(reason));
             m_PostProcess.Reset();
         }
@@ -192,6 +205,7 @@ namespace Axle {
     bool ViewContext::EndFrameAndSubmit() {
         if (!m_FrameActive || !m_Frame.End() || !m_Frame.Submit()) {
             m_FrameActive = false;
+            m_FroxelHistory = {};
             m_Input.Targets.reset();
             return false;
         }
@@ -208,6 +222,7 @@ namespace Axle {
     bool ViewContext::AbandonFrame() {
         if (!m_FrameActive) return true;
         const bool result = m_Frame.Abandon();
+        m_FroxelHistory = {};
         m_FrameActive = false;
         m_Input.Targets.reset();
         return result;

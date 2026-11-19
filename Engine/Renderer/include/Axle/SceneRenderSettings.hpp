@@ -62,6 +62,7 @@ namespace Axle {
         float FogNearDistance = 0.25f;
         float FogMaxDistance = 100.0f;
         FroxelFogQuality FogQuality = FroxelFogQuality::High;
+        float FogTemporalWeight = 0.8f; // Zero bypasses temporal filtering; maximum effective weight is 0.9.
         float DDGIMultiplier = 1.0f;
         float BloomThreshold = 1.0f;
         float BloomIntensity = 0.8f;

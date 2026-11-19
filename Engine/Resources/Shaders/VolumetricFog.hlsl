@@ -1,7 +1,7 @@
 // =============================================================================
 // AxleEngine - 3D Froxel Volumetric Fog & Atmospheric Participating Media
 // Dual-compiled for Direct3D 12 (DXIL 6.0) & Vulkan 1.3 (SPIR-V)
-// Static 3D Froxel Media Injection -> Front-to-Back Beer-Lambert Integration -> Apply
+// Media Injection -> Temporal Reprojection -> Beer-Lambert Integration -> Apply
 // =============================================================================
 
 #ifndef M_PI
@@ -21,6 +21,9 @@ cbuffer VolumetricFogConstants : register(b0, space0) {
     float4   u_FroxelGridParams;        // (x: gridW, y: gridH, z: gridD, w: orthographic flag)
     float4   u_AmbientRadiance;         // (rgb: authored scene ambient radiance)
     float4   u_FroxelDepthParams;       // (x: log(farZ / nearZ), y: nearZ, z: farZ, w: reserved)
+    float4x4 u_PrevViewProjection;
+    float4   u_PrevViewDepthRow;
+    float4   u_TemporalParams;         // (x: history weight, zero on seed frames)
 };
 
 // Matches Forward+ RHIMultiLightBufferData (register b2, space0).
@@ -465,6 +468,61 @@ void CSInjectMedia(uint3 dtid : SV_DispatchThreadID) {
     shadowSamples.PositionStep = rayDirWorldPerUnitZ * shadowSamples.DepthStep;
     float3 incoming = EvaluateVolumetricLighting(sampleWS, unitRayWS, g, shadowSamples);
     u_FroxelOutput[dtid] = float4(min(fogAlbedo * density * incoming, 65504.0), density);
+}
+
+// Reproject the current world-space froxel center into the last submitted volume.
+[numthreads(4, 4, 4)]
+void CSReproject(uint3 dtid : SV_DispatchThreadID) {
+    uint3 gridDims = (uint3)u_FroxelGridParams.xyz;
+    if (any(dtid >= gridDims)) return;
+
+    int3 cell = int3(dtid);
+    float4 current = u_FroxelVolume.Load(int4(cell, 0));
+    u_FroxelOutput[dtid] = current;
+    if (u_TemporalParams.x <= 0.0 || current.a <= 0.0 || !any(current.rgb > 0.0)) return;
+
+    float2 uv = (float2(dtid.xy) + 0.5) / float2(gridDims.xy);
+    float3 originWS, directionPerUnitZ;
+    ReconstructWorldRay(uv, originWS, directionPerUnitZ);
+    float depth = SliceDepth(float(dtid.z) + 0.5, float(gridDims.z));
+    float4 sampleWS = float4(originWS + directionPerUnitZ * depth, 1.0);
+    float4 prevClip = mul(u_PrevViewProjection, sampleWS);
+    if (!(prevClip.w > 1e-6) ||
+        any(abs(prevClip.xy) > prevClip.w) || prevClip.z < 0.0 || prevClip.z > prevClip.w) return;
+
+    float prevDepth = dot(u_PrevViewDepthRow, sampleWS);
+    if (!(prevDepth >= u_FroxelDepthParams.y && prevDepth <= u_FroxelDepthParams.z)) return;
+
+    float2 prevNDC = prevClip.xy / prevClip.w;
+    float prevSlice = log(prevDepth / u_FroxelDepthParams.y) / u_FroxelDepthParams.x;
+    float3 prevUVW = float3(prevNDC.x * 0.5 + 0.5, 0.5 - prevNDC.y * 0.5, prevSlice);
+    // Keep trilinear taps inside the former grid, including the near/far slices.
+    float3 halfTexel = 0.5 / float3(gridDims);
+    if (any(prevUVW < halfTexel - 1e-6) || any(prevUVW > 1.0 - halfTexel + 1e-6)) return;
+
+    float4 history = u_FroxelMedia.SampleLevel(u_LinearSampler, prevUVW, 0.0);
+    if (!all(isfinite(history)) || abs(history.a - current.a) > max(current.a * 0.1, 1e-5)) return;
+
+    static const int3 neighbors[6] = {
+        int3(-1, 0, 0), int3(1, 0, 0), int3(0, -1, 0),
+        int3(0, 1, 0), int3(0, 0, -1), int3(0, 0, 1)
+    };
+    float3 low = current.rgb;
+    float3 high = current.rgb;
+    [unroll]
+    for (int i = 0; i < 6; ++i) {
+        int3 neighbor = clamp(cell + neighbors[i], int3(0, 0, 0), int3(gridDims) - 1);
+        float3 value = u_FroxelVolume.Load(int4(neighbor, 0)).rgb;
+        low = min(low, value);
+        high = max(high, value);
+    }
+    // Bound changes at moving shadow edges, even when neighboring froxels are bright.
+    low = max(low, current.rgb * 0.75);
+    high = min(high, current.rgb * 1.25);
+    if (any(history.rgb < low) || any(history.rgb > high)) return;
+
+    // Extinction follows current density exactly and remains available for the next rejection.
+    u_FroxelOutput[dtid] = float4(lerp(current.rgb, history.rgb, u_TemporalParams.x), current.a);
 }
 
 // =============================================================================

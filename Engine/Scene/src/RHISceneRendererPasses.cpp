@@ -17,12 +17,37 @@
 #include <Axle/PhysicsScene.hpp>
 #include <Axle/RenderParticleData.hpp>
 #include <algorithm>
+#include <bit>
+#include <cmath>
 
 namespace Axle {
     using namespace RHI;
     static_assert(MaxLightingPointLights==MAX_POINT_LIGHTS && MaxLightingSpotLights==MAX_SPOT_LIGHTS);
     static_assert(MaxLightingRectLights==sizeof(RHIMultiLightBufferData{}.RectLights)/sizeof(RHIGPURectLight));
     static constexpr uint32_t ForwardTextureCount = static_cast<uint32_t>(RHITextureSlot::Count) + 7;
+
+    static uint64_t HashFroxelMedium(const FroxelFogContract::FroxelMediaState& media,
+                                     const glm::mat4& projection) {
+        uint64_t key = 1469598103934665603ull;
+        const auto mix = [&](float value) {
+            key = (key ^ std::bit_cast<uint32_t>(value)) * 1099511628211ull;
+        };
+        mix(media.FromWorldComponent ? 1.0f : 0.0f);
+        mix(media.Density);
+        mix(media.Intensity);
+        mix(media.HeightFalloff);
+        mix(media.ScatteringAsymmetry);
+        mix(media.Albedo.x);
+        mix(media.Albedo.y);
+        mix(media.Albedo.z);
+        mix(media.NearDistance);
+        mix(media.MaxDistance);
+        // The unjittered projection catches lens and projection changes while allowing camera motion.
+        for (int column = 0; column < 4; ++column)
+            for (int row = 0; row < 4; ++row)
+                mix(projection[column][row]);
+        return key;
+    }
 
     struct DrawItem {
         std::shared_ptr<const RHIMeshView> Mesh;
@@ -284,6 +309,41 @@ namespace Axle {
             if (useFog && settings.EnableShadows && !injectFogShadows)
                 viewCtx.Diagnostics().AddFallback("froxel_shadows_unavailable:unshadowed_lighting");
         }
+        const auto previousFog = viewCtx.GetFroxelHistory();
+        FroxelHistoryFrame nextFog;
+        RHITexture* fogHistoryRead = nullptr;
+        RHITexture* fogHistoryWrite = nullptr;
+        const float historyWeight = std::isfinite(settings.FogTemporalWeight)
+            ? std::clamp(settings.FogTemporalWeight, 0.0f, 0.9f) : 0.0f;
+        if (useFog && historyWeight > 0.0f) {
+            const auto ready = [froxelScatteringTex](const RHITexture* texture) {
+                return texture && texture->IsValid() && texture->GetSRV() && texture->GetUAV() &&
+                    texture->GetWidth() == froxelScatteringTex->GetWidth() &&
+                    texture->GetHeight() == froxelScatteringTex->GetHeight() &&
+                    texture->GetDepth() == froxelScatteringTex->GetDepth();
+            };
+            auto* history0 = viewTargets->GetFroxelHistory(0);
+            auto* history1 = viewTargets->GetFroxelHistory(1);
+            if (m_FogReprojectTextureSet && m_FogReprojectStorageSet && ready(history0) && ready(history1)) {
+                const auto mediumKey = HashFroxelMedium(froxelMedia, camera.GetProjectionMatrixZO());
+                const bool reuse = previousFog.Valid && viewCtx.GetFrameIndex() != 0 &&
+                    previousFog.MediumKey == mediumKey;
+                const auto& viewMatrix = camera.GetViewMatrix();
+                nextFog.ViewProjection = viewProjZO;
+                nextFog.ViewDepthRow = -glm::vec4(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2], viewMatrix[3][2]);
+                nextFog.MediumKey = mediumKey;
+                nextFog.Slot = reuse ? (previousFog.Slot ^ 1u) : 0u;
+                nextFog.Valid = true;
+                if (reuse) fogHistoryRead = previousFog.Slot == 0 ? history0 : history1;
+                fogHistoryWrite = nextFog.Slot == 0 ? history0 : history1;
+            } else {
+                viewCtx.Diagnostics().AddFallback("froxel_temporal_unavailable:history_or_pipeline");
+            }
+        }
+        const auto fogHistoryInput = fogHistoryRead
+            ? graph.Import("FogHistoryRead", fogHistoryRead->GetNative(), true) : output;
+        const auto fogHistoryOutput = fogHistoryWrite
+            ? graph.Import("FogHistoryWrite", fogHistoryWrite->GetNative()) : output;
         const auto fogInput = useFog ? graph.Import("FogInput", m_OpaqueSceneColor->GetNative()) : output;
         const auto fogDepth = useFog ? graph.Import("FogDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto fogScattering = useFog ? graph.Import("FogScattering", froxelScatteringTex->GetNative()) : output;
@@ -1563,38 +1623,6 @@ namespace Axle {
         });
 
         addPass("FroxelFogPass", [&](const RenderPassContext&) -> RenderPassResult {
-            // 7.7. Volumetric fog and atmospheric media.
-            if (useFog) {
-                const Passes::PassRecordOps ops{
-                    beginPass, passUniform,
-                    [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
-                        return bindDescriptorSet(index, set, bindPoint);
-                    }, beginRendering, endRendering};
-                if (!Passes::FroxelFogPass::Record(*this,
-                    {froxelMedia, camera, projZO, viewTargets.get(), sceneTargetTexture,
-                     sceneDepthTexture, sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
-                    return fail();
-            }
-
-            return {};
-        }, [&](RenderGraph& graph) {
-            if (useFog) {
-                Passes::FroxelFogPass::Declare(graph, {
-                    sceneColor, fogInput, sceneDepth, fogDepth, fogScattering, fogIntegrated,
-                    shadows, localShadows, injectFogShadows && shadowAtlas, injectFogShadows && localAtlas});
-            }
-        }, [&](const RenderPassContext&) -> RenderPassResult {
-            if (useFog && (!uniform("FogInject", sizeof(RHIVolumetricFogConstants)) ||
-                !uniform("FogIntegrate", sizeof(RHIVolumetricFogConstants)) ||
-                !uniform("FogApply", sizeof(RHIVolumetricFogConstants)) ||
-                !graph.DeclareRead("FogInject", m_LightBuffer.GetCBV()))) return fail();
-            if (useFog && injectFogShadows &&
-                (!graph.DeclareRead("FogInject", m_CascadedShadows.GetConstantsCBV()) ||
-                 !graph.DeclareRead("FogInject", m_LocalShadows.GetConstantsCBV()))) return fail();
-            return {};
-        });
-
-        addPass("PostProcessPass", [&](const RenderPassContext&) -> RenderPassResult {
             std::vector<std::pair<uint32_t, uint64_t>> identities;
             auto collect = [&](const auto& queue) {
                 for (const auto& item : queue) {
@@ -1619,6 +1647,42 @@ namespace Axle {
             }
             if (viewCtx.ObserveMaterialGeneration(materialGeneration))
                 temporalSelection = viewCtx.Temporal().Begin(useTAA ? 2 : 0, {jitterX, jitterY});
+            // 7.7. Volumetric fog and atmospheric media.
+            if (useFog) {
+                const Passes::PassRecordOps ops{
+                    beginPass, passUniform,
+                    [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                        return bindDescriptorSet(index, set, bindPoint);
+                    }, beginRendering, endRendering};
+                if (!Passes::FroxelFogPass::Record(*this,
+                    {froxelMedia, camera, projZO, viewTargets.get(),
+                     viewCtx.GetFrameIndex() != 0 ? fogHistoryRead : nullptr, fogHistoryWrite,
+                     previousFog, historyWeight, sceneTargetTexture,
+                     sceneDepthTexture, sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
+                    return fail();
+            }
+
+            return {};
+        }, [&](RenderGraph& graph) {
+            if (useFog) {
+                Passes::FroxelFogPass::Declare(graph, {
+                    sceneColor, fogInput, sceneDepth, fogDepth, fogScattering, fogIntegrated,
+                    shadows, localShadows, injectFogShadows && shadowAtlas, injectFogShadows && localAtlas,
+                    fogHistoryInput, fogHistoryOutput, fogHistoryWrite != nullptr, fogHistoryRead != nullptr});
+            }
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (useFog && (!uniform("FogInject", sizeof(RHIVolumetricFogConstants)) ||
+                !uniform("FogIntegrate", sizeof(RHIVolumetricFogConstants)) ||
+                !uniform("FogApply", sizeof(RHIVolumetricFogConstants)) ||
+                !graph.DeclareRead("FogInject", m_LightBuffer.GetCBV()))) return fail();
+            if (fogHistoryWrite && !uniform("FogReproject", sizeof(RHIVolumetricFogConstants))) return fail();
+            if (useFog && injectFogShadows &&
+                (!graph.DeclareRead("FogInject", m_CascadedShadows.GetConstantsCBV()) ||
+                 !graph.DeclareRead("FogInject", m_LocalShadows.GetConstantsCBV()))) return fail();
+            return {};
+        });
+
+        addPass("PostProcessPass", [&](const RenderPassContext&) -> RenderPassResult {
             const Passes::PassRecordOps postOps{
                 beginPass, passUniform,
                 [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
@@ -1745,6 +1809,7 @@ namespace Axle {
             AXLE_CORE_ERROR("View command finalization or submit failed");
             return false;
         }
+        viewCtx.CommitFroxelHistory(nextFog);
         viewCtx.Temporal().Commit(viewProjZO, useTAA);
         m_LocalShadows.OnSubmitted();
         if (m_PlanarSession.Active) {

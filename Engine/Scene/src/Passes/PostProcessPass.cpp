@@ -1,6 +1,7 @@
 #include "PostProcessPass.hpp"
 #include "../RHISceneRendererPasses.hpp"
 #include <Axle/Log.hpp>
+#include <Axle/RenderContracts.hpp>
 #include <cmath>
 
 namespace Axle::Passes {
@@ -9,6 +10,19 @@ namespace Axle::Passes {
         using Layout = RHI::RHIResourceLayout;
         using Access = RenderGraph::Access;
         using Load = RenderGraph::Load;
+        if (r.UseAutoExposure) {
+            if (!r.UseToneMap) graph.AddPass("AutoExposureCopy", {
+                {r.SceneColor, Layout::CopySource}, {r.ExposureInput, Layout::CopyDest, Access::Write}});
+            graph.AddPass("AutoExposureHistogramClear", {
+                {r.ExposureInput, Layout::ShaderResource},
+                {r.ExposureHistogram, Layout::ShaderResourceStorage, Access::Write}});
+            graph.AddPass("AutoExposureHistogram", {
+                {r.ExposureInput, Layout::ShaderResource},
+                {r.ExposureHistogram, Layout::ShaderResourceStorage, Access::Write}});
+            graph.AddPass("AutoExposure", {
+                {r.ExposureHistogram, Layout::ShaderResource},
+                {r.ExposureOutput, Layout::ShaderResourceStorage, Access::Write}});
+        }
         if (r.UseBloom) {
             graph.AddPass("BloomCopy", {{r.SceneColor, Layout::CopySource}, {r.BloomInput, Layout::CopyDest, Access::Write}});
             for (uint32_t level = 0; level < r.Bloom.size(); ++level) {
@@ -24,13 +38,6 @@ namespace Axle::Passes {
             graph.AddPass("BloomApply", {
                 {r.Bloom[0], Layout::ShaderResource}, {r.BloomInput, Layout::ShaderResource},
                 {r.SceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
-        }
-        if (r.UseAutoExposure) {
-            if (!r.UseToneMap) graph.AddPass("AutoExposureCopy", {
-                {r.SceneColor, Layout::CopySource}, {r.ExposureInput, Layout::CopyDest, Access::Write}});
-            graph.AddPass("AutoExposure", {
-                {r.ExposureInput, Layout::ShaderResource},
-                {r.ExposureOutput, Layout::ShaderResourceStorage, Access::Write}});
         }
         if (r.UseTAA) {
             const auto source = r.UseToneMap ? r.HDR : r.SceneColor;
@@ -79,6 +86,74 @@ namespace Axle::Passes {
         };
         const auto& beginRendering = ops.BeginRendering;
         const auto& endRendering = ops.EndRendering;
+            // 7b. Histogram-based eye adaptation runs on clean linear HDR BEFORE Bloom/UI
+            // so Bloom halos and HUD/Editor overlays never bias luminance metering.
+            if (useAutoExposure) {
+                if (!useToneMap) {
+                    if (!beginPass("AutoExposureCopy")) return false;
+                    renderer.Commands().CopyTexture(*renderer.m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
+                }
+                RHITexture* exposureSource = useToneMap && renderer.m_IntermediateHDRTarget ? renderer.m_IntermediateHDRTarget : renderer.m_OpaqueSceneColor;
+                auto* exposureHistogram = i.ExposureHistogram;
+                auto* exposureTarget = viewTargets->GetExposure();
+                if (!exposureSource || !exposureHistogram || !exposureHistogram->IsValid() || !exposureTarget) return false;
+
+                const uint32_t exposureWidth = useToneMap && renderer.m_IntermediateHDRTarget ? renderer.m_IntermediateHDRTarget->GetWidth() : width;
+                const uint32_t exposureHeight = useToneMap && renderer.m_IntermediateHDRTarget ? renderer.m_IntermediateHDRTarget->GetHeight() : height;
+                RHIExposureConstants exposureConstants{};
+                exposureConstants.ScreenSize = glm::vec4(
+                    static_cast<float>(exposureWidth),
+                    static_cast<float>(exposureHeight),
+                    1.0f / static_cast<float>(std::max(exposureWidth, 1u)),
+                    1.0f / static_cast<float>(std::max(exposureHeight, 1u)));
+                exposureConstants.ExposureParams = glm::vec4(
+                    AutoExposureContract::MinLogLuminance,
+                    AutoExposureContract::MaxLogLuminance,
+                    std::max(settings.AutoExposureSpeed, 0.0f),
+                    (std::isfinite(i.DeltaTime) && i.DeltaTime > 0.0f) ? i.DeltaTime : 0.0f);
+                exposureConstants.ExposureLimits = glm::vec4(
+                    settings.AutoExposureMin,
+                    settings.AutoExposureMax,
+                    settings.AutoExposureKeyValue,
+                    i.ResetAutoExposure ? 1.0f : 0.0f);
+                exposureConstants.ExposureFallback = glm::vec4(settings.Exposure, 0.0f, 0.0f, 0.0f);
+
+                if (!beginPass("AutoExposureHistogramClear")) return false;
+                if (!passUniform().UpdateData(&exposureConstants, sizeof(RHIExposureConstants))) return false;
+                if (!renderer.m_AutoExposureDescriptorPool.UpdateTexture(renderer.m_AutoExposureHistTextureSet, 0, 0, exposureSource->GetSRV()) ||
+                    !renderer.m_AutoExposureDescriptorPool.UpdateSampler(renderer.m_AutoExposureHistTextureSet, 1, 0, renderer.m_AutoExposureSampler.GetNative()) ||
+                    !renderer.m_AutoExposureDescriptorPool.UpdateStorageTexture(renderer.m_AutoExposureHistStorageSet, 0, 0, exposureHistogram->GetUAV())) return false;
+                renderer.Commands().SetPipeline(renderer.m_AutoExposureClearPipeline);
+                renderer.Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, renderer.m_AutoExposureHistPipelineLayout);
+                renderer.Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
+                renderer.m_AutoExposureDescriptorPool.Bind(renderer.Commands().GetNative());
+                if (!bindDescriptorSet(0, renderer.m_AutoExposureHistTextureSet, nri::BindPoint::COMPUTE) ||
+                    !bindDescriptorSet(1, renderer.m_AutoExposureHistStorageSet, nri::BindPoint::COMPUTE)) return false;
+                renderer.Commands().Dispatch(1, 1, 1); ++dispatchCount;
+
+                if (!beginPass("AutoExposureHistogram")) return false;
+                if (!passUniform().UpdateData(&exposureConstants, sizeof(RHIExposureConstants))) return false;
+                renderer.Commands().SetPipeline(renderer.m_AutoExposureHistogramPipeline);
+                renderer.Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, renderer.m_AutoExposureHistPipelineLayout);
+                renderer.Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
+                renderer.m_AutoExposureDescriptorPool.Bind(renderer.Commands().GetNative());
+                if (!bindDescriptorSet(0, renderer.m_AutoExposureHistTextureSet, nri::BindPoint::COMPUTE) ||
+                    !bindDescriptorSet(1, renderer.m_AutoExposureHistStorageSet, nri::BindPoint::COMPUTE)) return false;
+                renderer.Commands().Dispatch((exposureWidth + 15u) / 16u, (exposureHeight + 15u) / 16u, 1u); ++dispatchCount;
+
+                if (!beginPass("AutoExposure")) return false;
+                if (!passUniform().UpdateData(&exposureConstants, sizeof(RHIExposureConstants))) return false;
+                if (!renderer.m_AutoExposureDescriptorPool.UpdateTexture(renderer.m_AutoExposureTextureSet, 0, 0, exposureHistogram->GetSRV()) ||
+                    !renderer.m_AutoExposureDescriptorPool.UpdateStorageTexture(renderer.m_AutoExposureStorageSet, 0, 0, exposureTarget->GetUAV())) return false;
+                renderer.Commands().SetPipeline(renderer.m_AutoExposurePipeline);
+                renderer.Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, renderer.m_AutoExposurePipelineLayout);
+                renderer.Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
+                renderer.m_AutoExposureDescriptorPool.Bind(renderer.Commands().GetNative());
+                if (!bindDescriptorSet(0, renderer.m_AutoExposureTextureSet, nri::BindPoint::COMPUTE) ||
+                    !bindDescriptorSet(1, renderer.m_AutoExposureStorageSet, nri::BindPoint::COMPUTE)) return false;
+                renderer.Commands().Dispatch(1, 1, 1); ++dispatchCount;
+            }
+
             if (useBloom && renderer.m_OpaqueSceneColor && renderer.m_OpaqueSceneColor->IsValid()) {
                 if (!beginPass("BloomCopy")) return false;
                 renderer.Commands().CopyTexture(*renderer.m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
@@ -154,35 +229,6 @@ namespace Axle::Passes {
                  if (!bindDescriptorSet(0, renderer.m_BloomApplyDescriptorSet)) return false;
                 renderer.Commands().Draw(3, 1, 0, 0);
                 endRendering();
-            }
-
-            // 7c.5. Histogram-based eye adaptation on the linear HDR scene.
-            if (useAutoExposure) {
-                if (!useToneMap) {
-                    if (!beginPass("AutoExposureCopy")) return false;
-                    renderer.Commands().CopyTexture(*renderer.m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
-                }
-                if (!beginPass("AutoExposure")) return false;
-                const uint32_t exposureWidth = useToneMap && renderer.m_IntermediateHDRTarget ? renderer.m_IntermediateHDRTarget->GetWidth() : width;
-                const uint32_t exposureHeight = useToneMap && renderer.m_IntermediateHDRTarget ? renderer.m_IntermediateHDRTarget->GetHeight() : height;
-                RHIExposureConstants exposureConstants{};
-                exposureConstants.ScreenSize = glm::vec4(static_cast<float>(exposureWidth), static_cast<float>(exposureHeight),
-                    1.0f / static_cast<float>(exposureWidth), 1.0f / static_cast<float>(exposureHeight));
-                exposureConstants.ExposureParams = glm::vec4(-10.0f, 6.0f, settings.AutoExposureSpeed, 1.0f / 60.0f);
-                exposureConstants.ExposureLimits = glm::vec4(settings.AutoExposureMin, settings.AutoExposureMax, settings.AutoExposureKeyValue, 0.0f);
-                if (!passUniform().UpdateData(&exposureConstants, sizeof(RHIExposureConstants))) return false;
-                RHITexture* exposureSource = useToneMap && renderer.m_IntermediateHDRTarget ? renderer.m_IntermediateHDRTarget : renderer.m_OpaqueSceneColor;
-                auto* exposureTarget = viewTargets->GetExposure();
-                if (!exposureSource || !exposureTarget || !renderer.m_AutoExposureDescriptorPool.UpdateTexture(renderer.m_AutoExposureTextureSet, 0, 0, exposureSource->GetSRV()) ||
-                    !renderer.m_AutoExposureDescriptorPool.UpdateSampler(renderer.m_AutoExposureTextureSet, 1, 0, renderer.m_AutoExposureSampler.GetNative()) ||
-                    !renderer.m_AutoExposureDescriptorPool.UpdateStorageTexture(renderer.m_AutoExposureStorageSet, 0, 0, exposureTarget->GetUAV())) return false;
-                renderer.Commands().SetPipeline(renderer.m_AutoExposurePipeline);
-                renderer.Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, renderer.m_AutoExposurePipelineLayout);
-                renderer.Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
-                renderer.m_AutoExposureDescriptorPool.Bind(renderer.Commands().GetNative());
-                 if (!bindDescriptorSet(0, renderer.m_AutoExposureTextureSet, nri::BindPoint::COMPUTE) ||
-                     !bindDescriptorSet(1, renderer.m_AutoExposureStorageSet, nri::BindPoint::COMPUTE)) return false;
-                renderer.Commands().Dispatch(1, 1, 1); ++dispatchCount;
             }
 
             // 7d. Temporal Anti-Aliasing (TAA) Pass

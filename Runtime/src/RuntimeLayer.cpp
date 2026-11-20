@@ -212,6 +212,7 @@ namespace Axle {
             request.GLTargetFBO = nullptr;
             request.Name = "RuntimeGameView";
             request.CameraCut = viewCamera != m_LastViewCamera;
+            request.DeltaTime = ts.GetSeconds();
 
             const auto result = RenderService::Get().RenderView(*m_Scene, request);
             if (!result.Success) throw std::runtime_error("Runtime view failed: " + result.ErrorMessage);

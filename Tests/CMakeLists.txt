@@ -37,7 +37,7 @@ add_executable(AxleEnvironmentRenderingTests EXCLUDE_FROM_ALL
     src/Test_EnvironmentRendering.cpp rendering/Test_M15_OcclusionRendering.cpp
     rendering/Test_M15_OcclusionSurfaceRendering.cpp rendering/Test_M15_HiZRendering.cpp
     rendering/Test_M15_ReflectionCaptureRendering.cpp rendering/Test_M15_FroxelFogRendering.cpp
-    rendering/Test_M15_DDGIRendering.cpp)
+    rendering/Test_M15_DDGIRendering.cpp rendering/Test_M15_PostTemporalRendering.cpp)
 target_link_libraries(AxleEnvironmentRenderingTests PRIVATE Axle::Scene glad glfw)
 target_compile_definitions(AxleEnvironmentRenderingTests PRIVATE
     AXLE_GTAO_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/GTAO.hlsl"
@@ -519,6 +519,7 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_M15_ReflectionCaptureContractUnit.cpp
     rendering/Test_M15_FroxelFogContractUnit.cpp
     rendering/Test_M15_DDGIContractUnit.cpp
+    rendering/Test_M15_PostTemporalContractUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
 # M15-U1-01.1 & M15-U1-01.4: inspect canonical shader sources for lighting & exposure contracts.
@@ -553,7 +554,10 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
       AXLE_EDITOR_LAYER_HEADER_PATH="${CMAKE_SOURCE_DIR}/Editor/src/EditorLayer.hpp"
       AXLE_DDGI_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/DDGI.hlsl"
       AXLE_DDGI_COMMON_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/DDGICommon.hlsli"
-      AXLE_DDGI_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/DDGIPass.cpp")
+      AXLE_DDGI_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/DDGIPass.cpp"
+      AXLE_AUTO_EXPOSURE_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/AutoExposure.hlsl"
+      AXLE_POST_PROCESS_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/PostProcessPass.cpp"
+      AXLE_RUNTIME_LAYER_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Runtime/src/RuntimeLayer.cpp")
 target_link_libraries(AxleRenderUnitTests PRIVATE
     Axle::Core
     Axle::Platform
@@ -590,6 +594,8 @@ add_test(NAME M15FroxelFogContract COMMAND $<TARGET_FILE:AxleRenderUnitTests> --
 set_tests_properties(M15FroxelFogContract PROPERTIES LABELS "render;fog;froxel;cpu;m15" TIMEOUT 30)
 add_test(NAME M15DDGIContract COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-ddgi-contract)
 set_tests_properties(M15DDGIContract PROPERTIES LABELS "render;gi;ddgi;cpu;m15" TIMEOUT 30)
+add_test(NAME M15U8PostTemporalContract COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-u8-contract)
+set_tests_properties(M15U8PostTemporalContract PROPERTIES LABELS "render;post;taa;cpu;m15" TIMEOUT 30)
 add_test(NAME RenderHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleRenderUnitTests> --case render-probe)
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES LABELS "render;cpu")
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES TIMEOUT 30)

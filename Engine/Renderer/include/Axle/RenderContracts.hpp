@@ -932,4 +932,35 @@ namespace Axle {
                                       bool& outEnable, std::array<uint32_t, 3>& outGridDims);
     }
 
+    // M15 Unit 8 (S8.1 / U8-A): Log-luminance histogram & eye adaptation contract
+    namespace AutoExposureContract {
+        inline constexpr uint32_t HistogramBinCount = 256u;
+        inline constexpr float MinLogLuminance = -10.0f;
+        inline constexpr float MaxLogLuminance = 10.0f;
+        inline constexpr float BlackPixelEpsilon = 1e-5f;
+
+        struct ReferenceExposureResult {
+            float AdaptedExposure = 1.0f;
+            float AverageLuminance = 0.0f;
+            float TargetExposure = 1.0f;
+            uint64_t ValidPixelCount = 0;
+            bool BlackFrame = false;
+        };
+
+        // Quantizes a linear luminance into a 256-bin log2 histogram slot [0..255].
+        // Returns false for non-finite or black (<= BlackPixelEpsilon) pixels.
+        bool QuantizeLogLuminanceBin(float luminance, float minLogLuma, float maxLogLuma, uint32_t& outBin);
+
+        // Exact CPU reference matching AutoExposure.hlsl global histogram reduction,
+        // first-frame/camera-cut reset, black-frame retention/fallback, and dt-invariant adaptation.
+        ReferenceExposureResult ComputeReferenceAdaptation(float prevExposure,
+                                                           const float* pixelRGBData,
+                                                           uint32_t pixelCount,
+                                                           const SceneRenderSettings& settings,
+                                                           float deltaSeconds,
+                                                           bool resetExposure,
+                                                           float minLogLuma = MinLogLuminance,
+                                                           float maxLogLuma = MaxLogLuminance);
+    }
+
 } // namespace Axle

@@ -79,6 +79,7 @@ namespace Axle {
         m_Temporal.Reset();
         m_FroxelHistories.clear();
         m_DDGIHistories.clear();
+        m_ExposureHistories.clear();
         m_PostProcess.Reset();
         m_Diagnostics.BeginFrame(0);
         return true;
@@ -100,6 +101,7 @@ namespace Axle {
         m_Temporal.Reset();
         m_FroxelHistories.clear();
         m_DDGIHistories.clear();
+        m_ExposureHistories.clear();
         m_PostProcess.Reset();
         m_Diagnostics.BeginFrame(0);
     }
@@ -129,11 +131,14 @@ namespace Axle {
         if (Any(reasons & ViewResetReason::DeviceEpoch)) {
             m_FroxelHistories.clear();
             m_DDGIHistories.clear();
+            m_ExposureHistories.clear();
         }
         std::erase_if(m_FroxelHistories, [](const auto& entry) { return entry.first.expired(); });
         std::erase_if(m_DDGIHistories, [](const auto& entry) { return entry.first.expired(); });
+        std::erase_if(m_ExposureHistories, [](const auto& entry) { return entry.first.expired(); });
         if (input.CameraCut || !GetFroxelHistory().Valid) m_FroxelHistories.erase(m_TargetIdentity);
         if (!GetDDGIHistory().Valid) m_DDGIHistories.erase(m_TargetIdentity);
+        if (input.CameraCut || !GetExposureHistory().Valid) m_ExposureHistories.erase(m_TargetIdentity);
         if (Any(reasons & (ViewResetReason::Initial | ViewResetReason::Resize | ViewResetReason::ViewSwitch |
                            ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
                            ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
@@ -203,6 +208,32 @@ namespace Axle {
         m_DDGIHistories.erase(m_TargetIdentity);
     }
 
+    ExposureHistoryFrame ViewContext::GetExposureHistory() const {
+        if (m_Input.CameraCut) return {};
+        const auto it = m_ExposureHistories.find(m_TargetIdentity);
+        if (it == m_ExposureHistories.end()) return {};
+        const auto& entry = it->second;
+        if (entry.TargetGeneration != m_TargetGeneration ||
+            entry.SceneInstanceID != m_Input.SceneInstanceID ||
+            entry.Kind != m_Input.Kind) {
+            return {};
+        }
+        return entry.Frame;
+    }
+
+    void ViewContext::CommitExposureHistory(const ExposureHistoryFrame& frame) {
+        if (!frame.Valid || m_TargetIdentity.expired()) {
+            m_ExposureHistories.erase(m_TargetIdentity);
+            return;
+        }
+        m_ExposureHistories.insert_or_assign(m_TargetIdentity, ExposureHistoryEntry{
+            frame, m_TargetGeneration, m_Input.SceneInstanceID, m_Input.Kind});
+    }
+
+    void ViewContext::InvalidateExposureHistory() {
+        m_ExposureHistories.erase(m_TargetIdentity);
+    }
+
     bool ViewContext::ObserveMaterialGeneration(uint64_t generation) {
         const auto history = m_FroxelHistories.find(m_TargetIdentity);
         if (history != m_FroxelHistories.end() && history->second.MaterialGeneration != generation)
@@ -234,12 +265,16 @@ namespace Axle {
             if (Any(reason & ViewResetReason::DeviceEpoch)) {
                 m_FroxelHistories.clear();
                 m_DDGIHistories.clear();
+                m_ExposureHistories.clear();
             } else {
                 m_FroxelHistories.erase(m_TargetIdentity);
                 if (Any(reason & (ViewResetReason::Initial | ViewResetReason::ViewSwitch |
                                   ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
                                   ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration))) {
                     m_DDGIHistories.erase(m_TargetIdentity);
+                }
+                if (Any(reason & (ViewResetReason::Initial | ViewResetReason::ViewSwitch | ViewResetReason::CameraCut))) {
+                    m_ExposureHistories.erase(m_TargetIdentity);
                 }
             }
             m_Temporal.Reset(static_cast<uint32_t>(reason));
@@ -279,6 +314,7 @@ namespace Axle {
             m_FrameActive = false;
             m_FroxelHistories.erase(m_TargetIdentity);
             m_DDGIHistories.erase(m_TargetIdentity);
+            m_ExposureHistories.erase(m_TargetIdentity);
             m_Input.Targets.reset();
             return false;
         }
@@ -297,6 +333,7 @@ namespace Axle {
         const bool result = m_Frame.Abandon();
         m_FroxelHistories.erase(m_TargetIdentity);
         m_DDGIHistories.erase(m_TargetIdentity);
+        m_ExposureHistories.erase(m_TargetIdentity);
         m_FrameActive = false;
         m_Input.Targets.reset();
         return result;

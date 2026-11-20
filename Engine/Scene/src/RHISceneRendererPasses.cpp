@@ -242,9 +242,15 @@ namespace Axle {
                 bloomResources[level] = graph.Import("Bloom" + std::to_string(level), bloom->GetNative());
             }
         }
-        const bool useAutoExposure = settings.EnableAutoExposure && activeSampleCount == 1 && m_AutoExposurePipeline &&
+        const bool useAutoExposure = settings.EnableAutoExposure && activeSampleCount == 1 &&
+            m_AutoExposureClearPipeline && m_AutoExposureHistogramPipeline && m_AutoExposurePipeline &&
+            m_AutoExposureHistogram.IsValid() && m_AutoExposureHistogram.GetUAV() && m_AutoExposureHistogram.GetSRV() &&
+            (useToneMap ? (m_IntermediateHDRTarget && m_IntermediateHDRTarget->IsValid())
+                        : (m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid())) &&
             viewTargets->GetExposure() && viewTargets->GetExposure()->IsValid() &&
             viewTargets->GetExposure()->GetUAV() && viewTargets->GetExposure()->GetSRV();
+        const ExposureHistoryFrame prevExposureHistory = viewCtx.GetExposureHistory();
+        const bool resetAutoExposure = useAutoExposure && (!prevExposureHistory.Valid || !prevExposureHistory.AutoExposureEnabled);
         auto* ddgiIrradTex = viewTargets ? viewTargets->GetDDGI() : nullptr;
         auto* ddgiDistTex = viewTargets ? viewTargets->GetDDGIDistance() : nullptr;
         nri::Pipeline* ddgiCapturePipeline = GetOrCreateDDGICapturePipeline();
@@ -280,6 +286,7 @@ namespace Axle {
         nri::Descriptor* activeForwardDDGICBV = useDDGI ? m_DDGIConstantBuffer.GetCBV() : m_DisabledDDGIConstantBuffer.GetCBV();
         Passes::DDGIPlan ddgiPlan;
         const auto exposureInput = useAutoExposure ? graph.Import("ExposureInput", useToneMap ? m_IntermediateHDRTarget->GetNative() : m_OpaqueSceneColor->GetNative()) : output;
+        const auto exposureHistogram = useAutoExposure ? graph.Import("ExposureHistogram", m_AutoExposureHistogram.GetNative()) : output;
         const auto exposureOutput = useAutoExposure ? graph.Import("ExposureOutput", viewTargets->GetExposure()->GetNative()) : output;
 
         RHITexture* history0 = viewTargets ? viewTargets->Get(RHIViewTarget::History0) : nullptr;
@@ -1891,13 +1898,14 @@ namespace Axle {
             if (!Passes::PostProcessPass::Record(*this,
                 {settings, viewTargets, temporalSelection, viewProjZO, sceneTargetTexture,
                  sceneTargetRTV, colorTarget, colorRTV, sceneTargetFormat, width, height,
-                 jitterX, jitterY, useBloom, useAutoExposure, useTAA, useToneMap, useFXAA,
-                 historyRead, historyWrite, dispatchCount}, postOps)) return fail();
+                 jitterX, jitterY, view.DeltaTime, resetAutoExposure,
+                 useBloom, useAutoExposure, useTAA, useToneMap, useFXAA,
+                 historyRead, historyWrite, &m_AutoExposureHistogram, dispatchCount}, postOps)) return fail();
 
             return {};
         }, [&](RenderGraph& graph) {
             Passes::PostProcessPass::Declare(graph, {sceneColor, sceneDepth, output, hdr, fxaa,
-                bloomInput, exposureInput, exposureOutput, taaHistoryRead, taaHistoryWrite,
+                bloomInput, exposureInput, exposureHistogram, exposureOutput, taaHistoryRead, taaHistoryWrite,
                 bloomResources, useBloom, useAutoExposure, useTAA, useToneMap, useFXAA});
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useBloom) {
@@ -1906,7 +1914,10 @@ namespace Axle {
                 for (int i=static_cast<int>(bloomResources.size())-2; i>=0; --i)
                     if (!uniform("BloomUp"+std::to_string(i),sizeof(RHIBloomConstants))) return fail();
             }
-            if (useAutoExposure && !uniform("AutoExposure",sizeof(RHIExposureConstants))) return fail();
+            if (useAutoExposure &&
+                (!uniform("AutoExposureHistogramClear",sizeof(RHIExposureConstants)) ||
+                 !uniform("AutoExposureHistogram",sizeof(RHIExposureConstants)) ||
+                 !uniform("AutoExposure",sizeof(RHIExposureConstants)))) return fail();
             if (useTAA) {
                 // A fresh frame arena bounds memory and removes the preceding
                 // frame's history dependencies before declaring current slots.
@@ -2030,6 +2041,13 @@ namespace Axle {
             viewCtx.InvalidateDDGIHistory();
         }
         viewCtx.Temporal().Commit(viewProjZO, useTAA);
+        if (!captureActive && !planarActive) {
+            if (useAutoExposure) {
+                viewCtx.CommitExposureHistory({true, true});
+            } else {
+                viewCtx.InvalidateExposureHistory();
+            }
+        }
         m_LocalShadows.OnSubmitted();
         if (m_PlanarSession.Active) {
             m_PlanarLastCompletion = viewCtx.GetCompletion();

@@ -37,6 +37,7 @@ bool RunM15AreaLightRenderingTests(Axle::RHISceneRenderer& renderer, const std::
 bool RunM15ReflectionCaptureTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15FroxelFogTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15DDGITests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
+bool RunM15PostTemporalTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15ReflectionDeviceResetTests(const Axle::RHI::RHIDeviceDesc& initDesc);
 bool RunM15OcclusionSphereTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
                               const Axle::PerspectiveCamera& camera, Axle::SceneRenderSettings settings,
@@ -52,6 +53,7 @@ std::filesystem::path Output;
 bool AreaLightsOnly = false;
 bool FroxelFogOnly = false;
 bool DDGIOnly = false;
+bool PostTemporalOnly = false;
 
 bool TimestampProbe(uint64_t& ticks, double& milliseconds) {
     auto& device = RHIDevice::Get();
@@ -225,10 +227,11 @@ bool Native(RHIType backend) {
     TextureDescriptor authored; authored.Type="CubemapHDR"; authored.Source="red.hdr";
     CHECK(TextureDescriptor::Save((Output/"sky.axleasset").string(),authored));
     RHISceneRenderer renderer; CHECK(renderer.Init(device,false));
-    if (AreaLightsOnly || FroxelFogOnly || DDGIOnly) {
+    if (AreaLightsOnly || FroxelFogOnly || DDGIOnly || PostTemporalOnly) {
         const bool ok = AreaLightsOnly ? RunM15AreaLightRenderingTests(renderer, Output)
                       : FroxelFogOnly  ? RunM15FroxelFogTests(renderer, Output)
-                                       : RunM15DDGITests(renderer, Output);
+                      : DDGIOnly       ? RunM15DDGITests(renderer, Output)
+                                       : RunM15PostTemporalTests(renderer, Output);
         renderer.Shutdown();
         return ok && device.WaitIdle() && GetRHIValidationErrorCount() == 0;
     }
@@ -236,6 +239,7 @@ bool Native(RHIType backend) {
     CHECK(RunM15OcclusionHorizonTests(Output));
     CHECK(RunM15FroxelFogTests(renderer, Output));
     CHECK(RunM15DDGITests(renderer, Output));
+    CHECK(RunM15PostTemporalTests(renderer, Output));
     auto& environment=renderer.GetEnvironment(); EnvironmentBakeSettings bake;
     bake.EnvironmentSize=16; bake.IrradianceSize=4; bake.PrefilterSize=16; bake.PrefilterMips=5; bake.BRDFSize=16; bake.Samples=64;
     CHECK(environment.SetBakeSettings(bake));
@@ -1095,7 +1099,8 @@ int main(int argc,char** argv) {
         AreaLightsOnly = suite == "--m15-area-lights";
         FroxelFogOnly = suite == "--m15-froxel-fog";
         DDGIOnly = suite == "--m15-ddgi";
-        if ((!AreaLightsOnly && !FroxelFogOnly && !DDGIOnly) || std::string(argv[1]) == "gl") return 2;
+        PostTemporalOnly = suite == "--m15-u8";
+        if ((!AreaLightsOnly && !FroxelFogOnly && !DDGIOnly && !PostTemporalOnly) || std::string(argv[1]) == "gl") return 2;
     }
     Output=std::filesystem::absolute(argv[2]);std::filesystem::create_directories(Output);
     try { return (std::string(argv[1])=="gl"?OpenGL():Native(std::string(argv[1])=="vulkan"?RHIType::Vulkan:RHIType::Direct3D12))&&GetRHIValidationErrorCount()==0?0:1; }

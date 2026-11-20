@@ -40,6 +40,7 @@ namespace Axle {
 
         std::string Name = "DefaultView";
         bool CameraCut = false; // Set on the first request after a discontinuous camera change.
+        float DeltaTime = 1.0f / 60.0f; // Real frame delta time in seconds for frame-rate invariant post passes.
     };
 
     struct RenderResult {

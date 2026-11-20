@@ -1541,6 +1541,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     request.Camera = activeCamera; request.Settings = renderSettings; request.PhysicsScene = m_PhysicsScene.get();
     request.Name = "Editor main view";
     request.CameraCut = m_PendingViewCameraCut || viewCamera != m_LastViewCamera;
+    request.DeltaTime = ts.GetSeconds();
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
         if (!m_RHIViewport->SetRenderOptions(renderSettings, authoredFog ? &*authoredFog : nullptr,
                                              authoredDDGI ? &*authoredDDGI : nullptr)) {

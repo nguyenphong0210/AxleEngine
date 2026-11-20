@@ -148,6 +148,18 @@ To prevent the current 2D raymarch prototype from hiding resource, physical-inte
 
 **U6-E review:** The [Codex review and verification](../../reviews/M15_U6_E_CODEX_REVIEW.md) records the corrected implementation and requirement evidence. Formal acceptance remains open for the focused independent recheck of the corrections.
 
+#### U8 Execution Batches (U8-A through U8-E)
+
+To keep HDR post-processing and temporal reconstruction modular, independently verifiable on CPU and native D3D12/Vulkan, and isolated from motion-vector/shader layout regressions, U8 (`S8.1`–`S8.6`) is split into five sequential checkpoints covering all 42 atomic leaves:
+
+| Batch | Atomic Leaves | Scope Focus | Review Boundary |
+|---|---|---|---|
+| **U8-A** | `M15-U8-01.1` → `M15-U8-05.4` | Auto Exposure & metering pipeline order: full-viewport log-luminance histogram + global reduction, real `DeltaTime` adaptation across `30/60/120 Hz`, per-view exposure history & first-frame/black-frame/camera-cut policies, pre-Bloom/UI-excluded metering source, `ToneMapping` feed, mixed-tile & rate-invariance tests (`M15-U8-02.1/02.3/03.1/04` `EDITOR VISUAL` stay explicitly open if display is offline). | Consolidated U8 review |
+| **U8-B** | `M15-U8-06` → `M15-U8-10.4` | 6-level physically-based Bloom: single `PrefilterThreshold` pass on level 0, validated 6-mip dimensions for odd/small views, additive upsample reconstruction preserving finer levels, single-application tint & intensity at composite, and impulse-halo / gain / odd-small / HDR-SDR fixtures. | Consolidated U8 review |
+| **U8-C** | `M15-U8-11.1` → `11.3`, `13.1` → `13.5` | Motion vectors & temporal reset infrastructure: stable per-entity `PrevWorldTransform` cache, native `Velocity` target & camera/object motion-vector generation with jitter cancellation, and complete 5-trigger history resets (`Resize`, `ViewSwitch`, `CameraCut`, `Settings/Format`, `SceneRevision`). | Consolidated U8 review |
+| **U8-D** | `M15-U8-12.1` → `12.2`, `15.1` → `15.4` | TAA resolve core: closest `3x3` depth & velocity sampling, disocclusion/invalid-history rejection, explicit resource declarations, no silent FXAA-on-TAA stacking, and `static shimmer`, `moving object`, `disocclusion`, `resize/switch` native tests. | Consolidated U8 review |
+| **U8-E** | `M15-U8-14.1` → `14.3`, `15.5` | TAA edge policies & U8 closure: transparent geometry & reactive mask policies, unjittered UI/gizmo policy, `ghosting` fixture, post/temporal GPU timestamp & VRAM accounting, and final `PLAN.md` + exchange delivery. | Consolidated U8 review |
+
 **Deferred Editor visual policy (user steering 2026-11-17):** Open `EDITOR VISUAL` gates (`M15-U4-06.5`, `U4-E`, `U5-03`, and new U5 visual gates) remain explicitly marked `NOT RUN` / open during automated batch delivery and will be verified in a consolidated Editor capture session. Do not mark any `EDITOR VISUAL` item `PASS` or close its parent acceptance claim until the required Debug/Release Editor screenshots are attached and inspected.
 
 ## 4. Canonical atomic execution and acceptance checklist

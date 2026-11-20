@@ -56,6 +56,7 @@ namespace Axle {
         uint64_t FeatureGeneration = 0;
         bool CameraCut = false;
         uint64_t SceneInstanceID = 0;
+        float DeltaTime = 1.0f / 60.0f;
     };
 
     struct FroxelHistoryFrame {
@@ -72,6 +73,11 @@ namespace Axle {
         uint32_t ProbeCount = 0;
         uint32_t UpdatedProbeCount = 0;
         bool Valid = false;
+    };
+
+    struct ExposureHistoryFrame {
+        bool Valid = false;
+        bool AutoExposureEnabled = false;
     };
 
     // Owns one view's frame recording, target generation identity, reset state
@@ -125,6 +131,9 @@ namespace Axle {
         DDGIHistoryFrame GetDDGIHistory() const;
         void CommitDDGIHistory(const DDGIHistoryFrame& frame);
         void InvalidateDDGIHistory();
+        ExposureHistoryFrame GetExposureHistory() const;
+        void CommitExposureHistory(const ExposureHistoryFrame& frame);
+        void InvalidateExposureHistory();
 
         TemporalService& Temporal() { return m_Temporal; }
         const TemporalService& Temporal() const { return m_Temporal; }
@@ -160,10 +169,16 @@ namespace Axle {
             uint64_t TargetGeneration, SceneRevision, SceneInstanceID, FeatureGeneration, MaterialGeneration;
             RenderViewKind Kind;
         };
+        struct ExposureHistoryEntry {
+            ExposureHistoryFrame Frame;
+            uint64_t TargetGeneration, SceneInstanceID;
+            RenderViewKind Kind;
+        };
         // Concurrently live view targets retain their own history without being kept alive here.
         using ViewTargetIdentity = std::weak_ptr<RHI::RHIViewTargets>;
         std::map<ViewTargetIdentity, FroxelHistoryEntry, std::owner_less<ViewTargetIdentity>> m_FroxelHistories;
         std::map<ViewTargetIdentity, DDGIHistoryEntry, std::owner_less<ViewTargetIdentity>> m_DDGIHistories;
+        std::map<ViewTargetIdentity, ExposureHistoryEntry, std::owner_less<ViewTargetIdentity>> m_ExposureHistories;
         PostProcessService m_PostProcess;
         RenderDiagnostics m_Diagnostics;
     };

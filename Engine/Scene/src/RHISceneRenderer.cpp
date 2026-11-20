@@ -609,21 +609,28 @@ namespace Axle {
 
         if (!m_BloomConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIBloomConstants), RHIMemoryLocation::HostUpload, "BloomConstantsBuffer"))) return false;
 
-        // Initialize histogram-based auto exposure. The result is kept in a
-        // one-pixel storage target and can be consumed by later post passes.
+        // Initialize histogram-based auto exposure. The 256-bin R32_UINT histogram
+        // captures every viewport pixel; the reduced 1x1 target feeds ToneMapping.
         if (!CompileAutoExposureShaders(device) || !CreateAutoExposurePipelineLayout(device) || !CreateAutoExposurePipeline(device)) return false;
         if (!m_AutoExposureSampler.Init(RHISamplerDesc::Point(RHIAddressMode::ClampToEdge))) return false;
+        if (!m_AutoExposureHistogram.Init(RHITextureDesc::StorageTexture2D(
+                AutoExposureContract::HistogramBinCount, 1, RHITextureFormat::R32_UINT, "AutoExposureHistogram"))) {
+            return false;
+        }
         RHIDescriptorPoolDesc exposurePoolDesc;
-        exposurePoolDesc.MaxDescriptorSets = 8;
-        exposurePoolDesc.MaxTextures = 8;
+        exposurePoolDesc.MaxDescriptorSets = 16;
+        exposurePoolDesc.MaxTextures = 16;
         exposurePoolDesc.MaxSamplers = 8;
-        exposurePoolDesc.MaxStorageTextures = 8;
+        exposurePoolDesc.MaxStorageTextures = 16;
         exposurePoolDesc.MaxConstantBuffers = 8;
         if (!m_AutoExposureDescriptorPool.Init(exposurePoolDesc)) return false;
+        m_AutoExposureHistTextureSet = m_AutoExposureDescriptorPool.AllocateDescriptorSet(m_AutoExposureHistPipelineLayout, 0);
+        m_AutoExposureHistStorageSet = m_AutoExposureDescriptorPool.AllocateDescriptorSet(m_AutoExposureHistPipelineLayout, 1);
         m_AutoExposureTextureSet = m_AutoExposureDescriptorPool.AllocateDescriptorSet(m_AutoExposurePipelineLayout, 0);
         m_AutoExposureStorageSet = m_AutoExposureDescriptorPool.AllocateDescriptorSet(m_AutoExposurePipelineLayout, 1);
-        if (!m_AutoExposureTextureSet || !m_AutoExposureStorageSet) return false;
-        if (!m_AutoExposureDescriptorPool.UpdateSampler(m_AutoExposureTextureSet, 1, 0, m_AutoExposureSampler.GetNative())) return false;
+        if (!m_AutoExposureHistTextureSet || !m_AutoExposureHistStorageSet ||
+            !m_AutoExposureTextureSet || !m_AutoExposureStorageSet) return false;
+        if (!m_AutoExposureDescriptorPool.UpdateSampler(m_AutoExposureHistTextureSet, 1, 0, m_AutoExposureSampler.GetNative())) return false;
         if (!m_AutoExposureConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIExposureConstants), RHIMemoryLocation::HostUpload, "AutoExposureConstantsBuffer"))) return false;
 
         if (!CompileDDGIShaders(device) || !CreateDDGIPipelineLayout(device) || !CreateDDGIPipeline(device)) return false;
@@ -897,9 +904,15 @@ namespace Axle {
         m_BloomDescriptorPool.Shutdown();
         m_BloomSampler.Shutdown();
 
+        m_AutoExposureClearPipeline = nullptr;
+        m_AutoExposureHistogramPipeline = nullptr;
         m_AutoExposurePipeline = nullptr;
+        m_AutoExposureHistPipelineLayout.Shutdown();
         m_AutoExposurePipelineLayout.Shutdown();
         m_AutoExposureConstantBuffer.Shutdown();
+        m_AutoExposureHistogram.Shutdown();
+        m_AutoExposureHistTextureSet = nullptr;
+        m_AutoExposureHistStorageSet = nullptr;
         m_AutoExposureTextureSet = nullptr;
         m_AutoExposureStorageSet = nullptr;
         m_AutoExposureDescriptorPool.Shutdown();
@@ -3319,44 +3332,95 @@ namespace Axle {
         std::stringstream sourceStream; sourceStream << file.rdbuf();
         const auto source = sourceStream.str();
         if (source.empty()) return false;
-        RHIShaderCompileDesc desc;
-        desc.SourcePath = shaderPath.string(); desc.Source = source; desc.EntryPoint = "CSMain";
-        desc.Stage = RHIShaderStage::Compute; desc.HLSLVersion = "2021"; desc.ShaderModel = "6_0";
-        desc.Format = device.GetCapabilities().ActiveBackend == RHIType::Vulkan ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
-        desc.Optimization = true;
-        auto result = RHIShaderCompiler::Get().Compile(desc);
-        if (!result.Success) { AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile AutoExposure CS: {0}", result.ErrorMessage); return false; }
-        m_AutoExposureComputeShader = result.Bytecode;
-        return true;
+        const RHIShaderFormat format = device.GetCapabilities().ActiveBackend == RHIType::Vulkan
+            ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        auto compileEntry = [&](const char* entry, RHIShaderBytecode& outBytecode) -> bool {
+            RHIShaderCompileDesc desc;
+            desc.SourcePath = shaderPath.string();
+            desc.Source = source;
+            desc.EntryPoint = entry;
+            desc.Stage = RHIShaderStage::Compute;
+            desc.HLSLVersion = "2021";
+            desc.ShaderModel = "6_0";
+            desc.Format = format;
+            desc.Optimization = true;
+            const auto result = RHIShaderCompiler::Get().Compile(desc);
+            if (!result.Success) {
+                AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile AutoExposure CS '{0}': {1}", entry, result.ErrorMessage);
+                return false;
+            }
+            outBytecode = result.Bytecode;
+            return true;
+        };
+        return compileEntry("CSClearHistogram", m_AutoExposureClearShader) &&
+               compileEntry("CSBuildHistogram", m_AutoExposureHistogramShader) &&
+               compileEntry("CSReduceExposure", m_AutoExposureComputeShader);
     }
 
     bool RHISceneRenderer::CreateAutoExposurePipelineLayout(RHIDevice& device) {
         nri::RootDescriptorDesc root = {};
-        root.registerIndex = 0; root.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        root.registerIndex = 0;
+        root.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         root.shaderStages = nri::StageBits::COMPUTE_SHADER;
-        nri::DescriptorRangeDesc textureRanges[2] = {};
-        textureRanges[0].baseRegisterIndex = 0; textureRanges[0].descriptorNum = 1;
-        textureRanges[0].descriptorType = nri::DescriptorType::TEXTURE; textureRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
-        textureRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-        textureRanges[1].baseRegisterIndex = 0; textureRanges[1].descriptorNum = 1;
-        textureRanges[1].descriptorType = nri::DescriptorType::SAMPLER; textureRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
-        textureRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-        nri::DescriptorRangeDesc storage = {};
-        storage.baseRegisterIndex = 0; storage.descriptorNum = 1; storage.descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
-        storage.shaderStages = nri::StageBits::COMPUTE_SHADER; storage.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-        nri::DescriptorSetDesc sets[2] = {};
-        sets[0].registerSpace = 1; sets[0].ranges = textureRanges; sets[0].rangeNum = 2;
-        sets[1].registerSpace = 2; sets[1].ranges = &storage; sets[1].rangeNum = 1;
-        nri::PipelineLayoutDesc layout = {};
-        layout.rootRegisterSpace = 0; layout.rootDescriptors = &root; layout.rootDescriptorNum = 1;
-        layout.descriptorSets = sets; layout.descriptorSetNum = 2; layout.shaderStages = nri::StageBits::COMPUTE_SHADER;
-        return m_AutoExposurePipelineLayout.Init(layout);
+
+        // Clear / Build Histogram Layout: space1 (t0 HDRTexture, s0 LinearSampler), space2 (u1 HistogramUAV)
+        nri::DescriptorRangeDesc histTexRanges[2] = {};
+        histTexRanges[0].baseRegisterIndex = 0; histTexRanges[0].descriptorNum = 1;
+        histTexRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        histTexRanges[0].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        histTexRanges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        histTexRanges[1].baseRegisterIndex = 0; histTexRanges[1].descriptorNum = 1;
+        histTexRanges[1].descriptorType = nri::DescriptorType::SAMPLER;
+        histTexRanges[1].shaderStages = nri::StageBits::COMPUTE_SHADER;
+        histTexRanges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::DescriptorRangeDesc histStorage = {};
+        histStorage.baseRegisterIndex = 1; histStorage.descriptorNum = 1;
+        histStorage.descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        histStorage.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        histStorage.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::DescriptorSetDesc histSets[2] = {};
+        histSets[0].registerSpace = 1; histSets[0].ranges = histTexRanges; histSets[0].rangeNum = 2;
+        histSets[1].registerSpace = 2; histSets[1].ranges = &histStorage; histSets[1].rangeNum = 1;
+        nri::PipelineLayoutDesc histLayout = {};
+        histLayout.rootRegisterSpace = 0; histLayout.rootDescriptors = &root; histLayout.rootDescriptorNum = 1;
+        histLayout.descriptorSets = histSets; histLayout.descriptorSetNum = 2;
+        histLayout.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        if (!m_AutoExposureHistPipelineLayout.Init(histLayout)) return false;
+
+        // Global Reduction Layout: space1 (t1 HistogramSRV), space2 (u0 ExposureOutput UAV)
+        nri::DescriptorRangeDesc reduceTexRange = {};
+        reduceTexRange.baseRegisterIndex = 1; reduceTexRange.descriptorNum = 1;
+        reduceTexRange.descriptorType = nri::DescriptorType::TEXTURE;
+        reduceTexRange.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        reduceTexRange.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::DescriptorRangeDesc reduceStorage = {};
+        reduceStorage.baseRegisterIndex = 0; reduceStorage.descriptorNum = 1;
+        reduceStorage.descriptorType = nri::DescriptorType::STORAGE_TEXTURE;
+        reduceStorage.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        reduceStorage.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::DescriptorSetDesc reduceSets[2] = {};
+        reduceSets[0].registerSpace = 1; reduceSets[0].ranges = &reduceTexRange; reduceSets[0].rangeNum = 1;
+        reduceSets[1].registerSpace = 2; reduceSets[1].ranges = &reduceStorage; reduceSets[1].rangeNum = 1;
+        nri::PipelineLayoutDesc reduceLayout = {};
+        reduceLayout.rootRegisterSpace = 0; reduceLayout.rootDescriptors = &root; reduceLayout.rootDescriptorNum = 1;
+        reduceLayout.descriptorSets = reduceSets; reduceLayout.descriptorSetNum = 2;
+        reduceLayout.shaderStages = nri::StageBits::COMPUTE_SHADER;
+        return m_AutoExposurePipelineLayout.Init(reduceLayout);
     }
 
     bool RHISceneRenderer::CreateAutoExposurePipeline(RHIDevice& device) {
-        RHIComputePipelineDesc desc; desc.Layout = &m_AutoExposurePipelineLayout; desc.ComputeShader = m_AutoExposureComputeShader;
-        m_AutoExposurePipeline = RHIPipelineCache::Get().GetOrCreateComputePipeline(desc);
-        return m_AutoExposurePipeline != nullptr;
+        auto createCS = [](const RHIPipelineLayout& layout, const RHIShaderBytecode& shader) {
+            RHIComputePipelineDesc desc;
+            desc.Layout = &layout;
+            desc.ComputeShader = shader;
+            return RHIPipelineCache::Get().GetOrCreateComputePipeline(desc);
+        };
+        m_AutoExposureClearPipeline = createCS(m_AutoExposureHistPipelineLayout, m_AutoExposureClearShader);
+        m_AutoExposureHistogramPipeline = createCS(m_AutoExposureHistPipelineLayout, m_AutoExposureHistogramShader);
+        m_AutoExposurePipeline = createCS(m_AutoExposurePipelineLayout, m_AutoExposureComputeShader);
+        return m_AutoExposureClearPipeline != nullptr &&
+               m_AutoExposureHistogramPipeline != nullptr &&
+               m_AutoExposurePipeline != nullptr;
     }
 
     bool RHISceneRenderer::CompileDDGIShaders(RHIDevice& device) {
@@ -6423,7 +6487,7 @@ namespace Axle {
                                            const SceneRenderSettings& settings,
                                            PhysicsScene* physicsScene,
                                            std::shared_ptr<RHI::RHIViewTargets> viewTargets, bool cameraCut,
-                                           RenderViewKind viewKind)
+                                           RenderViewKind viewKind, float deltaTime)
     {
         ConsumeReadyGPUTimestamps();
         m_LastRenderSucceeded = false; m_LastCompletion = {};
@@ -6441,7 +6505,7 @@ namespace Axle {
                         nativeColor, colorRTV,
                         nativeDepth, depthDSV,
                         colorTarget->GetWidth(), colorTarget->GetHeight(),
-                        settings, physicsScene, viewTargets, cameraCut, viewKind);
+                        settings, physicsScene, viewTargets, cameraCut, viewKind, deltaTime);
     }
 
     void RHISceneRenderer::RenderWorldView(const RenderWorld& world,
@@ -6454,7 +6518,7 @@ namespace Axle {
                                        const SceneRenderSettings& requestedSettings,
                                        PhysicsScene* physicsScene,
                                        std::shared_ptr<RHI::RHIViewTargets> viewTargets, bool cameraCut,
-                                       RenderViewKind viewKind)
+                                       RenderViewKind viewKind, float deltaTime)
     {
         if (m_PlanarSession.Active) {
             m_PlanarRenderSucceeded = false;
@@ -6589,6 +6653,7 @@ namespace Axle {
         viewInput.SceneRevision = world.ViewSceneRevision.value_or(world.SceneRevision);
         viewInput.SceneInstanceID = world.SceneInstanceID;
         viewInput.CameraCut = cameraCut;
+        viewInput.DeltaTime = (std::isfinite(deltaTime) && deltaTime > 0.0f) ? deltaTime : 0.0f;
         // Effective material identity is published by the live pass schedule.
         viewInput.MaterialGeneration = viewCtx.GetInput().MaterialGeneration;
         viewCtx.Observe(viewInput, m_Device->GetEpoch());

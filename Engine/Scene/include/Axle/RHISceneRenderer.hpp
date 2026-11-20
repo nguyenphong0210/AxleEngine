@@ -191,9 +191,10 @@ namespace Axle {
 
     struct alignas(256) RHIExposureConstants {
         glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f };
-        glm::vec4 ExposureParams{ -10.0f, 6.0f, 3.0f, 1.0f };
+        glm::vec4 ExposureParams{ -10.0f, 10.0f, 3.0f, 1.0f / 60.0f };
         glm::vec4 ExposureLimits{ 0.1f, 10.0f, 0.18f, 0.0f };
-        glm::vec4 Reserved[13]{};
+        glm::vec4 ExposureFallback{ 1.0f, 0.0f, 0.0f, 0.0f };
+        glm::vec4 Reserved[12]{};
     };
     static_assert(sizeof(RHIExposureConstants) == 256, "RHIExposureConstants must be 256 bytes aligned!");
 
@@ -329,7 +330,8 @@ namespace Axle {
                              PhysicsScene* physicsScene = nullptr,
                              std::shared_ptr<RHI::RHIViewTargets> viewTargets = {},
                              bool cameraCut = false,
-                             RenderViewKind viewKind = RenderViewKind::Main);
+                             RenderViewKind viewKind = RenderViewKind::Main,
+                             float deltaTime = 1.0f / 60.0f);
 
         // Render an immutable RenderWorld snapshot into specific native render targets
         void RenderWorldView(const RenderWorld& world,
@@ -343,7 +345,8 @@ namespace Axle {
                              PhysicsScene* physicsScene = nullptr,
                              std::shared_ptr<RHI::RHIViewTargets> viewTargets = {},
                              bool cameraCut = false,
-                             RenderViewKind viewKind = RenderViewKind::Main);
+                             RenderViewKind viewKind = RenderViewKind::Main,
+                             float deltaTime = 1.0f / 60.0f);
 
         // Performance & Telemetry metrics
         uint32_t GetDrawCallCount() const { return m_LastDrawCallCount; }
@@ -1100,12 +1103,20 @@ namespace Axle {
         nri::DescriptorSet* m_BloomApplyDescriptorSet = nullptr;
 
         // Histogram-based auto exposure resources
+        RHI::RHIPipelineLayout m_AutoExposureHistPipelineLayout;
         RHI::RHIPipelineLayout m_AutoExposurePipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_AutoExposureClearPipeline;
+        RHI::RHIResourceRef<nri::Pipeline> m_AutoExposureHistogramPipeline;
         RHI::RHIResourceRef<nri::Pipeline> m_AutoExposurePipeline;
         RHI::RHIBuffer m_AutoExposureConstantBuffer;
+        RHI::RHITexture m_AutoExposureHistogram;
+        RHI::RHIShaderBytecode m_AutoExposureClearShader;
+        RHI::RHIShaderBytecode m_AutoExposureHistogramShader;
         RHI::RHIShaderBytecode m_AutoExposureComputeShader;
         RHI::RHISampler m_AutoExposureSampler;
         RHI::RHIDescriptorPool m_AutoExposureDescriptorPool;
+        nri::DescriptorSet* m_AutoExposureHistTextureSet = nullptr;
+        nri::DescriptorSet* m_AutoExposureHistStorageSet = nullptr;
         nri::DescriptorSet* m_AutoExposureTextureSet = nullptr;
         nri::DescriptorSet* m_AutoExposureStorageSet = nullptr;
 

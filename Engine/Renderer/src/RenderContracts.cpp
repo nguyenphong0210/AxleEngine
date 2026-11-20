@@ -3782,4 +3782,92 @@ namespace Axle {
         }
     } // namespace DDGIContract
 
+    namespace AutoExposureContract {
+        bool QuantizeLogLuminanceBin(float luminance, float minLogLuma, float maxLogLuma, uint32_t& outBin) {
+            outBin = 0u;
+            if (!std::isfinite(luminance) || luminance <= BlackPixelEpsilon) return false;
+            const float logRange = std::max(maxLogLuma - minLogLuma, 0.01f);
+            const float norm = std::clamp((std::log2(luminance) - minLogLuma) / logRange, 0.0f, 1.0f);
+            const uint32_t bin = static_cast<uint32_t>(norm * static_cast<float>(HistogramBinCount - 1u) + 0.5f);
+            outBin = std::min(bin, HistogramBinCount - 1u);
+            return true;
+        }
+
+        ReferenceExposureResult ComputeReferenceAdaptation(float prevExposure,
+                                                           const float* pixelRGBData,
+                                                           uint32_t pixelCount,
+                                                           const SceneRenderSettings& settings,
+                                                           float deltaSeconds,
+                                                           bool resetExposure,
+                                                           float minLogLuma,
+                                                           float maxLogLuma) {
+            ReferenceExposureResult result{};
+            const float minExp = std::min(settings.AutoExposureMin, settings.AutoExposureMax);
+            const float maxExp = std::max(settings.AutoExposureMin, settings.AutoExposureMax);
+            const float fallbackExp = std::clamp(
+                (std::isfinite(settings.Exposure) && settings.Exposure > 0.0f) ? settings.Exposure : 1.0f,
+                minExp, maxExp);
+            float validPrev = resetExposure ? fallbackExp : prevExposure;
+            if (!std::isfinite(validPrev) || validPrev <= 0.0f) validPrev = fallbackExp;
+            validPrev = std::clamp(validPrev, minExp, maxExp);
+
+            std::array<uint64_t, HistogramBinCount> histogram{};
+            uint64_t validCount = 0;
+            if (pixelRGBData && pixelCount > 0u) {
+                for (uint32_t i = 0; i < pixelCount; ++i) {
+                    const float r = pixelRGBData[i * 3u + 0u];
+                    const float g = pixelRGBData[i * 3u + 1u];
+                    const float b = pixelRGBData[i * 3u + 2u];
+                    if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b)) continue;
+                    const float luma = std::max(r, 0.0f) * 0.2126f + std::max(g, 0.0f) * 0.7152f + std::max(b, 0.0f) * 0.0722f;
+                    uint32_t bin = 0u;
+                    if (QuantizeLogLuminanceBin(luma, minLogLuma, maxLogLuma, bin)) {
+                        ++histogram[bin];
+                        ++validCount;
+                    }
+                }
+            }
+
+            result.ValidPixelCount = validCount;
+            if (validCount == 0u) {
+                result.BlackFrame = true;
+                result.AverageLuminance = 0.0f;
+                result.TargetExposure = resetExposure ? fallbackExp : validPrev;
+                result.AdaptedExposure = result.TargetExposure;
+                return result;
+            }
+
+            const float logRange = std::max(maxLogLuma - minLogLuma, 0.01f);
+            const double invTotal = 1.0 / static_cast<double>(std::max<uint32_t>(pixelCount, 1u));
+            double normWeightSum = 0.0;
+            double weightedLogSum = 0.0;
+            for (uint32_t bin = 0; bin < HistogramBinCount; ++bin) {
+                if (histogram[bin] == 0u) continue;
+                const double w = static_cast<double>(histogram[bin]) * invTotal;
+                const double binLog = static_cast<double>(minLogLuma) +
+                    (static_cast<double>(bin) / static_cast<double>(HistogramBinCount - 1u)) * static_cast<double>(logRange);
+                normWeightSum += w;
+                weightedLogSum += w * binLog;
+            }
+
+            const float avgLuma = static_cast<float>(std::exp2(weightedLogSum / std::max(normWeightSum, 1e-12)));
+            const float keyValue = (std::isfinite(settings.AutoExposureKeyValue) && settings.AutoExposureKeyValue > 0.0f)
+                ? settings.AutoExposureKeyValue : 0.18f;
+            const float targetExp = std::clamp(keyValue / std::max(avgLuma, BlackPixelEpsilon), minExp, maxExp);
+            result.AverageLuminance = avgLuma;
+            result.TargetExposure = targetExp;
+
+            if (resetExposure) {
+                result.AdaptedExposure = targetExp;
+            } else {
+                const float dt = (std::isfinite(deltaSeconds) && deltaSeconds > 0.0f) ? deltaSeconds : 0.0f;
+                const float speed = (std::isfinite(settings.AutoExposureSpeed) && settings.AutoExposureSpeed > 0.0f)
+                    ? settings.AutoExposureSpeed : 0.0f;
+                const float blend = 1.0f - std::exp(-dt * speed);
+                result.AdaptedExposure = std::clamp(validPrev + (targetExp - validPrev) * blend, minExp, maxExp);
+            }
+            return result;
+        }
+    } // namespace AutoExposureContract
+
 } // namespace Axle

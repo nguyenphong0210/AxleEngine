@@ -1,25 +1,25 @@
 {
   "schema_version": 1,
   "current_task": {
-    "id": "M15-U7",
-    "title": "Experimental DDGI: real world-space radiance acquisition, octahedral atlases, Chebyshev visibility, temporal/staggered updates, ForwardPBR/MaterialSurface diffuse integration, and budgeted validation",
-    "state": "ready_for_review",
+    "id": "M15-U8",
+    "title": "HDR post and temporal pipeline: global log-luminance auto exposure, 6-level additive Bloom, camera/object Motion Vectors, and TAA reprojection & policies",
+    "state": "in_progress",
     "coordinator": "User",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "b59339ba",
-    "u6e_codex_correction": "232298f5",
-    "user_instruction": "Start Milestone 15 U7 (Experimental DDGI) ahead of re-running display-blocked U6-E windowed DX12/GL checks.",
-    "user_scope": "M15-U7-01.1..M15-U7-08.4 across checkpoints U7-A, U7-B, U7-C, U7-D.",
+    "code_baseline": "1f0b293c",
+    "u7_delivery_head": "1f0b293c",
+    "user_instruction": "Lock the 5-batch plan (U8-A..U8-E) and implement Milestone 15 U8.",
+    "user_scope": "M15-U8-01.1..M15-U8-15.5 across checkpoints U8-A, U8-B, U8-C, U8-D, U8-E.",
     "plan_reference": "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
     "open_gates": [
-      "M15-U7-06 EDITOR VISUAL remains NOT RUN / BLOCKED (display offline: Win32_DesktopMonitor Availability=8); offscreen automated DDGI checks pass and M15-U7 awaits independent Codex review.",
+      "M15-U7 (commits 39372690..1f0b293c) is self-verified (offscreen) and ready_for_review awaiting independent Codex review; M15-U7-06 EDITOR VISUAL remains NOT RUN / BLOCKED while display is offline.",
       "M15-U6-E windowed D3D12 SwapChain and OpenGL WGL recheck checks were BLOCKED by offline display (Default Monitor Availability=8) in session b59339ba; M15-U6-05.1/05.2/07.5/07.6 remain unchecked until re-run or user closure.",
       "M15-U4-GTAO-HALO-FIX (delivered on e4b977fe, plus subsequent commits up to d4a07cd7) remains pending independent Codex review.",
       "Deferred interactive Editor visual gates from U4/U5 (M15-U4-06.5 and U5 visual leaves) remain open per consolidated S5.8 review."
     ],
-    "verification": "Self-verified across Debug & Release on commits 39372690 (U7-A), 3db0aba9 (U7-B), 281019df (U7-C), and 93baed17 (U7-D): check_architecture.py PASS, 7/7 MaterialGraph|M15DDGI CTests, AxleRenderUnitTests/AxleMaterialUnitTests/AxleSceneDataUnitTests PASS, full AxleEnvironmentRenderingTests {vulkan, dx12}, AxleRenderServiceTests {vulkan, dx12}, AxleRHIResourceViewTests {vulkan targets/storage, dx12 storage}, and offscreen AxleEditor --verify-empty-startup --rhi=vulkan PASS with 0 RHI validation errors.",
-    "next_action": "Independent Codex review of M15-U7 (commits 39372690..93baed17 + PLAN.md/exchange docs); interactive U7-06 EDITOR VISUAL & U6-E windowed DX12/GL rechecks await an active display."
+    "verification": "U8-A in progress from baseline 1f0b293c.",
+    "next_action": "Implement and verify U8-A (Exposure & metering pipeline order: full-frame histogram + global reduction, real DeltaTime, per-view exposure history, first-frame/black-frame/camera-cut, pre-Bloom/UI-excluded metering, mixed tiles & 30/60/120 Hz tests)."
   },
   "last_read": {
     "Codex": "CG-20261120T031716898976Z-GEMINI-058d23",
@@ -5173,6 +5173,17 @@
       "base_commit": "93baed177f48f1e281bc18b37b05e06a6b841fd0",
       "timestamp_utc": "2026-11-20T07:48:08.913577+00:00",
       "body": "DELIVERY: Milestone 15 Unit 7 (Experimental DDGI, M15-U7-01.1..08.4) is implemented and self-verified across checkpoints U7-A..U7-D; ready for independent Codex review (M15-U7-06 EDITOR VISUAL remains NOT RUN/BLOCKED while display is offline).\n\n1. Checkpoints & Delivered Commits:\n   - U7-A (39372690): Design gate & policy (docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/DDGI_ACQUISITION_POLICY.md), DDGIContract bounds/indexing (MaxProbeCount=16384, 64 MiB cap), RHIViewTargets dual RGBA16_FLOAT atlases (irradiance 6x6+1px=8x8 tile, distance moments 14x14+1px=16x16 tile), DDGIProbeGridComponent, extraction/serialization/Inspector/viewport wiring, and M15DDGIContract CPU tests.\n   - U7-B (3db0aba9): Real world-space amortized 6-face tile raster DDGICapture pass (RGBA16_FLOAT + D32_FLOAT scratch, max 32 probes/frame) independent of main-camera screen buffers, SV_IsFrontFace backface trap encoding, CSSeedClear/CSUpdateIrradiance/CSUpdateDistanceMoments compute passes, round-robin staggered updates, and scene/grid/epoch invalidation.\n   - U7-C (281019df): ForwardPBR.hlsl & MaterialSurface.hlsl diffuse GI integration (b8 DDGIConstants, t7/t8 space4 u_DDGIIrradiance/u_DDGIDistance), multi-bounce capture feedback, MSAA>1 / trapped-probe / disabled fallbacks to IBL, and ReconcileSPIRVDescriptorBindings in Engine/RHI/src/RHIShader.cpp fixing DXIL vs SPIR-V descriptor reflection parity.\n   - U7-D (93baed17 + PLAN/exchange docs commit): Native exit gates M15-U7-08.1..08.4 in Tests/rendering/Test_M15_DDGIRendering.cpp (oblique bounce & custom MaterialSurface u7d-ddgi-receiver.hlsl, 0.8m sealed wall zero-leakage <=2 RGB, live EnergyMultiplier/GridOrigin/MaxProbesPerFrame/Hysteresis sweeps, analytical sky-ambient & MSAA fallback parity) and live VRAM + NRI GPU timestamp scorecards across 4x2x4..32x16x32 at 1920x1080.\n\n2. Self-Verified Checks Executed After 93baed17 (RTX 3070, Debug & Release, zero RHI validation errors):\n   - python scripts/check_architecture.py -> PASS (621 files, 25 CMake files).\n   - CPU suites (Debug & Release): AxleRenderUnitTests --m15-ddgi-contract, full AxleRenderUnitTests, AxleMaterialUnitTests (5/5 suites), AxleSceneDataUnitTests (6/6), and ctest -C {Debug,Release} -R \"MaterialGraph|M15DDGI\" (7/7 PASS in both configs).\n   - Native Vulkan & D3D12 suites (Debug & Release, all exit 0):\n     * Full AxleEnvironmentRenderingTests (vulkan & dx12, including RunM15DDGITests U7-A..U7-D exit gates & scorecard generation).\n     * AxleRenderServiceTests (vulkan & dx12 -> OPT05 RenderService PASS).\n     * AxleRHIResourceViewTests (vulkan targets, vulkan storage, dx12 storage -> RHIResourceView: PASS).\n     * Offscreen AxleEditor --verify-empty-startup --rhi=vulkan (fallback=none, Error 0).\n\n3. Live GPU Scorecard Summary (1920x1080, RTX 3070, timing_samples=6, Release & Debug artifacts under build/Tests/Environment/{Debug,Release}/{vulkan,dx12}/M15_U7_ddgi_scorecard.txt):\n   - SmallRoom (4x2x4, 32 probes, 48x48/96x96): VRAM 0.6797 MiB (VK) / 0.7109 MiB (DX12); Release ddgi_steady_sum_ms = 4.3629 ms (VK) / 0.2425 ms (DX12).\n   - LocalRoom (8x4x8, 256 probes, 128x128/256x256): VRAM 1.1875 MiB (VK & DX12); Release ddgi_steady_sum_ms = 3.8842 ms (VK) / 0.2355 ms (DX12).\n   - Default (16x8x16, 2048 probes, 368x360/736x720): VRAM 5.9531 MiB (VK) / 6.0000 MiB (DX12); Release ddgi_steady_sum_ms = 3.7591 ms (VK) / 0.2359 ms (DX12).\n   - RefMax (32x16x32, 16384 probes, 1024x1024/2048x2048): VRAM 40.5625 MiB (VK & DX12); Release ddgi_steady_sum_ms = 3.6782 ms (VK) / 0.2430 ms (DX12).\n   - Debug steady_sum_ms ranges: VK 1.8628..4.8927 ms, DX12 1.2549..1.7753 ms.\n\n4. Open / Blocked Gates Preserved Honestly:\n   - M15-U7-06 EDITOR VISUAL remains unchecked in PLAN.md (NOT RUN/BLOCKED while display is offline: Win32_DesktopMonitor Availability=8).\n   - Independent Codex review of U7 (39372690..93baed17 + docs) is pending.\n   - Prior open gates preserved untouched: M15-U6-E windowed DX12/WGL checks (display-blocked on 232298f5), M15-U4-GTAO-HALO-FIX review, and deferred U4/U5 interactive Editor visual gates.\n"
+    },
+    {
+      "id": "CG-20261120T082412058927Z-GEMINI-d10f09",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "M15-U8",
+      "reply_to": "CG-20261120T074808913577Z-GEMINI-4e041a",
+      "base_commit": "1f0b293c",
+      "timestamp_utc": "2026-11-20T08:24:12.058927+00:00",
+      "body": "STATUS: Following explicit user instruction (\"chot 5 batch di, trien khai U8 giup toi nhe\"), starting Milestone 15 Unit 8 (HDR Post & Temporal Pipeline, M15-U8-01.1..15.5) from commit 1f0b293c across 5 sequential checkpoints (U8-A..U8-E):\n- U8-A (Exposure & metering order): M15-U8-01.1..05.4\n- U8-B (6-level additive Bloom): M15-U8-06..10.4\n- U8-C (Camera/Object Motion Vectors & 5 reset triggers): M15-U8-11.1..11.3, 13.1..13.5\n- U8-D (TAA closest-depth reprojection, disocclusion & core fixtures): M15-U8-12.1..12.2, 15.1..15.4\n- U8-E (Transparent/Reactive/UI policies, ghosting fixture & U8 scorecard/delivery): M15-U8-14.1..14.3, 15.5\n\nM15-U7 (39372690..1f0b293c) remains ready_for_review awaiting independent Codex review, and prior open gates (M15-U7-06 offline EDITOR VISUAL, M15-U6-E display-blocked windowed DX12/GL checks, M15-U4-GTAO-HALO-FIX, U4/U5 visual gates) remain preserved untouched.\n"
     }
   ],
   "deferred_tasks": [

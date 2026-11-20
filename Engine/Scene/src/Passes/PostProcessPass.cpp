@@ -49,10 +49,15 @@ namespace Axle::Passes {
                 {r.SceneDepth, Layout::CopySource},
                 {r.TAADepth, Layout::CopyDest, Access::Write}});
             const auto source = r.UseToneMap ? r.HDR : r.TAAColor;
-            graph.AddPass("TAAResolve", {
+            std::vector<RenderGraph::Use> taaUses = {
                 {source, Layout::ShaderResource}, {r.TAADepth, Layout::ShaderResource},
                 {r.TAAHistoryRead, Layout::ShaderResource},
-                {r.TAAHistoryWrite, Layout::ColorAttachment, Access::Write, Load::Clear}});
+                {r.TAAHistoryWrite, Layout::ColorAttachment, Access::Write, Load::Clear}
+            };
+            if (r.UseVelocity) {
+                taaUses.push_back({r.TAAVelocity, Layout::ShaderResource});
+            }
+            graph.AddPass("TAAResolve", std::move(taaUses));
             graph.AddPass("TAACopy", {
                 {r.TAAHistoryWrite, Layout::CopySource},
                 {r.UseToneMap ? r.HDR : r.SceneColor, Layout::CopyDest, Access::Write}});
@@ -65,7 +70,7 @@ namespace Axle::Passes {
                 {r.HDR, Layout::ShaderResource},
                 {r.FXAA, Layout::ColorAttachment, Access::Write, Load::Clear}});
         }
-        if (r.UseFXAA) graph.AddPass("FXAA", {
+        if (r.UseFXAA && !r.UseTAA) graph.AddPass("FXAA", {
             {r.FXAA, Layout::ShaderResource}, {r.Output, Layout::ColorAttachment, Access::Write, Load::Clear}});
     }
 
@@ -83,7 +88,8 @@ namespace Axle::Passes {
         const auto width = i.Width, height = i.Height;
         const auto jitterX = i.JitterX, jitterY = i.JitterY;
         const bool useBloom = i.UseBloom, useAutoExposure = i.UseAutoExposure;
-        const bool useTAA = i.UseTAA, useToneMap = i.UseToneMap, useFXAA = i.UseFXAA;
+        const bool useTAA = i.UseTAA, useVelocity = i.UseVelocity, useToneMap = i.UseToneMap;
+        const bool useFXAA = i.UseFXAA && !useTAA;
         auto* historyRead = i.HistoryRead;
         auto* historyWrite = i.HistoryWrite;
         auto& dispatchCount = i.DispatchCount;
@@ -310,22 +316,33 @@ namespace Axle::Passes {
 
                 if (!beginPass("TAAResolve")) return false;
                 RHITAAConstants taaConstants{};
-                taaConstants.InvViewProj = glm::inverse(viewProjZO);
-                taaConstants.PrevViewProj = temporalSelection.HistoryValid ? renderer.ActiveViewContext().Temporal().GetPreviousViewProjection() : viewProjZO;
+                taaConstants.InvViewProj = glm::inverse(i.UnjitteredViewProjectionZO);
+                taaConstants.PrevViewProj = temporalSelection.HistoryValid
+                    ? renderer.ActiveViewContext().Temporal().GetPreviousUnjitteredViewProjection()
+                    : i.UnjitteredViewProjectionZO;
                 taaConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
                                                     1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
                 taaConstants.TAAParams = glm::vec4(jitterX, jitterY, settings.TAAFeedbackMin, settings.TAAFeedbackMax);
-                taaConstants.Reserved[0].x = temporalSelection.HistoryValid ? 1.0f : 0.0f;
+                const bool hasVelocitySRV = useVelocity && i.VelocityTexture && i.VelocityTexture->IsValid() && i.VelocityTexture->GetSRV() != nullptr;
+                taaConstants.Reserved[0] = glm::vec4(
+                    temporalSelection.HistoryValid ? 1.0f : 0.0f,
+                    hasVelocitySRV ? 1.0f : 0.0f,
+                    1.0f,
+                    0.02f);
                 if (!passUniform().UpdateData(&taaConstants, sizeof(RHITAAConstants))) return false;
 
                 nri::Descriptor* currentSRV = (useToneMap && renderer.m_IntermediateHDRTarget) ? renderer.m_IntermediateHDRTarget->GetSRV() : renderer.m_OpaqueSceneColor->GetSRV();
                 nri::Descriptor* depthSRV = renderer.m_OpaqueSceneDepth->GetSRV();
+                nri::Descriptor* velocitySRV = hasVelocitySRV
+                    ? i.VelocityTexture->GetSRV()
+                    : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
                 if (!renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 0, 0, currentSRV) ||
                     !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 1, 0, depthSRV) ||
-                    !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 2, 0, historyRead->GetSRV())) return false;
+                    !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 2, 0, historyRead->GetSRV()) ||
+                    !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 3, 0, velocitySRV)) return false;
                 if (renderer.m_TAALinearSampler.IsValid() && renderer.m_TAAPointSampler.IsValid()) {
-                    if (!renderer.m_TAADescriptorPool.UpdateSampler(renderer.m_TAADescriptorSet, 3, 0, renderer.m_TAALinearSampler.GetNative())) return false;
-                    if (!renderer.m_TAADescriptorPool.UpdateSampler(renderer.m_TAADescriptorSet, 4, 0, renderer.m_TAAPointSampler.GetNative())) return false;
+                    if (!renderer.m_TAADescriptorPool.UpdateSampler(renderer.m_TAADescriptorSet, 4, 0, renderer.m_TAALinearSampler.GetNative())) return false;
+                    if (!renderer.m_TAADescriptorPool.UpdateSampler(renderer.m_TAADescriptorSet, 5, 0, renderer.m_TAAPointSampler.GetNative())) return false;
                 }
 
                 nri::Pipeline* taaPipeline = (historyWrite->GetFormat() == RHI::RHITextureFormat::RGBA16_FLOAT && renderer.m_TAAPipelineHDR)

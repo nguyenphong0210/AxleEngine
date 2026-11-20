@@ -348,6 +348,32 @@ bool RunM15PostTemporalContractUnitTests() {
             "Velocity.hlsl outputs jitter-cancelled camera and per-object motion vectors");
     }
 
-    std::cout << "[M15U8Contract] All M15 U8 Batch A, B & C contract tests passed.\n";
+    // Batch D (M15-U8-12.1..12.2, 15.1..15.4): Closest-3x3 depth dilation,
+    // disocclusion/out-of-bounds rejection & no silent FXAA-on-TAA stacking.
+    {
+        RENDER_CHECK(TAAContract::VerifyClosestDepthDilation() &&
+                     TAAContract::VerifyDisocclusionAndBoundsRejection() &&
+                     TAAContract::VerifyNoSilentFXAAOnTAA(),
+            "TAAContract verifies 3x3 closest-depth velocity dilation, disocclusion/OOB rejection, and FXAA mutual exclusion");
+
+        const std::string taaShader = LoadTextFile(AXLE_TAA_SHADER_PATH);
+        RENDER_CHECK(!taaShader.empty() &&
+                     taaShader.find("u_VelocityTexture") != std::string::npos &&
+                     taaShader.find("closestDepth") != std::string::npos &&
+                     taaShader.find("closestOffset") != std::string::npos &&
+                     taaShader.find("SampleHistoryCatmullRom") != std::string::npos &&
+                     taaShader.find("RGBToYCoCg") != std::string::npos &&
+                     taaShader.find("disocclusionGate") != std::string::npos,
+            "TAA.hlsl implements closest-3x3 depth dilation, RG16F velocity sampling, Catmull-Rom, YCoCg variance clip and disocclusion gate");
+
+        const std::string passSource = LoadTextFile(AXLE_POST_PROCESS_PASS_SOURCE_PATH);
+        RENDER_CHECK(!passSource.empty() &&
+                     passSource.find("r.TAAVelocity") != std::string::npos &&
+                     passSource.find("r.UseFXAA && !r.UseTAA") != std::string::npos &&
+                     passSource.find("i.VelocityTexture") != std::string::npos,
+            "PostProcessPass declares TAAVelocity in RenderGraph and suppresses FXAA when TAA is active");
+    }
+
+    std::cout << "[M15U8Contract] All M15 U8 Batch A, B, C & D contract tests passed.\n";
     return true;
 }

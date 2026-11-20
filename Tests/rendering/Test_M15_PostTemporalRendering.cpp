@@ -2,6 +2,7 @@
 #include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
@@ -1035,7 +1036,350 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         if (!checkResetProducesZeroVelocity("SceneRevision", targets, col, dep, false, RenderViewKind::Main, s)) return false;
     }
 
-    std::cout << "[M15U8] PASS: Batch A + B + C (AutoExposure, 6-level Bloom, Camera/Object Velocity, Jitter Cancellation & 5 TAA Resets) exp30="
+    // =========================================================================
+    // Batch D (M15-U8-15.1..15.4): TAA Shimmer Reduction, Moving Fidelity,
+    // Disocclusion Rejection, Resize/ViewSwitch & TAA/FXAA Mutual Exclusion
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // 11. M15-U8-15.1: Static diagonal high-contrast shimmer reduction & AA
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t W = 128, H = 128;
+        RHITexture colNoTAA, depNoTAA, colTAA, depTAA;
+        if (!colNoTAA.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !depNoTAA.Init(RHITextureDesc::DepthStencil2D(W, H)) ||
+            !colTAA.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !depTAA.Init(RHITextureDesc::DepthStencil2D(W, H))) return false;
+        auto targetsNoTAA = makeTemporalViewTargets(W, H, true);
+        auto targetsTAA = makeTemporalViewTargets(W, H, true);
+        if (!targetsNoTAA || !targetsTAA) return false;
+
+        RHIMaterialDesc barMatDesc{};
+        barMatDesc.BaseColor = {0.0f, 0.0f, 0.0f, 1.0f};
+        barMatDesc.EmissiveColor = {0.85f, 0.85f, 0.85f};
+        barMatDesc.EmissiveIntensity = 1.0f;
+        barMatDesc.Roughness = 1.0f;
+        auto barMat = std::make_shared<RHIMaterial>(barMatDesc);
+
+        RenderWorld world;
+        RenderMeshInstance bar;
+        bar.EntityID = 5101;
+        bar.StableUUID = UUID(0x5101u);
+        bar.NativeView = cube->CaptureView();
+        bar.WorldTransform = glm::rotate(glm::mat4(1.0f), glm::radians(26.0f), glm::vec3(0.0f, 0.0f, 1.0f)) *
+                             glm::scale(glm::mat4(1.0f), glm::vec3(0.28f, 3.2f, 0.28f));
+        bar.Material.RHIMaterialAsset = barMat;
+        world.Meshes.push_back(bar);
+
+        PerspectiveCamera cam(60.0f, 1.0f, 0.1f, 50.0f);
+        cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                          glm::vec3(0.0f, 0.0f, 4.0f));
+
+        SceneRenderSettings s;
+        s.EnableShadows = false;
+        s.EnableSkybox = false;
+        s.EnableParticles = false;
+        s.EnableStudioLightLobes = false;
+        s.EnableAutoExposure = false;
+        s.EnableBloom = false;
+        s.EnableToneMapping = true;
+        s.ToneMappingMode = 3;
+        s.Gamma = 1.0f;
+        s.ClearColor = {0.04f, 0.04f, 0.04f, 1.0f};
+
+        s.EnableTAA = false;
+        renderer.RenderWorldView(world, cam, &colNoTAA, &depNoTAA, s, nullptr, targetsNoTAA, true, RenderViewKind::Main, 1.0f / 60.0f);
+        if (!renderer.WasLastRenderSuccessful()) return false;
+        const auto pxNoTAA = RenderTests::ReadTexture(colNoTAA);
+
+        s.EnableTAA = true;
+        std::vector<uint8_t> pxTAA14, pxTAA15;
+        for (uint32_t f = 0; f < 16u; ++f) {
+            renderer.RenderWorldView(world, cam, &colTAA, &depTAA, s, nullptr, targetsTAA, f == 0u, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+            if (f == 14u) pxTAA14 = RenderTests::ReadTexture(colTAA);
+            if (f == 15u) pxTAA15 = RenderTests::ReadTexture(colTAA);
+        }
+
+        uint32_t noAaEdgeTransitions = 0, aaEdgeTransitions = 0;
+        double diffSq = 0.0;
+        const size_t pixelCount = size_t(W) * H;
+        for (size_t i = 0; i < pixelCount; ++i) {
+            const uint8_t r0 = pxNoTAA[i * 4u];
+            const uint8_t r14 = pxTAA14[i * 4u];
+            const uint8_t r15 = pxTAA15[i * 4u];
+            if (r0 > 20u && r0 < 195u) ++noAaEdgeTransitions;
+            if (r15 > 20u && r15 < 195u) ++aaEdgeTransitions;
+            const double d = double(r15) - double(r14);
+            diffSq += d * d;
+        }
+        const double rmsFrameDelta = std::sqrt(diffSq / double(pixelCount));
+        if (aaEdgeTransitions <= noAaEdgeTransitions || aaEdgeTransitions < 20u || rmsFrameDelta > 4.5) {
+            std::cerr << "[M15U8] FAIL (15.1): Diagonal edge TAA shimmer/AA check failed! noAaEdge="
+                      << noAaEdgeTransitions << " aaEdge=" << aaEdgeTransitions
+                      << " rmsDelta(f14,f15)=" << rmsFrameDelta << "\n";
+            return false;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 12. M15-U8-15.2: Moving high-contrast object edge fidelity & streak-free wake
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t W = 128, H = 128;
+        RHITexture col, dep;
+        if (!col.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !dep.Init(RHITextureDesc::DepthStencil2D(W, H))) return false;
+        auto targets = makeTemporalViewTargets(W, H, true);
+        if (!targets) return false;
+
+        RHIMaterialDesc movingMatDesc{};
+        movingMatDesc.BaseColor = {0.0f, 0.0f, 0.0f, 1.0f};
+        movingMatDesc.EmissiveColor = {0.9f, 0.85f, 0.15f};
+        movingMatDesc.EmissiveIntensity = 1.0f;
+        movingMatDesc.Roughness = 1.0f;
+        auto movingMat = std::make_shared<RHIMaterial>(movingMatDesc);
+
+        RHIMaterialDesc staticMatDesc{};
+        staticMatDesc.BaseColor = {0.0f, 0.0f, 0.0f, 1.0f};
+        staticMatDesc.EmissiveColor = {0.1f, 0.25f, 0.8f};
+        staticMatDesc.EmissiveIntensity = 1.0f;
+        auto staticMat = std::make_shared<RHIMaterial>(staticMatDesc);
+
+        RenderMeshInstance staticInst;
+        staticInst.EntityID = 5201;
+        staticInst.StableUUID = UUID(0x5201u);
+        staticInst.NativeView = cube->CaptureView();
+        staticInst.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(-1.6f, 1.3f, 0.0f)) *
+                                    glm::scale(glm::mat4(1.0f), glm::vec3(0.55f));
+        staticInst.Material.RHIMaterialAsset = staticMat;
+
+        RenderMeshInstance movingInst = staticInst;
+        movingInst.EntityID = 5202;
+        movingInst.StableUUID = UUID(0x5202u);
+        movingInst.Material.RHIMaterialAsset = movingMat;
+
+        PerspectiveCamera cam(60.0f, 1.0f, 0.1f, 50.0f);
+        cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                          glm::vec3(0.0f, 0.0f, 4.5f));
+
+        SceneRenderSettings s;
+        s.EnableShadows = false;
+        s.EnableSkybox = false;
+        s.EnableParticles = false;
+        s.EnableStudioLightLobes = false;
+        s.EnableAutoExposure = false;
+        s.EnableBloom = false;
+        s.EnableToneMapping = true;
+        s.ToneMappingMode = 3;
+        s.Gamma = 1.0f;
+        s.ClearColor = {0.05f, 0.05f, 0.07f, 1.0f};
+        s.EnableTAA = true;
+
+        RenderWorld world;
+        for (uint32_t f = 0; f <= 5u; ++f) {
+            const float x = -1.5f + 0.30f * float(f);
+            movingInst.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, 0.0f)) *
+                                        glm::scale(glm::mat4(1.0f), glm::vec3(0.85f));
+            world.Meshes = { staticInst, movingInst };
+            renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, f == 0u, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+        }
+
+        const auto px = RenderTests::ReadTexture(col);
+        auto at = [&](uint32_t x, uint32_t y) {
+            const size_t idx = (size_t(y) * W + x) * 4u;
+            return glm::ivec3(px[idx + 0u], px[idx + 1u], px[idx + 2u]);
+        };
+        const glm::ivec3 objCenter = at(64u, 64u);
+        const glm::ivec3 trailingWake = at(28u, 64u);
+        const glm::ivec3 leadingAhead = at(96u, 64u);
+        if (objCenter.r < 160 || objCenter.g < 140 || objCenter.b > 80 ||
+            trailingWake.r > 45 || trailingWake.g > 45 ||
+            leadingAhead.r > 45 || leadingAhead.g > 45) {
+            std::cerr << "[M15U8] FAIL (15.2): Moving object edge/wake ghosting check failed! center=("
+                      << objCenter.r << "," << objCenter.g << "," << objCenter.b << ") wake=("
+                      << trailingWake.r << "," << trailingWake.g << "," << trailingWake.b << ") ahead=("
+                      << leadingAhead.r << "," << leadingAhead.g << "," << leadingAhead.b << ")\n";
+            return false;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 13. M15-U8-15.3: Disocclusion behind rapidly moving occluder (zero ghost)
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t W = 128, H = 128;
+        RHITexture col, dep;
+        if (!col.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !dep.Init(RHITextureDesc::DepthStencil2D(W, H))) return false;
+        auto targets = makeTemporalViewTargets(W, H, true);
+        if (!targets) return false;
+
+        RHIMaterialDesc occMatDesc{};
+        occMatDesc.BaseColor = {0.0f, 0.0f, 0.0f, 1.0f};
+        occMatDesc.EmissiveColor = {0.02f, 0.04f, 0.85f};
+        occMatDesc.EmissiveIntensity = 1.0f;
+        auto occMat = std::make_shared<RHIMaterial>(occMatDesc);
+
+        RenderMeshInstance occ;
+        occ.EntityID = 5301;
+        occ.StableUUID = UUID(0x5301u);
+        occ.NativeView = cube->CaptureView();
+        occ.Material.RHIMaterialAsset = occMat;
+
+        PerspectiveCamera cam(60.0f, 1.0f, 0.1f, 50.0f);
+        cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                          glm::vec3(0.0f, 0.0f, 4.5f));
+
+        SceneRenderSettings s;
+        s.EnableShadows = false;
+        s.EnableSkybox = false;
+        s.EnableParticles = false;
+        s.EnableStudioLightLobes = false;
+        s.EnableAutoExposure = false;
+        s.EnableBloom = false;
+        s.EnableToneMapping = true;
+        s.ToneMappingMode = 3;
+        s.Gamma = 1.0f;
+        s.ClearColor = {0.85f, 0.03f, 0.03f, 1.0f};
+        s.EnableTAA = true;
+
+        RenderWorld world;
+        occ.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 1.5f)) *
+                             glm::scale(glm::mat4(1.0f), glm::vec3(1.4f));
+        world.Meshes = { occ };
+        for (uint32_t f = 0; f < 4u; ++f) {
+            renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, f == 0u, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+        }
+        const auto pxOccluded = RenderTests::ReadTexture(col);
+        const size_t cIdx = (size_t(H / 2u) * W + (W / 2u)) * 4u;
+        if (pxOccluded[cIdx + 2u] < 140 || pxOccluded[cIdx + 2u] <= pxOccluded[cIdx + 0u] + 80) {
+            std::cerr << "[M15U8] FAIL (15.3): Expected blue occluder over center before move\n";
+            return false;
+        }
+
+        // Rapidly move occluder to +X uncovering center & trailing margin immediately
+        occ.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(1.6f, 0.0f, 1.5f)) *
+                             glm::scale(glm::mat4(1.0f), glm::vec3(1.4f));
+        world.Meshes = { occ };
+        renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, false, RenderViewKind::Main, 1.0f / 60.0f);
+        if (!renderer.WasLastRenderSuccessful()) return false;
+
+        const auto pxDisoccluded = RenderTests::ReadTexture(col);
+        const size_t nearEdgeIdx = (size_t(H / 2u) * W + 82u) * 4u;
+        if (pxDisoccluded[cIdx + 0u] < 140 || pxDisoccluded[cIdx + 2u] > 45 ||
+            pxDisoccluded[nearEdgeIdx + 0u] < 140 || pxDisoccluded[nearEdgeIdx + 2u] > 45) {
+            std::cerr << "[M15U8] FAIL (15.3): Disoccluded background retained blue occluder ghost! center=("
+                      << int(pxDisoccluded[cIdx + 0u]) << "," << int(pxDisoccluded[cIdx + 1u]) << "," << int(pxDisoccluded[cIdx + 2u])
+                      << ") edge=(" << int(pxDisoccluded[nearEdgeIdx + 0u]) << "," << int(pxDisoccluded[nearEdgeIdx + 1u]) << "," << int(pxDisoccluded[nearEdgeIdx + 2u]) << ")\n";
+            return false;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 14. M15-U8-15.4: Resize + ViewSwitch reset cleanly & no silent FXAA-on-TAA
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t W = 128, H = 128, W2 = 192, H2 = 144;
+        RHITexture colA, depA, colB, depB, colBig, depBig;
+        if (!colA.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !depA.Init(RHITextureDesc::DepthStencil2D(W, H)) ||
+            !colB.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !depB.Init(RHITextureDesc::DepthStencil2D(W, H)) ||
+            !colBig.Init(RHITextureDesc::RenderTarget2D(W2, H2)) ||
+            !depBig.Init(RHITextureDesc::DepthStencil2D(W2, H2))) return false;
+        auto targetsA = makeTemporalViewTargets(W, H, true);
+        auto targetsB = makeTemporalViewTargets(W, H, true);
+        auto targetsBig = makeTemporalViewTargets(W2, H2, true);
+        if (!targetsA || !targetsB || !targetsBig) return false;
+
+        RHIMaterialDesc barMatDesc{};
+        barMatDesc.BaseColor = {0.0f, 0.0f, 0.0f, 1.0f};
+        barMatDesc.EmissiveColor = {0.85f, 0.85f, 0.85f};
+        barMatDesc.EmissiveIntensity = 1.0f;
+        auto barMat = std::make_shared<RHIMaterial>(barMatDesc);
+
+        RenderWorld world;
+        RenderMeshInstance bar;
+        bar.EntityID = 5401;
+        bar.StableUUID = UUID(0x5401u);
+        bar.NativeView = cube->CaptureView();
+        bar.WorldTransform = glm::rotate(glm::mat4(1.0f), glm::radians(26.0f), glm::vec3(0.0f, 0.0f, 1.0f)) *
+                             glm::scale(glm::mat4(1.0f), glm::vec3(0.28f, 3.2f, 0.28f));
+        bar.Material.RHIMaterialAsset = barMat;
+        world.Meshes.push_back(bar);
+
+        PerspectiveCamera cam(60.0f, 1.0f, 0.1f, 50.0f);
+        cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                          glm::vec3(0.0f, 0.0f, 4.0f));
+
+        SceneRenderSettings sTaaOnly;
+        sTaaOnly.EnableShadows = false;
+        sTaaOnly.EnableSkybox = false;
+        sTaaOnly.EnableParticles = false;
+        sTaaOnly.EnableStudioLightLobes = false;
+        sTaaOnly.EnableAutoExposure = false;
+        sTaaOnly.EnableBloom = false;
+        sTaaOnly.EnableToneMapping = true;
+        sTaaOnly.ToneMappingMode = 3;
+        sTaaOnly.Gamma = 1.0f;
+        sTaaOnly.EnableTAA = true;
+        sTaaOnly.EnableFXAA = false;
+
+        SceneRenderSettings sTaaAndFxaa = sTaaOnly;
+        sTaaAndFxaa.EnableFXAA = true;
+
+        const auto policy = RenderBackendPolicy::FromDevice(RHIDevice::Get().GetCapabilities());
+        const auto resolved = policy.ResolveSettings(sTaaAndFxaa);
+        const auto fallbacks = policy.CollectFallbacks(sTaaAndFxaa);
+        bool sawSuppressionReason = false;
+        for (const auto& reason : fallbacks) {
+            if (reason.find("fxaa_suppressed_by_taa") != std::string::npos) {
+                sawSuppressionReason = true;
+                break;
+            }
+        }
+        if (resolved.EnableFXAA || !sawSuppressionReason) {
+            std::cerr << "[M15U8] FAIL (15.4): RenderBackendPolicy did not suppress FXAA under TAA!\n";
+            return false;
+        }
+
+        for (uint32_t f = 0; f < 4u; ++f) {
+            renderer.RenderWorldView(world, cam, &colA, &depA, sTaaOnly, nullptr, targetsA, f == 0u, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+        }
+        for (uint32_t f = 0; f < 4u; ++f) {
+            renderer.RenderWorldView(world, cam, &colB, &depB, sTaaAndFxaa, nullptr, targetsB, f == 0u, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+        }
+        const auto pxTaaOnly = RenderTests::ReadTexture(colA);
+        const auto pxTaaFxaa = RenderTests::ReadTexture(colB);
+        if (pxTaaOnly != pxTaaFxaa) {
+            std::cerr << "[M15U8] FAIL (15.4): EnableTAA+EnableFXAA differed from EnableTAA-only (silent FXAA stacking)!\n";
+            return false;
+        }
+
+        // Resize cleanly
+        cam.SetProjection(60.0f, float(W2) / float(H2), 0.1f, 50.0f);
+        renderer.RenderWorldView(world, cam, &colBig, &depBig, sTaaOnly, nullptr, targetsBig, false, RenderViewKind::Main, 1.0f / 60.0f);
+        if (!renderer.WasLastRenderSuccessful() ||
+            renderer.GetMainViewContext().Temporal().GetCommittedFrameCount() != 1u) {
+            std::cerr << "[M15U8] FAIL (15.4): Resize did not reset TAA cleanly\n";
+            return false;
+        }
+        // ViewSwitch cleanly
+        renderer.RenderWorldView(world, cam, &colBig, &depBig, sTaaOnly, nullptr, targetsBig, false, RenderViewKind::AssetPreview, 1.0f / 60.0f);
+        if (!renderer.WasLastRenderSuccessful() ||
+            renderer.GetMainViewContext().Temporal().GetCommittedFrameCount() != 1u) {
+            std::cerr << "[M15U8] FAIL (15.4): ViewSwitch did not reset TAA cleanly\n";
+            return false;
+        }
+    }
+
+    std::cout << "[M15U8] PASS: Batch A + B + C + D (AutoExposure, Bloom, Velocity, TAA 3x3 Dilation, Disocclusion, Resize & Mutual Exclusion) exp30="
               << exp30 << " exp60=" << exp60 << " exp120=" << exp120 << "\n";
     return true;
 }

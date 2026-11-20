@@ -682,8 +682,8 @@ namespace Axle {
             m_TAADescriptorSet = m_TAADescriptorPool.AllocateDescriptorSet(m_TAAPipelineLayout, 0);
             if (!m_TAADescriptorSet) return false;
             if (m_TAALinearSampler.IsValid() && m_TAAPointSampler.IsValid()) {
-                if (!m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative()) ||
-                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative())) return false;
+                if (!m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAALinearSampler.GetNative()) ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 5, 0, m_TAAPointSampler.GetNative())) return false;
             }
         }
 
@@ -3737,7 +3737,7 @@ namespace Axle {
         rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDesc.shaderStages = nri::StageBits::ALL;
 
-        nri::DescriptorRangeDesc ranges[5] = {};
+        nri::DescriptorRangeDesc ranges[6] = {};
         ranges[0].baseRegisterIndex = 0;
         ranges[0].descriptorNum = 1;
         ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
@@ -3756,22 +3756,28 @@ namespace Axle {
         ranges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        ranges[3].baseRegisterIndex = 0;
+        ranges[3].baseRegisterIndex = 3;
         ranges[3].descriptorNum = 1;
-        ranges[3].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[3].descriptorType = nri::DescriptorType::TEXTURE;
         ranges[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[3].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        ranges[4].baseRegisterIndex = 1;
+        ranges[4].baseRegisterIndex = 0;
         ranges[4].descriptorNum = 1;
         ranges[4].descriptorType = nri::DescriptorType::SAMPLER;
         ranges[4].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[4].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
+        ranges[5].baseRegisterIndex = 1;
+        ranges[5].descriptorNum = 1;
+        ranges[5].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[5].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[5].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
         descSet.ranges = ranges;
-        descSet.rangeNum = 5;
+        descSet.rangeNum = 6;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
@@ -6762,7 +6768,7 @@ namespace Axle {
         bool useMSAA = (settings.MSAASamples > 1);
         uint8_t activeSampleCount = useMSAA ? settings.MSAASamples : 1;
         bool useToneMap = settings.EnableToneMapping;
-        bool useFXAA = settings.EnableFXAA;
+        bool useFXAA = settings.EnableFXAA && !(settings.EnableTAA && activeSampleCount == 1);
         nri::Texture* sceneDepthTexture = depthTarget;
 
         RHIViewTargetDesc targetDesc;

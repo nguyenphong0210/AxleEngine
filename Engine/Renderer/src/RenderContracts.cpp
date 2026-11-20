@@ -1,5 +1,6 @@
 #include <glm/gtc/packing.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
 #include <Axle/Material.hpp>
 #include <Axle/ResolvedSurface.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
@@ -4019,5 +4020,98 @@ namespace Axle {
             return ok && std::abs(staticVel.x) < 1e-7f && std::abs(staticVel.y) < 1e-7f;
         }
     } // namespace MotionVectorContract
+
+    namespace TAAContract {
+        namespace {
+            glm::vec3 TonemapWeight(const glm::vec3& c) {
+                const float maxC = std::max({ c.r, c.g, c.b, 0.0f });
+                return glm::max(c, glm::vec3(0.0f)) / (1.0f + maxC);
+            }
+            glm::vec3 RGBToYCoCg(const glm::vec3& rgb) {
+                return {
+                    0.25f * rgb.r + 0.50f * rgb.g + 0.25f * rgb.b,
+                    0.50f * rgb.r - 0.50f * rgb.b,
+                    -0.25f * rgb.r + 0.50f * rgb.g - 0.25f * rgb.b
+                };
+            }
+        }
+
+        glm::ivec2 SelectClosestDepthOffset3x3(const float depthGrid3x3[9]) {
+            float closest = 1.0f;
+            glm::ivec2 best(0, 0);
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const float d = depthGrid3x3[(dy + 1) * 3 + (dx + 1)];
+                    if (d < closest) {
+                        closest = d;
+                        best = { dx, dy };
+                    }
+                }
+            }
+            return best;
+        }
+
+        float EvaluateHistoryWeight(const glm::vec3* currentNeighborsRGB3x3,
+                                    const glm::vec3& historyRGB,
+                                    const glm::vec2& historyUV,
+                                    float velocityPixels,
+                                    float feedbackMin,
+                                    float feedbackMax) {
+            if (!currentNeighborsRGB3x3 ||
+                !std::isfinite(historyUV.x) || !std::isfinite(historyUV.y) ||
+                historyUV.x < 0.0f || historyUV.x > 1.0f || historyUV.y < 0.0f || historyUV.y > 1.0f) {
+                return 0.0f;
+            }
+            glm::vec3 m1(0.0f), m2(0.0f), boxMin(1e5f), boxMax(-1e5f);
+            for (int i = 0; i < 9; ++i) {
+                const glm::vec3 y = RGBToYCoCg(TonemapWeight(currentNeighborsRGB3x3[i]));
+                m1 += y;
+                m2 += y * y;
+                boxMin = glm::min(boxMin, y);
+                boxMax = glm::max(boxMax, y);
+            }
+            const glm::vec3 mu = m1 / 9.0f;
+            const glm::vec3 sigma = glm::sqrt(glm::max(m2 / 9.0f - mu * mu, glm::vec3(0.0f)));
+            const glm::vec3 hy = RGBToYCoCg(TonemapWeight(historyRGB));
+            const glm::vec3 outOfBox = glm::max(glm::vec3(0.0f), glm::max(boxMin - hy, hy - boxMax));
+            const float boxSpread = std::max(glm::length(sigma), 0.02f);
+            const float disocclusionRatio = glm::length(outOfBox) / boxSpread;
+            const float disocclusionGate = std::exp(-disocclusionRatio * 2.5f);
+            const float motionFactor = std::clamp(velocityPixels * 0.25f, 0.0f, 1.0f);
+            const float baseFeedback = feedbackMax + (feedbackMin - feedbackMax) * motionFactor;
+            return std::clamp(baseFeedback * disocclusionGate, 0.0f, 0.96f);
+        }
+
+        bool VerifyClosestDepthDilation() {
+            const float depths[9] = {
+                0.90f, 0.90f, 0.90f,
+                0.90f, 0.85f, 0.20f,
+                0.90f, 0.90f, 0.90f
+            };
+            const glm::ivec2 off = SelectClosestDepthOffset3x3(depths);
+            return off.x == 1 && off.y == 0;
+        }
+
+        bool VerifyDisocclusionAndBoundsRejection() {
+            const glm::vec3 redTile[9] = {
+                {0.9f, 0.05f, 0.05f}, {0.88f, 0.06f, 0.05f}, {0.92f, 0.04f, 0.05f},
+                {0.89f, 0.05f, 0.05f}, {0.90f, 0.05f, 0.05f}, {0.91f, 0.05f, 0.05f},
+                {0.87f, 0.05f, 0.05f}, {0.90f, 0.05f, 0.05f}, {0.93f, 0.05f, 0.05f}
+            };
+            const float stableW = EvaluateHistoryWeight(redTile, {0.90f, 0.05f, 0.05f}, {0.5f, 0.5f}, 0.0f, 0.88f, 0.96f);
+            const float disoccW = EvaluateHistoryWeight(redTile, {0.02f, 0.02f, 0.85f}, {0.5f, 0.5f}, 0.0f, 0.88f, 0.96f);
+            const float outOfBoundsW = EvaluateHistoryWeight(redTile, {0.90f, 0.05f, 0.05f}, {-0.01f, 0.5f}, 0.0f, 0.88f, 0.96f);
+            return stableW > 0.90f && disoccW < 0.02f && outOfBoundsW == 0.0f;
+        }
+
+        bool VerifyNoSilentFXAAOnTAA() {
+            SceneRenderSettings s;
+            s.EnableTAA = true;
+            s.EnableFXAA = true;
+            s.MSAASamples = 1;
+            const auto resolved = RenderBackendPolicy::FromBackend(RendererBackendType::ModernRHI_Vulkan).ResolveSettings(s);
+            return resolved.EnableTAA && !resolved.EnableFXAA;
+        }
+    } // namespace TAAContract
 
 } // namespace Axle

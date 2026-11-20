@@ -1009,4 +1009,18 @@ namespace Axle {
         bool VerifyJitterCancellationConsistency();
     }
 
+    // M15 Unit 8 (S8.4 / U8-D): TAA resolve, closest 3x3 dilation, disocclusion & AA mutual-exclusion contract
+    namespace TAAContract {
+        glm::ivec2 SelectClosestDepthOffset3x3(const float depthGrid3x3[9]);
+        float EvaluateHistoryWeight(const glm::vec3* currentNeighborsRGB3x3,
+                                    const glm::vec3& historyRGB,
+                                    const glm::vec2& historyUV,
+                                    float velocityPixels,
+                                    float feedbackMin,
+                                    float feedbackMax);
+        bool VerifyClosestDepthDilation();
+        bool VerifyDisocclusionAndBoundsRejection();
+        bool VerifyNoSilentFXAAOnTAA();
+    }
+
 } // namespace Axle

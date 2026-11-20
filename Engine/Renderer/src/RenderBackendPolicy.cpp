@@ -131,6 +131,9 @@ namespace Axle {
             resolved.EnableTAA = false;
             resolved.EnablePlanarReflections = false;
         }
+        if (resolved.EnableTAA && resolved.MSAASamples == 1 && resolved.EnableFXAA) {
+            resolved.EnableFXAA = false;
+        }
         return resolved;
     }
 
@@ -141,8 +144,12 @@ namespace Axle {
         if (authored.EnableToneMapping && !resolved.EnableToneMapping) reasons.push_back("tone_mapping_disabled:sdr_output");
         if (authored.EnableBloom && !resolved.EnableBloom) reasons.push_back("bloom_disabled:compute_or_hdr_unavailable");
         if (authored.EnableAutoExposure && !resolved.EnableAutoExposure) reasons.push_back("auto_exposure_disabled:compute_or_hdr_unavailable");
-        if (authored.EnableFXAA && !resolved.EnableFXAA) reasons.push_back("fxaa_disabled:backend_unsupported");
         if (authored.EnableTAA && !resolved.EnableTAA) reasons.push_back("taa_disabled:compatibility_backend");
+        if (authored.EnableFXAA && !resolved.EnableFXAA) {
+            reasons.push_back(resolved.EnableTAA
+                ? "fxaa_suppressed_by_taa: mutual_exclusion_prevents_silent_stacking"
+                : "fxaa_disabled:backend_unsupported");
+        }
         if (authored.EnableGTAO && !resolved.EnableGTAO) reasons.push_back("gtao_disabled:compute_or_storage_unavailable");
         if (authored.EnableContactShadows && !resolved.EnableContactShadows) reasons.push_back("contact_shadows_disabled:compute_or_storage_unavailable");
         if (authored.EnableSSR && !resolved.EnableSSR) reasons.push_back("ssr_disabled:compute_or_storage_unavailable");

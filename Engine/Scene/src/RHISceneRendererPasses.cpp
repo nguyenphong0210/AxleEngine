@@ -2051,18 +2051,18 @@ namespace Axle {
                     return bindDescriptorSet(index, set, bindPoint);
                 }, beginRendering, endRendering};
             if (!Passes::PostProcessPass::Record(*this,
-                {settings, viewTargets, temporalSelection, viewProjZO, sceneTargetTexture,
+                {settings, viewTargets, temporalSelection, viewProjZO, unjitteredViewProjZO, sceneTargetTexture,
                  sceneTargetRTV, colorTarget, colorRTV, sceneTargetFormat, width, height,
                  jitterX, jitterY, view.DeltaTime, resetAutoExposure,
-                 useBloom, useAutoExposure, useTAA, useToneMap, useFXAA,
-                 historyRead, historyWrite, &m_AutoExposureHistogram, dispatchCount}, postOps)) return fail();
+                 useBloom, useAutoExposure, useTAA, useVelocity, useToneMap, useFXAA && !useTAA,
+                 historyRead, historyWrite, velocityTex, &m_AutoExposureHistogram, dispatchCount}, postOps)) return fail();
 
             return {};
         }, [&](RenderGraph& graph) {
             Passes::PostProcessPass::Declare(graph, {sceneColor, sceneDepth, output, hdr, fxaa,
                 bloomInput, exposureInput, exposureHistogram, exposureOutput,
-                taaColor, taaDepth, taaHistoryRead, taaHistoryWrite,
-                bloomResources, useBloom, useAutoExposure, useTAA, useToneMap, useFXAA});
+                taaColor, taaDepth, velocityTarget, taaHistoryRead, taaHistoryWrite,
+                bloomResources, useBloom, useAutoExposure, useTAA, useVelocity, useToneMap, useFXAA && !useTAA});
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useBloom) {
                 if (!uniform("BloomApply",sizeof(RHIBloomConstants))) return fail();
@@ -2079,19 +2079,22 @@ namespace Axle {
                 // frame's history dependencies before declaring current slots.
                 if (!m_TAADescriptorPool.Init(m_TAADescriptorPool.GetDesc())) return fail();
                 m_TAADescriptorSet = m_TAADescriptorPool.AllocateDescriptorSet(m_TAAPipelineLayout, 0);
-                if (!m_TAADescriptorSet ||
-                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 3, 0, m_TAALinearSampler.GetNative()) ||
-                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative()) ||
+                nri::Descriptor* taaVelSRV = (useVelocity && velocityTex && velocityTex->IsValid())
+                    ? velocityTex->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
+                if (!m_TAADescriptorSet || !taaVelSRV ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAALinearSampler.GetNative()) ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 5, 0, m_TAAPointSampler.GetNative()) ||
                     !uniform("TAAResolve",sizeof(RHITAAConstants)) ||
                     !graph.DeclareRead("TAAResolve",m_TAADescriptorSet) ||
                     !graph.DeclareRead("TAAResolve",(useToneMap && m_IntermediateHDRTarget) ? m_IntermediateHDRTarget->GetSRV() : m_OpaqueSceneColor->GetSRV()) ||
                     !graph.DeclareRead("TAAResolve",m_OpaqueSceneDepth->GetSRV()) ||
-                    !graph.DeclareRead("TAAResolve",historyRead->GetSRV())) return fail();
+                    !graph.DeclareRead("TAAResolve",historyRead->GetSRV()) ||
+                    !graph.DeclareRead("TAAResolve",taaVelSRV)) return fail();
             }
             if (useToneMap && !uniform("ToneMapping",sizeof(RHIToneMappingConstants))) return fail();
             if (useToneMap && useAutoExposure &&
                 !graph.DeclareRead("ToneMapping",viewTargets->GetExposure()->GetSRV())) return fail();
-            if (useFXAA && (!uniform("FXAA",sizeof(RHIFXAAConstants)) ||
+            if (useFXAA && !useTAA && (!uniform("FXAA",sizeof(RHIFXAAConstants)) ||
                 !graph.DeclareRead("FXAA",RHIMaterial::GetDefaultWhiteTexture()->GetSRV()))) return fail();
             return {};
         });

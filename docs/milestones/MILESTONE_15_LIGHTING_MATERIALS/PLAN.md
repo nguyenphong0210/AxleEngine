@@ -146,6 +146,8 @@ To prevent the current 2D raymarch prototype from hiding resource, physical-inte
 
 **U6 execution & review cadence:** Each batch `U6-A`..`U6-E` is implemented, self-verified (CPU + Debug/Release D3D12/Vulkan + RHI validation), and locally committed as one coherent checkpoint without modifying unchecked leaves in later batches. Per the shared working protocol, Codex conducts either one consolidated review at the end of `U6-E` or an optional mid-unit checkpoint review after `U6-C` (Cluster 1) before layering temporal history and transparency composition. This schedule is planning structure only; it does not release U6 implementation or check off any atomic leaf ahead of an explicit task assignment in [CODEX_GEMINI_EXCHANGE.json](../../agents/CODEX_GEMINI_EXCHANGE.json).
 
+**U6-E review:** The [Codex review and verification](../../reviews/M15_U6_E_CODEX_REVIEW.md) records the corrected implementation and requirement evidence. Formal acceptance remains open for the focused independent recheck of the corrections.
+
 **Deferred Editor visual policy (user steering 2026-11-17):** Open `EDITOR VISUAL` gates (`M15-U4-06.5`, `U4-E`, `U5-03`, and new U5 visual gates) remain explicitly marked `NOT RUN` / open during automated batch delivery and will be verified in a consolidated Editor capture session. Do not mark any `EDITOR VISUAL` item `PASS` or close its parent acceptance claim until the required Debug/Release Editor screenshots are attached and inspected.
 
 ## 4. Canonical atomic execution and acceptance checklist

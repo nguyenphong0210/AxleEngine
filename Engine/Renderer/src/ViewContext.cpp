@@ -78,6 +78,7 @@ namespace Axle {
         m_ResetReasons = ViewResetReason::Initial;
         m_Temporal.Reset();
         m_FroxelHistories.clear();
+        m_DDGIHistories.clear();
         m_PostProcess.Reset();
         m_Diagnostics.BeginFrame(0);
         return true;
@@ -98,6 +99,7 @@ namespace Axle {
         m_Input = ViewContextInput{};
         m_Temporal.Reset();
         m_FroxelHistories.clear();
+        m_DDGIHistories.clear();
         m_PostProcess.Reset();
         m_Diagnostics.BeginFrame(0);
     }
@@ -124,9 +126,14 @@ namespace Axle {
         m_DeviceEpoch = deviceEpoch;
         m_HasInput = true;
         m_ResetReasons = reasons;
-        if (Any(reasons & ViewResetReason::DeviceEpoch)) m_FroxelHistories.clear();
+        if (Any(reasons & ViewResetReason::DeviceEpoch)) {
+            m_FroxelHistories.clear();
+            m_DDGIHistories.clear();
+        }
         std::erase_if(m_FroxelHistories, [](const auto& entry) { return entry.first.expired(); });
+        std::erase_if(m_DDGIHistories, [](const auto& entry) { return entry.first.expired(); });
         if (input.CameraCut || !GetFroxelHistory().Valid) m_FroxelHistories.erase(m_TargetIdentity);
+        if (!GetDDGIHistory().Valid) m_DDGIHistories.erase(m_TargetIdentity);
         if (Any(reasons & (ViewResetReason::Initial | ViewResetReason::Resize | ViewResetReason::ViewSwitch |
                            ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
                            ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
@@ -171,10 +178,38 @@ namespace Axle {
             m_Input.FeatureGeneration, m_Input.MaterialGeneration, m_Input.Width, m_Input.Height, m_Input.Kind});
     }
 
+    DDGIHistoryFrame ViewContext::GetDDGIHistory() const {
+        const auto it = m_DDGIHistories.find(m_TargetIdentity);
+        if (it == m_DDGIHistories.end()) return {};
+        const auto& entry = it->second;
+        if (entry.TargetGeneration != m_TargetGeneration || entry.SceneRevision != m_Input.SceneRevision ||
+            entry.SceneInstanceID != m_Input.SceneInstanceID || entry.FeatureGeneration != m_Input.FeatureGeneration ||
+            entry.MaterialGeneration != m_Input.MaterialGeneration || entry.Kind != m_Input.Kind)
+            return {};
+        return entry.Frame;
+    }
+
+    void ViewContext::CommitDDGIHistory(const DDGIHistoryFrame& frame) {
+        if (!frame.Valid || m_TargetIdentity.expired()) {
+            m_DDGIHistories.erase(m_TargetIdentity);
+            return;
+        }
+        m_DDGIHistories.insert_or_assign(m_TargetIdentity, DDGIHistoryEntry{
+            frame, m_TargetGeneration, m_Input.SceneRevision, m_Input.SceneInstanceID,
+            m_Input.FeatureGeneration, m_Input.MaterialGeneration, m_Input.Kind});
+    }
+
+    void ViewContext::InvalidateDDGIHistory() {
+        m_DDGIHistories.erase(m_TargetIdentity);
+    }
+
     bool ViewContext::ObserveMaterialGeneration(uint64_t generation) {
         const auto history = m_FroxelHistories.find(m_TargetIdentity);
         if (history != m_FroxelHistories.end() && history->second.MaterialGeneration != generation)
             m_FroxelHistories.erase(history);
+        const auto ddgiHistory = m_DDGIHistories.find(m_TargetIdentity);
+        if (ddgiHistory != m_DDGIHistories.end() && ddgiHistory->second.MaterialGeneration != generation)
+            m_DDGIHistories.erase(ddgiHistory);
         m_Diagnostics.SetMaterialGeneration(generation);
         if (m_Input.MaterialGeneration == generation) return false;
         m_Input.MaterialGeneration = generation;
@@ -196,8 +231,17 @@ namespace Axle {
                           ViewResetReason::CameraCut | ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
                           ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
             m_FrameIndex = 0;
-            if (Any(reason & ViewResetReason::DeviceEpoch)) m_FroxelHistories.clear();
-            else m_FroxelHistories.erase(m_TargetIdentity);
+            if (Any(reason & ViewResetReason::DeviceEpoch)) {
+                m_FroxelHistories.clear();
+                m_DDGIHistories.clear();
+            } else {
+                m_FroxelHistories.erase(m_TargetIdentity);
+                if (Any(reason & (ViewResetReason::Initial | ViewResetReason::ViewSwitch |
+                                  ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
+                                  ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration))) {
+                    m_DDGIHistories.erase(m_TargetIdentity);
+                }
+            }
             m_Temporal.Reset(static_cast<uint32_t>(reason));
             m_PostProcess.Reset();
         }
@@ -234,6 +278,7 @@ namespace Axle {
         if (!m_FrameActive || !m_Frame.End() || !m_Frame.Submit()) {
             m_FrameActive = false;
             m_FroxelHistories.erase(m_TargetIdentity);
+            m_DDGIHistories.erase(m_TargetIdentity);
             m_Input.Targets.reset();
             return false;
         }
@@ -251,6 +296,7 @@ namespace Axle {
         if (!m_FrameActive) return true;
         const bool result = m_Frame.Abandon();
         m_FroxelHistories.erase(m_TargetIdentity);
+        m_DDGIHistories.erase(m_TargetIdentity);
         m_FrameActive = false;
         m_Input.Targets.reset();
         return result;

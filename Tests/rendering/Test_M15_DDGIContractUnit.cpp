@@ -53,6 +53,22 @@ using namespace Axle;
 #define AXLE_EDITOR_LAYER_HEADER_PATH "Editor/src/EditorLayer.hpp"
 #endif
 
+#ifndef AXLE_DDGI_SHADER_PATH
+#define AXLE_DDGI_SHADER_PATH "Engine/Resources/Shaders/DDGI.hlsl"
+#endif
+
+#ifndef AXLE_DDGI_COMMON_SHADER_PATH
+#define AXLE_DDGI_COMMON_SHADER_PATH "Engine/Resources/Shaders/DDGICommon.hlsli"
+#endif
+
+#ifndef AXLE_DDGI_PASS_SOURCE_PATH
+#define AXLE_DDGI_PASS_SOURCE_PATH "Engine/Scene/src/Passes/DDGIPass.cpp"
+#endif
+
+#ifndef AXLE_FORWARD_PBR_SHADER_PATH
+#define AXLE_FORWARD_PBR_SHADER_PATH "Engine/Resources/Shaders/ForwardPBR.hlsl"
+#endif
+
 namespace {
     std::string ReadText(const char* path) {
         std::ifstream file(path);
@@ -324,6 +340,23 @@ bool RunM15DDGIContractUnitTests() {
                      editorHeaderSrc.find("bool m_EnableDDGI = false;") != std::string::npos &&
                      editorSrc.find("Experimental DDGI") != std::string::npos,
             "M15-U7-02 / 07.3: ViewTargets, Viewport, RenderService, RHISceneRenderer, Inspector, and Editor UI agree on DDGI contracts");
+
+        // U7-B: Verify legacy camera-screen-copy hack is gone and real capture/octahedral/Chebyshev compute kernels exist
+        const std::string ddgiShader = ReadText(AXLE_DDGI_SHADER_PATH);
+        const std::string ddgiCommon = ReadText(AXLE_DDGI_COMMON_SHADER_PATH);
+        const std::string ddgiPassSrc = ReadText(AXLE_DDGI_PASS_SOURCE_PATH);
+        const std::string forwardSrc = ReadText(AXLE_FORWARD_PBR_SHADER_PATH);
+        RENDER_CHECK(!ddgiShader.empty() && !ddgiCommon.empty() && !ddgiPassSrc.empty() && !forwardSrc.empty() &&
+                     ddgiShader.find("u_Scene") == std::string::npos &&
+                     ddgiShader.find("CSSeedClear") != std::string::npos &&
+                     ddgiShader.find("CSUpdateIrradiance") != std::string::npos &&
+                     ddgiShader.find("CSUpdateDistanceMoments") != std::string::npos &&
+                     ddgiCommon.find("DDGIMirrorInteriorCoord") != std::string::npos &&
+                     ddgiCommon.find("DDGIEvaluateChebyshev") != std::string::npos &&
+                     ddgiCommon.find("DDGISampleVolumeIrradiance") != std::string::npos &&
+                     ddgiPassSrc.find("DDGICapture") != std::string::npos &&
+                     forwardSrc.find("PSDDGICapture") != std::string::npos,
+            "M15-U7-03..05: DDGI retires camera u_Scene copy in favor of world-space DDGICapture + octahedral irradiance & Chebyshev distance kernels");
     }
 
     std::cout << "[M15DDGIContract] All M15 U7 Batch A DDGI contract tests passed.\n";

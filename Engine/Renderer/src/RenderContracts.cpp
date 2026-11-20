@@ -3,7 +3,9 @@
 #include <Axle/Material.hpp>
 #include <Axle/ResolvedSurface.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
+#include <Axle/RHI/RHIMaterial.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <bit>
 #include <cmath>
 #include <algorithm>
 #include <limits>
@@ -3626,6 +3628,105 @@ namespace Axle {
             if (resetSeed && probeCount <= hardCap) return probeCount;
             const uint32_t desired = std::max(1u, static_cast<uint32_t>(std::ceil(static_cast<double>(probeCount) * fraction)));
             return std::min({ probeCount, hardCap, desired });
+        }
+
+        float ComputeProbeMaxDistance(const glm::vec3& gridSpacing) {
+            const glm::vec3 safeSpacing = glm::max(gridSpacing, glm::vec3(0.05f));
+            return std::clamp(glm::length(safeSpacing) * 1.75f, 4.0f, 120.0f);
+        }
+
+        uint64_t ComputeStateHash(const RenderWorld& world, const SceneRenderSettings& settings,
+                                  uint64_t materialGeneration) {
+            uint64_t hash = 1469598103934665603ull;
+            const auto mixBytes = [&](const void* data, size_t size) {
+                const auto* ptr = static_cast<const uint8_t*>(data);
+                for (size_t i = 0; i < size; ++i) {
+                    hash ^= ptr[i];
+                    hash *= 1099511628211ull;
+                }
+            };
+            const auto mixVal = [&](const auto& v) { mixBytes(&v, sizeof(v)); };
+            mixVal(materialGeneration);
+            mixVal(settings.EnableShadows);
+            mixVal(settings.EnableSkybox);
+            if (world.DDGIProbeGrid) {
+                const auto& g = *world.DDGIProbeGrid;
+                mixVal(g.Enabled);
+                mixVal(g.GridDimensions);
+                mixVal(g.GridSpacing);
+                mixVal(g.GridOrigin);
+            }
+            const uint8_t hasDir = world.DirectionalLight.has_value() ? 1u : 0u;
+            mixVal(hasDir);
+            if (world.DirectionalLight) {
+                const auto& d = *world.DirectionalLight;
+                mixVal(d.Direction);
+                mixVal(d.Color);
+                mixVal(d.Intensity);
+                mixVal(d.AmbientIntensity);
+                mixVal(d.CastsShadows);
+            }
+            const size_t ptCount = world.PointLights.size();
+            mixVal(ptCount);
+            for (const auto& p : world.PointLights) {
+                mixVal(p.Position); mixVal(p.Color); mixVal(p.Intensity); mixVal(p.Radius); mixVal(p.Falloff);
+            }
+            const size_t spCount = world.SpotLights.size();
+            mixVal(spCount);
+            for (const auto& s : world.SpotLights) {
+                mixVal(s.Position); mixVal(s.Direction); mixVal(s.Color); mixVal(s.Intensity);
+                mixVal(s.Range); mixVal(s.InnerAngle); mixVal(s.OuterAngle);
+            }
+            const size_t rcCount = world.RectLights.size();
+            mixVal(rcCount);
+            for (const auto& r : world.RectLights) {
+                mixVal(r.Position); mixVal(r.Direction); mixVal(r.Up); mixVal(r.Color);
+                mixVal(r.Intensity); mixVal(r.Width); mixVal(r.Height); mixVal(r.Range); mixVal(r.TwoSided);
+            }
+            mixVal(world.Skybox.Authored);
+            mixVal(world.Skybox.Enabled);
+            mixVal(world.Skybox.EnvironmentLighting);
+            mixVal(world.Skybox.Type);
+            mixVal(world.Skybox.Intensity);
+            mixVal(world.Skybox.Exposure);
+            mixVal(world.Skybox.EnvironmentRotation);
+            mixVal(world.Skybox.SunDirection);
+            mixVal(world.Skybox.SunColor);
+            mixVal(world.Skybox.ZenithColor);
+            mixVal(world.Skybox.HorizonColor);
+            mixVal(world.Skybox.GroundColor);
+            const size_t meshCount = world.Meshes.size();
+            mixVal(meshCount);
+            for (const auto& m : world.Meshes) {
+                mixVal(m.WorldTransform);
+                mixVal(m.CastsShadows);
+                mixVal(m.Material.AlbedoColor);
+                mixVal(m.Material.SecondaryColor);
+                mixVal(m.Material.Emission);
+                mixVal(m.Material.ContentRevision);
+                mixVal(m.Material.Roughness);
+                mixVal(m.Material.Metallic);
+                mixVal(m.Material.PatternMode);
+                mixVal(m.Material.TileScale);
+                mixVal(m.Material.UseCustomShader);
+                mixBytes(m.Material.CustomShaderPath.data(), m.Material.CustomShaderPath.size());
+                mixBytes(m.Material.AlbedoMapPath.data(), m.Material.AlbedoMapPath.size());
+                mixBytes(m.Material.EmissiveMapPath.data(), m.Material.EmissiveMapPath.size());
+                mixBytes(m.Material.MaterialPath.data(), m.Material.MaterialPath.size());
+                if (m.Material.RHIMaterialAsset) {
+                    const auto& md = m.Material.RHIMaterialAsset->GetDesc();
+                    mixVal(md.BaseColor);
+                    mixVal(md.EmissiveColor);
+                    mixVal(md.EmissiveIntensity);
+                    mixVal(md.Roughness);
+                    mixVal(md.Metallic);
+                    mixVal(md.ShadingModel);
+                }
+                const auto* nativeViewPtr = m.NativeView.get();
+                mixVal(nativeViewPtr);
+                mixVal(m.MeshSourceUUID);
+            }
+            return hash;
         }
 
         DDGIMemoryBudget EstimateMemoryBudget(const glm::ivec3& dims, uint32_t maxProbesPerFrame, bool queryDevice) {

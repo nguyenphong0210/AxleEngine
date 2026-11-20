@@ -56,6 +56,7 @@ namespace Axle {
         class PostProcessPass;
         struct ReflectionCaptureTargets;
         class ReflectionCapturePass;
+        class DDGIPass;
     }
 
     namespace ReflectionCaptureContract {
@@ -282,6 +283,7 @@ namespace Axle {
         friend class Passes::FroxelFogPass;
         friend class Passes::PostProcessPass;
         friend class Passes::ReflectionCapturePass;
+        friend class Passes::DDGIPass;
     public:
         RHISceneRenderer();
         ~RHISceneRenderer();
@@ -565,6 +567,7 @@ namespace Axle {
         bool CompileDDGIShaders(RHI::RHIDevice& device);
         bool CreateDDGIPipelineLayout(RHI::RHIDevice& device);
         bool CreateDDGIPipeline(RHI::RHIDevice& device);
+        nri::Pipeline* GetOrCreateDDGICapturePipeline();
 
         // Temporal Anti-Aliasing (TAA) Pass
         bool CompileTAAShaders(RHI::RHIDevice& device);
@@ -758,6 +761,7 @@ namespace Axle {
         };
         // Render() waits for queue completion before reusing these resources.
         std::vector<std::unique_ptr<MaterialDrawResources>> m_MaterialDraws;
+        std::vector<std::unique_ptr<MaterialDrawResources>> m_DDGICaptureDraws;
         struct CustomDrawResources {
             std::vector<RHI::RHIBuffer> ConstantBuffers;
             std::vector<nri::DescriptorSet*> Sets;
@@ -810,6 +814,7 @@ namespace Axle {
         RHI::RHIShaderBytecode m_VertexShader;
         RHI::RHIShaderBytecode m_PixelShader;
         RHI::RHIShaderBytecode m_ReflectionPixelShader;
+        RHI::RHIShaderBytecode m_DDGICapturePixelShader;
 
         // Atmospheric Skybox Resources
         RHI::RHIPipelineLayout m_SkyboxPipelineLayout;
@@ -1101,11 +1106,18 @@ namespace Axle {
         nri::DescriptorSet* m_AutoExposureTextureSet = nullptr;
         nri::DescriptorSet* m_AutoExposureStorageSet = nullptr;
 
-        // Bounded DDGI irradiance atlas update resources
+        // Bounded DDGI irradiance + distance moment capture and compute update resources (M15 U7)
         RHI::RHIPipelineLayout m_DDGIPipelineLayout;
-        RHI::RHIResourceRef<nri::Pipeline> m_DDGIPipeline;
+        RHI::RHIResourceRef<nri::Pipeline> m_DDGISeedPipeline;
+        RHI::RHIResourceRef<nri::Pipeline> m_DDGIIrradiancePipeline;
+        RHI::RHIResourceRef<nri::Pipeline> m_DDGIDistancePipeline;
+        RHI::RHIResourceRef<nri::Pipeline> m_DDGICapturePipeline;
+        RHI::RHITexture m_DDGICaptureColor;
+        RHI::RHITexture m_DDGICaptureDepth;
         RHI::RHIBuffer m_DDGIConstantBuffer;
-        RHI::RHIShaderBytecode m_DDGIComputeShader;
+        RHI::RHIShaderBytecode m_DDGISeedShader;
+        RHI::RHIShaderBytecode m_DDGIUpdateIrradianceShader;
+        RHI::RHIShaderBytecode m_DDGIUpdateDistanceShader;
         RHI::RHISampler m_DDGISampler;
         RHI::RHIDescriptorPool m_DDGIDescriptorPool;
         nri::DescriptorSet* m_DDGITextureSet = nullptr;

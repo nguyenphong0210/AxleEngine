@@ -6,6 +6,7 @@
 #include "Passes/FroxelFogPass.hpp"
 #include "Passes/PostProcessPass.hpp"
 #include "Passes/ReflectionCapturePass.hpp"
+#include "Passes/DDGIPass.hpp"
 #include <Axle/Path.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Log.hpp>
@@ -244,17 +245,39 @@ namespace Axle {
         const bool useAutoExposure = settings.EnableAutoExposure && activeSampleCount == 1 && m_AutoExposurePipeline &&
             viewTargets->GetExposure() && viewTargets->GetExposure()->IsValid() &&
             viewTargets->GetExposure()->GetUAV() && viewTargets->GetExposure()->GetSRV();
-        const bool useDDGI = giFrame.UpdateScheduled && activeSampleCount == 1 && m_DDGIPipeline && sceneDepthTexture && sceneDepthDSV &&
-            viewTargets->GetDDGI() && viewTargets->GetDDGI()->IsValid() && viewTargets->GetDDGI()->GetUAV() != nullptr;
+        auto* ddgiIrradTex = viewTargets ? viewTargets->GetDDGI() : nullptr;
+        auto* ddgiDistTex = viewTargets ? viewTargets->GetDDGIDistance() : nullptr;
+        nri::Pipeline* ddgiCapturePipeline = GetOrCreateDDGICapturePipeline();
+        bool useDDGI = giFrame.UpdateScheduled && activeSampleCount == 1 && !captureActive && !planarActive &&
+            m_DDGISeedPipeline && m_DDGIIrradiancePipeline && m_DDGIDistancePipeline && ddgiCapturePipeline &&
+            sceneDepthTexture && sceneDepthDSV && world.DDGIProbeGrid &&
+            ddgiIrradTex && ddgiIrradTex->IsValid() && ddgiIrradTex->GetUAV() && ddgiIrradTex->GetSRV() &&
+            ddgiDistTex && ddgiDistTex->IsValid() && ddgiDistTex->GetUAV() && ddgiDistTex->GetSRV() &&
+            Passes::DDGIPass::EnsureScratchTargets(*this);
         if (giFrame.UpdateScheduled && !useDDGI) {
-            m_LastGIFrame.UpdateScheduled=false;
-            m_LastGIFrame.Status=GIFrameStatus::Fallback;
-            m_LastGIFrame.Diagnostic="ddgi_native_update_unavailable: IBL diffuse fallback";
+            m_LastGIFrame.UpdateScheduled = false;
+            m_LastGIFrame.IrradianceAvailable = false;
+            m_LastGIFrame.VisibilityAvailable = false;
+            m_LastGIFrame.SamplingEnabled = false;
+            m_LastGIFrame.Status = GIFrameStatus::Fallback;
+            m_LastGIFrame.Diagnostic = "ddgi_native_update_unavailable: IBL diffuse fallback";
             viewCtx.Diagnostics().AddFallback(m_LastGIFrame.Diagnostic);
         }
-        const auto ddgiInput = useDDGI ? graph.Import("DDGIInput", m_OpaqueSceneColor->GetNative()) : output;
-        const auto ddgiDepth = useDDGI ? graph.Import("DDGIDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
-        const auto ddgiOutput = useDDGI ? graph.Import("DDGIOutput", viewTargets->GetDDGI()->GetNative()) : output;
+        const uint64_t ddgiStartMatGen = view.MaterialGeneration;
+        bool ddgiResetSeed = false;
+        if (useDDGI) {
+            const uint64_t ddgiHash = DDGIContract::ComputeStateHash(world, settings, 0ull);
+            const DDGIHistoryFrame prevDDGI = viewCtx.GetDDGIHistory();
+            const bool historyValid = prevDDGI.Valid &&
+                prevDDGI.StateHash == ddgiHash &&
+                prevDDGI.ProbeCount == giFrame.ProbeCount;
+            ddgiResetSeed = !historyValid;
+        }
+        const auto ddgiCaptureColorRes = useDDGI ? graph.Import("DDGICaptureColor", m_DDGICaptureColor.GetNative()) : output;
+        const auto ddgiCaptureDepthRes = useDDGI ? graph.Import("DDGICaptureDepth", m_DDGICaptureDepth.GetNative()) : sceneDepth;
+        const auto ddgiOutput = useDDGI ? graph.Import("DDGIOutput", ddgiIrradTex->GetNative(), !ddgiResetSeed) : output;
+        const auto ddgiDistanceOutput = useDDGI ? graph.Import("DDGIDistanceOutput", ddgiDistTex->GetNative(), !ddgiResetSeed) : output;
+        Passes::DDGIPlan ddgiPlan;
         const auto exposureInput = useAutoExposure ? graph.Import("ExposureInput", useToneMap ? m_IntermediateHDRTarget->GetNative() : m_OpaqueSceneColor->GetNative()) : output;
         const auto exposureOutput = useAutoExposure ? graph.Import("ExposureOutput", viewTargets->GetExposure()->GetNative()) : output;
 
@@ -451,9 +474,15 @@ namespace Axle {
         };
         std::vector<DrawItem> opaqueQueue;
         std::vector<DrawItem> transparentQueue;
-        auto RenderSkybox=[&]() -> bool {
-        // 5. Procedural Atmospheric Skybox Pass (Rayleigh & Mie scattering at infinity)
-        if (settings.EnableSkybox && m_SkyboxPipeline && lighting.Environment) {
+        auto computeSkyboxState = [&](const PerspectiveCamera& skyCam, bool applyJitter, bool linearHdrOutput,
+                                      bool reflectionMRT, nri::Format targetColorFormat, nri::Format targetDepthFormat,
+                                      uint8_t targetSamples, RHISkyboxConstants& outConstants,
+                                      nri::Pipeline*& outPipeline) -> bool {
+            outConstants = RHISkyboxConstants{};
+            outPipeline = nullptr;
+            if (!(settings.EnableSkybox && m_SkyboxPipeline && lighting.Environment)) {
+                return false;
+            }
             SkyboxComponent activeSkybox = m_SkyboxParams;
             if (world.Skybox.Authored) {
                 activeSkybox.Enabled = world.Skybox.Enabled;
@@ -469,62 +498,63 @@ namespace Axle {
                 activeSkybox.CustomElevation = world.Skybox.CustomElevation;
                 activeSkybox.EnvironmentRotation = world.Skybox.EnvironmentRotation;
             }
+            const bool hdrEnvironment = activeSkybox.Type == SkyboxType::HDRCubemap && bool(m_Environment.Ready());
+            if (!(activeSkybox.Enabled && (activeSkybox.Type == SkyboxType::ProceduralAtmospheric || hdrEnvironment))) {
+                return false;
+            }
+            glm::vec3 sunDir = world.DirectionalLight && activeSkybox.SyncWithSun
+                ? lighting.SunDirection : glm::vec3(world.Skybox.SunDirection);
+            if (glm::length(sunDir) > 1e-4f) sunDir = glm::normalize(sunDir);
+            else sunDir = glm::vec3(0.0f, 1.0f, 0.0f);
 
-            const bool hdrEnvironment=activeSkybox.Type==SkyboxType::HDRCubemap && bool(m_Environment.Ready());
-            if (activeSkybox.Enabled && (activeSkybox.Type == SkyboxType::ProceduralAtmospheric || hdrEnvironment)) {
-                // 1. Determine normalized Sun direction
-                glm::vec3 sunDir = world.DirectionalLight && activeSkybox.SyncWithSun
-                    ? lighting.SunDirection : glm::vec3(world.Skybox.SunDirection);
-                if (glm::length(sunDir) > 1e-4f) {
-                    sunDir = glm::normalize(sunDir);
-                } else {
-                    sunDir = glm::vec3(0.0f, 1.0f, 0.0f);
-                }
+            const float sunElev = sunDir.y;
+            const float dayFactor = std::clamp(sunElev * 3.0f + 0.5f, 0.0f, 1.0f);
+            const float sunsetFactor = std::clamp(1.0f - std::abs(sunElev) * 2.5f, 0.0f, 1.0f);
 
-                // 2. Solar elevation, day factor and sunset horizon warming factors
-                float sunElev = sunDir.y;
-                float dayFactor = std::clamp(sunElev * 3.0f + 0.5f, 0.0f, 1.0f);
-                float sunsetFactor = std::clamp(1.0f - std::abs(sunElev) * 2.5f, 0.0f, 1.0f);
-
-                // 3. Setup 256-byte CBV aligned constant buffer
-                RHISkyboxConstants skyboxConstants{};
-                glm::mat4 skyboxProjZO = camera.GetUnclippedProjectionMatrixZO();
-                if (settings.EnableTAA) {
-                    skyboxProjZO[2][0] += 2.0f * jitterX;
-                    skyboxProjZO[2][1] += 2.0f * jitterY;
-                }
-                skyboxConstants.InvViewProjection = glm::inverse(skyboxProjZO * camera.GetViewMatrix());
+            glm::mat4 skyboxProjZO = skyCam.GetUnclippedProjectionMatrixZO();
+            if (applyJitter && settings.EnableTAA) {
+                skyboxProjZO[2][0] += 2.0f * jitterX;
+                skyboxProjZO[2][1] += 2.0f * jitterY;
+            }
+            outConstants.InvViewProjection = glm::inverse(skyboxProjZO * skyCam.GetViewMatrix());
+            outConstants.CameraPosition = glm::vec4(skyCam.GetPosition(), 1.0f);
+            outConstants.SunDirection = glm::vec4(sunDir, sunElev);
+            const float sunIntensity = world.DirectionalLight.has_value()
+                ? std::max(0.0f, world.DirectionalLight->Intensity) : 0.0f;
+            outConstants.SunColor = glm::vec4(glm::vec3(lighting.SunColor) * sunIntensity * activeSkybox.Intensity, dayFactor);
+            outConstants.ZenithColor = glm::vec4(activeSkybox.ZenithColor, sunsetFactor);
+            outConstants.HorizonColor = glm::vec4(activeSkybox.HorizonColor, activeSkybox.Turbidity);
+            outConstants.GroundColor = glm::vec4(activeSkybox.GroundColor, activeSkybox.Exposure);
+            const float skyboxToneMode = linearHdrOutput ? -1.0f : static_cast<float>(settings.ToneMappingMode);
+            outConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, skyboxToneMode, linearHdrOutput ? 1.0f : settings.Gamma);
+            if (hdrEnvironment) {
+                const double authoredScale = std::isfinite(activeSkybox.Intensity) && std::isfinite(activeSkybox.Exposure)
+                    ? std::clamp(double(activeSkybox.Intensity) * std::max(0.0, double(activeSkybox.Exposure)), 0.0, 1e12) : 0.0;
+                const float rotation = std::isfinite(activeSkybox.EnvironmentRotation)
+                    ? glm::radians(activeSkybox.EnvironmentRotation) : 0.0f;
+                outConstants.Reserved[0] = glm::vec4(1, static_cast<float>(authoredScale * m_Environment.SourceExposure()), rotation, 0);
+                outConstants.Params.z = linearHdrOutput ? -1.f : 0.f;
+                outConstants.Params.w = linearHdrOutput ? 1.f : 2.2f;
+            }
+            outPipeline = reflectionMRT
+                ? GetOrCreateSkyboxPipeline(targetColorFormat, targetDepthFormat, targetSamples, true)
+                : (targetColorFormat == nri::Format::RGBA16_SFLOAT && targetDepthFormat == nri::Format::D32_SFLOAT && m_SkyboxPipelineHDR && targetSamples == 1)
+                    ? m_SkyboxPipelineHDR
+                    : (targetColorFormat == nri::Format::RGBA8_UNORM && targetDepthFormat == nri::Format::D32_SFLOAT && m_SkyboxPipeline && targetSamples == 1)
+                        ? m_SkyboxPipeline
+                        : GetOrCreateSkyboxPipeline(targetColorFormat, targetDepthFormat, targetSamples);
+            return outPipeline != nullptr;
+        };
+        auto RenderSkybox=[&]() -> bool {
+        // 5. Procedural Atmospheric Skybox Pass (Rayleigh & Mie scattering at infinity)
+        if (settings.EnableSkybox && m_SkyboxPipeline && lighting.Environment) {
+            RHISkyboxConstants skyboxConstants{};
+            nri::Pipeline* activeSkyboxPipeline = nullptr;
+            const bool linearHdrOutput = settings.EnableToneMapping || captureLinearHdr;
+            const bool reflectionMRT = useSSR || usePlanarResolve;
+            if (computeSkyboxState(camera, true, linearHdrOutput, reflectionMRT, sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, skyboxConstants, activeSkyboxPipeline)) {
                 skyboxConstants.CameraPosition = sceneConstants.CameraPosition;
-                skyboxConstants.SunDirection = glm::vec4(sunDir, sunElev);
-                const float sunIntensity = world.DirectionalLight.has_value()
-                    ? std::max(0.0f, world.DirectionalLight->Intensity) : 0.0f;
-                skyboxConstants.SunColor = glm::vec4(glm::vec3(lighting.SunColor) * sunIntensity * activeSkybox.Intensity, dayFactor);
-                skyboxConstants.ZenithColor = glm::vec4(activeSkybox.ZenithColor, sunsetFactor);
-                skyboxConstants.HorizonColor = glm::vec4(activeSkybox.HorizonColor, activeSkybox.Turbidity);
-                skyboxConstants.GroundColor = glm::vec4(activeSkybox.GroundColor, activeSkybox.Exposure);
-                // If Tone Mapping is enabled or dynamic capture/planar is active, output linear HDR sky radiance (-1.0f mode)
-                const bool linearHdrOutput = settings.EnableToneMapping || captureLinearHdr;
-                float skyboxToneMode = linearHdrOutput ? -1.0f : static_cast<float>(settings.ToneMappingMode);
-                skyboxConstants.Params = glm::vec4(activeSkybox.SunSize, activeSkybox.SunGlow, skyboxToneMode, linearHdrOutput ? 1.0f : settings.Gamma);
-
-                if(hdrEnvironment) {
-                    const double authoredScale=std::isfinite(activeSkybox.Intensity)&&std::isfinite(activeSkybox.Exposure)
-                        ? std::clamp(double(activeSkybox.Intensity)*std::max(0.0,double(activeSkybox.Exposure)),0.0,1e12) : 0.0;
-                    const float rotation=std::isfinite(activeSkybox.EnvironmentRotation)
-                        ? glm::radians(activeSkybox.EnvironmentRotation) : 0.0f;
-                    skyboxConstants.Reserved[0]=glm::vec4(1,static_cast<float>(authoredScale*m_Environment.SourceExposure()),rotation,0);
-                    skyboxConstants.Params.z=linearHdrOutput?-1.f:0.f;
-                    skyboxConstants.Params.w=linearHdrOutput?1.f:2.2f;
-                }
                 if (!m_SkyboxConstantBuffer.UpdateData(&skyboxConstants, sizeof(RHISkyboxConstants))) return false;
-
-                // 4. Bind Skybox Graphics Pipeline matching active color & depth formats
-                const bool reflectionMRT = useSSR || usePlanarResolve;
-                nri::Pipeline* activeSkyboxPipeline = reflectionMRT ? GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount, true) : (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && m_SkyboxPipelineHDR && activeSampleCount == 1)
-                                                          ? m_SkyboxPipelineHDR
-                                                          : (sceneTargetFormat == nri::Format::RGBA8_UNORM && m_SkyboxPipeline && activeSampleCount == 1)
-                                                                ? m_SkyboxPipeline
-                                                                : GetOrCreateSkyboxPipeline(sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
                 if (!activeSkyboxPipeline) return false;
                 Commands().SetPipeline(activeSkyboxPipeline);
                 Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_SkyboxPipelineLayout);
@@ -533,7 +563,7 @@ namespace Axle {
                 }
 
                 m_DescriptorPool.Bind(Commands().GetNative());
-            if (!bindDescriptorSet(0, m_SkyboxDescriptorSet)) return false;
+                if (!bindDescriptorSet(0, m_SkyboxDescriptorSet)) return false;
                 // 5. Draw full-screen triangle on far plane (SV_VertexID unproject)
                 Commands().Draw(3, 1, 0, 0);
                 m_LastDrawCallCount++;
@@ -543,6 +573,43 @@ namespace Axle {
         return true;
         };
 
+        auto populateBuiltinMaterialResource = [&](ResolvedSurface& surface, MaterialDrawResources& resource, bool refractionReady) -> bool {
+            RHIMaterialConstants materialData = surface.ToMaterialConstants();
+            std::vector<nri::Descriptor*> srvs(ForwardTextureCount);
+            for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
+                std::shared_ptr<const RHITexture> texture;
+                if (materialData.Flags.x & (1u << slot)) {
+                    const auto& binding = surface.Textures[slot];
+                    texture = binding.Native;
+                    if (!texture) {
+                        std::string diagnostic;
+                        texture = m_MaterialTextures.Get(binding.Path, slot == 0 || slot == 5, &diagnostic);
+                        if (!diagnostic.empty()) { surface.Fallback = true; surface.Diagnostic = std::move(diagnostic); }
+                    }
+                }
+                if (texture && IsCaptureFeedbackTexture(*texture)) texture.reset();
+                if (!texture) {
+                    materialData.Flags.x &= ~(1u << slot);
+                    texture = RHIMaterial::GetFallbackTexture(static_cast<RHITextureSlot>(slot));
+                }
+                if (!texture || !texture->GetSRV()) return false;
+                resource.Textures[slot] = texture;
+                surface.Textures[slot].Native = texture;
+                srvs[slot < 6 ? slot : slot + 3] = texture->GetSRV();
+            }
+            srvs[6] = ActiveIrradiance()->GetSRV();
+            srvs[7] = ActivePrefilter()->GetSRV();
+            srvs[8] = ActiveBRDF()->GetSRV();
+            srvs[13] = refractionReady ? m_OpaqueSceneColor->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
+            srvs[14] = refractionReady ? m_OpaqueSceneDepth->GetSRV() : RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
+            srvs[15] = m_CascadedShadows.GetSRV();
+            srvs[16] = m_LocalShadows.GetSRV();
+            materialData.RefractionFrame = glm::vec4(width, height, refractionReady ? 1.0f : 0.0f, 0.0f);
+            if (!FinalizeSurfaceTextureBindings(surface, resource.Textures, materialData.Flags.x)) return false;
+            if (!m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs)) return false;
+            if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) return false;
+            return true;
+        };
         size_t materialDrawIndex = 0, customDrawIndex = 0;
         bool drawFailed = false;
         auto declareMesh = [&](std::string_view pass, const RHIMeshView& mesh) {
@@ -705,40 +772,7 @@ namespace Axle {
                 }
                 item.DrawResourceIndex = static_cast<uint32_t>(materialDrawIndex);
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
-                RHIMaterialConstants materialData = item.Surface.ToMaterialConstants();
-                std::vector<nri::Descriptor*> srvs(ForwardTextureCount);
-                for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
-                    std::shared_ptr<const RHITexture> texture;
-                    if (materialData.Flags.x & (1u << slot)) {
-                        const auto& binding = item.Surface.Textures[slot];
-                        texture = binding.Native;
-                        if (!texture) {
-                            std::string diagnostic;
-                            texture = m_MaterialTextures.Get(binding.Path, slot == 0 || slot == 5, &diagnostic);
-                            if (!diagnostic.empty()) { item.Surface.Fallback=true; item.Surface.Diagnostic=std::move(diagnostic); }
-                        }
-                    }
-                    if (texture && IsCaptureFeedbackTexture(*texture)) texture.reset();
-                    if (!texture) {
-                        materialData.Flags.x &= ~(1u << slot);
-                        texture = RHIMaterial::GetFallbackTexture(static_cast<RHITextureSlot>(slot));
-                    }
-                    if (!texture || !texture->GetSRV()) { drawFailed = true; return; }
-                    resource.Textures[slot] = texture;
-                    item.Surface.Textures[slot].Native = texture;
-                    srvs[slot<6?slot:slot+3]=texture->GetSRV();
-                }
-                srvs[6]=ActiveIrradiance()->GetSRV();
-                srvs[7]=ActivePrefilter()->GetSRV();
-                srvs[8]=ActiveBRDF()->GetSRV();
-                srvs[13]=refractionReady?m_OpaqueSceneColor->GetSRV():RHIMaterial::GetDefaultBlackTexture()->GetSRV();
-                srvs[14]=refractionReady?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
-                srvs[15]=m_CascadedShadows.GetSRV();
-                srvs[16]=m_LocalShadows.GetSRV();
-                materialData.RefractionFrame=glm::vec4(width,height,refractionReady?1.0f:0.0f,0.0f);
-                if (!FinalizeSurfaceTextureBindings(item.Surface, resource.Textures, materialData.Flags.x)) { drawFailed = true; return; }
-                if (!m_DescriptorPool.UpdateTextureRange(resource.Set, 0, 0, srvs)) { drawFailed = true; return; }
-                if (!resource.Constants.UpdateData(&materialData, sizeof(materialData))) { drawFailed = true; return; }
+                if (!populateBuiltinMaterialResource(item.Surface, resource, refractionReady)) { drawFailed = true; return; }
                 item.PreparedPipeline = needed;
                 item.PipelineLease = m_Device->GetResources().AcquireNative(needed);
                 if (!item.PipelineLease.IsLive() || !graph.DeclareRead(pass, resource.Constants.GetCBV()) ||
@@ -1130,6 +1164,202 @@ namespace Axle {
             return {};
         });
 
+        bool sceneQueuesPrepared = false;
+        RenderPassResult sceneQueuesResult;
+        auto buildAndPrepareSceneQueues = [&]() -> RenderPassResult {
+            if (sceneQueuesPrepared) return sceneQueuesResult;
+            sceneQueuesPrepared = true;
+            std::unordered_map<CustomProgramKey, std::string, CustomProgramKeyHash> customFingerprints;
+            const glm::vec3 camPos = camera.GetPosition();
+            for (const auto& meshInst : world.Meshes) {
+                const auto entityID = static_cast<entt::entity>(meshInst.EntityID);
+                auto mesh = meshInst.NativeView;
+                if (mesh && mesh->IsValid()) {
+                    glm::mat4 worldMat = meshInst.WorldTransform;
+                    DrawItem item;
+                    item.DiagnosticEntity = entityID;
+                    item.Mesh = mesh;
+                    item.PushConsts.Model = worldMat;
+                    item.Surface = MaterialResolver::Resolve(meshInst.Material);
+                    item.BaseSurfaceGeneration = item.Surface.Generation;
+                    if (!item.Surface.Valid) {
+                        m_MaterialDiagnostics[meshInst.EntityID] = item.Surface.Diagnostic;
+                        viewCtx.Diagnostics().AddMaterial(meshInst.EntityID, item.Surface);
+                        return sceneQueuesResult = RenderPassResult::Failed(item.Surface.Diagnostic);
+                    }
+                    const glm::vec3 diff = glm::vec3(worldMat[3]) - camPos;
+                    item.DistanceSq = glm::dot(diff, diff);
+                    if (meshInst.Material.RHIMaterialAsset) {
+                        auto mat = meshInst.Material;
+                        auto diagnostic = [&](std::string message) { m_MaterialDiagnostics[meshInst.EntityID] = std::move(message); };
+                        diagnostic("");
+                        if (mat.UseCustomShader) {
+                            CustomProgramKey key;
+                            key.ShaderPath = mat.CustomShaderPath.empty() ? "" : PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(mat.CustomShaderPath)).lexically_normal());
+                            key.Backend = m_Device->GetBackend();
+                            auto [fingerprint, inserted] = customFingerprints.try_emplace(key);
+                            if (inserted && !key.ShaderPath.empty()) fingerprint->second = m_CustomProgramCache.ComputeFingerprint(key);
+                            auto fp = fingerprint->second;
+                            auto selected = m_CustomProgramCache.SelectProgram(true, key.ShaderPath, key, fp);
+                            if (const auto* entry = m_CustomProgramCache.FindEntry(key)) fingerprint->second = entry->LastAttemptFingerprint;
+                            diagnostic(selected.Diagnostic);
+                            if (selected.Kind == ProgramSelectionKind::Custom && selected.Generation) {
+                                const auto& plan = selected.Generation->BindingPlan;
+                                mat.CustomProperties = SynchronizeCustomProperties(plan.PropertySchema, mat.CustomProperties);
+                                m_MaterialFeedback[meshInst.EntityID] = {mat.CustomProperties, selected.Generation->GenerationID};
+                                EngineMaterialValues engine;
+                                engine.Model = worldMat; engine.ViewProjection = sceneConstants.ViewProjection;
+                                engine.View = sceneConstants.View; engine.Projection = sceneConstants.Projection;
+                                engine.CameraPosition = sceneConstants.CameraPosition;
+                                engine.SunDirection = sceneConstants.SunDirection; engine.SunColor = sceneConstants.SunColor;
+                                auto resolved = ResolveShaderSurface(item.Surface, SurfaceEvaluation::CustomShader,
+                                    selected.Generation->GenerationID, plan, engine, mat.CustomProperties);
+                                if (auto* surface = std::get_if<ResolvedShaderSurface>(&resolved)) {
+                                    if (surface->Surface.Fallback) {
+                                        const auto unsupported = surface->Surface.UnsupportedFeatures;
+                                        const auto message = surface->Surface.Diagnostic;
+                                        item.Surface.Fallback = true;
+                                        item.Surface.UnsupportedFeatures = unsupported;
+                                        item.Surface.Diagnostic = message;
+                                        item.Surface.Evaluation = SurfaceEvaluation::BuiltIn;
+                                        item.Surface.ShaderGeneration = 0;
+                                        item.CustomGeneration.reset();
+                                        item.UseCustomShader = false;
+                                        diagnostic(item.Surface.Diagnostic);
+                                        m_MaterialFeedback[meshInst.EntityID].Generation = 0;
+                                    } else {
+                                        item.Surface = std::move(surface->Surface);
+                                        item.PackedConstants = std::move(surface->Constants);
+                                        item.TextureRequests = std::move(surface->Textures);
+                                        item.CustomGeneration = selected.Generation;
+                                        item.UseCustomShader = true;
+                                        if (!item.Surface.Diagnostic.empty()) diagnostic(item.Surface.Diagnostic);
+                                    }
+                                } else {
+                                    const auto& error = std::get<MaterialBindingError>(resolved);
+                                    diagnostic(error.Code + ": " + error.Message);
+                                    m_MaterialFeedback[meshInst.EntityID].Generation = 0;
+                                }
+                            }
+                        }
+                    } else if (meshInst.Material.UseCustomShader) {
+                        m_MaterialDiagnostics[meshInst.EntityID] = "CUSTOM_SURFACE_INPUT_MISSING: native material input unavailable; using procedural adapter";
+                    }
+                    if (const auto diagnostic = m_MaterialDiagnostics.find(meshInst.EntityID); diagnostic != m_MaterialDiagnostics.end())
+                        item.Surface.Diagnostic = diagnostic->second;
+                    if (!item.Surface.Diagnostic.empty()) item.Surface.Fallback = true;
+                    {
+                        item.Surface.ApplyToPushConstants(item.PushConsts);
+                        item.PushConsts.Model = worldMat;
+                        item.SurfaceType = item.Surface.Surface;
+                        item.CullMode = item.Surface.Cull;
+                        item.DepthWrite = item.Surface.DepthWrite;
+                        item.RenderQueue = item.Surface.RenderQueue;
+                    }
+                    if (item.SurfaceType == Axle::SurfaceType::Transparent || item.SurfaceType == Axle::SurfaceType::Additive) {
+                        transparentQueue.push_back(std::move(item));
+                    } else {
+                        opaqueQueue.push_back(std::move(item));
+                    }
+                }
+            }
+            if (useFog) {
+                auto* fogUniform = viewCtx.PreparePassUniform("TransparentFog", sizeof(activeFogConstants));
+                if (!fogUniform || !fogUniform->UpdateData(&activeFogConstants, sizeof(activeFogConstants))) return sceneQueuesResult = fail();
+                transparentFogCBV = fogUniform->GetCBV();
+                if (std::any_of(transparentQueue.begin(), transparentQueue.end(), [](const auto& item) {
+                        return item.UseCustomShader && item.SurfaceType == SurfaceType::Additive;
+                    })) {
+                    auto additiveFog = activeFogConstants;
+                    additiveFog.FogParams.w = 1.0f;
+                    auto* additiveUniform = viewCtx.PreparePassUniform("AdditiveFog", sizeof(additiveFog));
+                    if (!additiveUniform || !additiveUniform->UpdateData(&additiveFog, sizeof(additiveFog))) return sceneQueuesResult = fail();
+                    additiveFogCBV = additiveUniform->GetCBV();
+                }
+            }
+            for (auto& item : opaqueQueue) PrepareDrawItem(item, "OpaqueAndSky", false);
+            if (allowCaptureTransparent) {
+                for (auto& item : transparentQueue) PrepareDrawItem(item, "Transparent", copyRefraction);
+            }
+            if (drawFailed) return sceneQueuesResult = RenderPassResult::Failed("material input preparation failed: " + graph.GetError());
+            return sceneQueuesResult = {};
+        };
+
+        nri::Pipeline* ddgiSkyboxPipeline = nullptr;
+        addPass("DDGIUpdate", [&](const RenderPassContext&) -> RenderPassResult {
+            if (!useDDGI || !ddgiPlan.Active) return {};
+            const Passes::PassRecordOps ddgiOps{
+                beginPass, passUniform,
+                [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                    return bindDescriptorSet(index, set, bindPoint);
+                }, beginRendering, endRendering};
+            if (!Passes::DDGIPass::RecordCapture(*this, ddgiPlan, ddgiOps, ddgiSkyboxPipeline, m_ForwardOcclusionDescriptorSet, m_LastDrawCallCount) ||
+                !Passes::DDGIPass::RecordSeedAndUpdate(*this, ddgiPlan, ddgiOps, dispatchCount)) {
+                return fail();
+            }
+            return {};
+        }, [&](RenderGraph& graph) {
+            if (!useDDGI) return;
+            Passes::DDGIPlan declareStub{};
+            declareStub.Active = true;
+            declareStub.ResetSeed = ddgiResetSeed;
+            Passes::DDGIPass::Declare(graph, declareStub,
+                ddgiCaptureColorRes, ddgiCaptureDepthRes, ddgiOutput, ddgiDistanceOutput,
+                shadows, localShadows, shadowAtlas != nullptr, localAtlas != nullptr);
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (!useDDGI) return {};
+            if (auto res = buildAndPrepareSceneQueues(); !res) return res;
+            std::vector<Passes::DDGICaptureDraw> ddgiDraws;
+            ddgiDraws.reserve(opaqueQueue.size());
+            size_t captureCustomDrawIdx = 0;
+            for (auto& item : opaqueQueue) {
+                Passes::DDGICaptureDraw draw{};
+                draw.Mesh = item.Mesh.get();
+                std::memcpy(draw.PushConstants.data(), &item.PushConsts, sizeof(RHIObjectPushConstants));
+                if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
+                    const auto& res = *m_MaterialDraws[item.DrawResourceIndex];
+                    draw.MaterialCBV = res.Constants.GetCBV();
+                    draw.MaterialSet = res.Set;
+                } else {
+                    if (captureCustomDrawIdx == m_DDGICaptureDraws.size()) {
+                        auto res = std::make_unique<MaterialDrawResources>();
+                        if (!res->Constants.Init(RHIBufferDesc::Constant(sizeof(RHIMaterialConstants), RHIMemoryLocation::HostUpload, "DDGICaptureMaterial")) ||
+                            !(res->Set = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 0))) {
+                            return RenderPassResult::Failed("DDGICapture material allocation failed");
+                        }
+                        m_DDGICaptureDraws.push_back(std::move(res));
+                    }
+                    auto& capRes = *m_DDGICaptureDraws[captureCustomDrawIdx++];
+                    if (!populateBuiltinMaterialResource(item.Surface, capRes, false)) {
+                        return RenderPassResult::Failed("DDGICapture material binding preparation failed");
+                    }
+                    draw.MaterialCBV = capRes.Constants.GetCBV();
+                    draw.MaterialSet = capRes.Set;
+                }
+                ddgiDraws.push_back(draw);
+            }
+            RHISkyboxConstants skyboxBase{};
+            const bool hasSkyDraw = computeSkyboxState(
+                camera, false, true, false, nri::Format::RGBA16_SFLOAT, nri::Format::D32_SFLOAT, 1,
+                skyboxBase, ddgiSkyboxPipeline);
+            if (!Passes::DDGIPass::BuildPlan(*this, viewCtx, world, settings, giFrame, sceneConstants,
+                    hasSkyDraw ? &skyboxBase : nullptr, hasSkyDraw, viewTargets.get(), std::move(ddgiDraws), ddgiPlan) ||
+                !Passes::DDGIPass::PrepareGraphBindings(*this, graph, ddgiPlan, ddgiIrradTex, ddgiDistTex,
+                    m_ForwardOcclusionDescriptorSet, ddgiPlan.HasSkyboxDraw)) {
+                return fail();
+            }
+            if (ddgiPlan.ResetSeed && !uniform("DDGISeed", sizeof(RHIDDGIConstants))) return fail();
+            if (!uniform("DDGIUpdate", sizeof(RHIDDGIConstants))) return fail();
+            m_LastGIFrame.IrradianceAvailable = true;
+            m_LastGIFrame.VisibilityAvailable = true;
+            m_LastGIFrame.UpdatedProbeCount = ddgiPlan.UpdateCount;
+            m_LastGIFrame.ProbeCursor = ddgiPlan.StartProbeCursor;
+            m_LastGIFrame.Diagnostic = ddgiPlan.ResetSeed
+                ? "ddgi_experimental_atlas_seeded: diffuse sampling pending U7-C"
+                : "ddgi_experimental_atlas_updated: diffuse sampling pending U7-C";
+            return {};
+        });
+
         addPass("OpaqueAndSky", [&](const RenderPassContext&) -> RenderPassResult {
             if (!beginPass("OpaqueAndSky")) return fail();
             const bool reflectionMRT = useSSR || usePlanarResolve;
@@ -1200,133 +1430,7 @@ namespace Axle {
             if (shadowAtlas) opaqueUses.push_back({shadows,Layout::ShaderResource});
             graph.AddPass("OpaqueAndSky", std::move(opaqueUses));
         }, [&](const RenderPassContext&) -> RenderPassResult {
-            std::unordered_map<CustomProgramKey,std::string,CustomProgramKeyHash> customFingerprints;
-
-            glm::vec3 camPos = camera.GetPosition();
-
-            for (const auto& meshInst : world.Meshes) {
-                const auto entityID = static_cast<entt::entity>(meshInst.EntityID);
-                auto mesh = meshInst.NativeView;
-                if (mesh && mesh->IsValid()) {
-                    glm::mat4 worldMat = meshInst.WorldTransform;
-
-                    DrawItem item;
-                    item.DiagnosticEntity=entityID;
-                    item.Mesh = mesh;
-                    item.PushConsts.Model = worldMat;
-                    item.Surface = MaterialResolver::Resolve(meshInst.Material);
-                    item.BaseSurfaceGeneration = item.Surface.Generation;
-                    if (!item.Surface.Valid) {
-                        m_MaterialDiagnostics[meshInst.EntityID] = item.Surface.Diagnostic;
-                        viewCtx.Diagnostics().AddMaterial(meshInst.EntityID, item.Surface);
-                        return RenderPassResult::Failed(item.Surface.Diagnostic);
-                    }
-                    glm::vec3 diff = glm::vec3(worldMat[3]) - camPos;
-                    item.DistanceSq = glm::dot(diff, diff);
-
-                    // Apply PBR Material parameters if present
-                    // Entity material overrides the mesh resource material.
-                    if (meshInst.Material.RHIMaterialAsset) {
-                        auto mat = meshInst.Material;
-                        auto diagnostic=[&](std::string message) {
-                            m_MaterialDiagnostics[meshInst.EntityID] = std::move(message);
-                        };
-                        diagnostic("");
-                        if (mat.UseCustomShader) {
-                            CustomProgramKey key;
-                            key.ShaderPath=mat.CustomShaderPath.empty()?"":PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(mat.CustomShaderPath)).lexically_normal());
-                            key.Backend=m_Device->GetBackend();
-                            auto [fingerprint,inserted]=customFingerprints.try_emplace(key);
-                            if(inserted && !key.ShaderPath.empty())fingerprint->second=m_CustomProgramCache.ComputeFingerprint(key);
-                            auto fp=fingerprint->second;
-                            auto selected=m_CustomProgramCache.SelectProgram(true,key.ShaderPath,key,fp);
-                            if(const auto* entry=m_CustomProgramCache.FindEntry(key))fingerprint->second=entry->LastAttemptFingerprint;
-                            diagnostic(selected.Diagnostic);
-                            if (selected.Kind==ProgramSelectionKind::Custom && selected.Generation) {
-                                const auto& plan=selected.Generation->BindingPlan;
-                                mat.CustomProperties=SynchronizeCustomProperties(plan.PropertySchema,mat.CustomProperties);
-                                m_MaterialFeedback[meshInst.EntityID] = {mat.CustomProperties, selected.Generation->GenerationID};
-                                EngineMaterialValues engine;
-                                engine.Model=worldMat; engine.ViewProjection=sceneConstants.ViewProjection;
-                                engine.View=sceneConstants.View; engine.Projection=sceneConstants.Projection;
-                                engine.CameraPosition=sceneConstants.CameraPosition;
-                                engine.SunDirection=sceneConstants.SunDirection; engine.SunColor=sceneConstants.SunColor;
-                                auto resolved = ResolveShaderSurface(item.Surface, SurfaceEvaluation::CustomShader,
-                                    selected.Generation->GenerationID, plan, engine, mat.CustomProperties);
-                                if (auto* surface = std::get_if<ResolvedShaderSurface>(&resolved)) {
-                                    if (surface->Surface.Fallback) {
-                                        // Unsupported canonical controls must use
-                                        // the complete ForwardPBR path. Keeping
-                                        // the custom pipeline selected here would
-                                        // silently discard the authored feature.
-                                        const auto unsupported = surface->Surface.UnsupportedFeatures;
-                                        const auto message = surface->Surface.Diagnostic;
-                                        item.Surface.Fallback = true;
-                                        item.Surface.UnsupportedFeatures = unsupported;
-                                        item.Surface.Diagnostic = message;
-                                        item.Surface.Evaluation = SurfaceEvaluation::BuiltIn;
-                                        item.Surface.ShaderGeneration = 0;
-                                        item.CustomGeneration.reset();
-                                        item.UseCustomShader = false;
-                                        diagnostic(item.Surface.Diagnostic);
-                                        m_MaterialFeedback[meshInst.EntityID].Generation = 0;
-                                    } else {
-                                        item.Surface = std::move(surface->Surface);
-                                        item.PackedConstants = std::move(surface->Constants);
-                                        item.TextureRequests = std::move(surface->Textures);
-                                        item.CustomGeneration = selected.Generation;
-                                        item.UseCustomShader = true;
-                                        if (!item.Surface.Diagnostic.empty()) diagnostic(item.Surface.Diagnostic);
-                                    }
-                                } else {
-                                    const auto& error = std::get<MaterialBindingError>(resolved);
-                                    diagnostic(error.Code + ": " + error.Message);
-                                    m_MaterialFeedback[meshInst.EntityID].Generation = 0;
-                                }
-                            }
-                        }
-                    } else if (meshInst.Material.UseCustomShader) {
-                        m_MaterialDiagnostics[meshInst.EntityID] = "CUSTOM_SURFACE_INPUT_MISSING: native material input unavailable; using procedural adapter";
-                    }
-                    if (const auto diagnostic = m_MaterialDiagnostics.find(meshInst.EntityID); diagnostic != m_MaterialDiagnostics.end())
-                        item.Surface.Diagnostic = diagnostic->second;
-                    if (!item.Surface.Diagnostic.empty()) item.Surface.Fallback=true;
-                    {
-                        item.Surface.ApplyToPushConstants(item.PushConsts);
-                        item.PushConsts.Model = worldMat;
-                        item.SurfaceType = item.Surface.Surface;
-                        item.CullMode = item.Surface.Cull;
-                        item.DepthWrite = item.Surface.DepthWrite;
-                        item.RenderQueue = item.Surface.RenderQueue;
-                    }
-
-                    if (item.SurfaceType == Axle::SurfaceType::Transparent || item.SurfaceType == Axle::SurfaceType::Additive) {
-                        transparentQueue.push_back(std::move(item));
-                    } else {
-                        opaqueQueue.push_back(std::move(item));
-                    }
-                }
-            }
-
-            if (useFog) {
-                auto* fogUniform = viewCtx.PreparePassUniform("TransparentFog", sizeof(activeFogConstants));
-                if (!fogUniform || !fogUniform->UpdateData(&activeFogConstants, sizeof(activeFogConstants))) return fail();
-                transparentFogCBV = fogUniform->GetCBV();
-                if (std::any_of(transparentQueue.begin(), transparentQueue.end(), [](const auto& item) {
-                        return item.UseCustomShader && item.SurfaceType == SurfaceType::Additive;
-                    })) {
-                    auto additiveFog = activeFogConstants;
-                    additiveFog.FogParams.w = 1.0f;
-                    auto* additiveUniform = viewCtx.PreparePassUniform("AdditiveFog", sizeof(additiveFog));
-                    if (!additiveUniform || !additiveUniform->UpdateData(&additiveFog, sizeof(additiveFog))) return fail();
-                    additiveFogCBV = additiveUniform->GetCBV();
-                }
-            }
-            for (auto& item : opaqueQueue) PrepareDrawItem(item,"OpaqueAndSky",false);
-            if (allowCaptureTransparent) {
-                for (auto& item : transparentQueue) PrepareDrawItem(item,"Transparent",copyRefraction);
-            }
-            if (drawFailed) return RenderPassResult::Failed("material input preparation failed: " + graph.GetError());
+            if (auto res = buildAndPrepareSceneQueues(); !res) return res;
             auto declareForwardPass = [&](const char* pass) {
                 if (!graph.DeclareRead(pass, m_ForwardOcclusionDescriptorSet)) return false;
                 for (auto* cbv : {m_SceneConstantBuffer.GetCBV(), m_LightBuffer.GetCBV(),
@@ -1756,48 +1860,6 @@ namespace Axle {
         });
         }
 
-        addPass("DDGIUpdate", [&](const RenderPassContext&) -> RenderPassResult {
-            if (useDDGI) {
-                if (!beginPass("DDGICopy")) return fail();
-                Commands().CopyTexture(*m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
-                Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
-                if (!beginPass("DDGIUpdate")) return fail();
-                RHIDDGIConstants ddgiConstants{};
-                ddgiConstants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height), 1.0f / width, 1.0f / height);
-                ddgiConstants.Params = glm::vec4(giFrame.EnergyMultiplier, 1.0f, 0.0f, 0.0f);
-                ddgiConstants.GridDimensions = glm::vec4(glm::vec3(giFrame.GridDimensions), 0.0f);
-                ddgiConstants.GridOrigin = glm::vec4(giFrame.GridOrigin, 0.0f);
-                ddgiConstants.GridSpacing = glm::vec4(giFrame.GridSpacing, 0.0f);
-                if (!passUniform().UpdateData(&ddgiConstants, sizeof(RHIDDGIConstants))) return fail();
-                auto* ddgiTarget = viewTargets->GetDDGI();
-                if (!m_DDGIDescriptorPool.UpdateTexture(m_DDGITextureSet, 0, 0, m_OpaqueSceneDepth->GetSRV()) ||
-                    !m_DDGIDescriptorPool.UpdateTexture(m_DDGITextureSet, 0, 1, m_OpaqueSceneColor->GetSRV()) ||
-                    !m_DDGIDescriptorPool.UpdateSampler(m_DDGITextureSet, 1, 0, m_DDGISampler.GetNative()) ||
-                    !m_DDGIDescriptorPool.UpdateStorageTexture(m_DDGIStorageSet, 0, 0, ddgiTarget->GetUAV())) return fail();
-                Commands().SetPipeline(m_DDGIPipeline);
-                Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, m_DDGIPipelineLayout);
-                Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
-                m_DDGIDescriptorPool.Bind(Commands().GetNative());
-                 if (!bindDescriptorSet(0, m_DDGITextureSet, nri::BindPoint::COMPUTE) ||
-                     !bindDescriptorSet(1, m_DDGIStorageSet, nri::BindPoint::COMPUTE)) return fail();
-                Commands().Dispatch((ddgiTarget->GetWidth() + 7) / 8, (ddgiTarget->GetHeight() + 7) / 8, 1); ++dispatchCount;
-            }
-
-            return {};
-        }, [&](RenderGraph& graph) {
-            if (useDDGI) {
-                graph.AddPass("DDGICopy", {
-                    {sceneColor,Layout::CopySource}, {ddgiInput,Layout::CopyDest,Access::Write},
-                    {sceneDepth,Layout::CopySource}, {ddgiDepth,Layout::CopyDest,Access::Write}});
-                graph.AddPass("DDGIUpdate", {
-                    {ddgiInput,Layout::ShaderResource}, {ddgiDepth,Layout::ShaderResource},
-                    {ddgiOutput,Layout::ShaderResourceStorage,Access::Write}});
-            }
-        }, [&](const RenderPassContext&) -> RenderPassResult {
-            if (useDDGI && !uniform("DDGIUpdate",sizeof(RHIDDGIConstants))) return fail();
-            return {};
-        });
-
         addPass("PostProcessPass", [&](const RenderPassContext&) -> RenderPassResult {
             const Passes::PassRecordOps postOps{
                 beginPass, passUniform,
@@ -1895,6 +1957,10 @@ namespace Axle {
             std::vector<Graph::Use> exports{{output,Layout::ShaderResource}};
             if (sceneDepthDSV) exports.push_back({sceneDepth,Layout::DepthStencilRead});
             if (captureActive) exports.push_back({captureCubemap,Layout::ShaderResource});
+            if (ddgiPlan.Active) {
+                exports.push_back({ddgiOutput,Layout::ShaderResource});
+                exports.push_back({ddgiDistanceOutput,Layout::ShaderResource});
+            }
             graph.AddPass("Export", std::move(exports));
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (m_ActiveGPUTimestampSlot != static_cast<size_t>(-1) &&
@@ -1926,6 +1992,21 @@ namespace Axle {
             return false;
         }
         viewCtx.CommitFroxelHistory(nextFog);
+        if (ddgiPlan.Active) {
+            if (!ddgiPlan.ResetSeed && ddgiStartMatGen != 0 && viewCtx.GetInput().MaterialGeneration != ddgiStartMatGen) {
+                viewCtx.InvalidateDDGIHistory();
+            } else {
+                DDGIHistoryFrame committed{};
+                committed.StateHash = ddgiPlan.StateHash;
+                committed.NextProbeCursor = ddgiPlan.NextProbeCursor;
+                committed.ProbeCount = ddgiPlan.ProbeCount;
+                committed.UpdatedProbeCount = ddgiPlan.UpdateCount;
+                committed.Valid = true;
+                viewCtx.CommitDDGIHistory(committed);
+            }
+        } else if (!giFrame.UpdateScheduled) {
+            viewCtx.InvalidateDDGIHistory();
+        }
         viewCtx.Temporal().Commit(viewProjZO, useTAA);
         m_LocalShadows.OnSubmitted();
         if (m_PlanarSession.Active) {

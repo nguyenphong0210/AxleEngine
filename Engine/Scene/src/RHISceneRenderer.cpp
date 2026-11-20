@@ -884,7 +884,13 @@ namespace Axle {
         m_AutoExposureDescriptorPool.Shutdown();
         m_AutoExposureSampler.Shutdown();
 
-        m_DDGIPipeline = nullptr;
+        m_DDGISeedPipeline = nullptr;
+        m_DDGIIrradiancePipeline = nullptr;
+        m_DDGIDistancePipeline = nullptr;
+        m_DDGICapturePipeline = nullptr;
+        m_DDGICaptureColor.Shutdown();
+        m_DDGICaptureDepth.Shutdown();
+        m_DDGICaptureDraws.clear();
         m_DDGIPipelineLayout.Shutdown();
         m_DDGIConstantBuffer.Shutdown();
         m_DDGITextureSet = nullptr;
@@ -1045,6 +1051,15 @@ namespace Axle {
             return false;
         }
         m_ReflectionPixelShader = reflectionRes.Bytecode;
+
+        auto ddgiCaptureDesc = psDesc;
+        ddgiCaptureDesc.EntryPoint = "PSDDGICapture";
+        const auto ddgiCaptureRes = compiler.Compile(ddgiCaptureDesc);
+        if (!ddgiCaptureRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: DDGI capture PS compile failed: {0}", ddgiCaptureRes.ErrorMessage);
+            return false;
+        }
+        m_DDGICapturePixelShader = ddgiCaptureRes.Bytecode;
 
         auto normalShaderPath = FindShaderPath("SurfaceNormal.hlsl");
         if (normalShaderPath.empty() || !std::filesystem::exists(normalShaderPath)) {
@@ -1314,7 +1329,30 @@ namespace Axle {
     bool RHISceneRenderer::CreateGraphicsPipeline(RHIDevice& device) {
         m_Pipeline = GetOrCreatePipeline(nri::Format::RGBA8_UNORM, nri::Format::D32_SFLOAT);
         m_PipelineHDR = GetOrCreatePipeline(nri::Format::RGBA16_SFLOAT, nri::Format::D32_SFLOAT);
-        return m_Pipeline != nullptr && m_PipelineHDR != nullptr;
+        m_DDGICapturePipeline = GetOrCreateDDGICapturePipeline();
+        return m_Pipeline != nullptr && m_PipelineHDR != nullptr && m_DDGICapturePipeline != nullptr;
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateDDGICapturePipeline() {
+        if (!m_VertexShader.IsValid() || !m_DDGICapturePixelShader.IsValid()) {
+            return nullptr;
+        }
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_PipelineLayout;
+        gfxDesc.Shaders = { m_VertexShader, m_DDGICapturePixelShader };
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        // Double-sided capture marks backfaces via SV_IsFrontFace to detect inside-geometry probes
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = DepthClipContract::FrontCounterClockwise;
+        gfxDesc.DepthStencil.DepthTestEnable = true;
+        gfxDesc.DepthStencil.DepthWriteEnable = true;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS;
+        gfxDesc.DepthStencil.DepthStencilFormat = nri::Format::D32_SFLOAT;
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { nri::Format::RGBA16_SFLOAT };
+        gfxDesc.SampleCount = 1;
+        gfxDesc.VertexInput = VertexLayoutContract::GetCanonicalVertexInputDesc();
+        return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
     }
 
     bool RHISceneRenderer::CompileSkyboxShaders(RHIDevice& device) {
@@ -3293,23 +3331,44 @@ namespace Axle {
     bool RHISceneRenderer::CompileDDGIShaders(RHIDevice& device) {
         auto shaderPath = FindShaderPath("DDGI.hlsl");
         if (shaderPath.empty()) return false;
-        std::ifstream file(shaderPath); std::stringstream stream; stream << file.rdbuf();
-        RHIShaderCompileDesc desc; desc.SourcePath = shaderPath.string(); desc.Source = stream.str(); desc.EntryPoint = "CSMain";
-        desc.Stage = RHIShaderStage::Compute; desc.HLSLVersion = "2021"; desc.ShaderModel = "6_0";
-        desc.Format = device.GetCapabilities().ActiveBackend == RHIType::Vulkan ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
-        desc.Optimization = true;
-        auto result = RHIShaderCompiler::Get().Compile(desc);
-        if (!result.Success) { AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile DDGI CS: {0}", result.ErrorMessage); return false; }
-        m_DDGIComputeShader = result.Bytecode; return true;
+        std::ifstream file(shaderPath);
+        if (!file.is_open()) return false;
+        std::stringstream stream;
+        stream << file.rdbuf();
+        const std::string source = stream.str();
+        const RHIShaderFormat format = device.GetCapabilities().ActiveBackend == RHIType::Vulkan
+            ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        auto compileEntry = [&](const char* entry, RHIShaderBytecode& outBytecode) -> bool {
+            RHIShaderCompileDesc desc;
+            desc.SourcePath = shaderPath.string();
+            desc.Source = source;
+            desc.EntryPoint = entry;
+            desc.Stage = RHIShaderStage::Compute;
+            desc.HLSLVersion = "2021";
+            desc.ShaderModel = "6_0";
+            desc.Format = format;
+            desc.Optimization = true;
+            const auto result = RHIShaderCompiler::Get().Compile(desc);
+            if (!result.Success) {
+                AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile DDGI CS '{0}': {1}", entry, result.ErrorMessage);
+                return false;
+            }
+            outBytecode = result.Bytecode;
+            return true;
+        };
+        return compileEntry("CSSeedClear", m_DDGISeedShader) &&
+               compileEntry("CSUpdateIrradiance", m_DDGIUpdateIrradianceShader) &&
+               compileEntry("CSUpdateDistanceMoments", m_DDGIUpdateDistanceShader);
     }
 
     bool RHISceneRenderer::CreateDDGIPipelineLayout(RHIDevice& device) {
         nri::RootDescriptorDesc root = {};
         root.registerIndex = 0; root.descriptorType = nri::DescriptorType::CONSTANT_BUFFER; root.shaderStages = nri::StageBits::COMPUTE_SHADER;
-        nri::DescriptorRangeDesc ranges[3] = {};
+        nri::DescriptorRangeDesc ranges[2] = {};
         ranges[0].baseRegisterIndex = 0; ranges[0].descriptorNum = 2; ranges[0].descriptorType = nri::DescriptorType::TEXTURE; ranges[0].shaderStages = nri::StageBits::COMPUTE_SHADER; ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
         ranges[1].baseRegisterIndex = 0; ranges[1].descriptorNum = 1; ranges[1].descriptorType = nri::DescriptorType::SAMPLER; ranges[1].shaderStages = nri::StageBits::COMPUTE_SHADER; ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-        nri::DescriptorRangeDesc storage = {}; storage.baseRegisterIndex = 0; storage.descriptorNum = 1; storage.descriptorType = nri::DescriptorType::STORAGE_TEXTURE; storage.shaderStages = nri::StageBits::COMPUTE_SHADER; storage.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::DescriptorRangeDesc storage = {};
+        storage.baseRegisterIndex = 0; storage.descriptorNum = 2; storage.descriptorType = nri::DescriptorType::STORAGE_TEXTURE; storage.shaderStages = nri::StageBits::COMPUTE_SHADER; storage.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
         nri::DescriptorSetDesc sets[2] = {};
         sets[0].registerSpace = 1; sets[0].ranges = ranges; sets[0].rangeNum = 2;
         sets[1].registerSpace = 2; sets[1].ranges = &storage; sets[1].rangeNum = 1;
@@ -3318,8 +3377,18 @@ namespace Axle {
     }
 
     bool RHISceneRenderer::CreateDDGIPipeline(RHIDevice& device) {
-        RHIComputePipelineDesc desc; desc.Layout = &m_DDGIPipelineLayout; desc.ComputeShader = m_DDGIComputeShader;
-        m_DDGIPipeline = RHIPipelineCache::Get().GetOrCreateComputePipeline(desc); return m_DDGIPipeline != nullptr;
+        auto createCS = [&](const RHIShaderBytecode& shader) {
+            RHIComputePipelineDesc desc;
+            desc.Layout = &m_DDGIPipelineLayout;
+            desc.ComputeShader = shader;
+            return RHIPipelineCache::Get().GetOrCreateComputePipeline(desc);
+        };
+        m_DDGISeedPipeline = createCS(m_DDGISeedShader);
+        m_DDGIIrradiancePipeline = createCS(m_DDGIUpdateIrradianceShader);
+        m_DDGIDistancePipeline = createCS(m_DDGIUpdateDistanceShader);
+        return m_DDGISeedPipeline != nullptr &&
+               m_DDGIIrradiancePipeline != nullptr &&
+               m_DDGIDistancePipeline != nullptr;
     }
 
     bool RHISceneRenderer::CompileTAAShaders(RHIDevice& device) {

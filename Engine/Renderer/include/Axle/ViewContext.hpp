@@ -66,6 +66,14 @@ namespace Axle {
         bool Valid = false;
     };
 
+    struct DDGIHistoryFrame {
+        uint64_t StateHash = 0;
+        uint32_t NextProbeCursor = 0;
+        uint32_t ProbeCount = 0;
+        uint32_t UpdatedProbeCount = 0;
+        bool Valid = false;
+    };
+
     // Owns one view's frame recording, target generation identity, reset state
     // and completion token. Passes may borrow Frame()/Commands() while active;
     // they never submit or recycle the underlying frame themselves.
@@ -114,6 +122,9 @@ namespace Axle {
 
         FroxelHistoryFrame GetFroxelHistory() const;
         void CommitFroxelHistory(const FroxelHistoryFrame& frame);
+        DDGIHistoryFrame GetDDGIHistory() const;
+        void CommitDDGIHistory(const DDGIHistoryFrame& frame);
+        void InvalidateDDGIHistory();
 
         TemporalService& Temporal() { return m_Temporal; }
         const TemporalService& Temporal() const { return m_Temporal; }
@@ -144,9 +155,15 @@ namespace Axle {
             uint32_t Width, Height;
             RenderViewKind Kind;
         };
+        struct DDGIHistoryEntry {
+            DDGIHistoryFrame Frame;
+            uint64_t TargetGeneration, SceneRevision, SceneInstanceID, FeatureGeneration, MaterialGeneration;
+            RenderViewKind Kind;
+        };
         // Concurrently live view targets retain their own history without being kept alive here.
         using ViewTargetIdentity = std::weak_ptr<RHI::RHIViewTargets>;
         std::map<ViewTargetIdentity, FroxelHistoryEntry, std::owner_less<ViewTargetIdentity>> m_FroxelHistories;
+        std::map<ViewTargetIdentity, DDGIHistoryEntry, std::owner_less<ViewTargetIdentity>> m_DDGIHistories;
         PostProcessService m_PostProcess;
         RenderDiagnostics m_Diagnostics;
     };

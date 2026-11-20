@@ -983,3 +983,6 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
 
 float4 PSMain(PSInput input) : SV_Target0 { return EvaluateReflectionSurface(input).Color; }
 ReflectionSurfaceOutput PSReflectionMain(PSInput input) { return EvaluateReflectionSurface(input); }
+float4 PSDDGICapture(PSInput input, bool isFrontFace : SV_IsFrontFace) : SV_Target0 {
+    return isFrontFace ? float4(EvaluateReflectionSurface(input).Color.rgb, 1.0) : float4(0.0, 0.0, 0.0, 0.0);
+}

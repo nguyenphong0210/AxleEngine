@@ -16,6 +16,8 @@ namespace Axle {
         float EnergyMultiplier = 0.0f;
         uint32_t ProbeCount = 0;
         uint32_t MaxProbesPerFrame = 0;
+        uint32_t UpdatedProbeCount = 0;
+        uint32_t ProbeCursor = 0;
         float UpdateFraction = 0.25f;
         float Hysteresis = 0.90f;
         float ViewBias = 0.15f;

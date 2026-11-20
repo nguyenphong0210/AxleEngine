@@ -36,7 +36,8 @@ set_tests_properties(EnvironmentBakeTests PROPERTIES LABELS "environment;lightin
 add_executable(AxleEnvironmentRenderingTests EXCLUDE_FROM_ALL
     src/Test_EnvironmentRendering.cpp rendering/Test_M15_OcclusionRendering.cpp
     rendering/Test_M15_OcclusionSurfaceRendering.cpp rendering/Test_M15_HiZRendering.cpp
-    rendering/Test_M15_ReflectionCaptureRendering.cpp rendering/Test_M15_FroxelFogRendering.cpp)
+    rendering/Test_M15_ReflectionCaptureRendering.cpp rendering/Test_M15_FroxelFogRendering.cpp
+    rendering/Test_M15_DDGIRendering.cpp)
 target_link_libraries(AxleEnvironmentRenderingTests PRIVATE Axle::Scene glad glfw)
 target_compile_definitions(AxleEnvironmentRenderingTests PRIVATE
     AXLE_GTAO_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/GTAO.hlsl"
@@ -549,7 +550,10 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
       AXLE_DDGI_POLICY_DOC_PATH="${CMAKE_SOURCE_DIR}/docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/DDGI_ACQUISITION_POLICY.md"
       AXLE_ENTITY_INSPECTOR_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/UI/src/EntityInspector.cpp"
       AXLE_EDITOR_LAYER_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Editor/src/EditorLayer.cpp"
-      AXLE_EDITOR_LAYER_HEADER_PATH="${CMAKE_SOURCE_DIR}/Editor/src/EditorLayer.hpp")
+      AXLE_EDITOR_LAYER_HEADER_PATH="${CMAKE_SOURCE_DIR}/Editor/src/EditorLayer.hpp"
+      AXLE_DDGI_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/DDGI.hlsl"
+      AXLE_DDGI_COMMON_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/DDGICommon.hlsli"
+      AXLE_DDGI_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/DDGIPass.cpp")
 target_link_libraries(AxleRenderUnitTests PRIVATE
     Axle::Core
     Axle::Platform

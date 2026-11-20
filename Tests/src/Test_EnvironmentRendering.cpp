@@ -36,6 +36,7 @@ bool RunM15HiZTests(Axle::RHISceneRenderer& renderer, const std::filesystem::pat
 bool RunM15AreaLightRenderingTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15ReflectionCaptureTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15FroxelFogTests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
+bool RunM15DDGITests(Axle::RHISceneRenderer& renderer, const std::filesystem::path& output);
 bool RunM15ReflectionDeviceResetTests(const Axle::RHI::RHIDeviceDesc& initDesc);
 bool RunM15OcclusionSphereTests(Axle::RHISceneRenderer& renderer, const Axle::RenderWorld& world,
                               const Axle::PerspectiveCamera& camera, Axle::SceneRenderSettings settings,
@@ -50,6 +51,7 @@ using namespace Axle::RHI;
 std::filesystem::path Output;
 bool AreaLightsOnly = false;
 bool FroxelFogOnly = false;
+bool DDGIOnly = false;
 
 bool TimestampProbe(uint64_t& ticks, double& milliseconds) {
     auto& device = RHIDevice::Get();
@@ -223,15 +225,17 @@ bool Native(RHIType backend) {
     TextureDescriptor authored; authored.Type="CubemapHDR"; authored.Source="red.hdr";
     CHECK(TextureDescriptor::Save((Output/"sky.axleasset").string(),authored));
     RHISceneRenderer renderer; CHECK(renderer.Init(device,false));
-    if (AreaLightsOnly || FroxelFogOnly) {
+    if (AreaLightsOnly || FroxelFogOnly || DDGIOnly) {
         const bool ok = AreaLightsOnly ? RunM15AreaLightRenderingTests(renderer, Output)
-                                      : RunM15FroxelFogTests(renderer, Output);
+                      : FroxelFogOnly  ? RunM15FroxelFogTests(renderer, Output)
+                                       : RunM15DDGITests(renderer, Output);
         renderer.Shutdown();
         return ok && device.WaitIdle() && GetRHIValidationErrorCount() == 0;
     }
     CHECK(RunM15OcclusionRenderingTests(Output));
     CHECK(RunM15OcclusionHorizonTests(Output));
     CHECK(RunM15FroxelFogTests(renderer, Output));
+    CHECK(RunM15DDGITests(renderer, Output));
     auto& environment=renderer.GetEnvironment(); EnvironmentBakeSettings bake;
     bake.EnvironmentSize=16; bake.IrradianceSize=4; bake.PrefilterSize=16; bake.PrefilterMips=5; bake.BRDFSize=16; bake.Samples=64;
     CHECK(environment.SetBakeSettings(bake));
@@ -459,7 +463,8 @@ bool Native(RHIType backend) {
     auto ddgiFrame = render();
     CHECK(!ddgiFrame.empty() && ddgiFrame.size() == red.size());
     CHECK(renderer.GetGIFrame().UpdateScheduled && renderer.GetGIFrame().Fallback==GIFallback::IBL);
-    CHECK(!renderer.GetGIFrame().IrradianceAvailable && !renderer.GetGIFrame().VisibilityAvailable && !renderer.GetGIFrame().SamplingEnabled);
+    CHECK(renderer.GetGIFrame().IrradianceAvailable && renderer.GetGIFrame().VisibilityAvailable &&
+          renderer.GetGIFrame().UpdatedProbeCount == 8u && !renderer.GetGIFrame().SamplingEnabled);
     world.DDGIProbeGrid->Enabled=false;
     CHECK(!render().empty() && !renderer.GetGIFrame().UpdateScheduled);
     const auto disabledGINames=passNames();
@@ -1089,7 +1094,8 @@ int main(int argc,char** argv) {
         const std::string suite = argv[3];
         AreaLightsOnly = suite == "--m15-area-lights";
         FroxelFogOnly = suite == "--m15-froxel-fog";
-        if ((!AreaLightsOnly && !FroxelFogOnly) || std::string(argv[1]) == "gl") return 2;
+        DDGIOnly = suite == "--m15-ddgi";
+        if ((!AreaLightsOnly && !FroxelFogOnly && !DDGIOnly) || std::string(argv[1]) == "gl") return 2;
     }
     Output=std::filesystem::absolute(argv[2]);std::filesystem::create_directories(Output);
     try { return (std::string(argv[1])=="gl"?OpenGL():Native(std::string(argv[1])=="vulkan"?RHIType::Vulkan:RHIType::Direct3D12))&&GetRHIValidationErrorCount()==0?0:1; }

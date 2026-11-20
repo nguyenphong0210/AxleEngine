@@ -6431,7 +6431,12 @@ namespace Axle {
         targetDesc.EnableBloom = settings.EnableBloom;
         targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
         targetDesc.EnableAutoExposure = settings.EnableAutoExposure;
-        targetDesc.EnableDDGI = settings.EnableDDGI;
+        const auto* ddgiGrid = world.DDGIProbeGrid ? &*world.DDGIProbeGrid : nullptr;
+        std::array<uint32_t, 3> ddgiDims{0u, 0u, 0u};
+        DDGIContract::ResolveViewTargetOptions(settings, isSubCapture, ddgiGrid, targetDesc.EnableDDGI, ddgiDims);
+        targetDesc.DDGIGridX = ddgiDims[0];
+        targetDesc.DDGIGridY = ddgiDims[1];
+        targetDesc.DDGIGridZ = ddgiDims[2];
         targetDesc.EnableVolumetricFog = enableFroxelTargets;
         targetDesc.FroxelQuality = froxelQuality;
         if (settings.EnableTAA) targetDesc.HistoryCount = 2;

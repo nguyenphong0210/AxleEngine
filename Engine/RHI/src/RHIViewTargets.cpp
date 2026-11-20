@@ -52,6 +52,23 @@ namespace Axle::RHI {
         return qualityTier < kFroxelTiers.size() ? &kFroxelTiers[qualityTier] : nullptr;
     }
 
+    RHIDDGIAtlasExtent RHIViewTargets::ComputeDDGIAtlasExtent(uint32_t gridX, uint32_t gridY, uint32_t gridZ) {
+        const uint64_t total64 = static_cast<uint64_t>(gridX) * gridY * gridZ;
+        if (!gridX || !gridY || !gridZ || total64 == 0u || total64 > MaxDDGIProbes) return {};
+        const uint32_t probeCount = static_cast<uint32_t>(total64);
+        const uint32_t cols = std::max(1u, static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<double>(probeCount)))));
+        const uint32_t rows = (probeCount + cols - 1u) / cols;
+        const uint32_t irradW = cols * DDGIIrradianceTileSize;
+        const uint32_t irradH = rows * DDGIIrradianceTileSize;
+        const uint32_t distW = cols * DDGIDistanceTileSize;
+        const uint32_t distH = rows * DDGIDistanceTileSize;
+        if (irradW > MaxDDGIAtlasDimension || irradH > MaxDDGIAtlasDimension ||
+            distW > MaxDDGIAtlasDimension || distH > MaxDDGIAtlasDimension) {
+            return {};
+        }
+        return { probeCount, cols, rows, irradW, irradH, distW, distH, true };
+    }
+
     RHIFroxelGridExtent RHIViewTargets::ComputeFroxelGridExtent(uint32_t width, uint32_t height, uint8_t qualityTier) {
         const auto* tier = GetFroxelTierSpec(qualityTier);
         if (!width || !height || !tier) return {};
@@ -121,7 +138,19 @@ namespace Axle::RHI {
                          m_Desc.HDR ? RHITextureFormat::RGBA16_FLOAT : m_Desc.ColorFormat)) return false;
         }
         if (m_Desc.EnableAutoExposure && !check2D(RHIViewTarget::Exposure, 1, 1, RHITextureFormat::RGBA16_FLOAT)) return false;
-        if (m_Desc.EnableDDGI && !check2D(RHIViewTarget::DDGI, 256, 128, RHITextureFormat::RGBA16_FLOAT)) return false;
+        if (m_Desc.EnableDDGI) {
+            const uint32_t gx = (m_Desc.DDGIGridX == 0 && m_Desc.DDGIGridY == 0 && m_Desc.DDGIGridZ == 0) ? 1u : m_Desc.DDGIGridX;
+            const uint32_t gy = (m_Desc.DDGIGridX == 0 && m_Desc.DDGIGridY == 0 && m_Desc.DDGIGridZ == 0) ? 1u : m_Desc.DDGIGridY;
+            const uint32_t gz = (m_Desc.DDGIGridX == 0 && m_Desc.DDGIGridY == 0 && m_Desc.DDGIGridZ == 0) ? 1u : m_Desc.DDGIGridZ;
+            const auto ddgiExtent = ComputeDDGIAtlasExtent(gx, gy, gz);
+            if (!ddgiExtent.Valid ||
+                !check2D(RHIViewTarget::DDGI, ddgiExtent.IrradianceWidth, ddgiExtent.IrradianceHeight, RHITextureFormat::RGBA16_FLOAT) ||
+                !Get(RHIViewTarget::DDGI)->GetUAV() ||
+                !check2D(RHIViewTarget::DDGIDistance, ddgiExtent.DistanceWidth, ddgiExtent.DistanceHeight, RHITextureFormat::RGBA16_FLOAT) ||
+                !Get(RHIViewTarget::DDGIDistance)->GetUAV()) {
+                return false;
+            }
+        }
         if (m_Desc.EnableHiZ) {
             const uint32_t expectedUseful = ComputeUsefulHiZLevelCount(m_Desc.Width, m_Desc.Height);
             const uint32_t expectedAllocated = ComputeAllocatedHiZLevelCount(m_Desc.Width, m_Desc.Height);
@@ -311,10 +340,24 @@ namespace Axle::RHI {
             candidate.m_Textures[static_cast<size_t>(RHIViewTarget::Exposure)] = std::move(texture);
         }
         if (desc.EnableDDGI) {
-            auto texture = std::make_unique<RHITexture>();
-            auto native = RHITextureDesc::StorageTexture2D(256, 128, RHITextureFormat::RGBA16_FLOAT, "ViewTarget_DDGI_Irradiance");
-            if (!texture->Init(native)) return false;
-            candidate.m_Textures[static_cast<size_t>(RHIViewTarget::DDGI)] = std::move(texture);
+            const uint32_t gx = (desc.DDGIGridX == 0 && desc.DDGIGridY == 0 && desc.DDGIGridZ == 0) ? 1u : desc.DDGIGridX;
+            const uint32_t gy = (desc.DDGIGridX == 0 && desc.DDGIGridY == 0 && desc.DDGIGridZ == 0) ? 1u : desc.DDGIGridY;
+            const uint32_t gz = (desc.DDGIGridX == 0 && desc.DDGIGridY == 0 && desc.DDGIGridZ == 0) ? 1u : desc.DDGIGridZ;
+            const auto ddgiExtent = ComputeDDGIAtlasExtent(gx, gy, gz);
+            if (!ddgiExtent.Valid) return false;
+            auto irradTex = std::make_unique<RHITexture>();
+            auto irradDesc = RHITextureDesc::StorageTexture2D(
+                ddgiExtent.IrradianceWidth, ddgiExtent.IrradianceHeight,
+                RHITextureFormat::RGBA16_FLOAT, "ViewTarget_DDGI_Irradiance");
+            if (!irradTex->Init(irradDesc)) return false;
+            candidate.m_Textures[static_cast<size_t>(RHIViewTarget::DDGI)] = std::move(irradTex);
+
+            auto distTex = std::make_unique<RHITexture>();
+            auto distDesc = RHITextureDesc::StorageTexture2D(
+                ddgiExtent.DistanceWidth, ddgiExtent.DistanceHeight,
+                RHITextureFormat::RGBA16_FLOAT, "ViewTarget_DDGI_Distance");
+            if (!distTex->Init(distDesc)) return false;
+            candidate.m_Textures[static_cast<size_t>(RHIViewTarget::DDGIDistance)] = std::move(distTex);
         }
         if (desc.EnableHiZ) {
             candidate.m_HiZUsefulLevels = ComputeUsefulHiZLevelCount(desc.Width, desc.Height);

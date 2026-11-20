@@ -12,6 +12,7 @@
 namespace Axle {
 
     struct RenderVolumetricFog;
+    struct RenderDDGIProbeGrid;
 
     struct RHIViewportDesc {
         uint32_t Width = 1280;
@@ -29,6 +30,7 @@ namespace Axle {
         float PlanarResolutionScale = 0.5f;
         bool EnableVolumetricFog = false;
         uint8_t FroxelQuality = 2;
+        uint32_t DDGIGridX = 0, DDGIGridY = 0, DDGIGridZ = 0;
         bool operator==(const RHIViewportDesc&) const = default;
     };
 
@@ -59,7 +61,8 @@ namespace Axle {
         bool SetDepthFormat(RHI::RHITextureFormat depthFormat);
         bool SetRenderOptions(uint8_t samples, bool hdrIntermediate, bool fxaa, std::optional<uint8_t> historyCount = {},
                               bool enableNormal = false, bool enableScreenStorage = false);
-        bool SetRenderOptions(const SceneRenderSettings& settings, const RenderVolumetricFog* fog = nullptr);
+        bool SetRenderOptions(const SceneRenderSettings& settings, const RenderVolumetricFog* fog = nullptr,
+                              const RenderDDGIProbeGrid* ddgi = nullptr);
 
         RHI::RHITextureFormat GetColorFormat() const { return m_Desc.ColorFormat; }
         RHI::RHITextureFormat GetDepthFormat() const { return m_Desc.DepthFormat; }

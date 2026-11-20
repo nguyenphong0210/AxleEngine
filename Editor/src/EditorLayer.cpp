@@ -1525,11 +1525,13 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     renderSettings.EnablePlanarReflections = m_EnablePlanarReflections;
     renderSettings.EnableBloom = m_EnableBloom;
     const auto authoredFog = Axle::ExtractVolumetricFog(*m_Scene);
+    const auto authoredDDGI = Axle::ExtractDDGIProbeGrid(*m_Scene);
     renderSettings.EnableVolumetricFog = m_ViewportFogOverride.value_or(authoredFog.has_value());
     renderSettings.FogQuality = static_cast<Axle::FroxelFogQuality>(
         std::clamp(m_FogQuality, 0, static_cast<int>(Axle::FroxelFogQuality::Ultra)));
     renderSettings.FogTemporalWeight = std::clamp(m_FogTemporalWeight, 0.0f, 0.9f);
     renderSettings.EnableAutoExposure = m_EnableAutoExposure;
+    renderSettings.EnableDDGI = m_EnableDDGI;
     renderSettings.HiZVisualizationLevel = m_HiZVisualizationLevel;
     renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
     renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
@@ -1540,7 +1542,8 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     request.Name = "Editor main view";
     request.CameraCut = m_PendingViewCameraCut || viewCamera != m_LastViewCamera;
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
-        if (!m_RHIViewport->SetRenderOptions(renderSettings, authoredFog ? &*authoredFog : nullptr)) {
+        if (!m_RHIViewport->SetRenderOptions(renderSettings, authoredFog ? &*authoredFog : nullptr,
+                                             authoredDDGI ? &*authoredDDGI : nullptr)) {
             ++m_FailedViewCount;
             AXLE_ERROR("Editor view failed: viewport target configuration failed");
             return;
@@ -1924,6 +1927,9 @@ void EditorLayer::RenderToolbar() {
                 ImGui::SliderFloat("Fog Temporal Weight", &m_FogTemporalWeight, 0.0f, 0.9f, "%.2f");
             }
             ImGui::Checkbox("Auto-Exposure", &m_EnableAutoExposure);
+            ImGui::Checkbox("Experimental DDGI", &m_EnableDDGI);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Experimental staggered diffuse DDGI probe grid (falls back to IBL without an active grid or compute support).");
             ImGui::Checkbox("Temporal Anti-Aliasing (TAA)", &m_EnableTAA);
             ImGui::Separator();
             ImGui::SliderInt("Hi-Z Debug Level (-1=Off)", &m_HiZVisualizationLevel, -1,
@@ -2134,6 +2140,7 @@ void EditorLayer::OnImGuiRender() {
                 if (m_ViewportFogOverride.has_value() && ImGui::MenuItem("Use Scene Fog Setting"))
                     m_ViewportFogOverride.reset();
                 ImGui::MenuItem("Auto-Exposure", nullptr, &m_EnableAutoExposure);
+                ImGui::MenuItem("Experimental DDGI", nullptr, &m_EnableDDGI);
                 ImGui::MenuItem("Temporal Anti-Aliasing (TAA)", nullptr, &m_EnableTAA);
                 ImGui::EndMenu();
             }

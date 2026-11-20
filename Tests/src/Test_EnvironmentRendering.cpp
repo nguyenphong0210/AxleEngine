@@ -529,6 +529,11 @@ bool Native(RHIType backend) {
         ddgiComp.GridDimensions = glm::ivec3(32, 16, 32);
         ddgiComp.GridSpacing = glm::vec3(1.5f, 1.5f, 1.5f);
         ddgiComp.EnergyMultiplier = 1.25f;
+        ddgiComp.UpdateFraction = 0.5f;
+        ddgiComp.MaxProbesPerFrame = 16;
+        ddgiComp.Hysteresis = 0.88f;
+        ddgiComp.ViewBias = 0.2f;
+        ddgiComp.NormalBias = 0.12f;
 
         SceneSerializer serializer(testScene.get());
         std::string serialized = serializer.SerializeToString();
@@ -571,6 +576,11 @@ bool Native(RHIType backend) {
             const auto& d = viewDDGI.get<DDGIProbeGridComponent>(ent);
             CHECK(d.GridDimensions.x == 32);
             CHECK(d.EnergyMultiplier == 1.25f);
+            CHECK(d.UpdateFraction == 0.5f);
+            CHECK(d.MaxProbesPerFrame == 16);
+            CHECK(d.Hysteresis == 0.88f);
+            CHECK(d.ViewBias == 0.2f);
+            CHECK(d.NormalBias == 0.12f);
         }
     }
     // The HDR background remains visible when environment lighting is opt-out;

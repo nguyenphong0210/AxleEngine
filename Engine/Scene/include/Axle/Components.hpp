@@ -1049,6 +1049,11 @@ namespace Axle {
         glm::vec3 GridOrigin{ 0.0f, 0.0f, 0.0f };
         float EnergyMultiplier = 1.0f;
         int RaysPerProbe = 128;
+        float UpdateFraction = 0.25f;
+        int MaxProbesPerFrame = 8;
+        float Hysteresis = 0.90f;
+        float ViewBias = 0.15f;
+        float NormalBias = 0.08f;
 
         DDGIProbeGridComponent() = default;
         DDGIProbeGridComponent(const glm::ivec3& dims, const glm::vec3& spacing)

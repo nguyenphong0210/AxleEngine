@@ -13,6 +13,7 @@
 #include <Axle/AssetManager.hpp>
 #include <Axle/MaterialCache.hpp>
 #include <Axle/SceneRenderBridge.hpp>
+#include <Axle/RenderContracts.hpp>
 #include <Axle/RenderService.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/PlatformUtils.hpp>
@@ -1125,6 +1126,51 @@ namespace Axle {
             }
         }, /*canRemove=*/ true);
 
+        // DDGI Probe Grid Component (Experimental Dynamic Diffuse GI)
+        DrawComponent<DDGIProbeGridComponent>("DDGI Probe Grid (Experimental)", entity, [&](DDGIProbeGridComponent& ddgi) {
+            ImGui::Checkbox("Enabled", &ddgi.Enabled);
+            if (ImGui::DragInt3("Grid Dimensions", glm::value_ptr(ddgi.GridDimensions), 1.0f, 1, 64)) {
+                ddgi.GridDimensions = glm::clamp(ddgi.GridDimensions, glm::ivec3(1), glm::ivec3(64));
+            }
+            if (ImGui::DragFloat3("Grid Spacing", glm::value_ptr(ddgi.GridSpacing), 0.1f, 0.05f, 100.0f, "%.2f m")) {
+                ddgi.GridSpacing = glm::max(ddgi.GridSpacing, glm::vec3(0.05f));
+            }
+            ImGui::DragFloat3("Grid Origin", glm::value_ptr(ddgi.GridOrigin), 0.1f, -5000.0f, 5000.0f, "%.2f m");
+            if (ImGui::DragFloat("Energy Multiplier", &ddgi.EnergyMultiplier, 0.05f, 0.0f, 10.0f, "%.2f")) {
+                ddgi.EnergyMultiplier = std::max(0.0f, ddgi.EnergyMultiplier);
+            }
+            if (ImGui::SliderFloat("Hysteresis", &ddgi.Hysteresis, 0.0f, 0.99f, "%.2f")) {
+                ddgi.Hysteresis = std::clamp(ddgi.Hysteresis, 0.0f, 0.99f);
+            }
+            if (ImGui::SliderFloat("Update Fraction", &ddgi.UpdateFraction, 0.01f, 1.0f, "%.2f")) {
+                ddgi.UpdateFraction = std::clamp(ddgi.UpdateFraction, 0.01f, 1.0f);
+            }
+            ddgi.MaxProbesPerFrame = std::clamp(
+                ddgi.MaxProbesPerFrame, 1, static_cast<int>(DDGIContract::HardMaxProbesPerFrame));
+            ImGui::SliderInt("Max Probes / Frame", &ddgi.MaxProbesPerFrame, 1,
+                static_cast<int>(DDGIContract::HardMaxProbesPerFrame));
+            if (ImGui::DragFloat("View Bias", &ddgi.ViewBias, 0.01f, 0.0f, 2.0f, "%.3f m")) {
+                ddgi.ViewBias = std::max(0.0f, ddgi.ViewBias);
+            }
+            if (ImGui::DragFloat("Normal Bias", &ddgi.NormalBias, 0.01f, 0.0f, 2.0f, "%.3f m")) {
+                ddgi.NormalBias = std::max(0.0f, ddgi.NormalBias);
+            }
+            const auto budget = DDGIContract::EstimateMemoryBudget(
+                ddgi.GridDimensions, static_cast<uint32_t>(ddgi.MaxProbesPerFrame), false);
+            if (budget.Extent.Valid) {
+                const double mib = static_cast<double>(budget.TotalLogicalBytes) / (1024.0 * 1024.0);
+                ImGui::TextDisabled("Probes: %u | Irradiance: %ux%u | Distance: %ux%u | Est: %.2f MiB",
+                    budget.Extent.ProbeCount,
+                    budget.Extent.IrradianceWidth, budget.Extent.IrradianceHeight,
+                    budget.Extent.DistanceWidth, budget.Extent.DistanceHeight,
+                    mib);
+            } else {
+                ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f),
+                    "Invalid grid dimensions (max %u probes, max %u atlas extent).",
+                    DDGIContract::MaxProbeCount, DDGIContract::MaxAtlasDimension);
+            }
+        }, /*canRemove=*/ true);
+
         // Native Script Component
         DrawComponent<NativeScriptComponent>("Native Script", entity, [&](NativeScriptComponent& nsc) {
             // Script Class Combo Dropdown
@@ -2079,6 +2125,11 @@ namespace Axle {
             "Rendering", "VolumetricFogComponent", "Exponential height-falloff 3D froxel volumetric fog & scattering media",
             entity.HasComponent<VolumetricFogComponent>(), true,
             [&]() { entity.AddComponent<VolumetricFogComponent>(); }
+        });
+        items.push_back({
+            "Rendering", "DDGIProbeGridComponent", "Experimental dynamic diffuse GI probe lattice & octahedral atlas",
+            entity.HasComponent<DDGIProbeGridComponent>(), true,
+            [&]() { entity.AddComponent<DDGIProbeGridComponent>(); }
         });
 
         // --- PHYSICS CATEGORY ---

@@ -2,6 +2,7 @@
 
 #include <Axle/Types.hpp>
 #include <Axle/FroxelShaderConstants.hpp>
+#include <Axle/DDGIShaderConstants.hpp>
 #include <Axle/RenderCapabilities.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/SceneRenderSettings.hpp>
@@ -870,6 +871,62 @@ namespace Axle {
                                              const LightingRectFrame& light,
                                              const glm::vec3& sampleWS,
                                              const glm::vec3& unitRayWS);
+    }
+
+    // =========================================================================
+    // 10. Experimental DDGI Acquisition, Atlas Layout & Budget Contract (M15 U7)
+    // =========================================================================
+    namespace DDGIContract {
+        inline constexpr uint32_t IrradianceInterior = RHI::RHIViewTargets::DDGIIrradianceInterior;
+        inline constexpr uint32_t IrradianceBorder = RHI::RHIViewTargets::DDGIIrradianceBorder;
+        inline constexpr uint32_t IrradianceTileSize = RHI::RHIViewTargets::DDGIIrradianceTileSize;
+        inline constexpr uint32_t DistanceInterior = RHI::RHIViewTargets::DDGIDistanceInterior;
+        inline constexpr uint32_t DistanceBorder = RHI::RHIViewTargets::DDGIDistanceBorder;
+        inline constexpr uint32_t DistanceTileSize = RHI::RHIViewTargets::DDGIDistanceTileSize;
+        inline constexpr uint32_t MaxProbeCount = RHI::RHIViewTargets::MaxDDGIProbes;
+        inline constexpr uint32_t MaxAtlasDimension = RHI::RHIViewTargets::MaxDDGIAtlasDimension;
+        inline constexpr uint32_t CaptureFaceResolution = 16u;
+        inline constexpr uint32_t FacesPerProbe = 6u;
+        inline constexpr uint32_t DefaultMaxProbesPerFrame = 8u;
+        inline constexpr uint32_t HardMaxProbesPerFrame = 32u;
+        inline constexpr float DefaultUpdateFraction = 0.25f;
+        inline constexpr float DefaultHysteresis = 0.90f;
+        inline constexpr float DefaultViewBias = 0.15f;
+        inline constexpr float DefaultNormalBias = 0.08f;
+        inline constexpr uint64_t MaxAtlasBudgetBytes = 64ull * 1024ull * 1024ull;
+
+        struct DDGIMemoryBudget {
+            RHI::RHIDDGIAtlasExtent Extent{};
+            uint64_t IrradianceBytes = 0;
+            uint64_t DistanceBytes = 0;
+            uint32_t CaptureWidth = 0;
+            uint32_t CaptureHeight = 0;
+            uint64_t CaptureScratchBytes = 0;
+            uint64_t TotalLogicalBytes = 0;
+            bool DeviceQueryAvailable = false;
+            uint64_t DeviceIrradianceBytes = 0;
+            uint64_t DeviceDistanceBytes = 0;
+            uint64_t TotalDeviceReportedBytes = 0;
+        };
+
+        RHI::RHIDDGIAtlasExtent ComputeAtlasExtent(const glm::ivec3& dims);
+        bool ValidateGrid(const RenderDDGIProbeGrid& grid, std::string* outReason = nullptr);
+        glm::ivec3 ProbeIndexToCoord(uint32_t probeIndex, const glm::ivec3& dims);
+        uint32_t ProbeCoordToIndex(const glm::ivec3& coord, const glm::ivec3& dims);
+        glm::vec3 ProbeCoordToWorldPos(const glm::ivec3& coord, const RenderDDGIProbeGrid& grid);
+        glm::vec3 ProbeIndexToWorldPos(uint32_t probeIndex, const RenderDDGIProbeGrid& grid);
+        glm::ivec2 ProbeIndexToAtlasTile(uint32_t probeIndex, uint32_t atlasCols);
+        void ComputeCaptureScratchLayout(uint32_t maxProbesPerFrame, uint32_t& outCols, uint32_t& outRows,
+                                         uint32_t& outWidth, uint32_t& outHeight);
+        glm::ivec2 CaptureSlotToTile(uint32_t probeSlot, uint32_t faceIndex, uint32_t captureCols);
+        uint32_t ComputeStaggeredUpdateCount(uint32_t probeCount, float updateFraction,
+                                             uint32_t maxProbesPerFrame, bool resetSeed);
+        DDGIMemoryBudget EstimateMemoryBudget(const glm::ivec3& dims,
+                                              uint32_t maxProbesPerFrame = DefaultMaxProbesPerFrame,
+                                              bool queryDevice = false);
+        void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture,
+                                      const RenderDDGIProbeGrid* authored,
+                                      bool& outEnable, std::array<uint32_t, 3>& outGridDims);
     }
 
 } // namespace Axle

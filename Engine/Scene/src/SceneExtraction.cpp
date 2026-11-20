@@ -31,6 +31,29 @@ namespace Axle {
         return std::nullopt;
     }
 
+    std::optional<RenderDDGIProbeGrid> ExtractDDGIProbeGrid(const Scene& scene) {
+        const auto view = scene.GetRegistry().view<TransformComponent, DDGIProbeGridComponent>();
+        for (const auto entity : view) {
+            const auto& ddgi = view.get<DDGIProbeGridComponent>(entity);
+            if (!ddgi.Enabled) continue;
+            const glm::mat4 worldMat = scene.GetWorldTransform(entity);
+            RenderDDGIProbeGrid rgrid;
+            rgrid.Enabled = true;
+            rgrid.GridDimensions = ddgi.GridDimensions;
+            rgrid.GridSpacing = ddgi.GridSpacing;
+            rgrid.GridOrigin = glm::vec3(worldMat[3]) + ddgi.GridOrigin;
+            rgrid.EnergyMultiplier = ddgi.EnergyMultiplier;
+            rgrid.RaysPerProbe = ddgi.RaysPerProbe;
+            rgrid.UpdateFraction = ddgi.UpdateFraction;
+            rgrid.MaxProbesPerFrame = ddgi.MaxProbesPerFrame;
+            rgrid.Hysteresis = ddgi.Hysteresis;
+            rgrid.ViewBias = ddgi.ViewBias;
+            rgrid.NormalBias = ddgi.NormalBias;
+            return rgrid;
+        }
+        return std::nullopt;
+    }
+
     static void ResolveParticleMaterial(RenderParticleData& batch) {
         batch.Config.Collision.WorldRaycast=nullptr;
         batch.Material=ParticleMaterialAdapter::Resolve(batch.Config,batch.Resources,[](const auto& path) {
@@ -312,21 +335,7 @@ namespace Axle {
         world.VolumetricFog = ExtractVolumetricFog(scene);
 
         // 4.4. DDGI Probe Grid extraction
-        auto ddgiView = registry.view<TransformComponent, DDGIProbeGridComponent>();
-        for (auto entity : ddgiView) {
-            const auto& ddgi = ddgiView.get<DDGIProbeGridComponent>(entity);
-            if (!ddgi.Enabled) continue;
-            glm::mat4 worldMat = scene.GetWorldTransform(entity);
-            RenderDDGIProbeGrid rgrid;
-            rgrid.Enabled = true;
-            rgrid.GridDimensions = ddgi.GridDimensions;
-            rgrid.GridSpacing = ddgi.GridSpacing;
-            rgrid.GridOrigin = glm::vec3(worldMat[3]) + ddgi.GridOrigin;
-            rgrid.EnergyMultiplier = ddgi.EnergyMultiplier;
-            rgrid.RaysPerProbe = ddgi.RaysPerProbe;
-            world.DDGIProbeGrid = rgrid;
-            break;
-        }
+        world.DDGIProbeGrid = ExtractDDGIProbeGrid(scene);
 
         // 5. Skybox extraction
         auto skyboxView = registry.view<SkyboxComponent>();

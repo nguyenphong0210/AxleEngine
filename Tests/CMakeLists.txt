@@ -517,6 +517,7 @@ add_executable(AxleRenderUnitTests EXCLUDE_FROM_ALL
     rendering/Test_M15_HiZContractUnit.cpp
     rendering/Test_M15_ReflectionCaptureContractUnit.cpp
     rendering/Test_M15_FroxelFogContractUnit.cpp
+    rendering/Test_M15_DDGIContractUnit.cpp
 )
 target_include_directories(AxleRenderUnitTests PRIVATE rendering src)
 # M15-U1-01.1 & M15-U1-01.4: inspect canonical shader sources for lighting & exposure contracts.
@@ -544,7 +545,11 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
       AXLE_VOLUMETRIC_FOG_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/VolumetricFog.hlsl"
       AXLE_FROXEL_FOG_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/FroxelFogPass.cpp"
       AXLE_RENDER_CAPABILITIES_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Renderer/src/RenderCapabilities.cpp"
-      AXLE_RENDER_SERVICE_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RenderService.cpp")
+      AXLE_RENDER_SERVICE_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RenderService.cpp"
+      AXLE_DDGI_POLICY_DOC_PATH="${CMAKE_SOURCE_DIR}/docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/DDGI_ACQUISITION_POLICY.md"
+      AXLE_ENTITY_INSPECTOR_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/UI/src/EntityInspector.cpp"
+      AXLE_EDITOR_LAYER_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Editor/src/EditorLayer.cpp"
+      AXLE_EDITOR_LAYER_HEADER_PATH="${CMAKE_SOURCE_DIR}/Editor/src/EditorLayer.hpp")
 target_link_libraries(AxleRenderUnitTests PRIVATE
     Axle::Core
     Axle::Platform
@@ -579,6 +584,8 @@ add_test(NAME M15ReflectionCaptureContract COMMAND $<TARGET_FILE:AxleRenderUnitT
 set_tests_properties(M15ReflectionCaptureContract PROPERTIES LABELS "render;reflection;capture;cpu;m15" TIMEOUT 30)
 add_test(NAME M15FroxelFogContract COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-froxel-fog-contract)
 set_tests_properties(M15FroxelFogContract PROPERTIES LABELS "render;fog;froxel;cpu;m15" TIMEOUT 30)
+add_test(NAME M15DDGIContract COMMAND $<TARGET_FILE:AxleRenderUnitTests> --m15-ddgi-contract)
+set_tests_properties(M15DDGIContract PROPERTIES LABELS "render;gi;ddgi;cpu;m15" TIMEOUT 30)
 add_test(NAME RenderHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleRenderUnitTests> --case render-probe)
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES LABELS "render;cpu")
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES TIMEOUT 30)

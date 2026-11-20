@@ -684,6 +684,30 @@ static bool TargetSets(RHIType backend) {
             "M15-U6-01.1: RHIViewportDescriptor releases 3D froxel targets when volumetric fog is disabled");
     }
 
+    // M15-U7-02 / 07.3: RHIViewportDescriptor SetRenderOptions allocates and releases dual DDGI atlases
+    {
+        SceneRenderSettings ddgiSettings;
+        ddgiSettings.EnableDDGI = true;
+        RenderDDGIProbeGrid authoredGrid;
+        authoredGrid.Enabled = true;
+        authoredGrid.GridDimensions = {8, 4, 8};
+        RENDER_CHECK(second.SetRenderOptions(ddgiSettings, nullptr, &authoredGrid) &&
+                     second.GetTargets()->GetDDGI() && second.GetTargets()->GetDDGI()->GetUAV() &&
+                     second.GetTargets()->GetDDGI()->GetWidth() == 128u && second.GetTargets()->GetDDGI()->GetHeight() == 128u &&
+                     second.GetTargets()->GetDDGIDistance() && second.GetTargets()->GetDDGIDistance()->GetUAV() &&
+                     second.GetTargets()->GetDDGIDistance()->GetWidth() == 256u && second.GetTargets()->GetDDGIDistance()->GetHeight() == 256u,
+            "M15-U7-02: RHIViewportDescriptor allocates 8x8 irradiance and 16x16 distance DDGI atlases for 8x4x8 grid");
+
+        RENDER_CHECK(second.SetRenderOptions(2, false, false) &&
+                     !second.GetTargets()->GetDDGI() && !second.GetTargets()->GetDDGIDistance(),
+            "M15-U7-07.3: Switching viewport to MSAA releases DDGI dual atlases cleanly");
+
+        ddgiSettings.EnableDDGI = false;
+        RENDER_CHECK(second.SetRenderOptions(ddgiSettings, nullptr, &authoredGrid) &&
+                     !second.GetTargets()->GetDDGI() && !second.GetTargets()->GetDDGIDistance(),
+            "M15-U7-07.3: Disabled EnableDDGI keeps DDGI targets unallocated even with authored grid");
+    }
+
     // M15-U5-46.3: RHIViewTargets planar reflection color/depth lifecycle, resize & fault isolation
     {
         RHIViewTargets planarTargets;

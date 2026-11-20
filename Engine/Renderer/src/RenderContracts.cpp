@@ -3528,4 +3528,157 @@ namespace Axle {
 
     } // namespace FroxelFogContract
 
+    namespace DDGIContract {
+        namespace {
+            bool IsFiniteVec3(const glm::vec3& v) {
+                return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+            }
+        }
+
+        RHI::RHIDDGIAtlasExtent ComputeAtlasExtent(const glm::ivec3& dims) {
+            if (dims.x <= 0 || dims.y <= 0 || dims.z <= 0) return {};
+            return RHI::RHIViewTargets::ComputeDDGIAtlasExtent(
+                static_cast<uint32_t>(dims.x),
+                static_cast<uint32_t>(dims.y),
+                static_cast<uint32_t>(dims.z));
+        }
+
+        bool ValidateGrid(const RenderDDGIProbeGrid& grid, std::string* outReason) {
+            auto fail = [&](const char* msg) {
+                if (outReason) *outReason = msg;
+                return false;
+            };
+            if (!std::isfinite(grid.EnergyMultiplier) || grid.EnergyMultiplier < 0.0f)
+                return fail("DDGI energy multiplier must be finite and non-negative");
+            if (!IsFiniteVec3(grid.GridOrigin) || !IsFiniteVec3(grid.GridSpacing) ||
+                grid.GridSpacing.x <= 0.0f || grid.GridSpacing.y <= 0.0f || grid.GridSpacing.z <= 0.0f)
+                return fail("DDGI grid origin/spacing must be finite with strictly positive spacing");
+            if (grid.GridDimensions.x <= 0 || grid.GridDimensions.y <= 0 || grid.GridDimensions.z <= 0)
+                return fail("DDGI grid dimensions must be strictly positive");
+            const auto extent = ComputeAtlasExtent(grid.GridDimensions);
+            if (!extent.Valid)
+                return fail("DDGI grid exceeds bounded probe/atlas budget (max 16384 probes, max 8192 atlas extent)");
+            if (!std::isfinite(grid.Hysteresis) || grid.Hysteresis < 0.0f || grid.Hysteresis > 0.99f)
+                return fail("DDGI hysteresis must be in [0, 0.99]");
+            if (!std::isfinite(grid.ViewBias) || grid.ViewBias < 0.0f ||
+                !std::isfinite(grid.NormalBias) || grid.NormalBias < 0.0f)
+                return fail("DDGI view and normal bias must be finite and non-negative");
+            if (!std::isfinite(grid.UpdateFraction) || grid.UpdateFraction <= 0.0f || grid.UpdateFraction > 1.0f)
+                return fail("DDGI update fraction must be in (0, 1]");
+            if (grid.MaxProbesPerFrame <= 0)
+                return fail("DDGI max probes per frame must be positive");
+            if (outReason) outReason->clear();
+            return true;
+        }
+
+        glm::ivec3 ProbeIndexToCoord(uint32_t probeIndex, const glm::ivec3& dims) {
+            if (dims.x <= 0 || dims.y <= 0 || dims.z <= 0) return {0, 0, 0};
+            const uint32_t dx = static_cast<uint32_t>(dims.x);
+            const uint32_t dz = static_cast<uint32_t>(dims.z);
+            const uint32_t plane = dx * dz;
+            const uint32_t iy = probeIndex / plane;
+            const uint32_t rem = probeIndex % plane;
+            const uint32_t iz = rem / dx;
+            const uint32_t ix = rem % dx;
+            return { static_cast<int>(ix), static_cast<int>(iy), static_cast<int>(iz) };
+        }
+
+        uint32_t ProbeCoordToIndex(const glm::ivec3& coord, const glm::ivec3& dims) {
+            const glm::ivec3 c = glm::clamp(coord, glm::ivec3(0), glm::max(dims - 1, glm::ivec3(0)));
+            return static_cast<uint32_t>((c.y * dims.z + c.z) * dims.x + c.x);
+        }
+
+        glm::vec3 ProbeCoordToWorldPos(const glm::ivec3& coord, const RenderDDGIProbeGrid& grid) {
+            return grid.GridOrigin + glm::vec3(coord) * grid.GridSpacing;
+        }
+
+        glm::vec3 ProbeIndexToWorldPos(uint32_t probeIndex, const RenderDDGIProbeGrid& grid) {
+            return ProbeCoordToWorldPos(ProbeIndexToCoord(probeIndex, grid.GridDimensions), grid);
+        }
+
+        glm::ivec2 ProbeIndexToAtlasTile(uint32_t probeIndex, uint32_t atlasCols) {
+            const uint32_t cols = std::max(1u, atlasCols);
+            return { static_cast<int>(probeIndex % cols), static_cast<int>(probeIndex / cols) };
+        }
+
+        void ComputeCaptureScratchLayout(uint32_t maxProbesPerFrame, uint32_t& outCols, uint32_t& outRows,
+                                         uint32_t& outWidth, uint32_t& outHeight) {
+            const uint32_t probes = std::clamp(maxProbesPerFrame, 1u, HardMaxProbesPerFrame);
+            const uint32_t totalFaces = probes * FacesPerProbe;
+            // Arrange probes cleanly in 4 probe-rows of 6 faces when >= 4 probes, else 1 row per probe
+            outCols = probes >= 4u ? 24u : FacesPerProbe * probes;
+            outRows = (totalFaces + outCols - 1u) / outCols;
+            outWidth = outCols * CaptureFaceResolution;
+            outHeight = outRows * CaptureFaceResolution;
+        }
+
+        glm::ivec2 CaptureSlotToTile(uint32_t probeSlot, uint32_t faceIndex, uint32_t captureCols) {
+            const uint32_t cols = std::max(1u, captureCols);
+            const uint32_t linearFace = probeSlot * FacesPerProbe + (faceIndex % FacesPerProbe);
+            return { static_cast<int>(linearFace % cols), static_cast<int>(linearFace / cols) };
+        }
+
+        uint32_t ComputeStaggeredUpdateCount(uint32_t probeCount, float updateFraction,
+                                             uint32_t maxProbesPerFrame, bool resetSeed) {
+            if (probeCount == 0u) return 0u;
+            const uint32_t hardCap = std::clamp(maxProbesPerFrame, 1u, HardMaxProbesPerFrame);
+            const float fraction = std::isfinite(updateFraction) ? std::clamp(updateFraction, 0.01f, 1.0f) : DefaultUpdateFraction;
+            if (resetSeed && probeCount <= hardCap) return probeCount;
+            const uint32_t desired = std::max(1u, static_cast<uint32_t>(std::ceil(static_cast<double>(probeCount) * fraction)));
+            return std::min({ probeCount, hardCap, desired });
+        }
+
+        DDGIMemoryBudget EstimateMemoryBudget(const glm::ivec3& dims, uint32_t maxProbesPerFrame, bool queryDevice) {
+            DDGIMemoryBudget budget;
+            budget.Extent = ComputeAtlasExtent(dims);
+            if (!budget.Extent.Valid) return budget;
+            constexpr uint64_t bytesPerRGBA16F = 8ull;
+            budget.IrradianceBytes = static_cast<uint64_t>(budget.Extent.IrradianceWidth) *
+                budget.Extent.IrradianceHeight * bytesPerRGBA16F;
+            budget.DistanceBytes = static_cast<uint64_t>(budget.Extent.DistanceWidth) *
+                budget.Extent.DistanceHeight * bytesPerRGBA16F;
+            uint32_t capCols = 0, capRows = 0;
+            ComputeCaptureScratchLayout(maxProbesPerFrame, capCols, capRows, budget.CaptureWidth, budget.CaptureHeight);
+            // Color (RGBA16F = 8 B/px) + Depth (D32F = 4 B/px) shared across views
+            budget.CaptureScratchBytes = static_cast<uint64_t>(budget.CaptureWidth) * budget.CaptureHeight * 12ull;
+            budget.TotalLogicalBytes = budget.IrradianceBytes + budget.DistanceBytes + budget.CaptureScratchBytes;
+            if (queryDevice && RHI::RHIDevice::Get().CanCreateResources()) {
+                nri::MemoryDesc irradMem{}, distMem{};
+                const auto irradDesc = RHI::RHITextureDesc::StorageTexture2D(
+                    budget.Extent.IrradianceWidth, budget.Extent.IrradianceHeight,
+                    RHI::RHITextureFormat::RGBA16_FLOAT, "DDGIIrradBudgetProbe");
+                const auto distDesc = RHI::RHITextureDesc::StorageTexture2D(
+                    budget.Extent.DistanceWidth, budget.Extent.DistanceHeight,
+                    RHI::RHITextureFormat::RGBA16_FLOAT, "DDGIDistBudgetProbe");
+                if (RHI::RHITexture::QueryMemoryRequirements(irradDesc, irradMem) && irradMem.size > 0u &&
+                    RHI::RHITexture::QueryMemoryRequirements(distDesc, distMem) && distMem.size > 0u) {
+                    budget.DeviceQueryAvailable = true;
+                    budget.DeviceIrradianceBytes = irradMem.size;
+                    budget.DeviceDistanceBytes = distMem.size;
+                    budget.TotalDeviceReportedBytes = irradMem.size + distMem.size;
+                }
+            }
+            return budget;
+        }
+
+        void ResolveViewTargetOptions(const SceneRenderSettings& settings, bool isSubCapture,
+                                      const RenderDDGIProbeGrid* authored,
+                                      bool& outEnable, std::array<uint32_t, 3>& outGridDims) {
+            outGridDims = {0u, 0u, 0u};
+            outEnable = settings.EnableDDGI && !isSubCapture && settings.MSAASamples == 1u;
+            if (!outEnable) return;
+            if (authored) {
+                if (!authored->Enabled || !ValidateGrid(*authored)) {
+                    outEnable = false;
+                    return;
+                }
+                outGridDims = {
+                    static_cast<uint32_t>(authored->GridDimensions.x),
+                    static_cast<uint32_t>(authored->GridDimensions.y),
+                    static_cast<uint32_t>(authored->GridDimensions.z)
+                };
+            }
+        }
+    } // namespace DDGIContract
+
 } // namespace Axle

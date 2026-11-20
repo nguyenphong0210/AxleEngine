@@ -10,6 +10,7 @@
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/Types.hpp>
 #include <Axle/FroxelShaderConstants.hpp>
+#include <Axle/DDGIShaderConstants.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/SceneRenderer.hpp>
 #include <Axle/RenderWorld.hpp>
@@ -195,16 +196,8 @@ namespace Axle {
     };
     static_assert(sizeof(RHIExposureConstants) == 256, "RHIExposureConstants must be 256 bytes aligned!");
 
-    struct alignas(256) RHIDDGIConstants {
-        glm::vec4 ScreenSize{ 1.0f };
-        glm::vec4 AtlasSize{ 256.0f, 128.0f, 1.0f / 256.0f, 1.0f / 128.0f };
-        glm::vec4 GridDimensions{ 32.0f, 16.0f, 32.0f, 0.0f };
-        glm::vec4 GridOrigin{ 0.0f };
-        glm::vec4 GridSpacing{ 1.0f };
-        glm::vec4 Params{ 1.0f };
-        glm::vec4 Reserved[10]{};
-    };
-    static_assert(sizeof(RHIDDGIConstants) == 256, "RHIDDGIConstants must be 256 bytes aligned!");
+    using RHIDDGIConstants = DDGIContract::DDGIShaderConstants;
+    static_assert(sizeof(RHIDDGIConstants) == 256);
 
     // 256-byte CBV aligned constants for TAA pass
     struct alignas(256) RHITAAConstants {

@@ -22,6 +22,7 @@ bool RunM15OcclusionContractUnitTests();
 bool RunM15HiZContractUnitTests();
 bool RunM15ReflectionCaptureContractUnitTests();
 bool RunM15FroxelFogContractUnitTests();
+bool RunM15DDGIContractUnitTests();
 bool RunTemporalPostDiagnosticsUnitTests();
 namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderWorkerUnitTests(); }
@@ -66,6 +67,9 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string_view(argv[1]) == "--m15-froxel-fog-contract") {
         return RunM15FroxelFogContractUnitTests() ? 0 : 1;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--m15-ddgi-contract") {
+        return RunM15DDGIContractUnitTests() ? 0 : 1;
     }
 
     std::cout << "========================================================\n";
@@ -161,6 +165,11 @@ int main(int argc, char** argv) {
 
     if (!RunM15FroxelFogContractUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunM15FroxelFogContractUnitTests FAILED!\n";
+        return 1;
+    }
+
+    if (!RunM15DDGIContractUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunM15DDGIContractUnitTests FAILED!\n";
         return 1;
     }
 

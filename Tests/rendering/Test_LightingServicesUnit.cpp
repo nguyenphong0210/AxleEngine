@@ -476,6 +476,10 @@ bool RunLightingServiceUnitTests() {
     world.DDGIProbeGrid->Enabled=true;
     auto experimental = gi.Prepare(world, settings, true, 10);
     RENDER_CHECK(experimental.Status == GIFrameStatus::Experimental && experimental.UpdateScheduled &&
+                 experimental.ProbeCount == 16u * 8u * 16u &&
+                 experimental.MaxProbesPerFrame == 8u &&
+                 Axle::RenderTests::Near(experimental.UpdateFraction, 0.25f, 1e-6f) &&
+                 Axle::RenderTests::Near(experimental.Hysteresis, 0.90f, 1e-6f) &&
                  !experimental.IrradianceAvailable && !experimental.VisibilityAvailable &&
                  !experimental.SamplingEnabled && experimental.Fallback==GIFallback::IBL,
         "GI service exposes experimental update boundary without pretending feedback is ready");
@@ -486,6 +490,12 @@ bool RunLightingServiceUnitTests() {
     const auto invalidGI=gi.Prepare(world, settings, true, 10);
     RENDER_CHECK(invalidGI.Status==GIFrameStatus::Fallback && !invalidGI.UpdateScheduled && invalidGI.Fallback==GIFallback::IBL,
         "invalid GI grid spacing cannot schedule native work");
+    world.DDGIProbeGrid = RenderDDGIProbeGrid{};
+    world.DDGIProbeGrid->Enabled = true;
+    world.DDGIProbeGrid->GridDimensions = {33, 16, 32};
+    const auto oversizedGI = gi.Prepare(world, settings, true, 11);
+    RENDER_CHECK(oversizedGI.Status == GIFrameStatus::Fallback && !oversizedGI.UpdateScheduled && oversizedGI.Fallback == GIFallback::IBL,
+        "oversized GI probe grid cannot schedule native work");
 
     // M15-U1-01.1: frozen direct-light unit contract. These expectations mirror
     // DIRECT_LUX_TO_RADIANCE and LOCAL_INTENSITY_SCALE in ForwardPBR.hlsl.

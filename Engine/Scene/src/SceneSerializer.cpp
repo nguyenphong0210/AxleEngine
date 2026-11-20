@@ -392,6 +392,11 @@ namespace Axle {
                 ss << "      GridOrigin: [ " << ddgi.GridOrigin.x << " , " << ddgi.GridOrigin.y << " , " << ddgi.GridOrigin.z << " ]\n";
                 ss << "      EnergyMultiplier: " << ddgi.EnergyMultiplier << "\n";
                 ss << "      RaysPerProbe: " << ddgi.RaysPerProbe << "\n";
+                ss << "      UpdateFraction: " << ddgi.UpdateFraction << "\n";
+                ss << "      MaxProbesPerFrame: " << ddgi.MaxProbesPerFrame << "\n";
+                ss << "      Hysteresis: " << ddgi.Hysteresis << "\n";
+                ss << "      ViewBias: " << ddgi.ViewBias << "\n";
+                ss << "      NormalBias: " << ddgi.NormalBias << "\n";
             }
 
             // CameraComponent
@@ -1260,6 +1265,16 @@ namespace Axle {
                             ddgi.EnergyMultiplier = std::stof(Trim(trimmed.substr(17)));
                         } else if (trimmed.rfind("RaysPerProbe:", 0) == 0) {
                             ddgi.RaysPerProbe = std::stoi(Trim(trimmed.substr(13)));
+                        } else if (trimmed.rfind("UpdateFraction:", 0) == 0) {
+                            ddgi.UpdateFraction = std::stof(Trim(trimmed.substr(15)));
+                        } else if (trimmed.rfind("MaxProbesPerFrame:", 0) == 0) {
+                            ddgi.MaxProbesPerFrame = std::stoi(Trim(trimmed.substr(18)));
+                        } else if (trimmed.rfind("Hysteresis:", 0) == 0) {
+                            ddgi.Hysteresis = std::stof(Trim(trimmed.substr(11)));
+                        } else if (trimmed.rfind("ViewBias:", 0) == 0) {
+                            ddgi.ViewBias = std::stof(Trim(trimmed.substr(9)));
+                        } else if (trimmed.rfind("NormalBias:", 0) == 0) {
+                            ddgi.NormalBias = std::stof(Trim(trimmed.substr(11)));
                         }
                         break;
                     }

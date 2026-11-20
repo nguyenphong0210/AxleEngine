@@ -271,6 +271,7 @@ namespace Axle {
             if (!color && request.Kind == RenderViewKind::Main) {
                 const auto settings = RenderBackendPolicy::FromDevice(device.GetCapabilities()).ResolveSettings(request.Settings);
                 const auto* fog = prepared.VolumetricFog ? &*prepared.VolumetricFog : nullptr;
+                const auto* ddgi = prepared.DDGIProbeGrid ? &*prepared.DDGIProbeGrid : nullptr;
                 RHI::RHIViewTargetDesc desc;
                 desc.Width = request.Width; desc.Height = request.Height;
                 desc.Samples = settings.MSAASamples;
@@ -289,7 +290,11 @@ namespace Axle {
                                  RHI::RHIViewTargets::MaxPlanarResolutionScale)
                     : 0.5f;
                 desc.EnableAutoExposure = settings.EnableAutoExposure;
-                desc.EnableDDGI = settings.EnableDDGI;
+                std::array<uint32_t, 3> ddgiDims{0u, 0u, 0u};
+                DDGIContract::ResolveViewTargetOptions(settings, false, ddgi, desc.EnableDDGI, ddgiDims);
+                desc.DDGIGridX = ddgiDims[0];
+                desc.DDGIGridY = ddgiDims[1];
+                desc.DDGIGridZ = ddgiDims[2];
                 FroxelFogContract::ResolveViewTargetOptions(
                     settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality, fog);
                 desc.HDR = settings.EnableToneMapping || desc.EnableReflectionTerms ||

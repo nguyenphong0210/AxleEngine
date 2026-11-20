@@ -126,6 +126,7 @@ private:
     int m_FogQuality = static_cast<int>(Axle::FroxelFogQuality::High);
     float m_FogTemporalWeight = 0.8f;
     bool m_EnableAutoExposure = false;
+    bool m_EnableDDGI = false;
     bool m_EnableTAA = false;
     int m_HiZVisualizationLevel = -1;
     bool m_F1KeyWasPressed = false;

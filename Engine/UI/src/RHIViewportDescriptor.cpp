@@ -41,6 +41,9 @@ namespace Axle {
         targets.EnableGTAO = desc.EnableGTAO;
         targets.EnableAutoExposure = desc.EnableAutoExposure;
         targets.EnableDDGI = desc.EnableDDGI;
+        targets.DDGIGridX = desc.DDGIGridX;
+        targets.DDGIGridY = desc.DDGIGridY;
+        targets.DDGIGridZ = desc.DDGIGridZ;
         m_Targets = std::make_shared<RHI::RHIViewTargets>();
         return m_Targets->Configure(targets, nullptr, nullptr, RHI::FroxelHistoryPolicy::AllowStaticFog) &&
             RegisterWithImGui();
@@ -137,11 +140,16 @@ namespace Axle {
         if (samples != 1) {
             desc.EnableVolumetricFog = false;
             desc.FroxelQuality = RHI::RHIViewTargets::DefaultFroxelQualityTier;
+            desc.EnableDDGI = false;
+            desc.DDGIGridX = 0;
+            desc.DDGIGridY = 0;
+            desc.DDGIGridZ = 0;
         }
         return Recreate(desc);
     }
 
-    bool RHIViewportDescriptor::SetRenderOptions(const SceneRenderSettings& requestedSettings, const RenderVolumetricFog* fog) {
+    bool RHIViewportDescriptor::SetRenderOptions(const SceneRenderSettings& requestedSettings, const RenderVolumetricFog* fog,
+                                                 const RenderDDGIProbeGrid* ddgi) {
         if (!m_OwnsColorTexture) return false;
         const auto settings = RenderBackendPolicy::FromDevice(RHI::RHIDevice::Get().GetCapabilities()).ResolveSettings(requestedSettings);
         auto desc = m_Desc;
@@ -159,7 +167,11 @@ namespace Axle {
         desc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
         desc.EnableBloom = settings.EnableBloom;
         desc.EnableAutoExposure = settings.EnableAutoExposure;
-        desc.EnableDDGI = settings.EnableDDGI;
+        std::array<uint32_t, 3> ddgiDims{0u, 0u, 0u};
+        DDGIContract::ResolveViewTargetOptions(settings, false, ddgi, desc.EnableDDGI, ddgiDims);
+        desc.DDGIGridX = ddgiDims[0];
+        desc.DDGIGridY = ddgiDims[1];
+        desc.DDGIGridZ = ddgiDims[2];
         desc.EnableNormal = desc.EnableGTAO || settings.EnableSSR || settings.EnablePlanarReflections;
         desc.EnableScreenStorage = desc.EnableGTAO || settings.EnableSSR ||
             settings.EnableBloom || settings.EnableAutoExposure;

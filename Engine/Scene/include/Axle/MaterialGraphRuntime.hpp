@@ -97,7 +97,7 @@ namespace Axle {
                                              RHI::RHIDescriptorPool& pool, std::span<nri::DescriptorSet*> sets);
     private:
         struct ShaderCode {
-            RHI::RHIShaderBytecode Vertex, Fragment, NormalFragment;
+            RHI::RHIShaderBytecode Vertex, Fragment, NormalFragment, ReflectionFragment, SSSFragment, ReflectionSSSFragment;
             RHI::RHIShaderReflection Reflection;
         };
         uint64_t m_Identity;

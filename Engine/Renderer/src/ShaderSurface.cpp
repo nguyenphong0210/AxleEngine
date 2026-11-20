@@ -4,27 +4,37 @@
 
 namespace Axle {
 namespace {
-    uint32_t Unsupported(const ResolvedSurface& surface, SurfaceEvaluation evaluation) {
+    uint32_t Unsupported(const ResolvedSurface& surface, SurfaceEvaluation evaluation,
+                         uint32_t supportedMask, std::string& unsupportedNames) {
         uint32_t mask = 0;
-        auto add = [&](bool requested, SurfaceFeature feature) { if (requested) mask |= static_cast<uint32_t>(feature); };
-        add(surface.ClearcoatStrength > 0, SurfaceFeature::Clearcoat);
-        add(surface.AnisotropyStrength != 0, SurfaceFeature::Anisotropy);
-        add(surface.SheenEnabled, SurfaceFeature::Sheen);
-        add(surface.SubsurfaceEnabled, SurfaceFeature::Subsurface);
-        add(surface.AbsorptionEnabled, SurfaceFeature::Absorption);
-        add(surface.RefractionEnabled, SurfaceFeature::Refraction);
+        unsupportedNames.clear();
+        auto add = [&](bool requested, SurfaceFeature feature, const char* label) {
+            const uint32_t bit = static_cast<uint32_t>(feature);
+            if (requested && (supportedMask & bit) == 0u) {
+                mask |= bit;
+                if (!unsupportedNames.empty()) unsupportedNames += ", ";
+                unsupportedNames += label;
+            }
+        };
+        add(surface.ClearcoatStrength > 0, SurfaceFeature::Clearcoat, "Clearcoat");
+        add(surface.AnisotropyStrength != 0, SurfaceFeature::Anisotropy, "Anisotropy");
+        add(surface.SheenEnabled, SurfaceFeature::Sheen, "Sheen");
+        add(surface.SubsurfaceEnabled, SurfaceFeature::Subsurface, "Subsurface");
+        add(surface.AbsorptionEnabled, SurfaceFeature::Absorption, "Absorption");
+        add(surface.RefractionEnabled, SurfaceFeature::Refraction, "Refraction");
         add(surface.TextureFlags & ((1u << static_cast<uint32_t>(RHI::RHITextureSlot::DetailNormal)) |
-                                   (1u << static_cast<uint32_t>(RHI::RHITextureSlot::DetailMask))), SurfaceFeature::DetailNormal);
-        add(surface.NormalStrength != 1, SurfaceFeature::NormalStrength);
-        add(!surface.EnableSpecularHighlights, SurfaceFeature::SpecularPolicy);
-        add(!surface.EnableEnvironmentReflections, SurfaceFeature::ReflectionPolicy);
-        add(surface.Surface == SurfaceType::Cutout, SurfaceFeature::Cutout);
+                                   (1u << static_cast<uint32_t>(RHI::RHITextureSlot::DetailMask))),
+            SurfaceFeature::DetailNormal, "DetailNormal");
+        add(surface.NormalStrength != 1, SurfaceFeature::NormalStrength, "NormalStrength");
+        add(!surface.EnableSpecularHighlights, SurfaceFeature::SpecularPolicy, "SpecularPolicy");
+        add(!surface.EnableEnvironmentReflections, SurfaceFeature::ReflectionPolicy, "ReflectionPolicy");
+        add(surface.Surface == SurfaceType::Cutout, SurfaceFeature::Cutout, "Cutout");
         // MaterialSurface evaluates graph emission directly. CustomShader does not expose authored emission.
         if (evaluation == SurfaceEvaluation::CustomShader) {
-            add(surface.EmissionIntensity != 0 && surface.EmissionColor != glm::vec3(0), SurfaceFeature::Emission);
+            add(surface.EmissionIntensity != 0 && surface.EmissionColor != glm::vec3(0), SurfaceFeature::Emission, "Emission");
         }
-        add(surface.TextureFlags & ~1u, SurfaceFeature::NonBaseTextures);
-        add(std::abs(surface.Dispersion) > 1e-6f, SurfaceFeature::Dispersion);
+        add(surface.TextureFlags & ~1u, SurfaceFeature::NonBaseTextures, "NonBaseTextures");
+        add(std::abs(surface.Dispersion) > 1e-6f, SurfaceFeature::Dispersion, "Dispersion");
         return mask;
     }
     bool Finite(const ResolvedMaterialProperty& property) {
@@ -70,10 +80,12 @@ namespace {
         result.Surface = base;
         result.Surface.Evaluation = evaluation;
         result.Surface.ShaderGeneration = shaderGeneration;
-        result.Surface.UnsupportedFeatures = Unsupported(base, evaluation);
+        std::string unsupportedNames;
+        result.Surface.UnsupportedFeatures = Unsupported(base, evaluation, plan.SupportedFeatures, unsupportedNames);
         result.Surface.Fallback = result.Surface.UnsupportedFeatures != 0;
         if (result.Surface.UnsupportedFeatures)
-            result.Surface.Diagnostic = "SURFACE_UNSUPPORTED_FEATURES: canonical material controls are not exposed by this shader interface (mask=" +
+            result.Surface.Diagnostic = "SURFACE_UNSUPPORTED_FEATURES: canonical material controls [" +
+                unsupportedNames + "] are not exposed by this shader interface (mask=" +
                 std::to_string(result.Surface.UnsupportedFeatures) + ")";
         result.Constants = std::move(std::get<PackedMaterialResultData>(constants));
         result.Textures = std::move(std::get<TextureRequestResultData>(textures).Requests);

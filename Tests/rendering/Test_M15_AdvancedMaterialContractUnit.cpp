@@ -1,6 +1,12 @@
 #include "RenderTestCommon.hpp"
 #include <Axle/RenderContracts.hpp>
 #include <Axle/ResolvedSurface.hpp>
+#include <Axle/ShaderSurface.hpp>
+#include <Axle/MaterialGraph.hpp>
+#include <Axle/MaterialGraphHLSL.hpp>
+#include <Axle/MaterialGraphProgram.hpp>
+#include <Axle/MaterialGraphRuntime.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <fstream>
 #include <iostream>
@@ -141,6 +147,151 @@ bool RunM15AdvancedMaterialContractUnitTests() {
             "SubsurfaceScatteringPass executes before ScreenSpaceReflectionPass in scene frame pass schedule");
     }
 
-    std::cout << "[M15U9Contract] M15 U9 Batch A, B & C contract tests passed.\n";
+    // M15-U9-07.1 & M15-U9-07.2: Material Graph advanced lowering, DXIL/SPIR-V entry points & explicit unsupported diagnostics
+    {
+        // 1. 13-pin PBRMasterOutput lowering & DXIL/SPIR-V compilation (Sheen + Subsurface)
+        MaterialGraphDocument advDoc;
+        advDoc.Identity = 90901ULL;
+        advDoc.Name = "M_U9GraphAdv";
+        advDoc.Parameters = {
+            {"u_SheenTint", {MaterialValueType::Float3, {1.0f, 0.85f, 0.65f}}, {}},
+            {"u_SheenRough", {MaterialValueType::Float, {0.32f}}, {}},
+            {"u_SSSColor", {MaterialValueType::Float3, {1.0f, 0.25f, 0.08f}}, {}},
+            {"u_SSSRad", {MaterialValueType::Float, {6.0f}}, {}}
+        };
+        const auto* paramDef = MaterialNodeRegistry::Builtins().Find("ParameterRef");
+        const auto* masterDef = MaterialNodeRegistry::Builtins().Find("PBRMasterOutput");
+        RENDER_CHECK(paramDef && masterDef && masterDef->Signatures.size() >= 2,
+            "PBRMasterOutput exposes overload signature supporting advanced U9 material outputs");
+
+        auto makeParamNode = [&](uint64_t id, const char* paramName, MaterialValueType type) {
+            MaterialGraphNode n;
+            n.ID = id;
+            n.Type = "ParameterRef";
+            n.Attributes = {{"parameter", std::string(paramName), {}}};
+            n.Outputs = {{"value", type, {}, {}}};
+            return n;
+        };
+        advDoc.Nodes.push_back(makeParamNode(10, "u_SheenTint", MaterialValueType::Float3));
+        advDoc.Nodes.push_back(makeParamNode(11, "u_SheenRough", MaterialValueType::Float));
+        advDoc.Nodes.push_back(makeParamNode(12, "u_SSSColor", MaterialValueType::Float3));
+        advDoc.Nodes.push_back(makeParamNode(13, "u_SSSRad", MaterialValueType::Float));
+
+        MaterialGraphNode master;
+        master.ID = 1;
+        master.Type = "PBRMasterOutput";
+        for (const auto& pin : masterDef->Signatures[1].Inputs) {
+            master.Inputs.push_back({pin.Name, *pin.Type, pin.Default, {}});
+        }
+        advDoc.Nodes.push_back(std::move(master));
+        advDoc.Connections = {
+            {{10, "value"}, {1, "SheenColor"}, {}},
+            {{11, "value"}, {1, "SheenRoughness"}, {}},
+            {{12, "value"}, {1, "SubsurfaceColor"}, {}},
+            {{13, "value"}, {1, "SubsurfaceRadius"}, {}}
+        };
+
+        std::string serialized;
+        MaterialGraphDiagnostic diag;
+        RENDER_CHECK(MaterialGraph::Serialize(advDoc, serialized, &diag),
+            "13-pin MaterialGraphDocument serializes cleanly");
+        MaterialGraphDocument reparsed;
+        RENDER_CHECK(MaterialGraph::Parse(serialized, reparsed, &diag),
+            "13-pin MaterialGraphDocument round-trips cleanly through Parse");
+
+        for (auto fmt : {RHI::RHIShaderFormat::DXIL, RHI::RHIShaderFormat::SPIRV}) {
+            CompiledMaterialGraphProgram prog;
+            RENDER_CHECK(MaterialGraphProgram::Compile(reparsed, fmt, prog, &diag),
+                "13-pin Sheen+Subsurface MaterialGraph compiles cleanly for DXIL & SPIR-V");
+            RENDER_CHECK(prog.Vertex.IsValid() && prog.Fragment.IsValid() && prog.NormalFragment.IsValid() &&
+                         prog.ReflectionFragment.IsValid() && prog.SSSFragment.IsValid() &&
+                         prog.ReflectionSSSFragment.IsValid(),
+                "MaterialGraph compiles all 6 entry points (VS, PS, Normal, Reflection, SSS, ReflectionSSS)");
+            RENDER_CHECK(prog.Graph.Warnings.empty() &&
+                         prog.Graph.SurfaceFunction.find("surface.SheenColor =") != std::string::npos &&
+                         prog.Graph.SurfaceFunction.find("surface.SubsurfaceRadius =") != std::string::npos &&
+                         prog.Graph.SurfaceFunction.find("surface.FeatureFlags |=") != std::string::npos,
+                "MaterialGraph lowers Sheen/Subsurface surface fields and sets FeatureFlags with zero warnings");
+            RENDER_CHECK((prog.BindingPlan.SupportedFeatures & static_cast<uint32_t>(SurfaceFeature::Sheen)) != 0 &&
+                         (prog.BindingPlan.SupportedFeatures & static_cast<uint32_t>(SurfaceFeature::Subsurface)) != 0,
+                "MaterialGraph layout advertises Sheen and Subsurface support");
+        }
+
+        // 2. M15-U9-07.2: Explicit unsupported-feature diagnostics on both opaque graph & raw/graph ResolveShaderSurface
+        auto opaqueOptDoc = reparsed;
+        for (auto& inp : opaqueOptDoc.Nodes.back().Inputs) {
+            if (inp.Name == "AbsorptionColor") inp.Default->Components = {1.5f, 0.2f, 0.1f};
+            if (inp.Name == "Dispersion") inp.Default->Components = {0.35f};
+        }
+        MaterialHLSLSource warnedSource;
+        RENDER_CHECK(MaterialGraphHLSL::Lower(opaqueOptDoc, warnedSource, &diag) && warnedSource.Warnings.size() >= 2,
+            "Opaque MaterialGraph authoring AbsorptionColor/Dispersion emits explicit unsupported-feature lowering warnings");
+        bool hasAbsWarn = false, hasDispWarn = false;
+        for (const auto& w : warnedSource.Warnings) {
+            hasAbsWarn |= w.Code == "MG_UNSUPPORTED_OPAQUE_ABSORPTION";
+            hasDispWarn |= w.Code == "MG_UNSUPPORTED_OPAQUE_DISPERSION";
+        }
+        RENDER_CHECK(hasAbsWarn && hasDispWarn,
+            "Opaque optical warnings carry explicit MG_UNSUPPORTED_OPAQUE_ABSORPTION and MG_UNSUPPORTED_OPAQUE_DISPERSION codes");
+
+        MaterialGraphRuntime rt(90901ULL, MaterialGraphTarget{RHI::RHIShaderFormat::DXIL, false});
+        RENDER_CHECK(rt.Reload(opaqueOptDoc) && rt.Ready(), "MaterialGraphRuntime builds generation with warnings");
+        const auto rtRes = MaterialGraphRuntime::ResolveSurface(*rt.Ready());
+        RENDER_CHECK(std::holds_alternative<ResolvedShaderSurface>(rtRes), "MaterialGraphRuntime resolves surface");
+        const auto& rtSurf = std::get<ResolvedShaderSurface>(rtRes).Surface;
+        RENDER_CHECK(rtSurf.Fallback &&
+                     (rtSurf.UnsupportedFeatures & static_cast<uint32_t>(SurfaceFeature::Absorption)) != 0 &&
+                     (rtSurf.UnsupportedFeatures & static_cast<uint32_t>(SurfaceFeature::Dispersion)) != 0 &&
+                     rtSurf.Diagnostic.find("MG_UNSUPPORTED_OPAQUE") != std::string::npos,
+            "MaterialGraphRuntime flags Fallback, UnsupportedFeatures bits, and explicit diagnostic when opaque optical features authored");
+
+        // ResolveShaderSurface interface-capability check: graph plan supports Sheen/SSS, rejects Absorption/Dispersion
+        CompiledMaterialGraphProgram cleanProg;
+        RENDER_CHECK(MaterialGraphProgram::Compile(reparsed, RHI::RHIShaderFormat::DXIL, cleanProg, &diag),
+                     "Clean 13-pin graph compiles for DXIL interface check");
+        RHI::RHIMaterialDesc matReq;
+        matReq.SheenEnabled = true;
+        matReq.SheenColor = glm::vec3(1.0f, 0.8f, 0.7f);
+        matReq.SheenRoughness = 0.4f;
+        matReq.SubsurfaceEnabled = true;
+        matReq.SubsurfaceColor = glm::vec3(1.0f, 0.3f, 0.2f);
+        matReq.SubsurfaceRadius = 4.0f;
+        EngineMaterialValues viewVals;
+        const auto graphSupportedRes = ResolveShaderSurface(MaterialResolver::Resolve(RHI::RHIMaterial(matReq)),
+            SurfaceEvaluation::MaterialGraph, 77u, cleanProg.BindingPlan, viewVals, {});
+        RENDER_CHECK(std::holds_alternative<ResolvedShaderSurface>(graphSupportedRes) &&
+                     std::get<ResolvedShaderSurface>(graphSupportedRes).Surface.UnsupportedFeatures == 0 &&
+                     !std::get<ResolvedShaderSurface>(graphSupportedRes).Surface.Fallback,
+            "Graph BindingPlan accepts Sheen+Subsurface cleanly without spurious unsupported fallback");
+
+        matReq.AbsorptionEnabled = true;
+        matReq.AbsorptionColor = glm::vec3(1.0f, 0.2f, 0.1f);
+        matReq.Dispersion = 0.3f;
+        const auto graphPartialRes = ResolveShaderSurface(MaterialResolver::Resolve(RHI::RHIMaterial(matReq)),
+            SurfaceEvaluation::MaterialGraph, 78u, cleanProg.BindingPlan, viewVals, {});
+        RENDER_CHECK(std::holds_alternative<ResolvedShaderSurface>(graphPartialRes), "Partial feature interface resolves");
+        const auto& graphPartial = std::get<ResolvedShaderSurface>(graphPartialRes).Surface;
+        RENDER_CHECK(graphPartial.Fallback &&
+                     graphPartial.UnsupportedFeatures ==
+                         (static_cast<uint32_t>(SurfaceFeature::Absorption) | static_cast<uint32_t>(SurfaceFeature::Dispersion)) &&
+                     graphPartial.Diagnostic.find("Absorption") != std::string::npos &&
+                     graphPartial.Diagnostic.find("Dispersion") != std::string::npos,
+            "Graph BindingPlan names only genuinely unsupported optical controls [Absorption, Dispersion] in diagnostic");
+
+        // Empty/raw custom shader plan names missing Sheen/Subsurface/Absorption/Dispersion
+        MaterialBindingPlan rawPlan;
+        const auto rawRes = ResolveShaderSurface(MaterialResolver::Resolve(RHI::RHIMaterial(matReq)),
+            SurfaceEvaluation::CustomShader, 79u, rawPlan, viewVals, {});
+        RENDER_CHECK(std::holds_alternative<ResolvedShaderSurface>(rawRes), "Raw plan resolves with diagnostics");
+        const auto& rawSurf = std::get<ResolvedShaderSurface>(rawRes).Surface;
+        RENDER_CHECK(rawSurf.Fallback &&
+                     rawSurf.Diagnostic.find("Sheen") != std::string::npos &&
+                     rawSurf.Diagnostic.find("Subsurface") != std::string::npos &&
+                     rawSurf.Diagnostic.find("Absorption") != std::string::npos &&
+                     rawSurf.Diagnostic.find("Dispersion") != std::string::npos,
+            "Raw custom shader plan explicitly names unsupported Sheen/Subsurface/Absorption/Dispersion controls");
+    }
+
+    std::cout << "[M15U9Contract] M15 U9 Batch A, B, C & D contract tests passed.\n";
     return true;
 }

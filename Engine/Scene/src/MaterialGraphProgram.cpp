@@ -89,7 +89,7 @@ namespace {
         // Collision-free, process-local content identity. The fixed compiler contract
         // is part of this version: SM6_0, HLSL2021, O3, VSMain/PSMain/PSNormalMain,
         // Vulkan1.3 DX layout.
-        candidate.ShaderKey="MaterialGraphShader:3:"+std::to_string(compilerIdentity.size())+":"+compilerIdentity+":"+std::to_string(static_cast<unsigned>(format))+":"+
+        candidate.ShaderKey="MaterialGraphShader:4:"+std::to_string(compilerIdentity.size())+":"+compilerIdentity+":"+std::to_string(static_cast<unsigned>(format))+":"+
             std::to_string(candidate.Graph.CompilerKey.size())+":"+candidate.Graph.CompilerKey+candidate.HLSL;
         return true;
     }
@@ -112,7 +112,19 @@ namespace {
         description.EntryPoint="PSNormalMain";
         auto normal=compile();
         if(!normal.Success || !normal.Bytecode.IsValid()) return fail("Normal fragment compilation failed: "+normal.ErrorMessage,slang?"MG_SLANG_NORMAL":"MG_DXC_NORMAL");
+        description.EntryPoint="PSReflectionMain";
+        auto reflectionFrag=compile();
+        if(!reflectionFrag.Success || !reflectionFrag.Bytecode.IsValid()) return fail("Reflection fragment compilation failed: "+reflectionFrag.ErrorMessage,slang?"MG_SLANG_REFLECTION":"MG_DXC_REFLECTION");
+        description.EntryPoint="PSSSSMain";
+        auto sssFrag=compile();
+        if(!sssFrag.Success || !sssFrag.Bytecode.IsValid()) return fail("SSS fragment compilation failed: "+sssFrag.ErrorMessage,slang?"MG_SLANG_SSS":"MG_DXC_SSS");
+        description.EntryPoint="PSReflectionSSSMain";
+        auto reflectionSSSFrag=compile();
+        if(!reflectionSSSFrag.Success || !reflectionSSSFrag.Bytecode.IsValid()) return fail("Reflection SSS fragment compilation failed: "+reflectionSSSFrag.ErrorMessage,slang?"MG_SLANG_REFLECTION_SSS":"MG_DXC_REFLECTION_SSS");
         candidate.Vertex=std::move(vertex.Bytecode); candidate.Fragment=std::move(fragment.Bytecode); candidate.NormalFragment=std::move(normal.Bytecode);
+        candidate.ReflectionFragment=std::move(reflectionFrag.Bytecode);
+        candidate.SSSFragment=std::move(sssFrag.Bytecode);
+        candidate.ReflectionSSSFragment=std::move(reflectionSSSFrag.Bytecode);
         candidate.Reflection=RHI::RHIShaderReflection::Merge({vertex.Reflection,fragment.Reflection});
         return true;
     }

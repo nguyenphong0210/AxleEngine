@@ -1,6 +1,7 @@
 #include <Axle/MaterialGraphProgram.hpp>
 #include <Axle/CustomShaderInterface.hpp>
 #include <Axle/MaterialSurfaceShader.hpp>
+#include <Axle/ResolvedSurface.hpp>
 #include <algorithm>
 #include <set>
 
@@ -130,6 +131,11 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
     std::sort(records.begin(),records.end());
     std::string key="MaterialGraphLayout:1";
     for(const auto& record:records)Field(key,record);
-    outPlan=std::get<MaterialBindingPlan>(std::move(plan));outKey=std::move(key);return true;
+    outPlan=std::get<MaterialBindingPlan>(std::move(plan));
+    outPlan.SupportedFeatures = static_cast<uint32_t>(SurfaceFeature::Clearcoat) |
+                                static_cast<uint32_t>(SurfaceFeature::Sheen) |
+                                static_cast<uint32_t>(SurfaceFeature::Subsurface) |
+                                static_cast<uint32_t>(SurfaceFeature::Emission);
+    outKey=std::move(key);return true;
 }
 }

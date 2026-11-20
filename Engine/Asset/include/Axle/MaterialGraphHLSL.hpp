@@ -30,6 +30,7 @@ namespace Axle {
         // Only participating definition/emitter revisions; excludes values and paths.
         std::string CompilerKey;
         std::vector<std::pair<uint64_t, std::string>> NodeSources;
+        std::vector<MaterialGraphDiagnostic> Warnings;
     };
 
     struct MaterialHLSLNodeContext {

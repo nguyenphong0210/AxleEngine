@@ -106,7 +106,9 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
         const auto code=m_Shaders.find(program.ShaderKey);
         if(code!=m_Shaders.end()) {
             ++m_Stats.ShaderCacheHits;
-            program.Vertex=code->second.Vertex;program.Fragment=code->second.Fragment;program.NormalFragment=code->second.NormalFragment;program.Reflection=code->second.Reflection;
+            program.Vertex=code->second.Vertex;program.Fragment=code->second.Fragment;program.NormalFragment=code->second.NormalFragment;
+            program.ReflectionFragment=code->second.ReflectionFragment;program.SSSFragment=code->second.SSSFragment;
+            program.ReflectionSSSFragment=code->second.ReflectionSSSFragment;program.Reflection=code->second.Reflection;
         } else {
             ++m_Stats.ShaderCompiles;
             if(!MaterialGraphProgram::CompilePrepared(document,program,&m_Diagnostic))return false;
@@ -127,6 +129,9 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
             native->BindingPlan=program.BindingPlan;native->Reflection=program.Reflection;
             native->VSBytecode=program.Vertex;native->PSBytecode=program.Fragment;
             native->NormalPSBytecode=program.NormalFragment;native->HasNormalPass=program.NormalFragment.IsValid();
+            native->ReflectionPSBytecode=program.ReflectionFragment;native->HasReflectionTerms=program.ReflectionFragment.IsValid();
+            native->SSSPSBytecode=program.SSSFragment;native->ReflectionSSSPSBytecode=program.ReflectionSSSFragment;
+            native->HasSSSTerms=program.SSSFragment.IsValid() && program.ReflectionSSSFragment.IsValid();
             uint32_t rootSpace=0;for(const auto& r:program.Reflection.Resources)rootSpace=std::max(rootSpace,r.Space+1);
             native->LayoutDescription=program.Reflection.BuildPipelineLayoutDesc(rootSpace);
             if(!native->LayoutDescription.RootConstants.empty())return Fail(&m_Diagnostic,"MG_RELOAD_LAYOUT","Graph cbuffers must use descriptors");
@@ -146,7 +151,7 @@ bool MaterialGraphRuntime::Reload(const MaterialGraphDocument& document, const M
         if(code==m_Shaders.end() && m_ShaderCapacity) {
             while(m_Shaders.size()>=m_ShaderCapacity){m_Shaders.erase(m_ShaderOrder.front());m_ShaderOrder.pop_front();}
             m_ShaderOrder.push_back(program.ShaderKey);
-            m_Shaders.emplace(program.ShaderKey,ShaderCode{program.Vertex,program.Fragment,program.NormalFragment,program.Reflection});
+            m_Shaders.emplace(program.ShaderKey,ShaderCode{program.Vertex,program.Fragment,program.NormalFragment,program.ReflectionFragment,program.SSSFragment,program.ReflectionSSSFragment,program.Reflection});
         }
         if(m_Ready && m_Ready->PipelineKey==candidate->PipelineKey && m_Ready->DeviceEpoch==candidate->DeviceEpoch &&
            m_Ready->Resources.Key==candidate->Resources.Key &&
@@ -180,6 +185,20 @@ ShaderSurfaceResult MaterialGraphRuntime::ResolveSurface(const MaterialGraphRead
     auto result = ResolveShaderSurface(base,
         SurfaceEvaluation::MaterialGraph, generation.ID, generation.Program.BindingPlan, view, properties);
     if (auto* surface = std::get_if<ResolvedShaderSurface>(&result)) {
+        if (!generation.Program.Graph.Warnings.empty()) {
+            for (const auto& warning : generation.Program.Graph.Warnings) {
+                if (warning.Code == "MG_UNSUPPORTED_OPAQUE_ABSORPTION") {
+                    surface->Surface.UnsupportedFeatures |= static_cast<uint32_t>(SurfaceFeature::Absorption);
+                } else if (warning.Code == "MG_UNSUPPORTED_OPAQUE_DISPERSION") {
+                    surface->Surface.UnsupportedFeatures |= static_cast<uint32_t>(SurfaceFeature::Dispersion);
+                }
+            }
+            surface->Surface.Fallback = true;
+            if (surface->Surface.Diagnostic.empty()) {
+                surface->Surface.Diagnostic = generation.Program.Graph.Warnings.front().Code + ": " +
+                    generation.Program.Graph.Warnings.front().Message;
+            }
+        }
         if (!generation.Resources.Warnings.empty()) {
             surface->Surface.Fallback = true;
             surface->Surface.Diagnostic = generation.Resources.Warnings.front().Code + ": " + generation.Resources.Warnings.front().Message;

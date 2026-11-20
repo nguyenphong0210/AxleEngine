@@ -183,7 +183,39 @@ PSInput VSMain(VSInput input) {
     return output;
 }
 
-ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
+struct ForwardSurfaceEval {
+    float4 Color;
+    float3 Environment;
+    float3 Response;
+    float Roughness;
+    float ReflectionEnabled;
+    float3 DiffuseSSS;
+    float4 ControlSSS;
+    float3 CrispSpecularAndEmissive;
+};
+
+ForwardSurfaceEval MakeForwardSurfaceEval(
+    float4 color,
+    float3 environment,
+    float3 response,
+    float roughness,
+    float reflectionEnabled,
+    float3 diffuseSSS,
+    float4 controlSSS,
+    float3 crispSpecularAndEmissive) {
+    ForwardSurfaceEval result;
+    result.Color = color;
+    result.Environment = environment;
+    result.Response = response;
+    result.Roughness = roughness;
+    result.ReflectionEnabled = reflectionEnabled;
+    result.DiffuseSSS = diffuseSSS;
+    result.ControlSSS = controlSSS;
+    result.CrispSpecularAndEmissive = crispSpecularAndEmissive;
+    return result;
+}
+
+ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
     MaterialSurface surface = AxleEvaluateMaterial(input.TexCoord);
     float3 base = max(surface.BaseColor, float3(0,0,0));
     float metallic = saturate(surface.Metallic);
@@ -207,14 +239,44 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     float3 specular = DistributionGGX(normal, halfVector, roughness)*GeometrySmith(normal, view, light, roughness)*fresnel / max(4.0*nv*nl, 0.0001);
     float3 diffuse = (1.0 - fresnel)*(1.0 - metallic)*base * INV_PI;
 
+    const bool hasSSS = (surface.SubsurfaceRadius > 0.001);
+    const float sssGain = hasSSS ? min(surface.SubsurfaceRadius, 1.0) * 0.25 : 0.0;
+    const float3 sssTint = saturate(surface.SubsurfaceColor);
+    const float coat = saturate(surface.Clearcoat);
+    const float coatRoughness = clamp(surface.ClearcoatRoughness, 0.04, 1.0);
+
     // Direct sun lighting using unified physical calibration scale
     static const float DIRECT_LUX_TO_RADIANCE = 0.000035;
     float sunIntensity = hasMultiLightSun ? max(u_SunLight.DirectionAndIlluminance.w, 0.0) : max(u_SunDirection.w, 0.0);
     float sunRadianceScale = hasMultiLightSun || sunIntensity > 10.0 ? DIRECT_LUX_TO_RADIANCE : 1.0;
     float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : u_SunColor.rgb;
     float2 screenVisibility = AxleForwardVisibility(input.Position.xyz, u_Projection, u_LightReserved[1].yz);
-    float3 directLight = max(sunColor, float3(0,0,0)) * (sunIntensity * sunRadianceScale) * nl * AxleDirectionalVisibility(AxleSunShadowVisibility(input.WorldPos, normal, light), screenVisibility.y);
-    float3 direct = (diffuse + specular) * directLight;
+    float3 sunRadiance = max(sunColor, float3(0,0,0)) * (sunIntensity * sunRadianceScale) * AxleDirectionalVisibility(AxleSunShadowVisibility(input.WorldPos, normal, light), screenVisibility.y);
+    float3 diffDirect = float3(0.0, 0.0, 0.0);
+    float3 specDirect = float3(0.0, 0.0, 0.0);
+    if (nl > 0.0 || hasSSS) {
+        float3 sunDiff = diffuse * nl;
+        float3 sunSpec = specular * nl;
+        if (coat > 0.0 && nl > 0.0) {
+            float coatF = 0.04 + 0.96 * pow(1.0 - saturate(dot(view, halfVector)), 5.0);
+            float coatBRDF = DistributionGGX(normal, halfVector, coatRoughness) * GeometrySmith(normal, view, light, coatRoughness) * coatF / max(4.0 * nv * max(nl, 0.001), 0.0001);
+            float atten = (1.0 - coat * coatF) * (1.0 - coat * coatF);
+            sunDiff *= atten;
+            sunSpec = sunSpec * atten + coat * coatBRDF * nl;
+        }
+        ApplyCharlieSheenDirectSplit(sunDiff, sunSpec, normal, halfVector, nl, nv, surface.SheenColor, surface.SheenRoughness, 1.0);
+        diffDirect += sunDiff * sunRadiance;
+        specDirect += sunSpec * sunRadiance;
+        if (hasSSS) {
+            float wrap = 0.5;
+            float NdotL_wrap = saturate((dot(normal, light) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
+            float3 scatterDir = -(light + normal * 0.3);
+            float VdotS = max(dot(view, normalize(scatterDir)), 0.0);
+            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
+            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * sssTint * sssGain;
+            diffDirect += sssLighting * sunRadiance * (1.0 - metallic);
+        }
+    }
 
     // Keep the graph path on the same Forward+ light data contract.  The
     // authored graph still controls the surface value, while the renderer
@@ -232,16 +294,36 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         if (pointLight.Params.x > 0.1 && abs(pointLight.Params.x - 1.0) > 0.01)
             attenuation = pow(max(attenuation, 0.0), pointLight.Params.x);
         float localNl = saturate(dot(normal, localLight));
-        if (localNl <= 0.0) continue;
+        if (localNl <= 0.0 && !hasSSS) continue;
         float3 localHalf = AxleSafeNormal(view + localLight, normal);
         float3 localF = FresnelSchlick(saturate(dot(localHalf, view)), f0);
         float3 localSpec = DistributionGGX(normal, localHalf, roughness) *
             GeometrySmith(normal, view, localLight, roughness) * localF /
-            max(4.0 * nv * localNl, 0.0001);
+            max(4.0 * nv * max(localNl, 0.001), 0.0001);
         float3 localDiffuse = (1.0 - localF) * (1.0 - metallic) * base * INV_PI;
         float3 radiance = max(pointLight.ColorAndIntensity.rgb, 0.0) *
             (pointLight.ColorAndIntensity.w * attenuation * 0.05);
-        direct += (localDiffuse + localSpec) * radiance * localNl;
+        float3 pointDiff = localDiffuse * localNl;
+        float3 pointSpec = localSpec * localNl;
+        if (coat > 0.0 && localNl > 0.0) {
+            float coatF = 0.04 + 0.96 * pow(1.0 - saturate(dot(view, localHalf)), 5.0);
+            float coatBRDF = DistributionGGX(normal, localHalf, coatRoughness) * GeometrySmith(normal, view, localLight, coatRoughness) * coatF / max(4.0 * nv * max(localNl, 0.001), 0.0001);
+            float atten = (1.0 - coat * coatF) * (1.0 - coat * coatF);
+            pointDiff *= atten;
+            pointSpec = pointSpec * atten + coat * coatBRDF * localNl;
+        }
+        ApplyCharlieSheenDirectSplit(pointDiff, pointSpec, normal, localHalf, localNl, nv, surface.SheenColor, surface.SheenRoughness, 1.0);
+        diffDirect += pointDiff * radiance;
+        specDirect += pointSpec * radiance;
+        if (hasSSS) {
+            float wrap = 0.5;
+            float NdotL_wrap = saturate((dot(normal, localLight) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
+            float3 scatterDir = -(localLight + normal * 0.3);
+            float VdotS = max(dot(view, normalize(scatterDir)), 0.0);
+            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
+            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * sssTint * sssGain;
+            diffDirect += sssLighting * radiance * (1.0 - metallic);
+        }
     }
     [loop] for (uint s = 0u; s < min(u_LightCounts.y, 16u); ++s) {
         SpotLightData spot = u_SpotLights[s];
@@ -267,9 +349,28 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float3 localDiffuse = (1.0 - localF) * (1.0 - metallic) * base * INV_PI;
         float3 radiance = max(spot.ColorAndInnerAngle.rgb, 0.0) *
             (spot.DirectionAndIntensity.w * attenuation * 0.05);
-        direct += (localDiffuse + localSpec) * radiance * localNl;
+        float3 spotDiff = localDiffuse * localNl;
+        float3 spotSpec = localSpec * localNl;
+        if (coat > 0.0) {
+            float coatF = 0.04 + 0.96 * pow(1.0 - saturate(dot(view, localHalf)), 5.0);
+            float coatBRDF = DistributionGGX(normal, localHalf, coatRoughness) * GeometrySmith(normal, view, localLight, coatRoughness) * coatF / max(4.0 * nv * max(localNl, 0.001), 0.0001);
+            float atten = (1.0 - coat * coatF) * (1.0 - coat * coatF);
+            spotDiff *= atten;
+            spotSpec = spotSpec * atten + coat * coatBRDF * localNl;
+        }
+        ApplyCharlieSheenDirectSplit(spotDiff, spotSpec, normal, localHalf, localNl, nv, surface.SheenColor, surface.SheenRoughness, 1.0);
+        diffDirect += spotDiff * radiance;
+        specDirect += spotSpec * radiance;
+        if (hasSSS) {
+            float wrap = 0.5;
+            float NdotL_wrap = saturate((dot(normal, localLight) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
+            float3 scatterDir = -(localLight + normal * 0.3);
+            float VdotS = max(dot(view, normalize(scatterDir)), 0.0);
+            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
+            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * sssTint * sssGain;
+            diffDirect += sssLighting * radiance * (1.0 - metallic);
+        }
     }
-    float3 areaDirect = 0.0;
     [loop] for (uint r = 0u; r < min((uint)u_LightReserved[1].x, 2u); ++r) {
         RectLightData rLight = u_RectLights[r];
         LTCAreaLightResult ltc = EvaluateLTCAreaLightTerms(
@@ -286,33 +387,44 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
             f0,
             0.05);
         if (ltc.RangeAttenuation > 0.0) {
-            float3 areaLighting = ltc.DiffuseLighting + ltc.SpecularLighting;
-            float areaCoat = saturate(surface.Clearcoat);
-            if (areaCoat > 0.0) {
+            float3 areaDiff = ltc.DiffuseLighting;
+            float3 areaSpec = ltc.SpecularLighting;
+            if (coat > 0.0) {
                 LTCAreaLightResult coatLTC = EvaluateLTCAreaLightTerms(
                     rLight.PositionAndWidth, rLight.DirectionAndHeight, rLight.UpAndRange, rLight.ColorAndIntensity,
-                    input.WorldPos, normal, view, 1.0, 1.0, clamp(surface.ClearcoatRoughness, 0.04, 1.0), 0.04, 0.05);
-                float3 attenuation = 1.0 - areaCoat * coatLTC.SpecularAlbedo;
-                areaLighting = areaLighting * attenuation * attenuation + areaCoat * coatLTC.SpecularLighting;
+                    input.WorldPos, normal, view, 1.0, 1.0, coatRoughness, 0.04, 0.05);
+                float3 attenuation = 1.0 - coat * coatLTC.SpecularAlbedo;
+                float3 atten2 = attenuation * attenuation;
+                areaDiff *= atten2;
+                areaSpec = areaSpec * atten2 + coat * coatLTC.SpecularLighting;
             }
-            areaDirect += areaLighting * ltc.Radiance;
+            ApplyCharlieSheenAreaSplit(
+                areaDiff,
+                areaSpec,
+                rLight.PositionAndWidth,
+                rLight.DirectionAndHeight,
+                rLight.UpAndRange,
+                input.WorldPos,
+                normal,
+                view,
+                ltc.DiffuseFormFactor,
+                surface.SheenColor,
+                surface.SheenRoughness,
+                1.0);
+            diffDirect += areaDiff * ltc.Radiance;
+            specDirect += areaSpec * ltc.Radiance;
+            if (hasSSS) {
+                diffDirect += ltc.DiffuseFormFactor * sssTint * sssGain * (1.0 - metallic) * ltc.Radiance;
+            }
         }
     }
 
-    // Clearcoat layer evaluation
-    float coat = saturate(surface.Clearcoat);
-    if (coat > 0.0) {
-        float coatRoughness = clamp(surface.ClearcoatRoughness, 0.04, 1.0);
-        float coatF = 0.04 + 0.96 * pow(1.0 - saturate(dot(view, halfVector)), 5.0);
-        float coatBRDF = DistributionGGX(normal, halfVector, coatRoughness) * GeometrySmith(normal, view, light, coatRoughness) * coatF / max(4.0 * nv * max(nl, 0.001), 0.0001);
-        direct = direct * (1.0 - coat * coatF) * (1.0 - coat * coatF) + coat * coatBRDF * directLight;
-    }
-
-    direct += areaDirect; // Area clearcoat was integrated with each emitter, independent of sun direction.
+    float3 direct = diffDirect + specDirect;
 
     // Ambient / indirect term scaled by AO; direct and emissive are preserved
     float3 ambientRef = FresnelSchlickRoughness(nv, f0, roughness);
-    float3 ambient;
+    float3 diffAmbient = 0.0;
+    float3 specAmbient = 0.0;
     float3 reflectionEnvironment = 0.0;
     float3 reflectionResponse = 0.0;
     float3 reflDir = reflect(-view, normal);
@@ -328,13 +440,15 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         ddgiDiffuse = ddgiSample.rgb * base * ((1.0 - ambientRef) * (1.0 - metallic));
         ddgiConfidence = ddgiSample.a;
     }
+    uint envLevels = 1u;
+    float maxLod = 0.0;
+    float envIntensity = max(u_LightReserved[0].y, 0.0);
     if (u_LightCounts.w == 1u) {
-        uint envWidth, envHeight, envLevels;
+        uint envWidth, envHeight;
         u_PrefilterMap.GetDimensions(0, envWidth, envHeight, envLevels);
-        float maxLod = max(0.0, float(envLevels) - 1.0);
+        maxLod = max(0.0, float(envLevels) - 1.0);
         float3 ambientF = ambientRef;
         float3 ambientKD = (1.0 - ambientF) * (1.0 - metallic);
-        float envIntensity = max(u_LightReserved[0].y, 0.0);
         float rotation = u_ReflectionParams.z;
         float sinRot = sin(rotation), cosRot = cos(rotation);
         float3 skyNormal = float3(cosRot*normal.x-sinRot*normal.z, normal.y, sinRot*normal.x+cosRot*normal.z);
@@ -343,8 +457,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float3 skyPrefiltered = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, skyReflection, roughness * maxLod).rgb * envIntensity;
         float3 prefiltered = EvaluateMultiProbeBlendHLSL(input.WorldPos, reflDir, roughness, u_EnvironmentSampler, skyPrefiltered).BlendedEnvColor;
         float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(nv, roughness)).rg;
-        float3 diffuseAmbient = lerp(irradiance * base * ambientKD, ddgiDiffuse, ddgiConfidence) * diffuseRatio;
-        ambient = diffuseAmbient + prefiltered * (ambientF * envBRDF.x + envBRDF.y) * specRatio;
+        diffAmbient = lerp(irradiance * base * ambientKD, ddgiDiffuse, ddgiConfidence) * diffuseRatio;
+        specAmbient = prefiltered * (ambientF * envBRDF.x + envBRDF.y) * specRatio;
         reflectionResponse = (ambientF * envBRDF.x + envBRDF.y) * specAO;
         reflectionEnvironment = prefiltered * reflectionResponse;
     } else {
@@ -355,13 +469,45 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float3 probeSpec = probeBlend.ProbeColor * (ambientRef * envBRDF.x + envBRDF.y);
         float3 skySpec = ambientRef * 0.02 * (1.0 - saturate(u_LightReserved[0].z)) * ambientStrength;
         float3 iblDiffuse = base * 0.03 * (1.0 - metallic) * ambientStrength;
-        float3 diffuseAmbient = lerp(iblDiffuse, ddgiDiffuse, ddgiConfidence) * diffuseRatio;
-        ambient = diffuseAmbient + lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * specRatio;
+        diffAmbient = lerp(iblDiffuse, ddgiDiffuse, ddgiConfidence) * diffuseRatio;
+        specAmbient = lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * specRatio;
         reflectionResponse = (ambientRef * envBRDF.x + envBRDF.y) * specAO;
         reflectionEnvironment = lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * specAO;
     }
+    if (surface.SheenRoughness >= 0.0) {
+        float sheenRough = clamp(surface.SheenRoughness, 0.04, 1.0);
+        float3 sheenSky = 0.0;
+        if (u_LightCounts.w == 1u) {
+            float rotation = u_ReflectionParams.z;
+            float sinRot = sin(rotation), cosRot = cos(rotation);
+            float3 skyReflection = float3(cosRot*reflDir.x-sinRot*reflDir.z, reflDir.y, sinRot*reflDir.x+cosRot*reflDir.z);
+            sheenSky = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, skyReflection, sheenRough * maxLod).rgb * envIntensity;
+        } else {
+            sheenSky = (hasMultiLightSun ? u_SunLight.AmbientColor.rgb : max(u_SunColor.rgb, float3(0,0,0))) * envIntensity;
+        }
+        float3 sheenEnv = EvaluateMultiProbeBlendHLSL(input.WorldPos, reflDir, sheenRough, u_EnvironmentSampler, sheenSky).BlendedEnvColor;
+        ApplyCharlieSheenIBLSplit(diffAmbient, specAmbient, reflectionEnvironment, reflectionResponse, sheenEnv, nv, combinedAO, surface.SheenColor, surface.SheenRoughness, 1.0);
+    }
+    if (hasSSS) {
+        float3 sssIrr = 0.0;
+        if (u_LightCounts.w == 1u) {
+            float rotation = u_ReflectionParams.z;
+            float sinRot = sin(rotation), cosRot = cos(rotation);
+            float3 skyNormal = float3(cosRot*normal.x-sinRot*normal.z, normal.y, sinRot*normal.x+cosRot*normal.z);
+            sssIrr = u_IrradianceMap.Sample(u_EnvironmentSampler, skyNormal).rgb;
+        } else {
+            sssIrr = hasMultiLightSun ? u_SunLight.AmbientColor.rgb : max(u_SunColor.rgb, float3(0,0,0));
+        }
+        diffAmbient += sssIrr * base * sssTint * sssGain * 0.5 * (1.0 - metallic) * envIntensity * diffuseRatio;
+    }
+
+    float3 ambient = diffAmbient + specAmbient;
     float3 color = direct + ambient * screenVisibility.x + max(surface.Emission, float3(0,0,0));
     color = clamp(color, 0.0, 65000.0);
+    float3 diffuseSSS = clamp(diffDirect + diffAmbient * screenVisibility.x, 0.0, 65000.0);
+    float3 crispSpecEmissive = clamp(specDirect + specAmbient * screenVisibility.x + max(surface.Emission, float3(0,0,0)), 0.0, 65000.0);
+    float4 controlSSS = hasSSS ? float4(sssTint, clamp(surface.SubsurfaceRadius, 0.01, 16.0)) : float4(0.0, 0.0, 0.0, 0.0);
+
     if (u_FogParams.x > 0.0) {
         float3 cameraForward = mul((float3x3)u_FogInvView, float3(0.0, 0.0, -1.0));
         float viewDepth = dot(input.WorldPos - u_CameraPosition.xyz, cameraForward);
@@ -369,6 +515,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
             input.Position.xy * u_FogScreenSize.zw, viewDepth, u_FogInvView, u_FogInvProjection,
             u_FogParams, u_FogGridParams, u_FogDepthParams);
         color = clamp(color * fog.a + (u_FogParams.w > 0.5 ? 0.0 : fog.rgb), 0.0, 65000.0);
+        diffuseSSS = clamp(diffuseSSS * fog.a, 0.0, 65000.0);
+        crispSpecEmissive = clamp(crispSpecEmissive * fog.a + (u_FogParams.w > 0.5 ? 0.0 : fog.rgb), 0.0, 65000.0);
     }
 
     // 11. Tone Mapping & Color Polish (ACES Filmic Operator & Gamma Correction)
@@ -385,11 +533,28 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         color = saturate((color * (a * color + b)) / (color * (c * color + d) + e));
         color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
     }
-    return MakeMaterialReflectionSurfaceOutput(float4(color, 1.0), reflectionEnvironment, reflectionResponse, roughness, 1.0);
+    return MakeForwardSurfaceEval(float4(color, 1.0), reflectionEnvironment, reflectionResponse, roughness, 1.0, hasSSS ? diffuseSSS : 0.0, controlSSS, crispSpecEmissive);
 }
 
-float4 PSMain(PSInput input) : SV_Target0 { return EvaluateReflectionSurface(input).Color; }
-ReflectionSurfaceOutput PSReflectionMain(PSInput input) { return EvaluateReflectionSurface(input); }
+float4 PSMain(PSInput input) : SV_Target0 { return EvaluateForwardSurface(input).Color; }
+ReflectionSurfaceOutput PSReflectionMain(PSInput input) {
+    ForwardSurfaceEval eval = EvaluateForwardSurface(input);
+    return MakeMaterialReflectionSurfaceOutput(eval.Color, eval.Environment, eval.Response, eval.Roughness, eval.ReflectionEnabled);
+}
+SubsurfaceSurfaceOutput PSSSSMain(PSInput input) {
+    ForwardSurfaceEval eval = EvaluateForwardSurface(input);
+    float4 outColor = (eval.ControlSSS.a > 0.001)
+        ? float4(clamp(eval.CrispSpecularAndEmissive, 0.0, 65000.0), eval.Color.a)
+        : eval.Color;
+    return MakeSubsurfaceSurfaceOutput(outColor, eval.DiffuseSSS, eval.ControlSSS);
+}
+ReflectionSubsurfaceSurfaceOutput PSReflectionSSSMain(PSInput input) {
+    ForwardSurfaceEval eval = EvaluateForwardSurface(input);
+    float4 outColor = (eval.ControlSSS.a > 0.001)
+        ? float4(clamp(eval.CrispSpecularAndEmissive, 0.0, 65000.0), eval.Color.a)
+        : eval.Color;
+    return MakeReflectionSubsurfaceSurfaceOutput(outColor, eval.Environment, eval.Response, eval.Roughness, eval.ReflectionEnabled, eval.DiffuseSSS, eval.ControlSSS);
+}
 
 // Material Graphs use this companion entry point for the screen-space normal
 // producer. It evaluates the same authored graph function and TBN path as the

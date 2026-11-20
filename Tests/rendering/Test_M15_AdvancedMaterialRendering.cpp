@@ -4,6 +4,9 @@
 #include <Axle/RHI/RHIMesh.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
+#include <Axle/MaterialGraph.hpp>
+#include <Axle/MaterialGraphProgram.hpp>
+#include <Axle/FileSystem.hpp>
 #include <Axle/SceneRenderSettings.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/packing.hpp>
@@ -796,6 +799,277 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& renderer, const std::filesyst
                   << " specPeak(off=" << specPeakOff << ", on=" << specPeakOn << ")\n";
     }
 
-    std::cout << "[M15U9] M15 Unit 9 Batch A, B & C GPU tests (" << backendTag << ") passed.\n";
+    // =========================================================================
+    // Batch D (M15-U9-07.1, M15-U9-08.4): Built-in vs Material Graph Parity
+    // on Charlie Sheen & Separable Subsurface Scattering (Vulkan & D3D12)
+    // =========================================================================
+    {
+        auto buildGraphParityShader = [&](const glm::vec3& baseColor,
+                                          float metallic,
+                                          float roughness,
+                                          const glm::vec3& sheenColor,
+                                          float sheenRoughness,
+                                          const glm::vec3& sssColor,
+                                          float sssRadius,
+                                          const char* filename,
+                                          std::vector<ShaderPropertyInstance>& outProps) -> bool {
+            MaterialGraphDocument doc;
+            doc.Identity = 94001ULL;
+            doc.Name = "M_U9ParityGraph";
+            doc.CullMode = "None";
+            doc.Parameters = {
+                {"u_BaseColor", {MaterialValueType::Float3, {baseColor.r, baseColor.g, baseColor.b}}, {}},
+                {"u_Metallic", {MaterialValueType::Float, {metallic}}, {}},
+                {"u_Roughness", {MaterialValueType::Float, {roughness}}, {}},
+                {"u_SheenColor", {MaterialValueType::Float3, {sheenColor.r, sheenColor.g, sheenColor.b}}, {}},
+                {"u_SheenRoughness", {MaterialValueType::Float, {sheenRoughness}}, {}},
+                {"u_SSSColor", {MaterialValueType::Float3, {sssColor.r, sssColor.g, sssColor.b}}, {}},
+                {"u_SSSRadius", {MaterialValueType::Float, {sssRadius}}, {}}
+            };
+            const auto* masterDef = MaterialNodeRegistry::Builtins().Find("PBRMasterOutput");
+            if (!masterDef || masterDef->Signatures.size() < 2) return false;
+            auto makeParam = [&](uint64_t id, const char* name, MaterialValueType type) {
+                MaterialGraphNode n;
+                n.ID = id;
+                n.Type = "ParameterRef";
+                n.Attributes = {{"parameter", std::string(name), {}}};
+                n.Outputs = {{"value", type, {}, {}}};
+                return n;
+            };
+            doc.Nodes = {
+                makeParam(10, "u_BaseColor", MaterialValueType::Float3),
+                makeParam(11, "u_Metallic", MaterialValueType::Float),
+                makeParam(12, "u_Roughness", MaterialValueType::Float),
+                makeParam(13, "u_SheenColor", MaterialValueType::Float3),
+                makeParam(14, "u_SheenRoughness", MaterialValueType::Float),
+                makeParam(15, "u_SSSColor", MaterialValueType::Float3),
+                makeParam(16, "u_SSSRadius", MaterialValueType::Float)
+            };
+            MaterialGraphNode master;
+            master.ID = 1;
+            master.Type = "PBRMasterOutput";
+            for (const auto& pin : masterDef->Signatures[1].Inputs) {
+                master.Inputs.push_back({pin.Name, *pin.Type, pin.Default, {}});
+            }
+            doc.Nodes.push_back(std::move(master));
+            doc.Connections = {
+                {{10, "value"}, {1, "BaseColor"}, {}},
+                {{11, "value"}, {1, "Metallic"}, {}},
+                {{12, "value"}, {1, "Roughness"}, {}},
+                {{13, "value"}, {1, "SheenColor"}, {}},
+                {{14, "value"}, {1, "SheenRoughness"}, {}},
+                {{15, "value"}, {1, "SubsurfaceColor"}, {}},
+                {{16, "value"}, {1, "SubsurfaceRadius"}, {}}
+            };
+
+            const auto fmt = (device.GetBackend() == RHIType::Vulkan)
+                ? RHIShaderFormat::SPIRV
+                : RHIShaderFormat::DXIL;
+            CompiledMaterialGraphProgram prog;
+            MaterialGraphDiagnostic diag;
+            if (!MaterialGraphProgram::Compile(doc, fmt, prog, &diag)) {
+                std::cerr << "[M15U9] FAIL (08.4): MaterialGraphProgram::Compile failed: " << diag.Message << "\n";
+                return false;
+            }
+            if (!FileSystem::WriteTextFileAtomically(output / filename, prog.HLSL)) {
+                std::cerr << "[M15U9] FAIL (08.4): Failed writing parity shader to " << (output / filename) << "\n";
+                return false;
+            }
+            outProps = std::move(prog.DefaultProperties);
+            return true;
+        };
+
+        auto checkCustomDiag = [&](uint32_t entityID, const char* label) -> bool {
+            const auto& mats = renderer.GetDiagnostics().GetFrame().Materials;
+            for (const auto& entry : mats) {
+                if (entry.EntityID == entityID) {
+                    if (entry.Evaluation == SurfaceEvaluation::CustomShader && !entry.Fallback &&
+                        entry.UnsupportedFeatures == 0u && entry.ShaderGeneration != 0u) {
+                        return true;
+                    }
+                    std::cerr << "[M15U9] FAIL (08.4 " << label << "): unexpected graph eval state eval="
+                              << static_cast<int>(entry.Evaluation) << " fallback=" << entry.Fallback
+                              << " unsup=" << entry.UnsupportedFeatures << " reason='" << entry.Reason << "'\n";
+                    return false;
+                }
+            }
+            std::cerr << "[M15U9] FAIL (08.4 " << label << "): entity missing from frame diagnostics\n";
+            return false;
+        };
+
+        // 1. 08.4a: Built-in vs Material Graph Charlie Sheen Parity (Point + LTC Area + IBL)
+        RHIMaterialDesc sheenMatDesc;
+        sheenMatDesc.SurfaceType = SurfaceType::Opaque;
+        sheenMatDesc.BaseColor = glm::vec4(0.08f, 0.03f, 0.03f, 1.0f);
+        sheenMatDesc.Metallic = 0.0f;
+        sheenMatDesc.Roughness = 0.85f;
+        sheenMatDesc.CullMode = CullMode::None;
+        sheenMatDesc.SheenEnabled = true;
+        sheenMatDesc.SheenColor = glm::vec3(1.0f, 0.85f, 0.70f);
+        sheenMatDesc.SheenRoughness = 0.30f;
+        auto sheenMat = std::make_shared<RHIMaterial>(sheenMatDesc);
+
+        RenderMeshInstance sheenInst;
+        sheenInst.EntityID = 401;
+        sheenInst.NativeView = sphere->CaptureView();
+        sheenInst.Material.RHIMaterialAsset = sheenMat;
+
+        RenderPointLight pLight;
+        pLight.Position = glm::vec3(-2.2f, 0.0f, 0.8f);
+        pLight.Radius = 15.0f;
+        pLight.Color = glm::vec3(1.0f);
+        pLight.Intensity = 30.0f;
+
+        RenderRectLight rLight;
+        rLight.Position = glm::vec3(2.2f, 0.0f, 0.8f);
+        rLight.Direction = glm::normalize(glm::vec3(-0.9f, 0.0f, -0.4f));
+        rLight.Up = glm::vec3(0.0f, 1.0f, 0.0f);
+        rLight.Width = 1.6f;
+        rLight.Height = 1.6f;
+        rLight.Range = 15.0f;
+        rLight.Color = glm::vec3(1.0f);
+        rLight.Intensity = 45.0f;
+        rLight.TwoSided = true;
+
+        RenderWorld parityWorld;
+        parityWorld.Meshes = {sheenInst};
+        parityWorld.PointLights = {pLight};
+        parityWorld.RectLights = {rLight};
+        parityWorld.Skybox.Authored = true;
+        parityWorld.Skybox.Enabled = true;
+        parityWorld.Skybox.EnvironmentLighting = true;
+        parityWorld.Skybox.Type = 1;
+        parityWorld.Skybox.HDRPath = "u9_white_furnace.hdr";
+        parityWorld.Skybox.Intensity = 1.0f;
+
+        std::vector<glm::vec4> builtinSheenPx, graphSheenPx;
+        if (!renderLinear(parityWorld, builtinSheenPx)) return false;
+
+        std::vector<ShaderPropertyInstance> sheenProps;
+        if (!buildGraphParityShader(glm::vec3(0.08f, 0.03f, 0.03f), 0.0f, 0.85f,
+                                    sheenMatDesc.SheenColor, sheenMatDesc.SheenRoughness,
+                                    glm::vec3(0.0f), 0.0f, "u9d_sheen_parity.hlsl", sheenProps)) {
+            return false;
+        }
+        parityWorld.Meshes[0].Material.UseCustomShader = true;
+        parityWorld.Meshes[0].Material.CustomShaderPath = "u9d_sheen_parity.hlsl";
+        parityWorld.Meshes[0].Material.CustomProperties = sheenProps;
+        if (!renderLinear(parityWorld, graphSheenPx) || !checkCustomDiag(401, "Sheen")) return false;
+
+        const float biCenter = AverageRingLuminance(builtinSheenPx, width, height, 0.0f, 12.0f);
+        const float mgCenter = AverageRingLuminance(graphSheenPx, width, height, 0.0f, 12.0f);
+        const float biPointRim = AverageRingLuminance(builtinSheenPx, width, height, 42.0f, 50.0f, -1);
+        const float mgPointRim = AverageRingLuminance(graphSheenPx, width, height, 42.0f, 50.0f, -1);
+        const float biAreaRim = AverageRingLuminance(builtinSheenPx, width, height, 42.0f, 50.0f, +1);
+        const float mgAreaRim = AverageRingLuminance(graphSheenPx, width, height, 42.0f, 50.0f, +1);
+
+        auto relDiff = [](float a, float b) { return std::abs(a - b) / std::max(std::max(std::abs(a), std::abs(b)), 1e-4f); };
+        const float sheenCenterErr = relDiff(biCenter, mgCenter);
+        const float sheenPointErr = relDiff(biPointRim, mgPointRim);
+        const float sheenAreaErr = relDiff(biAreaRim, mgAreaRim);
+        if (sheenCenterErr > 0.05f || sheenPointErr > 0.05f || sheenAreaErr > 0.05f) {
+            std::cerr << "[M15U9] FAIL (08.4a): Built-in vs Graph Sheen parity diverged! center("
+                      << biCenter << " vs " << mgCenter << ") pointRim(" << biPointRim << " vs " << mgPointRim
+                      << ") areaRim(" << biAreaRim << " vs " << mgAreaRim << ")\n";
+            return false;
+        }
+
+        // 2. 08.4b: Built-in vs Material Graph Separable SSS + Glossy Specular Parity
+        auto sssTargets = std::make_shared<RHIViewTargets>();
+        {
+            RHIViewTargetDesc sssTargetDesc;
+            sssTargetDesc.Width = width;
+            sssTargetDesc.Height = height;
+            sssTargetDesc.Samples = 1;
+            sssTargetDesc.HDR = true;
+            sssTargetDesc.EnableDepth = true;
+            sssTargetDesc.EnableNormal = true;
+            sssTargetDesc.EnableSubsurface = true;
+            sssTargetDesc.OwnPrimary = false;
+            if (!sssTargets->Configure(sssTargetDesc, nullptr, nullptr, FroxelHistoryPolicy::AllowStaticFog)) {
+                return false;
+            }
+        }
+        auto cube = RHIMesh::CreateCube(1.0f);
+        if (!cube) return false;
+
+        RHIMaterialDesc sssMatDesc;
+        sssMatDesc.SurfaceType = SurfaceType::Opaque;
+        sssMatDesc.BaseColor = glm::vec4(0.65f, 0.62f, 0.60f, 1.0f);
+        sssMatDesc.Metallic = 0.0f;
+        sssMatDesc.Roughness = 0.25f;
+        sssMatDesc.CullMode = CullMode::None;
+        sssMatDesc.SubsurfaceEnabled = true;
+        sssMatDesc.SubsurfaceColor = glm::vec3(1.0f, 0.25f, 0.05f);
+        sssMatDesc.SubsurfaceRadius = 6.0f;
+        auto sssMat = std::make_shared<RHIMaterial>(sssMatDesc);
+
+        RenderMeshInstance slabInst;
+        slabInst.EntityID = 402;
+        slabInst.NativeView = cube->CaptureView();
+        slabInst.Material.RHIMaterialAsset = sssMat;
+        slabInst.WorldTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1.8f, 1.8f, 0.2f));
+
+        RenderSpotLight sssSpot;
+        sssSpot.EntityID = 403;
+        sssSpot.Position = glm::vec3(-0.45f, 0.0f, 2.0f);
+        sssSpot.Direction = glm::vec3(0.0f, 0.0f, -1.0f);
+        sssSpot.Color = glm::vec3(1.0f);
+        sssSpot.Intensity = 40.0f;
+        sssSpot.Range = 20.0f;
+        sssSpot.InnerAngle = 5.0f;
+        sssSpot.OuterAngle = 10.0f;
+
+        RenderWorld sssParityWorld;
+        sssParityWorld.Skybox.Enabled = false;
+        sssParityWorld.Skybox.EnvironmentLighting = false;
+        sssParityWorld.Meshes = {slabInst};
+        sssParityWorld.SpotLights = {sssSpot};
+
+        auto renderSSS = [&](const RenderWorld& w, std::vector<glm::vec4>& outPx) -> bool {
+            SceneRenderSettings sssSettings = settings;
+            sssSettings.EnableSubsurfaceScattering = true;
+            renderer.RenderWorldView(w, camera, &color, &depth, sssSettings, nullptr, sssTargets);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+            auto* hdr = sssTargets->Get(RHIViewTarget::HDR);
+            return hdr && ReadTextureRGBA16F(*hdr, outPx);
+        };
+
+        std::vector<glm::vec4> builtinSSSPx, graphSSSPx;
+        if (!renderSSS(sssParityWorld, builtinSSSPx)) return false;
+
+        std::vector<ShaderPropertyInstance> sssProps;
+        if (!buildGraphParityShader(glm::vec3(0.65f, 0.62f, 0.60f), 0.0f, 0.25f,
+                                    glm::vec3(0.0f), -1.0f,
+                                    sssMatDesc.SubsurfaceColor, sssMatDesc.SubsurfaceRadius,
+                                    "u9d_sss_parity.hlsl", sssProps)) {
+            return false;
+        }
+        sssParityWorld.Meshes[0].Material.UseCustomShader = true;
+        sssParityWorld.Meshes[0].Material.CustomShaderPath = "u9d_sss_parity.hlsl";
+        sssParityWorld.Meshes[0].Material.CustomProperties = sssProps;
+        if (!renderSSS(sssParityWorld, graphSSSPx) || !checkCustomDiag(402, "SSS")) return false;
+
+        float maxSSSPatchErr = 0.0f;
+        for (uint32_t y = 52u; y <= 75u; ++y) {
+            for (uint32_t x = 32u; x <= 76u; ++x) {
+                const glm::vec3 a = glm::vec3(builtinSSSPx[static_cast<size_t>(y) * width + x]);
+                const glm::vec3 b = glm::vec3(graphSSSPx[static_cast<size_t>(y) * width + x]);
+                const float denom = std::max({1.0f, a.r, a.g, a.b, b.r, b.g, b.b});
+                maxSSSPatchErr = std::max(maxSSSPatchErr, glm::length(a - b) / denom);
+            }
+        }
+        if (maxSSSPatchErr > 0.05f) {
+            std::cerr << "[M15U9] FAIL (08.4b): Built-in vs Graph SSS parity exceeded tolerance! maxRelErr="
+                      << maxSSSPatchErr << "\n";
+            return false;
+        }
+
+        std::cout << "  [08.4 " << backendTag << "] PASS Built-in vs MaterialGraph Parity: sheenRelErr=("
+                  << sheenCenterErr << "," << sheenPointErr << "," << sheenAreaErr
+                  << ") sssMaxRelErr=" << maxSSSPatchErr << "\n";
+    }
+
+    std::cout << "[M15U9] M15 Unit 9 Batch A, B, C & D GPU tests (" << backendTag << ") passed.\n";
     return true;
 }

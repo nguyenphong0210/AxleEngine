@@ -67,8 +67,17 @@ namespace {
     void RegisterSurface(MaterialNodeRegistry& registry) {
         MaterialNodeDefinition surface; surface.Type = "PBRMasterOutput"; surface.Role = MaterialNodeRole::SurfaceOutput;
         auto normal = Input("Normal", Type::Float3, 0); normal.Default->Components = {0,0,1};
-        surface.Signatures = {{{Input("BaseColor", Type::Float3, 1), Input("Metallic", Type::Float, 0), Input("Roughness", Type::Float, 0.5f),
-                               std::move(normal), Input("Emission", Type::Float3, 0), Input("AO", Type::Float, 1)}, {}}};
+        auto normalAdv = Input("Normal", Type::Float3, 0); normalAdv.Default->Components = {0,0,1};
+        surface.Signatures = {
+            {{Input("BaseColor", Type::Float3, 1), Input("Metallic", Type::Float, 0), Input("Roughness", Type::Float, 0.5f),
+              std::move(normal), Input("Emission", Type::Float3, 0), Input("AO", Type::Float, 1)}, {}},
+            {{Input("BaseColor", Type::Float3, 1), Input("Metallic", Type::Float, 0), Input("Roughness", Type::Float, 0.5f),
+              std::move(normalAdv), Input("Emission", Type::Float3, 0), Input("AO", Type::Float, 1),
+              Input("SheenColor", Type::Float3, 0), Input("SheenRoughness", Type::Float, -1.0f),
+              Input("SubsurfaceColor", Type::Float3, 0), Input("SubsurfaceRadius", Type::Float, 0.0f),
+              Input("AbsorptionColor", Type::Float3, 0), Input("IOR", Type::Float, 1.5f),
+              Input("Dispersion", Type::Float, 0.0f)}, {}}
+        };
         Add(registry, std::move(surface));
     }
 }

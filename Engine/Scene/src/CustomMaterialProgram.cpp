@@ -1,6 +1,7 @@
 #include <Axle/CustomMaterialProgram.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/MaterialSurfaceShader.hpp>
+#include <Axle/ResolvedSurface.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Path.hpp>
 #include <fstream>
@@ -360,6 +361,15 @@ namespace Axle {
             result.Diagnostic = "Binding plan creation failed [" + err.Code + "]: " + err.Message;
             return result;
         }
+        auto builtPlan = std::get<MaterialBindingPlan>(planResult);
+        const bool isMaterialSurfaceContract = hasNormalPass && hasReflectionTerms && hasSSSTerms &&
+            std::regex_search(annotatedSource + "\n" + vsDesc.Source, std::regex(R"(MaterialSurface\s+AxleEvaluateMaterial\s*\()"));
+        if (isMaterialSurfaceContract) {
+            builtPlan.SupportedFeatures = static_cast<uint32_t>(SurfaceFeature::Clearcoat) |
+                                          static_cast<uint32_t>(SurfaceFeature::Sheen) |
+                                          static_cast<uint32_t>(SurfaceFeature::Subsurface) |
+                                          static_cast<uint32_t>(SurfaceFeature::Emission);
+        }
 
         auto generation = std::make_shared<CustomReadyGeneration>();
         generation->VSBytecode = vsResult.Bytecode;
@@ -374,7 +384,7 @@ namespace Axle {
             if (hasReflectionTerms) generation->ReflectionSSSPSBytecode = reflectionSSSResult.Bytecode;
         }
         generation->Reflection = mergedReflection;
-        generation->BindingPlan = std::get<MaterialBindingPlan>(planResult);
+        generation->BindingPlan = std::move(builtPlan);
 
         // Build pipeline layout from merged reflection
         uint32_t rootSpace=0;

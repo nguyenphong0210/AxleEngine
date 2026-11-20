@@ -112,6 +112,7 @@ namespace Axle {
         std::vector<SamplerBinding> Samplers;
         VertexInputPlan VertexInput;
         uint32_t InterfaceRevision = 1;
+        uint32_t SupportedFeatures = 0;
         bool IsLegacyTemplate = false;
         std::vector<ShaderPropertyDesc> PropertySchema;
         bool operator==(const MaterialBindingPlan& other) const = default;

@@ -129,18 +129,65 @@ namespace {
                 outputs.emplace(std::pair{node.ID, name}, symbol);
             }
             if (node.ID == ir.OutputNode) {
-                const std::vector<std::string> fields{"BaseColor", "Metallic", "Roughness", "Normal", "Emission", "AO"};
-                if (emission.Surface.size() != fields.size()) Fail("MG_HLSL_SURFACE", "Surface lowering requires all six surface fields", node.ID);
+                const std::vector<std::string> requiredFields{"BaseColor", "Metallic", "Roughness", "Normal", "Emission", "AO"};
+                const std::vector<std::string> optionalFields{
+                    "SheenColor", "SheenRoughness", "SubsurfaceColor", "SubsurfaceRadius",
+                    "AbsorptionColor", "IOR", "Dispersion"
+                };
+                auto isKnownSurfaceField = [&](const std::string& name) {
+                    return std::find(requiredFields.begin(), requiredFields.end(), name) != requiredFields.end() ||
+                           std::find(optionalFields.begin(), optionalFields.end(), name) != optionalFields.end();
+                };
+                if (emission.Surface.size() < requiredFields.size()) Fail("MG_HLSL_SURFACE", "Surface lowering requires all six core surface fields", node.ID);
+                for (const auto& [name, expr] : emission.Surface) {
+                    if (!isKnownSurfaceField(name) || expr.empty()) Fail("MG_HLSL_SURFACE", "Unsupported or empty surface field: " + name, node.ID, name);
+                }
                 function << "    MaterialSurface surface;\n";
                 function << "    surface.Clearcoat = 0.0; surface.ClearcoatRoughness = 0.04;\n";
                 function << "    surface.Anisotropy = 0.0; surface.AnisotropyRotation = 0.0;\n";
                 function << "    surface.SheenColor = float3(0.0, 0.0, 0.0); surface.SheenRoughness = -1.0;\n";
                 function << "    surface.SubsurfaceColor = float3(0.0, 0.0, 0.0); surface.SubsurfaceRadius = 0.0;\n";
                 function << "    surface.AbsorptionColor = float3(0.0, 0.0, 0.0); surface.IOR = 1.5; surface.Dispersion = 0.0; surface.FeatureFlags = 0u;\n";
-                for (const auto& field : fields) {
+                for (const auto& field : requiredFields) {
                     const auto expression = emission.Surface.find(field);
                     if (expression == emission.Surface.end() || expression->second.empty()) Fail("MG_HLSL_SURFACE", "Missing surface field", node.ID, field);
                     function << "    surface." << field << " = " << expression->second << ";\n";
+                }
+                for (const auto& field : optionalFields) {
+                    const auto expression = emission.Surface.find(field);
+                    if (expression != emission.Surface.end()) {
+                        function << "    surface." << field << " = " << expression->second << ";\n";
+                    }
+                }
+                if (emission.Surface.contains("SheenColor") || emission.Surface.contains("SheenRoughness") ||
+                    emission.Surface.contains("SubsurfaceColor") || emission.Surface.contains("SubsurfaceRadius") ||
+                    emission.Surface.contains("AbsorptionColor") || emission.Surface.contains("Dispersion")) {
+                    function << "    if (surface.SheenRoughness >= 0.0 && any(surface.SheenColor > 0.0)) surface.FeatureFlags |= 1u;\n";
+                    function << "    if (surface.SubsurfaceRadius > 0.0 && any(surface.SubsurfaceColor > 0.0)) surface.FeatureFlags |= 2u;\n";
+                    function << "    if (any(surface.AbsorptionColor > 0.0) || surface.Dispersion > 0.0) surface.FeatureFlags |= 4u;\n";
+                }
+                // Explicit opaque surface diagnostics when optical transmission/dispersion pins are authored (M15-U9-07.2).
+                auto isNonDefaultPin = [&](std::string_view pinName, float expectedScalar = 0.0f) {
+                    for (const auto& pin : node.Inputs) {
+                        if (pin.Name != pinName) continue;
+                        if (pin.Connection.has_value()) return true;
+                        if (pin.Default) {
+                            for (float v : pin.Default->Components) {
+                                if (std::abs(v - expectedScalar) > 1e-6f) return true;
+                            }
+                        }
+                    }
+                    return false;
+                };
+                if (isNonDefaultPin("AbsorptionColor", 0.0f) || isNonDefaultPin("IOR", 1.5f)) {
+                    source.Warnings.push_back({"MG_UNSUPPORTED_OPAQUE_ABSORPTION",
+                        "Absorption/IOR requires a transparent refractive surface; opaque MaterialSurface does not evaluate Beer-Lambert transmission",
+                        {}, node.ID, "AbsorptionColor"});
+                }
+                if (isNonDefaultPin("Dispersion", 0.0f)) {
+                    source.Warnings.push_back({"MG_UNSUPPORTED_OPAQUE_DISPERSION",
+                        "Cauchy Dispersion requires a transparent refractive surface; opaque MaterialSurface does not evaluate chromatic refraction dispersion",
+                        {}, node.ID, "Dispersion"});
                 }
                 surfaceEmitted = true;
             } else if (!emission.Surface.empty()) Fail("MG_HLSL_SURFACE", "Only the surface output can emit surface fields", node.ID);

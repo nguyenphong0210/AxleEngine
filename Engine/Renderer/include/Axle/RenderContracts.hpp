@@ -1038,4 +1038,38 @@ namespace Axle {
         bool VerifyUnjitteredOverlayPolicy();
     }
 
+    // M15 Unit 9 (S9.1 / U9-A): Charlie sheen BRDF & layering energy conservation contract
+    namespace SheenContract {
+        float EvaluateCharlieNDF(float nDotH, float roughness);
+        float EvaluateCharlieLambda(float nDotW, float roughness);
+        float EvaluateCharlieVisibility(float nDotL, float nDotV, float roughness);
+        float EvaluateCharlieDirectionalAlbedo(float cosTheta, float roughness);
+        float ComputeSheenBaseAttenuation(const glm::vec3& sheenColor,
+                                          float nDotV,
+                                          float nDotL,
+                                          float sheenRoughness,
+                                          bool toggleEnabled = true);
+        glm::vec3 ApplyCharlieSheenDirect(const glm::vec3& baseLighting,
+                                          const glm::vec3& N,
+                                          const glm::vec3& V,
+                                          const glm::vec3& L,
+                                          bool sheenEnabled,
+                                          const glm::vec3& sheenColor,
+                                          float sheenRoughness,
+                                          bool specularHighlightsEnabled = true);
+        glm::vec3 ApplyCharlieSheenIBL(const glm::vec3& ambientBase,
+                                       const glm::vec3& sheenEnv,
+                                       float nDotV,
+                                       float ao,
+                                       bool sheenEnabled,
+                                       const glm::vec3& sheenColor,
+                                       float sheenRoughness,
+                                       bool environmentReflectionsEnabled = true);
+        double IntegrateCharlieDirectionalAlbedoReference(double nDotV, double roughness);
+        bool VerifyCharlieAlbedoAndEnergyConservation();
+        bool VerifyDirectVsIBLUniformHemisphereParity();
+        bool VerifyGrazingRimAndRoughnessNarrowing();
+        bool VerifyDisabledAndEdgeBehavior();
+    }
+
 } // namespace Axle

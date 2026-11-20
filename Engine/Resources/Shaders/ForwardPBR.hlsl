@@ -388,16 +388,6 @@ float3 EvaluateAnisotropicAreaSpecular(RectLightData light, float3 P, float3 N, 
     return brdf * nl * solidAngle;
 }
 
-float D_Charlie(float NdotH, float roughness) {
-    float invAlpha = 1.0 / max(roughness, 0.001);
-    float sin2H = max(1.0 - NdotH * NdotH, 0.0078125);
-    return (2.0 + invAlpha) / (2.0 * PI) * pow(sin2H, 0.5 * invAlpha);
-}
-
-float V_Charlie(float NdotL, float NdotV) {
-    return 1.0 / (4.0 * (NdotL + NdotV - NdotL * NdotV));
-}
-
 float3 ApplyClearcoat(float3 baseLighting, float3 N, float3 V, float3 L, float nl, float coatStrength, float coatRoughness) {
     float coat = saturate(coatStrength) * u_MaterialSurface.z;
     float r = clamp(coatRoughness, 0.04, 1.0);
@@ -618,13 +608,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb * BRDF_DIFFUSE_NORMALIZATION;
 
-        Lo += ApplyClearcoat(diffuse * NdotL_Sun_Diff + specular * NdotL_Sun, N, V, sunDir, NdotL_Sun, coatAnisotropy.x, coatAnisotropy.y) * sunRadiance;
-        if (u_Sheen.w >= 0.0 && NdotL_Sun > 0.0) {
-            float D_sheen = D_Charlie(max(dot(N, H), 0.0), u_Sheen.w);
-            float V_sheen = V_Charlie(NdotL_Sun, NdotV);
-            float3 sheenBRDF = D_sheen * V_sheen * u_Sheen.rgb;
-            Lo += sheenBRDF * NdotL_Sun * sunRadiance;
-        }
+        float3 sunLayered = ApplyClearcoat(diffuse * NdotL_Sun_Diff + specular * NdotL_Sun, N, V, sunDir, NdotL_Sun, coatAnisotropy.x, coatAnisotropy.y);
+        Lo += ApplyCharlieSheenDirect(sunLayered, N, H, NdotL_Sun, NdotV, u_Sheen.rgb, u_Sheen.w, u_MaterialSurface.z) * sunRadiance;
         if (u_Subsurface.w > 0.0) {
             float wrap = 0.5;
             float NdotL_wrap = saturate((dot(N, sunDir) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
@@ -684,13 +669,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb * BRDF_DIFFUSE_NORMALIZATION;
 
-        Lo += ApplyClearcoat(diffuse * NdotL_Diff + specular * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y) * radiance;
-        if (u_Sheen.w >= 0.0 && NdotL > 0.0) {
-            float D_sheen = D_Charlie(max(dot(N, H), 0.0), u_Sheen.w);
-            float V_sheen = V_Charlie(NdotL, NdotV);
-            float3 sheenBRDF = D_sheen * V_sheen * u_Sheen.rgb;
-            Lo += sheenBRDF * NdotL * radiance;
-        }
+        float3 pointLayered = ApplyClearcoat(diffuse * NdotL_Diff + specular * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y);
+        Lo += ApplyCharlieSheenDirect(pointLayered, N, H, NdotL, NdotV, u_Sheen.rgb, u_Sheen.w, u_MaterialSurface.z) * radiance;
         if (u_Subsurface.w > 0.0) {
             float wrap = 0.5;
             float NdotL_wrap = saturate((dot(N, L) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
@@ -752,13 +732,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
         float3 diffuse = kD * albedo.rgb * BRDF_DIFFUSE_NORMALIZATION;
 
-        Lo += ApplyClearcoat((diffuse + specular) * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y) * radiance;
-        if (u_Sheen.w >= 0.0 && NdotL > 0.0) {
-            float D_sheen = D_Charlie(max(dot(N, H), 0.0), u_Sheen.w);
-            float V_sheen = V_Charlie(NdotL, NdotV);
-            float3 sheenBRDF = D_sheen * V_sheen * u_Sheen.rgb;
-            Lo += sheenBRDF * NdotL * radiance;
-        }
+        float3 spotLayered = ApplyClearcoat((diffuse + specular) * NdotL, N, V, L, NdotL, coatAnisotropy.x, coatAnisotropy.y);
+        Lo += ApplyCharlieSheenDirect(spotLayered, N, H, NdotL, NdotV, u_Sheen.rgb, u_Sheen.w, u_MaterialSurface.z) * radiance;
         if (u_Subsurface.w > 0.0) {
             float wrap = 0.5;
             float NdotL_wrap = saturate((dot(N, L) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
@@ -806,6 +781,18 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
             float3 attenuation = 1.0 - coat * coatLTC.SpecularAlbedo;
             areaLighting = areaLighting * attenuation * attenuation + coat * coatLTC.SpecularLighting;
         }
+        areaLighting = ApplyCharlieSheenArea(
+            areaLighting,
+            rLight.PositionAndWidth,
+            rLight.DirectionAndHeight,
+            rLight.UpAndRange,
+            input.WorldPos,
+            N,
+            V,
+            ltc.DiffuseFormFactor,
+            u_Sheen.rgb,
+            u_Sheen.w,
+            u_MaterialSurface.z);
         Lo += areaLighting * ltc.Radiance;
         if (u_Subsurface.w > 0.0) {
             Lo += ltc.DiffuseFormFactor * u_Subsurface.rgb * u_Subsurface.w * (1.0 - metallic) * ltc.Radiance;
@@ -884,13 +871,10 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     }
     
     if (u_Sheen.w >= 0.0) {
-        float sheenSpecAO = ComputeSpecularOcclusion(NdotV, ao, u_Sheen.w);
-        float3 sheenSky = (hasSplitSumIBL ? u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), u_Sheen.w * MAX_REFLECTION_LOD).rgb : u_SunLight.AmbientColor.rgb) * envIntensity;
-        float3 sheenEnv = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, u_Sheen.w, u_EnvironmentSampler, sheenSky).BlendedEnvColor;
-        float3 sheenAmbient = sheenEnv * u_Sheen.rgb * pow(1.0 - NdotV, 4.0) * u_MaterialSurface.w;
-        ambient += sheenAmbient * sheenSpecAO;
-        reflectionEnvironment += sheenAmbient * sheenSpecAO;
-        reflectionResponse += u_Sheen.rgb * pow(1.0 - NdotV, 4.0) * u_MaterialSurface.w * sheenSpecAO;
+        float sheenRough = clamp(u_Sheen.w, 0.04, 1.0);
+        float3 sheenSky = (hasSplitSumIBL ? u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), sheenRough * MAX_REFLECTION_LOD).rgb : u_SunLight.AmbientColor.rgb) * envIntensity;
+        float3 sheenEnv = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, sheenRough, u_EnvironmentSampler, sheenSky).BlendedEnvColor;
+        ApplyCharlieSheenIBL(ambient, reflectionEnvironment, reflectionResponse, sheenEnv, NdotV, ao, u_Sheen.rgb, u_Sheen.w, u_MaterialSurface.w);
     }
     if (u_Subsurface.w > 0.0) {
         float3 sssEnv = (hasSplitSumIBL ? u_IrradianceMap.Sample(u_EnvironmentSampler, RotateEnvironmentDirection(N)).rgb : u_SunLight.AmbientColor.rgb);

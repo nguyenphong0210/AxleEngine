@@ -4180,4 +4180,319 @@ namespace Axle {
         }
     } // namespace TAAContract
 
+    // =========================================================================
+    // M15 Unit 9 (S9.1 / U9-A): Charlie Sheen BRDF & Energy Conservation Contract
+    // =========================================================================
+    namespace SheenContract {
+        namespace {
+            constexpr double kPi = 3.14159265358979323846;
+
+            float CharlieLambdaL(float x, float r) {
+                const float a = (1.0f - r) * (1.0f - r);
+                const float aP = 21.5473f * (1.0f - a) + 25.3245f * a;
+                const float bP = 3.82987f * (1.0f - a) + 3.32435f * a;
+                const float cP = 0.19823f * (1.0f - a) + 0.16801f * a;
+                const float dP = -1.97760f * (1.0f - a) + (-1.27393f) * a;
+                const float eP = -4.32054f * (1.0f - a) + (-4.85967f) * a;
+                return aP / (1.0f + bP * std::pow(std::max(x, 1e-4f), cP)) + dP * x + eP;
+            }
+
+            float ComputeSpecularOcclusionCPU(float nDotV, float ao, float roughness) {
+                const float safeAO = std::clamp(ao, 0.0f, 1.0f);
+                const float safeNV = std::clamp(nDotV, 0.0f, 1.0f);
+                const float safeR = std::clamp(roughness, 0.04f, 1.0f);
+                const float exponent = std::exp2(-16.0f * safeR - 1.0f);
+                return std::clamp(std::pow(std::max(safeNV + safeAO, 1e-5f), exponent) - 1.0f + safeAO, 0.0f, 1.0f);
+            }
+
+            constexpr float kCharlieDirectionalAlbedo[81] = {
+                0.94686f, 0.80236f, 0.51774f, 0.29026f, 0.13585f, 0.04851f, 0.01113f, 0.00107f, 0.00000f,
+                0.77604f, 0.71234f, 0.52575f, 0.35491f, 0.21707f, 0.11480f, 0.04814f, 0.01327f, 0.00054f,
+                0.71266f, 0.68189f, 0.53754f, 0.39638f, 0.27422f, 0.17260f, 0.09351f, 0.03958f, 0.00634f,
+                0.70532f, 0.69193f, 0.56630f, 0.43882f, 0.32503f, 0.22493f, 0.13973f, 0.07394f, 0.02236f,
+                0.73129f, 0.72829f, 0.60932f, 0.48622f, 0.37505f, 0.27452f, 0.18490f, 0.11150f, 0.04746f,
+                0.77572f, 0.77877f, 0.65960f, 0.53552f, 0.42334f, 0.32072f, 0.22719f, 0.14864f, 0.07726f,
+                0.82342f, 0.82936f, 0.70687f, 0.57972f, 0.46529f, 0.36033f, 0.26385f, 0.18221f, 0.10728f,
+                0.85550f, 0.86255f, 0.73777f, 0.60912f, 0.49406f, 0.38864f, 0.29149f, 0.20930f, 0.13393f,
+                0.85011f, 0.85837f, 0.73713f, 0.61256f, 0.50165f, 0.40012f, 0.30630f, 0.22712f, 0.15451f
+            };
+        } // namespace
+
+        float EvaluateCharlieNDF(float nDotH, float roughness) {
+            const float r = std::clamp(roughness, 0.04f, 1.0f);
+            const float invAlpha = 1.0f / r;
+            const float nh = std::clamp(nDotH, 0.0f, 1.0f);
+            const float sin2H = std::max(1.0f - nh * nh, 0.0078125f);
+            return (2.0f + invAlpha) / (2.0f * static_cast<float>(kPi)) * std::pow(sin2H, 0.5f * invAlpha);
+        }
+
+        float EvaluateCharlieLambda(float nDotW, float roughness) {
+            const float r = std::clamp(roughness, 0.04f, 1.0f);
+            const float x = std::clamp(nDotW, 1e-4f, 1.0f);
+            if (x < 0.5f) {
+                return std::exp(CharlieLambdaL(x, r));
+            }
+            return std::exp(2.0f * CharlieLambdaL(0.5f, r) - CharlieLambdaL(1.0f - x, r));
+        }
+
+        float EvaluateCharlieVisibility(float nDotL, float nDotV, float roughness) {
+            const float r = std::clamp(roughness, 0.04f, 1.0f);
+            const float nl = std::max(nDotL, 1e-4f);
+            const float nv = std::max(nDotV, 1e-4f);
+            const float lambdaV = EvaluateCharlieLambda(nv, r);
+            const float lambdaL = std::pow(EvaluateCharlieLambda(nl, r),
+                                           1.0f + 2.0f * std::pow(std::max(0.0f, 1.0f - nl), 8.0f));
+            return 1.0f / std::max(4.0f * nl * nv * (1.0f + lambdaV + lambdaL), 1e-4f);
+        }
+
+        float EvaluateCharlieDirectionalAlbedo(float cosTheta, float roughness) {
+            const float safeCos = std::clamp(cosTheta, 0.0f, 1.0f);
+            const float safeR = std::clamp(roughness, 0.04f, 1.0f);
+            const float u = std::clamp(std::sqrt(safeCos), 0.0f, 1.0f) * 8.0f;
+            const float v = std::clamp((std::sqrt(safeR) - 0.2f) / 0.8f, 0.0f, 1.0f) * 8.0f;
+            const uint32_t x0 = std::min(static_cast<uint32_t>(std::floor(u)), 7u);
+            const uint32_t y0 = std::min(static_cast<uint32_t>(std::floor(v)), 7u);
+            const float tx = u - static_cast<float>(x0);
+            const float ty = v - static_cast<float>(y0);
+            const uint32_t row0 = y0 * 9u;
+            const uint32_t row1 = (y0 + 1u) * 9u;
+            const float c00 = kCharlieDirectionalAlbedo[row0 + x0];
+            const float c10 = kCharlieDirectionalAlbedo[row0 + x0 + 1u];
+            const float c01 = kCharlieDirectionalAlbedo[row1 + x0];
+            const float c11 = kCharlieDirectionalAlbedo[row1 + x0 + 1u];
+            const float rowA = c00 + (c10 - c00) * tx;
+            const float rowB = c01 + (c11 - c01) * tx;
+            return std::clamp(rowA + (rowB - rowA) * ty, 0.0f, 1.0f);
+        }
+
+        float ComputeSheenBaseAttenuation(const glm::vec3& sheenColor,
+                                          float nDotV,
+                                          float nDotL,
+                                          float sheenRoughness,
+                                          bool toggleEnabled) {
+            if (!toggleEnabled || sheenRoughness < 0.0f) {
+                return 1.0f;
+            }
+            const glm::vec3 sc = glm::clamp(sheenColor, glm::vec3(0.0f), glm::vec3(1.0f));
+            const float maxSheen = std::max(sc.r, std::max(sc.g, sc.b));
+            if (maxSheen <= 0.0f) {
+                return 1.0f;
+            }
+            const float r = std::clamp(sheenRoughness, 0.04f, 1.0f);
+            const float eV = EvaluateCharlieDirectionalAlbedo(nDotV, r);
+            const float eL = EvaluateCharlieDirectionalAlbedo(nDotL, r);
+            return std::clamp(1.0f - maxSheen * std::max(eV, eL), 0.0f, 1.0f);
+        }
+
+        glm::vec3 ApplyCharlieSheenDirect(const glm::vec3& baseLighting,
+                                          const glm::vec3& N,
+                                          const glm::vec3& V,
+                                          const glm::vec3& L,
+                                          bool sheenEnabled,
+                                          const glm::vec3& sheenColor,
+                                          float sheenRoughness,
+                                          bool specularHighlightsEnabled) {
+            if (!sheenEnabled || !specularHighlightsEnabled || sheenRoughness < 0.0f) {
+                return baseLighting;
+            }
+            const float nl = std::max(glm::dot(N, L), 0.0f);
+            if (nl <= 0.0f) {
+                return baseLighting;
+            }
+            const glm::vec3 sc = glm::clamp(sheenColor, glm::vec3(0.0f), glm::vec3(1.0f));
+            const float maxSheen = std::max(sc.r, std::max(sc.g, sc.b));
+            if (maxSheen <= 0.0f) {
+                return baseLighting;
+            }
+            const float nv = std::clamp(glm::dot(N, V), 0.001f, 1.0f);
+            const float r = std::clamp(sheenRoughness, 0.04f, 1.0f);
+            const glm::vec3 sum = V + L;
+            const float sumLenSq = glm::dot(sum, sum);
+            const glm::vec3 H = sumLenSq > 1e-12f ? (sum / std::sqrt(sumLenSq)) : N;
+            const float dSheen = EvaluateCharlieNDF(std::max(glm::dot(N, H), 0.0f), r);
+            const float vSheen = EvaluateCharlieVisibility(nl, nv, r);
+            const float atten = ComputeSheenBaseAttenuation(sc, nv, nl, r, true);
+            return baseLighting * atten + sc * (dSheen * vSheen * nl);
+        }
+
+        glm::vec3 ApplyCharlieSheenIBL(const glm::vec3& ambientBase,
+                                       const glm::vec3& sheenEnv,
+                                       float nDotV,
+                                       float ao,
+                                       bool sheenEnabled,
+                                       const glm::vec3& sheenColor,
+                                       float sheenRoughness,
+                                       bool environmentReflectionsEnabled) {
+            if (!sheenEnabled || !environmentReflectionsEnabled || sheenRoughness < 0.0f) {
+                return ambientBase;
+            }
+            const glm::vec3 sc = glm::clamp(sheenColor, glm::vec3(0.0f), glm::vec3(1.0f));
+            const float maxSheen = std::max(sc.r, std::max(sc.g, sc.b));
+            if (maxSheen <= 0.0f) {
+                return ambientBase;
+            }
+            const float r = std::clamp(sheenRoughness, 0.04f, 1.0f);
+            const float nv = std::clamp(nDotV, 0.001f, 1.0f);
+            const float eSheen = EvaluateCharlieDirectionalAlbedo(nv, r);
+            const float atten = std::clamp(1.0f - maxSheen * eSheen, 0.0f, 1.0f);
+            const float specAO = ComputeSpecularOcclusionCPU(nv, ao, r);
+            return ambientBase * atten + sheenEnv * sc * (eSheen * specAO);
+        }
+
+        double IntegrateCharlieDirectionalAlbedoReference(double nDotV, double roughness) {
+            const double nv = std::clamp(nDotV, 1e-4, 1.0);
+            const double r = std::clamp(roughness, 0.04, 1.0);
+            constexpr int kTheta = 64;
+            constexpr int kPhi = 128;
+            const double dTheta = (0.5 * kPi) / kTheta;
+            const double dPhi = (2.0 * kPi) / kPhi;
+            const glm::dvec3 V(std::sqrt(std::max(0.0, 1.0 - nv * nv)), 0.0, nv);
+            double sum = 0.0;
+            for (int t = 0; t < kTheta; ++t) {
+                const double theta = (t + 0.5) * dTheta;
+                const double nl = std::cos(theta);
+                const double sl = std::sin(theta);
+                const float vTerm = EvaluateCharlieVisibility(static_cast<float>(nl), static_cast<float>(nv), static_cast<float>(r));
+                for (int p = 0; p < kPhi; ++p) {
+                    const double phi = (p + 0.5) * dPhi;
+                    const glm::dvec3 L(sl * std::cos(phi), sl * std::sin(phi), nl);
+                    const glm::dvec3 H = glm::normalize(V + L);
+                    const float nh = static_cast<float>(std::max(0.0, H.z));
+                    const float dTerm = EvaluateCharlieNDF(nh, static_cast<float>(r));
+                    sum += static_cast<double>(dTerm) * static_cast<double>(vTerm) * nl * sl * dTheta * dPhi;
+                }
+            }
+            return sum;
+        }
+
+        bool VerifyCharlieAlbedoAndEnergyConservation() {
+            const float roughnesses[] = {0.04f, 0.15f, 0.35f, 0.65f, 0.95f};
+            const float nvs[] = {0.03f, 0.10f, 0.25f, 0.55f, 0.90f};
+            const glm::dvec3 N(0.0, 0.0, 1.0);
+            constexpr int kTheta = 48;
+            constexpr int kPhi = 96;
+            const double dTheta = (0.5 * kPi) / kTheta;
+            const double dPhi = (2.0 * kPi) / kPhi;
+
+            for (float r : roughnesses) {
+                for (float nv : nvs) {
+                    const float estAlbedo = EvaluateCharlieDirectionalAlbedo(nv, r);
+                    const double refAlbedo = IntegrateCharlieDirectionalAlbedoReference(nv, r);
+                    if (!std::isfinite(estAlbedo) || estAlbedo < 0.0f || estAlbedo > 1.0f ||
+                        std::abs(static_cast<double>(estAlbedo) - refAlbedo) > 0.015) {
+                        return false;
+                    }
+
+                    // Furnace test with worst-case pure white Lambertian diffuse base (albedo = 1.0 -> integral = 1.0)
+                    // plus pure white Charlie sheen layered on top: total exitance must never exceed 1.0 (+ quad tol).
+                    const glm::dvec3 V(std::sqrt(std::max(0.0, 1.0 - nv * nv)), 0.0, nv);
+                    glm::dvec3 totalWhiteFurnace(0.0);
+                    for (int t = 0; t < kTheta; ++t) {
+                        const double theta = (t + 0.5) * dTheta;
+                        const double nl = std::cos(theta);
+                        const double sl = std::sin(theta);
+                        const glm::vec3 baseLambert(static_cast<float>(nl / kPi));
+                        for (int p = 0; p < kPhi; ++p) {
+                            const double phi = (p + 0.5) * dPhi;
+                            const glm::dvec3 L(sl * std::cos(phi), sl * std::sin(phi), nl);
+                            const glm::vec3 layered = ApplyCharlieSheenDirect(
+                                baseLambert, glm::vec3(N), glm::vec3(V), glm::vec3(L),
+                                true, glm::vec3(1.0f), r, true);
+                            if (!std::isfinite(layered.r) || layered.r < -1e-6f) {
+                                return false;
+                            }
+                            totalWhiteFurnace += glm::dvec3(layered) * sl * dTheta * dPhi;
+                        }
+                    }
+                    if (totalWhiteFurnace.r > 1.015 || totalWhiteFurnace.g > 1.015 || totalWhiteFurnace.b > 1.015) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        bool VerifyDirectVsIBLUniformHemisphereParity() {
+            const glm::vec3 N(0.0f, 0.0f, 1.0f);
+            const glm::vec3 sheenColor(0.85f, 0.45f, 0.30f);
+            const float roughnesses[] = {0.10f, 0.30f, 0.70f};
+            const float nvs[] = {0.08f, 0.35f, 0.80f};
+            constexpr int kTheta = 48;
+            constexpr int kPhi = 96;
+            const double dTheta = (0.5 * kPi) / kTheta;
+            const double dPhi = (2.0 * kPi) / kPhi;
+
+            for (float r : roughnesses) {
+                for (float nv : nvs) {
+                    const glm::vec3 V(std::sqrt(std::max(0.0f, 1.0f - nv * nv)), 0.0f, nv);
+                    const glm::vec3 baseAmbient(0.25f, 0.25f, 0.25f);
+                    const glm::vec3 iblResult = ApplyCharlieSheenIBL(
+                        baseAmbient, glm::vec3(1.0f), nv, 1.0f, true, sheenColor, r, true);
+
+                    glm::dvec3 directIntegral(0.0);
+                    for (int t = 0; t < kTheta; ++t) {
+                        const double theta = (t + 0.5) * dTheta;
+                        const double nl = std::cos(theta);
+                        const double sl = std::sin(theta);
+                        // Integrate only the sheen lobe for strict hemisphere integral parity with IBL sheen term.
+                        for (int p = 0; p < kPhi; ++p) {
+                            const double phi = (p + 0.5) * dPhi;
+                            const glm::vec3 L(static_cast<float>(sl * std::cos(phi)),
+                                              static_cast<float>(sl * std::sin(phi)),
+                                              static_cast<float>(nl));
+                            const glm::vec3 directOnlySheen = ApplyCharlieSheenDirect(
+                                glm::vec3(0.0f), N, V, L, true, sheenColor, r, true);
+                            directIntegral += glm::dvec3(directOnlySheen) * sl * dTheta * dPhi;
+                        }
+                    }
+                    const float eSheen = EvaluateCharlieDirectionalAlbedo(nv, r);
+                    const float maxSheen = std::max(sheenColor.r, std::max(sheenColor.g, sheenColor.b));
+                    const glm::vec3 expectedIBL = baseAmbient * (1.0f - maxSheen * eSheen) + glm::vec3(directIntegral);
+                    if (glm::length(iblResult - expectedIBL) > 0.02f) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        bool VerifyGrazingRimAndRoughnessNarrowing() {
+            const float centerSoft = EvaluateCharlieDirectionalAlbedo(0.95f, 0.45f);
+            const float grazingSoft = EvaluateCharlieDirectionalAlbedo(0.08f, 0.45f);
+            if (!(grazingSoft > centerSoft * 3.0f)) {
+                return false;
+            }
+            // Lower roughness narrows grazing highlight relative to mid-angle (0.45):
+            const float narrowRatio = EvaluateCharlieDirectionalAlbedo(0.06f, 0.08f) /
+                                      std::max(EvaluateCharlieDirectionalAlbedo(0.45f, 0.08f), 1e-4f);
+            const float wideRatio = EvaluateCharlieDirectionalAlbedo(0.06f, 0.80f) /
+                                    std::max(EvaluateCharlieDirectionalAlbedo(0.45f, 0.80f), 1e-4f);
+            return narrowRatio > wideRatio * 2.0f;
+        }
+
+        bool VerifyDisabledAndEdgeBehavior() {
+            const glm::vec3 N(0.0f, 0.0f, 1.0f);
+            const glm::vec3 V(0.0f, 0.0f, 1.0f);
+            const glm::vec3 L = glm::normalize(glm::vec3(0.4f, 0.0f, 0.9f));
+            const glm::vec3 base(0.42f, 0.18f, 0.09f);
+
+            const glm::vec3 disabledDirect = ApplyCharlieSheenDirect(base, N, V, L, false, glm::vec3(1.0f), 0.3f, true);
+            const glm::vec3 specOffDirect = ApplyCharlieSheenDirect(base, N, V, L, true, glm::vec3(1.0f), 0.3f, false);
+            const glm::vec3 negRoughDirect = ApplyCharlieSheenDirect(base, N, V, L, true, glm::vec3(1.0f), -1.0f, true);
+            const glm::vec3 disabledIBL = ApplyCharlieSheenIBL(base, glm::vec3(1.0f), 0.2f, 1.0f, false, glm::vec3(1.0f), 0.3f, true);
+            const glm::vec3 envOffIBL = ApplyCharlieSheenIBL(base, glm::vec3(1.0f), 0.2f, 1.0f, true, glm::vec3(1.0f), 0.3f, false);
+            if (glm::length(disabledDirect - base) > 1e-6f ||
+                glm::length(specOffDirect - base) > 1e-6f ||
+                glm::length(negRoughDirect - base) > 1e-6f ||
+                glm::length(disabledIBL - base) > 1e-6f ||
+                glm::length(envOffIBL - base) > 1e-6f) {
+                return false;
+            }
+            const glm::vec3 belowHorizon = ApplyCharlieSheenDirect(base, N, V, glm::vec3(0.0f, 0.0f, -1.0f),
+                true, glm::vec3(1.0f), 0.3f, true);
+            return glm::length(belowHorizon - base) < 1e-6f &&
+                   std::isfinite(EvaluateCharlieVisibility(1e-6f, 1e-6f, 0.01f));
+        }
+    } // namespace SheenContract
+
 } // namespace Axle

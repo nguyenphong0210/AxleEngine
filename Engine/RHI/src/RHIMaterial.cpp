@@ -175,7 +175,7 @@ namespace Axle::RHI {
         data.CoatAnisotropy = glm::vec4(m_Desc.ClearcoatStrength, m_Desc.ClearcoatRoughness,
             m_Desc.AnisotropyStrength, m_Desc.AnisotropyRotation);
         if (m_Desc.SheenEnabled) {
-            data.Sheen = glm::vec4(m_Desc.SheenColor, std::clamp(m_Desc.SheenRoughness, 0.01f, 1.0f));
+            data.Sheen = glm::vec4(glm::clamp(m_Desc.SheenColor, glm::vec3(0.0f), glm::vec3(1.0f)), std::clamp(m_Desc.SheenRoughness, 0.01f, 1.0f));
         } else {
             data.Sheen = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
         }

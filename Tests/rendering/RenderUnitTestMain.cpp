@@ -25,6 +25,7 @@ bool RunM15FroxelFogContractUnitTests();
 bool RunM15DDGIContractUnitTests();
 bool RunM15PostTemporalContractUnitTests();
 bool RunTemporalPostDiagnosticsUnitTests();
+bool RunM15AdvancedMaterialContractUnitTests();
 namespace Axle::RenderTests { bool RunRenderSnapshotQueueUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderWorkerUnitTests(); }
 namespace Axle::RenderTests { bool RunRenderParallelRecordingUnitTests(); }
@@ -74,6 +75,9 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string_view(argv[1]) == "--m15-u8-contract") {
         return RunM15PostTemporalContractUnitTests() ? 0 : 1;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--m15-u9-contract") {
+        return RunM15AdvancedMaterialContractUnitTests() ? 0 : 1;
     }
 
     std::cout << "========================================================\n";
@@ -179,6 +183,11 @@ int main(int argc, char** argv) {
 
     if (!RunM15PostTemporalContractUnitTests()) {
         std::cerr << "[AxleRenderUnitTests] RunM15PostTemporalContractUnitTests FAILED!\n";
+        return 1;
+    }
+
+    if (!RunM15AdvancedMaterialContractUnitTests()) {
+        std::cerr << "[AxleRenderUnitTests] RunM15AdvancedMaterialContractUnitTests FAILED!\n";
         return 1;
     }
 

@@ -121,7 +121,7 @@ namespace Axle {
         result.ClearcoatRoughness = std::clamp(desc.ClearcoatRoughness, 0.001f, 1.0f);
         result.AnisotropyStrength = std::clamp(desc.AnisotropyStrength, -1.0f, 1.0f);
         result.AnisotropyRotation = std::clamp(desc.AnisotropyRotation, 0.0f, 1.0f);
-        result.SheenEnabled = desc.SheenEnabled; result.SheenColor = glm::max(desc.SheenColor, glm::vec3(0.0f)); result.SheenRoughness = desc.SheenRoughness;
+        result.SheenEnabled = desc.SheenEnabled; result.SheenColor = glm::clamp(desc.SheenColor, glm::vec3(0.0f), glm::vec3(1.0f)); result.SheenRoughness = std::clamp(desc.SheenRoughness, 0.01f, 1.0f);
         result.SubsurfaceEnabled = desc.SubsurfaceEnabled; result.SubsurfaceColor = glm::max(desc.SubsurfaceColor, glm::vec3(0.0f)); result.SubsurfaceRadius = desc.SubsurfaceRadius;
         result.AbsorptionEnabled = desc.AbsorptionEnabled; result.AbsorptionColor = glm::max(desc.AbsorptionColor, glm::vec3(0.0f)); result.Dispersion = desc.Dispersion;
         result.RefractionEnabled = desc.RefractionEnabled; result.RefractionStrength = desc.RefractionStrength; result.RefractionIOR = desc.RefractionIOR;

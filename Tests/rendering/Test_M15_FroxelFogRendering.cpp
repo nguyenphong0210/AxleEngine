@@ -2,6 +2,8 @@
 #include "RHIReadback.hpp"
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RenderService.hpp>
+#include <Axle/RenderParticleData.hpp>
+#include <Axle/ParticleMaterialAdapter.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/LightingService.hpp>
@@ -1810,6 +1812,546 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                     << " production_cut_and_scene_reset=PASS temporal_oom_fallbacks=PASS\n";
         temporalLog.close();
         RENDER_CHECK(temporalLog.good(), "M15-U6-D: temporal readback evidence written");
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. M15-U6-E Native GPU Verification:
+    //    - M15-U6-05.1: Transparent / Additive / Refractive / Particle depth interaction
+    //    - M15-U6-05.2: No-light extinction with skybox background, disabled lights, temporal reprojection & local-light-only
+    //    - M15-U6-07.5 & 07.6: MSAA fallback, integrated VRAM & real GPU timestamp scorecard across Low..Ultra
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t kViewW = 640u;
+        constexpr uint32_t kViewH = 360u;
+        RHITexture displayColor, displayDepth;
+        RENDER_CHECK(displayColor.Init(RHITextureDesc::RenderTarget2D(kViewW, kViewH, RHITextureFormat::RGBA8_UNORM, "U6E_Display")) &&
+                     displayDepth.Init(RHITextureDesc::DepthStencil2D(kViewW, kViewH)),
+            "M15-U6-E: display & depth targets init");
+
+        RHIViewTargetDesc vtDesc{};
+        vtDesc.Width = kViewW;
+        vtDesc.Height = kViewH;
+        vtDesc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
+        vtDesc.HDR = true;
+        vtDesc.OwnPrimary = false;
+        vtDesc.EnableVolumetricFog = true;
+        vtDesc.FroxelQuality = static_cast<uint8_t>(FroxelFogQuality::High);
+        auto targets = std::make_shared<RHIViewTargets>();
+        RENDER_CHECK(targets->Configure(vtDesc) && targets->Validate(),
+            "M15-U6-E: view targets configured for High froxel grid");
+
+        auto cubeMesh = RHIMesh::CreateCube(1.0f);
+        RENDER_CHECK(cubeMesh && cubeMesh->IsValid(), "M15-U6-E: cube fixture valid");
+        auto cubeView = cubeMesh->CaptureView();
+
+        auto makeEmissiveMat = [](SurfaceType surface, const glm::vec4& baseColor, const glm::vec3& emissive, bool depthWrite, bool refract = false) {
+            RHIMaterialDesc d{};
+            d.SurfaceType = surface;
+            d.CullMode = CullMode::Back;
+            d.DepthWrite = depthWrite;
+            d.BaseColor = baseColor;
+            d.Metallic = 1.0f;
+            d.Roughness = 1.0f;
+            d.EmissiveColor = emissive;
+            d.EmissiveIntensity = 1.0f;
+            d.EnableSpecularHighlights = false;
+            d.EnableEnvironmentReflections = false;
+            d.RefractionEnabled = refract;
+            d.RefractionStrength = 0.25f;
+            d.RefractionIOR = 1.5f;
+            d.RefractionThickness = 0.5f;
+            return std::make_shared<RHIMaterial>(d);
+        };
+
+        auto wallMat = makeEmissiveMat(SurfaceType::Opaque, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f), glm::vec3(3.0f, 0.2f, 0.2f), true);
+        auto transMat = makeEmissiveMat(SurfaceType::Transparent, glm::vec4(0.0f, 0.0f, 0.0f, 0.5f), glm::vec3(0.0f, 4.0f, 0.0f), false);
+        auto addMat = makeEmissiveMat(SurfaceType::Additive, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 4.0f, 0.0f), false);
+        auto glassMat = makeEmissiveMat(SurfaceType::Transparent, glm::vec4(0.2f, 0.2f, 0.2f, 0.35f), glm::vec3(0.1f, 0.3f, 0.5f), false, true);
+
+        auto renderHDR = [&](const RenderWorld& world,
+                             const PerspectiveCamera& cam,
+                             const SceneRenderSettings& settings,
+                             std::vector<glm::vec4>& outHDR,
+                             RenderFrameDiagnostics& outDiag) -> bool {
+            renderer.RenderWorldView(world, cam, &displayColor, &displayDepth, settings, nullptr,
+                (settings.EnableVolumetricFog && settings.MSAASamples == 1) ? targets : nullptr);
+            outDiag = renderer.GetDiagnostics().GetFrame();
+            if (!renderer.WasLastRenderSuccessful() || renderer.GetDiagnostics().HasErrors() || !device.WaitIdle()) {
+                return false;
+            }
+            auto* linearHDR = renderer.GetIntermediateHDRTarget();
+            return linearHDR && Read2DRGBA16F(*linearHDR, outHDR) && outHDR.size() == size_t(kViewW) * kViewH;
+        };
+
+        PerspectiveCamera cam(60.0f, float(kViewW) / float(kViewH), 0.1f, 300.0f);
+        const glm::vec3 camPos(0.0f, 1.5f, 0.0f);
+        cam.SetViewMatrix(glm::lookAtRH(camPos, glm::vec3(0.0f, 1.5f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f)), camPos);
+
+        SceneRenderSettings baseFogSettings{};
+        baseFogSettings.EnableSkybox = false;
+        baseFogSettings.EnableShadows = false;
+        baseFogSettings.EnableParticles = true;
+        baseFogSettings.EnableToneMapping = true;
+        baseFogSettings.EnableVolumetricFog = true;
+        baseFogSettings.FogQuality = FroxelFogQuality::High;
+        baseFogSettings.FogTemporalWeight = 0.0f;
+        baseFogSettings.FogNearDistance = 0.25f;
+        baseFogSettings.FogMaxDistance = 120.0f;
+        baseFogSettings.FogDensity = 0.08f;
+        baseFogSettings.FogHeightFalloff = 0.0f;
+        baseFogSettings.FogScattering = 0.5f;
+        baseFogSettings.FogColor = glm::vec3(0.8f, 0.85f, 0.9f);
+        baseFogSettings.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+        RenderMeshInstance wallInst{};
+        wallInst.EntityID = 9501u;
+        wallInst.NativeView = cubeView;
+        wallInst.Material.RHIMaterialAsset = wallMat;
+        wallInst.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -60.5f)),
+            glm::vec3(400.0f, 400.0f, 1.0f));
+
+        RenderWorld baseWorld;
+        baseWorld.SceneRevision = 9601u;
+        RenderDirectionalLight sun{};
+        sun.Direction = glm::normalize(glm::vec3(0.2f, 0.4f, -0.8f));
+        sun.Color = glm::vec3(1.0f, 0.95f, 0.85f);
+        sun.Intensity = 2.0f;
+        sun.AmbientIntensity = 0.05f;
+        baseWorld.DirectionalLight = sun;
+        baseWorld.Meshes.push_back(wallInst);
+
+        LightingService lightingSvc;
+        const auto media = FroxelFogContract::ResolveMediaState(baseWorld, baseFogSettings, lightingSvc.BuildFrame(baseWorld, baseFogSettings));
+        const glm::vec3 forwardRay(0.0f, 0.0f, -1.0f);
+        const auto analytic4 = FroxelFogContract::EvaluateAnalyticHomogeneousFog(media, forwardRay, 4.0f, 1.0f);
+        const auto analytic40 = FroxelFogContract::EvaluateAnalyticHomogeneousFog(media, forwardRay, 40.0f, 1.0f);
+        const auto analytic60 = FroxelFogContract::EvaluateAnalyticHomogeneousFog(media, forwardRay, 60.0f, 1.0f);
+
+        RenderFrameDiagnostics diag;
+        std::vector<glm::vec4> hdrWallFog;
+        RENDER_CHECK(renderHDR(baseWorld, cam, baseFogSettings, hdrWallFog, diag),
+            "M15-U6-05.1: opaque z=60m wall fogged HDR baseline succeeds");
+        const glm::vec3 wallFoggedCenter = SampleHDRBlockAvg(hdrWallFog, kViewW, kViewW / 2u, kViewH / 2u);
+
+        // 6a. Alpha-blended Transparent quad at z = -4.0m (front face at z=-4.0, center at z=-4.5)
+        {
+            RenderMeshInstance quadInst{};
+            quadInst.EntityID = 9502u;
+            quadInst.NativeView = cubeView;
+            quadInst.Material.RHIMaterialAsset = transMat;
+            quadInst.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -4.5f)),
+                glm::vec3(4.0f, 4.0f, 1.0f));
+
+            RenderWorld transWorld = baseWorld;
+            transWorld.SceneRevision = 9602u;
+            transWorld.Meshes.push_back(quadInst);
+
+            auto noFog = baseFogSettings;
+            noFog.EnableVolumetricFog = false;
+            std::vector<glm::vec4> hdrTransNoFog, hdrWallNoFog;
+            RENDER_CHECK(renderHDR(baseWorld, cam, noFog, hdrWallNoFog, diag) &&
+                         renderHDR(transWorld, cam, noFog, hdrTransNoFog, diag),
+                "M15-U6-05.1: Fog-OFF transparent baseline succeeds");
+            const glm::vec3 wallNoFogCenter = SampleHDRBlockAvg(hdrWallNoFog, kViewW, kViewW / 2u, kViewH / 2u);
+            const glm::vec3 transNoFogCenter = SampleHDRBlockAvg(hdrTransNoFog, kViewW, kViewW / 2u, kViewH / 2u);
+            const glm::vec3 quadSurface = (transNoFogCenter - 0.5f * wallNoFogCenter) / 0.5f;
+
+            std::vector<glm::vec4> hdrTransFog;
+            RENDER_CHECK(renderHDR(transWorld, cam, baseFogSettings, hdrTransFog, diag),
+                "M15-U6-05.1: Fog-ON transparent render succeeds");
+            const glm::vec3 gpuTrans = SampleHDRBlockAvg(hdrTransFog, kViewW, kViewW / 2u, kViewH / 2u);
+            const glm::vec3 expectedTrans = 0.5f * wallFoggedCenter + 0.5f * (quadSurface * analytic4.Transmittance + analytic4.InScattering);
+            const glm::vec3 buggyOpaqueDepth = (0.5f * quadSurface) * analytic60.Transmittance + 0.5f * wallFoggedCenter + 0.5f * analytic60.InScattering;
+            std::cout << "  [U6-E Trans] gpu=(" << gpuTrans.r << "," << gpuTrans.g << "," << gpuTrans.b
+                      << ") exp=(" << expectedTrans.r << "," << expectedTrans.g << "," << expectedTrans.b
+                      << ") wallFog=" << wallFoggedCenter.g << " quadSurf=" << quadSurface.g << "\n";
+            RENDER_CHECK(glm::length(gpuTrans - expectedTrans) < 0.08f &&
+                         gpuTrans.g > buggyOpaqueDepth.g * 1.5f &&
+                         glm::length(gpuTrans - buggyOpaqueDepth) > 0.8f,
+                "M15-U6-05.1: close alpha-blended transparent surface applies z=4m foreground fog rather than z=60m opaque overwrite");
+
+            // Occluded behind a near opaque wall (z=-4.0m) -> invisible
+            RenderWorld occludedWorld = baseWorld;
+            occludedWorld.SceneRevision = 9603u;
+            RenderMeshInstance frontWall = wallInst;
+            frontWall.EntityID = 9503u;
+            frontWall.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -4.5f)),
+                glm::vec3(400.0f, 400.0f, 1.0f));
+            RenderMeshInstance backQuad = quadInst;
+            backQuad.EntityID = 9504u;
+            backQuad.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -10.5f)),
+                glm::vec3(4.0f, 4.0f, 1.0f));
+            occludedWorld.Meshes = { frontWall, backQuad };
+            std::vector<glm::vec4> hdrOccluded, hdrFrontOnly;
+            RenderWorld frontOnlyWorld = baseWorld;
+            frontOnlyWorld.Meshes = { frontWall };
+            RENDER_CHECK(renderHDR(frontOnlyWorld, cam, baseFogSettings, hdrFrontOnly, diag) &&
+                         renderHDR(occludedWorld, cam, baseFogSettings, hdrOccluded, diag),
+                "M15-U6-05.1: depth-occluded transparent mesh behind opaque wall renders cleanly");
+            const glm::vec3 frontCenter = SampleHDRBlockAvg(hdrFrontOnly, kViewW, kViewW / 2u, kViewH / 2u);
+            const glm::vec3 occCenter = SampleHDRBlockAvg(hdrOccluded, kViewW, kViewW / 2u, kViewH / 2u);
+            RENDER_CHECK(glm::length(frontCenter - occCenter) < 0.02f,
+                "M15-U6-05.1: depth test prevents occluded transparent geometry behind wall from glowing");
+        }
+
+        // 6b. Additive quad at z=-4m vs z=-40m (foreground transmittance without double-added scatter)
+        {
+            RenderMeshInstance addNear{};
+            addNear.EntityID = 9505u;
+            addNear.NativeView = cubeView;
+            addNear.Material.RHIMaterialAsset = addMat;
+            addNear.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -4.5f)),
+                glm::vec3(4.0f, 4.0f, 1.0f));
+            RenderWorld addWorld = baseWorld;
+            addWorld.SceneRevision = 9604u;
+            addWorld.Meshes.push_back(addNear);
+
+            std::vector<glm::vec4> hdrAddNear;
+            RENDER_CHECK(renderHDR(addWorld, cam, baseFogSettings, hdrAddNear, diag),
+                "M15-U6-05.1: additive near surface renders cleanly");
+            const glm::vec3 gpuAddNear = SampleHDRBlockAvg(hdrAddNear, kViewW, kViewW / 2u, kViewH / 2u);
+            const glm::vec3 expectedAddNear = wallFoggedCenter + glm::vec3(0.0f, 4.0f, 0.0f) * analytic4.Transmittance;
+            RENDER_CHECK(glm::length(gpuAddNear - expectedAddNear) < 0.08f &&
+                         std::abs(gpuAddNear.r - wallFoggedCenter.r) < 0.05f,
+                "M15-U6-05.1: additive mesh attenuates by foreground transmittance without doubling fog in-scattering");
+
+            addWorld.Meshes.back().WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -40.5f)),
+                glm::vec3(40.0f, 40.0f, 1.0f));
+            addWorld.SceneRevision = 9605u;
+            std::vector<glm::vec4> hdrAddFar;
+            RENDER_CHECK(renderHDR(addWorld, cam, baseFogSettings, hdrAddFar, diag),
+                "M15-U6-05.1: additive far surface renders cleanly");
+            const glm::vec3 gpuAddFar = SampleHDRBlockAvg(hdrAddFar, kViewW, kViewW / 2u, kViewH / 2u);
+            const glm::vec3 expectedAddFar = wallFoggedCenter + glm::vec3(0.0f, 4.0f, 0.0f) * analytic40.Transmittance;
+            const float nearDeltaG = gpuAddNear.g - wallFoggedCenter.g;
+            const float farDeltaG = gpuAddFar.g - wallFoggedCenter.g;
+            std::cout << "  [U6-E Add] near=" << gpuAddNear.g << " (exp " << expectedAddNear.g << ") far=" << gpuAddFar.g
+                      << " (exp " << expectedAddFar.g << ") deltaNear=" << nearDeltaG << " deltaFar=" << farDeltaG << "\n";
+            RENDER_CHECK(farDeltaG < nearDeltaG * 0.15f &&
+                         glm::length(gpuAddFar - expectedAddFar) < 0.08f,
+                "M15-U6-05.1: distant additive mesh is much darker than near additive mesh at true depth");
+        }
+
+        // 6c. Refractive glass in dense fog (RefractionCopy after FogApply)
+        {
+            RenderMeshInstance glassInst{};
+            glassInst.EntityID = 9506u;
+            glassInst.NativeView = cubeView;
+            glassInst.Material.RHIMaterialAsset = glassMat;
+            glassInst.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -4.5f)),
+                glm::vec3(4.0f, 4.0f, 1.0f));
+            RenderWorld glassWorld = baseWorld;
+            glassWorld.SceneRevision = 9606u;
+            glassWorld.Meshes.push_back(glassInst);
+            std::vector<glm::vec4> hdrGlass;
+            RENDER_CHECK(renderHDR(glassWorld, cam, baseFogSettings, hdrGlass, diag) &&
+                         HasPassNamed(diag, "RefractionCopy"),
+                "M15-U6-05.1: refractive glass composes cleanly with froxel fog and executes RefractionCopy");
+        }
+
+        // 6d. ParticleSystem (AlphaBlend & Additive at z=-4m vs z=-40m vs occluded)
+        {
+            auto makeParticleBatch = [](ParticleBlendMode mode, const glm::vec3& pos, const glm::vec4& color) {
+                auto batch = std::make_shared<RenderParticleData>();
+                batch->Config = ParticleEmitterConfig::CreateNeutral();
+                batch->Config.BlendMode = mode;
+                batch->Config.LightingEnabled = false;
+                batch->Config.SoftnessDistance = 0.0f;
+                batch->Config.NearFadeEnabled = false;
+                batch->Config.FarFadeEnabled = false;
+                batch->Config.StartColor = color;
+                batch->Config.ColorOverLifetime = { color, color };
+                batch->Config.StartSize = 6.0f;
+                batch->Config.EndSize = 6.0f;
+                batch->Material = ParticleMaterialAdapter::Resolve(batch->Config, batch->Resources);
+                batch->Material.BlendMode = mode;
+                batch->Material.LightingEnabled = false;
+                batch->Material.BaseColor = glm::vec4(1.0f);
+                batch->MaterialResolved = true;
+
+                ParticleSpawnData spawn{};
+                spawn.Position = pos;
+                spawn.StartSize = 6.0f;
+                spawn.EndSize = 6.0f;
+                spawn.StartColor = color;
+                spawn.EndColor = color;
+                spawn.Lifetime = 100.0f;
+                batch->Pool.Allocate(4);
+                batch->Pool.Spawn(spawn);
+                return batch;
+            };
+
+            RenderWorld alphaPartWorld = baseWorld;
+            alphaPartWorld.SceneRevision = 9607u;
+            alphaPartWorld.Particles.push_back(makeParticleBatch(
+                ParticleBlendMode::AlphaBlend, glm::vec3(0.0f, 1.5f, -4.0f), glm::vec4(0.0f, 6.0f, 0.0f, 0.5f)));
+            std::vector<glm::vec4> hdrPartAlpha;
+            RENDER_CHECK(renderHDR(alphaPartWorld, cam, baseFogSettings, hdrPartAlpha, diag),
+                "M15-U6-05.1: AlphaBlend particle renders in volumetric fog");
+            const glm::vec3 gpuPartAlpha = SampleHDRBlockAvg(hdrPartAlpha, kViewW, kViewW / 2u, kViewH / 2u);
+            const glm::vec3 expectedPartAlpha = 0.5f * wallFoggedCenter + 0.5f * (glm::vec3(0.0f, 6.0f, 0.0f) * analytic4.Transmittance + analytic4.InScattering);
+            const glm::vec3 buggyPartOpaque = 0.5f * wallFoggedCenter + 0.5f * (glm::vec3(0.0f, 6.0f, 0.0f) * analytic60.Transmittance + analytic60.InScattering);
+            std::cout << "  [U6-E PartAlpha] gpu=" << gpuPartAlpha.g << " exp=" << expectedPartAlpha.g << " buggy60=" << buggyPartOpaque.g << "\n";
+            RENDER_CHECK(glm::length(gpuPartAlpha - expectedPartAlpha) < 0.08f &&
+                         gpuPartAlpha.g > buggyPartOpaque.g * 1.8f &&
+                         glm::length(gpuPartAlpha - buggyPartOpaque) > 1.2f,
+                "M15-U6-05.1: AlphaBlend particle at z=4m applies foreground fog at true depth instead of background opaque depth");
+
+            RenderWorld addPartNearWorld = baseWorld;
+            addPartNearWorld.SceneRevision = 9608u;
+            addPartNearWorld.Particles.push_back(makeParticleBatch(
+                ParticleBlendMode::Additive, glm::vec3(0.0f, 1.5f, -4.0f), glm::vec4(0.0f, 4.0f, 0.0f, 1.0f)));
+            std::vector<glm::vec4> hdrPartAddNear;
+            RENDER_CHECK(renderHDR(addPartNearWorld, cam, baseFogSettings, hdrPartAddNear, diag),
+                "M15-U6-05.1: Additive particle at z=4m renders");
+            const glm::vec3 gpuPartAddNear = SampleHDRBlockAvg(hdrPartAddNear, kViewW, kViewW / 2u, kViewH / 2u);
+            const glm::vec3 expectedPartAddNear = wallFoggedCenter + glm::vec3(0.0f, 4.0f, 0.0f) * analytic4.Transmittance;
+            RENDER_CHECK(glm::length(gpuPartAddNear - expectedPartAddNear) < 0.08f,
+                "M15-U6-05.1: Additive particle at z=4m attenuates emission by foreground transmittance without doubling fog");
+
+            RenderWorld addPartFarWorld = baseWorld;
+            addPartFarWorld.SceneRevision = 9609u;
+            addPartFarWorld.Particles.push_back(makeParticleBatch(
+                ParticleBlendMode::Additive, glm::vec3(0.0f, 1.5f, -40.0f), glm::vec4(0.0f, 4.0f, 0.0f, 1.0f)));
+            std::vector<glm::vec4> hdrPartAddFar;
+            RENDER_CHECK(renderHDR(addPartFarWorld, cam, baseFogSettings, hdrPartAddFar, diag),
+                "M15-U6-05.1: Additive particle at z=40m renders");
+            const glm::vec3 gpuPartAddFar = SampleHDRBlockAvg(hdrPartAddFar, kViewW, kViewW / 2u, kViewH / 2u);
+            const float nearPartDeltaG = gpuPartAddNear.g - wallFoggedCenter.g;
+            const float farPartDeltaG = gpuPartAddFar.g - wallFoggedCenter.g;
+            std::cout << "  [U6-E PartAdd] near=" << gpuPartAddNear.g << " far=" << gpuPartAddFar.g
+                      << " deltaNear=" << nearPartDeltaG << " deltaFar=" << farPartDeltaG << "\n";
+            RENDER_CHECK(farPartDeltaG < nearPartDeltaG * 0.15f,
+                "M15-U6-05.1: distant Additive particle attenuates with deeper optical thickness");
+        }
+
+        // 6e. M15-U6-05.2: Unlit skybox background + disabled zero light + temporal reprojection
+        {
+            RenderWorld skyBgOnlyWorld;
+            skyBgOnlyWorld.SceneRevision = 9610u;
+            skyBgOnlyWorld.Skybox.Authored = true;
+            skyBgOnlyWorld.Skybox.Enabled = true;
+            skyBgOnlyWorld.Skybox.EnvironmentLighting = false;
+            RenderPointLight disabledLight{};
+            disabledLight.Position = glm::vec3(0.0f, 1.5f, -5.0f);
+            disabledLight.Radius = 20.0f;
+            disabledLight.Intensity = 0.0f;
+            skyBgOnlyWorld.PointLights.push_back(disabledLight);
+            RenderMeshInstance unlitWall = wallInst;
+            unlitWall.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -40.5f)),
+                glm::vec3(400.0f, 400.0f, 1.0f));
+            skyBgOnlyWorld.Meshes.push_back(unlitWall);
+
+            SceneRenderSettings temporalUnlit = baseFogSettings;
+            temporalUnlit.FogDensity = 0.04f;
+            temporalUnlit.FogTemporalWeight = 0.8f;
+            temporalUnlit.EnableSkybox = false;
+
+            auto noFogUnlit = temporalUnlit;
+            noFogUnlit.EnableVolumetricFog = false;
+            std::vector<glm::vec4> hdrNoFogUnlit;
+            RENDER_CHECK(renderHDR(skyBgOnlyWorld, cam, noFogUnlit, hdrNoFogUnlit, diag),
+                "M15-U6-05.2: unlit skybox-background baseline renders");
+            const glm::vec3 baseUnlit = SampleHDRBlockAvg(hdrNoFogUnlit, kViewW, kViewW / 2u, kViewH / 2u);
+
+            std::vector<glm::vec4> hdrUnlitTemporal;
+            for (int f = 0; f < 3; ++f) {
+                RENDER_CHECK(renderHDR(skyBgOnlyWorld, cam, temporalUnlit, hdrUnlitTemporal, diag),
+                    "M15-U6-05.2: temporal unlit frame renders");
+            }
+            RENDER_CHECK(HasFallbackPrefix(diag, "froxel_fog_no_directional_sun") &&
+                         HasFallbackPrefix(diag, "froxel_fog_unlit_extinction_only"),
+                "M15-U6-05.2: skybox-background-only + disabled-light temporal fog emits extinction-only diagnostic");
+            std::vector<glm::vec4> scatUnlit, intUnlit;
+            const uint32_t fgW = targets->GetFroxelScattering()->GetWidth();
+            const uint32_t fgH = targets->GetFroxelScattering()->GetHeight();
+            RENDER_CHECK(fgW > 0u && fgH > 0u &&
+                         Read3DSliceRGBA16F(*targets->GetFroxelScattering(), 32u, scatUnlit) &&
+                         Read3DSliceRGBA16F(*targets->GetFroxelIntegrated(), 32u, intUnlit) &&
+                         scatUnlit.size() == size_t(fgW) * fgH &&
+                         intUnlit.size() == size_t(fgW) * fgH,
+                "M15-U6-05.2: read unlit froxel volumes after temporal frames");
+            const size_t centerFroxel = size_t(fgH / 2u) * fgW + (fgW / 2u);
+            const glm::vec4 centerS = scatUnlit[centerFroxel];
+            const glm::vec4 centerI = intUnlit[centerFroxel];
+            const glm::vec3 gpuUnlitHDR = SampleHDRBlockAvg(hdrUnlitTemporal, kViewW, kViewW / 2u, kViewH / 2u);
+            const glm::vec3 expectedUnlitHDR = baseUnlit * std::exp(-0.04f * (40.0f - temporalUnlit.FogNearDistance));
+            std::cout << "  [U6-E Unlit] centerS=(" << centerS.r << "," << centerS.g << "," << centerS.b << "," << centerS.a
+                      << ") centerI.a=" << centerI.a << " gpu=" << gpuUnlitHDR.r << " exp=" << expectedUnlitHDR.r << std::endl;
+            RENDER_CHECK(glm::vec3(centerS) == glm::vec3(0.0f) && std::abs(centerS.a - 0.04f) < 5e-4f &&
+                         glm::vec3(centerI) == glm::vec3(0.0f) && centerI.a > 0.0f && centerI.a < 0.99f &&
+                         glm::length(gpuUnlitHDR - expectedUnlitHDR) < 0.03f,
+                "M15-U6-05.2: temporal unlit fog retains exact zero in-scattering and pure Beer-Lambert extinction");
+
+            // Point light only without directional sun: scatters light, does NOT emit extinction-only
+            RenderWorld localOnlyWorld;
+            localOnlyWorld.SceneRevision = 9611u;
+            RenderPointLight activePt{};
+            activePt.Position = glm::vec3(0.0f, 1.5f, -6.0f);
+            activePt.Radius = 25.0f;
+            activePt.Intensity = 60.0f;
+            activePt.Color = glm::vec3(1.0f, 0.85f, 0.7f);
+            localOnlyWorld.PointLights.push_back(activePt);
+            localOnlyWorld.Meshes.push_back(unlitWall);
+            std::vector<glm::vec4> hdrLocalOnly;
+            RENDER_CHECK(renderHDR(localOnlyWorld, cam, temporalUnlit, hdrLocalOnly, diag),
+                "M15-U6-05.2: point-light-only fog render succeeds");
+            RENDER_CHECK(HasFallbackPrefix(diag, "froxel_fog_no_directional_sun") &&
+                         !HasFallbackPrefix(diag, "froxel_fog_unlit_extinction_only"),
+                "M15-U6-05.2: active local light without directional sun scatters without unlit diagnostic");
+        }
+
+        // 6f. MSAA 4x fallback diagnostic on GPU
+        {
+            RHITexture singleColor, singleDepth;
+            RENDER_CHECK(singleColor.Init(RHITextureDesc::RenderTarget2D(128u, 128u, RHITextureFormat::RGBA8_UNORM, "U6E_MSAA_Resolve")) &&
+                         singleDepth.Init(RHITextureDesc::DepthStencil2D(128u, 128u)),
+                "M15-U6-07.6: MSAA 4x single-sample resolve targets init");
+            RHIViewTargetDesc msaaVtDesc{};
+            msaaVtDesc.Width = 128u;
+            msaaVtDesc.Height = 128u;
+            msaaVtDesc.Samples = 4u;
+            msaaVtDesc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
+            msaaVtDesc.EnableDepth = true;
+            msaaVtDesc.OwnPrimary = false;
+            msaaVtDesc.EnableVolumetricFog = false;
+            auto msaaTargets = std::make_shared<RHIViewTargets>();
+            RENDER_CHECK(msaaTargets->Configure(msaaVtDesc) && msaaTargets->Validate(),
+                "M15-U6-07.6: MSAA 4x fallback targets configured");
+            auto msaaSettings = baseFogSettings;
+            msaaSettings.MSAASamples = 4u;
+            msaaSettings.EnableToneMapping = false;
+            renderer.RenderWorldView(baseWorld, cam, &singleColor, &singleDepth, msaaSettings, nullptr, msaaTargets);
+            const auto& msaaDiag = renderer.GetDiagnostics().GetFrame();
+            RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle() &&
+                         HasFallbackPrefix(msaaDiag, "froxel_targets_disabled:multisampled_depth") &&
+                         !HasPassNamed(msaaDiag, "FogApply"),
+                "M15-U6-07.6: MSAA 4x gracefully disables froxel fog and records froxel_targets_disabled:multisampled_depth");
+        }
+
+        // 6g. M15-U6-07.5 & M15-U6-07.6: Full integrated VRAM + hardware GPU pass timestamp scorecard across all 4 tiers
+        {
+            std::ofstream scorecard(output / "M15_U6E_froxel_scorecard.txt");
+            RENDER_CHECK(scorecard.is_open(), "M15-U6-E: scorecard file created");
+            const auto& caps = device.GetCapabilities();
+#if defined(_DEBUG) || !defined(NDEBUG)
+            const char* buildCfg = "Debug";
+#else
+            const char* buildCfg = "Release";
+#endif
+            scorecard << "config=" << buildCfg
+                      << " backend=" << (device.GetBackend() == RHIType::Vulkan ? "Vulkan" : "D3D12")
+                      << " adapter=\"" << caps.AdapterName << "\""
+                      << " timestamp_hz=" << caps.TimestampFrequencyHz << "\n";
+
+            RenderWorld perfWorld = baseWorld;
+            perfWorld.SceneRevision = 9700u;
+            perfWorld.Meshes[0].CastsShadows = false;
+            RenderPointLight perfPoint{};
+            perfPoint.Position = glm::vec3(1.5f, 2.0f, -6.0f);
+            perfPoint.Radius = 25.0f;
+            perfPoint.Intensity = 40.0f;
+            perfPoint.Shadows.CastShadows = true;
+            perfWorld.PointLights.push_back(perfPoint);
+
+            struct PerfRes { uint32_t W; uint32_t H; };
+            for (const auto [pw, ph] : std::vector<PerfRes>{ {1920u, 1080u}, {2560u, 1440u} }) {
+                RHITexture pColor, pDepth;
+                RENDER_CHECK(pColor.Init(RHITextureDesc::RenderTarget2D(pw, ph, RHITextureFormat::RGBA8_UNORM, "U6E_PerfColor")) &&
+                             pDepth.Init(RHITextureDesc::DepthStencil2D(pw, ph)),
+                    "M15-U6-07.6: perf color/depth init");
+
+                for (uint8_t tier = 0u; tier < 4u; ++tier) {
+                    const auto q = static_cast<FroxelFogQuality>(tier);
+                    const auto spec = FroxelFogContract::GetTierSpec(q);
+                    const auto mem = FroxelFogContract::EstimateMemoryBudget(pw, ph, q, true);
+
+                    RHIViewTargetDesc pvtDesc{};
+                    pvtDesc.Width = pw;
+                    pvtDesc.Height = ph;
+                    pvtDesc.ColorFormat = RHITextureFormat::RGBA8_UNORM;
+                    pvtDesc.HDR = true;
+                    pvtDesc.OwnPrimary = false;
+                    pvtDesc.EnableVolumetricFog = true;
+                    pvtDesc.FroxelQuality = tier;
+                    auto pTargets = std::make_shared<RHIViewTargets>();
+                    RENDER_CHECK(pTargets->Configure(pvtDesc) && pTargets->Validate(),
+                        "M15-U6-07.6: perf view targets init");
+
+                    auto pSettings = baseFogSettings;
+                    pSettings.FogQuality = q;
+                    pSettings.FogTemporalWeight = 0.8f;
+                    pSettings.EnableShadows = true;
+
+                    double sumCopy = 0.0, sumInject = 0.0, sumReproj = 0.0, sumInteg = 0.0, sumApply = 0.0, sumTotal = 0.0;
+                    uint32_t measuredFrames = 0u;
+                    constexpr int kWarmup = 4;
+                    constexpr int kSamples = 6;
+                    for (int f = 0; f < kWarmup + kSamples; ++f) {
+                        PerspectiveCamera perfCam = cam;
+                        const float xJitter = 0.02f * static_cast<float>(f % 3);
+                        perfCam.SetViewMatrix(glm::lookAtRH(camPos + glm::vec3(xJitter, 0.0f, 0.0f),
+                            glm::vec3(xJitter, 1.5f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                            camPos + glm::vec3(xJitter, 0.0f, 0.0f));
+                        renderer.RenderWorldView(perfWorld, perfCam, &pColor, &pDepth, pSettings, nullptr, pTargets);
+                        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle(),
+                            "M15-U6-07.6: perf frame executes cleanly");
+                        const auto& timing = renderer.GetLastGPUTimingFrame();
+                        if (f >= kWarmup && caps.TimestampFrequencyHz > 0u) {
+                            auto findPass = [&](const char* name, double& outMs) {
+                                for (const auto& p : timing.Passes) {
+                                    if (p.Name == name) {
+                                        outMs = p.Milliseconds;
+                                        return p.Validity == DiagnosticValidity::Valid;
+                                    }
+                                }
+                                return false;
+                            };
+                            double tCopy = 0.0, tInj = 0.0, tRep = 0.0, tInt = 0.0, tApp = 0.0;
+                            if (timing.Validity == DiagnosticValidity::Valid &&
+                                findPass("FogCopy", tCopy) && findPass("FogInject", tInj) &&
+                                findPass("FogReproject", tRep) && findPass("FogIntegrate", tInt) &&
+                                findPass("FogApply", tApp)) {
+                                sumCopy += tCopy;
+                                sumInject += tInj;
+                                sumReproj += tRep;
+                                sumInteg += tInt;
+                                sumApply += tApp;
+                                sumTotal += timing.Milliseconds;
+                                ++measuredFrames;
+                            }
+                        }
+                    }
+                    if (caps.TimestampFrequencyHz > 0u) {
+                        RENDER_CHECK(measuredFrames > 0u,
+                            "M15-U6-07.6: valid per-pass GPU timestamps captured for all 5 fog passes");
+                    }
+                    const double denom = std::max<double>(measuredFrames, 1.0);
+                    const double avgCopy = sumCopy / denom;
+                    const double avgInj = sumInject / denom;
+                    const double avgRep = sumReproj / denom;
+                    const double avgInt = sumInteg / denom;
+                    const double avgApp = sumApply / denom;
+                    const double avgFogSum = avgCopy + avgInj + avgRep + avgInt + avgApp;
+                    const double avgTotal = sumTotal / denom;
+
+                    scorecard << pw << "x" << ph
+                              << " tier=" << spec.Name
+                              << " grid=" << mem.Extent.Width << "x" << mem.Extent.Height << "x" << mem.Extent.Depth
+                              << " logical_bytes=" << mem.TotalLogicalBytes
+                              << " device_bytes=" << mem.TotalDeviceReportedBytes
+                              << " fog_copy_ms=" << avgCopy
+                              << " fog_inject_ms=" << avgInj
+                              << " fog_reproject_ms=" << avgRep
+                              << " fog_integrate_ms=" << avgInt
+                              << " fog_apply_ms=" << avgApp
+                              << " fog_total_ms=" << avgFogSum
+                              << " frame_total_ms=" << avgTotal << "\n";
+                }
+            }
+            scorecard.close();
+            RENDER_CHECK(scorecard.good(), "M15-U6-E: scorecard written cleanly");
+        }
     }
 
     return device.WaitIdle() && GetRHIValidationErrorCount() == 0;

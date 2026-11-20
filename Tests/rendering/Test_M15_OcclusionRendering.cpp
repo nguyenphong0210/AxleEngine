@@ -958,8 +958,10 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
             commands.SetRootDescriptor(2, materialBuffer.GetCBV()); commands.SetRootDescriptor(3, cascadeBuffer.GetCBV());
             commands.SetRootDescriptor(4, renderer.GetLocalShadows().GetConstantsCBV());
             commands.SetRootDescriptor(5, reflectionProbeBuffer.GetCBV());
+            commands.SetRootDescriptor(6, renderer.GetDisabledFogConstantBuffer().GetCBV());
             pool.Bind(commands.GetNative()); commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, 0, materialSet);
             commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, 1, visibilitySet);
+            commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, 2, renderer.GetForwardFogFallbackDescriptorSet());
             commands.SetRootConstants(0, &object, sizeof(object));
         }
         commands.SetVertexBuffer(0, vertexBuffer, 0, sizeof(RHIVertex3D));

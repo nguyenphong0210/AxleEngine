@@ -6,6 +6,9 @@
 #include <Axle/ParticleSystem.hpp>
 #include <Axle/VFXEditorDocument.hpp>
 #include <Axle/VFXEditorPanel.hpp>
+#include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/Components.hpp>
 #include <Axle/Scene.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -346,10 +349,57 @@ namespace {
         }
         return true;
     }
+
+    bool TestVolumetricFogInspectorWithoutGPU() {
+        using namespace Axle;
+        auto* previous = ImGui::GetCurrentContext();
+        auto* context = ImGui::CreateContext();
+        struct Cleanup {
+            ImGuiContext* Context;
+            ImGuiContext* Previous;
+            ~Cleanup() { ImGui::DestroyContext(Context); ImGui::SetCurrentContext(Previous); }
+        } cleanup{ context, previous };
+        auto& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.LogFilename = nullptr;
+        io.DeltaTime = 1.0f / 60.0f;
+        io.DisplaySize = ImVec2(1600, 1000);
+        unsigned char* pixels;
+        int width, height;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+        io.Fonts->SetTexID((ImTextureID)1);
+
+        Scene scene;
+        auto entity = scene.CreateEntity("FogVolume");
+        auto& vfc = entity.AddComponent<VolumetricFogComponent>();
+        vfc.Density = 0.05f;
+        vfc.HeightFalloff = 0.2f;
+        vfc.ScatteringAsymmetry = 0.65f;
+        vfc.Color = glm::vec3(0.6f, 0.7f, 0.8f);
+        vfc.MaxDistance = 120.0f;
+        vfc.Intensity = 1.25f;
+
+        SceneHierarchyPanel inspector(&scene);
+        inspector.SetSelectedEntity(entity);
+
+        for (int frame = 0; frame < 4; ++frame) {
+            ImGui::NewFrame();
+            bool hierarchyOpen = true;
+            bool propertiesOpen = true;
+            inspector.OnImGuiRender(&hierarchyOpen, &propertiesOpen);
+            ImGui::Render();
+            VFX_TEST_CHECK(ImGui::GetDrawData()->Valid && ImGui::GetDrawData()->TotalVtxCount > 0,
+                "EntityInspector draws VolumetricFogComponent without GPU");
+            VFX_TEST_CHECK(context->ErrorCountCurrentFrame == 0,
+                "VolumetricFogComponent inspector causes zero ImGui ID/scope errors");
+        }
+        return true;
+    }
 }
 
 bool RunVFXAuthoringUnitTests() {
     return TestModulePersistenceAndHistory() && TestModuleSimulation() && TestDisabledEmissionDoesNotCatchUp()
         && TestAuthoringCommandsAndGraph() && TestSceneAuthoringAndBounds()
-        && TestPreviewMouseCaptureWithoutGPU() && TestEditorLayoutWithoutGPU();
+        && TestPreviewMouseCaptureWithoutGPU() && TestEditorLayoutWithoutGPU()
+        && TestVolumetricFogInspectorWithoutGPU();
 }

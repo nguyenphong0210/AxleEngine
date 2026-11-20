@@ -484,7 +484,8 @@ bool RunM15FroxelFogContractUnitTests() {
                      fogShaderSrc.find("0.001f") == std::string::npos &&
                      fogPassSrc.find("FogInject") != std::string::npos &&
                      fogPassSrc.find("FogIntegrate") != std::string::npos &&
-                     fogPassSrc.find("i.Media") != std::string::npos &&
+                     fogPassSrc.find("BuildConstants") != std::string::npos &&
+                     fogPassSrc.find("media.EffectiveBaseDensity") != std::string::npos &&
                      fogPassSrc.find("0.45f, 0.85f, 0.25f") == std::string::npos &&
                      fogPassSrc.find("-glm::normalize") == std::string::npos,
             "M15-U6-02.1 / 05.3 / 06: VolumetricFog.hlsl and FroxelFogPass.cpp match 3D froxel architecture without clamps or invented sun");
@@ -620,6 +621,81 @@ bool RunM15FroxelFogContractUnitTests() {
             "M15-U6-02.2: U6-C VolumetricFog.hlsl, FroxelFogPass.cpp, and RHISceneRendererPasses.cpp shadow/light bindings match");
     }
 
-    std::cout << "[M15FroxelFog] All Unit 6 Batch A, B & C contract tests PASSED.\n";
+    // 7. M15-U6-E: Transparent/particle depth interaction, no-light classification,
+    //    Inspector/Editor/Runtime/OpenGL fallback parity contracts
+    {
+        LightingService lightingSvc;
+        SceneRenderSettings fogSettings;
+        fogSettings.EnableVolumetricFog = true;
+        fogSettings.FogDensity = 0.05f;
+        fogSettings.FogNearDistance = 0.25f;
+        fogSettings.FogMaxDistance = 100.0f;
+
+        // Completely unlit world (even with background-only skybox and disabled zero-intensity point light)
+        RenderWorld unlitWorld;
+        unlitWorld.Skybox.Authored = true;
+        unlitWorld.Skybox.Enabled = true;
+        unlitWorld.Skybox.EnvironmentLighting = false;
+        RenderPointLight zeroPoint{};
+        zeroPoint.Position = { 0.0f, 2.0f, -5.0f };
+        zeroPoint.Radius = 15.0f;
+        zeroPoint.Intensity = 0.0f;
+        zeroPoint.Color = { 1.0f, 1.0f, 1.0f };
+        unlitWorld.PointLights.push_back(zeroPoint);
+        const auto unlitMedia = ResolveMediaState(unlitWorld, fogSettings, lightingSvc.BuildFrame(unlitWorld, fogSettings));
+        RENDER_CHECK(unlitMedia.Valid && !unlitMedia.HasDirectionalSun && !unlitMedia.HasLocalLight &&
+                     !unlitMedia.HasAmbientLight && !unlitMedia.HasAnyLighting() &&
+                     unlitMedia.Diagnostic.find("froxel_fog_no_directional_sun") != std::string::npos &&
+                     unlitMedia.Diagnostic.find("froxel_fog_unlit_extinction_only") != std::string::npos,
+            "M15-U6-05.2: unlit scene (including background-only sky & disabled lights) emits extinction-only diagnostic");
+        const auto unlitIntegral = EvaluateAnalyticHomogeneousFog(unlitMedia, glm::vec3(0.0f, 0.0f, -1.0f), 20.25f, 1.0f);
+        RENDER_CHECK(unlitIntegral.InScattering == glm::vec3(0.0f) &&
+                     std::abs(unlitIntegral.Transmittance - std::exp(-0.05f * 20.0f)) < 1e-5f,
+            "M15-U6-05.2: unlit fog preserves exact Beer-Lambert extinction with zero in-scattering");
+
+        // Local light only (no directional sun, no ambient)
+        RenderWorld localOnlyWorld;
+        RenderPointLight activePoint{};
+        activePoint.Position = { 0.0f, 2.0f, -5.0f };
+        activePoint.Radius = 15.0f;
+        activePoint.Intensity = 25.0f;
+        activePoint.Color = { 1.0f, 0.7f, 0.4f };
+        localOnlyWorld.PointLights.push_back(activePoint);
+        const auto localMedia = ResolveMediaState(localOnlyWorld, fogSettings, lightingSvc.BuildFrame(localOnlyWorld, fogSettings));
+        RENDER_CHECK(localMedia.Valid && !localMedia.HasDirectionalSun && localMedia.HasLocalLight &&
+                     !localMedia.HasAmbientLight && localMedia.HasAnyLighting() &&
+                     localMedia.Diagnostic.find("froxel_fog_no_directional_sun") != std::string::npos &&
+                     localMedia.Diagnostic.find("froxel_fog_unlit_extinction_only") == std::string::npos,
+            "M15-U6-05.2: local-light-only scene clears extinction-only diagnostic while keeping no-sun note");
+
+        // Ambient-only (EnvironmentLighting enabled without directional sun)
+        RenderWorld ambientOnlyWorld;
+        ambientOnlyWorld.Skybox.Authored = true;
+        ambientOnlyWorld.Skybox.Enabled = true;
+        ambientOnlyWorld.Skybox.EnvironmentLighting = true;
+        ambientOnlyWorld.Skybox.Intensity = 0.5f;
+        const auto ambientMedia = ResolveMediaState(ambientOnlyWorld, fogSettings, lightingSvc.BuildFrame(ambientOnlyWorld, fogSettings));
+        RENDER_CHECK(ambientMedia.Valid && !ambientMedia.HasDirectionalSun && !ambientMedia.HasLocalLight &&
+                     ambientMedia.HasAmbientLight && ambientMedia.HasAnyLighting() &&
+                     ambientMedia.Diagnostic.find("froxel_fog_unlit_extinction_only") == std::string::npos,
+            "M15-U6-05.2: ambient-only scene activates scattering without inventing a directional sun");
+
+        // M15-U6-05.1 pass order & shader parity source check
+        const std::string scenePassesSrc = ReadText(AXLE_SCENE_PASSES_SOURCE_PATH);
+        const size_t fogPos = scenePassesSrc.find("addPass(\"FroxelFogPass\"");
+        const size_t transPos = scenePassesSrc.find("addPass(\"Transparent\"");
+        const size_t partPos = scenePassesSrc.find("addPass(\"ParticlesAndResolve\"");
+        RENDER_CHECK(fogPos != std::string::npos && transPos != std::string::npos && partPos != std::string::npos &&
+                     fogPos < transPos && transPos < partPos,
+            "M15-U6-05.1: FroxelFogPass executes before Transparent and ParticlesAndResolve");
+
+        const auto glPolicy = RenderBackendPolicy::FromBackend(RendererBackendType::OpenGL_Compatibility);
+        const auto glFallbacks = glPolicy.CollectFallbacks(fogSettings);
+        RENDER_CHECK(!glPolicy.ResolveSettings(fogSettings).EnableVolumetricFog && !glFallbacks.empty() &&
+                     glFallbacks[0].find("volumetric_fog_disabled") != std::string::npos,
+            "M15-U6-07.6: OpenGL compatibility policy disables volumetric fog with explicit fallback reason");
+    }
+
+    std::cout << "[M15FroxelFog] All Unit 6 contract tests (A-E) PASSED.\n";
     return true;
 }

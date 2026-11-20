@@ -151,6 +151,16 @@ namespace {
         auto& nsc = e.AddComponent<Axle::NativeScriptComponent>("TestScript");
         nsc.FloatFields["Speed"] = 12.5f;
 
+        // Add VolumetricFogComponent
+        auto& vfc = e.AddComponent<Axle::VolumetricFogComponent>();
+        vfc.Enabled = true;
+        vfc.Density = 0.065f;
+        vfc.HeightFalloff = 0.18f;
+        vfc.ScatteringAsymmetry = 0.62f;
+        vfc.Color = glm::vec3(0.45f, 0.72f, 0.91f);
+        vfc.MaxDistance = 140.0f;
+        vfc.Intensity = 1.35f;
+
         // Perform Deep Copy via SceneData::Copy
         auto dstScene = Axle::SceneData::Copy(srcScene);
         TEST_ASSERT(dstScene != nullptr, "Copy must succeed");
@@ -178,6 +188,40 @@ namespace {
         TEST_ASSERT(copiedNsc.ScriptName == "TestScript", "Script name must match");
         TEST_ASSERT(copiedNsc.FloatFields.at("Speed") == 12.5f, "Script float field must match");
         TEST_ASSERT(copiedNsc.Instance == nullptr, "Runtime instance must be null in copied scene");
+
+        // Verify VolumetricFogComponent codec & serialization round trip
+        TEST_ASSERT(copied.HasComponent<Axle::VolumetricFogComponent>(), "Must have VolumetricFogComponent");
+        const auto& copiedFog = copied.GetComponent<Axle::VolumetricFogComponent>();
+        TEST_ASSERT(copiedFog.Enabled &&
+                    std::abs(copiedFog.Density - 0.065f) < 1e-5f &&
+                    std::abs(copiedFog.HeightFalloff - 0.18f) < 1e-5f &&
+                    std::abs(copiedFog.ScatteringAsymmetry - 0.62f) < 1e-5f &&
+                    std::abs(copiedFog.Color.r - 0.45f) < 1e-5f &&
+                    std::abs(copiedFog.Color.g - 0.72f) < 1e-5f &&
+                    std::abs(copiedFog.Color.b - 0.91f) < 1e-5f &&
+                    std::abs(copiedFog.MaxDistance - 140.0f) < 1e-4f &&
+                    std::abs(copiedFog.Intensity - 1.35f) < 1e-5f,
+            "VolumetricFogComponent fields must survive codec deep copy");
+
+        Axle::SceneSerializer fogWriter(srcScene.get());
+        const std::string fogYaml = fogWriter.SerializeToString();
+        TEST_ASSERT(fogYaml.find("VolumetricFogComponent:") != std::string::npos,
+            "SceneSerializer must serialize VolumetricFogComponent");
+        auto restoredFogScene = std::make_shared<Axle::SceneData>();
+        Axle::SceneSerializer fogReader(restoredFogScene.get());
+        TEST_ASSERT(fogReader.DeserializeFromString(fogYaml),
+            "SceneSerializer must deserialize VolumetricFogComponent");
+        Axle::Entity restoredFogEntity = restoredFogScene->GetEntityByUUID(e.GetUUID());
+        TEST_ASSERT(restoredFogEntity && restoredFogEntity.HasComponent<Axle::VolumetricFogComponent>(),
+            "Restored entity must carry VolumetricFogComponent");
+        const auto& rf = restoredFogEntity.GetComponent<Axle::VolumetricFogComponent>();
+        TEST_ASSERT(rf.Enabled &&
+                    std::abs(rf.Density - 0.065f) < 1e-5f &&
+                    std::abs(rf.HeightFalloff - 0.18f) < 1e-5f &&
+                    std::abs(rf.ScatteringAsymmetry - 0.62f) < 1e-5f &&
+                    std::abs(rf.MaxDistance - 140.0f) < 1e-4f &&
+                    std::abs(rf.Intensity - 1.35f) < 1e-5f,
+            "VolumetricFogComponent YAML round trip must preserve all values");
 
         std::cout << "[PASS] TestSceneDataComponentCodecsAndCopy" << std::endl;
         return true;

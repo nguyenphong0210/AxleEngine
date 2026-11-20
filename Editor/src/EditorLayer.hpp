@@ -45,6 +45,7 @@
 #include <unordered_map>
 #include <vector>
 #include <filesystem>
+#include <optional>
 
 class EditorLayer : public Axle::Layer {
 public:
@@ -103,6 +104,7 @@ public:
 private:
     void ResetSimulation();
     void RenderToolbar();
+    bool IsViewportFogEnabled() const;
     void RenderStatusBar();
     void UnlockCursor();
     void ClearRHIViewport();
@@ -120,7 +122,7 @@ private:
     bool m_EnableGTAO = true;
     bool m_EnableBloom = true;
     bool m_EnableContactShadows = true;
-    bool m_EnableVolumetricFog = false;
+    std::optional<bool> m_ViewportFogOverride;
     int m_FogQuality = static_cast<int>(Axle::FroxelFogQuality::High);
     float m_FogTemporalWeight = 0.8f;
     bool m_EnableAutoExposure = false;

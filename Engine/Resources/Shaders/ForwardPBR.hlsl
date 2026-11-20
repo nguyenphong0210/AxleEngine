@@ -1,6 +1,7 @@
 #define AXLE_FORWARD_LOCAL_SHADOWS 1
 #define AXLE_FORWARD_ENVIRONMENT_IBL 1
 #include "Occlusion.hlsli"
+#define AXLE_FROXEL_CONSTANTS_REGISTER b7
 #include "FroxelFogCommon.hlsli"
 // =============================================================================
 // ForwardPBR.hlsl - Unified D3D12 (DXIL) & Vulkan 1.3 (SPIR-V) PBR Forward+ Pipeline
@@ -240,23 +241,23 @@ TextureCube u_ReflectionProbeCube2 : register(t4, space4);
 TextureCube u_ReflectionProbeCube3 : register(t5, space4);
 #include "ReflectionProbeCommon.hlsli"
 
-cbuffer VolumetricFogConstants : register(b7, space0) {
-    float4x4 u_FogInvView;
-    float4x4 u_FogInvProjection;
-    float4   u_FogScreenSize;
-    float4   u_FogSunDirectionIntensity;
-    float4   u_FogSunRadiance;
-    float4   u_FogParams;
-    float4   u_FogAlbedo;
-    float4   u_FogGridParams;
-    float4   u_FogAmbientRadiance;
-    float4   u_FogDepthParams;
-    float4x4 u_FogPrevViewProjection;
-    float4   u_FogPrevViewDepthRow;
-    float4   u_FogTemporalParams;
-};
 Texture3D<float4> u_FroxelIntegrated : register(t0, space5);
 Texture3D<float4> u_FroxelMedia      : register(t1, space5);
+
+float4 ForwardFogAt(float2 uv, float viewDepth) {
+    return EvaluateFroxelFogSample(u_FroxelIntegrated, u_FroxelMedia, u_ScreenSampler,
+        uv, viewDepth, u_FogInvView, u_FogInvProjection, u_FogParams, u_FogGridParams, u_FogDepthParams);
+}
+
+float3 RefractedBackground(float2 uv, float viewDepth, float4 frontFog) {
+    float3 background = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, uv, 0.0).rgb;
+    if (u_FogParams.x <= 0.0) return background;
+    // The copy contains the full fogged ray. Remove its near segment so the
+    // material tints only transmitted light, then use the actual foreground ray.
+    float4 sampledFront = ForwardFogAt(uv, viewDepth);
+    if (sampledFront.a <= 1e-4) return float3(0.0, 0.0, 0.0);
+    return max(background - sampledFront.rgb, 0.0) * (frontFog.a / sampledFront.a);
+}
 
 float3 RotateEnvironmentDirection(float3 direction) {
     float angle=u_LightReserved[0].w;
@@ -896,20 +897,10 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     color = clamp(color, 0.0, 65000.0);
 
     float4 fogSample = float4(0.0, 0.0, 0.0, 1.0);
+    float viewDepth = -mul(u_View, float4(input.WorldPos, 1.0)).z;
     if ((surfaceType == 2 || surfaceType == 3) && u_FogParams.x > 0.0) {
         float2 fogUV = input.PositionCS.xy * u_FogScreenSize.zw;
-        float viewDepth = -mul(u_View, float4(input.WorldPos, 1.0)).z;
-        fogSample = EvaluateFroxelFogSample(
-            u_FroxelIntegrated,
-            u_FroxelMedia,
-            u_ScreenSampler,
-            fogUV,
-            viewDepth,
-            u_FogInvView,
-            u_FogInvProjection,
-            u_FogParams,
-            u_FogGridParams,
-            u_FogDepthParams);
+        fogSample = ForwardFogAt(fogUV, viewDepth);
     }
     const bool hasRefractionBackground = (surfaceType == 2 && u_Refraction.w > 0.5 && u_RefractionFrame.z > 0.5);
     if (!hasRefractionBackground) {
@@ -953,12 +944,14 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
             float2 uvR = clamp(sampleUV - dispOffset, halfPixel, 1.0 - halfPixel);
             float2 uvG = sampleUV;
             float2 uvB = clamp(sampleUV + dispOffset, halfPixel, 1.0 - halfPixel);
-            float r = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, uvR, 0).r;
-            float g = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, uvG, 0).g;
-            float b = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, uvB, 0).b;
+            if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler,uvR,0)<input.PositionCS.z-1e-5) uvR=sampleUV;
+            if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler,uvB,0)<input.PositionCS.z-1e-5) uvB=sampleUV;
+            float r = RefractedBackground(uvR, viewDepth, fogSample).r;
+            float g = RefractedBackground(uvG, viewDepth, fogSample).g;
+            float b = RefractedBackground(uvB, viewDepth, fogSample).b;
             transmitted = float3(r, g, b);
         } else {
-            transmitted = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, sampleUV, 0).rgb;
+            transmitted = RefractedBackground(sampleUV, viewDepth, fogSample);
         }
 
         // Beer-Lambert volumetric absorption
@@ -976,8 +969,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
                 transmitted=pow(max(transmitted,0.0),2.2);
                 color=pow(max(color,0.0),2.2);
             }
-            float3 glassReflection=clamp(color*fogSample.a+fogSample.rgb, 0.0, 65000.0);
-            color=transmitted*u_RefractionTint.rgb*(1.0-fresnel)+glassReflection*fresnel;
+            color=clamp(fogSample.rgb + transmitted*u_RefractionTint.rgb*(1.0-fresnel)+
+                color*fogSample.a*fresnel, 0.0, 65000.0);
             if (u_CameraPosition.w<=0.0) color=pow(max(color,0.0),1.0/2.2);
             return MakeMaterialReflectionSurfaceOutput(float4(color,1.0), 0.0, 0.0, 1.0, 0.0);
         }

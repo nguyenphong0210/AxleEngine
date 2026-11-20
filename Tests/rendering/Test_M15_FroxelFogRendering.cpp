@@ -7,6 +7,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/LightingService.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/RenderGraph.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
@@ -1649,6 +1650,20 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
         desc.FroxelQuality = static_cast<uint8_t>(settings.FogQuality);
         RENDER_CHECK(configure() && seedFrame(), "M15-U6-07.4: changing grid tier starts with a fresh volume");
 
+        auto materialChangeMesh = RHIMesh::CreateCube(1.0f);
+        RENDER_CHECK(materialChangeMesh && materialChangeMesh->IsValid(),
+            "U6-E: material generation change fixture mesh");
+        auto& edited = world.Meshes.emplace_back();
+        edited.EntityID = 2201u;
+        edited.NativeView = materialChangeMesh->CaptureView();
+        edited.Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(RHIMaterialDesc{});
+        edited.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, -6.0f));
+        light.Intensity *= 1.03f;
+        position.x += 0.2f;
+        pose();
+        RENDER_CHECK(render() && diag.GetFrame().FrameIndex == 0 && read(1, moved) && moved == raw,
+            "U6-E: material generation invalidates fog history before the first changed frame is recorded");
+
         bool faultReached = false;
         {
             ScopedRHIFault fault([&](std::string_view operation) -> std::optional<nri::Result> {
@@ -2047,6 +2062,57 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
             RENDER_CHECK(renderHDR(glassWorld, cam, baseFogSettings, hdrGlass, diag) &&
                          HasPassNamed(diag, "RefractionCopy"),
                 "M15-U6-05.1: refractive glass composes cleanly with froxel fog and executes RefractionCopy");
+
+            glassMat->GetDesc().RefractionTint = glm::vec3(0.0f);
+            glassMat->GetDesc().EmissiveIntensity = 0.0f;
+            glassMat->GetDesc().BaseColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.35f);
+            glassWorld.DirectionalLight->AmbientIntensity = 2.0f;
+            RENDER_CHECK(renderHDR(glassWorld, cam, baseFogSettings, hdrGlass, diag),
+                "M15-U6-05.1: opaque-black refraction renders with lit foreground fog");
+            const auto glassMedia = FroxelFogContract::ResolveMediaState(
+                glassWorld, baseFogSettings, lightingSvc.BuildFrame(glassWorld, baseFogSettings));
+            const auto expected = FroxelFogContract::EvaluateAnalyticHomogeneousFog(glassMedia, forwardRay, 4.0f, 1.0f);
+            const auto actual = SampleHDRBlockAvg(hdrGlass, kViewW, kViewW / 2u, kViewH / 2u);
+            RENDER_CHECK(glm::length(expected.InScattering) > 0.1f &&
+                         glm::length(actual - expected.InScattering) < 0.035f,
+                "M15-U6-05.1: glass tint absorbs transmitted light while foreground scatter remains untinted");
+        }
+
+        {
+            const auto graphPath = std::filesystem::absolute(output / "u6e-emissive-surface.hlsl");
+            {
+                std::ofstream shader(graphPath);
+                shader << AssembleMaterialSurfaceShader("",
+                    "MaterialSurface AxleEvaluateMaterial(float2 uv) { MaterialSurface s=(MaterialSurface)0; "
+                    "s.Metallic=1; s.Roughness=1; s.AO=1; s.IOR=1.5; s.Emission=float3(0,4,0); return s; }");
+                RENDER_CHECK(shader.good(), "M15-U6-05.1: write canonical Material Graph surface");
+            }
+            RenderWorld graphWorld = baseWorld;
+            auto graphMesh = wallInst;
+            graphMesh.EntityID = 9550u;
+            graphMesh.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -4.5f)),
+                glm::vec3(4.0f, 4.0f, 1.0f));
+            graphMesh.Material.UseCustomShader = true;
+            graphMesh.Material.CustomShaderPath = graphPath.string();
+            for (const auto surface : {SurfaceType::Transparent, SurfaceType::Additive}) {
+                RHIMaterialDesc graphDesc{};
+                graphDesc.SurfaceType = surface;
+                graphDesc.CullMode = CullMode::Back;
+                graphDesc.DepthWrite = false;
+                graphMesh.Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(graphDesc);
+                graphWorld.Meshes = {wallInst, graphMesh};
+                std::vector<glm::vec4> pixels;
+                RENDER_CHECK(renderHDR(graphWorld, cam, baseFogSettings, pixels, diag) &&
+                             (!renderer.GetMaterialDiagnostics().contains(9550u) ||
+                              renderer.GetMaterialDiagnostics().at(9550u).empty()),
+                    "M15-U6-05.1: graph material renders with its own froxel bindings");
+                const auto actual = SampleHDRBlockAvg(pixels, kViewW, kViewW / 2u, kViewH / 2u);
+                const glm::vec3 attenuated = glm::vec3(0.0f, 4.0f, 0.0f) * analytic4.Transmittance;
+                const auto expected = attenuated +
+                    (surface == SurfaceType::Additive ? wallFoggedCenter : analytic4.InScattering);
+                RENDER_CHECK(glm::length(actual - expected) < 0.08f,
+                    "M15-U6-05.1: canonical graph transparency and additive use the true-depth fog blend");
+            }
         }
 
         // 6d. ParticleSystem (AlphaBlend & Additive at z=-4m vs z=-40m vs occluded)
@@ -2123,6 +2189,36 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                       << " deltaNear=" << nearPartDeltaG << " deltaFar=" << farPartDeltaG << "\n";
             RENDER_CHECK(farPartDeltaG < nearPartDeltaG * 0.15f,
                 "M15-U6-05.1: distant Additive particle attenuates with deeper optical thickness");
+
+            RenderWorld cutoutWorld = baseWorld;
+            const glm::vec3 particlePosition(0.0f, 1.5f, -4.0f);
+            cutoutWorld.Particles = {makeParticleBatch(ParticleBlendMode::Cutout,
+                particlePosition, glm::vec4(0.0f, 4.0f, 0.0f, 0.75f))};
+            std::vector<glm::vec4> cutoutPixels;
+            RENDER_CHECK(renderHDR(cutoutWorld, cam, baseFogSettings, cutoutPixels, diag),
+                "M15-U6-05.1: fogged cutout particle renders");
+            const auto cutoutColor = SampleHDRBlockAvg(cutoutPixels, kViewW, kViewW / 2u, kViewH / 2u);
+            RENDER_CHECK(glm::length(cutoutColor -
+                (glm::vec3(0.0f, 4.0f, 0.0f)*analytic4.Transmittance + analytic4.InScattering)) < 0.08f,
+                "M15-U6-05.1: cutout particles shade with fog at their own depth");
+            cutoutWorld.Particles = {makeParticleBatch(ParticleBlendMode::Cutout,
+                particlePosition, glm::vec4(0.0f, 4.0f, 0.0f, 0.25f))};
+            RENDER_CHECK(renderHDR(cutoutWorld, cam, baseFogSettings, cutoutPixels, diag) &&
+                glm::length(SampleHDRBlockAvg(cutoutPixels, kViewW, kViewW / 2u, kViewH / 2u) - wallFoggedCenter) < 0.02f,
+                "M15-U6-05.1: fog leaves cutout rejection unchanged");
+
+            RenderWorld multiplyWorld = baseWorld;
+            const glm::vec3 multiplier(0.25f, 0.5f, 0.75f);
+            multiplyWorld.Particles = {makeParticleBatch(ParticleBlendMode::Multiply,
+                particlePosition, glm::vec4(multiplier, 1.0f))};
+            std::vector<glm::vec4> multiplyPixels;
+            RENDER_CHECK(renderHDR(multiplyWorld, cam, baseFogSettings, multiplyPixels, diag),
+                "M15-U6-05.1: fogged multiply particle renders");
+            const auto multiplyColor = SampleHDRBlockAvg(multiplyPixels, kViewW, kViewW / 2u, kViewH / 2u);
+            const auto expectedMultiply = wallFoggedCenter *
+                glm::mix(glm::vec3(1.0f), multiplier, analytic4.Transmittance);
+            RENDER_CHECK(glm::length(multiplyColor - expectedMultiply) < 0.04f,
+                "M15-U6-05.1: foreground extinction fades multiply toward a neutral blend");
         }
 
         // 6e. M15-U6-05.2: Unlit skybox background + disabled zero light + temporal reprojection
@@ -2139,13 +2235,13 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
             skyBgOnlyWorld.PointLights.push_back(disabledLight);
             RenderMeshInstance unlitWall = wallInst;
             unlitWall.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, -40.5f)),
-                glm::vec3(400.0f, 400.0f, 1.0f));
+                glm::vec3(16.0f, 16.0f, 1.0f));
             skyBgOnlyWorld.Meshes.push_back(unlitWall);
 
             SceneRenderSettings temporalUnlit = baseFogSettings;
             temporalUnlit.FogDensity = 0.04f;
             temporalUnlit.FogTemporalWeight = 0.8f;
-            temporalUnlit.EnableSkybox = false;
+            temporalUnlit.EnableSkybox = true;
 
             auto noFogUnlit = temporalUnlit;
             noFogUnlit.EnableVolumetricFog = false;
@@ -2153,6 +2249,9 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
             RENDER_CHECK(renderHDR(skyBgOnlyWorld, cam, noFogUnlit, hdrNoFogUnlit, diag),
                 "M15-U6-05.2: unlit skybox-background baseline renders");
             const glm::vec3 baseUnlit = SampleHDRBlockAvg(hdrNoFogUnlit, kViewW, kViewW / 2u, kViewH / 2u);
+            const auto clearSky = SampleHDRBlockAvg(hdrNoFogUnlit, kViewW, kViewW / 5u, kViewH / 3u);
+            RENDER_CHECK(glm::length(clearSky) > 0.05f,
+                "M15-U6-05.2: visible background sky authors radiance without enabling environment lighting");
 
             std::vector<glm::vec4> hdrUnlitTemporal;
             for (int f = 0; f < 3; ++f) {
@@ -2199,6 +2298,9 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
             RENDER_CHECK(HasFallbackPrefix(diag, "froxel_fog_no_directional_sun") &&
                          !HasFallbackPrefix(diag, "froxel_fog_unlit_extinction_only"),
                 "M15-U6-05.2: active local light without directional sun scatters without unlit diagnostic");
+            RENDER_CHECK(Read3DSliceRGBA16F(*targets->GetFroxelScattering(), 32u, scatUnlit) &&
+                         scatUnlit[centerFroxel].r > 0.0f,
+                "M15-U6-05.2: point-only fog injects positive native scattering");
         }
 
         // 6f. MSAA 4x fallback diagnostic on GPU
@@ -2243,6 +2345,7 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                       << " backend=" << (device.GetBackend() == RHIType::Vulkan ? "Vulkan" : "D3D12")
                       << " adapter=\"" << caps.AdapterName << "\""
                       << " timestamp_hz=" << caps.TimestampFrequencyHz << "\n";
+            RENDER_CHECK(caps.TimestampFrequencyHz > 0u, "M15-U6-07.6: native GPU timestamps required");
 
             RenderWorld perfWorld = baseWorld;
             perfWorld.SceneRevision = 9700u;
@@ -2277,6 +2380,25 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                     auto pTargets = std::make_shared<RHIViewTargets>();
                     RENDER_CHECK(pTargets->Configure(pvtDesc) && pTargets->Validate(),
                         "M15-U6-07.6: perf view targets init");
+                    uint64_t liveVolumeBytes = 0u;
+                    for (const auto* texture : {pTargets->GetFroxelScattering(), pTargets->GetFroxelIntegrated(),
+                                                pTargets->GetFroxelHistory(0), pTargets->GetFroxelHistory(1)}) {
+                        nri::MemoryDesc allocation{};
+                        RENDER_CHECK(texture && texture->IsValid(),
+                            "M15-U6-07.5: all four production froxel textures are live");
+                        device.GetNRICore().GetTextureMemoryDesc(*texture->GetNative(), nri::MemoryLocation::DEVICE, allocation);
+                        RENDER_CHECK(allocation.size > 0u, "M15-U6-07.5: native allocation size is reported");
+                        liveVolumeBytes += allocation.size;
+                    }
+                    RENDER_CHECK(liveVolumeBytes == mem.TotalDeviceReportedBytes &&
+                        liveVolumeBytes >= mem.TotalLogicalBytes,
+                        "M15-U6-07.5: live froxel allocations reconcile with the tier budget");
+                    auto* sceneColorCopy = pTargets->Get(RHIViewTarget::OpaqueColor);
+                    auto* sceneDepthCopy = pTargets->Get(RHIViewTarget::OpaqueDepth);
+                    RENDER_CHECK(sceneColorCopy && sceneDepthCopy, "M15-U6-07.5: shared fog copy targets are live");
+                    nri::MemoryDesc colorCopyAllocation{}, depthCopyAllocation{};
+                    device.GetNRICore().GetTextureMemoryDesc(*sceneColorCopy->GetNative(), nri::MemoryLocation::DEVICE, colorCopyAllocation);
+                    device.GetNRICore().GetTextureMemoryDesc(*sceneDepthCopy->GetNative(), nri::MemoryLocation::DEVICE, depthCopyAllocation);
 
                     auto pSettings = baseFogSettings;
                     pSettings.FogQuality = q;
@@ -2287,7 +2409,8 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                     uint32_t measuredFrames = 0u;
                     constexpr int kWarmup = 4;
                     constexpr int kSamples = 6;
-                    for (int f = 0; f < kWarmup + kSamples; ++f) {
+                    RHICompletionToken priorFrame{};
+                    for (int f = 0; f <= kWarmup + kSamples; ++f) {
                         PerspectiveCamera perfCam = cam;
                         const float xJitter = 0.02f * static_cast<float>(f % 3);
                         perfCam.SetViewMatrix(glm::lookAtRH(camPos + glm::vec3(xJitter, 0.0f, 0.0f),
@@ -2297,7 +2420,8 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                         RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle(),
                             "M15-U6-07.6: perf frame executes cleanly");
                         const auto& timing = renderer.GetLastGPUTimingFrame();
-                        if (f >= kWarmup && caps.TimestampFrequencyHz > 0u) {
+                        // The renderer publishes completed queries at the next frame's entry.
+                        if (f > kWarmup) {
                             auto findPass = [&](const char* name, double& outMs) {
                                 for (const auto& p : timing.Passes) {
                                     if (p.Name == name) {
@@ -2308,25 +2432,23 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                                 return false;
                             };
                             double tCopy = 0.0, tInj = 0.0, tRep = 0.0, tInt = 0.0, tApp = 0.0;
-                            if (timing.Validity == DiagnosticValidity::Valid &&
+                            RENDER_CHECK(timing.Completion == priorFrame && timing.Validity == DiagnosticValidity::Valid &&
                                 findPass("FogCopy", tCopy) && findPass("FogInject", tInj) &&
                                 findPass("FogReproject", tRep) && findPass("FogIntegrate", tInt) &&
-                                findPass("FogApply", tApp)) {
-                                sumCopy += tCopy;
-                                sumInject += tInj;
-                                sumReproj += tRep;
-                                sumInteg += tInt;
-                                sumApply += tApp;
-                                sumTotal += timing.Milliseconds;
-                                ++measuredFrames;
-                            }
+                                findPass("FogApply", tApp),
+                                "M15-U6-07.6: all five timings belong to the preceding measured frame");
+                            sumCopy += tCopy;
+                            sumInject += tInj;
+                            sumReproj += tRep;
+                            sumInteg += tInt;
+                            sumApply += tApp;
+                            sumTotal += timing.Milliseconds;
+                            ++measuredFrames;
                         }
+                        priorFrame = renderer.GetLastCompletion();
                     }
-                    if (caps.TimestampFrequencyHz > 0u) {
-                        RENDER_CHECK(measuredFrames > 0u,
-                            "M15-U6-07.6: valid per-pass GPU timestamps captured for all 5 fog passes");
-                    }
-                    const double denom = std::max<double>(measuredFrames, 1.0);
+                    RENDER_CHECK(measuredFrames == kSamples, "M15-U6-07.6: complete timing sample set");
+                    const double denom = measuredFrames;
                     const double avgCopy = sumCopy / denom;
                     const double avgInj = sumInject / denom;
                     const double avgRep = sumReproj / denom;
@@ -2339,7 +2461,10 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
                               << " tier=" << spec.Name
                               << " grid=" << mem.Extent.Width << "x" << mem.Extent.Height << "x" << mem.Extent.Depth
                               << " logical_bytes=" << mem.TotalLogicalBytes
-                              << " device_bytes=" << mem.TotalDeviceReportedBytes
+                              << " device_bytes=" << liveVolumeBytes
+                              << " shared_color_copy_bytes=" << colorCopyAllocation.size
+                              << " shared_depth_copy_bytes=" << depthCopyAllocation.size
+                              << " timing_samples=" << measuredFrames
                               << " fog_copy_ms=" << avgCopy
                               << " fog_inject_ms=" << avgInj
                               << " fog_reproject_ms=" << avgRep

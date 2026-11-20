@@ -36,6 +36,8 @@ static std::filesystem::path Fixture(const std::string& mode,bool cooked) {
     auto& material=mesh.AddComponent<MaterialComponent>();material.AlbedoColor={1,0,0,1};material.EmissionColor={1,0,0};material.EmissionIntensity=1;
     auto camera=scene.CreateEntity("Fixture camera");camera.GetComponent<TransformComponent>().Translation={0,0,4};camera.AddComponent<CameraComponent>().Primary=true;
     scene.CreateEntity("Authored disabled sky").AddComponent<SkyboxComponent>().Enabled=false;
+    auto& fog=scene.CreateEntity("Authored froxel fog").AddComponent<VolumetricFogComponent>();
+    fog.Enabled=true;fog.Density=0.16f;fog.Intensity=1.0f;fog.HeightFalloff=0.0f;fog.MaxDistance=40.0f;
     auto& particles=scene.CreateEntity("Authored effect").AddComponent<ParticleEmitterComponent>();
     auto config=ParticleEmitterConfig::CreateNeutral();config.EmissionRate=0;config.LightingEnabled=false;config.SoftnessDistance=0;
     config.StartColor={0,1,0,1};config.StartSize=config.EndSize={0.45f,0.45f};
@@ -93,6 +95,7 @@ public:
     std::filesystem::path Output;
     uint32_t Frames=0,Clicks=0;
     bool Native=false;
+    uint8_t FoggedCenterRed=0;
     explicit VerifyFrame(std::shared_ptr<RuntimeLayer> player,std::filesystem::path output):Player(std::move(player)),Output(std::move(output)){}
     void OnAttach() override {
         const auto scene=Player->GetScene();Require(scene&&scene->GetRegistry().view<MeshInstance3D>().size()==1,"actual startup scene loaded");
@@ -118,6 +121,17 @@ public:
         auto at=[&](uint32_t x,uint32_t y){return (size_t(y)*width+x)*4;};
         const auto center=at(width/2,height/2),sprite=at(width*68/320,height*20/240);
         Require(pixels[center]>pixels[center+1]+30&&pixels[center]>pixels[center+2]+30,"Runtime material geometry pixels");
+        if(Frames==1) {
+            FoggedCenterRed=pixels[center];
+            auto fog=Player->GetScene()->GetRegistry().view<VolumetricFogComponent>();
+            Require(fog.size()==1&&fog.get<VolumetricFogComponent>(*fog.begin()).Enabled,"authored fog loaded at Runtime");
+            fog.get<VolumetricFogComponent>(*fog.begin()).Enabled=false;
+        }
+        if(Frames==2) {
+            if(Native) Require(pixels[center]>FoggedCenterRed+8,"Runtime enabled fog attenuates scene pixels and authoring disables it live");
+            else Require(pixels[center]==FoggedCenterRed,"OpenGL preserves scene pixels with unsupported fog requested");
+            std::cout<<"U6E_RUNTIME_FOG_CENTER enabled="<<unsigned(FoggedCenterRed)<<" disabled="<<unsigned(pixels[center])<<'\n';
+        }
         Require(pixels[sprite+2]>245&&pixels[sprite]<8&&pixels[sprite+1]<8,"Runtime authored HUD sprite, including cooked VFS and DPI");
         size_t strokes=0,green=0;
         for(uint32_t y=0;y<height;++y)for(uint32_t x=0;x<width;++x) {

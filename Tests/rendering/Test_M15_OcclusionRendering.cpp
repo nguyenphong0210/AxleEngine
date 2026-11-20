@@ -799,7 +799,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
     const auto graphPS = RHIShaderCompiler::Get().Compile(graphCompile);
     RENDER_CHECK(graphVS.Success && graphPS.Success, "canonical graph radiance shader compilation");
     const auto graphReflection = RHIShaderReflection::Merge({graphVS.Reflection, graphPS.Reflection});
-    const auto graphLayoutDescription = graphReflection.BuildPipelineLayoutDesc(5);
+    const auto graphLayoutDescription = graphReflection.BuildPipelineLayoutDesc(6);
     RHIPipelineLayout graphLayout;
     RENDER_CHECK(graphLayout.Init(graphLayoutDescription), "canonical graph radiance layout");
     RHIGraphicsPipelineDesc graphPipelineDescription;
@@ -920,6 +920,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
                         else if (space == 0 && slot == 4) descriptor = cascadeBuffer.GetCBV();
                         else if (space == 0 && slot == 5) descriptor = renderer.GetLocalShadows().GetConstantsCBV();
                         else if (space == 0 && slot == 6) descriptor = reflectionProbeBuffer.GetCBV();
+                        else if (space == 0 && slot == 7) descriptor = renderer.GetDisabledFogConstantBuffer().GetCBV();
                         else if (space == 3 && slot == 0) descriptor = renderer.GetLightBuffer().GetCBV();
                     } else if (range.descriptorType == nri::DescriptorType::TEXTURE) {
                         if (space == 2 && slot < 3) descriptor = textures[6 + slot];
@@ -929,6 +930,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
                         else if (space == 4 && slot == 1) descriptor = guide.GetSRV();
                         else if (space == 4 && slot >= 2 && slot < 6) descriptor = defaultProbeSRV;
                         else if (space == 4 && slot == 6) descriptor = renderer.GetAreaLightLTC().GetSRV();
+                        else if (space == 5 && slot < 2) descriptor = RHIMaterial::GetDefaultEmptyFroxelVolumeTexture()->GetSRV();
                     } else if (range.descriptorType == nri::DescriptorType::SAMPLER) {
                         descriptor = slot == 1 ? graphShadowSampler.GetNative() : renderer.GetSampler().GetNative();
                     }

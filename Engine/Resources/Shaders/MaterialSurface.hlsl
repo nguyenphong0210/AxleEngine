@@ -11,6 +11,10 @@ cbuffer EngineScene : register(b1, space0) {
 };
 
 #include "Occlusion.hlsli"
+#define AXLE_FROXEL_CONSTANTS_REGISTER b7
+#include "FroxelFogCommon.hlsli"
+Texture3D<float4> u_FroxelIntegrated : register(t0, space5);
+Texture3D<float4> u_FroxelMedia : register(t1, space5);
 
 // Shared lighting contract with ForwardPBR.  Graph materials use the same
 // uploaded light buffer and shadow receiver data as the built-in path; they do
@@ -343,6 +347,14 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     }
     float3 color = direct + ambient * screenVisibility.x + max(surface.Emission, float3(0,0,0));
     color = clamp(color, 0.0, 65000.0);
+    if (u_FogParams.x > 0.0) {
+        float3 cameraForward = mul((float3x3)u_FogInvView, float3(0.0, 0.0, -1.0));
+        float viewDepth = dot(input.WorldPos - u_CameraPosition.xyz, cameraForward);
+        float4 fog = EvaluateFroxelFogSample(u_FroxelIntegrated, u_FroxelMedia, u_EnvironmentSampler,
+            input.Position.xy * u_FogScreenSize.zw, viewDepth, u_FogInvView, u_FogInvProjection,
+            u_FogParams, u_FogGridParams, u_FogDepthParams);
+        color = clamp(color * fog.a + (u_FogParams.w > 0.5 ? 0.0 : fog.rgb), 0.0, 65000.0);
+    }
 
     // 11. Tone Mapping & Color Polish (ACES Filmic Operator & Gamma Correction)
     // Parity with ForwardPBR.hlsl output policy (M15-U3-23.4):

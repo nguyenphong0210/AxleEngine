@@ -11,7 +11,6 @@ namespace Axle::Passes {
         const FroxelFogContract::FroxelMediaState& media,
         const PerspectiveCamera& camera,
         const glm::mat4& projectionZO,
-        const glm::mat4& viewProjZO,
         const RHI::RHIViewTargets* targets,
         const FroxelHistoryFrame& previous,
         bool hasHistoryRead,
@@ -39,7 +38,6 @@ namespace Axle::Passes {
         const float logRatio = (media.NearDistance > 0.0f && media.MaxDistance > media.NearDistance)
             ? std::log(media.MaxDistance / media.NearDistance) : 0.0f;
         constants.FroxelDepthParams = glm::vec4(logRatio, media.NearDistance, media.MaxDistance, 0.0f);
-        (void)viewProjZO;
 
         if (hasHistoryRead) {
             constants.PrevViewProjection = previous.ViewProjection;

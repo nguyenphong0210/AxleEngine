@@ -4,6 +4,7 @@
 // Direct3D 12 (DXIL 6.0) & Vulkan 1.3 (SPIR-V) Unified Shader Codebase
 // =============================================================================
 
+#define AXLE_FROXEL_CONSTANTS_REGISTER b1
 #include "FroxelFogCommon.hlsli"
 
 // -----------------------------------------------------------------------------
@@ -31,22 +32,6 @@ cbuffer ParticleConstants : register(b0, space0) {
     float4   u_MaterialTint;
     float4   u_MaterialEmission;
     float4   u_Reserved;              // offset 544..560 (x: ParticleBlendMode: 0=Additive, 1=AlphaBlend, 2=Multiply, 3=Cutout); CPU allocation padded to 768 bytes
-};
-
-cbuffer VolumetricFogConstants : register(b1, space0) {
-    float4x4 u_FogInvView;
-    float4x4 u_FogInvProjection;
-    float4   u_FogScreenSize;
-    float4   u_FogSunDirectionIntensity;
-    float4   u_FogSunRadiance;
-    float4   u_FogParams;
-    float4   u_FogAlbedo;
-    float4   u_FogGridParams;
-    float4   u_FogAmbientRadiance;
-    float4   u_FogDepthParams;
-    float4x4 u_FogPrevViewProjection;
-    float4   u_FogPrevViewDepthRow;
-    float4   u_FogTemporalParams;
 };
 
 // -----------------------------------------------------------------------------

@@ -12,6 +12,7 @@
 #include <Axle/SceneLighting.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/ShaderSurface.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/RHIParticleRenderer.hpp>
 #include <Axle/RHIPhysicsDebugRenderer.hpp>
 #include <Axle/PhysicsScene.hpp>
@@ -354,11 +355,13 @@ namespace Axle {
         const auto fogResolved = useFog ? (fogHistoryWrite ? fogHistoryOutput : fogScattering) : output;
         const RHIVolumetricFogConstants activeFogConstants = useFog
             ? Passes::FroxelFogPass::BuildConstants(
-                froxelMedia, camera, projZO, viewProjZO, viewTargets.get(),
+                froxelMedia, camera, projZO, viewTargets.get(),
                 previousFog, viewCtx.GetFroxelHistory().Valid && fogHistoryRead != nullptr,
                 historyWeight, width, height)
             : RHIVolumetricFogConstants{};
         nri::Descriptor* activeForwardFogCBV = m_DisabledFogConstantBuffer.GetCBV();
+        nri::Descriptor* transparentFogCBV = m_DisabledFogConstantBuffer.GetCBV();
+        nri::Descriptor* additiveFogCBV = m_DisabledFogConstantBuffer.GetCBV();
         nri::DescriptorSet* activeForwardFogSet = m_ForwardFogFallbackDescriptorSet;
         nri::DescriptorSet* transparentFogSet = m_ForwardFogFallbackDescriptorSet;
         ReflectionPublication reflectionPublication;
@@ -553,6 +556,13 @@ namespace Axle {
             if (item.UseCustomShader && item.CustomGeneration) {
                 auto prepareCustom = [&]() -> bool {
                         const auto& generation=*item.CustomGeneration;
+                        const bool transparent = pass == "Transparent";
+                        const bool supportsFog = std::any_of(generation.Reflection.ConstantBuffers.begin(),
+                            generation.Reflection.ConstantBuffers.end(), [](const auto& buffer) {
+                                return buffer.Name == "VolumetricFogConstants" && IsMaterialSurfaceEngineBuffer(buffer);
+                            });
+                        if (useFog && transparent && !supportsFog)
+                            viewCtx.Diagnostics().AddFallback("froxel_custom_transparency_unsupported: custom shader has no fog surface contract");
                         const bool reflectionMRT = useSSR || usePlanarResolve;
                         auto* pipeline=GetOrCreateCustomPipeline(generation,sceneTargetFormat,m_CurrentDepthFormat,activeSampleCount,item.SurfaceType,item.CullMode,item.DepthWrite,reflectionMRT && item.SurfaceType < SurfaceType::Transparent,reverseWinding);
                         if (!pipeline || !generation.PipelineLayout || !generation.PipelineLayout->IsValid()) return false;
@@ -603,8 +613,21 @@ namespace Axle {
                                     if (!descriptor && address == ShaderAddress{0,4}) descriptor=m_CascadedShadows.GetConstantsCBV();
                                     if (!descriptor && address == ShaderAddress{0,5}) descriptor=m_LocalShadows.GetConstantsCBV();
                                     if (!descriptor && address == ShaderAddress{0,6}) descriptor=m_ReflectionProbeBuffer.GetCBV();
+                                    if (!descriptor && supportsFog && address == ShaderAddress{0,7}) {
+                                        descriptor = !transparent ? m_DisabledFogConstantBuffer.GetCBV()
+                                            : item.SurfaceType == SurfaceType::Additive ? additiveFogCBV : transparentFogCBV;
+                                    }
                                 } else if(range.descriptorType==nri::DescriptorType::TEXTURE) {
                                     for(size_t i=0;i<item.TextureRequests.size();++i) if(item.TextureRequests[i].Address==address) descriptor=resource.Textures[i]->GetSRV();
+                                    if (!descriptor && supportsFog && address.RegisterSpace == 5 && address.RegisterIndex < 2) {
+                                        if (transparent && useFog) {
+                                            descriptor = address.RegisterIndex == 0
+                                                ? froxelIntegratedTex->GetSRV() : resolvedFogMediaTex->GetSRV();
+                                        } else {
+                                            const auto emptyFog = RHIMaterial::GetDefaultEmptyFroxelVolumeTexture();
+                                            descriptor = emptyFog ? emptyFog->GetSRV() : nullptr;
+                                        }
+                                    }
                                     if (!descriptor && address.RegisterSpace == 4) {
                                         if (address.RegisterIndex == 0) descriptor=useGTAO?viewTargets->GetGTAOResolved()->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                                         else if (address.RegisterIndex == 1) descriptor=useGTAO?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
@@ -1285,6 +1308,20 @@ namespace Axle {
                 }
             }
 
+            if (useFog) {
+                auto* fogUniform = viewCtx.PreparePassUniform("TransparentFog", sizeof(activeFogConstants));
+                if (!fogUniform || !fogUniform->UpdateData(&activeFogConstants, sizeof(activeFogConstants))) return fail();
+                transparentFogCBV = fogUniform->GetCBV();
+                if (std::any_of(transparentQueue.begin(), transparentQueue.end(), [](const auto& item) {
+                        return item.UseCustomShader && item.SurfaceType == SurfaceType::Additive;
+                    })) {
+                    auto additiveFog = activeFogConstants;
+                    additiveFog.FogParams.w = 1.0f;
+                    auto* additiveUniform = viewCtx.PreparePassUniform("AdditiveFog", sizeof(additiveFog));
+                    if (!additiveUniform || !additiveUniform->UpdateData(&additiveFog, sizeof(additiveFog))) return fail();
+                    additiveFogCBV = additiveUniform->GetCBV();
+                }
+            }
             for (auto& item : opaqueQueue) PrepareDrawItem(item,"OpaqueAndSky",false);
             if (allowCaptureTransparent) {
                 for (auto& item : transparentQueue) PrepareDrawItem(item,"Transparent",copyRefraction);
@@ -1309,7 +1346,7 @@ namespace Axle {
                 !graph.DeclareRead("OpaqueAndSky", m_DisabledFogConstantBuffer.GetCBV())) return fail();
             if (allowCaptureTransparent && !declareForwardPass("Transparent")) return fail();
             if (allowCaptureTransparent) {
-                if (useFog) {
+                if (useFog && !transparentQueue.empty()) {
                     auto& resources = m_Device->GetResources();
                     nri::DescriptorSet* chosenSet = nullptr;
                     for (auto* candidate : m_ForwardFogSets) {
@@ -1324,13 +1361,11 @@ namespace Axle {
                         chosenSet = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 2);
                         if (chosenSet) m_ForwardFogSets.push_back(chosenSet);
                     }
-                    auto* transparentFogBuf = viewCtx.PreparePassUniform("TransparentFog", sizeof(RHIVolumetricFogConstants));
-                    if (!chosenSet || !transparentFogBuf ||
-                        !graph.DeclareRead("Transparent", transparentFogBuf->GetCBV()) ||
+                    if (!chosenSet ||
+                        !graph.DeclareRead("Transparent", transparentFogCBV) ||
                         !m_DescriptorPool.UpdateTexture(chosenSet, 0, 0, froxelIntegratedTex->GetSRV()) ||
                         !m_DescriptorPool.UpdateTexture(chosenSet, 1, 0, resolvedFogMediaTex->GetSRV()) ||
                         !graph.DeclareRead("Transparent", chosenSet)) return fail();
-                    passUniforms["TransparentFog"] = transparentFogBuf;
                     transparentFogSet = chosenSet;
                 } else {
                     if (!graph.DeclareRead("Transparent", m_ForwardFogFallbackDescriptorSet) ||
@@ -1476,16 +1511,44 @@ namespace Axle {
         });
 
         // 7.7. Volumetric fog and atmospheric media composite opaque + sky before transparent/particle depth interaction.
+        auto observeMaterialGeneration = [&] {
+            std::vector<std::pair<uint32_t, uint64_t>> identities;
+            auto collect = [&](const auto& queue) {
+                for (const auto& item : queue) {
+                    const auto entity = static_cast<uint32_t>(item.DiagnosticEntity);
+                    identities.emplace_back(entity, item.Surface.Generation);
+                    viewCtx.Diagnostics().AddMaterial(entity, item.Surface);
+                    if (item.Surface.Fallback) {
+                        viewCtx.Diagnostics().AddFallback(item.Surface.Diagnostic);
+                        m_MaterialDiagnostics[entity] = item.Surface.Diagnostic;
+                    }
+                }
+            };
+            collect(opaqueQueue);
+            if (allowCaptureTransparent) collect(transparentQueue);
+            std::sort(identities.begin(), identities.end());
+            uint64_t materialGeneration = 1469598103934665603ull;
+            for (const auto& [entity, generation] : identities) {
+                materialGeneration ^= entity; materialGeneration *= 1099511628211ull;
+                materialGeneration ^= generation; materialGeneration *= 1099511628211ull;
+            }
+            if (viewCtx.ObserveMaterialGeneration(materialGeneration))
+                temporalSelection = viewCtx.Temporal().Begin(useTAA ? 2 : 0, {jitterX, jitterY});
+        };
         addPass("FroxelFogPass", [&](const RenderPassContext&) -> RenderPassResult {
+            observeMaterialGeneration();
             if (useFog) {
                 const Passes::PassRecordOps ops{
                     beginPass, passUniform,
                     [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
                         return bindDescriptorSet(index, set, bindPoint);
                     }, beginRendering, endRendering};
+                const bool reuseFog = fogHistoryRead && viewCtx.GetFroxelHistory().Valid;
+                auto fogPassConstants = activeFogConstants;
+                if (!reuseFog) fogPassConstants.TemporalParams.x = 0.0f;
                 if (!Passes::FroxelFogPass::Record(*this,
-                    {activeFogConstants, viewTargets.get(),
-                     viewCtx.GetFroxelHistory().Valid ? fogHistoryRead : nullptr, fogHistoryWrite,
+                    {fogPassConstants, viewTargets.get(),
+                     reuseFog ? fogHistoryRead : nullptr, fogHistoryWrite,
                      sceneTargetTexture, sceneDepthTexture, sceneTargetRTV, sceneTargetFormat,
                      width, height, dispatchCount}, ops))
                     return fail();
@@ -1519,10 +1582,8 @@ namespace Axle {
                 Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
             }
             if (!beginPass("Transparent")) return fail();
-            if (useFog) {
-                auto* transparentFogBuf = passUniforms.at("TransparentFog");
-                if (!transparentFogBuf->UpdateData(&activeFogConstants, sizeof(activeFogConstants))) return fail();
-                activeForwardFogCBV = transparentFogBuf->GetCBV();
+            if (useFog && !transparentQueue.empty()) {
+                activeForwardFogCBV = transparentFogCBV;
                 activeForwardFogSet = transparentFogSet;
             } else {
                 activeForwardFogCBV = m_DisabledFogConstantBuffer.GetCBV();
@@ -1592,7 +1653,7 @@ namespace Axle {
                 RHITexture* particleDepth = copyParticleDepth ? m_ParticleSceneDepth : nullptr;
                 // MSAA uses depth testing with soft intersections disabled until a compatible depth resolve exists.
                 m_ParticleRenderer->SetVolumetricFog(
-                    useFog ? &activeFogConstants : nullptr,
+                    useFog ? transparentFogCBV : nullptr,
                     useFog ? froxelIntegratedTex : nullptr,
                     useFog ? resolvedFogMediaTex : nullptr);
                 m_ParticleRenderer->Begin(Commands(), camera, sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
@@ -1672,7 +1733,7 @@ namespace Axle {
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (settings.EnableParticles && m_ParticleRenderer) {
                 m_ParticleRenderer->SetVolumetricFog(
-                    useFog ? &activeFogConstants : nullptr,
+                    useFog ? transparentFogCBV : nullptr,
                     useFog ? froxelIntegratedTex : nullptr,
                     useFog ? resolvedFogMediaTex : nullptr);
                 m_ParticleRenderer->BeginPreparation();
@@ -1738,30 +1799,6 @@ namespace Axle {
         });
 
         addPass("PostProcessPass", [&](const RenderPassContext&) -> RenderPassResult {
-            std::vector<std::pair<uint32_t, uint64_t>> identities;
-            auto collect = [&](const auto& queue) {
-                for (const auto& item : queue) {
-                    const auto entity = static_cast<uint32_t>(item.DiagnosticEntity);
-                    identities.emplace_back(entity, item.Surface.Generation);
-                    viewCtx.Diagnostics().AddMaterial(entity, item.Surface);
-                    if (item.Surface.Fallback) {
-                        viewCtx.Diagnostics().AddFallback(item.Surface.Diagnostic);
-                        m_MaterialDiagnostics[entity] = item.Surface.Diagnostic;
-                    }
-                }
-            };
-            collect(opaqueQueue);
-            if (allowCaptureTransparent) {
-                collect(transparentQueue);
-            }
-            std::sort(identities.begin(), identities.end());
-            uint64_t materialGeneration = 1469598103934665603ull;
-            for (const auto& [entity, generation] : identities) {
-                materialGeneration ^= entity; materialGeneration *= 1099511628211ull;
-                materialGeneration ^= generation; materialGeneration *= 1099511628211ull;
-            }
-            if (viewCtx.ObserveMaterialGeneration(materialGeneration))
-                temporalSelection = viewCtx.Temporal().Begin(useTAA ? 2 : 0, {jitterX, jitterY});
             const Passes::PassRecordOps postOps{
                 beginPass, passUniform,
                 [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {

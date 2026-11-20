@@ -9,7 +9,8 @@ namespace Axle {
         return (buffer.Name == "MultiLightBuffer" && buffer.Space == 3 && buffer.BindPoint == 0) ||
                (buffer.Name == "CascadeReceiver" && buffer.Space == 0 && buffer.BindPoint == 4) ||
                (buffer.Name == "LocalShadowReceiver" && buffer.Space == 0 && buffer.BindPoint == 5) ||
-               (buffer.Name == "ReflectionProbeBuffer" && buffer.Space == 0 && buffer.BindPoint == 6);
+               (buffer.Name == "ReflectionProbeBuffer" && buffer.Space == 0 && buffer.BindPoint == 6) ||
+               (buffer.Name == "VolumetricFogConstants" && buffer.Space == 0 && buffer.BindPoint == 7);
     }
 
     bool IsMaterialSurfaceEngineResource(const RHI::RHIShaderResourceBinding& resource) {
@@ -18,7 +19,12 @@ namespace Axle {
             return (resource.Name == "MultiLightBuffer" && resource.Space == 3 && resource.BindPoint == 0) ||
                    (resource.Name == "CascadeReceiver" && resource.Space == 0 && resource.BindPoint == 4) ||
                    (resource.Name == "LocalShadowReceiver" && resource.Space == 0 && resource.BindPoint == 5) ||
-                   (resource.Name == "ReflectionProbeBuffer" && resource.Space == 0 && resource.BindPoint == 6);
+                   (resource.Name == "ReflectionProbeBuffer" && resource.Space == 0 && resource.BindPoint == 6) ||
+                   (resource.Name == "VolumetricFogConstants" && resource.Space == 0 && resource.BindPoint == 7);
+        if (resource.Type == RHIResourceType::Texture && resource.Space == 5) {
+            return (resource.BindPoint == 0 && resource.Name == "u_FroxelIntegrated") ||
+                   (resource.BindPoint == 1 && resource.Name == "u_FroxelMedia");
+        }
         if (resource.Type == RHIResourceType::Texture && resource.Space == 4) {
             static constexpr std::string_view space4Names[]{
                 "u_ForwardOcclusion", "u_ForwardOcclusionDepth",
@@ -49,6 +55,7 @@ namespace Axle {
             const uint32_t expected = buffer.Name == "MultiLightBuffer" ? 2304u
                 : buffer.Name == "CascadeReceiver" ? 304u
                 : buffer.Name == "ReflectionProbeBuffer" ? 512u
+                : buffer.Name == "VolumetricFogConstants" ? 352u
                 : 1680u;
             if (buffer.Size != expected) {
                 diagnostic = "Reserved material surface buffer has incompatible layout: " + buffer.Name;

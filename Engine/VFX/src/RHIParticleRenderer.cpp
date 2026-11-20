@@ -64,7 +64,10 @@ namespace Axle {
         m_DrawResourceCursor = 0;
 
         m_ConstantBuffer.Shutdown();
-        m_FogConstantBuffer.Shutdown();
+        m_DisabledFogConstantBuffer.Shutdown();
+        m_ActiveFogConstants = nullptr;
+        m_FroxelIntegrated = nullptr;
+        m_FroxelMedia = nullptr;
         m_InstanceBuffer.Shutdown();
         m_LinearSampler.Shutdown();
         m_DescriptorPool.Shutdown();
@@ -77,9 +80,6 @@ namespace Axle {
         m_PipelineCutoutSDR = nullptr;
         m_PipelineCutoutHDR = nullptr;
         m_DescriptorSet = nullptr;
-        m_FroxelIntegrated = nullptr;
-        m_FroxelMedia = nullptr;
-        m_HasActiveFogConstants = false;
 
         m_InstanceStagingBuffer.clear();
         m_InBatch = false;
@@ -236,12 +236,12 @@ namespace Axle {
         if (!m_ConstantBuffer.Init(RHI::RHIBufferDesc::Constant(sizeof(RHIParticleConstants), RHI::RHIMemoryLocation::HostUpload, "Particle_ConstantBuffer"))) {
             return false;
         }
-        if (!m_FogConstantBuffer.Init(RHI::RHIBufferDesc::Constant(sizeof(FroxelFogContract::FroxelShaderConstants), RHI::RHIMemoryLocation::HostUpload, "Particle_FogConstantBuffer"))) {
+        if (!m_DisabledFogConstantBuffer.Init(RHI::RHIBufferDesc::Constant(sizeof(FroxelFogContract::FroxelShaderConstants), RHI::RHIMemoryLocation::HostUpload, "Particle_DisabledFogConstants"))) {
             return false;
         }
         {
             const FroxelFogContract::FroxelShaderConstants disabledFog{};
-            if (!m_FogConstantBuffer.UpdateData(&disabledFog, sizeof(disabledFog))) {
+            if (!m_DisabledFogConstantBuffer.UpdateData(&disabledFog, sizeof(disabledFog))) {
                 return false;
             }
         }
@@ -444,13 +444,6 @@ namespace Axle {
         m_ActiveConstants.CameraRight = glm::vec4(camRight, camera.GetFarClip());
         m_ActiveConstants.CameraUp = glm::vec4(camUp, 0.5f);
 
-        // Populate Froxel Volumetric Fog CBV once per batch session
-        const FroxelFogContract::FroxelShaderConstants disabledFog{};
-        const auto& activeFogConstants = m_HasActiveFogConstants ? m_ActiveFogConstants : disabledFog;
-        if (m_FogConstantBuffer.IsValid()) {
-            m_FogConstantBuffer.UpdateData(&activeFogConstants, sizeof(activeFogConstants));
-        }
-
         // 2. Populate Light Environment
         m_ActiveConstants.SunDirection = glm::vec4(m_LightEnvironment.SunDirection, 0.2f);
         m_ActiveConstants.SunColor = glm::vec4(m_LightEnvironment.SunColor, 0.5f);
@@ -467,19 +460,17 @@ namespace Axle {
         m_InBatch = true;
     }
 
-    void RHIParticleRenderer::SetVolumetricFog(const FroxelFogContract::FroxelShaderConstants* fogConstants,
+    void RHIParticleRenderer::SetVolumetricFog(nri::Descriptor* fogConstants,
                                                RHI::RHITexture* integratedVolume,
                                                RHI::RHITexture* mediaVolume) {
-        if (fogConstants && fogConstants->FogParams.x > 0.0f &&
+        if (fogConstants &&
             integratedVolume && integratedVolume->IsValid() && integratedVolume->GetSRV() &&
             mediaVolume && mediaVolume->IsValid() && mediaVolume->GetSRV()) {
-            m_ActiveFogConstants = *fogConstants;
-            m_HasActiveFogConstants = true;
+            m_ActiveFogConstants = fogConstants;
             m_FroxelIntegrated = integratedVolume;
             m_FroxelMedia = mediaVolume;
         } else {
-            m_ActiveFogConstants = {};
-            m_HasActiveFogConstants = false;
+            m_ActiveFogConstants = nullptr;
             m_FroxelIntegrated = nullptr;
             m_FroxelMedia = nullptr;
         }
@@ -491,18 +482,17 @@ namespace Axle {
         auto white=RHI::RHIMaterial::GetDefaultWhiteTexture();
         auto flat=RHI::RHIMaterial::GetDefaultFlatNormalTexture();
         auto emptyFog = RHI::RHIMaterial::GetDefaultEmptyFroxelVolumeTexture();
-        nri::Descriptor* fogIntegratedSRV = (m_HasActiveFogConstants && m_FroxelIntegrated && m_FroxelIntegrated->IsValid())
+        nri::Descriptor* fogIntegratedSRV = (m_ActiveFogConstants && m_FroxelIntegrated && m_FroxelIntegrated->IsValid())
             ? m_FroxelIntegrated->GetSRV() : (emptyFog ? emptyFog->GetSRV() : nullptr);
-        nri::Descriptor* fogMediaSRV = (m_HasActiveFogConstants && m_FroxelMedia && m_FroxelMedia->IsValid())
+        nri::Descriptor* fogMediaSRV = (m_ActiveFogConstants && m_FroxelMedia && m_FroxelMedia->IsValid())
             ? m_FroxelMedia->GetSRV() : (emptyFog ? emptyFog->GetSRV() : nullptr);
         if (!white || !flat || !emptyFog || !fogIntegratedSRV || !fogMediaSRV ||
-            !m_FogConstantBuffer.IsValid() || !m_FogConstantBuffer.GetCBV() ||
             !graph.DeclareRead(pass, texture ? texture : white->GetSRV()) ||
             !graph.DeclareRead(pass, normal ? normal : flat->GetSRV()) ||
             !graph.DeclareRead(pass, depth ? depth : white->GetSRV()) ||
             !graph.DeclareRead(pass, fogIntegratedSRV) ||
             !graph.DeclareRead(pass, fogMediaSRV) ||
-            !graph.DeclareRead(pass, m_FogConstantBuffer.GetCBV())) return false;
+            !graph.DeclareRead(pass, m_ActiveFogConstants ? m_ActiveFogConstants : m_DisabledFogConstantBuffer.GetCBV())) return false;
         for (uint32_t offset=0; offset<pool.GetActiveCount(); offset+=MAX_PARTICLES_PER_BATCH) {
             auto* draw=AcquireDrawResources(std::min(MAX_PARTICLES_PER_BATCH, pool.GetActiveCount()-offset));
             if (!draw || !graph.DeclareRead(pass, draw->Constants.GetCBV()) ||
@@ -514,7 +504,7 @@ namespace Axle {
     void RHIParticleRenderer::End() {
         m_InBatch = false;
         m_SceneDepth = nullptr;
-        m_HasActiveFogConstants = false;
+        m_ActiveFogConstants = nullptr;
         m_FroxelIntegrated = nullptr;
         m_FroxelMedia = nullptr;
     }
@@ -608,9 +598,9 @@ namespace Axle {
                 nri::Descriptor* finalTexSRV = textureSRV ? textureSRV : (defaultWhite ? defaultWhite->GetSRV() : nullptr);
                 nri::Descriptor* finalNormSRV = normalMapSRV ? normalMapSRV : (defaultFlatNormal ? defaultFlatNormal->GetSRV() : nullptr);
                 nri::Descriptor* finalDepthSRV = m_SceneDepth ? m_SceneDepth : (defaultWhite ? defaultWhite->GetSRV() : nullptr);
-                nri::Descriptor* finalFogIntSRV = (m_HasActiveFogConstants && m_FroxelIntegrated && m_FroxelIntegrated->IsValid())
+                nri::Descriptor* finalFogIntSRV = (m_ActiveFogConstants && m_FroxelIntegrated && m_FroxelIntegrated->IsValid())
                     ? m_FroxelIntegrated->GetSRV() : (defaultEmptyFog ? defaultEmptyFog->GetSRV() : nullptr);
-                nri::Descriptor* finalFogMediaSRV = (m_HasActiveFogConstants && m_FroxelMedia && m_FroxelMedia->IsValid())
+                nri::Descriptor* finalFogMediaSRV = (m_ActiveFogConstants && m_FroxelMedia && m_FroxelMedia->IsValid())
                     ? m_FroxelMedia->GetSRV() : (defaultEmptyFog ? defaultEmptyFog->GetSRV() : nullptr);
 
                 if (finalTexSRV) {
@@ -644,9 +634,9 @@ namespace Axle {
             if (drawRes->Constants.IsValid() && drawRes->Constants.GetCBV()) {
                 cmd.SetRootDescriptor(0, drawRes->Constants.GetCBV());
             }
-            if (m_FogConstantBuffer.IsValid() && m_FogConstantBuffer.GetCBV()) {
-                cmd.SetRootDescriptor(1, m_FogConstantBuffer.GetCBV());
-            }
+            auto* fogConstants = m_ActiveFogConstants ? m_ActiveFogConstants : m_DisabledFogConstantBuffer.GetCBV();
+            if (!fogConstants) return false;
+            cmd.SetRootDescriptor(1, fogConstants);
 
             // Bind Descriptor Set [0]: Particle Textures & Sampler (Space 1)
             if (drawRes->Pool.IsValid() && drawRes->Set) {

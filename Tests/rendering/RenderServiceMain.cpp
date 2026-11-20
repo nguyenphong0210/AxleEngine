@@ -261,6 +261,14 @@ static bool GLService() {
         result=service.RenderView(world,request);
         RENDER_CHECK(result.Success&&result.ErrorMessage.find("LOCAL_SHADOW_UNSUPPORTED")==std::string::npos,
             "global shadow toggle also disables GL unsupported-local-shadow warning");
+        request.Settings.EnableVolumetricFog=true;
+        result=service.RenderView(world,request);
+        RENDER_CHECK(result.Success&&result.ErrorMessage.find("VOLUMETRIC_FOG_UNSUPPORTED")!=std::string::npos,
+            "OpenGL renders a compatibility frame and reports the unavailable froxel effect");
+        request.Settings.EnableVolumetricFog=false;
+        result=service.RenderView(world,request);
+        RENDER_CHECK(result.Success&&result.ErrorMessage.find("VOLUMETRIC_FOG_UNSUPPORTED")==std::string::npos,
+            "OpenGL only reports the froxel fallback when the effect is requested");
         RenderService::Get().Shutdown();
     }
     return glGetError() == GL_NO_ERROR;

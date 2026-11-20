@@ -1,6 +1,24 @@
 #ifndef AXLE_FROXEL_FOG_COMMON_HLSLI
 #define AXLE_FROXEL_FOG_COMMON_HLSLI
 
+#ifdef AXLE_FROXEL_CONSTANTS_REGISTER
+cbuffer VolumetricFogConstants : register(AXLE_FROXEL_CONSTANTS_REGISTER, space0) {
+    float4x4 u_FogInvView;
+    float4x4 u_FogInvProjection;
+    float4   u_FogScreenSize;
+    float4   u_FogSunDirectionIntensity;
+    float4   u_FogSunRadiance;
+    float4   u_FogParams;
+    float4   u_FogAlbedo;
+    float4   u_FogGridParams;
+    float4   u_FogAmbientRadiance;
+    float4   u_FogDepthParams;
+    float4x4 u_FogPrevViewProjection;
+    float4   u_FogPrevViewDepthRow;
+    float4   u_FogTemporalParams;
+};
+#endif
+
 float FroxelSliceDepth(float sliceIndex, float gridD, float nearZ, float logRatio) {
     return nearZ * exp(logRatio * (sliceIndex / max(gridD, 1.0)));
 }

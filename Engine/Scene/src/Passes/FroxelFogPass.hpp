@@ -47,7 +47,6 @@ namespace Axle::Passes {
             const FroxelFogContract::FroxelMediaState& media,
             const PerspectiveCamera& camera,
             const glm::mat4& projectionZO,
-            const glm::mat4& viewProjZO,
             const RHI::RHIViewTargets* targets,
             const FroxelHistoryFrame& previous,
             bool hasHistoryRead,

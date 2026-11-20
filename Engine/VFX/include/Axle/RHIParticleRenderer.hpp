@@ -123,7 +123,7 @@ namespace Axle {
             m_ActiveConstants.ScreenSize = glm::vec4(width, height, 1.0f/std::max(width,1u), 1.0f/std::max(height,1u));
         }
 
-        void SetVolumetricFog(const FroxelFogContract::FroxelShaderConstants* fogConstants,
+        void SetVolumetricFog(nri::Descriptor* fogConstants,
                               RHI::RHITexture* integratedVolume,
                               RHI::RHITexture* mediaVolume);
 
@@ -222,9 +222,8 @@ namespace Axle {
         RHI::RHIDescriptorPool m_DescriptorPool;
         nri::DescriptorSet* m_DescriptorSet = nullptr;
 
-        RHI::RHIBuffer m_FogConstantBuffer;
-        FroxelFogContract::FroxelShaderConstants m_ActiveFogConstants{};
-        bool m_HasActiveFogConstants = false;
+        RHI::RHIBuffer m_DisabledFogConstantBuffer;
+        nri::Descriptor* m_ActiveFogConstants = nullptr;
         RHI::RHITexture* m_FroxelIntegrated = nullptr;
         RHI::RHITexture* m_FroxelMedia = nullptr;
 

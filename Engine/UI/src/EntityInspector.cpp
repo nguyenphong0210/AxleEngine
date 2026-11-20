@@ -1121,7 +1121,7 @@ namespace Axle {
                 vfc.Intensity = std::max(0.0f, vfc.Intensity);
             }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Overrides scene ambient fog medium when Volumetric Fog viewport FX is enabled.");
+                ImGui::SetTooltip("Scales the density of the scene fog. The Editor viewport can override its visibility.");
             }
         }, /*canRemove=*/ true);
 

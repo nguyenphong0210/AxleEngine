@@ -49,6 +49,7 @@ using namespace Axle;
 using namespace Axle::RHI;
 std::filesystem::path Output;
 bool AreaLightsOnly = false;
+bool FroxelFogOnly = false;
 
 bool TimestampProbe(uint64_t& ticks, double& milliseconds) {
     auto& device = RHIDevice::Get();
@@ -222,8 +223,9 @@ bool Native(RHIType backend) {
     TextureDescriptor authored; authored.Type="CubemapHDR"; authored.Source="red.hdr";
     CHECK(TextureDescriptor::Save((Output/"sky.axleasset").string(),authored));
     RHISceneRenderer renderer; CHECK(renderer.Init(device,false));
-    if (AreaLightsOnly) {
-        const bool ok = RunM15AreaLightRenderingTests(renderer, Output);
+    if (AreaLightsOnly || FroxelFogOnly) {
+        const bool ok = AreaLightsOnly ? RunM15AreaLightRenderingTests(renderer, Output)
+                                      : RunM15FroxelFogTests(renderer, Output);
         renderer.Shutdown();
         return ok && device.WaitIdle() && GetRHIValidationErrorCount() == 0;
     }
@@ -1073,7 +1075,12 @@ bool Native(RHIType backend) {
 }
 int main(int argc,char** argv) {
     if(argc!=3 && argc!=4)return 2;
-    if(argc==4) { if(std::string(argv[3])!="--m15-area-lights") return 2; AreaLightsOnly=true; }
+    if(argc==4) {
+        const std::string suite = argv[3];
+        AreaLightsOnly = suite == "--m15-area-lights";
+        FroxelFogOnly = suite == "--m15-froxel-fog";
+        if ((!AreaLightsOnly && !FroxelFogOnly) || std::string(argv[1]) == "gl") return 2;
+    }
     Output=std::filesystem::absolute(argv[2]);std::filesystem::create_directories(Output);
     try { return (std::string(argv[1])=="gl"?OpenGL():Native(std::string(argv[1])=="vulkan"?RHIType::Vulkan:RHIType::Direct3D12))&&GetRHIValidationErrorCount()==0?0:1; }
     catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}

@@ -1524,7 +1524,8 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     renderSettings.EnableSSR = m_EnableSSR;
     renderSettings.EnablePlanarReflections = m_EnablePlanarReflections;
     renderSettings.EnableBloom = m_EnableBloom;
-    renderSettings.EnableVolumetricFog = m_EnableVolumetricFog;
+    const auto authoredFog = Axle::ExtractVolumetricFog(*m_Scene);
+    renderSettings.EnableVolumetricFog = m_ViewportFogOverride.value_or(authoredFog.has_value());
     renderSettings.FogQuality = static_cast<Axle::FroxelFogQuality>(
         std::clamp(m_FogQuality, 0, static_cast<int>(Axle::FroxelFogQuality::Ultra)));
     renderSettings.FogTemporalWeight = std::clamp(m_FogTemporalWeight, 0.0f, 0.9f);
@@ -1539,8 +1540,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     request.Name = "Editor main view";
     request.CameraCut = m_PendingViewCameraCut || viewCamera != m_LastViewCamera;
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
-        const auto fog = renderSettings.EnableVolumetricFog ? Axle::ExtractVolumetricFog(*m_Scene) : std::nullopt;
-        if (!m_RHIViewport->SetRenderOptions(renderSettings, fog ? &*fog : nullptr)) {
+        if (!m_RHIViewport->SetRenderOptions(renderSettings, authoredFog ? &*authoredFog : nullptr)) {
             ++m_FailedViewCount;
             AXLE_ERROR("Editor view failed: viewport target configuration failed");
             return;
@@ -1558,6 +1558,11 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         m_PendingViewCameraCut = false;
     }
 
+}
+
+bool EditorLayer::IsViewportFogEnabled() const {
+    if (m_ViewportFogOverride.has_value()) return *m_ViewportFogOverride;
+    return m_Scene && Axle::ExtractVolumetricFog(*m_Scene).has_value();
 }
 
 void EditorLayer::RenderToolbar() {
@@ -1907,8 +1912,13 @@ void EditorLayer::RenderToolbar() {
             ImGui::Checkbox("Ambient Occlusion (GTAO)", &m_EnableGTAO);
             ImGui::Checkbox("Contact Shadows", &m_EnableContactShadows);
             ImGui::Checkbox("Physically Based Bloom", &m_EnableBloom);
-            ImGui::Checkbox("Volumetric Fog", &m_EnableVolumetricFog);
-            if (m_EnableVolumetricFog) {
+            bool fogEnabled = IsViewportFogEnabled();
+            if (ImGui::Checkbox("Volumetric Fog", &fogEnabled)) m_ViewportFogOverride = fogEnabled;
+            if (m_ViewportFogOverride.has_value() && ImGui::MenuItem("Use Scene Fog Setting")) {
+                m_ViewportFogOverride.reset();
+                fogEnabled = IsViewportFogEnabled();
+            }
+            if (fogEnabled) {
                 static constexpr const char* kFogQualityItems[] = { "Low", "Medium", "High", "Ultra" };
                 ImGui::Combo("Fog Quality", &m_FogQuality, kFogQualityItems, 4);
                 ImGui::SliderFloat("Fog Temporal Weight", &m_FogTemporalWeight, 0.0f, 0.9f, "%.2f");
@@ -2119,7 +2129,10 @@ void EditorLayer::OnImGuiRender() {
                 ImGui::MenuItem("Ambient Occlusion (GTAO)", nullptr, &m_EnableGTAO);
                 ImGui::MenuItem("Contact Shadows", nullptr, &m_EnableContactShadows);
                 ImGui::MenuItem("Physically Based Bloom", nullptr, &m_EnableBloom);
-                ImGui::MenuItem("Volumetric Fog", nullptr, &m_EnableVolumetricFog);
+                bool fogEnabled = IsViewportFogEnabled();
+                if (ImGui::MenuItem("Volumetric Fog", nullptr, &fogEnabled)) m_ViewportFogOverride = fogEnabled;
+                if (m_ViewportFogOverride.has_value() && ImGui::MenuItem("Use Scene Fog Setting"))
+                    m_ViewportFogOverride.reset();
                 ImGui::MenuItem("Auto-Exposure", nullptr, &m_EnableAutoExposure);
                 ImGui::MenuItem("Temporal Anti-Aliasing (TAA)", nullptr, &m_EnableTAA);
                 ImGui::EndMenu();

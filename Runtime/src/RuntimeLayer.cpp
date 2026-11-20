@@ -3,6 +3,7 @@
 #include <Axle/Application.hpp>
 #include <Axle/Package.hpp>
 #include <Axle/SceneSerializer.hpp>
+#include <Axle/SceneExtraction.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/Components.hpp>
@@ -194,9 +195,11 @@ namespace Axle {
 
         // 4. Render Scene via unified RenderService
         if (m_Scene) {
+            const auto authoredFog = ExtractVolumetricFog(*m_Scene);
             SceneRenderSettings settings;
             settings.EnableShadows = true;
             settings.EnableSkybox = true;
+            settings.EnableVolumetricFog = authoredFog && authoredFog->Enabled;
             settings.ShowPhysicsDebug = false;
 
             ViewRequest request;

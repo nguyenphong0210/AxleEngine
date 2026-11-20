@@ -1527,6 +1527,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     renderSettings.EnableVolumetricFog = m_EnableVolumetricFog;
     renderSettings.FogQuality = static_cast<Axle::FroxelFogQuality>(
         std::clamp(m_FogQuality, 0, static_cast<int>(Axle::FroxelFogQuality::Ultra)));
+    renderSettings.FogTemporalWeight = std::clamp(m_FogTemporalWeight, 0.0f, 0.9f);
     renderSettings.EnableAutoExposure = m_EnableAutoExposure;
     renderSettings.HiZVisualizationLevel = m_HiZVisualizationLevel;
     renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
@@ -1910,6 +1911,7 @@ void EditorLayer::RenderToolbar() {
             if (m_EnableVolumetricFog) {
                 static constexpr const char* kFogQualityItems[] = { "Low", "Medium", "High", "Ultra" };
                 ImGui::Combo("Fog Quality", &m_FogQuality, kFogQualityItems, 4);
+                ImGui::SliderFloat("Fog Temporal Weight", &m_FogTemporalWeight, 0.0f, 0.9f, "%.2f");
             }
             ImGui::Checkbox("Auto-Exposure", &m_EnableAutoExposure);
             ImGui::Checkbox("Temporal Anti-Aliasing (TAA)", &m_EnableTAA);

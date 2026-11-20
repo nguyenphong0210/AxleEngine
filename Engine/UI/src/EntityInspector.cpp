@@ -1103,6 +1103,28 @@ namespace Axle {
             ImGui::Checkbox("Primary Camera", &cam.Primary);
         }, /*canRemove=*/ true);
 
+        // Volumetric Fog Component (3D Froxel Atmospheric Media)
+        DrawComponent<VolumetricFogComponent>("Volumetric Fog", entity, [&](VolumetricFogComponent& vfc) {
+            ImGui::Checkbox("Enabled", &vfc.Enabled);
+            if (ImGui::DragFloat("Density", &vfc.Density, 0.002f, 0.0f, 5.0f, "%.4f 1/m")) {
+                vfc.Density = std::max(0.0f, vfc.Density);
+            }
+            if (ImGui::DragFloat("Height Falloff", &vfc.HeightFalloff, 0.005f, 0.0f, 5.0f, "%.3f 1/m")) {
+                vfc.HeightFalloff = std::max(0.0f, vfc.HeightFalloff);
+            }
+            ImGui::SliderFloat("Anisotropy (g)", &vfc.ScatteringAsymmetry, -0.95f, 0.95f, "%.2f");
+            ImGui::ColorEdit3("Albedo", glm::value_ptr(vfc.Color));
+            if (ImGui::DragFloat("Max Distance", &vfc.MaxDistance, 1.0f, 1.0f, 1000.0f, "%.1f m")) {
+                vfc.MaxDistance = std::max(1.0f, vfc.MaxDistance);
+            }
+            if (ImGui::DragFloat("Intensity", &vfc.Intensity, 0.05f, 0.0f, 10.0f, "%.2f")) {
+                vfc.Intensity = std::max(0.0f, vfc.Intensity);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Overrides scene ambient fog medium when Volumetric Fog viewport FX is enabled.");
+            }
+        }, /*canRemove=*/ true);
+
         // Native Script Component
         DrawComponent<NativeScriptComponent>("Native Script", entity, [&](NativeScriptComponent& nsc) {
             // Script Class Combo Dropdown
@@ -2052,6 +2074,11 @@ namespace Axle {
             "Rendering", "CameraComponent", "Perspective/Orthographic scene camera",
             entity.HasComponent<CameraComponent>(), true,
             [&]() { entity.AddComponent<CameraComponent>(); }
+        });
+        items.push_back({
+            "Rendering", "VolumetricFogComponent", "Exponential height-falloff 3D froxel volumetric fog & scattering media",
+            entity.HasComponent<VolumetricFogComponent>(), true,
+            [&]() { entity.AddComponent<VolumetricFogComponent>(); }
         });
 
         // --- PHYSICS CATEGORY ---

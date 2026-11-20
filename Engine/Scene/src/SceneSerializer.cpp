@@ -1219,19 +1219,21 @@ namespace Axle {
                         if (trimmed.rfind("Enabled:", 0) == 0) {
                             vfc.Enabled = (Trim(trimmed.substr(8)) == "true");
                         } else if (trimmed.rfind("Density:", 0) == 0) {
-                            vfc.Density = std::stof(Trim(trimmed.substr(8)));
+                            try { float v = std::stof(Trim(trimmed.substr(8))); if (std::isfinite(v)) vfc.Density = std::max(0.0f, v); } catch (...) {}
                         } else if (trimmed.rfind("HeightFalloff:", 0) == 0) {
-                            vfc.HeightFalloff = std::stof(Trim(trimmed.substr(14)));
+                            try { float v = std::stof(Trim(trimmed.substr(14))); if (std::isfinite(v)) vfc.HeightFalloff = std::max(0.0f, v); } catch (...) {}
                         } else if (trimmed.rfind("ScatteringAsymmetry:", 0) == 0) {
-                            vfc.ScatteringAsymmetry = std::stof(Trim(trimmed.substr(20)));
+                            try { float v = std::stof(Trim(trimmed.substr(20))); if (std::isfinite(v)) vfc.ScatteringAsymmetry = std::clamp(v, -0.95f, 0.95f); } catch (...) {}
                         } else if (trimmed.rfind("Color:", 0) == 0) {
                             float r = 1, g = 1, b = 1;
-                            sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
-                            vfc.Color = glm::vec3(r, g, b);
+                            if (sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b) == 3 &&
+                                std::isfinite(r) && std::isfinite(g) && std::isfinite(b)) {
+                                vfc.Color = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
+                            }
                         } else if (trimmed.rfind("MaxDistance:", 0) == 0) {
-                            vfc.MaxDistance = std::stof(Trim(trimmed.substr(12)));
+                            try { float v = std::stof(Trim(trimmed.substr(12))); if (std::isfinite(v)) vfc.MaxDistance = v; } catch (...) {}
                         } else if (trimmed.rfind("Intensity:", 0) == 0) {
-                            vfc.Intensity = std::stof(Trim(trimmed.substr(10)));
+                            try { float v = std::stof(Trim(trimmed.substr(10))); if (std::isfinite(v)) vfc.Intensity = std::max(0.0f, v); } catch (...) {}
                         }
                         break;
                     }

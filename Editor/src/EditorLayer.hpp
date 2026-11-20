@@ -122,6 +122,7 @@ private:
     bool m_EnableContactShadows = true;
     bool m_EnableVolumetricFog = false;
     int m_FogQuality = static_cast<int>(Axle::FroxelFogQuality::High);
+    float m_FogTemporalWeight = 0.8f;
     bool m_EnableAutoExposure = false;
     bool m_EnableTAA = false;
     int m_HiZVisualizationLevel = -1;

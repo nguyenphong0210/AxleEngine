@@ -1543,8 +1543,10 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     request.CameraCut = m_PendingViewCameraCut || viewCamera != m_LastViewCamera;
     request.DeltaTime = ts.GetSeconds();
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
+        const bool wantsSSS = m_Scene &&
+            Axle::SceneRequiresSubsurfacePass(*m_Scene, renderSettings, renderSettings.MSAASamples);
         if (!m_RHIViewport->SetRenderOptions(renderSettings, authoredFog ? &*authoredFog : nullptr,
-                                             authoredDDGI ? &*authoredDDGI : nullptr)) {
+                                             authoredDDGI ? &*authoredDDGI : nullptr, wantsSSS)) {
             ++m_FailedViewCount;
             AXLE_ERROR("Editor view failed: viewport target configuration failed");
             return;

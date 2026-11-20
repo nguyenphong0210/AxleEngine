@@ -1,4 +1,5 @@
 #include <Axle/SceneExtraction.hpp>
+#include <Axle/SceneRenderSettings.hpp>
 #include <Axle/Scene.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RenderParticleData.hpp>
@@ -10,8 +11,40 @@
 #include <Axle/ImageTextureCache.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
 
 namespace Axle {
+
+    bool SceneRequiresSubsurfacePass(const Scene& scene, const SceneRenderSettings& settings, uint8_t sampleCount) {
+        if (!settings.EnableSubsurfaceScattering || sampleCount != 1u) {
+            return false;
+        }
+        const auto& registry = scene.GetRegistry();
+        const auto view = registry.view<TransformComponent, MeshInstance3D>();
+        for (const auto entity : view) {
+            const auto& mc = view.get<MeshInstance3D>(entity);
+            if (mc.AssetPath.empty() && !mc.VAO && !mc.RHIMeshAsset && !mc.Source) continue;
+            if (registry.all_of<MaterialComponent>(entity)) {
+                const auto& mat = registry.get<MaterialComponent>(entity);
+                const SurfaceType surf = (mat.HasAsset() && mat.MaterialAsset)
+                    ? mat.MaterialAsset->GetSurfaceType() : mat.SurfaceType;
+                const bool sssEnabled = (mat.HasAsset() && mat.MaterialAsset)
+                    ? mat.MaterialAsset->GetSubsurfaceEnabled() : mat.SubsurfaceEnabled;
+                const float sssRadius = (mat.HasAsset() && mat.MaterialAsset)
+                    ? mat.MaterialAsset->GetSubsurfaceRadius() : mat.SubsurfaceRadius;
+                if (surf < SurfaceType::Transparent && sssEnabled && sssRadius > 0.0f) {
+                    return true;
+                }
+            } else if (mc.RHIMaterialAsset) {
+                const auto& desc = mc.RHIMaterialAsset->GetDesc();
+                if (desc.SurfaceType < SurfaceType::Transparent &&
+                    desc.SubsurfaceEnabled && desc.SubsurfaceRadius > 0.0f) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 
     std::optional<RenderVolumetricFog> ExtractVolumetricFog(const Scene& scene) {
         const auto view = scene.GetRegistry().view<VolumetricFogComponent>();
@@ -421,14 +454,14 @@ namespace Axle {
                 rmi.Material.Metallic = matComp.Metallic;
                 rmi.Material.Emission = matComp.EmissionIntensity;
                 rmi.Material.SheenEnabled = matComp.SheenEnabled;
-                rmi.Material.SheenColor = matComp.SheenColor;
-                rmi.Material.SheenRoughness = matComp.SheenRoughness;
+                rmi.Material.SheenColor = glm::clamp(matComp.SheenColor, glm::vec3(0.0f), glm::vec3(1.0f));
+                rmi.Material.SheenRoughness = std::clamp(matComp.SheenRoughness, 0.01f, 1.0f);
                 rmi.Material.SubsurfaceEnabled = matComp.SubsurfaceEnabled;
-                rmi.Material.SubsurfaceColor = matComp.SubsurfaceColor;
-                rmi.Material.SubsurfaceRadius = matComp.SubsurfaceRadius;
+                rmi.Material.SubsurfaceColor = glm::clamp(matComp.SubsurfaceColor, glm::vec3(0.0f), glm::vec3(1.0f));
+                rmi.Material.SubsurfaceRadius = std::clamp(matComp.SubsurfaceRadius, 0.0f, 16.0f);
                 rmi.Material.AbsorptionEnabled = matComp.AbsorptionEnabled;
-                rmi.Material.AbsorptionColor = matComp.AbsorptionColor;
-                rmi.Material.Dispersion = matComp.Dispersion;
+                rmi.Material.AbsorptionColor = glm::max(matComp.AbsorptionColor, glm::vec3(0.0f));
+                rmi.Material.Dispersion = std::clamp(matComp.Dispersion, 0.0f, 1.0f);
                 rmi.Material.TileScale = glm::vec2(mc.TileScale);
                 rmi.Material.PatternMode = mc.PatternMode;
             } else {

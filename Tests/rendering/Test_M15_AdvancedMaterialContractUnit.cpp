@@ -7,7 +7,16 @@
 #include <Axle/MaterialGraphProgram.hpp>
 #include <Axle/MaterialGraphRuntime.hpp>
 #include <Axle/MaterialSurfaceShader.hpp>
+#include <Axle/Material.hpp>
+#include <Axle/Components.hpp>
+#include <Axle/MaterialComponentCodec.hpp>
+#include <Axle/Scene.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/SceneExtraction.hpp>
+#include <Axle/SceneSerializer.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
+#include <glm/gtc/epsilon.hpp>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -292,6 +301,241 @@ bool RunM15AdvancedMaterialContractUnitTests() {
             "Raw custom shader plan explicitly names unsupported Sheen/Subsurface/Absorption/Dispersion controls");
     }
 
-    std::cout << "[M15U9Contract] M15 U9 Batch A, B, C & D contract tests passed.\n";
+    // =========================================================================
+    // Batch E (M15-U9-06.1..06.6): Persistence, Clamps, Inspector UI, Preview & Runtime
+    // =========================================================================
+    {
+        namespace fs = std::filesystem;
+        const fs::path tempDir = fs::temp_directory_path() / "axle_m15_u9e_contract_tests";
+        std::error_code ec;
+        fs::create_directories(tempDir, ec);
+
+        // 06.1: Native Material defaults, setter clamps & .amat round-trip
+        Material defMat;
+        RENDER_CHECK(!defMat.GetSheenEnabled() &&
+                     glm::all(glm::epsilonEqual(defMat.GetSheenColor(), glm::vec3(1.0f), 1e-5f)) &&
+                     std::abs(defMat.GetSheenRoughness() - 0.5f) < 1e-5f &&
+                     !defMat.GetSubsurfaceEnabled() &&
+                     glm::all(glm::epsilonEqual(defMat.GetSubsurfaceColor(), glm::vec3(1.0f, 0.8f, 0.7f), 1e-5f)) &&
+                     std::abs(defMat.GetSubsurfaceRadius() - 1.0f) < 1e-5f &&
+                     !defMat.GetAbsorptionEnabled() &&
+                     glm::all(glm::epsilonEqual(defMat.GetAbsorptionColor(), glm::vec3(0.0f), 1e-5f)) &&
+                     std::abs(defMat.GetDispersion()) < 1e-5f,
+            "06.1: Native Material defaults match M15-U9 specification");
+
+        Material clampedMat("ClampedMat", 9001);
+        clampedMat.SetSheenEnabled(true);
+        clampedMat.SetSheenColor(glm::vec3(-0.4f, 0.65f, 2.5f));
+        clampedMat.SetSheenRoughness(0.0005f);
+        RENDER_CHECK(glm::all(glm::epsilonEqual(clampedMat.GetSheenColor(), glm::vec3(0.0f, 0.65f, 1.0f), 1e-5f)) &&
+                     std::abs(clampedMat.GetSheenRoughness() - 0.01f) < 1e-5f,
+            "06.1: Native Material clamps SheenColor [0,1] and SheenRoughness >= 0.01");
+
+        clampedMat.SetSheenRoughness(5.0f);
+        clampedMat.SetSubsurfaceEnabled(true);
+        clampedMat.SetSubsurfaceColor(glm::vec3(-0.2f, 0.4f, 3.0f));
+        clampedMat.SetSubsurfaceRadius(42.0f);
+        clampedMat.SetAbsorptionEnabled(true);
+        clampedMat.SetAbsorptionColor(glm::vec3(-1.0f, 2.5f, 0.3f));
+        clampedMat.SetDispersion(2.4f);
+        RENDER_CHECK(std::abs(clampedMat.GetSheenRoughness() - 1.0f) < 1e-5f &&
+                     glm::all(glm::epsilonEqual(clampedMat.GetSubsurfaceColor(), glm::vec3(0.0f, 0.4f, 1.0f), 1e-5f)) &&
+                     std::abs(clampedMat.GetSubsurfaceRadius() - 16.0f) < 1e-5f &&
+                     glm::all(glm::epsilonEqual(clampedMat.GetAbsorptionColor(), glm::vec3(0.0f, 2.5f, 0.3f), 1e-5f)) &&
+                     std::abs(clampedMat.GetDispersion() - 1.0f) < 1e-5f,
+            "06.1: Native Material clamps SheenRoughness<=1, SubsurfaceRadius<=16, AbsorptionColor>=0, Dispersion<=1");
+
+        // .amat Save & Reload (valid values + out-of-range YAML values clamped on load)
+        Material roundTripMat("RoundTripU9Mat", 9002);
+        roundTripMat.SetSurfaceType(SurfaceType::Transparent);
+        roundTripMat.SetRefractionEnabled(true);
+        roundTripMat.SetRefractionIOR(1.48f);
+        roundTripMat.SetRefractionThickness(0.35f);
+        roundTripMat.SetSheenEnabled(true);
+        roundTripMat.SetSheenColor(glm::vec3(0.85f, 0.45f, 0.25f));
+        roundTripMat.SetSheenRoughness(0.32f);
+        roundTripMat.SetSubsurfaceEnabled(true);
+        roundTripMat.SetSubsurfaceColor(glm::vec3(0.9f, 0.3f, 0.2f));
+        roundTripMat.SetSubsurfaceRadius(7.5f);
+        roundTripMat.SetAbsorptionEnabled(true);
+        roundTripMat.SetAbsorptionColor(glm::vec3(1.8f, 0.4f, 0.2f));
+        roundTripMat.SetDispersion(0.22f);
+        const fs::path amatPath = tempDir / "roundtrip_u9.amat";
+        RENDER_CHECK(roundTripMat.Save(amatPath.string()), "06.1: Material::Save succeeds");
+        Material reloadedMat;
+        RENDER_CHECK(reloadedMat.Load(amatPath.string()), "06.1: Material::Load succeeds");
+        RENDER_CHECK(reloadedMat.GetSheenEnabled() &&
+                     glm::all(glm::epsilonEqual(reloadedMat.GetSheenColor(), roundTripMat.GetSheenColor(), 1e-4f)) &&
+                     std::abs(reloadedMat.GetSheenRoughness() - roundTripMat.GetSheenRoughness()) < 1e-4f &&
+                     reloadedMat.GetSubsurfaceEnabled() &&
+                     glm::all(glm::epsilonEqual(reloadedMat.GetSubsurfaceColor(), roundTripMat.GetSubsurfaceColor(), 1e-4f)) &&
+                     std::abs(reloadedMat.GetSubsurfaceRadius() - roundTripMat.GetSubsurfaceRadius()) < 1e-4f &&
+                     reloadedMat.GetAbsorptionEnabled() &&
+                     glm::all(glm::epsilonEqual(reloadedMat.GetAbsorptionColor(), roundTripMat.GetAbsorptionColor(), 1e-4f)) &&
+                     std::abs(reloadedMat.GetDispersion() - roundTripMat.GetDispersion()) < 1e-4f,
+            "06.1: .amat save/reopen preserves all M15-U9 fields");
+
+        const fs::path dirtyAmat = tempDir / "dirty_u9.amat";
+        {
+            std::ofstream fout(dirtyAmat);
+            fout << "MaterialAsset:\n"
+                 << "  SheenEnabled: true\n"
+                 << "  SheenColor: [ -1.0 , 0.5 , 4.0 ]\n"
+                 << "  SheenRoughness: 0.0\n"
+                 << "  SubsurfaceEnabled: true\n"
+                 << "  SubsurfaceColor: [ 2.0 , -0.5 , 0.25 ]\n"
+                 << "  SubsurfaceRadius: 99.0\n"
+                 << "  AbsorptionEnabled: true\n"
+                 << "  AbsorptionColor: [ -2.0 , 3.5 , 0.5 ]\n"
+                 << "  Dispersion: 4.5\n";
+        }
+        Material clampedFromFile;
+        RENDER_CHECK(clampedFromFile.Load(dirtyAmat.string()), "06.1: Malformed .amat loads safely");
+        RENDER_CHECK(glm::all(glm::epsilonEqual(clampedFromFile.GetSheenColor(), glm::vec3(0.0f, 0.5f, 1.0f), 1e-5f)) &&
+                     std::abs(clampedFromFile.GetSheenRoughness() - 0.01f) < 1e-5f &&
+                     glm::all(glm::epsilonEqual(clampedFromFile.GetSubsurfaceColor(), glm::vec3(1.0f, 0.0f, 0.25f), 1e-5f)) &&
+                     std::abs(clampedFromFile.GetSubsurfaceRadius() - 16.0f) < 1e-5f &&
+                     glm::all(glm::epsilonEqual(clampedFromFile.GetAbsorptionColor(), glm::vec3(0.0f, 3.5f, 0.5f), 1e-5f)) &&
+                     std::abs(clampedFromFile.GetDispersion() - 1.0f) < 1e-5f,
+            "06.1: Out-of-range .amat YAML values clamp on reload in native Material");
+
+        RHI::RHIMaterial rhiDirty;
+        RENDER_CHECK(rhiDirty.Load(dirtyAmat), "06.1: RHIMaterial loads YAML cleanly");
+        RENDER_CHECK(glm::all(glm::epsilonEqual(rhiDirty.GetSheenColor(), glm::vec3(0.0f, 0.5f, 1.0f), 1e-5f)) &&
+                     std::abs(rhiDirty.GetSheenRoughness() - 0.01f) < 1e-5f &&
+                     glm::all(glm::epsilonEqual(rhiDirty.GetSubsurfaceColor(), glm::vec3(1.0f, 0.0f, 0.25f), 1e-5f)) &&
+                     std::abs(rhiDirty.GetSubsurfaceRadius() - 16.0f) < 1e-5f &&
+                     glm::all(glm::epsilonEqual(rhiDirty.GetAbsorptionColor(), glm::vec3(0.0f, 3.5f, 0.5f), 1e-5f)) &&
+                     std::abs(rhiDirty.GetDispersion() - 1.0f) < 1e-5f,
+            "06.1: RHIMaterial YAML load matches exact native Material clamps");
+
+        // 06.2 & 06.3: MaterialComponentCodec, SceneSerializer round-trip, SyncToRHI & ResolvedSurface parity
+        MaterialComponent srcComp;
+        srcComp.SurfaceType = SurfaceType::Transparent;
+        srcComp.RefractionEnabled = true;
+        srcComp.SheenEnabled = true;
+        srcComp.SheenColor = glm::vec3(-0.3f, 0.7f, 2.0f);
+        srcComp.SheenRoughness = 0.0f;
+        srcComp.SubsurfaceEnabled = true;
+        srcComp.SubsurfaceColor = glm::vec3(2.0f, 0.4f, -1.0f);
+        srcComp.SubsurfaceRadius = 50.0f;
+        srcComp.AbsorptionEnabled = true;
+        srcComp.AbsorptionColor = glm::vec3(-0.5f, 2.2f, 0.9f);
+        srcComp.Dispersion = 3.0f;
+
+        std::stringstream codecStream;
+        WriteMaterialComponent(codecStream, srcComp);
+        MaterialComponent parsedComp;
+        std::string line;
+        while (std::getline(codecStream, line)) {
+            ReadMaterialComponentLine(parsedComp, line);
+        }
+        RENDER_CHECK(parsedComp.SheenEnabled &&
+                     glm::all(glm::epsilonEqual(parsedComp.SheenColor, glm::vec3(0.0f, 0.7f, 1.0f), 1e-5f)) &&
+                     std::abs(parsedComp.SheenRoughness - 0.01f) < 1e-5f &&
+                     parsedComp.SubsurfaceEnabled &&
+                     glm::all(glm::epsilonEqual(parsedComp.SubsurfaceColor, glm::vec3(1.0f, 0.4f, 0.0f), 1e-5f)) &&
+                     std::abs(parsedComp.SubsurfaceRadius - 16.0f) < 1e-5f &&
+                     parsedComp.AbsorptionEnabled &&
+                     glm::all(glm::epsilonEqual(parsedComp.AbsorptionColor, glm::vec3(0.0f, 2.2f, 0.9f), 1e-5f)) &&
+                     std::abs(parsedComp.Dispersion - 1.0f) < 1e-5f,
+            "06.2: MaterialComponentCodec clamps out-of-range U9 fields symmetrically on parse");
+
+        // Scene save/reopen + ExtractRenderWorld + SyncToRHI + ResolvedSurface parity
+        Scene saveScene;
+        auto ent = saveScene.CreateEntity("U9PersistenceSphere");
+        auto& meshComp = ent.AddComponent<MeshInstance3D>();
+        meshComp.AssetPath = "builtin://sphere";
+        auto& mc = ent.AddComponent<MaterialComponent>();
+        mc.SurfaceType = SurfaceType::Opaque;
+        mc.SheenEnabled = true;
+        mc.SheenColor = glm::vec3(0.75f, 0.55f, 0.35f);
+        mc.SheenRoughness = 0.28f;
+        mc.SubsurfaceEnabled = true;
+        mc.SubsurfaceColor = glm::vec3(0.95f, 0.35f, 0.22f);
+        mc.SubsurfaceRadius = 6.25f;
+        mc.AbsorptionEnabled = true;
+        mc.AbsorptionColor = glm::vec3(1.4f, 0.3f, 0.1f);
+        mc.Dispersion = 0.18f;
+
+        const fs::path scenePath = tempDir / "u9_persistence.axle";
+        SceneSerializer saver(&saveScene);
+        RENDER_CHECK(saver.Serialize(scenePath), "06.2: SceneSerializer::Serialize succeeds");
+
+        Scene loadedScene;
+        SceneSerializer loader(&loadedScene);
+        RENDER_CHECK(loader.Deserialize(scenePath), "06.2: SceneSerializer::Deserialize succeeds");
+
+        SceneRenderSettings sssSettings;
+        sssSettings.EnableSubsurfaceScattering = true;
+        RENDER_CHECK(SceneRequiresSubsurfacePass(loadedScene, sssSettings, 1u) &&
+                     !SceneRequiresSubsurfacePass(loadedScene, sssSettings, 4u),
+            "06.5: SceneRequiresSubsurfacePass tracks Opaque SSS at 1x sample and rejects MSAA > 1");
+
+        const RenderWorld extracted = ExtractRenderWorld(static_cast<const Scene&>(loadedScene));
+        RENDER_CHECK(extracted.Meshes.size() == 1u, "06.3: ExtractRenderWorld preserves saved entity mesh");
+        const auto& em = extracted.Meshes[0].Material;
+        RENDER_CHECK(em.RHIMaterialAsset != nullptr &&
+                     em.SheenEnabled &&
+                     glm::all(glm::epsilonEqual(em.SheenColor, mc.SheenColor, 1e-4f)) &&
+                     std::abs(em.SheenRoughness - mc.SheenRoughness) < 1e-4f &&
+                     em.SubsurfaceEnabled &&
+                     glm::all(glm::epsilonEqual(em.SubsurfaceColor, mc.SubsurfaceColor, 1e-4f)) &&
+                     std::abs(em.SubsurfaceRadius - mc.SubsurfaceRadius) < 1e-4f &&
+                     em.AbsorptionEnabled &&
+                     glm::all(glm::epsilonEqual(em.AbsorptionColor, mc.AbsorptionColor, 1e-4f)) &&
+                     std::abs(em.Dispersion - mc.Dispersion) < 1e-4f,
+            "06.3: Scene reopen + ExtractRenderWorld preserves RHIMaterialAsset & extracted U9 fields");
+
+        const RHI::RHIMaterialConstants gpuData = em.RHIMaterialAsset->BuildConstants();
+        const ResolvedSurface resolvedFromRHI = MaterialResolver::Resolve(*em.RHIMaterialAsset);
+        const RHI::RHIMaterialConstants resolvedConstants = resolvedFromRHI.ToMaterialConstants();
+        RENDER_CHECK(glm::all(glm::epsilonEqual(glm::vec3(gpuData.Sheen), mc.SheenColor, 1e-4f)) &&
+                     std::abs(gpuData.Sheen.w - mc.SheenRoughness) < 1e-4f &&
+                     glm::all(glm::epsilonEqual(glm::vec3(gpuData.Subsurface), mc.SubsurfaceColor, 1e-4f)) &&
+                     std::abs(gpuData.Subsurface.w - mc.SubsurfaceRadius) < 1e-4f &&
+                     glm::all(glm::epsilonEqual(glm::vec3(gpuData.Absorption), mc.AbsorptionColor, 1e-4f)) &&
+                     std::abs(gpuData.Absorption.w - mc.Dispersion) < 1e-4f &&
+                     resolvedFromRHI.SheenEnabled && resolvedFromRHI.SubsurfaceEnabled && resolvedFromRHI.AbsorptionEnabled &&
+                     resolvedConstants.Sheen == gpuData.Sheen &&
+                     resolvedConstants.Subsurface == gpuData.Subsurface &&
+                     resolvedConstants.Absorption == gpuData.Absorption,
+            "06.3: RHIMaterialConstants & ResolvedSurface GPU constants match authored U9 values");
+
+        // 06.4: Inspector UI contract source verification
+        const std::string inspectorSrc = LoadTextFile(AXLE_MATERIAL_INSPECTOR_CONTROLS_SOURCE_PATH);
+        RENDER_CHECK(!inspectorSrc.empty() &&
+                     inspectorSrc.find("BeginGroup(\"Sheen\")") != std::string::npos &&
+                     inspectorSrc.find("BeginGroup(\"Subsurface Scattering\")") != std::string::npos &&
+                     inspectorSrc.find("BeginGroup(\"Absorption & Dispersion\")") != std::string::npos &&
+                     inspectorSrc.find("m.SheenColor") != std::string::npos &&
+                     inspectorSrc.find("m.SheenRoughness") != std::string::npos &&
+                     inspectorSrc.find("m.SubsurfaceColor") != std::string::npos &&
+                     inspectorSrc.find("m.SubsurfaceRadius") != std::string::npos &&
+                     inspectorSrc.find("m.AbsorptionColor") != std::string::npos &&
+                     inspectorSrc.find("m.Dispersion") != std::string::npos &&
+                     inspectorSrc.find("Select Opaque or Cutout to scatter") != std::string::npos &&
+                     inspectorSrc.find("Enable Refraction on Transparent to transmit") != std::string::npos,
+            "06.4: MaterialInspectorControls exposes Sheen, Subsurface Scattering & Absorption/Dispersion UI with clamps & surface hints");
+
+        // 06.5 & 06.6: Viewport descriptor, Preview Panel, Editor & Runtime wiring checks
+        const std::string previewSrc = LoadTextFile(AXLE_ASSET_PREVIEW_PANEL_SOURCE_PATH);
+        const std::string viewportSrc = LoadTextFile(AXLE_RHI_VIEWPORT_DESCRIPTOR_SOURCE_PATH);
+        const std::string editorSrc = LoadTextFile(AXLE_EDITOR_LAYER_SOURCE_PATH);
+        const std::string runtimeSrc = LoadTextFile(AXLE_RUNTIME_LAYER_SOURCE_PATH);
+        RENDER_CHECK(!previewSrc.empty() && !viewportSrc.empty() && !editorSrc.empty() && !runtimeSrc.empty() &&
+                     previewSrc.find("SceneRequiresSubsurfacePass") != std::string::npos &&
+                     previewSrc.find("wantsSSS ? 1u : 4u") != std::string::npos &&
+                     viewportSrc.find("targets.EnableSubsurface = desc.EnableSubsurface") != std::string::npos &&
+                     viewportSrc.find("|| desc.EnableSubsurface") != std::string::npos &&
+                     editorSrc.find("SceneRequiresSubsurfacePass") != std::string::npos &&
+                     runtimeSrc.find("SceneSerializer") != std::string::npos &&
+                     runtimeSrc.find("RenderService::Get().RenderView") != std::string::npos,
+            "06.5 & 06.6: Preview, Viewport, Editor & Runtime wire SSS single-sample targets and unified RenderView scene loading");
+
+        fs::remove_all(tempDir, ec);
+    }
+
+    std::cout << "[M15U9Contract] M15 U9 Batch A, B, C, D & E contract tests passed.\n";
     return true;
 }

@@ -536,11 +536,13 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
     return MakeForwardSurfaceEval(float4(color, 1.0), reflectionEnvironment, reflectionResponse, roughness, 1.0, hasSSS ? diffuseSSS : 0.0, controlSSS, crispSpecEmissive);
 }
 
-float4 PSMain(PSInput input) : SV_Target0 { return EvaluateForwardSurface(input).Color; }
-ReflectionSurfaceOutput PSReflectionMain(PSInput input) {
+ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     ForwardSurfaceEval eval = EvaluateForwardSurface(input);
     return MakeMaterialReflectionSurfaceOutput(eval.Color, eval.Environment, eval.Response, eval.Roughness, eval.ReflectionEnabled);
 }
+
+float4 PSMain(PSInput input) : SV_Target0 { return EvaluateForwardSurface(input).Color; }
+ReflectionSurfaceOutput PSReflectionMain(PSInput input) { return EvaluateReflectionSurface(input); }
 SubsurfaceSurfaceOutput PSSSSMain(PSInput input) {
     ForwardSurfaceEval eval = EvaluateForwardSurface(input);
     float4 outColor = (eval.ControlSSS.a > 0.001)

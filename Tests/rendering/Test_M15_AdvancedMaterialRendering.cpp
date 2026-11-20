@@ -6,6 +6,12 @@
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/MaterialGraph.hpp>
 #include <Axle/MaterialGraphProgram.hpp>
+#include <Axle/Material.hpp>
+#include <Axle/Scene.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/Components.hpp>
+#include <Axle/SceneExtraction.hpp>
+#include <Axle/SceneSerializer.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/SceneRenderSettings.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -119,8 +125,17 @@ namespace {
     }
 } // namespace
 
-bool RunM15AdvancedMaterialTests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
+bool RunM15AdvancedMaterialTests(RHISceneRenderer& /*sharedRenderer*/, const std::filesystem::path& output) {
     auto& device = RHIDevice::Get();
+    RHISceneRenderer renderer;
+    if (!renderer.Init(device, false)) {
+        std::cerr << "[M15U9] FAIL: Could not initialize isolated RHISceneRenderer\n";
+        return false;
+    }
+    struct RendererShutdownGuard {
+        RHISceneRenderer& Target;
+        ~RendererShutdownGuard() { Target.Shutdown(); }
+    } shutdownGuard{renderer};
     const char* backendTag = device.GetBackend() == RHIType::Vulkan ? "Vulkan" : "D3D12";
     std::cout << "[M15U9] Running Milestone 15 Unit 9 GPU tests (" << backendTag << ")...\n";
 
@@ -1070,6 +1085,139 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& renderer, const std::filesyst
                   << ") sssMaxRelErr=" << maxSSSPatchErr << "\n";
     }
 
-    std::cout << "[M15U9] M15 Unit 9 Batch A, B, C & D GPU tests (" << backendTag << ") passed.\n";
+    // =========================================================================
+    // Batch E (M15-U9-06.2, 06.5, 06.6): Scene Save/Reopen -> ExtractRenderWorld -> GPU Render
+    // =========================================================================
+    {
+        auto rtTargets = std::make_shared<RHIViewTargets>();
+        {
+            RHIViewTargetDesc rtDesc;
+            rtDesc.Width = width;
+            rtDesc.Height = height;
+            rtDesc.Samples = 1;
+            rtDesc.HDR = true;
+            rtDesc.EnableDepth = true;
+            rtDesc.EnableNormal = true;
+            rtDesc.EnableSubsurface = true;
+            rtDesc.OwnPrimary = false;
+            if (!rtTargets->Configure(rtDesc, nullptr, nullptr, FroxelHistoryPolicy::AllowStaticFog)) {
+                std::cerr << "[M15U9] FAIL (06.5/06.6): Could not configure runtime/preview SSS view targets\n";
+                return false;
+            }
+        }
+
+        Scene saveScene;
+        {
+            auto lightEnt = saveScene.CreateEntity("U9KeyLight");
+            auto& dlc = lightEnt.AddComponent<DirectionalLightComponent>();
+            dlc.Elevation = 15.0f;
+            dlc.Azimuth = -70.0f;
+            dlc.Color = glm::vec3(1.0f);
+            dlc.Intensity = 4.0f;
+            dlc.AmbientIntensity = 0.02f;
+            dlc.CastShadows = false;
+
+            auto matEnt = saveScene.CreateEntity("U9PersistedSphere");
+            auto& meshComp = matEnt.AddComponent<MeshInstance3D>();
+            meshComp.AssetPath = "builtin://sphere";
+            meshComp.RHIMeshAsset = sphere;
+            auto& mc = matEnt.AddComponent<MaterialComponent>();
+            mc.SurfaceType = SurfaceType::Opaque;
+            mc.AlbedoColor = glm::vec4(0.18f, 0.14f, 0.14f, 1.0f);
+            mc.Roughness = 0.85f;
+            mc.Metallic = 0.0f;
+            mc.EnableSpecularHighlights = false;
+            mc.SheenEnabled = true;
+            mc.SheenColor = glm::vec3(1.0f, 0.90f, 0.82f);
+            mc.SheenRoughness = 0.25f;
+            mc.SubsurfaceEnabled = true;
+            mc.SubsurfaceColor = glm::vec3(1.0f, 0.20f, 0.10f);
+            mc.SubsurfaceRadius = 8.0f;
+        }
+
+        const std::filesystem::path sceneFile = output / "u9e_runtime_scene.axle";
+        if (!SceneSerializer(&saveScene).Serialize(sceneFile)) {
+            std::cerr << "[M15U9] FAIL (06.2): SceneSerializer::Serialize failed\n";
+            return false;
+        }
+
+        Scene runtimeScene;
+        if (!SceneSerializer(&runtimeScene).Deserialize(sceneFile)) {
+            std::cerr << "[M15U9] FAIL (06.2/06.6): SceneSerializer::Deserialize failed\n";
+            return false;
+        }
+
+        SceneRenderSettings rtSettings = settings;
+        rtSettings.EnableSubsurfaceScattering = true;
+        if (!SceneRequiresSubsurfacePass(runtimeScene, rtSettings, 1u) ||
+            SceneRequiresSubsurfacePass(runtimeScene, rtSettings, 4u)) {
+            std::cerr << "[M15U9] FAIL (06.5): SceneRequiresSubsurfacePass mismatch on deserialized runtime scene\n";
+            return false;
+        }
+
+        SceneExtractionOptions extOpts;
+        extOpts.CameraOverride = &camera;
+        RenderWorld rtWorld = ExtractRenderWorld(runtimeScene, extOpts);
+        if (rtWorld.Meshes.size() != 1u || !rtWorld.Meshes[0].Material.RHIMaterialAsset) {
+            std::cerr << "[M15U9] FAIL (06.3/06.6): ExtractRenderWorld missing persisted mesh or RHIMaterialAsset\n";
+            return false;
+        }
+        // Re-attach procedural sphere RHI mesh handle if builtin:// lookup did not bind RHI mesh offline
+        if (!rtWorld.Meshes[0].NativeView || !rtWorld.Meshes[0].NativeView->IsValid()) {
+            rtWorld.Meshes[0].NativeMesh = sphere;
+            rtWorld.Meshes[0].NativeView = sphere->CaptureView();
+        }
+
+        std::vector<glm::vec4> runtimePixels;
+        renderer.RenderWorldView(rtWorld, camera, &color, &depth, rtSettings, nullptr, rtTargets);
+        if (!renderer.WasLastRenderSuccessful() ||
+            !rtTargets->Get(RHIViewTarget::HDR) ||
+            !ReadTextureRGBA16F(*rtTargets->Get(RHIViewTarget::HDR), runtimePixels)) {
+            std::cerr << "[M15U9] FAIL (06.6): Deserialized scene GPU render failed\n";
+            return false;
+        }
+
+        // Disable U9 terms on an identical baseline pass and confirm non-zero Sheen + SSS response
+        auto baseMat = std::make_shared<RHIMaterial>(*rtWorld.Meshes[0].Material.RHIMaterialAsset);
+        baseMat->SetSheenEnabled(false);
+        baseMat->SetSubsurfaceEnabled(false);
+        rtWorld.Meshes[0].Material.RHIMaterialAsset = baseMat;
+        rtWorld.Meshes[0].Material.SheenEnabled = false;
+        rtWorld.Meshes[0].Material.SubsurfaceEnabled = false;
+        std::vector<glm::vec4> basePixels;
+        SceneRenderSettings offSettings = settings;
+        offSettings.EnableSubsurfaceScattering = false;
+        renderer.RenderWorldView(rtWorld, camera, &color, &depth, offSettings, nullptr, rtTargets);
+        if (!renderer.WasLastRenderSuccessful() ||
+            !rtTargets->Get(RHIViewTarget::HDR) ||
+            !ReadTextureRGBA16F(*rtTargets->Get(RHIViewTarget::HDR), basePixels)) {
+            std::cerr << "[M15U9] FAIL (06.6): Baseline GPU render failed\n";
+            return false;
+        }
+
+        const float rimRuntime = AverageRingLuminance(runtimePixels, width, height, 42.0f, 51.0f);
+        const float rimBase = AverageRingLuminance(basePixels, width, height, 42.0f, 51.0f);
+        double termRedRuntime = 0.0, termRedBase = 0.0;
+        uint32_t termCount = 0u;
+        for (uint32_t y = 52u; y <= 76u; ++y) {
+            for (uint32_t x = 58u; x <= 70u; ++x) {
+                termRedRuntime += static_cast<double>(runtimePixels[static_cast<size_t>(y) * width + x].r);
+                termRedBase += static_cast<double>(basePixels[static_cast<size_t>(y) * width + x].r);
+                ++termCount;
+            }
+        }
+        const float rLift = termCount > 0u ? static_cast<float>((termRedRuntime - termRedBase) / termCount) : 0.0f;
+        const float rimLift = rimRuntime - rimBase;
+        if (rimLift <= 0.01f || rLift <= 0.005f) {
+            std::cerr << "[M15U9] FAIL (06.5/06.6): Persisted U9 Sheen/SSS effects did not propagate to GPU! rimLift="
+                      << rimLift << " termRedLift=" << rLift << "\n";
+            return false;
+        }
+
+        std::cout << "  [06.5/06.6 " << backendTag << "] PASS Runtime Scene Persistence -> GPU: rimLift="
+                  << rimLift << " termRedLift=" << rLift << "\n";
+    }
+
+    std::cout << "[M15U9] M15 Unit 9 Batch A, B, C, D & E GPU tests (" << backendTag << ") passed.\n";
     return true;
 }

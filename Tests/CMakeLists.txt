@@ -565,6 +565,8 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
       AXLE_TAA_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/TAA.hlsl"
       AXLE_POST_PROCESS_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/PostProcessPass.cpp"
       AXLE_RUNTIME_LAYER_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Runtime/src/RuntimeLayer.cpp"
+      AXLE_MATERIAL_INSPECTOR_CONTROLS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/UI/src/MaterialInspectorControls.cpp"
+      AXLE_ASSET_PREVIEW_PANEL_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/UI/src/AssetPreviewPanel.cpp"
       AXLE_REFRACTION_POLICY_DOC_PATH="${CMAKE_SOURCE_DIR}/docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/REFRACTION_ABSORPTION_POLICY.md")
 target_link_libraries(AxleRenderUnitTests PRIVATE
     Axle::Core

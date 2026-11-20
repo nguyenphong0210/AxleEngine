@@ -204,25 +204,25 @@ namespace Axle {
         } else if (trimmed.rfind("SheenColor:", 0) == 0) {
             float r = 1, g = 1, b = 1;
             std::sscanf(trimmed.c_str(), "SheenColor: [ %f , %f , %f ]", &r, &g, &b);
-            mat.SheenColor = glm::vec3(r, g, b);
+            mat.SheenColor = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
         } else if (trimmed.rfind("SheenRoughness:", 0) == 0) {
-            mat.SheenRoughness = std::stof(Trim(trimmed.substr(15)));
+            try { mat.SheenRoughness = std::clamp(std::stof(Trim(trimmed.substr(15))), 0.01f, 1.0f); } catch (...) {}
         } else if (trimmed.rfind("SubsurfaceEnabled:", 0) == 0) {
             mat.SubsurfaceEnabled = Trim(trimmed.substr(18)) == "true";
         } else if (trimmed.rfind("SubsurfaceColor:", 0) == 0) {
             float r = 1, g = 0.8f, b = 0.7f;
             std::sscanf(trimmed.c_str(), "SubsurfaceColor: [ %f , %f , %f ]", &r, &g, &b);
-            mat.SubsurfaceColor = glm::vec3(r, g, b);
+            mat.SubsurfaceColor = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
         } else if (trimmed.rfind("SubsurfaceRadius:", 0) == 0) {
-            mat.SubsurfaceRadius = std::stof(Trim(trimmed.substr(17)));
+            try { mat.SubsurfaceRadius = std::clamp(std::stof(Trim(trimmed.substr(17))), 0.0f, 16.0f); } catch (...) {}
         } else if (trimmed.rfind("AbsorptionEnabled:", 0) == 0) {
             mat.AbsorptionEnabled = Trim(trimmed.substr(18)) == "true";
         } else if (trimmed.rfind("AbsorptionColor:", 0) == 0) {
             float r = 0, g = 0, b = 0;
             std::sscanf(trimmed.c_str(), "AbsorptionColor: [ %f , %f , %f ]", &r, &g, &b);
-            mat.AbsorptionColor = glm::vec3(r, g, b);
+            mat.AbsorptionColor = glm::max(glm::vec3(r, g, b), glm::vec3(0.0f));
         } else if (trimmed.rfind("Dispersion:", 0) == 0) {
-            mat.Dispersion = std::stof(Trim(trimmed.substr(11)));
+            try { mat.Dispersion = std::clamp(std::stof(Trim(trimmed.substr(11))), 0.0f, 1.0f); } catch (...) {}
         } else if (trimmed.rfind("RenderQueue:", 0) == 0) {
             mat.RenderQueue = std::stoi(Trim(trimmed.substr(12)));
         } else if (trimmed.rfind("NormalPath:", 0) == 0) {

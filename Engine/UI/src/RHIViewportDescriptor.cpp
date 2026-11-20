@@ -31,6 +31,7 @@ namespace Axle {
         targets.Samples = desc.MSAASamples; targets.HDR = desc.IntermediateHDR; targets.FXAA = desc.FXAA; targets.HistoryCount = desc.HistoryCount;
         targets.EnableNormal = desc.EnableNormal;
         targets.EnableScreenStorage = desc.EnableScreenStorage;
+        targets.EnableSubsurface = desc.EnableSubsurface;
         targets.EnableHiZ = desc.EnableHiZ;
         targets.EnableReflectionTerms = desc.EnableReflectionTerms;
         targets.EnablePlanarReflection = desc.EnablePlanarReflection;
@@ -151,7 +152,7 @@ namespace Axle {
     }
 
     bool RHIViewportDescriptor::SetRenderOptions(const SceneRenderSettings& requestedSettings, const RenderVolumetricFog* fog,
-                                                 const RenderDDGIProbeGrid* ddgi) {
+                                                 const RenderDDGIProbeGrid* ddgi, bool enableSubsurface) {
         if (!m_OwnsColorTexture) return false;
         const auto settings = RenderBackendPolicy::FromDevice(RHI::RHIDevice::Get().GetCapabilities()).ResolveSettings(requestedSettings);
         auto desc = m_Desc;
@@ -167,6 +168,7 @@ namespace Axle {
         desc.HistoryCount = settings.EnableTAA ? 2 : 0;
         desc.EnableVelocity = settings.EnableTAA && settings.MSAASamples == 1;
         desc.EnableReactive = settings.EnableTAA && settings.MSAASamples == 1;
+        desc.EnableSubsurface = enableSubsurface && requestedSettings.EnableSubsurfaceScattering && settings.MSAASamples == 1;
         desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
         desc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
         desc.EnableBloom = settings.EnableBloom;
@@ -176,7 +178,7 @@ namespace Axle {
         desc.DDGIGridX = ddgiDims[0];
         desc.DDGIGridY = ddgiDims[1];
         desc.DDGIGridZ = ddgiDims[2];
-        desc.EnableNormal = desc.EnableGTAO || settings.EnableSSR || settings.EnablePlanarReflections;
+        desc.EnableNormal = desc.EnableGTAO || settings.EnableSSR || settings.EnablePlanarReflections || desc.EnableSubsurface;
         desc.EnableScreenStorage = desc.EnableGTAO || settings.EnableSSR ||
             settings.EnableBloom || settings.EnableAutoExposure;
         FroxelFogContract::ResolveViewTargetOptions(

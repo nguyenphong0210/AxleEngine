@@ -24,6 +24,7 @@ namespace Axle {
         uint8_t MSAASamples = 1, HistoryCount = 0;
         bool IntermediateHDR = false, FXAA = false;
         bool EnableNormal = false, EnableScreenStorage = false;
+        bool EnableSubsurface = false;
         bool EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false, EnableVelocity = false, EnableReactive = false;
         bool EnableReflectionTerms = false;
         bool EnablePlanarReflection = false;
@@ -62,7 +63,7 @@ namespace Axle {
         bool SetRenderOptions(uint8_t samples, bool hdrIntermediate, bool fxaa, std::optional<uint8_t> historyCount = {},
                               bool enableNormal = false, bool enableScreenStorage = false);
         bool SetRenderOptions(const SceneRenderSettings& settings, const RenderVolumetricFog* fog = nullptr,
-                              const RenderDDGIProbeGrid* ddgi = nullptr);
+                              const RenderDDGIProbeGrid* ddgi = nullptr, bool enableSubsurface = false);
 
         RHI::RHITextureFormat GetColorFormat() const { return m_Desc.ColorFormat; }
         RHI::RHITextureFormat GetDepthFormat() const { return m_Desc.DepthFormat; }

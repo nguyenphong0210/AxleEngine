@@ -89,23 +89,23 @@ namespace Axle {
         bool GetSheenEnabled() const { return m_SheenEnabled; }
         void SetSheenEnabled(bool value) { m_SheenEnabled = value; }
         const glm::vec3& GetSheenColor() const { return m_SheenColor; }
-        void SetSheenColor(const glm::vec3& value) { m_SheenColor = value; }
+        void SetSheenColor(const glm::vec3& value) { m_SheenColor = glm::clamp(value, glm::vec3(0.0f), glm::vec3(1.0f)); }
         float GetSheenRoughness() const { return m_SheenRoughness; }
         void SetSheenRoughness(float value) { m_SheenRoughness = std::clamp(value, 0.01f, 1.0f); }
 
         bool GetSubsurfaceEnabled() const { return m_SubsurfaceEnabled; }
         void SetSubsurfaceEnabled(bool value) { m_SubsurfaceEnabled = value; }
         const glm::vec3& GetSubsurfaceColor() const { return m_SubsurfaceColor; }
-        void SetSubsurfaceColor(const glm::vec3& value) { m_SubsurfaceColor = value; }
+        void SetSubsurfaceColor(const glm::vec3& value) { m_SubsurfaceColor = glm::clamp(value, glm::vec3(0.0f), glm::vec3(1.0f)); }
         float GetSubsurfaceRadius() const { return m_SubsurfaceRadius; }
-        void SetSubsurfaceRadius(float value) { m_SubsurfaceRadius = std::max(0.0f, value); }
+        void SetSubsurfaceRadius(float value) { m_SubsurfaceRadius = std::clamp(value, 0.0f, 16.0f); }
 
         bool GetAbsorptionEnabled() const { return m_AbsorptionEnabled; }
         void SetAbsorptionEnabled(bool value) { m_AbsorptionEnabled = value; }
         const glm::vec3& GetAbsorptionColor() const { return m_AbsorptionColor; }
-        void SetAbsorptionColor(const glm::vec3& value) { m_AbsorptionColor = value; }
+        void SetAbsorptionColor(const glm::vec3& value) { m_AbsorptionColor = glm::max(value, glm::vec3(0.0f)); }
         float GetDispersion() const { return m_Dispersion; }
-        void SetDispersion(float value) { m_Dispersion = std::max(0.0f, value); }
+        void SetDispersion(float value) { m_Dispersion = std::clamp(value, 0.0f, 1.0f); }
 
         // Automotive & Advanced Shading (Clearcoat & Anisotropy)
         float GetClearcoatStrength() const { return m_ClearcoatStrength; }

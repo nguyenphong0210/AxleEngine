@@ -240,6 +240,63 @@ namespace Axle {
             }
             EndGroup();
         }
+        if (BeginGroup("Sheen")) {
+            Row("Enabled"); changed|=ImGui::Checkbox("##Enabled",&m.SheenEnabled);
+            if (m.SheenEnabled) {
+                Row("Color");
+                if (ImGui::ColorEdit3("##Color",glm::value_ptr(m.SheenColor))) {
+                    m.SheenColor=glm::clamp(m.SheenColor,glm::vec3(0.0f),glm::vec3(1.0f));
+                    changed=true;
+                }
+                Row("Roughness");
+                if (ImGui::SliderFloat("##Roughness",&m.SheenRoughness,0.01f,1.0f,"%.2f")) {
+                    m.SheenRoughness=std::clamp(m.SheenRoughness,0.01f,1.0f);
+                    changed=true;
+                }
+            }
+            EndGroup();
+        }
+        if (BeginGroup("Subsurface Scattering")) {
+            Row("Enabled"); changed|=ImGui::Checkbox("##Enabled",&m.SubsurfaceEnabled);
+            if (m.SubsurfaceEnabled) {
+                Row("Color");
+                if (ImGui::ColorEdit3("##Color",glm::value_ptr(m.SubsurfaceColor))) {
+                    m.SubsurfaceColor=glm::clamp(m.SubsurfaceColor,glm::vec3(0.0f),glm::vec3(1.0f));
+                    changed=true;
+                }
+                Row("Radius");
+                if (ImGui::SliderFloat("##Radius",&m.SubsurfaceRadius,0.0f,16.0f,"%.2f")) {
+                    m.SubsurfaceRadius=std::clamp(m.SubsurfaceRadius,0.0f,16.0f);
+                    changed=true;
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Screen-space separable subsurface scattering radius (0-16). Single-sample RHI pass; disabled when MSAA > 1.");
+                if (m.SurfaceType>=SurfaceType::Transparent) { Row("Surface"); ImGui::TextDisabled("Select Opaque or Cutout to scatter"); }
+            }
+            EndGroup();
+        }
+        if (BeginGroup("Absorption & Dispersion")) {
+            Row("Absorption"); changed|=ImGui::Checkbox("##AbsorptionEnabled",&m.AbsorptionEnabled);
+            if (m.AbsorptionEnabled) {
+                Row("Sigma Color");
+                if (ImGui::ColorEdit3("##AbsorptionColor",glm::value_ptr(m.AbsorptionColor),ImGuiColorEditFlags_Float|ImGuiColorEditFlags_HDR)) {
+                    m.AbsorptionColor=glm::max(m.AbsorptionColor,glm::vec3(0.0f));
+                    changed=true;
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Beer-Lambert per-channel absorption coefficient (sigma >= 0) over refraction thickness.");
+            }
+            if (m.AbsorptionEnabled || m.RefractionEnabled) {
+                Row("Dispersion");
+                if (ImGui::SliderFloat("##Dispersion",&m.Dispersion,0.0f,1.0f,"%.3f")) {
+                    m.Dispersion=std::clamp(m.Dispersion,0.0f,1.0f);
+                    changed=true;
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Cauchy RGB chromatic dispersion across IOR on refractive transparent surfaces.");
+                if (!m.RefractionEnabled || m.SurfaceType!=SurfaceType::Transparent) {
+                    Row("Surface"); ImGui::TextDisabled("Enable Refraction on Transparent to transmit");
+                }
+            }
+            EndGroup();
+        }
         if (BeginGroup("Detail Normal")) {
             Row("Texture"); changed|=TextureSlot("DetailNormal",m.DetailNormalPath,m.UseDetailNormalMap,[&](const auto& p){AssignTexture(m.DetailNormalPath,m.DetailNormalMap,m.UseDetailNormalMap,p);});
             Row("Strength"); changed|=ImGui::SliderFloat("##Strength",&m.DetailNormalStrength,0,4);

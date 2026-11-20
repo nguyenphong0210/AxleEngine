@@ -708,7 +708,9 @@ namespace Axle {
         settings.EnableStudioLightLobes = false;
         settings.EnableToneMapping = true;
         settings.EnableFXAA = true;
-        settings.MSAASamples = 4;
+        const bool wantsSSS = m_PreviewScene &&
+            Axle::SceneRequiresSubsurfacePass(*m_PreviewScene, settings, 1u);
+        settings.MSAASamples = wantsSSS ? 1u : 4u;
         settings.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // Transparent clear for Godot checkerboard
 
         ViewRequest request;
@@ -720,7 +722,7 @@ namespace Axle {
         request.Name = "AssetPreview";
 
         if (RHI::RHIDevice::Get().IsNativeReady() && m_RHIViewport && m_RHIViewport->IsValid()) {
-            if (!m_RHIViewport->SetRenderOptions(settings)) return;
+            if (!m_RHIViewport->SetRenderOptions(settings, nullptr, nullptr, wantsSSS)) return;
             request.ColorTarget = m_RHIViewport->GetColorTexture();
             request.DepthTarget = m_RHIViewport->GetDepthTexture();
             request.ViewTargets = m_RHIViewport->GetTargets();

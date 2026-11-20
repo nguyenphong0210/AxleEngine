@@ -831,7 +831,7 @@ namespace Axle {
                     size_t colon = trimmed.find(':');
                     float r = 1, g = 1, b = 1;
                     std::sscanf(trimmed.substr(colon + 1).c_str(), " [ %f , %f , %f ]", &r, &g, &b);
-                    m_SheenColor = glm::vec3(r, g, b);
+                    m_SheenColor = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
                 } else if (trimmed.rfind("SheenRoughness:", 0) == 0 || trimmed.rfind("sheenRoughness:", 0) == 0) {
                     size_t colon = trimmed.find(':');
                     try { m_SheenRoughness = std::clamp(std::stof(Trim(trimmed.substr(colon + 1))), 0.01f, 1.0f); } catch (...) {}
@@ -842,10 +842,10 @@ namespace Axle {
                     size_t colon = trimmed.find(':');
                     float r = 1, g = 1, b = 1;
                     std::sscanf(trimmed.substr(colon + 1).c_str(), " [ %f , %f , %f ]", &r, &g, &b);
-                    m_SubsurfaceColor = glm::vec3(r, g, b);
+                    m_SubsurfaceColor = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
                 } else if (trimmed.rfind("SubsurfaceRadius:", 0) == 0 || trimmed.rfind("subsurfaceRadius:", 0) == 0) {
                     size_t colon = trimmed.find(':');
-                    try { m_SubsurfaceRadius = std::max(0.0f, std::stof(Trim(trimmed.substr(colon + 1)))); } catch (...) {}
+                    try { m_SubsurfaceRadius = std::clamp(std::stof(Trim(trimmed.substr(colon + 1))), 0.0f, 16.0f); } catch (...) {}
                 } else if (trimmed.rfind("AbsorptionEnabled:", 0) == 0 || trimmed.rfind("absorptionEnabled:", 0) == 0) {
                     size_t colon = trimmed.find(':');
                     m_AbsorptionEnabled = (Trim(trimmed.substr(colon + 1)) == "true");
@@ -853,10 +853,10 @@ namespace Axle {
                     size_t colon = trimmed.find(':');
                     float r = 0, g = 0, b = 0;
                     std::sscanf(trimmed.substr(colon + 1).c_str(), " [ %f , %f , %f ]", &r, &g, &b);
-                    m_AbsorptionColor = glm::vec3(r, g, b);
+                    m_AbsorptionColor = glm::max(glm::vec3(r, g, b), glm::vec3(0.0f));
                 } else if (trimmed.rfind("Dispersion:", 0) == 0 || trimmed.rfind("dispersion:", 0) == 0) {
                     size_t colon = trimmed.find(':');
-                    try { m_Dispersion = std::max(0.0f, std::stof(Trim(trimmed.substr(colon + 1)))); } catch (...) {}
+                    try { m_Dispersion = std::clamp(std::stof(Trim(trimmed.substr(colon + 1))), 0.0f, 1.0f); } catch (...) {}
                 } else if (trimmed.rfind("normalStrength:", 0) == 0) {
                     try { m_NormalStrength = std::stof(Trim(trimmed.substr(15))); } catch (...) {}
                 } else if (trimmed.rfind("uvScale:", 0) == 0 || trimmed.rfind("uvTiling:", 0) == 0) {
@@ -966,7 +966,7 @@ namespace Axle {
             } else if (trimmed.rfind("SheenColor:", 0) == 0) {
                 float r = 1, g = 1, b = 1;
                 std::sscanf(trimmed.c_str(), "SheenColor: [ %f , %f , %f ]", &r, &g, &b);
-                m_SheenColor = glm::vec3(r, g, b);
+                m_SheenColor = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
             } else if (trimmed.rfind("SheenRoughness:", 0) == 0) {
                 try { m_SheenRoughness = std::clamp(std::stof(Trim(trimmed.substr(15))), 0.01f, 1.0f); } catch (...) {}
             } else if (trimmed.rfind("SubsurfaceEnabled:", 0) == 0) {
@@ -974,17 +974,17 @@ namespace Axle {
             } else if (trimmed.rfind("SubsurfaceColor:", 0) == 0) {
                 float r = 1, g = 1, b = 1;
                 std::sscanf(trimmed.c_str(), "SubsurfaceColor: [ %f , %f , %f ]", &r, &g, &b);
-                m_SubsurfaceColor = glm::vec3(r, g, b);
+                m_SubsurfaceColor = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
             } else if (trimmed.rfind("SubsurfaceRadius:", 0) == 0) {
-                try { m_SubsurfaceRadius = std::max(0.0f, std::stof(Trim(trimmed.substr(17)))); } catch (...) {}
+                try { m_SubsurfaceRadius = std::clamp(std::stof(Trim(trimmed.substr(17))), 0.0f, 16.0f); } catch (...) {}
             } else if (trimmed.rfind("AbsorptionEnabled:", 0) == 0) {
                 m_AbsorptionEnabled = (Trim(trimmed.substr(18)) == "true");
             } else if (trimmed.rfind("AbsorptionColor:", 0) == 0) {
                 float r = 0, g = 0, b = 0;
                 std::sscanf(trimmed.c_str(), "AbsorptionColor: [ %f , %f , %f ]", &r, &g, &b);
-                m_AbsorptionColor = glm::vec3(r, g, b);
+                m_AbsorptionColor = glm::max(glm::vec3(r, g, b), glm::vec3(0.0f));
             } else if (trimmed.rfind("Dispersion:", 0) == 0) {
-                try { m_Dispersion = std::max(0.0f, std::stof(Trim(trimmed.substr(11)))); } catch (...) {}
+                try { m_Dispersion = std::clamp(std::stof(Trim(trimmed.substr(11))), 0.0f, 1.0f); } catch (...) {}
             } else if (trimmed.rfind("NormalStrength:", 0) == 0) {
                     m_NormalStrength = std::stof(Trim(trimmed.substr(15)));
                 } else if (trimmed.rfind("RoughnessPath:", 0) == 0) {

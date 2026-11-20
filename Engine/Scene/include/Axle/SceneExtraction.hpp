@@ -5,6 +5,7 @@
 
 namespace Axle {
     class Scene;
+    struct SceneRenderSettings;
 
     struct SceneExtractionOptions {
         const PerspectiveCamera* CameraOverride = nullptr;
@@ -15,6 +16,7 @@ namespace Axle {
     bool ResolveRenderWorldResources(RenderWorld& world);
     std::optional<RenderVolumetricFog> ExtractVolumetricFog(const Scene& scene);
     std::optional<RenderDDGIProbeGrid> ExtractDDGIProbeGrid(const Scene& scene);
+    bool SceneRequiresSubsurfacePass(const Scene& scene, const SceneRenderSettings& settings, uint8_t sampleCount = 1u);
 
     // Extracts an immutable RenderWorld snapshot from a Scene.
     // Captures owned material/pose/particle values on the scene owner thread.

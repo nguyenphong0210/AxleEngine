@@ -650,7 +650,7 @@ namespace Axle::RHI {
                 } else if (trimmed.rfind("sheenColor:", 0) == 0) {
                     float r = 1, g = 1, b = 1;
                     std::sscanf(trimmed.c_str(), "sheenColor: [ %f , %f , %f ]", &r, &g, &b);
-                    m_Desc.SheenColor = glm::vec3(r, g, b);
+                    m_Desc.SheenColor = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
                 } else if (trimmed.rfind("sheenRoughness:", 0) == 0) {
                     try { m_Desc.SheenRoughness = std::clamp(std::stof(Trim(trimmed.substr(15))), 0.01f, 1.0f); } catch (...) {}
                 } else if (trimmed.rfind("subsurfaceEnabled:", 0) == 0) {
@@ -658,17 +658,17 @@ namespace Axle::RHI {
                 } else if (trimmed.rfind("subsurfaceColor:", 0) == 0) {
                     float r = 1, g = 1, b = 1;
                     std::sscanf(trimmed.c_str(), "subsurfaceColor: [ %f , %f , %f ]", &r, &g, &b);
-                    m_Desc.SubsurfaceColor = glm::vec3(r, g, b);
+                    m_Desc.SubsurfaceColor = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
                 } else if (trimmed.rfind("subsurfaceRadius:", 0) == 0) {
-                    try { m_Desc.SubsurfaceRadius = std::max(0.0f, std::stof(Trim(trimmed.substr(17)))); } catch (...) {}
+                    try { m_Desc.SubsurfaceRadius = std::clamp(std::stof(Trim(trimmed.substr(17))), 0.0f, 16.0f); } catch (...) {}
                 } else if (trimmed.rfind("absorptionEnabled:", 0) == 0) {
                     m_Desc.AbsorptionEnabled = (Trim(trimmed.substr(18)) == "true");
                 } else if (trimmed.rfind("absorptionColor:", 0) == 0) {
                     float r = 0, g = 0, b = 0;
                     std::sscanf(trimmed.c_str(), "absorptionColor: [ %f , %f , %f ]", &r, &g, &b);
-                    m_Desc.AbsorptionColor = glm::vec3(r, g, b);
+                    m_Desc.AbsorptionColor = glm::max(glm::vec3(r, g, b), glm::vec3(0.0f));
                 } else if (trimmed.rfind("dispersion:", 0) == 0) {
-                    try { m_Desc.Dispersion = std::max(0.0f, std::stof(Trim(trimmed.substr(11)))); } catch (...) {}
+                    try { m_Desc.Dispersion = std::clamp(std::stof(Trim(trimmed.substr(11))), 0.0f, 1.0f); } catch (...) {}
                 } else if (trimmed.rfind("renderQueue:", 0) == 0) {
                     try { m_Desc.RenderQueue = std::stoi(Trim(trimmed.substr(12))); } catch (...) {}
                 } else if (trimmed.rfind("specularHighlights:", 0) == 0) {
@@ -891,7 +891,7 @@ namespace Axle::RHI {
                     size_t colon = trimmed.find(':');
                     float r = 1, g = 1, b = 1;
                     std::sscanf(trimmed.substr(colon + 1).c_str(), " [ %f , %f , %f ]", &r, &g, &b);
-                    m_Desc.SheenColor = glm::vec3(r, g, b);
+                    m_Desc.SheenColor = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
                 } else if (trimmed.rfind("SheenRoughness:", 0) == 0 || trimmed.rfind("sheenRoughness:", 0) == 0) {
                     size_t colon = trimmed.find(':');
                     try { m_Desc.SheenRoughness = std::clamp(std::stof(Trim(trimmed.substr(colon + 1))), 0.01f, 1.0f); } catch (...) {}
@@ -902,10 +902,10 @@ namespace Axle::RHI {
                     size_t colon = trimmed.find(':');
                     float r = 1, g = 1, b = 1;
                     std::sscanf(trimmed.substr(colon + 1).c_str(), " [ %f , %f , %f ]", &r, &g, &b);
-                    m_Desc.SubsurfaceColor = glm::vec3(r, g, b);
+                    m_Desc.SubsurfaceColor = glm::clamp(glm::vec3(r, g, b), glm::vec3(0.0f), glm::vec3(1.0f));
                 } else if (trimmed.rfind("SubsurfaceRadius:", 0) == 0 || trimmed.rfind("subsurfaceRadius:", 0) == 0) {
                     size_t colon = trimmed.find(':');
-                    try { m_Desc.SubsurfaceRadius = std::max(0.0f, std::stof(Trim(trimmed.substr(17)))); } catch (...) {}
+                    try { m_Desc.SubsurfaceRadius = std::clamp(std::stof(Trim(trimmed.substr(colon + 1))), 0.0f, 16.0f); } catch (...) {}
                 } else if (trimmed.rfind("AbsorptionEnabled:", 0) == 0 || trimmed.rfind("absorptionEnabled:", 0) == 0) {
                     size_t colon = trimmed.find(':');
                     m_Desc.AbsorptionEnabled = (Trim(trimmed.substr(colon + 1)) == "true");
@@ -913,10 +913,10 @@ namespace Axle::RHI {
                     size_t colon = trimmed.find(':');
                     float r = 0, g = 0, b = 0;
                     std::sscanf(trimmed.substr(colon + 1).c_str(), " [ %f , %f , %f ]", &r, &g, &b);
-                    m_Desc.AbsorptionColor = glm::vec3(r, g, b);
+                    m_Desc.AbsorptionColor = glm::max(glm::vec3(r, g, b), glm::vec3(0.0f));
                 } else if (trimmed.rfind("Dispersion:", 0) == 0 || trimmed.rfind("dispersion:", 0) == 0) {
                     size_t colon = trimmed.find(':');
-                    try { m_Desc.Dispersion = std::max(0.0f, std::stof(Trim(trimmed.substr(colon + 1)))); } catch (...) {}
+                    try { m_Desc.Dispersion = std::clamp(std::stof(Trim(trimmed.substr(colon + 1))), 0.0f, 1.0f); } catch (...) {}
                 }
             }
         }

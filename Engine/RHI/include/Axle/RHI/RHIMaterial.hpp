@@ -181,23 +181,23 @@ namespace Axle::RHI {
         bool GetSheenEnabled() const { return m_Desc.SheenEnabled; }
         void SetSheenEnabled(bool val) { m_Desc.SheenEnabled = val; }
         const glm::vec3& GetSheenColor() const { return m_Desc.SheenColor; }
-        void SetSheenColor(const glm::vec3& val) { m_Desc.SheenColor = val; }
+        void SetSheenColor(const glm::vec3& val) { m_Desc.SheenColor = glm::clamp(val, glm::vec3(0.0f), glm::vec3(1.0f)); }
         float GetSheenRoughness() const { return m_Desc.SheenRoughness; }
-        void SetSheenRoughness(float val) { m_Desc.SheenRoughness = val; }
+        void SetSheenRoughness(float val) { m_Desc.SheenRoughness = std::clamp(val, 0.01f, 1.0f); }
 
         bool GetSubsurfaceEnabled() const { return m_Desc.SubsurfaceEnabled; }
         void SetSubsurfaceEnabled(bool val) { m_Desc.SubsurfaceEnabled = val; }
         const glm::vec3& GetSubsurfaceColor() const { return m_Desc.SubsurfaceColor; }
-        void SetSubsurfaceColor(const glm::vec3& val) { m_Desc.SubsurfaceColor = val; }
+        void SetSubsurfaceColor(const glm::vec3& val) { m_Desc.SubsurfaceColor = glm::clamp(val, glm::vec3(0.0f), glm::vec3(1.0f)); }
         float GetSubsurfaceRadius() const { return m_Desc.SubsurfaceRadius; }
-        void SetSubsurfaceRadius(float val) { m_Desc.SubsurfaceRadius = val; }
+        void SetSubsurfaceRadius(float val) { m_Desc.SubsurfaceRadius = std::clamp(val, 0.0f, 16.0f); }
 
         bool GetAbsorptionEnabled() const { return m_Desc.AbsorptionEnabled; }
         void SetAbsorptionEnabled(bool val) { m_Desc.AbsorptionEnabled = val; }
         const glm::vec3& GetAbsorptionColor() const { return m_Desc.AbsorptionColor; }
-        void SetAbsorptionColor(const glm::vec3& val) { m_Desc.AbsorptionColor = val; }
+        void SetAbsorptionColor(const glm::vec3& val) { m_Desc.AbsorptionColor = glm::max(val, glm::vec3(0.0f)); }
         float GetDispersion() const { return m_Desc.Dispersion; }
-        void SetDispersion(float val) { m_Desc.Dispersion = val; }
+        void SetDispersion(float val) { m_Desc.Dispersion = std::clamp(val, 0.0f, 1.0f); }
 
         RHIMaterialDesc& GetDesc() { return m_Desc; }
         const RHIMaterialDesc& GetDesc() const { return m_Desc; }

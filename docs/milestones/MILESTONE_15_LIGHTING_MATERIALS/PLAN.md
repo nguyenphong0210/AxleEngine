@@ -160,6 +160,18 @@ To keep HDR post-processing and temporal reconstruction modular, independently v
 | **U8-D** | `M15-U8-12.1` → `12.2`, `15.1` → `15.4` | TAA resolve core: closest `3x3` depth & velocity sampling, disocclusion/invalid-history rejection, explicit resource declarations, no silent FXAA-on-TAA stacking, and `static shimmer`, `moving object`, `disocclusion`, `resize/switch` native tests. | Consolidated U8 review |
 | **U8-E** | `M15-U8-14.1` → `14.3`, `15.5` | TAA edge policies & U8 closure: transparent geometry & reactive mask policies, unjittered UI/gizmo policy, `ghosting` fixture, post/temporal GPU timestamp & VRAM accounting, and final `PLAN.md` + exchange delivery. | Consolidated U8 review |
 
+#### U9 Execution Batches (U9-A through U9-E)
+
+To keep advanced material shading models, transmittance optics, screen-space subsurface filtering, MaterialGraph contract parity, and product authoring pipelines isolated and independently verifiable, U9 (`S9.1`–`S9.5`, 19 leaves) was implemented across five sequential checkpoints starting from `6f22017a`:
+
+| Batch | Atomic Leaves | Commit | Scope Focus | Review Boundary |
+|---|---|---|---|---|
+| **U9-A** | `M15-U9-01`, `08.1` | `5c140f37` | Charlie sheen Direct, Point, Spot, LTC Area & IBL BRDF + 9x9 directional albedo LUT energy conservation (`<= 1.0`). | Consolidated U9 review |
+| **U9-B** | `M15-U9-02`, `03`, `08.2` | `ffb140b1` | Beer–Lambert absorption, thickness/path policy (`REFRACTION_ABSORPTION_POLICY.md`) & Cauchy 3-wavelength chromatic dispersion. | Consolidated U9 review |
+| **U9-C** | `M15-U9-04.1` → `04.3`, `05`, `08.3` | `3244aa34` | Separable screen-space SSS (`SSS.hlsl`, `SubsurfaceScatteringPass`), depth & normal/material boundary rejection, specular/emissive split & recombination. | Consolidated U9 review |
+| **U9-D** | `M15-U9-07.1`, `07.2`, `08.4` | `dbdf828d` | 13-pin `PBRMasterOutput` lowering, `MaterialSurface.hlsl` Sheen/SSS split parity, `MaterialBindingPlan::SupportedFeatures`, explicit unsupported diagnostics & built-in/graph parity fixtures. | Consolidated U9 review |
+| **U9-E** | `M15-U9-06.1` → `06.6` | `7568cd5e` | Shared bounds/clamps across `Material`, `MaterialComponent`, `MaterialComponentCodec`, `RHIMaterial`, `ResolvedSurface`, `SceneExtraction`; Inspector UI (`Sheen`, `Subsurface Scattering`, `Absorption & Dispersion`); Preview & Editor single-sample SSS viewport wiring; Runtime persistence & GPU regression. | Consolidated U9 review |
+
 **Deferred Editor visual policy (user steering 2026-11-17):** Open `EDITOR VISUAL` gates (`M15-U4-06.5`, `U4-E`, `U5-03`, and new U5 visual gates) remain explicitly marked `NOT RUN` / open during automated batch delivery and will be verified in a consolidated Editor capture session. Do not mark any `EDITOR VISUAL` item `PASS` or close its parent acceptance claim until the required Debug/Release Editor screenshots are attached and inspected.
 
 ## 4. Canonical atomic execution and acceptance checklist
@@ -1404,65 +1416,68 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 
 ### U9 / S9.1–S9.5 — Advanced material models
 
-- [ ] **M15-U9-01 — Charlie sheen direct/IBL response with energy checks.**
+- [x] **M15-U9-01 — Charlie sheen direct/IBL response with energy checks.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-02 — Beer–Lambert absorption with documented thickness/path policy.**
+  - **Evidence:** Self-verified automated PASS (`5c140f37`, re-verified at `7568cd5e`): Charlie sheen NDF/visibility/FGrazing + 9x9 directional-albedo LUT energy conservation (`<= 1.0`) implemented across Direct, Point, Spot, LTC Area, and IBL in `PBRCommon.hlsli`/`ForwardPBR.hlsl`/`MaterialSurface.hlsl`; `AxleRenderUnitTests` (`SheenContract`) & Debug/Release Vulkan/DX12 `AxleEnvironmentRenderingTests` (`[08.1]`) exit 0. Independent Codex review pending.
+- [x] **M15-U9-02 — Beer–Lambert absorption with documented thickness/path policy.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-03 — Cauchy/wavelength dispersion within documented scope.**
+  - **Evidence:** Self-verified automated PASS (`ffb140b1`, re-verified at `7568cd5e`): `exp(-sigma * pathLength)` transmittance (`AbsorptionContract` & `REFRACTION_ABSORPTION_POLICY.md`) verified on Debug/Release `AxleRenderUnitTests` & Vulkan/DX12 `AxleEnvironmentRenderingTests` (`[08.2]`, `sigma(3,0.5,1.5)`, zero opaque leakage `opaqueDiff=0`). Independent Codex review pending.
+- [x] **M15-U9-03 — Cauchy/wavelength dispersion within documented scope.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-04.1 — Implement separable diffusion.**
+  - **Evidence:** Self-verified automated PASS (`ffb140b1`, re-verified at `7568cd5e`): 3-wavelength Cauchy RGB IOR splitting (`EvaluateCauchyIORs`) within documented screen-space limits verified on Debug/Release `AxleRenderUnitTests` (`AbsorptionContract`) & Vulkan/DX12 `AxleEnvironmentRenderingTests` (`[08.2]`, `dispFringe=(-0.9202,0)`). Independent Codex review pending.
+- [x] **M15-U9-04.1 — Implement separable diffusion.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-04.2 — Reject by depth.**
+  - **Evidence:** Self-verified automated PASS (`3244aa34`, re-verified at `7568cd5e`): point-sampled 11-tap separable H/V diffusion pass (`SSS.hlsl`, `SubsurfaceScatteringPass`, `RHIViewTarget::SubsurfaceDiffuse/Control/Temp`) verified across CPU (`SubsurfaceContract`) & Debug/Release Vulkan/DX12 `AxleEnvironmentRenderingTests` (`[08.3]`, `termBleedR=0.4530`). Independent Codex review pending.
+- [x] **M15-U9-04.2 — Reject by depth.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`3244aa34`, re-verified at `7568cd5e`): exponential relative-depth rejection weight (`ComputeBoundaryWeight`) blocks silhouette bleed (`silhouetteBleed=0`) in `SubsurfaceContract` & Debug/Release Vulkan/DX12 `[08.3]`. Independent Codex review pending.
 - [ ] **M15-U9-04.3 — Reject by normal/material boundary.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the sphere is smooth with no triangle bands or invalid pixels.
-- [ ] **M15-U9-05 — Preserve specular while diffusing intended diffuse data.**
+  - **Evidence:** **Self-verified automated PASS (display-blocked EDITOR VISUAL):** `3244aa34` & `7568cd5e` pass normal dot & SSS material boundary rejection (`seamBleed=0`, `silhouetteBleed=0` on Debug/Release Vulkan/DX12 `[08.3]` and `AxleEditor --verify-empty-startup --rhi=vulkan` exit 0). **EDITOR VISUAL: NOT RUN / BLOCKED (display offline: `Default Monitor Availability=8`); independent Codex review pending.**
+- [x] **M15-U9-05 — Preserve specular while diffusing intended diffuse data.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-06.1 — Complete native asset path.**
+  - **Evidence:** Self-verified automated PASS (`3244aa34`, re-verified at `7568cd5e`): `DiffuseSSS` isolated from crisp specular/emissive before separable blur and recombined in `SSS.hlsl` (`specPeak(off=590.3094, on=589.5969)` on Debug/Release Vulkan/DX12 `[08.3]`). Independent Codex review pending.
+- [x] **M15-U9-06.1 — Complete native asset path.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-06.2 — Complete component path.**
+  - **Evidence:** Self-verified automated PASS (`7568cd5e`): native `Material` defaults, `[0,1]` / `[0.01,1]` / `[0,16]` / `>= 0` setter & `.amat` reload clamps, and round-trip serialization verified in Debug/Release `AxleRenderUnitTests` (`M15U9Contract` `06.1`), `AxleMaterialUnitTests` (5/5), and `ctest -R ^M15U9AdvancedMaterialContract$`. Independent Codex review pending.
+- [x] **M15-U9-06.2 — Complete component path.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-06.3 — Complete GPU path.**
+  - **Evidence:** Self-verified automated PASS (`7568cd5e`): `MaterialComponent`, `MaterialComponentCodec`, and `SceneSerializer` round-trip/clamps verified in Debug/Release `AxleRenderUnitTests` (`M15U9Contract` `06.2`), `ctest -R ^(M15U9AdvancedMaterialContract|M15SurfaceAndMaterialContract)$`, and Vulkan/DX12 `[06.5/06.6]`. Independent Codex review pending.
+- [x] **M15-U9-06.3 — Complete GPU path.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`7568cd5e`): `SceneExtraction`, `RHI::RHIMaterial`, and `ResolvedSurface` constant buffer packing & clamps match across Debug/Release `AxleRenderUnitTests` (`M15U9Contract` `06.3`) and Vulkan/DX12 `AxleEnvironmentRenderingTests`. Independent Codex review pending.
 - [ ] **M15-U9-06.4 — Complete Inspector path.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen and matches Runtime/Preview.
+  - **Evidence:** **Self-verified automated PASS (display-blocked EDITOR VISUAL):** `7568cd5e` adds `Sheen`, `Subsurface Scattering`, and `Absorption & Dispersion` Inspector controls with bounds/clamps & tooltips in `MaterialInspectorControls.cpp` (`AxleEditor` Debug/Release build + `--verify-empty-startup --rhi=vulkan` & `M15U9Contract` `06.4` exit 0). **EDITOR VISUAL: NOT RUN / BLOCKED (display offline: `Default Monitor Availability=8`); independent Codex review pending.**
 - [ ] **M15-U9-06.5 — Complete Preview path.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen and matches Runtime/Preview.
-- [ ] **M15-U9-06.6 — Complete Runtime path.**
+  - **Evidence:** **Self-verified automated PASS (display-blocked EDITOR VISUAL):** `7568cd5e` wires `SceneRequiresSubsurfacePass` & `RHIViewportDesc::EnableSubsurface` in `AssetPreviewPanel`/`RHIViewportDescriptor` (dropping preview `MSAASamples` from `4` to `1` for SSS) with Debug/Release `AxlePreviewRenderTests` (`vulkan`/`dx12` & `surfaces`, 8/8 exit 0) & `AxleEnvironmentRenderingTests` (`[06.5/06.6]`). **EDITOR VISUAL: NOT RUN / BLOCKED (display offline: `Default Monitor Availability=8`); independent Codex review pending.**
+- [x] **M15-U9-06.6 — Complete Runtime path.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-07.1 — Extend graph outputs/lowering.**
+  - **Evidence:** Self-verified automated PASS (`7568cd5e`): serialized `.axle` scene loaded via `SceneSerializer::Deserialize`, extracted cleanly via `ExtractRenderWorld`, and rendered on Debug/Release Vulkan & DX12 (`AxleEnvironmentRenderingTests` `[06.5/06.6]`, `rimLift=0.3674 termRedLift=1.2745`, plus `AxleRuntime` build & `AxleRenderServiceTests` 4/4 exit 0). Independent Codex review pending.
+- [x] **M15-U9-07.1 — Extend graph outputs/lowering.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-07.2 — Declare unsupported fields explicitly.**
+  - **Evidence:** Self-verified automated PASS (`dbdf828d`, re-verified at `7568cd5e`): 13-pin `PBRMasterOutput` (`Sheen*`, `Subsurface*`, `AbsorptionColor`, `IOR`, `Dispersion`) & 6 entry-point `MaterialSurface.hlsl` pipeline (`PSMain`, `PSReflectionMain`, `PSSSSMain`, `PSReflectionSSSMain`, `PSNormalMain`) pass Debug/Release `MaterialGraph*` ctests (`12/12` pass) and `M15U9Contract`. Independent Codex review pending.
+- [x] **M15-U9-07.2 — Declare unsupported fields explicitly.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-08.1 — Test sheen.**
+  - **Evidence:** Self-verified automated PASS (`dbdf828d`, re-verified at `7568cd5e`): `MaterialBindingPlan::SupportedFeatures` & `MG_UNSUPPORTED_OPAQUE_ABSORPTION` / `MG_UNSUPPORTED_OPAQUE_DISPERSION` surface explicit diagnostics & `UnsupportedFeatures` mask in `AxleRenderUnitTests` (`M15U9Contract` `07.2`). Independent Codex review pending.
+- [x] **M15-U9-08.1 — Test sheen.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-08.2 — Test absorption.**
+  - **Evidence:** Self-verified automated PASS (`5c140f37`, re-verified at `7568cd5e`): `AxleEnvironmentRenderingTests` `[08.1]` Debug/Release Vulkan & DX12 (`center=0.0898 grazing=0.3190 tightRatio=5.4623 wideRatio=2.7766 pointOn=23.6896 rectOn=0.0825`). Independent Codex review pending.
+- [x] **M15-U9-08.2 — Test absorption.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-08.3 — Test SSS.**
+  - **Evidence:** Self-verified automated PASS (`ffb140b1`, re-verified at `7568cd5e`): `AxleEnvironmentRenderingTests` `[08.2]` Debug/Release Vulkan & DX12 (`sigma(3,0.5,1.5)`, `unabs=(1,1,1)`, `dispFringe=(-0.9202,0)`, `opaqueDiff=0`). Independent Codex review pending.
+- [x] **M15-U9-08.3 — Test SSS.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U9-08.4 — Test built-in/graph parity.**
+  - **Evidence:** Self-verified automated PASS (`3244aa34`, re-verified at `7568cd5e`): `AxleEnvironmentRenderingTests` `[08.3]` Debug/Release Vulkan & DX12 (`termBleedR=0.4530 silhouetteBleed=0 seamBleed=0 specPeak(off=590.3094, on=589.5969)`). Independent Codex review pending.
+- [x] **M15-U9-08.4 — Test built-in/graph parity.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`dbdf828d`, `7568cd5e`): `AxleEnvironmentRenderingTests` `[08.4]` Debug/Release Vulkan & DX12 (`sheenRelErr=(0.0177,0.0360,0.0032)`, `sssMaxRelErr=0.0029`, built-in & graph `PSMain`/`PSSSSMain`/`PSReflectionMain` parity). Independent Codex review pending.
 
-**Exit:** models are bounded, authorable, serializable and pass controlled fixtures.
+**Exit:** all U9 advanced material models, bounds/clamps, separable SSS, MaterialGraph lowering/diagnostics, Inspector/Preview/Runtime plumbing and Debug/Release Vulkan/DX12 fixtures pass self-verification on commit `7568cd5e` (`M15-U9-04.3/06.4/06.5` `EDITOR VISUAL` blocked on offline display `Availability=8`; U9 independent Codex review pending).
 
 ### U10 / S10.1–S10.4 — Editor and authoring integration
 

@@ -563,6 +563,239 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& renderer, const std::filesyst
                   << dispMin << "," << dispMax << ") opaqueDiff=" << maxOpaqueDiff << "\n";
     }
 
-    std::cout << "[M15U9] M15 Unit 9 Batch A & B GPU tests (" << backendTag << ") passed.\n";
+    // =========================================================================
+    // Batch C (M15-U9-04.1..04.3, M15-U9-05, M15-U9-08.3):
+    // Screen-Space Separable SSS Diffusion, Silhouette & Boundary Isolation,
+    // and Crisp Specular Recombination
+    // =========================================================================
+    {
+        auto sssTargets = std::make_shared<RHIViewTargets>();
+        {
+            RHIViewTargetDesc sssTargetDesc;
+            sssTargetDesc.Width = width;
+            sssTargetDesc.Height = height;
+            sssTargetDesc.Samples = 1;
+            sssTargetDesc.HDR = true;
+            sssTargetDesc.EnableDepth = true;
+            sssTargetDesc.EnableNormal = true;
+            sssTargetDesc.EnableSubsurface = true;
+            sssTargetDesc.OwnPrimary = false;
+            if (!sssTargets->Configure(sssTargetDesc, nullptr, nullptr, FroxelHistoryPolicy::AllowStaticFog)) {
+                std::cerr << "[M15U9] FAIL (08.3): Could not configure SSS view targets\n";
+                return false;
+            }
+        }
+
+        auto cube = RHIMesh::CreateCube(1.0f);
+        if (!cube) {
+            std::cerr << "[M15U9] FAIL (08.3): Could not create cube mesh\n";
+            return false;
+        }
+
+        auto renderSSSLinear = [&](const RenderWorld& world, bool enableSSS, std::vector<glm::vec4>& outPixels) -> bool {
+            SceneRenderSettings sssSettings = settings;
+            sssSettings.EnableSubsurfaceScattering = enableSSS;
+            renderer.RenderWorldView(world, camera, &color, &depth, sssSettings, nullptr, sssTargets);
+            if (!renderer.WasLastRenderSuccessful()) {
+                std::cerr << "[M15U9] FAIL (08.3): RenderWorldView(SSS) failed ("
+                          << renderer.GetDiagnostics().GetFrame().Fallbacks.size() << " fallbacks)\n";
+                return false;
+            }
+            auto* hdr = sssTargets->Get(RHIViewTarget::HDR);
+            return hdr && ReadTextureRGBA16F(*hdr, outPixels);
+        };
+
+        auto worldToPixelX = [&](float wx, float wz) -> uint32_t {
+            const glm::mat4 vp = camera.GetProjectionMatrixZO() * camera.GetViewMatrix();
+            const glm::vec4 clip = vp * glm::vec4(wx, 0.0f, wz, 1.0f);
+            const float u = 0.5f * (clip.x / clip.w) + 0.5f;
+            return static_cast<uint32_t>(std::clamp(std::lround(u * static_cast<float>(width - 1u)), 0l, static_cast<long>(width - 1u)));
+        };
+
+        // 1. Terminator diffuse scatter across continuous SSS surface
+        RHIMaterialDesc skinDesc;
+        skinDesc.SurfaceType = SurfaceType::Opaque;
+        skinDesc.BaseColor = glm::vec4(0.75f, 0.72f, 0.70f, 1.0f);
+        skinDesc.Roughness = 0.90f;
+        skinDesc.Metallic = 0.0f;
+        skinDesc.EnableSpecularHighlights = false;
+        skinDesc.SubsurfaceEnabled = true;
+        skinDesc.SubsurfaceColor = glm::vec3(1.0f, 0.25f, 0.05f);
+        skinDesc.SubsurfaceRadius = 6.0f;
+        auto skinMat = std::make_shared<RHIMaterial>(skinDesc);
+
+        RenderMeshInstance contSlab;
+        contSlab.EntityID = 301;
+        contSlab.NativeView = cube->CaptureView();
+        contSlab.Material.RHIMaterialAsset = skinMat;
+        contSlab.WorldTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1.8f, 1.8f, 0.2f));
+
+        RenderSpotLight termSpot;
+        termSpot.EntityID = 302;
+        termSpot.Position = glm::vec3(-0.45f, 0.0f, 2.0f);
+        termSpot.Direction = glm::vec3(0.0f, 0.0f, -1.0f);
+        termSpot.Color = glm::vec3(1.0f, 1.0f, 1.0f);
+        termSpot.Intensity = 45.0f;
+        termSpot.Range = 20.0f;
+        termSpot.InnerAngle = 5.0f;
+        termSpot.OuterAngle = 10.0f;
+
+        RenderWorld sssWorld;
+        sssWorld.Skybox.Enabled = false;
+        sssWorld.Skybox.EnvironmentLighting = false;
+        sssWorld.Meshes = {contSlab};
+        sssWorld.SpotLights = {termSpot};
+
+        std::vector<glm::vec4> pxOff, pxOn;
+        if (!renderSSSLinear(sssWorld, false, pxOff) || !renderSSSLinear(sssWorld, true, pxOn)) return false;
+
+        // Just past the spot cutoff edge (x ~ -0.06..+0.02 -> ~px 61..65; test well past cutoff near x = -0.03..+0.04)
+        const uint32_t xStart = worldToPixelX(-0.07f, 0.1f);
+        const uint32_t xEnd = worldToPixelX(0.03f, 0.1f);
+        glm::vec3 meanOff(0.0f), meanOn(0.0f);
+        uint32_t tapCount = 0u;
+        for (uint32_t y = 60u; y <= 67u; ++y) {
+            for (uint32_t x = xStart; x <= xEnd; ++x) {
+                meanOff += glm::vec3(pxOff[static_cast<size_t>(y) * width + x]);
+                meanOn += glm::vec3(pxOn[static_cast<size_t>(y) * width + x]);
+                ++tapCount;
+            }
+        }
+        meanOff /= static_cast<float>(std::max(tapCount, 1u));
+        meanOn /= static_cast<float>(std::max(tapCount, 1u));
+        const float bleedGainR = meanOn.r - meanOff.r;
+        if (!(bleedGainR > 0.025f && meanOn.r > meanOn.g * 1.15f && meanOn.g > meanOn.b)) {
+            std::cerr << "[M15U9] FAIL (08.3): Expected warm subsurface scatter past light terminator! off=("
+                      << meanOff.r << "," << meanOff.g << "," << meanOff.b << ") on=("
+                      << meanOn.r << "," << meanOn.g << "," << meanOn.b << ")\n";
+            return false;
+        }
+
+        // 2a. Depth-jump silhouette isolation: bright SSS left slab vs distant dark non-SSS backdrop on right
+        RHIMaterialDesc darkDesc;
+        darkDesc.SurfaceType = SurfaceType::Opaque;
+        darkDesc.BaseColor = glm::vec4(0.02f, 0.02f, 0.02f, 1.0f);
+        darkDesc.Roughness = 0.90f;
+        darkDesc.SubsurfaceEnabled = false;
+        auto darkMat = std::make_shared<RHIMaterial>(darkDesc);
+
+        RenderMeshInstance leftHalf;
+        leftHalf.EntityID = 303;
+        leftHalf.NativeView = cube->CaptureView();
+        leftHalf.Material.RHIMaterialAsset = skinMat;
+        leftHalf.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(-0.48f, 0.0f, 0.0f)),
+                                             glm::vec3(0.90f, 1.8f, 0.2f)); // Right edge x = -0.03
+
+        RenderMeshInstance rightDeep;
+        rightDeep.EntityID = 304;
+        rightDeep.NativeView = cube->CaptureView();
+        rightDeep.Material.RHIMaterialAsset = darkMat;
+        rightDeep.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.45f, 0.0f, -2.5f)),
+                                              glm::vec3(1.8f, 3.6f, 0.2f));
+
+        termSpot.InnerAngle = 15.0f;
+        termSpot.OuterAngle = 20.0f; // Illuminate right up to leftHalf edge x = -0.03!
+        sssWorld.Meshes = {leftHalf, rightDeep};
+        sssWorld.SpotLights = {termSpot};
+
+        if (!renderSSSLinear(sssWorld, false, pxOff) || !renderSSSLinear(sssWorld, true, pxOn)) return false;
+        const uint32_t isoStart = worldToPixelX(0.02f, 0.1f);
+        const uint32_t isoEnd = std::min(width - 2u, isoStart + 12u);
+        float maxDepthJumpBleed = 0.0f;
+        for (uint32_t y = 56u; y <= 71u; ++y) {
+            for (uint32_t x = isoStart; x <= isoEnd; ++x) {
+                maxDepthJumpBleed = std::max(maxDepthJumpBleed,
+                    glm::length(glm::vec3(pxOn[static_cast<size_t>(y) * width + x] - pxOff[static_cast<size_t>(y) * width + x])));
+            }
+        }
+        if (maxDepthJumpBleed > 1e-3f) {
+            std::cerr << "[M15U9] FAIL (08.3): Subsurface scatter bled across depth silhouette jump! diff="
+                      << maxDepthJumpBleed << "\n";
+            return false;
+        }
+
+        // 2b. Coplanar dissimilar-SSS touching seam isolation (zero depth delta, same normal, different scatter color)
+        RHIMaterialDesc blueSSSDesc = skinDesc;
+        blueSSSDesc.BaseColor = glm::vec4(0.02f, 0.02f, 0.02f, 1.0f);
+        blueSSSDesc.SubsurfaceColor = glm::vec3(0.0f, 0.15f, 1.0f);
+        auto blueSSSMat = std::make_shared<RHIMaterial>(blueSSSDesc);
+
+        RenderMeshInstance rightTouch = leftHalf;
+        rightTouch.EntityID = 305;
+        rightTouch.Material.RHIMaterialAsset = blueSSSMat;
+        rightTouch.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.42f, 0.0f, 0.0f)),
+                                               glm::vec3(0.90f, 1.8f, 0.2f)); // Left edge x = -0.03 (coplanar z=+0.1!)
+
+        // Keep spot cone strictly inside leftHalf (x <= -0.045) while illuminating right up to ~1px of the seam.
+        termSpot.Position = glm::vec3(-0.40f, 0.0f, 2.0f);
+        termSpot.InnerAngle = 6.0f;
+        termSpot.OuterAngle = 10.5f;
+        sssWorld.Meshes = {leftHalf, rightTouch};
+        sssWorld.SpotLights = {termSpot};
+
+        if (!renderSSSLinear(sssWorld, false, pxOff) || !renderSSSLinear(sssWorld, true, pxOn)) return false;
+        float maxSeamBleed = 0.0f;
+        for (uint32_t y = 56u; y <= 71u; ++y) {
+            for (uint32_t x = isoStart; x <= isoEnd; ++x) {
+                const glm::vec3 d = glm::vec3(pxOn[static_cast<size_t>(y) * width + x] - pxOff[static_cast<size_t>(y) * width + x]);
+                maxSeamBleed = std::max(maxSeamBleed, std::abs(d.r));
+            }
+        }
+        if (maxSeamBleed > 2e-3f) {
+            std::cerr << "[M15U9] FAIL (08.3): Subsurface scatter bled across coplanar dissimilar-material boundary! diffR="
+                      << maxSeamBleed << "\n";
+            return false;
+        }
+
+        // 3. Crisp Specular Peak Preservation (Specular separated before separable H/V diffusion, then recombined)
+        RHIMaterialDesc glossySSSDesc;
+        glossySSSDesc.SurfaceType = SurfaceType::Opaque;
+        glossySSSDesc.BaseColor = glm::vec4(0.03f, 0.03f, 0.03f, 1.0f);
+        glossySSSDesc.Roughness = 0.07f;
+        glossySSSDesc.Metallic = 0.0f;
+        glossySSSDesc.EnableSpecularHighlights = true;
+        glossySSSDesc.SubsurfaceEnabled = true;
+        glossySSSDesc.SubsurfaceColor = glm::vec3(1.0f, 0.35f, 0.15f);
+        glossySSSDesc.SubsurfaceRadius = 12.0f;
+        auto glossySSSMat = std::make_shared<RHIMaterial>(glossySSSDesc);
+
+        RenderMeshInstance glossySphere;
+        glossySphere.EntityID = 306;
+        glossySphere.NativeView = sphere->CaptureView();
+        glossySphere.Material.RHIMaterialAsset = glossySSSMat;
+
+        RenderPointLight glintLight;
+        glintLight.EntityID = 307;
+        glintLight.Position = glm::vec3(0.0f, 0.0f, 2.5f);
+        glintLight.Color = glm::vec3(1.0f, 1.0f, 1.0f);
+        glintLight.Intensity = 18.0f;
+        glintLight.Radius = 20.0f;
+
+        RenderWorld specWorld;
+        specWorld.Skybox.Enabled = false;
+        specWorld.Skybox.EnvironmentLighting = false;
+        specWorld.Meshes = {glossySphere};
+        specWorld.PointLights = {glintLight};
+
+        if (!renderSSSLinear(specWorld, false, pxOff) || !renderSSSLinear(specWorld, true, pxOn)) return false;
+        float specPeakOff = 0.0f, specPeakOn = 0.0f;
+        for (uint32_t y = 58u; y <= 69u; ++y) {
+            for (uint32_t x = 58u; x <= 69u; ++x) {
+                specPeakOff = std::max(specPeakOff, Luminance(pxOff[static_cast<size_t>(y) * width + x]));
+                specPeakOn = std::max(specPeakOn, Luminance(pxOn[static_cast<size_t>(y) * width + x]));
+            }
+        }
+        if (!(specPeakOff > 1.5f && specPeakOn >= specPeakOff * 0.90f)) {
+            std::cerr << "[M15U9] FAIL (08.3): Crisp specular peak was attenuated/blurred by SSS! off="
+                      << specPeakOff << " on=" << specPeakOn << "\n";
+            return false;
+        }
+
+        std::cout << "  [08.3 " << backendTag << "] PASS Separable SSS: termBleedR=" << bleedGainR
+                  << " silhouetteBleed=" << maxDepthJumpBleed << " seamBleed=" << maxSeamBleed
+                  << " specPeak(off=" << specPeakOff << ", on=" << specPeakOn << ")\n";
+    }
+
+    std::cout << "[M15U9] M15 Unit 9 Batch A, B & C GPU tests (" << backendTag << ") passed.\n";
     return true;
 }

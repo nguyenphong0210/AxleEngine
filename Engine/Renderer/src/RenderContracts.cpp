@@ -4588,4 +4588,156 @@ namespace Axle {
         }
     } // namespace AbsorptionDispersionContract
 
+    // =========================================================================
+    // M15 Unit 9 (S9.3 / U9-C): Separable Subsurface Scattering Contract
+    // =========================================================================
+    namespace SubsurfaceContract {
+        float ComputeBoundaryWeight(const SamplePoint& center,
+                                    const SamplePoint& sample,
+                                    float depthRejectScale,
+                                    float normalMinDot) {
+            if (sample.SubsurfaceRadius <= 0.001f || center.SubsurfaceRadius <= 0.001f) {
+                return 0.0f;
+            }
+            const float colorDiff = glm::length(glm::clamp(center.SubsurfaceColor, 0.0f, 1.0f) -
+                                                glm::clamp(sample.SubsurfaceColor, 0.0f, 1.0f));
+            const float radiusDiff = std::abs(center.SubsurfaceRadius - sample.SubsurfaceRadius) /
+                                     std::max(std::max(center.SubsurfaceRadius, sample.SubsurfaceRadius), 0.1f);
+            if (colorDiff > 0.08f || radiusDiff > 0.15f) {
+                return 0.0f;
+            }
+
+            const float depthDelta = std::abs(center.Depth - sample.Depth);
+            const float maxAllowedDepthStep = std::max(depthRejectScale * std::max(center.SubsurfaceRadius, 0.05f), 0.05f);
+            if (depthDelta > maxAllowedDepthStep) {
+                return 0.0f;
+            }
+            const float depthWeight = std::exp(-depthDelta * (3.0f / maxAllowedDepthStep));
+
+            const float nLenC = glm::length(center.Normal);
+            const float nLenS = glm::length(sample.Normal);
+            const glm::vec3 nC = nLenC > 1e-6f ? center.Normal / nLenC : glm::vec3(0.0f, 0.0f, 1.0f);
+            const glm::vec3 nS = nLenS > 1e-6f ? sample.Normal / nLenS : glm::vec3(0.0f, 0.0f, 1.0f);
+            const float ndot = glm::dot(nC, nS);
+            if (ndot < normalMinDot) {
+                return 0.0f;
+            }
+            const float normalWeight = std::pow(std::clamp((ndot - normalMinDot) / std::max(1.0f - normalMinDot, 1e-4f), 0.0f, 1.0f), 2.0f);
+            return depthWeight * normalWeight;
+        }
+
+        glm::vec3 EvaluateSeparableSSS1D(const SamplePoint* samples,
+                                         size_t count,
+                                         size_t centerIndex) {
+            if (!samples || centerIndex >= count) {
+                return glm::vec3(0.0f);
+            }
+            const SamplePoint& center = samples[centerIndex];
+            if (center.SubsurfaceRadius <= 0.001f) {
+                return center.Diffuse;
+            }
+            const glm::vec3 scatterStrength = glm::clamp(center.SubsurfaceColor, 0.0f, 1.0f);
+            glm::vec3 accumColor = center.Diffuse;
+            glm::vec3 accumWeight(1.0f);
+            for (int i = -5; i <= 5; ++i) {
+                if (i == 0) continue;
+                const int idxInt = static_cast<int>(centerIndex) + i;
+                if (idxInt < 0 || idxInt >= static_cast<int>(count)) continue;
+                const auto& sample = samples[static_cast<size_t>(idxInt)];
+                const float t = static_cast<float>(i) * 0.2f;
+                const float gaussW = std::exp(-3.0f * t * t);
+                const float bilateral = ComputeBoundaryWeight(center, sample);
+                if (bilateral <= 1e-5f) continue;
+                const glm::vec3 tapW = (gaussW * bilateral) * scatterStrength;
+                accumColor += sample.Diffuse * tapW;
+                accumWeight += tapW;
+            }
+            return accumColor / glm::max(accumWeight, glm::vec3(1e-4f));
+        }
+
+        bool VerifyNormalizedKernelAndDiffusePreservation() {
+            // 1. Flat uniform diffuse surface retains exact energy (weight normalization == 1.0)
+            std::vector<SamplePoint> uniform(11);
+            for (auto& s : uniform) {
+                s.Diffuse = glm::vec3(0.65f, 0.42f, 0.21f);
+                s.Depth = 2.5f;
+                s.Normal = glm::vec3(0.0f, 0.0f, 1.0f);
+                s.SubsurfaceColor = glm::vec3(1.0f, 0.35f, 0.15f);
+                s.SubsurfaceRadius = 1.5f;
+            }
+            const glm::vec3 preserved = EvaluateSeparableSSS1D(uniform.data(), uniform.size(), 5);
+            if (glm::length(preserved - uniform[5].Diffuse) > 1e-4f) {
+                return false;
+            }
+
+            // 2. Step light terminator spreads warm diffuse from lit half into unlit half with per-channel color tint
+            for (size_t idx = 0; idx < 11; ++idx) {
+                uniform[idx].Diffuse = idx < 5 ? glm::vec3(1.0f, 1.0f, 1.0f) : glm::vec3(0.0f, 0.0f, 0.0f);
+            }
+            const glm::vec3 unlitEdge = EvaluateSeparableSSS1D(uniform.data(), uniform.size(), 5);
+            return unlitEdge.r > 0.15f && unlitEdge.r > unlitEdge.g && unlitEdge.g > unlitEdge.b && unlitEdge.b > 0.02f;
+        }
+
+        bool VerifyDepthAndBoundaryRejection() {
+            // Left half [0..4]: bright lit red skin; Right half [5..10]: unlit neighbor at different depth, normal, or material
+            std::vector<SamplePoint> seam(11);
+            for (size_t idx = 0; idx < 11; ++idx) {
+                if (idx < 5) {
+                    seam[idx].Diffuse = glm::vec3(4.0f, 0.2f, 0.1f);
+                    seam[idx].Depth = 2.0f;
+                    seam[idx].Normal = glm::vec3(0.0f, 0.0f, 1.0f);
+                    seam[idx].SubsurfaceColor = glm::vec3(1.0f, 0.3f, 0.2f);
+                    seam[idx].SubsurfaceRadius = 2.0f;
+                } else {
+                    seam[idx].Diffuse = glm::vec3(0.0f);
+                    seam[idx].Depth = 2.0f;
+                    seam[idx].Normal = glm::vec3(0.0f, 0.0f, 1.0f);
+                    seam[idx].SubsurfaceColor = glm::vec3(1.0f, 0.3f, 0.2f);
+                    seam[idx].SubsurfaceRadius = 2.0f;
+                }
+            }
+            // (a) Depth silhouette jump at index 5
+            auto depthJump = seam;
+            for (size_t idx = 5; idx < 11; ++idx) depthJump[idx].Depth = 4.5f;
+            if (glm::length(EvaluateSeparableSSS1D(depthJump.data(), depthJump.size(), 5)) > 1e-6f) return false;
+
+            // (b) Normal crease discontinuity (90 deg corner)
+            auto normalJump = seam;
+            for (size_t idx = 5; idx < 11; ++idx) normalJump[idx].Normal = glm::vec3(1.0f, 0.0f, 0.0f);
+            if (glm::length(EvaluateSeparableSSS1D(normalJump.data(), normalJump.size(), 5)) > 1e-6f) return false;
+
+            // (c) Coplanar equal-depth non-SSS neighbor (radius = 0)
+            auto nonSssNeighbor = seam;
+            for (size_t idx = 5; idx < 11; ++idx) nonSssNeighbor[idx].SubsurfaceRadius = 0.0f;
+            if (glm::length(EvaluateSeparableSSS1D(nonSssNeighbor.data(), nonSssNeighbor.size(), 5)) > 1e-6f) return false;
+
+            // (d) Coplanar equal-depth/normal dissimilar SSS material (blue jade touching red skin)
+            auto diffMaterial = seam;
+            for (size_t idx = 5; idx < 11; ++idx) diffMaterial[idx].SubsurfaceColor = glm::vec3(0.1f, 0.7f, 1.0f);
+            if (glm::length(EvaluateSeparableSSS1D(diffMaterial.data(), diffMaterial.size(), 5)) > 1e-6f) return false;
+
+            return true;
+        }
+
+        bool VerifySpecularSplitRecombination() {
+            // Diffuse gets blurred across terminator while crisp localized specular spike at center stays sharp.
+            std::vector<SamplePoint> strip(11);
+            std::vector<glm::vec3> specSpike(11, glm::vec3(0.0f));
+            specSpike[5] = glm::vec3(10.0f, 10.0f, 10.0f);
+            for (size_t idx = 0; idx < 11; ++idx) {
+                strip[idx].Diffuse = glm::vec3(idx <= 5 ? 0.5f : 0.0f);
+                strip[idx].Depth = 2.0f;
+                strip[idx].Normal = glm::vec3(0.0f, 0.0f, 1.0f);
+                strip[idx].SubsurfaceColor = glm::vec3(1.0f);
+                strip[idx].SubsurfaceRadius = 2.0f;
+            }
+            const glm::vec3 blurredDiff5 = EvaluateSeparableSSS1D(strip.data(), strip.size(), 5);
+            const glm::vec3 blurredDiff6 = EvaluateSeparableSSS1D(strip.data(), strip.size(), 6);
+            const glm::vec3 final5 = specSpike[5] + blurredDiff5;
+            const glm::vec3 final6 = specSpike[6] + blurredDiff6;
+            // Center retains > 10.0 spike while adjacent pixel 6 gets zero specular bleed from center spike
+            return final5.r > 10.2f && final6.r < 0.35f;
+        }
+    } // namespace SubsurfaceContract
+
 } // namespace Axle

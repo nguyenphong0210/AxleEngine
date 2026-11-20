@@ -43,8 +43,11 @@ namespace Axle {
         RHI::RHIShaderBytecode PSBytecode;
         RHI::RHIShaderBytecode NormalPSBytecode;
         RHI::RHIShaderBytecode ReflectionPSBytecode;
+        RHI::RHIShaderBytecode SSSPSBytecode;
+        RHI::RHIShaderBytecode ReflectionSSSPSBytecode;
         bool HasNormalPass = false;
         bool HasReflectionTerms = false;
+        bool HasSSSTerms = false;
         RHI::RHIShaderReflection Reflection;
         // Own range storage referenced by the native layout's descriptor descriptions.
         RHI::RHIAutoPipelineLayout LayoutDescription;
@@ -59,7 +62,7 @@ namespace Axle {
     nri::Pipeline* CreateCustomMaterialPipeline(const CustomReadyGeneration& generation,
         nri::Format colorFormat, nri::Format depthFormat, uint8_t samples,
         SurfaceType surface, CullMode cull, bool depthWrite, bool normalPass = false, bool reflectionTerms = false,
-        bool reverseWinding = false);
+        bool reverseWinding = false, bool sssTerms = false);
 
     enum class ProgramSelectionKind : uint8_t {
         BuiltIn = 0,

@@ -180,7 +180,7 @@ namespace Axle::RHI {
             data.Sheen = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
         }
         if (m_Desc.SubsurfaceEnabled) {
-            data.Subsurface = glm::vec4(m_Desc.SubsurfaceColor, std::max(0.0f, m_Desc.SubsurfaceRadius));
+            data.Subsurface = glm::vec4(glm::clamp(m_Desc.SubsurfaceColor, glm::vec3(0.0f), glm::vec3(1.0f)), std::clamp(m_Desc.SubsurfaceRadius, 0.0f, 16.0f));
         } else {
             data.Subsurface = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
         }

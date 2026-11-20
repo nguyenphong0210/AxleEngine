@@ -1,4 +1,5 @@
 #include <Axle/RenderService.hpp>
+#include "Passes/SubsurfaceScatteringPass.hpp"
 #include <Axle/RenderBackendPolicy.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/RHIObjectPicker.hpp>
@@ -276,8 +277,11 @@ namespace Axle {
                 desc.Width = request.Width; desc.Height = request.Height;
                 desc.Samples = settings.MSAASamples;
                 desc.FXAA = settings.EnableFXAA;
+                const bool wantsSSS = Passes::SubsurfaceScatteringPass::SceneRequiresSubsurfacePass(
+                    prepared, settings, settings.MSAASamples);
                 desc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows ||
-                    settings.EnableSSR || settings.EnablePlanarReflections);
+                    settings.EnableSSR || settings.EnablePlanarReflections || wantsSSS);
+                desc.EnableSubsurface = wantsSSS;
                 desc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableBloom || settings.EnableAutoExposure);
                 desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
                 desc.EnableBloom = settings.EnableBloom;

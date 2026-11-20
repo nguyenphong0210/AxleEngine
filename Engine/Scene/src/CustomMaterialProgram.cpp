@@ -12,13 +12,18 @@ namespace Axle {
     nri::Pipeline* CreateCustomMaterialPipeline(const CustomReadyGeneration& generation,
         nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount,
         SurfaceType surfaceType, CullMode cullMode, bool depthWrite, bool normalPass, bool reflectionTerms,
-        bool reverseWinding) {
+        bool reverseWinding, bool sssTerms) {
         using namespace RHI;
         if (!generation.PipelineLayout || !generation.PipelineLayout->IsValid()) return nullptr;
         if (normalPass && (!generation.HasNormalPass || !generation.NormalPSBytecode.IsValid())) return nullptr;
+        if (sssTerms && (!generation.HasSSSTerms || (reflectionTerms ? !generation.ReflectionSSSPSBytecode.IsValid() : !generation.SSSPSBytecode.IsValid()))) {
+            return nullptr;
+        }
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = generation.PipelineLayout.get();
         gfxDesc.Shaders = { generation.VSBytecode, normalPass ? generation.NormalPSBytecode :
+            (sssTerms && reflectionTerms) ? generation.ReflectionSSSPSBytecode :
+            sssTerms ? generation.SSSPSBytecode :
             reflectionTerms ? generation.ReflectionPSBytecode : generation.PSBytecode };
 
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
@@ -43,9 +48,16 @@ namespace Axle {
         } else {
             gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
         }
+        if ((reflectionTerms && !generation.HasReflectionTerms) || (sssTerms && !generation.HasSSSTerms)) return nullptr;
+        if ((reflectionTerms || sssTerms) && normalPass) return nullptr;
         gfxDesc.ColorAttachmentFormats = { colorFormat };
         if (reflectionTerms) {
-            if (!generation.HasReflectionTerms || normalPass) return nullptr;
+            for (int i = 0; i < 2; ++i) {
+                gfxDesc.ColorAttachments.push_back(RHIBlendAttachmentDesc::Opaque());
+                gfxDesc.ColorAttachmentFormats.push_back(nri::Format::RGBA16_SFLOAT);
+            }
+        }
+        if (sssTerms) {
             for (int i = 0; i < 2; ++i) {
                 gfxDesc.ColorAttachments.push_back(RHIBlendAttachmentDesc::Opaque());
                 gfxDesc.ColorAttachmentFormats.push_back(nri::Format::RGBA16_SFLOAT);
@@ -296,9 +308,36 @@ namespace Axle {
                 return result;
             }
         }
+        const bool hasSSSTerms = key.EntryPointPS == "PSMain" &&
+            std::regex_search(vsDesc.Source, std::regex(R"(SubsurfaceSurfaceOutput\s+PSSSSMain\s*\()")) &&
+            (!hasReflectionTerms || std::regex_search(vsDesc.Source, std::regex(R"(ReflectionSubsurfaceSurfaceOutput\s+PSReflectionSSSMain\s*\()")));
+        RHI::RHIShaderCompileResult sssResult;
+        RHI::RHIShaderCompileResult reflectionSSSResult;
+        if (hasSSSTerms) {
+            auto sssDesc = psDesc;
+            sssDesc.EntryPoint = "PSSSSMain";
+            sssResult = compiler.Compile(sssDesc);
+            if (!sssResult.Success) {
+                result.Diagnostic = "SSS companion compilation failed: " + sssResult.ErrorMessage;
+                return result;
+            }
+            if (hasReflectionTerms) {
+                auto reflectionSSSDesc = psDesc;
+                reflectionSSSDesc.EntryPoint = "PSReflectionSSSMain";
+                reflectionSSSResult = compiler.Compile(reflectionSSSDesc);
+                if (!reflectionSSSResult.Success) {
+                    result.Diagnostic = "Reflection SSS companion compilation failed: " + reflectionSSSResult.ErrorMessage;
+                    return result;
+                }
+            }
+        }
         std::vector<RHI::RHIShaderReflection> interfaces{vsResult.Reflection, psResult.Reflection};
         if (hasNormalPass) interfaces.push_back(normalResult.Reflection);
         if (hasReflectionTerms) interfaces.push_back(reflectionResult.Reflection);
+        if (hasSSSTerms) {
+            interfaces.push_back(sssResult.Reflection);
+            if (hasReflectionTerms) interfaces.push_back(reflectionSSSResult.Reflection);
+        }
         auto mergedReflection = RHI::RHIShaderReflection::Merge(interfaces);
         auto validation=CustomShaderInterface::Validate(mergedReflection);
         std::string collision;
@@ -329,6 +368,11 @@ namespace Axle {
         generation->HasNormalPass = hasNormalPass;
         generation->HasReflectionTerms = hasReflectionTerms;
         if (hasReflectionTerms) generation->ReflectionPSBytecode = reflectionResult.Bytecode;
+        generation->HasSSSTerms = hasSSSTerms;
+        if (hasSSSTerms) {
+            generation->SSSPSBytecode = sssResult.Bytecode;
+            if (hasReflectionTerms) generation->ReflectionSSSPSBytecode = reflectionSSSResult.Bytecode;
+        }
         generation->Reflection = mergedReflection;
         generation->BindingPlan = std::get<MaterialBindingPlan>(planResult);
 

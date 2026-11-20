@@ -31,6 +31,7 @@ namespace Axle {
         bool EnableBloom = false;
         bool EnableAutoExposure = false;
         bool EnableTAA = false;
+        bool EnableSubsurfaceScattering = true;
         uint8_t MSAASamples = 1; // 1 (disabled), 2, 4, 8
         bool Wireframe = false;
         bool ShowPhysicsDebug = false;

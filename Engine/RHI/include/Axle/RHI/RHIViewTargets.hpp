@@ -10,6 +10,7 @@ namespace Axle::RHI {
         OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1, Velocity, Reactive,
         GTAO, GTAOResolved, Bloom0, Bloom1, Bloom2, Bloom3, Bloom4, Bloom5, Exposure, DDGI, DDGIDistance,
         HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, ReflectionEnvironment, ReflectionResponse,
+        SubsurfaceDiffuse, SubsurfaceControl, SubsurfaceTemp,
         SSRColor0, SSRColor1, SSRColor2, SSRColor3, PlanarColor, PlanarDepth,
         FroxelScattering, FroxelIntegrated, FroxelHistory0, FroxelHistory1, Count
     };
@@ -46,6 +47,7 @@ namespace Axle::RHI {
         bool EnableDepth = true, HDR = false, FXAA = false, OwnPrimary = true, RenderAuxiliary = true;
         bool EnableNormal = false, EnableScreenStorage = false, EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false, EnableVelocity = false, EnableReactive = false;
         bool EnableReflectionTerms = false;
+        bool EnableSubsurface = false;
         bool EnablePlanarReflection = false;
         float PlanarResolutionScale = 0.5f;
         bool EnableVolumetricFog = false;
@@ -120,6 +122,9 @@ namespace Axle::RHI {
         RHITexture* GetSSRColor(uint32_t level) const {
             return level < 4 ? Get(static_cast<RHIViewTarget>(static_cast<uint8_t>(RHIViewTarget::SSRColor0) + level)) : nullptr;
         }
+        RHITexture* GetSubsurfaceDiffuse() const { return Get(RHIViewTarget::SubsurfaceDiffuse); }
+        RHITexture* GetSubsurfaceControl() const { return Get(RHIViewTarget::SubsurfaceControl); }
+        RHITexture* GetSubsurfaceTemp() const { return Get(RHIViewTarget::SubsurfaceTemp); }
         RHITexture* GetPlanarColor() const { return Get(RHIViewTarget::PlanarColor); }
         RHITexture* GetPlanarDepth() const { return Get(RHIViewTarget::PlanarDepth); }
         RHITexture* GetFroxelScattering() const { return Get(RHIViewTarget::FroxelScattering); }

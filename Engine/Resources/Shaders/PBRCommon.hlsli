@@ -426,6 +426,34 @@ float3 ApplyCharlieSheenDirect(
     return baseLighting * baseAtten + sc * (dSheen * vSheen * NdotL);
 }
 
+void ApplyCharlieSheenDirectSplit(
+    inout float3 diffLighting,
+    inout float3 specLighting,
+    float3 N,
+    float3 H,
+    float NdotL,
+    float NdotV,
+    float3 sheenColor,
+    float sheenRoughness,
+    float specularToggle) {
+    if (sheenRoughness < 0.0 || NdotL <= 0.0) {
+        return;
+    }
+    float3 sc = saturate(sheenColor) * saturate(specularToggle);
+    float maxSheen = max(sc.r, max(sc.g, sc.b));
+    if (maxSheen <= 0.0) {
+        return;
+    }
+    float r = clamp(sheenRoughness, 0.04, 1.0);
+    float eV = EvaluateCharlieDirectionalAlbedo(NdotV, r);
+    float eL = EvaluateCharlieDirectionalAlbedo(NdotL, r);
+    float baseAtten = saturate(1.0 - maxSheen * max(eV, eL));
+    float dSheen = D_Charlie(max(dot(N, H), 0.0), r);
+    float vSheen = V_Charlie(NdotL, NdotV, r);
+    diffLighting *= baseAtten;
+    specLighting = specLighting * baseAtten + sc * (dSheen * vSheen * NdotL);
+}
+
 float3 ApplyCharlieSheenArea(
     float3 areaBaseLighting,
     float4 positionAndWidth,
@@ -487,6 +515,102 @@ float3 ApplyCharlieSheenArea(
     float sheenTerm = min(rawSheen, eV);
     float baseAtten = saturate(1.0 - maxSheen * max(eV, eL));
     return areaBaseLighting * baseAtten + sc * sheenTerm;
+}
+
+void ApplyCharlieSheenAreaSplit(
+    inout float3 areaDiffLighting,
+    inout float3 areaSpecLighting,
+    float4 positionAndWidth,
+    float4 directionAndHeight,
+    float4 upAndRange,
+    float3 worldPos,
+    float3 N,
+    float3 V,
+    float diffuseFormFactor,
+    float3 sheenColor,
+    float sheenRoughness,
+    float specularToggle) {
+    if (sheenRoughness < 0.0 || diffuseFormFactor <= 0.0) {
+        return;
+    }
+    float3 sc = saturate(sheenColor) * saturate(specularToggle);
+    float maxSheen = max(sc.r, max(sc.g, sc.b));
+    if (maxSheen <= 0.0) {
+        return;
+    }
+    float3 lightDir = dot(directionAndHeight.xyz, directionAndHeight.xyz) > 1e-12
+        ? normalize(directionAndHeight.xyz) : float3(0.0, 0.0, -1.0);
+    float3 fallbackAxis = (abs(lightDir.y) < 0.99) ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+    float3 rawUp = upAndRange.xyz - lightDir * dot(upAndRange.xyz, lightDir);
+    float3 lightUp = dot(rawUp, rawUp) > 1e-12 ? normalize(rawUp) : normalize(cross(fallbackAxis, lightDir));
+    float3 lightRight = normalize(cross(lightDir, lightUp));
+    lightUp = normalize(cross(lightRight, lightDir));
+
+    float2 halfSize = max(float2(positionAndWidth.w, abs(directionAndHeight.w)) * 0.5, 0.005);
+    float3 center = positionAndWidth.xyz;
+    float3 samplePos = center;
+    if (dot(center - worldPos, N) <= 0.0) {
+        float2 horizonBias = float2(dot(lightRight, N), dot(lightUp, N)) * max(halfSize.x, halfSize.y);
+        if (directionAndHeight.w < 0.0) {
+            float rad = length(horizonBias / halfSize);
+            if (rad > 1.0) horizonBias /= rad;
+        } else {
+            horizonBias = clamp(horizonBias, -halfSize, halfSize);
+        }
+        samplePos = center + lightRight * horizonBias.x + lightUp * horizonBias.y;
+    }
+    float3 toRep = samplePos - worldPos;
+    float repLen = length(toRep);
+    if (repLen < 1e-5) {
+        return;
+    }
+    float3 L = toRep / repLen;
+    float nl = max(dot(N, L), 0.0);
+    if (nl <= 0.0) {
+        return;
+    }
+    float nv = clamp(dot(N, V), 0.001, 1.0);
+    float3 H = normalize(V + L);
+    float r = clamp(sheenRoughness, 0.04, 1.0);
+    float solidAngle = min(2.0 * PI, PI * diffuseFormFactor / max(nl, 0.05));
+    float rawSheen = D_Charlie(max(dot(N, H), 0.0), r) * V_Charlie(nl, nv, r) * nl * solidAngle;
+    float eV = EvaluateCharlieDirectionalAlbedo(nv, r);
+    float eL = EvaluateCharlieDirectionalAlbedo(nl, r);
+    float sheenTerm = min(rawSheen, eV);
+    float baseAtten = saturate(1.0 - maxSheen * max(eV, eL));
+    areaDiffLighting *= baseAtten;
+    areaSpecLighting = areaSpecLighting * baseAtten + sc * sheenTerm;
+}
+
+void ApplyCharlieSheenIBLSplit(
+    inout float3 diffuseAmbient,
+    inout float3 specularAmbient,
+    inout float3 reflectionEnvironment,
+    inout float3 reflectionResponse,
+    float3 sheenEnv,
+    float NdotV,
+    float ao,
+    float3 sheenColor,
+    float sheenRoughness,
+    float envReflectionToggle) {
+    if (sheenRoughness < 0.0) {
+        return;
+    }
+    float3 sc = saturate(sheenColor) * saturate(envReflectionToggle);
+    float maxSheen = max(sc.r, max(sc.g, sc.b));
+    if (maxSheen <= 0.0) {
+        return;
+    }
+    float r = clamp(sheenRoughness, 0.04, 1.0);
+    float nv = clamp(NdotV, 0.001, 1.0);
+    float eSheen = EvaluateCharlieDirectionalAlbedo(nv, r);
+    float baseAtten = saturate(1.0 - maxSheen * eSheen);
+    float sheenSpecAO = ComputeSpecularOcclusion(nv, ao, r);
+    float3 sheenAmbient = sheenEnv * sc * eSheen * sheenSpecAO;
+    diffuseAmbient *= baseAtten;
+    specularAmbient = specularAmbient * baseAtten + sheenAmbient;
+    reflectionEnvironment = reflectionEnvironment * baseAtten + sheenAmbient;
+    reflectionResponse = reflectionResponse * baseAtten + sc * eSheen * sheenSpecAO;
 }
 
 void ApplyCharlieSheenIBL(

@@ -99,6 +99,48 @@ bool RunM15AdvancedMaterialContractUnitTests() {
             "REFRACTION_ABSORPTION_POLICY.md documents thickness/path policy and screen-space vs traced glass limits");
     }
 
-    std::cout << "[M15U9Contract] M15 U9 Batch A & B contract tests passed.\n";
+    // M15-U9-04 & M15-U9-05: Screen-space Separable Subsurface Scattering contracts & diffuse/specular split
+    {
+        RENDER_CHECK(SubsurfaceContract::VerifyNormalizedKernelAndDiffusePreservation(),
+            "Separable SSS 1D filter preserves uniform diffuse plateau and smooths step terminator asymmetrically by RGB scatter");
+        RENDER_CHECK(SubsurfaceContract::VerifyDepthAndBoundaryRejection(),
+            "Separable SSS bilateral weights reject silhouette depth jumps, creases, non-SSS and dissimilar SSS materials");
+        RENDER_CHECK(SubsurfaceContract::VerifySpecularSplitRecombination(),
+            "Separable SSS splits diffuse from crisp specular before blurring and recombines exactly");
+
+        RHI::RHIMaterialDesc sssDesc;
+        sssDesc.SubsurfaceEnabled = true;
+        sssDesc.SubsurfaceColor = glm::vec3(1.4f, -0.1f, 0.25f);
+        sssDesc.SubsurfaceRadius = 2.0f;
+        RHI::RHIMaterial sssMat(sssDesc);
+        const auto sc = sssMat.BuildConstants();
+        const auto sr = MaterialResolver::Resolve(sssMat).ToMaterialConstants();
+        RENDER_CHECK(std::abs(sc.Subsurface.x - 1.0f) < 1e-5f && sc.Subsurface.y == 0.0f &&
+                     std::abs(sc.Subsurface.z - 0.25f) < 1e-5f && std::abs(sc.Subsurface.w - 2.0f) < 1e-5f &&
+                     sr.Subsurface == sc.Subsurface,
+            "RHIMaterial and ResolvedSurface clamp SubsurfaceColor [0,1] and pack SubsurfaceRadius in sync");
+
+        const std::string forwardPBR = LoadTextFile(AXLE_FORWARD_PBR_SHADER_PATH);
+        const std::string sssShader = LoadTextFile(AXLE_SSS_SHADER_PATH);
+        const std::string sssPass = LoadTextFile(AXLE_SUBSURFACE_PASS_SOURCE_PATH);
+        const std::string scenePasses = LoadTextFile(AXLE_SCENE_PASSES_SOURCE_PATH);
+        RENDER_CHECK(!sssShader.empty() && !sssPass.empty() && !scenePasses.empty() &&
+                     sssShader.find("PSBlurH") != std::string::npos &&
+                     sssShader.find("PSBlurVComposite") != std::string::npos &&
+                     sssShader.find("ComputeBoundaryWeight") != std::string::npos &&
+                     sssPass.find("SceneRequiresSubsurfacePass") != std::string::npos &&
+                     sssPass.find("SSSBlurH") != std::string::npos &&
+                     sssPass.find("SSSBlurV") != std::string::npos &&
+                     forwardPBR.find("PSSSSMain") != std::string::npos &&
+                     forwardPBR.find("PSReflectionSSSMain") != std::string::npos,
+            "SSS.hlsl, SubsurfaceScatteringPass, and ForwardPBR SSS MRT entry points exist and wire separable diffusion");
+
+        const auto sssPos = scenePasses.find("\"SubsurfaceScatteringPass\"");
+        const auto ssrPos = scenePasses.find("\"ScreenSpaceReflectionPass\"");
+        RENDER_CHECK(sssPos != std::string::npos && ssrPos != std::string::npos && sssPos < ssrPos,
+            "SubsurfaceScatteringPass executes before ScreenSpaceReflectionPass in scene frame pass schedule");
+    }
+
+    std::cout << "[M15U9Contract] M15 U9 Batch A, B & C contract tests passed.\n";
     return true;
 }

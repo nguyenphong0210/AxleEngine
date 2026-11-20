@@ -2,6 +2,7 @@
 #include "RHISceneRendererPasses.hpp"
 #include "Passes/ReflectionCapturePass.hpp"
 #include "Passes/PlanarReflectionPass.hpp"
+#include "Passes/SubsurfaceScatteringPass.hpp"
 #include <Axle/Path.hpp>
 #include <Axle/RenderGraph.hpp>
 #include <Axle/SceneLighting.hpp>
@@ -693,6 +694,35 @@ namespace Axle {
 
         if (!m_TAAConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHITAAConstants), RHIMemoryLocation::HostUpload, "TAAConstantsBuffer"))) return false;
 
+        // Initialize Screen-Space Separable Subsurface Scattering Resources (M15-U9-04, U9-05)
+        if (!CompileSSSShaders(device) || !CreateSSSPipelineLayout(device) || !CreateSSSPipeline(device)) return false;
+        if (!m_SSSLinearSampler.Init(RHISamplerDesc::Bilinear(RHIAddressMode::ClampToEdge)) ||
+            !m_SSSPointSampler.Init(RHISamplerDesc::Point(RHIAddressMode::ClampToEdge))) {
+            AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize samplers for SSS.");
+            return false;
+        }
+        {
+            RHIDescriptorPoolDesc sssPoolDesc;
+            sssPoolDesc.DebugName = "SSSDescriptors";
+            sssPoolDesc.MaxDescriptorSets = 8;
+            sssPoolDesc.MaxTextures = 32;
+            sssPoolDesc.MaxSamplers = 16;
+            sssPoolDesc.MaxConstantBuffers = 8;
+            if (!m_SSSDescriptorPool.Init(sssPoolDesc)) {
+                AXLE_CORE_WARN("RHISceneRenderer: Failed to initialize SSS Descriptor Pool!");
+                return false;
+            }
+            m_SSSBlurHDescriptorSet = m_SSSDescriptorPool.AllocateDescriptorSet(m_SSSPipelineLayout, 0);
+            m_SSSBlurVDescriptorSet = m_SSSDescriptorPool.AllocateDescriptorSet(m_SSSPipelineLayout, 0);
+            if (!m_SSSBlurHDescriptorSet || !m_SSSBlurVDescriptorSet) return false;
+            if (!m_SSSDescriptorPool.UpdateSampler(m_SSSBlurHDescriptorSet, 5, 0, m_SSSLinearSampler.GetNative()) ||
+                !m_SSSDescriptorPool.UpdateSampler(m_SSSBlurHDescriptorSet, 6, 0, m_SSSPointSampler.GetNative()) ||
+                !m_SSSDescriptorPool.UpdateSampler(m_SSSBlurVDescriptorSet, 5, 0, m_SSSLinearSampler.GetNative()) ||
+                !m_SSSDescriptorPool.UpdateSampler(m_SSSBlurVDescriptorSet, 6, 0, m_SSSPointSampler.GetNative())) {
+                return false;
+            }
+        }
+
         // Initialize GPU Instanced Particle VFX Renderer
         m_ParticleRenderer = std::make_unique<RHIParticleRenderer>();
         if (!m_ParticleRenderer->Init(device)) {
@@ -969,6 +999,18 @@ namespace Axle {
         m_TAADescriptorPool.Shutdown();
         m_TAALinearSampler.Shutdown();
         m_TAAPointSampler.Shutdown();
+        m_SSSBlurHPipeline = nullptr;
+        m_SSSBlurVPipelineSDR = nullptr;
+        m_SSSBlurVPipelineHDR = nullptr;
+        m_SSSPipelineLayout.Shutdown();
+        m_SSSBlurHDescriptorSet = nullptr;
+        m_SSSBlurVDescriptorSet = nullptr;
+        m_SSSDescriptorPool.Shutdown();
+        m_SSSLinearSampler.Shutdown();
+        m_SSSPointSampler.Shutdown();
+        m_SSSVertexShader = {};
+        m_SSSBlurHPixelShader = {};
+        m_SSSBlurVPixelShader = {};
         m_MSAAColorTarget = nullptr;
         m_MSAADepthTarget = nullptr;
         m_CurrentMSAASamples = 1;
@@ -987,6 +1029,8 @@ namespace Axle {
         m_PipelineHDR = nullptr;
         m_SurfaceNormalPixelShader = {};
         m_ReflectionPixelShader = {};
+        m_SSSPixelShader = {};
+        m_ReflectionSSSPixelShader = {};
         m_SkyboxPipeline = nullptr;
         m_SkyboxPipelineHDR = nullptr;
         m_SkyboxPipelineLayout.Shutdown();
@@ -1115,6 +1159,24 @@ namespace Axle {
             return false;
         }
         m_ReflectionPixelShader = reflectionRes.Bytecode;
+
+        auto sssDesc = psDesc;
+        sssDesc.EntryPoint = "PSSSSMain";
+        const auto sssRes = compiler.Compile(sssDesc);
+        if (!sssRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: SSS PS compile failed: {0}", sssRes.ErrorMessage);
+            return false;
+        }
+        m_SSSPixelShader = sssRes.Bytecode;
+
+        auto reflectionSSSDesc = psDesc;
+        reflectionSSSDesc.EntryPoint = "PSReflectionSSSMain";
+        const auto reflectionSSSRes = compiler.Compile(reflectionSSSDesc);
+        if (!reflectionSSSRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: reflection SSS PS compile failed: {0}", reflectionSSSRes.ErrorMessage);
+            return false;
+        }
+        m_ReflectionSSSPixelShader = reflectionSSSRes.Bytecode;
 
         auto ddgiCaptureDesc = psDesc;
         ddgiCaptureDesc.EntryPoint = "PSDDGICapture";
@@ -1330,10 +1392,13 @@ namespace Axle {
                                                          Axle::SurfaceType surfaceType,
                                                          Axle::CullMode cullMode,
                                                          bool depthWrite, bool reflectionTerms,
-                                                         bool reverseWinding) {
+                                                         bool reverseWinding, bool sssTerms) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_PipelineLayout;
-        gfxDesc.Shaders = { m_VertexShader, reflectionTerms ? m_ReflectionPixelShader : m_PixelShader };
+        const auto& pixelShader = (sssTerms && reflectionTerms) ? m_ReflectionSSSPixelShader :
+                                  sssTerms ? m_SSSPixelShader :
+                                  reflectionTerms ? m_ReflectionPixelShader : m_PixelShader;
+        gfxDesc.Shaders = { m_VertexShader, pixelShader };
 
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
         if (cullMode == Axle::CullMode::Back) {
@@ -1359,6 +1424,12 @@ namespace Axle {
         }
         gfxDesc.ColorAttachmentFormats = { colorFormat };
         if (reflectionTerms) {
+            for (int i = 0; i < 2; ++i) {
+                gfxDesc.ColorAttachments.push_back(RHIBlendAttachmentDesc::Opaque());
+                gfxDesc.ColorAttachmentFormats.push_back(nri::Format::RGBA16_SFLOAT);
+            }
+        }
+        if (sssTerms) {
             for (int i = 0; i < 2; ++i) {
                 gfxDesc.ColorAttachments.push_back(RHIBlendAttachmentDesc::Opaque());
                 gfxDesc.ColorAttachmentFormats.push_back(nri::Format::RGBA16_SFLOAT);
@@ -1395,8 +1466,8 @@ namespace Axle {
 
     nri::Pipeline* RHISceneRenderer::GetOrCreateCustomPipeline(const CustomReadyGeneration& generation,
         nri::Format colorFormat, nri::Format depthFormat, uint8_t samples,
-        SurfaceType surface, CullMode cull, bool depthWrite, bool reflectionTerms, bool reverseWinding) {
-        return CreateCustomMaterialPipeline(generation,colorFormat,depthFormat,samples,surface,cull,depthWrite,false,reflectionTerms,reverseWinding);
+        SurfaceType surface, CullMode cull, bool depthWrite, bool reflectionTerms, bool reverseWinding, bool sssTerms) {
+        return CreateCustomMaterialPipeline(generation,colorFormat,depthFormat,samples,surface,cull,depthWrite,false,reflectionTerms,reverseWinding,sssTerms);
     }
 
     bool RHISceneRenderer::CreateGraphicsPipeline(RHIDevice& device) {
@@ -1503,7 +1574,7 @@ namespace Axle {
         return m_SkyboxPipelineLayout.Init(layoutDesc);
     }
 
-    nri::Pipeline* RHISceneRenderer::GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount, bool reflectionTerms) {
+    nri::Pipeline* RHISceneRenderer::GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat, uint8_t sampleCount, bool reflectionTerms, bool sssTerms) {
         RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_SkyboxPipelineLayout;
         gfxDesc.Shaders = { m_SkyboxVertexShader, m_SkyboxPixelShader };
@@ -1519,10 +1590,11 @@ namespace Axle {
 
         gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
         gfxDesc.ColorAttachmentFormats = { colorFormat };
-        if (reflectionTerms) {
+        const int extraAttachments = (reflectionTerms ? 2 : 0) + (sssTerms ? 2 : 0);
+        if (extraAttachments > 0) {
             auto ignored = RHIBlendAttachmentDesc::Opaque();
             ignored.ColorWriteMask = nri::ColorWriteBits::NONE;
-            for (int i = 0; i < 2; ++i) {
+            for (int i = 0; i < extraAttachments; ++i) {
                 gfxDesc.ColorAttachments.push_back(ignored);
                 gfxDesc.ColorAttachmentFormats.push_back(nri::Format::RGBA16_SFLOAT);
             }
@@ -3832,6 +3904,130 @@ namespace Axle {
         m_TAAPipelineSDR = GetOrCreateTAAPipeline(nri::Format::RGBA8_UNORM);
         m_TAAPipelineHDR = GetOrCreateTAAPipeline(nri::Format::RGBA16_SFLOAT);
         return m_TAAPipelineSDR != nullptr && m_TAAPipelineHDR != nullptr;
+    }
+
+    bool RHISceneRenderer::CompileSSSShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        auto shaderPath = FindShaderPath("SSS.hlsl");
+        if (shaderPath.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate SSS.hlsl!");
+            return false;
+        }
+
+        std::string shaderSource;
+        std::ifstream file(shaderPath);
+        if (file.is_open()) {
+            std::stringstream ss; ss << file.rdbuf(); shaderSource = ss.str();
+        }
+        if (shaderSource.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to read SSS.hlsl!");
+            return false;
+        }
+
+        RHIShaderFormat format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan) ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+
+        RHIShaderCompileDesc vsDesc;
+        vsDesc.SourcePath = shaderPath.string();
+        vsDesc.Source = shaderSource;
+        vsDesc.EntryPoint = "VSMain";
+        vsDesc.Stage = RHIShaderStage::Vertex;
+        vsDesc.HLSLVersion = "2021";
+        vsDesc.ShaderModel = "6_0";
+        vsDesc.Format = format;
+        vsDesc.Optimization = true;
+        auto vsRes = compiler.Compile(vsDesc);
+        if (!vsRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile SSS VS: {0}", vsRes.ErrorMessage);
+            return false;
+        }
+        m_SSSVertexShader = vsRes.Bytecode;
+
+        RHIShaderCompileDesc hDesc = vsDesc;
+        hDesc.EntryPoint = "PSBlurH";
+        hDesc.Stage = RHIShaderStage::Fragment;
+        auto hRes = compiler.Compile(hDesc);
+        if (!hRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile SSS BlurH PS: {0}", hRes.ErrorMessage);
+            return false;
+        }
+        m_SSSBlurHPixelShader = hRes.Bytecode;
+
+        RHIShaderCompileDesc vDesc = vsDesc;
+        vDesc.EntryPoint = "PSBlurVComposite";
+        vDesc.Stage = RHIShaderStage::Fragment;
+        auto vRes = compiler.Compile(vDesc);
+        if (!vRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile SSS BlurV PS: {0}", vRes.ErrorMessage);
+            return false;
+        }
+        m_SSSBlurVPixelShader = vRes.Bytecode;
+        return true;
+    }
+
+    bool RHISceneRenderer::CreateSSSPipelineLayout(RHIDevice& device) {
+        nri::RootDescriptorDesc rootDesc = {};
+        rootDesc.registerIndex = 0;
+        rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDesc.shaderStages = nri::StageBits::ALL;
+
+        nri::DescriptorRangeDesc ranges[7] = {};
+        for (uint32_t t = 0; t < 5; ++t) {
+            ranges[t].baseRegisterIndex = t;
+            ranges[t].descriptorNum = 1;
+            ranges[t].descriptorType = nri::DescriptorType::TEXTURE;
+            ranges[t].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+            ranges[t].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        }
+
+        ranges[5].baseRegisterIndex = 0;
+        ranges[5].descriptorNum = 1;
+        ranges[5].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[5].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[5].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        ranges[6].baseRegisterIndex = 1;
+        ranges[6].descriptorNum = 1;
+        ranges[6].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[6].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[6].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc descSet = {};
+        descSet.registerSpace = 1;
+        descSet.ranges = ranges;
+        descSet.rangeNum = 7;
+
+        nri::PipelineLayoutDesc layoutDesc = {};
+        layoutDesc.rootRegisterSpace = 0;
+        layoutDesc.rootDescriptors = &rootDesc;
+        layoutDesc.rootDescriptorNum = 1;
+        layoutDesc.descriptorSets = &descSet;
+        layoutDesc.descriptorSetNum = 1;
+        layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+
+        return m_SSSPipelineLayout.Init(layoutDesc);
+    }
+
+    bool RHISceneRenderer::CreateSSSPipeline(RHIDevice& device) {
+        auto createSSSPassPipeline = [&](const RHI::RHIShaderBytecode& ps, nri::Format colorFormat) -> nri::Pipeline* {
+            RHIGraphicsPipelineDesc gfxDesc;
+            gfxDesc.Layout = &m_SSSPipelineLayout;
+            gfxDesc.Shaders = { m_SSSVertexShader, ps };
+            gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+            gfxDesc.Rasterizer.FrontCounterClockwise = false;
+            gfxDesc.DepthStencil.DepthTestEnable = false;
+            gfxDesc.DepthStencil.DepthWriteEnable = false;
+            gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+            gfxDesc.ColorAttachmentFormats = { colorFormat };
+            gfxDesc.VertexInput = RHIVertexInputDesc{};
+            return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
+        };
+
+        m_SSSBlurHPipeline = createSSSPassPipeline(m_SSSBlurHPixelShader, nri::Format::RGBA16_SFLOAT);
+        m_SSSBlurVPipelineSDR = createSSSPassPipeline(m_SSSBlurVPixelShader, nri::Format::RGBA8_UNORM);
+        m_SSSBlurVPipelineHDR = createSSSPassPipeline(m_SSSBlurVPixelShader, nri::Format::RGBA16_SFLOAT);
+        return m_SSSBlurHPipeline != nullptr && m_SSSBlurVPipelineSDR != nullptr && m_SSSBlurVPipelineHDR != nullptr;
     }
 
     void RHISceneRenderer::SetRenderTargetFormat(RHI::RHITextureFormat colorFormat, RHI::RHITextureFormat depthFormat) {
@@ -6798,8 +6994,11 @@ namespace Axle {
         targetDesc.HDR = useToneMap;
         targetDesc.FXAA = useFXAA;
         targetDesc.OwnPrimary = false;
+        const bool wantsSSS = !isSubCapture &&
+            Passes::SubsurfaceScatteringPass::SceneRequiresSubsurfacePass(world, settings, activeSampleCount);
         targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows ||
-            settings.EnableSSR || settings.EnablePlanarReflections);
+            settings.EnableSSR || settings.EnablePlanarReflections || wantsSSS);
+        targetDesc.EnableSubsurface = wantsSSS;
         targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows ||
             settings.EnableSSR || settings.EnableBloom || settings.EnableAutoExposure);
         targetDesc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
@@ -6838,6 +7037,8 @@ namespace Axle {
             expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
             expected.EnableVelocity = viewTargets->GetDesc().EnableVelocity;
             expected.EnableReactive = viewTargets->GetDesc().EnableReactive;
+            expected.EnableSubsurface = viewTargets->GetDesc().EnableSubsurface;
+            expected.EnableNormal = expected.EnableNormal || viewTargets->GetDesc().EnableNormal;
             if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
                 (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||
                 (viewTargets->Get(RHIViewTarget::Depth) && viewTargets->Get(RHIViewTarget::Depth)->GetNative() != depthTarget)) {

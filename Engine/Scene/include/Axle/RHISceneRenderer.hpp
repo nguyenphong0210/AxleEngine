@@ -57,6 +57,7 @@ namespace Axle {
         struct ReflectionCaptureTargets;
         class ReflectionCapturePass;
         class DDGIPass;
+        class SubsurfaceScatteringPass;
     }
 
     namespace ReflectionCaptureContract {
@@ -158,6 +159,16 @@ namespace Axle {
         glm::vec4 Padding[10]{};                                       // 160 bytes -> 512 bytes total
     };
     static_assert(sizeof(RHIPlanarReflectionConstants) == 512, "RHIPlanarReflectionConstants must be 512 bytes aligned!");
+
+    // 256-byte CBV aligned constants for Screen-Space Separable Subsurface Scattering
+    struct alignas(256) RHISSSConstants {
+        glm::mat4 InvProjection{ 1.0f };
+        glm::vec4 ScreenSize{ 1280.0f, 720.0f, 1.0f / 1280.0f, 1.0f / 720.0f };
+        glm::vec4 DirectionAndProj{ 1.0f, 0.0f, 1.0f, 0.035f };
+        glm::vec4 SSSParams{ 0.06f, 0.25f, 0.65f, 1.0f };
+        glm::vec4 Reserved[9]{};
+    };
+    static_assert(sizeof(RHISSSConstants) == 256, "RHISSSConstants must be 256 bytes aligned!");
 
     // 256-byte CBV aligned constants for one Hi-Z depth reduction level.
     struct alignas(256) RHIHiZConstants {
@@ -302,6 +313,7 @@ namespace Axle {
         friend class Passes::PostProcessPass;
         friend class Passes::ReflectionCapturePass;
         friend class Passes::DDGIPass;
+        friend class Passes::SubsurfaceScatteringPass;
     public:
         RHISceneRenderer();
         ~RHISceneRenderer();
@@ -424,8 +436,8 @@ namespace Axle {
                                            Axle::SurfaceType surfaceType = Axle::SurfaceType::Opaque,
                                            Axle::CullMode cullMode = Axle::CullMode::None,
                                            bool depthWrite = true, bool reflectionTerms = false,
-                                           bool reverseWinding = false);
-        nri::Pipeline* GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1, bool reflectionTerms = false);
+                                           bool reverseWinding = false, bool sssTerms = false);
+        nri::Pipeline* GetOrCreateSkyboxPipeline(nri::Format colorFormat, nri::Format depthFormat = nri::Format::D32_SFLOAT, uint8_t sampleCount = 1, bool reflectionTerms = false, bool sssTerms = false);
 
         // Image-Based Lighting (IBL) configuration
         void SetIBLMaps(const std::shared_ptr<RHI::RHITexture>& irradiance,
@@ -573,6 +585,14 @@ namespace Axle {
         RHI::RHITexture* GetScreenStorageTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ScreenStorage); }
         RHI::RHITexture* GetReflectionEnvironmentTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ReflectionEnvironment); }
         RHI::RHITexture* GetReflectionResponseTarget() const { return GetActiveTarget(RHI::RHIViewTarget::ReflectionResponse); }
+        RHI::RHITexture* GetSubsurfaceDiffuseTarget() const { return GetActiveTarget(RHI::RHIViewTarget::SubsurfaceDiffuse); }
+        RHI::RHITexture* GetSubsurfaceControlTarget() const { return GetActiveTarget(RHI::RHIViewTarget::SubsurfaceControl); }
+        RHI::RHITexture* GetSubsurfaceTempTarget() const { return GetActiveTarget(RHI::RHIViewTarget::SubsurfaceTemp); }
+
+        // Screen-Space Separable Subsurface Scattering (M15-U9-04, U9-05)
+        bool CompileSSSShaders(RHI::RHIDevice& device);
+        bool CreateSSSPipelineLayout(RHI::RHIDevice& device);
+        bool CreateSSSPipeline(RHI::RHIDevice& device);
         RHI::RHITexture* GetHiZTarget(uint32_t level) const {
             auto targets = m_ActiveViewTargets.lock(); return targets ? targets->GetHiZ(level) : nullptr;
         }
@@ -815,7 +835,7 @@ namespace Axle {
             Axle::SurfaceType surfaceType,
             Axle::CullMode cullMode,
             bool depthWrite, bool reflectionTerms = false,
-            bool reverseWinding = false);
+            bool reverseWinding = false, bool sssTerms = false);
 
         MaterialTextureCache m_MaterialTextures;
         RHI::RHITexture* m_OpaqueSceneColor = nullptr;
@@ -845,6 +865,8 @@ namespace Axle {
         RHI::RHIShaderBytecode m_VertexShader;
         RHI::RHIShaderBytecode m_PixelShader;
         RHI::RHIShaderBytecode m_ReflectionPixelShader;
+        RHI::RHIShaderBytecode m_SSSPixelShader;
+        RHI::RHIShaderBytecode m_ReflectionSSSPixelShader;
         RHI::RHIShaderBytecode m_DDGICapturePixelShader;
 
         // Atmospheric Skybox Resources
@@ -899,6 +921,20 @@ namespace Axle {
         nri::DescriptorSet* m_GTAOUpsampleTextureSet = nullptr;
         nri::DescriptorSet* m_GTAOUpsampleStorageSet = nullptr;
         nri::DescriptorSet* m_GTAOApplyDescriptorSet = nullptr;
+
+        // Screen-Space Separable Subsurface Scattering Resources
+        RHI::RHIPipelineLayout m_SSSPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_SSSBlurHPipeline;
+        RHI::RHIResourceRef<nri::Pipeline> m_SSSBlurVPipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_SSSBlurVPipelineHDR;
+        RHI::RHIShaderBytecode m_SSSVertexShader;
+        RHI::RHIShaderBytecode m_SSSBlurHPixelShader;
+        RHI::RHIShaderBytecode m_SSSBlurVPixelShader;
+        RHI::RHISampler m_SSSLinearSampler;
+        RHI::RHISampler m_SSSPointSampler;
+        RHI::RHIDescriptorPool m_SSSDescriptorPool;
+        nri::DescriptorSet* m_SSSBlurHDescriptorSet = nullptr;
+        nri::DescriptorSet* m_SSSBlurVDescriptorSet = nullptr;
 
         // Screen-Space Reflections (SSR) & Reflection Probes Resources
         RHI::RHIPipelineLayout m_SSRComputePipelineLayout;

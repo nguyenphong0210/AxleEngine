@@ -129,6 +129,11 @@ namespace Axle::RHI {
         if (m_Desc.EnableReflectionTerms &&
             (!check2D(RHIViewTarget::ReflectionEnvironment, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT) ||
              !check2D(RHIViewTarget::ReflectionResponse, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT))) return false;
+        if (m_Desc.EnableSubsurface &&
+            (m_Desc.Samples != 1 || !m_Desc.EnableNormal ||
+             !check2D(RHIViewTarget::SubsurfaceDiffuse, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT) ||
+             !check2D(RHIViewTarget::SubsurfaceControl, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT) ||
+             !check2D(RHIViewTarget::SubsurfaceTemp, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT))) return false;
         for (uint32_t level = 0; m_Desc.EnableReflectionTerms && level < 4; ++level) {
             const uint32_t expectedW = std::max(1u, m_Desc.Width >> (level + 1u));
             const uint32_t expectedH = std::max(1u, m_Desc.Height >> (level + 1u));
@@ -253,6 +258,7 @@ namespace Axle::RHI {
              desc.PlanarResolutionScale > MaxPlanarResolutionScale)) {
             return false;
         }
+        if (desc.EnableSubsurface && (!desc.RenderAuxiliary || desc.Samples != 1 || !desc.EnableNormal)) return false;
         RHIViewTargets candidate; candidate.m_Desc = desc;
         auto createSized = [&](RHIViewTarget slot, uint32_t w, uint32_t h, RHITextureFormat format, uint8_t samples, bool depth) {
             auto texture = std::make_unique<RHITexture>();
@@ -295,6 +301,10 @@ namespace Axle::RHI {
         if (desc.EnableReflectionTerms &&
             (!create(RHIViewTarget::ReflectionEnvironment, RHITextureFormat::RGBA16_FLOAT, 1, false) ||
              !create(RHIViewTarget::ReflectionResponse, RHITextureFormat::RGBA16_FLOAT, 1, false))) return false;
+        if (desc.EnableSubsurface &&
+            (!create(RHIViewTarget::SubsurfaceDiffuse, RHITextureFormat::RGBA16_FLOAT, 1, false) ||
+             !create(RHIViewTarget::SubsurfaceControl, RHITextureFormat::RGBA16_FLOAT, 1, false) ||
+             !create(RHIViewTarget::SubsurfaceTemp, RHITextureFormat::RGBA16_FLOAT, 1, false))) return false;
         if (desc.EnablePlanarReflection) {
             const uint32_t planarW = ComputePlanarTargetDimension(desc.Width, desc.PlanarResolutionScale);
             const uint32_t planarH = ComputePlanarTargetDimension(desc.Height, desc.PlanarResolutionScale);

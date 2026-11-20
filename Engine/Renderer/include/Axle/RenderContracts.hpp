@@ -1089,4 +1089,26 @@ namespace Axle {
         bool VerifyOpaqueFallbackUnaffected();
     }
 
+    // M15 Unit 9 (S9.3 / U9-C): Screen-space separable subsurface scattering & boundary rejection contract
+    namespace SubsurfaceContract {
+        struct SamplePoint {
+            glm::vec3 Diffuse{ 0.0f };
+            float Depth = 1.0f;
+            glm::vec3 Normal{ 0.0f, 0.0f, 1.0f };
+            glm::vec3 SubsurfaceColor{ 0.0f };
+            float SubsurfaceRadius = 0.0f;
+        };
+
+        float ComputeBoundaryWeight(const SamplePoint& center,
+                                    const SamplePoint& sample,
+                                    float depthRejectScale = 0.25f,
+                                    float normalMinDot = 0.65f);
+        glm::vec3 EvaluateSeparableSSS1D(const SamplePoint* samples,
+                                         size_t count,
+                                         size_t centerIndex);
+        bool VerifyNormalizedKernelAndDiffusePreservation();
+        bool VerifyDepthAndBoundaryRejection();
+        bool VerifySpecularSplitRecombination();
+    }
+
 } // namespace Axle

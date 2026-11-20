@@ -71,6 +71,49 @@ ReflectionSurfaceOutput MakeMaterialReflectionSurfaceOutput(
     return result;
 }
 
+struct SubsurfaceSurfaceOutput {
+    float4 Color : SV_Target0;
+    float4 SubsurfaceDiffuse : SV_Target1;
+    float4 SubsurfaceControl : SV_Target2;
+};
+
+struct ReflectionSubsurfaceSurfaceOutput {
+    float4 Color : SV_Target0;
+    float4 Environment : SV_Target1;
+    float4 Response : SV_Target2;
+    float4 SubsurfaceDiffuse : SV_Target3;
+    float4 SubsurfaceControl : SV_Target4;
+};
+
+SubsurfaceSurfaceOutput MakeSubsurfaceSurfaceOutput(
+    float4 color,
+    float3 diffuseSSS,
+    float4 controlSSS) {
+    SubsurfaceSurfaceOutput result;
+    result.Color = color;
+    result.SubsurfaceDiffuse = float4(clamp(diffuseSSS, 0.0, 65000.0), controlSSS.a > 0.0 ? 1.0 : 0.0);
+    result.SubsurfaceControl = controlSSS;
+    return result;
+}
+
+ReflectionSubsurfaceSurfaceOutput MakeReflectionSubsurfaceSurfaceOutput(
+    float4 color,
+    float3 environment,
+    float3 response,
+    float roughness,
+    float reflectionEnabled,
+    float3 diffuseSSS,
+    float4 controlSSS) {
+    ReflectionSurfaceOutput refl = MakeMaterialReflectionSurfaceOutput(color, environment, response, roughness, reflectionEnabled);
+    ReflectionSubsurfaceSurfaceOutput result;
+    result.Color = refl.Color;
+    result.Environment = refl.Environment;
+    result.Response = refl.Response;
+    result.SubsurfaceDiffuse = float4(clamp(diffuseSSS, 0.0, 65000.0), controlSSS.a > 0.0 ? 1.0 : 0.0);
+    result.SubsurfaceControl = controlSSS;
+    return result;
+}
+
 float3 SampleReflectionProbeSlot(uint slot, SamplerState envSampler, float3 dir, float lod) {
     switch (min(slot, 3u)) {
         case 0u: return u_ReflectionProbeCube0.SampleLevel(envSampler, dir, lod).rgb;

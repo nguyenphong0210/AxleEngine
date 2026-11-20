@@ -464,7 +464,7 @@ bool Native(RHIType backend) {
     CHECK(!ddgiFrame.empty() && ddgiFrame.size() == red.size());
     CHECK(renderer.GetGIFrame().UpdateScheduled && renderer.GetGIFrame().Fallback==GIFallback::IBL);
     CHECK(renderer.GetGIFrame().IrradianceAvailable && renderer.GetGIFrame().VisibilityAvailable &&
-          renderer.GetGIFrame().UpdatedProbeCount == 8u && !renderer.GetGIFrame().SamplingEnabled);
+          renderer.GetGIFrame().UpdatedProbeCount == 8u && renderer.GetGIFrame().SamplingEnabled);
     world.DDGIProbeGrid->Enabled=false;
     CHECK(!render().empty() && !renderer.GetGIFrame().UpdateScheduled);
     const auto disabledGINames=passNames();

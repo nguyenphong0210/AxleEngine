@@ -10,7 +10,8 @@ namespace Axle {
                (buffer.Name == "CascadeReceiver" && buffer.Space == 0 && buffer.BindPoint == 4) ||
                (buffer.Name == "LocalShadowReceiver" && buffer.Space == 0 && buffer.BindPoint == 5) ||
                (buffer.Name == "ReflectionProbeBuffer" && buffer.Space == 0 && buffer.BindPoint == 6) ||
-               (buffer.Name == "VolumetricFogConstants" && buffer.Space == 0 && buffer.BindPoint == 7);
+               (buffer.Name == "VolumetricFogConstants" && buffer.Space == 0 && buffer.BindPoint == 7) ||
+               (buffer.Name == "DDGIConstants" && buffer.Space == 0 && buffer.BindPoint == 8);
     }
 
     bool IsMaterialSurfaceEngineResource(const RHI::RHIShaderResourceBinding& resource) {
@@ -20,7 +21,8 @@ namespace Axle {
                    (resource.Name == "CascadeReceiver" && resource.Space == 0 && resource.BindPoint == 4) ||
                    (resource.Name == "LocalShadowReceiver" && resource.Space == 0 && resource.BindPoint == 5) ||
                    (resource.Name == "ReflectionProbeBuffer" && resource.Space == 0 && resource.BindPoint == 6) ||
-                   (resource.Name == "VolumetricFogConstants" && resource.Space == 0 && resource.BindPoint == 7);
+                   (resource.Name == "VolumetricFogConstants" && resource.Space == 0 && resource.BindPoint == 7) ||
+                   (resource.Name == "DDGIConstants" && resource.Space == 0 && resource.BindPoint == 8);
         if (resource.Type == RHIResourceType::Texture && resource.Space == 5) {
             return (resource.BindPoint == 0 && resource.Name == "u_FroxelIntegrated") ||
                    (resource.BindPoint == 1 && resource.Name == "u_FroxelMedia");
@@ -29,7 +31,8 @@ namespace Axle {
             static constexpr std::string_view space4Names[]{
                 "u_ForwardOcclusion", "u_ForwardOcclusionDepth",
                 "u_ReflectionProbeCube0", "u_ReflectionProbeCube1",
-                "u_ReflectionProbeCube2", "u_ReflectionProbeCube3", "u_AreaLightLTC"
+                "u_ReflectionProbeCube2", "u_ReflectionProbeCube3", "u_AreaLightLTC",
+                "u_DDGIIrradiance", "u_DDGIDistance"
             };
             return resource.BindPoint < std::size(space4Names) && resource.Name == space4Names[resource.BindPoint];
         }
@@ -56,6 +59,7 @@ namespace Axle {
                 : buffer.Name == "CascadeReceiver" ? 304u
                 : buffer.Name == "ReflectionProbeBuffer" ? 512u
                 : buffer.Name == "VolumetricFogConstants" ? 352u
+                : buffer.Name == "DDGIConstants" ? 256u
                 : 1680u;
             if (buffer.Size != expected) {
                 diagnostic = "Reserved material surface buffer has incompatible layout: " + buffer.Name;

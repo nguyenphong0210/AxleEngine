@@ -277,6 +277,7 @@ namespace Axle {
         const auto ddgiCaptureDepthRes = useDDGI ? graph.Import("DDGICaptureDepth", m_DDGICaptureDepth.GetNative()) : sceneDepth;
         const auto ddgiOutput = useDDGI ? graph.Import("DDGIOutput", ddgiIrradTex->GetNative(), !ddgiResetSeed) : output;
         const auto ddgiDistanceOutput = useDDGI ? graph.Import("DDGIDistanceOutput", ddgiDistTex->GetNative(), !ddgiResetSeed) : output;
+        nri::Descriptor* activeForwardDDGICBV = useDDGI ? m_DDGIConstantBuffer.GetCBV() : m_DisabledDDGIConstantBuffer.GetCBV();
         Passes::DDGIPlan ddgiPlan;
         const auto exposureInput = useAutoExposure ? graph.Import("ExposureInput", useToneMap ? m_IntermediateHDRTarget->GetNative() : m_OpaqueSceneColor->GetNative()) : output;
         const auto exposureOutput = useAutoExposure ? graph.Import("ExposureOutput", viewTargets->GetExposure()->GetNative()) : output;
@@ -680,6 +681,7 @@ namespace Axle {
                                     if (!descriptor && address == ShaderAddress{0,4}) descriptor=m_CascadedShadows.GetConstantsCBV();
                                     if (!descriptor && address == ShaderAddress{0,5}) descriptor=m_LocalShadows.GetConstantsCBV();
                                     if (!descriptor && address == ShaderAddress{0,6}) descriptor=m_ReflectionProbeBuffer.GetCBV();
+                                    if (!descriptor && address == ShaderAddress{0,8}) descriptor=activeForwardDDGICBV;
                                     if (!descriptor && supportsFog && address == ShaderAddress{0,7}) {
                                         descriptor = !transparent ? m_DisabledFogConstantBuffer.GetCBV()
                                             : item.SurfaceType == SurfaceType::Additive ? additiveFogCBV : transparentFogCBV;
@@ -699,6 +701,8 @@ namespace Axle {
                                         if (address.RegisterIndex == 0) descriptor=useGTAO?viewTargets->GetGTAOResolved()->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                                         else if (address.RegisterIndex == 1) descriptor=useGTAO?m_OpaqueSceneDepth->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                                         else if (address.RegisterIndex == 6) descriptor=m_AreaLightLTC.GetSRV();
+                                        else if (address.RegisterIndex == 7) descriptor=useDDGI?ddgiIrradTex->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
+                                        else if (address.RegisterIndex == 8) descriptor=useDDGI?ddgiDistTex->GetSRV():RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                                         else if (address.RegisterIndex >= 2 && address.RegisterIndex < 2u + MaxActiveReflectionProbes) {
                                             const uint32_t probeIdx = address.RegisterIndex - 2u;
                                             const auto& probeTex = m_ActiveReflectionProbePrefilters[probeIdx];
@@ -796,6 +800,7 @@ namespace Axle {
                 Commands().SetRootDescriptor(4, m_LocalShadows.GetConstantsCBV());
                 Commands().SetRootDescriptor(5, m_ReflectionProbeBuffer.GetCBV());
                 Commands().SetRootDescriptor(6, activeForwardFogCBV);
+                Commands().SetRootDescriptor(7, activeForwardDDGICBV);
             } else {
                 const auto& resource = *m_MaterialDraws[item.DrawResourceIndex];
                 Commands().SetPipeline(item.PreparedPipeline);
@@ -930,7 +935,12 @@ namespace Axle {
             if (!m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 0, 0,
                     {useGTAO ? viewTargets->GetGTAOResolved()->GetSRV() : neutral->GetSRV(),
                      useGTAO ? m_OpaqueSceneDepth->GetSRV() : neutral->GetSRV()}) ||
-                !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 1, 0, probeSRVs)) return fail();
+                !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 1, 0, probeSRVs) ||
+                !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 3, 0,
+                    {neutral->GetSRV(), neutral->GetSRV()}) ||
+                !m_DescriptorPool.UpdateTextureRange(m_DDGICaptureOcclusionSet, 1, 0, probeSRVs) ||
+                !m_DescriptorPool.UpdateTextureRange(m_DDGICaptureOcclusionSet, 3, 0,
+                    {neutral->GetSRV(), neutral->GetSRV()})) return fail();
             if (!useGTAO && (settings.EnableGTAO || settings.EnableContactShadows))
                 viewCtx.Diagnostics().AddFallback("occlusion_unavailable: single-sample depth/normal/storage required; neutral visibility");
 
@@ -1293,7 +1303,7 @@ namespace Axle {
                 [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
                     return bindDescriptorSet(index, set, bindPoint);
                 }, beginRendering, endRendering};
-            if (!Passes::DDGIPass::RecordCapture(*this, ddgiPlan, ddgiOps, ddgiSkyboxPipeline, m_ForwardOcclusionDescriptorSet, m_LastDrawCallCount) ||
+            if (!Passes::DDGIPass::RecordCapture(*this, ddgiPlan, ddgiOps, ddgiSkyboxPipeline, m_DDGICaptureOcclusionSet, m_LastDrawCallCount) ||
                 !Passes::DDGIPass::RecordSeedAndUpdate(*this, ddgiPlan, ddgiOps, dispatchCount)) {
                 return fail();
             }
@@ -1344,19 +1354,21 @@ namespace Axle {
                 skyboxBase, ddgiSkyboxPipeline);
             if (!Passes::DDGIPass::BuildPlan(*this, viewCtx, world, settings, giFrame, sceneConstants,
                     hasSkyDraw ? &skyboxBase : nullptr, hasSkyDraw, viewTargets.get(), std::move(ddgiDraws), ddgiPlan) ||
+                ddgiPlan.ResetSeed != ddgiResetSeed ||
                 !Passes::DDGIPass::PrepareGraphBindings(*this, graph, ddgiPlan, ddgiIrradTex, ddgiDistTex,
-                    m_ForwardOcclusionDescriptorSet, ddgiPlan.HasSkyboxDraw)) {
+                    m_DDGICaptureOcclusionSet, ddgiPlan.HasSkyboxDraw)) {
                 return fail();
             }
             if (ddgiPlan.ResetSeed && !uniform("DDGISeed", sizeof(RHIDDGIConstants))) return fail();
             if (!uniform("DDGIUpdate", sizeof(RHIDDGIConstants))) return fail();
             m_LastGIFrame.IrradianceAvailable = true;
             m_LastGIFrame.VisibilityAvailable = true;
+            m_LastGIFrame.SamplingEnabled = true;
             m_LastGIFrame.UpdatedProbeCount = ddgiPlan.UpdateCount;
             m_LastGIFrame.ProbeCursor = ddgiPlan.StartProbeCursor;
             m_LastGIFrame.Diagnostic = ddgiPlan.ResetSeed
-                ? "ddgi_experimental_atlas_seeded: diffuse sampling pending U7-C"
-                : "ddgi_experimental_atlas_updated: diffuse sampling pending U7-C";
+                ? "ddgi_experimental_seeded_and_sampling: world-space capture + diffuse GI active"
+                : "ddgi_experimental_active: world-space capture + diffuse GI sampling";
             return {};
         });
 
@@ -1397,6 +1409,7 @@ namespace Axle {
             activeForwardFogCBV = m_DisabledFogConstantBuffer.GetCBV();
             activeForwardFogSet = m_ForwardFogFallbackDescriptorSet;
             Commands().SetRootDescriptor(6, activeForwardFogCBV);
+            Commands().SetRootDescriptor(7, activeForwardDDGICBV);
 
             // Bind Descriptor Pool & Material Descriptor Set (Space 1: 6 PBR textures + 16x Aniso Sampler)
             if (m_DescriptorPool.IsValid()) {
@@ -1428,6 +1441,10 @@ namespace Axle {
             }
             if(localAtlas)opaqueUses.push_back({localShadows,Layout::ShaderResource});
             if (shadowAtlas) opaqueUses.push_back({shadows,Layout::ShaderResource});
+            if (useDDGI) {
+                opaqueUses.push_back({ddgiOutput, Layout::ShaderResource});
+                opaqueUses.push_back({ddgiDistanceOutput, Layout::ShaderResource});
+            }
             graph.AddPass("OpaqueAndSky", std::move(opaqueUses));
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (auto res = buildAndPrepareSceneQueues(); !res) return res;
@@ -1435,7 +1452,7 @@ namespace Axle {
                 if (!graph.DeclareRead(pass, m_ForwardOcclusionDescriptorSet)) return false;
                 for (auto* cbv : {m_SceneConstantBuffer.GetCBV(), m_LightBuffer.GetCBV(),
                     m_CascadedShadows.GetConstantsCBV(), m_LocalShadows.GetConstantsCBV(),
-                    m_ReflectionProbeBuffer.GetCBV()})
+                    m_ReflectionProbeBuffer.GetCBV(), activeForwardDDGICBV})
                     if (!graph.DeclareRead(pass,cbv)) return false;
                 for (uint32_t slot = 0; slot < MaxActiveReflectionProbes; ++slot) {
                     const auto& probeTex = m_ActiveReflectionProbePrefilters[slot];
@@ -1709,6 +1726,7 @@ namespace Axle {
             Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
             Commands().SetRootDescriptor(5,m_ReflectionProbeBuffer.GetCBV());
             Commands().SetRootDescriptor(6,activeForwardFogCBV);
+            Commands().SetRootDescriptor(7,activeForwardDDGICBV);
 
             // 4b. Render Transparent & Additive Queue (Sorted Back-to-Front)
             if (!transparentQueue.empty()) {
@@ -1737,6 +1755,10 @@ namespace Axle {
             if (useFog) {
                 transparentUses.push_back({fogIntegrated,Layout::ShaderResource});
                 transparentUses.push_back({fogResolved,Layout::ShaderResource});
+            }
+            if (useDDGI) {
+                transparentUses.push_back({ddgiOutput, Layout::ShaderResource});
+                transparentUses.push_back({ddgiDistanceOutput, Layout::ShaderResource});
             }
             graph.AddPass("Transparent", std::move(transparentUses));
         });
@@ -1957,7 +1979,7 @@ namespace Axle {
             std::vector<Graph::Use> exports{{output,Layout::ShaderResource}};
             if (sceneDepthDSV) exports.push_back({sceneDepth,Layout::DepthStencilRead});
             if (captureActive) exports.push_back({captureCubemap,Layout::ShaderResource});
-            if (ddgiPlan.Active) {
+            if (useDDGI) {
                 exports.push_back({ddgiOutput,Layout::ShaderResource});
                 exports.push_back({ddgiDistanceOutput,Layout::ShaderResource});
             }

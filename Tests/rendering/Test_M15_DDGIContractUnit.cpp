@@ -3,7 +3,9 @@
 #include <Axle/DDGIShaderConstants.hpp>
 #include <Axle/GIService.hpp>
 #include <Axle/RenderBackendPolicy.hpp>
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <Axle/RHI/RHIShader.hpp>
 #include <Axle/RenderWorld.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
@@ -67,6 +69,14 @@ using namespace Axle;
 
 #ifndef AXLE_FORWARD_PBR_SHADER_PATH
 #define AXLE_FORWARD_PBR_SHADER_PATH "Engine/Resources/Shaders/ForwardPBR.hlsl"
+#endif
+
+#ifndef AXLE_MATERIAL_SURFACE_SHADER_PATH
+#define AXLE_MATERIAL_SURFACE_SHADER_PATH "Engine/Resources/Shaders/MaterialSurface.hlsl"
+#endif
+
+#ifndef AXLE_SCENE_PASSES_SOURCE_PATH
+#define AXLE_SCENE_PASSES_SOURCE_PATH "Engine/Scene/src/RHISceneRendererPasses.cpp"
 #endif
 
 namespace {
@@ -354,9 +364,47 @@ bool RunM15DDGIContractUnitTests() {
                      ddgiCommon.find("DDGIMirrorInteriorCoord") != std::string::npos &&
                      ddgiCommon.find("DDGIEvaluateChebyshev") != std::string::npos &&
                      ddgiCommon.find("DDGISampleVolumeIrradiance") != std::string::npos &&
-                     ddgiPassSrc.find("DDGICapture") != std::string::npos &&
-                     forwardSrc.find("PSDDGICapture") != std::string::npos,
+                      ddgiPassSrc.find("DDGICapture") != std::string::npos &&
+                      forwardSrc.find("PSDDGICapture") != std::string::npos,
             "M15-U7-03..05: DDGI retires camera u_Scene copy in favor of world-space DDGICapture + octahedral irradiance & Chebyshev distance kernels");
+
+        // U7-C: Verify ForwardPBR, MaterialSurface, MaterialSurfaceShader, DDGIPass, and RHISceneRendererPasses diffuse GI wiring
+        const std::string materialSurfaceSrc = ReadText(AXLE_MATERIAL_SURFACE_SHADER_PATH);
+        const std::string scenePassesSrc = ReadText(AXLE_SCENE_PASSES_SOURCE_PATH);
+        const std::string assembled = AssembleMaterialSurfaceShader("", "MaterialSurface AxleEvaluateMaterial(float2 uv) { MaterialSurface s = (MaterialSurface)0; return s; }");
+        RENDER_CHECK(!materialSurfaceSrc.empty() && !scenePassesSrc.empty() &&
+                     forwardSrc.find("AXLE_DDGI_CBUFFER_REGISTER b8") != std::string::npos &&
+                     forwardSrc.find("u_DDGIIrradiance") != std::string::npos &&
+                     forwardSrc.find("u_DDGIDistance") != std::string::npos &&
+                     forwardSrc.find("DDGISampleVolumeIrradiance") != std::string::npos &&
+                     materialSurfaceSrc.find("AXLE_DDGI_CBUFFER_REGISTER b8") != std::string::npos &&
+                     materialSurfaceSrc.find("DDGISampleVolumeIrradiance") != std::string::npos &&
+                     assembled.find("#include \"DDGICommon.hlsli\"") == std::string::npos &&
+                     assembled.find("DDGISampleVolumeIrradiance") != std::string::npos &&
+                     ddgiPassSrc.find("CaptureConstantsCB") != std::string::npos &&
+                     scenePassesSrc.find("m_DDGICaptureOcclusionSet") != std::string::npos &&
+                     scenePassesSrc.find("m_LastGIFrame.SamplingEnabled = true") != std::string::npos,
+            "M15-U7-06 / 07.2: ForwardPBR, MaterialSurface, and render passes wire DDGI volume irradiance, capture multi-bounce, and SamplingEnabled");
+
+        RHI::RHIShaderConstantBuffer ddgiCb{"DDGIConstants", 8u, 0u, sizeof(DDGIContract::DDGIShaderConstants), {}};
+        RHI::RHIShaderConstantBuffer badDdgiCb{"DDGIConstants", 8u, 0u, 128u, {}};
+        RHI::RHIShaderResourceBinding irradBind{"u_DDGIIrradiance", RHI::RHIResourceType::Texture, 7u, 1u, 4u};
+        RHI::RHIShaderResourceBinding distBind{"u_DDGIDistance", RHI::RHIResourceType::Texture, 8u, 1u, 4u};
+        RHI::RHIShaderReflection ddgiRefl;
+        ddgiRefl.ConstantBuffers = {ddgiCb};
+        ddgiRefl.Resources = {irradBind, distBind};
+        std::string diag;
+        RENDER_CHECK(IsMaterialSurfaceEngineBuffer(ddgiCb) &&
+                     IsMaterialSurfaceEngineResource(irradBind) &&
+                     IsMaterialSurfaceEngineResource(distBind) &&
+                     ValidateMaterialSurfaceEngineBuffers(ddgiRefl, diag),
+            "M15-U7-06: MaterialSurfaceShader recognizes and validates DDGIConstants b8 and t7/t8 atlases");
+        StripMaterialSurfaceEngineBindings(ddgiRefl);
+        RENDER_CHECK(ddgiRefl.ConstantBuffers.empty() && ddgiRefl.Resources.empty(),
+            "M15-U7-06: StripMaterialSurfaceEngineBindings strips DDGI engine resources from material properties");
+        ddgiRefl.ConstantBuffers = {badDdgiCb};
+        RENDER_CHECK(!ValidateMaterialSurfaceEngineBuffers(ddgiRefl, diag),
+            "M15-U7-06: ValidateMaterialSurfaceEngineBuffers rejects invalid DDGIConstants size");
     }
 
     std::cout << "[M15DDGIContract] All M15 U7 Batch A DDGI contract tests passed.\n";

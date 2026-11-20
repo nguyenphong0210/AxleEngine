@@ -239,16 +239,28 @@ namespace Axle {
         }
 
         m_ForwardOcclusionDescriptorSet = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 1);
+        m_DDGICaptureOcclusionSet = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 1);
         auto neutralOcclusion = RHIMaterial::GetDefaultWhiteTexture();
         auto defaultProbePrefilter = RHIMaterial::GetDefaultPrefilterCubemap();
-        if (!m_ForwardOcclusionDescriptorSet || !neutralOcclusion || !defaultProbePrefilter ||
+        if (!m_ForwardOcclusionDescriptorSet || !m_DDGICaptureOcclusionSet ||
+            !neutralOcclusion || !defaultProbePrefilter ||
             !InitAreaLightLTC(device, m_AreaLightLTC) ||
             !m_DescriptorPool.UpdateTexture(m_ForwardOcclusionDescriptorSet, 2, 0, m_AreaLightLTC.GetSRV()) ||
             !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 0, 0,
                 {neutralOcclusion->GetSRV(), neutralOcclusion->GetSRV()}) ||
             !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 1, 0,
                 {defaultProbePrefilter->GetSRV(), defaultProbePrefilter->GetSRV(),
-                 defaultProbePrefilter->GetSRV(), defaultProbePrefilter->GetSRV()})) return false;
+                 defaultProbePrefilter->GetSRV(), defaultProbePrefilter->GetSRV()}) ||
+            !m_DescriptorPool.UpdateTextureRange(m_ForwardOcclusionDescriptorSet, 3, 0,
+                {neutralOcclusion->GetSRV(), neutralOcclusion->GetSRV()}) ||
+            !m_DescriptorPool.UpdateTexture(m_DDGICaptureOcclusionSet, 2, 0, m_AreaLightLTC.GetSRV()) ||
+            !m_DescriptorPool.UpdateTextureRange(m_DDGICaptureOcclusionSet, 0, 0,
+                {neutralOcclusion->GetSRV(), neutralOcclusion->GetSRV()}) ||
+            !m_DescriptorPool.UpdateTextureRange(m_DDGICaptureOcclusionSet, 1, 0,
+                {defaultProbePrefilter->GetSRV(), defaultProbePrefilter->GetSRV(),
+                 defaultProbePrefilter->GetSRV(), defaultProbePrefilter->GetSRV()}) ||
+            !m_DescriptorPool.UpdateTextureRange(m_DDGICaptureOcclusionSet, 3, 0,
+                {neutralOcclusion->GetSRV(), neutralOcclusion->GetSRV()})) return false;
 
         if (!m_ReflectionProbeBuffer.Init(RHIBufferDesc::Constant(
                 sizeof(RHIReflectionProbeBufferData), RHIMemoryLocation::HostUpload, "ReflectionProbeConstantsBuffer"))) {
@@ -283,6 +295,14 @@ namespace Axle {
         {
             const RHIVolumetricFogConstants disabledFog{};
             if (!m_DisabledFogConstantBuffer.UpdateData(&disabledFog, sizeof(disabledFog))) return false;
+        }
+        if (!m_DisabledDDGIConstantBuffer.Init(RHIBufferDesc::Constant(
+                sizeof(RHIDDGIConstants), RHIMemoryLocation::HostUpload, "DisabledDDGIConstantsBuffer"))) {
+            return false;
+        }
+        {
+            const RHIDDGIConstants disabledDDGI{};
+            if (!m_DisabledDDGIConstantBuffer.UpdateData(&disabledDDGI, sizeof(disabledDDGI))) return false;
         }
 
         RHIDescriptorPoolDesc customPool;
@@ -860,6 +880,7 @@ namespace Axle {
         m_ForwardFogSets.clear();
         m_ForwardFogFallbackDescriptorSet = nullptr;
         m_DisabledFogConstantBuffer.Shutdown();
+        m_DisabledDDGIConstantBuffer.Shutdown();
         m_FogDescriptorPool.Shutdown();
         m_FogShadowSampler.Shutdown();
         m_FogSampler.Shutdown();
@@ -959,6 +980,7 @@ namespace Axle {
         m_MaterialTextures.Clear();
         m_DefaultDescriptorSet = nullptr;
         m_ForwardOcclusionDescriptorSet = nullptr;
+        m_DDGICaptureOcclusionSet = nullptr;
         m_AreaLightLTC.Shutdown();
         m_IrradianceMap = nullptr;
         m_PrefilterMap = nullptr;
@@ -1100,7 +1122,7 @@ namespace Axle {
         // Root Descriptors (space 0):
         // [0] b1, space 0: 256-byte Scene Constants
         // [1] b2, space 0: 2304-byte Forward+ Multi-Light Buffer
-        nri::RootDescriptorDesc rootDescs[7] = {};
+        nri::RootDescriptorDesc rootDescs[8] = {};
         rootDescs[0].registerIndex = ConstantBufferContract::FrameConstantsRegister;
         rootDescs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[0].shaderStages = nri::StageBits::ALL;
@@ -1129,6 +1151,10 @@ namespace Axle {
         rootDescs[6].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[6].shaderStages = nri::StageBits::FRAGMENT_SHADER;
 
+        rootDescs[7].registerIndex = 8; // World-space DDGI probe volume constants
+        rootDescs[7].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDescs[7].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
         // Space 1 includes PBR, IBL, refraction, cascades and local shadow textures.
         nri::DescriptorRangeDesc ranges[2] = {};
         ranges[0].baseRegisterIndex = 0;
@@ -1155,7 +1181,7 @@ namespace Axle {
         samplers[3].desc=RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge).ToNRIDesc();
         samplers[3].shaderStages=nri::StageBits::FRAGMENT_SHADER;
 
-        nri::DescriptorRangeDesc occlusionAndProbeRanges[3]{};
+        nri::DescriptorRangeDesc occlusionAndProbeRanges[4]{};
         occlusionAndProbeRanges[0].baseRegisterIndex = 0;
         occlusionAndProbeRanges[0].descriptorNum = 2;
         occlusionAndProbeRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
@@ -1171,6 +1197,11 @@ namespace Axle {
         occlusionAndProbeRanges[2].descriptorNum = 1;
         occlusionAndProbeRanges[2].descriptorType = nri::DescriptorType::TEXTURE;
         occlusionAndProbeRanges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
+        occlusionAndProbeRanges[3].baseRegisterIndex = 7; // u_DDGIIrradiance, u_DDGIDistance
+        occlusionAndProbeRanges[3].descriptorNum = 2;
+        occlusionAndProbeRanges[3].descriptorType = nri::DescriptorType::TEXTURE;
+        occlusionAndProbeRanges[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
 
         nri::DescriptorRangeDesc forwardFogRanges[2]{};
         forwardFogRanges[0].baseRegisterIndex = 0; // u_FroxelIntegrated
@@ -1188,7 +1219,7 @@ namespace Axle {
         descriptorSets[0].rangeNum = 1;
         descriptorSets[1].registerSpace = 4;
         descriptorSets[1].ranges = occlusionAndProbeRanges;
-        descriptorSets[1].rangeNum = 3;
+        descriptorSets[1].rangeNum = 4;
         descriptorSets[2].registerSpace = 5;
         descriptorSets[2].ranges = forwardFogRanges;
         descriptorSets[2].rangeNum = 2;
@@ -1198,7 +1229,7 @@ namespace Axle {
         layoutDesc.rootConstants = &rootConst;
         layoutDesc.rootConstantNum = 1;
         layoutDesc.rootDescriptors = rootDescs;
-        layoutDesc.rootDescriptorNum = 7;
+        layoutDesc.rootDescriptorNum = 8;
         layoutDesc.rootSamplers = samplers;
         layoutDesc.rootSamplerNum = 4;
         layoutDesc.descriptorSets = descriptorSets;

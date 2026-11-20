@@ -61,6 +61,7 @@ namespace Axle::Passes {
         float ProbeMaxDistance = 4.0f;
         RHI::RHIDDGIAtlasExtent AtlasExtent{};
         DDGIContract::DDGIShaderConstants Constants{};
+        RHI::RHIBuffer* CaptureConstantsCB = nullptr;
         std::vector<DDGICaptureFaceTarget> Faces;
         std::vector<DDGICaptureDraw> Draws;
     };

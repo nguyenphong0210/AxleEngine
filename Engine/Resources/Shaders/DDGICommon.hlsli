@@ -121,7 +121,7 @@ float DDGIEvaluateChebyshev(float2 moments, float dist) {
 float4 DDGISampleVolumeIrradiance(Texture2D<float4> irradAtlas, Texture2D<float4> distAtlas,
                                     SamplerState linearSampler, float3 worldPos,
                                     float3 worldNormal, float3 viewDir) {
-    if (u_DDGIFlags.x < 0.5 || u_DDGIParams.x <= 0.0) {
+    if (u_DDGIFlags.x < 0.5) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
@@ -196,7 +196,7 @@ float4 DDGISampleVolumeIrradiance(Texture2D<float4> irradAtlas, Texture2D<float4
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    float3 irradiance = (irradSum / weightSum) * u_DDGIParams.x;
+    float3 irradiance = (irradSum / weightSum) * max(u_DDGIParams.x, 0.0);
     float confidence = cageWeight * saturate(weightSum * 4.0);
     return float4(irradiance, confidence);
 }

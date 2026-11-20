@@ -241,6 +241,11 @@ TextureCube u_ReflectionProbeCube2 : register(t4, space4);
 TextureCube u_ReflectionProbeCube3 : register(t5, space4);
 #include "ReflectionProbeCommon.hlsli"
 
+#define AXLE_DDGI_CBUFFER_REGISTER b8
+Texture2D<float4> u_DDGIIrradiance : register(t7, space4);
+Texture2D<float4> u_DDGIDistance : register(t8, space4);
+#include "DDGICommon.hlsli"
+
 Texture3D<float4> u_FroxelIntegrated : register(t0, space5);
 Texture3D<float4> u_FroxelMedia      : register(t1, space5);
 
@@ -825,12 +830,14 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     float envIntensity = max(u_LightReserved[0].y, 0.0);
     float3 diffuseAO = ComputeMultiBounceAO(ao, albedo.rgb, saturate(u_LightReserved[1].w));
     float specAO = ComputeSpecularOcclusion(NdotV, ao, roughness);
+    float4 ddgiSample = DDGISampleVolumeIrradiance(u_DDGIIrradiance, u_DDGIDistance, u_EnvironmentSampler, input.WorldPos, N, V);
+    float3 ddgiDiffuse = ddgiSample.rgb * albedo.rgb * ambientKD;
 
     if (hasSplitSumIBL) {
         // Image-Based Lighting (IBL) via Split-Sum Approximation + Multi-Probe Blend
-        // A. Diffuse Irradiance: Cosine-weighted hemispherical integration
+        // A. Diffuse Irradiance: Cosine-weighted hemispherical integration (replaced smoothly by world-space DDGI when enabled)
         float3 irradiance = u_IrradianceMap.Sample(u_EnvironmentSampler, RotateEnvironmentDirection(N)).rgb;
-        float3 diffuseAmbient = irradiance * albedo.rgb * ambientKD * envIntensity;
+        float3 diffuseAmbient = lerp(irradiance * albedo.rgb * ambientKD * envIntensity, ddgiDiffuse, ddgiSample.a);
 
         // B. Specular Radiance: Pre-filtered local probes (scaled by probe Intensity) -> sky fallback (scaled by envIntensity)
         float3 skyPrefilter = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, RotateEnvironmentDirection(R), roughness * MAX_REFLECTION_LOD).rgb * envIntensity;
@@ -855,7 +862,7 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         // Shared analytical environment approximation with seamless local-probe split-sum blend:
         // local probes carry their own authored Intensity even when world sky/ambient is zero.
         float3 ambientColor = u_SunLight.AmbientColor.rgb;
-        float3 diffuseAmbient = ambientColor * albedo.rgb * ambientKD * envIntensity;
+        float3 diffuseAmbient = lerp(ambientColor * albedo.rgb * ambientKD * envIntensity, ddgiDiffuse, ddgiSample.a);
         float3 analyticalSpec = ambientColor * ambientF * (1.0 - roughness * 0.5) * u_MaterialSurface.w * ggxEnergyCompensation * (1.0 - saturate(u_LightReserved[0].z)) * envIntensity;
         MultiProbeBlendResult envBlend = EvaluateMultiProbeBlendHLSL(input.WorldPos, R, roughness, u_EnvironmentSampler, float3(0.0, 0.0, 0.0));
         float3 probeSpec = envBlend.ProbeColor * (ambientF * envBRDF.x + envBRDF.y) * ggxEnergyCompensation * u_MaterialSurface.w;

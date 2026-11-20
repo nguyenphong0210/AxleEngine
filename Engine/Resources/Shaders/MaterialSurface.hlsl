@@ -83,6 +83,11 @@ TextureCube u_ReflectionProbeCube2 : register(t4, space4);
 TextureCube u_ReflectionProbeCube3 : register(t5, space4);
 #include "ReflectionProbeCommon.hlsli"
 
+#define AXLE_DDGI_CBUFFER_REGISTER b8
+Texture2D<float4> u_DDGIIrradiance : register(t7, space4);
+Texture2D<float4> u_DDGIDistance : register(t8, space4);
+#include "DDGICommon.hlsli"
+
 // @AXLE_GRAPH_DECLARATIONS@
 
 struct MaterialSurface {
@@ -316,6 +321,13 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     float specAO = ComputeSpecularOcclusion(nv, combinedAO, roughness);
     float3 diffuseRatio = (screenVisibility.x > 1e-4) ? (diffuseAO / screenVisibility.x) : float3(0.0, 0.0, 0.0);
     float specRatio = (screenVisibility.x > 1e-4) ? (specAO / screenVisibility.x) : 0.0;
+    float3 ddgiDiffuse = float3(0.0, 0.0, 0.0);
+    float ddgiConfidence = 0.0;
+    if (metallic < 0.9999) {
+        float4 ddgiSample = DDGISampleVolumeIrradiance(u_DDGIIrradiance, u_DDGIDistance, u_EnvironmentSampler, input.WorldPos, normal, view);
+        ddgiDiffuse = ddgiSample.rgb * base * ((1.0 - ambientRef) * (1.0 - metallic));
+        ddgiConfidence = ddgiSample.a;
+    }
     if (u_LightCounts.w == 1u) {
         uint envWidth, envHeight, envLevels;
         u_PrefilterMap.GetDimensions(0, envWidth, envHeight, envLevels);
@@ -331,7 +343,8 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float3 skyPrefiltered = u_PrefilterMap.SampleLevel(u_EnvironmentSampler, skyReflection, roughness * maxLod).rgb * envIntensity;
         float3 prefiltered = EvaluateMultiProbeBlendHLSL(input.WorldPos, reflDir, roughness, u_EnvironmentSampler, skyPrefiltered).BlendedEnvColor;
         float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(nv, roughness)).rg;
-        ambient = irradiance * base * ambientKD * diffuseRatio + prefiltered * (ambientF * envBRDF.x + envBRDF.y) * specRatio;
+        float3 diffuseAmbient = lerp(irradiance * base * ambientKD, ddgiDiffuse, ddgiConfidence) * diffuseRatio;
+        ambient = diffuseAmbient + prefiltered * (ambientF * envBRDF.x + envBRDF.y) * specRatio;
         reflectionResponse = (ambientF * envBRDF.x + envBRDF.y) * specAO;
         reflectionEnvironment = prefiltered * reflectionResponse;
     } else {
@@ -341,7 +354,9 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         float2 envBRDF = u_BRDFLUT.Sample(u_EnvironmentSampler, float2(nv, roughness)).rg;
         float3 probeSpec = probeBlend.ProbeColor * (ambientRef * envBRDF.x + envBRDF.y);
         float3 skySpec = ambientRef * 0.02 * (1.0 - saturate(u_LightReserved[0].z)) * ambientStrength;
-        ambient = base * 0.03 * (1.0 - metallic) * ambientStrength * diffuseRatio + lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * specRatio;
+        float3 iblDiffuse = base * 0.03 * (1.0 - metallic) * ambientStrength;
+        float3 diffuseAmbient = lerp(iblDiffuse, ddgiDiffuse, ddgiConfidence) * diffuseRatio;
+        ambient = diffuseAmbient + lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * specRatio;
         reflectionResponse = (ambientRef * envBRDF.x + envBRDF.y) * specAO;
         reflectionEnvironment = lerp(skySpec, probeSpec, probeBlend.ProbeCoverage) * specAO;
     }

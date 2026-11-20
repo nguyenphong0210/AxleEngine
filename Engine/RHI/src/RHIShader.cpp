@@ -27,11 +27,14 @@
 #include <d3d12shader.h>
 
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <unordered_map>
 #include <unordered_set>
 #include <map>
+#include <cstring>
 
 namespace Axle::RHI {
 
@@ -41,6 +44,179 @@ namespace Axle::RHI {
         std::wstring wstr(sizeNeeded, 0);
         MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &wstr[0], sizeNeeded);
         return wstr;
+    }
+
+    // Ensures every descriptor binding retained in a compiled SPIR-V module is
+    // declared in RHIShaderReflection even when DXIL reflection dead-code strips it.
+    static void ReconcileSPIRVDescriptorBindings(const RHIShaderBytecode& bytecode, RHIShaderReflection& reflection) {
+        if (bytecode.Format != RHIShaderFormat::SPIRV || bytecode.Data.size() < 20 || (bytecode.Data.size() % 4) != 0) {
+            return;
+        }
+        const auto wordCountTotal = bytecode.Data.size() / 4;
+        std::vector<uint32_t> words(wordCountTotal);
+        std::memcpy(words.data(), bytecode.Data.data(), bytecode.Data.size());
+        if (words[0] != 0x07230203u) {
+            return;
+        }
+
+        struct SpirvTypeInfo {
+            uint32_t Opcode = 0;
+            uint32_t ElemType = 0;
+            uint32_t Count = 0;
+            uint32_t WidthBits = 0;
+            uint32_t Dim = 0;
+            uint32_t Sampled = 0;
+            uint32_t StorageClass = 0;
+            std::vector<uint32_t> Members;
+        };
+        struct SpirvVar {
+            uint32_t PtrType = 0;
+            uint32_t StorageClass = 0;
+        };
+
+        std::unordered_map<uint32_t, std::string> names;
+        std::unordered_map<uint32_t, uint32_t> sets, bindings, arrayStrides;
+        std::unordered_set<uint32_t> bufferBlocks;
+        std::unordered_map<uint32_t, uint32_t> uintConsts;
+        std::unordered_map<uint32_t, SpirvTypeInfo> types;
+        std::unordered_map<uint32_t, SpirvVar> vars;
+        std::map<std::pair<uint32_t, uint32_t>, uint32_t> memberOff;
+
+        size_t idx = 5;
+        while (idx < wordCountTotal) {
+            const uint32_t opWord = words[idx];
+            const uint32_t wc = opWord >> 16;
+            const uint32_t op = opWord & 0xFFFFu;
+            if (wc == 0 || idx + wc > wordCountTotal) break;
+
+            if (op == 5 && wc >= 3) { // OpName
+                const char* raw = reinterpret_cast<const char*>(&words[idx + 2]);
+                const size_t maxBytes = (wc - 2) * 4;
+                names[words[idx + 1]] = std::string(raw, strnlen(raw, maxBytes));
+            } else if (op == 71 && wc >= 3) { // OpDecorate
+                const uint32_t id = words[idx + 1];
+                const uint32_t dec = words[idx + 2];
+                if (dec == 33 && wc >= 4) bindings[id] = words[idx + 3];
+                else if (dec == 34 && wc >= 4) sets[id] = words[idx + 3];
+                else if (dec == 6 && wc >= 4) arrayStrides[id] = words[idx + 3];
+                else if (dec == 3) bufferBlocks.insert(id);
+            } else if (op == 72 && wc >= 5) { // OpMemberDecorate
+                if (words[idx + 3] == 35) memberOff[{words[idx + 1], words[idx + 2]}] = words[idx + 4];
+            } else if (op == 21 && wc >= 4) { // OpTypeInt
+                types[words[idx + 1]] = { op, 0, 0, words[idx + 2] };
+            } else if (op == 22 && wc >= 3) { // OpTypeFloat
+                types[words[idx + 1]] = { op, 0, 0, words[idx + 2] };
+            } else if (op == 23 && wc >= 4) { // OpTypeVector
+                types[words[idx + 1]] = { op, words[idx + 2], words[idx + 3] };
+            } else if (op == 24 && wc >= 4) { // OpTypeMatrix
+                types[words[idx + 1]] = { op, words[idx + 2], words[idx + 3] };
+            } else if (op == 25 && wc >= 9) { // OpTypeImage
+                SpirvTypeInfo info{}; info.Opcode = op; info.Dim = words[idx + 3]; info.Sampled = words[idx + 7];
+                types[words[idx + 1]] = info;
+            } else if (op == 26 && wc >= 2) { // OpTypeSampler
+                types[words[idx + 1]] = { op };
+            } else if (op == 27 && wc >= 3) { // OpTypeSampledImage
+                types[words[idx + 1]] = { op, words[idx + 2] };
+            } else if (op == 28 && wc >= 4) { // OpTypeArray
+                types[words[idx + 1]] = { op, words[idx + 2], words[idx + 3] };
+            } else if (op == 30 && wc >= 2) { // OpTypeStruct
+                SpirvTypeInfo info{}; info.Opcode = op;
+                for (uint32_t m = 2; m < wc; ++m) info.Members.push_back(words[idx + m]);
+                types[words[idx + 1]] = std::move(info);
+            } else if (op == 32 && wc >= 4) { // OpTypePointer
+                SpirvTypeInfo info{}; info.Opcode = op; info.StorageClass = words[idx + 2]; info.ElemType = words[idx + 3];
+                types[words[idx + 1]] = info;
+            } else if (op == 43 && wc >= 4) { // OpConstant
+                uintConsts[words[idx + 2]] = words[idx + 3];
+            } else if (op == 59 && wc >= 4) { // OpVariable
+                vars[words[idx + 2]] = { words[idx + 1], words[idx + 3] };
+            }
+            idx += wc;
+        }
+
+        std::function<uint32_t(uint32_t)> byteSize = [&](uint32_t typeId) -> uint32_t {
+            const auto it = types.find(typeId);
+            if (it == types.end()) return 0u;
+            const auto& t = it->second;
+            if (t.Opcode == 21 || t.Opcode == 22) return t.WidthBits / 8u;
+            if (t.Opcode == 23 || t.Opcode == 24) return byteSize(t.ElemType) * t.Count;
+            if (t.Opcode == 28) {
+                const uint32_t len = uintConsts.contains(t.Count) ? uintConsts[t.Count] : 1u;
+                const uint32_t stride = arrayStrides.contains(typeId) ? arrayStrides[typeId] : byteSize(t.ElemType);
+                return stride * len;
+            }
+            if (t.Opcode == 30 && !t.Members.empty()) {
+                const uint32_t lastIdx = static_cast<uint32_t>(t.Members.size() - 1);
+                const uint32_t lastOff = memberOff.contains({typeId, lastIdx}) ? memberOff[{typeId, lastIdx}] : 0u;
+                const uint32_t raw = lastOff + byteSize(t.Members.back());
+                return (raw + 15u) & ~15u;
+            }
+            return 0u;
+        };
+
+        for (const auto& [varId, var] : vars) {
+            if (!sets.contains(varId) || !bindings.contains(varId)) continue;
+            if (var.StorageClass != 0u && var.StorageClass != 2u && var.StorageClass != 12u) continue;
+            const uint32_t space = sets[varId];
+            uint32_t slot = bindings[varId];
+            const auto ptrIt = types.find(var.PtrType);
+            if (ptrIt == types.end()) continue;
+            uint32_t baseTypeId = ptrIt->second.ElemType;
+            uint32_t bindCount = 1u;
+            if (auto baseIt = types.find(baseTypeId); baseIt != types.end() && baseIt->second.Opcode == 28) {
+                bindCount = uintConsts.contains(baseIt->second.Count) ? uintConsts[baseIt->second.Count] : 1u;
+                baseTypeId = baseIt->second.ElemType;
+            }
+            const auto baseIt = types.find(baseTypeId);
+            if (baseIt == types.end()) continue;
+            const auto& bt = baseIt->second;
+
+            RHIResourceType resType = RHIResourceType::Unknown;
+            uint32_t texDim = 0u;
+            if (var.StorageClass == 0u) { // UniformConstant
+                if (bt.Opcode == 26) resType = RHIResourceType::Sampler;
+                else if (bt.Opcode == 25) {
+                    if (bt.Dim == 5) resType = bt.Sampled == 2 ? RHIResourceType::StorageTexture : RHIResourceType::Texture;
+                    else resType = bt.Sampled == 2 ? RHIResourceType::StorageTexture : RHIResourceType::Texture;
+                    texDim = (bt.Dim == 1) ? 2u : 0xffffffffu;
+                } else if (bt.Opcode == 27) {
+                    resType = RHIResourceType::Texture;
+                }
+            } else if (var.StorageClass == 2u && !bufferBlocks.contains(baseTypeId)) {
+                resType = RHIResourceType::ConstantBuffer;
+            } else if (var.StorageClass == 12u || (var.StorageClass == 2u && bufferBlocks.contains(baseTypeId))) {
+                resType = RHIResourceType::StructuredBuffer;
+            }
+            if (resType == RHIResourceType::Unknown) continue;
+            // Undo DXC -fvk-s-shift 128 applied during SPIR-V compilation so BindPoint stays in HLSL register space.
+            if (resType == RHIResourceType::Sampler && slot >= 128u) {
+                slot -= 128u;
+            }
+
+            std::string resName = names.contains(varId) ? names[varId] : ("SPIRV_" + std::to_string(space) + "_" + std::to_string(slot));
+            const bool exists = std::any_of(reflection.Resources.begin(), reflection.Resources.end(), [&](const auto& r) {
+                return (r.Space == space && r.BindPoint == slot && r.Type == resType) || r.Name == resName;
+            });
+            if (exists) continue;
+            RHIShaderResourceBinding b;
+            b.Name = resName;
+            b.Type = resType;
+            b.BindPoint = slot;
+            b.BindCount = bindCount;
+            b.Space = space;
+            b.Stage = reflection.Stage;
+            b.TextureDimension = texDim;
+            reflection.Resources.push_back(std::move(b));
+
+            if (resType == RHIResourceType::ConstantBuffer && !reflection.FindConstantBuffer(resName)) {
+                RHIShaderConstantBuffer cb;
+                cb.Name = std::move(resName);
+                cb.BindPoint = slot;
+                cb.Space = space;
+                cb.Size = byteSize(baseTypeId);
+                reflection.ConstantBuffers.push_back(std::move(cb));
+            }
+        }
     }
 
     // =========================================================================
@@ -407,6 +583,7 @@ namespace Axle::RHI {
                 // When compiling to SPIR-V, DXC doesn't output DXIL reflection blob.
                 // We reflect using HLSL source directly to get unified spaces, registers, variables and thread groups!
                 result.Reflection = ReflectFromSource(desc);
+                ReconcileSPIRVDescriptorBindings(result.Bytecode, result.Reflection);
             } else {
                 IDxcBlob* pReflBlob = nullptr;
                 if (SUCCEEDED(pCompileResult->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&pReflBlob), nullptr)) && pReflBlob) {
@@ -652,6 +829,7 @@ namespace Axle::RHI {
                                 reflDesc.Source = sbuf.str();
                                 reflDesc.SourcePath = PathToUtf8(filepath);
                                 result.Reflection = ReflectFromSource(reflDesc);
+                                ReconcileSPIRVDescriptorBindings(result.Bytecode, result.Reflection);
                             }
                         } else {
                             result.Reflection = Reflect(result.Bytecode);

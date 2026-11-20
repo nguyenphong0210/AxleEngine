@@ -277,9 +277,12 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path&) {
     settings.EnableStudioLightLobes = false;
     settings.EnableDDGI = true;
 
-    auto renderView = [&](const PerspectiveCamera& cam) -> bool {
-        renderer.RenderWorldView(world, cam, &color, &depth, settings, nullptr, targets);
+    auto renderViewWith = [&](const PerspectiveCamera& cam, std::shared_ptr<RHIViewTargets> viewTargets) -> bool {
+        renderer.RenderWorldView(world, cam, &color, &depth, settings, nullptr, std::move(viewTargets));
         return renderer.WasLastRenderSuccessful() && device.WaitIdle();
+    };
+    auto renderView = [&](const PerspectiveCamera& cam) -> bool {
+        return renderViewWith(cam, targets);
     };
 
     // Frame 0: Seed reset clears atlas & updates probes [0..7]
@@ -289,9 +292,9 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path&) {
     }
     const auto f0GI = renderer.GetGIFrame();
     if (!f0GI.UpdateScheduled || !f0GI.IrradianceAvailable || !f0GI.VisibilityAvailable ||
-        f0GI.ProbeCursor != 0u || f0GI.UpdatedProbeCount != 8u) {
+        !f0GI.SamplingEnabled || f0GI.ProbeCursor != 0u || f0GI.UpdatedProbeCount != 8u) {
         std::cerr << "[M15DDGI] FAIL: Frame 0 GI telemetry mismatch (cursor=" << f0GI.ProbeCursor
-                  << ", updated=" << f0GI.UpdatedProbeCount << ")\n";
+                  << ", updated=" << f0GI.UpdatedProbeCount << ", sampling=" << f0GI.SamplingEnabled << ")\n";
         return false;
     }
 
@@ -381,9 +384,95 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path&) {
     const auto p8Cleared = AnalyzeTile(irradInvalid, extent.IrradianceWidth, 8u, extent.AtlasCols,
                                        DDGIContract::IrradianceInterior, DDGIContract::IrradianceTileSize);
     if (fInvalidGI.ProbeCursor != 0u ||
+        !fInvalidGI.SamplingEnabled ||
         !(p0Green.MeanIrrad.g > 0.2f && p0Green.MeanIrrad.g > p0Green.MeanIrrad.r * 3.0f) ||
         !(p8Cleared.MaxAlpha == 0.0f)) {
         std::cerr << "[M15DDGI] FAIL: Scene revision invalidation left stale red bounce or failed reset\n";
+        return false;
+    }
+
+    // U7-C Live Forward Diffuse GI & Fallback Check (M15-U7-06 / 07.2):
+    // Moderate green emitter keeps indirect HDR bounce inside non-clipped RGBA8 SDR range.
+    world.Meshes[0].Material.RHIMaterialAsset = MakeSolidMat(glm::vec3(0.02f, 0.6f, 0.02f), glm::vec3(0.01f, 0.8f, 0.01f), 2.0f);
+    // Place an unlit matte white receiver wall at X=1.2 facing the green emitter wall at X=-1.2
+    // inside the air probes at X=0. Main camera looks straight at the receiver wall (emitter behind camera).
+    RenderMeshInstance receiverWall{};
+    receiverWall.EntityID = 103;
+    receiverWall.NativeView = cube->CaptureView();
+    receiverWall.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(1.2f, 2.0f, 3.0f)) *
+                                  glm::scale(glm::mat4(1.0f), glm::vec3(0.4f, 6.0f, 10.0f));
+    receiverWall.Material.RHIMaterialAsset = MakeSolidMat(glm::vec3(0.9f, 0.9f, 0.9f));
+    world.Meshes.push_back(receiverWall);
+    world.SceneRevision = 3;
+
+    PerspectiveCamera camReceiver(60.0f, 1.0f, 0.1f, 200.0f);
+    camReceiver.SetViewMatrix(
+        glm::lookAtRH(glm::vec3(-0.3f, 2.0f, 3.0f), glm::vec3(1.2f, 2.0f, 3.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+        glm::vec3(-0.3f, 2.0f, 3.0f));
+
+    auto readCenterRGB = [&]() -> glm::ivec3 {
+        const auto px = Axle::RenderTests::ReadTexture(color);
+        if (px.size() != static_cast<size_t>(width) * height * 4u) {
+            return glm::ivec3(-1);
+        }
+        const size_t idx = (static_cast<size_t>(height / 2u) * width + (width / 2u)) * 4u;
+        return glm::ivec3(px[idx + 0], px[idx + 1], px[idx + 2]);
+    };
+
+    auto offTargets = std::make_shared<RHIViewTargets>();
+    RHIViewTargetDesc offDesc = targetDesc;
+    offDesc.EnableDDGI = false;
+    offDesc.DDGIGridX = 0u;
+    offDesc.DDGIGridY = 0u;
+    offDesc.DDGIGridZ = 0u;
+    if (!offTargets->Configure(offDesc)) {
+        std::cerr << "[M15DDGI] FAIL: failed to configure off baseline targets\n";
+        return false;
+    }
+
+    settings.EnableDDGI = false;
+    const bool offOk = renderViewWith(camReceiver, offTargets);
+    if (!offOk || renderer.GetGIFrame().SamplingEnabled) {
+        std::cerr << "[M15DDGI] FAIL: Disabled DDGI baseline render failed or reported SamplingEnabled"
+                  << " (offOk=" << offOk
+                  << ", lastRender=" << renderer.WasLastRenderSuccessful()
+                  << ", sampling=" << renderer.GetGIFrame().SamplingEnabled
+                  << ", status=" << static_cast<int>(renderer.GetGIFrame().Status)
+                  << ", updateSched=" << renderer.GetGIFrame().UpdateScheduled
+                  << ", diag=" << renderer.GetGIFrame().Diagnostic << ")\n";
+        return false;
+    }
+    const glm::ivec3 offRGB = readCenterRGB();
+    if (offRGB.r < 0 || offRGB.r > 2 || offRGB.g > 2 || offRGB.b > 2) {
+        std::cerr << "[M15DDGI] FAIL: Disabled DDGI unlit receiver baseline not dark ("
+                  << offRGB.r << "," << offRGB.g << "," << offRGB.b << ")\n";
+        return false;
+    }
+
+    settings.EnableDDGI = true;
+    if (!renderView(camReceiver) || !renderer.GetGIFrame().SamplingEnabled) {
+        std::cerr << "[M15DDGI] FAIL: Active DDGI forward receiver render failed\n";
+        return false;
+    }
+    const glm::ivec3 bounceFrame0 = readCenterRGB();
+    for (int f = 0; f < 4; ++f) {
+        if (!renderView(camReceiver) || !renderer.GetGIFrame().SamplingEnabled) {
+            std::cerr << "[M15DDGI] FAIL: Multi-bounce warm frame " << f << " failed\n";
+            return false;
+        }
+    }
+    const glm::ivec3 bounceSteady = readCenterRGB();
+    if (!(bounceFrame0.g > 30 && bounceFrame0.g > bounceFrame0.r * 2 &&
+          bounceSteady.g >= bounceFrame0.g && bounceSteady.g > bounceSteady.r * 2)) {
+        std::cerr << "[M15DDGI] FAIL: White receiver wall did not receive indirect green bounce ("
+                  << "f0=(" << bounceFrame0.r << "," << bounceFrame0.g << "," << bounceFrame0.b << "), "
+                  << "steady=(" << bounceSteady.r << "," << bounceSteady.g << "," << bounceSteady.b << "))\n";
+        return false;
+    }
+
+    settings.EnableDDGI = false;
+    if (!renderViewWith(camReceiver, nullptr) || renderer.GetGIFrame().SamplingEnabled || readCenterRGB() != offRGB) {
+        std::cerr << "[M15DDGI] FAIL: Turning DDGI back off did not restore exact baseline\n";
         return false;
     }
 
@@ -392,6 +481,7 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path&) {
               << "p0_dist_min=" << p0Dist.MinMean << ", "
               << "air_backface=" << p0Dist.MeanBackfaceRatio << ", "
               << "trapped_backface=" << p1Dist.MeanBackfaceRatio << ", "
-              << "p0_green=(" << p0Green.MeanIrrad.r << "," << p0Green.MeanIrrad.g << "))\n";
+              << "p0_green=(" << p0Green.MeanIrrad.r << "," << p0Green.MeanIrrad.g << "), "
+              << "fwd_bounce=(" << bounceSteady.r << "," << bounceSteady.g << "," << bounceSteady.b << "))\n";
     return true;
 }

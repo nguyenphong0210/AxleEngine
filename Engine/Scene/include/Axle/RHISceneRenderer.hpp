@@ -388,6 +388,7 @@ namespace Axle {
         nri::DescriptorSet* GetDefaultDescriptorSet() const { return m_DefaultDescriptorSet; }
         nri::DescriptorSet* GetForwardFogFallbackDescriptorSet() const { return m_ForwardFogFallbackDescriptorSet; }
         const RHI::RHIBuffer& GetDisabledFogConstantBuffer() const { return m_DisabledFogConstantBuffer; }
+        const RHI::RHIBuffer& GetDisabledDDGIConstantBuffer() const { return m_DisabledDDGIConstantBuffer; }
         RHI::RHIMultiLightBuffer& GetLightBuffer() { return m_LightBuffer; }
         const RHI::RHIMultiLightBuffer& GetLightBuffer() const { return m_LightBuffer; }
 
@@ -1115,6 +1116,7 @@ namespace Axle {
         RHI::RHITexture m_DDGICaptureColor;
         RHI::RHITexture m_DDGICaptureDepth;
         RHI::RHIBuffer m_DDGIConstantBuffer;
+        RHI::RHIBuffer m_DisabledDDGIConstantBuffer;
         RHI::RHIShaderBytecode m_DDGISeedShader;
         RHI::RHIShaderBytecode m_DDGIUpdateIrradianceShader;
         RHI::RHIShaderBytecode m_DDGIUpdateDistanceShader;
@@ -1122,6 +1124,7 @@ namespace Axle {
         RHI::RHIDescriptorPool m_DDGIDescriptorPool;
         nri::DescriptorSet* m_DDGITextureSet = nullptr;
         nri::DescriptorSet* m_DDGIStorageSet = nullptr;
+        nri::DescriptorSet* m_DDGICaptureOcclusionSet = nullptr;
 
         // Temporal Anti-Aliasing (TAA) Resources
         RHI::RHIPipelineLayout m_TAAPipelineLayout;

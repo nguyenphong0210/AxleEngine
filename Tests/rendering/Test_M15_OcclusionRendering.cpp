@@ -893,7 +893,9 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
             pool.UpdateTextureRange(materialSet, 0, 0, textures) &&
             pool.UpdateTextureRange(visibilitySet, 0, 0, {visibility.GetSRV(), guide.GetSRV()}) &&
             pool.UpdateTextureRange(visibilitySet, 1, 0, {defaultProbeSRV, defaultProbeSRV, defaultProbeSRV, defaultProbeSRV}) &&
-            pool.UpdateTexture(visibilitySet, 2, 0, renderer.GetAreaLightLTC().GetSRV()),
+            pool.UpdateTexture(visibilitySet, 2, 0, renderer.GetAreaLightLTC().GetSRV()) &&
+            pool.UpdateTextureRange(visibilitySet, 3, 0,
+                {RHIMaterial::GetDefaultWhiteTexture()->GetSRV(), RHIMaterial::GetDefaultWhiteTexture()->GetSRV()}),
             "forward synthetic descriptors");
         RHIDescriptorPool graphPool;
         std::vector<nri::DescriptorSet*> graphSets;
@@ -921,6 +923,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
                         else if (space == 0 && slot == 5) descriptor = renderer.GetLocalShadows().GetConstantsCBV();
                         else if (space == 0 && slot == 6) descriptor = reflectionProbeBuffer.GetCBV();
                         else if (space == 0 && slot == 7) descriptor = renderer.GetDisabledFogConstantBuffer().GetCBV();
+                        else if (space == 0 && slot == 8) descriptor = renderer.GetDisabledDDGIConstantBuffer().GetCBV();
                         else if (space == 3 && slot == 0) descriptor = renderer.GetLightBuffer().GetCBV();
                     } else if (range.descriptorType == nri::DescriptorType::TEXTURE) {
                         if (space == 2 && slot < 3) descriptor = textures[6 + slot];
@@ -930,6 +933,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
                         else if (space == 4 && slot == 1) descriptor = guide.GetSRV();
                         else if (space == 4 && slot >= 2 && slot < 6) descriptor = defaultProbeSRV;
                         else if (space == 4 && slot == 6) descriptor = renderer.GetAreaLightLTC().GetSRV();
+                        else if (space == 4 && (slot == 7 || slot == 8)) descriptor = RHIMaterial::GetDefaultWhiteTexture()->GetSRV();
                         else if (space == 5 && slot < 2) descriptor = RHIMaterial::GetDefaultEmptyFroxelVolumeTexture()->GetSRV();
                     } else if (range.descriptorType == nri::DescriptorType::SAMPLER) {
                         descriptor = slot == 1 ? graphShadowSampler.GetNative() : renderer.GetSampler().GetNative();
@@ -961,6 +965,7 @@ bool RunM15OcclusionForwardTests(RHISceneRenderer& renderer, const std::filesyst
             commands.SetRootDescriptor(4, renderer.GetLocalShadows().GetConstantsCBV());
             commands.SetRootDescriptor(5, reflectionProbeBuffer.GetCBV());
             commands.SetRootDescriptor(6, renderer.GetDisabledFogConstantBuffer().GetCBV());
+            commands.SetRootDescriptor(7, renderer.GetDisabledDDGIConstantBuffer().GetCBV());
             pool.Bind(commands.GetNative()); commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, 0, materialSet);
             commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, 1, visibilitySet);
             commands.SetDescriptorSet(nri::BindPoint::GRAPHICS, 2, renderer.GetForwardFogFallbackDescriptorSet());

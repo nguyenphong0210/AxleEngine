@@ -147,11 +147,23 @@ namespace Axle::Passes {
             static_cast<float>(capCols),
             static_cast<float>(DDGIContract::CaptureFaceResolution));
         cb.Flags = glm::vec4(
-            0.0f, // SamplingEnabled controlled/published cleanly once U7-C shader wiring runs
+            1.0f, // Forward diffuse GI sampling enabled after DDGIUpdate completes
             hasHistory ? 1.0f : 0.0f,
             resetSeed ? 1.0f : 0.0f,
             static_cast<float>(extent.AtlasRows));
         cb.ClipParams = glm::vec4(captureNear, captureFar, 0.0f, 0.0f);
+
+        // Multi-bounce capture samples prior-frame DDGI irradiance only when steady-state history exists.
+        auto* captureConstsCB = viewCtx.PreparePassUniform("DDGICaptureConsts", sizeof(DDGIContract::DDGIShaderConstants));
+        if (!captureConstsCB) {
+            return false;
+        }
+        DDGIContract::DDGIShaderConstants captureConstants = cb;
+        captureConstants.Flags.x = hasHistory ? 1.0f : 0.0f;
+        if (!captureConstsCB->UpdateData(&captureConstants, sizeof(captureConstants))) {
+            return false;
+        }
+        outPlan.CaptureConstantsCB = captureConstsCB;
 
         const uint32_t totalFaces = updateCount * DDGIContract::FacesPerProbe;
         outPlan.Faces.reserve(totalFaces);
@@ -234,6 +246,10 @@ namespace Axle::Passes {
             {captureColor, Layout::ColorAttachment, Access::Write, Load::Clear},
             {captureDepth, Layout::DepthStencilWrite, Access::Write, Load::Clear}
         };
+        if (!plan.ResetSeed) {
+            capUses.push_back({irradAtlas, Layout::ShaderResource});
+            capUses.push_back({distAtlas, Layout::ShaderResource});
+        }
         if (hasCascadeAtlas) {
             capUses.push_back({shadowAtlas, Layout::ShaderResource});
         }
@@ -268,13 +284,29 @@ namespace Axle::Passes {
         if (!plan.Active) {
             return true;
         }
+        auto* neutral = RHIMaterial::GetDefaultWhiteTexture().get();
         if (!irradAtlas || !distAtlas || !irradAtlas->GetUAV() || !distAtlas->GetUAV() ||
+            !irradAtlas->GetSRV() || !distAtlas->GetSRV() || !neutral || !neutral->GetSRV() ||
             !renderer.m_DDGICaptureColor.GetSRV() || !renderer.m_DDGICaptureDepth.GetSRV()) {
             return false;
         }
 
+        if (!renderer.m_DDGIConstantBuffer.UpdateData(&plan.Constants, sizeof(plan.Constants))) {
+            return false;
+        }
+        if (!captureOcclusionSet || !renderer.m_ForwardOcclusionDescriptorSet ||
+            !renderer.m_DescriptorPool.UpdateTextureRange(captureOcclusionSet, 3, 0,
+                {plan.HasHistory ? irradAtlas->GetSRV() : neutral->GetSRV(),
+                 plan.HasHistory ? distAtlas->GetSRV() : neutral->GetSRV()}) ||
+            !renderer.m_DescriptorPool.UpdateTextureRange(renderer.m_ForwardOcclusionDescriptorSet, 3, 0,
+                {irradAtlas->GetSRV(), distAtlas->GetSRV()})) {
+            return false;
+        }
+
         // Capture pass descriptor & buffer read declarations
-        if (!captureOcclusionSet || !graph.DeclareRead("DDGICapture", captureOcclusionSet) ||
+        if (!plan.CaptureConstantsCB || !plan.CaptureConstantsCB->GetCBV() ||
+            !graph.DeclareRead("DDGICapture", plan.CaptureConstantsCB->GetCBV()) ||
+            !graph.DeclareRead("DDGICapture", captureOcclusionSet) ||
             !graph.DeclareRead("DDGICapture", renderer.m_ForwardFogFallbackDescriptorSet) ||
             !graph.DeclareRead("DDGICapture", renderer.m_DisabledFogConstantBuffer.GetCBV()) ||
             !graph.DeclareRead("DDGICapture", renderer.m_DefaultDescriptorSet)) {
@@ -396,6 +428,7 @@ namespace Axle::Passes {
             cmd.SetRootDescriptor(4, renderer.m_LocalShadows.GetConstantsCBV());
             cmd.SetRootDescriptor(5, renderer.m_ReflectionProbeBuffer.GetCBV());
             cmd.SetRootDescriptor(6, renderer.m_DisabledFogConstantBuffer.GetCBV());
+            cmd.SetRootDescriptor(7, plan.CaptureConstantsCB->GetCBV());
             renderer.m_DescriptorPool.Bind(cmd.GetNative());
             if (!ops.BindDescriptor(1, captureOcclusionSet, nri::BindPoint::GRAPHICS) ||
                 !ops.BindDescriptor(2, renderer.m_ForwardFogFallbackDescriptorSet, nri::BindPoint::GRAPHICS)) {

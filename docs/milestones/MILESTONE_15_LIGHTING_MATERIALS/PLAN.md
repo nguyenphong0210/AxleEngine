@@ -1263,140 +1263,144 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 
 ### Exposure
 
-- [ ] **M15-U8-01.1 — Build log-luminance histogram.**
+- [x] **M15-U8-01.1 — Build log-luminance histogram.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-01.2 — Reduce histogram globally.**
+  - **Evidence:** Self-verified automated PASS (`a13155b4`, re-verified at `62d77e0c`): full-viewport histogram (`AutoExposure.hlsl`) verified via `M15U8PostTemporalContract` (`AxleRenderUnitTests` / `ctest -R ^M15U8PostTemporalContract$`, Debug/Release exit 0) and native `AxleEnvironmentRenderingTests` (`vulkan` & `dx12`, Debug/Release exit 0). Independent Codex review pending.
+- [x] **M15-U8-01.2 — Reduce histogram globally.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`a13155b4`, `62d77e0c`): global 256-bin histogram reduction verified against CPU contract and GPU readbacks (`AxleRenderUnitTests`, `AxleEnvironmentRenderingTests` Vulkan/DX12 Debug/Release exit 0). Independent Codex review pending.
 - [ ] **M15-U8-02.1 — Adapt previous exposure.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U8-02.2 — Use real delta time.**
+  - **Evidence:** **Self-verified automated PASS (display-blocked EDITOR VISUAL):** `a13155b4` & `62d77e0c` pass `AutoExposure` temporal adaptation and `AxleEditor --verify-empty-startup --rhi=vulkan` (Debug/Release exit 0). **EDITOR VISUAL: NOT RUN / BLOCKED (display offline: `Default Monitor Availability=8`); independent Codex review pending.**
+- [x] **M15-U8-02.2 — Use real delta time.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`a13155b4`, `62d77e0c`): real frame `DeltaTime` propagated through `ViewContext` & `PostProcessPass`, rate-invariant across `30/60/120 Hz` (`exp30=2.6582 exp60=2.6484 exp120=2.6367` on Debug/Release Vulkan/DX12). Independent Codex review pending.
 - [ ] **M15-U8-02.3 — Keep exposure per-view.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
+  - **Evidence:** **Self-verified automated PASS (display-blocked EDITOR VISUAL):** `a13155b4` & `62d77e0c` isolate `Exposure` per `ViewContext` across `Main`/auxiliary views (`AxleRenderUnitTests`, `AxleEnvironmentRenderingTests` Vulkan/DX12 Debug/Release, `AxleEditor --verify-empty-startup --rhi=vulkan` exit 0). **EDITOR VISUAL: NOT RUN / BLOCKED (display offline: `Default Monitor Availability=8`); independent Codex review pending.**
 - [ ] **M15-U8-03.1 — Feed exposure to tonemapping.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U8-03.2 — Define first-frame behavior.**
+  - **Evidence:** **Self-verified automated PASS (display-blocked EDITOR VISUAL):** `a13155b4` & `62d77e0c` declare and bind `viewTargets->GetExposure()` into `ToneMapping` with manual exposure fallback (`AxleRenderUnitTests`, `AxleEnvironmentRenderingTests` Vulkan/DX12 Debug/Release, `AxleEditor --verify-empty-startup --rhi=vulkan` exit 0). **EDITOR VISUAL: NOT RUN / BLOCKED (display offline: `Default Monitor Availability=8`); independent Codex review pending.**
+- [x] **M15-U8-03.2 — Define first-frame behavior.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-03.3 — Define black-frame behavior.**
+  - **Evidence:** Self-verified automated PASS (`a13155b4`, `62d77e0c`): first-frame snap/initialization policy verified via `AutoExposureContract` and Debug/Release Vulkan/DX12 GPU fixtures. Independent Codex review pending.
+- [x] **M15-U8-03.3 — Define black-frame behavior.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-03.4 — Define camera-cut behavior.**
+  - **Evidence:** Self-verified automated PASS (`a13155b4`, `62d77e0c`): zero-luminance/black frame clamps safely to bounded `AutoExposureMin/Max` without NaN/Inf (`AxleRenderUnitTests`, `AxleEnvironmentRenderingTests` Vulkan/DX12 Debug/Release). Independent Codex review pending.
+- [x] **M15-U8-03.4 — Define camera-cut behavior.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`a13155b4`, `62d77e0c`): `CameraCut` snaps exposure immediately without stale adaptation lag (`AxleRenderUnitTests`, `AxleEnvironmentRenderingTests` Vulkan/DX12 Debug/Release). Independent Codex review pending.
 - [ ] **M15-U8-04 — Exclude UI/bloom from metering by policy.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: a bounded multiscale halo appears without repeated tint/gain.
-- [ ] **M15-U8-05.1 — Test mixed tiles.**
+  - **Evidence:** **Self-verified automated PASS (display-blocked EDITOR VISUAL):** `a13155b4` & `62d77e0c` run `AutoExposure` strictly pre-Bloom and verify UI/`PhysicsDebug` exclusion in native Vulkan/DX12 Debug/Release tests + `AxleEditor --verify-empty-startup --rhi=vulkan`. **EDITOR VISUAL: NOT RUN / BLOCKED (display offline: `Default Monitor Availability=8`); independent Codex review pending.**
+- [x] **M15-U8-05.1 — Test mixed tiles.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-05.2 — Test 30 Hz.**
+  - **Evidence:** Self-verified automated PASS (`a13155b4`, `62d77e0c`): `25/75` vs `50/50` dark/bright mixed-tile luminance metering verified on Debug/Release Vulkan/DX12 (`AxleEnvironmentRenderingTests`). Independent Codex review pending.
+- [x] **M15-U8-05.2 — Test 30 Hz.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-05.3 — Test 60 Hz.**
+  - **Evidence:** Self-verified automated PASS (`a13155b4`, `62d77e0c`): `dt=1/30` 1-second convergence (`exp30=2.6582`) verified on Debug/Release Vulkan/DX12 (`AxleEnvironmentRenderingTests`). Independent Codex review pending.
+- [x] **M15-U8-05.3 — Test 60 Hz.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-05.4 — Test 120 Hz.**
+  - **Evidence:** Self-verified automated PASS (`a13155b4`, `62d77e0c`): `dt=1/60` 1-second convergence (`exp60=2.6484`) verified on Debug/Release Vulkan/DX12 (`AxleEnvironmentRenderingTests`). Independent Codex review pending.
+- [x] **M15-U8-05.4 — Test 120 Hz.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`a13155b4`, `62d77e0c`): `dt=1/120` 1-second convergence (`exp120=2.6367`) matching `30/60 Hz` verified on Debug/Release Vulkan/DX12 (`AxleEnvironmentRenderingTests`). Independent Codex review pending.
 
 ### Bloom
 
-- [ ] **M15-U8-06 — Threshold HDR source once.**
+- [x] **M15-U8-06 — Threshold HDR source once.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-07.1 — Build six levels.**
+  - **Evidence:** Self-verified automated PASS (`fc6a2e66`, `62d77e0c`): single soft-knee prefilter + Karis average on `BloomDown0` (`Bloom.hlsl`, `PostProcessPass.cpp`) with `BloomDown1..5` sampling source mips without re-thresholding (`M15U8PostTemporalContract`, `AxleEnvironmentRenderingTests` Debug/Release Vulkan/DX12). Independent Codex review pending.
+- [x] **M15-U8-07.1 — Build six levels.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-07.2 — Validate level dimensions.**
+  - **Evidence:** Self-verified automated PASS (`fc6a2e66`, `62d77e0c`): `Bloom0..Bloom5` compute downsample chain verified via `BloomContract` and `RHIViewTargets` (`AxleRenderUnitTests`, `AxleEnvironmentRenderingTests` Vulkan/DX12 Debug/Release). Independent Codex review pending.
+- [x] **M15-U8-07.2 — Validate level dimensions.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-08.1 — Reconstruct additively.**
+  - **Evidence:** Self-verified automated PASS (`fc6a2e66`, `62d77e0c`): `RHIViewTargets::ComputeBloomExtent` / `BloomContract::ComputeMipExtent` validated across even, odd, and tiny resolutions (`AxleRenderUnitTests`, `AxleEnvironmentRenderingTests`, `AxleRHIResourceViewTests`). Independent Codex review pending.
+- [x] **M15-U8-08.1 — Reconstruct additively.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-08.2 — Preserve finer contributions.**
+  - **Evidence:** Self-verified automated PASS (`fc6a2e66`, `62d77e0c`): tent-filter upsample pyramid (`BloomUp4..0`) with hardware `ONE + ONE` `LoadOp::LOAD` blending verified on Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-08.2 — Preserve finer contributions.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-09 — Apply intensity/tint once.**
+  - **Evidence:** Self-verified automated PASS (`fc6a2e66`, `62d77e0c`): hardware `LoadOp::LOAD` additive upsample retains finer mip peaks rather than overwriting `Bloom0..4` (`AxleEnvironmentRenderingTests` Debug/Release Vulkan/DX12). Independent Codex review pending.
+- [x] **M15-U8-09 — Apply intensity/tint once.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-10.1 — Test impulse halo.**
+  - **Evidence:** Self-verified automated PASS (`fc6a2e66`, `62d77e0c`): normalized `BloomTint * BloomIntensity * (1/6)` applied once in `BloomApply` (`Bloom.hlsl`), verified via gain linearity and shader contract checks (`M15U8PostTemporalContract`, `AxleEnvironmentRenderingTests` Vulkan/DX12 Debug/Release). Independent Codex review pending.
+- [x] **M15-U8-10.1 — Test impulse halo.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-10.2 — Test gain.**
+  - **Evidence:** Self-verified automated PASS (`fc6a2e66`, `62d77e0c`): HDR impulse halo test confirms crisp inner core preservation + monotonic radial falloff on Debug/Release Vulkan/DX12 (`AxleEnvironmentRenderingTests`). Independent Codex review pending.
+- [x] **M15-U8-10.2 — Test gain.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-10.3 — Test odd/small resolution.**
+  - **Evidence:** Self-verified automated PASS (`fc6a2e66`, `62d77e0c`): single-application linear intensity gain sweep verified in Debug/Release Vulkan/DX12 GPU fixtures. Independent Codex review pending.
+- [x] **M15-U8-10.3 — Test odd/small resolution.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-10.4 — Test HDR/SDR.**
+  - **Evidence:** Self-verified automated PASS (`fc6a2e66`, `62d77e0c`): odd and minimal extents (`127x63`, `33x17`, `9x9`) validate and render cleanly on Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-10.4 — Test HDR/SDR.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`fc6a2e66`, `62d77e0c`): both `RGBA16_FLOAT` HDR and `RGBA8_UNORM` SDR Bloom targets pass PSO/render checks across Vulkan/DX12 Debug/Release. Independent Codex review pending.
 
 ### TAA
 
-- [ ] **M15-U8-11.1 — Generate camera motion vectors.**
+- [x] **M15-U8-11.1 — Generate camera motion vectors.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-11.2 — Generate object motion vectors.**
+  - **Evidence:** Self-verified automated PASS (`230d213d`, `62d77e0c`): native `RG16_FLOAT` `Velocity` pass (`Velocity.hlsl::PSBackground`) verified on linear camera pan across Debug/Release Vulkan/DX12 (`AxleEnvironmentRenderingTests`). Independent Codex review pending.
+- [x] **M15-U8-11.2 — Generate object motion vectors.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-11.3 — Apply consistent jitter.**
+  - **Evidence:** Self-verified automated PASS (`230d213d`, `62d77e0c`): per-view `PrevWorldTransform` cache keyed by `StableUUID`/`EntityID` (`ViewContext`) drives `Velocity.hlsl::PSMesh`, tested for moving/static/first-spawn/reassigned EntityID on Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-11.3 — Apply consistent jitter.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-12.1 — Reject disoccluded history.**
+  - **Evidence:** Self-verified automated PASS (`230d213d`, `62d77e0c`): Halton `(2,3)` subpixel jitter cancels identically between `CurrJitteredVP` and unjittered `CurrVP`/`PrevVP` (`<= 1e-4` static velocity leak on Debug/Release Vulkan/DX12). Independent Codex review pending.
+- [x] **M15-U8-12.1 — Reject disoccluded history.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-12.2 — Reject invalid history.**
+  - **Evidence:** Self-verified automated PASS (`c34c8a1b`, `62d77e0c`): closest 3x3 depth & dilated velocity lookup + YCoCg variance clip + exponential `disocclusionGate` (`TAA.hlsl`, `TAAContract`) verified on CPU and native Vulkan/DX12 Debug/Release. Independent Codex review pending.
+- [x] **M15-U8-12.2 — Reject invalid history.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-13.1 — Reset on resize.**
+  - **Evidence:** Self-verified automated PASS (`c34c8a1b`, `62d77e0c`): out-of-bounds UV, non-finite velocity, first-frame/reset invalidation, explicit RenderGraph read declarations, and `RenderBackendPolicy` FXAA suppression verified across CPU & Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-13.1 — Reset on resize.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-13.2 — Reset on view switch.**
+  - **Evidence:** Self-verified automated PASS (`230d213d`, `c34c8a1b`, `62d77e0c`): viewport dimension changes reset temporal & object transform history cleanly (`CommittedFrameCount == 1`, zero velocity) across CPU and Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-13.2 — Reset on view switch.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-13.3 — Reset on camera cut.**
+  - **Evidence:** Self-verified automated PASS (`230d213d`, `c34c8a1b`, `62d77e0c`): switching `RenderViewKind` (`Main` <-> `AssetPreview` / `ViewId`) isolates/resets history cleanly across CPU and Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-13.3 — Reset on camera cut.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-13.4 — Reset on settings/format.**
+  - **Evidence:** Self-verified automated PASS (`230d213d`, `62d77e0c`): `CameraCut` invalidates temporal history and per-object transform cache cleanly (`M15U8PostTemporalContract`, `AxleEnvironmentRenderingTests` Vulkan/DX12 Debug/Release). Independent Codex review pending.
+- [x] **M15-U8-13.4 — Reset on settings/format.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-13.5 — Reset on scene generation.**
+  - **Evidence:** Self-verified automated PASS (`230d213d`, `62d77e0c`): `FeatureGeneration` hashes TAA settings plus `m_CurrentColorFormat`/`m_CurrentDepthFormat` and resets history on toggles/changes (`M15U8PostTemporalContract`, `AxleEnvironmentRenderingTests` Debug/Release Vulkan/DX12). Independent Codex review pending.
+- [x] **M15-U8-13.5 — Reset on scene generation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-14.1 — Define transparent policy.**
+  - **Evidence:** Self-verified automated PASS (`230d213d`, `62d77e0c`): `ViewSceneRevision` bump invalidates both temporal and object-transform caches (`M15U8PostTemporalContract`, `AxleEnvironmentRenderingTests` Debug/Release Vulkan/DX12). Independent Codex review pending.
+- [x] **M15-U8-14.1 — Define transparent policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-14.2 — Define reactive policy.**
+  - **Evidence:** Self-verified automated PASS (`62d77e0c`): `Transparent`/`Additive` surfaces and GPU particles are excluded from `MotionVectors` (`opaqueQueue` only) while rasterizing into `R8_UNORM` `Reactive`, verified in `TAAContract` and Debug/Release Vulkan/DX12 GPU fixtures. Independent Codex review pending.
+- [x] **M15-U8-14.2 — Define reactive policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-14.3 — Define unjittered UI policy.**
+  - **Evidence:** Self-verified automated PASS (`62d77e0c`): native `RHIViewTarget::Reactive` (`R8_UNORM`, hardware `MAX` blend) populated by `ReactiveMask` (`Velocity.hlsl::PSReactive` + `Particle.hlsl::PSReactive`) damps `TAAResolve` history weight on translucent/additive/particle/intense-emissive pixels across CPU & Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-14.3 — Define unjittered UI policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-15.1 — Test static shimmer.**
+  - **Evidence:** Self-verified automated PASS (`62d77e0c`): 2D Canvas/ImGui UI and Editor gizmos compose post-TAA/ToneMapping without jitter, and `PhysicsDebug` defers unjittered rendering (`PhysicsDebugOverlay`) after `PostProcessPass` under TAA, verified on Debug/Release Vulkan/DX12 (`0` pixel shift & invariant exposure). Independent Codex review pending.
+- [x] **M15-U8-15.1 — Test static shimmer.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-15.2 — Test moving object.**
+  - **Evidence:** Self-verified automated PASS (`c34c8a1b`, `62d77e0c`): rotated high-contrast thin bar accumulates smooth subpixel anti-aliased transitions over 16 Halton jitter frames (`rms <= 4.5` across consecutive jitter phases) on Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-15.2 — Test moving object.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-15.3 — Test disocclusion.**
+  - **Evidence:** Self-verified automated PASS (`c34c8a1b`, `62d77e0c`): fast moving high-contrast object maintains foreground edge fidelity with clean trailing wake across Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-15.3 — Test disocclusion.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-15.4 — Test resize.**
+  - **Evidence:** Self-verified automated PASS (`c34c8a1b`, `62d77e0c`): rapidly moving occluder uncovers high-contrast background without stale foreground color ghosting on Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-15.4 — Test resize.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U8-15.5 — Test ghosting.**
+  - **Evidence:** Self-verified automated PASS (`c34c8a1b`, `62d77e0c`): resize (`128x128 -> 192x144`), view switch, and `EnableTAA + EnableFXAA` mutual exclusion (`maxDiff == 0`) pass on Debug/Release Vulkan/DX12. Independent Codex review pending.
+- [x] **M15-U8-15.5 — Test ghosting.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`62d77e0c`): moving semi-transparent wake & additive snap-off fixtures clear ghosting cleanly on Debug/Release Vulkan/DX12; 1280x720 Release GPU scorecard: VK `22.3960 MiB` (`frame=3.6294 ms`, `taa=0.8593 ms`), D3D12 `22.3789 MiB` (`frame=2.5830 ms`, `taa=0.9508 ms`). Independent Codex review pending.
 
-**Exit:** exposure, bloom and TAA have behavior tests and no stale-history/gain artifacts.
+**Exit:** exposure, bloom and TAA have automated behavior tests, reactive/overlay policies and 720p Vulkan/D3D12 GPU/VRAM scorecards without stale-history/gain artifacts (`M15-U8-02.1/02.3/03.1/04` `EDITOR VISUAL` blocked on offline display `Availability=8`; U8 independent Codex review pending).
 
 ### U9 / S9.1–S9.5 — Advanced material models
 

@@ -188,6 +188,7 @@ namespace Axle::RHI {
         if (m_Desc.HistoryCount > 0 && !check2D(RHIViewTarget::History0, m_Desc.Width, m_Desc.Height, sceneFormat)) return false;
         if (m_Desc.HistoryCount > 1 && !check2D(RHIViewTarget::History1, m_Desc.Width, m_Desc.Height, sceneFormat)) return false;
         if (m_Desc.EnableVelocity && (!check2D(RHIViewTarget::Velocity, m_Desc.Width, m_Desc.Height, RHITextureFormat::RG16_FLOAT) || !Get(RHIViewTarget::Velocity)->GetSRV() || !Get(RHIViewTarget::Velocity)->GetRTV())) return false;
+        if (m_Desc.EnableReactive && (!check2D(RHIViewTarget::Reactive, m_Desc.Width, m_Desc.Height, RHITextureFormat::R8_UNORM) || !Get(RHIViewTarget::Reactive)->GetSRV() || !Get(RHIViewTarget::Reactive)->GetRTV())) return false;
         if (m_Desc.EnablePlanarReflection) {
             if (!std::isfinite(m_Desc.PlanarResolutionScale) ||
                 m_Desc.PlanarResolutionScale < MinPlanarResolutionScale ||
@@ -396,6 +397,7 @@ namespace Axle::RHI {
         for (uint8_t i = 0; i < desc.HistoryCount; ++i)
             if (!create(i ? RHIViewTarget::History1 : RHIViewTarget::History0, sceneColor, 1, false)) return false;
         if (desc.EnableVelocity && !create(RHIViewTarget::Velocity, RHITextureFormat::RG16_FLOAT, 1, false)) return false;
+        if (desc.EnableReactive && !create(RHIViewTarget::Reactive, RHITextureFormat::R8_UNORM, 1, false)) return false;
         if (desc.EnableVolumetricFog) {
             const auto froxelExtent = ComputeFroxelGridExtent(desc.Width, desc.Height, desc.FroxelQuality);
             if (!froxelExtent.Width || !froxelExtent.Height || !froxelExtent.Depth) return false;

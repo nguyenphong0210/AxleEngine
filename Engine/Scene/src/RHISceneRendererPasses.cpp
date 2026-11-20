@@ -299,6 +299,13 @@ namespace Axle {
             m_DefaultVelocityMaterialBuffer.IsValid() &&
             velocityTex && velocityTex->IsValid() && velocityTex->GetRTV() && velocityTex->GetSRV();
         const auto velocityTarget = useVelocity ? graph.Import("Velocity", velocityTex->GetNative()) : output;
+        RHITexture* reactiveTex = viewTargets ? viewTargets->GetReactive() : nullptr;
+        const bool useReactive = (settings.EnableTAA || (viewTargets && viewTargets->GetDesc().EnableReactive)) &&
+            activeSampleCount == 1 && !captureActive && !planarActive && sceneDepthTexture && sceneDepthDSV &&
+            m_VelocityMeshVertexShader.IsValid() && m_ReactiveMeshPixelShader.IsValid() &&
+            m_DefaultVelocityMaterialBuffer.IsValid() && m_DefaultReactiveMaterialBuffer.IsValid() &&
+            reactiveTex && reactiveTex->IsValid() && reactiveTex->GetRTV() && reactiveTex->GetSRV();
+        const auto reactiveTarget = useReactive ? graph.Import("Reactive", reactiveTex->GetNative()) : output;
 
         RHITexture* history0 = viewTargets ? viewTargets->Get(RHIViewTarget::History0) : nullptr;
         RHITexture* history1 = viewTargets ? viewTargets->Get(RHIViewTarget::History1) : nullptr;
@@ -600,15 +607,21 @@ namespace Axle {
         auto populateBuiltinMaterialResource = [&](ResolvedSurface& surface, MaterialDrawResources& resource, bool refractionReady,
                                                    const RHIObjectPushConstants* cutoutParams = nullptr) -> bool {
             RHIMaterialConstants materialData = surface.ToMaterialConstants();
+            const float emissiveStrength =
+                glm::max(surface.EmissionColor.r, std::max(surface.EmissionColor.g, surface.EmissionColor.b)) *
+                surface.EmissionIntensity;
             if (cutoutParams) {
-                materialData.Reserved[2] = glm::vec4(cutoutParams->MaterialExtra.x, cutoutParams->MaterialExtra.y, 0.0f, 0.0f);
+                materialData.Reserved[2] = glm::vec4(cutoutParams->MaterialExtra.x, cutoutParams->MaterialExtra.y, emissiveStrength, 0.0f);
                 materialData.Reserved[3] = glm::vec4(cutoutParams->ColorPrimary.a, cutoutParams->MaterialExtra.z,
                                                      cutoutParams->MaterialExtra.w, cutoutParams->Params.x);
             } else {
-                materialData.Reserved[2] = glm::vec4(0.0f);
+                materialData.Reserved[2] = glm::vec4(0.0f, 0.0f, emissiveStrength, 0.0f);
                 materialData.Reserved[3] = glm::vec4(surface.BaseColor.a, surface.AlphaCutoff,
                                                      static_cast<float>(surface.Surface), 1.0f);
             }
+            resource.IsReactive = (surface.Surface == SurfaceType::Transparent ||
+                                   surface.Surface == SurfaceType::Additive ||
+                                   emissiveStrength > 1.0f);
             std::vector<nri::Descriptor*> srvs(ForwardTextureCount);
             for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
                 std::shared_ptr<const RHITexture> texture;
@@ -1926,6 +1939,8 @@ namespace Axle {
         });
         }
 
+        const bool hasPhysicsDebug = m_PhysicsDebugRenderer && ((settings.ShowPhysicsDebug && physicsScene) || !world.DebugLines.empty());
+        const bool deferPhysicsDebugAfterTAA = useTAA && hasPhysicsDebug;
         if (allowCaptureParticlesAndOverlays || useMSAA) {
         addPass("ParticlesAndResolve", [&](const RenderPassContext&) -> RenderPassResult {
             if (copyParticleDepth) {
@@ -1966,11 +1981,11 @@ namespace Axle {
             }
 
             // 6.5. Jolt Physics Debug Wireframe Pass (Colliders, wheel suspension raycasts, bounds)
-            if (m_PhysicsDebugRenderer && ((settings.ShowPhysicsDebug && physicsScene) || !world.DebugLines.empty())) {
+            if (!deferPhysicsDebugAfterTAA && hasPhysicsDebug) {
                 PhysicsScene* activePhysics = physicsScene;
                 {
                     m_PhysicsDebugRenderer->Begin(camera.GetPosition(),
-                                                 camera.GetViewProjectionMatrixZO(),
+                                                 unjitteredViewProjZO,
                                                  sceneTargetFormat,
                                                  m_CurrentDepthFormat,
                                                  activeSampleCount,
@@ -1980,7 +1995,6 @@ namespace Axle {
 
                     if (settings.ShowPhysicsDebug && activePhysics) activePhysics->DrawDebug(*m_PhysicsDebugRenderer, settings.PhysicsDrawSettings);
                     for (const auto& line : world.DebugLines) m_PhysicsDebugRenderer->DrawLineSegment(line.From, line.To, line.Color);
-
 
                     if (!m_PhysicsDebugRenderer->End(Commands())) {
                         endRendering(); return RenderPassResult::Failed("physics debug upload or recording failed");
@@ -2032,14 +2046,121 @@ namespace Axle {
                     auto normal=effective.UseNormalMap?m_MaterialTextures.Get(effective.NormalMapPath,false):nullptr;
                     if (!m_ParticleRenderer->PrepareInputs(graph,"ParticlesAndPhysics",batch->Pool,
                         texture?texture->GetSRV():nullptr,normal?normal->GetSRV():nullptr,
-                        copyParticleDepth?m_ParticleSceneDepth->GetSRV():nullptr)) return fail();
+                        copyParticleDepth?m_ParticleSceneDepth->GetSRV():nullptr,
+                        useReactive ? std::string_view("ReactiveMask") : std::string_view{})) return fail();
                     preparedParticles.push_back({batch,std::move(effective),std::move(texture),std::move(normal)});
                 }
             }
-            if (m_PhysicsDebugRenderer && ((settings.ShowPhysicsDebug && physicsScene) || !world.DebugLines.empty())) {
+            if (!deferPhysicsDebugAfterTAA && hasPhysicsDebug) {
                 if (!graph.DeclareRead("ParticlesAndPhysics",m_PhysicsDebugRenderer->GetConstantBuffer().GetCBV()) ||
                     !graph.DeclareBuffer("ParticlesAndPhysics",m_PhysicsDebugRenderer->GetVertexBuffer().AcquireLease(),RHIAccess::VertexBuffer)) return fail();
             }
+            return {};
+        });
+        }
+
+        if (useReactive) {
+        addPass("ReactiveMask", [&](const RenderPassContext&) -> RenderPassResult {
+            if (!beginPass("ReactiveMask")) return fail();
+
+            RHIVelocitySceneConstants velScene{};
+            velScene.CurrJitteredVP = viewProjZO;
+            velScene.CurrUnjitteredVP = unjitteredViewProjZO;
+            velScene.PrevUnjitteredVP = unjitteredViewProjZO;
+            velScene.InvCurrUnjitteredVP = glm::inverse(unjitteredViewProjZO);
+            velScene.VelocityParams = glm::vec4(1.0f, static_cast<float>(width), static_cast<float>(height), 0.0f);
+            if (!passUniform().UpdateData(&velScene, sizeof(velScene))) return fail();
+
+            nri::AttachmentDesc reactColorAttachment = {};
+            reactColorAttachment.descriptor = reactiveTex->GetRTV();
+            reactColorAttachment.loadOp = nri::LoadOp::CLEAR;
+            reactColorAttachment.storeOp = nri::StoreOp::STORE;
+            reactColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+            nri::AttachmentDesc reactDepthAttachment = {};
+            reactDepthAttachment.descriptor = sceneDepthDSV;
+            reactDepthAttachment.loadOp = nri::LoadOp::LOAD;
+            reactDepthAttachment.storeOp = nri::StoreOp::STORE;
+
+            nri::RenderingDesc reactRendering = {};
+            reactRendering.colors = &reactColorAttachment;
+            reactRendering.colorNum = 1;
+            reactRendering.depth = reactDepthAttachment;
+
+            beginRendering(reactRendering);
+            nri::Viewport vp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+            Commands().SetViewport(vp);
+            nri::Rect scissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
+            Commands().SetScissor(scissor);
+            Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_VelocityMeshPipelineLayout);
+            Commands().SetRootDescriptor(0, passUniform().GetCBV());
+            if (m_DescriptorPool.IsValid()) {
+                m_DescriptorPool.Bind(Commands().GetNative());
+            }
+
+            auto drawReactiveItem = [&](const DrawItem& item, bool defaultToTransparent) -> bool {
+                if (!item.Mesh || !item.Mesh->IsValid()) return true;
+                auto* meshPipeline = GetOrCreateReactiveMeshPipeline(m_CurrentDepthFormat, item.CullMode, reverseWinding);
+                if (!meshPipeline) return false;
+                Commands().SetPipeline(meshPipeline);
+                if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
+                    const auto& res = *m_MaterialDraws[item.DrawResourceIndex];
+                    Commands().SetRootDescriptor(1, res.Constants.GetCBV());
+                    if (!bindDescriptorSet(0, res.Set)) return false;
+                } else {
+                    Commands().SetRootDescriptor(1, defaultToTransparent ? m_DefaultReactiveMaterialBuffer.GetCBV() : m_DefaultVelocityMaterialBuffer.GetCBV());
+                    if (m_DefaultDescriptorSet && !bindDescriptorSet(0, m_DefaultDescriptorSet)) return false;
+                }
+                RHIVelocityObjectConstants objConsts{};
+                objConsts.CurrModel = item.PushConsts.Model;
+                objConsts.PrevModel = item.PushConsts.Model;
+                Commands().SetRootConstants(0, &objConsts, sizeof(objConsts));
+                item.Mesh->Bind(Commands());
+                item.Mesh->Draw(Commands());
+                m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
+                return true;
+            };
+
+            for (const auto& item : opaqueQueue) {
+                if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size() &&
+                    m_MaterialDraws[item.DrawResourceIndex]->IsReactive) {
+                    if (!drawReactiveItem(item, false)) { endRendering(); return fail(); }
+                }
+            }
+            for (const auto& item : transparentQueue) {
+                if (!drawReactiveItem(item, true)) { endRendering(); return fail(); }
+            }
+            if (settings.EnableParticles && m_ParticleRenderer && !preparedParticles.empty()) {
+                if (!m_ParticleRenderer->RenderPreparedReactive(Commands(), m_CurrentDepthFormat, activeSampleCount)) {
+                    endRendering();
+                    return fail();
+                }
+            }
+            endRendering();
+            return {};
+        }, [&](RenderGraph& graph) {
+            graph.AddPass("ReactiveMask", {
+                {sceneDepth, Layout::DepthStencilWrite, Access::Write, Load::Load},
+                {reactiveTarget, Layout::ColorAttachment, Access::Write, Load::Clear}});
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (!uniform("ReactiveMask", sizeof(RHIVelocitySceneConstants))) return fail();
+            auto declareReactiveQueue = [&](const std::vector<DrawItem>& q, bool onlyReactiveFlagged) {
+                for (const auto& item : q) {
+                    if (!item.Mesh || !item.Mesh->IsValid()) continue;
+                    if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
+                        const auto& res = *m_MaterialDraws[item.DrawResourceIndex];
+                        if (onlyReactiveFlagged && !res.IsReactive) continue;
+                        if (!graph.DeclareRead("ReactiveMask", res.Constants.GetCBV()) ||
+                            !graph.DeclareRead("ReactiveMask", res.Set)) return false;
+                    } else if (!onlyReactiveFlagged) {
+                        if (!graph.DeclareRead("ReactiveMask", m_DefaultReactiveMaterialBuffer.GetCBV()) ||
+                            (m_DefaultDescriptorSet && !graph.DeclareRead("ReactiveMask", m_DefaultDescriptorSet))) return false;
+                    }
+                    if (!declareMesh("ReactiveMask", *item.Mesh)) return false;
+                }
+                return true;
+            };
+            if (!declareReactiveQueue(opaqueQueue, true) || !declareReactiveQueue(transparentQueue, false)) return fail();
             return {};
         });
         }
@@ -2054,15 +2175,15 @@ namespace Axle {
                 {settings, viewTargets, temporalSelection, viewProjZO, unjitteredViewProjZO, sceneTargetTexture,
                  sceneTargetRTV, colorTarget, colorRTV, sceneTargetFormat, width, height,
                  jitterX, jitterY, view.DeltaTime, resetAutoExposure,
-                 useBloom, useAutoExposure, useTAA, useVelocity, useToneMap, useFXAA && !useTAA,
-                 historyRead, historyWrite, velocityTex, &m_AutoExposureHistogram, dispatchCount}, postOps)) return fail();
+                 useBloom, useAutoExposure, useTAA, useVelocity, useReactive, useToneMap, useFXAA && !useTAA,
+                 historyRead, historyWrite, velocityTex, reactiveTex, &m_AutoExposureHistogram, dispatchCount}, postOps)) return fail();
 
             return {};
         }, [&](RenderGraph& graph) {
             Passes::PostProcessPass::Declare(graph, {sceneColor, sceneDepth, output, hdr, fxaa,
                 bloomInput, exposureInput, exposureHistogram, exposureOutput,
-                taaColor, taaDepth, velocityTarget, taaHistoryRead, taaHistoryWrite,
-                bloomResources, useBloom, useAutoExposure, useTAA, useVelocity, useToneMap, useFXAA && !useTAA});
+                taaColor, taaDepth, velocityTarget, reactiveTarget, taaHistoryRead, taaHistoryWrite,
+                bloomResources, useBloom, useAutoExposure, useTAA, useVelocity, useReactive, useToneMap, useFXAA && !useTAA});
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useBloom) {
                 if (!uniform("BloomApply",sizeof(RHIBloomConstants))) return fail();
@@ -2081,15 +2202,18 @@ namespace Axle {
                 m_TAADescriptorSet = m_TAADescriptorPool.AllocateDescriptorSet(m_TAAPipelineLayout, 0);
                 nri::Descriptor* taaVelSRV = (useVelocity && velocityTex && velocityTex->IsValid())
                     ? velocityTex->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
-                if (!m_TAADescriptorSet || !taaVelSRV ||
-                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAALinearSampler.GetNative()) ||
-                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 5, 0, m_TAAPointSampler.GetNative()) ||
+                nri::Descriptor* taaReactSRV = (useReactive && reactiveTex && reactiveTex->IsValid())
+                    ? reactiveTex->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
+                if (!m_TAADescriptorSet || !taaVelSRV || !taaReactSRV ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 5, 0, m_TAALinearSampler.GetNative()) ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 6, 0, m_TAAPointSampler.GetNative()) ||
                     !uniform("TAAResolve",sizeof(RHITAAConstants)) ||
                     !graph.DeclareRead("TAAResolve",m_TAADescriptorSet) ||
                     !graph.DeclareRead("TAAResolve",(useToneMap && m_IntermediateHDRTarget) ? m_IntermediateHDRTarget->GetSRV() : m_OpaqueSceneColor->GetSRV()) ||
                     !graph.DeclareRead("TAAResolve",m_OpaqueSceneDepth->GetSRV()) ||
                     !graph.DeclareRead("TAAResolve",historyRead->GetSRV()) ||
-                    !graph.DeclareRead("TAAResolve",taaVelSRV)) return fail();
+                    !graph.DeclareRead("TAAResolve",taaVelSRV) ||
+                    !graph.DeclareRead("TAAResolve",taaReactSRV)) return fail();
             }
             if (useToneMap && !uniform("ToneMapping",sizeof(RHIToneMappingConstants))) return fail();
             if (useToneMap && useAutoExposure &&
@@ -2098,6 +2222,56 @@ namespace Axle {
                 !graph.DeclareRead("FXAA",RHIMaterial::GetDefaultWhiteTexture()->GetSRV()))) return fail();
             return {};
         });
+
+        if (deferPhysicsDebugAfterTAA) {
+        addPass("PhysicsDebugOverlay", [&](const RenderPassContext&) -> RenderPassResult {
+            if (!beginPass("PhysicsDebugOverlay")) return fail();
+
+            nri::AttachmentDesc dbgColor = {};
+            dbgColor.descriptor = colorRTV;
+            dbgColor.loadOp = nri::LoadOp::LOAD;
+            dbgColor.storeOp = nri::StoreOp::STORE;
+            nri::AttachmentDesc dbgDepth = {};
+            dbgDepth.descriptor = sceneDepthDSV;
+            dbgDepth.loadOp = nri::LoadOp::LOAD;
+            dbgDepth.storeOp = nri::StoreOp::STORE;
+            nri::RenderingDesc dbgRender = {};
+            dbgRender.colors = &dbgColor;
+            dbgRender.colorNum = 1;
+            dbgRender.depth = dbgDepth;
+            beginRendering(dbgRender);
+            nri::Viewport vp = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f };
+            Commands().SetViewport(vp);
+            nri::Rect scissor = { 0, 0, static_cast<nri::Dim_t>(width), static_cast<nri::Dim_t>(height) };
+            Commands().SetScissor(scissor);
+
+            m_PhysicsDebugRenderer->Begin(camera.GetPosition(),
+                                         unjitteredViewProjZO,
+                                         m_CurrentColorFormat,
+                                         m_CurrentDepthFormat,
+                                         1,
+                                         true,
+                                         settings.PhysicsDepthBias,
+                                         settings.PhysicsAlphaMultiplier);
+            PhysicsScene* activePhysics = settings.ShowPhysicsDebug ? physicsScene : nullptr;
+            if (settings.ShowPhysicsDebug && activePhysics) activePhysics->DrawDebug(*m_PhysicsDebugRenderer, settings.PhysicsDrawSettings);
+            for (const auto& line : world.DebugLines) m_PhysicsDebugRenderer->DrawLineSegment(line.From, line.To, line.Color);
+            if (!m_PhysicsDebugRenderer->End(Commands())) {
+                endRendering(); return fail();
+            }
+            m_LastDrawCallCount += m_PhysicsDebugRenderer->GetDrawCallCount();
+            endRendering();
+            return {};
+        }, [&](RenderGraph& graph) {
+            graph.AddPass("PhysicsDebugOverlay", {
+                {output, Layout::ColorAttachment, Access::ReadWrite, Load::Load},
+                {sceneDepth, Layout::DepthStencilWrite, Access::Write, Load::Load}});
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (!graph.DeclareRead("PhysicsDebugOverlay", m_PhysicsDebugRenderer->GetConstantBuffer().GetCBV()) ||
+                !graph.DeclareBuffer("PhysicsDebugOverlay", m_PhysicsDebugRenderer->GetVertexBuffer().AcquireLease(), RHIAccess::VertexBuffer)) return fail();
+            return {};
+        });
+        }
 
         if (captureActive) {
             addPass("ReflectionCapturePass", [&](const RenderPassContext&) -> RenderPassResult {

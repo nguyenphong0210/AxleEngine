@@ -82,6 +82,7 @@ namespace Axle {
         m_DescriptorSet = nullptr;
 
         m_InstanceStagingBuffer.clear();
+        m_PreparedReactiveDraws.clear();
         m_InBatch = false;
         m_Initialized = false;
     }
@@ -176,6 +177,16 @@ namespace Axle {
             return false;
         }
         m_PixelShader = psRes.Bytecode;
+
+        RHI::RHIShaderCompileDesc reactiveDesc = vsDesc;
+        reactiveDesc.EntryPoint = "PSReactive";
+        reactiveDesc.Stage = RHI::RHIShaderStage::Fragment;
+        auto reactiveRes = compiler.Compile(reactiveDesc);
+        if (!reactiveRes.Success) {
+            AXLE_CORE_ERROR("RHIParticleRenderer: Failed to compile Particle PSReactive: {0}", reactiveRes.ErrorMessage);
+            return false;
+        }
+        m_ReactivePixelShader = reactiveRes.Bytecode;
 
         return true;
     }
@@ -275,11 +286,12 @@ namespace Axle {
     nri::Pipeline* RHIParticleRenderer::GetOrCreatePipeline(ParticleBlendMode blendMode,
                                                            nri::Format colorFormat,
                                                            nri::Format depthFormat,
-                                                           uint8_t sampleCount)
+                                                           uint8_t sampleCount,
+                                                           bool reactivePass)
     {
         RHI::RHIGraphicsPipelineDesc gfxDesc;
         gfxDesc.Layout = &m_PipelineLayout;
-        gfxDesc.Shaders = { m_VertexShader, m_PixelShader };
+        gfxDesc.Shaders = { m_VertexShader, reactivePass ? m_ReactivePixelShader : m_PixelShader };
 
         gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
         gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
@@ -291,7 +303,15 @@ namespace Axle {
         gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
 
         RHI::RHIBlendAttachmentDesc blendDesc;
-        if (blendMode == ParticleBlendMode::Additive) {
+        if (reactivePass) {
+            blendDesc.BlendEnabled = true;
+            blendDesc.SrcColor = nri::BlendFactor::ONE;
+            blendDesc.DstColor = nri::BlendFactor::ONE;
+            blendDesc.ColorOp = nri::BlendOp::MAX;
+            blendDesc.SrcAlpha = nri::BlendFactor::ONE;
+            blendDesc.DstAlpha = nri::BlendFactor::ONE;
+            blendDesc.AlphaOp = nri::BlendOp::MAX;
+        } else if (blendMode == ParticleBlendMode::Additive) {
             blendDesc = RHI::RHIBlendAttachmentDesc::Additive();
         } else if (blendMode == ParticleBlendMode::Multiply) {
             blendDesc.BlendEnabled = true;
@@ -477,7 +497,7 @@ namespace Axle {
     }
 
     bool RHIParticleRenderer::PrepareInputs(RenderGraph& graph, std::string_view pass, const ParticlePool& pool,
-        nri::Descriptor* texture, nri::Descriptor* normal, nri::Descriptor* depth) {
+        nri::Descriptor* texture, nri::Descriptor* normal, nri::Descriptor* depth, std::string_view reactivePass) {
         if (!pool.GetActiveCount()) return true;
         auto white=RHI::RHIMaterial::GetDefaultWhiteTexture();
         auto flat=RHI::RHIMaterial::GetDefaultFlatNormalTexture();
@@ -486,17 +506,23 @@ namespace Axle {
             ? m_FroxelIntegrated->GetSRV() : (emptyFog ? emptyFog->GetSRV() : nullptr);
         nri::Descriptor* fogMediaSRV = (m_ActiveFogConstants && m_FroxelMedia && m_FroxelMedia->IsValid())
             ? m_FroxelMedia->GetSRV() : (emptyFog ? emptyFog->GetSRV() : nullptr);
-        if (!white || !flat || !emptyFog || !fogIntegratedSRV || !fogMediaSRV ||
-            !graph.DeclareRead(pass, texture ? texture : white->GetSRV()) ||
-            !graph.DeclareRead(pass, normal ? normal : flat->GetSRV()) ||
-            !graph.DeclareRead(pass, depth ? depth : white->GetSRV()) ||
-            !graph.DeclareRead(pass, fogIntegratedSRV) ||
-            !graph.DeclareRead(pass, fogMediaSRV) ||
-            !graph.DeclareRead(pass, m_ActiveFogConstants ? m_ActiveFogConstants : m_DisabledFogConstantBuffer.GetCBV())) return false;
+        nri::Descriptor* fogCBV = m_ActiveFogConstants ? m_ActiveFogConstants : m_DisabledFogConstantBuffer.GetCBV();
+        auto declareShared = [&](std::string_view targetPass) {
+            return graph.DeclareRead(targetPass, texture ? texture : white->GetSRV()) &&
+                   graph.DeclareRead(targetPass, normal ? normal : flat->GetSRV()) &&
+                   graph.DeclareRead(targetPass, depth ? depth : white->GetSRV()) &&
+                   graph.DeclareRead(targetPass, fogIntegratedSRV) &&
+                   graph.DeclareRead(targetPass, fogMediaSRV) &&
+                   graph.DeclareRead(targetPass, fogCBV);
+        };
+        if (!white || !flat || !emptyFog || !fogIntegratedSRV || !fogMediaSRV || !declareShared(pass) ||
+            (!reactivePass.empty() && !declareShared(reactivePass))) return false;
         for (uint32_t offset=0; offset<pool.GetActiveCount(); offset+=MAX_PARTICLES_PER_BATCH) {
             auto* draw=AcquireDrawResources(std::min(MAX_PARTICLES_PER_BATCH, pool.GetActiveCount()-offset));
             if (!draw || !graph.DeclareRead(pass, draw->Constants.GetCBV()) ||
                 !graph.DeclareBuffer(pass, draw->Instances.AcquireLease(), RHI::RHIAccess::VertexBuffer)) return false;
+            if (!reactivePass.empty() && (!graph.DeclareRead(reactivePass, draw->Constants.GetCBV()) ||
+                !graph.DeclareBuffer(reactivePass, draw->Instances.AcquireLease(), RHI::RHIAccess::VertexBuffer))) return false;
         }
         return true;
     }
@@ -554,6 +580,7 @@ namespace Axle {
         ParticleRenderPlanner::BuildDrawPackets(pool, config, cam, emitterWorldPos, emitterWorldRot, packets, MAX_PARTICLES_PER_BATCH, emitterWorldScale);
 
         for (const auto& packet : packets) {
+            const size_t drawResourceIndex = m_DrawResourceCursor;
             ParticleDrawResources *drawRes = AcquireDrawResources(packet.InstanceCount);
             if (!drawRes) return false;
 
@@ -651,8 +678,39 @@ namespace Axle {
             cmd.Draw(6, packet.InstanceCount, 0, 0);
 
             if (!cmd.IsRecording()) return false;
+            m_PreparedReactiveDraws.push_back({drawResourceIndex, packet.InstanceCount, fogConstants});
             m_DrawCallCount++;
             m_RenderedParticleCount += packet.InstanceCount;
+        }
+        return true;
+    }
+
+    bool RHIParticleRenderer::RenderPreparedReactive(RHI::RHICommandBuffer& cmd,
+                                                     nri::Format depthFormat,
+                                                     uint8_t sampleCount) {
+        if (!m_Initialized || m_PreparedReactiveDraws.empty()) return true;
+        if (!m_ReactivePixelShader.IsValid()) return false;
+        nri::Pipeline* pipeline = GetOrCreatePipeline(
+            ParticleBlendMode::AlphaBlend, nri::Format::R8_UNORM, depthFormat, sampleCount, true);
+        if (!pipeline) return false;
+        for (const auto& entry : m_PreparedReactiveDraws) {
+            if (entry.DrawResourceIndex >= m_DrawResources.size() || entry.InstanceCount == 0u) continue;
+            auto* drawRes = m_DrawResources[entry.DrawResourceIndex].get();
+            if (!drawRes || !drawRes->Constants.IsValid() || !drawRes->Instances.IsValid()) continue;
+            cmd.SetPipeline(pipeline);
+            cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
+            if (drawRes->Constants.GetCBV()) cmd.SetRootDescriptor(0, drawRes->Constants.GetCBV());
+            nri::Descriptor* fogCBV = entry.FogConstants ? entry.FogConstants : m_DisabledFogConstantBuffer.GetCBV();
+            if (!fogCBV) return false;
+            cmd.SetRootDescriptor(1, fogCBV);
+            if (drawRes->Pool.IsValid() && drawRes->Set) {
+                drawRes->Pool.Bind(cmd.GetNative());
+                RHI::RHIDescriptorPool::BindDescriptorSet(cmd.GetNative(), 0, drawRes->Set);
+            }
+            cmd.SetVertexBuffer(0, drawRes->Instances.GetNative(), 0, sizeof(ParticleInstanceVertex));
+            cmd.Draw(6, entry.InstanceCount, 0, 0);
+            if (!cmd.IsRecording()) return false;
+            m_DrawCallCount++;
         }
         return true;
     }

@@ -1017,10 +1017,25 @@ namespace Axle {
                                     const glm::vec2& historyUV,
                                     float velocityPixels,
                                     float feedbackMin,
-                                    float feedbackMax);
+                                    float feedbackMax,
+                                    float reactive = 0.0f);
+        float ComputeTransparentReactiveWeight(SurfaceType surfaceType,
+                                             float alpha,
+                                             float emissiveStrength = 0.0f);
+        struct TemporalOverlayPolicy {
+            bool ApplySceneJitter = false;
+            bool ExcludeTransparentFromVelocity = true;
+            bool StampReactiveMask = false;
+            bool DeferPhysicsDebugAfterTAA = false;
+            bool ComposeUIAfterPostProcess = true;
+            bool KeepEditorGizmosUnjittered = true;
+        };
+        TemporalOverlayPolicy ResolveTemporalOverlayPolicy(const SceneRenderSettings& settings);
         bool VerifyClosestDepthDilation();
         bool VerifyDisocclusionAndBoundsRejection();
         bool VerifyNoSilentFXAAOnTAA();
+        bool VerifyTransparentAndReactivePolicy();
+        bool VerifyUnjitteredOverlayPolicy();
     }
 
 } // namespace Axle

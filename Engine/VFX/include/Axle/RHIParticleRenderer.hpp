@@ -165,9 +165,13 @@ namespace Axle {
                     const glm::vec3& emitterWorldScale = glm::vec3(1),
                     const EffectiveParticleRenderSettings* material = nullptr);
 
-        void BeginPreparation() { m_DrawResourceCursor = 0; }
+        void BeginPreparation() { m_DrawResourceCursor = 0; m_PreparedReactiveDraws.clear(); }
         bool PrepareInputs(RenderGraph&, std::string_view pass, const ParticlePool&,
-            nri::Descriptor* texture, nri::Descriptor* normal, nri::Descriptor* depth);
+            nri::Descriptor* texture, nri::Descriptor* normal, nri::Descriptor* depth,
+            std::string_view reactivePass = {});
+        bool RenderPreparedReactive(RHI::RHICommandBuffer& cmd,
+                                    nri::Format depthFormat = nri::Format::D32_SFLOAT,
+                                    uint8_t sampleCount = 1);
 
         // Environment lighting
         void SetLightEnvironment(const ParticleLightEnvironment& env) { m_LightEnvironment = env; }
@@ -178,7 +182,8 @@ namespace Axle {
         nri::Pipeline* GetOrCreatePipeline(ParticleBlendMode blendMode,
                                            nri::Format colorFormat,
                                            nri::Format depthFormat = nri::Format::D32_SFLOAT,
-                                           uint8_t sampleCount = 1);
+                                           uint8_t sampleCount = 1,
+                                           bool reactivePass = false);
 
         // Accessors & Telemetry
         RHI::RHIPipelineLayout& GetPipelineLayout() { return m_PipelineLayout; }
@@ -203,6 +208,7 @@ namespace Axle {
 
         RHI::RHIShaderBytecode m_VertexShader;
         RHI::RHIShaderBytecode m_PixelShader;
+        RHI::RHIShaderBytecode m_ReactivePixelShader;
         RHI::RHIPipelineLayout m_PipelineLayout;
 
         // Default PSOs (AlphaBlend, Additive, Multiply, Cutout in SDR & HDR formats)
@@ -235,6 +241,13 @@ namespace Axle {
 
         std::vector<ParticleInstanceVertex> m_InstanceStagingBuffer;
         ParticleLightEnvironment m_LightEnvironment;
+
+        struct PreparedReactiveDraw {
+            size_t DrawResourceIndex = 0;
+            uint32_t InstanceCount = 0;
+            nri::Descriptor* FogConstants = nullptr;
+        };
+        std::vector<PreparedReactiveDraw> m_PreparedReactiveDraws;
 
         uint32_t m_DrawCallCount = 0;
         uint32_t m_RenderedParticleCount = 0;

@@ -651,13 +651,17 @@ namespace Axle {
         if (!m_DDGIDescriptorPool.UpdateSampler(m_DDGITextureSet, 1, 0, m_DDGISampler.GetNative())) return false;
         if (!m_DDGIConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIDDGIConstants), RHIMemoryLocation::HostUpload, "DDGIConstantsBuffer"))) return false;
 
-        // Initialize Screen-Space Motion Vectors Resources
+        // Initialize Screen-Space Motion Vectors & Reactive Mask Resources
         if (!CompileVelocityShaders(device) || !CreateVelocityPipelineLayout(device) || !CreateVelocityPipeline(device)) return false;
         if (!m_DefaultVelocityMaterialBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIMaterialConstants), RHIMemoryLocation::HostUpload, "VelocityDefaultMaterial"))) return false;
+        if (!m_DefaultReactiveMaterialBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIMaterialConstants), RHIMemoryLocation::HostUpload, "ReactiveDefaultMaterial"))) return false;
         {
             RHIMaterialConstants defaultVelMat{};
             defaultVelMat.Reserved[3] = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f);
             if (!m_DefaultVelocityMaterialBuffer.UpdateData(&defaultVelMat, sizeof(defaultVelMat))) return false;
+            RHIMaterialConstants defaultReactMat{};
+            defaultReactMat.Reserved[3] = glm::vec4(0.85f, 0.5f, 2.0f, 1.0f);
+            if (!m_DefaultReactiveMaterialBuffer.UpdateData(&defaultReactMat, sizeof(defaultReactMat))) return false;
         }
 
         // Initialize Temporal Anti-Aliasing (TAA) Resources
@@ -682,8 +686,8 @@ namespace Axle {
             m_TAADescriptorSet = m_TAADescriptorPool.AllocateDescriptorSet(m_TAAPipelineLayout, 0);
             if (!m_TAADescriptorSet) return false;
             if (m_TAALinearSampler.IsValid() && m_TAAPointSampler.IsValid()) {
-                if (!m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAALinearSampler.GetNative()) ||
-                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 5, 0, m_TAAPointSampler.GetNative())) return false;
+                if (!m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 5, 0, m_TAALinearSampler.GetNative()) ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 6, 0, m_TAAPointSampler.GetNative())) return false;
             }
         }
 
@@ -954,6 +958,7 @@ namespace Axle {
         m_VelocityBgPipelineLayout.Shutdown();
         m_VelocityMeshPipelineLayout.Shutdown();
         m_DefaultVelocityMaterialBuffer.Shutdown();
+        m_DefaultReactiveMaterialBuffer.Shutdown();
         m_TAADepthSource = nullptr;
 
         m_TAAPipelineSDR = nullptr;
@@ -3586,7 +3591,8 @@ namespace Axle {
         return compileEntry("VSBackground", RHIShaderStage::Vertex, m_VelocityBgVertexShader) &&
                compileEntry("PSBackground", RHIShaderStage::Fragment, m_VelocityBgPixelShader) &&
                compileEntry("VSMesh", RHIShaderStage::Vertex, m_VelocityMeshVertexShader) &&
-               compileEntry("PSMesh", RHIShaderStage::Fragment, m_VelocityMeshPixelShader);
+               compileEntry("PSMesh", RHIShaderStage::Fragment, m_VelocityMeshPixelShader) &&
+               compileEntry("PSReactive", RHIShaderStage::Fragment, m_ReactiveMeshPixelShader);
     }
 
     bool RHISceneRenderer::CreateVelocityPipelineLayout(RHIDevice& device) {
@@ -3661,7 +3667,8 @@ namespace Axle {
         bgDesc.VertexInput = RHIVertexInputDesc{};
         m_VelocityBgPipeline = RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(bgDesc);
         return m_VelocityBgPipeline != nullptr &&
-               GetOrCreateVelocityMeshPipeline(nri::Format::D32_SFLOAT, Axle::CullMode::None, false) != nullptr;
+               GetOrCreateVelocityMeshPipeline(nri::Format::D32_SFLOAT, Axle::CullMode::None, false) != nullptr &&
+               GetOrCreateReactiveMeshPipeline(nri::Format::D32_SFLOAT, Axle::CullMode::None, false) != nullptr;
     }
 
     nri::Pipeline* RHISceneRenderer::GetOrCreateVelocityMeshPipeline(nri::Format depthFormat, Axle::CullMode cull, bool reverseWinding) {
@@ -3677,6 +3684,32 @@ namespace Axle {
         gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
         gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
         gfxDesc.ColorAttachmentFormats = { nri::Format::RG16_SFLOAT };
+        gfxDesc.SampleCount = 1;
+        gfxDesc.VertexInput = VertexLayoutContract::GetCanonicalVertexInputDesc();
+        return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateReactiveMeshPipeline(nri::Format depthFormat, Axle::CullMode cull, bool reverseWinding) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_VelocityMeshPipelineLayout;
+        gfxDesc.Shaders = { m_VelocityMeshVertexShader, m_ReactiveMeshPixelShader };
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = cull == CullMode::Back ? nri::CullMode::BACK : (cull == CullMode::Front ? nri::CullMode::FRONT : nri::CullMode::NONE);
+        gfxDesc.Rasterizer.FrontCounterClockwise = !reverseWinding;
+        gfxDesc.DepthStencil.DepthTestEnable = true;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS_EQUAL;
+        gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
+        RHIBlendAttachmentDesc maxBlend{};
+        maxBlend.BlendEnabled = true;
+        maxBlend.SrcColor = nri::BlendFactor::ONE;
+        maxBlend.DstColor = nri::BlendFactor::ONE;
+        maxBlend.ColorOp = nri::BlendOp::MAX;
+        maxBlend.SrcAlpha = nri::BlendFactor::ONE;
+        maxBlend.DstAlpha = nri::BlendFactor::ONE;
+        maxBlend.AlphaOp = nri::BlendOp::MAX;
+        gfxDesc.ColorAttachments = { maxBlend };
+        gfxDesc.ColorAttachmentFormats = { nri::Format::R8_UNORM };
         gfxDesc.SampleCount = 1;
         gfxDesc.VertexInput = VertexLayoutContract::GetCanonicalVertexInputDesc();
         return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
@@ -3737,47 +3770,31 @@ namespace Axle {
         rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDesc.shaderStages = nri::StageBits::ALL;
 
-        nri::DescriptorRangeDesc ranges[6] = {};
-        ranges[0].baseRegisterIndex = 0;
-        ranges[0].descriptorNum = 1;
-        ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
-        ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        nri::DescriptorRangeDesc ranges[7] = {};
+        for (uint32_t t = 0; t < 5; ++t) {
+            ranges[t].baseRegisterIndex = t;
+            ranges[t].descriptorNum = 1;
+            ranges[t].descriptorType = nri::DescriptorType::TEXTURE;
+            ranges[t].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+            ranges[t].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        }
 
-        ranges[1].baseRegisterIndex = 1;
-        ranges[1].descriptorNum = 1;
-        ranges[1].descriptorType = nri::DescriptorType::TEXTURE;
-        ranges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        ranges[2].baseRegisterIndex = 2;
-        ranges[2].descriptorNum = 1;
-        ranges[2].descriptorType = nri::DescriptorType::TEXTURE;
-        ranges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        ranges[3].baseRegisterIndex = 3;
-        ranges[3].descriptorNum = 1;
-        ranges[3].descriptorType = nri::DescriptorType::TEXTURE;
-        ranges[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[3].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        ranges[4].baseRegisterIndex = 0;
-        ranges[4].descriptorNum = 1;
-        ranges[4].descriptorType = nri::DescriptorType::SAMPLER;
-        ranges[4].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[4].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        ranges[5].baseRegisterIndex = 1;
+        ranges[5].baseRegisterIndex = 0;
         ranges[5].descriptorNum = 1;
         ranges[5].descriptorType = nri::DescriptorType::SAMPLER;
         ranges[5].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[5].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
+        ranges[6].baseRegisterIndex = 1;
+        ranges[6].descriptorNum = 1;
+        ranges[6].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[6].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[6].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
         descSet.ranges = ranges;
-        descSet.rangeNum = 6;
+        descSet.rangeNum = 7;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
@@ -6808,6 +6825,7 @@ namespace Axle {
         if (settings.EnableTAA) {
             targetDesc.HistoryCount = 2;
             targetDesc.EnableVelocity = (activeSampleCount == 1);
+            targetDesc.EnableReactive = (activeSampleCount == 1);
         }
 
         if (!world.ErrorMessage.empty()) {
@@ -6819,6 +6837,7 @@ namespace Axle {
             expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
             expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
             expected.EnableVelocity = viewTargets->GetDesc().EnableVelocity;
+            expected.EnableReactive = viewTargets->GetDesc().EnableReactive;
             if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
                 (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||
                 (viewTargets->Get(RHIViewTarget::Depth) && viewTargets->Get(RHIViewTarget::Depth)->GetNative() != depthTarget)) {
@@ -6944,9 +6963,10 @@ namespace Axle {
         // importing temporal slots. Frame acquisition already waited for reuse.
         static const float s_Halton2[8] = { 0.5f, 0.25f, 0.75f, 0.125f, 0.625f, 0.375f, 0.875f, 0.0625f };
         static const float s_Halton3[8] = { 0.333333f, 0.666667f, 0.111111f, 0.444444f, 0.777778f, 0.222222f, 0.555556f, 0.888889f };
+        const auto overlayPolicy = TAAContract::ResolveTemporalOverlayPolicy(settings);
         float jitterX = 0.0f;
         float jitterY = 0.0f;
-        if (settings.EnableTAA) {
+        if (overlayPolicy.ApplySceneJitter) {
             jitterX = (s_Halton2[viewCtx.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(width) * settings.TAAJitterSpread;
             jitterY = (s_Halton3[viewCtx.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(height) * settings.TAAJitterSpread;
         }
@@ -6954,7 +6974,7 @@ namespace Axle {
         const glm::mat4 unjitteredProjZO = camera.GetProjectionMatrixZO();
         const glm::mat4 unjitteredViewProjZO = unjitteredProjZO * camera.GetViewMatrix();
         glm::mat4 projZO = unjitteredProjZO;
-        if (settings.EnableTAA) {
+        if (overlayPolicy.ApplySceneJitter) {
             projZO[2][0] += 2.0f * jitterX;
             projZO[2][1] += 2.0f * jitterY;
         }

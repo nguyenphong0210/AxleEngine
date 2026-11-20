@@ -14,7 +14,9 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 
@@ -107,6 +109,46 @@ namespace {
                 std::memcpy(&packed, row + x * pixelSize, sizeof(packed));
                 outPixels[static_cast<size_t>(y) * width + x] = glm::unpackHalf2x16(packed);
             }
+        }
+        staging.Unmap();
+        return true;
+    }
+
+    bool ReadTextureR8(RHITexture& tex, std::vector<uint8_t>& outPixels) {
+        if (!tex.IsValid() || tex.GetFormat() != RHITextureFormat::R8_UNORM) return false;
+        auto& device = RHIDevice::Get();
+        const auto alignment = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice()).memoryAlignment;
+        const auto align = [](uint32_t value, uint32_t step) { return (value + step - 1u) / step * step; };
+        const uint32_t width = tex.GetWidth();
+        const uint32_t height = tex.GetHeight();
+
+        nri::TextureDataLayoutDesc layout{};
+        layout.rowPitch = align(width, alignment.uploadBufferTextureRow);
+        layout.slicePitch = align(layout.rowPitch * height, alignment.uploadBufferTextureSlice);
+
+        RHIBufferDesc desc{};
+        desc.Size = layout.slicePitch;
+        desc.MemoryLocation = RHIMemoryLocation::HostReadback;
+        desc.DebugName = "U8ReactiveReadback";
+        RHIBuffer staging;
+        RHICommandBuffer cmd;
+        if (!staging.Init(desc) || !cmd.Init() || !cmd.Begin()) return false;
+
+        cmd.TransitionTexture(tex.GetNative(), RHIResourceLayout::ShaderResource, RHIResourceLayout::CopySource);
+        nri::TextureRegionDesc region{};
+        region.width = static_cast<nri::Dim_t>(width);
+        region.height = static_cast<nri::Dim_t>(height);
+        region.depth = 1;
+        cmd.ReadbackTextureToBuffer(*staging.GetNative(), layout, *tex.GetNative(), region);
+        cmd.TransitionTexture(tex.GetNative(), RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
+        if (!cmd.End() || !cmd.Submit() || !device.WaitIdle()) return false;
+
+        const auto* bytes = static_cast<const uint8_t*>(staging.Map());
+        if (!bytes) return false;
+        outPixels.resize(static_cast<size_t>(width) * height);
+        for (uint32_t y = 0; y < height; ++y) {
+            const uint8_t* row = bytes + y * layout.rowPitch;
+            std::memcpy(outPixels.data() + static_cast<size_t>(y) * width, row, width);
         }
         staging.Unmap();
         return true;
@@ -732,6 +774,7 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         desc.HDR = hdr;
         desc.HistoryCount = 2;
         desc.EnableVelocity = true;
+        desc.EnableReactive = true;
         desc.EnableDepth = true;
         desc.OwnPrimary = false;
         if (!targets->Configure(desc, nullptr, nullptr, FroxelHistoryPolicy::AllowStaticFog)) return {};
@@ -1379,7 +1422,389 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         }
     }
 
-    std::cout << "[M15U8] PASS: Batch A + B + C + D (AutoExposure, Bloom, Velocity, TAA 3x3 Dilation, Disocclusion, Resize & Mutual Exclusion) exp30="
+    // =========================================================================
+    // Batch E (M15-U8-14.1..14.3, 15.5): Transparent/Reactive Mask, Unjittered
+    // Debug Overlays, Ghosting Fixture & GPU/VRAM Scorecard
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // 15. M15-U8-14.1, 14.2 & 15.5: Transparent/Additive reactive mask + ghosting
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t W = 128, H = 128;
+        RHITexture col, dep;
+        if (!col.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !dep.Init(RHITextureDesc::DepthStencil2D(W, H))) return false;
+        auto targets = makeTemporalViewTargets(W, H, true);
+        if (!targets || !targets->GetReactive()) return false;
+
+        RHIMaterialDesc staticMatDesc{};
+        staticMatDesc.SurfaceType = SurfaceType::Opaque;
+        staticMatDesc.BaseColor = {0.25f, 0.35f, 0.65f, 1.0f};
+        staticMatDesc.EmissiveIntensity = 0.0f;
+        auto staticMat = std::make_shared<RHIMaterial>(staticMatDesc);
+
+        RHIMaterialDesc glassMatDesc{};
+        glassMatDesc.SurfaceType = SurfaceType::Transparent;
+        glassMatDesc.DepthWrite = false;
+        glassMatDesc.RenderQueue = 3000;
+        glassMatDesc.BaseColor = {0.95f, 0.15f, 0.15f, 0.70f};
+        glassMatDesc.EmissiveColor = {0.90f, 0.12f, 0.12f};
+        glassMatDesc.EmissiveIntensity = 1.0f;
+        auto glassMat = std::make_shared<RHIMaterial>(glassMatDesc);
+
+        RenderMeshInstance staticCorner;
+        staticCorner.EntityID = 5501;
+        staticCorner.StableUUID = UUID(0x5501u);
+        staticCorner.NativeView = cube->CaptureView();
+        staticCorner.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(-1.55f, 1.45f, 0.0f)) *
+                                      glm::scale(glm::mat4(1.0f), glm::vec3(0.55f));
+        staticCorner.Material.RHIMaterialAsset = staticMat;
+
+        RenderMeshInstance movingGlass = staticCorner;
+        movingGlass.EntityID = 5502;
+        movingGlass.StableUUID = UUID(0x5502u);
+        movingGlass.Material.RHIMaterialAsset = glassMat;
+
+        PerspectiveCamera cam(60.0f, 1.0f, 0.1f, 50.0f);
+        const glm::mat4 viewMat = glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        cam.SetViewMatrix(viewMat, glm::vec3(0.0f, 0.0f, 4.5f));
+
+        SceneRenderSettings s;
+        s.EnableShadows = false;
+        s.EnableSkybox = false;
+        s.EnableParticles = false;
+        s.EnableStudioLightLobes = false;
+        s.EnableAutoExposure = false;
+        s.EnableBloom = false;
+        s.EnableToneMapping = true;
+        s.ToneMappingMode = 3;
+        s.Gamma = 1.0f;
+        s.ClearColor = {0.04f, 0.04f, 0.06f, 1.0f};
+        s.EnableTAA = true;
+
+        RenderWorld world;
+        for (uint32_t f = 0; f <= 5u; ++f) {
+            const float x = -1.75f + 0.35f * float(f);
+            movingGlass.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, 0.0f)) *
+                                         glm::scale(glm::mat4(1.0f), glm::vec3(0.9f));
+            world.Meshes = { staticCorner, movingGlass };
+            renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, f == 0u, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+        }
+
+        std::vector<glm::vec2> vel;
+        std::vector<uint8_t> reactive;
+        if (!ReadTextureRG16F(*targets->GetVelocity(), vel) ||
+            !ReadTextureR8(*targets->GetReactive(), reactive)) return false;
+
+        bool okProj = false;
+        const glm::vec2 staticUV = MotionVectorContract::ProjectWorldPointToUV(cam.GetViewProjectionMatrixZO(), glm::vec3(-1.55f, 1.45f, 0.275f), okProj);
+        const uint32_t sx = std::clamp<uint32_t>(static_cast<uint32_t>(staticUV.x * float(W)), 0u, W - 1u);
+        const uint32_t sy = std::clamp<uint32_t>(static_cast<uint32_t>(staticUV.y * float(H)), 0u, H - 1u);
+
+        const glm::vec2 glassCenterVel = vel[(H / 2u) * W + (W / 2u)];
+        const uint8_t glassReactive = reactive[(H / 2u) * W + (W / 2u)];
+        const uint8_t staticReactive = reactive[sy * W + sx];
+        const auto px = RenderTests::ReadTexture(col);
+        auto rgbAt = [&](uint32_t x, uint32_t y) {
+            const size_t idx = (size_t(y) * W + x) * 4u;
+            return glm::ivec3(px[idx], px[idx + 1u], px[idx + 2u]);
+        };
+        const glm::ivec3 glassRGB = rgbAt(64u, 64u);
+        const glm::ivec3 wakeRGB = rgbAt(28u, 64u);
+        if (!okProj || glm::length(glassCenterVel) > 1e-4f ||
+            glassReactive < 150u || staticReactive != 0u ||
+            glassRGB.r < 120 || glassRGB.r <= glassRGB.b + 50 ||
+            wakeRGB.r > 40) {
+            std::cerr << "[M15U8] FAIL (14.1/14.2/15.5): Transparent reactive/ghosting check failed! vel=("
+                      << glassCenterVel.x << "," << glassCenterVel.y << ") react=" << int(glassReactive)
+                      << " staticReact=" << int(staticReactive)
+                      << " glassRGB=(" << glassRGB.r << "," << glassRGB.g << "," << glassRGB.b
+                      << ") wakeRGB=(" << wakeRGB.r << "," << wakeRGB.g << "," << wakeRGB.b << ")\n";
+            return false;
+        }
+
+        // Additive snap-off ghosting test (15.5)
+        RHIMaterialDesc addMatDesc{};
+        addMatDesc.SurfaceType = SurfaceType::Additive;
+        addMatDesc.DepthWrite = false;
+        addMatDesc.RenderQueue = 3000;
+        addMatDesc.BaseColor = {0.0f, 0.9f, 0.9f, 0.9f};
+        addMatDesc.EmissiveColor = {0.0f, 0.9f, 0.9f};
+        addMatDesc.EmissiveIntensity = 1.0f;
+        auto addMat = std::make_shared<RHIMaterial>(addMatDesc);
+
+        RenderMeshInstance flashBox;
+        flashBox.EntityID = 5503;
+        flashBox.StableUUID = UUID(0x5503u);
+        flashBox.NativeView = cube->CaptureView();
+        flashBox.WorldTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1.1f));
+        flashBox.Material.RHIMaterialAsset = addMat;
+        world.Meshes = { flashBox };
+        for (uint32_t f = 0; f < 4u; ++f) {
+            renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, f == 0u, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+        }
+        flashBox.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(3.2f, 0.0f, 0.0f));
+        world.Meshes = { flashBox };
+        renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, false, RenderViewKind::Main, 1.0f / 60.0f);
+        if (!renderer.WasLastRenderSuccessful()) return false;
+        const auto pxSnap = RenderTests::ReadTexture(col);
+        const size_t cIdx = (size_t(H / 2u) * W + (W / 2u)) * 4u;
+        if (pxSnap[cIdx + 1u] > 40 || pxSnap[cIdx + 2u] > 40) {
+            std::cerr << "[M15U8] FAIL (15.5): Additive flash retained ghost after snap-off! center=("
+                      << int(pxSnap[cIdx]) << "," << int(pxSnap[cIdx + 1u]) << "," << int(pxSnap[cIdx + 2u]) << ")\n";
+            return false;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 16. M15-U8-14.3: Unjittered PhysicsDebug overlay & AutoExposure isolation
+    // -------------------------------------------------------------------------
+    {
+        RHISceneRenderer debugRenderer;
+        if (!debugRenderer.Init(RHIDevice::Get(), true)) return false;
+
+        constexpr uint32_t W = 128, H = 128;
+        RHITexture colRef, depRef, colTAA, depTAA;
+        if (!colRef.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !depRef.Init(RHITextureDesc::DepthStencil2D(W, H)) ||
+            !colTAA.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !depTAA.Init(RHITextureDesc::DepthStencil2D(W, H))) return false;
+        auto makeDbgTargets = [&](bool enableTaa, bool enableExp) -> std::shared_ptr<RHIViewTargets> {
+            auto t = std::make_shared<RHIViewTargets>();
+            RHIViewTargetDesc d{};
+            d.Width = W; d.Height = H;
+            d.HDR = true; d.EnableDepth = true;
+            d.EnableScreenStorage = enableExp;
+            d.EnableAutoExposure = enableExp;
+            d.HistoryCount = enableTaa ? 2 : 0;
+            d.EnableVelocity = enableTaa;
+            d.EnableReactive = enableTaa;
+            d.OwnPrimary = false;
+            if (!t->Configure(d, nullptr, nullptr, FroxelHistoryPolicy::AllowStaticFog)) return {};
+            return t;
+        };
+        auto targetsRef = makeDbgTargets(false, false);
+        auto expNoDbgTargets = makeDbgTargets(false, true);
+        auto expWithDbgTargets = makeDbgTargets(true, true);
+        if (!targetsRef || !expNoDbgTargets || !expWithDbgTargets) return false;
+
+        RenderWorld worldEmpty;
+        RenderWorld worldWithDebug;
+        RenderDebugLine line{};
+        line.From = glm::vec3(-0.08f, -1.6f, 0.0f);
+        line.To = glm::vec3(-0.08f, 1.6f, 0.0f);
+        line.Color = glm::vec4(0.05f, 0.98f, 0.12f, 1.0f);
+        worldWithDebug.DebugLines.push_back(line);
+
+        PerspectiveCamera cam(60.0f, 1.0f, 0.1f, 50.0f);
+        cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                          glm::vec3(0.0f, 0.0f, 4.0f));
+
+        SceneRenderSettings s;
+        s.EnableShadows = false;
+        s.EnableSkybox = false;
+        s.EnableParticles = false;
+        s.EnableStudioLightLobes = false;
+        s.EnableBloom = false;
+        s.EnableToneMapping = true;
+        s.ToneMappingMode = 3;
+        s.Gamma = 1.0f;
+        s.ClearColor = {0.03f, 0.03f, 0.03f, 1.0f};
+        s.EnableAutoExposure = true;
+        s.AutoExposureMin = 0.05f;
+        s.AutoExposureMax = 8.0f;
+        s.AutoExposureSpeed = 2.0f;
+
+        s.EnableTAA = false;
+        debugRenderer.RenderWorldView(worldEmpty, cam, &colRef, &depRef, s, nullptr, expNoDbgTargets, true, RenderViewKind::Main, 1.0f / 60.0f);
+        s.EnableAutoExposure = false;
+        debugRenderer.RenderWorldView(worldWithDebug, cam, &colRef, &depRef, s, nullptr, targetsRef, true, RenderViewKind::Main, 1.0f / 60.0f);
+        if (!debugRenderer.WasLastRenderSuccessful()) return false;
+        const auto pxRef = RenderTests::ReadTexture(colRef);
+        auto findPeakGreenX = [&](const std::vector<uint8_t>& img, int& peakVal) -> int {
+            int bestX = -1;
+            peakVal = -1;
+            const size_t y = H / 2u;
+            for (uint32_t x = 0; x < W; ++x) {
+                const int g = int(img[(y * W + x) * 4u + 1u]) - int(img[(y * W + x) * 4u + 0u]);
+                if (g > peakVal) { peakVal = g; bestX = int(x); }
+            }
+            return bestX;
+        };
+        int refPeakVal = 0;
+        const int refPeakX = findPeakGreenX(pxRef, refPeakVal);
+
+        s.EnableAutoExposure = true;
+        s.EnableTAA = true;
+        s.TAAJitterSpread = 2.0f;
+        std::vector<uint8_t> pxTAA6, pxTAA7;
+        for (uint32_t f = 0; f < 8u; ++f) {
+            debugRenderer.RenderWorldView(worldWithDebug, cam, &colTAA, &depTAA, s, nullptr, expWithDbgTargets, f == 0u, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!debugRenderer.WasLastRenderSuccessful()) return false;
+            if (f == 6u) pxTAA6 = RenderTests::ReadTexture(colTAA);
+            if (f == 7u) pxTAA7 = RenderTests::ReadTexture(colTAA);
+        }
+        glm::vec4 expNoDbg{}, expWithDbg{};
+        if (!ReadExposureValue(*expNoDbgTargets, expNoDbg) ||
+            !ReadExposureValue(*expWithDbgTargets, expWithDbg)) return false;
+
+        debugRenderer.Shutdown();
+
+        int pVal6 = 0, pVal7 = 0;
+        const int pX6 = findPeakGreenX(pxTAA6, pVal6);
+        const int pX7 = findPeakGreenX(pxTAA7, pVal7);
+        if (refPeakVal < 150 || pX6 != refPeakX || pX7 != refPeakX || pVal6 < 150 || pVal7 < 150 ||
+            std::abs(expWithDbg.r - expNoDbg.r) > 0.005f) {
+            std::cerr << "[M15U8] FAIL (14.3): Unjittered PhysicsDebug overlay drifted or polluted AutoExposure! refX="
+                      << refPeakX << " pX6=" << pX6 << " pX7=" << pX7
+                      << " pVal6=" << pVal6 << " pVal7=" << pVal7
+                      << " expNo=" << expNoDbg.r << " expWith=" << expWithDbg.r << "\n";
+            return false;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 17. U8 Closure: Post/Temporal GPU Timestamp & VRAM Budget Scorecard (720p)
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t W = 1280, H = 720;
+        RHITexture col, dep;
+        if (!col.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !dep.Init(RHITextureDesc::DepthStencil2D(W, H))) return false;
+        auto targets = std::make_shared<RHIViewTargets>();
+        RHIViewTargetDesc desc{};
+        desc.Width = W;
+        desc.Height = H;
+        desc.HDR = true;
+        desc.EnableDepth = true;
+        desc.EnableScreenStorage = true;
+        desc.EnableAutoExposure = true;
+        desc.EnableBloom = true;
+        desc.HistoryCount = 2;
+        desc.EnableVelocity = true;
+        desc.EnableReactive = true;
+        desc.OwnPrimary = false;
+        if (!targets->Configure(desc, nullptr, nullptr, FroxelHistoryPolicy::AllowStaticFog)) return false;
+
+        RHIMaterialDesc opaqueMatDesc{};
+        opaqueMatDesc.BaseColor = {0.75f, 0.75f, 0.75f, 1.0f};
+        RHIMaterialDesc transMatDesc{};
+        transMatDesc.SurfaceType = SurfaceType::Transparent;
+        transMatDesc.DepthWrite = false;
+        transMatDesc.RenderQueue = 3000;
+        transMatDesc.BaseColor = {0.2f, 0.7f, 0.9f, 0.6f};
+
+        RenderWorld world;
+        RenderMeshInstance opq;
+        opq.EntityID = 5701; opq.StableUUID = UUID(0x5701u); opq.NativeView = cube->CaptureView();
+        opq.WorldTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1.2f));
+        opq.Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(opaqueMatDesc);
+        RenderMeshInstance trn = opq;
+        trn.EntityID = 5702; trn.StableUUID = UUID(0x5702u);
+        trn.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.4f, 0.0f, 1.2f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.6f));
+        trn.Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(transMatDesc);
+        world.Meshes = { opq, trn };
+
+        PerspectiveCamera cam(60.0f, float(W) / float(H), 0.1f, 50.0f);
+        cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                          glm::vec3(0.0f, 0.0f, 4.5f));
+
+        SceneRenderSettings s;
+        s.EnableShadows = false;
+        s.EnableSkybox = false;
+        s.EnableParticles = false;
+        s.EnableStudioLightLobes = false;
+        s.EnableAutoExposure = true;
+        s.EnableBloom = true;
+        s.BloomThreshold = 0.8f;
+        s.BloomIntensity = 0.5f;
+        s.EnableTAA = true;
+        s.EnableToneMapping = true;
+
+        auto& device = RHIDevice::Get();
+        double sumExposure = 0.0, sumBloom = 0.0, sumMotion = 0.0, sumReactive = 0.0, sumTAA = 0.0, sumTone = 0.0, sumTotal = 0.0;
+        uint32_t measured = 0;
+        constexpr int kWarmup = 4;
+        constexpr int kSamples = 6;
+        RHICompletionToken priorFrame{};
+        for (int f = 0; f <= kWarmup + kSamples; ++f) {
+            renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, f == 0, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful() || !device.WaitIdle()) return false;
+            const auto& timing = renderer.GetLastGPUTimingFrame();
+            auto getPassMs = [&](std::string_view name, double& outMs) -> bool {
+                for (const auto& tp : timing.Passes) {
+                    if (tp.Name == name && tp.Validity != DiagnosticValidity::Invalid && std::isfinite(tp.Milliseconds)) {
+                        outMs = tp.Milliseconds;
+                        return true;
+                    }
+                }
+                return false;
+            };
+            if (f > kWarmup && timing.Validity == DiagnosticValidity::Valid) {
+                double eH = 0, eR = 0, b0 = 0, bA = 0, mv = 0, rx = 0, taa = 0, tm = 0;
+                if (timing.Completion != priorFrame ||
+                    !getPassMs("AutoExposureHistogram", eH) || !getPassMs("AutoExposure", eR) ||
+                    !getPassMs("BloomDown0", b0) || !getPassMs("BloomApply", bA) ||
+                    !getPassMs("MotionVectors", mv) || !getPassMs("ReactiveMask", rx) ||
+                    !getPassMs("TAAResolve", taa) || !getPassMs("ToneMapping", tm)) {
+                    std::cerr << "[M15U8] FAIL (Scorecard): Missing or stale GPU timing passes on frame " << f << "\n";
+                    return false;
+                }
+                sumExposure += (eH + eR);
+                sumBloom += (b0 + bA);
+                sumMotion += mv;
+                sumReactive += rx;
+                sumTAA += taa;
+                sumTone += tm;
+                sumTotal += timing.Milliseconds;
+                ++measured;
+            }
+            priorFrame = renderer.GetLastCompletion();
+        }
+        if (measured != kSamples) {
+            std::cerr << "[M15U8] FAIL (Scorecard): Valid GPU timestamps measured=" << measured << " expected=" << kSamples << "\n";
+            return false;
+        }
+
+        uint64_t totalVramBytes = 0;
+        auto addTexBytes = [&](RHITexture* tex) {
+            if (!tex || !tex->IsValid()) return;
+            nri::MemoryDesc mem{};
+            device.GetNRICore().GetTextureMemoryDesc(*tex->GetNative(), nri::MemoryLocation::DEVICE, mem);
+            totalVramBytes += mem.size;
+        };
+        addTexBytes(targets->GetExposure());
+        for (uint32_t lvl = 0; lvl < 6u; ++lvl) addTexBytes(targets->GetBloom(lvl));
+        addTexBytes(targets->Get(RHIViewTarget::History0));
+        addTexBytes(targets->Get(RHIViewTarget::History1));
+        addTexBytes(targets->GetVelocity());
+        addTexBytes(targets->GetReactive());
+
+        constexpr uint64_t kMaxPostTemporalBudgetBytes = 64ull * 1024ull * 1024ull;
+        const double totalMiB = static_cast<double>(totalVramBytes) / (1024.0 * 1024.0);
+        if (totalVramBytes == 0u || totalVramBytes > kMaxPostTemporalBudgetBytes) {
+            std::cerr << "[M15U8] FAIL (Scorecard): U8 VRAM out of 64 MiB budget: bytes=" << totalVramBytes << "\n";
+            return false;
+        }
+        const char* backendTag = (device.GetBackend() == RHIType::Vulkan) ? "Vulkan" : "D3D12";
+        std::cout << std::fixed << std::setprecision(4)
+                  << "[M15U8Scorecard] backend=" << backendTag
+                  << " res=1280x720"
+                  << " post_temporal_vram_bytes=" << totalVramBytes
+                  << " post_temporal_vram_mib=" << totalMiB
+                  << " auto_exposure_ms=" << (sumExposure / measured)
+                  << " bloom_key_ms=" << (sumBloom / measured)
+                  << " motion_vectors_ms=" << (sumMotion / measured)
+                  << " reactive_mask_ms=" << (sumReactive / measured)
+                  << " taa_resolve_ms=" << (sumTAA / measured)
+                  << " tonemapping_ms=" << (sumTone / measured)
+                  << " frame_total_ms=" << (sumTotal / measured) << "\n";
+    }
+
+    std::cout << "[M15U8] PASS: Batch A + B + C + D + E (AutoExposure, Bloom, Velocity, TAA 3x3, Transparent/Reactive, Unjittered Overlays, Ghosting & Scorecard) exp30="
               << exp30 << " exp60=" << exp60 << " exp120=" << exp120 << "\n";
     return true;
 }

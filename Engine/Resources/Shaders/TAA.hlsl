@@ -18,6 +18,7 @@ Texture2D         u_CurrentColor    : register(t0, space1);
 Texture2D<float>  u_DepthTexture    : register(t1, space1);
 Texture2D         u_HistoryColor    : register(t2, space1);
 Texture2D<float2> u_VelocityTexture : register(t3, space1);
+Texture2D<float>  u_ReactiveMask    : register(t4, space1);
 SamplerState      u_LinearSampler   : register(s0, space1);
 SamplerState      u_PointSampler    : register(s1, space1);
 
@@ -108,6 +109,7 @@ float4 PSMain(VSOutput input) : SV_Target {
     float3 m2 = float3(0.0, 0.0, 0.0);
     float3 boxMin = float3(1e5, 1e5, 1e5);
     float3 boxMax = float3(-1e5, -1e5, -1e5);
+    float reactiveMax = 0.0;
 
     [unroll]
     for (int dy = -1; dy <= 1; ++dy) {
@@ -126,6 +128,7 @@ float4 PSMain(VSOutput input) : SV_Target {
             m2 += ycocg * ycocg;
             boxMin = min(boxMin, ycocg);
             boxMax = max(boxMax, ycocg);
+            reactiveMax = max(reactiveMax, u_ReactiveMask.SampleLevel(u_PointSampler, tapUV, 0));
         }
     }
 
@@ -175,7 +178,10 @@ float4 PSMain(VSOutput input) : SV_Target {
 
     float speedPx = length(velocity * u_ScreenSize.xy);
     float motionFactor = saturate(speedPx * 0.25);
-    float baseFeedback = lerp(u_TAAParams.w, u_TAAParams.z, motionFactor);
+    float reactive = saturate(reactiveMax * saturate(u_TAAFlags.z));
+    float effectiveMax = lerp(u_TAAParams.w, 0.08, reactive);
+    float effectiveMin = lerp(u_TAAParams.z, 0.04, reactive);
+    float baseFeedback = min(lerp(effectiveMax, effectiveMin, motionFactor), effectiveMax);
     float historyWeight = clamp(baseFeedback * disocclusionGate, 0.0, 0.96);
 
     float3 currentYCoCg = RGBToYCoCg(TonemapWeight(currentCenter));

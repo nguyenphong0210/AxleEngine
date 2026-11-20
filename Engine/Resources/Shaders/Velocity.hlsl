@@ -120,15 +120,19 @@ MeshVSOutput VSMesh(MeshVSInput input) {
     return output;
 }
 
+float SampleSurfaceAlpha(float2 texCoord) {
+    float tileScale = max(0.01, u_MaterialReserved[3].w);
+    float2 uv = (u_MaterialFlags.y != 0)
+        ? (texCoord * u_MaterialUV.xy + u_MaterialUV.zw)
+        : (texCoord * tileScale + u_MaterialReserved[2].xy);
+    float texAlpha = ((u_MaterialFlags.x & 1u) != 0) ? u_AlbedoMap.Sample(u_Sampler, uv).a : 1.0;
+    return texAlpha * u_MaterialReserved[3].x;
+}
+
 float2 PSMesh(MeshVSOutput input) : SV_Target0 {
     int surfaceType = (int)(u_MaterialReserved[3].z + 0.5);
     if (surfaceType == 1) {
-        float tileScale = max(0.01, u_MaterialReserved[3].w);
-        float2 uv = (u_MaterialFlags.y != 0)
-            ? (input.TexCoord * u_MaterialUV.xy + u_MaterialUV.zw)
-            : (input.TexCoord * tileScale + u_MaterialReserved[2].xy);
-        float texAlpha = ((u_MaterialFlags.x & 1u) != 0) ? u_AlbedoMap.Sample(u_Sampler, uv).a : 1.0;
-        float alpha = texAlpha * u_MaterialReserved[3].x;
+        float alpha = SampleSurfaceAlpha(input.TexCoord);
         if (alpha < saturate(u_MaterialReserved[3].y)) {
             discard;
         }
@@ -144,4 +148,24 @@ float2 PSMesh(MeshVSOutput input) : SV_Target0 {
     float2 prevUV = ComputeUVFromClip(input.PrevClipPos);
     float2 velocity = currUV - prevUV;
     return any(isnan(velocity)) || any(isinf(velocity)) ? float2(0.0, 0.0) : velocity;
+}
+
+// Reactive mask pass (M15-U8-14.1 / 14.2):
+// Transparent/Additive surfaces and intense HDR emissives write reactivity into R8_UNORM
+// without overwriting opaque object velocity vectors.
+float4 PSReactive(MeshVSOutput input) : SV_Target0 {
+    int surfaceType = (int)(u_MaterialReserved[3].z + 0.5);
+    float alpha = SampleSurfaceAlpha(input.TexCoord);
+    if (surfaceType == 1 && alpha < saturate(u_MaterialReserved[3].y)) {
+        discard;
+    }
+    if (surfaceType == 3) {
+        return float4(0.92, 0.0, 0.0, 1.0);
+    }
+    if (surfaceType == 2) {
+        return float4(clamp(max(alpha, 0.65), 0.35, 0.95), 0.0, 0.0, 1.0);
+    }
+    float emissiveStrength = max(u_MaterialReserved[2].z, 0.0);
+    float reactive = (emissiveStrength > 1.0) ? clamp((emissiveStrength - 1.0) * 0.25, 0.0, 0.90) : 0.0;
+    return float4(reactive, 0.0, 0.0, 1.0);
 }

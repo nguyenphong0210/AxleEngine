@@ -597,6 +597,7 @@ namespace Axle {
         bool CreateVelocityPipelineLayout(RHI::RHIDevice& device);
         bool CreateVelocityPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateVelocityMeshPipeline(nri::Format depthFormat, Axle::CullMode cull, bool reverseWinding);
+        nri::Pipeline* GetOrCreateReactiveMeshPipeline(nri::Format depthFormat, Axle::CullMode cull, bool reverseWinding);
 
         // Temporal Anti-Aliasing (TAA) Pass
         bool CompileTAAShaders(RHI::RHIDevice& device);
@@ -787,6 +788,7 @@ namespace Axle {
             RHI::RHIBuffer Constants;
             nri::DescriptorSet* Set = nullptr;
             std::array<std::shared_ptr<const RHI::RHITexture>, static_cast<size_t>(RHI::RHITextureSlot::Count)> Textures;
+            bool IsReactive = false;
         };
         // Render() waits for queue completion before reusing these resources.
         std::vector<std::unique_ptr<MaterialDrawResources>> m_MaterialDraws;
@@ -1174,7 +1176,9 @@ namespace Axle {
         RHI::RHIShaderBytecode m_VelocityBgPixelShader;
         RHI::RHIShaderBytecode m_VelocityMeshVertexShader;
         RHI::RHIShaderBytecode m_VelocityMeshPixelShader;
+        RHI::RHIShaderBytecode m_ReactiveMeshPixelShader;
         RHI::RHIBuffer m_DefaultVelocityMaterialBuffer;
+        RHI::RHIBuffer m_DefaultReactiveMaterialBuffer;
         nri::Texture* m_TAADepthSource = nullptr;
 
         // Temporal Anti-Aliasing (TAA) Resources

@@ -369,11 +369,30 @@ bool RunM15PostTemporalContractUnitTests() {
         const std::string passSource = LoadTextFile(AXLE_POST_PROCESS_PASS_SOURCE_PATH);
         RENDER_CHECK(!passSource.empty() &&
                      passSource.find("r.TAAVelocity") != std::string::npos &&
+                     passSource.find("r.TAAReactive") != std::string::npos &&
                      passSource.find("r.UseFXAA && !r.UseTAA") != std::string::npos &&
-                     passSource.find("i.VelocityTexture") != std::string::npos,
-            "PostProcessPass declares TAAVelocity in RenderGraph and suppresses FXAA when TAA is active");
+                     passSource.find("i.VelocityTexture") != std::string::npos &&
+                     passSource.find("i.ReactiveTexture") != std::string::npos,
+            "PostProcessPass declares TAAVelocity & TAAReactive in RenderGraph and suppresses FXAA when TAA is active");
     }
 
-    std::cout << "[M15U8Contract] All M15 U8 Batch A, B, C & D contract tests passed.\n";
+    // Batch E (M15-U8-14.1..14.3, 15.5): Transparent geometry policy, reactive mask policy,
+    // and unjittered UI/gizmo/debug overlay policy.
+    {
+        RENDER_CHECK(TAAContract::VerifyTransparentAndReactivePolicy() &&
+                     TAAContract::VerifyUnjitteredOverlayPolicy(),
+            "TAAContract verifies transparent/reactive history weight damping and unjittered UI/overlay policy");
+
+        const std::string velShader = LoadTextFile(AXLE_VELOCITY_SHADER_PATH);
+        const std::string taaShader = LoadTextFile(AXLE_TAA_SHADER_PATH);
+        RENDER_CHECK(!velShader.empty() && velShader.find("PSReactive") != std::string::npos &&
+                     !taaShader.empty() &&
+                     taaShader.find("u_ReactiveMask") != std::string::npos &&
+                     taaShader.find("reactiveMax") != std::string::npos &&
+                     taaShader.find("effectiveMax") != std::string::npos,
+            "Velocity.hlsl PSReactive & TAA.hlsl u_ReactiveMask enforce transparent/emissive reactive weighting");
+    }
+
+    std::cout << "[M15U8Contract] All M15 U8 Batch A, B, C, D & E contract tests passed.\n";
     return true;
 }

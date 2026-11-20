@@ -180,7 +180,7 @@ PSInput VSMain(VSInput input) {
 // =============================================================================
 // PIXEL SHADER
 // =============================================================================
-float4 PSMain(PSInput input) : SV_Target0 {
+void EvaluateParticleAlpha(PSInput input, out float4 finalColor) {
     float4 texColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
 
     if (u_Flags.x == 1) { // HasTexture
@@ -202,7 +202,7 @@ float4 PSMain(PSInput input) : SV_Target0 {
         texColor = float4(1.0f, 1.0f, 1.0f, alphaMask);
     }
 
-    float4 finalColor = input.Color * texColor * u_MaterialTint;
+    finalColor = input.Color * texColor * u_MaterialTint;
     if (u_CutoutAndMaterial.w > 0.5f) {
         if (finalColor.a < u_CutoutAndMaterial.x) {
             discard;
@@ -210,6 +210,32 @@ float4 PSMain(PSInput input) : SV_Target0 {
     } else if (finalColor.a <= 0.001f) {
         discard;
     }
+}
+
+float ApplyParticleDistanceFade(PSInput input, float alpha) {
+    float camDist = -input.ViewPos.z;
+    if (u_Flags2.x == 1) { // NearFadeEnabled
+        alpha *= smoothstep(u_FadeParams.x, u_FadeParams.y, camDist);
+    }
+    if (u_Flags2.y == 1) { // FarFadeEnabled
+        alpha *= (1.0f - smoothstep(u_FadeParams.z, u_FadeParams.w, camDist));
+    }
+    if (u_Flags2.z == 1) { // SoftParticlesEnabled
+        float2 screenUV = input.Position.xy * u_ScreenSize.zw;
+        float sceneDepthRaw = u_SceneDepthMap.SampleLevel(u_LinearSampler, screenUV, 0).r;
+        float nearClip = u_CameraPosition.w;
+        float farClip = u_CameraRight.w;
+        float sceneLinearZ = (nearClip * farClip) / max(0.0001f, farClip - sceneDepthRaw * (farClip - nearClip));
+        float depthDiff = sceneLinearZ - camDist;
+        float fadeDist = max(0.001f, u_CameraUp.w);
+        alpha *= saturate(depthDiff / fadeDist);
+    }
+    return alpha;
+}
+
+float4 PSMain(PSInput input) : SV_Target0 {
+    float4 finalColor;
+    EvaluateParticleAlpha(input, finalColor);
 
     // Volumetric wrap lighting
     if (u_Flags.w == 1) { // LightingEnabled
@@ -253,32 +279,8 @@ float4 PSMain(PSInput input) : SV_Target0 {
 
     finalColor.rgb += u_MaterialEmission.rgb * u_MaterialEmission.w;
 
-    // Near & far camera distance fading
     float camDist = -input.ViewPos.z;
-    if (u_Flags2.x == 1) { // NearFadeEnabled
-        float nearFade = smoothstep(u_FadeParams.x, u_FadeParams.y, camDist);
-        finalColor.a *= nearFade;
-    }
-
-    if (u_Flags2.y == 1) { // FarFadeEnabled
-        float farFade = 1.0f - smoothstep(u_FadeParams.z, u_FadeParams.w, camDist);
-        finalColor.a *= farFade;
-    }
-
-    // Depth-aware soft particle edge fading
-    if (u_Flags2.z == 1) { // SoftParticlesEnabled
-        float2 screenUV = input.Position.xy * u_ScreenSize.zw;
-        float sceneDepthRaw = u_SceneDepthMap.SampleLevel(u_LinearSampler, screenUV, 0).r;
-        
-        float nearClip = u_CameraPosition.w;
-        float farClip = u_CameraRight.w;
-        float sceneLinearZ = (nearClip * farClip) / max(0.0001f, farClip - sceneDepthRaw * (farClip - nearClip));
-        float particleLinearZ = camDist;
-        
-        float depthDiff = sceneLinearZ - particleLinearZ;
-        float fadeDist = max(0.001f, u_CameraUp.w);
-        finalColor.a *= saturate(depthDiff / fadeDist);
-    }
+    finalColor.a = ApplyParticleDistanceFade(input, finalColor.a);
 
     if (u_FogParams.x > 0.0) {
         float2 fogUV = input.Position.xy * u_FogScreenSize.zw;
@@ -306,4 +308,12 @@ float4 PSMain(PSInput input) : SV_Target0 {
     }
 
     return finalColor;
+}
+
+float4 PSReactive(PSInput input) : SV_Target0 {
+    float4 finalColor;
+    EvaluateParticleAlpha(input, finalColor);
+    float alpha = ApplyParticleDistanceFade(input, finalColor.a);
+    float reactiveScale = (u_Reserved.x < 0.5f) ? 0.95f : 0.85f;
+    return float4(saturate(max(alpha, 0.35f) * reactiveScale), 0.0f, 0.0f, 1.0f);
 }

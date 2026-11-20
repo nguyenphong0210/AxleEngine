@@ -24,7 +24,7 @@ namespace Axle {
         uint8_t MSAASamples = 1, HistoryCount = 0;
         bool IntermediateHDR = false, FXAA = false;
         bool EnableNormal = false, EnableScreenStorage = false;
-        bool EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false, EnableVelocity = false;
+        bool EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false, EnableVelocity = false, EnableReactive = false;
         bool EnableReflectionTerms = false;
         bool EnablePlanarReflection = false;
         float PlanarResolutionScale = 0.5f;

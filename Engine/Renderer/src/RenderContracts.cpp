@@ -4056,7 +4056,8 @@ namespace Axle {
                                     const glm::vec2& historyUV,
                                     float velocityPixels,
                                     float feedbackMin,
-                                    float feedbackMax) {
+                                    float feedbackMax,
+                                    float reactive) {
             if (!currentNeighborsRGB3x3 ||
                 !std::isfinite(historyUV.x) || !std::isfinite(historyUV.y) ||
                 historyUV.x < 0.0f || historyUV.x > 1.0f || historyUV.y < 0.0f || historyUV.y > 1.0f) {
@@ -4078,8 +4079,38 @@ namespace Axle {
             const float disocclusionRatio = glm::length(outOfBox) / boxSpread;
             const float disocclusionGate = std::exp(-disocclusionRatio * 2.5f);
             const float motionFactor = std::clamp(velocityPixels * 0.25f, 0.0f, 1.0f);
-            const float baseFeedback = feedbackMax + (feedbackMin - feedbackMax) * motionFactor;
+            const float r = std::clamp(reactive, 0.0f, 1.0f);
+            const float effectiveMax = feedbackMax + (0.08f - feedbackMax) * r;
+            const float effectiveMin = feedbackMin + (0.04f - feedbackMin) * r;
+            const float baseFeedback = std::min(effectiveMax + (effectiveMin - effectiveMax) * motionFactor, effectiveMax);
             return std::clamp(baseFeedback * disocclusionGate, 0.0f, 0.96f);
+        }
+
+        float ComputeTransparentReactiveWeight(SurfaceType surfaceType,
+                                             float alpha,
+                                             float emissiveStrength) {
+            if (surfaceType == SurfaceType::Additive) {
+                return 0.92f;
+            }
+            if (surfaceType == SurfaceType::Transparent) {
+                return std::clamp(std::max(alpha, 0.65f), 0.35f, 0.95f);
+            }
+            if (emissiveStrength > 1.0f) {
+                return std::clamp((emissiveStrength - 1.0f) * 0.25f, 0.0f, 0.90f);
+            }
+            return 0.0f;
+        }
+
+        TemporalOverlayPolicy ResolveTemporalOverlayPolicy(const SceneRenderSettings& settings) {
+            TemporalOverlayPolicy policy{};
+            const bool taaActive = settings.EnableTAA && settings.MSAASamples == 1;
+            policy.ApplySceneJitter = taaActive;
+            policy.ExcludeTransparentFromVelocity = true;
+            policy.StampReactiveMask = taaActive;
+            policy.DeferPhysicsDebugAfterTAA = taaActive;
+            policy.ComposeUIAfterPostProcess = true;
+            policy.KeepEditorGizmosUnjittered = true;
+            return policy;
         }
 
         bool VerifyClosestDepthDilation() {
@@ -4111,6 +4142,41 @@ namespace Axle {
             s.MSAASamples = 1;
             const auto resolved = RenderBackendPolicy::FromBackend(RendererBackendType::ModernRHI_Vulkan).ResolveSettings(s);
             return resolved.EnableTAA && !resolved.EnableFXAA;
+        }
+
+        bool VerifyTransparentAndReactivePolicy() {
+            glm::vec3 neighbors[9];
+            for (int i = 0; i < 9; ++i) neighbors[i] = glm::vec3(0.4f);
+            const float wOpaqueStatic = EvaluateHistoryWeight(neighbors, glm::vec3(0.4f), glm::vec2(0.5f), 0.0f, 0.55f, 0.90f, 0.0f);
+            const float reactiveGlass = ComputeTransparentReactiveWeight(SurfaceType::Transparent, 0.35f, 0.0f);
+            const float reactiveAdditive = ComputeTransparentReactiveWeight(SurfaceType::Additive, 0.10f, 0.0f);
+            const float reactiveEmissive = ComputeTransparentReactiveWeight(SurfaceType::Opaque, 1.0f, 3.0f);
+            const float wGlass = EvaluateHistoryWeight(neighbors, glm::vec3(0.4f), glm::vec2(0.5f), 0.0f, 0.55f, 0.90f, reactiveGlass);
+            const float wAdditive = EvaluateHistoryWeight(neighbors, glm::vec3(0.4f), glm::vec2(0.5f), 0.0f, 0.55f, 0.90f, reactiveAdditive);
+            SceneRenderSettings s;
+            s.EnableTAA = true;
+            s.MSAASamples = 1;
+            const auto policy = ResolveTemporalOverlayPolicy(s);
+            return wOpaqueStatic > 0.85f &&
+                   reactiveGlass >= 0.64f && reactiveAdditive >= 0.90f && reactiveEmissive >= 0.45f &&
+                   wGlass < 0.40f && wAdditive < 0.20f &&
+                   policy.ExcludeTransparentFromVelocity && policy.StampReactiveMask;
+        }
+
+        bool VerifyUnjitteredOverlayPolicy() {
+            SceneRenderSettings taaOn;
+            taaOn.EnableTAA = true;
+            taaOn.MSAASamples = 1;
+            const auto pOn = ResolveTemporalOverlayPolicy(taaOn);
+
+            SceneRenderSettings taaOff;
+            taaOff.EnableTAA = false;
+            const auto pOff = ResolveTemporalOverlayPolicy(taaOff);
+
+            return pOn.ApplySceneJitter && pOn.DeferPhysicsDebugAfterTAA &&
+                   pOn.ComposeUIAfterPostProcess && pOn.KeepEditorGizmosUnjittered &&
+                   !pOff.ApplySceneJitter && !pOff.DeferPhysicsDebugAfterTAA &&
+                   pOff.ComposeUIAfterPostProcess && pOff.KeepEditorGizmosUnjittered;
         }
     } // namespace TAAContract
 

@@ -1186,65 +1186,66 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 
 ### U7 / S7.1–S7.4 — Experimental DDGI
 
-- [ ] **M15-U7-01.1 — Choose radiance acquisition.**
+- [x] **M15-U7-01.1 — Choose radiance acquisition.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-01.2 — Document acquisition cost/policy.**
+  - **Evidence:** Self-verified automated PASS (`39372690`, `93baed17`): chose shared offscreen amortized 6-face tile-atlas world-space raster capture (`DDGICapture`, explicit `Experimental` / default OFF policy) over ray tracing or screen-space sampling; verified via `DDGI_ACQUISITION_POLICY.md`, `M15DDGIContract`, and Debug/Release Vulkan/D3D12 `AxleEnvironmentRenderingTests --m15-ddgi`. Independent Codex review pending.
+- [x] **M15-U7-01.2 — Document acquisition cost/policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-02 — Implement probe indexing/origin/spacing and bounded allocation.**
+  - **Evidence:** Self-verified automated PASS (`39372690`): authored `docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/DDGI_ACQUISITION_POLICY.md` documenting offscreen `16x16` per-face capture tiles, `RGBA16_FLOAT` / `D32_FLOAT` formats, staggered probe update budget (`MaxProbesPerFrame` default `8`, hard cap `32`), fallback policy, and experimental limits. Independent Codex review pending.
+- [x] **M15-U7-02 — Implement probe indexing/origin/spacing and bounded allocation.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-03.1 — Pack irradiance atlas.**
+  - **Evidence:** Self-verified automated PASS (`39372690`, `93baed17`): `DDGIProbeGridComponent`, 3D/linear probe indexing, `DDGIConstants`, 32x16x32 bounded cap (`DDGIContract::MaxProbeCount = 16384`, `MaxAtlasBudgetBytes = 64 MiB`), and `RHIViewTargets` dual atlases + capture scratch verified in `M15DDGIContract` and Debug/Release Vulkan/D3D12 `AxleEnvironmentRenderingTests` (`build/Tests/Environment/{Debug,Release}/{vulkan,dx12}/M15_U7_ddgi_scorecard.txt`). Independent Codex review pending.
+- [x] **M15-U7-03.1 — Pack irradiance atlas.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-03.2 — Pack distance atlas.**
+  - **Evidence:** Self-verified automated PASS (`39372690`, `3db0aba9`): `6x6` octahedral interior + `1 px` border gutter (`8x8` tile) `RGBA16_FLOAT` packing (`DDGICommon.hlsli`, `DDGIPass::CSUpdateIrradiance`) verified against CPU contract and GPU captures on Debug/Release Vulkan/D3D12 (`--m15-ddgi`). Independent Codex review pending.
+- [x] **M15-U7-03.2 — Pack distance atlas.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-03.3 — Pack variance moments.**
+  - **Evidence:** Self-verified automated PASS (`39372690`, `3db0aba9`): `14x14` octahedral interior + `1 px` border gutter (`16x16` tile) `RGBA16_FLOAT` packing (`DDGICommon.hlsli`, `DDGIPass::CSUpdateDistanceMoments`) verified against CPU contract and GPU readbacks on Debug/Release Vulkan/D3D12 (`--m15-ddgi`). Independent Codex review pending.
+- [x] **M15-U7-03.3 — Pack variance moments.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-04.1 — Implement visibility moments.**
+  - **Evidence:** Self-verified automated PASS (`3db0aba9`): `CSUpdateDistanceMoments` packs `(E[r], E[r^2], validWeight, backfaceRatio)` in `RGBA16_FLOAT`, verified via `M15DDGIContract` and Debug/Release Vulkan/D3D12 GPU readbacks (`--m15-ddgi`). Independent Codex review pending.
+- [x] **M15-U7-04.1 — Implement visibility moments.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-04.2 — Implement Chebyshev weighting.**
+  - **Evidence:** Self-verified automated PASS (`3db0aba9`): offscreen `D32_FLOAT` capture depth + `SV_IsFrontFace` backface sign encoding feed radial `(E[r], E[r^2])` visibility moments and backface ratio, verified on Debug/Release Vulkan/D3D12 (`--m15-ddgi`). Independent Codex review pending.
+- [x] **M15-U7-04.2 — Implement Chebyshev weighting.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-04.3 — Validate bias.**
+  - **Evidence:** Self-verified automated PASS (`39372690`, `3db0aba9`, `281019df`): one-tailed Chebyshev visibility weighting (`variance / (variance + d^2)`) with backface threshold suppression in `DDGICommon.hlsli`, verified in `M15DDGIContract` and sealed-chamber native fixtures (`--m15-ddgi`). Independent Codex review pending.
+- [x] **M15-U7-04.3 — Validate bias.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-05.1 — Add temporal accumulation.**
+  - **Evidence:** Self-verified automated PASS (`39372690`, `93baed17`): shared `ViewBias` (default `0.15`) and `NormalBias` (default `0.08`) constants verified across CPU contracts and native Debug/Release Vulkan/D3D12 `--m15-ddgi` fixtures. Independent Codex review pending.
+- [x] **M15-U7-05.1 — Add temporal accumulation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-05.2 — Add staggered updates.**
+  - **Evidence:** Self-verified automated PASS (`3db0aba9`, `93baed17`): hysteresis blending (`DefaultHysteresis = 0.90`) in `CSUpdateIrradiance`/`CSUpdateDistanceMoments` verified for steady propagation and `Hysteresis=0.0` vs `0.95` convergence rate on Debug/Release Vulkan/D3D12 (`--m15-ddgi`). Independent Codex review pending.
+- [x] **M15-U7-05.2 — Add staggered updates.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`3db0aba9`, `93baed17`): post-seed round-robin staggered batching via `MaxProbesPerFrame` / `UpdateFraction` verified in `M15DDGIContract` (`ProbeCursor` wrapping) and GPU steady-state probe budget checks (`08.3`). Independent Codex review pending.
 - [ ] **M15-U7-06 — Feed irradiance into diffuse ForwardPBR lighting.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected material/light response is visible with no abrupt energy jump or invalid pixels.
-- [ ] **M15-U7-07.1 — Add scene/probe invalidation.**
+  - **Evidence:** **Self-verified automated PASS (display-blocked EDITOR VISUAL):** `281019df` & `93baed17` integrate world-space DDGI diffuse irradiance (`b8`, `t7`/`t8` `space4`) into `ForwardPBR.hlsl` & `MaterialSurface.hlsl` (with `ReconcileSPIRVDescriptorBindings` in `RHIShader.cpp`), passing Debug/Release Vulkan/D3D12 `AxleEnvironmentRenderingTests`, 7/7 `MaterialGraph|M15DDGI` CTests, and offscreen `AxleEditor --verify-empty-startup --rhi=vulkan`. **EDITOR VISUAL: NOT RUN / BLOCKED (display offline: `Default Monitor Availability=8`); independent Codex review pending.**
+- [x] **M15-U7-07.1 — Add scene/probe invalidation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-07.2 — Add no-valid-probe fallback.**
+  - **Evidence:** Self-verified automated PASS (`3db0aba9`): invalidates seed/history on `DDGIProbeGridComponent` edits, origin/spacing/hysteresis changes, `SceneRevision`, `DeviceEpoch`, and toggles; verified in CPU & Debug/Release Vulkan/D3D12 `--m15-ddgi` fixtures. Independent Codex review pending.
+- [x] **M15-U7-07.2 — Add no-valid-probe fallback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-07.3 — Add memory/update budgets.**
+  - **Evidence:** Self-verified automated PASS (`281019df`, `93baed17`): falls back cleanly to `Sky/IBL` diffuse with `RenderDiagnostics` telemetry when all probes are backface-trapped, MSAA > 1, grid disabled, or `EnableDDGI=false` (verified matching analytical sky-ambient baseline on Debug/Release Vulkan/D3D12). Independent Codex review pending.
+- [x] **M15-U7-07.3 — Add memory/update budgets.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-08.1 — Test indirect bounce.**
+  - **Evidence:** Self-verified automated PASS (`93baed17`): live atlas + scratch VRAM byte accounting and NRI GPU pass timestamps (`ddgi_seed_ms`, `ddgi_capture_ms`, `ddgi_update_ms`) across `4x2x4..32x16x32` at `1920x1080` recorded in `build/Tests/Environment/{Debug,Release}/{vulkan,dx12}/M15_U7_ddgi_scorecard.txt`. Independent Codex review pending.
+- [x] **M15-U7-08.1 — Test indirect bounce.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-08.2 — Test wall leakage.**
+  - **Evidence:** Self-verified automated PASS (`281019df`, `93baed17`): oblique-angle world-space indirect color bounce, multi-bounce propagation, and custom `MaterialSurface` receiver (`u7d-ddgi-receiver.hlsl`) verified on Debug/Release Vulkan/D3D12 (`AxleEnvironmentRenderingTests --m15-ddgi`). Independent Codex review pending.
+- [x] **M15-U7-08.2 — Test wall leakage.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-08.3 — Test grid settings.**
+  - **Evidence:** Self-verified automated PASS (`93baed17`): sealed dark chamber behind `0.8m` dividing wall blocks bright emitter indirect light (`<= 2` RGB inside vs `g > 50` outside) on Debug/Release Vulkan/D3D12 (`--m15-ddgi`). Independent Codex review pending.
+- [x] **M15-U7-08.3 — Test grid settings.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U7-08.4 — Test disabled fallback.**
+  - **Evidence:** Self-verified automated PASS (`93baed17`): live sweeps of `EnergyMultiplier`, `GridOrigin`, `MaxProbesPerFrame`, and `Hysteresis` (`0.0` vs `0.95`) verified on Debug/Release Vulkan/D3D12 (`--m15-ddgi`). Independent Codex review pending.
+- [x] **M15-U7-08.4 — Test disabled fallback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`281019df`, `93baed17`): verified analytical fallback parity under `EnableDDGI=false`, component `Enabled=false`, all-enclosed `Back`-face probes, MSAA > 1 (`Fallback==IBL`), `AxleRenderUnitTests` backend compute policy (`OpenGL -> EnableDDGI=false`), and `AxleRenderServiceTests` parity. Independent Codex review pending.
 
-**Exit:** bounce follows world probes rather than camera pixels; walls suppress leakage; experimental status/cost explicit.
+**Exit:** bounce follows world probes rather than camera pixels; walls suppress leakage; experimental status/cost explicit (`M15-U7-06` `EDITOR VISUAL` blocked on offline display `Availability=8`; U7 independent Codex review pending).
 
 ### U8 / S8.1–S8.6 — HDR post and temporal pipeline
 

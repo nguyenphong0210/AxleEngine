@@ -1,5 +1,6 @@
 #include "OcclusionTestSupport.hpp"
 #include "RHIReadback.hpp"
+#include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RenderContracts.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
@@ -14,6 +15,8 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 
@@ -193,7 +196,7 @@ namespace {
     }
 }
 
-bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path&) {
+bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path& output) {
     std::cout << "[M15DDGI] Running Milestone 15 Unit 7 (Experimental DDGI GPU Acquisition & Moments) Tests...\n";
 
     auto& device = RHIDevice::Get();
@@ -476,6 +479,448 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path&) {
         return false;
     }
 
+    // =========================================================================
+    // M15-U7-D Exit Validation (M15-U7-08.1..08.4) + Live GPU Scorecard (07.3)
+    // =========================================================================
+    const std::filesystem::path outDir = output.empty()
+        ? std::filesystem::path("build/Tests/Environment/DDGI")
+        : output;
+    std::error_code mkdirEc;
+    std::filesystem::create_directories(outDir, mkdirEc);
+
+    auto readColorPixelAt = [&](RHITexture& rt, uint32_t rtW, uint32_t rtH, uint32_t px, uint32_t py) -> glm::ivec3 {
+        const auto pixels = Axle::RenderTests::ReadTexture(rt);
+        if (pixels.size() != static_cast<size_t>(rtW) * rtH * 4u) {
+            return glm::ivec3(-1);
+        }
+        const size_t idx = (static_cast<size_t>(py) * rtW + px) * 4u;
+        return glm::ivec3(pixels[idx + 0], pixels[idx + 1], pixels[idx + 2]);
+    };
+
+    // 1. M15-U7-08.1: Oblique camera independence & Custom Material Graph indirect bounce
+    {
+        PerspectiveCamera camOblique(60.0f, 1.0f, 0.1f, 200.0f);
+        camOblique.SetViewMatrix(
+            glm::lookAtRH(glm::vec3(-0.3f, 3.2f, 0.8f), glm::vec3(1.2f, 2.0f, 3.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(-0.3f, 3.2f, 0.8f));
+
+        settings.EnableDDGI = true;
+        if (!renderView(camOblique) || !renderer.GetGIFrame().SamplingEnabled) {
+            std::cerr << "[M15DDGI] FAIL (08.1): Oblique view DDGI render failed\n";
+            return false;
+        }
+        const glm::ivec3 obliqueBounce = readCenterRGB();
+        if (!(obliqueBounce.g > 30 && obliqueBounce.g > obliqueBounce.r * 2 && obliqueBounce.g > obliqueBounce.b * 2)) {
+            std::cerr << "[M15DDGI] FAIL (08.1): Oblique camera did not preserve world-space green indirect bounce ("
+                      << obliqueBounce.r << "," << obliqueBounce.g << "," << obliqueBounce.b << ")\n";
+            return false;
+        }
+
+        const auto customShaderPath = std::filesystem::absolute(outDir / "u7d-ddgi-receiver.hlsl");
+        {
+            std::ofstream shaderFile(customShaderPath);
+            shaderFile << AssembleMaterialSurfaceShader("",
+                "MaterialSurface AxleEvaluateMaterial(float2 uv) { MaterialSurface s = (MaterialSurface)0; "
+                "s.BaseColor = float3(0.9, 0.9, 0.9); s.Metallic = 0.0; s.Roughness = 0.85; "
+                "s.Normal = float3(0.0, 0.0, 1.0); s.AO = 1.0; s.IOR = 1.5; s.ClearcoatRoughness = 0.04; return s; }");
+            RENDER_CHECK(shaderFile.good(), "M15-U7-08.1: write custom MaterialSurface DDGI shader");
+        }
+        RenderWorld graphWorld = world;
+        graphWorld.SceneRevision = 401;
+        graphWorld.Meshes.back().EntityID = 403u;
+        graphWorld.Meshes.back().Material.UseCustomShader = true;
+        graphWorld.Meshes.back().Material.CustomShaderPath = customShaderPath.string();
+        RHIMaterialDesc graphMatDesc{};
+        graphMatDesc.CullMode = CullMode::Back;
+        graphWorld.Meshes.back().Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(graphMatDesc);
+
+        settings.EnableDDGI = false;
+        renderer.RenderWorldView(graphWorld, camReceiver, &color, &depth, settings, nullptr, offTargets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle(), "M15-U7-08.1: custom shader off baseline");
+        const glm::ivec3 graphOff = readCenterRGB();
+
+        settings.EnableDDGI = true;
+        renderer.RenderWorldView(graphWorld, camReceiver, &color, &depth, settings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle() && renderer.GetGIFrame().SamplingEnabled,
+            "M15-U7-08.1: custom MaterialSurface shader DDGI active");
+        RENDER_CHECK(!renderer.GetMaterialDiagnostics().contains(403u) || renderer.GetMaterialDiagnostics().at(403u).empty(),
+            "M15-U7-08.1: custom MaterialSurface shader compiled and ran without fallback");
+        const glm::ivec3 graphOn = readCenterRGB();
+        if (!(graphOff.g <= 2 && graphOn.g > 30 && graphOn.g > graphOn.r * 2)) {
+            std::cerr << "[M15DDGI] FAIL (08.1): Custom MaterialSurface shader did not receive indirect bounce (off="
+                      << graphOff.g << ", on=(" << graphOn.r << "," << graphOn.g << "," << graphOn.b << "))\n";
+            return false;
+        }
+    }
+
+    // 2. M15-U7-08.2: Sealed dark chamber next to bright emitter wall suppresses light leakage
+    {
+        RenderWorld leakWorld{};
+        leakWorld.DDGIProbeGrid = grid;
+        leakWorld.SceneRevision = 500;
+        auto addBox = [&](uint32_t entityId, glm::vec3 pos, glm::vec3 scale, std::shared_ptr<RHIMaterial> mat) {
+            RenderMeshInstance inst{};
+            inst.EntityID = entityId;
+            inst.NativeView = cube->CaptureView();
+            inst.WorldTransform = glm::translate(glm::mat4(1.0f), pos) * glm::scale(glm::mat4(1.0f), scale);
+            inst.Material.RHIMaterialAsset = std::move(mat);
+            leakWorld.Meshes.push_back(std::move(inst));
+        };
+        auto darkWallMat = MakeSolidMat(glm::vec3(0.05f, 0.05f, 0.05f));
+        auto whiteMatteMat = MakeSolidMat(glm::vec3(0.9f, 0.9f, 0.9f));
+        auto brightGreenMat = MakeSolidMat(glm::vec3(0.05f, 0.9f, 0.05f), glm::vec3(0.02f, 1.0f, 0.02f), 6.0f);
+
+        addBox(501u, glm::vec3(-1.2f, 2.0f, 3.0f), glm::vec3(0.4f, 8.0f, 12.0f), brightGreenMat); // Bright emitter outside
+        addBox(502u, glm::vec3(2.0f, 2.0f, 3.0f), glm::vec3(0.8f, 12.0f, 14.0f), darkWallMat);   // Thick dividing wall X in [1.6..2.4]
+        addBox(503u, glm::vec3(6.8f, 2.0f, 3.0f), glm::vec3(0.8f, 10.0f, 14.0f), darkWallMat);   // Far right wall X in [6.4..7.2]
+        addBox(504u, glm::vec3(4.5f, -0.5f, 3.0f), glm::vec3(6.0f, 1.0f, 14.0f), darkWallMat);   // Sealed floor
+        addBox(505u, glm::vec3(4.5f, 4.5f, 3.0f), glm::vec3(6.0f, 1.0f, 14.0f), darkWallMat);    // Sealed ceiling
+        addBox(506u, glm::vec3(4.5f, 2.0f, -1.5f), glm::vec3(6.0f, 10.0f, 1.0f), darkWallMat);   // Sealed back Z wall
+        addBox(507u, glm::vec3(4.5f, 2.0f, 7.5f), glm::vec3(6.0f, 10.0f, 1.0f), darkWallMat);    // Sealed front Z wall
+        addBox(508u, glm::vec3(2.55f, 2.0f, 3.0f), glm::vec3(0.2f, 3.0f, 4.0f), whiteMatteMat);  // White interior test panel X+ = 2.65
+        addBox(509u, glm::vec3(1.45f, 2.0f, 3.0f), glm::vec3(0.2f, 3.0f, 4.0f), whiteMatteMat);  // White lit-side panel X- = 1.35
+
+        PerspectiveCamera camDarkInterior(60.0f, 1.0f, 0.1f, 200.0f);
+        camDarkInterior.SetViewMatrix(
+            glm::lookAtRH(glm::vec3(4.0f, 2.0f, 3.0f), glm::vec3(2.65f, 2.0f, 3.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(4.0f, 2.0f, 3.0f));
+        PerspectiveCamera camLitExterior(60.0f, 1.0f, 0.1f, 200.0f);
+        camLitExterior.SetViewMatrix(
+            glm::lookAtRH(glm::vec3(0.0f, 2.0f, 3.0f), glm::vec3(1.35f, 2.0f, 3.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(0.0f, 2.0f, 3.0f));
+
+        settings.EnableDDGI = true;
+        // Warm all 32 probes across 4 staggered steps before measuring interior & exterior panels
+        for (int step = 0; step < 4; ++step) {
+            renderer.RenderWorldView(leakWorld, camDarkInterior, &color, &depth, settings, nullptr, targets);
+            RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle(), "M15-U7-08.2: warm dark/lit chamber");
+        }
+        const glm::ivec3 sealedDarkPixel = readCenterRGB();
+        renderer.RenderWorldView(leakWorld, camLitExterior, &color, &depth, settings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle(), "M15-U7-08.2: lit exterior render");
+        const glm::ivec3 litOutsidePixel = readCenterRGB();
+
+        if (!(sealedDarkPixel.r <= 2 && sealedDarkPixel.g <= 2 && sealedDarkPixel.b <= 2 &&
+              litOutsidePixel.g > 50 && litOutsidePixel.g > litOutsidePixel.r * 2)) {
+            std::cerr << "[M15DDGI] FAIL (08.2): Sealed chamber leaked light or outside lacked bounce (dark=("
+                      << sealedDarkPixel.r << "," << sealedDarkPixel.g << "," << sealedDarkPixel.b
+                      << "), lit=(" << litOutsidePixel.r << "," << litOutsidePixel.g << "," << litOutsidePixel.b << "))\n";
+            return false;
+        }
+    }
+
+    // 3. M15-U7-08.3: Grid settings (EnergyMultiplier, GridOrigin shift, MaxProbesPerFrame, Hysteresis) alter output measurably
+    {
+        RenderWorld sweepWorld = world;
+        sweepWorld.SceneRevision = 600;
+        sweepWorld.Meshes[0].Material.RHIMaterialAsset = MakeSolidMat(glm::vec3(0.02f, 0.6f, 0.02f), glm::vec3(0.01f, 0.8f, 0.01f), 1.0f);
+        settings.EnableDDGI = true;
+
+        // 3a. EnergyMultiplier 0.4 vs 2.0
+        sweepWorld.DDGIProbeGrid->EnergyMultiplier = 0.4f;
+        renderer.RenderWorldView(sweepWorld, camReceiver, &color, &depth, settings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle(), "M15-U7-08.3: low energy multiplier");
+        const glm::ivec3 lowEnergyRGB = readCenterRGB();
+
+        sweepWorld.DDGIProbeGrid->EnergyMultiplier = 2.0f;
+        renderer.RenderWorldView(sweepWorld, camReceiver, &color, &depth, settings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle(), "M15-U7-08.3: high energy multiplier");
+        const glm::ivec3 highEnergyRGB = readCenterRGB();
+        if (!(highEnergyRGB.g > lowEnergyRGB.g + 25)) {
+            std::cerr << "[M15DDGI] FAIL (08.3): EnergyMultiplier sweep did not change output ("
+                      << lowEnergyRGB.g << " vs " << highEnergyRGB.g << ")\n";
+            return false;
+        }
+
+        // 3b. GridOrigin shifted far away -> receiver leaves DDGI cage
+        sweepWorld.DDGIProbeGrid->EnergyMultiplier = 1.0f;
+        sweepWorld.DDGIProbeGrid->GridOrigin = glm::vec3(40.0f, 1.0f, 0.0f);
+        renderer.RenderWorldView(sweepWorld, camReceiver, &color, &depth, settings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle(), "M15-U7-08.3: shifted GridOrigin outside cage");
+        const glm::ivec3 outsideCageRGB = readCenterRGB();
+        if (!(outsideCageRGB.r <= 2 && outsideCageRGB.g <= 2 && outsideCageRGB.b <= 2)) {
+            std::cerr << "[M15DDGI] FAIL (08.3): Shifting GridOrigin outside scene did not suppress receiver GI ("
+                      << outsideCageRGB.r << "," << outsideCageRGB.g << "," << outsideCageRGB.b << ")\n";
+            return false;
+        }
+
+        // 3c. MaxProbesPerFrame 4 vs 8 -> reported UpdatedProbeCount tracks authored budget
+        sweepWorld.DDGIProbeGrid->GridOrigin = grid.GridOrigin;
+        sweepWorld.DDGIProbeGrid->MaxProbesPerFrame = 4;
+        sweepWorld.SceneRevision = 601;
+        // Frame 0 resets seed cleanly; Frame 1 exercises steady-state staggered budget = 4
+        renderer.RenderWorldView(sweepWorld, camReceiver, &color, &depth, settings, nullptr, targets);
+        renderer.RenderWorldView(sweepWorld, camReceiver, &color, &depth, settings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle() &&
+                     renderer.GetGIFrame().UpdatedProbeCount == 4u,
+            "M15-U7-08.3: MaxProbesPerFrame=4 updates 4 probes in steady state");
+
+        // 3d. Hysteresis 0.0 vs 0.95 multi-bounce probe atlas convergence rate
+        sweepWorld.DDGIProbeGrid->MaxProbesPerFrame = 32;
+        sweepWorld.DDGIProbeGrid->UpdateFraction = 1.0f;
+        sweepWorld.Meshes[0].Material.RHIMaterialAsset = MakeSolidMat(glm::vec3(0.05f, 0.9f, 0.05f), glm::vec3(0.02f, 1.0f, 0.02f), 4.0f);
+        auto measureMultiBounceDelta = [&](float hysteresisVal, uint64_t rev, float& outDelta) -> bool {
+            sweepWorld.DDGIProbeGrid->Hysteresis = hysteresisVal;
+            sweepWorld.SceneRevision = rev;
+            renderer.RenderWorldView(sweepWorld, camReceiver, &color, &depth, settings, nullptr, targets);
+            if (!renderer.WasLastRenderSuccessful() || !device.WaitIdle()) return false;
+            std::vector<glm::vec4> f0;
+            if (!ReadTextureRGBA16F(*targets->GetDDGI(), f0)) return false;
+            renderer.RenderWorldView(sweepWorld, camReceiver, &color, &depth, settings, nullptr, targets);
+            if (!renderer.WasLastRenderSuccessful() || !device.WaitIdle()) return false;
+            std::vector<glm::vec4> f1;
+            if (!ReadTextureRGBA16F(*targets->GetDDGI(), f1) || f0.size() != f1.size()) return false;
+            double diffSum = 0.0;
+            for (size_t i = 0; i < f0.size(); ++i) {
+                diffSum += std::abs(f1[i].g - f0[i].g);
+            }
+            outDelta = static_cast<float>(diffSum / static_cast<double>(f0.size()));
+            return std::isfinite(outDelta);
+        };
+        float deltaH0 = 0.0f, deltaH95 = 0.0f;
+        RENDER_CHECK(measureMultiBounceDelta(0.0f, 610u, deltaH0) &&
+                     measureMultiBounceDelta(0.95f, 611u, deltaH95) &&
+                     deltaH0 > deltaH95 * 4.0f + 1e-4f,
+            "M15-U7-08.3: Hysteresis=0.0 adapts multi-bounce irradiance faster than Hysteresis=0.95");
+    }
+
+    // 4. M15-U7-08.4: Explicit fallback under Disabled / DisabledGrid / MSAA 4x / All-Enclosed Probes
+    {
+        RenderWorld fallbackWorld{};
+        fallbackWorld.DDGIProbeGrid = grid;
+        fallbackWorld.SceneRevision = 700;
+        RenderDirectionalLight sun{};
+        sun.Direction = glm::normalize(glm::vec3(0.0f, 0.8f, 0.6f));
+        sun.Color = glm::vec3(0.4f, 0.7f, 1.0f);
+        sun.Intensity = 0.0f;
+        sun.AmbientIntensity = 1.5f;
+        fallbackWorld.DirectionalLight = sun;
+
+        RenderMeshInstance litReceiver{};
+        litReceiver.EntityID = 701u;
+        litReceiver.NativeView = cube->CaptureView();
+        litReceiver.WorldTransform = glm::translate(glm::mat4(1.0f), glm::vec3(1.2f, 2.0f, 3.0f)) *
+                                     glm::scale(glm::mat4(1.0f), glm::vec3(0.4f, 6.0f, 10.0f));
+        litReceiver.Material.RHIMaterialAsset = MakeSolidMat(glm::vec3(0.8f, 0.8f, 0.8f));
+        fallbackWorld.Meshes.push_back(litReceiver);
+
+        SceneRenderSettings fbSettings = settings;
+        fbSettings.EnableSkybox = false;
+        fbSettings.EnableShadows = false;
+        fbSettings.EnableDDGI = false;
+        renderer.RenderWorldView(fallbackWorld, camReceiver, &color, &depth, fbSettings, nullptr, offTargets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle() &&
+                     renderer.GetGIFrame().Status == GIFrameStatus::Disabled &&
+                     !renderer.GetGIFrame().SamplingEnabled,
+            "M15-U7-08.4: EnableDDGI=false baseline");
+        const glm::ivec3 baselineAmbient = readCenterRGB();
+        RENDER_CHECK(baselineAmbient.b > 10, "M15-U7-08.4: analytical sky ambient baseline is nonzero");
+
+        // 4a. Grid disabled
+        fallbackWorld.DDGIProbeGrid->Enabled = false;
+        fbSettings.EnableDDGI = true;
+        renderer.RenderWorldView(fallbackWorld, camReceiver, &color, &depth, fbSettings, nullptr, offTargets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle() &&
+                     !renderer.GetGIFrame().UpdateScheduled && !renderer.GetGIFrame().SamplingEnabled &&
+                     readCenterRGB() == baselineAmbient,
+            "M15-U7-08.4: disabled DDGIProbeGrid preserves exact ambient/IBL baseline");
+
+        // 4b. All corner probes enclosed in solid geometry -> airWeight=0 -> graceful analytical/IBL fallback
+        fallbackWorld.DDGIProbeGrid->Enabled = true;
+        fallbackWorld.DDGIProbeGrid->UpdateFraction = 1.0f;
+        fallbackWorld.DDGIProbeGrid->MaxProbesPerFrame = 32;
+        RenderWorld enclosedWorld = fallbackWorld;
+        enclosedWorld.SceneRevision = 702;
+        uint32_t nextEnt = 710u;
+        for (uint32_t p = 0; p < extent.ProbeCount; ++p) {
+            const glm::vec3 pPos = DDGIContract::ProbeIndexToWorldPos(p, grid);
+            RenderMeshInstance pCube{};
+            pCube.EntityID = nextEnt++;
+            pCube.NativeView = cube->CaptureView();
+            pCube.WorldTransform = glm::translate(glm::mat4(1.0f), pPos) * glm::scale(glm::mat4(1.0f), glm::vec3(0.45f));
+            pCube.Material.RHIMaterialAsset = MakeSolidMat(glm::vec3(0.05f, 0.05f, 0.05f));
+            enclosedWorld.Meshes.push_back(pCube);
+        }
+        PerspectiveCamera camCorner(60.0f, 1.0f, 0.1f, 200.0f);
+        camCorner.SetViewMatrix(
+            glm::lookAtRH(glm::vec3(-0.3f, 2.0f, 3.0f), glm::vec3(1.2f, 2.0f, 3.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(-0.3f, 2.0f, 3.0f));
+        renderer.RenderWorldView(enclosedWorld, camCorner, &color, &depth, fbSettings, nullptr, targets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle(), "M15-U7-08.4: all-enclosed fallback");
+        const glm::ivec3 enclosedRGB = readColorPixelAt(color, width, height, width / 2u, height / 2u);
+        RENDER_CHECK(glm::abs(enclosedRGB.r - baselineAmbient.r) <= 2 &&
+                     glm::abs(enclosedRGB.g - baselineAmbient.g) <= 2 &&
+                     glm::abs(enclosedRGB.b - baselineAmbient.b) <= 2,
+            "M15-U7-08.4: no-valid-probe condition gracefully falls back to ambient/IBL baseline");
+
+        // 4c. MSAA 4x explicitly disables DDGI with IBL fallback diagnostic
+        RHITexture msaaColor, msaaDepth;
+        RENDER_CHECK(msaaColor.Init(RHITextureDesc::RenderTarget2D(width, height, RHITextureFormat::RGBA8_UNORM, "DDGIMSAAOut")) &&
+                     msaaDepth.Init(RHITextureDesc::DepthStencil2D(width, height)),
+            "M15-U7-08.4: msaa color/depth init");
+        auto msaaTargets = std::make_shared<RHIViewTargets>();
+        RHIViewTargetDesc msaaDesc{};
+        msaaDesc.Width = width; msaaDesc.Height = height;
+        msaaDesc.Samples = 4;
+        msaaDesc.OwnPrimary = false;
+        msaaDesc.EnableDepth = true;
+        msaaDesc.EnableDDGI = false;
+        RENDER_CHECK(msaaTargets->Configure(msaaDesc), "M15-U7-08.4: configure 4x MSAA view targets");
+        SceneRenderSettings msaaSettings = fbSettings;
+        msaaSettings.MSAASamples = 4;
+        msaaSettings.EnableDDGI = true;
+        renderer.RenderWorldView(fallbackWorld, camReceiver, &msaaColor, &msaaDepth, msaaSettings, nullptr, msaaTargets);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle() &&
+                     !renderer.GetGIFrame().UpdateScheduled &&
+                     !renderer.GetGIFrame().SamplingEnabled &&
+                     renderer.GetGIFrame().Fallback == GIFallback::IBL,
+            "M15-U7-08.4: MSAA 4x forces explicit IBL fallback without DDGI sampling");
+    }
+
+    // 5. M15-U7-07.3: Live VRAM + GPU pass timestamp scorecard across 4x2x4..32x16x32
+    {
+        std::ofstream scorecard(outDir / "M15_U7_ddgi_scorecard.txt");
+        RENDER_CHECK(scorecard.is_open(), "M15-U7-07.3: scorecard file created");
+        const auto& caps = device.GetCapabilities();
+        RENDER_CHECK(caps.TimestampFrequencyHz > 0u, "M15-U7-07.3: native GPU timestamps required");
+#if defined(_DEBUG) || !defined(NDEBUG)
+        const char* buildCfg = "Debug";
+#else
+        const char* buildCfg = "Release";
+#endif
+        scorecard << "config=" << buildCfg
+                  << " backend=" << (device.GetBackend() == RHIType::Vulkan ? "Vulkan" : "D3D12")
+                  << " adapter=\"" << caps.AdapterName << "\""
+                  << " timestamp_hz=" << caps.TimestampFrequencyHz << "\n";
+
+        constexpr uint32_t perfW = 1920u, perfH = 1080u;
+        RHITexture perfColor, perfDepth;
+        RENDER_CHECK(perfColor.Init(RHITextureDesc::RenderTarget2D(perfW, perfH, RHITextureFormat::RGBA8_UNORM, "DDGIPerfColor")) &&
+                     perfDepth.Init(RHITextureDesc::DepthStencil2D(perfW, perfH, RHITextureFormat::D32_FLOAT, "DDGIPerfDepth")),
+            "M15-U7-07.3: 1080p perf render target init");
+
+        struct GridPreset { const char* Name; glm::ivec3 Dims; };
+        const std::vector<GridPreset> presets{
+            { "SmallRoom_4x2x4",     {4, 2, 4} },
+            { "LocalRoom_8x4x8",     {8, 4, 8} },
+            { "Default_16x8x16",     {16, 8, 16} },
+            { "RefMax_32x16x32",     {32, 16, 32} }
+        };
+
+        RenderWorld perfWorld = world;
+        SceneRenderSettings perfSettings = settings;
+        perfSettings.EnableDDGI = true;
+        perfSettings.EnableSkybox = false;
+        perfSettings.EnableShadows = false;
+        perfSettings.EnableToneMapping = false;
+
+        for (size_t pIdx = 0; pIdx < presets.size(); ++pIdx) {
+            const auto& preset = presets[pIdx];
+            const auto pExtent = DDGIContract::ComputeAtlasExtent(preset.Dims);
+            const auto budget = DDGIContract::EstimateMemoryBudget(preset.Dims);
+            RENDER_CHECK(pExtent.Valid && budget.TotalLogicalBytes <= DDGIContract::MaxAtlasBudgetBytes,
+                "M15-U7-07.3: preset budget valid");
+
+            perfWorld.DDGIProbeGrid->GridDimensions = preset.Dims;
+            perfWorld.DDGIProbeGrid->MaxProbesPerFrame = 8;
+            perfWorld.DDGIProbeGrid->UpdateFraction = 0.25f;
+            perfWorld.DDGIProbeGrid->Hysteresis = 0.90f;
+            perfWorld.SceneRevision = 800u + static_cast<uint64_t>(pIdx);
+
+            RHIViewTargetDesc pvt{};
+            pvt.Width = perfW; pvt.Height = perfH;
+            pvt.ColorFormat = RHITextureFormat::RGBA8_UNORM;
+            pvt.DepthFormat = RHITextureFormat::D32_FLOAT;
+            pvt.EnableDepth = true;
+            pvt.OwnPrimary = false;
+            pvt.EnableDDGI = true;
+            pvt.DDGIGridX = static_cast<uint32_t>(preset.Dims.x);
+            pvt.DDGIGridY = static_cast<uint32_t>(preset.Dims.y);
+            pvt.DDGIGridZ = static_cast<uint32_t>(preset.Dims.z);
+            auto pTargets = std::make_shared<RHIViewTargets>();
+            RENDER_CHECK(pTargets->Configure(pvt) && pTargets->Validate(), "M15-U7-07.3: preset view targets init");
+
+            nri::MemoryDesc irradMem{}, distMem{};
+            RENDER_CHECK(pTargets->GetDDGI() && pTargets->GetDDGIDistance(), "M15-U7-07.3: live DDGI atlases");
+            device.GetNRICore().GetTextureMemoryDesc(*pTargets->GetDDGI()->GetNative(), nri::MemoryLocation::DEVICE, irradMem);
+            device.GetNRICore().GetTextureMemoryDesc(*pTargets->GetDDGIDistance()->GetNative(), nri::MemoryLocation::DEVICE, distMem);
+            const uint64_t liveAtlasBytes = irradMem.size + distMem.size;
+            RENDER_CHECK(liveAtlasBytes >= budget.IrradianceBytes + budget.DistanceBytes &&
+                         liveAtlasBytes <= DDGIContract::MaxAtlasBudgetBytes,
+                "M15-U7-07.3: live atlas VRAM reconciles with <=64 MiB cap");
+
+            double seedMs = 0.0, sumCap = 0.0, sumUpd = 0.0, sumTotal = 0.0;
+            uint32_t measuredFrames = 0u;
+            constexpr int kWarmup = 4;
+            constexpr int kSamples = 6;
+            RHICompletionToken priorFrame{};
+            for (int f = 0; f <= kWarmup + kSamples; ++f) {
+                renderer.RenderWorldView(perfWorld, camReceiver, &perfColor, &perfDepth, perfSettings, nullptr, pTargets);
+                RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle(), "M15-U7-07.3: perf frame render");
+                const auto& timing = renderer.GetLastGPUTimingFrame();
+                auto findPass = [&](const char* name, double& outMs) {
+                    for (const auto& pass : timing.Passes) {
+                        if (pass.Name == name) {
+                            outMs = pass.Milliseconds;
+                            return pass.Validity != DiagnosticValidity::Invalid && std::isfinite(pass.Milliseconds);
+                        }
+                    }
+                    return false;
+                };
+                if (f == 1) {
+                    double tSeedCap = 0.0, tSeed = 0.0, tSeedUpd = 0.0;
+                    RENDER_CHECK(timing.Completion == priorFrame && timing.Validity == DiagnosticValidity::Valid &&
+                                 findPass("DDGICapture", tSeedCap) && findPass("DDGISeed", tSeed) &&
+                                 findPass("DDGIUpdate", tSeedUpd),
+                        "M15-U7-07.3: ResetSeed GPU timestamps belong cleanly to Frame 0");
+                    seedMs = tSeed;
+                } else if (f > kWarmup) {
+                    double tCap = 0.0, tUpd = 0.0;
+                    RENDER_CHECK(timing.Completion == priorFrame && timing.Validity == DiagnosticValidity::Valid &&
+                                 findPass("DDGICapture", tCap) && findPass("DDGIUpdate", tUpd),
+                        "M15-U7-07.3: steady-state DDGI GPU timestamps match preceding frame");
+                    sumCap += tCap;
+                    sumUpd += tUpd;
+                    sumTotal += timing.Milliseconds;
+                    ++measuredFrames;
+                }
+                priorFrame = renderer.GetLastCompletion();
+            }
+            RENDER_CHECK(measuredFrames == kSamples, "M15-U7-07.3: full 6-sample measurement count");
+
+            nri::MemoryDesc capColorMem{}, capDepthMem{};
+            RENDER_CHECK(renderer.GetDDGICaptureColor().IsValid() && renderer.GetDDGICaptureDepth().IsValid(),
+                "M15-U7-07.3: live capture scratch targets valid");
+            device.GetNRICore().GetTextureMemoryDesc(*renderer.GetDDGICaptureColor().GetNative(), nri::MemoryLocation::DEVICE, capColorMem);
+            device.GetNRICore().GetTextureMemoryDesc(*renderer.GetDDGICaptureDepth().GetNative(), nri::MemoryLocation::DEVICE, capDepthMem);
+            const uint64_t liveScratchBytes = capColorMem.size + capDepthMem.size;
+            const uint64_t totalLiveBytes = liveAtlasBytes + liveScratchBytes;
+            RENDER_CHECK(totalLiveBytes <= DDGIContract::MaxAtlasBudgetBytes,
+                "M15-U7-07.3: combined atlas + scratch VRAM stays under 64 MiB cap");
+
+            const double avgCap = sumCap / measuredFrames;
+            const double avgUpd = sumUpd / measuredFrames;
+            const double avgTotal = sumTotal / measuredFrames;
+            scorecard << std::fixed << std::setprecision(4)
+                      << "preset=" << preset.Name
+                      << " probes=" << pExtent.ProbeCount
+                      << " irrad=" << pExtent.IrradianceWidth << "x" << pExtent.IrradianceHeight
+                      << " dist=" << pExtent.DistanceWidth << "x" << pExtent.DistanceHeight
+                      << " atlas_logical_bytes=" << (budget.IrradianceBytes + budget.DistanceBytes)
+                      << " atlas_device_bytes=" << liveAtlasBytes
+                      << " scratch_device_bytes=" << liveScratchBytes
+                      << " total_device_mib=" << (static_cast<double>(totalLiveBytes) / (1024.0 * 1024.0))
+                      << " timing_samples=" << measuredFrames
+                      << " ddgi_seed_ms=" << seedMs
+                      << " ddgi_capture_ms=" << avgCap
+                      << " ddgi_update_ms=" << avgUpd
+                      << " ddgi_steady_sum_ms=" << (avgCap + avgUpd)
+                      << " frame_total_ms=" << avgTotal << "\n";
+        }
+        scorecard.close();
+        RENDER_CHECK(scorecard.good(), "M15-U7-07.3: scorecard written cleanly");
+    }
+
     std::cout << "[M15DDGI] PASS: world-space probe capture ("
               << "p0_red=(" << p0Irrad.MeanIrrad.r << "," << p0Irrad.MeanIrrad.g << "), "
               << "p0_dist_min=" << p0Dist.MinMean << ", "
@@ -483,5 +928,5 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path&) {
               << "trapped_backface=" << p1Dist.MeanBackfaceRatio << ", "
               << "p0_green=(" << p0Green.MeanIrrad.r << "," << p0Green.MeanIrrad.g << "), "
               << "fwd_bounce=(" << bounceSteady.r << "," << bounceSteady.g << "," << bounceSteady.b << "))\n";
-    return true;
+    return device.WaitIdle() && GetRHIValidationErrorCount() == 0;
 }

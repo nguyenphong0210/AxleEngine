@@ -389,6 +389,8 @@ namespace Axle {
         nri::DescriptorSet* GetForwardFogFallbackDescriptorSet() const { return m_ForwardFogFallbackDescriptorSet; }
         const RHI::RHIBuffer& GetDisabledFogConstantBuffer() const { return m_DisabledFogConstantBuffer; }
         const RHI::RHIBuffer& GetDisabledDDGIConstantBuffer() const { return m_DisabledDDGIConstantBuffer; }
+        const RHI::RHITexture& GetDDGICaptureColor() const { return m_DDGICaptureColor; }
+        const RHI::RHITexture& GetDDGICaptureDepth() const { return m_DDGICaptureDepth; }
         RHI::RHIMultiLightBuffer& GetLightBuffer() { return m_LightBuffer; }
         const RHI::RHIMultiLightBuffer& GetLightBuffer() const { return m_LightBuffer; }
 

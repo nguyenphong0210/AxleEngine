@@ -651,6 +651,15 @@ namespace Axle {
         if (!m_DDGIDescriptorPool.UpdateSampler(m_DDGITextureSet, 1, 0, m_DDGISampler.GetNative())) return false;
         if (!m_DDGIConstantBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIDDGIConstants), RHIMemoryLocation::HostUpload, "DDGIConstantsBuffer"))) return false;
 
+        // Initialize Screen-Space Motion Vectors Resources
+        if (!CompileVelocityShaders(device) || !CreateVelocityPipelineLayout(device) || !CreateVelocityPipeline(device)) return false;
+        if (!m_DefaultVelocityMaterialBuffer.Init(RHIBufferDesc::Constant(sizeof(RHIMaterialConstants), RHIMemoryLocation::HostUpload, "VelocityDefaultMaterial"))) return false;
+        {
+            RHIMaterialConstants defaultVelMat{};
+            defaultVelMat.Reserved[3] = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f);
+            if (!m_DefaultVelocityMaterialBuffer.UpdateData(&defaultVelMat, sizeof(defaultVelMat))) return false;
+        }
+
         // Initialize Temporal Anti-Aliasing (TAA) Resources
         if (!CompileTAAShaders(device) || !CreateTAAPipelineLayout(device) || !CreateTAAPipeline(device)) return false;
 
@@ -940,6 +949,12 @@ namespace Axle {
         m_DDGIStorageSet = nullptr;
         m_DDGIDescriptorPool.Shutdown();
         m_DDGISampler.Shutdown();
+
+        m_VelocityBgPipeline = nullptr;
+        m_VelocityBgPipelineLayout.Shutdown();
+        m_VelocityMeshPipelineLayout.Shutdown();
+        m_DefaultVelocityMaterialBuffer.Shutdown();
+        m_TAADepthSource = nullptr;
 
         m_TAAPipelineSDR = nullptr;
         m_TAAPipelineHDR = nullptr;
@@ -3531,6 +3546,140 @@ namespace Axle {
         return m_DDGISeedPipeline != nullptr &&
                m_DDGIIrradiancePipeline != nullptr &&
                m_DDGIDistancePipeline != nullptr;
+    }
+
+    bool RHISceneRenderer::CompileVelocityShaders(RHIDevice& device) {
+        auto& compiler = RHIShaderCompiler::Get();
+        auto shaderPath = FindShaderPath("Velocity.hlsl");
+        if (shaderPath.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to locate Velocity.hlsl!");
+            return false;
+        }
+        std::ifstream file(shaderPath);
+        std::stringstream ss;
+        ss << file.rdbuf();
+        const auto source = ss.str();
+        if (source.empty()) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to read Velocity.hlsl!");
+            return false;
+        }
+        const RHIShaderFormat format = (device.GetCapabilities().ActiveBackend == RHIType::Vulkan)
+            ? RHIShaderFormat::SPIRV : RHIShaderFormat::DXIL;
+        auto compileEntry = [&](const char* entry, RHIShaderStage stage, RHI::RHIShaderBytecode& outBytecode) -> bool {
+            RHIShaderCompileDesc desc;
+            desc.SourcePath = shaderPath.string();
+            desc.Source = source;
+            desc.EntryPoint = entry;
+            desc.Stage = stage;
+            desc.HLSLVersion = "2021";
+            desc.ShaderModel = "6_0";
+            desc.Format = format;
+            desc.Optimization = true;
+            const auto res = compiler.Compile(desc);
+            if (!res.Success) {
+                AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile Velocity '{0}': {1}", entry, res.ErrorMessage);
+                return false;
+            }
+            outBytecode = res.Bytecode;
+            return true;
+        };
+        return compileEntry("VSBackground", RHIShaderStage::Vertex, m_VelocityBgVertexShader) &&
+               compileEntry("PSBackground", RHIShaderStage::Fragment, m_VelocityBgPixelShader) &&
+               compileEntry("VSMesh", RHIShaderStage::Vertex, m_VelocityMeshVertexShader) &&
+               compileEntry("PSMesh", RHIShaderStage::Fragment, m_VelocityMeshPixelShader);
+    }
+
+    bool RHISceneRenderer::CreateVelocityPipelineLayout(RHIDevice& device) {
+        nri::RootDescriptorDesc bgRoot = {};
+        bgRoot.registerIndex = 1;
+        bgRoot.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        bgRoot.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+
+        nri::PipelineLayoutDesc bgLayoutDesc = {};
+        bgLayoutDesc.rootRegisterSpace = 0;
+        bgLayoutDesc.rootDescriptors = &bgRoot;
+        bgLayoutDesc.rootDescriptorNum = 1;
+        bgLayoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+        if (!m_VelocityBgPipelineLayout.Init(bgLayoutDesc)) return false;
+
+        nri::RootConstantDesc meshRootConst = {};
+        meshRootConst.registerIndex = 0;
+        meshRootConst.size = sizeof(RHIVelocityObjectConstants);
+        meshRootConst.shaderStages = nri::StageBits::VERTEX_SHADER;
+
+        nri::RootDescriptorDesc meshRootCBVs[2] = {};
+        meshRootCBVs[0].registerIndex = 1;
+        meshRootCBVs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        meshRootCBVs[0].shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+        meshRootCBVs[1].registerIndex = 3;
+        meshRootCBVs[1].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        meshRootCBVs[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
+        nri::RootSamplerDesc meshSampler = {};
+        meshSampler.registerIndex = 0;
+        meshSampler.desc = RHISamplerDesc::Anisotropic16x().ToNRIDesc();
+        meshSampler.shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
+        nri::DescriptorRangeDesc meshRange = {};
+        meshRange.baseRegisterIndex = 0;
+        meshRange.descriptorNum = ForwardTextureCount;
+        meshRange.descriptorType = nri::DescriptorType::TEXTURE;
+        meshRange.shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        meshRange.flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
+        nri::DescriptorSetDesc meshSet = {};
+        meshSet.registerSpace = 1;
+        meshSet.ranges = &meshRange;
+        meshSet.rangeNum = 1;
+
+        nri::PipelineLayoutDesc meshLayoutDesc = {};
+        meshLayoutDesc.rootRegisterSpace = 0;
+        meshLayoutDesc.rootConstants = &meshRootConst;
+        meshLayoutDesc.rootConstantNum = 1;
+        meshLayoutDesc.rootDescriptors = meshRootCBVs;
+        meshLayoutDesc.rootDescriptorNum = 2;
+        meshLayoutDesc.rootSamplers = &meshSampler;
+        meshLayoutDesc.rootSamplerNum = 1;
+        meshLayoutDesc.descriptorSets = &meshSet;
+        meshLayoutDesc.descriptorSetNum = 1;
+        meshLayoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
+        return m_VelocityMeshPipelineLayout.Init(meshLayoutDesc);
+    }
+
+    bool RHISceneRenderer::CreateVelocityPipeline(RHIDevice& device) {
+        RHIGraphicsPipelineDesc bgDesc;
+        bgDesc.Layout = &m_VelocityBgPipelineLayout;
+        bgDesc.Shaders = { m_VelocityBgVertexShader, m_VelocityBgPixelShader };
+        bgDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        bgDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        bgDesc.Rasterizer.FrontCounterClockwise = false;
+        bgDesc.DepthStencil.DepthTestEnable = false;
+        bgDesc.DepthStencil.DepthWriteEnable = false;
+        bgDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+        bgDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        bgDesc.ColorAttachmentFormats = { nri::Format::RG16_SFLOAT };
+        bgDesc.VertexInput = RHIVertexInputDesc{};
+        m_VelocityBgPipeline = RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(bgDesc);
+        return m_VelocityBgPipeline != nullptr &&
+               GetOrCreateVelocityMeshPipeline(nri::Format::D32_SFLOAT, Axle::CullMode::None, false) != nullptr;
+    }
+
+    nri::Pipeline* RHISceneRenderer::GetOrCreateVelocityMeshPipeline(nri::Format depthFormat, Axle::CullMode cull, bool reverseWinding) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_VelocityMeshPipelineLayout;
+        gfxDesc.Shaders = { m_VelocityMeshVertexShader, m_VelocityMeshPixelShader };
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = cull == CullMode::Back ? nri::CullMode::BACK : (cull == CullMode::Front ? nri::CullMode::FRONT : nri::CullMode::NONE);
+        gfxDesc.Rasterizer.FrontCounterClockwise = !reverseWinding;
+        gfxDesc.DepthStencil.DepthTestEnable = true;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS_EQUAL;
+        gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { nri::Format::RG16_SFLOAT };
+        gfxDesc.SampleCount = 1;
+        gfxDesc.VertexInput = VertexLayoutContract::GetCanonicalVertexInputDesc();
+        return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
     }
 
     bool RHISceneRenderer::CompileTAAShaders(RHIDevice& device) {
@@ -6650,7 +6799,10 @@ namespace Axle {
         targetDesc.DDGIGridZ = ddgiDims[2];
         targetDesc.EnableVolumetricFog = enableFroxelTargets;
         targetDesc.FroxelQuality = froxelQuality;
-        if (settings.EnableTAA) targetDesc.HistoryCount = 2;
+        if (settings.EnableTAA) {
+            targetDesc.HistoryCount = 2;
+            targetDesc.EnableVelocity = (activeSampleCount == 1);
+        }
 
         if (!world.ErrorMessage.empty()) {
             AXLE_CORE_ERROR("View frame acquisition failed");
@@ -6660,6 +6812,7 @@ namespace Axle {
             auto expected = targetDesc;
             expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
             expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
+            expected.EnableVelocity = viewTargets->GetDesc().EnableVelocity;
             if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
                 (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||
                 (viewTargets->Get(RHIViewTarget::Depth) && viewTargets->Get(RHIViewTarget::Depth)->GetNative() != depthTarget)) {
@@ -6696,7 +6849,9 @@ namespace Axle {
         viewInput.Camera = camera;
         viewInput.Settings = settings;
         viewInput.Targets = viewTargets;
-        viewInput.FeatureGeneration = HashViewFeaturePolicy(settings);
+        viewInput.FeatureGeneration = HashViewFeaturePolicy(settings) ^
+            (static_cast<uint64_t>(m_CurrentColorFormat) * 0x9e3779b97f4a7c15ull) ^
+            (static_cast<uint64_t>(m_CurrentDepthFormat) * 0xbf58476d1ce4e5b9ull);
         viewInput.SceneRevision = world.ViewSceneRevision.value_or(world.SceneRevision);
         viewInput.SceneInstanceID = world.SceneInstanceID;
         viewInput.CameraCut = cameraCut;
@@ -6790,7 +6945,9 @@ namespace Axle {
             jitterY = (s_Halton3[viewCtx.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(height) * settings.TAAJitterSpread;
         }
         viewCtx.SetJitter({ jitterX, jitterY });
-        glm::mat4 projZO = camera.GetProjectionMatrixZO();
+        const glm::mat4 unjitteredProjZO = camera.GetProjectionMatrixZO();
+        const glm::mat4 unjitteredViewProjZO = unjitteredProjZO * camera.GetViewMatrix();
+        glm::mat4 projZO = unjitteredProjZO;
         if (settings.EnableTAA) {
             projZO[2][0] += 2.0f * jitterX;
             projZO[2][1] += 2.0f * jitterY;
@@ -6823,7 +6980,7 @@ namespace Axle {
             colorTarget, colorRTV, useMSAA, useToneMap, useFXAA,
             activeSampleCount, sceneTargetTexture, sceneTargetRTV, sceneDepthTexture,
             sceneDepthDSV, sceneTargetFormat, activePipeline,
-            projZO, viewProjZO, giFrame, {passCapabilities.NativeRHI, passCapabilities.Compute,
+            projZO, viewProjZO, unjitteredViewProjZO, giFrame, {passCapabilities.NativeRHI, passCapabilities.Compute,
                 passCapabilities.StorageTextures, passCapabilities.Timestamps, passCapabilities.RayTracing}
         });
     }

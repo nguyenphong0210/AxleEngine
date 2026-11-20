@@ -40,13 +40,22 @@ namespace Axle::Passes {
                 {r.SceneColor, Layout::ColorAttachment, Access::Write, Load::Clear}});
         }
         if (r.UseTAA) {
-            const auto source = r.UseToneMap ? r.HDR : r.SceneColor;
+            if (!r.UseToneMap) {
+                graph.AddPass("TAASourceCopy", {
+                    {r.SceneColor, Layout::CopySource},
+                    {r.TAAColor, Layout::CopyDest, Access::Write}});
+            }
+            graph.AddPass("TAADepthCopy", {
+                {r.SceneDepth, Layout::CopySource},
+                {r.TAADepth, Layout::CopyDest, Access::Write}});
+            const auto source = r.UseToneMap ? r.HDR : r.TAAColor;
             graph.AddPass("TAAResolve", {
-                {source, Layout::ShaderResource}, {r.SceneDepth, Layout::ShaderResource},
+                {source, Layout::ShaderResource}, {r.TAADepth, Layout::ShaderResource},
                 {r.TAAHistoryRead, Layout::ShaderResource},
                 {r.TAAHistoryWrite, Layout::ColorAttachment, Access::Write, Load::Clear}});
             graph.AddPass("TAACopy", {
-                {r.TAAHistoryWrite, Layout::CopySource}, {source, Layout::CopyDest, Access::Write}});
+                {r.TAAHistoryWrite, Layout::CopySource},
+                {r.UseToneMap ? r.HDR : r.SceneColor, Layout::CopyDest, Access::Write}});
         }
         if (r.UseToneMap) {
             if (r.UseAutoExposure) graph.AddPass("ToneMapping", {
@@ -292,6 +301,13 @@ namespace Axle::Passes {
 
             // 7d. Temporal Anti-Aliasing (TAA) Pass
             if (useTAA && historyRead && historyWrite) {
+                if (!useToneMap) {
+                    if (!beginPass("TAASourceCopy")) return false;
+                    renderer.Commands().CopyTexture(*renderer.m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
+                }
+                if (!beginPass("TAADepthCopy")) return false;
+                renderer.Commands().CopyTexture(*renderer.m_OpaqueSceneDepth->GetNative(), nullptr, *renderer.m_TAADepthSource, nullptr);
+
                 if (!beginPass("TAAResolve")) return false;
                 RHITAAConstants taaConstants{};
                 taaConstants.InvViewProj = glm::inverse(viewProjZO);
@@ -302,7 +318,7 @@ namespace Axle::Passes {
                 taaConstants.Reserved[0].x = temporalSelection.HistoryValid ? 1.0f : 0.0f;
                 if (!passUniform().UpdateData(&taaConstants, sizeof(RHITAAConstants))) return false;
 
-                nri::Descriptor* currentSRV = renderer.m_IntermediateHDRTarget ? renderer.m_IntermediateHDRTarget->GetSRV() : renderer.m_OpaqueSceneColor->GetSRV();
+                nri::Descriptor* currentSRV = (useToneMap && renderer.m_IntermediateHDRTarget) ? renderer.m_IntermediateHDRTarget->GetSRV() : renderer.m_OpaqueSceneColor->GetSRV();
                 nri::Descriptor* depthSRV = renderer.m_OpaqueSceneDepth->GetSRV();
                 if (!renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 0, 0, currentSRV) ||
                     !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 1, 0, depthSRV) ||

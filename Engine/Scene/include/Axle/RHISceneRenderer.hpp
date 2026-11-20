@@ -212,6 +212,22 @@ namespace Axle {
     };
     static_assert(sizeof(RHITAAConstants) == 256, "RHITAAConstants must be 256 bytes aligned!");
 
+    struct alignas(256) RHIVelocitySceneConstants {
+        glm::mat4 CurrJitteredVP{ 1.0f };
+        glm::mat4 CurrUnjitteredVP{ 1.0f };
+        glm::mat4 PrevUnjitteredVP{ 1.0f };
+        glm::mat4 InvCurrUnjitteredVP{ 1.0f };
+        glm::vec4 VelocityParams{ 0.0f, 1.0f, 1.0f, 0.0f }; // x: historyValid, y: width, z: height
+        glm::vec4 Reserved[15]{};
+    };
+    static_assert(sizeof(RHIVelocitySceneConstants) == 512, "RHIVelocitySceneConstants must be 512 bytes aligned!");
+
+    struct alignas(16) RHIVelocityObjectConstants {
+        glm::mat4 CurrModel{ 1.0f };
+        glm::mat4 PrevModel{ 1.0f };
+    };
+    static_assert(sizeof(RHIVelocityObjectConstants) == 128, "RHIVelocityObjectConstants must be 128 bytes aligned!");
+
     // 256-byte CBV aligned constants for dynamic reflection cubemap orientation pass
     struct alignas(256) RHICubemapCaptureConstants {
         glm::uvec4 Params{ 128u, 1u, 0u, 0u }; // x: Resolution, y: FlipHorizontal (1/0), z: FaceIndex, w: Reserved
@@ -575,6 +591,12 @@ namespace Axle {
         bool CreateDDGIPipelineLayout(RHI::RHIDevice& device);
         bool CreateDDGIPipeline(RHI::RHIDevice& device);
         nri::Pipeline* GetOrCreateDDGICapturePipeline();
+
+        // Screen-Space Motion Vectors Pass (M15-U8-C)
+        bool CompileVelocityShaders(RHI::RHIDevice& device);
+        bool CreateVelocityPipelineLayout(RHI::RHIDevice& device);
+        bool CreateVelocityPipeline(RHI::RHIDevice& device);
+        nri::Pipeline* GetOrCreateVelocityMeshPipeline(nri::Format depthFormat, Axle::CullMode cull, bool reverseWinding);
 
         // Temporal Anti-Aliasing (TAA) Pass
         bool CompileTAAShaders(RHI::RHIDevice& device);
@@ -1143,6 +1165,17 @@ namespace Axle {
         nri::DescriptorSet* m_DDGITextureSet = nullptr;
         nri::DescriptorSet* m_DDGIStorageSet = nullptr;
         nri::DescriptorSet* m_DDGICaptureOcclusionSet = nullptr;
+
+        // Motion Vectors (Velocity) Pass Resources
+        RHI::RHIPipelineLayout m_VelocityBgPipelineLayout;
+        RHI::RHIPipelineLayout m_VelocityMeshPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_VelocityBgPipeline;
+        RHI::RHIShaderBytecode m_VelocityBgVertexShader;
+        RHI::RHIShaderBytecode m_VelocityBgPixelShader;
+        RHI::RHIShaderBytecode m_VelocityMeshVertexShader;
+        RHI::RHIShaderBytecode m_VelocityMeshPixelShader;
+        RHI::RHIBuffer m_DefaultVelocityMaterialBuffer;
+        nri::Texture* m_TAADepthSource = nullptr;
 
         // Temporal Anti-Aliasing (TAA) Resources
         RHI::RHIPipelineLayout m_TAAPipelineLayout;

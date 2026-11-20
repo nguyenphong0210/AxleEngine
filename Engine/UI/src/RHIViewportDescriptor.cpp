@@ -41,6 +41,7 @@ namespace Axle {
         targets.EnableGTAO = desc.EnableGTAO;
         targets.EnableAutoExposure = desc.EnableAutoExposure;
         targets.EnableDDGI = desc.EnableDDGI;
+        targets.EnableVelocity = desc.EnableVelocity;
         targets.DDGIGridX = desc.DDGIGridX;
         targets.DDGIGridY = desc.DDGIGridY;
         targets.DDGIGridZ = desc.DDGIGridZ;
@@ -163,6 +164,7 @@ namespace Axle {
             : 0.5f;
         desc.FXAA = settings.EnableFXAA;
         desc.HistoryCount = settings.EnableTAA ? 2 : 0;
+        desc.EnableVelocity = settings.EnableTAA && settings.MSAASamples == 1;
         desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
         desc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
         desc.EnableBloom = settings.EnableBloom;

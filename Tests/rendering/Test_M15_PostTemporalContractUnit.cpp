@@ -242,6 +242,112 @@ bool RunM15PostTemporalContractUnitTests() {
             "PostProcessPass preserves finer Bloom mips via additive LoadOp::LOAD and constant radius");
     }
 
-    std::cout << "[M15U8Contract] All M15 U8 Batch A & B contract tests passed.\n";
+    // 7. M15-U8-11 & 13 (Batch C): Motion Vector, PrevWorldTransform Cache, Jitter Cancellation & 5 Resets
+    {
+        RENDER_CHECK(MotionVectorContract::VerifyCameraAndObjectMotionVectors() &&
+                     MotionVectorContract::VerifyJitterCancellationConsistency(),
+            "MotionVectorContract verifies camera pan, object translation, history UV reconstruction and jitter cancellation");
+
+        ViewContext ctx;
+        auto targetsA = std::make_shared<RHI::RHIViewTargets>();
+        auto targetsB = std::make_shared<RHI::RHIViewTargets>();
+        ViewContextInput inA{};
+        inA.Kind = RenderViewKind::Main;
+        inA.Targets = targetsA;
+        inA.Width = 128;
+        inA.Height = 128;
+        inA.SceneRevision = 10;
+        inA.SceneInstanceID = 1;
+        inA.Settings.EnableTAA = true;
+        inA.FeatureGeneration = HashViewFeaturePolicy(inA.Settings);
+
+        ViewContextInput inB = inA;
+        inB.Targets = targetsB;
+
+        const glm::mat4 mA1 = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        const glm::mat4 mB1 = glm::translate(glm::mat4(1.0f), glm::vec3(-5.0f, 0.0f, 0.0f));
+        ctx.Observe(inA, 1);
+        RENDER_CHECK(!ctx.Temporal().IsHistoryValid() && !ctx.FindPreviousObjectTransform(1u, UUID(101u)).has_value(),
+            "initial frame starts with invalid temporal history and empty object transform cache");
+        ctx.Temporal().Commit(glm::mat4(1.0f), true, glm::mat4(1.0f));
+        ctx.CommitTemporalObjectTransforms({ {MakeTemporalObjectKey(1u, UUID(101u)), mA1} }, true);
+
+        // First-spawn object returns nullopt cleanly; matching StableUUID with changed EntityID matches!
+        RENDER_CHECK(!ctx.FindPreviousObjectTransform(2u, UUID(202u)).has_value(),
+            "first-spawn object returns empty previous transform without garbage");
+        const auto foundReassigned = ctx.FindPreviousObjectTransform(99u, UUID(101u));
+        RENDER_CHECK(foundReassigned.has_value() && std::abs((*foundReassigned)[3][0] - 1.0f) < 1e-6f,
+            "StableUUID keeps previous transform identity even if EntityID changes");
+
+        // Interleaved view switch -> separate view resets current temporal selection
+        ctx.Observe(inB, 1);
+        RENDER_CHECK(!ctx.Temporal().IsHistoryValid() && !ctx.FindPreviousObjectTransform(1u, UUID(101u)).has_value(),
+            "switching to separate view invalidates active temporal history");
+        ctx.Temporal().Commit(glm::mat4(1.0f), true, glm::mat4(1.0f));
+        ctx.CommitTemporalObjectTransforms({ {MakeTemporalObjectKey(1u, UUID(101u)), mB1} }, true);
+
+        // Establish steady history on A again, then verify ALL 5 TAA reset triggers (M15-U8-13.5):
+        auto establishA = [&]() {
+            ctx.Observe(inA, 1);
+            ctx.Temporal().Commit(glm::mat4(1.0f), true, glm::mat4(1.0f));
+            ctx.CommitTemporalObjectTransforms({ {MakeTemporalObjectKey(1u, UUID(101u)), mA1} }, true);
+        };
+        establishA();
+        RENDER_CHECK(ctx.Temporal().IsHistoryValid() && ctx.GetCachedTemporalObjectCount() == 1u,
+            "committed frame makes TAA history and object transform cache valid");
+
+        // (1) Resize
+        inA.Width = 256;
+        ctx.Observe(inA, 1);
+        RENDER_CHECK(!ctx.Temporal().IsHistoryValid() && ctx.GetCachedTemporalObjectCount() == 0u,
+            "Resize reset invalidates TAA history and object transform cache");
+        establishA();
+
+        // (2) ViewSwitch
+        inA.Kind = RenderViewKind::AssetPreview;
+        ctx.Observe(inA, 1);
+        RENDER_CHECK(!ctx.Temporal().IsHistoryValid() && ctx.GetCachedTemporalObjectCount() == 0u,
+            "ViewSwitch reset invalidates TAA history and object transform cache");
+        inA.Kind = RenderViewKind::Main;
+        establishA();
+
+        // (3) CameraCut
+        inA.CameraCut = true;
+        ctx.Observe(inA, 1);
+        RENDER_CHECK(!ctx.Temporal().IsHistoryValid() && ctx.GetCachedTemporalObjectCount() == 0u,
+            "CameraCut reset invalidates TAA history and object transform cache");
+        inA.CameraCut = false;
+        establishA();
+
+        // (4) Settings / Format policy change
+        inA.Settings.EnableTAA = false;
+        inA.FeatureGeneration = HashViewFeaturePolicy(inA.Settings);
+        ctx.Observe(inA, 1);
+        RENDER_CHECK(!ctx.Temporal().IsHistoryValid(),
+            "Settings toggle (EnableTAA off) invalidates TAA history");
+        inA.Settings.EnableTAA = true;
+        inA.FeatureGeneration = HashViewFeaturePolicy(inA.Settings);
+        ctx.Observe(inA, 1);
+        RENDER_CHECK(!ctx.Temporal().IsHistoryValid(),
+            "Settings toggle (EnableTAA back on) starts fresh without stale history");
+        establishA();
+
+        // (5) SceneRevision bump
+        ++inA.SceneRevision;
+        ctx.Observe(inA, 1);
+        RENDER_CHECK(!ctx.Temporal().IsHistoryValid() && ctx.GetCachedTemporalObjectCount() == 0u,
+            "SceneRevision change invalidates TAA history and object transform cache");
+
+        const std::string velShader = LoadTextFile(AXLE_VELOCITY_SHADER_PATH);
+        RENDER_CHECK(!velShader.empty() &&
+                     velShader.find("u_CurrJitteredVP") != std::string::npos &&
+                     velShader.find("u_CurrUnjitteredVP") != std::string::npos &&
+                     velShader.find("u_PrevUnjitteredVP") != std::string::npos &&
+                     velShader.find("PSBackground") != std::string::npos &&
+                     velShader.find("PSMesh") != std::string::npos,
+            "Velocity.hlsl outputs jitter-cancelled camera and per-object motion vectors");
+    }
+
+    std::cout << "[M15U8Contract] All M15 U8 Batch A, B & C contract tests passed.\n";
     return true;
 }

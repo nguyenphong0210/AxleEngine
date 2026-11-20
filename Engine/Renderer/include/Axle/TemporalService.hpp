@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <optional>
 
 namespace Axle {
 
@@ -23,7 +24,8 @@ namespace Axle {
         void Reset(uint32_t resetReasonMask = 0xffffffffu);
 
         TemporalHistorySelection Begin(uint8_t historyCount, const glm::vec2& currentJitter = {});
-        void Commit(const glm::mat4& currentViewProjection, bool historyWritten);
+        void Commit(const glm::mat4& currentViewProjection, bool historyWritten,
+                    const std::optional<glm::mat4>& currentUnjitteredViewProjection = std::nullopt);
         void Invalidate() { Reset(); }
         // Late material resolution may invalidate contents after the graph has
         // imported history slots. Preserve those slot identities until commit.
@@ -36,6 +38,7 @@ namespace Axle {
         uint8_t GetWriteSlot() const { return m_WriteSlot; }
         uint64_t GetCommittedFrameCount() const { return m_CommittedFrameCount; }
         const glm::mat4& GetPreviousViewProjection() const { return m_PreviousViewProjection; }
+        const glm::mat4& GetPreviousUnjitteredViewProjection() const { return m_PreviousUnjitteredViewProjection; }
         const glm::vec2& GetPreviousJitter() const { return m_PreviousJitter; }
 
     private:
@@ -47,6 +50,7 @@ namespace Axle {
         glm::vec2 m_CurrentJitter{ 0.0f };
         glm::vec2 m_PreviousJitter{ 0.0f };
         glm::mat4 m_PreviousViewProjection{ 1.0f };
+        glm::mat4 m_PreviousUnjitteredViewProjection{ 1.0f };
         uint64_t m_CommittedFrameCount = 0;
     };
 }

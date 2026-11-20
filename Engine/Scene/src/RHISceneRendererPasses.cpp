@@ -53,6 +53,7 @@ namespace Axle {
 
     struct DrawItem {
         std::shared_ptr<const RHIMeshView> Mesh;
+        UUID StableUUID = 0;
         RHIObjectPushConstants PushConsts;
         Axle::SurfaceType SurfaceType = Axle::SurfaceType::Opaque;
         Axle::CullMode CullMode = Axle::CullMode::None;
@@ -77,7 +78,7 @@ namespace Axle {
             colorTarget, colorRTV, useMSAA, useToneMap, useFXAA,
             activeSampleCount, sceneTargetTexture, sceneTargetRTV, sceneDepthTexture,
             sceneDepthDSV, sceneTargetFormat, activePipeline,
-            projZO, viewProjZO, giFrame, capabilities
+            projZO, viewProjZO, unjitteredViewProjZO, giFrame, capabilities
         ] = inputs;
         // The ViewContext has observed the final target generation and jitter
         // before this call. Every scheduled pass reads that same view snapshot.
@@ -291,17 +292,30 @@ namespace Axle {
         const auto exposureHistogram = useAutoExposure ? graph.Import("ExposureHistogram", m_AutoExposureHistogram.GetNative()) : output;
         const auto exposureOutput = useAutoExposure ? graph.Import("ExposureOutput", viewTargets->GetExposure()->GetNative()) : output;
 
+        RHITexture* velocityTex = viewTargets ? viewTargets->GetVelocity() : nullptr;
+        const bool useVelocity = (settings.EnableTAA || (viewTargets && viewTargets->GetDesc().EnableVelocity)) &&
+            activeSampleCount == 1 && !captureActive && !planarActive && sceneDepthTexture && sceneDepthDSV &&
+            m_VelocityBgPipeline && m_VelocityMeshVertexShader.IsValid() && m_VelocityMeshPixelShader.IsValid() &&
+            m_DefaultVelocityMaterialBuffer.IsValid() &&
+            velocityTex && velocityTex->IsValid() && velocityTex->GetRTV() && velocityTex->GetSRV();
+        const auto velocityTarget = useVelocity ? graph.Import("Velocity", velocityTex->GetNative()) : output;
+
         RHITexture* history0 = viewTargets ? viewTargets->Get(RHIViewTarget::History0) : nullptr;
         RHITexture* history1 = viewTargets ? viewTargets->Get(RHIViewTarget::History1) : nullptr;
         RHITexture* historyRead = nullptr;
         RHITexture* historyWrite = nullptr;
         const bool useTAA = settings.EnableTAA && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
+            m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
+            m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
             m_TAAPipelineSDR && history0 && history0->IsValid() && history1 && history1->IsValid();
+        m_TAADepthSource = sceneDepthTexture;
         auto temporalSelection = viewCtx.Temporal().Begin(useTAA ? 2 : 0, { jitterX, jitterY });
         historyRead = (temporalSelection.ReadSlot == 0) ? history0 : history1;
         historyWrite = (temporalSelection.WriteSlot == 0) ? history0 : history1;
         // The first frame deliberately reads an uninitialized slot but the
         // shader bypasses it through the explicit HistoryValid flag below.
+        const auto taaColor = useTAA ? graph.Import("TAAColor", m_OpaqueSceneColor->GetNative()) : output;
+        const auto taaDepth = useTAA ? graph.Import("TAADepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto taaHistoryRead = useTAA ? graph.Import("TAAHistoryRead", historyRead->GetNative(), true) : output;
         const auto taaHistoryWrite = useTAA ? graph.Import("TAAHistoryWrite", historyWrite->GetNative()) : output;
         auto attachments = [&](Load load) {
@@ -583,8 +597,18 @@ namespace Axle {
         return true;
         };
 
-        auto populateBuiltinMaterialResource = [&](ResolvedSurface& surface, MaterialDrawResources& resource, bool refractionReady) -> bool {
+        auto populateBuiltinMaterialResource = [&](ResolvedSurface& surface, MaterialDrawResources& resource, bool refractionReady,
+                                                   const RHIObjectPushConstants* cutoutParams = nullptr) -> bool {
             RHIMaterialConstants materialData = surface.ToMaterialConstants();
+            if (cutoutParams) {
+                materialData.Reserved[2] = glm::vec4(cutoutParams->MaterialExtra.x, cutoutParams->MaterialExtra.y, 0.0f, 0.0f);
+                materialData.Reserved[3] = glm::vec4(cutoutParams->ColorPrimary.a, cutoutParams->MaterialExtra.z,
+                                                     cutoutParams->MaterialExtra.w, cutoutParams->Params.x);
+            } else {
+                materialData.Reserved[2] = glm::vec4(0.0f);
+                materialData.Reserved[3] = glm::vec4(surface.BaseColor.a, surface.AlphaCutoff,
+                                                     static_cast<float>(surface.Surface), 1.0f);
+            }
             std::vector<nri::Descriptor*> srvs(ForwardTextureCount);
             for (uint32_t slot = 0; slot < static_cast<uint32_t>(RHITextureSlot::Count); ++slot) {
                 std::shared_ptr<const RHITexture> texture;
@@ -785,7 +809,7 @@ namespace Axle {
                 }
                 item.DrawResourceIndex = static_cast<uint32_t>(materialDrawIndex);
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
-                if (!populateBuiltinMaterialResource(item.Surface, resource, refractionReady)) { drawFailed = true; return; }
+                if (!populateBuiltinMaterialResource(item.Surface, resource, refractionReady, &item.PushConsts)) { drawFailed = true; return; }
                 item.PreparedPipeline = needed;
                 item.PipelineLease = m_Device->GetResources().AcquireNative(needed);
                 if (!item.PipelineLease.IsLive() || !graph.DeclareRead(pass, resource.Constants.GetCBV()) ||
@@ -1197,6 +1221,7 @@ namespace Axle {
                     glm::mat4 worldMat = meshInst.WorldTransform;
                     DrawItem item;
                     item.DiagnosticEntity = entityID;
+                    item.StableUUID = meshInst.StableUUID;
                     item.Mesh = mesh;
                     item.PushConsts.Model = worldMat;
                     item.Surface = MaterialResolver::Resolve(meshInst.Material);
@@ -1562,6 +1587,134 @@ namespace Axle {
 
         if (!useGTAO) registerSurfaceNormal();
 
+        addPass("MotionVectors", [&](const RenderPassContext&) -> RenderPassResult {
+            if (!useVelocity) return {};
+            if (!beginPass("MotionVectors")) return fail();
+
+            RHIVelocitySceneConstants velScene{};
+            velScene.CurrJitteredVP = viewProjZO;
+            velScene.CurrUnjitteredVP = unjitteredViewProjZO;
+            velScene.PrevUnjitteredVP = temporalSelection.HistoryValid
+                ? viewCtx.Temporal().GetPreviousUnjitteredViewProjection()
+                : unjitteredViewProjZO;
+            velScene.InvCurrUnjitteredVP = glm::inverse(unjitteredViewProjZO);
+            velScene.VelocityParams = glm::vec4(
+                temporalSelection.HistoryValid ? 1.0f : 0.0f,
+                static_cast<float>(width),
+                static_cast<float>(height),
+                0.0f);
+            if (!passUniform().UpdateData(&velScene, sizeof(velScene))) return fail();
+
+            nri::AttachmentDesc velBgColorAttachment = {};
+            velBgColorAttachment.descriptor = velocityTex->GetRTV();
+            velBgColorAttachment.loadOp = nri::LoadOp::CLEAR;
+            velBgColorAttachment.storeOp = nri::StoreOp::STORE;
+            velBgColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+            nri::RenderingDesc velBgRendering = {};
+            velBgRendering.colors = &velBgColorAttachment;
+            velBgRendering.colorNum = 1;
+
+            // 1. Background / skybox camera-motion pass across entire target (no depth attachment bound)
+            beginRendering(velBgRendering);
+            Commands().SetViewport(vp);
+            Commands().SetScissor(scissor);
+            Commands().SetPipeline(m_VelocityBgPipeline);
+            Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_VelocityBgPipelineLayout);
+            Commands().SetRootDescriptor(0, passUniform().GetCBV());
+            Commands().Draw(3, 1, 0, 0);
+            ++m_LastDrawCallCount;
+            endRendering();
+
+            // 2. Per-object depth-tested velocity draws using per-view cached PrevWorldTransform
+            bool anyMesh = false;
+            for (const auto& item : opaqueQueue) {
+                if (item.DepthWrite && item.Mesh && item.Mesh->IsValid()) {
+                    anyMesh = true;
+                    break;
+                }
+            }
+            if (anyMesh) {
+                nri::AttachmentDesc velMeshColorAttachment = velBgColorAttachment;
+                velMeshColorAttachment.loadOp = nri::LoadOp::LOAD;
+
+                nri::AttachmentDesc velDepthAttachment = {};
+                velDepthAttachment.descriptor = sceneDepthDSV;
+                velDepthAttachment.loadOp = nri::LoadOp::LOAD;
+                velDepthAttachment.storeOp = nri::StoreOp::STORE;
+
+                nri::RenderingDesc velMeshRendering = {};
+                velMeshRendering.colors = &velMeshColorAttachment;
+                velMeshRendering.colorNum = 1;
+                velMeshRendering.depth = velDepthAttachment;
+
+                beginRendering(velMeshRendering);
+                Commands().SetViewport(vp);
+                Commands().SetScissor(scissor);
+                Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, m_VelocityMeshPipelineLayout);
+                Commands().SetRootDescriptor(0, passUniform().GetCBV());
+                if (m_DescriptorPool.IsValid()) {
+                    m_DescriptorPool.Bind(Commands().GetNative());
+                }
+                for (const auto& item : opaqueQueue) {
+                    if (!item.DepthWrite || !item.Mesh || !item.Mesh->IsValid()) continue;
+                    auto* meshPipeline = GetOrCreateVelocityMeshPipeline(m_CurrentDepthFormat, item.CullMode, reverseWinding);
+                    if (!meshPipeline) { endRendering(); return fail(); }
+                    Commands().SetPipeline(meshPipeline);
+
+                    if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
+                        const auto& res = *m_MaterialDraws[item.DrawResourceIndex];
+                        Commands().SetRootDescriptor(1, res.Constants.GetCBV());
+                        if (!bindDescriptorSet(0, res.Set)) { endRendering(); return fail(); }
+                    } else {
+                        Commands().SetRootDescriptor(1, m_DefaultVelocityMaterialBuffer.GetCBV());
+                        if (m_DefaultDescriptorSet && !bindDescriptorSet(0, m_DefaultDescriptorSet)) { endRendering(); return fail(); }
+                    }
+
+                    RHIVelocityObjectConstants objConsts{};
+                    objConsts.CurrModel = item.PushConsts.Model;
+                    if (temporalSelection.HistoryValid) {
+                        objConsts.PrevModel = viewCtx.FindPreviousObjectTransform(
+                            static_cast<uint32_t>(item.DiagnosticEntity), item.StableUUID)
+                            .value_or(item.PushConsts.Model);
+                    } else {
+                        objConsts.PrevModel = item.PushConsts.Model;
+                    }
+                    Commands().SetRootConstants(0, &objConsts, sizeof(objConsts));
+                    item.Mesh->Bind(Commands());
+                    item.Mesh->Draw(Commands());
+                    m_LastDrawCallCount += static_cast<uint32_t>(item.Mesh->GetSubmeshCount());
+                }
+                endRendering();
+            }
+            return {};
+        }, [&](RenderGraph& graph) {
+            if (useVelocity) {
+                graph.AddPass("MotionVectors", {
+                    {sceneDepth, Layout::DepthStencilWrite, Access::Write, Load::Load},
+                    {velocityTarget, Layout::ColorAttachment, Access::Write, Load::Clear}});
+            }
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (auto res = buildAndPrepareSceneQueues(); !res) return res;
+            if (!useVelocity) return {};
+            if (!uniform("MotionVectors", sizeof(RHIVelocitySceneConstants))) return fail();
+            if (m_DefaultDescriptorSet &&
+                (!graph.DeclareRead("MotionVectors", m_DefaultDescriptorSet) ||
+                 !graph.DeclareRead("MotionVectors", m_DefaultVelocityMaterialBuffer.GetCBV()))) {
+                return fail();
+            }
+            for (const auto& item : opaqueQueue) {
+                if (!item.DepthWrite || !item.Mesh || !item.Mesh->IsValid()) continue;
+                if (!declareMesh("MotionVectors", *item.Mesh)) return fail();
+                if (!item.UseCustomShader && item.DrawResourceIndex < m_MaterialDraws.size()) {
+                    const auto& res = *m_MaterialDraws[item.DrawResourceIndex];
+                    if (!graph.DeclareRead("MotionVectors", res.Constants.GetCBV()) ||
+                        !graph.DeclareRead("MotionVectors", res.Set)) return fail();
+                }
+            }
+            return {};
+        });
+
         addPass("ScreenSpaceReflectionPass", [&](const RenderPassContext&) -> RenderPassResult {
             // 7.6. Screen-Space Reflections with probe fallback (and optional Hi-Z visualization).
             const Passes::PassRecordOps ops{
@@ -1907,7 +2060,8 @@ namespace Axle {
             return {};
         }, [&](RenderGraph& graph) {
             Passes::PostProcessPass::Declare(graph, {sceneColor, sceneDepth, output, hdr, fxaa,
-                bloomInput, exposureInput, exposureHistogram, exposureOutput, taaHistoryRead, taaHistoryWrite,
+                bloomInput, exposureInput, exposureHistogram, exposureOutput,
+                taaColor, taaDepth, taaHistoryRead, taaHistoryWrite,
                 bloomResources, useBloom, useAutoExposure, useTAA, useToneMap, useFXAA});
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useBloom) {
@@ -1930,7 +2084,7 @@ namespace Axle {
                     !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 4, 0, m_TAAPointSampler.GetNative()) ||
                     !uniform("TAAResolve",sizeof(RHITAAConstants)) ||
                     !graph.DeclareRead("TAAResolve",m_TAADescriptorSet) ||
-                    !graph.DeclareRead("TAAResolve",m_IntermediateHDRTarget ? m_IntermediateHDRTarget->GetSRV() : m_OpaqueSceneColor->GetSRV()) ||
+                    !graph.DeclareRead("TAAResolve",(useToneMap && m_IntermediateHDRTarget) ? m_IntermediateHDRTarget->GetSRV() : m_OpaqueSceneColor->GetSRV()) ||
                     !graph.DeclareRead("TAAResolve",m_OpaqueSceneDepth->GetSRV()) ||
                     !graph.DeclareRead("TAAResolve",historyRead->GetSRV())) return fail();
             }
@@ -2042,7 +2196,19 @@ namespace Axle {
         } else if (!giFrame.UpdateScheduled) {
             viewCtx.InvalidateDDGIHistory();
         }
-        viewCtx.Temporal().Commit(viewProjZO, useTAA);
+        std::vector<std::pair<TemporalObjectKey, glm::mat4>> frameObjectTransforms;
+        if (useTAA) {
+            frameObjectTransforms.reserve(world.Meshes.size());
+            for (const auto& meshInst : world.Meshes) {
+                if (meshInst.NativeView && meshInst.NativeView->IsValid()) {
+                    frameObjectTransforms.emplace_back(
+                        MakeTemporalObjectKey(meshInst.EntityID, meshInst.StableUUID),
+                        meshInst.WorldTransform);
+                }
+            }
+        }
+        viewCtx.Temporal().Commit(viewProjZO, useTAA, unjitteredViewProjZO);
+        viewCtx.CommitTemporalObjectTransforms(frameObjectTransforms, useTAA);
         if (!captureActive && !planarActive) {
             if (useAutoExposure) {
                 viewCtx.CommitExposureHistory({true, true});

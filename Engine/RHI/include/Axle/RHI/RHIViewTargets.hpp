@@ -7,7 +7,7 @@
 namespace Axle::RHI {
     enum class RHIViewTarget : uint8_t {
         Color, Depth, MSAAColor, MSAADepth, HDR, FXAA,
-        OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1,
+        OpaqueColor, OpaqueDepth, ParticleDepth, ScreenNormal, ScreenStorage, History0, History1, Velocity,
         GTAO, GTAOResolved, Bloom0, Bloom1, Bloom2, Bloom3, Bloom4, Bloom5, Exposure, DDGI, DDGIDistance,
         HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, ReflectionEnvironment, ReflectionResponse,
         SSRColor0, SSRColor1, SSRColor2, SSRColor3, PlanarColor, PlanarDepth,
@@ -44,7 +44,7 @@ namespace Axle::RHI {
         RHITextureFormat NormalFormat = RHITextureFormat::RGBA16_FLOAT;
         uint8_t Samples = 1, HistoryCount = 0;
         bool EnableDepth = true, HDR = false, FXAA = false, OwnPrimary = true, RenderAuxiliary = true;
-        bool EnableNormal = false, EnableScreenStorage = false, EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false;
+        bool EnableNormal = false, EnableScreenStorage = false, EnableHiZ = false, EnableBloom = false, EnableGTAO = false, EnableAutoExposure = false, EnableDDGI = false, EnableVelocity = false;
         bool EnableReflectionTerms = false;
         bool EnablePlanarReflection = false;
         float PlanarResolutionScale = 0.5f;
@@ -109,6 +109,7 @@ namespace Axle::RHI {
         uint32_t GetHiZUsefulLevelCount() const { return m_HiZUsefulLevels; }
         RHITexture* GetGTAO() const { return Get(RHIViewTarget::GTAO); }
         RHITexture* GetGTAOResolved() const { return Get(RHIViewTarget::GTAOResolved); }
+        RHITexture* GetVelocity() const { return Get(RHIViewTarget::Velocity); }
         RHITexture* GetExposure() const { return Get(RHIViewTarget::Exposure); }
         RHITexture* GetDDGI() const { return Get(RHIViewTarget::DDGI); }
         RHITexture* GetDDGIDistance() const { return Get(RHIViewTarget::DDGIDistance); }

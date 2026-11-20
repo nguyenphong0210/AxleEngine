@@ -299,7 +299,7 @@ namespace Axle {
                     settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality, fog);
                 desc.HDR = settings.EnableToneMapping || desc.EnableReflectionTerms ||
                     (desc.EnableVolumetricFog && FroxelFogContract::RequiresLinearColor(settings, fog));
-                if (settings.EnableTAA) desc.HistoryCount = 2;
+                if (settings.EnableTAA) { desc.HistoryCount = 2; desc.EnableVelocity = (settings.MSAASamples == 1); }
                 if (!m_DefaultMainTargets || !m_DefaultMainTargets->IsValid() || m_DefaultMainTargets->GetDesc() != desc) {
                     auto candidate = std::make_shared<RHI::RHIViewTargets>();
                     if (!candidate->Configure(desc, nullptr, nullptr, RHI::FroxelHistoryPolicy::AllowStaticFog))

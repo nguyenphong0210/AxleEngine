@@ -984,4 +984,29 @@ namespace Axle {
                                                const glm::vec3& tint, float intensity);
     }
 
+    // M15 Unit 8 (S8.3 / U8-C): Motion vector & jitter-cancellation contract
+    namespace MotionVectorContract {
+        inline constexpr bool UVOriginTopLeft = true;
+
+        glm::vec2 ProjectWorldPointToUV(const glm::mat4& unjitteredViewProjZO,
+                                        const glm::vec3& worldPos,
+                                        bool& outValid);
+        glm::vec2 ComputeWorldVelocityUV(const glm::mat4& currUnjitteredVP,
+                                         const glm::mat4& prevUnjitteredVP,
+                                         const glm::vec3& currWorldPos,
+                                         const glm::vec3& prevWorldPos,
+                                         bool& outValid);
+        glm::vec2 ComputeObjectVelocityUV(const glm::mat4& currUnjitteredVP,
+                                          const glm::mat4& prevUnjitteredVP,
+                                          const glm::mat4& currModel,
+                                          const glm::mat4& prevModel,
+                                          const glm::vec3& localPos,
+                                          bool& outValid);
+        inline glm::vec2 ReconstructHistoryUV(const glm::vec2& currentUV, const glm::vec2& velocityUV) {
+            return currentUV - velocityUV;
+        }
+        bool VerifyCameraAndObjectMotionVectors();
+        bool VerifyJitterCancellationConsistency();
+    }
+
 } // namespace Axle

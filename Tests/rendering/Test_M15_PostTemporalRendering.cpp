@@ -66,6 +66,51 @@ namespace {
         return true;
     }
 
+    bool ReadTextureRG16F(RHITexture& tex, std::vector<glm::vec2>& outPixels) {
+        if (!tex.IsValid() || tex.GetFormat() != RHITextureFormat::RG16_FLOAT) return false;
+        auto& device = RHIDevice::Get();
+        const auto alignment = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice()).memoryAlignment;
+        const auto align = [](uint32_t value, uint32_t step) { return (value + step - 1u) / step * step; };
+        const uint32_t width = tex.GetWidth();
+        const uint32_t height = tex.GetHeight();
+        constexpr uint32_t pixelSize = 4u;
+
+        nri::TextureDataLayoutDesc layout{};
+        layout.rowPitch = align(width * pixelSize, alignment.uploadBufferTextureRow);
+        layout.slicePitch = align(layout.rowPitch * height, alignment.uploadBufferTextureSlice);
+
+        RHIBufferDesc desc{};
+        desc.Size = layout.slicePitch;
+        desc.MemoryLocation = RHIMemoryLocation::HostReadback;
+        desc.DebugName = "U8VelocityReadback";
+        RHIBuffer staging;
+        RHICommandBuffer cmd;
+        if (!staging.Init(desc) || !cmd.Init() || !cmd.Begin()) return false;
+
+        cmd.TransitionTexture(tex.GetNative(), RHIResourceLayout::ShaderResource, RHIResourceLayout::CopySource);
+        nri::TextureRegionDesc region{};
+        region.width = static_cast<nri::Dim_t>(width);
+        region.height = static_cast<nri::Dim_t>(height);
+        region.depth = 1;
+        cmd.ReadbackTextureToBuffer(*staging.GetNative(), layout, *tex.GetNative(), region);
+        cmd.TransitionTexture(tex.GetNative(), RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
+        if (!cmd.End() || !cmd.Submit() || !device.WaitIdle()) return false;
+
+        const auto* bytes = static_cast<const uint8_t*>(staging.Map());
+        if (!bytes) return false;
+        outPixels.resize(static_cast<size_t>(width) * height);
+        for (uint32_t y = 0; y < height; ++y) {
+            const uint8_t* row = bytes + y * layout.rowPitch;
+            for (uint32_t x = 0; x < width; ++x) {
+                uint32_t packed = 0;
+                std::memcpy(&packed, row + x * pixelSize, sizeof(packed));
+                outPixels[static_cast<size_t>(y) * width + x] = glm::unpackHalf2x16(packed);
+            }
+        }
+        staging.Unmap();
+        return true;
+    }
+
     bool ReadExposureValue(RHIViewTargets& targets, glm::vec4& outValue) {
         auto* tex = targets.GetExposure();
         if (!tex || !tex->IsValid()) return false;
@@ -672,7 +717,325 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         }
     }
 
-    std::cout << "[M15U8] PASS: Batch A + Batch B (6-level additive Bloom, odd/small, linear gain, single tint, HDR/SDR) exp30="
+    // =========================================================================
+    // Batch C (M15-U8-13.1..13.5): Motion Vectors, Jitter Cancellation & 5 Resets
+    // =========================================================================
+    auto makeTemporalViewTargets = [](uint32_t w, uint32_t h, bool hdr,
+                                      RHITextureFormat colorFmt = RHITextureFormat::RGBA8_UNORM) -> std::shared_ptr<RHIViewTargets> {
+        auto targets = std::make_shared<RHIViewTargets>();
+        RHIViewTargetDesc desc;
+        desc.Width = w;
+        desc.Height = h;
+        desc.ColorFormat = colorFmt;
+        desc.Samples = 1;
+        desc.HDR = hdr;
+        desc.HistoryCount = 2;
+        desc.EnableVelocity = true;
+        desc.EnableDepth = true;
+        desc.OwnPrimary = false;
+        if (!targets->Configure(desc, nullptr, nullptr, FroxelHistoryPolicy::AllowStaticFog)) return {};
+        return targets;
+    };
+
+    // -------------------------------------------------------------------------
+    // 8. M15-U8-13.1, 13.2 & 13.4: Static jitter cancellation + Camera pan
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t W = 128, H = 128;
+        RHITexture col, dep;
+        if (!col.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !dep.Init(RHITextureDesc::DepthStencil2D(W, H))) return false;
+        auto targets = makeTemporalViewTargets(W, H, true);
+        if (!targets || !targets->GetVelocity()) return false;
+
+        RenderWorld world;
+        RHIMaterialDesc matDesc{};
+        matDesc.BaseColor = {0.8f, 0.8f, 0.8f, 1.0f};
+        matDesc.Roughness = 0.6f;
+        auto mat = std::make_shared<RHIMaterial>(matDesc);
+        RenderMeshInstance obj;
+        obj.EntityID = 4001;
+        obj.StableUUID = UUID(0x4001u);
+        obj.NativeView = cube->CaptureView();
+        obj.WorldTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1.2f));
+        obj.Material.RHIMaterialAsset = mat;
+        world.Meshes.push_back(obj);
+
+        PerspectiveCamera cam(60.0f, 1.0f, 0.1f, 50.0f);
+        const glm::mat4 view0 = glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        cam.SetViewMatrix(view0, glm::vec3(0.0f, 0.0f, 4.0f));
+
+        SceneRenderSettings s;
+        s.EnableShadows = false;
+        s.EnableSkybox = false;
+        s.EnableParticles = false;
+        s.EnableStudioLightLobes = false;
+        s.EnableAutoExposure = false;
+        s.EnableBloom = false;
+        s.EnableToneMapping = true;
+        s.ToneMappingMode = 3;
+        s.Gamma = 1.0f;
+        s.EnableTAA = true;
+        s.TAAJitterSpread = 1.0f;
+
+        // Frames 0..2 static camera + static object under varying Halton jitter => exact zero velocity
+        for (uint32_t f = 0; f < 3u; ++f) {
+            renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, f == 0u, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+            std::vector<glm::vec2> vel;
+            if (!ReadTextureRG16F(*targets->GetVelocity(), vel) || vel.size() != size_t(W) * H) return false;
+            const glm::vec2& centerVel = vel[(H / 2u) * W + (W / 2u)];
+            const glm::vec2& cornerVel = vel[8u * W + 8u];
+            if (!std::isfinite(centerVel.x) || !std::isfinite(centerVel.y) ||
+                glm::length(centerVel) > 1e-4f || glm::length(cornerVel) > 1e-4f) {
+                std::cerr << "[M15U8] FAIL (13.1/13.4): Jitter leaked into static velocity on frame " << f
+                          << " center=(" << centerVel.x << "," << centerVel.y << ") corner=("
+                          << cornerVel.x << "," << cornerVel.y << ")\n";
+                return false;
+            }
+        }
+
+        // Frame 3: Linear camera pan (+X) -> negative horizontal motion vector on both object & background
+        const glm::mat4 prevVP = cam.GetProjectionMatrixZO() * view0;
+        const glm::mat4 view1 = glm::lookAtRH(glm::vec3(0.8f, 0.0f, 4.0f), glm::vec3(0.8f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        cam.SetViewMatrix(view1, glm::vec3(0.8f, 0.0f, 4.0f));
+        const glm::mat4 currVP = cam.GetProjectionMatrixZO() * view1;
+        renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, false, RenderViewKind::Main, 1.0f / 60.0f);
+        if (!renderer.WasLastRenderSuccessful()) return false;
+
+        std::vector<glm::vec2> velPan;
+        if (!ReadTextureRG16F(*targets->GetVelocity(), velPan) || velPan.size() != size_t(W) * H) return false;
+        bool ok = false;
+        const glm::vec3 facePt(0.0f, 0.0f, 0.6f);
+        const glm::vec2 projCurrUV = MotionVectorContract::ProjectWorldPointToUV(currVP, facePt, ok);
+        const glm::vec2 expectedObjVel = MotionVectorContract::ComputeWorldVelocityUV(currVP, prevVP, facePt, facePt, ok);
+        const uint32_t sx = std::clamp<uint32_t>(static_cast<uint32_t>(projCurrUV.x * float(W)), 0u, W - 1u);
+        const uint32_t sy = std::clamp<uint32_t>(static_cast<uint32_t>(projCurrUV.y * float(H)), 0u, H - 1u);
+        const glm::vec2 sampledCubeVel = velPan[sy * W + sx];
+        const glm::vec2 sampledBgVel = velPan[8u * W + 8u];
+        if (!ok || expectedObjVel.x >= -0.02f ||
+            glm::length(sampledCubeVel - expectedObjVel) > 0.015f ||
+            sampledBgVel.x >= -0.01f) {
+            std::cerr << "[M15U8] FAIL (13.2): Camera pan velocity mismatch! sampledCube=("
+                      << sampledCubeVel.x << "," << sampledCubeVel.y << ") expected=("
+                      << expectedObjVel.x << "," << expectedObjVel.y << ") bg=("
+                      << sampledBgVel.x << "," << sampledBgVel.y << ")\n";
+            return false;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 9. M15-U8-13.3: Moving object vs static neighbor + StableUUID continuity + first spawn
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t W = 128, H = 128;
+        RHITexture col, dep;
+        if (!col.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !dep.Init(RHITextureDesc::DepthStencil2D(W, H))) return false;
+        auto targets = makeTemporalViewTargets(W, H, true);
+        if (!targets) return false;
+
+        RHIMaterialDesc matDesc{};
+        matDesc.BaseColor = {0.75f, 0.75f, 0.75f, 1.0f};
+        matDesc.Roughness = 0.7f;
+        auto mat = std::make_shared<RHIMaterial>(matDesc);
+
+        const glm::mat4 staticM = glm::translate(glm::mat4(1.0f), glm::vec3(-1.1f, 0.0f, 0.0f)) *
+                                  glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+        const glm::mat4 movingM0 = glm::translate(glm::mat4(1.0f), glm::vec3(0.6f, 0.0f, 0.0f)) *
+                                   glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+        const glm::mat4 movingM1 = glm::translate(glm::mat4(1.0f), glm::vec3(1.1f, 0.0f, 0.0f)) *
+                                   glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+        const glm::mat4 spawnM = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.2f, 0.0f)) *
+                                 glm::scale(glm::mat4(1.0f), glm::vec3(0.65f));
+
+        RenderWorld world;
+        RenderMeshInstance staticInst;
+        staticInst.EntityID = 4101;
+        staticInst.StableUUID = UUID(0x4101u);
+        staticInst.NativeView = cube->CaptureView();
+        staticInst.WorldTransform = staticM;
+        staticInst.Material.RHIMaterialAsset = mat;
+
+        RenderMeshInstance movingInst = staticInst;
+        movingInst.EntityID = 4102;
+        movingInst.StableUUID = UUID(0xB002u);
+        movingInst.WorldTransform = movingM0;
+
+        world.Meshes = { staticInst, movingInst };
+
+        PerspectiveCamera cam(60.0f, 1.0f, 0.1f, 50.0f);
+        cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                          glm::vec3(0.0f, 0.0f, 4.5f));
+        const glm::mat4 vp = cam.GetViewProjectionMatrixZO();
+
+        SceneRenderSettings s;
+        s.EnableShadows = false;
+        s.EnableSkybox = false;
+        s.EnableParticles = false;
+        s.EnableStudioLightLobes = false;
+        s.EnableAutoExposure = false;
+        s.EnableBloom = false;
+        s.EnableToneMapping = true;
+        s.ToneMappingMode = 3;
+        s.Gamma = 1.0f;
+        s.EnableTAA = true;
+
+        // Frame 0 establishes previous transforms
+        renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, true, RenderViewKind::Main, 1.0f / 60.0f);
+        if (!renderer.WasLastRenderSuccessful()) return false;
+
+        // Frame 1: movingInst translates +X and gets a different EntityID (same StableUUID), plus new spawned cube
+        movingInst.EntityID = 4999;
+        movingInst.WorldTransform = movingM1;
+        RenderMeshInstance spawnInst = staticInst;
+        spawnInst.EntityID = 4103;
+        spawnInst.StableUUID = UUID(0xC003u);
+        spawnInst.WorldTransform = spawnM;
+        world.Meshes = { staticInst, movingInst, spawnInst };
+
+        renderer.RenderWorldView(world, cam, &col, &dep, s, nullptr, targets, false, RenderViewKind::Main, 1.0f / 60.0f);
+        if (!renderer.WasLastRenderSuccessful()) return false;
+
+        std::vector<glm::vec2> vel;
+        if (!ReadTextureRG16F(*targets->GetVelocity(), vel) || vel.size() != size_t(W) * H) return false;
+        bool ok = false;
+        auto sampleAtWorld = [&](const glm::vec3& wp) -> glm::vec2 {
+            const glm::vec2 uv = MotionVectorContract::ProjectWorldPointToUV(vp, wp, ok);
+            const uint32_t x = std::clamp<uint32_t>(static_cast<uint32_t>(uv.x * float(W)), 0u, W - 1u);
+            const uint32_t y = std::clamp<uint32_t>(static_cast<uint32_t>(uv.y * float(H)), 0u, H - 1u);
+            return vel[y * W + x];
+        };
+        const glm::vec2 vStatic = sampleAtWorld(glm::vec3(-1.1f, 0.0f, 0.375f));
+        const glm::vec2 vMoving = sampleAtWorld(glm::vec3(1.1f, 0.0f, 0.375f));
+        const glm::vec2 vSpawn = sampleAtWorld(glm::vec3(0.0f, -1.2f, 0.325f));
+        const glm::vec2 expectedMoving = MotionVectorContract::ComputeObjectVelocityUV(
+            vp, vp, movingM1, movingM0, glm::vec3(0.0f, 0.0f, 0.5f), ok);
+        if (!ok || glm::length(vStatic) > 1e-3f ||
+            vMoving.x <= 0.02f || glm::length(vMoving - expectedMoving) > 0.015f ||
+            glm::length(vSpawn) > 1e-3f) {
+            std::cerr << "[M15U8] FAIL (13.3): Moving/static/spawn object velocities invalid! static=("
+                      << vStatic.x << "," << vStatic.y << ") moving=(" << vMoving.x << "," << vMoving.y
+                      << ") expected=(" << expectedMoving.x << "," << expectedMoving.y
+                      << ") spawn=(" << vSpawn.x << "," << vSpawn.y << ")\n";
+            return false;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 10. M15-U8-13.5: All 5 TAA History Reset Triggers Reset GPU History & Velocity
+    // -------------------------------------------------------------------------
+    {
+        constexpr uint32_t W = 128, H = 128;
+        RHITexture col, dep, colSmall, depSmall;
+        if (!col.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !dep.Init(RHITextureDesc::DepthStencil2D(W, H)) ||
+            !colSmall.Init(RHITextureDesc::RenderTarget2D(96u, 96u)) ||
+            !depSmall.Init(RHITextureDesc::DepthStencil2D(96u, 96u))) return false;
+        auto targets = makeTemporalViewTargets(W, H, true);
+        auto targetsSmall = makeTemporalViewTargets(96u, 96u, true);
+        if (!targets || !targetsSmall) return false;
+
+        RenderWorld world;
+        world.ViewSceneRevision = 10u;
+        RHIMaterialDesc matDesc{};
+        matDesc.BaseColor = {0.8f, 0.8f, 0.8f, 1.0f};
+        auto mat = std::make_shared<RHIMaterial>(matDesc);
+        RenderMeshInstance inst;
+        inst.EntityID = 4201;
+        inst.StableUUID = UUID(0x4201u);
+        inst.NativeView = cube->CaptureView();
+        inst.WorldTransform = glm::scale(glm::mat4(1.0f), glm::vec3(2.0f));
+        inst.Material.RHIMaterialAsset = mat;
+        world.Meshes.push_back(inst);
+
+        PerspectiveCamera cam(60.0f, 1.0f, 0.1f, 50.0f);
+        SceneRenderSettings s;
+        s.EnableShadows = false;
+        s.EnableSkybox = false;
+        s.EnableParticles = false;
+        s.EnableStudioLightLobes = false;
+        s.EnableAutoExposure = false;
+        s.EnableBloom = false;
+        s.EnableToneMapping = true;
+        s.ToneMappingMode = 3;
+        s.Gamma = 1.0f;
+        s.EnableTAA = true;
+
+        auto warmUpMotion = [&](const std::shared_ptr<RHIViewTargets>& vt, RHITexture& cTex, RHITexture& dTex) -> bool {
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              glm::vec3(0.0f, 0.0f, 4.0f));
+            renderer.RenderWorldView(world, cam, &cTex, &dTex, s, nullptr, vt, true, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) {
+                std::cerr << "[M15U8] warmUp frame0 render failed\n";
+                return false;
+            }
+            cam.SetViewMatrix(glm::lookAtRH(glm::vec3(0.5f, 0.0f, 4.0f), glm::vec3(0.5f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                              glm::vec3(0.5f, 0.0f, 4.0f));
+            renderer.RenderWorldView(world, cam, &cTex, &dTex, s, nullptr, vt, false, RenderViewKind::Main, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) {
+                std::cerr << "[M15U8] warmUp frame1 render failed\n";
+                return false;
+            }
+            std::vector<glm::vec2> vel;
+            if (!ReadTextureRG16F(*vt->GetVelocity(), vel)) {
+                std::cerr << "[M15U8] warmUp ReadTextureRG16F failed\n";
+                return false;
+            }
+            const uint32_t w = vt->GetVelocity()->GetWidth();
+            const uint32_t h = vt->GetVelocity()->GetHeight();
+            const glm::vec2 cVel = vel[(h / 2u) * w + (w / 2u)];
+            const uint64_t comm = renderer.GetMainViewContext().Temporal().GetCommittedFrameCount();
+            if (!(std::abs(cVel.x) > 0.02f && comm == 2u)) {
+                std::cerr << "[M15U8] warmUp check failed: vel=(" << cVel.x << "," << cVel.y << ") committed=" << comm << "\n";
+                return false;
+            }
+            return true;
+        };
+
+        auto checkResetProducesZeroVelocity = [&](const char* label,
+                                                  const std::shared_ptr<RHIViewTargets>& vt,
+                                                  RHITexture& cTex, RHITexture& dTex,
+                                                  bool cut, RenderViewKind kind,
+                                                  const SceneRenderSettings& renderCfg) -> bool {
+            renderer.RenderWorldView(world, cam, &cTex, &dTex, renderCfg, nullptr, vt, cut, kind, 1.0f / 60.0f);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+            std::vector<glm::vec2> vel;
+            if (!ReadTextureRG16F(*vt->GetVelocity(), vel)) return false;
+            const uint32_t w = vt->GetVelocity()->GetWidth();
+            const uint32_t h = vt->GetVelocity()->GetHeight();
+            const glm::vec2& centerVel = vel[(h / 2u) * w + (w / 2u)];
+            const bool committedRestarted = renderer.GetMainViewContext().Temporal().GetCommittedFrameCount() == 1u;
+            if (!committedRestarted || glm::length(centerVel) > 1e-4f) {
+                std::cerr << "[M15U8] FAIL (13.5): Reset trigger '" << label << "' failed! committed="
+                          << renderer.GetMainViewContext().Temporal().GetCommittedFrameCount()
+                          << " vel=(" << centerVel.x << "," << centerVel.y << ")\n";
+                return false;
+            }
+            return true;
+        };
+
+        // 1. CameraCut
+        if (!warmUpMotion(targets, col, dep) ||
+            !checkResetProducesZeroVelocity("CameraCut", targets, col, dep, true, RenderViewKind::Main, s)) return false;
+        // 2. ViewSwitch
+        if (!warmUpMotion(targets, col, dep) ||
+            !checkResetProducesZeroVelocity("ViewSwitch", targets, col, dep, false, RenderViewKind::AssetPreview, s)) return false;
+        // 3. Resize
+        if (!warmUpMotion(targets, col, dep) ||
+            !checkResetProducesZeroVelocity("Resize", targetsSmall, colSmall, depSmall, false, RenderViewKind::Main, s)) return false;
+        // 4. Settings / Format change (toggle TAAJitterSpread / EnableTAA / Format)
+        if (!warmUpMotion(targets, col, dep)) return false;
+        SceneRenderSettings settingsChanged = s;
+        settingsChanged.TAAJitterSpread = 0.5f;
+        if (!checkResetProducesZeroVelocity("SettingsPolicy", targets, col, dep, false, RenderViewKind::Main, settingsChanged)) return false;
+        // 5. SceneRevision change
+        if (!warmUpMotion(targets, col, dep)) return false;
+        world.ViewSceneRevision = 11u;
+        if (!checkResetProducesZeroVelocity("SceneRevision", targets, col, dep, false, RenderViewKind::Main, s)) return false;
+    }
+
+    std::cout << "[M15U8] PASS: Batch A + B + C (AutoExposure, 6-level Bloom, Camera/Object Velocity, Jitter Cancellation & 5 TAA Resets) exp30="
               << exp30 << " exp60=" << exp60 << " exp120=" << exp120 << "\n";
     return true;
 }

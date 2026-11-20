@@ -60,6 +60,18 @@ namespace Axle {
         mix(settings.TAAJitterSpread);
         mix(settings.TAAFeedbackMin);
         mix(settings.TAAFeedbackMax);
+        mix(settings.WhitePoint);
+        mix(settings.BloomThreshold);
+        mix(settings.BloomIntensity);
+        mix(settings.BloomKnee);
+        mix(settings.BloomRadius);
+        mix(settings.BloomTint.x);
+        mix(settings.BloomTint.y);
+        mix(settings.BloomTint.z);
+        mix(settings.AutoExposureMin);
+        mix(settings.AutoExposureMax);
+        mix(settings.AutoExposureKeyValue);
+        mix(settings.AutoExposureSpeed);
         return hash;
     }
 
@@ -80,6 +92,7 @@ namespace Axle {
         m_FroxelHistories.clear();
         m_DDGIHistories.clear();
         m_ExposureHistories.clear();
+        m_TemporalObjectCaches.clear();
         m_PostProcess.Reset();
         m_Diagnostics.BeginFrame(0);
         return true;
@@ -102,6 +115,7 @@ namespace Axle {
         m_FroxelHistories.clear();
         m_DDGIHistories.clear();
         m_ExposureHistories.clear();
+        m_TemporalObjectCaches.clear();
         m_PostProcess.Reset();
         m_Diagnostics.BeginFrame(0);
     }
@@ -132,10 +146,12 @@ namespace Axle {
             m_FroxelHistories.clear();
             m_DDGIHistories.clear();
             m_ExposureHistories.clear();
+            m_TemporalObjectCaches.clear();
         }
         std::erase_if(m_FroxelHistories, [](const auto& entry) { return entry.first.expired(); });
         std::erase_if(m_DDGIHistories, [](const auto& entry) { return entry.first.expired(); });
         std::erase_if(m_ExposureHistories, [](const auto& entry) { return entry.first.expired(); });
+        std::erase_if(m_TemporalObjectCaches, [](const auto& entry) { return entry.first.expired(); });
         if (input.CameraCut || !GetFroxelHistory().Valid) m_FroxelHistories.erase(m_TargetIdentity);
         if (!GetDDGIHistory().Valid) m_DDGIHistories.erase(m_TargetIdentity);
         if (input.CameraCut || !GetExposureHistory().Valid) m_ExposureHistories.erase(m_TargetIdentity);
@@ -144,6 +160,7 @@ namespace Axle {
                            ViewResetReason::FeaturePolicy | ViewResetReason::TargetGeneration | ViewResetReason::DeviceEpoch))) {
             m_FrameIndex = 0;
             m_Temporal.Reset(static_cast<uint32_t>(reasons));
+            m_TemporalObjectCaches.erase(m_TargetIdentity);
             m_PostProcess.Reset();
         }
         return reasons;
@@ -234,6 +251,50 @@ namespace Axle {
         m_ExposureHistories.erase(m_TargetIdentity);
     }
 
+    std::optional<glm::mat4> ViewContext::FindPreviousObjectTransform(uint32_t entityID, UUID stableUUID) const {
+        if (!m_Temporal.IsHistoryValid() || m_Input.CameraCut) return std::nullopt;
+        const auto it = m_TemporalObjectCaches.find(m_TargetIdentity);
+        if (it == m_TemporalObjectCaches.end()) return std::nullopt;
+        const auto& entry = it->second;
+        if (!entry.Valid || entry.TargetGeneration != m_TargetGeneration ||
+            entry.SceneRevision != m_Input.SceneRevision ||
+            entry.SceneInstanceID != m_Input.SceneInstanceID || entry.Kind != m_Input.Kind) {
+            return std::nullopt;
+        }
+        const TemporalObjectKey key = MakeTemporalObjectKey(entityID, stableUUID);
+        const auto objIt = entry.PrevWorldTransforms.find(key);
+        if (objIt == entry.PrevWorldTransforms.end()) return std::nullopt;
+        return objIt->second;
+    }
+
+    void ViewContext::CommitTemporalObjectTransforms(const std::vector<std::pair<TemporalObjectKey, glm::mat4>>& transforms,
+                                                     bool valid) {
+        if (!valid || m_TargetIdentity.expired()) {
+            m_TemporalObjectCaches.erase(m_TargetIdentity);
+            return;
+        }
+        TemporalObjectCacheEntry entry;
+        entry.TargetGeneration = m_TargetGeneration;
+        entry.SceneRevision = m_Input.SceneRevision;
+        entry.SceneInstanceID = m_Input.SceneInstanceID;
+        entry.Kind = m_Input.Kind;
+        entry.Valid = true;
+        entry.PrevWorldTransforms.reserve(transforms.size());
+        for (const auto& [key, worldTransform] : transforms) {
+            entry.PrevWorldTransforms[key] = worldTransform;
+        }
+        m_TemporalObjectCaches.insert_or_assign(m_TargetIdentity, std::move(entry));
+    }
+
+    void ViewContext::InvalidateTemporalObjectTransforms() {
+        m_TemporalObjectCaches.erase(m_TargetIdentity);
+    }
+
+    size_t ViewContext::GetCachedTemporalObjectCount() const {
+        const auto it = m_TemporalObjectCaches.find(m_TargetIdentity);
+        return (it != m_TemporalObjectCaches.end() && it->second.Valid) ? it->second.PrevWorldTransforms.size() : 0u;
+    }
+
     bool ViewContext::ObserveMaterialGeneration(uint64_t generation) {
         const auto history = m_FroxelHistories.find(m_TargetIdentity);
         if (history != m_FroxelHistories.end() && history->second.MaterialGeneration != generation)
@@ -247,6 +308,7 @@ namespace Axle {
         m_ResetReasons |= ViewResetReason::MaterialGeneration;
         m_FrameIndex = 0;
         m_Temporal.InvalidateContents();
+        m_TemporalObjectCaches.erase(m_TargetIdentity);
         m_Diagnostics.SetFrameIndex(m_FrameIndex);
         // Keep the frame's selected output/AA policy while restarting adaptation.
         const bool configured = m_PostProcess.IsConfigured();
@@ -266,7 +328,9 @@ namespace Axle {
                 m_FroxelHistories.clear();
                 m_DDGIHistories.clear();
                 m_ExposureHistories.clear();
+                m_TemporalObjectCaches.clear();
             } else {
+                m_TemporalObjectCaches.erase(m_TargetIdentity);
                 m_FroxelHistories.erase(m_TargetIdentity);
                 if (Any(reason & (ViewResetReason::Initial | ViewResetReason::ViewSwitch |
                                   ViewResetReason::SceneRevision | ViewResetReason::MaterialGeneration |
@@ -315,6 +379,7 @@ namespace Axle {
             m_FroxelHistories.erase(m_TargetIdentity);
             m_DDGIHistories.erase(m_TargetIdentity);
             m_ExposureHistories.erase(m_TargetIdentity);
+            m_TemporalObjectCaches.erase(m_TargetIdentity);
             m_Input.Targets.reset();
             return false;
         }
@@ -334,6 +399,7 @@ namespace Axle {
         m_FroxelHistories.erase(m_TargetIdentity);
         m_DDGIHistories.erase(m_TargetIdentity);
         m_ExposureHistories.erase(m_TargetIdentity);
+        m_TemporalObjectCaches.erase(m_TargetIdentity);
         m_FrameActive = false;
         m_Input.Targets.reset();
         return result;

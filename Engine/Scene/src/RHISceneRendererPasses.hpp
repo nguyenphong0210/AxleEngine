@@ -23,6 +23,7 @@ namespace Axle {
         nri::Pipeline* activePipeline;
         const glm::mat4& projZO;
         const glm::mat4& viewProjZO;
+        const glm::mat4& unjitteredViewProjZO;
         const GIFrame& giFrame;
         RenderPassCapabilities capabilities;
     };

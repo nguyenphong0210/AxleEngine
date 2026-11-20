@@ -16,7 +16,7 @@ namespace Axle::Passes {
     struct PostProcessResources {
         RenderGraph::Resource SceneColor, SceneDepth, Output, HDR, FXAA;
         RenderGraph::Resource BloomInput, ExposureInput, ExposureHistogram, ExposureOutput;
-        RenderGraph::Resource TAAHistoryRead, TAAHistoryWrite;
+        RenderGraph::Resource TAAColor, TAADepth, TAAHistoryRead, TAAHistoryWrite;
         std::array<RenderGraph::Resource, 6> Bloom;
         bool UseBloom = false, UseAutoExposure = false, UseTAA = false;
         bool UseToneMap = false, UseFXAA = false;

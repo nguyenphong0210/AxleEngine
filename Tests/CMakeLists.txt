@@ -557,6 +557,8 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
       AXLE_DDGI_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/DDGIPass.cpp"
       AXLE_AUTO_EXPOSURE_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/AutoExposure.hlsl"
       AXLE_BLOOM_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/Bloom.hlsl"
+      AXLE_VELOCITY_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/Velocity.hlsl"
+      AXLE_TAA_SHADER_PATH="${CMAKE_SOURCE_DIR}/Engine/Resources/Shaders/TAA.hlsl"
       AXLE_POST_PROCESS_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/PostProcessPass.cpp"
       AXLE_RUNTIME_LAYER_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Runtime/src/RuntimeLayer.cpp")
 target_link_libraries(AxleRenderUnitTests PRIVATE

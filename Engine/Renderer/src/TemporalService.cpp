@@ -11,6 +11,7 @@ namespace Axle {
         m_CurrentJitter = {};
         m_PreviousJitter = {};
         m_PreviousViewProjection = glm::mat4(1.0f);
+        m_PreviousUnjitteredViewProjection = glm::mat4(1.0f);
         m_CommittedFrameCount = 0;
     }
 
@@ -27,9 +28,11 @@ namespace Axle {
         return selection;
     }
 
-    void TemporalService::Commit(const glm::mat4& currentViewProjection, bool historyWritten) {
+    void TemporalService::Commit(const glm::mat4& currentViewProjection, bool historyWritten,
+                                 const std::optional<glm::mat4>& currentUnjitteredViewProjection) {
         if (!historyWritten) return;
         m_PreviousViewProjection = currentViewProjection;
+        m_PreviousUnjitteredViewProjection = currentUnjitteredViewProjection.value_or(currentViewProjection);
         m_PreviousJitter = m_CurrentJitter;
         m_HistoryValid = true;
         m_MotionValid = true;

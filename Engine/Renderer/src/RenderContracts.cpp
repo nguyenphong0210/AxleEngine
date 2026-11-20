@@ -3944,4 +3944,80 @@ namespace Axle {
         }
     } // namespace BloomContract
 
+    namespace MotionVectorContract {
+        glm::vec2 ProjectWorldPointToUV(const glm::mat4& unjitteredViewProjZO,
+                                        const glm::vec3& worldPos,
+                                        bool& outValid) {
+            const glm::vec4 clip = unjitteredViewProjZO * glm::vec4(worldPos, 1.0f);
+            if (!std::isfinite(clip.x) || !std::isfinite(clip.y) || !std::isfinite(clip.w) || clip.w <= 1e-6f) {
+                outValid = false;
+                return { 0.0f, 0.0f };
+            }
+            const glm::vec2 ndc = glm::vec2(clip.x, clip.y) / clip.w;
+            outValid = std::isfinite(ndc.x) && std::isfinite(ndc.y);
+            return { ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f };
+        }
+
+        glm::vec2 ComputeWorldVelocityUV(const glm::mat4& currUnjitteredVP,
+                                         const glm::mat4& prevUnjitteredVP,
+                                         const glm::vec3& currWorldPos,
+                                         const glm::vec3& prevWorldPos,
+                                         bool& outValid) {
+            bool currValid = false;
+            bool prevValid = false;
+            const glm::vec2 currUV = ProjectWorldPointToUV(currUnjitteredVP, currWorldPos, currValid);
+            const glm::vec2 prevUV = ProjectWorldPointToUV(prevUnjitteredVP, prevWorldPos, prevValid);
+            outValid = currValid && prevValid;
+            if (!outValid) return { 0.0f, 0.0f };
+            return currUV - prevUV;
+        }
+
+        glm::vec2 ComputeObjectVelocityUV(const glm::mat4& currUnjitteredVP,
+                                          const glm::mat4& prevUnjitteredVP,
+                                          const glm::mat4& currModel,
+                                          const glm::mat4& prevModel,
+                                          const glm::vec3& localPos,
+                                          bool& outValid) {
+            const glm::vec3 currWorld = glm::vec3(currModel * glm::vec4(localPos, 1.0f));
+            const glm::vec3 prevWorld = glm::vec3(prevModel * glm::vec4(localPos, 1.0f));
+            return ComputeWorldVelocityUV(currUnjitteredVP, prevUnjitteredVP, currWorld, prevWorld, outValid);
+        }
+
+        bool VerifyCameraAndObjectMotionVectors() {
+            const glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
+            const glm::mat4 prevView = glm::lookAtRH(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0, 1, 0));
+            // Camera pans right (+X): static object at origin moves left in screen space -> negative velocity.x
+            const glm::mat4 currViewPan = glm::lookAtRH(glm::vec3(1.0f, 0.0f, 5.0f), glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0, 1, 0));
+            bool ok = false;
+            const glm::vec2 camPanVel = ComputeWorldVelocityUV(proj * currViewPan, proj * prevView, glm::vec3(0.0f), glm::vec3(0.0f), ok);
+            if (!ok || camPanVel.x >= -0.05f || std::abs(camPanVel.y) > 1e-4f) return false;
+            const glm::vec2 recCamPrev = ReconstructHistoryUV(ProjectWorldPointToUV(proj * currViewPan, glm::vec3(0.0f), ok), camPanVel);
+            const glm::vec2 expectedCamPrev = ProjectWorldPointToUV(proj * prevView, glm::vec3(0.0f), ok);
+            if (glm::length(recCamPrev - expectedCamPrev) > 1e-5f) return false;
+
+            // Static camera, object translates right (+X): moves right in screen space -> positive velocity.x
+            const glm::mat4 prevM(1.0f);
+            const glm::mat4 currM = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+            const glm::vec2 objVel = ComputeObjectVelocityUV(proj * prevView, proj * prevView, currM, prevM, glm::vec3(0.0f), ok);
+            if (!ok || objVel.x <= 0.05f || std::abs(objVel.y) > 1e-4f) return false;
+            const glm::vec2 recObjPrev = ReconstructHistoryUV(ProjectWorldPointToUV(proj * prevView, glm::vec3(1.0f, 0.0f, 0.0f), ok), objVel);
+            if (glm::length(recObjPrev - glm::vec2(0.5f, 0.5f)) > 1e-5f) return false;
+
+            // Static camera + static object => exact zero velocity
+            const glm::vec2 zeroVel = ComputeObjectVelocityUV(proj * prevView, proj * prevView, prevM, prevM, glm::vec3(0.25f, -0.3f, 0.1f), ok);
+            return ok && glm::length(zeroVel) < 1e-7f;
+        }
+
+        bool VerifyJitterCancellationConsistency() {
+            const glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 100.0f);
+            const glm::mat4 view = glm::lookAtRH(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0, 1, 0));
+            const glm::mat4 unjitteredVP = proj * view;
+            // Even when rasterizer uses distinct Halton jitters in prev & curr frames, unjittered
+            // motion vectors produce exact zero velocity for static geometry.
+            bool ok = false;
+            const glm::vec2 staticVel = ComputeObjectVelocityUV(unjitteredVP, unjitteredVP, glm::mat4(1.0f), glm::mat4(1.0f), glm::vec3(0.3f, 0.4f, -0.2f), ok);
+            return ok && std::abs(staticVel.x) < 1e-7f && std::abs(staticVel.y) < 1e-7f;
+        }
+    } // namespace MotionVectorContract
+
 } // namespace Axle

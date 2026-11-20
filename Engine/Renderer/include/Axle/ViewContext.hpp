@@ -5,12 +5,16 @@
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/ViewRequest.hpp>
 #include <Axle/TemporalService.hpp>
+#include <Axle/UUID.hpp>
 #include <Axle/PostProcessService.hpp>
 #include <Axle/RenderDiagnostics.hpp>
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace Axle {
 
@@ -80,6 +84,25 @@ namespace Axle {
         bool AutoExposureEnabled = false;
     };
 
+    struct TemporalObjectKey {
+        uint64_t ID = 0;
+        bool IsStableUUID = false;
+        bool operator==(const TemporalObjectKey&) const = default;
+    };
+
+    struct TemporalObjectKeyHash {
+        size_t operator()(const TemporalObjectKey& k) const noexcept {
+            const uint64_t mixed = k.ID ^ (k.IsStableUUID ? 0x9e3779b97f4a7c15ull : 0x517cc1b727220a95ull);
+            return std::hash<uint64_t>{}(mixed);
+        }
+    };
+
+    inline TemporalObjectKey MakeTemporalObjectKey(uint32_t entityID, UUID stableUUID) {
+        const uint64_t uuidValue = static_cast<uint64_t>(stableUUID);
+        if (uuidValue != 0u) return { uuidValue, true };
+        return { static_cast<uint64_t>(entityID), false };
+    }
+
     // Owns one view's frame recording, target generation identity, reset state
     // and completion token. Passes may borrow Frame()/Commands() while active;
     // they never submit or recycle the underlying frame themselves.
@@ -135,6 +158,12 @@ namespace Axle {
         void CommitExposureHistory(const ExposureHistoryFrame& frame);
         void InvalidateExposureHistory();
 
+        std::optional<glm::mat4> FindPreviousObjectTransform(uint32_t entityID, UUID stableUUID) const;
+        void CommitTemporalObjectTransforms(const std::vector<std::pair<TemporalObjectKey, glm::mat4>>& transforms,
+                                            bool valid);
+        void InvalidateTemporalObjectTransforms();
+        size_t GetCachedTemporalObjectCount() const;
+
         TemporalService& Temporal() { return m_Temporal; }
         const TemporalService& Temporal() const { return m_Temporal; }
         PostProcessService& PostProcess() { return m_PostProcess; }
@@ -174,11 +203,20 @@ namespace Axle {
             uint64_t TargetGeneration, SceneInstanceID;
             RenderViewKind Kind;
         };
+        struct TemporalObjectCacheEntry {
+            uint64_t TargetGeneration = 0;
+            uint64_t SceneRevision = 0;
+            uint64_t SceneInstanceID = 0;
+            RenderViewKind Kind = RenderViewKind::Main;
+            std::unordered_map<TemporalObjectKey, glm::mat4, TemporalObjectKeyHash> PrevWorldTransforms;
+            bool Valid = false;
+        };
         // Concurrently live view targets retain their own history without being kept alive here.
         using ViewTargetIdentity = std::weak_ptr<RHI::RHIViewTargets>;
         std::map<ViewTargetIdentity, FroxelHistoryEntry, std::owner_less<ViewTargetIdentity>> m_FroxelHistories;
         std::map<ViewTargetIdentity, DDGIHistoryEntry, std::owner_less<ViewTargetIdentity>> m_DDGIHistories;
         std::map<ViewTargetIdentity, ExposureHistoryEntry, std::owner_less<ViewTargetIdentity>> m_ExposureHistories;
+        std::map<ViewTargetIdentity, TemporalObjectCacheEntry, std::owner_less<ViewTargetIdentity>> m_TemporalObjectCaches;
         PostProcessService m_PostProcess;
         RenderDiagnostics m_Diagnostics;
     };

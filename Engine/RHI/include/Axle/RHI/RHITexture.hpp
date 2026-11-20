@@ -11,6 +11,7 @@ namespace Axle::RHI {
         RGBA8_UNORM,
         RGBA8_SRGB,
         BGRA8_UNORM,
+        RG16_FLOAT,
         RGBA16_FLOAT,
         RGBA32_FLOAT,
         R32_FLOAT,
@@ -24,6 +25,7 @@ namespace Axle::RHI {
             case RHITextureFormat::RGBA8_UNORM:       return nri::Format::RGBA8_UNORM;
             case RHITextureFormat::RGBA8_SRGB:        return nri::Format::RGBA8_SRGB;
             case RHITextureFormat::BGRA8_UNORM:       return nri::Format::BGRA8_UNORM;
+            case RHITextureFormat::RG16_FLOAT:        return nri::Format::RG16_SFLOAT;
             case RHITextureFormat::RGBA16_FLOAT:      return nri::Format::RGBA16_SFLOAT;
             case RHITextureFormat::RGBA32_FLOAT:      return nri::Format::RGBA32_SFLOAT;
             case RHITextureFormat::R32_FLOAT:         return nri::Format::R32_SFLOAT;
@@ -39,6 +41,7 @@ namespace Axle::RHI {
             case nri::Format::RGBA8_UNORM:       return RHITextureFormat::RGBA8_UNORM;
             case nri::Format::RGBA8_SRGB:        return RHITextureFormat::RGBA8_SRGB;
             case nri::Format::BGRA8_UNORM:       return RHITextureFormat::BGRA8_UNORM;
+            case nri::Format::RG16_SFLOAT:       return RHITextureFormat::RG16_FLOAT;
             case nri::Format::RGBA16_SFLOAT:     return RHITextureFormat::RGBA16_FLOAT;
             case nri::Format::RGBA32_SFLOAT:     return RHITextureFormat::RGBA32_FLOAT;
             case nri::Format::R32_SFLOAT:        return RHITextureFormat::R32_FLOAT;

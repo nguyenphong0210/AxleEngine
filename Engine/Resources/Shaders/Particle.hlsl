@@ -4,6 +4,8 @@
 // Direct3D 12 (DXIL 6.0) & Vulkan 1.3 (SPIR-V) Unified Shader Codebase
 // =============================================================================
 
+#include "FroxelFogCommon.hlsli"
+
 // -----------------------------------------------------------------------------
 // Uniform Constant Buffer (b0, space 0) - 768-byte aligned CPU allocation
 // -----------------------------------------------------------------------------
@@ -28,16 +30,34 @@ cbuffer ParticleConstants : register(b0, space0) {
     float4   u_UVTransform;
     float4   u_MaterialTint;
     float4   u_MaterialEmission;
-    float4   u_Reserved;              // offset 544..560; CPU allocation padded to 768 bytes
+    float4   u_Reserved;              // offset 544..560 (x: ParticleBlendMode: 0=Additive, 1=AlphaBlend, 2=Multiply, 3=Cutout); CPU allocation padded to 768 bytes
+};
+
+cbuffer VolumetricFogConstants : register(b1, space0) {
+    float4x4 u_FogInvView;
+    float4x4 u_FogInvProjection;
+    float4   u_FogScreenSize;
+    float4   u_FogSunDirectionIntensity;
+    float4   u_FogSunRadiance;
+    float4   u_FogParams;
+    float4   u_FogAlbedo;
+    float4   u_FogGridParams;
+    float4   u_FogAmbientRadiance;
+    float4   u_FogDepthParams;
+    float4x4 u_FogPrevViewProjection;
+    float4   u_FogPrevViewDepthRow;
+    float4   u_FogTemporalParams;
 };
 
 // -----------------------------------------------------------------------------
 // Texture & Sampler Bindings (space 1)
 // -----------------------------------------------------------------------------
-Texture2D    u_ParticleTexture   : register(t0, space1);
-Texture2D    u_ParticleNormalMap : register(t1, space1);
-Texture2D    u_SceneDepthMap     : register(t2, space1);
-SamplerState u_LinearSampler     : register(s0, space1);
+Texture2D         u_ParticleTexture   : register(t0, space1);
+Texture2D         u_ParticleNormalMap : register(t1, space1);
+Texture2D         u_SceneDepthMap     : register(t2, space1);
+Texture3D<float4> u_FroxelIntegrated  : register(t3, space1);
+Texture3D<float4> u_FroxelMedia       : register(t4, space1);
+SamplerState      u_LinearSampler     : register(s0, space1);
 
 // -----------------------------------------------------------------------------
 // Vertex Shader Input (Instanced Vertex Stream)
@@ -273,6 +293,31 @@ float4 PSMain(PSInput input) : SV_Target0 {
         float depthDiff = sceneLinearZ - particleLinearZ;
         float fadeDist = max(0.001f, u_CameraUp.w);
         finalColor.a *= saturate(depthDiff / fadeDist);
+    }
+
+    if (u_FogParams.x > 0.0) {
+        float2 fogUV = input.Position.xy * u_FogScreenSize.zw;
+        float4 fogSample = EvaluateFroxelFogSample(
+            u_FroxelIntegrated,
+            u_FroxelMedia,
+            u_LinearSampler,
+            fogUV,
+            camDist,
+            u_FogInvView,
+            u_FogInvProjection,
+            u_FogParams,
+            u_FogGridParams,
+            u_FogDepthParams);
+        if (u_Reserved.x < 0.5) {
+            // Additive (0): background already carries fog scatter; apply only foreground transmittance.
+            finalColor.rgb = min(finalColor.rgb * fogSample.a, 65504.0);
+        } else if (u_Reserved.x >= 1.5 && u_Reserved.x < 2.5) {
+            // Multiply (2): fade absorption multiplier toward identity (1,1,1) as foreground fog occludes background.
+            finalColor.rgb = lerp(float3(1.0, 1.0, 1.0), finalColor.rgb, fogSample.a);
+        } else {
+            // AlphaBlend (1) or Cutout (3): attenuate surface radiance and add foreground in-scattering.
+            finalColor.rgb = min(finalColor.rgb * fogSample.a + fogSample.rgb, 65504.0);
+        }
     }
 
     return finalColor;

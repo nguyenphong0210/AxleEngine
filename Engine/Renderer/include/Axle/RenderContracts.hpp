@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Axle/Types.hpp>
+#include <Axle/FroxelShaderConstants.hpp>
 #include <Axle/RenderCapabilities.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/SceneRenderSettings.hpp>
@@ -785,10 +786,13 @@ namespace Axle {
             bool HasDirectionalSun = false;       // True iff world authored an active positive-illuminance sun
             glm::vec3 SunDirectionToLight{ 0.0f, 1.0f, 0.0f }; // Unit vector pointing toward sun light
             glm::vec3 SunRadiance{ 0.0f };        // Linear scene sun radiance (0 when !HasDirectionalSun)
+            bool HasLocalLight = false;           // True iff authored scene contains any positive-contribution local light
             bool HasAmbientLight = false;         // True iff authored lighting/environment has positive ambient
             glm::vec3 AmbientRadiance{ 0.0f };    // Linear scene ambient radiance (0 when unlit)
             bool AuthoredMaxDistanceInvalidFallback = false;
             std::string Diagnostic;
+
+            bool HasAnyLighting() const { return HasDirectionalSun || HasLocalLight || HasAmbientLight; }
         };
 
         struct FroxelSampleIntegral {

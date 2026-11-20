@@ -7,6 +7,48 @@
 #include <vector>
 
 namespace Axle::Passes {
+    FroxelFogContract::FroxelShaderConstants FroxelFogPass::BuildConstants(
+        const FroxelFogContract::FroxelMediaState& media,
+        const PerspectiveCamera& camera,
+        const glm::mat4& projectionZO,
+        const glm::mat4& viewProjZO,
+        const RHI::RHIViewTargets* targets,
+        const FroxelHistoryFrame& previous,
+        bool hasHistoryRead,
+        float historyWeight,
+        uint32_t width,
+        uint32_t height) {
+        FroxelFogContract::FroxelShaderConstants constants{};
+        const auto* scattering = targets ? targets->GetFroxelScattering() : nullptr;
+        const uint32_t gridW = scattering ? scattering->GetWidth() : 0u;
+        const uint32_t gridH = scattering ? scattering->GetHeight() : 0u;
+        const uint32_t gridD = scattering ? scattering->GetDepth() : 0u;
+
+        constants.InvView = glm::inverse(camera.GetViewMatrix());
+        constants.InvProjection = glm::inverse(projectionZO);
+        constants.ScreenSize = glm::vec4(static_cast<float>(width), static_cast<float>(height),
+            width > 0u ? 1.0f / static_cast<float>(width) : 0.0f,
+            height > 0u ? 1.0f / static_cast<float>(height) : 0.0f);
+        constants.SunDirectionIntensity = glm::vec4(media.SunDirectionToLight, media.HasDirectionalSun ? 1.0f : 0.0f);
+        constants.SunRadiance = glm::vec4(media.SunRadiance, 0.0f);
+        constants.FogParams = glm::vec4(media.EffectiveBaseDensity, media.HeightFalloff, media.ScatteringAsymmetry, 0.0f);
+        constants.FogAlbedo = glm::vec4(media.Albedo, 0.0f);
+        constants.FroxelGridParams = glm::vec4(static_cast<float>(gridW), static_cast<float>(gridH),
+            static_cast<float>(gridD), camera.IsOrthographic() ? 1.0f : 0.0f);
+        constants.AmbientRadiance = glm::vec4(media.AmbientRadiance, 0.0f);
+        const float logRatio = (media.NearDistance > 0.0f && media.MaxDistance > media.NearDistance)
+            ? std::log(media.MaxDistance / media.NearDistance) : 0.0f;
+        constants.FroxelDepthParams = glm::vec4(logRatio, media.NearDistance, media.MaxDistance, 0.0f);
+        (void)viewProjZO;
+
+        if (hasHistoryRead) {
+            constants.PrevViewProjection = previous.ViewProjection;
+            constants.PrevViewDepthRow = previous.ViewDepthRow;
+            constants.TemporalParams.x = historyWeight;
+        }
+        return constants;
+    }
+
     void FroxelFogPass::Declare(RenderGraph& graph, const FroxelFogResources& r) {
         using Layout = RHI::RHIResourceLayout;
         using Access = RenderGraph::Access;
@@ -68,28 +110,7 @@ namespace Axle::Passes {
             return false;
         }
 
-        const auto& media = i.Media;
-
-        RHIVolumetricFogConstants constants{};
-        constants.InvView = glm::inverse(i.Camera.GetViewMatrix());
-        constants.InvProjection = glm::inverse(i.ProjectionZO);
-        constants.ScreenSize = glm::vec4(static_cast<float>(i.Width), static_cast<float>(i.Height),
-            1.0f / static_cast<float>(i.Width), 1.0f / static_cast<float>(i.Height));
-        constants.SunDirectionIntensity = glm::vec4(media.SunDirectionToLight, media.HasDirectionalSun ? 1.0f : 0.0f);
-        constants.SunRadiance = glm::vec4(media.SunRadiance, 0.0f);
-        constants.FogParams = glm::vec4(media.EffectiveBaseDensity, media.HeightFalloff, media.ScatteringAsymmetry, 0.0f);
-        constants.FogAlbedo = glm::vec4(media.Albedo, 0.0f);
-        constants.FroxelGridParams = glm::vec4(static_cast<float>(gridW), static_cast<float>(gridH),
-            static_cast<float>(gridD), i.Camera.IsOrthographic() ? 1.0f : 0.0f);
-        constants.AmbientRadiance = glm::vec4(media.AmbientRadiance, 0.0f);
-        const float logRatio = std::log(media.MaxDistance / media.NearDistance);
-        constants.FroxelDepthParams = glm::vec4(logRatio, media.NearDistance, media.MaxDistance, 0.0f);
-
-        if (i.HistoryRead) {
-            constants.PrevViewProjection = i.Previous.ViewProjection;
-            constants.PrevViewDepthRow = i.Previous.ViewDepthRow;
-            constants.TemporalParams.x = i.HistoryWeight;
-        }
+        const auto& constants = i.Constants;
 
         if (!ops.BeginPass("FogCopy")) return false;
         commands.CopyTexture(*color->GetNative(), nullptr, *i.SceneTarget, nullptr);

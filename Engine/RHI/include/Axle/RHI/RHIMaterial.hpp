@@ -228,6 +228,7 @@ namespace Axle::RHI {
         static std::shared_ptr<RHITexture> GetDefaultIrradianceCubemap();   // 1x1x6 Neutral Ambient Irradiance Cubemap
         static std::shared_ptr<RHITexture> GetDefaultPrefilterCubemap();    // 1x1x6 Specular Prefiltered Cubemap (5 mips)
         static std::shared_ptr<RHITexture> GetDefaultBRDFLUT();             // 1x1 Neutral BRDF Integration 2D LUT
+        static std::shared_ptr<RHITexture> GetDefaultEmptyFroxelVolumeTexture(); // 1x1x1 RGBA16F (0,0,0,1) Neutral 3D Froxel Volume
         static void ReleaseDefaultTextures();
 
         // Automotive & Industrial PBR Presets

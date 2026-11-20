@@ -8,6 +8,7 @@
 #include <Axle/ParticleSystem.hpp>
 #include <Axle/ParticleMaterialAdapter.hpp>
 #include <Axle/ParticleRenderer.hpp>
+#include <Axle/FroxelShaderConstants.hpp>
 
 #include <Axle/RHI/RHICommon.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
@@ -122,6 +123,10 @@ namespace Axle {
             m_ActiveConstants.ScreenSize = glm::vec4(width, height, 1.0f/std::max(width,1u), 1.0f/std::max(height,1u));
         }
 
+        void SetVolumetricFog(const FroxelFogContract::FroxelShaderConstants* fogConstants,
+                              RHI::RHITexture* integratedVolume,
+                              RHI::RHITexture* mediaVolume);
+
         // End batch rendering pass
         void End();
 
@@ -216,6 +221,12 @@ namespace Axle {
         RHI::RHISampler m_LinearSampler;
         RHI::RHIDescriptorPool m_DescriptorPool;
         nri::DescriptorSet* m_DescriptorSet = nullptr;
+
+        RHI::RHIBuffer m_FogConstantBuffer;
+        FroxelFogContract::FroxelShaderConstants m_ActiveFogConstants{};
+        bool m_HasActiveFogConstants = false;
+        RHI::RHITexture* m_FroxelIntegrated = nullptr;
+        RHI::RHITexture* m_FroxelMedia = nullptr;
 
         // Active pass context
         RHIParticleConstants m_ActiveConstants{};

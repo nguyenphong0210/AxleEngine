@@ -350,6 +350,17 @@ namespace Axle {
         const auto fogDepth = useFog ? graph.Import("FogDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto fogScattering = useFog ? graph.Import("FogScattering", froxelScatteringTex->GetNative()) : output;
         const auto fogIntegrated = useFog ? graph.Import("FogIntegrated", froxelIntegratedTex->GetNative()) : output;
+        RHITexture* resolvedFogMediaTex = useFog ? (fogHistoryWrite ? fogHistoryWrite : froxelScatteringTex) : nullptr;
+        const auto fogResolved = useFog ? (fogHistoryWrite ? fogHistoryOutput : fogScattering) : output;
+        const RHIVolumetricFogConstants activeFogConstants = useFog
+            ? Passes::FroxelFogPass::BuildConstants(
+                froxelMedia, camera, projZO, viewProjZO, viewTargets.get(),
+                previousFog, viewCtx.GetFroxelHistory().Valid && fogHistoryRead != nullptr,
+                historyWeight, width, height)
+            : RHIVolumetricFogConstants{};
+        nri::Descriptor* activeForwardFogCBV = m_DisabledFogConstantBuffer.GetCBV();
+        nri::DescriptorSet* activeForwardFogSet = m_ForwardFogFallbackDescriptorSet;
+        nri::DescriptorSet* transparentFogSet = m_ForwardFogFallbackDescriptorSet;
         ReflectionPublication reflectionPublication;
         RHISceneConstants sceneConstants;
         // 3. Begin Rendering Pass
@@ -727,12 +738,14 @@ namespace Axle {
                 Commands().SetRootDescriptor(3, m_CascadedShadows.GetConstantsCBV());
                 Commands().SetRootDescriptor(4, m_LocalShadows.GetConstantsCBV());
                 Commands().SetRootDescriptor(5, m_ReflectionProbeBuffer.GetCBV());
+                Commands().SetRootDescriptor(6, activeForwardFogCBV);
             } else {
                 const auto& resource = *m_MaterialDraws[item.DrawResourceIndex];
                 Commands().SetPipeline(item.PreparedPipeline);
                 Commands().SetRootDescriptor(2, resource.Constants.GetCBV());
                 if (!bindDescriptorSet(0, resource.Set) ||
-                    !bindDescriptorSet(1, m_ForwardOcclusionDescriptorSet)) { drawFailed = true; return; }
+                    !bindDescriptorSet(1, m_ForwardOcclusionDescriptorSet) ||
+                    !bindDescriptorSet(2, activeForwardFogSet)) { drawFailed = true; return; }
                 Commands().SetRootConstants(0, &item.PushConsts, sizeof(item.PushConsts));
                 m_LastStreamedTransformBytes += sizeof(item.PushConsts);
                 item.Mesh->Bind(Commands()); item.Mesh->Draw(Commands());
@@ -1128,6 +1141,9 @@ namespace Axle {
             Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
             Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
             Commands().SetRootDescriptor(5,m_ReflectionProbeBuffer.GetCBV());
+            activeForwardFogCBV = m_DisabledFogConstantBuffer.GetCBV();
+            activeForwardFogSet = m_ForwardFogFallbackDescriptorSet;
+            Commands().SetRootDescriptor(6, activeForwardFogCBV);
 
             // Bind Descriptor Pool & Material Descriptor Set (Space 1: 6 PBR textures + 16x Aniso Sampler)
             if (m_DescriptorPool.IsValid()) {
@@ -1289,7 +1305,38 @@ namespace Axle {
                 return true;
             };
             if (!declareForwardPass("OpaqueAndSky")) return fail();
+            if (!graph.DeclareRead("OpaqueAndSky", m_ForwardFogFallbackDescriptorSet) ||
+                !graph.DeclareRead("OpaqueAndSky", m_DisabledFogConstantBuffer.GetCBV())) return fail();
             if (allowCaptureTransparent && !declareForwardPass("Transparent")) return fail();
+            if (allowCaptureTransparent) {
+                if (useFog) {
+                    auto& resources = m_Device->GetResources();
+                    nri::DescriptorSet* chosenSet = nullptr;
+                    for (auto* candidate : m_ForwardFogSets) {
+                        if (!candidate) continue;
+                        auto lease = resources.AcquireNative(candidate);
+                        if (lease.IsLive() && !resources.IsInUse(lease)) {
+                            chosenSet = candidate;
+                            break;
+                        }
+                    }
+                    if (!chosenSet) {
+                        chosenSet = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 2);
+                        if (chosenSet) m_ForwardFogSets.push_back(chosenSet);
+                    }
+                    auto* transparentFogBuf = viewCtx.PreparePassUniform("TransparentFog", sizeof(RHIVolumetricFogConstants));
+                    if (!chosenSet || !transparentFogBuf ||
+                        !graph.DeclareRead("Transparent", transparentFogBuf->GetCBV()) ||
+                        !m_DescriptorPool.UpdateTexture(chosenSet, 0, 0, froxelIntegratedTex->GetSRV()) ||
+                        !m_DescriptorPool.UpdateTexture(chosenSet, 1, 0, resolvedFogMediaTex->GetSRV()) ||
+                        !graph.DeclareRead("Transparent", chosenSet)) return fail();
+                    passUniforms["TransparentFog"] = transparentFogBuf;
+                    transparentFogSet = chosenSet;
+                } else {
+                    if (!graph.DeclareRead("Transparent", m_ForwardFogFallbackDescriptorSet) ||
+                        !graph.DeclareRead("Transparent", m_DisabledFogConstantBuffer.GetCBV())) return fail();
+                }
+            }
             if (!graph.DeclareRead("OpaqueAndSky",m_DefaultDescriptorSet)) return fail();
             if (settings.EnableSkybox && m_SkyboxPipeline && lighting.Environment &&
                 (!graph.DeclareRead("OpaqueAndSky",m_SkyboxDescriptorSet) ||
@@ -1428,6 +1475,42 @@ namespace Axle {
             return {};
         });
 
+        // 7.7. Volumetric fog and atmospheric media composite opaque + sky before transparent/particle depth interaction.
+        addPass("FroxelFogPass", [&](const RenderPassContext&) -> RenderPassResult {
+            if (useFog) {
+                const Passes::PassRecordOps ops{
+                    beginPass, passUniform,
+                    [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
+                        return bindDescriptorSet(index, set, bindPoint);
+                    }, beginRendering, endRendering};
+                if (!Passes::FroxelFogPass::Record(*this,
+                    {activeFogConstants, viewTargets.get(),
+                     viewCtx.GetFroxelHistory().Valid ? fogHistoryRead : nullptr, fogHistoryWrite,
+                     sceneTargetTexture, sceneDepthTexture, sceneTargetRTV, sceneTargetFormat,
+                     width, height, dispatchCount}, ops))
+                    return fail();
+            }
+
+            return {};
+        }, [&](RenderGraph& graph) {
+            if (useFog) {
+                Passes::FroxelFogPass::Declare(graph, {
+                    sceneColor, fogInput, sceneDepth, fogDepth, fogScattering, fogIntegrated,
+                    shadows, localShadows, injectFogShadows && shadowAtlas, injectFogShadows && localAtlas,
+                    fogHistoryInput, fogHistoryOutput, fogHistoryWrite != nullptr, fogHistoryRead != nullptr});
+            }
+        }, [&](const RenderPassContext&) -> RenderPassResult {
+            if (useFog && (!uniform("FogInject", sizeof(RHIVolumetricFogConstants)) ||
+                !uniform("FogIntegrate", sizeof(RHIVolumetricFogConstants)) ||
+                !uniform("FogApply", sizeof(RHIVolumetricFogConstants)) ||
+                !graph.DeclareRead("FogInject", m_LightBuffer.GetCBV()))) return fail();
+            if (fogReprojectUniform && !declareUniform("FogReproject", fogReprojectUniform)) return fail();
+            if (useFog && injectFogShadows &&
+                (!graph.DeclareRead("FogInject", m_CascadedShadows.GetConstantsCBV()) ||
+                 !graph.DeclareRead("FogInject", m_LocalShadows.GetConstantsCBV()))) return fail();
+            return {};
+        });
+
         if (allowCaptureTransparent) {
         addPass("Transparent", [&](const RenderPassContext&) -> RenderPassResult {
             if (copyRefraction) {
@@ -1436,10 +1519,21 @@ namespace Axle {
                 Commands().CopyTexture(*m_OpaqueSceneDepth->GetNative(), nullptr, *sceneDepthTexture, nullptr);
             }
             if (!beginPass("Transparent")) return fail();
+            if (useFog) {
+                auto* transparentFogBuf = passUniforms.at("TransparentFog");
+                if (!transparentFogBuf->UpdateData(&activeFogConstants, sizeof(activeFogConstants))) return fail();
+                activeForwardFogCBV = transparentFogBuf->GetCBV();
+                activeForwardFogSet = transparentFogSet;
+            } else {
+                activeForwardFogCBV = m_DisabledFogConstantBuffer.GetCBV();
+                activeForwardFogSet = m_ForwardFogFallbackDescriptorSet;
+            }
             colorAttachment.loadOp = nri::LoadOp::LOAD;
             depthAttachment.loadOp = nri::LoadOp::LOAD;
             if (sceneDepthDSV) renderingDesc.depth = depthAttachment;
             beginRendering(renderingDesc);
+            Commands().SetViewport(vp);
+            Commands().SetScissor(scissor);
             // Skybox changes the entire binding layout. Restore all built-in
             // receiver state before transparent or custom material draws.
             Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS,m_PipelineLayout);
@@ -1449,6 +1543,7 @@ namespace Axle {
             Commands().SetRootDescriptor(3,m_CascadedShadows.GetConstantsCBV());
             Commands().SetRootDescriptor(4,m_LocalShadows.GetConstantsCBV());
             Commands().SetRootDescriptor(5,m_ReflectionProbeBuffer.GetCBV());
+            Commands().SetRootDescriptor(6,activeForwardFogCBV);
 
             // 4b. Render Transparent & Additive Queue (Sorted Back-to-Front)
             if (!transparentQueue.empty()) {
@@ -1474,6 +1569,10 @@ namespace Axle {
                 transparentUses.push_back({opaqueColor,Layout::ShaderResource});
                 transparentUses.push_back({opaqueDepth,Layout::ShaderResource});
             }
+            if (useFog) {
+                transparentUses.push_back({fogIntegrated,Layout::ShaderResource});
+                transparentUses.push_back({fogResolved,Layout::ShaderResource});
+            }
             graph.AddPass("Transparent", std::move(transparentUses));
         });
         }
@@ -1492,6 +1591,10 @@ namespace Axle {
                 m_ParticleRenderer->ResetMetrics();
                 RHITexture* particleDepth = copyParticleDepth ? m_ParticleSceneDepth : nullptr;
                 // MSAA uses depth testing with soft intersections disabled until a compatible depth resolve exists.
+                m_ParticleRenderer->SetVolumetricFog(
+                    useFog ? &activeFogConstants : nullptr,
+                    useFog ? froxelIntegratedTex : nullptr,
+                    useFog ? resolvedFogMediaTex : nullptr);
                 m_ParticleRenderer->Begin(Commands(), camera, sceneTargetFormat, m_CurrentDepthFormat, activeSampleCount);
                 m_ParticleRenderer->SetSceneDepth(particleDepth, width, height);
                 for (const auto& prepared : preparedParticles) {
@@ -1559,11 +1662,19 @@ namespace Axle {
                 {sceneDepth,Layout::CopySource}, {particleDepthImage,Layout::CopyDest,Access::Write}});
             auto overlayUses = attachments(Load::Load);
             if (copyParticleDepth) overlayUses.push_back({particleDepthImage,Layout::ShaderResource});
+            if (useFog && settings.EnableParticles && m_ParticleRenderer && !world.Particles.empty()) {
+                overlayUses.push_back({fogIntegrated,Layout::ShaderResource});
+                overlayUses.push_back({fogResolved,Layout::ShaderResource});
+            }
             graph.AddPass("ParticlesAndPhysics", std::move(overlayUses));
             if (useMSAA) graph.AddPass("Resolve", {
                 {sceneColor,Layout::ResolveSource}, {useToneMap ? hdr : fxaa,Layout::ResolveDest,Access::Write}});
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (settings.EnableParticles && m_ParticleRenderer) {
+                m_ParticleRenderer->SetVolumetricFog(
+                    useFog ? &activeFogConstants : nullptr,
+                    useFog ? froxelIntegratedTex : nullptr,
+                    useFog ? resolvedFogMediaTex : nullptr);
                 m_ParticleRenderer->BeginPreparation();
                 for (const auto& batch : world.Particles) {
                     if (!batch) return RenderPassResult::Failed("null particle snapshot");
@@ -1626,7 +1737,7 @@ namespace Axle {
             return {};
         });
 
-        addPass("FroxelFogPass", [&](const RenderPassContext&) -> RenderPassResult {
+        addPass("PostProcessPass", [&](const RenderPassContext&) -> RenderPassResult {
             std::vector<std::pair<uint32_t, uint64_t>> identities;
             auto collect = [&](const auto& queue) {
                 for (const auto& item : queue) {
@@ -1651,42 +1762,6 @@ namespace Axle {
             }
             if (viewCtx.ObserveMaterialGeneration(materialGeneration))
                 temporalSelection = viewCtx.Temporal().Begin(useTAA ? 2 : 0, {jitterX, jitterY});
-            // 7.7. Volumetric fog and atmospheric media.
-            if (useFog) {
-                const Passes::PassRecordOps ops{
-                    beginPass, passUniform,
-                    [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {
-                        return bindDescriptorSet(index, set, bindPoint);
-                    }, beginRendering, endRendering};
-                if (!Passes::FroxelFogPass::Record(*this,
-                    {froxelMedia, camera, projZO, viewTargets.get(),
-                     viewCtx.GetFroxelHistory().Valid ? fogHistoryRead : nullptr, fogHistoryWrite,
-                     previousFog, historyWeight, sceneTargetTexture,
-                     sceneDepthTexture, sceneTargetRTV, sceneTargetFormat, width, height, dispatchCount}, ops))
-                    return fail();
-            }
-
-            return {};
-        }, [&](RenderGraph& graph) {
-            if (useFog) {
-                Passes::FroxelFogPass::Declare(graph, {
-                    sceneColor, fogInput, sceneDepth, fogDepth, fogScattering, fogIntegrated,
-                    shadows, localShadows, injectFogShadows && shadowAtlas, injectFogShadows && localAtlas,
-                    fogHistoryInput, fogHistoryOutput, fogHistoryWrite != nullptr, fogHistoryRead != nullptr});
-            }
-        }, [&](const RenderPassContext&) -> RenderPassResult {
-            if (useFog && (!uniform("FogInject", sizeof(RHIVolumetricFogConstants)) ||
-                !uniform("FogIntegrate", sizeof(RHIVolumetricFogConstants)) ||
-                !uniform("FogApply", sizeof(RHIVolumetricFogConstants)) ||
-                !graph.DeclareRead("FogInject", m_LightBuffer.GetCBV()))) return fail();
-            if (fogReprojectUniform && !declareUniform("FogReproject", fogReprojectUniform)) return fail();
-            if (useFog && injectFogShadows &&
-                (!graph.DeclareRead("FogInject", m_CascadedShadows.GetConstantsCBV()) ||
-                 !graph.DeclareRead("FogInject", m_LocalShadows.GetConstantsCBV()))) return fail();
-            return {};
-        });
-
-        addPass("PostProcessPass", [&](const RenderPassContext&) -> RenderPassResult {
             const Passes::PassRecordOps postOps{
                 beginPass, passUniform,
                 [&](uint32_t index, nri::DescriptorSet* set, nri::BindPoint bindPoint) {

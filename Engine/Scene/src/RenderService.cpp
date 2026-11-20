@@ -340,8 +340,13 @@ namespace Axle {
         result.RenderedEntityCount = result.DrawCallCount;
         // GL executes on the current context; an NRI completion token has no meaning here.
         if (request.Settings.EnableFXAA || request.Settings.EnableToneMapping || request.Settings.MSAASamples > 1 ||
+            request.Settings.EnableVolumetricFog ||
             std::any_of(prepared.Meshes.begin(),prepared.Meshes.end(),[](const auto& mesh){return mesh.Material.UseCustomShader;}))
             result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
+        if (request.Settings.EnableVolumetricFog) {
+            if (!result.ErrorMessage.empty()) result.ErrorMessage += " ";
+            result.ErrorMessage += "VOLUMETRIC_FOG_UNSUPPORTED: OpenGL compatibility omits 3D froxel volumetric fog; use D3D12 or Vulkan.";
+        }
         if(request.Settings.EnableShadows&&(
             std::any_of(prepared.PointLights.begin(),prepared.PointLights.end(),[](const auto& light){return light.Shadows.CastShadows&&light.Intensity>0;})||
             std::any_of(prepared.SpotLights.begin(),prepared.SpotLights.end(),[](const auto& light){return light.Shadows.CastShadows&&light.Intensity>0;}))) {

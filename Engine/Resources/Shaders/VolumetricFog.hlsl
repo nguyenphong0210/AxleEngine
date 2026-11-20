@@ -8,6 +8,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+#include "FroxelFogCommon.hlsli"
+
 static const float LOCAL_INTENSITY_SCALE = 0.05;
 
 cbuffer VolumetricFogConstants : register(b0, space0) {
@@ -593,36 +595,20 @@ float4 PSMain(VSOutput input) : SV_Target {
     float gridD = u_FroxelGridParams.z;
 
     float pixelViewZ = depth >= 1.0 ? farZ : -ReconstructViewPos(uv, depth).z;
-    if (pixelViewZ <= nearZ) {
-        return sceneColor;
-    }
+    float4 fogSample = EvaluateFroxelFogSample(
+        u_FroxelVolume,
+        u_FroxelMedia,
+        u_LinearSampler,
+        uv,
+        pixelViewZ,
+        u_InvView,
+        u_InvProjection,
+        u_FogParams,
+        u_FroxelGridParams,
+        u_FroxelDepthParams);
 
-    float4 fogSample;
-    if (pixelViewZ >= farZ) {
-        fogSample = u_FroxelVolume.SampleLevel(u_LinearSampler, float3(uv, 1.0 - 0.5 / gridD), 0.0);
-    } else {
-        float slice = min(floor(saturate(log(pixelViewZ / nearZ) / logRatio) * gridD), gridD - 1.0);
-        fogSample = float4(0.0, 0.0, 0.0, 1.0);
-        if (slice > 0.0) {
-            fogSample = u_FroxelVolume.SampleLevel(u_LinearSampler, float3(uv, (slice - 0.5) / gridD), 0.0);
-        }
-        // Keep both XY-filtered endpoints continuous across slice boundaries.
-        // The Beer-Lambert weight evaluates the partial distance inside the slice.
-        float3 sampleUV = float3(uv, (slice + 0.5) / gridD);
-        float extinction = max(u_FroxelMedia.SampleLevel(u_LinearSampler, sampleUV, 0.0).a, 0.0);
-        float4 sliceEnd = u_FroxelVolume.SampleLevel(u_LinearSampler, sampleUV, 0.0);
-        float3 originWS, directionPerUnitZ;
-        ReconstructWorldRay(uv, originWS, directionPerUnitZ);
-        float z0 = SliceDepth(slice, gridD);
-        float span = SliceDepth(slice + 1.0, gridD) - z0;
-        float fraction = span > 0.0 ? saturate((pixelViewZ - z0) / span) : 0.0;
-        float tau = extinction * span * length(directionPerUnitZ);
-        float weight = tau > 0.0 ? AbsorbedFraction(tau * fraction) / AbsorbedFraction(tau) : fraction;
-        fogSample = lerp(fogSample, sliceEnd, saturate(weight));
-    }
-
-    float3 inScattering = max(fogSample.rgb, float3(0.0, 0.0, 0.0));
-    float transmittance = saturate(fogSample.a);
+    float3 inScattering = fogSample.rgb;
+    float transmittance = fogSample.a;
     float3 finalColor = min(sceneColor.rgb * transmittance + inScattering, 65504.0);
     return float4(finalColor, sceneColor.a);
 }

@@ -64,6 +64,7 @@ namespace Axle {
         m_DrawResourceCursor = 0;
 
         m_ConstantBuffer.Shutdown();
+        m_FogConstantBuffer.Shutdown();
         m_InstanceBuffer.Shutdown();
         m_LinearSampler.Shutdown();
         m_DescriptorPool.Shutdown();
@@ -73,7 +74,12 @@ namespace Axle {
         m_PipelineAlphaBlendHDR = nullptr;
         m_PipelineAdditiveSDR = nullptr;
         m_PipelineAdditiveHDR = nullptr;
+        m_PipelineCutoutSDR = nullptr;
+        m_PipelineCutoutHDR = nullptr;
         m_DescriptorSet = nullptr;
+        m_FroxelIntegrated = nullptr;
+        m_FroxelMedia = nullptr;
+        m_HasActiveFogConstants = false;
 
         m_InstanceStagingBuffer.clear();
         m_InBatch = false;
@@ -112,10 +118,10 @@ namespace Axle {
                                                             "Particle_VBO_" + suffix))) {
             return nullptr;
         }
-        if (!res->Pool.Init(RHI::RHIDescriptorPoolDesc::Tier2Bindless(3, 1))) return nullptr;
+        if (!res->Pool.Init(RHI::RHIDescriptorPoolDesc::Tier2Bindless(5, 1))) return nullptr;
         res->Set = res->Pool.AllocateDescriptorSet(m_PipelineLayout, 0);
         if (!res->Set) return nullptr;
-        if (!res->Pool.UpdateSampler(res->Set, 3, 0, m_LinearSampler.GetNative())) return nullptr;
+        if (!res->Pool.UpdateSampler(res->Set, 5, 0, m_LinearSampler.GetNative())) return nullptr;
         m_DrawResources.push_back(std::move(res));
         m_DrawResourceCursor = m_DrawResources.size();
         return m_DrawResources.back().get();
@@ -175,51 +181,49 @@ namespace Axle {
     }
 
     bool RHIParticleRenderer::CreatePipelineLayout(RHI::RHIDevice& device) {
-        // Root Descriptor [0] b0, space 0: aligned RHIParticleConstants
-        nri::RootDescriptorDesc rootDesc = {};
-        rootDesc.registerIndex = 0;
-        rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
-        rootDesc.shaderStages = nri::StageBits::ALL;
+        // Root Descriptors (space 0):
+        // [0] b0: aligned RHIParticleConstants
+        // [1] b1: aligned FroxelShaderConstants (FogParams.x <= 0 disables sampling)
+        nri::RootDescriptorDesc rootDescs[2] = {};
+        rootDescs[0].registerIndex = 0;
+        rootDescs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDescs[0].shaderStages = nri::StageBits::ALL;
+
+        rootDescs[1].registerIndex = 1;
+        rootDescs[1].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDescs[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
 
         // Descriptor Set (space 1):
-        // Range 0: t0 (Particle Texture, 1 descriptor)
-        // Range 1: t1 (Normal Map, 1 descriptor)
-        // Range 2: t2 (Scene Depth Map, 1 descriptor)
-        // Range 3: s0 (Linear Sampler, 1 descriptor)
-        nri::DescriptorRangeDesc ranges[4] = {};
-        ranges[0].baseRegisterIndex = 0;
-        ranges[0].descriptorNum = 1;
-        ranges[0].descriptorType = nri::DescriptorType::TEXTURE;
-        ranges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[0].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        // Range 0: t0 (Particle Texture)
+        // Range 1: t1 (Normal Map)
+        // Range 2: t2 (Scene Depth Map)
+        // Range 3: t3 (Froxel Integrated 3D Volume)
+        // Range 4: t4 (Froxel Media 3D Volume)
+        // Range 5: s0 (Linear Sampler)
+        nri::DescriptorRangeDesc ranges[6] = {};
+        for (uint32_t i = 0; i < 5; ++i) {
+            ranges[i].baseRegisterIndex = i;
+            ranges[i].descriptorNum = 1;
+            ranges[i].descriptorType = nri::DescriptorType::TEXTURE;
+            ranges[i].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+            ranges[i].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        }
 
-        ranges[1].baseRegisterIndex = 1;
-        ranges[1].descriptorNum = 1;
-        ranges[1].descriptorType = nri::DescriptorType::TEXTURE;
-        ranges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[1].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        ranges[2].baseRegisterIndex = 2;
-        ranges[2].descriptorNum = 1;
-        ranges[2].descriptorType = nri::DescriptorType::TEXTURE;
-        ranges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[2].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        ranges[3].baseRegisterIndex = 0;
-        ranges[3].descriptorNum = 1;
-        ranges[3].descriptorType = nri::DescriptorType::SAMPLER;
-        ranges[3].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[3].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        ranges[5].baseRegisterIndex = 0;
+        ranges[5].descriptorNum = 1;
+        ranges[5].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[5].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[5].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
         descSet.ranges = ranges;
-        descSet.rangeNum = 4;
+        descSet.rangeNum = 6;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
-        layoutDesc.rootDescriptors = &rootDesc;
-        layoutDesc.rootDescriptorNum = 1;
+        layoutDesc.rootDescriptors = rootDescs;
+        layoutDesc.rootDescriptorNum = 2;
         layoutDesc.descriptorSets = &descSet;
         layoutDesc.descriptorSetNum = 1;
         layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
@@ -228,9 +232,18 @@ namespace Axle {
     }
 
     bool RHIParticleRenderer::CreateBuffers(RHI::RHIDevice& device) {
-        // 1. Hardware Constant Buffer (aligned to 256B boundary)
+        // 1. Hardware Constant Buffers (aligned to 256B boundary)
         if (!m_ConstantBuffer.Init(RHI::RHIBufferDesc::Constant(sizeof(RHIParticleConstants), RHI::RHIMemoryLocation::HostUpload, "Particle_ConstantBuffer"))) {
             return false;
+        }
+        if (!m_FogConstantBuffer.Init(RHI::RHIBufferDesc::Constant(sizeof(FroxelFogContract::FroxelShaderConstants), RHI::RHIMemoryLocation::HostUpload, "Particle_FogConstantBuffer"))) {
+            return false;
+        }
+        {
+            const FroxelFogContract::FroxelShaderConstants disabledFog{};
+            if (!m_FogConstantBuffer.UpdateData(&disabledFog, sizeof(disabledFog))) {
+                return false;
+            }
         }
 
         // 2. Hardware Dynamic Instance Buffer (20,000 particles * 84 bytes = 1.68 MB)
@@ -254,7 +267,7 @@ namespace Axle {
         }
 
         if (m_LinearSampler.IsValid() &&
-            !m_DescriptorPool.UpdateSampler(m_DescriptorSet, 3, 0, m_LinearSampler.GetNative())) return false;
+            !m_DescriptorPool.UpdateSampler(m_DescriptorSet, 5, 0, m_LinearSampler.GetNative())) return false;
 
         return true;
     }
@@ -431,6 +444,13 @@ namespace Axle {
         m_ActiveConstants.CameraRight = glm::vec4(camRight, camera.GetFarClip());
         m_ActiveConstants.CameraUp = glm::vec4(camUp, 0.5f);
 
+        // Populate Froxel Volumetric Fog CBV once per batch session
+        const FroxelFogContract::FroxelShaderConstants disabledFog{};
+        const auto& activeFogConstants = m_HasActiveFogConstants ? m_ActiveFogConstants : disabledFog;
+        if (m_FogConstantBuffer.IsValid()) {
+            m_FogConstantBuffer.UpdateData(&activeFogConstants, sizeof(activeFogConstants));
+        }
+
         // 2. Populate Light Environment
         m_ActiveConstants.SunDirection = glm::vec4(m_LightEnvironment.SunDirection, 0.2f);
         m_ActiveConstants.SunColor = glm::vec4(m_LightEnvironment.SunColor, 0.5f);
@@ -447,14 +467,42 @@ namespace Axle {
         m_InBatch = true;
     }
 
+    void RHIParticleRenderer::SetVolumetricFog(const FroxelFogContract::FroxelShaderConstants* fogConstants,
+                                               RHI::RHITexture* integratedVolume,
+                                               RHI::RHITexture* mediaVolume) {
+        if (fogConstants && fogConstants->FogParams.x > 0.0f &&
+            integratedVolume && integratedVolume->IsValid() && integratedVolume->GetSRV() &&
+            mediaVolume && mediaVolume->IsValid() && mediaVolume->GetSRV()) {
+            m_ActiveFogConstants = *fogConstants;
+            m_HasActiveFogConstants = true;
+            m_FroxelIntegrated = integratedVolume;
+            m_FroxelMedia = mediaVolume;
+        } else {
+            m_ActiveFogConstants = {};
+            m_HasActiveFogConstants = false;
+            m_FroxelIntegrated = nullptr;
+            m_FroxelMedia = nullptr;
+        }
+    }
+
     bool RHIParticleRenderer::PrepareInputs(RenderGraph& graph, std::string_view pass, const ParticlePool& pool,
         nri::Descriptor* texture, nri::Descriptor* normal, nri::Descriptor* depth) {
         if (!pool.GetActiveCount()) return true;
         auto white=RHI::RHIMaterial::GetDefaultWhiteTexture();
         auto flat=RHI::RHIMaterial::GetDefaultFlatNormalTexture();
-        if (!white || !flat || !graph.DeclareRead(pass, texture ? texture : white->GetSRV()) ||
+        auto emptyFog = RHI::RHIMaterial::GetDefaultEmptyFroxelVolumeTexture();
+        nri::Descriptor* fogIntegratedSRV = (m_HasActiveFogConstants && m_FroxelIntegrated && m_FroxelIntegrated->IsValid())
+            ? m_FroxelIntegrated->GetSRV() : (emptyFog ? emptyFog->GetSRV() : nullptr);
+        nri::Descriptor* fogMediaSRV = (m_HasActiveFogConstants && m_FroxelMedia && m_FroxelMedia->IsValid())
+            ? m_FroxelMedia->GetSRV() : (emptyFog ? emptyFog->GetSRV() : nullptr);
+        if (!white || !flat || !emptyFog || !fogIntegratedSRV || !fogMediaSRV ||
+            !m_FogConstantBuffer.IsValid() || !m_FogConstantBuffer.GetCBV() ||
+            !graph.DeclareRead(pass, texture ? texture : white->GetSRV()) ||
             !graph.DeclareRead(pass, normal ? normal : flat->GetSRV()) ||
-            !graph.DeclareRead(pass, depth ? depth : white->GetSRV())) return false;
+            !graph.DeclareRead(pass, depth ? depth : white->GetSRV()) ||
+            !graph.DeclareRead(pass, fogIntegratedSRV) ||
+            !graph.DeclareRead(pass, fogMediaSRV) ||
+            !graph.DeclareRead(pass, m_FogConstantBuffer.GetCBV())) return false;
         for (uint32_t offset=0; offset<pool.GetActiveCount(); offset+=MAX_PARTICLES_PER_BATCH) {
             auto* draw=AcquireDrawResources(std::min(MAX_PARTICLES_PER_BATCH, pool.GetActiveCount()-offset));
             if (!draw || !graph.DeclareRead(pass, draw->Constants.GetCBV()) ||
@@ -466,6 +514,9 @@ namespace Axle {
     void RHIParticleRenderer::End() {
         m_InBatch = false;
         m_SceneDepth = nullptr;
+        m_HasActiveFogConstants = false;
+        m_FroxelIntegrated = nullptr;
+        m_FroxelMedia = nullptr;
     }
 
     bool RHIParticleRenderer::Render(RHI::RHICommandBuffer& cmd,
@@ -543,6 +594,7 @@ namespace Axle {
             drawConstants.MaterialTint = material ? material->BaseColor : glm::vec4(1);
             drawConstants.MaterialEmission = material ? glm::vec4(material->EmissiveColor, material->EmissiveIntensity) : glm::vec4(0);
             drawConstants.UVTransform = material ? glm::vec4(material->UVScale, material->UVOffset) : glm::vec4(1,1,0,0);
+            drawConstants.Reserved.x = static_cast<float>(static_cast<int>(config.BlendMode));
 
             if (!drawRes->Constants.UpdateData(&drawConstants, sizeof(RHIParticleConstants)))
                 return false;
@@ -551,10 +603,15 @@ namespace Axle {
             if (drawRes->Pool.IsValid() && drawRes->Set) {
                 auto defaultWhite = RHI::RHIMaterial::GetDefaultWhiteTexture();
                 auto defaultFlatNormal = RHI::RHIMaterial::GetDefaultFlatNormalTexture();
+                auto defaultEmptyFog = RHI::RHIMaterial::GetDefaultEmptyFroxelVolumeTexture();
 
                 nri::Descriptor* finalTexSRV = textureSRV ? textureSRV : (defaultWhite ? defaultWhite->GetSRV() : nullptr);
                 nri::Descriptor* finalNormSRV = normalMapSRV ? normalMapSRV : (defaultFlatNormal ? defaultFlatNormal->GetSRV() : nullptr);
                 nri::Descriptor* finalDepthSRV = m_SceneDepth ? m_SceneDepth : (defaultWhite ? defaultWhite->GetSRV() : nullptr);
+                nri::Descriptor* finalFogIntSRV = (m_HasActiveFogConstants && m_FroxelIntegrated && m_FroxelIntegrated->IsValid())
+                    ? m_FroxelIntegrated->GetSRV() : (defaultEmptyFog ? defaultEmptyFog->GetSRV() : nullptr);
+                nri::Descriptor* finalFogMediaSRV = (m_HasActiveFogConstants && m_FroxelMedia && m_FroxelMedia->IsValid())
+                    ? m_FroxelMedia->GetSRV() : (defaultEmptyFog ? defaultEmptyFog->GetSRV() : nullptr);
 
                 if (finalTexSRV) {
                     if (!drawRes->Pool.UpdateTexture(drawRes->Set, 0, 0, finalTexSRV)) return false;
@@ -565,8 +622,14 @@ namespace Axle {
                 if (finalDepthSRV) {
                     if (!drawRes->Pool.UpdateTexture(drawRes->Set, 2, 0, finalDepthSRV)) return false;
                 }
+                if (finalFogIntSRV) {
+                    if (!drawRes->Pool.UpdateTexture(drawRes->Set, 3, 0, finalFogIntSRV)) return false;
+                }
+                if (finalFogMediaSRV) {
+                    if (!drawRes->Pool.UpdateTexture(drawRes->Set, 4, 0, finalFogMediaSRV)) return false;
+                }
                 if (m_LinearSampler.IsValid()) {
-                    if (!drawRes->Pool.UpdateSampler(drawRes->Set, 3, 0, m_LinearSampler.GetNative())) return false;
+                    if (!drawRes->Pool.UpdateSampler(drawRes->Set, 5, 0, m_LinearSampler.GetNative())) return false;
                 }
             }
 
@@ -577,9 +640,12 @@ namespace Axle {
             cmd.SetPipeline(pipeline);
             cmd.SetPipelineLayout(nri::BindPoint::GRAPHICS, m_PipelineLayout);
 
-            // Bind Root Descriptor [0]: ParticleConstants (b0)
+            // Bind Root Descriptors: [0] ParticleConstants (b0), [1] VolumetricFogConstants (b1)
             if (drawRes->Constants.IsValid() && drawRes->Constants.GetCBV()) {
                 cmd.SetRootDescriptor(0, drawRes->Constants.GetCBV());
+            }
+            if (m_FogConstantBuffer.IsValid() && m_FogConstantBuffer.GetCBV()) {
+                cmd.SetRootDescriptor(1, m_FogConstantBuffer.GetCBV());
             }
 
             // Bind Descriptor Set [0]: Particle Textures & Sampler (Space 1)

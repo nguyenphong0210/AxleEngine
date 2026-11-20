@@ -17,6 +17,7 @@ namespace Axle::RHI {
     static std::shared_ptr<RHITexture> s_DefaultIrradianceCubemap;
     static std::shared_ptr<RHITexture> s_DefaultPrefilterCubemap;
     static std::shared_ptr<RHITexture> s_DefaultBRDFLUT;
+    static std::shared_ptr<RHITexture> s_DefaultEmptyFroxelVolume;
 
     // All fallback subresources must contain defined pixels, including cube faces
     // and every prefilter mip; allocating an image alone leaves undefined data.
@@ -255,6 +256,42 @@ namespace Axle::RHI {
         return DefaultTexture(s_DefaultBRDFLUT, desc, {255, 0, 0, 255});
     }
 
+    std::shared_ptr<RHITexture> RHIMaterial::GetDefaultEmptyFroxelVolumeTexture() {
+        if (!RHIDevice::Get().CanCreateResources()) return {};
+        if (s_DefaultEmptyFroxelVolume && s_DefaultEmptyFroxelVolume->IsValid()) return s_DefaultEmptyFroxelVolume;
+        RHITextureDesc desc;
+        desc.Width = 1;
+        desc.Height = 1;
+        desc.Depth = 1;
+        desc.IsVolume = true;
+        desc.Format = RHITextureFormat::RGBA16_FLOAT;
+        desc.Usage = RHITextureUsage::ShaderResource;
+        desc.DebugName = "RHIDefault_EmptyFroxelVolume_1x1x1";
+        auto candidate = std::make_shared<RHITexture>();
+        if (!candidate->Init(desc)) return {};
+        static constexpr std::array<uint16_t, 4> kNeutralTexel{ 0x0000u, 0x0000u, 0x0000u, 0x3C00u };
+        nri::TextureSubresourceUploadDesc subresource{};
+        subresource.slices = kNeutralTexel.data();
+        subresource.sliceNum = 1;
+        subresource.rowPitch = sizeof(kNeutralTexel);
+        subresource.slicePitch = sizeof(kNeutralTexel);
+        nri::TextureUploadDesc upload{};
+        upload.subresources = &subresource;
+        upload.texture = candidate->GetNative();
+        upload.planes = nri::PlaneBits::COLOR;
+        upload.after.access = nri::AccessBits::SHADER_RESOURCE;
+        upload.after.layout = nri::Layout::SHADER_RESOURCE;
+        upload.after.stages = nri::StageBits::FRAGMENT_SHADER;
+        auto& device = RHIDevice::Get();
+        const auto& helper = device.GetNRIHelper();
+        if (!device.GetGraphicsQueue() || !helper.UploadData || device.UploadData(&upload, 1, nullptr, 0) != nri::Result::SUCCESS) {
+            AXLE_CORE_ERROR("Could not initialize default empty 3D froxel volume texture");
+            return {};
+        }
+        s_DefaultEmptyFroxelVolume = std::move(candidate);
+        return s_DefaultEmptyFroxelVolume;
+    }
+
     void RHIMaterial::ReleaseDefaultTextures() {
         if (s_DefaultWhite) { s_DefaultWhite->Shutdown(); s_DefaultWhite = nullptr; }
         if (s_DefaultFlatNormal) { s_DefaultFlatNormal->Shutdown(); s_DefaultFlatNormal = nullptr; }
@@ -263,6 +300,7 @@ namespace Axle::RHI {
         if (s_DefaultIrradianceCubemap) { s_DefaultIrradianceCubemap->Shutdown(); s_DefaultIrradianceCubemap = nullptr; }
         if (s_DefaultPrefilterCubemap) { s_DefaultPrefilterCubemap->Shutdown(); s_DefaultPrefilterCubemap = nullptr; }
         if (s_DefaultBRDFLUT) { s_DefaultBRDFLUT->Shutdown(); s_DefaultBRDFLUT = nullptr; }
+        if (s_DefaultEmptyFroxelVolume) { s_DefaultEmptyFroxelVolume->Shutdown(); s_DefaultEmptyFroxelVolume = nullptr; }
     }
 
     // Presets

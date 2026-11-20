@@ -190,8 +190,8 @@ namespace Axle {
         }
 
         // Per-draw resource descriptors; the immutable sampler uses no heap slots.
-        // Reserve the fixed PBR-default and sky sets in addition to 4096 draws.
-        constexpr uint32_t materialSets=4096+3;
+        // Reserve the fixed PBR-default, occlusion, fog ring/fallback and sky sets in addition to 4096 draws.
+        constexpr uint32_t materialSets=4096+16;
         auto materialPoolDesc = RHIDescriptorPoolDesc::Tier2Bindless(materialSets*ForwardTextureCount + 16u, materialSets);
         materialPoolDesc.MaxSamplers = 0;
         if (!m_DescriptorPool.Init(materialPoolDesc)) {
@@ -257,6 +257,32 @@ namespace Axle {
         {
             const RHIReflectionProbeBufferData emptyProbes{};
             if (!m_ReflectionProbeBuffer.UpdateData(&emptyProbes, sizeof(emptyProbes))) return false;
+        }
+
+        m_ForwardFogFallbackDescriptorSet = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 2);
+        auto emptyFroxel = RHIMaterial::GetDefaultEmptyFroxelVolumeTexture();
+        if (!m_ForwardFogFallbackDescriptorSet || !emptyFroxel || !emptyFroxel->GetSRV() ||
+            !m_DescriptorPool.UpdateTexture(m_ForwardFogFallbackDescriptorSet, 0, 0, emptyFroxel->GetSRV()) ||
+            !m_DescriptorPool.UpdateTexture(m_ForwardFogFallbackDescriptorSet, 1, 0, emptyFroxel->GetSRV())) {
+            return false;
+        }
+        m_ForwardFogSets.clear();
+        for (int slot = 0; slot < 4; ++slot) {
+            auto* set = m_DescriptorPool.AllocateDescriptorSet(m_PipelineLayout, 2);
+            if (!set ||
+                !m_DescriptorPool.UpdateTexture(set, 0, 0, emptyFroxel->GetSRV()) ||
+                !m_DescriptorPool.UpdateTexture(set, 1, 0, emptyFroxel->GetSRV())) {
+                return false;
+            }
+            m_ForwardFogSets.push_back(set);
+        }
+        if (!m_DisabledFogConstantBuffer.Init(RHIBufferDesc::Constant(
+                sizeof(RHIVolumetricFogConstants), RHIMemoryLocation::HostUpload, "DisabledFogConstantsBuffer"))) {
+            return false;
+        }
+        {
+            const RHIVolumetricFogConstants disabledFog{};
+            if (!m_DisabledFogConstantBuffer.UpdateData(&disabledFog, sizeof(disabledFog))) return false;
         }
 
         RHIDescriptorPoolDesc customPool;
@@ -831,6 +857,9 @@ namespace Axle {
         m_FogIntegrateTextureSet = nullptr;
         m_FogIntegrateStorageSet = nullptr;
         m_FogApplyDescriptorSet = nullptr;
+        m_ForwardFogSets.clear();
+        m_ForwardFogFallbackDescriptorSet = nullptr;
+        m_DisabledFogConstantBuffer.Shutdown();
         m_FogDescriptorPool.Shutdown();
         m_FogShadowSampler.Shutdown();
         m_FogSampler.Shutdown();
@@ -1056,7 +1085,7 @@ namespace Axle {
         // Root Descriptors (space 0):
         // [0] b1, space 0: 256-byte Scene Constants
         // [1] b2, space 0: 2304-byte Forward+ Multi-Light Buffer
-        nri::RootDescriptorDesc rootDescs[6] = {};
+        nri::RootDescriptorDesc rootDescs[7] = {};
         rootDescs[0].registerIndex = ConstantBufferContract::FrameConstantsRegister;
         rootDescs[0].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[0].shaderStages = nri::StageBits::ALL;
@@ -1080,6 +1109,10 @@ namespace Axle {
         rootDescs[5].registerIndex = 6; // Multi-probe reflection constants
         rootDescs[5].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDescs[5].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
+        rootDescs[6].registerIndex = 7; // Froxel volumetric fog constants for transparent/additive surfaces
+        rootDescs[6].descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
+        rootDescs[6].shaderStages = nri::StageBits::FRAGMENT_SHADER;
 
         // Space 1 includes PBR, IBL, refraction, cascades and local shadow textures.
         nri::DescriptorRangeDesc ranges[2] = {};
@@ -1124,24 +1157,37 @@ namespace Axle {
         occlusionAndProbeRanges[2].descriptorType = nri::DescriptorType::TEXTURE;
         occlusionAndProbeRanges[2].shaderStages = nri::StageBits::FRAGMENT_SHADER;
 
-        nri::DescriptorSetDesc descriptorSets[2]{};
+        nri::DescriptorRangeDesc forwardFogRanges[2]{};
+        forwardFogRanges[0].baseRegisterIndex = 0; // u_FroxelIntegrated
+        forwardFogRanges[0].descriptorNum = 1;
+        forwardFogRanges[0].descriptorType = nri::DescriptorType::TEXTURE;
+        forwardFogRanges[0].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        forwardFogRanges[1].baseRegisterIndex = 1; // u_FroxelMedia
+        forwardFogRanges[1].descriptorNum = 1;
+        forwardFogRanges[1].descriptorType = nri::DescriptorType::TEXTURE;
+        forwardFogRanges[1].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+
+        nri::DescriptorSetDesc descriptorSets[3]{};
         descriptorSets[0].registerSpace = 1;
         descriptorSets[0].ranges = ranges;
         descriptorSets[0].rangeNum = 1;
         descriptorSets[1].registerSpace = 4;
         descriptorSets[1].ranges = occlusionAndProbeRanges;
         descriptorSets[1].rangeNum = 3;
+        descriptorSets[2].registerSpace = 5;
+        descriptorSets[2].ranges = forwardFogRanges;
+        descriptorSets[2].rangeNum = 2;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
         layoutDesc.rootConstants = &rootConst;
         layoutDesc.rootConstantNum = 1;
         layoutDesc.rootDescriptors = rootDescs;
-        layoutDesc.rootDescriptorNum = 6;
+        layoutDesc.rootDescriptorNum = 7;
         layoutDesc.rootSamplers = samplers;
         layoutDesc.rootSamplerNum = 4;
         layoutDesc.descriptorSets = descriptorSets;
-        layoutDesc.descriptorSetNum = 2;
+        layoutDesc.descriptorSetNum = 3;
         layoutDesc.shaderStages = nri::StageBits::VERTEX_SHADER | nri::StageBits::FRAGMENT_SHADER;
 
         return m_PipelineLayout.Init(layoutDesc);

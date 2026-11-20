@@ -3227,9 +3227,36 @@ namespace Axle {
                         (lightingFrame.Sun.Illuminance * DirectLuxToRadiance);
                 }
             }
-            if (!state.HasDirectionalSun) {
-                AppendDiagnostic(state.Diagnostic,
-                    "froxel_fog_no_directional_sun: unlit scattering uses authored environment or zero radiance");
+
+            const auto hasPositiveColor = [](const glm::vec3& c) {
+                const glm::vec3 s = SanitizeNonNegativeVec3(c);
+                return s.r > 0.0f || s.g > 0.0f || s.b > 0.0f;
+            };
+            for (uint32_t i = 0u; i < std::min<uint32_t>(lightingFrame.PointCount, MaxLightingPointLights); ++i) {
+                const auto& p = lightingFrame.PointLights[i];
+                const bool geomOk = p.Directional ? (glm::dot(p.Position, p.Position) > 1e-12f) : (std::isfinite(p.Radius) && p.Radius > 0.0f);
+                if (geomOk && std::isfinite(p.Intensity) && p.Intensity > 0.0f && hasPositiveColor(p.Color)) {
+                    state.HasLocalLight = true;
+                    break;
+                }
+            }
+            if (!state.HasLocalLight) {
+                for (uint32_t i = 0u; i < std::min<uint32_t>(lightingFrame.SpotCount, MaxLightingSpotLights); ++i) {
+                    const auto& s = lightingFrame.SpotLights[i];
+                    if (std::isfinite(s.Range) && s.Range > 0.0f && std::isfinite(s.Intensity) && s.Intensity > 0.0f && hasPositiveColor(s.Color)) {
+                        state.HasLocalLight = true;
+                        break;
+                    }
+                }
+            }
+            if (!state.HasLocalLight) {
+                for (uint32_t i = 0u; i < std::min<uint32_t>(lightingFrame.RectCount, MaxLightingRectLights); ++i) {
+                    const auto& r = lightingFrame.RectLights[i];
+                    if (std::isfinite(r.Range) && r.Range > 1e-3f && std::isfinite(r.SignedIntensity) && std::abs(r.SignedIntensity) > 0.0f && hasPositiveColor(r.Color)) {
+                        state.HasLocalLight = true;
+                        break;
+                    }
+                }
             }
 
             if (std::isfinite(lightingFrame.Sun.AmbientIntensity) && lightingFrame.Sun.AmbientIntensity > 0.0f) {
@@ -3238,6 +3265,17 @@ namespace Axle {
                     state.HasAmbientLight = true;
                     state.AmbientRadiance = amb;
                 }
+            }
+
+            if (!state.HasDirectionalSun) {
+                AppendDiagnostic(state.Diagnostic,
+                    state.HasLocalLight || state.HasAmbientLight
+                        ? "froxel_fog_no_directional_sun: scattering uses authored local or environment radiance"
+                        : "froxel_fog_no_directional_sun: unlit scattering uses zero radiance");
+            }
+            if (!state.HasAnyLighting()) {
+                AppendDiagnostic(state.Diagnostic,
+                    "froxel_fog_unlit_extinction_only: zero in-scattering with Beer-Lambert extinction preserved");
             }
             return state;
         }

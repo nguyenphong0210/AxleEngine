@@ -9,6 +9,7 @@
 #include <Axle/RHI/RHIFrameContext.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <Axle/Types.hpp>
+#include <Axle/FroxelShaderConstants.hpp>
 #include <Axle/PerspectiveCamera.hpp>
 #include <Axle/SceneRenderer.hpp>
 #include <Axle/RenderWorld.hpp>
@@ -166,21 +167,7 @@ namespace Axle {
     static_assert(sizeof(RHIHiZConstants) == 256, "RHIHiZConstants must be 256 bytes aligned!");
 
     // 256-byte CBV aligned constants for 3D Froxel Volumetric Fog pass
-    struct alignas(256) RHIVolumetricFogConstants {
-        glm::mat4 InvView{1.0f};
-        glm::mat4 InvProjection{1.0f};
-        glm::vec4 ScreenSize{};              // Width, height, reciprocal width and height
-        glm::vec4 SunDirectionIntensity{};   // Direction toward light and enabled flag
-        glm::vec4 SunRadiance{};
-        glm::vec4 FogParams{};               // Effective density, height falloff, anisotropy
-        glm::vec4 FogAlbedo{};
-        glm::vec4 FroxelGridParams{};        // Grid extent and orthographic flag
-        glm::vec4 AmbientRadiance{};
-        glm::vec4 FroxelDepthParams{};       // Log depth ratio, near and far
-        glm::mat4 PrevViewProjection{1.0f};
-        glm::vec4 PrevViewDepthRow{};
-        glm::vec4 TemporalParams{};          // History weight (zero for seed frames)
-    };
+    using RHIVolumetricFogConstants = FroxelFogContract::FroxelShaderConstants;
     static_assert(sizeof(RHIVolumetricFogConstants) == 512);
 
     // 256-byte CBV aligned constants for FXAA 3.11 post-processing pass
@@ -404,6 +391,8 @@ namespace Axle {
         RHI::RHISampler& GetSampler() { return m_AnisoSampler; }
         RHI::RHIDescriptorPool& GetDescriptorPool() { return m_DescriptorPool; }
         nri::DescriptorSet* GetDefaultDescriptorSet() const { return m_DefaultDescriptorSet; }
+        nri::DescriptorSet* GetForwardFogFallbackDescriptorSet() const { return m_ForwardFogFallbackDescriptorSet; }
+        const RHI::RHIBuffer& GetDisabledFogConstantBuffer() const { return m_DisabledFogConstantBuffer; }
         RHI::RHIMultiLightBuffer& GetLightBuffer() { return m_LightBuffer; }
         const RHI::RHIMultiLightBuffer& GetLightBuffer() const { return m_LightBuffer; }
 
@@ -1087,6 +1076,9 @@ namespace Axle {
         nri::DescriptorSet* m_FogIntegrateTextureSet = nullptr;
         nri::DescriptorSet* m_FogIntegrateStorageSet = nullptr;
         nri::DescriptorSet* m_FogApplyDescriptorSet = nullptr;
+        std::vector<nri::DescriptorSet*> m_ForwardFogSets;
+        nri::DescriptorSet* m_ForwardFogFallbackDescriptorSet = nullptr;
+        RHI::RHIBuffer m_DisabledFogConstantBuffer;
 
         // Physically Based Bloom Resources
         RHI::RHIPipelineLayout m_BloomComputePipelineLayout;

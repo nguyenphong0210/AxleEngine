@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PassRecordOps.hpp"
+#include <Axle/FroxelShaderConstants.hpp>
 #include <Axle/RenderGraph.hpp>
 #include <glm/mat4x4.hpp>
 
@@ -28,14 +29,10 @@ namespace Axle::Passes {
     };
 
     struct FroxelFogRecordInputs {
-        const FroxelFogContract::FroxelMediaState& Media;
-        const PerspectiveCamera& Camera;
-        const glm::mat4& ProjectionZO;
+        const FroxelFogContract::FroxelShaderConstants& Constants;
         RHI::RHIViewTargets* Targets;
         RHI::RHITexture* HistoryRead;
         RHI::RHITexture* HistoryWrite;
-        const FroxelHistoryFrame& Previous;
-        float HistoryWeight;
         nri::Texture* SceneTarget;
         nri::Texture* SceneDepthTarget;
         nri::Descriptor* SceneTargetRTV;
@@ -46,6 +43,17 @@ namespace Axle::Passes {
 
     class FroxelFogPass final {
     public:
+        static FroxelFogContract::FroxelShaderConstants BuildConstants(
+            const FroxelFogContract::FroxelMediaState& media,
+            const PerspectiveCamera& camera,
+            const glm::mat4& projectionZO,
+            const glm::mat4& viewProjZO,
+            const RHI::RHIViewTargets* targets,
+            const FroxelHistoryFrame& previous,
+            bool hasHistoryRead,
+            float historyWeight,
+            uint32_t width,
+            uint32_t height);
         static void Declare(RenderGraph& graph, const FroxelFogResources& resources);
         static bool Record(RHISceneRenderer& renderer, const FroxelFogRecordInputs& inputs,
                            const PassRecordOps& ops);

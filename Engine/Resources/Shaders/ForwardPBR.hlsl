@@ -1,6 +1,7 @@
 #define AXLE_FORWARD_LOCAL_SHADOWS 1
 #define AXLE_FORWARD_ENVIRONMENT_IBL 1
 #include "Occlusion.hlsli"
+#include "FroxelFogCommon.hlsli"
 // =============================================================================
 // ForwardPBR.hlsl - Unified D3D12 (DXIL) & Vulkan 1.3 (SPIR-V) PBR Forward+ Pipeline
 // Standardized HLSL 2021 Codebase for AxleEngine Multi-Backend 3D Viewport Renderer
@@ -238,6 +239,24 @@ TextureCube u_ReflectionProbeCube1 : register(t3, space4);
 TextureCube u_ReflectionProbeCube2 : register(t4, space4);
 TextureCube u_ReflectionProbeCube3 : register(t5, space4);
 #include "ReflectionProbeCommon.hlsli"
+
+cbuffer VolumetricFogConstants : register(b7, space0) {
+    float4x4 u_FogInvView;
+    float4x4 u_FogInvProjection;
+    float4   u_FogScreenSize;
+    float4   u_FogSunDirectionIntensity;
+    float4   u_FogSunRadiance;
+    float4   u_FogParams;
+    float4   u_FogAlbedo;
+    float4   u_FogGridParams;
+    float4   u_FogAmbientRadiance;
+    float4   u_FogDepthParams;
+    float4x4 u_FogPrevViewProjection;
+    float4   u_FogPrevViewDepthRow;
+    float4   u_FogTemporalParams;
+};
+Texture3D<float4> u_FroxelIntegrated : register(t0, space5);
+Texture3D<float4> u_FroxelMedia      : register(t1, space5);
 
 float3 RotateEnvironmentDirection(float3 direction) {
     float angle=u_LightReserved[0].w;
@@ -875,6 +894,31 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
     float3 color = ambient + Lo + emissive;
     // Preserve finite radiance when an intense, narrow lobe is stored in FP16.
     color = clamp(color, 0.0, 65000.0);
+
+    float4 fogSample = float4(0.0, 0.0, 0.0, 1.0);
+    if ((surfaceType == 2 || surfaceType == 3) && u_FogParams.x > 0.0) {
+        float2 fogUV = input.PositionCS.xy * u_FogScreenSize.zw;
+        float viewDepth = -mul(u_View, float4(input.WorldPos, 1.0)).z;
+        fogSample = EvaluateFroxelFogSample(
+            u_FroxelIntegrated,
+            u_FroxelMedia,
+            u_ScreenSampler,
+            fogUV,
+            viewDepth,
+            u_FogInvView,
+            u_FogInvProjection,
+            u_FogParams,
+            u_FogGridParams,
+            u_FogDepthParams);
+    }
+    const bool hasRefractionBackground = (surfaceType == 2 && u_Refraction.w > 0.5 && u_RefractionFrame.z > 0.5);
+    if (!hasRefractionBackground) {
+        if (surfaceType == 2) {
+            color = clamp(color * fogSample.a + fogSample.rgb, 0.0, 65000.0);
+        } else if (surfaceType == 3) {
+            color = clamp(color * fogSample.a, 0.0, 65000.0);
+        }
+    }
     
     // 11. Tone Mapping & Color Polish (ACES Filmic Operator & Gamma Correction)
     // If u_CameraPosition.w > 0.0 (HDR Post-Processing Mode): Output pure linear HDR radiance
@@ -932,9 +976,13 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
                 transmitted=pow(max(transmitted,0.0),2.2);
                 color=pow(max(color,0.0),2.2);
             }
-            color=transmitted*u_RefractionTint.rgb*(1.0-fresnel)+color*fresnel;
+            float3 glassReflection=clamp(color*fogSample.a+fogSample.rgb, 0.0, 65000.0);
+            color=transmitted*u_RefractionTint.rgb*(1.0-fresnel)+glassReflection*fresnel;
             if (u_CameraPosition.w<=0.0) color=pow(max(color,0.0),1.0/2.2);
             return MakeMaterialReflectionSurfaceOutput(float4(color,1.0), 0.0, 0.0, 1.0, 0.0);
+        }
+        if (u_FogParams.x > 0.0) {
+            color = clamp(color * fogSample.a + fogSample.rgb, 0.0, 65000.0);
         }
     }
     return MakeMaterialReflectionSurfaceOutput(float4(color, albedo.a), reflectionEnvironment, reflectionResponse, roughness, u_MaterialSurface.w);

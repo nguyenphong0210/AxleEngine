@@ -182,10 +182,11 @@ namespace Axle {
 
     // 256-byte CBV aligned constants for Bloom Kawase downsample/upsample pass
     struct alignas(256) RHIBloomConstants {
-        glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // (width, height, 1/w, 1/h)
+        glm::vec4 ScreenSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // (dstWidth, dstHeight, 1/dstW, 1/dstH)
         glm::vec4 BloomParams{ 1.0f, 0.8f, 0.5f, 0.0f };                           // (threshold, intensity, knee, mode)
-        glm::vec4 BloomTint{ 1.0f, 1.0f, 1.0f, 1.5f };                            // (rgb: tint, w: radius)
-        glm::vec4 Reserved[13]{};                                                 // 208 bytes padding -> Total: 256 bytes
+        glm::vec4 BloomTint{ 1.0f, 1.0f, 1.0f, 1.5f };                             // (rgb: tint, w: tent radius)
+        glm::vec4 SourceSize{ 1920.0f, 1080.0f, 1.0f / 1920.0f, 1.0f / 1080.0f }; // (srcWidth, srcHeight, 1/srcW, 1/srcH)
+        glm::vec4 Reserved[12]{};                                                  // 192 bytes padding -> Total: 256 bytes
     };
     static_assert(sizeof(RHIBloomConstants) == 256, "RHIBloomConstants must be 256 bytes aligned!");
 
@@ -1088,11 +1089,14 @@ namespace Axle {
         RHI::RHIPipelineLayout m_BloomComputePipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_BloomComputePipeline;
         RHI::RHIPipelineLayout m_BloomApplyPipelineLayout;
+        RHI::RHIResourceRef<nri::Pipeline> m_BloomUpsamplePipelineSDR;
+        RHI::RHIResourceRef<nri::Pipeline> m_BloomUpsamplePipelineHDR;
         RHI::RHIResourceRef<nri::Pipeline> m_BloomApplyPipelineSDR;
         RHI::RHIResourceRef<nri::Pipeline> m_BloomApplyPipelineHDR;
         RHI::RHIBuffer m_BloomConstantBuffer;
         RHI::RHIShaderBytecode m_BloomComputeShader;
         RHI::RHIShaderBytecode m_BloomApplyVertexShader;
+        RHI::RHIShaderBytecode m_BloomUpsamplePixelShader;
         RHI::RHIShaderBytecode m_BloomApplyPixelShader;
         RHI::RHISampler m_BloomSampler;
         RHI::RHIDescriptorPool m_BloomDescriptorPool;
@@ -1100,6 +1104,7 @@ namespace Axle {
         nri::DescriptorSet* m_BloomComputeStorageSet = nullptr;
         std::array<nri::DescriptorSet*, 11> m_BloomComputeTextureSets{};
         std::array<nri::DescriptorSet*, 11> m_BloomComputeStorageSets{};
+        std::array<nri::DescriptorSet*, 5> m_BloomUpsampleDescriptorSets{};
         nri::DescriptorSet* m_BloomApplyDescriptorSet = nullptr;
 
         // Histogram-based auto exposure resources

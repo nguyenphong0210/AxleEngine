@@ -207,6 +207,41 @@ bool RunM15PostTemporalContractUnitTests() {
             "EditorLayer and RuntimeLayer pass real frame deltaTime into ViewRequest::DeltaTime");
     }
 
-    std::cout << "[M15U8Contract] All M15 U8 Batch A Exposure & Post Pipeline contract tests passed.\n";
+    // 6. M15-U8-06..09 (Batch B): 6-level Bloom dimensions, single threshold/Karis & additive energy contract
+    {
+        RENDER_CHECK(BloomContract::VerifySixLevelPyramidDimensions(1920u, 1080u) &&
+                     BloomContract::VerifySixLevelPyramidDimensions(1919u, 1079u) &&
+                     BloomContract::VerifySixLevelPyramidDimensions(127u, 63u) &&
+                     BloomContract::VerifySixLevelPyramidDimensions(3u, 5u) &&
+                     BloomContract::VerifySixLevelPyramidDimensions(1u, 1u) &&
+                     !BloomContract::VerifySixLevelPyramidDimensions(0u, 128u),
+            "BloomContract validates 6-level pyramid extents across standard, odd, small and degenerate resolutions");
+        const bool extentOk =
+            BloomContract::ComputeMipExtent(1919u, 1079u, 0u) == (BloomContract::MipExtent{959u, 539u}) &&
+            BloomContract::ComputeMipExtent(3u, 5u, 0u) == (BloomContract::MipExtent{1u, 2u}) &&
+            BloomContract::ComputeMipExtent(3u, 5u, 5u) == (BloomContract::MipExtent{1u, 1u});
+        RENDER_CHECK(extentOk,
+            "Bloom mip levels halve accurately with safe minimum 1x1 clamping");
+
+        RENDER_CHECK(BloomContract::VerifyAdditiveEnergyAndSingleTint(
+                         glm::vec3(5.0f, 3.0f, 1.0f), 1.0f, 0.25f,
+                         glm::vec3(1.0f, 0.5f, 0.25f), 0.75f),
+            "Bloom thresholds once at Down0, sums octaves additively without overwrite, and scales tint/intensity linearly once");
+
+        const std::string bloomShader = LoadTextFile(AXLE_BLOOM_SHADER_PATH);
+        const std::string postPass = LoadTextFile(AXLE_POST_PROCESS_PASS_SOURCE_PATH);
+        RENDER_CHECK(!bloomShader.empty() &&
+                     bloomShader.find("u_SourceSize.zw") != std::string::npos &&
+                     bloomShader.find("PSUpsample") != std::string::npos &&
+                     bloomShader.find("u_BloomParams.w < 0.5") != std::string::npos &&
+                     bloomShader.find("1.0 / 6.0") != std::string::npos,
+            "Bloom.hlsl samples with source texel size, thresholds once at mode<0.5, upsamples via PSUpsample and normalizes 6 octaves once in PSApply");
+        RENDER_CHECK(postPass.find("std::pow(1.35f") == std::string::npos &&
+                     postPass.find("Load::Load") != std::string::npos &&
+                     postPass.find("nri::LoadOp::LOAD") != std::string::npos,
+            "PostProcessPass preserves finer Bloom mips via additive LoadOp::LOAD and constant radius");
+    }
+
+    std::cout << "[M15U8Contract] All M15 U8 Batch A & B contract tests passed.\n";
     return true;
 }

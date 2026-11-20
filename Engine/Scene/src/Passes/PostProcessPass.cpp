@@ -33,7 +33,7 @@ namespace Axle::Passes {
             for (int level = static_cast<int>(r.Bloom.size()) - 2; level >= 0; --level) {
                 graph.AddPass("BloomUp" + std::to_string(level), {
                     {r.Bloom[level + 1], Layout::ShaderResource},
-                    {r.Bloom[level], Layout::ShaderResourceStorage, Access::Write}});
+                    {r.Bloom[level], Layout::ColorAttachment, Access::ReadWrite, Load::Load}});
             }
             graph.AddPass("BloomApply", {
                 {r.Bloom[0], Layout::ShaderResource}, {r.BloomInput, Layout::ShaderResource},
@@ -158,18 +158,32 @@ namespace Axle::Passes {
                 if (!beginPass("BloomCopy")) return false;
                 renderer.Commands().CopyTexture(*renderer.m_OpaqueSceneColor->GetNative(), nullptr, *sceneTargetTexture, nullptr);
                 uint32_t bloomPassIndex = 0;
-                RHIBloomConstants lastBloomConstants{};
-                auto dispatchBloom = [&](std::string_view passName, RHITexture* source, RHITexture* destination, float mode, uint32_t level) -> bool {
+                auto makeBloomConstants = [&](uint32_t srcW, uint32_t srcH, uint32_t dstW, uint32_t dstH, float mode) {
+                    RHIBloomConstants c{};
+                    const float safeDstW = static_cast<float>(std::max(dstW, 1u));
+                    const float safeDstH = static_cast<float>(std::max(dstH, 1u));
+                    const float safeSrcW = static_cast<float>(std::max(srcW, 1u));
+                    const float safeSrcH = static_cast<float>(std::max(srcH, 1u));
+                    c.ScreenSize = glm::vec4(safeDstW, safeDstH, 1.0f / safeDstW, 1.0f / safeDstH);
+                    c.BloomParams = glm::vec4(
+                        std::max(settings.BloomThreshold, 0.0f),
+                        std::max(settings.BloomIntensity, 0.0f),
+                        std::max(settings.BloomKnee, 0.0f),
+                        mode);
+                    c.BloomTint = glm::vec4(
+                        glm::max(settings.BloomTint, glm::vec3(0.0f)),
+                        std::max(settings.BloomRadius, 0.25f));
+                    c.SourceSize = glm::vec4(safeSrcW, safeSrcH, 1.0f / safeSrcW, 1.0f / safeSrcH);
+                    return c;
+                };
+                auto dispatchBloomDown = [&](std::string_view passName, RHITexture* source, RHITexture* destination, uint32_t level) -> bool {
                     if (!source || !destination || !source->IsValid() || !destination->IsValid()) { AXLE_CORE_ERROR("Bloom pass {0}: invalid source/destination", passName); return false; }
                     if (!beginPass(passName)) return false;
-                    const float dstWidth = static_cast<float>(destination->GetWidth());
-                    const float dstHeight = static_cast<float>(destination->GetHeight());
-                    RHIBloomConstants bloomConstants{};
-                    bloomConstants.ScreenSize = glm::vec4(dstWidth, dstHeight, 1.0f / dstWidth, 1.0f / dstHeight);
-                    bloomConstants.BloomParams = glm::vec4(settings.BloomThreshold, settings.BloomIntensity, settings.BloomKnee, mode);
-                    bloomConstants.BloomTint = glm::vec4(settings.BloomTint, settings.BloomRadius * std::pow(1.35f, static_cast<float>(level)));
+                    const RHIBloomConstants bloomConstants = makeBloomConstants(
+                        source->GetWidth(), source->GetHeight(),
+                        destination->GetWidth(), destination->GetHeight(),
+                        level == 0u ? 0.0f : 1.0f);
                     if (!passUniform().UpdateData(&bloomConstants, sizeof(RHIBloomConstants))) { AXLE_CORE_ERROR("Bloom pass {0}: constant update failed", passName); return false; }
-                    lastBloomConstants = bloomConstants;
                     if (bloomPassIndex >= renderer.m_BloomComputeTextureSets.size()) return false;
                     auto* textureSet = renderer.m_BloomComputeTextureSets[bloomPassIndex];
                     auto* storageSet = renderer.m_BloomComputeStorageSets[bloomPassIndex++];
@@ -181,22 +195,67 @@ namespace Axle::Passes {
                     renderer.Commands().SetPipelineLayout(nri::BindPoint::COMPUTE, renderer.m_BloomComputePipelineLayout);
                     renderer.Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::COMPUTE);
                     renderer.m_BloomDescriptorPool.Bind(renderer.Commands().GetNative());
-                     if (!bindDescriptorSet(0, textureSet, nri::BindPoint::COMPUTE) ||
-                         !bindDescriptorSet(1, storageSet, nri::BindPoint::COMPUTE)) return false;
+                    if (!bindDescriptorSet(0, textureSet, nri::BindPoint::COMPUTE) ||
+                        !bindDescriptorSet(1, storageSet, nri::BindPoint::COMPUTE)) return false;
                     renderer.Commands().Dispatch((destination->GetWidth() + 7) / 8, (destination->GetHeight() + 7) / 8, 1); ++dispatchCount;
                     return true;
                 };
-                for (uint32_t level = 0; level < 6; ++level) {
+                for (uint32_t level = 0; level < BloomContract::PyramidLevels; ++level) {
                     auto* source = level == 0 ? renderer.m_OpaqueSceneColor : viewTargets->GetBloom(level - 1);
-                    if (!dispatchBloom("BloomDown" + std::to_string(level), source, viewTargets->GetBloom(level), 0.0f, level)) return false;
+                    if (!dispatchBloomDown("BloomDown" + std::to_string(level), source, viewTargets->GetBloom(level), level)) return false;
                 }
-                for (int level = 4; level >= 0; --level) {
-                    if (!dispatchBloom("BloomUp" + std::to_string(level), viewTargets->GetBloom(level + 1), viewTargets->GetBloom(level), 1.0f, static_cast<uint32_t>(level))) return false;
+                for (int level = static_cast<int>(BloomContract::PyramidLevels) - 2; level >= 0; --level) {
+                    const uint32_t lvl = static_cast<uint32_t>(level);
+                    RHITexture* source = viewTargets->GetBloom(lvl + 1u);
+                    RHITexture* destination = viewTargets->GetBloom(lvl);
+                    if (!source || !destination || !source->IsValid() || !destination->IsValid() || !destination->GetRTV()) return false;
+                    if (!beginPass("BloomUp" + std::to_string(level))) return false;
+                    const RHIBloomConstants upConstants = makeBloomConstants(
+                        source->GetWidth(), source->GetHeight(),
+                        destination->GetWidth(), destination->GetHeight(),
+                        2.0f);
+                    if (!passUniform().UpdateData(&upConstants, sizeof(RHIBloomConstants))) return false;
+                    if (lvl >= renderer.m_BloomUpsampleDescriptorSets.size()) return false;
+                    auto* upsampleSet = renderer.m_BloomUpsampleDescriptorSets[lvl];
+                    if (!renderer.m_BloomDescriptorPool.UpdateTexture(upsampleSet, 0, 0, source->GetSRV()) ||
+                        !renderer.m_BloomDescriptorPool.UpdateTexture(upsampleSet, 1, 0, source->GetSRV())) return false;
+                    if (renderer.m_BloomSampler.IsValid() &&
+                        !renderer.m_BloomDescriptorPool.UpdateSampler(upsampleSet, 2, 0, renderer.m_BloomSampler.GetNative())) return false;
+                    nri::Pipeline* upsamplePipeline = (destination->GetFormat() == RHI::RHITextureFormat::RGBA16_FLOAT && renderer.m_BloomUpsamplePipelineHDR)
+                        ? renderer.m_BloomUpsamplePipelineHDR : renderer.m_BloomUpsamplePipelineSDR;
+                    if (!upsamplePipeline) return false;
+
+                    nri::AttachmentDesc upAttachment = {};
+                    upAttachment.descriptor = destination->GetRTV();
+                    upAttachment.loadOp = nri::LoadOp::LOAD;
+                    upAttachment.storeOp = nri::StoreOp::STORE;
+                    nri::RenderingDesc upRenderingDesc = {};
+                    upRenderingDesc.colors = &upAttachment;
+                    upRenderingDesc.colorNum = 1;
+
+                    beginRendering(upRenderingDesc);
+                    const uint32_t dstW = destination->GetWidth();
+                    const uint32_t dstH = destination->GetHeight();
+                    nri::Viewport upVp = { 0.0f, 0.0f, static_cast<float>(dstW), static_cast<float>(dstH), 0.0f, 1.0f };
+                    renderer.Commands().SetViewport(upVp);
+                    nri::Rect upScissor = { 0, 0, static_cast<nri::Dim_t>(dstW), static_cast<nri::Dim_t>(dstH) };
+                    renderer.Commands().SetScissor(upScissor);
+                    renderer.Commands().SetPipeline(upsamplePipeline);
+                    renderer.Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, renderer.m_BloomApplyPipelineLayout);
+                    renderer.Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::GRAPHICS);
+                    renderer.m_BloomDescriptorPool.Bind(renderer.Commands().GetNative());
+                    if (!bindDescriptorSet(0, upsampleSet)) return false;
+                    renderer.Commands().Draw(3, 1, 0, 0);
+                    endRendering();
                 }
 
                 if (!beginPass("BloomApply")) return false;
-                if (!passUniform().UpdateData(&lastBloomConstants, sizeof(lastBloomConstants))) return false;
-                if (!renderer.m_BloomDescriptorPool.UpdateTexture(renderer.m_BloomApplyDescriptorSet, 0, 0, viewTargets->GetBloom(0)->GetSRV())) return false;
+                auto* bloom0 = viewTargets->GetBloom(0);
+                if (!bloom0 || !bloom0->IsValid()) return false;
+                const RHIBloomConstants applyConstants = makeBloomConstants(
+                    bloom0->GetWidth(), bloom0->GetHeight(), width, height, 3.0f);
+                if (!passUniform().UpdateData(&applyConstants, sizeof(applyConstants))) return false;
+                if (!renderer.m_BloomDescriptorPool.UpdateTexture(renderer.m_BloomApplyDescriptorSet, 0, 0, bloom0->GetSRV())) return false;
                 if (!renderer.m_BloomDescriptorPool.UpdateTexture(renderer.m_BloomApplyDescriptorSet, 1, 0, renderer.m_OpaqueSceneColor->GetSRV())) return false;
                 if (renderer.m_BloomSampler.IsValid()) {
                     if (!renderer.m_BloomDescriptorPool.UpdateSampler(renderer.m_BloomApplyDescriptorSet, 2, 0, renderer.m_BloomSampler.GetNative())) return false;
@@ -226,7 +285,7 @@ namespace Axle::Passes {
                 renderer.Commands().SetPipelineLayout(nri::BindPoint::GRAPHICS, renderer.m_BloomApplyPipelineLayout);
                 renderer.Commands().SetRootDescriptor(0, passUniform().GetCBV(), 0, nri::BindPoint::GRAPHICS);
                 renderer.m_BloomDescriptorPool.Bind(renderer.Commands().GetNative());
-                 if (!bindDescriptorSet(0, renderer.m_BloomApplyDescriptorSet)) return false;
+                if (!bindDescriptorSet(0, renderer.m_BloomApplyDescriptorSet)) return false;
                 renderer.Commands().Draw(3, 1, 0, 0);
                 endRendering();
             }

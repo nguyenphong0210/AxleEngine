@@ -581,9 +581,9 @@ namespace Axle {
         }
 
         RHIDescriptorPoolDesc bloomPoolDesc;
-        bloomPoolDesc.MaxDescriptorSets = 32;
+        bloomPoolDesc.MaxDescriptorSets = 40;
         bloomPoolDesc.MaxTextures = 64;
-        bloomPoolDesc.MaxSamplers = 16;
+        bloomPoolDesc.MaxSamplers = 32;
         bloomPoolDesc.MaxStorageTextures = 16;
         bloomPoolDesc.MaxConstantBuffers = 16;
         if (!m_BloomDescriptorPool.Init(bloomPoolDesc)) {
@@ -599,11 +599,17 @@ namespace Axle {
                 m_BloomComputeStorageSets[i] = m_BloomDescriptorPool.AllocateDescriptorSet(m_BloomComputePipelineLayout, 1);
                 if (!m_BloomComputeTextureSets[i] || !m_BloomComputeStorageSets[i]) return false;
             }
+            for (size_t i = 0; i < m_BloomUpsampleDescriptorSets.size(); ++i) {
+                m_BloomUpsampleDescriptorSets[i] = m_BloomDescriptorPool.AllocateDescriptorSet(m_BloomApplyPipelineLayout, 0);
+                if (!m_BloomUpsampleDescriptorSets[i]) return false;
+            }
             if (m_BloomSampler.IsValid()) {
                 if (!m_BloomDescriptorPool.UpdateSampler(m_BloomComputeTextureSet, 1, 0, m_BloomSampler.GetNative()) ||
                     !m_BloomDescriptorPool.UpdateSampler(m_BloomApplyDescriptorSet, 2, 0, m_BloomSampler.GetNative())) return false;
                 for (auto* set : m_BloomComputeTextureSets)
                     if (!m_BloomDescriptorPool.UpdateSampler(set, 1, 0, m_BloomSampler.GetNative())) return false;
+                for (auto* set : m_BloomUpsampleDescriptorSets)
+                    if (!m_BloomDescriptorPool.UpdateSampler(set, 2, 0, m_BloomSampler.GetNative())) return false;
             }
         }
 
@@ -893,6 +899,8 @@ namespace Axle {
         m_FogSampler.Shutdown();
 
         m_BloomComputePipeline = nullptr;
+        m_BloomUpsamplePipelineSDR = nullptr;
+        m_BloomUpsamplePipelineHDR = nullptr;
         m_BloomApplyPipelineSDR = nullptr;
         m_BloomApplyPipelineHDR = nullptr;
         m_BloomComputePipelineLayout.Shutdown();
@@ -900,6 +908,7 @@ namespace Axle {
         m_BloomConstantBuffer.Shutdown();
         m_BloomComputeTextureSet = nullptr;
         m_BloomComputeStorageSet = nullptr;
+        m_BloomUpsampleDescriptorSets.fill(nullptr);
         m_BloomApplyDescriptorSet = nullptr;
         m_BloomDescriptorPool.Shutdown();
         m_BloomSampler.Shutdown();
@@ -3193,6 +3202,16 @@ namespace Axle {
         }
         m_BloomApplyVertexShader = vsRes.Bytecode;
 
+        RHIShaderCompileDesc upsampleDesc = csDesc;
+        upsampleDesc.EntryPoint = "PSUpsample";
+        upsampleDesc.Stage = RHIShaderStage::Fragment;
+        auto upsampleRes = compiler.Compile(upsampleDesc);
+        if (!upsampleRes.Success) {
+            AXLE_CORE_ERROR("RHISceneRenderer: Failed to compile Bloom Upsample PS: {0}", upsampleRes.ErrorMessage);
+            return false;
+        }
+        m_BloomUpsamplePixelShader = upsampleRes.Bytecode;
+
         RHIShaderCompileDesc psDesc = csDesc;
         psDesc.EntryPoint = "PSApply";
         psDesc.Stage = RHIShaderStage::Fragment;
@@ -3319,10 +3338,38 @@ namespace Axle {
         compDesc.ComputeShader = m_BloomComputeShader;
         m_BloomComputePipeline = cache.GetOrCreateComputePipeline(compDesc);
 
+        auto createUpsample = [&](nri::Format colorFormat) -> nri::Pipeline* {
+            RHIGraphicsPipelineDesc gfxDesc;
+            gfxDesc.Layout = &m_BloomApplyPipelineLayout;
+            gfxDesc.Shaders = { m_BloomApplyVertexShader, m_BloomUpsamplePixelShader };
+            gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+            gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+            gfxDesc.Rasterizer.FrontCounterClockwise = false;
+            gfxDesc.DepthStencil.DepthTestEnable = false;
+            gfxDesc.DepthStencil.DepthWriteEnable = false;
+            gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+            RHIBlendAttachmentDesc additiveOneOne;
+            additiveOneOne.BlendEnabled = true;
+            additiveOneOne.SrcColor = nri::BlendFactor::ONE;
+            additiveOneOne.DstColor = nri::BlendFactor::ONE;
+            additiveOneOne.ColorOp = nri::BlendOp::ADD;
+            additiveOneOne.SrcAlpha = nri::BlendFactor::ONE;
+            additiveOneOne.DstAlpha = nri::BlendFactor::ONE;
+            additiveOneOne.AlphaOp = nri::BlendOp::ADD;
+            gfxDesc.ColorAttachments = { additiveOneOne };
+            gfxDesc.ColorAttachmentFormats = { colorFormat };
+            gfxDesc.VertexInput = RHIVertexInputDesc{};
+            return cache.GetOrCreateGraphicsPipeline(gfxDesc);
+        };
+
+        m_BloomUpsamplePipelineSDR = createUpsample(nri::Format::RGBA8_UNORM);
+        m_BloomUpsamplePipelineHDR = createUpsample(nri::Format::RGBA16_SFLOAT);
         m_BloomApplyPipelineSDR = GetOrCreateBloomApplyPipeline(nri::Format::RGBA8_UNORM);
         m_BloomApplyPipelineHDR = GetOrCreateBloomApplyPipeline(nri::Format::RGBA16_SFLOAT);
 
-        return m_BloomComputePipeline != nullptr && m_BloomApplyPipelineSDR != nullptr && m_BloomApplyPipelineHDR != nullptr;
+        return m_BloomComputePipeline != nullptr &&
+               m_BloomUpsamplePipelineSDR != nullptr && m_BloomUpsamplePipelineHDR != nullptr &&
+               m_BloomApplyPipelineSDR != nullptr && m_BloomApplyPipelineHDR != nullptr;
     }
 
     bool RHISceneRenderer::CompileAutoExposureShaders(RHIDevice& device) {

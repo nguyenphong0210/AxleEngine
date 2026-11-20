@@ -231,14 +231,16 @@ namespace Axle {
         }
 
         const bool useBloom = settings.EnableBloom && activeSampleCount == 1 &&
-            m_BloomComputePipeline && m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
+            m_BloomComputePipeline && m_BloomUpsamplePipelineHDR && m_BloomUpsamplePipelineSDR &&
+            m_BloomApplyPipelineHDR && m_BloomApplyPipelineSDR &&
+            m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
             m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
         const auto bloomInput = useBloom ? graph.Import("BloomInput", m_OpaqueSceneColor->GetNative()) : output;
         std::array<Graph::Resource, 6> bloomResources{};
         if (useBloom) {
             for (uint32_t level = 0; level < bloomResources.size(); ++level) {
                 auto* bloom = viewTargets->GetBloom(level);
-                if (!bloom || !bloom->IsValid()) { return false; }
+                if (!bloom || !bloom->IsValid() || !bloom->GetSRV() || !bloom->GetUAV() || !bloom->GetRTV()) { return false; }
                 bloomResources[level] = graph.Import("Bloom" + std::to_string(level), bloom->GetNative());
             }
         }

@@ -52,6 +52,18 @@ namespace Axle::RHI {
         return qualityTier < kFroxelTiers.size() ? &kFroxelTiers[qualityTier] : nullptr;
     }
 
+    bool RHIViewTargets::ComputeBloomExtent(uint32_t fullWidth, uint32_t fullHeight, uint32_t level,
+                                          uint32_t& outWidth, uint32_t& outHeight) {
+        if (!fullWidth || !fullHeight || level >= 6u) {
+            outWidth = 0u;
+            outHeight = 0u;
+            return false;
+        }
+        outWidth = std::max(1u, fullWidth >> (level + 1u));
+        outHeight = std::max(1u, fullHeight >> (level + 1u));
+        return true;
+    }
+
     RHIDDGIAtlasExtent RHIViewTargets::ComputeDDGIAtlasExtent(uint32_t gridX, uint32_t gridY, uint32_t gridZ) {
         const uint64_t total64 = static_cast<uint64_t>(gridX) * gridY * gridZ;
         if (!gridX || !gridY || !gridZ || total64 == 0u || total64 > MaxDDGIProbes) return {};
@@ -132,10 +144,12 @@ namespace Axle::RHI {
         if (m_Desc.EnableGTAO && (!check2D(RHIViewTarget::GTAO, std::max(1u, m_Desc.Width >> 1), std::max(1u, m_Desc.Height >> 1), RHITextureFormat::RGBA16_FLOAT) || !Get(RHIViewTarget::GTAO)->GetUAV() ||
             !check2D(RHIViewTarget::GTAOResolved, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT) || !Get(RHIViewTarget::GTAOResolved)->GetUAV())) return false;
         for (uint32_t level = 0; m_Desc.EnableBloom && level < 6; ++level) {
-            uint32_t width = std::max(1u, m_Desc.Width >> (level + 1));
-            uint32_t height = std::max(1u, m_Desc.Height >> (level + 1));
+            uint32_t width = 0u, height = 0u;
+            if (!ComputeBloomExtent(m_Desc.Width, m_Desc.Height, level, width, height)) return false;
+            auto* bloomTex = GetBloom(level);
             if (!check2D(static_cast<RHIViewTarget>(static_cast<uint8_t>(RHIViewTarget::Bloom0) + level), width, height,
-                         m_Desc.HDR ? RHITextureFormat::RGBA16_FLOAT : m_Desc.ColorFormat)) return false;
+                         m_Desc.HDR ? RHITextureFormat::RGBA16_FLOAT : m_Desc.ColorFormat) ||
+                !bloomTex || !bloomTex->GetSRV() || !bloomTex->GetUAV() || !bloomTex->GetRTV()) return false;
         }
         if (m_Desc.EnableAutoExposure && !check2D(RHIViewTarget::Exposure, 1, 1, RHITextureFormat::RGBA16_FLOAT)) return false;
         if (m_Desc.EnableDDGI) {
@@ -320,17 +334,16 @@ namespace Axle::RHI {
             candidate.m_Textures[static_cast<size_t>(RHIViewTarget::GTAOResolved)] = std::move(resolvedTexture);
         }
         if (desc.EnableBloom) {
-            uint32_t bloomWidth = std::max(1u, desc.Width >> 1);
-            uint32_t bloomHeight = std::max(1u, desc.Height >> 1);
             const auto bloomFormat = desc.HDR ? RHITextureFormat::RGBA16_FLOAT : desc.ColorFormat;
             for (uint32_t level = 0; level < 6; ++level) {
+                uint32_t bloomWidth = 0u, bloomHeight = 0u;
+                if (!ComputeBloomExtent(desc.Width, desc.Height, level, bloomWidth, bloomHeight)) return false;
                 auto texture = std::make_unique<RHITexture>();
                 auto native = RHITextureDesc::StorageTexture2D(
                     bloomWidth, bloomHeight, bloomFormat, "ViewTarget_Bloom" + std::to_string(level));
+                native.Usage = native.Usage | RHITextureUsage::ColorAttachment;
                 if (!texture->Init(native)) return false;
                 candidate.m_Textures[static_cast<size_t>(RHIViewTarget::Bloom0) + level] = std::move(texture);
-                bloomWidth = std::max(1u, bloomWidth >> 1);
-                bloomHeight = std::max(1u, bloomHeight >> 1);
             }
         }
         if (desc.EnableAutoExposure) {

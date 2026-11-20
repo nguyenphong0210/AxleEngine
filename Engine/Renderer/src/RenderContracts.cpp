@@ -3870,4 +3870,78 @@ namespace Axle {
         }
     } // namespace AutoExposureContract
 
+    namespace BloomContract {
+        MipExtent ComputeMipExtent(uint32_t fullWidth, uint32_t fullHeight, uint32_t level) {
+            return {
+                std::max(1u, fullWidth >> (level + 1u)),
+                std::max(1u, fullHeight >> (level + 1u))
+            };
+        }
+
+        glm::vec3 EvaluatePrefilter(const glm::vec3& color, float threshold, float knee) {
+            auto sanitize = [](float v) -> float {
+                if (!std::isfinite(v)) return 0.0f;
+                return std::clamp(v, 0.0f, 65000.0f);
+            };
+            const glm::vec3 clean(sanitize(color.r), sanitize(color.g), sanitize(color.b));
+            const float brightness = std::max({ clean.r, clean.g, clean.b });
+            const float safeThreshold = std::isfinite(threshold) ? threshold : 1.0f;
+            const float safeKnee = (std::isfinite(knee) && knee > 0.0f) ? knee : 0.0f;
+            const float softKnee = std::max(safeThreshold * safeKnee, 0.0f);
+            float rq = std::clamp(brightness - safeThreshold + softKnee, 0.0f, 2.0f * softKnee);
+            rq = (rq * rq) / std::max(4.0f * softKnee, 1e-5f);
+            const float contribution = std::max(rq, brightness - safeThreshold) / std::max(brightness, 1e-5f);
+            return clean * std::clamp(contribution, 0.0f, 1.0f);
+        }
+
+        glm::vec3 EvaluateAdditiveApply(const glm::vec3& sceneColor, const glm::vec3& bloomLevel0,
+                                        const glm::vec3& tint, float intensity) {
+            const glm::vec3 safeTint = glm::max(tint, glm::vec3(0.0f));
+            const float safeIntensity = (std::isfinite(intensity) && intensity > 0.0f) ? intensity : 0.0f;
+            return sceneColor + bloomLevel0 * (safeTint * safeIntensity * PyramidNormalization);
+        }
+
+        bool VerifySixLevelPyramidDimensions(uint32_t fullWidth, uint32_t fullHeight) {
+            if (fullWidth == 0u || fullHeight == 0u) return false;
+            uint32_t w = fullWidth;
+            uint32_t h = fullHeight;
+            for (uint32_t level = 0; level < PyramidLevels; ++level) {
+                w = std::max(1u, w >> 1);
+                h = std::max(1u, h >> 1);
+                const MipExtent computed = ComputeMipExtent(fullWidth, fullHeight, level);
+                if (computed.Width != w || computed.Height != h) return false;
+                if (computed.Width == 0u || computed.Height == 0u) return false;
+                if (level > 0u) {
+                    const MipExtent prev = ComputeMipExtent(fullWidth, fullHeight, level - 1u);
+                    if (computed.Width > prev.Width || computed.Height > prev.Height) return false;
+                }
+            }
+            return true;
+        }
+
+        bool VerifyAdditiveEnergyAndSingleTint(const glm::vec3& hdrRadiance,
+                                               float threshold, float knee,
+                                               const glm::vec3& tint, float intensity) {
+            // Threshold runs strictly once at level 0.
+            const glm::vec3 level0Filtered = EvaluatePrefilter(hdrRadiance, threshold, knee);
+            const glm::vec3 rethresholded = EvaluatePrefilter(level0Filtered, threshold, knee);
+            if (threshold > 0.0f && glm::length(level0Filtered) > 1e-4f &&
+                glm::length(rethresholded) >= glm::length(level0Filtered) - 1e-4f) {
+                return false;
+            }
+            // Six uniform downsamples summed bottom-up without overwriting finer mips yield 6x level0.
+            std::array<glm::vec3, PyramidLevels> mips{};
+            mips.fill(level0Filtered);
+            for (int level = static_cast<int>(PyramidLevels) - 2; level >= 0; --level) {
+                mips[static_cast<size_t>(level)] += mips[static_cast<size_t>(level + 1)];
+            }
+            const glm::vec3 applied1x = EvaluateAdditiveApply(glm::vec3(0.0f), mips[0], tint, intensity);
+            const glm::vec3 applied2x = EvaluateAdditiveApply(glm::vec3(0.0f), mips[0], tint, intensity * 2.0f);
+            const glm::vec3 expected = level0Filtered * glm::max(tint, glm::vec3(0.0f)) * std::max(intensity, 0.0f);
+            if (glm::length(applied1x - expected) > 1e-4f) return false;
+            if (glm::length(applied2x - applied1x * 2.0f) > 1e-4f) return false;
+            return true;
+        }
+    } // namespace BloomContract
+
 } // namespace Axle

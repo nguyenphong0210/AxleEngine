@@ -963,4 +963,25 @@ namespace Axle {
                                                            float maxLogLuma = MaxLogLuminance);
     }
 
+    // M15 Unit 8 (S8.2 / U8-B): 6-level physically based additive Bloom contract
+    namespace BloomContract {
+        inline constexpr uint32_t PyramidLevels = 6u;
+        inline constexpr float PyramidNormalization = 1.0f / static_cast<float>(PyramidLevels);
+
+        struct MipExtent {
+            uint32_t Width = 1u;
+            uint32_t Height = 1u;
+            bool operator==(const MipExtent&) const = default;
+        };
+
+        MipExtent ComputeMipExtent(uint32_t fullWidth, uint32_t fullHeight, uint32_t level);
+        glm::vec3 EvaluatePrefilter(const glm::vec3& color, float threshold, float knee);
+        glm::vec3 EvaluateAdditiveApply(const glm::vec3& sceneColor, const glm::vec3& bloomLevel0,
+                                        const glm::vec3& tint, float intensity);
+        bool VerifySixLevelPyramidDimensions(uint32_t fullWidth, uint32_t fullHeight);
+        bool VerifyAdditiveEnergyAndSingleTint(const glm::vec3& hdrRadiance,
+                                               float threshold, float knee,
+                                               const glm::vec3& tint, float intensity);
+    }
+
 } // namespace Axle

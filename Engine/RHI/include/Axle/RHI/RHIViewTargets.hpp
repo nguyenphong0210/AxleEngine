@@ -86,6 +86,9 @@ namespace Axle::RHI {
         static const RHIFroxelTierSpec* GetFroxelTierSpec(uint8_t qualityTier);
         // Bounded 2D octahedral atlas layout for an active DDGI probe grid.
         static RHIDDGIAtlasExtent ComputeDDGIAtlasExtent(uint32_t gridX, uint32_t gridY, uint32_t gridZ);
+        // Validated 6-level Bloom mip dimensions for arbitrary/odd/small viewports.
+        static bool ComputeBloomExtent(uint32_t fullWidth, uint32_t fullHeight, uint32_t level,
+                                       uint32_t& outWidth, uint32_t& outHeight);
 
         bool Configure(const RHIViewTargetDesc& desc, const RHITexture* externalColor = nullptr,
                        const RHITexture* externalDepth = nullptr,

@@ -184,11 +184,9 @@ namespace Axle::RHI {
         } else {
             data.Subsurface = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
         }
-        if (m_Desc.AbsorptionEnabled) {
-            data.Absorption = glm::vec4(glm::max(glm::vec3(0.0f), m_Desc.AbsorptionColor), std::max(0.0f, m_Desc.Dispersion));
-        } else {
-            data.Absorption = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
-        }
+        data.Absorption = glm::vec4(
+            m_Desc.AbsorptionEnabled ? glm::max(glm::vec3(0.0f), m_Desc.AbsorptionColor) : glm::vec3(0.0f),
+            (m_Desc.AbsorptionEnabled || m_Desc.RefractionEnabled) ? std::clamp(m_Desc.Dispersion, 0.0f, 1.0f) : 0.0f);
         for (uint32_t i = 0; i < static_cast<uint32_t>(RHITextureSlot::Count); ++i) {
             if ((m_Desc.TextureEnableMask & (1u << i)) && (!GetTexturePath(static_cast<RHITextureSlot>(i)).empty() || HasTexture(static_cast<RHITextureSlot>(i))))
                 data.Flags.x |= 1u << i;

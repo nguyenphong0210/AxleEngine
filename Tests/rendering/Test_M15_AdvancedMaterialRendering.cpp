@@ -368,11 +368,201 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& renderer, const std::filesyst
             std::cerr << "[M15U9] FAIL (08.1): Disabled sheen parameters leaked into output! diff=" << maxFallbackDiff << "\n";
             return false;
         }
-        std::cout << "  [08.1 " << backendTag << "] PASS Charlie Sheen: center=" << centerLuma
+    std::cout << "  [08.1 " << backendTag << "] PASS Charlie Sheen: center=" << centerLuma
                   << " grazing=" << grazingLuma << " tightRatio=" << tightRatio << " wideRatio=" << wideRatio
                   << " pointOn=" << onPointRim << " rectOn=" << onRectRim << "\n";
     }
 
-    std::cout << "[M15U9] M15 Unit 9 Batch A GPU tests (" << backendTag << ") passed.\n";
+    // =========================================================================
+    // Batch B (M15-U9-02, M15-U9-03, M15-U9-08.2): Beer-Lambert Absorption,
+    // Cauchy Wavelength Dispersion & Opaque Fallback Parity
+    // =========================================================================
+    {
+        auto cube = RHIMesh::CreateCube(1.0f);
+        if (!cube) {
+            std::cerr << "[M15U9] FAIL (08.2): Could not create cube backdrop mesh\n";
+            return false;
+        }
+
+        // 1. Exponential Beer-Lambert absorption curve & color shift through flat glass slab (IOR=1.0 -> Fresnel=0)
+        RHIMaterialDesc whiteWallDesc;
+        whiteWallDesc.SurfaceType = SurfaceType::Opaque;
+        whiteWallDesc.BaseColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        whiteWallDesc.Roughness = 1.0f;
+        whiteWallDesc.EmissiveColor = glm::vec3(1.0f, 1.0f, 1.0f);
+        whiteWallDesc.EmissiveIntensity = 1.0f;
+        auto whiteWallMat = std::make_shared<RHIMaterial>(whiteWallDesc);
+
+        RHIMaterialDesc slabDesc;
+        slabDesc.SurfaceType = SurfaceType::Transparent;
+        slabDesc.BaseColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.05f);
+        slabDesc.Roughness = 0.05f;
+        slabDesc.Metallic = 0.0f;
+        slabDesc.RefractionEnabled = true;
+        slabDesc.RefractionStrength = 1.0f;
+        slabDesc.RefractionIOR = 1.0f;
+        slabDesc.RefractionThickness = 0.25f;
+        slabDesc.AbsorptionEnabled = true;
+        slabDesc.AbsorptionColor = glm::vec3(3.0f, 0.5f, 1.5f);
+        slabDesc.Dispersion = 0.0f;
+        auto slabMat = std::make_shared<RHIMaterial>(slabDesc);
+
+        RenderWorld absWorld;
+        absWorld.Skybox.Enabled = false;
+        absWorld.Skybox.EnvironmentLighting = false;
+
+        RenderMeshInstance wallInst;
+        wallInst.EntityID = 201;
+        wallInst.NativeView = cube->CaptureView();
+        wallInst.Material.RHIMaterialAsset = whiteWallMat;
+        wallInst.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2.5f)),
+                                             glm::vec3(8.0f, 8.0f, 0.2f));
+
+        RenderMeshInstance slabInst;
+        slabInst.EntityID = 202;
+        slabInst.NativeView = cube->CaptureView();
+        slabInst.Material.RHIMaterialAsset = slabMat;
+        slabInst.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)),
+                                             glm::vec3(1.8f, 1.8f, 0.2f));
+        absWorld.Meshes = {wallInst, slabInst};
+
+        auto sampleCenterRGB = [&](const std::vector<glm::vec4>& pixels) {
+            glm::vec3 accum(0.0f);
+            for (uint32_t y = 62; y <= 65; ++y) {
+                for (uint32_t x = 62; x <= 65; ++x) {
+                    accum += glm::vec3(pixels[static_cast<size_t>(y) * width + x]);
+                }
+            }
+            return accum / 16.0f;
+        };
+
+        std::vector<glm::vec4> absPx;
+        slabMat->GetDesc().AbsorptionEnabled = false;
+        if (!renderLinear(absWorld, absPx)) return false;
+        const glm::vec3 unabsorbed = sampleCenterRGB(absPx);
+        if (glm::length(unabsorbed - glm::vec3(1.0f)) > 0.03f) {
+            std::cerr << "[M15U9] FAIL (08.2): Unabsorbed transmission did not preserve white backdrop! got=("
+                      << unabsorbed.r << "," << unabsorbed.g << "," << unabsorbed.b << ")\n";
+            return false;
+        }
+
+        slabMat->GetDesc().AbsorptionEnabled = true;
+        const glm::vec3 sigma = slabMat->GetDesc().AbsorptionColor;
+        for (float thick : {0.25f, 0.65f, 1.25f}) {
+            slabMat->GetDesc().RefractionThickness = thick;
+            if (!renderLinear(absWorld, absPx)) return false;
+            const glm::vec3 measured = sampleCenterRGB(absPx);
+            const glm::vec3 expected = glm::exp(-sigma * thick);
+            if (glm::length(measured - expected) > 0.03f || !(measured.g > measured.b && measured.b > measured.r)) {
+                std::cerr << "[M15U9] FAIL (08.2): Beer-Lambert transmittance mismatch at d=" << thick
+                          << " measured=(" << measured.r << "," << measured.g << "," << measured.b
+                          << ") expected=(" << expected.r << "," << expected.g << "," << expected.b << ")\n";
+                return false;
+            }
+        }
+
+        // Negative absorption clamp check (<= 0 never amplifies > 1.0)
+        slabMat->GetDesc().AbsorptionColor = glm::vec3(-4.0f, 0.0f, -1.0f);
+        slabMat->GetDesc().RefractionThickness = 1.0f;
+        if (!renderLinear(absWorld, absPx)) return false;
+        const glm::vec3 negClamped = sampleCenterRGB(absPx);
+        if (glm::length(negClamped - glm::vec3(1.0f)) > 0.03f) {
+            std::cerr << "[M15U9] FAIL (08.2): Negative absorption coefficient amplified/altered radiance! ("
+                      << negClamped.r << "," << negClamped.g << "," << negClamped.b << ")\n";
+            return false;
+        }
+
+        // 2. Cauchy chromatic dispersion across crisp black/white step backdrop behind refracting sphere
+        RHIMaterialDesc darkWallDesc = whiteWallDesc;
+        darkWallDesc.EmissiveColor = glm::vec3(0.02f, 0.02f, 0.02f);
+        auto darkWallMat = std::make_shared<RHIMaterial>(darkWallDesc);
+
+        RenderMeshInstance leftWall = wallInst;
+        leftWall.EntityID = 203;
+        leftWall.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, -2.5f)),
+                                             glm::vec3(4.0f, 8.0f, 0.2f));
+        RenderMeshInstance rightWall = wallInst;
+        rightWall.EntityID = 204;
+        rightWall.Material.RHIMaterialAsset = darkWallMat;
+        rightWall.WorldTransform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, -2.5f)),
+                                              glm::vec3(4.0f, 8.0f, 0.2f));
+
+        slabMat->GetDesc().AbsorptionEnabled = false;
+        slabMat->GetDesc().RefractionIOR = 1.65f;
+        slabMat->GetDesc().RefractionThickness = 1.20f;
+        slabMat->GetDesc().RefractionStrength = 1.0f;
+        RenderMeshInstance dispPrism;
+        dispPrism.EntityID = 205;
+        dispPrism.NativeView = cube->CaptureView();
+        dispPrism.Material.RHIMaterialAsset = slabMat;
+        dispPrism.WorldTransform = glm::scale(
+            glm::rotate(glm::mat4(1.0f), glm::radians(35.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            glm::vec3(1.6f, 1.6f, 0.2f));
+
+        RenderWorld dispWorld;
+        dispWorld.Skybox.Enabled = false;
+        dispWorld.Skybox.EnvironmentLighting = false;
+        dispWorld.Meshes = {leftWall, rightWall, dispPrism};
+
+        slabMat->GetDesc().Dispersion = 0.0f;
+        std::vector<glm::vec4> noDispPx;
+        if (!renderLinear(dispWorld, noDispPx)) return false;
+
+        slabMat->GetDesc().Dispersion = 0.60f;
+        std::vector<glm::vec4> dispPx;
+        if (!renderLinear(dispWorld, dispPx)) return false;
+
+        auto analyzeChromaAcrossPrism = [&](const std::vector<glm::vec4>& pixels, float& outMaxRB, float& outMinRB) {
+            outMaxRB = -10.0f;
+            outMinRB = 10.0f;
+            for (uint32_t y = 44; y <= 84; ++y) {
+                for (uint32_t x = 36; x <= 92; ++x) {
+                    const glm::vec4& px = pixels[static_cast<size_t>(y) * width + x];
+                    const float diff = px.r - px.b;
+                    outMaxRB = std::max(outMaxRB, diff);
+                    outMinRB = std::min(outMinRB, diff);
+                }
+            }
+        };
+        float noDispMax = 0.0f, noDispMin = 0.0f, dispMax = 0.0f, dispMin = 0.0f;
+        analyzeChromaAcrossPrism(noDispPx, noDispMax, noDispMin);
+        analyzeChromaAcrossPrism(dispPx, dispMax, dispMin);
+        if (!(std::max(std::abs(noDispMax), std::abs(noDispMin)) < 0.04f &&
+              (dispMax - dispMin > 0.25f) && (dispMax > 0.20f || dispMin < -0.20f))) {
+            std::cerr << "[M15U9] FAIL (08.2): Cauchy chromatic dispersion did not separate RGB channels cleanly! noDisp=("
+                      << noDispMin << "," << noDispMax << ") disp=(" << dispMin << "," << dispMax << ")\n";
+            return false;
+        }
+
+        // 3. Opaque fallback unaffected by Absorption / Dispersion / Refraction flags
+        slabMat->GetDesc().SurfaceType = SurfaceType::Opaque;
+        slabMat->GetDesc().BaseColor = glm::vec4(0.35f, 0.45f, 0.55f, 1.0f);
+        slabMat->GetDesc().AbsorptionEnabled = true;
+        slabMat->GetDesc().AbsorptionColor = glm::vec3(4.0f, 1.0f, 0.2f);
+        slabMat->GetDesc().Dispersion = 0.6f;
+        slabMat->GetDesc().RefractionEnabled = true;
+        std::vector<glm::vec4> opaqueWithAdv;
+        if (!renderLinear(dispWorld, opaqueWithAdv)) return false;
+
+        slabMat->GetDesc().AbsorptionEnabled = false;
+        slabMat->GetDesc().Dispersion = 0.0f;
+        slabMat->GetDesc().RefractionEnabled = false;
+        std::vector<glm::vec4> opaqueClean;
+        if (!renderLinear(dispWorld, opaqueClean)) return false;
+
+        float maxOpaqueDiff = 0.0f;
+        for (size_t i = 0; i < opaqueWithAdv.size(); ++i) {
+            maxOpaqueDiff = std::max(maxOpaqueDiff, glm::length(glm::vec3(opaqueWithAdv[i] - opaqueClean[i])));
+        }
+        if (maxOpaqueDiff > 1e-4f) {
+            std::cerr << "[M15U9] FAIL (08.2): Absorption/Dispersion leaked into opaque fallback! diff=" << maxOpaqueDiff << "\n";
+            return false;
+        }
+        std::cout << "  [08.2 " << backendTag << "] PASS Beer-Lambert & Cauchy: sigma(3,0.5,1.5) unabs=("
+                  << unabsorbed.r << "," << unabsorbed.g << "," << unabsorbed.b << ") dispFringe=("
+                  << dispMin << "," << dispMax << ") opaqueDiff=" << maxOpaqueDiff << "\n";
+    }
+
+    std::cout << "[M15U9] M15 Unit 9 Batch A & B GPU tests (" << backendTag << ") passed.\n";
     return true;
 }

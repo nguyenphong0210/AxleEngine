@@ -1072,4 +1072,21 @@ namespace Axle {
         bool VerifyDisabledAndEdgeBehavior();
     }
 
+    // M15 Unit 9 (S9.2 / U9-B): Beer-Lambert volumetric absorption & Cauchy wavelength dispersion contract
+    namespace AbsorptionDispersionContract {
+        inline constexpr float MinTransmissionCos = 0.20f;
+        inline constexpr float MaxThickness = 100.0f;
+
+        float EvaluateSnellTransmissionCosine(float nDotV, float ior);
+        float EvaluateAbsorptionPathLength(float thickness, float nDotV, float ior);
+        glm::vec3 EvaluateBeerLambertTransmittance(const glm::vec3& absorptionSigma,
+                                                   float thickness,
+                                                   float nDotV,
+                                                   float ior);
+        glm::vec3 EvaluateCauchyIORs(float baseIOR, float dispersion);
+        bool VerifyBeerLambertExponentialAndClamps();
+        bool VerifyCauchyWavelengthDispersion();
+        bool VerifyOpaqueFallbackUnaffected();
+    }
+
 } // namespace Axle

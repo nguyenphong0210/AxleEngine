@@ -916,54 +916,47 @@ ReflectionSurfaceOutput EvaluateReflectionSurface(PSInput input) {
         color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
     }
     
-    if (surfaceType==2 && u_Refraction.w>0.5 && u_RefractionFrame.z>0.5) {
-        float2 screenUV=input.PositionCS.xy/u_RefractionFrame.xy;
-        float3 refracted=refract(-V,N,1.0/u_Refraction.y);
-        float4 endClip=mul(u_ViewProjection,float4(input.WorldPos+refracted*u_Refraction.z,1));
-        float4 startClip=mul(u_ViewProjection,float4(input.WorldPos,1));
-        float2 offset=(endClip.xy/max(endClip.w,1e-5)-startClip.xy/max(startClip.w,1e-5))*float2(0.5,-0.5)*u_Refraction.x;
-        float2 halfPixel=0.5/u_RefractionFrame.xy;
-        float2 sampleUV=clamp(screenUV+offset,halfPixel,1.0-halfPixel);
+    if (surfaceType == 2 && u_Refraction.w > 0.5 && u_RefractionFrame.z > 0.5) {
+        float2 screenUV = input.PositionCS.xy / u_RefractionFrame.xy;
+        float thickness = clamp(u_Refraction.z, 0.0, 100.0);
+        float4 startClip = mul(u_ViewProjection, float4(input.WorldPos, 1.0));
+        float2 halfPixel = 0.5 / u_RefractionFrame.xy;
+        float3 cauchyIOR = EvaluateCauchyIORs(u_Refraction.y, u_Absorption.w);
+
+        float2 sampleUV = ProjectSnellRefractedUV(V, N, cauchyIOR.y, thickness, u_Refraction.x, input.WorldPos, u_ViewProjection, startClip, screenUV, halfPixel);
         // Do not pull an opaque foreground object across the glass silhouette.
-        if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler,sampleUV,0)<input.PositionCS.z-1e-5) sampleUV=screenUV;
-        
+        if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler, sampleUV, 0) < input.PositionCS.z - 1e-5) sampleUV = screenUV;
+
         float3 transmitted;
-        if (u_Absorption.w > 0.001) {
-            // Cauchy chromatic dispersion
-            float dispersion = u_Absorption.w;
-            float2 dispOffset = offset * dispersion * 0.15;
-            float2 uvR = clamp(sampleUV - dispOffset, halfPixel, 1.0 - halfPixel);
-            float2 uvG = sampleUV;
-            float2 uvB = clamp(sampleUV + dispOffset, halfPixel, 1.0 - halfPixel);
-            if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler,uvR,0)<input.PositionCS.z-1e-5) uvR=sampleUV;
-            if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler,uvB,0)<input.PositionCS.z-1e-5) uvB=sampleUV;
-            float r = RefractedBackground(uvR, viewDepth, fogSample).r;
-            float g = RefractedBackground(uvG, viewDepth, fogSample).g;
-            float b = RefractedBackground(uvB, viewDepth, fogSample).b;
-            transmitted = float3(r, g, b);
+        if (u_Absorption.w > 0.001 && cauchyIOR.y > 1.001) {
+            float2 uvR = ProjectSnellRefractedUV(V, N, cauchyIOR.x, thickness, u_Refraction.x, input.WorldPos, u_ViewProjection, startClip, screenUV, halfPixel);
+            float2 uvB = ProjectSnellRefractedUV(V, N, cauchyIOR.z, thickness, u_Refraction.x, input.WorldPos, u_ViewProjection, startClip, screenUV, halfPixel);
+            if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler, uvR, 0) < input.PositionCS.z - 1e-5) uvR = sampleUV;
+            if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler, uvB, 0) < input.PositionCS.z - 1e-5) uvB = sampleUV;
+            transmitted = float3(
+                RefractedBackground(uvR, viewDepth, fogSample).r,
+                RefractedBackground(sampleUV, viewDepth, fogSample).g,
+                RefractedBackground(uvB, viewDepth, fogSample).b);
         } else {
             transmitted = RefractedBackground(sampleUV, viewDepth, fogSample);
         }
 
-        // Beer-Lambert volumetric absorption
-        float travelDist = u_Refraction.z / max(abs(dot(N, refracted)), 0.1);
-        float3 absorptionCoeff = max(u_Absorption.rgb, float3(0.0, 0.0, 0.0));
-        float3 transmittance = exp(-absorptionCoeff * travelDist);
-        transmitted *= transmittance;
-
-        float4 background=u_OpaqueSceneColor.SampleLevel(u_ScreenSampler,sampleUV,0);
-        // Transparent editor clear has no rendered checkerboard to refract.
-        if (background.a>0.001) {
-            float f0=(u_Refraction.y-1.0)/(u_Refraction.y+1.0);
-            float fresnel=f0*f0+(1.0-f0*f0)*pow(1.0-NdotV,5.0);
-            if (u_CameraPosition.w<=0.0) {
-                transmitted=pow(max(transmitted,0.0),2.2);
-                color=pow(max(color,0.0),2.2);
+        float4 background = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, sampleUV, 0);
+        // Transparent editor clear has no rendered backdrop to refract.
+        if (background.a > 0.001) {
+            float f0 = (cauchyIOR.y - 1.0) / (cauchyIOR.y + 1.0);
+            float fresnel = f0 * f0 + (1.0 - f0 * f0) * pow(1.0 - NdotV, 5.0);
+            if (u_CameraPosition.w <= 0.0) {
+                transmitted = pow(max(transmitted, 0.0), 2.2);
+                color = pow(max(color, 0.0), 2.2);
             }
-            color=clamp(fogSample.rgb + transmitted*u_RefractionTint.rgb*(1.0-fresnel)+
-                color*fogSample.a*fresnel, 0.0, 65000.0);
-            if (u_CameraPosition.w<=0.0) color=pow(max(color,0.0),1.0/2.2);
-            return MakeMaterialReflectionSurfaceOutput(float4(color,1.0), 0.0, 0.0, 1.0, 0.0);
+            // Apply linear Beer-Lambert absorption using Snell optical path policy.
+            float3 transmittance = EvaluateBeerLambertTransmittance(u_Absorption.rgb, thickness, NdotV, cauchyIOR.y);
+            transmitted *= transmittance;
+            color = clamp(fogSample.rgb + transmitted * u_RefractionTint.rgb * (1.0 - fresnel) +
+                color * fogSample.a * fresnel, 0.0, 65000.0);
+            if (u_CameraPosition.w <= 0.0) color = pow(max(color, 0.0), 1.0 / 2.2);
+            return MakeMaterialReflectionSurfaceOutput(float4(color, 1.0), 0.0, 0.0, 1.0, 0.0);
         }
         if (u_FogParams.x > 0.0) {
             color = clamp(color * fogSample.a + fogSample.rgb, 0.0, 65000.0);

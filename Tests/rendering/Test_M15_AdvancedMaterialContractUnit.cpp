@@ -61,6 +61,44 @@ bool RunM15AdvancedMaterialContractUnitTests() {
             "PBRCommon.hlsli and ForwardPBR.hlsl share energy-conserving Charlie Sheen direct/area/IBL helpers");
     }
 
-    std::cout << "[M15U9Contract] M15 U9 Batch A contract tests passed.\n";
+    // M15-U9-02 & M15-U9-03: Beer-Lambert absorption & Cauchy dispersion contracts + documented policy
+    {
+        RENDER_CHECK(AbsorptionDispersionContract::VerifyBeerLambertExponentialAndClamps(),
+            "Beer-Lambert transmittance matches exp(-sigma*d), clamps negative/zero inputs and caps grazing path <= 5x thickness");
+        RENDER_CHECK(AbsorptionDispersionContract::VerifyCauchyWavelengthDispersion(),
+            "Cauchy dispersion orders IOR(R) < IOR(G) < IOR(B) cleanly and stays neutral at IOR=1 or Dispersion=0");
+        RENDER_CHECK(AbsorptionDispersionContract::VerifyOpaqueFallbackUnaffected(),
+            "Non-refractive opaque materials emit zero absorption and dispersion impact");
+
+        // Verify Dispersion forwards independently for clear dispersive glass (RefractionEnabled=true, AbsorptionEnabled=false)
+        RHI::RHIMaterialDesc clearDisp;
+        clearDisp.SurfaceType = SurfaceType::Transparent;
+        clearDisp.RefractionEnabled = true;
+        clearDisp.AbsorptionEnabled = false;
+        clearDisp.Dispersion = 0.25f;
+        RHI::RHIMaterial clearMat(clearDisp);
+        const auto cc = clearMat.BuildConstants();
+        const auto cr = MaterialResolver::Resolve(clearMat).ToMaterialConstants();
+        RENDER_CHECK(cc.Absorption.x == 0.0f && cc.Absorption.y == 0.0f && cc.Absorption.z == 0.0f &&
+                     std::abs(cc.Absorption.w - 0.25f) < 1e-5f && cr.Absorption == cc.Absorption,
+            "Clear dispersive glass retains Cauchy dispersion without spurious absorption");
+
+        const std::string pbrCommon = LoadTextFile(AXLE_PBR_COMMON_SHADER_PATH);
+        const std::string forwardPBR = LoadTextFile(AXLE_FORWARD_PBR_SHADER_PATH);
+        const std::string policyDoc = LoadTextFile(AXLE_REFRACTION_POLICY_DOC_PATH);
+        RENDER_CHECK(pbrCommon.find("EvaluateBeerLambertTransmittance") != std::string::npos &&
+                     pbrCommon.find("EvaluateCauchyIORs") != std::string::npos &&
+                     pbrCommon.find("ProjectSnellRefractedUV") != std::string::npos &&
+                     forwardPBR.find("EvaluateBeerLambertTransmittance") != std::string::npos &&
+                     forwardPBR.find("EvaluateCauchyIORs") != std::string::npos,
+            "ForwardPBR.hlsl and PBRCommon.hlsli implement documented Beer-Lambert & Cauchy helpers");
+        RENDER_CHECK(!policyDoc.empty() &&
+                     policyDoc.find("Beer-Lambert") != std::string::npos &&
+                     policyDoc.find("Cauchy") != std::string::npos &&
+                     policyDoc.find("single-bounce screen-space refraction limits") != std::string::npos,
+            "REFRACTION_ABSORPTION_POLICY.md documents thickness/path policy and screen-space vs traced glass limits");
+    }
+
+    std::cout << "[M15U9Contract] M15 U9 Batch A & B contract tests passed.\n";
     return true;
 }

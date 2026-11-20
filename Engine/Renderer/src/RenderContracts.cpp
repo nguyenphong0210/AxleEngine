@@ -4495,4 +4495,97 @@ namespace Axle {
         }
     } // namespace SheenContract
 
+    // =========================================================================
+    // M15 Unit 9 (S9.2 / U9-B): Beer-Lambert Absorption & Cauchy Dispersion Contract
+    // =========================================================================
+    namespace AbsorptionDispersionContract {
+        float EvaluateSnellTransmissionCosine(float nDotV, float ior) {
+            const float safeIOR = std::clamp(ior, 1.0f, 3.5f);
+            const float invIOR = 1.0f / safeIOR;
+            const float nv = std::clamp(nDotV, 0.0f, 1.0f);
+            const float sin2I = std::max(0.0f, 1.0f - nv * nv);
+            return std::sqrt(std::max(0.0f, 1.0f - invIOR * invIOR * sin2I));
+        }
+
+        float EvaluateAbsorptionPathLength(float thickness, float nDotV, float ior) {
+            const float safeThickness = std::clamp(thickness, 0.0f, MaxThickness);
+            const float cosThetaT = EvaluateSnellTransmissionCosine(nDotV, ior);
+            return safeThickness / std::max(cosThetaT, MinTransmissionCos);
+        }
+
+        glm::vec3 EvaluateBeerLambertTransmittance(const glm::vec3& absorptionSigma,
+                                                   float thickness,
+                                                   float nDotV,
+                                                   float ior) {
+            const glm::vec3 safeSigma = glm::max(absorptionSigma, glm::vec3(0.0f));
+            const float dist = EvaluateAbsorptionPathLength(thickness, nDotV, ior);
+            return glm::exp(-safeSigma * dist);
+        }
+
+        glm::vec3 EvaluateCauchyIORs(float baseIOR, float dispersion) {
+            const float iorG = std::clamp(baseIOR, 1.0f, 3.0f);
+            const float bEff = (iorG > 1.001f) ? (std::clamp(dispersion, 0.0f, 1.0f) * 0.25f) : 0.0f;
+            const float iorR = std::clamp(iorG - 0.9389f * bEff, 1.0f, 3.5f);
+            const float iorB = std::clamp(iorG + 1.6325f * bEff, 1.0f, 3.5f);
+            return glm::vec3(iorR, iorG, iorB);
+        }
+
+        bool VerifyBeerLambertExponentialAndClamps() {
+            // Normal incidence with IOR=1.5 -> optical path == thickness
+            const glm::vec3 sigma(2.5f, 0.5f, 1.25f);
+            const float thicknesses[] = {0.0f, 0.25f, 0.5f, 1.0f, 2.0f};
+            glm::vec3 prev(1.0f);
+            for (float t : thicknesses) {
+                const glm::vec3 T = EvaluateBeerLambertTransmittance(sigma, t, 1.0f, 1.5f);
+                const glm::vec3 expected = glm::exp(-sigma * t);
+                if (glm::length(T - expected) > 1e-5f) {
+                    return false;
+                }
+                if (t > 0.0f && !(T.r < prev.r && T.g < prev.g && T.b < prev.b)) {
+                    return false;
+                }
+                prev = T;
+            }
+            // Zero/negative absorption or zero thickness clamps to unit transmittance
+            const glm::vec3 negT = EvaluateBeerLambertTransmittance(glm::vec3(-4.0f, -0.1f, 0.0f), 2.0f, 0.5f, 1.5f);
+            const glm::vec3 zeroT = EvaluateBeerLambertTransmittance(sigma, -1.0f, 0.2f, 1.5f);
+            if (glm::length(negT - glm::vec3(1.0f)) > 1e-5f || glm::length(zeroT - glm::vec3(1.0f)) > 1e-5f) {
+                return false;
+            }
+            // Grazing angle edge clamp caps path length at <= thickness / MinTransmissionCos (5x)
+            const float maxGrazingPath = EvaluateAbsorptionPathLength(1.0f, 0.0f, 1.0f);
+            return std::isfinite(maxGrazingPath) && std::abs(maxGrazingPath - (1.0f / MinTransmissionCos)) < 1e-4f;
+        }
+
+        bool VerifyCauchyWavelengthDispersion() {
+            const glm::vec3 zeroDisp = EvaluateCauchyIORs(1.52f, 0.0f);
+            if (std::abs(zeroDisp.r - zeroDisp.g) > 1e-6f || std::abs(zeroDisp.b - zeroDisp.g) > 1e-6f) {
+                return false;
+            }
+            const glm::vec3 vacuum = EvaluateCauchyIORs(1.0f, 0.8f);
+            if (std::abs(vacuum.r - 1.0f) > 1e-6f || std::abs(vacuum.b - 1.0f) > 1e-6f) {
+                return false;
+            }
+            const glm::vec3 flint = EvaluateCauchyIORs(1.62f, 0.35f);
+            if (!(flint.r < flint.g && flint.g < flint.b)) {
+                return false;
+            }
+            const glm::vec3 clamped = EvaluateCauchyIORs(1.62f, 5.0f);
+            const glm::vec3 unitMax = EvaluateCauchyIORs(1.62f, 1.0f);
+            return glm::length(clamped - unitMax) < 1e-6f;
+        }
+
+        bool VerifyOpaqueFallbackUnaffected() {
+            // CPU surface constant check: non-refractive opaque material emits zero absorption & dispersion if disabled
+            ResolvedSurface opaque;
+            opaque.Surface = SurfaceType::Opaque;
+            opaque.RefractionEnabled = false;
+            opaque.AbsorptionEnabled = false;
+            opaque.AbsorptionColor = glm::vec3(2.0f, 1.0f, 0.5f);
+            opaque.Dispersion = 0.4f;
+            const auto constants = opaque.ToMaterialConstants();
+            return constants.Absorption == glm::vec4(0.0f) && constants.Refraction.w == 0.0f;
+        }
+    } // namespace AbsorptionDispersionContract
+
 } // namespace Axle

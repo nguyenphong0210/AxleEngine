@@ -518,4 +518,57 @@ void ApplyCharlieSheenIBL(
     reflectionResponse = reflectionResponse * baseAtten + sc * eSheen * sheenSpecAO;
 }
 
+// =============================================================================
+// Beer-Lambert Absorption & Cauchy Wavelength Dispersion (M15-U9-02, M15-U9-03)
+// =============================================================================
+float EvaluateSnellTransmissionCosine(float NdotV, float ior) {
+    float safeIOR = clamp(ior, 1.0, 3.5);
+    float invIOR = 1.0 / safeIOR;
+    float sin2I = max(0.0, 1.0 - saturate(NdotV) * saturate(NdotV));
+    return sqrt(max(0.0, 1.0 - invIOR * invIOR * sin2I));
+}
+
+float EvaluateAbsorptionPathLength(float thickness, float NdotV, float ior) {
+    float safeThickness = clamp(thickness, 0.0, 100.0);
+    float cosThetaT = EvaluateSnellTransmissionCosine(NdotV, ior);
+    return safeThickness / max(cosThetaT, 0.20);
+}
+
+float3 EvaluateBeerLambertTransmittance(float3 absorptionSigma, float thickness, float NdotV, float ior) {
+    float3 safeSigma = max(absorptionSigma, float3(0.0, 0.0, 0.0));
+    float opticalDist = EvaluateAbsorptionPathLength(thickness, NdotV, ior);
+    return exp(-safeSigma * opticalDist);
+}
+
+float3 EvaluateCauchyIORs(float baseIOR, float dispersion) {
+    float iorG = clamp(baseIOR, 1.0, 3.0);
+    float bEff = (iorG > 1.001) ? (clamp(dispersion, 0.0, 1.0) * 0.25) : 0.0;
+    float iorR = clamp(iorG - 0.9389 * bEff, 1.0, 3.5);
+    float iorB = clamp(iorG + 1.6325 * bEff, 1.0, 3.5);
+    return float3(iorR, iorG, iorB);
+}
+
+float3 ComputeSafeRefractRay(float3 V, float3 N, float ior) {
+    float eta = 1.0 / clamp(ior, 1.0, 3.5);
+    float3 r = refract(-V, N, eta);
+    return dot(r, r) > 1e-6 ? normalize(r) : -V;
+}
+
+float2 ProjectSnellRefractedUV(
+    float3 V,
+    float3 N,
+    float ior,
+    float thickness,
+    float refractStrength,
+    float3 worldPos,
+    float4x4 viewProj,
+    float4 startClip,
+    float2 screenUV,
+    float2 halfPixel) {
+    float3 ray = ComputeSafeRefractRay(V, N, ior);
+    float4 endClip = mul(viewProj, float4(worldPos + ray * clamp(thickness, 0.0, 100.0), 1.0));
+    float2 offset = (endClip.xy / max(endClip.w, 1e-5) - startClip.xy / max(startClip.w, 1e-5)) * float2(0.5, -0.5) * saturate(refractStrength);
+    return clamp(screenUV + offset, halfPixel, 1.0 - halfPixel);
+}
+
 #endif

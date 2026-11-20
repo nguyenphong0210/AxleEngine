@@ -30,8 +30,9 @@ namespace Axle {
                                   : glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
         data.Subsurface = SubsurfaceEnabled ? glm::vec4(glm::max(SubsurfaceColor, glm::vec3(0.0f)), std::max(0.0f, SubsurfaceRadius))
                                             : glm::vec4(0.0f);
-        data.Absorption = AbsorptionEnabled ? glm::vec4(glm::max(AbsorptionColor, glm::vec3(0.0f)), std::max(0.0f, Dispersion))
-                                            : glm::vec4(0.0f);
+        data.Absorption = glm::vec4(
+            AbsorptionEnabled ? glm::max(AbsorptionColor, glm::vec3(0.0f)) : glm::vec3(0.0f),
+            (AbsorptionEnabled || RefractionEnabled) ? std::clamp(Dispersion, 0.0f, 1.0f) : 0.0f);
         return data;
     }
 
@@ -123,9 +124,9 @@ namespace Axle {
         result.AnisotropyRotation = std::clamp(desc.AnisotropyRotation, 0.0f, 1.0f);
         result.SheenEnabled = desc.SheenEnabled; result.SheenColor = glm::clamp(desc.SheenColor, glm::vec3(0.0f), glm::vec3(1.0f)); result.SheenRoughness = std::clamp(desc.SheenRoughness, 0.01f, 1.0f);
         result.SubsurfaceEnabled = desc.SubsurfaceEnabled; result.SubsurfaceColor = glm::max(desc.SubsurfaceColor, glm::vec3(0.0f)); result.SubsurfaceRadius = desc.SubsurfaceRadius;
-        result.AbsorptionEnabled = desc.AbsorptionEnabled; result.AbsorptionColor = glm::max(desc.AbsorptionColor, glm::vec3(0.0f)); result.Dispersion = desc.Dispersion;
-        result.RefractionEnabled = desc.RefractionEnabled; result.RefractionStrength = desc.RefractionStrength; result.RefractionIOR = desc.RefractionIOR;
-        result.RefractionThickness = desc.RefractionThickness; result.RefractionTint = glm::clamp(desc.RefractionTint, glm::vec3(0.0f), glm::vec3(1.0f));
+        result.AbsorptionEnabled = desc.AbsorptionEnabled; result.AbsorptionColor = glm::max(desc.AbsorptionColor, glm::vec3(0.0f)); result.Dispersion = std::clamp(desc.Dispersion, 0.0f, 1.0f);
+        result.RefractionEnabled = desc.RefractionEnabled; result.RefractionStrength = std::clamp(desc.RefractionStrength, 0.0f, 1.0f); result.RefractionIOR = std::clamp(desc.RefractionIOR, 1.0f, 3.0f);
+        result.RefractionThickness = std::clamp(desc.RefractionThickness, 0.0f, 100.0f); result.RefractionTint = glm::clamp(desc.RefractionTint, glm::vec3(0.0f), glm::vec3(1.0f));
         result.Surface = desc.SurfaceType; result.Cull = desc.CullMode; result.DepthWrite = desc.DepthWrite;
         result.RenderQueue = desc.RenderQueue;
         result.ShadingModel = desc.TextureMode == TextureMode::PackedORM

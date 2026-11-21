@@ -23,7 +23,9 @@ LOD ratios of 100/50/25/10 percent are cook targets. Preserve attribute disconti
 
 Evaluate projected coverage per view against conservative bounds. Use history with hysteresis, a stable transition seed and consistent coverage for participating raster passes. Reset on incompatible view, geometry or device generations and camera cuts. Define how blended surfaces transition while preserving depth sorting and opacity. Shadow depth selection uses light-space coverage and caster silhouette error independently of camera selection, including casters outside the main frustum.
 
-Flat meshlets retain stable identity within a geometry generation, source triangle and material correspondence, bounds, normal cones and seam metadata. The default profile caps meshlets at 64 vertices and 126 triangles. The indexed representation maps the same triangles to the same identities. The later cluster DAG preserves locked shared boundary loops and monotonically conservative geometric error. Cluster selection produces a complete compatible cut, with one representation for each covered region and an indexed representation of that cut. Invalid metadata, incompatible cuts or exceeded budgets select a valid coarser or discrete-LOD representation before drawing.
+Flat meshlets retain stable identity within a geometry generation, source triangle and material correspondence, bounds, normal cones and seam metadata. The default profile caps meshlets at 64 vertices and 126 triangles. The indexed representation maps the same triangles to the same identities. The later cluster DAG preserves locked shared boundary loops and monotonically conservative geometric error.
+
+Admit complete cooked geometry generations within a declared GPU memory budget. Account for vertex/index, meshlet and hierarchy data, the available fallback and temporarily overlapping generations. Track staging in its memory domain. Preflight an indexed fallback before admitting an optional product. Publish a replacement only after upload readiness. Retain the exact old generation while submissions still reference it. When an asset exceeds its allocation, use an admitted compatible generation or a budgeted discrete LOD and report why that asset took the fallback. On-demand page streaming has its own feature scope.
 
 An optional M17-produced RT proxy carries the M16 source linkage, proxy generation, vertex attributes, material/alpha mapping and triangle-budget contract. M16 can use its own proxy and continues to own proxy selection and AS lifetime. TLAS classification consumes eligible whole-scene instances, including off-camera casters and reflection hits. The view-culled raster working set is a separate consumer of the same snapshot.
 
@@ -35,9 +37,11 @@ Emit indexed indirect commands by compatible geometry binding, index type and pi
 
 Use frustum bounds first. Apply meshlet normal-cone rejection only when the transform and material provide a conservative cone. Disable it for unsupported cases such as two-sided surfaces or unproven transformed bounds.
 
+Traverse the admitted cluster DAG on the GPU per view against a projected error bound. Use a CPU reference for deterministic cut and limit fixtures. The GPU publishes one complete compatible cluster cut consumed by indexed and Task/Mesh rasterization. Bound traversal and output by view and frame. Invalid metadata or exhausted work selects a valid coarser cut or a discrete LOD for the affected scope before raster reads the result. Expose selected cluster counts, effective routes and fallback reasons for fixture and Editor diagnosis.
+
 For the engine's forward depth convention of near 0 and far 1, the occlusion pyramid stores the farthest relevant depth over each represented footprint. Its reduction uses `max()` or an equivalent conservative representation with empty/uncertain coverage treated as potentially visible. Reuse the M15 Hi-Z allocation and odd-edge handling where compatible. Preserve the separate nearest-depth `min()` semantics used by SSR.
 
-1. Use compatible previous view depth to defer candidates that may be occluded. Record first-phase depth from conservative eligible occluders. Grids and history are view-local, including same-size views.
+1. Use compatible previous view depth to defer candidates that may be occluded. Record first-phase depth from eligible occluders with current projection, clipping and coverage that remains valid for final rasterization. If an occluder changes LOD or route and invalidates that coverage, retest affected work or keep it visible. Grids and history are view-local, including same-size views.
 2. Build the current occlusion pyramid and retest deferred work before final coverage. Draw recovered candidates in the same frame. Near-plane intersections, invalid history and unproven occlusion retain candidates. Camera cuts, resize, incompatible scene/geometry changes and device epochs invalidate history. Compare against an occlusion-disabled reference with the same geometry and camera.
 
 ## 4. Coverage, clustered shading and RT integration
@@ -49,8 +53,8 @@ The ordered scheduler hosts stateful passes with explicit graph edges. Each arro
 ```mermaid
 flowchart TD
     W[RenderWorld]
-    W --> U[Instance upload and geometry selection]
-    U --> C[Frustum, cone and two-phase occlusion]
+    W --> U[Instance upload and geometry admission]
+    U --> C[GPU cluster selection and culling]
     C --> V[Indexed or Task/Mesh visibility coverage]
     W --> F[Forward fallback coverage]
     V --> R[Receiver inputs and final opaque ownership]

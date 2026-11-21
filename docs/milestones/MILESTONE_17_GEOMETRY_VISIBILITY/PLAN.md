@@ -8,6 +8,8 @@
 
 Phase 46.1 owns cooked autoLOD. Phase 46.2 owns GPU-driven geometry, meshlets, Visibility Buffer and its resolve. Phase 46.3 owns clustered lighting shared by Forward and visibility shading. These phases identify scope. The execution order below brings forward resource contracts and clustered lighting where another feature needs them.
 
+Phase 46.2 selects continuous LOD from cooked geometry generations admitted to GPU memory. Fine-grained, on-demand geometry page streaming is a separate feature scope.
+
 - Record [M15 U11-E](../MILESTONE_15_LIGHTING_MATERIALS/PLAN.md#s115-batch-u11-e--post-refactor-ab-scorecard-parity-and-zero-debt-m15-closure) source and evidence for stateful passes, shared surface and lighting evaluation, view and capture policy, descriptor lifetimes, frame completion and transient resources.
 - Use [M16 RT-01.1 and RT-08D](../MILESTONE_16_RAY_TRACING/PLAN.md) for the backend-neutral capability matrix and the integrated M16 core reference. Verify RT receiver inputs, per-light shadow visibility, reflection resolve and proxy identity against that reference. M16 owns AS, SBT, proxy eligibility and RT coverage. Optional M16 RT-09 has a separate release and acceptance boundary.
 - Use CPU indexed Forward as the reference for GPU culling and ForwardPBR as the reference for visibility shading. First prove indexed visibility with flat meshlets. Add cluster hierarchy and task/mesh rasterization as separate checkpoints against that reference.
@@ -28,7 +30,7 @@ Groups A–I define the delivery order. Each of the 22 numbered batches below ow
 | **M17-C2** | `02.2`, `03.2` | Temporal transitions and shadow-specific LOD policy. Inspect static and animated camera sequences and compare caster silhouettes and contact shadows. |
 | **M17-D1** | `04.1`, `04.2` | Pack instances from the immutable snapshot and retain frame generations. Verify reload, ID reuse, capacity pressure and slot reuse after completion. |
 | **M17-D2** | `05.1` | GPU frustum culling and discrete-LOD indexed indirect rendering. Compare drawn IDs, arguments and images to CPU indexed Forward with the same LODs. |
-| **M17-E1** | `06.1`, `06.2` | Cook flat meshlets and validate schema, IDs, bounds, seams and indexed triangle mapping. |
+| **M17-E1** | `06.1`, `06.2`, `06.3` | Cook and load flat meshlets. Verify schema, triangle mapping and GPU memory admission with a forced budget and hot reload. |
 | **M17-E2** | `05.2` | Add normal-cone culling for eligible meshlets. Compare against a cone-disabled reference including mirrored, nonuniform and two-sided geometry. |
 | **M17-E3** | `05.3` | Add a conservative depth pyramid and two-phase occlusion. Verify same-frame recovery at openings and after occluder motion, history resets and view changes. |
 
@@ -42,7 +44,7 @@ Groups A–I define the delivery order. Each of the 22 numbered batches below ow
 | **M17-G2** | `09.1` | Run the dedicated resolve on a bounded built-in PBR fixture using the existing clustered list. Check reconstructed attributes, derivatives and scene-linear HDR against ForwardPBR. |
 | **M17-G3** | `09.2`, `09.3`, `15.2`, `17.1` | Extend resolve to typed bindless materials and supported generated graph paths. Verify shared clustered shading and graph order in mixed visibility/Forward scenes. |
 | **M17-G4** | `15.3`, `17.2`, `18.3` | Wire mixed-view receiver inputs and shared secondary lighting to M16. Verify RT Off, Shadows and Reflections, material/view fallback, and graph/resource lifecycle. |
-| **M17-H1** | `07.1`, `07.2` | Cook and select a cluster DAG using the indexed path. Verify locked seams, legal cluster cuts and deterministic transitions before adding mesh shaders. |
+| **M17-H1** | `07.1`, `07.2` | Cook the cluster DAG and select cuts on the GPU for the indexed path. Verify locked seams, bounded traversal and deterministic transitions before adding mesh shaders. |
 | **M17-H2** | `10.1`, `10.2` | Compile, reflect and run native Task/Mesh rasterization. Compare selected clusters, per-pixel identity, depth and final image against indexed rendering of the same cluster cut. |
 | **M17-I1** | `16.1`, `16.2` | Measure bounded material bins and wave fast paths against the generic resolve. Verify the generic fallback and record which variants qualify for promotion. |
 | **M17-I2** | `11.3`, `12.1`, `12.2`, `17.3` | Freeze the integrated candidate. Run product, fallback, lifecycle, visual and scale gates and archive the scorecards. |
@@ -88,8 +90,8 @@ Groups A–I define the delivery order. Each of the 22 numbered batches below ow
   - **PASS when** native argument and instance readbacks, submitted draws and image coverage match a CPU reference at identical LOD. Include mixed meshes, nonzero index/vertex/instance offsets, empty outputs and command overflow.
 - [ ] **C17-05.2 — Add safe meshlet normal-cone rejection.** Define transform and material conditions for cone use, with a conservative path for unproven bounds.
   - **PASS when** visible coverage agrees with the cone-disabled reference for near-plane, nonuniform-scale, mirrored and two-sided cases, while a suitable workload demonstrates genuine cone rejection.
-- [ ] **C17-05.3 — Add two-phase conservative Hi-Z occlusion.** Use compatible history to defer candidates, render first-phase depth, and retest deferred work against current conservative depth before final visibility. Preserve the existing SSR reduction semantics.
-  - **PASS when** no visible object is falsely culled in margin, thin-occluder, opening, odd-size and moving-camera/occluder fixtures. Verify history invalidation, fail-open behavior and measured rejection for genuinely occluded geometry.
+- [ ] **C17-05.3 — Add two-phase conservative Hi-Z occlusion.** Use compatible history to defer candidates, render first-phase depth from valid current-view coverage, and retest deferred work against current conservative depth before final visibility. Preserve the existing SSR reduction semantics.
+  - **PASS when** no visible object is falsely culled in margin, thin-occluder, opening, odd-size and moving-camera/occluder fixtures. Include a change of occluder LOD or route that exposes an opening. Verify history invalidation, fail-open behavior and measured rejection for genuinely occluded geometry.
 
 #### C17-06 — Flat meshlet product
 
@@ -97,13 +99,15 @@ Groups A–I define the delivery order. Each of the 22 numbered batches below ow
   - **PASS when** deterministic static fixtures reproduce original triangle coverage and material assignment, and every meshlet respects the profile limits and measured bounds.
 - [ ] **C17-06.2 — Serialize and validate meshlet data.** Version ranges and identity within the derived geometry product, and define invalidation on geometry revisions.
   - **PASS when** loose and cooked loads agree, malformed ranges/IDs fail safely, and an unavailable or incompatible meshlet product routes to the corresponding discrete-LOD draw.
+- [ ] **C17-06.3 — Admit complete geometry generations within a GPU memory budget.** Account for meshlet and hierarchy data, fallback geometry and overlapping generations. Track upload staging separately by memory domain. Establish an available indexed fallback before admitting an optional product. Report admission and fallback reasons by asset.
+  - **PASS when** constrained-budget fixtures on both native backends reject an oversized product or replacement, retain complete raster coverage through an available budgeted fallback, and recover when the replacement fits. Hot reload and failed upload keep memory bounded while protecting in-flight generations.
 
 #### C17-07 — Cluster DAG
 
 - [ ] **C17-07.1 — Cook a deterministic hierarchy with locked shared boundaries.** Validate parent/child coverage, error bounds, stable IDs, material mapping and compatible seams.
-  - **PASS when** topology validation detects cycles, invalid ranges and broken coverage, and adjacent levels preserve shared boundary loops in deterministic fixtures.
-- [ ] **C17-07.2 — Select legal cluster cuts by projected error.** Select complete compatible coverage with a valid indexed representation and a bounded fallback for invalid or oversubscribed selection.
-  - **PASS when** a camera transition sequence produces no cracks, duplicate coverage or visible pop within the declared limits. Include mixed levels across neighbors, motion/disocclusion and a recoverable invalid hierarchy.
+  - **PASS when** topology validation detects cycles, invalid ranges and broken coverage, and adjacent levels preserve shared boundary loops in deterministic fixtures. With the production hierarchy payload, recheck admission, replacement and fallback under `C17-06.3`.
+- [ ] **C17-07.2 — Select legal cluster cuts on the GPU by projected error.** Traverse the cooked DAG per view with declared work and output bounds. Publish one complete cut for indexed rasterization and the later Task/Mesh route. Select a valid coarser cut or discrete LOD when traversal cannot finish within its bounds.
+  - **PASS when** both native backends match a CPU reference on deterministic cuts and budget decisions without reading back to submit the frame. Compare camera transitions for cracks, duplicate coverage and visible pop. Include mixed levels across neighbors, motion/disocclusion, an invalid hierarchy and forced traversal/output exhaustion.
 
 #### C17-08 — Visibility Buffer
 
@@ -139,8 +143,8 @@ Groups A–I define the delivery order. Each of the 22 numbered batches below ow
 
 #### C17-12 — Scale and final acceptance
 
-- [ ] **C17-12.1 — Measure dense-scene geometry and lighting.** Compare the M16 raster baseline and eligible M17 routes under identical inputs. Isolate draw submission, triangle reduction, visibility bandwidth, resolve and cluster costs.
-  - **PASS when** the Release scorecards meet frozen fixture-specific CPU/GPU and memory budgets, show the target gain for promoted routes and record reproducible workload counts and distributions.
+- [ ] **C17-12.1 — Measure dense-scene geometry and lighting.** Compare the M16 raster baseline and eligible M17 routes under identical inputs. Isolate draw submission, triangle reduction, visibility bandwidth, resolve and cluster costs. Include a close-to-far path with subpixel triangles and a layered opaque case with substantial overdraw.
+  - **PASS when** the Release scorecards meet frozen fixture-specific CPU/GPU and memory budgets, show the target gain for promoted routes and record reproducible counts and distributions. Report GPU geometry memory, derived package growth, and cold cook/load costs for the dense assets.
 - [ ] **C17-12.2 — Verify integrated visual and lifecycle stability.**
   - **PASS when** the final candidate passes the native, fallback, deterministic readback, Editor visual and lifecycle/soak matrix in Section 4. Report validation errors, effective routes, resource retirement and image/temporal comparisons.
 - [ ] **C17-12.3 — Complete the consolidated independent acceptance.**
@@ -203,7 +207,7 @@ Build changed targets before using their results. For each delivered batch, reco
 | Native and product matrix | Strict physical D3D12 and Vulkan in Debug/Release with validation. Cover Editor main/game and Preview, Runtime loose/cooked, and declared planar/probe policies. Exercise CPU Forward, indexed indirect with discrete LOD, visibility indexed and visibility Task/Mesh on applicable hardware. Test OpenGL 4.5 on its supported Forward route. Exercise RT Off, Shadows, Reflections and the supported combination in mixed M17 views. |
 | Deterministic signals and images | Freeze fixtures, camera paths, seeds, thresholds and reference products before scoring. Use exact comparisons for identities, expected command/cluster structures and policy outcomes. Use predeclared tolerances for linear HDR, depth, derivatives, temporal convergence and images. Freeze identical geometry and light sets for parity comparisons. Separately verify the error bounds of LOD, hierarchy and overflow approximations. |
 | Failure and lifecycle | Exercise capacity pressure, malformed derived payloads, missing shaders/descriptors, failed recording/submission, camera cut, scene/asset reload, view switch, odd/rapid resize, minimize/restore and device reset. Run at least 1,000 steady-state frames on each native backend on the integrated route and verify bounded memory and resource counts. |
-| Editor visuals | Use the [Editor GPU capture procedure](../../agents/EDITOR_VISUAL_CAPTURE.md). Inspect LOD and cluster transitions, moving occluders, cutout/shadow contacts, UV/normal maps, transparent refraction, clustered overflow and route diagnostics. Save raw viewport and relevant UI captures alongside native readbacks. |
+| Editor visuals | Use the [Editor GPU capture procedure](../../agents/EDITOR_VISUAL_CAPTURE.md). Inspect LOD and cluster transitions, moving occluders, cutout/shadow contacts, UV/normal maps, transparent refraction, clustered overflow and route diagnostics. Correlate view captures with selected LOD/cluster counts and asset-specific fallback reasons. Save raw viewport and relevant UI captures alongside native readbacks. |
 | Scale and budgets | Use accepted M16 core with M17 Off and comparable M17 routes at Release 1080p/1440p. Use separate submission-heavy, geometry-heavy, lighting-heavy and mixed-material workloads. Record resolution, scene/view/quality/RT settings, instance/triangle/meshlet/light counts and isolation toggles. Report cold start/compile separately from at least 120 warm-up and 1,000 measured frames per case. Record CPU extraction/submission/wait, GPU cull/raster/cluster/resolve/frame `p50/p95/p99/max`, visible counts, visibility bandwidth and peak committed/transient VRAM. Freeze tolerances and promotion budgets after calibration and before acceptance measurements. |
 | Consolidated audit | Archive reproducible commands, evidence manifests, comparisons and performance reports in `docs/reviews/` or link the stored artifacts from the review. Map each atomic leaf to caller paths, independently verified evidence and disposition. |
 

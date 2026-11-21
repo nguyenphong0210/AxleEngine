@@ -253,8 +253,7 @@ float4 ForwardFogAt(float2 uv, float viewDepth) {
         uv, viewDepth, u_FogInvView, u_FogInvProjection, u_FogParams, u_FogGridParams, u_FogDepthParams);
 }
 
-float3 RefractedBackground(float2 uv, float viewDepth, float4 frontFog) {
-    float3 background = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, uv, 0.0).rgb;
+float3 RefractedBackground(float3 background, float2 uv, float viewDepth, float4 frontFog) {
     if (u_FogParams.x <= 0.0) return background;
     // The copy contains the full fogged ray. Remove its near segment so the
     // material tints only transmitted light, then use the actual foreground ray.
@@ -278,6 +277,65 @@ float NearestRefractedDepth(float2 uv) {
     float bottom = min(u_OpaqueSceneDepth.Load(int3(first.x, last.y, 0)),
                        u_OpaqueSceneDepth.Load(int3(last, 0)));
     return min(top, bottom);
+}
+
+float2 RefractionFilterStep(float2 gradient, float2 screenSize) {
+    float lengthInTexels = length(gradient * screenSize);
+    // Reconstruct subpixel edges from the single-sample source even where
+    // refraction magnifies it. Bound the search near grazing and screen edges.
+    return gradient * (0.25 * clamp(lengthInTexels, 2.5, 6.0) / max(lengthInTexels, 1e-4));
+}
+
+struct RefractionFootprint {
+    float2 Center;
+    float2 StepX;
+    float2 StepY;
+};
+
+RefractionFootprint MakeRefractionFootprint(float2 uv, float2 screenSize) {
+    RefractionFootprint footprint;
+    footprint.Center = uv;
+    footprint.StepX = RefractionFilterStep(ddx_fine(uv), screenSize);
+    footprint.StepY = RefractionFilterStep(ddy_fine(uv), screenSize);
+    return footprint;
+}
+
+struct RefractionSampling {
+    float2 HalfPixel;
+    float ForegroundDepth;
+    float ViewDepth;
+    float4 FrontFog;
+    bool Filter;
+};
+
+float4 ReadRefractionTap(float2 uv, RefractionSampling sampling) {
+    float4 tap = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, uv, 0.0);
+    tap.rgb = RefractedBackground(tap.rgb, uv, sampling.ViewDepth, sampling.FrontFog);
+    return tap;
+}
+
+float4 FilterRefractedRay(RefractionFootprint footprint, RefractionSampling sampling) {
+    float4 center = ReadRefractionTap(footprint.Center, sampling);
+    if (!sampling.Filter || center.a <= 0.001) return center;
+
+    // Filter each ray over the output pixel's projected footprint. Keep the
+    // central contribution and reject taps that include opaque foreground.
+    float3 color = center.rgb;
+    float weight = 1.0;
+    [unroll] for (int y = -1; y <= 1; y += 2) {
+        [unroll] for (int x = -1; x <= 1; x += 2) {
+            float2 uv = clamp(footprint.Center + x * footprint.StepX + y * footprint.StepY,
+                              sampling.HalfPixel, 1.0 - sampling.HalfPixel);
+            if (NearestRefractedDepth(uv) >= sampling.ForegroundDepth) {
+                float4 tap = ReadRefractionTap(uv, sampling);
+                if (tap.a > 0.001) {
+                    color += tap.rgb;
+                    weight += 1.0;
+                }
+            }
+        }
+    }
+    return float4(color / weight, center.a);
 }
 
 float3 RotateEnvironmentDirection(float3 direction) {
@@ -337,6 +395,7 @@ PSInput VSMain(VSInput input) {
 // PHYSICALLY BASED RENDERING (PBR) BRDF FUNCTIONS
 // =============================================================================
 #include "PBRCommon.hlsli"
+#include "ProceduralChecker.hlsli"
 
 // GLSL-compatible modulo utility: mod(x, y) = x - y * floor(x / y)
 // Ensures 100% exact parity with OpenGL across positive and negative coordinate axes.
@@ -491,13 +550,15 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input, bool ddgiCapture = fals
     
     if (shadingMode == 0) {
         // Mode 0: Procedural World XZ Caro / Checkerboard Pattern (Matches OpenGL Floor)
-        float2 coord = floor(input.WorldPos.xz * tileScale);
-        float pattern = glsl_mod(coord.x + coord.y, 2.0);
+        float2 coord = input.WorldPos.xz * tileScale;
+        float pattern = u_ColorPrimary.a == u_ColorSecondary.a ? FilterWorldChecker(coord)
+            : glsl_mod(dot(floor(coord), float2(1.0, 1.0)), 2.0);
         albedo = lerp(u_ColorPrimary, u_ColorSecondary, pattern);
     } else if (shadingMode == 1) {
         // Mode 1: Local 3D Caro / Checkerboard Pattern (Matches OpenGL 3D Mesh default)
-        float3 coord = floor((input.LocalPos + float3(0.5, 0.5, 0.5)) * tileScale + float3(0.0001, 0.0001, 0.0001));
-        float pattern = glsl_mod(coord.x + coord.y + coord.z, 2.0);
+        float3 coord = (input.LocalPos + 0.5) * tileScale + 0.0001;
+        float pattern = u_ColorPrimary.a == u_ColorSecondary.a ? FilterLocalChecker(coord)
+            : glsl_mod(dot(floor(coord), float3(1.0, 1.0, 1.0)), 2.0);
         albedo = lerp(u_ColorPrimary, u_ColorSecondary, pattern);
     } else if (shadingMode == 2) {
         // Mode 2: Spherical Caro Pattern (Matches OpenGL Spheres)
@@ -998,26 +1059,29 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input, bool ddgiCapture = fals
         float2 halfPixel = 0.5 / u_RefractionFrame.xy;
         float3 cauchyIOR = EvaluateCauchyIORs(u_Refraction.y, u_Absorption.w);
 
-        float2 sampleUV = ProjectSnellRefractedUV(V, N, cauchyIOR.y, thickness, u_Refraction.x, input.WorldPos, u_ViewProjection, startClip, screenUV, halfPixel);
-        // Do not pull an opaque foreground object across the glass silhouette.
-        const float foregroundDepth = input.PositionCS.z - 1e-5;
-        if (NearestRefractedDepth(sampleUV) < foregroundDepth) sampleUV = screenUV;
+        RefractionSampling sampling;
+        sampling.HalfPixel = halfPixel;
+        sampling.ForegroundDepth = input.PositionCS.z - 1e-5;
+        sampling.ViewDepth = viewDepth;
+        sampling.FrontFog = fogSample;
+        sampling.Filter = thickness > 0.0 && u_Refraction.x > 0.0 && cauchyIOR.y > 1.001;
+        float2 uvG = ProjectSnellRefractedUV(V, N, cauchyIOR.y, thickness, u_Refraction.x, input.WorldPos, u_ViewProjection, startClip, screenUV, halfPixel);
+        RefractionFootprint greenRay = MakeRefractionFootprint(uvG, u_RefractionFrame.xy);
+        float4 background = NearestRefractedDepth(uvG) < sampling.ForegroundDepth
+            ? ReadRefractionTap(screenUV, sampling) : FilterRefractedRay(greenRay, sampling);
 
-        float3 transmitted;
+        float3 transmitted = background.rgb;
         if (u_Absorption.w > 0.001 && cauchyIOR.y > 1.001) {
             float2 uvR = ProjectSnellRefractedUV(V, N, cauchyIOR.x, thickness, u_Refraction.x, input.WorldPos, u_ViewProjection, startClip, screenUV, halfPixel);
             float2 uvB = ProjectSnellRefractedUV(V, N, cauchyIOR.z, thickness, u_Refraction.x, input.WorldPos, u_ViewProjection, startClip, screenUV, halfPixel);
-            if (NearestRefractedDepth(uvR) < foregroundDepth) uvR = sampleUV;
-            if (NearestRefractedDepth(uvB) < foregroundDepth) uvB = sampleUV;
-            transmitted = float3(
-                RefractedBackground(uvR, viewDepth, fogSample).r,
-                RefractedBackground(sampleUV, viewDepth, fogSample).g,
-                RefractedBackground(uvB, viewDepth, fogSample).b);
-        } else {
-            transmitted = RefractedBackground(sampleUV, viewDepth, fogSample);
+            RefractionFootprint redRay = MakeRefractionFootprint(uvR, u_RefractionFrame.xy);
+            RefractionFootprint blueRay = MakeRefractionFootprint(uvB, u_RefractionFrame.xy);
+            if (NearestRefractedDepth(uvR) >= sampling.ForegroundDepth)
+                transmitted.r = FilterRefractedRay(redRay, sampling).r;
+            if (NearestRefractedDepth(uvB) >= sampling.ForegroundDepth)
+                transmitted.b = FilterRefractedRay(blueRay, sampling).b;
         }
 
-        float4 background = u_OpaqueSceneColor.SampleLevel(u_ScreenSampler, sampleUV, 0);
         // Transparent editor clear has no rendered backdrop to refract.
         if (background.a > 0.001) {
             float f0 = (cauchyIOR.y - 1.0) / (cauchyIOR.y + 1.0);

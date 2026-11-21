@@ -3,6 +3,8 @@
 // AxleEngine Multi-Backend 3D Viewport Scene Renderer
 // =========================================================================
 
+#include "ProceduralChecker.hlsli"
+
 // Root Constants / Push Constants (register b0, space0)
 // Size: EXACTLY 128 bytes (32 DWORDs)
 // In Vulkan (SPIR-V), DXC compiles [[vk::push_constant]] to physical push constant range
@@ -81,13 +83,15 @@ float4 PSMain(PSInput input) : SV_Target0 {
     
     if (patternMode == 0) {
         // Mode 0: World XZ Caro (Floor)
-        float2 coord = floor(input.WorldPos.xz * tileScale);
-        float pattern = glsl_mod(coord.x + coord.y, 2.0);
+        float2 coord = input.WorldPos.xz * tileScale;
+        float pattern = u_ColorPrimary.a == u_ColorSecondary.a ? FilterWorldChecker(coord)
+            : glsl_mod(dot(floor(coord), float2(1.0, 1.0)), 2.0);
         baseColor = lerp(u_ColorPrimary, u_ColorSecondary, pattern);
     } else if (patternMode == 1) {
         // Mode 1: Local 3D Caro (Box/Mesh)
-        float3 coord = floor((input.LocalPos + float3(0.5, 0.5, 0.5)) * tileScale + float3(0.0001, 0.0001, 0.0001));
-        float pattern = glsl_mod(coord.x + coord.y + coord.z, 2.0);
+        float3 coord = (input.LocalPos + 0.5) * tileScale + 0.0001;
+        float pattern = u_ColorPrimary.a == u_ColorSecondary.a ? FilterLocalChecker(coord)
+            : glsl_mod(dot(floor(coord), float3(1.0, 1.0, 1.0)), 2.0);
         baseColor = lerp(u_ColorPrimary, u_ColorSecondary, pattern);
     } else if (patternMode == 2) {
         // Mode 2: Spherical Caro (Sphere)

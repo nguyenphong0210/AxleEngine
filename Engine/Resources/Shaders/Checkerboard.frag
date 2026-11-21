@@ -313,6 +313,15 @@ vec3 ToneMapUncharted2(vec3 x) {
 // ----------------------------------------------------------------------------
 // Main Shader Routine
 // ----------------------------------------------------------------------------
+float checkerStripeAverage(float coordinate, float width) {
+    // Same box-integrated square wave as ProceduralChecker.hlsli.
+    float phase = fract(coordinate * 0.5) * 2.0;
+    if (width < 1e-4) return phase < 1.0 ? 1.0 : -1.0;
+    float low = fract((phase - width * 0.5) * 0.5) * 2.0;
+    float high = fract((phase + width * 0.5) * 0.5) * 2.0;
+    return clamp((abs(low - 1.0) - abs(high - 1.0)) / width, -1.0, 1.0);
+}
+
 void main() {
     vec2 uvScale = (u_UVScale.x != 0.0 && u_UVScale.y != 0.0) ? u_UVScale : vec2(1.0);
     vec2 uv = v_TexCoord * uvScale;
@@ -347,19 +356,23 @@ void main() {
     } else {
         float pattern = 0.0;
         if (u_PatternMode == 0) {
-            vec2 coord = floor(v_WorldPos.xz * u_TileScale);
-            pattern = mod(coord.x + coord.y, 2.0);
+            vec2 coord = v_WorldPos.xz * u_TileScale;
+            vec2 width = fwidth(coord);
+            pattern = u_Color1.a == u_Color2.a
+                ? 0.5 - 0.5 * checkerStripeAverage(coord.x, width.x) * checkerStripeAverage(coord.y, width.y)
+                : mod(dot(floor(coord), vec2(1.0)), 2.0);
         } else if (u_PatternMode == 1) {
-            vec3 coord = floor((v_LocalPos + vec3(0.5)) * u_TileScale + vec3(0.0001));
-            pattern = mod(coord.x + coord.y + coord.z, 2.0);
+            vec3 coord = (v_LocalPos + 0.5) * u_TileScale + 0.0001;
+            vec3 width = fwidth(coord);
+            pattern = u_Color1.a == u_Color2.a
+                ? 0.5 - 0.5 * checkerStripeAverage(coord.x, width.x) * checkerStripeAverage(coord.y, width.y) * checkerStripeAverage(coord.z, width.z)
+                : mod(dot(floor(coord), vec3(1.0)), 2.0);
         } else if (u_PatternMode == 2) {
             vec3 nLocal = normalize(v_LocalPos);
             float uSph = atan(nLocal.z, nLocal.x) / (2.0 * PI) + 0.5;
             float vSph = asin(clamp(nLocal.y, -1.0, 1.0)) / PI + 0.5;
             vec2 coord = floor(vec2(uSph * u_TileScale, vSph * (u_TileScale * 0.5)));
             pattern = mod(coord.x + coord.y, 2.0);
-        } else {
-            pattern = 0.0;
         }
         baseColor = mix(u_Color1, u_Color2, pattern);
     }

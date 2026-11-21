@@ -1,0 +1,30 @@
+Scene: Checker diagonal and grazing angles
+Entities:
+  - Entity: 1
+    TagComponent:
+      Tag: Studio key
+    TransformComponent:
+      Translation: [0, 4, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Azimuth: 35
+      Elevation: 50
+      Intensity: 1.0
+      AmbientIntensity: 0.3
+      CastShadows: false
+      ToneMappingMode: 0
+      Gamma: 2.2
+  - Entity: 2
+    TagComponent:
+      Tag: World checker floor
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [160, 1, 160]
+    MeshInstance3D:
+      AssetPath: builtin://plane
+      PatternMode: 0
+      TileScale: 0.8
+      Color1: [0.73, 0.82, 0.9, 1]
+      Color2: [0.28, 0.37, 0.5, 1]

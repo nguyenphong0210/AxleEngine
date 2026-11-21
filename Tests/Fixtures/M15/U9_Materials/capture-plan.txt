@@ -20,5 +20,12 @@ select_asset materials/U9_AmberGlass.axleasset
 preview_mesh sphere
 wait 12
 capture_editor preview_glass_editor.png
+scene CheckerAngles.axlescene
+camera 0.16 1.5 3.31 -55 14
+wait 10
+capture_viewport checker_diagonal.png
+camera 0.16 0.33 3.31 -11 14
+wait 10
+capture_viewport checker_grazing.png
 assert_no_errors
 quit

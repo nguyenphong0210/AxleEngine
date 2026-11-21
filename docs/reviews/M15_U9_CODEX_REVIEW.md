@@ -47,3 +47,9 @@ The code review, fixes and tests are complete. The final separate-context source
 ## Coverage
 
 The advanced material fixture exercises D3D12 and Vulkan on one GeForce RTX 3070. Refraction and spectral offsets sample the opaque screen-color copy under the existing thickness policy. The SSS pass uses single-sample opaque/cutout views. Opaque custom shaders request targets conservatively because a shader may supply its own profile. Raw custom shaders without the matching companion can cause the existing view fallback. Generated self-contained HLSL works from a cooked package. SDK shader includes still use the existing DXC include loader.
+
+## Follow-up on jagged glass and checker edges
+
+At the original camera angle, the glass warped high-contrast edges in the single-sample opaque color copy. Each bent wavelength now filters up to five bilinear taps using the projected pixel footprint. Depth checks reject foreground taps and fog is decomposed per tap. The fixed-camera D3D12 capture recorded 531 neighboring channel differences of at least 24/255 inside the glass versus 755 before the change. The color fringes remain visible. The additional samples apply to refractive pixels.
+
+The world and local procedural checkers now integrate tile colors across the pixel footprint. Distant tiles converge toward the mean color, and checker tiles with different alphas retain their authored color and coverage. The box filter uses separate intervals for the coordinate axes. The native grazing fixture compares the subpixel tiles with a uniform mean-color surface. The replay plan now captures the checker at diagonal and grazing angles. The before/after render captures and execution logs are under `build/agent-runs/codex-m15-u9-glass/`. A separate source review rechecked the checker alpha and per-tap fog behavior after the corrections.

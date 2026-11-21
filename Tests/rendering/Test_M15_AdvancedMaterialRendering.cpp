@@ -399,6 +399,49 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& /*sharedRenderer*/, const std
                   << " pointOn=" << onPointRim << " rectOn=" << onRectRim << "\n";
     }
 
+    // Subpixel tiles should converge to the mean of the two colors, including
+    // when a grazing view samples many tiles on one axis in a single pixel.
+    {
+        auto plane = RHIMesh::CreatePlane(1.0f, 1.0f, 1, 1);
+        RENDER_CHECK(plane && plane->IsValid(), "procedural checker plane is available");
+        RenderWorld world;
+        auto& floor = world.Meshes.emplace_back();
+        floor.NativeView = plane->CaptureView();
+        floor.WorldTransform = glm::scale(glm::mat4(1.0f), glm::vec3(150.0f, 1.0f, 150.0f));
+        floor.Material.PatternMode = 0;
+        floor.Material.TileScale = glm::vec2(400.0f);
+        floor.Material.AlbedoColor = glm::vec4(0.9f, 0.9f, 0.9f, 1.0f);
+        floor.Material.SecondaryColor = glm::vec4(0.1f, 0.1f, 0.1f, 1.0f);
+        auto& light = world.DirectionalLight.emplace();
+        light.Direction = glm::normalize(glm::vec3(0.4f, 1.0f, 0.5f));
+        light.Color = glm::vec3(1.0f);
+
+        auto floorSettings = settings;
+        floorSettings.EnableSkybox = false;
+        PerspectiveCamera floorCamera(45.0f, 1.0f, 0.1f, 100.0f);
+        const glm::vec3 eye(0.16f, 0.45f, 3.3f);
+        floorCamera.SetViewMatrix(glm::lookAtRH(eye, glm::vec3(-0.7f, 0.0f, 0.0f), glm::vec3(0, 1, 0)), eye);
+        auto renderFloor = [&](std::vector<glm::vec4>& pixels) {
+            renderer.RenderWorldView(world, floorCamera, &color, &depth, floorSettings, nullptr, targets);
+            return renderer.WasLastRenderSuccessful() && ReadTextureRGBA16F(*targets->Get(RHIViewTarget::HDR), pixels);
+        };
+        std::vector<glm::vec4> checker, reference;
+        RENDER_CHECK(renderFloor(checker), "render distant procedural checker at a grazing angle");
+        floor.Material.AlbedoColor = floor.Material.SecondaryColor = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+        RENDER_CHECK(renderFloor(reference), "render reference with the mean checker color");
+        float maxRelativeDelta = 0.0f;
+        for (uint32_t y = 70; y < 96; ++y) {
+            for (uint32_t x = 36; x < 92; ++x) {
+                const size_t index = static_cast<size_t>(y) * width + x;
+                const float gray = Luminance(reference[index]);
+                RENDER_CHECK(gray > 0.05f, "checker comparison patch covers the lit plane");
+                maxRelativeDelta = std::max(maxRelativeDelta, std::abs(Luminance(checker[index]) - gray) / gray);
+            }
+        }
+        std::cout << "  [procedural checker] maxRelativeDelta=" << maxRelativeDelta << '\n';
+        RENDER_CHECK(maxRelativeDelta < 0.08f, "subpixel checker tiles converge to their mean radiance");
+    }
+
     // =========================================================================
     // Batch B (M15-U9-02, M15-U9-03, M15-U9-08.2): Beer-Lambert Absorption,
     // Cauchy Wavelength Dispersion & Opaque Fallback Parity

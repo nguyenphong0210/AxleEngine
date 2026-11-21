@@ -116,6 +116,10 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     }
 
     float3 viewPos = ReconstructViewPos(uv, depth);
+    // Clip W gives the pixel-to-world scale for both perspective and ortho views.
+    bool isPerspective = abs(u_Projection[3][2]) > 1e-4;
+    float projectionW = isPerspective ? abs(viewPos.z) : 1.0;
+    float3 viewDir = isPerspective ? -normalize(viewPos) : float3(0.0, 0.0, 1.0);
 
     // 1. Determine surface normal in view space
     uint2 normalSize;
@@ -133,12 +137,10 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
         float3 dx = (abs(pR.z - viewPos.z) < abs(pL.z - viewPos.z)) ? (pR - viewPos) : (viewPos - pL);
         float3 dy = (abs(pD.z - viewPos.z) < abs(pU.z - viewPos.z)) ? (pD - viewPos) : (viewPos - pU);
         viewNormal = normalize(cross(dy, dx));
-        if (dot(viewNormal, -normalize(viewPos)) < 0.0) {
+        if (dot(viewNormal, viewDir) < 0.0) {
             viewNormal = -viewNormal;
         }
     }
-
-    float3 viewDir = -normalize(viewPos);
 
     // 2. GTAO Horizon-Based Hemispherical Integration
     float ao = 1.0;
@@ -148,7 +150,7 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     float falloffStartFrac = u_Padding[0].x > 1e-4 ? clamp(u_Padding[0].z, 0.05, 0.95) : 0.25;
     float radiusCap = u_Padding[0].w > 1.0 ? u_Padding[0].w : maxRadiusPx;
     float radiusPixels = (u_Padding[0].x > 1e-4 && projScale > 1e-4)
-        ? clamp((worldRadius * projScale) / max(abs(viewPos.z), 0.1), 2.0, radiusCap)
+        ? clamp((worldRadius * projScale) / max(projectionW, 0.1), 2.0, radiusCap)
         : maxRadiusPx;
     float strength = u_GTAOParams.y;
     float depthBias = u_GTAOParams.z;
@@ -229,7 +231,7 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
             float viewDepth = abs(viewPos.z);
             float projX = max(abs(u_Projection[0][0]), 1e-4);
             float projY = max(abs(u_Projection[1][1]), 1e-4);
-            float texelWorldSize = viewDepth * max(1.0 / (0.5 * float(sceneSize.x) * projX),
+            float texelWorldSize = projectionW * max(1.0 / (0.5 * float(sceneSize.x) * projX),
                                                    1.0 / (0.5 * float(sceneSize.y) * projY));
 
             float startBias = max(depthBias * 2.0, texelWorldSize + 0.0015 * viewDepth);
@@ -238,7 +240,6 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
             float targetWorldLength = maxDistPx * texelWorldSize * 1.5;
             float rayLength = clamp(targetWorldLength, 0.20, 0.04 * maxDistPx);
 
-            bool isPerspective = abs(u_Projection[2][3]) > 1e-4;
             bool validRay = !isPerspective;
             if (isPerspective) {
                 float nearViewZ = abs(ReconstructViewPos(float2(0.5, 0.5), 0.0).z);

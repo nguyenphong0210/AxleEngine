@@ -449,21 +449,25 @@ bool RunM15OcclusionSphereTests(RHISceneRenderer& renderer, const RenderWorld& w
         const glm::vec3 shallowCam(0.0f, 0.25f, 6.2f);
         PerspectiveCamera shallowCamera(55.0f, 1.0f, 0.1f, 100.0f);
         shallowCamera.SetViewMatrix(glm::lookAtRH(shallowCam, glm::vec3(0.0f, -0.75f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), shallowCam);
-        renderer.RenderWorldView(flatWorld, shallowCamera, targets->Get(RHIViewTarget::Color), targets->Get(RHIViewTarget::Depth), floorSettings, nullptr, targets);
-        RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() &&
-                     Read(*targets->GetGTAOResolved(), resolvedAO) &&
-                     Read(*targets->Get(RHIViewTarget::ScreenNormal), floorNormals),
-            "empty shallow sun-facing floor contact readback");
-        float minEmptyFloorContact = 1.0f;
-        size_t emptyFloorSamples = 0;
-        for (size_t idx = 0; idx < resolvedAO.size(); ++idx) {
-            if (floorNormals[idx].w < 0.5f || floorNormals[idx].y <= 0.95f) continue;
-            minEmptyFloorContact = std::min(minEmptyFloorContact, resolvedAO[idx].y);
-            ++emptyFloorSamples;
+        for (const bool ortho : {false, true}) {
+            if (ortho) shallowCamera.SetOrthographic(6.0f, 1.0f, 0.1f, 100.0f);
+            renderer.RenderWorldView(flatWorld, shallowCamera, targets->Get(RHIViewTarget::Color), targets->Get(RHIViewTarget::Depth), floorSettings, nullptr, targets);
+            RENDER_CHECK(renderer.WasLastRenderSuccessful() && !renderer.GetDiagnostics().HasErrors() &&
+                         Read(*targets->GetGTAOResolved(), resolvedAO) &&
+                         Read(*targets->Get(RHIViewTarget::ScreenNormal), floorNormals),
+                "empty shallow sun-facing floor contact readback");
+            float minEmptyFloorContact = 1.0f;
+            size_t emptyFloorSamples = 0;
+            for (size_t idx = 0; idx < resolvedAO.size(); ++idx) {
+                if (floorNormals[idx].w < 0.5f || floorNormals[idx].y <= 0.95f) continue;
+                minEmptyFloorContact = std::min(minEmptyFloorContact, resolvedAO[idx].y);
+                ++emptyFloorSamples;
+            }
+            evidence << "empty_shallow_floor ortho=" << ortho << " samples=" << emptyFloorSamples
+                     << " min_contact=" << minEmptyFloorContact << '\n';
+            RENDER_CHECK(emptyFloorSamples > 1000 && minEmptyFloorContact >= 0.999f,
+                "shallow empty floor facing toward the sun has zero false horizontal shadow band");
         }
-        evidence << "empty_shallow_floor samples=" << emptyFloorSamples << " min_contact=" << minEmptyFloorContact << '\n';
-        RENDER_CHECK(emptyFloorSamples > 1000 && minEmptyFloorContact >= 0.999f,
-            "shallow empty floor facing toward the sun has zero false horizontal shadow band");
     }
     return true;
 }

@@ -3,6 +3,11 @@
 #include <Axle/RHI/RHIFaultInjection.hpp>
 #include <Axle/RHI/RHIPipeline.hpp>
 #include <Axle/RHI/RHISampler.hpp>
+#include <Axle/RHI/RHITexture.hpp>
+#include <Axle/RHI/RHIBuffer.hpp>
+#include <cstring>
+#include <limits>
+#include <utility>
 
 namespace Axle::RHI {
     struct RHIPresentationContext::Storage {
@@ -18,7 +23,7 @@ namespace Axle::RHI {
         nri::Pipeline* ImagePipeline = nullptr;
         RHIResourceLease ImagePipelineOwner;
         nri::Format ImageFormat = nri::Format::UNKNOWN;
-        bool PrepareImage(nri::Texture* source, nri::Format format, RHICommandBuffer& commands) {
+        bool PrepareImage(nri::Texture* source, nri::Format format, RHICommandBuffer& commands, bool transitionFromUndefined = true) {
             auto& device = RHIDevice::Get();
             auto owner = device.GetResources().AcquireNative(source);
             if (!owner.IsLive()) return false;
@@ -63,12 +68,28 @@ namespace Axle::RHI {
             if (!lease.IsLive()) { core.DestroyDescriptor(descriptor); return false; }
             auto* set=ImagePool.AllocateDescriptorSet(ImageLayout,0);
             if(!lease || !set || !ImagePool.UpdateTextureRange(set,0,0,{descriptor}) || !commands.KeepAlive(lease))return false;
-            ImageSet=set; commands.TransitionTexture(source,RHIResourceLayout::Undefined,RHIResourceLayout::ShaderResource);
+            ImageSet=set;
+            if (transitionFromUndefined) commands.TransitionTexture(source,RHIResourceLayout::Undefined,RHIResourceLayout::ShaderResource);
             return true;
         }
         nri::DescriptorSet* ImageSet=nullptr;
         uint64_t Epoch = 0, Presented = 0;
         uint32_t Slot = 0;
+        FrameCaptureCallback PendingCapture;
+        RHITexture CaptureColor;
+        nri::Format CaptureColorFormat = nri::Format::UNKNOWN;
+        bool EnsureCaptureTarget(uint32_t width, uint32_t height, nri::Format format) {
+            if (!width || !height) return false;
+            const auto rhiFormat = FromNRIFormat(format);
+            if (CaptureColor.IsValid() && CaptureColor.GetWidth() == width && CaptureColor.GetHeight() == height && CaptureColorFormat == format) return true;
+            CaptureColor.Shutdown(); CaptureColorFormat = nri::Format::UNKNOWN;
+            RHITextureDesc desc;
+            desc.Width = width; desc.Height = height; desc.Format = rhiFormat;
+            desc.Usage = RHITextureUsage::ColorAttachment | RHITextureUsage::ShaderResource;
+            desc.DebugName = "PresentationCaptureColor";
+            if (!CaptureColor.Init(desc)) return false;
+            CaptureColorFormat = format; return true;
+        }
         bool BuildFrameStorage() {
             auto& device = RHIDevice::Get(); const auto core = device.GetNRICore();
             std::vector<RHIFrameContext> frames(Desc.FramesInFlight);
@@ -113,6 +134,9 @@ namespace Axle::RHI {
         if (m_Storage->Epoch == device.GetEpoch() && device.IsNativeReady() && !device.WaitIdle()) return false;
         m_Storage.reset(); return true;
     }
+    void RHIPresentationContext::RequestNextFrameCapture(FrameCaptureCallback callback) {
+        if (m_Storage) m_Storage->PendingCapture = std::move(callback);
+    }
     RHIPresentOutcome RHIPresentationContext::RenderFrame(uint32_t width, uint32_t height, bool vsync,
         const Recorder& prepare, const Recorder& draw, nri::Texture* blitSource) {
         auto& device = RHIDevice::Get();
@@ -137,23 +161,86 @@ namespace Axle::RHI {
         auto& commands = *frame.GetCommands();
         if (prepare && !prepare(commands, format)) return abandon();
 
-        if (blitSource && !state.PrepareImage(blitSource,format,commands)) return abandon();
-        const auto index = state.SwapChain.GetCurrentTextureIndex();
-        if (index >= state.Views.size() || !commands.KeepAlive(state.ViewLeases[index])) return abandon();
-        commands.TransitionTexture(texture,RHIResourceLayout::Undefined,RHIResourceLayout::ColorAttachment);
-        nri::AttachmentDesc color{};color.descriptor=state.Views[index];color.loadOp=nri::LoadOp::CLEAR;color.storeOp=nri::StoreOp::STORE;
-        color.clearValue.color.f={0.04f,0.05f,0.07f,1};
-        nri::RenderingDesc rendering{};rendering.colors=&color;rendering.colorNum=1;
-        commands.BeginRendering(rendering);
-        if (blitSource) {
-            commands.SetPipelineLayout(nri::BindPoint::GRAPHICS,state.ImageLayout);commands.SetPipeline(state.ImagePipeline);
-            state.ImagePool.Bind(commands.GetNative());RHIDescriptorPool::BindDescriptorSet(commands.GetNative(),0,state.ImageSet);
-            commands.SetViewport({0,0,float(state.SwapChain.GetWidth()),float(state.SwapChain.GetHeight()),0,1});
-            commands.SetScissor({0,0,static_cast<uint16_t>(state.SwapChain.GetWidth()),static_cast<uint16_t>(state.SwapChain.GetHeight())});
-            commands.Draw(3);
+        FrameCaptureCallback captureCallback;
+        RHIBuffer captureReadback;
+        uint64_t captureRowPitch = 0;
+        const bool isBGRA = (format == nri::Format::BGRA8_UNORM);
+        if (state.PendingCapture) {
+            auto pending = std::move(state.PendingCapture); state.PendingCapture = {};
+            const auto& limits = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice()).memoryAlignment;
+            auto align = [](uint64_t n, uint32_t a) { return a ? (n + a - 1) / a * a : n; };
+            captureRowPitch = align(uint64_t(width) * 4u, limits.uploadBufferTextureRow);
+            const uint64_t slicePitch = align(captureRowPitch * height, limits.uploadBufferTextureSlice);
+            RHIBufferDesc rbDesc; rbDesc.Size = slicePitch; rbDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
+            rbDesc.DebugName = "PresentationCaptureReadback";
+            if (state.EnsureCaptureTarget(width, height, format) && state.CaptureColor.GetRTV() &&
+                captureRowPitch <= (std::numeric_limits<uint32_t>::max)() && captureReadback.Init(rbDesc) &&
+                commands.KeepAlive(state.CaptureColor.AcquireLease()) && commands.KeepAlive(captureReadback.AcquireLease())) {
+                captureCallback = std::move(pending);
+            }
         }
-        if (draw && !draw(commands,format)) return abandon();
-        commands.EndRendering();commands.TransitionTexture(texture,RHIResourceLayout::ColorAttachment,RHIResourceLayout::Present);
+
+        if (captureCallback) {
+            if (blitSource && !state.PrepareImage(blitSource, format, commands)) return abandon();
+            commands.TransitionTexture(state.CaptureColor.GetNative(), RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+            nri::AttachmentDesc capColor{}; capColor.descriptor = state.CaptureColor.GetRTV();
+            capColor.loadOp = nri::LoadOp::CLEAR; capColor.storeOp = nri::StoreOp::STORE;
+            capColor.clearValue.color.f = {0.04f, 0.05f, 0.07f, 1.0f};
+            nri::RenderingDesc capRendering{}; capRendering.colors = &capColor; capRendering.colorNum = 1;
+            commands.BeginRendering(capRendering);
+            if (blitSource) {
+                commands.SetPipelineLayout(nri::BindPoint::GRAPHICS, state.ImageLayout); commands.SetPipeline(state.ImagePipeline);
+                state.ImagePool.Bind(commands.GetNative()); RHIDescriptorPool::BindDescriptorSet(commands.GetNative(), 0, state.ImageSet);
+                commands.SetViewport({0, 0, float(width), float(height), 0, 1});
+                commands.SetScissor({0, 0, static_cast<uint16_t>(width), static_cast<uint16_t>(height)});
+                commands.Draw(3);
+            }
+            if (draw && !draw(commands, format)) return abandon();
+            commands.EndRendering();
+
+            const uint64_t slicePitch = captureReadback.GetSize();
+            nri::TextureDataLayoutDesc rbLayout{};
+            rbLayout.rowPitch = static_cast<uint32_t>(captureRowPitch);
+            rbLayout.slicePitch = slicePitch;
+            nri::TextureRegionDesc rbRegion{}; rbRegion.width = static_cast<nri::Dim_t>(width); rbRegion.height = static_cast<nri::Dim_t>(height); rbRegion.depth = 1;
+            commands.TransitionTexture(state.CaptureColor.GetNative(), RHIResourceLayout::ColorAttachment, RHIResourceLayout::CopySource);
+            commands.ReadbackTextureToBuffer(*captureReadback.GetNative(), rbLayout, *state.CaptureColor.GetNative(), rbRegion);
+            commands.TransitionTexture(state.CaptureColor.GetNative(), RHIResourceLayout::CopySource, RHIResourceLayout::ShaderResource);
+            if (!state.PrepareImage(state.CaptureColor.GetNative(), format, commands, false)) return abandon();
+
+            const auto index = state.SwapChain.GetCurrentTextureIndex();
+            if (index >= state.Views.size() || !commands.KeepAlive(state.ViewLeases[index])) return abandon();
+            commands.TransitionTexture(texture, RHIResourceLayout::Undefined, RHIResourceLayout::ColorAttachment);
+            nri::AttachmentDesc color{}; color.descriptor = state.Views[index]; color.loadOp = nri::LoadOp::CLEAR; color.storeOp = nri::StoreOp::STORE;
+            color.clearValue.color.f = {0.04f, 0.05f, 0.07f, 1};
+            nri::RenderingDesc rendering{}; rendering.colors = &color; rendering.colorNum = 1;
+            commands.BeginRendering(rendering);
+            commands.SetPipelineLayout(nri::BindPoint::GRAPHICS, state.ImageLayout); commands.SetPipeline(state.ImagePipeline);
+            state.ImagePool.Bind(commands.GetNative()); RHIDescriptorPool::BindDescriptorSet(commands.GetNative(), 0, state.ImageSet);
+            commands.SetViewport({0, 0, float(state.SwapChain.GetWidth()), float(state.SwapChain.GetHeight()), 0, 1});
+            commands.SetScissor({0, 0, static_cast<uint16_t>(state.SwapChain.GetWidth()), static_cast<uint16_t>(state.SwapChain.GetHeight())});
+            commands.Draw(3);
+            commands.EndRendering();
+            commands.TransitionTexture(texture, RHIResourceLayout::ColorAttachment, RHIResourceLayout::Present);
+        } else {
+            if (blitSource && !state.PrepareImage(blitSource,format,commands)) return abandon();
+            const auto index = state.SwapChain.GetCurrentTextureIndex();
+            if (index >= state.Views.size() || !commands.KeepAlive(state.ViewLeases[index])) return abandon();
+            commands.TransitionTexture(texture,RHIResourceLayout::Undefined,RHIResourceLayout::ColorAttachment);
+            nri::AttachmentDesc color{};color.descriptor=state.Views[index];color.loadOp=nri::LoadOp::CLEAR;color.storeOp=nri::StoreOp::STORE;
+            color.clearValue.color.f={0.04f,0.05f,0.07f,1};
+            nri::RenderingDesc rendering{};rendering.colors=&color;rendering.colorNum=1;
+            commands.BeginRendering(rendering);
+            if (blitSource) {
+                commands.SetPipelineLayout(nri::BindPoint::GRAPHICS,state.ImageLayout);commands.SetPipeline(state.ImagePipeline);
+                state.ImagePool.Bind(commands.GetNative());RHIDescriptorPool::BindDescriptorSet(commands.GetNative(),0,state.ImageSet);
+                commands.SetViewport({0,0,float(state.SwapChain.GetWidth()),float(state.SwapChain.GetHeight()),0,1});
+                commands.SetScissor({0,0,static_cast<uint16_t>(state.SwapChain.GetWidth()),static_cast<uint16_t>(state.SwapChain.GetHeight())});
+                commands.Draw(3);
+            }
+            if (draw && !draw(commands,format)) return abandon();
+            commands.EndRendering();commands.TransitionTexture(texture,RHIResourceLayout::ColorAttachment,RHIResourceLayout::Present);
+        }
 
         if (!frame.End()) return abandon();
         const nri::CommandBuffer* native = commands.GetNative();
@@ -163,6 +250,30 @@ namespace Axle::RHI {
         if (completion != before) {
             if (!frame.AdoptSubmission(completion)) return RHIPresentOutcome::Failed;
             state.Slot = (state.Slot + 1) % static_cast<uint32_t>(state.Frames.size());
+        }
+        if (captureCallback) {
+            if ((completion == before || device.WaitForCompletion(completion)) && captureReadback.IsValid()) {
+                if (const auto* mapped = static_cast<const uint8_t*>(captureReadback.Map())) {
+                    std::vector<uint8_t> rgba8(size_t(width) * height * 4u);
+                    for (uint32_t y = 0; y < height; ++y) {
+                        const uint8_t* srcRow = mapped + y * captureRowPitch;
+                        uint8_t* dstRow = rgba8.data() + size_t(y) * width * 4u;
+                        if (isBGRA) {
+                            for (uint32_t x = 0; x < width; ++x) {
+                                dstRow[x * 4u + 0u] = srcRow[x * 4u + 2u];
+                                dstRow[x * 4u + 1u] = srcRow[x * 4u + 1u];
+                                dstRow[x * 4u + 2u] = srcRow[x * 4u + 0u];
+                                dstRow[x * 4u + 3u] = 255u;
+                            }
+                        } else {
+                            std::memcpy(dstRow, srcRow, size_t(width) * 4u);
+                            for (uint32_t x = 0; x < width; ++x) dstRow[x * 4u + 3u] = 255u;
+                        }
+                    }
+                    captureReadback.Unmap();
+                    captureCallback(width, height, rgba8);
+                }
+            }
         }
         if (presented) { ++state.Presented; return RHIPresentOutcome::Presented; }
         return state.SwapChain.NeedsResize() ? RHIPresentOutcome::RebuildRequired : RHIPresentOutcome::Failed;

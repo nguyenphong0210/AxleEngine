@@ -240,6 +240,7 @@ namespace Axle {
             }
             EndGroup();
         }
+        if (m.SheenEnabled) ImGui::SetNextItemOpen(true, ImGuiCond_Once);
         if (BeginGroup("Sheen")) {
             Row("Enabled"); changed|=ImGui::Checkbox("##Enabled",&m.SheenEnabled);
             if (m.SheenEnabled) {
@@ -256,6 +257,7 @@ namespace Axle {
             }
             EndGroup();
         }
+        if (m.SubsurfaceEnabled) ImGui::SetNextItemOpen(true, ImGuiCond_Once);
         if (BeginGroup("Subsurface Scattering")) {
             Row("Enabled"); changed|=ImGui::Checkbox("##Enabled",&m.SubsurfaceEnabled);
             if (m.SubsurfaceEnabled) {
@@ -274,6 +276,7 @@ namespace Axle {
             }
             EndGroup();
         }
+        if (m.AbsorptionEnabled || m.Dispersion > 0.0f) ImGui::SetNextItemOpen(true, ImGuiCond_Once);
         if (BeginGroup("Absorption & Dispersion")) {
             Row("Absorption"); changed|=ImGui::Checkbox("##AbsorptionEnabled",&m.AbsorptionEnabled);
             if (m.AbsorptionEnabled) {

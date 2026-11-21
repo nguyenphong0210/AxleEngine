@@ -135,6 +135,9 @@ namespace Axle {
                 Presenter.Shutdown(); return false;
             }
         }
+        void RequestNextFrameCapture(FrameCaptureCallback callback) override {
+            Presenter.RequestNextFrameCapture(std::move(callback));
+        }
         void Shutdown() override { Presenter.Shutdown(); if (Detach) Detach(); }
     };
 

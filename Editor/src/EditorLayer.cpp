@@ -1901,7 +1901,7 @@ void EditorLayer::RenderToolbar() {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Simulation Speed Multiplier");
 
         ImGui::SameLine();
-        if (ImGui::Button("Render FX", ImVec2(75.0f, 26.0f))) {
+        if (ImGui::Button("Render FX", ImVec2(75.0f, 26.0f)) || (m_PinRenderFXPopup && !ImGui::IsPopupOpen("RenderFXPopup"))) {
             ImGui::OpenPopup("RenderFXPopup");
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Configure Viewport Post-Processing & Lighting FX");
@@ -3220,6 +3220,17 @@ void EditorLayer::OnImGuiRender() {
 
     // 13. Unity Style Persistent Status Bar (Bottom edge)
     RenderStatusBar();
+    if (m_PendingInspectorScroll.has_value()) {
+        if (ImGui::Begin("Inspector", nullptr)) {
+            ImGui::SetScrollY(std::clamp(*m_PendingInspectorScroll, 0.0f, 1.0f) * ImGui::GetScrollMaxY());
+        }
+        ImGui::End();
+        m_PendingInspectorScroll.reset();
+    }
+    if (!m_PendingFocusWindow.empty()) {
+        ImGui::SetWindowFocus(m_PendingFocusWindow.c_str());
+        m_PendingFocusWindow.clear();
+    }
     ImGui::EndDisabled();
     RenderDocumentDecision();
     if (m_PluginRestart.IsWaiting()) ImGui::OpenPopup("Restarting Editor");
@@ -3934,4 +3945,81 @@ void EditorLayer::VerifySimulationContract() {
     }
     NewScene();
     Axle::Input::SetInputContext(previousInput);
+}
+
+void EditorLayer::ApplyRenderFXOverride(const RenderFXOverride& state) {
+    if (state.SSR.has_value()) m_EnableSSR = *state.SSR;
+    if (state.Planar.has_value()) m_EnablePlanarReflections = *state.Planar;
+    if (state.GTAO.has_value()) m_EnableGTAO = *state.GTAO;
+    if (state.Contact.has_value()) m_EnableContactShadows = *state.Contact;
+    if (state.Bloom.has_value()) m_EnableBloom = *state.Bloom;
+    if (state.AutoExposure.has_value()) m_EnableAutoExposure = *state.AutoExposure;
+    if (state.DDGI.has_value()) m_EnableDDGI = *state.DDGI;
+    if (state.TAA.has_value()) m_EnableTAA = *state.TAA;
+    if (state.HiZLevel.has_value()) m_HiZVisualizationLevel = *state.HiZLevel;
+    if (state.PinRenderFXPopup.has_value()) m_PinRenderFXPopup = *state.PinRenderFXPopup;
+    if (state.FogQuality.has_value()) m_FogQuality = std::clamp(*state.FogQuality, 0, 3);
+    if (state.FogTemporalWeight.has_value()) m_FogTemporalWeight = std::clamp(*state.FogTemporalWeight, 0.0f, 0.9f);
+    if (state.FogOverride.has_value()) {
+        if (*state.FogOverride < 0) m_ViewportFogOverride.reset();
+        else m_ViewportFogOverride = (*state.FogOverride != 0);
+    }
+    if (state.HDRViewport.has_value() && m_RHIViewport && m_RHIViewport->IsValid()) {
+        m_RHIViewport->SetHDR(*state.HDRViewport);
+        ClearRHIViewport();
+    }
+}
+
+void EditorLayer::SetCameraPose(const glm::vec3& position, const glm::vec3& rotationDeg) {
+    if (!m_CameraController) return;
+    m_CameraController->SetPosition(position);
+    m_CameraController->SetRotation(rotationDeg);
+    m_PendingViewCameraCut = true;
+}
+
+void EditorLayer::SetGameCameraEjected(bool eject) {
+    m_UseEditorCameraInPlay = eject;
+    if (m_SceneState == SceneState::Play && eject && m_Scene && m_CameraController) {
+        auto camEntity = m_Scene->GetPrimaryCameraEntity();
+        if (camEntity && camEntity.HasComponent<Axle::TransformComponent>()) {
+            glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)camEntity);
+            glm::vec3 camPos = glm::vec3(worldMat[3]);
+            glm::vec3 fwd = -glm::normalize(glm::vec3(worldMat[2]));
+            float pitch = glm::degrees(std::asin(std::clamp(fwd.y, -0.999f, 0.999f)));
+            float yaw = glm::degrees(std::atan2(-fwd.x, -fwd.z));
+            m_CameraController->SetPosition(camPos);
+            m_CameraController->SetRotation(glm::vec3(pitch, yaw, 0.0f));
+            m_PendingViewCameraCut = true;
+        }
+    }
+}
+
+bool EditorLayer::SelectEntityByName(const std::string& name) {
+    if (!m_Scene) return false;
+    auto view = m_Scene->GetRegistry().view<Axle::TagComponent>();
+    for (auto entityID : view) {
+        const auto& tag = view.get<Axle::TagComponent>(entityID).Tag;
+        if (tag == name) {
+            m_SceneHierarchyPanel.SetSelectedEntity(Axle::Entity{entityID, m_Scene.get()});
+            return true;
+        }
+    }
+    return false;
+}
+
+bool EditorLayer::SelectAssetByPath(const std::filesystem::path& path) {
+    auto resolved = path.is_absolute() ? path : Axle::FileSystem::ResolveAssetPath(path);
+    if (!std::filesystem::exists(resolved)) return false;
+    m_AssetPreviewPanel.SetAsset(resolved);
+    m_SceneHierarchyPanel.SetSelectedAsset(resolved);
+    return true;
+}
+
+void EditorLayer::SetPreviewMesh(Axle::PreviewMeshType type) {
+    m_AssetPreviewPanel.SetPreviewMeshType(type);
+}
+
+void EditorLayer::SetPreviewSun(float azimuthDeg, float elevationDeg) {
+    m_AssetPreviewPanel.SetSunAzimuth(azimuthDeg);
+    m_AssetPreviewPanel.SetSunElevation(elevationDeg);
 }

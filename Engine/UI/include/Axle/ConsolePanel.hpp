@@ -40,6 +40,7 @@ namespace Axle {
         void OnImGuiRender(bool* p_open = nullptr);
         void Clear() { if (m_Sink) m_Sink->Clear(); m_SelectedMessageIndex = -1; }
         bool GetClearOnPlay() const { return m_ClearOnPlay; }
+        void GetMessageCounts(size_t& outInfos, size_t& outWarnings, size_t& outErrors) const;
 
     private:
         std::shared_ptr<EditorConsoleSink> m_Sink;

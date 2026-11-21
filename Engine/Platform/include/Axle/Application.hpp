@@ -55,6 +55,7 @@ namespace Axle {
         void SetUIContext(std::unique_ptr<ApplicationUIContext> uiContext);
         ApplicationUIContext* GetUIContext() { return m_UIContext.get(); }
         void SetRenderContext(std::unique_ptr<ApplicationRenderContext> context);
+        ApplicationRenderContext* GetRenderContext() { return m_RenderContext.get(); }
 
         Window& GetWindow() { return *m_Window; }
         const Window& GetWindow() const { return *m_Window; }

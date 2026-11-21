@@ -97,6 +97,25 @@ public:
     const std::filesystem::path& GetCurrentProjectPath() const { return m_CurrentProjectPath; }
     Axle::RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
 
+    struct RenderFXOverride {
+        std::optional<bool> SSR, Planar, GTAO, Contact, Bloom, AutoExposure, DDGI, TAA, HDRViewport, PinRenderFXPopup;
+        std::optional<int> FogOverride; // -1 = scene default, 0 = off, 1 = on
+        std::optional<int> FogQuality;
+        std::optional<float> FogTemporalWeight;
+        std::optional<int> HiZLevel;
+    };
+    void ApplyRenderFXOverride(const RenderFXOverride& state);
+    void SetCameraPose(const glm::vec3& position, const glm::vec3& rotationDeg);
+    void SetGameCameraEjected(bool eject);
+    bool SelectEntityByName(const std::string& name);
+    bool SelectAssetByPath(const std::filesystem::path& path);
+    void SetPreviewMesh(Axle::PreviewMeshType type);
+    void SetPreviewSun(float azimuthDeg, float elevationDeg);
+    void RequestFocusWindow(const std::string& title) { m_PendingFocusWindow = title; }
+    void RequestInspectorScroll(float fraction) { m_PendingInspectorScroll = fraction; }
+    void SetTelemetryVisible(bool visible) { m_ShowTelemetry = visible; }
+    void GetConsoleCounts(size_t& outInfos, size_t& outWarnings, size_t& outErrors) const { m_ConsolePanel.GetMessageCounts(outInfos, outWarnings, outErrors); }
+
     // Viewport 2D UI Edit Mode & Grid Snapping (Phase 34 Step 7.3)
     void Set2DViewMode(bool enabled);
     bool Is2DViewMode() const;
@@ -129,6 +148,9 @@ private:
     bool m_EnableDDGI = false;
     bool m_EnableTAA = false;
     int m_HiZVisualizationLevel = -1;
+    bool m_PinRenderFXPopup = false;
+    std::string m_PendingFocusWindow;
+    std::optional<float> m_PendingInspectorScroll;
     bool m_F1KeyWasPressed = false;
     bool m_F9KeyWasPressed = false;
     bool m_F11KeyWasPressed = false;

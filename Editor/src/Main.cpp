@@ -15,6 +15,7 @@
 #include <Axle/RenderService.hpp>
 #include <Axle/PhysicsEngine.hpp>
 #include "EditorLayer.hpp"
+#include "VisualCapture.hpp"
 #include <exception>
 #include <csignal>
 #include <cstdio>
@@ -137,6 +138,7 @@ int EditorMain(int argc, char** argv) {
     for (const auto& reason : renderPolicy.Reasons) fprintf(stderr, "Render fallback: %s\n", reason.c_str());
     // Explicit projects override the build-configured development sample.
     std::filesystem::path requestedProject;
+    std::filesystem::path capturePlanPath;
     bool emptyProject = false;
     bool verifyEmptyStartup = false;
     bool verifyStartup = false;
@@ -175,6 +177,7 @@ int EditorMain(int argc, char** argv) {
         else if (argument.rfind("--verify-startup-rejection=", 0) == 0) startupRejection = argument.substr(27);
         else if (argument == "--project" && i + 1 < argc) requestedProject = Axle::PathFromUtf8(argv[++i]);
         else if (argument.rfind("--project=", 0) == 0) requestedProject = Axle::PathFromUtf8(argument.substr(10));
+        else if (argument.rfind("--capture-plan=", 0) == 0) capturePlanPath = Axle::PathFromUtf8(argument.substr(15));
         else {
             const auto candidate = Axle::PathFromUtf8(argument);
             if (candidate.extension() == ".axleproj" || candidate.extension() == ".axleproject")
@@ -440,7 +443,10 @@ int EditorMain(int argc, char** argv) {
             }
             if (verifyPluginWorkflow) { editorLayer->VerifyPluginWorkflow(); app->Close(); }
             else if (verifySimulation) editorLayer->VerifySimulationContract();
-            else if (!app->Run()) throw std::runtime_error("Editor rendering or presentation failed");
+            else {
+                if (!capturePlanPath.empty()) app->PushLayer(Axle::CreateEditorVisualCaptureLayer(editorLayer, capturePlanPath));
+                if (!app->Run()) throw std::runtime_error("Editor rendering or presentation failed");
+            }
             AXLE_INFO("Main: Application run loop completed, now destroying app object...");
         }
 

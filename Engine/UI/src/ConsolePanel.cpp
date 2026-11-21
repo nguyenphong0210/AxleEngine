@@ -58,6 +58,16 @@ namespace Axle {
         Log::AddSink(m_Sink);
     }
 
+    void ConsolePanel::GetMessageCounts(size_t& outInfos, size_t& outWarnings, size_t& outErrors) const {
+        outInfos = outWarnings = outErrors = 0;
+        if (!m_Sink) return;
+        for (const auto& msg : m_Sink->GetMessages()) {
+            if (msg.Level == spdlog::level::warn) ++outWarnings;
+            else if (msg.Level == spdlog::level::err || msg.Level == spdlog::level::critical) ++outErrors;
+            else ++outInfos;
+        }
+    }
+
     static bool CaseInsensitiveFind(const std::string& str, const std::string& query) {
         if (query.empty()) return true;
         auto it = std::search(

@@ -39,7 +39,7 @@ authority, source ownership and independent correction rechecks.
    supported defaults, limits and remaining optional/deferred work.
 
 This sequence is performed when U10 is explicitly assigned. It does not start
-another session, authorize a push, or move M16/M17 work into M15.
+another session, authorize a push, or move M16 ray tracing or M21 geometry work into M15.
 
 ## 2. Required review artifacts
 

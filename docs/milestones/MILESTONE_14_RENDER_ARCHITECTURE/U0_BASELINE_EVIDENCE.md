@@ -117,7 +117,7 @@ renderer_gpu_scope_ms=0.017408
 renderer_gpu_scope_valid=1
 ```
 
-This is a baseline measurement only; it is not the M19 multi-resolution performance scorecard.
+This is a baseline measurement only; it is not the M24 multi-resolution performance scorecard.
 
 ### Output hashes
 

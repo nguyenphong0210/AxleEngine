@@ -1,9 +1,9 @@
 # AxleEngine Master Development Roadmap
 
 This is the canonical master execution roadmap for AxleEngine.
-The entire engine lifecycle is governed by a unified **Milestone** architecture spanning **Milestones 01 through 20**. Each Milestone manages its sequential **Phases**.
+The engine lifecycle spans **Milestones 01 through 24**. Each milestone manages its sequential phases or execution checkpoints.
 
-Detailed task checklists, work breakdown packages, and verification criteria live strictly within each Milestone's dedicated `PLAN.md` under [`docs/milestones/`](docs/milestones/README.md). Active technical milestones (Milestones 12–20) also maintain a companion `ARCHITECTURE.md` establishing subsystem designs, data contracts, and technology limits.
+Task checklists, checkpoints and verification criteria live in each milestone's `PLAN.md` under [docs/milestones](docs/milestones/README.md). Its companion `ARCHITECTURE.md` establishes subsystem ownership, data contracts and platform limits.
 
 ---
 
@@ -27,10 +27,14 @@ Detailed task checklists, work breakdown packages, and verification criteria liv
 | **14** | **Render Architecture Refactor** | **Accepted:** U0-U9 final source, ownership contracts, RenderGraph/resource lifetime, service seams, backend/fallback policy, migration tooling and M15 handoff. M15 feature fidelity remains deferred. | [Plan](docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE/PLAN.md) · [Architecture](docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE/ARCHITECTURE.md) · [U9 review](docs/reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md) |
 | **15** | **Lighting & Material Fidelity** | **HOLD:** Former M14 feature milestone, now dependent on M14 architecture contracts. Includes direct BRDF, GTAO/contact, SSR, reflection captures, fog, DDGI, post/temporal and advanced materials (Phase 45). | [Plan](docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md) · [Architecture](docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/ARCHITECTURE.md) |
 | **16** | **Ray Tracing Backend** | **Proposed:** D3D12/Vulkan capability policy, BLAS/TLAS lifecycle, RT pipeline/SBT, RT shadows/reflections, unified denoising, material parity and explicit raster fallback. | [Plan](docs/milestones/MILESTONE_16_RAY_TRACING/PLAN.md) · [Architecture](docs/milestones/MILESTONE_16_RAY_TRACING/ARCHITECTURE.md) |
-| **17** | **Scalable Geometry & Virtual Geometry** | **Proposed:** Offline algorithmic autoLOD pipeline via `meshoptimizer` (Phase 46.1) and Nanite-style continuous virtual geometry with Task/Mesh Shaders (Phase 46.2). | [Plan](docs/milestones/MILESTONE_17_GEOMETRY_VISIBILITY/PLAN.md) · [Architecture](docs/milestones/MILESTONE_17_GEOMETRY_VISIBILITY/ARCHITECTURE.md) |
-| **18** | **Simulation Scale & Logic LOD** | **Proposed:** Significance evaluation tiers, deterministic staggered modulo scheduler, spatial hash grid, 0% CPU spatial dormancy bubble, kinematic physics bypass (Phases 47.1–47.4). | [Plan](docs/milestones/MILESTONE_18_SIMULATION_SCALE/PLAN.md) · [Architecture](docs/milestones/MILESTONE_18_SIMULATION_SCALE/ARCHITECTURE.md) |
-| **19** | **Content Authoring Studios & Tooling** | **Proposed:** Skeletal Animation Studio (Phase 48.1), Visual FX Studio & GPU Particles (Phase 48.2), Material Graph UI Canvas (Phase 48.3), Packaging Cooker & Asset Linter (Phase 48.4). | [Plan](docs/milestones/MILESTONE_19_CONTENT_TOOLING/PLAN.md) · [Architecture](docs/milestones/MILESTONE_19_CONTENT_TOOLING/ARCHITECTURE.md) |
-| **20** | **Performance Profiling, Parity & Master Rollout** | **Proposed:** Standardized benchmark matrix, automated multi-backend image parity (PSNR/SSIM), GPU timestamp telemetry, simulated device-loss recovery, final production scorecard (Phases 49.1–49.6). | [Plan](docs/milestones/MILESTONE_20_PERFORMANCE_ROLLOUT/PLAN.md) · [Architecture](docs/milestones/MILESTONE_20_PERFORMANCE_ROLLOUT/ARCHITECTURE.md) |
+| **17** | **Skeletal Animation Studio & Runtime** | **Proposed:** FBX/glTF, native skeletal rendering, clip/controller authoring, blend spaces, sockets, IK and additive layers (Phase 46). | [Plan](docs/milestones/MILESTONE_17_ANIMATION/PLAN.md) · [Architecture](docs/milestones/MILESTONE_17_ANIMATION/ARCHITECTURE.md) |
+| **18** | **Visual FX Studio & GPU Particles** | **Proposed:** Multi-emitter authoring, motion, collision/events, ribbons, mesh particles, shared native indirect foundation and GPU Visual Effect Graph (Phase 47). | [Plan](docs/milestones/MILESTONE_18_VFX/PLAN.md) · [Architecture](docs/milestones/MILESTONE_18_VFX/ARCHITECTURE.md) |
+| **19** | **Canvas2D & In-Game UI Authoring** | **Proposed:** Visual Canvas Designer, responsive layout, UI bindings, input/actions and Runtime HUD (Phase 48). | [Plan](docs/milestones/MILESTONE_19_CANVAS2D/PLAN.md) · [Architecture](docs/milestones/MILESTONE_19_CANVAS2D/ARCHITECTURE.md) |
+| **20** | **Asset Cooker, Linter & Packaged Runtime** | **Proposed:** Dependency graph, headless linter, derived assets, compressed pak and integrated packaged project (Phase 49). | [Plan](docs/milestones/MILESTONE_20_COOKER/PLAN.md) · [Architecture](docs/milestones/MILESTONE_20_COOKER/ARCHITECTURE.md) |
+| **21** | **Scalable Geometry & Virtual Geometry** | **Proposed:** Cooked autoLOD, GPU-driven geometry and visibility, Task/Mesh Shaders and shared Clustered Forward+ (Phases 50.1–50.3). | [Plan](docs/milestones/MILESTONE_21_GEOMETRY_VISIBILITY/PLAN.md) · [Architecture](docs/milestones/MILESTONE_21_GEOMETRY_VISIBILITY/ARCHITECTURE.md) |
+| **22** | **Simulation Scale & Logic LOD** | **Proposed:** Significance tiers, deterministic scheduling, spatial partitions, dormancy, physics fast paths and animation URO (Phases 51.1–51.4). | [Plan](docs/milestones/MILESTONE_22_SIMULATION_SCALE/PLAN.md) · [Architecture](docs/milestones/MILESTONE_22_SIMULATION_SCALE/ARCHITECTURE.md) |
+| **23** | **Material Graph & Advanced Scene Tooling** | **Proposed:** Visual material graph, advanced surfaces, reflection probe integration, decals and prefab variants (Phase 52). | [Plan](docs/milestones/MILESTONE_23_MATERIAL_GRAPH_TOOLING/PLAN.md) · [Architecture](docs/milestones/MILESTONE_23_MATERIAL_GRAPH_TOOLING/ARCHITECTURE.md) |
+| **24** | **Performance Profiling, Parity & Master Rollout** | **Proposed:** Benchmark matrix, native image parity, telemetry, device recovery, final production defaults and scorecard (Phases 53.1–53.6). | [Plan](docs/milestones/MILESTONE_24_PERFORMANCE_ROLLOUT/PLAN.md) · [Architecture](docs/milestones/MILESTONE_24_PERFORMANCE_ROLLOUT/ARCHITECTURE.md) |
 
 ---
 
@@ -49,16 +53,22 @@ flowchart LR
         M15["M15: Lighting<br/>Material Fidelity"]
     end
 
-    subgraph Era3 ["Next-Gen Rendering and Scale: Milestones 16 - 20"]
+    subgraph Era3 ["Ray tracing and content production (M16–M20)"]
         M16["M16: Ray Tracing<br/>BLAS/TLAS & RT Shading"]
-        M17["M17: Geometry<br/>autoLOD & Meshlets"]
-        M18["M18: Simulation<br/>Significance & Dormancy"]
-        M19["M19: Content<br/>Anim, VFX & Mat Studios"]
-        M20["M20: Rollout<br/>Benchmarks & Parity"]
+        M17["M17: Animation"]
+        M18["M18: VFX"]
+        M19["M19: Canvas2D"]
+        M20["M20: Cooker and Linter"]
     end
 
-    M01_11 --> M12 --> M13 --> M14 --> M15 --> M16 --> M17 --> M18 --> M19 --> M20
+    subgraph Era4 ["Scale, scene tooling and release (M21–M24)"]
+        M21["M21: Geometry and Visibility"]
+        M22["M22: Simulation Scale"]
+        M23["M23: Material Graph and Scene Tools"]
+        M24["M24: Performance and Rollout"]
+    end
 
+    M01_11 --> M12 --> M13 --> M14 --> M15 --> M16 --> M17 --> M18 --> M19 --> M20 --> M21 --> M22 --> M23 --> M24
 ```
 
 ### 2.1. Historical Foundations (Milestones 01 through 11)
@@ -69,9 +79,17 @@ flowchart LR
 - **Status:** M12/M13 baseline completed; M14 architecture accepted; M15 lighting/material fidelity remains held for its own released scope and evidence.
 - M14 makes the renderer modular and establishes the `ViewContext`, pass, material, resource-generation and fallback contracts required for reliable lighting fidelity work in M15.
 
-### 2.3. Ray Tracing, Next-Gen Scale, Content Studios & Production Rollout (Milestones 16 through 20)
-- **Status:** Proposed & Fully Planned.
-- Targets a capability-safe ray-tracing backend with raster fallback, AAA geometric throughput (autoLOD and Task/Mesh Shaders), vast entity simulation scaling (significance tiers and spatial hibernation), end-to-end visual authoring tools (Animation Studio, Visual FX Studio, and Material Graph Node Canvas), concluding with exhaustive benchmark verification across Direct3D 12, Vulkan, and OpenGL.
+### 2.3. Ray Tracing and Content Production (Milestones 16 through 20)
+
+- M16 core acceptance at `RT-08D` is the entry baseline for M17. Optional RT work retains its own release boundary.
+- M17–M19 add animation, effects and in-game UI. Each domain defines its dependency data and verifies packaging through the existing export path while building the authored fixture.
+- M20 closes shared dependency traversal and publishes the integrated packaged gameplay fixture. M21 uses it as its product baseline.
+
+### 2.4. Scalable Rendering and Simulation, Scene Tools and Release (Milestones 21 through 24)
+
+- M21 uses M17 skeletal rendering, the M18 native indirect fixture and M20 cook/cache ownership. M22 builds on the M17 tick and pose contract for animation URO.
+- M23 completes Material Graph Canvas and related scene authoring. M24 compares the accepted routes and qualifies release defaults across D3D12, Vulkan and supported OpenGL paths.
+- Each proposed implementation range requires an explicit release. See the [milestone index](docs/milestones/README.md) for the previous numbering.
 
 ---
 

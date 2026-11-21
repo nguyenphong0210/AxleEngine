@@ -2,10 +2,11 @@
 ## (Visibility Buffer / Nanite + Clustered Forward+ + Hardware Ray Tracing)
 
 > **Document Type:** Technical RFC & Architecture Proposal  
-> **Target Milestones:** Milestone 15 (Fidelity closure), Milestone 16 (Ray Tracing Backend), Milestone 17 (Virtual Geometry & Nanite VisBuffer), Milestone 18+ (Simulation & Rollout)  
+> **Target Milestones:** Milestone 15 (Fidelity closure), Milestone 16 (Ray Tracing Backend), Milestone 21 (Virtual Geometry & Nanite VisBuffer), Milestone 22+ (Simulation & Rollout)
+>
 > **Audience:** AxleEngine Architects & Agent Review (Codex / Gemini)  
 > **Baseline Commit:** Post-M15 U3 batch 4 / Roadmap shift (`fad0df92`)  
-> **Independent review:** [M16/M17 Hybrid Rendering RFC Review](../reviews/M16_M17_HYBRID_RENDERING_RFC_REVIEW.md). The proposal is conditionally feasible; the readiness table is not an implementation acceptance gate.  
+> **Independent review:** [Historical hybrid rendering RFC review](../reviews/M16_M17_HYBRID_RENDERING_RFC_REVIEW.md). The proposal is conditionally feasible; the readiness table is not an implementation acceptance gate.
 
 ---
 
@@ -118,12 +119,12 @@ This hybrid architecture cleanly aligns with the newly shifted repository roadma
    - Implement `RTAccelerationStructureService` with coarse proxy BLAS.
    - Deliver RT capability discovery, TLAS build/update, and RT pipeline/SBT.
    - Implement dedicated RT secondary passes (`RayTracingShadow`, `RayTracingReflection`).
-3. **Milestone 17 (Scalable Geometry & Nanite-Style Virtual Geometry):**
+3. **Milestone 21 (Scalable Geometry & Nanite-Style Virtual Geometry):**
    - Deliver `meshoptimizer` meshlet generation (`meshopt_buildMeshlets`).
    - Implement `NaniteGeometryPass` writing 64-bit Visibility Buffer.
    - Implement `VisBufferResolvePass` using Barycentric coordinate interpolation.
    - Deliver Clustered Light Culling (replacing static light uniforms).
-4. **Milestone 18+ (Simulation Scale & Master Rollout):**
+4. **Milestone 22+ (Simulation Scale & Master Rollout):**
    - Scale active entity simulation (Significance / Logic LOD) and consolidate multi-backend visual parity.
 
 ---

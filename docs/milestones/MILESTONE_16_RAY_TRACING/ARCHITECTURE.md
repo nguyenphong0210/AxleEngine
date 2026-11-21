@@ -16,7 +16,7 @@ M16 owns the RT backend and its capability-safe integration:
 - Spatial/temporal denoising, history rejection and camera/scene/material invalidation.
 - A single resolve policy with raster SSR, planar reflection, local probes and sky IBL as fallbacks.
 
-M16 does not own meshlet generation or clustered light culling; those remain in M17. M16 does own the minimal coarse RT-proxy contract needed to build a bounded BLAS. M17 autoLOD may later produce a compatible proxy, but M16 startup cannot depend on a future M17 artifact. M15 owns planar reflection and the raster reflection contracts consumed here.
+M16 does not own meshlet generation or clustered light culling; those remain in M21. M16 does own the minimal coarse RT-proxy contract needed to build a bounded BLAS. M21 autoLOD may later produce a compatible proxy, but M16 startup cannot depend on a future M21 artifact. M15 owns planar reflection and the raster reflection contracts consumed here.
 
 ## 2. Backend and pass topology
 

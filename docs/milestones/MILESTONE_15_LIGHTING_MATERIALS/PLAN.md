@@ -36,7 +36,7 @@ Use these states in reports:
 |---|---|---|
 | CSM, HDR/Split-Sum IBL, local shadows, procedural sky | Existing implementation and earlier native evidence | Baseline to protect |
 | P0 baseline fixtures and audit | 6 deterministic fixtures, 19 diagnostic channels, 5 open source findings | Verified checkpoint |
-| GPU timestamps | Valid probe and renderer scope on RTX 3070 D3D12/Vulkan Debug/Release | Verified checkpoint; full M19 rollout matrix open |
+| GPU timestamps | Valid probe and renderer scope on RTX 3070 D3D12/Vulkan Debug/Release | Verified checkpoint; full M24 rollout matrix open |
 | Smooth ForwardPBR normal | Derivative-flat-normal override removed | Verified partial checkpoint |
 | `ScreenNormal` producer | Opaque normal pass exists and is consumed by GTAO/SSR | Verified partial checkpoint |
 | GTAO/contact composite | Conservative bounded post-lighting composite | Verified partial checkpoint; true indirect separation open |
@@ -93,22 +93,22 @@ allowed only as a derived summary: it remains unchecked until every child leaf i
 PASS, and it carries no evidence separate from its children. Close each leaf
 immediately after its evidence passes, then update the derived parent summary.
 
-### 3.1 Scope allocation boundary: Milestone 15 vs Milestone 16/17
+### 3.1 Scope allocation across M15, M16 and M21
 
-To prevent scope creep, M15 owns raster lighting/material fidelity, M16 owns ray tracing, and M17 owns scalable geometry/visibility. The following boundaries are enforced:
+To prevent scope creep, M15 owns raster lighting/material fidelity, M16 owns ray tracing, and M21 owns scalable geometry/visibility. The following boundaries are enforced:
 
 | Architectural Item | Target Milestone | Allocation and Execution Contract |
 |---|---|---|
 | **1. Modular `IRenderPass` Extraction** | **M15 (Progressive → U11 Closure)** | Extract both secondary passes (`Passes::*`) and core scene passes (`ShadowPass`, `GeometrySurfacePass`, `ForwardOpaquePass`, `TransparentAndRefractionPass`, `SkyboxAndResolvePass`, `SceneDrawListBuilder`, `CustomProgramCache`) into stateful `IRenderPass`/service owners, deleting all `9 friend class` declarations and `RecordFramePasses` lambda adapters (`U11 / S11.2`). |
-| **2. Hi-Z Depth Pyramid** | **M15 (100% Core)** | Delivered in U5/S5.1 (P4) with full compute downsampling and odd-dimension handling for SSR; reusable by M17 for GPU-driven occlusion culling. |
+| **2. Hi-Z Depth Pyramid** | **M15 (100% Core)** | Delivered in U5/S5.1 (P4) with full compute downsampling and odd-dimension handling for SSR; reusable by M21 for GPU-driven occlusion culling. |
 | **3. Denoising Strategy** | **M15 (Pass-Local) / M16 (Unified)** | M15 uses pass-local spatial/temporal filters: Bilateral reconstruction for GTAO (P3), Roughness cone-filtering for SSR (P6), and Variance-clipped TAA (P8). A unified spatiotemporal denoiser (SVGF) is deferred to M16 (RT backend). |
-| **4. Clustered / Tiled Light Culling** | **M17 (100% Deferred)** | Formally deferred to Milestone 17 (Scalable Geometry and Visibility). M15 retains Forward+ lighting with a bounded active light capacity managed by `LightingService`. |
-| **5. Bindless Textures for Material Graph** | **M15 (Heap Runtime) / M17 (Full Compiler)** | M15 delivers runtime `Tier2Bindless` heap resource support and standard texture slot mapping (`U11 / S11.1` unifies built-in and graph shaders onto one shared HLSL lighting kernel `SurfaceLightingCommon.hlsli`). Full HLSL dynamically indexed bindless array emission (`g_Textures[index]`) for indirect draw execution is aligned with M17 Virtual Geometry / Meshlets. |
+| **4. Clustered / Tiled Light Culling** | **M21 (100% Deferred)** | Formally deferred to Milestone 21 (Scalable Geometry and Visibility). M15 retains Forward+ lighting with a bounded active light capacity managed by `LightingService`. |
+| **5. Bindless Textures for Material Graph** | **M15 (Heap Runtime) / M21 (Full Compiler)** | M15 delivers runtime `Tier2Bindless` heap resource support and standard texture slot mapping (`U11 / S11.1` unifies built-in and graph shaders onto one shared HLSL lighting kernel `SurfaceLightingCommon.hlsli`). Full HLSL dynamically indexed bindless array emission (`g_Textures[index]`) for indirect draw execution is aligned with M21 Virtual Geometry / Meshlets. |
 
 ### Dependency order
 
 ```text
-U0 -> U1/U2 -> U3 -> U4 -> U5 -> U6/U7 -> U8 -> U9 -> U10 (authoring & pre-refactor baseline) -> U11 (zero-debt architecture, pipelining & transient aliasing refactor + final closure); M16-RT depends on M15 U3/U5/U7/U10/U11, and M17 depends on M15 contracts.
+U0 -> U1/U2 -> U3 -> U4 -> U5 -> U6/U7 -> U8 -> U9 -> U10 (authoring & pre-refactor baseline) -> U11 (zero-debt architecture, pipelining & transient aliasing refactor + final closure); M16-RT depends on M15 U3/U5/U7/U10/U11, and M21 depends on M15 contracts.
 
 Within U5: `S5.1 Hi-Z -> S5.2 Dynamic Capture -> S5.3 Prefilter -> S5.4 Invalidation/Scheduling -> S5.5 Multi-Probe -> S5.6 SSR -> S5.7 LTC -> S5.8 Planar Reflection`. The existing `P4/P5A–P5D/P6/P7` names are implementation aliases for these SubUnits.
 
@@ -199,7 +199,7 @@ After **U10** freezes authoring, quality presets, visual/parity validation, and 
 | **U11-B** | `S11.2`: `M15-U11-02.1` → `02.4` | Full stateful `IRenderPass` decomposition (secondary + core) & culling/sorting: move shaders/layouts/PSOs/descriptors out of `RHISceneRenderer` into all secondary `Passes::*` and extracted core modules (`ShadowPass`, `GeometrySurfacePass`, `ForwardOpaquePass`, `TransparentAndRefractionPass`, `SkyboxAndResolvePass`, `SceneDrawListBuilder`, `CustomProgramCache`), delete all 9 `friend class` declarations, dissolve `RecordFramePasses` lambdas, add main-view camera frustum culling + PSO/material sort + instancing readiness. | Mid-unit parity check or U11 review |
 | **U11-C** | `S11.3`: `M15-U11-03.1` → `03.3` | Multi-frame-in-flight sync & per-frame descriptor allocation: replace in-place descriptor mutation with frame-token ring/linear arenas, remove unconditional `device.WaitIdle()` in `RHISwapChain::BeginFrame()`, generalize `RHIFrameContext`/`ViewContext` to `N >= 2` in-flight frames, and prove clean resize/capture/device validation on D3D12 & Vulkan. | Mid-unit lifetime check + U11 review |
 | **U11-D** | `S11.4`: `M15-U11-04.1` → `04.3` | Cached `RenderTransientGraph` aliasing & copy-chain elimination: add `UAV`/HDR/depth/storage support and plan/allocation caching by `RHIViewTargetDesc`, migrate short-lived intermediate targets (`Bloom*`, `SSRColor*`, `ScreenStorage`, `SubsurfaceTemp`, `OpaqueColor/Depth`) to cut full-res `CopyTexture` chains and resolve Vulkan copy overhead. | Consolidated U11 review |
-| **U11-E** | `S11.5`: `M15-U11-05.1` → `05.3` | Post-refactor A/B scorecard, parity/soak & zero-debt M15-to-M16 closure: verify CPU/GPU 1080p/1440p A/B deltas vs U10 baseline, re-verify consolidated Editor visuals + cross-backend parity + 1,000-frame soak, audit zero-debt invariants, and sign off M15 for M16/M17. | Consolidated U11 review + M16 handoff |
+| **U11-E** | `S11.5`: `M15-U11-05.1` → `05.3` | Post-refactor A/B scorecard, parity/soak & zero-debt M15-to-M16 closure: verify CPU/GPU 1080p/1440p A/B deltas vs U10 baseline, re-verify consolidated Editor visuals + cross-backend parity + 1,000-frame soak, audit zero-debt invariants, and sign off M15 for M16/M21. | Consolidated U11 review + M16 handoff |
 
 **Editor visual policy (user steering 2026-11-17):** During automated batch delivery, Editor visual gates stayed open for a consolidated capture session. Mark an Editor visual gate PASS after inspecting the required Debug and Release Editor screenshots. The [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records current evidence.
 
@@ -1810,12 +1810,12 @@ U10 serves as the **pre-refactor fidelity, authoring, lifecycle, and 1080p/1440p
   - **EDITOR VISUAL:** build Debug/Release Editor, launch `--rhi=dx12 --strict-rhi` and `--rhi=vulkan --strict-rhi`, capture consolidated M15 visual plans (`M15_RoughnessSweep`, `U4`, `U5`, `U6`, `U7`, `U8`, `U9`) and inspect parity vs U10 references.
   - **Evidence:** rebuild logs, CTest/suite logs, consolidated Editor screenshots (`Error 0`, `nonFinite=0`), parity metrics and soak telemetry.
 - [ ] **M15-U11-05.3 — Complete U11 independent source review, correction recheck and zero-debt M15-to-M16 closure sign-off.**
-  - **PASS when:** separate-context independent review and any correction rechecks pass across `S11.1`–`S11.5`, confirming zero `friend class`/lambda adapters in `RHISceneRenderer`, unified HLSL lighting evaluation, zero per-frame material snapshot cloning or byte-by-byte shader hashing, multi-frame-in-flight overlap, transient aliasing, and signed-off M15 contracts for M16/M17 consumption.
+  - **PASS when:** separate-context independent review and any correction rechecks pass across `S11.1`–`S11.5`, confirming zero `friend class`/lambda adapters in `RHISceneRenderer`, unified HLSL lighting evaluation, zero per-frame material snapshot cloning or byte-by-byte shader hashing, multi-frame-in-flight overlap, transient aliasing, and signed-off M15 contracts for M16/M21 consumption.
   - **Evidence:** U11 review report, finding/recheck log and final M15 closure disposition.
 
 ### M16 handoff — Ray Tracing Backend
 
-M15 does not contain a ray-tracing Unit. The former U11/P13 checklist is moved to [Milestone 16 Ray Tracing Backend](../MILESTONE_16_RAY_TRACING/PLAN.md). M15 is complete for this boundary when both its raster contracts (U0–U10: `ResolvedSurface`, `ViewContext`, capture targets, reflection confidence/energy policy, denoising history invalidation and raster fallback) and its U11 zero-debt stateful `IRenderPass`, unified shader lighting kernel, revision-cached material extraction, culling/PSO sort, multi-frame-in-flight descriptor/sync and transient-resource baseline are closed. M16 must consume those contracts without introducing a second material interpretation, while M17 adds GPU-driven indirect culling, Meshlets/Visibility Buffer and Clustered Light Culling cleanly atop these modular passes.
+M15 does not contain a ray-tracing Unit. The former U11/P13 checklist is moved to [Milestone 16 Ray Tracing Backend](../MILESTONE_16_RAY_TRACING/PLAN.md). M15 is complete for this boundary when both its raster contracts (U0–U10: `ResolvedSurface`, `ViewContext`, capture targets, reflection confidence/energy policy, denoising history invalidation and raster fallback) and its U11 zero-debt stateful `IRenderPass`, unified shader lighting kernel, revision-cached material extraction, culling/PSO sort, multi-frame-in-flight descriptor/sync and transient-resource baseline are closed. M16 must consume those contracts without introducing a second material interpretation, while M21 adds GPU-driven indirect culling, Meshlets/Visibility Buffer and Clustered Light Culling cleanly atop these modular passes.
 
 **M15 final acceptance:** every mandatory U0–U11 atomic leaf and required U10 baseline + U11 post-refactor visual, integration, stability and measurement gate is PASS on the final integrated source. No missing mandatory behavior, unresolved P1/P2 blocker or required NOT RUN/BLOCKED check remains. Separately permitted optional deferrals and other nonblocking findings are explicit, and only verified supported features are promoted.
 

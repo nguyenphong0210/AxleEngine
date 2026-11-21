@@ -7,7 +7,7 @@
 **User objective:** Smooth, believable surfaces; reflective materials that show surrounding scene geometry; a complete, usable material system and an honestly verified Milestone 15.
 **Authority:** The latest user request is detailed planning. Do not start implementation merely because this plan exists.
 
-This is a correction and completion plan for the existing [PLAN.md](PLAN.md) and [ARCHITECTURE.md](ARCHITECTURE.md). Package IDs below are implementation checkpoints, not new roadmap phases. Preserve the canonical Phase 45 numbering and U0-U10 ownership. Shared measurement work must follow Milestone 19 contracts without treating the whole of Milestone 19 as released.
+This is a correction and completion plan for the existing [PLAN.md](PLAN.md) and [ARCHITECTURE.md](ARCHITECTURE.md). Package IDs below are implementation checkpoints, not new roadmap phases. Preserve the canonical Phase 45 numbering and U0-U10 ownership. Shared measurement work must follow Milestone 24 contracts without treating the whole of Milestone 24 as released.
 
 ## 1. Scope, preservation, and acceptance boundaries
 
@@ -78,7 +78,7 @@ Bloom/exposure sourcing, transparency/fog interaction and motion/jitter conventi
 
 **Exit:** A known bad result can be reproduced and rejected by the relevant fixture. No all-green acceptance based on image size. This documentation/fixture checkpoint does not claim a rendering fix.
 
-### P1 - Repair resource recording and establish valid GPU timing (U3, shared U10/M19)
+### P1 - Repair resource recording and establish valid GPU timing (U3, shared U10/M24)
 
 **Depends on:** P0.
 
@@ -244,7 +244,7 @@ post-refactor A/B scorecard and parity/soak verification before M16.
 | Compatibility | OpenGL and unsupported capability profiles exercise their documented fallback; no false parity claim against unavailable effects. |
 | Material quality | Smooth sphere; roughness/metallic sweep; graph/built-in matching; local reflection hit/miss/fallback; authored save/reopen. |
 | Temporal/reliability | Camera/object motion, cuts, toggle combinations, resize/minimize/restore, separate views, resource failure/retry, shutdown/reinit and a >=1,000-frame soak. |
-| Parity | For deterministic equivalent outputs, M19 rollout thresholds: PSNR >=40 dB, SSIM >=0.985 and channel error <=4/255; specify the comparison space and separately justify temporal/statistical cases. |
+| Parity | For deterministic equivalent outputs, M24 rollout thresholds: PSNR >=40 dB, SSIM >=0.985 and channel error <=4/255; specify the comparison space and separately justify temporal/statistical cases. |
 | Performance | Release 1080p/1440p, fixed named workloads/presets, at least 120 warm-up +1,000 measured frames per workload; valid per-pass/whole-view timing, CPU/GPU p50/p95/p99/max, memory and update counts. Cold compile/first-use and warm steady state are separate; required presets meet their frozen budgets. |
 | Budget | Report which named lighting passes satisfy the original 3.5-5.0 ms target on the named GPU/preset; report total frame time separately. An FPS goal cannot be inferred from lighting time alone. |
 | Portability | Record tested GPU/driver/CPU/OS/backend/commit. One available vendor does not establish multi-vendor production evidence; required unavailable hardware checks remain NOT RUN. |

@@ -1,7 +1,7 @@
-# Milestone 17 — Scalable Geometry and Virtual Geometry Architecture
+# Milestone 21 — Scalable Geometry and Virtual Geometry Architecture
 
 **Status** — Proposed architecture for the checkpoints in [PLAN.md](PLAN.md).
-**Inputs** — Accepted M15 U11-E renderer contracts and M16 core at RT-08D.
+**Inputs** — Accepted M15 U11-E renderer contracts, M16 RT-08D, M17 skeletal geometry and pose publication, M18 native indirect foundation and M20 cooked-product contract and packaged fixture.
 
 ## 1. Ownership and reference routes
 
@@ -12,6 +12,8 @@
 | RHI | Native feature/limit discovery, compiled shader layouts, indexed indirect and Task/Mesh commands, barriers, descriptor generations and completion ownership. |
 | M15 | Shared surface/lighting evaluation, view and capture policies, raster reflection chain, pass scheduling, frame lifetime and transient resources. |
 | M16 | Backend-neutral feature matrix, RT acceleration structures and shader tables, proxy eligibility, receiver inputs, shadow visibility, reflection radiance and coverage policy. |
+| M17 and M18 | Native skeletal mesh/pose contract and independent RHI compute-to-indexed-indirect reference. |
+| M20 | Shared provenance, staged package publication and declared base-product fallback. |
 
 CPU indexed Forward is the geometry reference. Fixed-slot ForwardPBR with the same material, light set and selected LOD is the shading reference. Flat indexed meshlets are the first visibility route. The hierarchy adds selectable cluster cuts to that route. Task/Mesh consumes the same selected cut and produces the same identities.
 

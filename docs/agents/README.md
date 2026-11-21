@@ -51,10 +51,11 @@ The live exchange determines the current assignment; no plan releases production
 | Plugin execution | [Plugin plan](../archive/design/deferred/PLUGIN_SYSTEM_IMPLEMENTATION_PLAN.md) | 26 unreleased packages and acceptance gates |
 | Plugin implementation details | [Plugin coding reference](../archive/design/deferred/PLUGIN_SYSTEM_IMPLEMENTATION_GUIDE.md) | Proposed algorithms, SDK contracts and real-fixture strategy |
 | Feature status | [ROADMAP](../../ROADMAP.md) | Overall plan; not an automatic release |
-| Animation requirements/dependencies | [Milestone 19 plan](../milestones/MILESTONE_19_CONTENT_TOOLING/PLAN.md) | Current content/tooling boundary |
+| Animation requirements/dependencies | [M17 Animation](../milestones/MILESTONE_17_ANIMATION/PLAN.md) | Current skeletal authoring and runtime boundary |
 | Latest animation foundation | [Verified corrections](../archive/design/reports/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md) | Existing accepted foundation evidence |
 | G1 submission | [Gemini delivery](../archive/design/reports/ANIMATION_G1_GEMINI_DELIVERY.md) | Implementer's report; review still required |
-| VFX requirements | [Milestone 19 plan](../milestones/MILESTONE_19_CONTENT_TOOLING/PLAN.md) | Current content/tooling boundary |
+| VFX requirements | [M18 VFX](../milestones/MILESTONE_18_VFX/PLAN.md) | Current effect authoring and runtime boundary |
+| In-game UI and packaging | [M19 Canvas2D](../milestones/MILESTONE_19_CANVAS2D/PLAN.md), [M20 Cooker and Linter](../milestones/MILESTONE_20_COOKER/PLAN.md) | UI authoring, content traversal and packaged acceptance |
 
 ## Historical prompts
 

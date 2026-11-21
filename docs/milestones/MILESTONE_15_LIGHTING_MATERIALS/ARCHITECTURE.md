@@ -294,7 +294,7 @@ To eliminate the monolithic callback adapter debt in `RHISceneRendererPasses.cpp
    - `U0/U1 (Shadows & Opaque)` $\rightarrow$ `CascadedShadowPass` and `ForwardOpaquePass`
 4. **Renderer Role Transition**: `RHISceneRenderer` transitions into a lightweight facade that instantiates and registers these passes into `RenderPassScheduler` during initialization and dispatches execution via `m_PassScheduler.Execute(context)` per frame.
 
-### 3C. Scope boundaries: Milestone 15 vs Milestone 16/17
+### 3C. Scope boundaries across M15, M16 and M21
 
 U3-09.1–10.2 implementation checkpoint: the first pass contracts and graph declarations are under `Engine/Scene/src/Passes`, where the scene renderer currently owns their resources. GTAO and Hi-Z recording has moved there, but the existing scheduler adapter still invokes it. The `Engine/Renderer` paths and direct `IRenderPass` scheduler registration above remain the target for the later pass extraction/orchestration steps, not a claim about the current tree.
 
@@ -308,16 +308,16 @@ U3-09.1–10.2 implementation checkpoint: the first pass contracts and graph dec
 To prevent scope creep and maintain milestone focus, technical responsibilities are split as follows:
 
 - **Modular IRenderPass Extraction**: 100% owned by M15 through progressive pass replacement.
-- **Hi-Z Depth Reduction**: 100% owned by M15 (U5/S5.1) for hierarchical SSR raymarching; reusable by M17 for GPU occlusion culling.
+- **Hi-Z Depth Reduction**: 100% owned by M15 (U5/S5.1) for hierarchical SSR raymarching; reusable by M21 for GPU occlusion culling.
 - **Denoising Strategy**:
   - *M15:* Pass-local filtering (Bilateral filter for GTAO, Roughness cone filtering for SSR, Variance clipping for TAA).
   - *M16:* Unified spatiotemporal denoising framework (SVGF) for RT shadows/reflections.
 - **Clustered / Tiled Light Culling**:
-  - Formally assigned to **Milestone 17** to align with GPU-driven geometry culling and high-throughput scalability ($100{,}000+$ instances, hundreds of dynamic lights).
+  - Formally assigned to **Milestone 21** to align with GPU-driven geometry culling and high-throughput scalability ($100{,}000+$ instances, hundreds of dynamic lights).
   - M15 focuses strictly on lighting fidelity with bounded active light capacity managed by `LightingService`.
 - **Bindless Material Graph**:
   - *M15:* RHI `Tier2Bindless` heap resource management and canonical surface parameter packing.
-  - *M17:* Complete dynamic HLSL bindless array indexing (`g_Textures[index]`) to support GPU-driven indirect draw execution (`ExecuteIndirect` / Mesh Shaders).
+  - *M21:* Complete dynamic HLSL bindless array indexing (`g_Textures[index]`) to support GPU-driven indirect draw execution (`ExecuteIndirect` / Mesh Shaders).
 
 ## 4. Canonical material/surface contract
 

@@ -74,9 +74,9 @@ Before Milestone 12, AxleEngine was constructed through 11 major milestones enco
 - [x] **Phase 38: Visual Material Studio & Multi-Pass Surface Pipeline** (`Engine/Asset`, `Engine/Renderer`, `Engine/UI`, `Editor`).
 - [x] **Phase 38.1: Embedded 3D Material Preview & HLSL Studio** (`Engine/UI`, `Engine/RHI`, `Editor`).
 - [x] **Phase 38.2: Dynamic Shader Reflection & Advanced Shading** (`Engine/RHI`, `Engine/Asset`, `Engine/UI`).
-- [ ] **Phase 38.3: Material Pipeline Completion & Automotive Materials** — *(Deferred to Milestone 18)*.
-- [ ] **Phase 39: Visual Particle & VFX Studio Completion** — *(Deferred to Milestone 18)*.
-- [ ] **Phase 40: Skeletal Animation Studio Completion** — *(Deferred to Milestone 18)*.
+- [ ] **Phase 38.3: Material Pipeline Completion & Automotive Materials** — *(Deferred to [M15 material fidelity](../MILESTONE_15_LIGHTING_MATERIALS/PLAN.md) and [M23 graph authoring](../MILESTONE_23_MATERIAL_GRAPH_TOOLING/PLAN.md))*.
+- [ ] **Phase 39: Visual Particle & VFX Studio Completion** — *(Deferred to [M18 VFX](../MILESTONE_18_VFX/PLAN.md))*.
+- [ ] **Phase 40: Skeletal Animation Studio Completion** — *(Deferred to [M17 Animation](../MILESTONE_17_ANIMATION/PLAN.md))*.
 
 ### Milestone 11: RHI-Primary Rendering Foundation
 - [x] **Phase 41: Shared Rendering Architecture, GPU Safety & Product Integration** — Absorbed into Milestones 12 and 13.

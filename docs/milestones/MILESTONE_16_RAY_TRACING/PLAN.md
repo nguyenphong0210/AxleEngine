@@ -8,7 +8,7 @@ M16 adds a capability-safe hardware ray-tracing backend. Every RT feature has a 
 
 ## 1. Entry gate and execution order
 
-Record the accepted [M15 U11-E source, support matrix and post-refactor scorecard](../MILESTONE_15_LIGHTING_MATERIALS/PLAN.md#m16-handoff--ray-tracing-backend) before the first M16 implementation checkpoint. Reuse the M15 reference scenes and evidence tools where applicable. M16 adds hardware shadows and reflections to the raster renderer. M17 geometry/visibility work and optional `RT-09` have separate release boundaries.
+Record the accepted [M15 U11-E source, support matrix and post-refactor scorecard](../MILESTONE_15_LIGHTING_MATERIALS/PLAN.md#m16-handoff--ray-tracing-backend) before the first M16 implementation checkpoint. Reuse the M15 reference scenes and evidence tools where applicable. M16 adds hardware shadows and reflections to the raster renderer. M21 geometry/visibility work and optional `RT-09` have separate release boundaries.
 
 Package IDs identify feature scope. Batch IDs identify buildable deliveries with a primary owner for each atomic requirement. The batch order brings shader compilation and history forward where another package needs them.
 
@@ -79,7 +79,7 @@ This is the single status-bearing checklist. Each item closes on its stated resu
 
 ### M16-RT-01 — Capability policy and RHI foundation
 
-- [ ] **M16-RT-01.1 — Freeze D3D12/Vulkan capability contract.** Define required AS, pipeline, shader-table, inline-ray and descriptor features, plus the backend-neutral feature matrix consumed by M17. Mesh-shader and indirect-draw support must not be inferred from an RT bit.
+- [ ] **M16-RT-01.1 — Freeze D3D12/Vulkan capability contract.** Define required AS, pipeline, shader-table, inline-ray and descriptor features, plus the backend-neutral feature matrix consumed by M21. Mesh-shader and indirect-draw support must not be inferred from an RT bit.
   - **PASS when** native interface availability, AS/pipeline/descriptor limits, SBT size/alignment, refit and inline ray capabilities are recorded and tested independently. Mesh-shader and indirect-draw results are independently derived. A pipeline-capable device can use the core path with inline rays unavailable.
 - [ ] **M16-RT-01.2 — Add RHI acceleration-structure descriptors and handles.** No backend-specific handle leaks into Scene.
   - **PASS when** backend-neutral creation, validation and destruction work on both backend implementations. Native tests reject invalid inputs and cover partial initialization and device-epoch ownership.
@@ -94,8 +94,8 @@ This is the single status-bearing checklist. Each item closes on its stated resu
 
 ### M16-RT-02 — BLAS/TLAS lifecycle
 
-- [ ] **M16-RT-02.1 — Freeze the RT coarse-proxy contract.** Define proxy identity, source-mesh linkage, material/alpha/normal requirements, shadow/reflection masks, triangle-budget policy and static/deforming update classes. M16 must not depend on a future M17 autoLOD artifact.
-  - **PASS when** the contract defines source UUID and revision, proxy generation, required vertex attributes and primitive/material mapping, classification, legal update classes, budget inputs and failure reasons. Tests cover valid and incompatible records without M17 assets.
+- [ ] **M16-RT-02.1 — Freeze the RT coarse-proxy contract.** Define proxy identity, source-mesh linkage, material/alpha/normal requirements, shadow/reflection masks, triangle-budget policy and static/deforming update classes. M16 must not depend on a future M21 autoLOD artifact.
+  - **PASS when** the contract defines source UUID and revision, proxy generation, required vertex attributes and primitive/material mapping, classification, legal update classes, budget inputs and failure reasons. Tests cover valid and incompatible records without M21 assets.
 - [ ] **M16-RT-02.2 — Build BLAS for static opaque geometry from a retained proxy generation.** A source mesh may be used only when it already satisfies the proxy budget and hit-shader contract; otherwise use the cooker/runtime coarse proxy.
   - **PASS when** native hit tests cover eligible source reuse and actual coarse-proxy generation/selection for an over-budget source. Verify mapping, silhouette/cutout fixture constraints and source/proxy lease retention.
 - [ ] **M16-RT-02.3 — Refit or rebuild BLAS for supported deforming geometry.** Publish an explicit policy for skinned/deforming meshes; do not silently refit topology changes.

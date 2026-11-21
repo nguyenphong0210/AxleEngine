@@ -42,6 +42,12 @@ The scheduler registers `RayTracingASBuild`, `RayTracingShadow`, `RayTracingRefl
 
 AS build precedes trace. Receiver inputs must be available before tracing. Filtered shadow visibility must reach the matching light before its direct lighting is evaluated. Reflections feed the shared indirect-specular resolve before post-processing. Declare each edge in the graph. Probe and planar subcaptures have explicit effect policies that prevent recursive reflection sampling.
 
+### 2.1 RT receiver inputs
+
+Map receiver depth, the normals and surface terms needed by each effect, and temporal motion to their producers in the M15 view pipeline. Declare the required target formats, sample-count policy and graph order per supported view. Shadow visibility uses receiver data produced before direct lighting. Reflection tracing and resolve use the required surface and response data before their respective passes.
+
+Allocate and populate these inputs from effective RT settings. RT Reflections can run with SSR and planar reflections disabled. RT temporal passes request velocity independently of TAA. A supported single-sample view with TAA disabled still supplies the motion needed by the denoiser.
+
 ## 3. Ownership and lifetime
 
 - `RTAccelerationStructureService` owns engine RHI handles for BLAS/TLAS, scratch buffers, compaction state, build generations and deferred retirement. RHI owns the native objects and backend destruction.
@@ -63,6 +69,8 @@ RT resources must be represented by explicit RHI types rather than raw API handl
 
 The graph must reject a pass that reads an unbuilt AS generation, mixes incompatible generations, or writes a history target with an incompatible view/material generation. History identity records the view, target, scene, compatible AS/material generation and device epoch. Distinguish slot rotation and compatible transform updates from a change that invalidates those identities. Routine object/camera motion uses reprojection and per-pixel rejection within a compatible history. The completion token and explicit graph dependencies protect the history across frames in flight.
 
+Reflection history validates the secondary hit as well as the primary receiver. Use hit identity and distance with hit position or instance motion where needed. A stationary receiver can reflect a moving off-screen instance. Reject or reduce history for reflected samples whose hit changed or whose correspondence cannot be established. Preserve valid history for unaffected samples.
+
 ## 5. Geometry and material contract
 
 M16 consumes M15's canonical `ResolvedSurface` values. The RT hit path must use the same base color, metallic, roughness, normal, F0, clearcoat, sheen, transmission and reflection flags as ForwardPBR. Unsupported custom graph fields produce a named fallback rather than silently diverging.
@@ -74,6 +82,16 @@ Geometry updates are classified as static build, transform update, same-topology
 RT BLAS geometry is selected from a budgeted proxy generation, never from an unbounded Nanite micro-triangle stream. The proxy record carries a stable source-mesh UUID, proxy generation, primitive/material-slot mapping, alpha-test/two-sided classification, positions, normals and the UV/tangent data required by the hit material contract. Proxy triangle count is selected per asset and quality tier; the RFC's 10--20% ratio is a starting heuristic, not an invariant.
 
 Static assets are cooked or generated into a retained proxy before BLAS build. Supported deforming assets publish whether they refit, rebuild or fall back to raster; topology changes always rebuild. Proxy generation, BLAS generation and TLAS generation are independently leaseable and retain the last-good generation on failure. Shadow and reflection masks may select different proxy budgets when silhouette or leak risk requires it.
+
+### 5.2 TLAS coverage
+
+Report when an effect's required geometry is missing because a proxy is unavailable, deformation is unsupported or a budget is exceeded. An instance intentionally excluded by its effect mask or material policy is outside that effect's required coverage.
+
+Use a valid RT result only when the effect has adequate coverage for the sample. For known omissions, use the existing raster shadow visibility or reflection fallback for the affected scope. Scope the fallback to the affected light or region when its coverage is known. Otherwise fall back for that effect in the view. Carry a reason distinct from a geometric miss so omitted casters cannot yield valid unoccluded samples and incomplete reflection hits cannot replace valid raster contributions.
+
+### 5.3 Lighting at a reflection hit
+
+Produce scene-linear HDR radiance leaving the hit surface toward the receiver. Use the shared M15 surface and lighting evaluation for emissive, applicable direct lights with visibility at the hit, and environment terms covered by the M15 policy. Define valid shadow sources at the hit and the documented fallback outside their coverage, including off-screen hits. The hit shader evaluates the hit surface with the one-bounce policy. The resolve applies the receiver's indirect-specular response once and uses the existing reflection chain for misses and unavailable samples.
 
 ## 6. Quality tiers and fallback
 

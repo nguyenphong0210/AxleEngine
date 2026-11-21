@@ -7,14 +7,14 @@
     "coordinator": "User",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "e41275c5",
+    "code_baseline": "558fac49",
     "user_instruction": "Split U10 into 7 sequential batches (U10-A, U10-B1, U10-B2, U10-C, U10-D1, U10-D2, U10-E) and implement U10.",
     "user_scope": "M15-U10-01.1..M15-U10-16.2 across implementation/verification batches U10-A..U10-D2, stopping cleanly for consolidated Codex review/acceptance at U10-E (M15-U10-17.1..19.2).",
-    "active_batch": "U10-B2 (M15-U10-03.4, 04, 07.1..07.3)",
+    "active_batch": "U10-C (M15-U10-05.1..05.5, 06.1..06.2)",
     "plan_reference": "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
     "open_gates": [
       "M15-U9: Separate-context source recheck of final terminator and Preview adjustments remains open (token revoked in M15-U9 session); carries forward cleanly for U10-E.",
-      "M15-U10: Batches U10-A (b7fab12c) & U10-B1 (e41275c5) self-verified and checked in PLAN.md; batches U10-B2..U10-E open."
+      "M15-U10: Batches U10-A (b7fab12c), U10-B1 (e41275c5), & U10-B2 (558fac49) self-verified and checked in PLAN.md; batches U10-C..U10-E open."
     ],
     "prior_followup": "M15-U4-U6-FOLLOWUP passed through 5fd995f3. See docs/reviews/M15_U4_U6_CODEX_FOLLOWUP.md.",
     "u7_independent_review": "PASS at 75a93b66 as experimental DDGI. See docs/reviews/M15_U7_CODEX_REVIEW.md.",
@@ -5393,6 +5393,17 @@
       "base_commit": "e41275c5",
       "timestamp_utc": "2026-11-21T08:22:45.795354+00:00",
       "body": "STATUS (Batch U10-B1 self-verified at e41275c5; advancing to U10-B2):\n\nImplemented and committed U10-B1 in e41275c5 (M15-U10-02.1..02.3, 03.1..03.3):\n- Added ProjectRenderSettings POD in Engine/Project (ProjectSerializer YAML round-trip + RuntimeBuild packaged-project parity) and header-only ProjectRenderSettingsSync helpers in Engine/Renderer so Editor (RenderFX, View->Rendering Features, Project Settings) and RuntimeLayer stay 1:1 synchronized across Environment, Exposure/AA, and Reflections without circular CMake dependencies.\n- Added ReflectionProbe authoring UI in EntityInspector & SceneHierarchyPanel Create->Light->Reflection Probe plus selected-probe wireframe volume/blend overlay via ViewRequest::ExtraDebugLines and RenderService/RHISceneRenderer dynamic probe telemetry & Capture Now / Invalidate / Retry facades.\n- Fixed root-cause sub-capture contract mismatch in Engine/Renderer/src/RenderContracts.cpp (ReflectionCaptureContract::SanitizeCaptureSettings + ViewTargetContract planar reflection check when IsSubCapture=true).\n\nVerification after final e41275c5 code edit:\n- python scripts/check_architecture.py -> PASS (626 files, 25 CMake files).\n- Debug & Release builds + unit/service/runtime/preview/view tests passed across D3D12, Vulkan, and OpenGL (AxleRenderUnitTests, AxleProjectUnitTests, AxleAssetUnitTests, AxleRuntimeProductParityUnitTests, AxleBuildWorkflowTests, AxleRenderServiceTests x6, AxleRuntimeRenderTests loose x6 + cooked x4, AxlePreviewRenderTests x8, AxleRHIResourceViewTests x4, AxleEditor --verify-empty-startup x4).\n- EDITOR VISUAL closed for U10-B1 on Debug DX12 & Release Vulkan (build/agent-runs/u10b1_visual/, okViews=34 failedViews=0 errors=0 nonFinite=0).\n\nChecked M15-U10-02.1..02.3 and 03.1..03.3 in PLAN.md; U10-B2 (M15-U10-03.4, 04, 07.1..07.3) starts next. Independent U10-E acceptance remains pending for Codex.\n"
+    },
+    {
+      "id": "CG-20261121T100553867092Z-GEMINI-c01290",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "M15-U10",
+      "reply_to": "CG-20261121T061855566843Z-CODEX-b080c3",
+      "base_commit": "558fac49",
+      "timestamp_utc": "2026-11-21T10:05:53.867092+00:00",
+      "body": "STATUS: Completed self-verified implementation & verification for M15-U10 batch U10-B2 (M15-U10-03.4, 04, 07.1..07.3) at source commit 558fac49; advancing to batch U10-C (M15-U10-05.1..05.5, 06.1..06.2).\n\nSummary of changes (558fac49):\n1. M15-U10-03.4 (Preview/Runtime Policy & Environment Match): Added PreviewEnvironmentMode (Studio vs MatchScene), SetMatchSceneRenderPolicy, SetSceneRenderSettings, explicit Studio fallback banner/diagnostics, and fixed AssetPreviewPanel SSS single-sample detection (probing 1x MSAA when Studio/Material preview overrides 4x MSAA) + EditorLayer RenderSettings propagation and VisualCapture commands (preview_env / preview_policy).\n2. M15-U10-04 (Complete Scene/Assembly/Runtime Codecs): Extracted shared Engine/Scene/src/LightingComponentPersistence.hpp YAML helpers used by SceneSerializer and AssemblySerializer; extended AssemblyNode/AssemblyEditorPanel/AssetPreviewPanel with DirectionalLight, Skybox, ReflectionProbe, VolumetricFog, and DDGIProbeGrid components.\n3. M15-U10-07.1..07.3 (Authoring, Save/Reopen & Runtime Parity): Added TestCompleteM15MaterialAssetAndCodecRoundTrip (AxleMaterialUnitTests), Test_U10_B2_CompleteSceneAssemblyAndCodecRoundTrips (AxleRenderUnitTests, including malformed assembly rollback guard), PreviewProductMain Policy suite, and RuntimeProductMain RunM15Parity (m15parity) comparing saved/reopened Editor vs Runtime pixels (maxDiff <= 2).\n\nSelf-verified post-edit checks at 558fac49 (all exit 0; Debug & Release; pending independent U10-E Codex review):\n- python scripts/check_architecture.py -> PASS (627 files, 25 CMake files)\n- AxleRenderUnitTests, AxleProjectUnitTests, AxleMaterialUnitTests (5/5), AxleAssetUnitTests (15/15) Debug & Release -> PASS\n- AxleRenderServiceTests {dx12, vulkan, gl} Debug & Release -> PASS\n- AxlePreviewRenderTests {dx12, vulkan} x {policy, default, surfaces} + {gl policy} Debug & Release -> PASS\n- AxleRuntimeRenderTests {dx12, vulkan} x {m15parity, loose, cooked} + gl x {m15parity, loose} Debug & Release -> PASS\n- EDITOR VISUAL: Debug DX12 & Release Vulkan AxleEditor build/agent-runs/u10b2_visual/plan_{dx12,vk}.txt (okViews=27, failedViews=0, errors=0, nonFinite=0) + plan_reopen_{dx12,vk}.txt (okViews=9, failedViews=0, errors=0, meanLuma=0.511824 DX12 / 0.511823 VK) + --verify-empty-startup PASS.\n"
     }
   ],
   "deferred_tasks": [

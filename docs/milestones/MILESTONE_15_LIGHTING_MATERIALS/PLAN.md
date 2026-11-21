@@ -1552,15 +1552,16 @@ The [independent Codex review](../../reviews/M15_U8_CODEX_REVIEW.md) verifies th
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the expected reflected object/location is visible and fallback is smooth with no black edge.
   - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`e41275c5`): unified `EnableSSR`, `EnablePlanarReflections`, `PlanarReflectionResolutionScale`, `PlanarReflectionStrength`, `PlanarReflectionMaxRoughness`, and dynamic probe budgets (`MaxProbesPerFrame`, `MaxFacesPerFrame`, `CacheBudgetBytes`) identically across Editor `RenderFX`/`Project Settings`, `.axleproj`, `RuntimeBuild`, and `RuntimeLayer`. Verified in Debug/Release `AxleRenderUnitTests`, `AxleAssetUnitTests`, `AxleRuntimeRenderTests` (10/10), and `u10b1_visual` Debug DX12 / Release Vulkan captures (`errors=0`, `nonFinite=0`).
-- [ ] **M15-U10-03.4 — Match Preview/Runtime policy.**
+- [x] **M15-U10-03.4 — Match Preview/Runtime policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen and matches Runtime/Preview.
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`558fac49`): `AssetPreviewPanel` adds `PreviewEnvironmentMode` (`Studio` / `MatchScene`), `SetMatchSceneRenderPolicy`, `SetSceneRenderSettings`, explicit Studio fallback banner/status (`GetEnvironmentFallbackReason()`), and fixes single-sample SSS detection via `probeSampleCount` when overriding Studio 4x MSAA. `EditorLayer` propagates active scene `RenderSettings` and exposes `preview_env` / `preview_policy` in `VisualCapture`. Verified by Debug/Release `AxlePreviewRenderTests` `{dx12,vulkan}` x `{policy,default,surfaces}` + `gl policy` (exit 0), `AxleRenderUnitTests` (exit 0), and `u10b2_visual` Debug DX12 / Release Vulkan captures (`studio_exp1.png`, `studio_exp26.png`, `match_scene_editor.png`, `viewport_match_scene.png`, `reopen_editor.png`; `okViews=27/9 failedViews=0 errors=0 nonFinite=0`).
 - [x] **M15-U10-03.5 — Unify shared `RHIViewTargetDesc` builder.**
   - **PASS when:** `RenderService` and `RHISceneRenderer` compute `RHIViewTargetDesc` through one shared policy helper so Preview, Runtime, Main and preset paths never drift on expected descriptors or trigger false mismatches/reallocations when adding or toggling view targets.
   - **Evidence:** Self-verified automated PASS (`b7fab12c`): `ViewTargetContract` (`RenderContracts.hpp`/`.cpp`) unified across `RenderService`, `RHISceneRenderer`, and `RHIViewportDescriptor`; verified by Debug/Release `AxleRenderUnitTests` (`Test_ViewTargetContractUnification`, DDGI/FroxelFog/ReflectionCapture contract suites), `AxleRHIResourceViewTests` (12/12 `{dx12,vulkan}` x `{default,targets,storage}`), `AxlePreviewRenderTests` (8/8), `AxleRenderServiceTests` (6/6), `AxleEditor --verify-empty-startup` (4/4), and `check_architecture.py PASS`.
-- [ ] **M15-U10-04 — Complete scene/assembly/runtime codec round trips.**
+- [x] **M15-U10-04 — Complete scene/assembly/runtime codec round trips.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
-  - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`558fac49`): extracted shared YAML codec `Engine/Scene/src/LightingComponentPersistence.hpp` across `SceneSerializer` and `AssemblySerializer`, extended `AssemblyNode` / `AssemblyEditorPanel` / `AssetPreviewPanel` with `DirectionalLight`, `Skybox`, `ReflectionProbe`, `VolumetricFog`, and `DDGIProbeGrid`, and verified `TestCompleteM15MaterialAssetAndCodecRoundTrip` (`AxleMaterialUnitTests` 5/5 Debug/Release, exit 0), `Test_U10_B2_CompleteSceneAssemblyAndCodecRoundTrips` (`AxleRenderUnitTests` Debug/Release, exit 0, including malformed `.axle` rejection leaving `Scene` untouched), `AxleAssetUnitTests` (15/15 Debug/Release, exit 0), and `AxleRenderServiceTests` `{dx12,vulkan,gl}` Debug/Release (exit 0).
 - [ ] **M15-U10-05.1 — Add Low preset.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
@@ -1582,15 +1583,16 @@ The [independent Codex review](../../reviews/M15_U8_CODEX_REVIEW.md) verifies th
 - [ ] **M15-U10-06.2 — Diagnose unsupported capability fallback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-07.1 — Test Editor create/edit.**
+- [x] **M15-U10-07.1 — Test Editor create/edit.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen and matches Runtime/Preview.
-- [ ] **M15-U10-07.2 — Test save/reopen.**
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`558fac49`): verified in Debug DX12 & Release Vulkan `AxleEditor --project=build/agent-runs/u10b2_visual/fixture/U10B2.axleproj --capture-plan=build/agent-runs/u10b2_visual/plan_{dx12,vk}.txt` (`okViews=27 failedViews=0 warnings=0 errors=0 nonFinite=0`) plus `--verify-empty-startup` (exit 0), confirming material/lighting edits reflect across Main Viewport, `RenderFX` popup, Inspector, and Studio/`[Match Scene]` Asset Preview.
+- [x] **M15-U10-07.2 — Test save/reopen.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-07.3 — Test Runtime parity.**
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`558fac49`): `.axleproj` / `.axleasset` / `.axle` / `.axlescene` save-and-reopen tested across Debug & Release `AxleProjectUnitTests`, `AxleMaterialUnitTests` (5/5), `AxleAssetUnitTests` (15/15), `AxleRenderUnitTests`, and `u10b2_visual/plan_reopen_{dx12,vk}.txt` (`Reinhard`, `Exposure: 0.45`, crimson `M_U10B2_ReflectiveCoat`, `okViews=9 failedViews=0 errors=0`, matching `meanLuma=0.511824` DX12 / `0.511823` Vulkan).
+- [x] **M15-U10-07.3 — Test Runtime parity.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`558fac49`): `AxleRuntimeRenderTests` `{dx12,vulkan,gl} m15parity`, `{dx12,vulkan,gl} loose`, and `{dx12,vulkan} cooked` all passed (exit 0) in Debug and Release (`RunM15Parity` verifies save -> reload -> `RenderSettingsSync::ApplyToSceneSettings` -> Editor vs Runtime pixel parity `maxDiff <= 2` on native D3D12/Vulkan and OpenGL fallback), paired with `AxlePreviewRenderTests` (`policy`, `default`, `surfaces`).
 
 **Exit:** every accepted runtime feature is authorable and survives save/reload.
 

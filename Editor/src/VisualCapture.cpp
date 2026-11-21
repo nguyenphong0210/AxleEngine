@@ -248,13 +248,15 @@ public:
 
     void OnImGuiRender() override {
         if (m_Completed) return;
-        if (m_CaptureSaved) {
-            if (!*m_CaptureSaved) {
+        if (m_CaptureStatus) {
+            if (*m_CaptureStatus == CaptureStatus::WriteFailed)
+                throw std::runtime_error("VisualCapture: failed writing Editor PNG to " + m_CapturePath.string());
+            if (*m_CaptureStatus == CaptureStatus::Pending) {
                 if (--m_CaptureFramesRemaining == 0)
                     throw std::runtime_error("VisualCapture: no Editor frame readback for " + m_CapturePath.string());
                 return;
             }
-            m_CaptureSaved.reset();
+            m_CaptureStatus.reset();
         }
         if (m_WaitFrames > 0) {
             --m_WaitFrames;
@@ -274,12 +276,14 @@ public:
                 auto* rc = Application::Get().GetRenderContext();
                 if (!rc) throw std::runtime_error("VisualCapture: missing ApplicationRenderContext");
                 m_CapturePath = outPath;
-                m_CaptureSaved = std::make_shared<bool>(false);
+                m_CaptureStatus = std::make_shared<CaptureStatus>(CaptureStatus::Pending);
                 m_CaptureFramesRemaining = 8;
-                rc->RequestNextFrameCapture([outPath, saved = m_CaptureSaved](uint32_t w, uint32_t h, const std::vector<uint8_t>& rgba8) {
-                    if (!WritePngRGBA8(outPath, w, h, rgba8))
-                        throw std::runtime_error("VisualCapture: failed writing Editor PNG to " + outPath.string());
-                    *saved = true;
+                rc->RequestNextFrameCapture([outPath, status = m_CaptureStatus](uint32_t w, uint32_t h, const std::vector<uint8_t>& rgba8) {
+                    if (!WritePngRGBA8(outPath, w, h, rgba8)) {
+                        *status = CaptureStatus::WriteFailed;
+                        return;
+                    }
+                    *status = CaptureStatus::Saved;
                     AXLE_INFO("VISUAL_CAPTURE_EDITOR path={0} size={1}x{2}", outPath.string(), w, h);
                 });
                 m_WaitFrames = 1;
@@ -322,6 +326,7 @@ public:
     }
 
 private:
+    enum class CaptureStatus { Pending, Saved, WriteFailed };
     struct Command { std::string Op, Args; };
     std::shared_ptr<EditorLayer> m_Editor;
     std::filesystem::path m_PlanPath, m_OutputBase;
@@ -329,7 +334,7 @@ private:
     size_t m_Cursor = 0;
     int m_WaitFrames = 2;
     std::filesystem::path m_CapturePath;
-    std::shared_ptr<bool> m_CaptureSaved;
+    std::shared_ptr<CaptureStatus> m_CaptureStatus;
     unsigned m_CaptureFramesRemaining = 0;
     bool& m_Completed;
 
@@ -357,7 +362,7 @@ private:
     }
 
     void ProcessImmediateCommands() {
-        if (m_Completed || m_WaitFrames > 0 || m_CaptureSaved) return;
+        if (m_Completed || m_WaitFrames > 0 || m_CaptureStatus) return;
         while (m_Cursor < m_Commands.size()) {
             const auto& cmd = m_Commands[m_Cursor];
             if (IsRenderPhaseCommand(cmd.Op)) break;

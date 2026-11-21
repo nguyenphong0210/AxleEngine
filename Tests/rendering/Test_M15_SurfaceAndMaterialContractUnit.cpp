@@ -551,7 +551,8 @@ bool RunM15SurfaceAndMaterialContractUnitTests() {
         std::stringstream ssMat; ssMat << matFile.rdbuf();
         std::string matSource = ssMat.str();
 
-        std::ifstream fwdFile("Engine/Resources/Shaders/ForwardPBR.hlsl");
+        std::ifstream fwdFile(AXLE_FORWARD_PBR_SHADER_PATH);
+        if (!fwdFile.is_open()) fwdFile.open("Engine/Resources/Shaders/ForwardPBR.hlsl");
         RENDER_CHECK(fwdFile.is_open(), "ForwardPBR.hlsl is accessible");
         std::stringstream ssFwd; ssFwd << fwdFile.rdbuf();
         std::string fwdSource = ssFwd.str();

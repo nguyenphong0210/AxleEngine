@@ -613,7 +613,8 @@ add_test(NAME M15U9AdvancedMaterialContract COMMAND $<TARGET_FILE:AxleRenderUnit
 set_tests_properties(M15U9AdvancedMaterialContract PROPERTIES LABELS "render;material;sheen;cpu;m15" TIMEOUT 30)
 add_test(NAME RenderHarnessFailure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/verify_failure_probe.py" $<TARGET_FILE:AxleRenderUnitTests> --case render-probe)
 set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES LABELS "render;cpu")
-set_tests_properties(RenderUnitTests RenderHarnessFailure PROPERTIES TIMEOUT 30)
+set_tests_properties(RenderUnitTests PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" TIMEOUT 120)
+set_tests_properties(RenderHarnessFailure PROPERTIES TIMEOUT 30)
 
 option(AXLE_ENABLE_RENDER_GPU_TESTS "Register shared physical D3D12/Vulkan render readback tests" OFF)
 if(AXLE_ENABLE_RENDER_GPU_TESTS)

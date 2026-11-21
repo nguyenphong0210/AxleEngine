@@ -31,7 +31,7 @@ inline std::vector<uint8_t> DrawMaterialGraph(std::shared_ptr<const MaterialGrap
     }
     const auto* buffers=&packed;
     constexpr uint32_t width=64;
-    RHITexture color,depth,shadowDepth;RHIBuffer readback;RHIBufferDesc read;read.Size=width*width*4;read.MemoryLocation=RHIMemoryLocation::HostReadback;
+    RHITexture color,depth,shadowDepth,volumeFallback;RHIBuffer readback;RHIBufferDesc read;read.Size=width*width*4;read.MemoryLocation=RHIMemoryLocation::HostReadback;
     if(!color.Init(RHITextureDesc::RenderTarget2D(width,width))||!depth.Init(RHITextureDesc::DepthStencil2D(width,width))||!readback.Init(read))return {};
     std::vector<RHIVertex3D> vertices(3);
     vertices[0].Position={-1,-1,0.5f};vertices[1].Position={0,1,0.5f};vertices[2].Position={1,-1,0.5f};
@@ -61,9 +61,14 @@ inline std::vector<uint8_t> DrawMaterialGraph(std::shared_ptr<const MaterialGrap
         return IsMaterialSurfaceEngineResource(value)&&value.Type==RHIResourceType::Texture&&
             (value.Name=="u_CascadeDepth"||value.Name=="u_LocalShadowDepth");
     });
+    const bool needVolumeFallback=std::any_of(engineResources.begin(),engineResources.end(),[](const auto& value) {
+        return IsMaterialSurfaceEngineResource(value)&&value.Type==RHIResourceType::Texture&&
+            (value.Name=="u_FroxelIntegrated"||value.Name=="u_FroxelMedia");
+    });
     if((needLinearSampler&&!linear.Init(RHISamplerDesc::Trilinear(RHIAddressMode::ClampToEdge)))||
        (needShadowSampler&&!shadow.Init(RHISamplerDesc::ShadowPCF()))||
-       (needShadowDepth&&!shadowDepth.Init(RHITextureDesc::DepthStencil2D(2,2,RHITextureFormat::D32_FLOAT,"MaterialGraphTestShadowDepth"))))return {};
+       (needShadowDepth&&!shadowDepth.Init(RHITextureDesc::DepthStencil2D(2,2,RHITextureFormat::D32_FLOAT,"MaterialGraphTestShadowDepth")))||
+       (needVolumeFallback&&!volumeFallback.Init(RHITextureDesc::StorageTexture3D(1,1,1,RHITextureFormat::RGBA16_FLOAT,"MaterialGraphTestVolume3D"))))return {};
     for(size_t i=0;i<native.LayoutDescription.DescriptorSets.size();++i) {
         const auto& desc=native.LayoutDescription.DescriptorSets[i];
         for(size_t r=0;r<desc.Ranges.size();++r) {
@@ -83,6 +88,8 @@ inline std::vector<uint8_t> DrawMaterialGraph(std::shared_ptr<const MaterialGrap
                     descriptor=resource->Name=="u_ShadowSampler"?shadow.GetNative():linear.GetNative();
                 else if(resource->Name=="u_CascadeDepth"||resource->Name=="u_LocalShadowDepth")
                     descriptor=shadowDepth.GetSRV();
+                else if(resource->Name=="u_FroxelIntegrated"||resource->Name=="u_FroxelMedia")
+                    descriptor=volumeFallback.GetSRV();
                 else {
                     const bool cube=resource->Name=="u_IrradianceMap"||resource->Name=="u_PrefilterMap"||
                                     resource->Name.starts_with("u_ReflectionProbeCube");
@@ -103,6 +110,9 @@ inline std::vector<uint8_t> DrawMaterialGraph(std::shared_ptr<const MaterialGrap
         shadowClear.depth.clearValue.depthStencil.depth=1.0f;
         commands.BeginRendering(shadowClear);commands.EndRendering();
         commands.TransitionTexture(shadowDepth.GetNative(),RHIResourceLayout::DepthStencilWrite,RHIResourceLayout::ShaderResource);
+    }
+    if(volumeFallback.IsValid()) {
+        commands.TransitionTexture(volumeFallback.GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::ShaderResource);
     }
     commands.TransitionTexture(color.GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::ColorAttachment);
     commands.TransitionTexture(depth.GetNative(),RHIResourceLayout::Undefined,RHIResourceLayout::DepthStencilWrite);

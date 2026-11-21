@@ -39,6 +39,7 @@ The live exchange determines the current assignment; no plan releases production
 
 | Topic | Reference | Role |
 | --- | --- | --- |
+| Editor GPU visual capture | [Editor visual capture guide](EDITOR_VISUAL_CAPTURE.md) | Deterministic `--capture-plan` GPU SwapChain/Viewport PNG runner (`dx12`/`vulkan`) |
 | Execution/progress | [Roadmap](../../ROADMAP.md) | Single Milestone order and status authority |
 | Architecture contracts | [Master plan](../design/ARCHITECTURE_FOUNDATION_MASTER_PLAN.md) | External prerequisite graph, AF definitions and bounded architecture exit |
 | Native render integration | [NRI contract](../design/NRI_INTEGRATION_CONTRACT.md) | Source-pinned vendor/service/lifetime rules mapped to P41 |

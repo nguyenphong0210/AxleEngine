@@ -1484,7 +1484,7 @@ namespace {
         // -----------------------------------------------------------------
         // 5. M15-U5-39.7: Zoomed Sphere-Floor Contact & Underside SSR Smoothness (TAA Off)
         // -----------------------------------------------------------------
-        {
+        for (const float floorRoughness : {0.055f, 0.12f}) {
             auto zoomSphere = RHIMesh::CreateSphere(0.5f, 32, 48);
             RENDER_CHECK(zoomSphere && zoomSphere->IsValid(), "U5-F 39.7 zoomed sphere mesh");
             auto zoomSphereView = zoomSphere->CaptureView();
@@ -1505,7 +1505,7 @@ namespace {
             RENDER_CHECK(zoomTargets->Configure(zoomVT), "U5-F 39.7 zoom RHIViewTargets configure");
 
             RenderWorld zoomWorld;
-            zoomWorld.SceneRevision = 9240;
+            zoomWorld.SceneRevision = floorRoughness < 0.1f ? 9241 : 9240;
             zoomWorld.Skybox.Authored = true;
             zoomWorld.Skybox.Enabled = true;
             zoomWorld.Skybox.EnvironmentLighting = true;
@@ -1516,7 +1516,7 @@ namespace {
             zoomWorld.DirectionalLight->Intensity = 5.0f;
 
             // Glossy conductor plane (y = 0) + Metal_Gold sphere resting tangent at y = 0 (center y = 0.5)
-            zoomWorld.Meshes.push_back(MakeBoxInstance(40, cubeView, makeMaterial({0.72f, 0.80f, 0.90f}, 1.0f, 0.12f),
+            zoomWorld.Meshes.push_back(MakeBoxInstance(40, cubeView, makeMaterial({0.72f, 0.80f, 0.90f}, 1.0f, floorRoughness),
                 {0.0f, -0.05f, 0.0f}, {16.0f, 0.1f, 16.0f}, false));
             zoomWorld.Meshes.push_back(MakeBoxInstance(41, zoomSphereView, makeMaterial({1.0f, 0.78f, 0.34f}, 1.0f, 0.22f),
                 {0.0f, 0.50f, 0.0f}, {1.0f, 1.0f, 1.0f}, false));
@@ -1621,7 +1621,8 @@ namespace {
             const float opFloorRelHorizLap = float(opFloorLapSum / std::max(1u, floorCount)) / std::max(opFloorMeanLum, 0.01f);
             const float floorHitCoverage = float(floorHitCount) / float(std::max(1u, floorCount));
 
-            std::cout << "  [U5-F Zoomed Contact] underSSR=" << underSSRCount << "/" << underCount
+            std::cout << "  [U5-F Zoomed Contact] floorRoughness=" << floorRoughness
+                      << " underSSR=" << underSSRCount << "/" << underCount
                       << " underRelLap=" << underRelLap
                       << " opaqueFloorHorizLap=" << opFloorRelHorizLap
                       << " floorHitCov=" << floorHitCoverage

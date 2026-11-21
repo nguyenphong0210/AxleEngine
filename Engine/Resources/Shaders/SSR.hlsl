@@ -595,9 +595,10 @@ float4 PSMain(VSOutput input) : SV_Target {
     bool centerValid = EvaluateSSRTap(
         pixel, roughness, ssrScale, maxDist, projScale, maxConePx, true, centerRadiance, centerWeight);
 
-    // Keep exact single-tap sharp mirror parity at min roughness (0.04); enable cross-bilateral
-    // spatial resolve on glossier surfaces to suppress TAA-off DDA streaking and contour variance.
-    float spatialBlend = smoothstep(0.045, 0.10, roughness);
+    // Keep the single-tap mirror at minimum roughness. Bring in the full
+    // surface-aware resolve on near-mirrors with a finite roughness lobe so
+    // individual screen-space hits do not dominate at grazing contacts.
+    float spatialBlend = smoothstep(0.04, 0.055, roughness);
     float finalWeight = centerWeight;
     float3 finalRadiance = centerRadiance;
 

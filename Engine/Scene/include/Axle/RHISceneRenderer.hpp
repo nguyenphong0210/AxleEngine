@@ -454,6 +454,7 @@ namespace Axle {
 
         // Dynamic six-face reflection probe capture, invalidation & scheduling (M15-U5-B/C/D)
         static std::string ResolveDynamicProbeKey(const RenderReflectionProbe& probe);
+        static std::string ResolveDynamicProbeKey(uint64_t entityID, UUID stableUUID = 0);
         ReflectionCaptureDomainStamps ComputeDynamicCaptureDomainStamps(
             const RenderWorld& world,
             const RenderReflectionProbe& probe,
@@ -464,12 +465,15 @@ namespace Axle {
             const SceneRenderSettings& settings = SceneRenderSettings{},
             const ReflectionCaptureContract::ReflectionCapturePolicy* policyOverride = nullptr);
         void RequestDynamicReflectionCapture(const std::string& probeKey);
+        void RequestDynamicReflectionCapture(uint64_t entityID, UUID stableUUID = 0);
         void RequestDynamicReflectionCapture(const RenderReflectionProbe& probe);
         void InvalidateDynamicReflectionProbe(const std::string& probeKey, const std::string& reason = "manual_invalidation");
+        void InvalidateDynamicReflectionProbe(uint64_t entityID, UUID stableUUID = 0, const std::string& reason = "manual_invalidation");
         void InvalidateDynamicReflectionProbe(const RenderReflectionProbe& probe, const std::string& reason = "manual_invalidation");
         std::shared_ptr<const DynamicReflectionProbeGeneration> GetDynamicReflectionProbe(const std::string& probeKey) const;
         std::shared_ptr<const DynamicReflectionProbeGeneration> GetDynamicReflectionProbe(const RenderReflectionProbe& probe) const;
         std::optional<DynamicReflectionProbeStatus> GetDynamicReflectionProbeStatus(const std::string& probeKey) const;
+        std::optional<DynamicReflectionProbeStatus> GetDynamicReflectionProbeStatus(uint64_t entityID, UUID stableUUID = 0) const;
         std::optional<DynamicReflectionProbeStatus> GetDynamicReflectionProbeStatus(const RenderReflectionProbe& probe) const;
         DynamicReflectionCaptureCacheStats GetDynamicReflectionCaptureCacheStats() const;
         void SetDynamicReflectionCaptureCacheBudget(uint64_t budgetBytes);

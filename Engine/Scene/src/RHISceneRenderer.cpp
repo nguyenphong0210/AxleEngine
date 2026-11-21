@@ -4588,6 +4588,13 @@ namespace Axle {
         return "dynamic:anon:" + std::to_string(px) + ":" + std::to_string(py) + ":" + std::to_string(pz);
     }
 
+    std::string RHISceneRenderer::ResolveDynamicProbeKey(uint64_t entityID, UUID stableUUID) {
+        RenderReflectionProbe key{};
+        key.EntityID = entityID;
+        key.StableUUID = stableUUID;
+        return ResolveDynamicProbeKey(key);
+    }
+
     uint64_t RHISceneRenderer::EffectiveDynamicCaptureBudgetBytes(const SceneRenderSettings& settings) const {
         if (m_HasDynamicCaptureBudgetOverride) {
             return m_DynamicCaptureBudgetOverrideBytes;
@@ -4617,6 +4624,10 @@ namespace Axle {
         }
     }
 
+    void RHISceneRenderer::RequestDynamicReflectionCapture(uint64_t entityID, UUID stableUUID) {
+        RequestDynamicReflectionCapture(ResolveDynamicProbeKey(entityID, stableUUID));
+    }
+
     void RHISceneRenderer::RequestDynamicReflectionCapture(const RenderReflectionProbe& probe) {
         RequestDynamicReflectionCapture(ResolveDynamicProbeKey(probe));
     }
@@ -4634,6 +4645,10 @@ namespace Axle {
             }
             it->second.LastDiagnostic = reason;
         }
+    }
+
+    void RHISceneRenderer::InvalidateDynamicReflectionProbe(uint64_t entityID, UUID stableUUID, const std::string& reason) {
+        InvalidateDynamicReflectionProbe(ResolveDynamicProbeKey(entityID, stableUUID), reason);
     }
 
     void RHISceneRenderer::InvalidateDynamicReflectionProbe(const RenderReflectionProbe& probe, const std::string& reason) {
@@ -4665,6 +4680,11 @@ namespace Axle {
             return std::nullopt;
         }
         return it->second;
+    }
+
+    std::optional<DynamicReflectionProbeStatus> RHISceneRenderer::GetDynamicReflectionProbeStatus(
+        uint64_t entityID, UUID stableUUID) const {
+        return GetDynamicReflectionProbeStatus(ResolveDynamicProbeKey(entityID, stableUUID));
     }
 
     std::optional<DynamicReflectionProbeStatus> RHISceneRenderer::GetDynamicReflectionProbeStatus(

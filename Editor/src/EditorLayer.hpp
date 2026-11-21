@@ -98,11 +98,11 @@ public:
     Axle::RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
 
     struct RenderFXOverride {
-        std::optional<bool> Shadows, SSR, Planar, GTAO, Contact, Bloom, AutoExposure, DDGI, TAA, SSS, HDRViewport, PinRenderFXPopup;
-        std::optional<int> MSAA;
+        std::optional<bool> Shadows, Skybox, SSR, Planar, GTAO, Contact, Bloom, ToneMapping, FXAA, AutoExposure, DDGI, TAA, SSS, HDRViewport, PinRenderFXPopup;
+        std::optional<int> MSAA, ToneMappingMode, ProbeMaxProbes, ProbeMaxFaces;
         std::optional<int> FogOverride; // -1 = scene default, 0 = off, 1 = on
         std::optional<int> FogQuality;
-        std::optional<float> FogTemporalWeight;
+        std::optional<float> FogTemporalWeight, Exposure, PlanarScale;
         std::optional<int> HiZLevel;
     };
     void ApplyRenderFXOverride(const RenderFXOverride& state);
@@ -139,15 +139,32 @@ private:
     bool m_ShowPhysicsDebug = false;
     // Advanced Post-Processing & Lighting Features (Group 1)
     bool m_EnableShadows = true;
+    bool m_EnableSkybox = true;
     bool m_EnableSSR = true;
     bool m_EnablePlanarReflections = true;
+    float m_PlanarReflectionResolutionScale = 0.5f;
+    float m_PlanarReflectionStrength = 1.0f;
+    float m_PlanarReflectionMaxRoughness = 0.45f;
+    int m_ReflectionCaptureMaxProbesPerFrame = 2;
+    int m_ReflectionCaptureMaxFacesPerFrame = 6;
+    int m_ReflectionCaptureCacheBudgetMB = 64;
     bool m_EnableGTAO = true;
     bool m_EnableBloom = true;
     bool m_EnableContactShadows = true;
     std::optional<bool> m_ViewportFogOverride;
     int m_FogQuality = static_cast<int>(Axle::FroxelFogQuality::High);
     float m_FogTemporalWeight = 0.8f;
+    bool m_EnableToneMapping = true;
+    int m_ToneMappingMode = 0;
+    float m_Exposure = 1.0f;
+    float m_Gamma = 2.2f;
+    float m_WhitePoint = 4.0f;
     bool m_EnableAutoExposure = false;
+    float m_AutoExposureMin = 0.1f;
+    float m_AutoExposureMax = 10.0f;
+    float m_AutoExposureSpeed = 3.0f;
+    float m_AutoExposureKeyValue = 0.18f;
+    bool m_EnableFXAA = true;
     std::optional<bool> m_ViewportDDGIOverride;
     bool m_EnableTAA = false;
     bool m_EnableSubsurfaceScattering = true;
@@ -344,4 +361,8 @@ private:
 
     void RenderProjectSettingsModal();
     void RestartEditorWithBackend(const std::string& backendArg);
+    Axle::ProjectRenderSettings BuildEditorProjectRenderSettings() const;
+    void ApplyProjectRenderSettingsToEditor();
+    void SyncEditorRenderSettingsToProject();
+    void ResetRenderFXDefaults();
 };

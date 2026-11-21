@@ -4,6 +4,7 @@
 #include <chrono>
 #include <Axle/TextureDescriptor.hpp>
 #include "EditorLayer.hpp"
+#include <Axle/ProjectRenderSettingsSync.hpp>
 #include <Axle/Application.hpp>
 #include <Axle/Input.hpp>
 #include <Axle/RenderCommand.hpp>
@@ -335,7 +336,10 @@ void EditorLayer::OnAttach() {
     m_PluginsPanel.SetActiveProject(Axle::Project::GetActive(), m_CurrentProjectPath);
 
     if (!m_CurrentProjectPath.empty()) OpenProject(m_CurrentProjectPath);
-    else NewScene();
+    else {
+        NewScene();
+        ApplyProjectRenderSettingsToEditor();
+    }
 
     m_PluginSession = std::make_unique<Axle::PluginProjectSession>(Axle::GetPluginSessionEnvironment());
     std::string pluginError;
@@ -975,6 +979,7 @@ void EditorLayer::NewProject() {
     Axle::AssetManager::SetAssetDirectory(Axle::Project::GetAssetDirectory());
     m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
     m_PluginsPanel.SetActiveProject(project, m_CurrentProjectPath);
+    ApplyProjectRenderSettingsToEditor();
     m_CompileNotificationMessage = "Created project: " + project->GetConfig().Name;
     m_CompileNotificationTimer = 4.0f;
     UpdateWindowTitle();
@@ -1016,6 +1021,7 @@ void EditorLayer::OpenProject(const std::filesystem::path& filepath) {
         Axle::AssetManager::SetAssetDirectory(Axle::Project::GetAssetDirectory());
         m_ContentBrowserPanel.SetRootPath(Axle::Project::GetAssetDirectory());
         m_PluginsPanel.SetActiveProject(project, m_CurrentProjectPath);
+        ApplyProjectRenderSettingsToEditor();
 
         // Load project's StartScene if specified
         const auto& startSceneRel = project->GetConfig().StartScene;
@@ -1515,26 +1521,16 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     // Multi-Pass Scene Rendering (OpenGL vs Direct3D 12 / Vulkan)
     // ----------------------------------------------------
     Axle::SceneRenderSettings renderSettings;
-    renderSettings.EnableShadows = m_EnableShadows;
-    renderSettings.EnableSkybox = true;
-    renderSettings.EnableToneMapping = true;
-    renderSettings.EnableFXAA = !m_EnableTAA;
-    renderSettings.EnableTAA = m_EnableTAA;
-    renderSettings.EnableSubsurfaceScattering = m_EnableSubsurfaceScattering;
-    renderSettings.MSAASamples = static_cast<Axle::u8>(std::clamp(m_MSAASamples, 1, 8));
-    renderSettings.EnableGTAO = m_EnableGTAO;
-    renderSettings.EnableContactShadows = m_EnableContactShadows;
-    renderSettings.EnableSSR = m_EnableSSR;
-    renderSettings.EnablePlanarReflections = m_EnablePlanarReflections;
-    renderSettings.EnableBloom = m_EnableBloom;
     const auto authoredFog = Axle::ExtractVolumetricFog(*m_Scene);
     const auto authoredDDGI = Axle::ExtractDDGIProbeGrid(*m_Scene);
-    renderSettings.EnableVolumetricFog = m_ViewportFogOverride.value_or(authoredFog.has_value());
-    renderSettings.FogQuality = static_cast<Axle::FroxelFogQuality>(
-        std::clamp(m_FogQuality, 0, static_cast<int>(Axle::FroxelFogQuality::Ultra)));
-    renderSettings.FogTemporalWeight = std::clamp(m_FogTemporalWeight, 0.0f, 0.9f);
-    renderSettings.EnableAutoExposure = m_EnableAutoExposure;
-    renderSettings.EnableDDGI = m_ViewportDDGIOverride.value_or(authoredDDGI.has_value());
+    Axle::RenderSettingsSync::ApplyToSceneSettings(
+        BuildEditorProjectRenderSettings(),
+        renderSettings,
+        m_ViewportFogOverride,
+        authoredFog.has_value(),
+        m_ViewportDDGIOverride,
+        authoredDDGI.has_value(),
+        std::nullopt);
     renderSettings.HiZVisualizationLevel = m_HiZVisualizationLevel;
     renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
     renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
@@ -1547,6 +1543,67 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     request.Name = "Editor main view";
     request.CameraCut = m_PendingViewCameraCut || viewCamera != m_LastViewCamera;
     request.DeltaTime = ts.GetSeconds();
+    if (m_SceneState != SceneState::Play && m_Scene) {
+        if (auto selected = m_SceneHierarchyPanel.GetSelectedEntity();
+            selected && m_Scene->GetRegistry().valid((entt::entity)selected) &&
+            selected.HasComponent<Axle::ReflectionProbeComponent>()) {
+            const auto& rpc = selected.GetComponent<Axle::ReflectionProbeComponent>();
+            const glm::mat4 worldMat = m_Scene->GetWorldTransform((entt::entity)selected);
+            auto safeAxis = [](const glm::vec3& col, const glm::vec3& fb) {
+                const float len = glm::length(col);
+                return (std::isfinite(len) && len > 1e-5f) ? (col / len) : fb;
+            };
+            const glm::vec3 ax = safeAxis(glm::vec3(worldMat[0]), {1, 0, 0});
+            const glm::vec3 ay = safeAxis(glm::vec3(worldMat[1]), {0, 1, 0});
+            const glm::vec3 az = safeAxis(glm::vec3(worldMat[2]), {0, 0, 1});
+            const glm::vec3 center = glm::vec3(worldMat[3]) + ax * rpc.BoxOffset.x + ay * rpc.BoxOffset.y + az * rpc.BoxOffset.z;
+            const glm::vec4 coreCol = rpc.Enabled ? glm::vec4(0.22f, 0.90f, 1.0f, 1.0f) : glm::vec4(0.55f, 0.55f, 0.58f, 0.8f);
+            const glm::vec4 blendCol(0.95f, 0.72f, 0.25f, 0.75f);
+            const glm::vec4 crossCol(1.0f, 0.95f, 0.4f, 1.0f);
+            auto emitLine = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec4& c) {
+                request.ExtraDebugLines.push_back(Axle::RenderDebugLine{nullptr, a, b, c});
+            };
+            emitLine(center - ax * 0.25f, center + ax * 0.25f, crossCol);
+            emitLine(center - ay * 0.25f, center + ay * 0.25f, crossCol);
+            emitLine(center - az * 0.25f, center + az * 0.25f, crossCol);
+            auto emitBox = [&](const glm::vec3& half, const glm::vec4& col) {
+                glm::vec3 c[8];
+                for (int i = 0; i < 8; ++i) {
+                    const float sx = (i & 1) ? 1.0f : -1.0f;
+                    const float sy = (i & 2) ? 1.0f : -1.0f;
+                    const float sz = (i & 4) ? 1.0f : -1.0f;
+                    c[i] = center + ax * (sx * half.x) + ay * (sy * half.y) + az * (sz * half.z);
+                }
+                static constexpr int kEdges[12][2] = {
+                    {0,1},{2,3},{4,5},{6,7},
+                    {0,2},{1,3},{4,6},{5,7},
+                    {0,4},{1,5},{2,6},{3,7}
+                };
+                for (const auto& e : kEdges) emitLine(c[e[0]], c[e[1]], col);
+            };
+            auto emitSphere = [&](float rad, const glm::vec4& col) {
+                constexpr int kSegs = 24;
+                for (int s = 0; s < kSegs; ++s) {
+                    const float a0 = (6.283185307f * s) / kSegs;
+                    const float a1 = (6.283185307f * (s + 1)) / kSegs;
+                    const float c0 = std::cos(a0) * rad, s0 = std::sin(a0) * rad;
+                    const float c1 = std::cos(a1) * rad, s1 = std::sin(a1) * rad;
+                    emitLine(center + ax * c0 + ay * s0, center + ax * c1 + ay * s1, col);
+                    emitLine(center + ax * c0 + az * s0, center + ax * c1 + az * s1, col);
+                    emitLine(center + ay * c0 + az * s0, center + ay * c1 + az * s1, col);
+                }
+            };
+            if (rpc.Shape == Axle::ProbeShape::Sphere) {
+                const float r = std::max(std::abs(rpc.Radius), 0.05f);
+                emitSphere(r, coreCol);
+                if (rpc.BlendDistance > 0.01f) emitSphere(r + rpc.BlendDistance, blendCol);
+            } else {
+                const glm::vec3 half = glm::max(glm::abs(rpc.BoxExtents) * 0.5f, glm::vec3(0.05f));
+                emitBox(half, coreCol);
+                if (rpc.BlendDistance > 0.01f) emitBox(half + glm::vec3(rpc.BlendDistance), blendCol);
+            }
+        }
+    }
     if (m_RHIViewport && m_RHIViewport->IsValid()) {
         const bool wantsSSS = m_Scene &&
             Axle::SceneRequiresSubsurfacePass(*m_Scene, renderSettings, renderSettings.MSAASamples);
@@ -1920,46 +1977,95 @@ void EditorLayer::RenderToolbar() {
             auto fxTooltip = [](const char* text) {
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", text);
             };
-            ImGui::TextDisabled("Viewport Post-Processing & Lighting");
+            bool fxChanged = false;
+            ImGui::TextDisabled("Viewport Post-Processing & Lighting (Project-Synced)");
             ImGui::Separator();
-            ImGui::Checkbox("Real-Time Shadows", &m_EnableShadows);
+            fxChanged |= ImGui::Checkbox("Real-Time Shadows", &m_EnableShadows);
             fxTooltip("Enable directional cascaded and local light shadow map passes.");
-            ImGui::Checkbox("Screen-Space Reflections (SSR)", &m_EnableSSR);
+            fxChanged |= ImGui::Checkbox("Skybox & IBL Environment", &m_EnableSkybox);
+            fxTooltip("Enable procedural/HDR skybox rendering and IBL skylight fallback.");
+            fxChanged |= ImGui::Checkbox("Screen-Space Reflections (SSR)", &m_EnableSSR);
             fxTooltip("Real-time screen-space reflections raymarched in depth space with cubemap fallback (requires MSAA 1x).");
-            ImGui::Checkbox("Planar Reflections", &m_EnablePlanarReflections);
+            fxChanged |= ImGui::Checkbox("Planar Reflections", &m_EnablePlanarReflections);
             fxTooltip("Mirrored planar reflections with oblique clipping and SSR/Probe/Sky fallback (requires MSAA 1x).");
-            ImGui::Checkbox("Ambient Occlusion (GTAO)", &m_EnableGTAO);
+            if (m_EnablePlanarReflections) {
+                if (ImGui::SliderFloat("Planar Scale##FXPlanarScale", &m_PlanarReflectionResolutionScale,
+                    Axle::RHI::RHIViewTargets::MinPlanarResolutionScale, Axle::RHI::RHIViewTargets::MaxPlanarResolutionScale, "%.2f")) {
+                    fxChanged = true;
+                }
+                fxTooltip("Offscreen planar mirror resolution scale [0.25..1.0].");
+                if (ImGui::SliderFloat("Planar Strength##FXPlanarStrength", &m_PlanarReflectionStrength, 0.0f, 2.0f, "%.2f")) {
+                    fxChanged = true;
+                }
+                fxTooltip("Global multiplier applied to planar reflection contribution [0..2].");
+                if (ImGui::SliderFloat("Planar Max Roughness##FXPlanarRough", &m_PlanarReflectionMaxRoughness, 0.02f, 1.0f, "%.2f")) {
+                    fxChanged = true;
+                }
+                fxTooltip("Roughness cutoff blending planar reflections toward SSR/Probe/Sky.");
+            }
+            if (ImGui::SliderInt("Probe Max / Frame##FXProbeMax", &m_ReflectionCaptureMaxProbesPerFrame, 1, 8)) {
+                fxChanged = true;
+            }
+            fxTooltip("Maximum number of dynamic reflection probes scheduled per frame [1..8].");
+            if (ImGui::SliderInt("Probe Faces / Frame##FXProbeFaces", &m_ReflectionCaptureMaxFacesPerFrame, 1, 48)) {
+                fxChanged = true;
+            }
+            fxTooltip("Maximum dynamic cubemap faces rendered per frame across active probes [1..48].");
+            if (ImGui::SliderInt("Probe Cache Budget (MB)##FXProbeMB", &m_ReflectionCaptureCacheBudgetMB, 8, 512)) {
+                fxChanged = true;
+            }
+            fxTooltip("VRAM LRU cache budget reserved for dynamic reflection probe captures [8..512 MB].");
+            fxChanged |= ImGui::Checkbox("Ambient Occlusion (GTAO)", &m_EnableGTAO);
             fxTooltip("Half-resolution ground-truth ambient occlusion with spatial bilateral denoise.");
-            ImGui::Checkbox("Contact Shadows", &m_EnableContactShadows);
+            fxChanged |= ImGui::Checkbox("Contact Shadows", &m_EnableContactShadows);
             fxTooltip("Short-range screen-space raymarched contact shadowing against directional light.");
-            ImGui::Checkbox("Subsurface Scattering (SSS)", &m_EnableSubsurfaceScattering);
+            fxChanged |= ImGui::Checkbox("Subsurface Scattering (SSS)", &m_EnableSubsurfaceScattering);
             fxTooltip("Separable screen-space subsurface diffuse scattering for Opaque/Cutout SSS materials (requires MSAA 1x).");
-            ImGui::Checkbox("Physically Based Bloom", &m_EnableBloom);
+            fxChanged |= ImGui::Checkbox("Physically Based Bloom", &m_EnableBloom);
             fxTooltip("6-level progressive HDR downsample/upsample bloom filter.");
             bool fogEnabled = IsViewportFogEnabled();
-            if (ImGui::Checkbox("Volumetric Fog", &fogEnabled)) m_ViewportFogOverride = fogEnabled;
+            if (ImGui::Checkbox("Volumetric Fog", &fogEnabled)) { m_ViewportFogOverride = fogEnabled; fxChanged = true; }
             fxTooltip("3D froxel injected and temporally filtered volumetric scattering (requires MSAA 1x).");
             if (m_ViewportFogOverride.has_value() && ImGui::MenuItem("Use Scene Fog Setting")) {
                 m_ViewportFogOverride.reset();
                 fogEnabled = IsViewportFogEnabled();
+                fxChanged = true;
             }
             if (fogEnabled) {
                 static constexpr const char* kFogQualityItems[] = { "Low", "Medium", "High", "Ultra" };
-                ImGui::Combo("Fog Quality", &m_FogQuality, kFogQualityItems, 4);
+                fxChanged |= ImGui::Combo("Fog Quality", &m_FogQuality, kFogQualityItems, 4);
                 fxTooltip("Froxel grid spatial resolution tier (Low..Ultra).");
                 if (ImGui::SliderFloat("Fog Temporal Weight", &m_FogTemporalWeight, 0.0f, 0.9f, "%.2f")) {
                     m_FogTemporalWeight = std::clamp(m_FogTemporalWeight, 0.0f, 0.9f);
+                    fxChanged = true;
                 }
                 fxTooltip("Temporal reprojection blend factor [0..0.9] suppressing froxel slicing flicker.");
             }
-            ImGui::Checkbox("Auto-Exposure", &m_EnableAutoExposure);
+            fxChanged |= ImGui::Checkbox("Tone Mapping", &m_EnableToneMapping);
+            fxTooltip("Applies HDR-to-display tone mapping in PostProcessPass.");
+            static constexpr const char* kToneMapLabels[] = { "ACES Filmic", "Reinhard", "Uncharted 2", "Linear Bypass" };
+            fxChanged |= ImGui::Combo("Tone Mapper##FXToneMode", &m_ToneMappingMode, kToneMapLabels, 4);
+            fxTooltip("Selects HDR tone mapping curve.");
+            if (ImGui::SliderFloat("Exposure##FXExposure", &m_Exposure, 0.05f, 16.0f, "%.2f")) {
+                fxChanged = true;
+            }
+            fxTooltip("Manual linear EV multiplier [0.05..16] (superseded when Auto-Exposure is enabled).");
+            fxChanged |= ImGui::Checkbox("Auto-Exposure", &m_EnableAutoExposure);
             fxTooltip("Histogram-based automatic luminance adaptation.");
+            if (m_EnableAutoExposure) {
+                if (ImGui::SliderFloat("AE Speed##FXAESpeed", &m_AutoExposureSpeed, 0.05f, 32.0f, "%.2f")) fxChanged = true;
+                if (ImGui::SliderFloat("AE Key##FXAEKey", &m_AutoExposureKeyValue, 0.01f, 2.0f, "%.3f")) fxChanged = true;
+            }
             bool ddgiEnabled = IsViewportDDGIEnabled();
-            if (ImGui::Checkbox("Experimental DDGI", &ddgiEnabled)) m_ViewportDDGIOverride = ddgiEnabled;
+            if (ImGui::Checkbox("Experimental DDGI", &ddgiEnabled)) { m_ViewportDDGIOverride = ddgiEnabled; fxChanged = true; }
             fxTooltip("Uses the scene's enabled DDGI probe grid (requires MSAA 1x). This viewport can temporarily override the scene setting.");
-            if (m_ViewportDDGIOverride.has_value() && ImGui::MenuItem("Use Scene DDGI Setting"))
+            if (m_ViewportDDGIOverride.has_value() && ImGui::MenuItem("Use Scene DDGI Setting")) {
                 m_ViewportDDGIOverride.reset();
-            ImGui::Checkbox("Temporal Anti-Aliasing (TAA)", &m_EnableTAA);
+                fxChanged = true;
+            }
+            fxChanged |= ImGui::Checkbox("FXAA (Single-Sample)", &m_EnableFXAA);
+            fxTooltip("Fast approximate anti-aliasing at MSAA 1x when TAA is disabled.");
+            fxChanged |= ImGui::Checkbox("Temporal Anti-Aliasing (TAA)", &m_EnableTAA);
             fxTooltip("History-reprojected temporal anti-aliasing with reactive/depth rejection; supersedes FXAA at MSAA 1x.");
             static constexpr int kMSAASampleCounts[] = { 1, 2, 4, 8 };
             static constexpr const char* kMSAALabels[] = { "1x (Off)", "2x", "4x", "8x" };
@@ -1969,6 +2075,7 @@ void EditorLayer::RenderToolbar() {
             }
             if (ImGui::Combo("MSAA Samples", &msaaIndex, kMSAALabels, 4)) {
                 m_MSAASamples = kMSAASampleCounts[msaaIndex];
+                fxChanged = true;
             }
             fxTooltip("Hardware multi-sample anti-aliasing [1x..8x]; values > 1x bypass single-sample screen passes.");
             ImGui::Separator();
@@ -1979,23 +2086,13 @@ void EditorLayer::RenderToolbar() {
             }
             fxTooltip("Inspect conservative min-depth Hi-Z mip level in the viewport (-1 disables debug view).");
             if (ImGui::Button("Reset Render FX Defaults")) {
-                m_EnableShadows = true;
-                m_EnableSSR = true;
-                m_EnablePlanarReflections = true;
-                m_EnableGTAO = true;
-                m_EnableBloom = true;
-                m_EnableContactShadows = true;
-                m_ViewportFogOverride.reset();
-                m_FogQuality = static_cast<int>(Axle::FroxelFogQuality::High);
-                m_FogTemporalWeight = 0.8f;
-                m_EnableAutoExposure = false;
-                m_ViewportDDGIOverride.reset();
-                m_EnableTAA = false;
-                m_EnableSubsurfaceScattering = true;
-                m_MSAASamples = 1;
-                m_HiZVisualizationLevel = -1;
+                ResetRenderFXDefaults();
+                fxChanged = true;
             }
-            fxTooltip("Restore standardized Editor viewport Render FX defaults.");
+            fxTooltip("Restore standardized Editor/Runtime Render FX defaults and sync to active ProjectConfig.");
+            if (fxChanged) {
+                SyncEditorRenderSettingsToProject();
+            }
             {
                 const auto policy = Axle::RenderBackendPolicy::FromDevice(Axle::RHI::RHIDevice::Get().GetCapabilities());
                 const auto fallbacks = policy.CollectFallbacks(m_LastRenderSettings);
@@ -2203,30 +2300,39 @@ void EditorLayer::OnImGuiRender() {
                 }
             }
             if (ImGui::BeginMenu("Rendering Features")) {
-                ImGui::MenuItem("Real-Time Shadows", nullptr, &m_EnableShadows);
-                ImGui::MenuItem("Screen-Space Reflections (SSR)", nullptr, &m_EnableSSR);
-                ImGui::MenuItem("Planar Reflections", nullptr, &m_EnablePlanarReflections);
-                ImGui::MenuItem("Ambient Occlusion (GTAO)", nullptr, &m_EnableGTAO);
-                ImGui::MenuItem("Contact Shadows", nullptr, &m_EnableContactShadows);
-                ImGui::MenuItem("Subsurface Scattering (SSS)", nullptr, &m_EnableSubsurfaceScattering);
-                ImGui::MenuItem("Physically Based Bloom", nullptr, &m_EnableBloom);
+                bool fxChanged = false;
+                fxChanged |= ImGui::MenuItem("Real-Time Shadows", nullptr, &m_EnableShadows);
+                fxChanged |= ImGui::MenuItem("Skybox & IBL Environment", nullptr, &m_EnableSkybox);
+                fxChanged |= ImGui::MenuItem("Screen-Space Reflections (SSR)", nullptr, &m_EnableSSR);
+                fxChanged |= ImGui::MenuItem("Planar Reflections", nullptr, &m_EnablePlanarReflections);
+                fxChanged |= ImGui::MenuItem("Ambient Occlusion (GTAO)", nullptr, &m_EnableGTAO);
+                fxChanged |= ImGui::MenuItem("Contact Shadows", nullptr, &m_EnableContactShadows);
+                fxChanged |= ImGui::MenuItem("Subsurface Scattering (SSS)", nullptr, &m_EnableSubsurfaceScattering);
+                fxChanged |= ImGui::MenuItem("Physically Based Bloom", nullptr, &m_EnableBloom);
                 bool fogEnabled = IsViewportFogEnabled();
-                if (ImGui::MenuItem("Volumetric Fog", nullptr, &fogEnabled)) m_ViewportFogOverride = fogEnabled;
-                if (m_ViewportFogOverride.has_value() && ImGui::MenuItem("Use Scene Fog Setting"))
+                if (ImGui::MenuItem("Volumetric Fog", nullptr, &fogEnabled)) { m_ViewportFogOverride = fogEnabled; fxChanged = true; }
+                if (m_ViewportFogOverride.has_value() && ImGui::MenuItem("Use Scene Fog Setting")) {
                     m_ViewportFogOverride.reset();
-                ImGui::MenuItem("Auto-Exposure", nullptr, &m_EnableAutoExposure);
+                    fxChanged = true;
+                }
+                fxChanged |= ImGui::MenuItem("Tone Mapping", nullptr, &m_EnableToneMapping);
+                fxChanged |= ImGui::MenuItem("Auto-Exposure", nullptr, &m_EnableAutoExposure);
                 bool ddgiEnabled = IsViewportDDGIEnabled();
-                if (ImGui::MenuItem("Experimental DDGI", nullptr, &ddgiEnabled)) m_ViewportDDGIOverride = ddgiEnabled;
-                if (m_ViewportDDGIOverride.has_value() && ImGui::MenuItem("Use Scene DDGI Setting"))
+                if (ImGui::MenuItem("Experimental DDGI", nullptr, &ddgiEnabled)) { m_ViewportDDGIOverride = ddgiEnabled; fxChanged = true; }
+                if (m_ViewportDDGIOverride.has_value() && ImGui::MenuItem("Use Scene DDGI Setting")) {
                     m_ViewportDDGIOverride.reset();
-                ImGui::MenuItem("Temporal Anti-Aliasing (TAA)", nullptr, &m_EnableTAA);
+                    fxChanged = true;
+                }
+                fxChanged |= ImGui::MenuItem("FXAA (Single-Sample)", nullptr, &m_EnableFXAA);
+                fxChanged |= ImGui::MenuItem("Temporal Anti-Aliasing (TAA)", nullptr, &m_EnableTAA);
                 if (ImGui::BeginMenu("MSAA Samples")) {
                     for (int count : { 1, 2, 4, 8 }) {
                         const std::string label = count == 1 ? "1x (Off)" : (std::to_string(count) + "x");
-                        if (ImGui::MenuItem(label.c_str(), nullptr, m_MSAASamples == count)) m_MSAASamples = count;
+                        if (ImGui::MenuItem(label.c_str(), nullptr, m_MSAASamples == count)) { m_MSAASamples = count; fxChanged = true; }
                     }
                     ImGui::EndMenu();
                 }
+                if (fxChanged) SyncEditorRenderSettingsToProject();
                 ImGui::EndMenu();
             }
             ImGui::Separator();
@@ -3805,6 +3911,132 @@ void EditorLayer::ClearRHIViewport() {
     }
 }
 
+Axle::ProjectRenderSettings EditorLayer::BuildEditorProjectRenderSettings() const {
+    Axle::ProjectRenderSettings ps;
+    ps.EnableShadows = m_EnableShadows;
+    ps.EnableSkybox = m_EnableSkybox;
+    ps.EnableGTAO = m_EnableGTAO;
+    ps.EnableContactShadows = m_EnableContactShadows;
+    ps.EnableBloom = m_EnableBloom;
+    ps.EnableSubsurfaceScattering = m_EnableSubsurfaceScattering;
+    ps.FogOverride = m_ViewportFogOverride.has_value() ? (*m_ViewportFogOverride ? 1 : 0) : -1;
+    ps.FogQuality = m_FogQuality;
+    ps.FogTemporalWeight = m_FogTemporalWeight;
+    ps.DDGIOverride = m_ViewportDDGIOverride.has_value() ? (*m_ViewportDDGIOverride ? 1 : 0) : -1;
+    ps.EnableToneMapping = m_EnableToneMapping;
+    ps.ToneMappingMode = m_ToneMappingMode;
+    ps.Exposure = m_Exposure;
+    ps.Gamma = m_Gamma;
+    ps.WhitePoint = m_WhitePoint;
+    ps.EnableAutoExposure = m_EnableAutoExposure;
+    ps.AutoExposureMin = m_AutoExposureMin;
+    ps.AutoExposureMax = m_AutoExposureMax;
+    ps.AutoExposureSpeed = m_AutoExposureSpeed;
+    ps.AutoExposureKeyValue = m_AutoExposureKeyValue;
+    ps.EnableFXAA = m_EnableFXAA;
+    ps.EnableTAA = m_EnableTAA;
+    ps.MSAASamples = m_MSAASamples;
+    ps.EnableSSR = m_EnableSSR;
+    ps.EnablePlanarReflections = m_EnablePlanarReflections;
+    ps.PlanarReflectionResolutionScale = m_PlanarReflectionResolutionScale;
+    ps.PlanarReflectionStrength = m_PlanarReflectionStrength;
+    ps.PlanarReflectionMaxRoughness = m_PlanarReflectionMaxRoughness;
+    ps.ReflectionCaptureMaxProbesPerFrame = m_ReflectionCaptureMaxProbesPerFrame;
+    ps.ReflectionCaptureMaxFacesPerFrame = m_ReflectionCaptureMaxFacesPerFrame;
+    ps.ReflectionCaptureCacheBudgetBytes = static_cast<uint64_t>(std::clamp(m_ReflectionCaptureCacheBudgetMB, 8, 512)) * 1024ull * 1024ull;
+    Axle::RenderSettingsSync::ClampProjectRenderSettings(ps);
+    return ps;
+}
+
+void EditorLayer::ApplyProjectRenderSettingsToEditor() {
+    const auto activeProj = Axle::Project::GetActive();
+    Axle::ProjectRenderSettings ps = activeProj
+        ? activeProj->GetConfig().RenderSettings
+        : Axle::ProjectRenderSettings{};
+    Axle::RenderSettingsSync::ClampProjectRenderSettings(ps);
+
+    m_EnableShadows = ps.EnableShadows;
+    m_EnableSkybox = ps.EnableSkybox;
+    m_EnableGTAO = ps.EnableGTAO;
+    m_EnableContactShadows = ps.EnableContactShadows;
+    m_EnableBloom = ps.EnableBloom;
+    m_EnableSubsurfaceScattering = ps.EnableSubsurfaceScattering;
+    if (ps.FogOverride < 0) m_ViewportFogOverride.reset();
+    else m_ViewportFogOverride = (ps.FogOverride != 0);
+    m_FogQuality = ps.FogQuality;
+    m_FogTemporalWeight = ps.FogTemporalWeight;
+    if (ps.DDGIOverride < 0) m_ViewportDDGIOverride.reset();
+    else m_ViewportDDGIOverride = (ps.DDGIOverride != 0);
+
+    m_EnableToneMapping = ps.EnableToneMapping;
+    m_ToneMappingMode = ps.ToneMappingMode;
+    m_Exposure = ps.Exposure;
+    m_Gamma = ps.Gamma;
+    m_WhitePoint = ps.WhitePoint;
+    m_EnableAutoExposure = ps.EnableAutoExposure;
+    m_AutoExposureMin = ps.AutoExposureMin;
+    m_AutoExposureMax = ps.AutoExposureMax;
+    m_AutoExposureSpeed = ps.AutoExposureSpeed;
+    m_AutoExposureKeyValue = ps.AutoExposureKeyValue;
+    m_EnableFXAA = ps.EnableFXAA;
+    m_EnableTAA = ps.EnableTAA;
+    m_MSAASamples = ps.MSAASamples;
+
+    m_EnableSSR = ps.EnableSSR;
+    m_EnablePlanarReflections = ps.EnablePlanarReflections;
+    m_PlanarReflectionResolutionScale = ps.PlanarReflectionResolutionScale;
+    m_PlanarReflectionStrength = ps.PlanarReflectionStrength;
+    m_PlanarReflectionMaxRoughness = ps.PlanarReflectionMaxRoughness;
+    m_ReflectionCaptureMaxProbesPerFrame = ps.ReflectionCaptureMaxProbesPerFrame;
+    m_ReflectionCaptureMaxFacesPerFrame = ps.ReflectionCaptureMaxFacesPerFrame;
+    m_ReflectionCaptureCacheBudgetMB = static_cast<int>(std::clamp<uint64_t>(
+        ps.ReflectionCaptureCacheBudgetBytes / (1024ull * 1024ull), 8ull, 512ull));
+}
+
+void EditorLayer::SyncEditorRenderSettingsToProject() {
+    if (auto activeProj = Axle::Project::GetActive()) {
+        activeProj->GetConfig().RenderSettings = BuildEditorProjectRenderSettings();
+        activeProj->GetConfig().HasAuthoredRenderSettings = true;
+    }
+}
+
+void EditorLayer::ResetRenderFXDefaults() {
+    Axle::ProjectRenderSettings defaults{};
+    m_EnableShadows = defaults.EnableShadows;
+    m_EnableSkybox = defaults.EnableSkybox;
+    m_EnableGTAO = defaults.EnableGTAO;
+    m_EnableContactShadows = defaults.EnableContactShadows;
+    m_EnableBloom = defaults.EnableBloom;
+    m_EnableSubsurfaceScattering = defaults.EnableSubsurfaceScattering;
+    m_ViewportFogOverride.reset();
+    m_FogQuality = defaults.FogQuality;
+    m_FogTemporalWeight = defaults.FogTemporalWeight;
+    m_ViewportDDGIOverride.reset();
+    m_EnableToneMapping = defaults.EnableToneMapping;
+    m_ToneMappingMode = defaults.ToneMappingMode;
+    m_Exposure = defaults.Exposure;
+    m_Gamma = defaults.Gamma;
+    m_WhitePoint = defaults.WhitePoint;
+    m_EnableAutoExposure = defaults.EnableAutoExposure;
+    m_AutoExposureMin = defaults.AutoExposureMin;
+    m_AutoExposureMax = defaults.AutoExposureMax;
+    m_AutoExposureSpeed = defaults.AutoExposureSpeed;
+    m_AutoExposureKeyValue = defaults.AutoExposureKeyValue;
+    m_EnableFXAA = defaults.EnableFXAA;
+    m_EnableTAA = defaults.EnableTAA;
+    m_MSAASamples = defaults.MSAASamples;
+    m_EnableSSR = defaults.EnableSSR;
+    m_EnablePlanarReflections = defaults.EnablePlanarReflections;
+    m_PlanarReflectionResolutionScale = defaults.PlanarReflectionResolutionScale;
+    m_PlanarReflectionStrength = defaults.PlanarReflectionStrength;
+    m_PlanarReflectionMaxRoughness = defaults.PlanarReflectionMaxRoughness;
+    m_ReflectionCaptureMaxProbesPerFrame = defaults.ReflectionCaptureMaxProbesPerFrame;
+    m_ReflectionCaptureMaxFacesPerFrame = defaults.ReflectionCaptureMaxFacesPerFrame;
+    m_ReflectionCaptureCacheBudgetMB = 64;
+    m_HiZVisualizationLevel = -1;
+    SyncEditorRenderSettingsToProject();
+}
+
 void EditorLayer::RenderProjectSettingsModal() {
     if (m_ShowProjectSettingsModal) {
         ImGui::OpenPopup("Project Settings##Modal");
@@ -3927,9 +4159,77 @@ void EditorLayer::RenderProjectSettingsModal() {
 
             ImGui::Spacing();
             ImGui::Separator();
+            if (ImGui::CollapsingHeader("Render Pipeline Defaults (Editor & Runtime Parity)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::TextDisabled("Saved into .axleproj and applied identically by both Editor Viewport and Runtime Player.");
+                bool changed = false;
+
+                ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "Environment & Lighting");
+                changed |= ImGui::Checkbox("Shadows##ProjShadows", &m_EnableShadows);
+                ImGui::SameLine();
+                changed |= ImGui::Checkbox("Skybox & IBL##ProjSkybox", &m_EnableSkybox);
+                changed |= ImGui::Checkbox("GTAO##ProjGTAO", &m_EnableGTAO);
+                ImGui::SameLine();
+                changed |= ImGui::Checkbox("Contact Shadows##ProjContact", &m_EnableContactShadows);
+                changed |= ImGui::Checkbox("Bloom##ProjBloom", &m_EnableBloom);
+                ImGui::SameLine();
+                changed |= ImGui::Checkbox("Subsurface Scattering##ProjSSS", &m_EnableSubsurfaceScattering);
+                const char* fogQualLabels[] = { "Low (80x45x32)", "Medium (120x68x48)", "High (160x90x64)", "Ultra (200x112x96)" };
+                changed |= ImGui::Combo("Volumetric Fog Quality##ProjFogQual", &m_FogQuality, fogQualLabels, 4);
+                changed |= ImGui::SliderFloat("Fog Temporal Blend##ProjFogTemporal", &m_FogTemporalWeight, 0.0f, 0.9f, "%.2f");
+
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "Exposure & Anti-Aliasing");
+                changed |= ImGui::Checkbox("Tone Mapping##ProjToneMap", &m_EnableToneMapping);
+                const char* tmLabels[] = { "ACES Filmic", "Reinhard", "Uncharted 2", "Linear Bypass" };
+                changed |= ImGui::Combo("Tone Mapper##ProjToneMode", &m_ToneMappingMode, tmLabels, 4);
+                changed |= ImGui::SliderFloat("Manual Exposure##ProjExp", &m_Exposure, 0.05f, 16.0f, "%.2f");
+                changed |= ImGui::Checkbox("Auto-Exposure##ProjAE", &m_EnableAutoExposure);
+                if (m_EnableAutoExposure) {
+                    changed |= ImGui::DragFloat("AE Min EV Scale##ProjAEMin", &m_AutoExposureMin, 0.02f, 0.001f, 16.0f, "%.3f");
+                    changed |= ImGui::DragFloat("AE Max EV Scale##ProjAEMax", &m_AutoExposureMax, 0.1f, 0.05f, 64.0f, "%.2f");
+                    changed |= ImGui::DragFloat("AE Adaptation Speed##ProjAESpeed", &m_AutoExposureSpeed, 0.1f, 0.05f, 32.0f, "%.2f");
+                    changed |= ImGui::SliderFloat("AE Key Value##ProjAEKey", &m_AutoExposureKeyValue, 0.01f, 2.0f, "%.3f");
+                }
+                changed |= ImGui::Checkbox("FXAA (Single-Sample)##ProjFXAA", &m_EnableFXAA);
+                ImGui::SameLine();
+                changed |= ImGui::Checkbox("TAA##ProjTAA", &m_EnableTAA);
+                const int msaaVals[] = { 1, 2, 4, 8 };
+                const char* msaaLabels[] = { "1x (Off)", "2x MSAA", "4x MSAA", "8x MSAA" };
+                int msaaIdx = 0;
+                for (int i = 0; i < 4; ++i) if (m_MSAASamples == msaaVals[i]) msaaIdx = i;
+                if (ImGui::Combo("MSAA Samples##ProjMSAA", &msaaIdx, msaaLabels, 4)) {
+                    m_MSAASamples = msaaVals[msaaIdx];
+                    changed = true;
+                }
+
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "Reflections & Probe Capture Scheduling");
+                changed |= ImGui::Checkbox("Screen-Space Reflections (SSR)##ProjSSR", &m_EnableSSR);
+                ImGui::SameLine();
+                changed |= ImGui::Checkbox("Planar Reflections##ProjPlanar", &m_EnablePlanarReflections);
+                changed |= ImGui::SliderFloat("Planar Resolution Scale##ProjPlanarScale", &m_PlanarReflectionResolutionScale,
+                    Axle::RHI::RHIViewTargets::MinPlanarResolutionScale, Axle::RHI::RHIViewTargets::MaxPlanarResolutionScale, "%.2f");
+                changed |= ImGui::SliderFloat("Planar Strength##ProjPlanarStrength", &m_PlanarReflectionStrength, 0.0f, 2.0f, "%.2f");
+                changed |= ImGui::SliderFloat("Planar Max Roughness##ProjPlanarRough", &m_PlanarReflectionMaxRoughness, 0.02f, 1.0f, "%.2f");
+                changed |= ImGui::SliderInt("Probe Max Probes / Frame##ProjProbeCount", &m_ReflectionCaptureMaxProbesPerFrame, 1, 8);
+                changed |= ImGui::SliderInt("Probe Max Faces / Frame##ProjProbeFaces", &m_ReflectionCaptureMaxFacesPerFrame, 1, 48);
+                changed |= ImGui::SliderInt("Probe Cache Budget (MB)##ProjProbeMB", &m_ReflectionCaptureCacheBudgetMB, 8, 512);
+
+                if (ImGui::Button("Reset Render Defaults##ProjResetRender")) {
+                    ResetRenderFXDefaults();
+                    changed = true;
+                }
+                if (changed) {
+                    SyncEditorRenderSettingsToProject();
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
             ImGui::Spacing();
 
             if (ImGui::Button("Save Project", ImVec2(120.0f, 32.0f))) {
+                SyncEditorRenderSettingsToProject();
                 SaveProject();
                 m_ShowProjectSettingsModal = false;
                 ImGui::CloseCurrentPopup();
@@ -3937,6 +4237,7 @@ void EditorLayer::RenderProjectSettingsModal() {
 
             ImGui::SameLine();
             if (ImGui::Button("Save & Restart Now", ImVec2(160.0f, 32.0f))) {
+                SyncEditorRenderSettingsToProject();
                 SaveProject();
                 if (!m_CurrentScenePath.empty()) {
                     SaveScene(m_CurrentScenePath);
@@ -4052,10 +4353,23 @@ void EditorLayer::ApplyRenderFXOverride(const RenderFXOverride& state) {
         if (*state.FogOverride < 0) m_ViewportFogOverride.reset();
         else m_ViewportFogOverride = (*state.FogOverride != 0);
     }
+    if (state.Skybox.has_value()) m_EnableSkybox = *state.Skybox;
+    if (state.ToneMapping.has_value()) m_EnableToneMapping = *state.ToneMapping;
+    if (state.ToneMappingMode.has_value()) m_ToneMappingMode = std::clamp(*state.ToneMappingMode, 0, 3);
+    if (state.Exposure.has_value()) m_Exposure = std::isfinite(*state.Exposure) ? std::clamp(*state.Exposure, 0.05f, 16.0f) : 1.0f;
+    if (state.FXAA.has_value()) m_EnableFXAA = *state.FXAA;
+    if (state.PlanarScale.has_value()) {
+        m_PlanarReflectionResolutionScale = std::isfinite(*state.PlanarScale)
+            ? std::clamp(*state.PlanarScale, Axle::RHI::RHIViewTargets::MinPlanarResolutionScale, Axle::RHI::RHIViewTargets::MaxPlanarResolutionScale)
+            : 0.5f;
+    }
+    if (state.ProbeMaxProbes.has_value()) m_ReflectionCaptureMaxProbesPerFrame = std::clamp(*state.ProbeMaxProbes, 1, 8);
+    if (state.ProbeMaxFaces.has_value()) m_ReflectionCaptureMaxFacesPerFrame = std::clamp(*state.ProbeMaxFaces, 1, 48);
     if (state.HDRViewport.has_value() && m_RHIViewport && m_RHIViewport->IsValid()) {
         m_RHIViewport->SetHDR(*state.HDRViewport);
         ClearRHIViewport();
     }
+    SyncEditorRenderSettingsToProject();
 }
 
 void EditorLayer::SetCameraPose(const glm::vec3& position, const glm::vec3& rotationDeg, bool cameraCut) {

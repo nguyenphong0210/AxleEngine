@@ -704,6 +704,40 @@ namespace Axle::RenderTests {
         RENDER_CHECK(!MaterialCache::FindLoadedMaterial("fx.axleasset"),"replaced file UUID invalidates cached authoring values");return true;
     }
 
+    static bool Test_U10_B1_ReflectionProbeServiceFacadeAndExtraDebugLines() {
+        auto& service = RenderService::Get();
+        service.Shutdown();
+
+        // Stopped/uninitialized RenderService must fail safely without dereferencing null renderer
+        RENDER_CHECK(!service.GetDynamicReflectionProbeStatus(42, 99999ULL).has_value(),
+            "M15-U10-02.3: stopped RenderService safely returns nullopt probe status");
+        const auto emptyStats = service.GetDynamicReflectionCaptureCacheStats();
+        RENDER_CHECK(emptyStats.CachedProbeCount == 0 && emptyStats.PendingJobCount == 0,
+            "M15-U10-02.2: stopped RenderService returns empty probe cache stats");
+        service.RequestDynamicReflectionCapture(42, 99999ULL);
+        service.InvalidateDynamicReflectionProbe(42, 99999ULL, "unit_safe_noop");
+
+        // Dynamic probe key identity prioritizes StableUUID over EntityID cleanly
+        RenderReflectionProbe uuidProbe{};
+        uuidProbe.EntityID = 10u;
+        uuidProbe.StableUUID = 123456789ULL;
+        const std::string keyA = RHISceneRenderer::ResolveDynamicProbeKey(uuidProbe);
+        const std::string keyB = RHISceneRenderer::ResolveDynamicProbeKey(999u, 123456789ULL);
+        RENDER_CHECK(keyA == keyB && keyA.find("dynamic:uuid:") == 0,
+            "M15-U10-02.2: dynamic probe key resolves stably via UUID regardless of ECS handle");
+
+        const std::string entKey = RHISceneRenderer::ResolveDynamicProbeKey(77u, 0ULL);
+        RENDER_CHECK(entKey == "dynamic:entity:77",
+            "M15-U10-02.2: dynamic probe key falls back to entity ID when StableUUID == 0");
+
+        // ViewRequest::ExtraDebugLines carries editor probe shape gizmos cleanly without mutating Scene
+        ViewRequest req;
+        req.ExtraDebugLines.push_back(RenderDebugLine{ nullptr, {0, 0, 0}, {1, 0, 0}, {0.2f, 0.9f, 1.0f, 1.0f} });
+        RENDER_CHECK(req.ExtraDebugLines.size() == 1 && !req.ExtraDebugLines[0].OwnerLease,
+            "M15-U10-02.1: ViewRequest carries editor wireframe debug lines safely");
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
@@ -727,6 +761,7 @@ bool RunRenderServiceUnitTests() {
     if (!Axle::RenderTests::Test_ThumbnailRenderJobAndCacheContracts()) return false;
     if (!Axle::RenderTests::Test_StandaloneRuntimeContracts()) return false;
     if (!Axle::RenderTests::Test_PhysicsDebugAndOverlayContracts()) return false;
+    if (!Axle::RenderTests::Test_U10_B1_ReflectionProbeServiceFacadeAndExtraDebugLines()) return false;
     std::cout << "  [RenderService] All RenderService & ViewRequest unit tests passed.\n";
     return true;
 }

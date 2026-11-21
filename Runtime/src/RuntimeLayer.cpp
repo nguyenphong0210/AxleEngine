@@ -1,5 +1,6 @@
 #include <Axle/AssetManager.hpp>
 #include "RuntimeLayer.hpp"
+#include <Axle/ProjectRenderSettingsSync.hpp>
 #include <Axle/Application.hpp>
 #include <Axle/Package.hpp>
 #include <Axle/SceneSerializer.hpp>
@@ -196,11 +197,20 @@ namespace Axle {
         // 4. Render Scene via unified RenderService
         if (m_Scene) {
             const auto authoredFog = ExtractVolumetricFog(*m_Scene);
+            const auto authoredDDGI = ExtractDDGIProbeGrid(*m_Scene);
+            const auto activeProject = m_PreparedProject ? m_PreparedProject : Project::GetActive();
+            const ProjectRenderSettings projectRender = activeProject
+                ? activeProject->GetConfig().RenderSettings
+                : ProjectRenderSettings{};
             SceneRenderSettings settings;
-            settings.EnableShadows = true;
-            settings.EnableSkybox = true;
-            settings.EnableVolumetricFog = authoredFog && authoredFog->Enabled;
-            settings.EnableDDGI = ExtractDDGIProbeGrid(*m_Scene).has_value();
+            RenderSettingsSync::ApplyToSceneSettings(
+                projectRender,
+                settings,
+                std::nullopt,
+                authoredFog && authoredFog->Enabled,
+                std::nullopt,
+                authoredDDGI && authoredDDGI->Enabled,
+                std::nullopt);
             settings.ShowPhysicsDebug = false;
 
             ViewRequest request;

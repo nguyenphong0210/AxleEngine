@@ -115,6 +115,52 @@ static bool Service(RHIType backend) {
                 RENDER_CHECK(service.RenderView(scene, fog).Success && froxelAllocations == 3 &&
                              ReadTexture(*service.GetDefaultMainColorTarget()) == green,
                     "A zero-intensity component preserves the legacy SDR output byte for byte");
+                scene.DestroyEntity(fogEntity);
+            }
+            {
+                auto probeEntity = scene.CreateEntityWithUUID(88442211ULL, "ServiceProbe");
+                auto& rpc = probeEntity.AddComponent<ReflectionProbeComponent>();
+                rpc.DynamicCapture = true;
+                rpc.CaptureResolution = 32u;
+                rpc.CaptureShadows = false;
+                rpc.CaptureMode = ReflectionProbeCaptureMode::Manual;
+                rpc.BoxExtents = {20.0f, 20.0f, 20.0f};
+                const uint64_t probeEntID = static_cast<uint64_t>(static_cast<uint32_t>(probeEntity));
+                const UUID probeUUID = probeEntity.GetUUID();
+
+                auto probeReq = request;
+                probeReq.Settings.EnableSSR = false;
+                probeReq.Settings.ReflectionCaptureMaxProbesPerFrame = 1;
+                probeReq.Settings.ReflectionCaptureMaxFacesPerFrame = 6;
+                probeReq.ExtraDebugLines.push_back(RenderDebugLine{ nullptr, {0,0,0}, {0.5f,0,0}, {0.2f,0.9f,1.0f,1.0f} });
+                RENDER_CHECK(service.RenderView(scene, probeReq).Success, "U10-B1 cold manual probe view renders cleanly");
+                const auto coldProbeStatus = service.GetDynamicReflectionProbeStatus(probeEntID, probeUUID);
+                RENDER_CHECK(coldProbeStatus && coldProbeStatus->State == DynamicCaptureLifecycleState::Idle &&
+                             coldProbeStatus->ManualRefreshRequired && !coldProbeStatus->HasGeneration,
+                    "U10-B1: RenderService exposes Manual dynamic probe Idle & ManualRefreshRequired status");
+
+                service.RequestDynamicReflectionCapture(probeEntID, probeUUID);
+                RENDER_CHECK(service.RenderView(scene, probeReq).Success, "U10-B1 manual probe capture view executes");
+                const auto readyProbeStatus = service.GetDynamicReflectionProbeStatus(probeEntID, probeUUID);
+                const auto probeCacheStats = service.GetDynamicReflectionCaptureCacheStats();
+                RENDER_CHECK(readyProbeStatus && readyProbeStatus->State == DynamicCaptureLifecycleState::Ready &&
+                             readyProbeStatus->HasGeneration && readyProbeStatus->CompletedFaces == 6u &&
+                             probeCacheStats.CachedProbeCount >= 1u && probeCacheStats.UsedBytes > 0u,
+                    "U10-B1: RequestDynamicReflectionCapture transitions manual probe to Ready and populates cache telemetry");
+
+                service.InvalidateDynamicReflectionProbe(probeEntID, probeUUID, "u10b1_manual_invalidate");
+                const auto staleProbeStatus = service.GetDynamicReflectionProbeStatus(probeEntID, probeUUID);
+                RENDER_CHECK(staleProbeStatus && staleProbeStatus->State == DynamicCaptureLifecycleState::Stale &&
+                             staleProbeStatus->Stale && staleProbeStatus->LastDiagnostic == "u10b1_manual_invalidate",
+                    "U10-B1: InvalidateDynamicReflectionProbe marks active probe Stale with diagnostic note");
+
+                service.RequestDynamicReflectionCapture(probeEntID, probeUUID);
+                RENDER_CHECK(service.RenderView(scene, probeReq).Success, "U10-B1 probe recapture succeeds");
+                const auto recoveredStatus = service.GetDynamicReflectionProbeStatus(probeEntID, probeUUID);
+                RENDER_CHECK(recoveredStatus && recoveredStatus->State == DynamicCaptureLifecycleState::Ready &&
+                             !recoveredStatus->Stale && recoveredStatus->ActiveGenerationID > readyProbeStatus->ActiveGenerationID,
+                    "U10-B1: retry capture recovers Ready generation without leaking stale state");
+                scene.DestroyEntity(probeEntity);
             }
             Scene empty;
             auto emptyRequest = request; emptyRequest.Settings.ClearColor = {0,0,1,1};

@@ -255,7 +255,9 @@ bool FreezeRuntimeBuildRequest(RuntimeBuildRequest& request, std::string& error)
         snapshot->Identity = hash.Text();
         snapshot->SourceIdentity = sourceHash.Text();
         std::ostringstream packaged;
-        packaged << "Project:\n  SchemaVersion: 1\n  Name: " << config.Name << "\n  StartScene: " << PathToUtf8(config.StartScene) << "\n  AssetDirectory: assets\n  RHIBackend: " << config.RHIBackend << "\n  RuntimeSnapshot: " << snapshot->Identity << "\n  Plugins:\n";
+        packaged << "Project:\n  SchemaVersion: 1\n  Name: " << config.Name << "\n  StartScene: " << PathToUtf8(config.StartScene) << "\n  AssetDirectory: assets\n  RHIBackend: " << config.RHIBackend << "\n  RuntimeSnapshot: " << snapshot->Identity << "\n";
+        ProjectSerializer::AppendRenderSettingsYaml(packaged, config.RenderSettings);
+        packaged << "  Plugins:\n";
         for (const auto& id : config.SelectedPlugins) packaged << "    - " << id << '\n';
         snapshot->PackagedProject = packaged.str();
         request.BuildDirectory = request.EngineSourceDirectory / "build/p";

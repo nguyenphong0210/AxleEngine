@@ -412,6 +412,14 @@ private:
                     else if (k == "fog_quality") fx.FogQuality = std::stoi(v);
                     else if (k == "fog_temporal") fx.FogTemporalWeight = std::stof(v);
                     else if (k == "fog") fx.FogOverride = (v == "scene") ? -1 : (asBool() ? 1 : 0);
+                    else if (k == "skybox") fx.Skybox = asBool();
+                    else if (k == "tonemapping") fx.ToneMapping = asBool();
+                    else if (k == "tonemap_mode") fx.ToneMappingMode = std::stoi(v);
+                    else if (k == "exposure") fx.Exposure = std::stof(v);
+                    else if (k == "fxaa") fx.FXAA = asBool();
+                    else if (k == "planar_scale") fx.PlanarScale = std::stof(v);
+                    else if (k == "probe_max_probes") fx.ProbeMaxProbes = std::stoi(v);
+                    else if (k == "probe_max_faces") fx.ProbeMaxFaces = std::stoi(v);
                 }
                 m_Editor->ApplyRenderFXOverride(fx);
             } else if (cmd.Op == "play") {

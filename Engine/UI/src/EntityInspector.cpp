@@ -1298,6 +1298,246 @@ namespace Axle {
             }
         }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
 
+        // Reflection Probe Component (M15-U5 / M15-U10-02.1..02.3)
+        DrawComponent<ReflectionProbeComponent>("Reflection Probe", entity, [&](ReflectionProbeComponent& rpc) {
+            ImGui::Checkbox("Enabled", &rpc.Enabled);
+            inspectTooltip("Enables this reflection probe for local IBL specular and diffuse fallback.");
+
+            if (lightPolicy.GetQualityTier() == BackendQualityTier::Compatibility) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "OpenGL Compatibility: Local reflection probes and dynamic probe captures execute on D3D12 or Vulkan.");
+            } else if (rpc.DynamicCapture && !rpc.CubemapPath.empty()) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "Static CubemapPath is assigned: Dynamic Capture stays idle until CubemapPath is cleared.");
+            }
+
+            const char* shapeItems[] = { "Box", "Sphere" };
+            int shapeIdx = (rpc.Shape == ProbeShape::Sphere) ? 1 : 0;
+            if (ImGui::Combo("Volume Shape", &shapeIdx, shapeItems, 2)) {
+                rpc.Shape = (shapeIdx == 1) ? ProbeShape::Sphere : ProbeShape::Box;
+            }
+            inspectTooltip("Box uses oriented box extents + parallax proxy bounds; Sphere uses radial distance influence.");
+
+            if (rpc.Shape == ProbeShape::Box) {
+                if (ImGui::DragFloat3("Box Extents (m)", glm::value_ptr(rpc.BoxExtents), 0.1f, 0.1f, 5000.0f, "%.2f")) {
+                    rpc.BoxExtents = glm::clamp(glm::vec3(
+                        std::isfinite(rpc.BoxExtents.x) ? rpc.BoxExtents.x : 10.0f,
+                        std::isfinite(rpc.BoxExtents.y) ? rpc.BoxExtents.y : 10.0f,
+                        std::isfinite(rpc.BoxExtents.z) ? rpc.BoxExtents.z : 10.0f), glm::vec3(0.1f), glm::vec3(5000.0f));
+                }
+                inspectTooltip("Full axis extents (width, height, depth) of the probe influence volume in meters.");
+            } else {
+                if (ImGui::DragFloat("Radius (m)", &rpc.Radius, 0.1f, 0.1f, 5000.0f, "%.2f")) {
+                    rpc.Radius = std::isfinite(rpc.Radius) ? std::clamp(rpc.Radius, 0.1f, 5000.0f) : 10.0f;
+                }
+                inspectTooltip("Inner core radius of the spherical probe influence volume in meters.");
+            }
+
+            if (ImGui::DragFloat3("Local Offset (m)", glm::value_ptr(rpc.BoxOffset), 0.05f, -5000.0f, 5000.0f, "%.2f")) {
+                rpc.BoxOffset = glm::clamp(glm::vec3(
+                    std::isfinite(rpc.BoxOffset.x) ? rpc.BoxOffset.x : 0.0f,
+                    std::isfinite(rpc.BoxOffset.y) ? rpc.BoxOffset.y : 0.0f,
+                    std::isfinite(rpc.BoxOffset.z) ? rpc.BoxOffset.z : 0.0f), glm::vec3(-5000.0f), glm::vec3(5000.0f));
+            }
+            inspectTooltip("Local-space offset of the capture origin and influence bounds relative to transform.");
+
+            if (ImGui::DragFloat("Blend Distance (m)", &rpc.BlendDistance, 0.05f, 0.0f, 500.0f, "%.2f")) {
+                rpc.BlendDistance = std::isfinite(rpc.BlendDistance) ? std::clamp(rpc.BlendDistance, 0.0f, 500.0f) : 0.0f;
+            }
+            inspectTooltip("Outer smoothstep falloff margin into neighboring probes/skybox (0 = auto margin).");
+
+            if (ImGui::SliderFloat("Intensity", &rpc.Intensity, 0.0f, 20.0f, "%.2f")) {
+                rpc.Intensity = std::isfinite(rpc.Intensity) ? std::clamp(rpc.Intensity, 0.0f, 20.0f) : 1.0f;
+            }
+            inspectTooltip("Probe radiance intensity multiplier [0..20].");
+
+            ImGui::Checkbox("Parallax Corrected", &rpc.ParallaxCorrected);
+            inspectTooltip("Reprojects specular sample directions against the probe bounds for localized reflections.");
+
+            ImGui::Separator();
+            std::string cubemapDisplay = rpc.CubemapPath.empty() ? "(None - Use Dynamic / Procedural)" : rpc.CubemapPath;
+            ImGui::Text("Baked Cubemap");
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.19f, 0.22f, 1.0f));
+            ImGui::Button((cubemapDisplay + "##ProbeCubemapSlot").c_str(), ImVec2(170.0f, 0.0f));
+            ImGui::PopStyleColor();
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_BROWSER_ITEM")) {
+                    const char* pathStr = static_cast<const char*>(payload->Data);
+                    std::filesystem::path droppedPath(pathStr ? pathStr : "");
+                    std::string ext = droppedPath.extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                    if (ext == ".hdr" || ext == ".exr" || ext == ".png" || ext == ".jpg") {
+                        auto assetDir = FileSystem::GetAssetDirectory();
+                        if (!assetDir.empty()) {
+                            std::error_code ec;
+                            auto rel = std::filesystem::relative(droppedPath, assetDir, ec);
+                            rpc.CubemapPath = (!ec && !rel.empty()) ? PathToUtf8(rel) : PathToUtf8(droppedPath);
+                        } else {
+                            rpc.CubemapPath = PathToUtf8(droppedPath);
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("...##BrowseProbeCubemap")) {
+                std::string selected = FileDialogs::OpenFile("Radiance HDR / Image (*.hdr;*.exr;*.png;*.jpg)\0*.hdr;*.exr;*.png;*.jpg\0All Files (*.*)\0*.*\0");
+                if (!selected.empty()) {
+                    auto assetDir = FileSystem::GetAssetDirectory();
+                    auto chosen = PathFromUtf8(selected);
+                    std::error_code ec;
+                    auto rel = !assetDir.empty() ? std::filesystem::relative(chosen, assetDir, ec) : std::filesystem::path{};
+                    rpc.CubemapPath = (!ec && !rel.empty() && rel.native().rfind(L"..", 0) != 0)
+                        ? PathToUtf8(rel) : selected;
+                }
+            }
+            if (!rpc.CubemapPath.empty()) {
+                ImGui::SameLine();
+                if (ImGui::Button("Clear##ClearProbeCubemap")) {
+                    rpc.CubemapPath.clear();
+                }
+            }
+
+            ImGui::Checkbox("Dynamic Capture", &rpc.DynamicCapture);
+            inspectTooltip("Captures the live scene into a 6-face cubemap with GGX prefiltered mip levels.");
+
+            if (rpc.DynamicCapture) {
+                static constexpr uint32_t kResValues[] = { 32u, 64u, 128u, 256u, 512u };
+                const char* resLabels[] = { "32 x 32", "64 x 64", "128 x 128", "256 x 256", "512 x 512" };
+                int resIdx = 2;
+                for (int i = 0; i < 5; ++i) {
+                    if (rpc.CaptureResolution <= kResValues[i]) { resIdx = i; break; }
+                    resIdx = 4;
+                }
+                if (ImGui::Combo("Capture Resolution", &resIdx, resLabels, 5)) {
+                    rpc.CaptureResolution = kResValues[resIdx];
+                }
+                inspectTooltip("Per-face dynamic cubemap capture resolution [32..512].");
+
+                ImGui::Checkbox("Capture Shadows", &rpc.CaptureShadows);
+                inspectTooltip("Includes shadowed direct lighting while rendering probe faces.");
+
+                if (ImGui::DragFloat("Capture Near", &rpc.CaptureNearPlane, 0.01f, 0.01f, 10.0f, "%.3f")) {
+                    rpc.CaptureNearPlane = std::isfinite(rpc.CaptureNearPlane)
+                        ? std::clamp(rpc.CaptureNearPlane, 0.01f, 10.0f) : 0.1f;
+                    rpc.CaptureFarPlane = std::max(rpc.CaptureFarPlane, rpc.CaptureNearPlane + 0.1f);
+                }
+                if (ImGui::DragFloat("Capture Far", &rpc.CaptureFarPlane, 1.0f, 1.0f, 10000.0f, "%.1f")) {
+                    rpc.CaptureFarPlane = std::isfinite(rpc.CaptureFarPlane)
+                        ? std::clamp(rpc.CaptureFarPlane, std::max(1.0f, rpc.CaptureNearPlane + 0.1f), 10000.0f)
+                        : 100.0f;
+                }
+
+                const char* probeModeItems[] = { "Automatic", "Manual" };
+                int probeModeIdx = (rpc.CaptureMode == ReflectionProbeCaptureMode::Manual) ? 1 : 0;
+                if (ImGui::Combo("Capture Mode", &probeModeIdx, probeModeItems, 2)) {
+                    rpc.CaptureMode = (probeModeIdx == 1)
+                        ? ReflectionProbeCaptureMode::Manual
+                        : ReflectionProbeCaptureMode::Automatic;
+                }
+                inspectTooltip("Automatic schedules incremental recaptures on scene edits; Manual updates only on Capture Now.");
+
+                const uint64_t entityKeyID = static_cast<uint64_t>(static_cast<uint32_t>(entity));
+                const UUID entityUUID = entity.GetUUID();
+                auto& renderService = RenderService::Get();
+                const auto probeStatus = renderService.GetDynamicReflectionProbeStatus(entityKeyID, entityUUID);
+                const auto cacheStats = renderService.GetDynamicReflectionCaptureCacheStats();
+
+                if (probeStatus) {
+                    const char* stateLabel = "Idle";
+                    ImVec4 stateColor(0.70f, 0.72f, 0.76f, 1.0f);
+                    switch (probeStatus->State) {
+                        case DynamicCaptureLifecycleState::Idle:
+                            stateLabel = "Idle";
+                            break;
+                        case DynamicCaptureLifecycleState::Pending:
+                            stateLabel = "Pending";
+                            stateColor = ImVec4(0.38f, 0.80f, 0.98f, 1.0f);
+                            break;
+                        case DynamicCaptureLifecycleState::Ready:
+                            stateLabel = "Ready";
+                            stateColor = ImVec4(0.35f, 0.90f, 0.45f, 1.0f);
+                            break;
+                        case DynamicCaptureLifecycleState::Stale:
+                            stateLabel = "Stale";
+                            stateColor = ImVec4(0.95f, 0.72f, 0.28f, 1.0f);
+                            break;
+                        case DynamicCaptureLifecycleState::Failed:
+                            stateLabel = "Failed";
+                            stateColor = ImVec4(0.95f, 0.35f, 0.35f, 1.0f);
+                            break;
+                    }
+                    ImGui::TextColored(stateColor, "Status: %s (%u/%u faces) | Gen %llu | %.2f MB",
+                        stateLabel,
+                        probeStatus->CompletedFaces,
+                        probeStatus->TotalFaces,
+                        static_cast<unsigned long long>(probeStatus->ActiveGenerationID),
+                        static_cast<double>(probeStatus->CachedBytes) / (1024.0 * 1024.0));
+
+                    if (probeStatus->PendingInvalidation.Any()) {
+                        std::string reasons;
+                        auto appendReason = [&](bool flag, const char* label) {
+                            if (!flag) return;
+                            if (!reasons.empty()) reasons += ", ";
+                            reasons += label;
+                        };
+                        appendReason(probeStatus->PendingInvalidation.TransformChanged, "Transform");
+                        appendReason(probeStatus->PendingInvalidation.SceneRevisionChanged, "SceneRev");
+                        appendReason(probeStatus->PendingInvalidation.GeometryChanged, "Geometry");
+                        appendReason(probeStatus->PendingInvalidation.MaterialChanged, "Material");
+                        appendReason(probeStatus->PendingInvalidation.LightingChanged, "Lighting");
+                        appendReason(probeStatus->PendingInvalidation.AssetChanged, "Asset");
+                        appendReason(probeStatus->PendingInvalidation.SettingsChanged, "Settings");
+                        appendReason(probeStatus->PendingInvalidation.DeviceEpochChanged, "DeviceEpoch");
+                        appendReason(probeStatus->PendingInvalidation.ManualRequested, "Manual");
+                        ImGui::TextDisabled("Dirty Domains: %s", reasons.c_str());
+                    }
+                    if (probeStatus->ManualRefreshRequired) {
+                        ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                            "Manual refresh pending — click Capture Now to recapture.");
+                    }
+                    if (probeStatus->Failed) {
+                        ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f),
+                            "Capture Failed (%u failure(s)): %s",
+                            probeStatus->FailureCount,
+                            probeStatus->LastDiagnostic.empty() ? "unknown capture failure" : probeStatus->LastDiagnostic.c_str());
+                    } else if (!probeStatus->LastDiagnostic.empty()) {
+                        ImGui::TextDisabled("Diagnostic: %s", probeStatus->LastDiagnostic.c_str());
+                    }
+                } else {
+                    ImGui::TextDisabled("Status: Idle (render a frame or click Capture Now)");
+                }
+
+                ImGui::TextDisabled("Scheduler Cache: %u probes | %.1f / %.1f MB | Frame: %u probe(s), %u face(s) | Evictions: %llu",
+                    cacheStats.CachedProbeCount,
+                    static_cast<double>(cacheStats.UsedBytes) / (1024.0 * 1024.0),
+                    static_cast<double>(cacheStats.BudgetBytes) / (1024.0 * 1024.0),
+                    cacheStats.LastScheduledProbes,
+                    cacheStats.LastScheduledFaces,
+                    static_cast<unsigned long long>(cacheStats.EvictionCount));
+                if (m_HasActiveRenderSettings) {
+                    ImGui::TextDisabled("Frame Budget: %u probes/frame | %u faces/frame (Render FX / Project Settings)",
+                        resolvedViewSettings.ReflectionCaptureMaxProbesPerFrame,
+                        resolvedViewSettings.ReflectionCaptureMaxFacesPerFrame);
+                }
+
+                if (ImGui::Button("Capture Now##ProbeCaptureNow")) {
+                    renderService.RequestDynamicReflectionCapture(entityKeyID, entityUUID);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Invalidate##ProbeInvalidate")) {
+                    renderService.InvalidateDynamicReflectionProbe(entityKeyID, entityUUID, "inspector_manual_invalidate");
+                }
+                if (probeStatus && probeStatus->Failed) {
+                    ImGui::SameLine();
+                    if (ImGui::Button("Retry Capture##ProbeRetry")) {
+                        renderService.RequestDynamicReflectionCapture(entityKeyID, entityUUID);
+                    }
+                }
+            }
+        }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
+
         // Camera Component
         DrawComponent<CameraComponent>("Camera", entity, [&](CameraComponent& cam) {
             if (ImGui::DragFloat("Field of View", &cam.FOV, 0.5f, 10.0f, 150.0f, "%.1f deg")) {
@@ -2352,6 +2592,14 @@ namespace Axle {
             "Rendering", "PlanarReflectionComponent", "Single-sided real-time planar mirror reflection plane",
             entity.HasComponent<PlanarReflectionComponent>(), true,
             [&]() { entity.AddComponent<PlanarReflectionComponent>(); }
+        });
+        items.push_back({
+            "Rendering", "ReflectionProbeComponent", "Local box/sphere cubemap reflection volume with dynamic or baked capture",
+            entity.HasComponent<ReflectionProbeComponent>(), true,
+            [&]() {
+                auto& probe = entity.AddComponent<ReflectionProbeComponent>();
+                probe.DynamicCapture = true;
+            }
         });
         items.push_back({
             "Rendering", "SkyboxComponent", "Procedural atmospheric Rayleigh/Mie sky dome",

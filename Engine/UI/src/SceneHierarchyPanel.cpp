@@ -375,6 +375,13 @@ namespace Axle {
                 planar.AddComponent<PlanarReflectionComponent>();
                 m_SelectedEntity = planar;
             }
+            if (ImGui::MenuItem("Reflection Probe")) {
+                auto probeEnt = m_Scene->CreateEntity("Reflection Probe");
+                probeEnt.GetComponent<TransformComponent>().Translation = glm::vec3(0.0f, 2.0f, 0.0f);
+                auto& rpc = probeEnt.AddComponent<ReflectionProbeComponent>();
+                rpc.DynamicCapture = true;
+                m_SelectedEntity = probeEnt;
+            }
             ImGui::EndMenu();
         }
 
@@ -1029,6 +1036,13 @@ namespace Axle {
                     planar.SetParent(entity);
                     planar.AddComponent<PlanarReflectionComponent>();
                     m_SelectedEntity = planar;
+                }
+                if (ImGui::MenuItem("Reflection Probe")) {
+                    auto probeEnt = m_Scene->CreateEntity("Reflection Probe");
+                    probeEnt.SetParent(entity);
+                    auto& rpc = probeEnt.AddComponent<ReflectionProbeComponent>();
+                    rpc.DynamicCapture = true;
+                    m_SelectedEntity = probeEnt;
                 }
                 ImGui::EndMenu();
             }

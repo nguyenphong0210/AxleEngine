@@ -276,7 +276,36 @@ namespace {
         auto scenePath=root/"save.axlescene", assemblyPath=root/"save.axle", projectPath=root/"test.axleproj";
         CHECK(serializer.Serialize(scenePath));
         CHECK(AssemblySerializer::Serialize(assemblyPath,entity));
-        auto project=std::make_shared<Project>(); ProjectSerializer writer(project); CHECK(writer.Serialize(projectPath));
+        auto project=std::make_shared<Project>();
+        auto& rs = project->GetConfig().RenderSettings;
+        rs.EnableShadows = false;
+        rs.EnableSkybox = false;
+        rs.EnableToneMapping = true;
+        rs.ToneMappingMode = 2;
+        rs.Exposure = 2.25f;
+        rs.EnableAutoExposure = true;
+        rs.AutoExposureMin = 0.2f;
+        rs.AutoExposureMax = 12.0f;
+        rs.EnableFXAA = false;
+        rs.EnableTAA = true;
+        rs.MSAASamples = 4;
+        rs.EnableSSR = false;
+        rs.EnablePlanarReflections = true;
+        rs.PlanarReflectionResolutionScale = 0.75f;
+        rs.ReflectionCaptureMaxProbesPerFrame = 4;
+        rs.ReflectionCaptureMaxFacesPerFrame = 18;
+        rs.ReflectionCaptureCacheBudgetBytes = 128ull * 1024ull * 1024ull;
+        ProjectSerializer writer(project); CHECK(writer.Serialize(projectPath));
+        auto reloadedProject = std::make_shared<Project>();
+        ProjectSerializer reader(reloadedProject); CHECK(reader.Deserialize(projectPath));
+        const auto& lrs = reloadedProject->GetConfig().RenderSettings;
+        CHECK(reloadedProject->GetConfig().HasAuthoredRenderSettings &&
+              !lrs.EnableShadows && !lrs.EnableSkybox && lrs.EnableToneMapping && lrs.ToneMappingMode == 2 &&
+              std::abs(lrs.Exposure - 2.25f) < 1e-4f && lrs.EnableAutoExposure && !lrs.EnableFXAA && lrs.EnableTAA &&
+              lrs.MSAASamples == 4 && !lrs.EnableSSR && lrs.EnablePlanarReflections &&
+              std::abs(lrs.PlanarReflectionResolutionScale - 0.75f) < 1e-4f &&
+              lrs.ReflectionCaptureMaxProbesPerFrame == 4 && lrs.ReflectionCaptureMaxFacesPerFrame == 18 &&
+              lrs.ReflectionCaptureCacheBudgetBytes == 128ull * 1024ull * 1024ull);
         uint64_t sceneID=0; CHECK(FileSystem::ReadFileIdentity(scenePath,sceneID));
         CHECK(serializer.Serialize(scenePath)); uint64_t next=0; CHECK(FileSystem::ReadFileIdentity(scenePath,next) && next==sceneID);
 #ifdef _WIN32

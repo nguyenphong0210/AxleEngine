@@ -1309,6 +1309,8 @@ namespace Axle {
             out.EnableAutoExposure = false;
             out.EnableTAA = false;
             out.EnableSSR = policy.AllowSSR;
+            out.EnablePlanarReflections = false;
+            out.EnableSubsurfaceScattering = false;
             out.EnableGTAO = false;
             out.EnableContactShadows = false;
             out.EnableVolumetricFog = false;
@@ -4722,6 +4724,10 @@ namespace Axle {
             bool hasDepth,
             const RenderVolumetricFog* fog) {
             SceneRenderSettings settings = resolvedSettings;
+            if (isSubCapture) {
+                settings.EnablePlanarReflections = false;
+                settings.EnableSubsurfaceScattering = false;
+            }
             bool enableFroxelTargets = false;
             uint8_t froxelQuality = RHI::RHIViewTargets::DefaultFroxelQualityTier;
             FroxelFogContract::ResolveViewTargetOptions(
@@ -4761,9 +4767,9 @@ namespace Axle {
             desc.EnableSubsurface = wantsSSS;
             desc.EnableGTAO = resolvedSettings.EnableGTAO || resolvedSettings.EnableContactShadows;
             desc.EnableHiZ = resolvedSettings.EnableSSR || resolvedSettings.HiZVisualizationLevel >= 0;
-            desc.EnableReflectionTerms =
-                (resolvedSettings.EnableSSR || resolvedSettings.EnablePlanarReflections) && activeSampleCount == 1u;
             const bool enablePlanarTargets = resolvedSettings.EnablePlanarReflections && !input.IsSubCapture;
+            desc.EnableReflectionTerms =
+                (resolvedSettings.EnableSSR || enablePlanarTargets) && activeSampleCount == 1u;
             desc.EnablePlanarReflection = enablePlanarTargets;
             desc.PlanarResolutionScale = enablePlanarTargets
                 ? std::clamp(resolvedSettings.PlanarReflectionResolutionScale,
@@ -4785,7 +4791,7 @@ namespace Axle {
                 desc.EnableVolumetricFog, desc.FroxelQuality, input.VolumetricFog);
 
             desc.EnableNormal = desc.EnableGTAO || resolvedSettings.EnableSSR ||
-                resolvedSettings.EnablePlanarReflections || desc.EnableSubsurface;
+                enablePlanarTargets || desc.EnableSubsurface;
             desc.EnableScreenStorage = desc.EnableGTAO || resolvedSettings.EnableSSR;
             desc.HDR = resolvedSettings.EnableToneMapping || desc.EnableReflectionTerms ||
                 (desc.EnableVolumetricFog && FroxelFogContract::RequiresLinearColor(resolvedSettings, input.VolumetricFog));

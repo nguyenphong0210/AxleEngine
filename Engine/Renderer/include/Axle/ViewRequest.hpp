@@ -7,6 +7,7 @@
 #include <Axle/SceneRenderSettings.hpp>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace Axle {
     class PhysicsScene;
@@ -35,8 +36,9 @@ namespace Axle {
         // OpenGL target destination (for GL compatibility mode):
         std::shared_ptr<Framebuffer> GLTargetFBO;
 
-        // Optional physics debug scene:
+        // Optional physics debug scene and editor/tool wireframe lines:
         PhysicsScene* PhysicsScene = nullptr;
+        std::vector<RenderDebugLine> ExtraDebugLines;
 
         std::string Name = "DefaultView";
         bool CameraCut = false; // Set on the first request after a discontinuous camera change.

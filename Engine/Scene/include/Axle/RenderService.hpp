@@ -89,6 +89,10 @@ namespace Axle {
         PlanarReflectionCacheStats GetPlanarReflectionCacheStats() const;
         void RequestPlanarReflectionCapture(uint64_t entityID, UUID stableUUID = 0);
         void InvalidatePlanarReflection(uint64_t entityID, UUID stableUUID = 0, const std::string& reason = "manual_invalidation");
+        std::optional<DynamicReflectionProbeStatus> GetDynamicReflectionProbeStatus(uint64_t entityID, UUID stableUUID = 0) const;
+        DynamicReflectionCaptureCacheStats GetDynamicReflectionCaptureCacheStats() const;
+        void RequestDynamicReflectionCapture(uint64_t entityID, UUID stableUUID = 0);
+        void InvalidateDynamicReflectionProbe(uint64_t entityID, UUID stableUUID = 0, const std::string& reason = "manual_invalidation");
 
         // Capabilities and honest diagnostics
         RendererCapabilities GetActiveCapabilities() const;

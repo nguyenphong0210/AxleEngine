@@ -191,6 +191,30 @@ namespace Axle {
         else report.OwnerDiagnostic = "Native render-worker ownership is enabled";
         return report;
     }
+    std::optional<DynamicReflectionProbeStatus> RenderService::GetDynamicReflectionProbeStatus(
+        uint64_t entityID, UUID stableUUID) const {
+        if (!m_RHIRenderer) return std::nullopt;
+        return m_RHIRenderer->GetDynamicReflectionProbeStatus(entityID, stableUUID);
+    }
+
+    DynamicReflectionCaptureCacheStats RenderService::GetDynamicReflectionCaptureCacheStats() const {
+        if (!m_RHIRenderer) return {};
+        return m_RHIRenderer->GetDynamicReflectionCaptureCacheStats();
+    }
+
+    void RenderService::RequestDynamicReflectionCapture(uint64_t entityID, UUID stableUUID) {
+        if (m_RHIRenderer) {
+            m_RHIRenderer->RequestDynamicReflectionCapture(entityID, stableUUID);
+        }
+    }
+
+    void RenderService::InvalidateDynamicReflectionProbe(
+        uint64_t entityID, UUID stableUUID, const std::string& reason) {
+        if (m_RHIRenderer) {
+            m_RHIRenderer->InvalidateDynamicReflectionProbe(entityID, stableUUID, reason);
+        }
+    }
+
     RendererCapabilities RenderService::GetActiveCapabilities() const {
         const auto& device = RHI::RHIDevice::Get();
         if (m_RHIRenderer && device.IsNativeReady() && m_Epoch == device.GetEpoch()) {
@@ -212,6 +236,12 @@ namespace Axle {
         if (!Init()) return fail("RenderService backend/context is unavailable");
         // Resource resolution happens after extraction, on owned records only.
         auto prepared = world;
+        if (!request.ExtraDebugLines.empty()) {
+            prepared.DebugLines.insert(
+                prepared.DebugLines.end(),
+                request.ExtraDebugLines.begin(),
+                request.ExtraDebugLines.end());
+        }
         auto meshKey = [](const RenderMeshInstance& mesh) {
             auto key = std::to_string(FileSystem::GetSourceGeneration()) + ":" + mesh.MeshURI;
             if (mesh.Source) return key + ":source:" + std::to_string(MeshSourceRevision(*mesh.Source));

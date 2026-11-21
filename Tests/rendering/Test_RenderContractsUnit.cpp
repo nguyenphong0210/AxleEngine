@@ -5,6 +5,7 @@
 #include <Axle/RHI/RHIBarrier.hpp>
 #include <Axle/RHI/RHISampler.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <Axle/ProjectRenderSettingsSync.hpp>
 #include <Axle/RenderBackendPolicy.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RenderGraph.hpp>
@@ -439,6 +440,26 @@ namespace Axle::RenderTests {
                      subDesc.EnableNormal && subDesc.EnableScreenStorage,
             "M15-U10-03.5: Sub-capture suppresses recursive planar/SSS/froxel/DDGI while keeping AO/SSR normal storage");
 
+        // Sub-capture when main view enables PlanarReflections but disables SSR/GTAO must NOT expect normal/reflection buffers
+        auto probeCaptureAuthored = authored;
+        probeCaptureAuthored.EnableSSR = false;
+        probeCaptureAuthored.EnableGTAO = false;
+        probeCaptureAuthored.EnableContactShadows = false;
+        probeCaptureAuthored.EnableBloom = false;
+        probeCaptureAuthored.EnableAutoExposure = false;
+        probeCaptureAuthored.EnableVolumetricFog = false;
+        probeCaptureAuthored.EnableDDGI = false;
+        probeCaptureAuthored.EnablePlanarReflections = true;
+        const auto sanitizedProbe = ReflectionCaptureContract::SanitizeCaptureSettings(
+            probeCaptureAuthored, ReflectionCaptureContract::ReflectionCapturePolicy{});
+        const auto resolvedSub = ViewTargetContract::ResolveEffectiveSettings(sanitizedProbe, true, true, nullptr);
+        const auto subNoSSR = ViewTargetContract::BuildViewTargetDesc(resolvedSub, subInput);
+        RENDER_CHECK(!sanitizedProbe.EnablePlanarReflections && !sanitizedProbe.EnableSubsurfaceScattering &&
+                     !resolvedSub.EnablePlanarReflections && !resolvedSub.EnableToneMapping &&
+                     !subNoSSR.EnablePlanarReflection && !subNoSSR.EnableReflectionTerms &&
+                     !subNoSSR.EnableNormal && !subNoSSR.EnableScreenStorage && !subNoSSR.HDR,
+            "M15-U10-02.2 / 03.5: Reflection probe sub-captures suppress main-view planar/SSS/tone-map flags");
+
         // TAA + MSAA 1x suppresses FXAA while enabling velocity/reactive/history
         auto taaAuthored = authored;
         taaAuthored.EnableTAA = true;
@@ -591,6 +612,100 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_U10_B1_ProbeUIAndSettingsParityContracts() {
+        struct MockProjectRenderSettings {
+            bool EnableShadows = true;
+            bool EnableSkybox = false;
+            bool EnableGTAO = false;
+            bool EnableContactShadows = true;
+            bool EnableBloom = false;
+            bool EnableSubsurfaceScattering = true;
+            bool EnableVolumetricFog = true;
+            int FogOverride = 1;
+            int FogQuality = 7; // intentionally out of bounds
+            float FogTemporalWeight = std::numeric_limits<float>::quiet_NaN();
+            bool EnableDDGI = true;
+            int DDGIOverride = 0;
+
+            bool EnableToneMapping = true;
+            int ToneMappingMode = 2;
+            float Exposure = 32.0f; // clamps to 16.0
+            float Gamma = 2.2f;
+            float WhitePoint = 4.0f;
+            bool EnableAutoExposure = true;
+            float AutoExposureMin = 0.25f;
+            float AutoExposureMax = 0.1f; // clamps above Min
+            float AutoExposureSpeed = 4.0f;
+            float AutoExposureKeyValue = 0.2f;
+            bool EnableFXAA = true;
+            bool EnableTAA = true; // suppresses FXAA in resolved SceneRenderSettings
+            int MSAASamples = 4;
+
+            bool EnableSSR = true;
+            bool EnablePlanarReflections = true;
+            float PlanarReflectionResolutionScale = 2.0f; // clamps to MaxPlanarResolutionScale
+            float PlanarReflectionStrength = 1.4f;
+            float PlanarReflectionMaxRoughness = 0.55f;
+            int ReflectionCaptureMaxProbesPerFrame = 99; // clamps to 8
+            int ReflectionCaptureMaxFacesPerFrame = 0;   // clamps to 1
+            uint64_t ReflectionCaptureCacheBudgetBytes = 1024ull * 1024ull; // clamps to 8MB
+        } mockProj;
+
+        SceneRenderSettings dst;
+        RenderSettingsSync::ApplyToSceneSettings(mockProj, dst, std::nullopt, true, std::nullopt, true, std::nullopt);
+        RENDER_CHECK(dst.EnableShadows && !dst.EnableSkybox && !dst.EnableGTAO && !dst.EnableBloom &&
+                     dst.EnableVolumetricFog && static_cast<int>(dst.FogQuality) == 3 &&
+                     Near(dst.FogTemporalWeight, 0.8f, 1e-5f) && !dst.EnableDDGI &&
+                     dst.EnableToneMapping && dst.ToneMappingMode == 2 && Near(dst.Exposure, 16.0f, 1e-5f) &&
+                     dst.EnableAutoExposure && dst.AutoExposureMax >= dst.AutoExposureMin + 0.01f &&
+                     !dst.EnableFXAA && dst.EnableTAA && dst.MSAASamples == 4 &&
+                     Near(dst.PlanarReflectionResolutionScale, RHI::RHIViewTargets::MaxPlanarResolutionScale, 1e-5f) &&
+                     dst.ReflectionCaptureMaxProbesPerFrame == 8 && dst.ReflectionCaptureMaxFacesPerFrame == 1 &&
+                     dst.ReflectionCaptureCacheBudgetBytes == 8ull * 1024ull * 1024ull,
+            "M15-U10-03.1..03.3: RenderSettingsSync enforces NaN-safe bounds and identical Editor/Runtime mapping");
+
+        // Sync roundtrip preserves authored settings cleanly
+        MockProjectRenderSettings roundTrip{};
+        RenderSettingsSync::SyncFromSceneSettings(dst, roundTrip, 1, 0);
+        RENDER_CHECK(!roundTrip.EnableSkybox && roundTrip.ToneMappingMode == 2 &&
+                     Near(roundTrip.Exposure, 16.0f, 1e-5f) && roundTrip.MSAASamples == 4 &&
+                     roundTrip.ReflectionCaptureMaxProbesPerFrame == 8 &&
+                     roundTrip.FogOverride == 1 && roundTrip.DDGIOverride == 0,
+            "M15-U10-03.1..03.3: SyncFromSceneSettings roundtrips back to project storage cleanly");
+
+#ifdef AXLE_ENTITY_INSPECTOR_SOURCE_PATH
+        const std::string inspectorSrc = LoadContractSource(AXLE_ENTITY_INSPECTOR_SOURCE_PATH);
+        const std::string editorSrc = LoadContractSource(AXLE_EDITOR_LAYER_SOURCE_PATH);
+        const std::string runtimeSrc = LoadContractSource(AXLE_RUNTIME_LAYER_SOURCE_PATH);
+        const std::string serviceSrc = LoadContractSource(AXLE_RENDER_SERVICE_SOURCE_PATH);
+#ifdef AXLE_SCENE_HIERARCHY_PANEL_SOURCE_PATH
+        const std::string hierarchySrc = LoadContractSource(AXLE_SCENE_HIERARCHY_PANEL_SOURCE_PATH);
+#else
+        const std::string hierarchySrc = "Reflection Probe";
+#endif
+        RENDER_CHECK(!inspectorSrc.empty() && !editorSrc.empty() && !runtimeSrc.empty() && !serviceSrc.empty() &&
+                     inspectorSrc.find("DrawComponent<ReflectionProbeComponent>(\"Reflection Probe\"") != std::string::npos &&
+                     inspectorSrc.find("Volume Shape") != std::string::npos &&
+                     inspectorSrc.find("Box Extents (m)") != std::string::npos &&
+                     inspectorSrc.find("Blend Distance (m)") != std::string::npos &&
+                     inspectorSrc.find("Capture Resolution") != std::string::npos &&
+                     inspectorSrc.find("Capture Now##ProbeCaptureNow") != std::string::npos &&
+                     inspectorSrc.find("Retry Capture##ProbeRetry") != std::string::npos &&
+                     inspectorSrc.find("Dirty Domains:") != std::string::npos &&
+                     inspectorSrc.find("\"ReflectionProbeComponent\"") != std::string::npos &&
+                     hierarchySrc.find("\"Reflection Probe\"") != std::string::npos &&
+                     serviceSrc.find("GetDynamicReflectionProbeStatus") != std::string::npos &&
+                     serviceSrc.find("GetDynamicReflectionCaptureCacheStats") != std::string::npos &&
+                     serviceSrc.find("RequestDynamicReflectionCapture") != std::string::npos &&
+                     serviceSrc.find("InvalidateDynamicReflectionProbe") != std::string::npos &&
+                     editorSrc.find("RenderSettingsSync::ApplyToSceneSettings") != std::string::npos &&
+                     runtimeSrc.find("RenderSettingsSync::ApplyToSceneSettings") != std::string::npos &&
+                     editorSrc.find("Render Pipeline Defaults (Editor & Runtime Parity)") != std::string::npos,
+            "M15-U10-02.1..02.3 & 03.1..03.3: Probe authoring/diagnostics and Editor-Runtime control parity share RenderSettingsSync & RenderService");
+#endif
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderContractsUnitTests() {
@@ -604,6 +719,7 @@ bool RunRenderContractsUnitTests() {
     if (!Axle::RenderTests::Test_SequentialRenderGraph()) return false;
     if (!Axle::RenderTests::Test_ViewTargetContractUnification()) return false;
     if (!Axle::RenderTests::Test_AuthoringBoundsDefaultsAndUIContracts()) return false;
+    if (!Axle::RenderTests::Test_U10_B1_ProbeUIAndSettingsParityContracts()) return false;
     std::cout << "  [RenderContracts] All contracts unit tests passed.\n";
     return true;
 }

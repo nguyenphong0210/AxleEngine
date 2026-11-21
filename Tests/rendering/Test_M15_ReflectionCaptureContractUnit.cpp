@@ -75,6 +75,26 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         "valid close clip planes are preserved without silent widening");
     std::cout << "[M15ReflectionCapture] Running Milestone 15 Unit 5 Batch B (Dynamic Reflection Capture) Contract Tests...\n";
 
+    {
+        constexpr uint32_t size = 16;
+        const auto projection = glm::perspectiveRH_ZO(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
+        const auto inverse = glm::inverse(projection);
+        const float planeDepth = SSRRaymarchContract::ProjectViewToUVZ(glm::vec3(0, 0, -4), projection).z;
+        SSRRaymarchContract::RaySetup ray;
+        ray.StartUVZ = {0.2f, 0.5f, planeDepth - 0.01f};
+        ray.EndUVZ = {0.8f, 0.5f, planeDepth + 0.01f};
+        ray.StartView = SSRRaymarchContract::ReconstructViewPos(ray.StartUVZ, ray.StartUVZ.z, inverse);
+        ray.EndView = SSRRaymarchContract::ReconstructViewPos(ray.EndUVZ, ray.EndUVZ.z, inverse);
+        ray.OriginView = ray.StartView;
+        ray.MaxDistance = 10.0f;
+        ray.Valid = true;
+        const std::vector<std::vector<float>> pyramid{std::vector<float>(size * size, planeDepth)};
+        const auto hit = SSRRaymarchContract::TraceHiZDepthBuffer(pyramid, size, size, ray,
+            projection, inverse, 0.05f, 64);
+        RENDER_CHECK(hit.Hit && std::abs(hit.HitUV.x - 0.5f) < 0.03f && hit.Confidence > 0.0f,
+            "M15-U5-39.7: SSR refines a continuous plane at minimum ray thickness");
+    }
+
     // 1. M15-U5-08.1 / 08.2: Target allocation & policy contract
     {
         ReflectionCapturePolicy policy;

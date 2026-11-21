@@ -180,7 +180,7 @@ bool TrySampleContinuousHiZ0Depth(float2 sampleUV, uint2 baseSize, float safeThi
     if (dMax >= 0.9999 || dMin <= 0.0) return false;
     float zAtMin = ReconstructViewPos(sampleUV, dMin).z;
     float zAtMax = ReconstructViewPos(sampleUV, dMax).z;
-    float maxContDiff = clamp(abs(zAtMin) * 0.08 + 0.05, 0.05, min(safeThickness * 0.65, 0.35));
+    float maxContDiff = min(abs(zAtMin) * 0.08 + 0.05, min(safeThickness * 0.65, 0.35));
     if (abs(zAtMin - zAtMax) > maxContDiff) return false;
     outDepth = lerp(lerp(d00, d10, fx), lerp(d01, d11, fx), fy);
     return true;

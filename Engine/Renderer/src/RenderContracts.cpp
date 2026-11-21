@@ -1908,7 +1908,7 @@ namespace Axle {
                 if (dMax >= 0.9999f || dMin <= 0.0f) return false;
                 const float zAtMin = ReconstructViewPos(sampleUV, dMin, invProjZO).z;
                 const float zAtMax = ReconstructViewPos(sampleUV, dMax, invProjZO).z;
-                const float maxContDiff = std::clamp(std::abs(zAtMin) * 0.08f + 0.05f, 0.05f, std::min(safeThickness * 0.65f, 0.35f));
+                const float maxContDiff = std::min({std::abs(zAtMin) * 0.08f + 0.05f, safeThickness * 0.65f, 0.35f});
                 if (std::abs(zAtMin - zAtMax) > maxContDiff) return false;
                 outDepth = glm::mix(glm::mix(d00, d10, fx), glm::mix(d01, d11, fx), fy);
                 return true;

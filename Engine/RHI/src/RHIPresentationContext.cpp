@@ -5,7 +5,6 @@
 #include <Axle/RHI/RHISampler.hpp>
 #include <Axle/RHI/RHITexture.hpp>
 #include <Axle/RHI/RHIBuffer.hpp>
-#include <cstring>
 #include <limits>
 #include <utility>
 
@@ -164,20 +163,21 @@ namespace Axle::RHI {
         FrameCaptureCallback captureCallback;
         RHIBuffer captureReadback;
         uint64_t captureRowPitch = 0;
-        const bool isBGRA = (format == nri::Format::BGRA8_UNORM);
+        const bool isBGRA = format == nri::Format::BGRA8_UNORM;
         if (state.PendingCapture) {
-            auto pending = std::move(state.PendingCapture); state.PendingCapture = {};
+            captureCallback = std::exchange(state.PendingCapture, {});
+            if (!isBGRA && format != nri::Format::RGBA8_UNORM && format != nri::Format::RGBA8_SRGB)
+                return abandon();
             const auto& limits = device.GetNRICore().GetDeviceDesc(*device.GetNRIDevice()).memoryAlignment;
             auto align = [](uint64_t n, uint32_t a) { return a ? (n + a - 1) / a * a : n; };
             captureRowPitch = align(uint64_t(width) * 4u, limits.uploadBufferTextureRow);
             const uint64_t slicePitch = align(captureRowPitch * height, limits.uploadBufferTextureSlice);
             RHIBufferDesc rbDesc; rbDesc.Size = slicePitch; rbDesc.MemoryLocation = RHIMemoryLocation::HostReadback;
             rbDesc.DebugName = "PresentationCaptureReadback";
-            if (state.EnsureCaptureTarget(width, height, format) && state.CaptureColor.GetRTV() &&
-                captureRowPitch <= (std::numeric_limits<uint32_t>::max)() && captureReadback.Init(rbDesc) &&
-                commands.KeepAlive(state.CaptureColor.AcquireLease()) && commands.KeepAlive(captureReadback.AcquireLease())) {
-                captureCallback = std::move(pending);
-            }
+            if (!state.EnsureCaptureTarget(width, height, format) || !state.CaptureColor.GetRTV() ||
+                captureRowPitch > (std::numeric_limits<uint32_t>::max)() || !captureReadback.Init(rbDesc) ||
+                !commands.KeepAlive(state.CaptureColor.AcquireLease()) || !commands.KeepAlive(captureReadback.AcquireLease()))
+                return abandon();
         }
 
         if (captureCallback) {
@@ -252,28 +252,23 @@ namespace Axle::RHI {
             state.Slot = (state.Slot + 1) % static_cast<uint32_t>(state.Frames.size());
         }
         if (captureCallback) {
-            if ((completion == before || device.WaitForCompletion(completion)) && captureReadback.IsValid()) {
-                if (const auto* mapped = static_cast<const uint8_t*>(captureReadback.Map())) {
-                    std::vector<uint8_t> rgba8(size_t(width) * height * 4u);
-                    for (uint32_t y = 0; y < height; ++y) {
-                        const uint8_t* srcRow = mapped + y * captureRowPitch;
-                        uint8_t* dstRow = rgba8.data() + size_t(y) * width * 4u;
-                        if (isBGRA) {
-                            for (uint32_t x = 0; x < width; ++x) {
-                                dstRow[x * 4u + 0u] = srcRow[x * 4u + 2u];
-                                dstRow[x * 4u + 1u] = srcRow[x * 4u + 1u];
-                                dstRow[x * 4u + 2u] = srcRow[x * 4u + 0u];
-                                dstRow[x * 4u + 3u] = 255u;
-                            }
-                        } else {
-                            std::memcpy(dstRow, srcRow, size_t(width) * 4u);
-                            for (uint32_t x = 0; x < width; ++x) dstRow[x * 4u + 3u] = 255u;
-                        }
-                    }
-                    captureReadback.Unmap();
-                    captureCallback(width, height, rgba8);
+            if (completion == before || !device.WaitForCompletion(completion))
+                return RHIPresentOutcome::Failed;
+            std::vector<uint8_t> rgba8(size_t(width) * height * 4u);
+            const auto* mapped = static_cast<const uint8_t*>(captureReadback.Map());
+            if (!mapped) return RHIPresentOutcome::Failed;
+            for (uint32_t y = 0; y < height; ++y) {
+                const uint8_t* srcRow = mapped + y * captureRowPitch;
+                uint8_t* dstRow = rgba8.data() + size_t(y) * width * 4u;
+                for (uint32_t x = 0; x < width; ++x) {
+                    dstRow[x * 4u + 0u] = srcRow[x * 4u + (isBGRA ? 2u : 0u)];
+                    dstRow[x * 4u + 1u] = srcRow[x * 4u + 1u];
+                    dstRow[x * 4u + 2u] = srcRow[x * 4u + (isBGRA ? 0u : 2u)];
+                    dstRow[x * 4u + 3u] = 255u;
                 }
             }
+            captureReadback.Unmap();
+            captureCallback(width, height, rgba8);
         }
         if (presented) { ++state.Presented; return RHIPresentOutcome::Presented; }
         return state.SwapChain.NeedsResize() ? RHIPresentOutcome::RebuildRequired : RHIPresentOutcome::Failed;

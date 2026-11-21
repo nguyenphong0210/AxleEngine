@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -118,6 +119,7 @@ bool WritePngRGBA8(const std::filesystem::path& path, uint32_t width, uint32_t h
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
     if (!file) return false;
     file.write(reinterpret_cast<const char*>(png.data()), static_cast<std::streamsize>(png.size()));
+    file.close();
     return file.good();
 }
 
@@ -234,8 +236,9 @@ bool CaptureTextureRGBA8(RHI::RHITexture* texture, uint32_t& outW, uint32_t& out
 
 class VisualCaptureLayer final : public Layer {
 public:
-    VisualCaptureLayer(std::shared_ptr<EditorLayer> editor, std::filesystem::path planPath)
-        : Layer("VisualCaptureLayer"), m_Editor(std::move(editor)), m_PlanPath(std::move(planPath)) {
+    VisualCaptureLayer(std::shared_ptr<EditorLayer> editor, std::filesystem::path planPath, bool& completed)
+        : Layer("VisualCaptureLayer"), m_Editor(std::move(editor)), m_PlanPath(std::move(planPath)),
+          m_Completed(completed) {
         LoadPlan();
     }
 
@@ -244,7 +247,15 @@ public:
     }
 
     void OnImGuiRender() override {
-        if (m_Done) return;
+        if (m_Completed) return;
+        if (m_CaptureSaved) {
+            if (!*m_CaptureSaved) {
+                if (--m_CaptureFramesRemaining == 0)
+                    throw std::runtime_error("VisualCapture: no Editor frame readback for " + m_CapturePath.string());
+                return;
+            }
+            m_CaptureSaved.reset();
+        }
         if (m_WaitFrames > 0) {
             --m_WaitFrames;
             if (m_WaitFrames > 0) return;
@@ -262,9 +273,13 @@ public:
                 const auto outPath = ResolveOutput(cmd.Args);
                 auto* rc = Application::Get().GetRenderContext();
                 if (!rc) throw std::runtime_error("VisualCapture: missing ApplicationRenderContext");
-                rc->RequestNextFrameCapture([outPath](uint32_t w, uint32_t h, const std::vector<uint8_t>& rgba8) {
+                m_CapturePath = outPath;
+                m_CaptureSaved = std::make_shared<bool>(false);
+                m_CaptureFramesRemaining = 8;
+                rc->RequestNextFrameCapture([outPath, saved = m_CaptureSaved](uint32_t w, uint32_t h, const std::vector<uint8_t>& rgba8) {
                     if (!WritePngRGBA8(outPath, w, h, rgba8))
                         throw std::runtime_error("VisualCapture: failed writing Editor PNG to " + outPath.string());
+                    *saved = true;
                     AXLE_INFO("VISUAL_CAPTURE_EDITOR path={0} size={1}x{2}", outPath.string(), w, h);
                 });
                 m_WaitFrames = 1;
@@ -295,13 +310,13 @@ public:
                 continue;
             }
             if (cmd.Op == "quit") {
-                m_Done = true;
+                m_Completed = true;
                 Application::Get().Close();
                 return;
             }
         }
-        if (m_Cursor >= m_Commands.size() && !m_Done) {
-            m_Done = true;
+        if (m_Cursor >= m_Commands.size()) {
+            m_Completed = true;
             Application::Get().Close();
         }
     }
@@ -313,7 +328,10 @@ private:
     std::vector<Command> m_Commands;
     size_t m_Cursor = 0;
     int m_WaitFrames = 2;
-    bool m_Done = false;
+    std::filesystem::path m_CapturePath;
+    std::shared_ptr<bool> m_CaptureSaved;
+    unsigned m_CaptureFramesRemaining = 0;
+    bool& m_Completed;
 
     static bool IsRenderPhaseCommand(const std::string& op) {
         return op == "wait" || op == "capture_editor" || op == "capture_viewport" || op == "assert_no_errors" || op == "quit";
@@ -339,7 +357,7 @@ private:
     }
 
     void ProcessImmediateCommands() {
-        if (m_Done || m_WaitFrames > 0) return;
+        if (m_Completed || m_WaitFrames > 0 || m_CaptureSaved) return;
         while (m_Cursor < m_Commands.size()) {
             const auto& cmd = m_Commands[m_Cursor];
             if (IsRenderPhaseCommand(cmd.Op)) break;
@@ -428,8 +446,9 @@ private:
 
 std::shared_ptr<Layer> CreateEditorVisualCaptureLayer(
     std::shared_ptr<EditorLayer> editor,
-    const std::filesystem::path& planPath) {
-    return std::make_shared<VisualCaptureLayer>(std::move(editor), planPath);
+    const std::filesystem::path& planPath,
+    bool& completed) {
+    return std::make_shared<VisualCaptureLayer>(std::move(editor), planPath, completed);
 }
 
 } // namespace Axle

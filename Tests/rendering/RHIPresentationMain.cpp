@@ -21,6 +21,15 @@ static bool Native(RHIType backend) {
     RENDER_CHECK(present.Init(window.GetNativeWindow()), "one real NRI window owner");
     for (int i = 0; i < 4; ++i)
         RENDER_CHECK(present.RenderFrame(160, 120, true) == RHIPresentOutcome::Presented, "standalone clear and present without ImGui");
+    unsigned captures = 0;
+    bool validCapture = false;
+    present.RequestNextFrameCapture([&](uint32_t width, uint32_t height, const std::vector<uint8_t>& rgba) {
+        ++captures;
+        validCapture = width == 160 && height == 120 && rgba.size() == size_t(width) * height * 4u &&
+            rgba[0] > 0 && rgba[0] < rgba[1] && rgba[1] < rgba[2] && rgba[3] == 255;
+    });
+    RENDER_CHECK(present.RenderFrame(160, 120, true) == RHIPresentOutcome::Presented && captures == 1 && validCapture,
+        "successful GPU readback returns the presented clear color in RGBA order");
     unsigned creates = 0;
     {
         ScopedRHIFault observe([&](std::string_view operation) -> std::optional<nri::Result> {
@@ -58,12 +67,14 @@ static bool Native(RHIType backend) {
     }
     RENDER_CHECK(present.RenderFrame(224, 144, false) == RHIPresentOutcome::Presented, "present recovery rebuilds behind completion");
     const auto completed = present.GetPresentCount();
+    present.RequestNextFrameCapture([&](uint32_t, uint32_t, const std::vector<uint8_t>&) { ++captures; });
     {
         ScopedRHIFault failed([](std::string_view operation) -> std::optional<nri::Result> {
             if (operation == "QueueSubmit") return nri::Result::FAILURE; return {};
         });
-        RENDER_CHECK(present.RenderFrame(224, 144, false) == RHIPresentOutcome::Failed && present.GetPresentCount() == completed,
-            "failed shared submission never reaches presentation");
+        RENDER_CHECK(present.RenderFrame(224, 144, false) == RHIPresentOutcome::Failed &&
+                     present.GetPresentCount() == completed && captures == 1,
+            "failed submission neither presents nor publishes capture readback bytes");
     }
     RENDER_CHECK(present.Shutdown(), "checked presenter teardown before native window destruction");
     return device.Shutdown();

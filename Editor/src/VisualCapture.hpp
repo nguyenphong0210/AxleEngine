@@ -8,5 +8,6 @@ namespace Axle {
     class Layer;
     std::shared_ptr<Layer> CreateEditorVisualCaptureLayer(
         std::shared_ptr<EditorLayer> editor,
-        const std::filesystem::path& planPath);
+        const std::filesystem::path& planPath,
+        bool& completed);
 }

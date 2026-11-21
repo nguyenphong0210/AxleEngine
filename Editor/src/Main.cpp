@@ -311,6 +311,7 @@ int EditorMain(int argc, char** argv) {
         }
     } deviceCleanup;
     try {
+        bool captureCompleted = false;
         class PhysicsApplicationService final : public Axle::IApplicationService {
         public:
             const char* GetName() const override { return "Physics"; }
@@ -444,8 +445,10 @@ int EditorMain(int argc, char** argv) {
             if (verifyPluginWorkflow) { editorLayer->VerifyPluginWorkflow(); app->Close(); }
             else if (verifySimulation) editorLayer->VerifySimulationContract();
             else {
-                if (!capturePlanPath.empty()) app->PushLayer(Axle::CreateEditorVisualCaptureLayer(editorLayer, capturePlanPath));
+                if (!capturePlanPath.empty()) app->PushLayer(Axle::CreateEditorVisualCaptureLayer(editorLayer, capturePlanPath, captureCompleted));
                 if (!app->Run()) throw std::runtime_error("Editor rendering or presentation failed");
+                if (!capturePlanPath.empty() && !captureCompleted)
+                    throw std::runtime_error("Editor closed before the capture plan completed");
             }
             AXLE_INFO("Main: Application run loop completed, now destroying app object...");
         }

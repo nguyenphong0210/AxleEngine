@@ -23,8 +23,7 @@ M15 Lighting and Material Fidelity
       ├─ U8 Post and temporal
       ├─ U9 Advanced materials
       ├─ U10 Authoring and pre-refactor baseline acceptance
-      ├─ U11 Architecture refactor, frame pipelining and transient aliasing
-      └─ U12 Material Graph Studio and advanced raster material parity
+      └─ U11 Architecture refactor, frame pipelining and transient aliasing
           └─ each Unit contains independently buildable/checkable SubUnits
               └─ high-risk SubUnits contain focused WorkItems with their own evidence
 ```
@@ -442,19 +441,9 @@ TAA owns current/previous transforms, jitter, motion policy, history validity/ge
 - Material Graph emits the same advanced fields or reports explicit unsupported scope.
 - Native asset/component/runtime/GPU/Inspector/Preview use matching defaults and clamps.
 
-### U12 Material Graph Studio
-
-The Studio is a Dear ImGui Editor workspace. The node canvas owns pointer input, view transforms, selection, layout and transaction boundaries. The material asset layer owns `MaterialGraphDocument`, the node registry, typed connections, stable identities and canonical serialization. It uses the native graph asset format shared with textual authoring. Layout changes update the document without changing the shader key. A drag commits one undoable edit. Canvas2D in M19 is the in-game UI system and has an independent runtime and asset format.
-
-Keep the working revision private to the Studio. Semantic edits produce immutable validation/compile inputs. The existing IR, HLSL lowering, compiler and program cache serve native Preview and Scene. Each request captures the document identity, semantic revision, target and device generation. Publish a fully ready program only while the request is current. Finalize native bindings on the RHI owning thread and retain referenced generations through completion. An invalid revision retains the last compatible Preview, shows its diagnostics and leaves the committed asset intact. Save/Apply operates on a validated revision. Parameter value updates use the current program's binding interface where compatible.
-
-The studio's material fixtures use the same `ResolvedSurface`, graph bindings and supported pass variants as Runtime. The graph schema and lowering carry real Clearcoat/Anisotropy values into the shared lighting evaluation. Preserve U9 Sheen and SSS behavior. Transparent refractive graphs use the existing opaque scene color/depth snapshot policy and refraction equations. The graph supplies surface inputs such as opacity, IOR, thickness and optical controls. The renderer owns pass routing, scene snapshot access, depth rejection and fallback. The Preview supplies a reference mesh, lighting and an appropriate opaque background through the published view policy.
-
-Publish support by feature, surface class, view and backend. Report the effective route when compatible scene inputs, MSAA or backend support affect output. Validate the saved graph as an authored asset and include its actual transitive inputs in the existing export path. D3D12 and Vulkan native output is mandatory in U12. M16 adds traced material behavior against the accepted raster fixtures. M21 validates generated bindless routes against that same reference.
-
 ## 11. M16 ray-tracing handoff boundary
 
-M15 supplies canonical `ResolvedSurface`, per-view `ViewContext`, capture/target lifetime and completion rules, material-energy resolve, denoising-history invalidation, raster fallbacks and Studio-authored reference materials. M16 owns capability policy, BLAS/TLAS, RT pipeline/SBT, RT shadows/reflections, unified denoising and optional RT GI.
+M15 supplies canonical `ResolvedSurface`, per-view `ViewContext`, capture/target lifetime and completion rules, material-energy resolve, denoising-history invalidation and the raster fallback chain. [M16 Material Graph Studio](../MILESTONE_16_RAY_TRACING/ARCHITECTURE.md#material-graph-studio) builds on those contracts and accepts authored raster references before the M16 RT phase.
 
 Capability reporting alone is not implementation. Until M16 passes its backend and material-parity gates, RT remains disabled or falls back to planar reflection, SSR, local probes and sky IBL without changing authored scene data.
 
@@ -485,33 +474,16 @@ No tier enables a feature whose data/fallback contract is incomplete.
 
 Every checkpoint supplies exact commit/source/configuration, Debug/Release builds, physical D3D12/Vulkan results, applicable OpenGL/fallback results, validation logs, deterministic images/readbacks, failure/lifetime behavior, hardware/driver/resolution measurements and known limitations.
 
-U10/S10.5 closes the pre-refactor fidelity, authoring and 1080p/1440p baseline.
-U11/S11.5 accepts the renderer architecture, pipelining, transient aliasing and
-post-refactor A/B verification. U12/S12.5 accepts Studio, raster graph parity and
-the detached product on the integrated U0–U12 baseline. Experimental DDGI may be
-separately deferred. M16 tracks RT acceptance.
+U10/S10.5 closes M15 feature fidelity, authoring and the pre-refactor 1080p/1440p
+baseline, while full M15 acceptance requires both `U0-U10` and `U11/S11.5` (Phase
+45.19 architecture, pipelining, transient aliasing and post-refactor A/B verification)
+to pass. Experimental DDGI may be separately deferred; RT is excluded from M15
+acceptance and tracked by M16.
 
 Use the [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md) for the consolidated
 feature, integration, lifecycle, Editor visual and cold/warm baseline audit prior
 to U11, followed by U11's A/B performance/VRAM scorecard, parity, 1,000-frame soak
 and independent source review/recheck gates in [PLAN.md](PLAN.md). Package
-acceptance and architecture-script PASS remain evidence inputs. Full closure requires
-all mandatory final gates on the corrected baseline. PLAN owns the checkbox state,
-and the exchange owns the active release.
-
-## 15. Material Studio gaps against Unreal Engine
-
-The comparison assumes the planned U12 exit. It compares artist-facing and runtime capabilities using Epic's Unreal Engine 5 documentation. The items below are follow-up candidates. Existing Axle capabilities, such as graph parameters, custom shader assets and built-in optical materials, provide a starting point.
-
-| Area | Capability gap after U12 | Axle evidence and Unreal reference |
-|---|---|---|
-| **UV animation and expression library** | Time, Panner/Rotator, vector composition and channel masks, procedural noise and broader coordinate/texture tools. An artist should be able to make a flowing water material with graph nodes. | The built-in graph registry has UV input, a small arithmetic set and texture/normal sampling. [Axle nodes](../../../Engine/Asset/src/BuiltinMaterialNodes.cpp) · [UE expressions](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-material-expressions-reference) · [UE UV animation](https://dev.epicgames.com/documentation/en-us/unreal-engine/animating-uv-coordinates-in-unreal-engine) |
-| **Screen-space distortion** | Graph-controlled masked 2D offsets or a normal-offset mode for heat haze, shockwaves and water, with bounded scene-color/depth access and explicit view policy. U12 covers the declared IOR-based raster glass route. | [Axle refraction contract](REFRACTION_ABSORPTION_POLICY.md) · [UE refraction modes](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-material-properties) |
-| **Height and deformation** | Height-map parallax/POM, Pixel Depth Offset and World Position Offset require distinct contracts. Parallax shifts texture sampling. Pixel Depth Offset changes the depth test. World Position Offset moves vertices and requires bounds plus consistent depth, shadow, motion and picking passes. | Axle's graph vertex and fragment entry points provide the current surface baseline. [Axle graph shader](../../../Engine/Resources/Shaders/MaterialSurface.hlsl) · [UE height-map offset reference](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-bump-offset-in-unreal-engine) · [UE material inputs](https://dev.epicgames.com/documentation/unreal-engine/material-inputs-in-unreal-engine) |
-| **Reusable graphs and layers** | Material Function assets with typed inputs/outputs and dependency revisioning, artist-authored layer/blend stacks and reusable shader-code nodes with declared bindings. Axle can build on its graph registry and custom shader path. | [UE Material Functions](https://dev.epicgames.com/documentation/en-us/unreal-engine/creating-and-using-material-functions-in-unreal-engine) · [UE Material Layers](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-material-layers-in-unreal-engine) · [UE custom expressions](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-material-expressions-reference) |
-| **Material instance workflows** | Parent/child material-instance assets and an override editor, grouped defaults and reset, gameplay-visible dynamic instances and shared parameter collections. U12 proves independent values through the existing graph instance binding. Static switches also require a permutation and cache policy. | [Axle graph instance](../../../Engine/Scene/include/Axle/MaterialGraphRuntime.hpp) · [UE instances](https://dev.epicgames.com/documentation/en-us/unreal-engine/instanced-materials-in-unreal-engine) · [UE parameter collections](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-material-parameter-collections-in-unreal-engine) |
-| **Studio tools and profiling** | Per-node preview, richer graph navigation/organization and refactoring, quality/feature-level preview and per-target shader stats, permutation inventory and compile diagnostics across an asset set. | [UE Material Editor UI](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-material-editor-ui) · [UE Material Analyzer](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-material-analyzer-tool) |
-| **Rendering domains and resources** | Purpose-specific material outputs for decal, UI, post-process, volume or light-function passes. VFX and UI need their own compatible renderer contracts. Streaming and runtime virtual textures need sampler, cook and residency work. M23 already owns decal tooling. | [M23](../MILESTONE_23_MATERIAL_GRAPH_TOOLING/PLAN.md) · [UE material domains](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-material-properties) · [UE virtual texturing](https://dev.epicgames.com/documentation/en-us/unreal-engine/virtual-texturing-in-unreal-engine) |
-| **Broader shading model composition** | Additional shading models and physically composed BSDF layers comparable to Substrate. This affects the material representation, evaluation and renderer passes beyond the fixed raster features in U12. | [UE Substrate](https://dev.epicgames.com/documentation/en-us/unreal-engine/overview-of-substrate-materials-in-unreal-engine) |
-
-Prioritize UV animation, masked screen-space distortion and height-map parallax for the next surface authoring increment. Validate flowing texture, heat haze against an opaque grid and a wall viewed at grazing angle. Specify depth and multi-pass deformation independently before adding Pixel Depth Offset or World Position Offset. Group reusable functions, material instances and shader statistics by their asset and compiler dependencies.
+acceptance and architecture-script PASS remain evidence inputs; full closure requires
+all mandatory final gates on the corrected baseline. This specification does not
+release work or claim review execution. PLAN remains the only checkbox/status authority.

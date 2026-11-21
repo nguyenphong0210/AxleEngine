@@ -7,7 +7,7 @@
 
 ## 1. Starting point and deliverable
 
-Reuse the `.axleui` document, layout, `UIDataContext`, `UICanvasComponent`, renderer and current [Canvas Designer](../../../Engine/UI/src/UICanvasDesignerPanel.cpp). Use [M08 Phase 34](../MILESTONE_08_VFX_RHI_CROSSPLATFORM/PLAN.md) as the historical source baseline and reproduce current behavior before extending it. Deliver a visual editor and shipping UI path for an interactive HUD, with responsive layout, typed data flow, stable UI actions, undo/redo and portable assets. The Material Graph node editor belongs to [M15 U12](../MILESTONE_15_LIGHTING_MATERIALS/PLAN.md#u12-material-graph-studio).
+Reuse the `.axleui` document, layout, `UIDataContext`, `UICanvasComponent`, renderer and current [Canvas Designer](../../../Engine/UI/src/UICanvasDesignerPanel.cpp). Use [M08 Phase 34](../MILESTONE_08_VFX_RHI_CROSSPLATFORM/PLAN.md) as the historical source baseline and reproduce current behavior before extending it. Deliver a visual editor and shipping UI path for an interactive HUD, with responsive layout, typed data flow, stable UI actions, undo/redo and portable assets. The Material Graph node editor belongs to [M16 Material Graph Studio](../MILESTONE_16_RAY_TRACING/PLAN.md#material-graph-studio).
 
 ## 2. Execution and acceptance checklist
 

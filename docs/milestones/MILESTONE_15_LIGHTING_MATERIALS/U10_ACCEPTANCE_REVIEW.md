@@ -190,13 +190,13 @@ baseline source (with `M15-U10-03.5` unifying `RHIViewTargetDesc` across
 and transient-aliasing refactors explicitly scoped to `U11` are tracked as open
 U11 handoff items rather than blocking the U10 baseline freeze, provided all
 U10 runtime validation, lifetime, and parity checks pass.
-Full M15 milestone closure additionally requires U11's post-refactor A/B
-scorecard, visual parity, 1,000-frame soak and independent review/recheck gates,
-then [U12 Studio, raster graph parity and product acceptance](PLAN.md#u12-material-graph-studio).
+Full M15 milestone closure additionally requires `M15-U11` (`S11.1–S11.5`) to
+complete and pass its post-refactor A/B scorecard, visual parity, 1,000-frame
+soak, and independent review/recheck gates in [PLAN.md](PLAN.md).
 
 Promote only verified supported features/presets. Keep failed, incomplete or
 deferred features out of defaults as required by `M15-U10-19.2`. Attach final source
 and evidence to every completed leaf; update derived summaries only from children.
 Earlier automated-only acceptance remains scoped until its required visual gates
-are closed. The final report records the U10 pre-refactor baseline disposition,
-the U11 renderer baseline disposition and full M15 acceptance after U12.
+are closed. The final report explicitly distinguishes U10 pre-refactor baseline
+acceptance, full M15 post-U11 acceptance, and an unaccepted milestone.

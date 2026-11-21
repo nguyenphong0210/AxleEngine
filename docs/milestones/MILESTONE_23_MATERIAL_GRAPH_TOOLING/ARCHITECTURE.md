@@ -2,7 +2,7 @@
 
 ## 1. Graph authoring and shared runtime
 
-Reuse [M15 U12's Studio and graph publication contracts](../MILESTONE_15_LIGHTING_MATERIALS/ARCHITECTURE.md#u12-material-graph-studio) for authoring, diagnostics, preview, native persistence and raster advanced surface nodes. Integrate scene features through the same transaction and asset interfaces. Resolve canonical saved assets and their scene dependencies through M20.
+Reuse [M16's Studio and graph publication contracts](../MILESTONE_16_RAY_TRACING/ARCHITECTURE.md#material-graph-studio) for authoring, diagnostics, preview, native persistence and raster advanced surface nodes. Integrate scene features through the same transaction and asset interfaces. Resolve canonical saved assets and their scene dependencies through M20.
 
 Use the shared compiler and M15 material/surface evaluation across Preview, Scene and Runtime. Verify accepted opaque and refractive graphs with the applicable M21 route policy. Use a matching Forward route when a graph or its resources exceed the visibility path's contract. Surface unsupported combinations in Studio with the effective route.
 

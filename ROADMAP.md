@@ -25,8 +25,8 @@ Task checklists, checkpoints and verification criteria live in each milestone's 
 | **12** | **Architecture Foundation & Boundary Hardening** | **Completed:** Zero-allowance layer enforcement, enkiTS multithreading, Jolt physics decoupling, NRI device epochs, `RenderWorld` snapshot, Plugin SDK, VFS identity, pak cooker.<br>**Open Gates:** 3 final release acceptance gates (Phase 42.10). | [Plan](docs/milestones/MILESTONE_12_ARCHITECTURE_FOUNDATION/PLAN.md) · [Architecture](docs/milestones/MILESTONE_12_ARCHITECTURE_FOUNDATION/ARCHITECTURE.md) |
 | **13** | **Render Concurrency & Shader Compilation Pipeline** | **Completed:** Decoupled Render Thread, transient VRAM memory aliasing, DXC Material Graph compiler & pipeline caching (Phases 43.1–43.2).<br>**Deferred:** Asynchronous parallel command recording rollout (Phase 43.3). | [Plan](docs/milestones/MILESTONE_13_RENDER_CONCURRENCY/PLAN.md) · [Architecture](docs/milestones/MILESTONE_13_RENDER_CONCURRENCY/ARCHITECTURE.md) |
 | **14** | **Render Architecture Refactor** | **Accepted:** U0-U9 final source, ownership contracts, RenderGraph/resource lifetime, service seams, backend/fallback policy, migration tooling and M15 handoff. M15 feature fidelity remains deferred. | [Plan](docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE/PLAN.md) · [Architecture](docs/milestones/MILESTONE_14_RENDER_ARCHITECTURE/ARCHITECTURE.md) · [U9 review](docs/reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md) |
-| **15** | **Lighting & Material Fidelity** | **HOLD:** Raster lighting, reflections, fog, DDGI, post/temporal and the renderer refactor. U12 closes Material Graph Studio and advanced raster graph parity (Phase 45). | [Plan](docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md) · [Architecture](docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/ARCHITECTURE.md) |
-| **16** | **Ray Tracing Backend** | **Proposed:** D3D12/Vulkan capability policy, BLAS/TLAS lifecycle, RT pipeline/SBT, RT shadows/reflections, unified denoising, material parity and explicit raster fallback. | [Plan](docs/milestones/MILESTONE_16_RAY_TRACING/PLAN.md) · [Architecture](docs/milestones/MILESTONE_16_RAY_TRACING/ARCHITECTURE.md) |
+| **15** | **Lighting & Material Fidelity** | **HOLD:** Raster lighting, reflections, fog, DDGI, post/temporal and the renderer refactor. U11-E closes the raster baseline (Phase 45). | [Plan](docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md) · [Architecture](docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/ARCHITECTURE.md) |
+| **16** | **Material Graph Studio & Ray Tracing** | **Proposed:** Studio and D3D12/Vulkan advanced raster material parity first, then BLAS/TLAS, RT pipeline/SBT, RT shadows/reflections, unified denoising, material parity and raster fallback. | [Plan](docs/milestones/MILESTONE_16_RAY_TRACING/PLAN.md) · [Architecture](docs/milestones/MILESTONE_16_RAY_TRACING/ARCHITECTURE.md) |
 | **17** | **Skeletal Animation Studio & Runtime** | **Proposed:** FBX/glTF, native skeletal rendering, clip/controller authoring, blend spaces, sockets, IK, additive layers and offline cross-rig retargeting (Phase 46). | [Plan](docs/milestones/MILESTONE_17_ANIMATION/PLAN.md) · [Architecture](docs/milestones/MILESTONE_17_ANIMATION/ARCHITECTURE.md) |
 | **18** | **Visual FX Studio & GPU Particles** | **Proposed:** Multi-emitter authoring, motion, collision/events, ribbons, mesh particles, shared native indirect foundation and GPU Visual Effect Graph (Phase 47). | [Plan](docs/milestones/MILESTONE_18_VFX/PLAN.md) · [Architecture](docs/milestones/MILESTONE_18_VFX/ARCHITECTURE.md) |
 | **19** | **Canvas2D & In-Game UI Authoring** | **Proposed:** Visual Canvas Designer, responsive layout, UI bindings, input/actions and Runtime HUD (Phase 48). | [Plan](docs/milestones/MILESTONE_19_CANVAS2D/PLAN.md) · [Architecture](docs/milestones/MILESTONE_19_CANVAS2D/ARCHITECTURE.md) |
@@ -54,7 +54,7 @@ flowchart LR
     end
 
     subgraph Era3 ["Ray tracing and content production (M16–M20)"]
-        M16["M16: Ray Tracing<br/>BLAS/TLAS & RT Shading"]
+        M16["M16: Material Graph Studio<br/>Ray Tracing"]
         M17["M17: Animation"]
         M18["M18: VFX"]
         M19["M19: Canvas2D"]
@@ -81,7 +81,7 @@ flowchart LR
 
 ### 2.3. Ray Tracing and Content Production (Milestones 16 through 20)
 
-- M15 U11 accepts the renderer baseline. [M15 U12](docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md#u12-material-graph-studio) closes Studio and raster graph parity, and supplies reference materials to M16. M16 core acceptance at `RT-08D` is the entry baseline for M17. Optional RT work retains its own release boundary.
+- M15 U11-E accepts the renderer baseline. [M16 Material Graph Studio](docs/milestones/MILESTONE_16_RAY_TRACING/PLAN.md#material-graph-studio) accepts the authored raster material reference at MAT-E before RT-01A. M16 core acceptance at `RT-08D` is the entry baseline for M17. Optional RT work retains its own release boundary.
 - M17–M19 add animation, effects and in-game UI. Each domain defines its dependency data and verifies packaging through the existing export path while building the authored fixture.
 - M20 closes shared dependency traversal and publishes the integrated packaged gameplay fixture. M21 uses it as its product baseline.
 

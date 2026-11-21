@@ -1,19 +1,20 @@
-﻿# Milestone 16 — Ray Tracing Backend Plan
+﻿# Milestone 16 — Material Graph Studio and Ray Tracing Plan
 
 **Status** — Execution plan. Implementation starts at the explicitly released package or batch boundary.
-**Baseline** — Accepted M15 source through U12, including the U11-E renderer evidence and U12 Studio-authored raster material fixtures and support matrix.
+**Baseline** — Accepted M15 U11-E source and renderer evidence.
 **Supporting architecture** — [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-M16 adds a capability-safe hardware ray-tracing backend. Every RT feature has a raster fallback and a separate evidence gate. The milestone does not claim support merely because a GPU reports an RT capability bit.
+M16 first ships Material Graph Studio and accepts its advanced raster materials as reference fixtures. The RT phase adds capability-safe hardware shadows and reflections with raster fallbacks and verifies them against the accepted raster reference.
 
 ## 1. Entry gate and execution order
 
-Record the [accepted M15 handoff](../MILESTONE_15_LIGHTING_MATERIALS/PLAN.md#m16-handoff--ray-tracing-backend) before the first M16 implementation checkpoint. Reuse its renderer evidence, reference scenes, raster support matrix and Studio-authored graphs. M16 adds hardware shadows and reflections to the raster renderer. M21 geometry/visibility work and optional `RT-09` have separate release boundaries.
+Record the [accepted M15 handoff](../MILESTONE_15_LIGHTING_MATERIALS/PLAN.md#m16-handoff--ray-tracing-backend) before the first M16 checkpoint. Build and accept Studio on the M15 raster path. MAT-E freezes the authored fixtures and their D3D12/Vulkan support matrix before RT-01A. This staged order gives RT parity and fallback tests a verified reference with the same graph inputs. M21 geometry/visibility work and optional `RT-09` have separate release boundaries.
 
 Package IDs identify feature scope. Batch IDs identify buildable deliveries with a primary owner for each atomic requirement. The batch order brings shader compilation and history forward where another package needs them.
 
 ```text
-M15 U11-E renderer baseline -> M15 U12-E product acceptance
+M15 U11-E renderer baseline
+  -> MAT-A -> MAT-B -> MAT-C -> MAT-D -> MAT-E (Studio and raster acceptance)
   -> RT-01A -> RT-01B -> RT-03A -> RT-01C
   -> RT-02A -> RT-02B -> RT-02C -> RT-02D
   -> RT-03B -> RT-03C
@@ -28,7 +29,17 @@ M15 U11-E renderer baseline -> M15 U12-E product acceptance
 
 ## 2. Execution batches
 
-The **26 core batches** and **2 optional batches** below map each atomic requirement to one primary checkpoint. In the tables, leaf `NN.n` means `M16-RT-NN.n`. The batch gate is required alongside each assigned leaf's PASS conditions.
+The **5 MAT batches**, **26 RT core batches** and **2 optional RT batches** map each atomic requirement to one primary checkpoint. In the RT tables, leaf `NN.n` means `M16-RT-NN.n`. The batch gate is required alongside each assigned leaf's PASS conditions.
+
+### MAT — Material Graph Studio batches
+
+| Batch | SubUnit and atomic leaves | Delivery gate |
+|---|---|---|
+| **MAT-A** | `MAT-01`: `M16-MAT-01.1` → `01.3` | Reproduce the graph baseline. Deliver the document, typed transactions and native asset round-trip through production APIs. |
+| **MAT-B** | `MAT-02`: `M16-MAT-02.1` → `02.3` | Create or open graphs from Content Browser. Verify real palette-to-canvas drag, node move, pin wiring, parameter edits and reopen. |
+| **MAT-C** | `MAT-03`: `M16-MAT-03.1` → `03.3` | Deliver revision-aware live Preview, node diagnostics, and valid asset publication to Scene with safe in-flight lifetime. |
+| **MAT-D** | `MAT-04`: `M16-MAT-04.1` → `04.4` | Verify Clearcoat, Anisotropy, Sheen, SSS and refractive glass through generated raster programs on both native backends. |
+| **MAT-E** | `MAT-05`: `M16-MAT-05.1` → `05.3` | Verify Studio-authored fixtures through Editor and detached Runtime, regress M15 U11-E and accept the raster reference for RT. |
 
 ### RT-01 to RT-03 — Backend and scene integration
 
@@ -76,6 +87,41 @@ The **26 core batches** and **2 optional batches** below map each atomic require
 ## 3. Canonical atomic checklist
 
 This is the single status-bearing checklist. Each item closes on its stated result and evidence from [Section 4](#4-verification-and-evidence). Batch handoffs reference the assigned IDs, the base/head commits and any open findings.
+
+### Material Graph Studio
+
+**Entry** — Accepted M15 U11-E source and evidence. MAT owns the former `M15-U12` scope, including `M23-01` and the raster scope of `M23-02`. Use the Editor's Dear ImGui layer, the native material graph format and the accepted raster Preview/render services. [Architecture](ARCHITECTURE.md#material-graph-studio) · [Unreal capability gaps](ARCHITECTURE.md#8-material-studio-gaps-against-unreal-engine).
+
+#### MAT-01 (MAT-A) — Graph document and asset workflow
+
+- [ ] **M16-MAT-01.1 — Record the starting graph and raster matrix.** Rebuild the graph asset, compiler, resource, runtime and native preview suites on the U11-E source. Record registered nodes/pins, supported generated surface variants and missing routes. Trace native graph create/load/save, current custom shaders and renderer binding.
+- [ ] **M16-MAT-01.2 — Use transactional typed graph edits.** Reuse `MaterialGraphDocument`, registry, IR and validation. Verify valid and invalid connections, cycle rejection, deletion/restoration of connected nodes, no-op edits, one undo step per drag, redo branches and independent working documents.
+- [ ] **M16-MAT-01.3 — Preserve identity, layout and textual interchange.** Save atomically as native `.axleasset`. Verify UUID preservation on save, new UUID on Save As, valid text/visual round-trip, layout-only edits preserving shader identity, and dirty/file guards on reload, failed save, close or project switch.
+
+#### MAT-02 (MAT-B) — Interactive canvas and authoring
+
+- [ ] **M16-MAT-02.1 — Deliver the actual pointer workflow.** Create and open a graph from Content Browser. Search the palette, drag a node onto the canvas, move nodes, pan/zoom, select multiple nodes and drag a wire between typed pins. Verify mismatched pins and illegal cycles leave the graph intact. Verify disconnect, replace and undo/redo through the interactive Editor.
+- [ ] **M16-MAT-02.2 — Author parameters and resource references.** Edit node fields, typed defaults, exposed parameter names/IDs and supported surface settings. Assign textures with explicit color space and sampler. Verify rename preserves references, validation points to the field, and reopening restores the working values and layout.
+- [ ] **M16-MAT-02.3 — Verify graph assignment and independent overrides.** Assign a saved graph to a real material slot in Scene. Verify two consumers of one asset with independent supported parameter overrides and reset-to-default. Round-trip the production binding, validate incompatible overrides and verify parameter-only updates preserve shader identity wherever the existing binding contract allows.
+
+#### MAT-03 (MAT-C) — Live Preview, compilation and publication
+
+- [ ] **M16-MAT-03.1 — Compile and publish revisions safely.** Compile immutable snapshots asynchronously through the existing DXC pipeline and applicable Slang route. Keep pointer interactions responsive during compilation. Distinguish pending, active and failed revisions. Verify stale job completion, device/target change, switch/close during compile and valid → invalid → valid edits. Failed candidates retain the last compatible ready Preview. Retire device generations after the last referencing submission.
+- [ ] **M16-MAT-03.2 — Surface stage and node diagnostics.** Show validation, lowering, resource, shader and route failures with revision and node/pin when attributable. Navigate to the source node and verify unattributed backend failures still identify the stage. Exercise invalid wiring and missing resources and confirm recovery when corrected.
+- [ ] **M16-MAT-03.3 — Use the production material route in Preview and Scene.** Preview a sphere, plane or reference mesh with an appropriate environment and opaque background for glass. Verify Preview does not change the scene-bound asset while editing. Publish validated changes through the saved asset/apply path. Capture expected pixels from Preview and Scene on D3D12 and Vulkan with matched inputs.
+
+#### MAT-04 (MAT-D) — Advanced raster graph parity
+
+- [ ] **M16-MAT-04.1 — Wire Clearcoat and Anisotropy through the graph.** Extend node schema, lowering, bindings, canonical surface data and shader evaluation while preserving existing graph asset behavior. Compare a coated roughness sweep and oriented brushed metal to built-in raster materials under matched direct light and IBL. Vary authored strengths and anisotropy orientation and verify visible response and neutral defaults on both backends.
+- [ ] **M16-MAT-04.2 — Preserve and expose Sheen and SSS.** Keep the existing U9 surface contracts through the final shared lighting path. Author cloth and subsurface fixtures in Studio. Compare supported sheen and SSS responses to built-in references, including SSS at a material/depth boundary and the corresponding Preview, forward and auxiliary variants.
+- [ ] **M16-MAT-04.3 — Deliver generated transparent refractive glass.** Author opacity, refraction controls, IOR, thickness, absorption and Cauchy dispersion on the compatible graph output. Bind the existing opaque scene color/depth snapshots through the shared pass contract. Compare depth rejection, screen edges, plain refraction, tinted absorption, chromatic split and neutral cases against the built-in raster path on D3D12 and Vulkan. Verify unavailable compatible scene input/MSAA fallbacks, and opaque/cutout diagnostics for optical fields.
+- [ ] **M16-MAT-04.4 — Validate the graph support matrix and real pass routing.** Declare supported surface class, feature, blend, view and backend combinations. Exercise the applicable normal, reflection, SSS and transparency paths with real graph programs and resource generations. Cross-check binding flags against observable output. A declared fallback includes its reason and effective route. OpenGL keeps its declared compatibility behavior and reports unsupported graph routes.
+
+#### MAT-05 (MAT-E) — Studio product and pre-RT acceptance
+
+- [ ] **M16-MAT-05.1 — Ship the authored reference set.** Build coated paint, brushed metal, sheen cloth, SSS and glass fixtures from Studio using real textures, graph connections and a visible opaque refraction reference. Save/reopen, assign in Scene, export and run loose and detached Runtime with the current exporter. Record resolved UUIDs, parameters, selected variants, and dependency closure. Exercise a missing referenced asset in a negative package fixture.
+- [ ] **M16-MAT-05.2 — Verify native output, Editor workflow and regression.** Rebuild Editor, Runtime and relevant graph/render/build targets in Debug/Release. Verify physical D3D12 and Vulkan with validation and fallback disabled for native runs. Inspect actual Editor captures of node drag/wiring, real Preview, last-good/error recovery and Scene authoring. Record equivalent rendered samples and freeze tolerance/reference inputs before scoring. Recheck U11 affected parity/lifetime paths and compare steady-state cost to the U11-E baseline with Studio closed.
+- [ ] **M16-MAT-05.3 — Complete consolidated review and handoff.** Record each MAT leaf, production caller, build/backend identity, actual command results, visual/numeric evidence, findings and disposition in `docs/reviews/`. Close required repairs and rechecks. Freeze the accepted source, per-backend support matrix and authored raster fixture set as the RT baseline. Make the same native assets available to M20, M21 and M23.
 
 ### M16-RT-01 — Capability policy and RHI foundation
 
@@ -177,7 +223,7 @@ This is the single status-bearing checklist. Each item closes on its stated resu
 - [ ] **M16-RT-07.2 — Match normal, clearcoat, sheen and transmission policy.**
   - **PASS when** fixtures verify normal map/two-sided behavior, clearcoat and sheen response, and the declared transmission participation or fallback. Compare canonical inputs and evaluated terms to the raster reference where applicable.
 - [ ] **M16-RT-07.3 — Match custom Material Graph support or publish explicit unsupported fields.**
-  - **PASS when** supported graph programs and bindings use the shared contract, unsupported graph fields or programs have specific diagnostics and correct per-effect fallback, and representative cooked assets produce the same effective decisions in Runtime. Use graphs authored in M15 U12 as the raster references for the applicable supported and fallback cases.
+  - **PASS when** supported graph programs and bindings use the shared contract, unsupported graph fields or programs have specific diagnostics and correct per-effect fallback, and representative cooked assets produce the same effective decisions in Runtime. Use graphs authored and accepted at MAT-E as the raster references for the applicable supported and fallback cases.
 - [ ] **M16-RT-07.4 — Validate deterministic RT/raster material comparisons within documented tolerance.**
   - **PASS when** the frozen fixture matrix covers every supported material class and the declared fallback cases on D3D12 and Vulkan. Readback and image tolerances, sample/seed policy and expected visibility differences are documented before scoring.
 
@@ -218,13 +264,13 @@ This is the single status-bearing checklist. Each item closes on its stated resu
 | Gate | Minimum evidence |
 |---|---|
 | Native path and product parity | Strict physical D3D12 and Vulkan in Debug and Release with validation. Cover Editor main/game views, Runtime loose/cooked and the declared Preview, planar and probe-capture policies. Cover Off, Shadows and Reflections plus combination if exposed. Where settings are persisted, prove roundtrip and shared effective settings across Editor and Runtime. |
-| Fallback | Compare against the applicable M15 U11 raster reference for explicit Off, physical non-RT hardware, injected missing capability, OpenGL compatibility and shader/AS/descriptor/budget failure. Include incomplete TLAS coverage with an eligible caster or reflection target omitted. Confirm the intended diagnostic, valid supported remaining effects and recoverable re-enable without mutating the project or scene. |
+| Fallback | Compare against the applicable M15 U11 built-in or MAT-E graph raster reference for explicit Off, physical non-RT hardware, injected missing capability, OpenGL compatibility and shader/AS/descriptor/budget failure. Include incomplete TLAS coverage with an eligible caster or reflection target omitted. Confirm the intended diagnostic, valid supported remaining effects and recoverable re-enable without mutating the project or scene. |
 | Lifecycle and soak | Exercise view/camera switches and cuts, same-size view isolation, rapid resize/minimize/restore, scene/asset replacement, frames in flight and device reset/reinit. Run at least 1,000 steady-state frames on each native backend with RT active. Record validation, generation retirement and bounded resource counts/memory. |
 | Deterministic signals and images | Freeze the fixtures, sample/seed, inputs and per-signal tolerances before scoring. Save hit/miss and identity readbacks, shadow visibility, linear HDR radiance/confidence and final images with manifests. Compare material parity and RT Off against their references. Rerun the independent RT Reflections, off-screen hit lighting and zero-receiver-velocity fixtures on the integrated candidate. |
 | Editor visual inspection | Use the [GPU capture procedure](../../agents/EDITOR_VISUAL_CAPTURE.md) with strict D3D12/Vulkan and validation for Debug/Release. Inspect directional and local contacts, cutout shadows, off-screen reflections on a roughness sweep, movement/disocclusion, and tier switching with fallback diagnostics. Archive viewport and UI captures where relevant and record expected/observed behavior. |
 | Cost and budgets | On each declared RT backend, record Release 1080p/1440p cold startup/compile separately from at least 120 warm-up and 1,000 measured frames per workload. Measure CPU extraction/submission/wait, GPU AS build/update/compaction, dispatch, denoise/resolve and whole-frame `p50/p95/p99/max`. Report committed and peak transient VRAM including AS, scratch, SBT, descriptors, history and overlapping generations. Freeze tolerances and budgets for the declared adapter, fixture and mode after calibration and before scoring the acceptance run. |
-| Consolidated audit | One row per `RT-01`–`RT-08` leaf with scope, implementation and caller paths, evidence, status and finding IDs. Audit ownership, graph dependencies, publication, deferred destruction, shared material evaluation, normal product entry points and failure behavior. Close findings and rerun affected plus required final integrated gates. |
+| Consolidated audit | One row per `RT-01`–`RT-08` leaf with scope, implementation and caller paths, evidence, status and finding IDs. Link MAT-E acceptance and the affected Studio/raster regression results. Audit ownership, graph dependencies, publication, deferred destruction, shared material evaluation, normal product entry points and failure behavior. Close findings and rerun affected plus required final integrated gates. |
 
 ## 5. Exit criteria
 
-M16 core closes at `RT-08D` when every mandatory leaf in `RT-01`–`RT-08` is PASS on the final integrated source and the independent acceptance report links native, fallback, parity, lifecycle, Editor visual and performance evidence. The report records the supported modes/defaults and any verified limits. `RT-09` has its own release and acceptance record.
+MAT-E accepts the Studio and raster reference before the RT phase. M16 core closes at `RT-08D` when that acceptance remains valid, every mandatory leaf in `RT-01`–`RT-08` is PASS and the independent acceptance report links native, fallback, parity, lifecycle, Editor visual and performance evidence on the final integrated source. Recheck the affected Studio and raster paths, including RT Off and applicable graph fallbacks. The report records supported modes/defaults and verified limits. `RT-09` has its own release and acceptance record.

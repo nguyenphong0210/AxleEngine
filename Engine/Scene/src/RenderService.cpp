@@ -271,39 +271,17 @@ namespace Axle {
             }
             if (!color && request.Kind == RenderViewKind::Main) {
                 const auto settings = RenderBackendPolicy::FromDevice(device.GetCapabilities()).ResolveSettings(request.Settings);
-                const auto* fog = prepared.VolumetricFog ? &*prepared.VolumetricFog : nullptr;
-                const auto* ddgi = prepared.DDGIProbeGrid ? &*prepared.DDGIProbeGrid : nullptr;
-                RHI::RHIViewTargetDesc desc;
-                desc.Width = request.Width; desc.Height = request.Height;
-                desc.Samples = settings.MSAASamples;
-                desc.FXAA = settings.EnableFXAA;
-                const bool wantsSSS = Passes::SubsurfaceScatteringPass::SceneRequiresSubsurfacePass(
-                    prepared, settings, settings.MSAASamples);
-                desc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows ||
-                    settings.EnableSSR || settings.EnablePlanarReflections || wantsSSS);
-                desc.EnableSubsurface = wantsSSS;
-                desc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
-                desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
-                desc.EnableBloom = settings.EnableBloom;
-                desc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
-                desc.EnableReflectionTerms = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
-                desc.EnablePlanarReflection = settings.EnablePlanarReflections;
-                desc.PlanarResolutionScale = desc.EnablePlanarReflection
-                    ? std::clamp(settings.PlanarReflectionResolutionScale,
-                                 RHI::RHIViewTargets::MinPlanarResolutionScale,
-                                 RHI::RHIViewTargets::MaxPlanarResolutionScale)
-                    : 0.5f;
-                desc.EnableAutoExposure = settings.EnableAutoExposure;
-                std::array<uint32_t, 3> ddgiDims{0u, 0u, 0u};
-                DDGIContract::ResolveViewTargetOptions(settings, false, ddgi, desc.EnableDDGI, ddgiDims);
-                desc.DDGIGridX = ddgiDims[0];
-                desc.DDGIGridY = ddgiDims[1];
-                desc.DDGIGridZ = ddgiDims[2];
-                FroxelFogContract::ResolveViewTargetOptions(
-                    settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality, fog);
-                desc.HDR = settings.EnableToneMapping || desc.EnableReflectionTerms ||
-                    (desc.EnableVolumetricFog && FroxelFogContract::RequiresLinearColor(settings, fog));
-                if (settings.EnableTAA) { desc.HistoryCount = 2; desc.EnableVelocity = (settings.MSAASamples == 1); desc.EnableReactive = (settings.MSAASamples == 1); }
+                ViewTargetContract::ViewTargetPolicyInput targetInput;
+                targetInput.Width = request.Width;
+                targetInput.Height = request.Height;
+                targetInput.EnableDepth = true;
+                targetInput.OwnPrimary = true;
+                targetInput.IsSubCapture = false;
+                targetInput.WantsSubsurface = Passes::SubsurfaceScatteringPass::SceneRequiresSubsurfacePass(
+                    prepared, settings, std::max<uint8_t>(1u, settings.MSAASamples));
+                targetInput.VolumetricFog = prepared.VolumetricFog ? &*prepared.VolumetricFog : nullptr;
+                targetInput.DDGIProbeGrid = prepared.DDGIProbeGrid ? &*prepared.DDGIProbeGrid : nullptr;
+                const RHI::RHIViewTargetDesc desc = ViewTargetContract::BuildViewTargetDesc(settings, targetInput);
                 if (!m_DefaultMainTargets || !m_DefaultMainTargets->IsValid() || m_DefaultMainTargets->GetDesc() != desc) {
                     auto candidate = std::make_shared<RHI::RHIViewTargets>();
                     if (!candidate->Configure(desc, nullptr, nullptr, RHI::FroxelHistoryPolicy::AllowStaticFog))

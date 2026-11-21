@@ -14,7 +14,9 @@
 #include <Axle/MaterialCache.hpp>
 #include <Axle/SceneRenderBridge.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
 #include <Axle/RenderService.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/Window.hpp>
 #include <Axle/PlatformUtils.hpp>
 #include <Axle/AudioEngine.hpp>
@@ -80,7 +82,9 @@ namespace Axle {
         Entity entity,
         UIFunction uiFunction,
         bool canRemove = true,
-        std::function<void(T&)> onRemove = nullptr
+        std::function<void(T&)> onRemove = nullptr,
+        bool canReset = false,
+        std::function<void(T&)> onReset = nullptr
     ) {
         if (!entity.HasComponent<T>()) {
             return;
@@ -132,8 +136,15 @@ namespace Axle {
         }
 
         if (ImGui::BeginPopup("ComponentSettings")) {
-            if (ImGui::MenuItem("Reset")) {
-                // Reset component parameters to defaults
+            if (canReset) {
+                if (ImGui::MenuItem("Reset")) {
+                    if (onReset) onReset(component);
+                    else component = T{};
+                }
+            } else {
+                ImGui::BeginDisabled();
+                ImGui::MenuItem("Reset");
+                ImGui::EndDisabled();
             }
             ImGui::Separator();
             if (canRemove) {
@@ -565,13 +576,17 @@ namespace Axle {
             std::string shaderName = mat.AssetPath.empty() ? "CustomShader" : std::filesystem::path(mat.AssetPath).stem().string();
             if (m_CustomShaderPicker.Draw("EntityMaterialShader", mat, shaderName, m_OnOpenHLSLStudioCallback)) {
                 if (mat.HasAsset()) mat.SyncToAsset();
+                mat.SyncToRHI();
             }
 
-            if (m_MaterialInspectorControls.Draw(mat)) {
+            if (m_MaterialInspectorControls.Draw(mat, m_HasActiveRenderSettings ? &m_ActiveRenderSettings : nullptr)) {
                 if (mat.HasAsset()) mat.SyncToAsset();
                 mat.SyncToRHI();
             }
-        }, /*canRemove=*/ true);
+        }, /*canRemove=*/ true, /*onRemove=*/ nullptr, /*canReset=*/ true, [](MaterialComponent& mat) {
+            mat.ResetToDefault();
+            if (mat.HasAsset()) mat.SyncToAsset();
+        });
 
         // Collision Shape 3D Component
         DrawComponent<CollisionShape3D>("CollisionShape3D", entity, [&](CollisionShape3D& cs) {
@@ -725,21 +740,49 @@ namespace Axle {
 
         // Directional Light Component
         DrawComponent<DirectionalLightComponent>("Directional Sun Light", entity, [&](DirectionalLightComponent& dlc) {
+            const auto backendPolicy = RenderBackendPolicy::FromDevice(RHI::RHIDevice::Get().GetCapabilities());
+            const auto resolvedView = backendPolicy.ResolveSettings(
+                m_HasActiveRenderSettings ? m_ActiveRenderSettings : SceneRenderSettings{});
+            auto tooltip = [](const char* text) {
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", text);
+            };
             // Light Color
-            ImGui::ColorEdit3("Light Color", glm::value_ptr(dlc.Color));
+            if (ImGui::ColorEdit3("Light Color", glm::value_ptr(dlc.Color))) {
+                dlc.Color = glm::max(dlc.Color, glm::vec3(0.0f));
+            }
+            tooltip("Linear RGB directional light color.");
 
             // Intensity
-            ImGui::SliderFloat("Intensity", &dlc.Intensity, 0.0f, 5.0f, "%.2f");
+            if (ImGui::SliderFloat("Intensity", &dlc.Intensity, 0.0f, 10.0f, "%.2f")) {
+                dlc.Intensity = std::isfinite(dlc.Intensity) ? std::clamp(dlc.Intensity, 0.0f, 100.0f) : 1.0f;
+            }
+            tooltip("Sun illuminance multiplier [0..100]; 1.0 corresponds to nominal daylight reference.");
 
             // Ambient Intensity
-            ImGui::SliderFloat("Ambient Fill", &dlc.AmbientIntensity, 0.0f, 1.0f, "%.2f");
+            if (ImGui::SliderFloat("Ambient Fill", &dlc.AmbientIntensity, 0.0f, 1.0f, "%.2f")) {
+                dlc.AmbientIntensity = std::isfinite(dlc.AmbientIntensity) ? std::clamp(dlc.AmbientIntensity, 0.0f, 1.0f) : 0.28f;
+            }
+            tooltip("Fallback indirect fill radiance weight [0..1] when IBL/GI is inactive.");
 
             // Sun Angles
-            ImGui::SliderFloat("Azimuth (Heading)", &dlc.Azimuth, 0.0f, 360.0f, "%.1f deg");
-            ImGui::SliderFloat("Elevation (Altitude)", &dlc.Elevation, 5.0f, 89.0f, "%.1f deg");
+            if (ImGui::SliderFloat("Azimuth (Heading)", &dlc.Azimuth, 0.0f, 360.0f, "%.1f deg")) {
+                dlc.Azimuth = std::isfinite(dlc.Azimuth) ? std::clamp(dlc.Azimuth, 0.0f, 360.0f) : 45.0f;
+            }
+            tooltip("Horizontal compass bearing around world up (degrees).");
+            if (ImGui::SliderFloat("Elevation (Altitude)", &dlc.Elevation, 5.0f, 89.0f, "%.1f deg")) {
+                dlc.Elevation = std::isfinite(dlc.Elevation) ? std::clamp(dlc.Elevation, 5.0f, 89.0f) : 50.0f;
+            }
+            tooltip("Vertical angle above the horizon (degrees).");
 
             // Cast Shadows Toggle
             ImGui::Checkbox("Cast Real-Time Shadows", &dlc.CastShadows);
+            tooltip("Enable 4-cascade directional shadow map generation.");
+            if (dlc.CastShadows && !resolvedView.EnableShadows) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "Viewport Render FX currently has Real-Time Shadows disabled.");
+            } else if (dlc.CastShadows && backendPolicy.GetQualityTier() == BackendQualityTier::Compatibility) {
+                ImGui::TextDisabled("OpenGL Compatibility: Cascaded sun shadows active (local point/spot shadows omitted).");
+            }
 
             if (dlc.CastShadows) {
                 ImGui::Indent(15.0f);
@@ -750,38 +793,39 @@ namespace Axle {
                 if (ImGui::Combo("Shadow Quality", &currentQuality, shadowQualities, IM_ARRAYSIZE(shadowQualities))) {
                     dlc.ShadowQuality = currentQuality;
                 }
+                tooltip("Cascade tile resolution for each of the 4 directional splits.");
 
-                ImGui::SliderFloat("Max Shadow Distance", &dlc.MaxShadowDistance, 20.0f, 500.0f, "%.1f m");
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Maximum view-space distance across all 4 cascades.");
+                if (ImGui::SliderFloat("Max Shadow Distance", &dlc.MaxShadowDistance, 20.0f, 500.0f, "%.1f m")) {
+                    dlc.MaxShadowDistance = std::isfinite(dlc.MaxShadowDistance) ? std::clamp(dlc.MaxShadowDistance, 20.0f, 500.0f) : 150.0f;
                 }
+                tooltip("Maximum view-space distance across all 4 cascades.");
 
-                ImGui::SliderFloat("Cascade Split Lambda", &dlc.CascadeSplitLambda, 0.50f, 0.95f, "%.2f");
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("PSSM practical split weight (logarithmic vs linear distribution). Higher values give denser detail near the camera.");
+                if (ImGui::SliderFloat("Cascade Split Lambda", &dlc.CascadeSplitLambda, 0.50f, 0.95f, "%.2f")) {
+                    dlc.CascadeSplitLambda = std::isfinite(dlc.CascadeSplitLambda) ? std::clamp(dlc.CascadeSplitLambda, 0.50f, 0.95f) : 0.85f;
                 }
+                tooltip("PSSM practical split weight (logarithmic vs linear distribution). Higher values give denser detail near the camera.");
 
-                ImGui::SliderFloat("PCF 5x5 Softness", &dlc.ShadowFilterRadius, 0.5f, 3.0f, "%.2f");
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("5x5 Percentage-Closer Filtering (25 hardware bilinear taps) spread multiplier.");
+                if (ImGui::SliderFloat("PCF 5x5 Softness", &dlc.ShadowFilterRadius, 0.5f, 3.0f, "%.2f")) {
+                    dlc.ShadowFilterRadius = std::isfinite(dlc.ShadowFilterRadius) ? std::clamp(dlc.ShadowFilterRadius, 0.5f, 3.0f) : 2.0f;
                 }
+                tooltip("5x5 Percentage-Closer Filtering (25 hardware bilinear taps) spread multiplier.");
 
                 ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "Anti-Acne Depth Biasing:");
 
-                ImGui::DragFloat("Base Depth Bias", &dlc.ShadowBias, 0.0001f, 0.0001f, 0.0100f, "%.5f");
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Constant depth bias offset.");
+                if (ImGui::DragFloat("Base Depth Bias", &dlc.ShadowBias, 0.0001f, 0.0001f, 0.0100f, "%.5f")) {
+                    dlc.ShadowBias = std::isfinite(dlc.ShadowBias) ? std::clamp(dlc.ShadowBias, 0.0001f, 0.0100f) : 0.0012f;
                 }
+                tooltip("Constant depth bias offset.");
 
-                ImGui::DragFloat("Slope-Scaled Bias", &dlc.ShadowSlopeBias, 0.0001f, 0.0001f, 0.0200f, "%.5f");
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Slope-scaled depth bias proportional to tan(theta) to eliminate shadow acne on grazing angles.");
+                if (ImGui::DragFloat("Slope-Scaled Bias", &dlc.ShadowSlopeBias, 0.0001f, 0.0001f, 0.0200f, "%.5f")) {
+                    dlc.ShadowSlopeBias = std::isfinite(dlc.ShadowSlopeBias) ? std::clamp(dlc.ShadowSlopeBias, 0.0001f, 0.0200f) : 0.0020f;
                 }
+                tooltip("Slope-scaled depth bias proportional to tan(theta) to eliminate shadow acne on grazing angles.");
 
-                ImGui::DragFloat("Normal Offset Bias", &dlc.ShadowNormalBias, 0.001f, 0.001f, 0.050f, "%.4f");
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("World-space normal offset bias to prevent self-shadow acne on curved surfaces without Peter Panning.");
+                if (ImGui::DragFloat("Normal Offset Bias", &dlc.ShadowNormalBias, 0.001f, 0.001f, 0.050f, "%.4f")) {
+                    dlc.ShadowNormalBias = std::isfinite(dlc.ShadowNormalBias) ? std::clamp(dlc.ShadowNormalBias, 0.001f, 0.050f) : 0.0150f;
                 }
+                tooltip("World-space normal offset bias to prevent self-shadow acne on curved surfaces without Peter Panning.");
 
                 ImGui::Unindent(15.0f);
             }
@@ -830,7 +874,10 @@ namespace Axle {
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), "HDR Filmic Tone Mapping & Gamma:");
 
-            ImGui::SliderFloat("Exposure", &dlc.Exposure, 0.1f, 5.0f, "%.2f");
+            if (ImGui::SliderFloat("Exposure", &dlc.Exposure, 0.1f, 5.0f, "%.2f")) {
+                dlc.Exposure = std::isfinite(dlc.Exposure) ? std::clamp(dlc.Exposure, 0.1f, 5.0f) : 1.0f;
+            }
+            tooltip("Manual HDR exposure multiplier [0.1..5.0] applied prior to tone mapping when Auto-Exposure is off.");
 
             const char* toneMappingNames[] = {
                 "0: ACES Filmic (Cinematic)",
@@ -838,12 +885,19 @@ namespace Axle {
                 "2: Uncharted 2 (Hable)",
                 "3: None (Linear Bypass)"
             };
-            int currentTM = dlc.ToneMappingMode;
+            int currentTM = std::clamp(dlc.ToneMappingMode, 0, 3);
             if (ImGui::Combo("Tone Mapping", &currentTM, toneMappingNames, IM_ARRAYSIZE(toneMappingNames))) {
                 dlc.ToneMappingMode = currentTM;
             }
+            tooltip("Select HDR-to-display tone mapping curve.");
 
-            ImGui::SliderFloat("Display Gamma", &dlc.Gamma, 1.0f, 3.0f, "%.2f");
+            if (ImGui::SliderFloat("Display Gamma", &dlc.Gamma, 1.0f, 3.0f, "%.2f")) {
+                dlc.Gamma = std::isfinite(dlc.Gamma) ? std::clamp(dlc.Gamma, 1.0f, 3.0f) : 2.2f;
+            }
+            tooltip("Display transfer gamma exponent (standard sRGB approximation: 2.2).");
+            if (backendPolicy.GetQualityTier() == BackendQualityTier::Compatibility) {
+                ImGui::TextDisabled("OpenGL Compatibility: Tone mapping passes use standard LDR output.");
+            }
 
             ImGui::TextDisabled("Quick Looks:");
             ImGui::SameLine();
@@ -874,15 +928,17 @@ namespace Axle {
             // Vector display
             glm::vec3 dir = dlc.GetDirection();
             ImGui::TextDisabled("Light Direction: (%.2f, %.2f, %.2f)", dir.x, dir.y, dir.z);
-        }, /*canRemove=*/ true);
+        }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
 
         // Skybox Component (Procedural Atmospheric vs HDR Cubemap IBL)
         DrawComponent<SkyboxComponent>("Skybox & Environment", entity, [&](SkyboxComponent& sbc) {
+            auto tooltip = [](const char* text) {
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", text);
+            };
             ImGui::Checkbox("Enable Skybox", &sbc.Enabled);
+            tooltip("Render this sky in the background.");
             ImGui::Checkbox("Environment Lighting", &sbc.EnvironmentLighting);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Allow this sky to provide ambient and image-based lighting to scene geometry.");
-            }
+            tooltip("Allow this sky to provide ambient and image-based lighting to scene geometry.");
             if (!sbc.EnvironmentLighting) {
                 ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.35f, 1.0f),
                     "Background only: metallic surfaces need Environment Lighting or a direct light.");
@@ -893,6 +949,7 @@ namespace Axle {
             if (ImGui::Combo("Skybox Type", &currentType, skyboxTypes, IM_ARRAYSIZE(skyboxTypes))) {
                 sbc.Type = (currentType == 1) ? SkyboxType::HDRCubemap : SkyboxType::ProceduralAtmospheric;
             }
+            tooltip("Select procedural atmospheric sky or authored HDR equirectangular cubemap.");
 
             ImGui::Spacing();
 
@@ -928,40 +985,63 @@ namespace Axle {
                     }
                 }
 
-                ImGui::SliderFloat("Radiance / Intensity", &sbc.Intensity, 0.0f, 5.0f, "%.2f");
-                ImGui::SliderFloat("Exposure", &sbc.Exposure, 0.1f, 5.0f, "%.2f");
-                ImGui::SliderFloat("Environment Rotation", &sbc.EnvironmentRotation, -360.0f, 360.0f, "%.1f deg");
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Rotate authored HDRI around world up; procedural sun azimuth/elevation remain independent.");
+                if (ImGui::SliderFloat("Radiance / Intensity", &sbc.Intensity, 0.0f, 5.0f, "%.2f")) {
+                    sbc.Intensity = std::isfinite(sbc.Intensity) ? std::clamp(sbc.Intensity, 0.0f, 20.0f) : 1.0f;
                 }
-
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Image-Based Lighting provides real-time diffuse irradiance and pre-filtered GGX specular reflections.");
+                tooltip("Scales both background luminance and baked IBL radiance.");
+                if (ImGui::SliderFloat("Exposure", &sbc.Exposure, 0.1f, 5.0f, "%.2f")) {
+                    sbc.Exposure = std::isfinite(sbc.Exposure) ? std::clamp(sbc.Exposure, 0.1f, 10.0f) : 1.0f;
                 }
+                tooltip("Pre-baked exposure multiplier applied when decoding the HDR environment.");
+                if (ImGui::SliderFloat("Environment Rotation", &sbc.EnvironmentRotation, -360.0f, 360.0f, "%.1f deg")) {
+                    sbc.EnvironmentRotation = std::isfinite(sbc.EnvironmentRotation) ? std::clamp(sbc.EnvironmentRotation, -360.0f, 360.0f) : 0.0f;
+                }
+                tooltip("Rotate authored HDRI around world up; procedural sun azimuth/elevation remain independent.");
             } else {
                 ImGui::Checkbox("Hemisphere Ambient Lighting", &sbc.HemisphereAmbient);
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Compute realistic ambient irradiance gradients (Zenith, Horizon, Ground) from atmospheric sky.");
-                }
+                tooltip("Compute realistic ambient irradiance gradients (Zenith, Horizon, Ground) from atmospheric sky.");
                 ImGui::Spacing();
 
                 // Atmosphere Colors
-                ImGui::ColorEdit3("Zenith Color", glm::value_ptr(sbc.ZenithColor));
-                ImGui::ColorEdit3("Horizon Color", glm::value_ptr(sbc.HorizonColor));
-                ImGui::ColorEdit3("Ground Color", glm::value_ptr(sbc.GroundColor));
+                if (ImGui::ColorEdit3("Zenith Color", glm::value_ptr(sbc.ZenithColor))) {
+                    sbc.ZenithColor = glm::max(sbc.ZenithColor, glm::vec3(0.0f));
+                }
+                tooltip("Upper hemisphere sky color at zenith.");
+                if (ImGui::ColorEdit3("Horizon Color", glm::value_ptr(sbc.HorizonColor))) {
+                    sbc.HorizonColor = glm::max(sbc.HorizonColor, glm::vec3(0.0f));
+                }
+                tooltip("Atmospheric horizon scatter tint.");
+                if (ImGui::ColorEdit3("Ground Color", glm::value_ptr(sbc.GroundColor))) {
+                    sbc.GroundColor = glm::max(sbc.GroundColor, glm::vec3(0.0f));
+                }
+                tooltip("Lower hemisphere ground bounce tint.");
                 ImGui::Spacing();
 
                 // Atmospheric Properties
-                ImGui::SliderFloat("Turbidity (Haze)", &sbc.Turbidity, 0.2f, 4.0f, "%.2f");
-                ImGui::SliderFloat("Sun Disk Size", &sbc.SunSize, 0.01f, 0.15f, "%.3f");
-                ImGui::SliderFloat("Sun Glow (Corona)", &sbc.SunGlow, 0.02f, 0.80f, "%.2f");
+                if (ImGui::SliderFloat("Turbidity (Haze)", &sbc.Turbidity, 0.2f, 4.0f, "%.2f")) {
+                    sbc.Turbidity = std::isfinite(sbc.Turbidity) ? std::clamp(sbc.Turbidity, 0.2f, 4.0f) : 1.0f;
+                }
+                tooltip("Atmospheric scattering density / haze strength.");
+                if (ImGui::SliderFloat("Sun Disk Size", &sbc.SunSize, 0.01f, 0.15f, "%.3f")) {
+                    sbc.SunSize = std::isfinite(sbc.SunSize) ? std::clamp(sbc.SunSize, 0.01f, 0.15f) : 0.04f;
+                }
+                tooltip("Angular radius of the procedural solar disk.");
+                if (ImGui::SliderFloat("Sun Glow (Corona)", &sbc.SunGlow, 0.02f, 0.80f, "%.2f")) {
+                    sbc.SunGlow = std::isfinite(sbc.SunGlow) ? std::clamp(sbc.SunGlow, 0.02f, 0.80f) : 0.2f;
+                }
+                tooltip("Forward-scattering atmospheric halo around the sun.");
                 ImGui::Spacing();
 
                 // Sun Alignment
                 ImGui::Checkbox("Sync with Directional Sun Light", &sbc.SyncWithSun);
+                tooltip("Follow the primary DirectionalLightComponent sun vector automatically.");
                 if (!sbc.SyncWithSun) {
-                    ImGui::SliderFloat("Custom Sun Azimuth", &sbc.CustomAzimuth, 0.0f, 360.0f, "%.1f deg");
-                    ImGui::SliderFloat("Custom Sun Elevation", &sbc.CustomElevation, 1.0f, 89.0f, "%.1f deg");
+                    if (ImGui::SliderFloat("Custom Sun Azimuth", &sbc.CustomAzimuth, 0.0f, 360.0f, "%.1f deg")) {
+                        sbc.CustomAzimuth = std::isfinite(sbc.CustomAzimuth) ? std::clamp(sbc.CustomAzimuth, 0.0f, 360.0f) : 45.0f;
+                    }
+                    if (ImGui::SliderFloat("Custom Sun Elevation", &sbc.CustomElevation, 1.0f, 89.0f, "%.1f deg")) {
+                        sbc.CustomElevation = std::isfinite(sbc.CustomElevation) ? std::clamp(sbc.CustomElevation, 1.0f, 89.0f) : 50.0f;
+                    }
                 }
                 ImGui::Spacing();
 
@@ -987,37 +1067,98 @@ namespace Axle {
                     sbc.SetPresetAlienMars();
                 }
             }
-        }, /*canRemove=*/ true);
+        }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
+
+        const auto lightPolicy = RenderBackendPolicy::FromDevice(RHI::RHIDevice::Get().GetCapabilities());
+        const auto resolvedViewSettings = lightPolicy.ResolveSettings(
+            m_HasActiveRenderSettings ? m_ActiveRenderSettings : SceneRenderSettings{});
+        auto inspectTooltip = [](const char* text) {
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", text);
+        };
 
         // Point Light Component
-        auto drawLocalShadows=[](LocalShadowSettings& s) {
-            ImGui::Checkbox("Cast Shadows",&s.CastShadows);
-            if(RHI::RHIDevice::Get().GetBackend()==RHI::RHIType::OpenGL)ImGui::TextDisabled("Local shadows require D3D12 or Vulkan.");
-            if(!s.CastShadows)return;
-            ImGui::DragFloat("Shadow Bias (m)",&s.Bias,.0001f,0.f,1.f,"%.4f");
-            ImGui::DragFloat("Shadow Slope Bias (m)",&s.SlopeBias,.0001f,0.f,1.f,"%.4f");
-            ImGui::DragFloat("Shadow Normal Bias (m)",&s.NormalBias,.0001f,0.f,1.f,"%.4f");
-            ImGui::SliderFloat("Shadow Filter Radius",&s.FilterRadius,0.f,2.f);
-            ImGui::DragFloat("Shadow Near Clip (m)",&s.NearPlane,.005f,.001f,1.f,"%.3f");
+        auto drawLocalShadows = [&](LocalShadowSettings& s) {
+            ImGui::Checkbox("Cast Shadows", &s.CastShadows);
+            inspectTooltip("Enable real-time local shadow map atlas allocation on D3D12/Vulkan.");
+            if (lightPolicy.GetQualityTier() == BackendQualityTier::Compatibility) {
+                ImGui::TextDisabled("Local shadows require D3D12 or Vulkan.");
+            } else if (s.CastShadows && !resolvedViewSettings.EnableShadows) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "Viewport Render FX currently has Real-Time Shadows disabled.");
+            } else if (s.CastShadows) {
+                ImGui::TextDisabled("Native local shadow budget: max %u Spot + %u Point lights within %.0f m.",
+                    static_cast<unsigned>(resolvedViewSettings.MaxShadowedSpotLights),
+                    static_cast<unsigned>(resolvedViewSettings.MaxShadowedPointLights),
+                    resolvedViewSettings.LocalShadowDistance);
+            }
+            if (!s.CastShadows) return;
+            if (ImGui::DragFloat("Shadow Bias (m)", &s.Bias, .0001f, 0.f, 1.f, "%.4f")) {
+                s.Bias = std::isfinite(s.Bias) ? std::clamp(s.Bias, 0.0f, 1.0f) : 0.002f;
+            }
+            inspectTooltip("Constant world-space receiver depth offset against shadow acne.");
+            if (ImGui::DragFloat("Shadow Slope Bias (m)", &s.SlopeBias, .0001f, 0.f, 1.f, "%.4f")) {
+                s.SlopeBias = std::isfinite(s.SlopeBias) ? std::clamp(s.SlopeBias, 0.0f, 1.0f) : 0.005f;
+            }
+            inspectTooltip("Grazing-angle slope depth bias against shadow acne.");
+            if (ImGui::DragFloat("Shadow Normal Bias (m)", &s.NormalBias, .0001f, 0.f, 1.f, "%.4f")) {
+                s.NormalBias = std::isfinite(s.NormalBias) ? std::clamp(s.NormalBias, 0.0f, 1.0f) : 0.01f;
+            }
+            inspectTooltip("World-space surface normal offset applied when sampling local shadows.");
+            if (ImGui::SliderFloat("Shadow Filter Radius", &s.FilterRadius, 0.f, 2.f)) {
+                s.FilterRadius = std::isfinite(s.FilterRadius) ? std::clamp(s.FilterRadius, 0.0f, 2.0f) : 1.0f;
+            }
+            inspectTooltip("PCF filter kernel softness multiplier [0..2].");
+            if (ImGui::DragFloat("Shadow Near Clip (m)", &s.NearPlane, .005f, .001f, 1.f, "%.3f")) {
+                s.NearPlane = std::isfinite(s.NearPlane) ? std::clamp(s.NearPlane, 0.001f, 1.0f) : 0.05f;
+            }
+            inspectTooltip("Shadow projection near plane distance in meters.");
         };
         DrawComponent<PointLightComponent>("Point Light", entity, [&](PointLightComponent& plc) {
-            ImGui::ColorEdit3("Light Color", glm::value_ptr(plc.Color));
-            ImGui::DragFloat("Intensity", &plc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f");
-            ImGui::DragFloat("Radius", &plc.Radius, 0.5f, 0.1f, 500.0f, "%.1f m");
-            ImGui::DragFloat("Falloff", &plc.Falloff, 0.05f, 0.1f, 10.0f, "%.2f");
+            if (ImGui::ColorEdit3("Light Color", glm::value_ptr(plc.Color))) {
+                plc.Color = glm::max(plc.Color, glm::vec3(0.0f));
+            }
+            inspectTooltip("Linear RGB omnidirectional light color.");
+            if (ImGui::DragFloat("Intensity", &plc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f")) {
+                plc.Intensity = std::isfinite(plc.Intensity) ? std::clamp(plc.Intensity, 0.0f, 1000.0f) : 1.0f;
+            }
+            inspectTooltip("Luminous intensity multiplier (>= 0).");
+            if (ImGui::DragFloat("Radius", &plc.Radius, 0.5f, 0.1f, 500.0f, "%.1f m")) {
+                plc.Radius = std::isfinite(plc.Radius) ? std::clamp(plc.Radius, 0.1f, 500.0f) : 10.0f;
+            }
+            inspectTooltip("Effective attenuation cutoff radius in meters.");
+            if (ImGui::DragFloat("Falloff", &plc.Falloff, 0.05f, 0.1f, 10.0f, "%.2f")) {
+                plc.Falloff = std::isfinite(plc.Falloff) ? std::clamp(plc.Falloff, 0.1f, 10.0f) : 1.0f;
+            }
+            inspectTooltip("Distance attenuation shaping exponent [0.1..10].");
             drawLocalShadows(plc.Shadows);
-        }, /*canRemove=*/ true);
+        }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
 
         // Spot Light Component
         DrawComponent<SpotLightComponent>("Spot Light", entity, [&](SpotLightComponent& slc) {
             ImGui::Checkbox("Enabled", &slc.Enabled);
-            ImGui::ColorEdit3("Light Color", glm::value_ptr(slc.Color));
-            ImGui::DragFloat("Intensity", &slc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f");
-            ImGui::DragFloat("Range", &slc.Range, 0.5f, 0.1f, 500.0f, "%.1f m");
-            ImGui::DragFloat("Inner Cone Angle", &slc.InnerConeAngle, 0.5f, 1.0f, 89.0f, "%.1f deg");
-            ImGui::DragFloat("Outer Cone Angle", &slc.OuterConeAngle, 0.5f, slc.InnerConeAngle, 89.0f, "%.1f deg");
+            if (ImGui::ColorEdit3("Light Color", glm::value_ptr(slc.Color))) {
+                slc.Color = glm::max(slc.Color, glm::vec3(0.0f));
+            }
+            inspectTooltip("Linear RGB spotlight cone color.");
+            if (ImGui::DragFloat("Intensity", &slc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f")) {
+                slc.Intensity = std::isfinite(slc.Intensity) ? std::clamp(slc.Intensity, 0.0f, 1000.0f) : 8.0f;
+            }
+            inspectTooltip("Luminous intensity multiplier (>= 0).");
+            if (ImGui::DragFloat("Range", &slc.Range, 0.5f, 0.1f, 500.0f, "%.1f m")) {
+                slc.Range = std::isfinite(slc.Range) ? std::clamp(slc.Range, 0.1f, 500.0f) : 35.0f;
+            }
+            inspectTooltip("Spotlight cutoff distance in meters.");
+            if (ImGui::DragFloat("Inner Cone Angle", &slc.InnerConeAngle, 0.5f, 1.0f, 89.0f, "%.1f deg")) {
+                slc.InnerConeAngle = std::isfinite(slc.InnerConeAngle) ? std::clamp(slc.InnerConeAngle, 1.0f, 89.0f) : 18.0f;
+                slc.OuterConeAngle = std::max(slc.OuterConeAngle, slc.InnerConeAngle);
+            }
+            inspectTooltip("Full-brightness inner cone half-angle in degrees.");
+            if (ImGui::DragFloat("Outer Cone Angle", &slc.OuterConeAngle, 0.5f, slc.InnerConeAngle, 89.0f, "%.1f deg")) {
+                slc.OuterConeAngle = std::isfinite(slc.OuterConeAngle) ? std::clamp(slc.OuterConeAngle, slc.InnerConeAngle, 89.0f) : 32.0f;
+            }
+            inspectTooltip("Zero-falloff outer cone half-angle (>= Inner Cone Angle).");
             drawLocalShadows(slc.Shadows);
-        }, /*canRemove=*/ true);
+        }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
 
         // Rect / Area Light Component (LTC)
         DrawComponent<RectLightComponent>("Area Light (LTC)", entity, [&](RectLightComponent& rlc) {
@@ -1027,31 +1168,91 @@ namespace Axle {
             if (ImGui::Combo("Shape", &shapeIdx, shapeLabels, 2)) {
                 rlc.Shape = (shapeIdx == 1) ? AreaLightShape::Disk : AreaLightShape::Rectangle;
             }
-            ImGui::ColorEdit3("Light Color", glm::value_ptr(rlc.Color));
-            ImGui::DragFloat("Intensity", &rlc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f");
-            ImGui::DragFloat("Width", &rlc.Width, 0.05f, 0.01f, 100.0f, "%.2f m");
-            ImGui::DragFloat("Height", &rlc.Height, 0.05f, 0.01f, 100.0f, "%.2f m");
-            ImGui::DragFloat("Range", &rlc.Range, 0.5f, 0.1f, 500.0f, "%.1f m");
+            inspectTooltip("Analytic Linearly Transformed Cosines (LTC) emitter geometry.");
+            if (ImGui::ColorEdit3("Light Color", glm::value_ptr(rlc.Color))) {
+                rlc.Color = glm::max(rlc.Color, glm::vec3(0.0f));
+            }
+            inspectTooltip("Linear RGB area emitter color.");
+            if (ImGui::DragFloat("Intensity", &rlc.Intensity, 0.1f, 0.0f, 100.0f, "%.2f")) {
+                rlc.Intensity = std::isfinite(rlc.Intensity) ? std::clamp(rlc.Intensity, 0.0f, 1000.0f) : 10.0f;
+            }
+            inspectTooltip("Radiant intensity multiplier (>= 0).");
+            if (ImGui::DragFloat("Width", &rlc.Width, 0.05f, 0.01f, 100.0f, "%.2f m")) {
+                rlc.Width = std::isfinite(rlc.Width) ? std::clamp(rlc.Width, 0.01f, 100.0f) : 2.0f;
+            }
+            inspectTooltip("Emitter full width in meters.");
+            if (ImGui::DragFloat("Height", &rlc.Height, 0.05f, 0.01f, 100.0f, "%.2f m")) {
+                rlc.Height = std::isfinite(rlc.Height) ? std::clamp(rlc.Height, 0.01f, 100.0f) : 1.0f;
+            }
+            inspectTooltip("Emitter full height in meters (Disk uses Width/Height ellipsoid axes).");
+            if (ImGui::DragFloat("Range", &rlc.Range, 0.5f, 0.1f, 500.0f, "%.1f m")) {
+                rlc.Range = std::isfinite(rlc.Range) ? std::clamp(rlc.Range, 0.1f, 500.0f) : 20.0f;
+            }
+            inspectTooltip("Smooth distance cutoff range in meters.");
             ImGui::Checkbox("Two-Sided", &rlc.TwoSided);
+            inspectTooltip("Emit radiance from both front and back faces of the area emitter.");
             ImGui::TextDisabled("Shadow Policy: Unshadowed Analytic LTC");
-        }, /*canRemove=*/ true);
+            if (lightPolicy.GetQualityTier() == BackendQualityTier::Compatibility) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "OpenGL Compatibility: Area lights (LTC) execute on D3D12 or Vulkan.");
+            }
+        }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
 
         // Planar Reflection Component (M15-U5-46)
         DrawComponent<PlanarReflectionComponent>("Planar Reflection", entity, [&](PlanarReflectionComponent& prc) {
             ImGui::Checkbox("Enabled", &prc.Enabled);
-            if (ImGui::DragFloat2("Half Extents (m)", glm::value_ptr(prc.HalfExtents), 0.1f, 0.05f, 500.0f, "%.2f")) {
-                prc.HalfExtents = glm::max(prc.HalfExtents, glm::vec2(0.05f));
+            if (lightPolicy.GetQualityTier() == BackendQualityTier::Compatibility) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "OpenGL Compatibility: Planar reflections require D3D12 or Vulkan.");
+            } else if (resolvedViewSettings.MSAASamples > 1) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "Single-sample pass: Planar reflection resolve is disabled while viewport MSAA > 1x.");
+            } else if (!resolvedViewSettings.EnablePlanarReflections) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "Planar Reflections toggle is currently disabled in viewport Render FX.");
             }
-            ImGui::SliderFloat("Resolution Scale", &prc.ResolutionScale, 0.25f, 1.0f, "%.2f");
-            ImGui::DragFloat("Clip Plane Offset", &prc.ClipPlaneOffset, 0.005f, -1.0f, 1.0f, "%.3f");
-            ImGui::SliderFloat("Edge Fade (m)", &prc.EdgeFadeDistance, 0.0f, 5.0f, "%.2f");
-            ImGui::SliderFloat("Max Roughness", &prc.MaxRoughness, 0.02f, 1.0f, "%.2f");
-            ImGui::SliderFloat("Intensity", &prc.Intensity, 0.0f, 2.0f, "%.2f");
-            ImGui::DragFloat("Capture Near", &prc.CaptureNearPlane, 0.01f, 0.01f, 10.0f, "%.3f");
-            ImGui::DragFloat("Capture Far", &prc.CaptureFarPlane, 1.0f, 1.0f, 10000.0f, "%.1f");
+            if (ImGui::DragFloat2("Half Extents (m)", glm::value_ptr(prc.HalfExtents), 0.1f, 0.05f, 500.0f, "%.2f")) {
+                prc.HalfExtents = glm::clamp(glm::vec2(
+                    std::isfinite(prc.HalfExtents.x) ? prc.HalfExtents.x : 5.0f,
+                    std::isfinite(prc.HalfExtents.y) ? prc.HalfExtents.y : 5.0f), glm::vec2(0.05f), glm::vec2(500.0f));
+            }
+            inspectTooltip("Planar reflector plane half-width and half-length in meters.");
+            if (ImGui::SliderFloat("Resolution Scale", &prc.ResolutionScale,
+                    RHI::RHIViewTargets::MinPlanarResolutionScale, RHI::RHIViewTargets::MaxPlanarResolutionScale, "%.2f")) {
+                prc.ResolutionScale = std::isfinite(prc.ResolutionScale)
+                    ? std::clamp(prc.ResolutionScale, RHI::RHIViewTargets::MinPlanarResolutionScale, RHI::RHIViewTargets::MaxPlanarResolutionScale)
+                    : 0.5f;
+            }
+            inspectTooltip("Offscreen reflection capture scale relative to main viewport [0.25..1.0].");
+            if (ImGui::DragFloat("Clip Plane Offset", &prc.ClipPlaneOffset, 0.005f, -1.0f, 1.0f, "%.3f")) {
+                prc.ClipPlaneOffset = std::isfinite(prc.ClipPlaneOffset) ? std::clamp(prc.ClipPlaneOffset, -1.0f, 1.0f) : 0.0f;
+            }
+            inspectTooltip("Oblique near-plane offset along reflector normal to avoid seam clipping artifacts.");
+            if (ImGui::SliderFloat("Edge Fade (m)", &prc.EdgeFadeDistance, 0.0f, 5.0f, "%.2f")) {
+                prc.EdgeFadeDistance = std::isfinite(prc.EdgeFadeDistance) ? std::clamp(prc.EdgeFadeDistance, 0.0f, 5.0f) : 0.15f;
+            }
+            inspectTooltip("Distance from extent border over which planar reflection fades into SSR/probe/sky fallback.");
+            if (ImGui::SliderFloat("Max Roughness", &prc.MaxRoughness, 0.02f, 1.0f, "%.2f")) {
+                prc.MaxRoughness = std::isfinite(prc.MaxRoughness) ? std::clamp(prc.MaxRoughness, 0.02f, 1.0f) : 0.45f;
+            }
+            inspectTooltip("Surface roughness cutoff above which planar reflections blend toward probe/sky fallback.");
+            if (ImGui::SliderFloat("Intensity", &prc.Intensity, 0.0f, 2.0f, "%.2f")) {
+                prc.Intensity = std::isfinite(prc.Intensity) ? std::clamp(prc.Intensity, 0.0f, 2.0f) : 1.0f;
+            }
+            inspectTooltip("Planar reflection radiance weight [0..2].");
+            if (ImGui::DragFloat("Capture Near", &prc.CaptureNearPlane, 0.01f, 0.01f, 10.0f, "%.3f")) {
+                prc.CaptureNearPlane = std::isfinite(prc.CaptureNearPlane) ? std::clamp(prc.CaptureNearPlane, 0.01f, 10.0f) : 0.1f;
+                prc.CaptureFarPlane = std::max(prc.CaptureFarPlane, prc.CaptureNearPlane + 0.1f);
+            }
+            if (ImGui::DragFloat("Capture Far", &prc.CaptureFarPlane, 1.0f, 1.0f, 10000.0f, "%.1f")) {
+                prc.CaptureFarPlane = std::isfinite(prc.CaptureFarPlane)
+                    ? std::clamp(prc.CaptureFarPlane, std::max(1.0f, prc.CaptureNearPlane + 0.1f), 10000.0f)
+                    : 1000.0f;
+            }
             ImGui::Checkbox("Capture Shadows", &prc.CaptureShadows);
             ImGui::Checkbox("Capture Skybox", &prc.CaptureSkybox);
             ImGui::Checkbox("Clip To Extents", &prc.ClipToExtents);
+            inspectTooltip("Restrict planar reflection influence to the authored reflector box extents.");
 
             const char* modeItems[] = { "Automatic", "Manual" };
             int modeIdx = (prc.CaptureMode == PlanarReflectionCaptureMode::Manual) ? 1 : 0;
@@ -1060,6 +1261,7 @@ namespace Axle {
                     ? PlanarReflectionCaptureMode::Manual
                     : PlanarReflectionCaptureMode::Automatic;
             }
+            inspectTooltip("Automatic recaptures when scene/camera changes; Manual updates only on Capture Now.");
 
             const uint64_t entityKeyID = static_cast<uint64_t>(static_cast<uint32_t>(entity));
             const UUID entityUUID = entity.GetUUID();
@@ -1094,67 +1296,112 @@ namespace Axle {
             if (ImGui::Button("Invalidate")) {
                 renderService.InvalidatePlanarReflection(entityKeyID, entityUUID, "inspector_manual_invalidate");
             }
-        }, /*canRemove=*/ true);
+        }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
 
         // Camera Component
         DrawComponent<CameraComponent>("Camera", entity, [&](CameraComponent& cam) {
-            ImGui::DragFloat("Field of View", &cam.FOV, 0.5f, 10.0f, 150.0f, "%.1f deg");
-            ImGui::DragFloat("Near Clip", &cam.NearClip, 0.01f, 0.001f, 10.0f, "%.3f m");
-            ImGui::DragFloat("Far Clip", &cam.FarClip, 1.0f, 1.0f, 10000.0f, "%.1f m");
+            if (ImGui::DragFloat("Field of View", &cam.FOV, 0.5f, 10.0f, 150.0f, "%.1f deg")) {
+                cam.FOV = std::isfinite(cam.FOV) ? std::clamp(cam.FOV, 10.0f, 150.0f) : 45.0f;
+            }
+            if (ImGui::DragFloat("Near Clip", &cam.NearClip, 0.01f, 0.001f, 10.0f, "%.3f m")) {
+                cam.NearClip = std::isfinite(cam.NearClip) ? std::clamp(cam.NearClip, 0.001f, 10.0f) : 0.1f;
+                cam.FarClip = std::max(cam.FarClip, cam.NearClip + 0.1f);
+            }
+            if (ImGui::DragFloat("Far Clip", &cam.FarClip, 1.0f, 1.0f, 10000.0f, "%.1f m")) {
+                cam.FarClip = std::isfinite(cam.FarClip) ? std::clamp(cam.FarClip, std::max(1.0f, cam.NearClip + 0.1f), 10000.0f) : 1000.0f;
+            }
             ImGui::Checkbox("Primary Camera", &cam.Primary);
-        }, /*canRemove=*/ true);
+        }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
 
         // Volumetric Fog Component (3D Froxel Atmospheric Media)
         DrawComponent<VolumetricFogComponent>("Volumetric Fog", entity, [&](VolumetricFogComponent& vfc) {
             ImGui::Checkbox("Enabled", &vfc.Enabled);
+            if (!lightPolicy.Supports(BackendFeature::Compute) ||
+                !lightPolicy.Supports(BackendFeature::StorageTextures) ||
+                !lightPolicy.Supports(BackendFeature::HDRFormats)) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "3D Froxel Volumetric Fog requires D3D12 or Vulkan with compute & linear HDR targets.");
+            } else if (resolvedViewSettings.MSAASamples > 1) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "Single-sample pass: Volumetric Fog is disabled while viewport MSAA > 1x.");
+            } else if (m_HasActiveRenderSettings && !resolvedViewSettings.EnableVolumetricFog) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "Viewport Render FX override currently disables Volumetric Fog.");
+            }
             if (ImGui::DragFloat("Density", &vfc.Density, 0.002f, 0.0f, 5.0f, "%.4f 1/m")) {
-                vfc.Density = std::max(0.0f, vfc.Density);
+                vfc.Density = std::isfinite(vfc.Density) ? std::clamp(vfc.Density, 0.0f, 5.0f) : 0.02f;
             }
+            inspectTooltip("Base extinction density [0..5] in inverse meters.");
             if (ImGui::DragFloat("Height Falloff", &vfc.HeightFalloff, 0.005f, 0.0f, 5.0f, "%.3f 1/m")) {
-                vfc.HeightFalloff = std::max(0.0f, vfc.HeightFalloff);
+                vfc.HeightFalloff = std::isfinite(vfc.HeightFalloff) ? std::clamp(vfc.HeightFalloff, 0.0f, 5.0f) : 0.1f;
             }
-            ImGui::SliderFloat("Anisotropy (g)", &vfc.ScatteringAsymmetry, -0.95f, 0.95f, "%.2f");
-            ImGui::ColorEdit3("Albedo", glm::value_ptr(vfc.Color));
+            inspectTooltip("Exponential vertical density decay above Y = 0.");
+            if (ImGui::SliderFloat("Anisotropy (g)", &vfc.ScatteringAsymmetry, -0.95f, 0.95f, "%.2f")) {
+                vfc.ScatteringAsymmetry = std::isfinite(vfc.ScatteringAsymmetry) ? std::clamp(vfc.ScatteringAsymmetry, -0.95f, 0.95f) : 0.7f;
+            }
+            inspectTooltip("Henyey-Greenstein phase asymmetry (-0.95=backscatter, 0=isotropic, +0.95=forward Mie).");
+            if (ImGui::ColorEdit3("Albedo", glm::value_ptr(vfc.Color))) {
+                vfc.Color = glm::clamp(vfc.Color, glm::vec3(0.0f), glm::vec3(1.0f));
+            }
+            inspectTooltip("Single-scattering particle albedo [0..1].");
             if (ImGui::DragFloat("Max Distance", &vfc.MaxDistance, 1.0f, 1.0f, 1000.0f, "%.1f m")) {
-                vfc.MaxDistance = std::max(1.0f, vfc.MaxDistance);
+                vfc.MaxDistance = std::isfinite(vfc.MaxDistance) ? std::clamp(vfc.MaxDistance, 1.0f, 1000.0f) : 100.0f;
             }
+            inspectTooltip("Far depth bound of the 3D froxel frustum grid in meters [1..1000].");
             if (ImGui::DragFloat("Intensity", &vfc.Intensity, 0.05f, 0.0f, 10.0f, "%.2f")) {
-                vfc.Intensity = std::max(0.0f, vfc.Intensity);
+                vfc.Intensity = std::isfinite(vfc.Intensity) ? std::clamp(vfc.Intensity, 0.0f, 10.0f) : 1.0f;
             }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Scales the density of the scene fog. The Editor viewport can override its visibility.");
-            }
-        }, /*canRemove=*/ true);
+            inspectTooltip("Scales the density of the scene fog. The Editor viewport can override its visibility.");
+        }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
 
         // DDGI Probe Grid Component (Experimental Dynamic Diffuse GI)
         DrawComponent<DDGIProbeGridComponent>("DDGI Probe Grid (Experimental)", entity, [&](DDGIProbeGridComponent& ddgi) {
             ImGui::Checkbox("Enabled", &ddgi.Enabled);
+            if (!lightPolicy.Supports(BackendFeature::Compute) ||
+                !lightPolicy.Supports(BackendFeature::StorageTextures)) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "Experimental DDGI requires D3D12 or Vulkan with compute & storage textures.");
+            } else if (resolvedViewSettings.MSAASamples > 1) {
+                ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f),
+                    "Single-sample pass: DDGI diffuse GI is disabled while viewport MSAA > 1x.");
+            } else if (m_HasActiveRenderSettings && !resolvedViewSettings.EnableDDGI) {
+                ImGui::TextDisabled("Experimental DDGI is disabled by current viewport Render FX / preset.");
+            }
             if (ImGui::DragInt3("Grid Dimensions", glm::value_ptr(ddgi.GridDimensions), 1.0f, 1, 64)) {
                 ddgi.GridDimensions = glm::clamp(ddgi.GridDimensions, glm::ivec3(1), glm::ivec3(64));
             }
+            inspectTooltip("Probe count along X, Y, Z axes (capped by 16384 total probes).");
             if (ImGui::DragFloat3("Grid Spacing", glm::value_ptr(ddgi.GridSpacing), 0.1f, 0.05f, 100.0f, "%.2f m")) {
-                ddgi.GridSpacing = glm::max(ddgi.GridSpacing, glm::vec3(0.05f));
+                ddgi.GridSpacing = glm::clamp(ddgi.GridSpacing, glm::vec3(0.05f), glm::vec3(100.0f));
             }
+            inspectTooltip("World-space interval between neighboring probes in meters.");
             ImGui::DragFloat3("Grid Origin", glm::value_ptr(ddgi.GridOrigin), 0.1f, -5000.0f, 5000.0f, "%.2f m");
+            inspectTooltip("Local origin offset of probe (0,0,0) relative to this entity's transform.");
             if (ImGui::DragFloat("Energy Multiplier", &ddgi.EnergyMultiplier, 0.05f, 0.0f, 10.0f, "%.2f")) {
-                ddgi.EnergyMultiplier = std::max(0.0f, ddgi.EnergyMultiplier);
+                ddgi.EnergyMultiplier = std::isfinite(ddgi.EnergyMultiplier) ? std::clamp(ddgi.EnergyMultiplier, 0.0f, 10.0f) : 1.0f;
             }
+            inspectTooltip("Multi-bounce diffuse irradiance intensity scale [0..10].");
             if (ImGui::SliderFloat("Hysteresis", &ddgi.Hysteresis, 0.0f, 0.99f, "%.2f")) {
-                ddgi.Hysteresis = std::clamp(ddgi.Hysteresis, 0.0f, 0.99f);
+                ddgi.Hysteresis = std::isfinite(ddgi.Hysteresis) ? std::clamp(ddgi.Hysteresis, 0.0f, 0.99f) : 0.9f;
             }
+            inspectTooltip("Temporal blend weight [0..0.99] suppressing irradiance flicker across recaptures.");
             if (ImGui::SliderFloat("Update Fraction", &ddgi.UpdateFraction, 0.01f, 1.0f, "%.2f")) {
-                ddgi.UpdateFraction = std::clamp(ddgi.UpdateFraction, 0.01f, 1.0f);
+                ddgi.UpdateFraction = std::isfinite(ddgi.UpdateFraction) ? std::clamp(ddgi.UpdateFraction, 0.01f, 1.0f) : 0.25f;
             }
+            inspectTooltip("Target fraction of grid probes scheduled per update batch.");
             ddgi.MaxProbesPerFrame = std::clamp(
                 ddgi.MaxProbesPerFrame, 1, static_cast<int>(DDGIContract::HardMaxProbesPerFrame));
             ImGui::SliderInt("Max Probes / Frame", &ddgi.MaxProbesPerFrame, 1,
                 static_cast<int>(DDGIContract::HardMaxProbesPerFrame));
+            inspectTooltip("Strict per-frame ceiling on recaptured probes.");
             if (ImGui::DragFloat("View Bias", &ddgi.ViewBias, 0.01f, 0.0f, 2.0f, "%.3f m")) {
-                ddgi.ViewBias = std::max(0.0f, ddgi.ViewBias);
+                ddgi.ViewBias = std::isfinite(ddgi.ViewBias) ? std::clamp(ddgi.ViewBias, 0.0f, 2.0f) : 0.15f;
             }
+            inspectTooltip("Sampling offset toward camera to mitigate light leaking through thin walls.");
             if (ImGui::DragFloat("Normal Bias", &ddgi.NormalBias, 0.01f, 0.0f, 2.0f, "%.3f m")) {
-                ddgi.NormalBias = std::max(0.0f, ddgi.NormalBias);
+                ddgi.NormalBias = std::isfinite(ddgi.NormalBias) ? std::clamp(ddgi.NormalBias, 0.0f, 2.0f) : 0.08f;
             }
+            inspectTooltip("Sampling offset along surface normal before Chebyshev visibility test.");
             const auto budget = DDGIContract::EstimateMemoryBudget(
                 ddgi.GridDimensions, static_cast<uint32_t>(ddgi.MaxProbesPerFrame), false);
             if (budget.Extent.Valid) {
@@ -1169,7 +1416,7 @@ namespace Axle {
                     "Invalid grid dimensions (max %u probes, max %u atlas extent).",
                     DDGIContract::MaxProbeCount, DDGIContract::MaxAtlasDimension);
             }
-        }, /*canRemove=*/ true);
+        }, /*canRemove=*/ true, nullptr, /*canReset=*/ true);
 
         // Native Script Component
         DrawComponent<NativeScriptComponent>("Native Script", entity, [&](NativeScriptComponent& nsc) {

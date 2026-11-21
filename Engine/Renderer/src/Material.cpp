@@ -236,6 +236,14 @@ namespace Axle {
         m_UVOffset = glm::vec2(0.0f);
     }
 
+    void Material::ResetToDefault() {
+        const auto name = m_Name;
+        const auto handle = m_Handle;
+        const auto filePath = m_FilePath;
+        *this = Material(name, handle);
+        m_FilePath = filePath;
+    }
+
     void Material::SetPresetCarPaintRed() {
         ResetTextures();
         m_AlbedoColor = glm::vec4(0.85f, 0.06f, 0.08f, 1.0f);

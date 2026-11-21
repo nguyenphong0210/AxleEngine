@@ -395,7 +395,8 @@ private:
                     const auto k = tok.substr(0, eq);
                     const auto v = tok.substr(eq + 1);
                     auto asBool = [&] { return v == "1" || v == "true" || v == "on"; };
-                    if (k == "ssr") fx.SSR = asBool();
+                    if (k == "shadows") fx.Shadows = asBool();
+                    else if (k == "ssr") fx.SSR = asBool();
                     else if (k == "planar") fx.Planar = asBool();
                     else if (k == "gtao") fx.GTAO = asBool();
                     else if (k == "contact") fx.Contact = asBool();
@@ -403,6 +404,8 @@ private:
                     else if (k == "autoexp") fx.AutoExposure = asBool();
                     else if (k == "ddgi") fx.DDGI = asBool();
                     else if (k == "taa") fx.TAA = asBool();
+                    else if (k == "sss") fx.SSS = asBool();
+                    else if (k == "msaa") fx.MSAA = std::stoi(v);
                     else if (k == "hdr") fx.HDRViewport = asBool();
                     else if (k == "popup") fx.PinRenderFXPopup = asBool();
                     else if (k == "hiz") fx.HiZLevel = std::stoi(v);

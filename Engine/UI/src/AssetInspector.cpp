@@ -476,7 +476,8 @@ namespace Axle {
         changed |= m_CustomShaderPicker.Draw("MaterialAssetShader", m_ActiveMaterialAsset,
                                              path.stem().string(), m_OnOpenHLSLStudioCallback);
 
-        changed |= m_MaterialInspectorControls.Draw(m_ActiveMaterialAsset);
+        changed |= m_MaterialInspectorControls.Draw(
+            m_ActiveMaterialAsset, m_HasActiveRenderSettings ? &m_ActiveRenderSettings : nullptr);
 
         if (changed) m_ActiveMaterialAsset.SyncToAsset();
 

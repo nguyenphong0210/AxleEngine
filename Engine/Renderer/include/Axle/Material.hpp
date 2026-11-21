@@ -4,6 +4,7 @@
 #include <Axle/Texture2D.hpp>
 #include <Axle/ShaderPropertyReflection.hpp>
 #include <Axle/Shader.hpp>
+#include <Axle/RHI/RHIMaterialConstants.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
@@ -68,61 +69,109 @@ namespace Axle {
         void SetDetailMaskTexture(const std::shared_ptr<Texture2D>& texture,const std::string& path="") { m_DetailMaskMap=texture; m_DetailMaskPath=path; m_UseDetailMaskMap=!path.empty(); }
 
         float GetDetailNormalStrength() const { return m_DetailNormalStrength; }
-        void SetDetailNormalStrength(float value) { m_DetailNormalStrength=value; }
+        void SetDetailNormalStrength(float value) {
+            m_DetailNormalStrength = MaterialParameterBounds::ClampFinite(
+                value, MaterialParameterBounds::MinDetailNormalStrength, MaterialParameterBounds::MaxDetailNormalStrength,
+                MaterialParameterBounds::DefaultDetailNormalStrength);
+        }
         glm::vec2 GetDetailUVScale() const { return m_DetailUVScale; }
-        void SetDetailUVScale(glm::vec2 value) { m_DetailUVScale=value; }
+        void SetDetailUVScale(glm::vec2 value) { m_DetailUVScale = MaterialParameterBounds::SanitizeVec2(value, glm::vec2(1.0f)); }
         glm::vec2 GetDetailUVOffset() const { return m_DetailUVOffset; }
-        void SetDetailUVOffset(glm::vec2 value) { m_DetailUVOffset=value; }
+        void SetDetailUVOffset(glm::vec2 value) { m_DetailUVOffset = MaterialParameterBounds::SanitizeVec2(value, glm::vec2(0.0f)); }
 
         bool GetRefractionEnabled() const { return m_RefractionEnabled; }
-        void SetRefractionEnabled(bool value) { m_RefractionEnabled=value; }
+        void SetRefractionEnabled(bool value) { m_RefractionEnabled = value; }
         float GetRefractionStrength() const { return m_RefractionStrength; }
-        void SetRefractionStrength(float value) { m_RefractionStrength=value; }
+        void SetRefractionStrength(float value) {
+            m_RefractionStrength = MaterialParameterBounds::ClampFinite(
+                value, MaterialParameterBounds::MinRefractionStrength, MaterialParameterBounds::MaxRefractionStrength,
+                MaterialParameterBounds::DefaultRefractionStrength);
+        }
         float GetRefractionIOR() const { return m_RefractionIOR; }
-        void SetRefractionIOR(float value) { m_RefractionIOR=value; }
+        void SetRefractionIOR(float value) {
+            m_RefractionIOR = MaterialParameterBounds::ClampFinite(
+                value, MaterialParameterBounds::MinRefractionIOR, MaterialParameterBounds::MaxRefractionIOR,
+                MaterialParameterBounds::DefaultRefractionIOR);
+        }
         float GetRefractionThickness() const { return m_RefractionThickness; }
-        void SetRefractionThickness(float value) { m_RefractionThickness=value; }
+        void SetRefractionThickness(float value) {
+            m_RefractionThickness = MaterialParameterBounds::ClampFinite(
+                value, MaterialParameterBounds::MinRefractionThickness, MaterialParameterBounds::MaxRefractionThickness,
+                MaterialParameterBounds::DefaultRefractionThickness);
+        }
         glm::vec3 GetRefractionTint() const { return m_RefractionTint; }
-        void SetRefractionTint(glm::vec3 value) { m_RefractionTint=value; }
+        void SetRefractionTint(glm::vec3 value) {
+            m_RefractionTint = MaterialParameterBounds::ClampVec3(value, 0.0f, 1.0f, glm::vec3(1.0f));
+        }
 
         // M14-U8 Advanced Materials: Sheen, Subsurface, Absorption
         bool GetSheenEnabled() const { return m_SheenEnabled; }
         void SetSheenEnabled(bool value) { m_SheenEnabled = value; }
         const glm::vec3& GetSheenColor() const { return m_SheenColor; }
-        void SetSheenColor(const glm::vec3& value) { m_SheenColor = glm::clamp(value, glm::vec3(0.0f), glm::vec3(1.0f)); }
+        void SetSheenColor(const glm::vec3& value) {
+            m_SheenColor = MaterialParameterBounds::ClampVec3(value, 0.0f, 1.0f, glm::vec3(1.0f));
+        }
         float GetSheenRoughness() const { return m_SheenRoughness; }
-        void SetSheenRoughness(float value) { m_SheenRoughness = std::clamp(value, 0.01f, 1.0f); }
+        void SetSheenRoughness(float value) {
+            m_SheenRoughness = MaterialParameterBounds::ClampFinite(
+                value, MaterialParameterBounds::MinSheenRoughness, MaterialParameterBounds::MaxSheenRoughness,
+                MaterialParameterBounds::DefaultSheenRoughness);
+        }
 
         bool GetSubsurfaceEnabled() const { return m_SubsurfaceEnabled; }
         void SetSubsurfaceEnabled(bool value) { m_SubsurfaceEnabled = value; }
         const glm::vec3& GetSubsurfaceColor() const { return m_SubsurfaceColor; }
-        void SetSubsurfaceColor(const glm::vec3& value) { m_SubsurfaceColor = glm::clamp(value, glm::vec3(0.0f), glm::vec3(1.0f)); }
+        void SetSubsurfaceColor(const glm::vec3& value) {
+            m_SubsurfaceColor = MaterialParameterBounds::ClampVec3(value, 0.0f, 1.0f, glm::vec3(1.0f, 0.8f, 0.7f));
+        }
         float GetSubsurfaceRadius() const { return m_SubsurfaceRadius; }
-        void SetSubsurfaceRadius(float value) { m_SubsurfaceRadius = std::clamp(value, 0.0f, 16.0f); }
+        void SetSubsurfaceRadius(float value) {
+            m_SubsurfaceRadius = MaterialParameterBounds::ClampFinite(
+                value, MaterialParameterBounds::MinSubsurfaceRadius, MaterialParameterBounds::MaxSubsurfaceRadius,
+                MaterialParameterBounds::DefaultSubsurfaceRadius);
+        }
 
         bool GetAbsorptionEnabled() const { return m_AbsorptionEnabled; }
         void SetAbsorptionEnabled(bool value) { m_AbsorptionEnabled = value; }
         const glm::vec3& GetAbsorptionColor() const { return m_AbsorptionColor; }
-        void SetAbsorptionColor(const glm::vec3& value) { m_AbsorptionColor = glm::max(value, glm::vec3(0.0f)); }
+        void SetAbsorptionColor(const glm::vec3& value) {
+            m_AbsorptionColor = MaterialParameterBounds::ClampMinVec3(value, 0.0f);
+        }
         float GetDispersion() const { return m_Dispersion; }
-        void SetDispersion(float value) { m_Dispersion = std::clamp(value, 0.0f, 1.0f); }
+        void SetDispersion(float value) {
+            m_Dispersion = MaterialParameterBounds::ClampFinite(
+                value, MaterialParameterBounds::MinDispersion, MaterialParameterBounds::MaxDispersion, 0.0f);
+        }
 
         // Automotive & Advanced Shading (Clearcoat & Anisotropy)
         float GetClearcoatStrength() const { return m_ClearcoatStrength; }
         float& GetClearcoatStrengthRef() { return m_ClearcoatStrength; }
-        void SetClearcoatStrength(float val) { m_ClearcoatStrength = std::clamp(val, 0.0f, 1.0f); }
+        void SetClearcoatStrength(float val) {
+            m_ClearcoatStrength = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinClearcoatStrength, MaterialParameterBounds::MaxClearcoatStrength, 0.0f);
+        }
 
         float GetClearcoatRoughness() const { return m_ClearcoatRoughness; }
         float& GetClearcoatRoughnessRef() { return m_ClearcoatRoughness; }
-        void SetClearcoatRoughness(float val) { m_ClearcoatRoughness = std::clamp(val, 0.001f, 1.0f); }
+        void SetClearcoatRoughness(float val) {
+            m_ClearcoatRoughness = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinClearcoatRoughness, MaterialParameterBounds::MaxClearcoatRoughness,
+                MaterialParameterBounds::DefaultClearcoatRoughness);
+        }
 
         float GetAnisotropyStrength() const { return m_AnisotropyStrength; }
         float& GetAnisotropyStrengthRef() { return m_AnisotropyStrength; }
-        void SetAnisotropyStrength(float val) { m_AnisotropyStrength = std::clamp(val, -1.0f, 1.0f); }
+        void SetAnisotropyStrength(float val) {
+            m_AnisotropyStrength = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinAnisotropyStrength, MaterialParameterBounds::MaxAnisotropyStrength, 0.0f);
+        }
 
         float GetAnisotropyRotation() const { return m_AnisotropyRotation; }
         float& GetAnisotropyRotationRef() { return m_AnisotropyRotation; }
-        void SetAnisotropyRotation(float val) { m_AnisotropyRotation = std::clamp(val, 0.0f, 1.0f); }
+        void SetAnisotropyRotation(float val) {
+            m_AnisotropyRotation = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinAnisotropyRotation, MaterialParameterBounds::MaxAnisotropyRotation, 0.0f);
+        }
 
         // Custom HLSL Shader Overrides
         bool GetUseCustomShader() const { return m_UseCustomShader; }
@@ -146,7 +195,11 @@ namespace Axle {
 
         float GetAlphaCutoff() const { return m_AlphaCutoff; }
         float& GetAlphaCutoffRef() { return m_AlphaCutoff; }
-        void SetAlphaCutoff(float cutoff) { m_AlphaCutoff = std::clamp(cutoff, 0.0f, 1.0f); }
+        void SetAlphaCutoff(float cutoff) {
+            m_AlphaCutoff = MaterialParameterBounds::ClampFinite(
+                cutoff, MaterialParameterBounds::MinAlphaCutoff, MaterialParameterBounds::MaxAlphaCutoff,
+                MaterialParameterBounds::DefaultAlphaCutoff);
+        }
 
         bool GetDepthWrite() const { return m_DepthWrite; }
         bool& GetDepthWriteRef() { return m_DepthWrite; }
@@ -163,7 +216,9 @@ namespace Axle {
 
         int GetRenderQueue() const { return m_RenderQueue; }
         int& GetRenderQueueRef() { return m_RenderQueue; }
-        void SetRenderQueue(int queue) { m_RenderQueue = queue; }
+        void SetRenderQueue(int queue) {
+            m_RenderQueue = std::clamp(queue, MaterialParameterBounds::MinRenderQueue, MaterialParameterBounds::MaxRenderQueue);
+        }
 
         // Dynamic Shader Properties (Phase 38.2)
         const std::vector<ShaderPropertyInstance>& GetCustomProperties() const { return m_CustomProperties; }
@@ -179,39 +234,53 @@ namespace Axle {
         // PBR Core Properties
         const glm::vec4& GetAlbedoColor() const { return m_AlbedoColor; }
         glm::vec4& GetAlbedoColorRef() { return m_AlbedoColor; }
-        void SetAlbedoColor(const glm::vec4& color) { m_AlbedoColor = color; }
+        void SetAlbedoColor(const glm::vec4& color) { m_AlbedoColor = MaterialParameterBounds::SanitizeAlbedo(color); }
 
         float GetRoughness() const { return m_Roughness; }
         float& GetRoughnessRef() { return m_Roughness; }
-        void SetRoughness(float roughness) { m_Roughness = std::clamp(roughness, 0.0f, 1.0f); }
+        void SetRoughness(float roughness) {
+            m_Roughness = MaterialParameterBounds::ClampFinite(
+                roughness, 0.0f, MaterialParameterBounds::MaxRoughness, MaterialParameterBounds::DefaultRoughness);
+        }
 
         float GetMetallic() const { return m_Metallic; }
         float& GetMetallicRef() { return m_Metallic; }
-        void SetMetallic(float metallic) { m_Metallic = std::clamp(metallic, 0.0f, 1.0f); }
+        void SetMetallic(float metallic) {
+            m_Metallic = MaterialParameterBounds::ClampFinite(
+                metallic, MaterialParameterBounds::MinMetallic, MaterialParameterBounds::MaxMetallic,
+                MaterialParameterBounds::DefaultMetallic);
+        }
 
         float GetNormalStrength() const { return m_NormalStrength; }
         float& GetNormalStrengthRef() { return m_NormalStrength; }
-        void SetNormalStrength(float strength) { m_NormalStrength = strength; }
+        void SetNormalStrength(float strength) {
+            m_NormalStrength = MaterialParameterBounds::ClampFinite(
+                strength, MaterialParameterBounds::MinNormalStrength, MaterialParameterBounds::MaxNormalStrength,
+                MaterialParameterBounds::DefaultNormalStrength);
+        }
 
         const glm::vec3& GetEmissionColor() const { return m_EmissionColor; }
         glm::vec3& GetEmissionColorRef() { return m_EmissionColor; }
-        void SetEmissionColor(const glm::vec3& color) { m_EmissionColor = color; }
+        void SetEmissionColor(const glm::vec3& color) { m_EmissionColor = MaterialParameterBounds::ClampMinVec3(color, 0.0f); }
 
         float GetEmissionIntensity() const { return m_EmissionIntensity; }
         float& GetEmissionIntensityRef() { return m_EmissionIntensity; }
-        void SetEmissionIntensity(float intensity) { m_EmissionIntensity = std::max(0.0f, intensity); }
+        void SetEmissionIntensity(float intensity) {
+            m_EmissionIntensity = MaterialParameterBounds::ClampMinFinite(
+                intensity, MaterialParameterBounds::MinEmissionIntensity, 0.0f);
+        }
 
         const glm::vec2& GetUVScale() const { return m_UVScale; }
         glm::vec2& GetUVScaleRef() { return m_UVScale; }
-        void SetUVScale(const glm::vec2& uvScale) { m_UVScale = uvScale; }
+        void SetUVScale(const glm::vec2& uvScale) { m_UVScale = MaterialParameterBounds::SanitizeVec2(uvScale, glm::vec2(1.0f)); }
 
         const glm::vec2& GetUVTiling() const { return m_UVScale; }
         glm::vec2& GetUVTilingRef() { return m_UVScale; }
-        void SetUVTiling(const glm::vec2& uvTiling) { m_UVScale = uvTiling; }
+        void SetUVTiling(const glm::vec2& uvTiling) { m_UVScale = MaterialParameterBounds::SanitizeVec2(uvTiling, glm::vec2(1.0f)); }
 
         const glm::vec2& GetUVOffset() const { return m_UVOffset; }
         glm::vec2& GetUVOffsetRef() { return m_UVOffset; }
-        void SetUVOffset(const glm::vec2& uvOffset) { m_UVOffset = uvOffset; }
+        void SetUVOffset(const glm::vec2& uvOffset) { m_UVOffset = MaterialParameterBounds::SanitizeVec2(uvOffset, glm::vec2(0.0f)); }
 
         // Texture Slots
         const std::string& GetAlbedoPath() const { return m_AlbedoPath; }
@@ -252,7 +321,10 @@ namespace Axle {
 
         float GetAO() const { return m_AOStrength; }
         float& GetAORef() { return m_AOStrength; }
-        void SetAO(float ao) { m_AOStrength = std::clamp(ao, 0.0f, 1.0f); }
+        void SetAO(float ao) {
+            m_AOStrength = MaterialParameterBounds::ClampFinite(
+                ao, MaterialParameterBounds::MinAO, MaterialParameterBounds::MaxAO, MaterialParameterBounds::DefaultAO);
+        }
         const std::string& GetAOPath() const { return m_AOPath; }
         const std::shared_ptr<Texture2D>& GetAOMap() const { return m_AOMap; }
         bool UseAOMap() const { return m_UseAOMap && (m_AOMap != nullptr); }
@@ -272,6 +344,7 @@ namespace Axle {
         void ClearEmissiveTexture();
 
         void ResetTextures();
+        void ResetToDefault();
 
         // Presets
         void SetPresetCarPaintRed();

@@ -9,6 +9,7 @@
 #include <Axle/RHIObjectPicker.hpp>
 #include <Axle/RHIMeshRegistry.hpp>
 #include <Axle/Scene.hpp>
+#include <Axle/SceneExtraction.hpp>
 #include <Axle/Entity.hpp>
 #include <Axle/ResolvedSurface.hpp>
 #include <Axle/RHI/RHIFaultInjection.hpp>
@@ -242,7 +243,12 @@ static bool Run(RHIType backend) {
     settings.EnableSkybox = settings.EnableShadows = settings.EnableToneMapping = settings.EnableFXAA = false;
     settings.EnableParticles = false; settings.MSAASamples = 1; settings.ClearColor = {0, 0, 0, 1};
     auto draw = [&] {
-        if (!view.SetRenderOptions(settings)) return false;
+        const auto authoredFog = ExtractVolumetricFog(*scene);
+        const auto authoredDDGI = ExtractDDGIProbeGrid(*scene);
+        if (!view.SetRenderOptions(settings, authoredFog ? &*authoredFog : nullptr,
+                                   authoredDDGI ? &*authoredDDGI : nullptr)) {
+            return false;
+        }
         renderer.RenderScene(scene, camera, view.GetColorTexture(), view.GetDepthTexture(), settings, nullptr, view.GetTargets());
         return renderer.WasLastRenderSuccessful();
     };
@@ -272,8 +278,15 @@ static bool Run(RHIType backend) {
         targets->GetHiZ(7) && targets->GetBloom(5), "viewport publishes half-res GTAO, full-res resolved GTAO, and complete Hi-Z/bloom levels");
     RENDER_CHECK(!ReadTexture(*view.GetColorTexture()).empty(), "M14 explicit viewport output can be read back");
     settings.EnableAutoExposure = settings.EnableDDGI = true;
+    RENDER_CHECK(draw() && view.GetTargets()->GetExposure() && !view.GetTargets()->GetDDGI(),
+        "optional targets omit DDGI atlas when the scene has no authored DDGI grid");
+    auto ddgiEntity = scene->CreateEntity("ProbeGrid");
+    ddgiEntity.AddComponent<TransformComponent>();
+    auto& ddgiGrid = ddgiEntity.AddComponent<DDGIProbeGridComponent>();
+    ddgiGrid.GridDimensions = { 4, 4, 4 };
     RENDER_CHECK(draw() && view.GetTargets()->GetExposure() && view.GetTargets()->GetDDGI(),
-        "optional targets match renderer requirements even without an authored DDGI grid");
+        "optional targets match renderer requirements with an authored DDGI grid");
+    scene->DestroyEntity(ddgiEntity);
     // M15 S1.1: scene luminance must reach tone mapping through the GPU exposure
     // target while the authored exposure remains fixed at 1.0.
     auto savedScene = scene;

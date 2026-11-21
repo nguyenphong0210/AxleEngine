@@ -2,6 +2,8 @@
 #include <Axle/Components.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/HLSLStudioPanel.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
+#include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/ShaderPropertyReflection.hpp>
 #include <Axle/ShaderDragDropDecoder.hpp>
 #include <imgui.h>
@@ -124,6 +126,18 @@ namespace Axle {
                                   const std::function<void(const std::filesystem::path&)>& openShader) {
         ImGui::PushID(id);
         bool changed = ImGui::Checkbox("Use Custom Shader", &material.UseCustomShader);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Override Standard PBR with a custom authored HLSL shader on Direct3D 12 / Vulkan.");
+        }
+        const auto policy = RenderBackendPolicy::FromDevice(RHI::RHIDevice::Get().GetCapabilities());
+        if (material.UseCustomShader && policy.GetQualityTier() == BackendQualityTier::Compatibility) {
+            ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.25f, 1.0f),
+                "OpenGL Compatibility: Custom HLSL shaders fall back to Standard PBR; authored shader path and parameters are preserved.");
+        } else if (material.UseCustomShader &&
+                   policy.GetBackend() != RHI::RHIType::Direct3D12 && policy.GetBackend() != RHI::RHIType::Vulkan) {
+            ImGui::TextColored(ImVec4(0.95f, 0.55f, 0.35f, 1.0f),
+                "Custom HLSL shaders require an active Direct3D 12 or Vulkan device.");
+        }
         const auto& diagnostic=material.MaterialAsset?material.MaterialAsset->GetCustomShaderDiagnostic():material.CustomShaderDiagnostic;
         if (material.UseCustomShader && !diagnostic.empty()) ImGui::TextWrapped("%s",diagnostic.c_str());
         ImGui::Spacing();

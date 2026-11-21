@@ -4714,4 +4714,108 @@ namespace Axle {
         }
     } // namespace SubsurfaceContract
 
+    namespace ViewTargetContract {
+
+        SceneRenderSettings ResolveEffectiveSettings(
+            const SceneRenderSettings& resolvedSettings,
+            bool isSubCapture,
+            bool hasDepth,
+            const RenderVolumetricFog* fog) {
+            SceneRenderSettings settings = resolvedSettings;
+            bool enableFroxelTargets = false;
+            uint8_t froxelQuality = RHI::RHIViewTargets::DefaultFroxelQualityTier;
+            FroxelFogContract::ResolveViewTargetOptions(
+                settings, isSubCapture, hasDepth, enableFroxelTargets, froxelQuality, fog);
+            const uint8_t activeSampleCount = std::max<uint8_t>(1u, settings.MSAASamples);
+            const bool linearFog = enableFroxelTargets && FroxelFogContract::RequiresLinearColor(settings, fog);
+            const bool linearReflections =
+                (settings.EnableSSR || settings.EnablePlanarReflections) && activeSampleCount == 1u;
+            if ((linearReflections || linearFog) && !settings.EnableToneMapping) {
+                // Compose scene radiance in linear space before tone mapping / gamma conversion.
+                settings.EnableToneMapping = true;
+                settings.ToneMappingMode = 0;
+                settings.Exposure = 1.0f;
+                settings.Gamma = 2.2f;
+            }
+            return settings;
+        }
+
+        RHI::RHIViewTargetDesc BuildViewTargetDesc(
+            const SceneRenderSettings& resolvedSettings,
+            const ViewTargetPolicyInput& input) {
+            const uint8_t activeSampleCount = std::max<uint8_t>(1u, resolvedSettings.MSAASamples);
+            RHI::RHIViewTargetDesc desc;
+            desc.Width = std::max(1u, input.Width);
+            desc.Height = std::max(1u, input.Height);
+            desc.ColorFormat = input.ColorFormat;
+            desc.DepthFormat = input.DepthFormat;
+            desc.NormalFormat = input.NormalFormat;
+            desc.Samples = activeSampleCount;
+            desc.EnableDepth = input.EnableDepth;
+            desc.OwnPrimary = input.OwnPrimary;
+            desc.RenderAuxiliary = input.RenderAuxiliary;
+            desc.FXAA = resolvedSettings.EnableFXAA && !(resolvedSettings.EnableTAA && activeSampleCount == 1u);
+
+            const bool wantsSSS = !input.IsSubCapture && input.WantsSubsurface &&
+                resolvedSettings.EnableSubsurfaceScattering && activeSampleCount == 1u;
+            desc.EnableSubsurface = wantsSSS;
+            desc.EnableGTAO = resolvedSettings.EnableGTAO || resolvedSettings.EnableContactShadows;
+            desc.EnableHiZ = resolvedSettings.EnableSSR || resolvedSettings.HiZVisualizationLevel >= 0;
+            desc.EnableReflectionTerms =
+                (resolvedSettings.EnableSSR || resolvedSettings.EnablePlanarReflections) && activeSampleCount == 1u;
+            const bool enablePlanarTargets = resolvedSettings.EnablePlanarReflections && !input.IsSubCapture;
+            desc.EnablePlanarReflection = enablePlanarTargets;
+            desc.PlanarResolutionScale = enablePlanarTargets
+                ? std::clamp(resolvedSettings.PlanarReflectionResolutionScale,
+                             RHI::RHIViewTargets::MinPlanarResolutionScale,
+                             RHI::RHIViewTargets::MaxPlanarResolutionScale)
+                : 0.5f;
+            desc.EnableBloom = resolvedSettings.EnableBloom;
+            desc.EnableAutoExposure = resolvedSettings.EnableAutoExposure;
+
+            std::array<uint32_t, 3> ddgiDims{0u, 0u, 0u};
+            DDGIContract::ResolveViewTargetOptions(
+                resolvedSettings, input.IsSubCapture, input.DDGIProbeGrid, desc.EnableDDGI, ddgiDims);
+            desc.DDGIGridX = ddgiDims[0];
+            desc.DDGIGridY = ddgiDims[1];
+            desc.DDGIGridZ = ddgiDims[2];
+
+            FroxelFogContract::ResolveViewTargetOptions(
+                resolvedSettings, input.IsSubCapture, desc.EnableDepth,
+                desc.EnableVolumetricFog, desc.FroxelQuality, input.VolumetricFog);
+
+            desc.EnableNormal = desc.EnableGTAO || resolvedSettings.EnableSSR ||
+                resolvedSettings.EnablePlanarReflections || desc.EnableSubsurface;
+            desc.EnableScreenStorage = desc.EnableGTAO || resolvedSettings.EnableSSR;
+            desc.HDR = resolvedSettings.EnableToneMapping || desc.EnableReflectionTerms ||
+                (desc.EnableVolumetricFog && FroxelFogContract::RequiresLinearColor(resolvedSettings, input.VolumetricFog));
+
+            if (resolvedSettings.EnableTAA) {
+                desc.HistoryCount = 2;
+                desc.EnableVelocity = (activeSampleCount == 1u);
+                desc.EnableReactive = (activeSampleCount == 1u);
+            } else {
+                desc.HistoryCount = 0;
+                desc.EnableVelocity = false;
+                desc.EnableReactive = false;
+            }
+            return desc;
+        }
+
+        RHI::RHIViewTargetDesc DeriveExpectedViewTargetDesc(
+            const RHI::RHIViewTargetDesc& requiredDesc,
+            const RHI::RHIViewTargetDesc& currentTargetDesc) {
+            RHI::RHIViewTargetDesc expected = requiredDesc;
+            expected.OwnPrimary = currentTargetDesc.OwnPrimary;
+            expected.HistoryCount = currentTargetDesc.HistoryCount;
+            expected.EnableVelocity = currentTargetDesc.EnableVelocity;
+            expected.EnableReactive = currentTargetDesc.EnableReactive;
+            expected.EnableSubsurface = currentTargetDesc.EnableSubsurface;
+            expected.EnableNormal = requiredDesc.EnableNormal || currentTargetDesc.EnableNormal;
+            expected.EnableScreenStorage = requiredDesc.EnableScreenStorage || currentTargetDesc.EnableScreenStorage;
+            return expected;
+        }
+
+    } // namespace ViewTargetContract
+
 } // namespace Axle

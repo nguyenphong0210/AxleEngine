@@ -45,6 +45,10 @@ using namespace Axle::ReflectionCaptureContract;
 #define AXLE_SSR_SHADER_PATH "Engine/Resources/Shaders/SSR.hlsl"
 #endif
 
+#ifndef AXLE_RENDER_CONTRACTS_SOURCE_PATH
+#define AXLE_RENDER_CONTRACTS_SOURCE_PATH "Engine/Renderer/src/RenderContracts.cpp"
+#endif
+
 #ifndef AXLE_REFLECTION_PROBE_COMMON_SHADER_PATH
 #define AXLE_REFLECTION_PROBE_COMMON_SHADER_PATH "Engine/Resources/Shaders/ReflectionProbeCommon.hlsli"
 #endif
@@ -1184,6 +1188,7 @@ bool RunM15ReflectionCaptureContractUnitTests() {
         const std::string planarPassSrc = readText(AXLE_PLANAR_PASS_SOURCE_PATH);
         const std::string scenePassesSrc = readText(AXLE_SCENE_PASSES_SOURCE_PATH);
         const std::string renderServiceSrc = readText(AXLE_RENDER_SERVICE_SOURCE_PATH);
+        const std::string renderContractsSrc = readText(AXLE_RENDER_CONTRACTS_SOURCE_PATH);
         RENDER_CHECK(!planarShader.empty() &&
                      planarShader.find("VSMain") != std::string::npos &&
                      planarShader.find("PSMain") != std::string::npos &&
@@ -1203,8 +1208,9 @@ bool RunM15ReflectionCaptureContractUnitTests() {
             "M15-U5-46.4: PlanarReflectionPass declares explicit copy/resolve/release DAG edges");
         RENDER_CHECK(scenePassesSrc.find("PlanarReflectionPass::Declare") != std::string::npos &&
                      scenePassesSrc.find("PlanarReflectionPass::Record") != std::string::npos &&
-                     renderServiceSrc.find("EnablePlanarReflections") != std::string::npos,
-            "M15-U5-46.4 / 46.5: RHISceneRendererPasses and RenderService wire PlanarReflectionPass and target policy parity");
+                     renderContractsSrc.find("EnablePlanarReflections") != std::string::npos &&
+                     renderServiceSrc.find("ViewTargetContract::BuildViewTargetDesc") != std::string::npos,
+            "M15-U5-46.4 / 46.5 / U10-03.5: RHISceneRendererPasses, RenderContracts, and RenderService wire PlanarReflectionPass and target policy parity");
 
         PlanarReflectionCaptureStatus st{};
         st.State = PlanarCaptureLifecycleState::Idle;

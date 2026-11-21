@@ -160,6 +160,64 @@ namespace Axle {
             reasons.push_back(Supports(BackendFeature::HDRFormats) ? "volumetric_fog_disabled:compute_or_storage_unavailable" :
                 "volumetric_fog_disabled:linear_hdr_unavailable");
         if (authored.EnableDDGI && !resolved.EnableDDGI) reasons.push_back("ddgi_disabled:compute_or_storage_unavailable");
+        if (m_QualityTier == BackendQualityTier::Compatibility && authored.EnableSubsurfaceScattering) {
+            reasons.push_back("subsurface_scattering_disabled:compatibility_backend");
+        }
+        if (resolved.MSAASamples > 1) {
+            if (resolved.EnableSubsurfaceScattering) {
+                reasons.push_back("subsurface_scattering_disabled:msaa_requires_single_sample");
+            }
+            if (resolved.EnableSSR || resolved.EnablePlanarReflections) {
+                reasons.push_back("screen_reflections_disabled:msaa_requires_single_sample");
+            }
+            if (resolved.EnableVolumetricFog) {
+                reasons.push_back("volumetric_fog_disabled:msaa_requires_single_sample");
+            }
+            if (resolved.EnableDDGI) {
+                reasons.push_back("ddgi_disabled:msaa_requires_single_sample");
+            }
+            if (resolved.EnableTAA) {
+                reasons.push_back("taa_motion_vectors_disabled:msaa_requires_single_sample");
+            }
+        }
         return reasons;
+    }
+
+    std::vector<std::string> RenderBackendPolicy::CollectMaterialFeatureDiagnostics(
+        const SceneRenderSettings& resolved,
+        bool usesCustomShader,
+        bool usesRefraction,
+        bool usesSubsurface,
+        bool usesAbsorptionOrDispersion) const {
+        std::vector<std::string> diagnostics;
+        const bool isCompat = (m_QualityTier == BackendQualityTier::Compatibility);
+        const bool hasNative = (m_Backend == RHI::RHIType::Direct3D12 || m_Backend == RHI::RHIType::Vulkan);
+        if (usesCustomShader) {
+            if (isCompat) {
+                diagnostics.push_back("OpenGL Compatibility: Custom HLSL shaders fall back to standard PBR shading; authored shader properties are preserved.");
+            } else if (!hasNative) {
+                diagnostics.push_back("No active RHI device: Custom HLSL shaders require Direct3D 12 or Vulkan.");
+            }
+        }
+        if (usesRefraction) {
+            if (isCompat || !hasNative) {
+                diagnostics.push_back("Screen-space refraction requires Direct3D 12 or Vulkan; compatibility path falls back to alpha blending.");
+            } else if (resolved.MSAASamples > 1) {
+                diagnostics.push_back("Screen-space refraction copy is disabled while viewport MSAA > 1x; falls back to alpha blending.");
+            }
+        }
+        if (usesSubsurface) {
+            if (isCompat || !hasNative) {
+                diagnostics.push_back("Separable subsurface scattering requires Direct3D 12 or Vulkan; compatibility path preserves diffuse tint.");
+            } else if (!resolved.EnableSubsurfaceScattering) {
+                diagnostics.push_back("Subsurface scattering pass is disabled in viewport Render FX.");
+            } else if (resolved.MSAASamples > 1) {
+                diagnostics.push_back("Subsurface scattering requires single-sample rendering; disabled while viewport MSAA > 1x.");
+            }
+        }
+        if (usesAbsorptionOrDispersion && (isCompat || !hasNative)) {
+            diagnostics.push_back("Volumetric Beer-Lambert absorption & dispersion require Direct3D 12 or Vulkan refraction.");
+        }
+        return diagnostics;
     }
 }

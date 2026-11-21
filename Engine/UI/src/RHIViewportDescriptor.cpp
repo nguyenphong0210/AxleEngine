@@ -8,6 +8,33 @@
 
 namespace Axle {
 
+    namespace {
+        void ApplyViewTargetDesc(RHIViewportDesc& desc, const RHI::RHIViewTargetDesc& targets) {
+            desc.MSAASamples = targets.Samples;
+            desc.HistoryCount = targets.HistoryCount;
+            desc.IntermediateHDR = targets.HDR;
+            desc.FXAA = targets.FXAA;
+            desc.EnableNormal = targets.EnableNormal;
+            desc.EnableScreenStorage = targets.EnableScreenStorage;
+            desc.EnableSubsurface = targets.EnableSubsurface;
+            desc.EnableHiZ = targets.EnableHiZ;
+            desc.EnableBloom = targets.EnableBloom;
+            desc.EnableGTAO = targets.EnableGTAO;
+            desc.EnableAutoExposure = targets.EnableAutoExposure;
+            desc.EnableDDGI = targets.EnableDDGI;
+            desc.EnableVelocity = targets.EnableVelocity;
+            desc.EnableReactive = targets.EnableReactive;
+            desc.EnableReflectionTerms = targets.EnableReflectionTerms;
+            desc.EnablePlanarReflection = targets.EnablePlanarReflection;
+            desc.PlanarResolutionScale = targets.PlanarResolutionScale;
+            desc.EnableVolumetricFog = targets.EnableVolumetricFog;
+            desc.FroxelQuality = targets.FroxelQuality;
+            desc.DDGIGridX = targets.DDGIGridX;
+            desc.DDGIGridY = targets.DDGIGridY;
+            desc.DDGIGridZ = targets.DDGIGridZ;
+        }
+    }
+
     RHIViewportDescriptor::~RHIViewportDescriptor() {
         Shutdown();
     }
@@ -29,7 +56,7 @@ namespace Axle {
         RHI::RHIViewTargetDesc targets; targets.Width = desc.Width; targets.Height = desc.Height;
         targets.ColorFormat = desc.ColorFormat; targets.DepthFormat = desc.DepthFormat; targets.EnableDepth = desc.EnableDepth;
         targets.Samples = desc.MSAASamples; targets.HDR = desc.IntermediateHDR; targets.FXAA = desc.FXAA; targets.HistoryCount = desc.HistoryCount;
-        targets.EnableNormal = desc.EnableNormal;
+        targets.EnableNormal = desc.EnableNormal || desc.EnableSubsurface;
         targets.EnableScreenStorage = desc.EnableScreenStorage;
         targets.EnableSubsurface = desc.EnableSubsurface;
         targets.EnableHiZ = desc.EnableHiZ;
@@ -156,34 +183,19 @@ namespace Axle {
         if (!m_OwnsColorTexture) return false;
         const auto settings = RenderBackendPolicy::FromDevice(RHI::RHIDevice::Get().GetCapabilities()).ResolveSettings(requestedSettings);
         auto desc = m_Desc;
-        desc.MSAASamples = settings.MSAASamples;
-        desc.EnableReflectionTerms = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
-        desc.EnablePlanarReflection = settings.EnablePlanarReflections;
-        desc.PlanarResolutionScale = desc.EnablePlanarReflection
-            ? std::clamp(settings.PlanarReflectionResolutionScale,
-                         RHI::RHIViewTargets::MinPlanarResolutionScale,
-                         RHI::RHIViewTargets::MaxPlanarResolutionScale)
-            : 0.5f;
-        desc.FXAA = settings.EnableFXAA;
-        desc.HistoryCount = settings.EnableTAA ? 2 : 0;
-        desc.EnableVelocity = settings.EnableTAA && settings.MSAASamples == 1;
-        desc.EnableReactive = settings.EnableTAA && settings.MSAASamples == 1;
-        desc.EnableSubsurface = enableSubsurface && requestedSettings.EnableSubsurfaceScattering && settings.MSAASamples == 1;
-        desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
-        desc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
-        desc.EnableBloom = settings.EnableBloom;
-        desc.EnableAutoExposure = settings.EnableAutoExposure;
-        std::array<uint32_t, 3> ddgiDims{0u, 0u, 0u};
-        DDGIContract::ResolveViewTargetOptions(settings, false, ddgi, desc.EnableDDGI, ddgiDims);
-        desc.DDGIGridX = ddgiDims[0];
-        desc.DDGIGridY = ddgiDims[1];
-        desc.DDGIGridZ = ddgiDims[2];
-        desc.EnableNormal = desc.EnableGTAO || settings.EnableSSR || settings.EnablePlanarReflections || desc.EnableSubsurface;
-        desc.EnableScreenStorage = desc.EnableGTAO || settings.EnableSSR;
-        FroxelFogContract::ResolveViewTargetOptions(
-            settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality, fog);
-        desc.IntermediateHDR = settings.EnableToneMapping || desc.EnableReflectionTerms ||
-            (desc.EnableVolumetricFog && FroxelFogContract::RequiresLinearColor(settings, fog));
+        ViewTargetContract::ViewTargetPolicyInput targetInput;
+        targetInput.Width = m_Desc.Width;
+        targetInput.Height = m_Desc.Height;
+        targetInput.ColorFormat = m_Desc.ColorFormat;
+        targetInput.DepthFormat = m_Desc.DepthFormat;
+        targetInput.EnableDepth = m_Desc.EnableDepth;
+        targetInput.OwnPrimary = true;
+        targetInput.IsSubCapture = false;
+        targetInput.WantsSubsurface = enableSubsurface;
+        targetInput.VolumetricFog = fog;
+        targetInput.DDGIProbeGrid = ddgi;
+        const RHI::RHIViewTargetDesc targets = ViewTargetContract::BuildViewTargetDesc(settings, targetInput);
+        ApplyViewTargetDesc(desc, targets);
         if (desc == m_Desc && IsValid()) return true;
         return Recreate(desc);
     }

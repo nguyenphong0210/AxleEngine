@@ -43,6 +43,10 @@ using namespace Axle;
 #define AXLE_RENDER_SERVICE_SOURCE_PATH "Engine/Scene/src/RenderService.cpp"
 #endif
 
+#ifndef AXLE_RENDER_CONTRACTS_SOURCE_PATH
+#define AXLE_RENDER_CONTRACTS_SOURCE_PATH "Engine/Renderer/src/RenderContracts.cpp"
+#endif
+
 #ifndef AXLE_ENTITY_INSPECTOR_SOURCE_PATH
 #define AXLE_ENTITY_INSPECTOR_SOURCE_PATH "Engine/UI/src/EntityInspector.cpp"
 #endif
@@ -338,6 +342,7 @@ bool RunM15DDGIContractUnitTests() {
 
         // Verify source wiring consistency across all owners and Editor/Inspector UI
         const std::string viewTargetsSrc = ReadText(AXLE_RHI_VIEW_TARGETS_SOURCE_PATH);
+        const std::string renderContractsSrc = ReadText(AXLE_RENDER_CONTRACTS_SOURCE_PATH);
         const std::string viewportDescSrc = ReadText(AXLE_RHI_VIEWPORT_DESCRIPTOR_SOURCE_PATH);
         const std::string sceneRendererSrc = ReadText(AXLE_SCENE_RENDERER_SOURCE_PATH);
         const std::string renderServiceSrc = ReadText(AXLE_RENDER_SERVICE_SOURCE_PATH);
@@ -346,13 +351,14 @@ bool RunM15DDGIContractUnitTests() {
         const std::string editorSrc = ReadText(AXLE_EDITOR_LAYER_SOURCE_PATH);
 
         RENDER_CHECK(viewTargetsSrc.find("ViewTarget_DDGI_Distance") != std::string::npos &&
-                     viewportDescSrc.find("DDGIContract::ResolveViewTargetOptions") != std::string::npos &&
-                     sceneRendererSrc.find("DDGIContract::ResolveViewTargetOptions") != std::string::npos &&
-                     renderServiceSrc.find("DDGIContract::ResolveViewTargetOptions") != std::string::npos &&
+                     renderContractsSrc.find("DDGIContract::ResolveViewTargetOptions") != std::string::npos &&
+                     viewportDescSrc.find("ViewTargetContract::BuildViewTargetDesc") != std::string::npos &&
+                     sceneRendererSrc.find("ViewTargetContract::BuildViewTargetDesc") != std::string::npos &&
+                     renderServiceSrc.find("ViewTargetContract::BuildViewTargetDesc") != std::string::npos &&
                      inspectorSrc.find("DDGIProbeGridComponent") != std::string::npos &&
                      editorHeaderSrc.find("std::optional<bool> m_ViewportDDGIOverride") != std::string::npos &&
                      editorSrc.find("Experimental DDGI") != std::string::npos,
-            "M15-U7-02 / 07.3: ViewTargets, Viewport, RenderService, RHISceneRenderer, Inspector, and Editor UI agree on DDGI contracts");
+            "M15-U7-02 / 07.3 / U10-03.5: ViewTargets, ViewTargetContract, Viewport, RenderService, RHISceneRenderer, Inspector, and Editor UI agree on DDGI contracts");
 
         // U7-B: Verify legacy camera-screen-copy hack is gone and real capture/octahedral/Chebyshev compute kernels exist
         const std::string ddgiShader = ReadText(AXLE_DDGI_SHADER_PATH);

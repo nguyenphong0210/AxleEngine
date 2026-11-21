@@ -6,9 +6,10 @@
 
 namespace Axle {
     struct MaterialComponent;
+    struct SceneRenderSettings;
     class MaterialInspectorControls {
     public:
-        bool Draw(MaterialComponent& material);
+        bool Draw(MaterialComponent& material, const SceneRenderSettings* activeViewSettings = nullptr);
         static std::vector<std::filesystem::path> FindTextures(const std::filesystem::path& root);
         bool TextureSlot(const char* id, std::string& path, bool& enabled,
                          const std::function<void(const std::string&)>& assign, bool showEnabled = true);

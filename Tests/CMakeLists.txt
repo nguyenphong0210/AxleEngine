@@ -552,6 +552,8 @@ target_compile_definitions(AxleRenderUnitTests PRIVATE
       AXLE_FROXEL_FOG_PASS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/Passes/FroxelFogPass.cpp"
       AXLE_RENDER_CAPABILITIES_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Renderer/src/RenderCapabilities.cpp"
       AXLE_RENDER_SERVICE_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Scene/src/RenderService.cpp"
+      AXLE_RENDER_CONTRACTS_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/Renderer/src/RenderContracts.cpp"
+      AXLE_CUSTOM_SHADER_PICKER_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/UI/src/CustomShaderPicker.cpp"
       AXLE_DDGI_POLICY_DOC_PATH="${CMAKE_SOURCE_DIR}/docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/DDGI_ACQUISITION_POLICY.md"
       AXLE_ENTITY_INSPECTOR_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Engine/UI/src/EntityInspector.cpp"
       AXLE_EDITOR_LAYER_SOURCE_PATH="${CMAKE_SOURCE_DIR}/Editor/src/EditorLayer.cpp"

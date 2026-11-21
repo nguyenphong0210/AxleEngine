@@ -33,6 +33,10 @@ using namespace Axle::FroxelFogContract;
 #define AXLE_SCENE_RENDERER_SOURCE_PATH "Engine/Scene/src/RHISceneRenderer.cpp"
 #endif
 
+#ifndef AXLE_RENDER_CONTRACTS_SOURCE_PATH
+#define AXLE_RENDER_CONTRACTS_SOURCE_PATH "Engine/Renderer/src/RenderContracts.cpp"
+#endif
+
 #ifndef AXLE_VOLUMETRIC_FOG_SHADER_PATH
 #define AXLE_VOLUMETRIC_FOG_SHADER_PATH "Engine/Resources/Shaders/VolumetricFog.hlsl"
 #endif
@@ -282,6 +286,7 @@ bool RunM15FroxelFogContractUnitTests() {
             "M15-U6-01.1: OpenGL compatibility policy keeps volumetric fog disabled without mutating authored tier");
 
         const std::string rhiViewTargetsSrc = ReadText(AXLE_RHI_VIEW_TARGETS_SOURCE_PATH);
+        const std::string renderContractsSrc = ReadText(AXLE_RENDER_CONTRACTS_SOURCE_PATH);
         const std::string renderServiceSrc = ReadText(AXLE_RENDER_SERVICE_SOURCE_PATH);
         const std::string viewportDescSrc = ReadText(AXLE_RHI_VIEWPORT_DESCRIPTOR_SOURCE_PATH);
         const std::string sceneRendererSrc = ReadText(AXLE_SCENE_RENDERER_SOURCE_PATH);
@@ -289,10 +294,11 @@ bool RunM15FroxelFogContractUnitTests() {
                      rhiViewTargetsSrc.find("FroxelIntegrated") != std::string::npos &&
                      rhiViewTargetsSrc.find("FroxelHistory0") != std::string::npos &&
                      rhiViewTargetsSrc.find("FroxelHistory1") != std::string::npos &&
-                     renderServiceSrc.find("ResolveViewTargetOptions") != std::string::npos &&
-                     viewportDescSrc.find("ResolveViewTargetOptions") != std::string::npos &&
-                     sceneRendererSrc.find("ResolveViewTargetOptions") != std::string::npos,
-            "M15-U6-01.1: RHIViewTargets and all three view-target builders share ResolveViewTargetOptions");
+                     renderContractsSrc.find("FroxelFogContract::ResolveViewTargetOptions") != std::string::npos &&
+                     renderServiceSrc.find("ViewTargetContract::BuildViewTargetDesc") != std::string::npos &&
+                     viewportDescSrc.find("ViewTargetContract::BuildViewTargetDesc") != std::string::npos &&
+                     sceneRendererSrc.find("ViewTargetContract::BuildViewTargetDesc") != std::string::npos,
+            "M15-U6-01.1 / U10-03.5: RHIViewTargets and ViewTargetContract::BuildViewTargetDesc unify ResolveViewTargetOptions across all builders");
     }
 
     // 6. M15-U6-05.3 & 06: ResolveMediaState removes clamps and invented fallbacks

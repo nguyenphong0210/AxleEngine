@@ -1,4 +1,5 @@
 #include <Axle/RenderService.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
 #include <cmath>
 #include <chrono>
 #include <Axle/TextureDescriptor.hpp>
@@ -1514,11 +1515,13 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     // Multi-Pass Scene Rendering (OpenGL vs Direct3D 12 / Vulkan)
     // ----------------------------------------------------
     Axle::SceneRenderSettings renderSettings;
-    renderSettings.EnableShadows = true;
+    renderSettings.EnableShadows = m_EnableShadows;
     renderSettings.EnableSkybox = true;
     renderSettings.EnableToneMapping = true;
     renderSettings.EnableFXAA = !m_EnableTAA;
     renderSettings.EnableTAA = m_EnableTAA;
+    renderSettings.EnableSubsurfaceScattering = m_EnableSubsurfaceScattering;
+    renderSettings.MSAASamples = static_cast<Axle::u8>(std::clamp(m_MSAASamples, 1, 8));
     renderSettings.EnableGTAO = m_EnableGTAO;
     renderSettings.EnableContactShadows = m_EnableContactShadows;
     renderSettings.EnableSSR = m_EnableSSR;
@@ -1535,6 +1538,8 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     renderSettings.HiZVisualizationLevel = m_HiZVisualizationLevel;
     renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
     renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
+    m_LastRenderSettings = renderSettings;
+    m_SceneHierarchyPanel.SetActiveRenderSettings(renderSettings);
 
     Axle::ViewRequest request;
     request.Kind = Axle::RenderViewKind::Main; request.Width = m_ViewportWidth; request.Height = m_ViewportHeight;
@@ -1912,19 +1917,28 @@ void EditorLayer::RenderToolbar() {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Configure Viewport Post-Processing & Lighting FX");
 
         if (ImGui::BeginPopup("RenderFXPopup")) {
+            auto fxTooltip = [](const char* text) {
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", text);
+            };
             ImGui::TextDisabled("Viewport Post-Processing & Lighting");
             ImGui::Separator();
+            ImGui::Checkbox("Real-Time Shadows", &m_EnableShadows);
+            fxTooltip("Enable directional cascaded and local light shadow map passes.");
             ImGui::Checkbox("Screen-Space Reflections (SSR)", &m_EnableSSR);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Real-time screen-space reflections raymarched in depth space with cubemap fallback.");
+            fxTooltip("Real-time screen-space reflections raymarched in depth space with cubemap fallback (requires MSAA 1x).");
             ImGui::Checkbox("Planar Reflections", &m_EnablePlanarReflections);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Mirrored planar reflections with oblique clipping and SSR/Probe/Sky fallback.");
+            fxTooltip("Mirrored planar reflections with oblique clipping and SSR/Probe/Sky fallback (requires MSAA 1x).");
             ImGui::Checkbox("Ambient Occlusion (GTAO)", &m_EnableGTAO);
+            fxTooltip("Half-resolution ground-truth ambient occlusion with spatial bilateral denoise.");
             ImGui::Checkbox("Contact Shadows", &m_EnableContactShadows);
+            fxTooltip("Short-range screen-space raymarched contact shadowing against directional light.");
+            ImGui::Checkbox("Subsurface Scattering (SSS)", &m_EnableSubsurfaceScattering);
+            fxTooltip("Separable screen-space subsurface diffuse scattering for Opaque/Cutout SSS materials (requires MSAA 1x).");
             ImGui::Checkbox("Physically Based Bloom", &m_EnableBloom);
+            fxTooltip("6-level progressive HDR downsample/upsample bloom filter.");
             bool fogEnabled = IsViewportFogEnabled();
             if (ImGui::Checkbox("Volumetric Fog", &fogEnabled)) m_ViewportFogOverride = fogEnabled;
+            fxTooltip("3D froxel injected and temporally filtered volumetric scattering (requires MSAA 1x).");
             if (m_ViewportFogOverride.has_value() && ImGui::MenuItem("Use Scene Fog Setting")) {
                 m_ViewportFogOverride.reset();
                 fogEnabled = IsViewportFogEnabled();
@@ -1932,19 +1946,67 @@ void EditorLayer::RenderToolbar() {
             if (fogEnabled) {
                 static constexpr const char* kFogQualityItems[] = { "Low", "Medium", "High", "Ultra" };
                 ImGui::Combo("Fog Quality", &m_FogQuality, kFogQualityItems, 4);
-                ImGui::SliderFloat("Fog Temporal Weight", &m_FogTemporalWeight, 0.0f, 0.9f, "%.2f");
+                fxTooltip("Froxel grid spatial resolution tier (Low..Ultra).");
+                if (ImGui::SliderFloat("Fog Temporal Weight", &m_FogTemporalWeight, 0.0f, 0.9f, "%.2f")) {
+                    m_FogTemporalWeight = std::clamp(m_FogTemporalWeight, 0.0f, 0.9f);
+                }
+                fxTooltip("Temporal reprojection blend factor [0..0.9] suppressing froxel slicing flicker.");
             }
             ImGui::Checkbox("Auto-Exposure", &m_EnableAutoExposure);
+            fxTooltip("Histogram-based automatic luminance adaptation.");
             bool ddgiEnabled = IsViewportDDGIEnabled();
             if (ImGui::Checkbox("Experimental DDGI", &ddgiEnabled)) m_ViewportDDGIOverride = ddgiEnabled;
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Uses the scene's enabled DDGI probe grid. This viewport can temporarily override the scene setting.");
+            fxTooltip("Uses the scene's enabled DDGI probe grid (requires MSAA 1x). This viewport can temporarily override the scene setting.");
             if (m_ViewportDDGIOverride.has_value() && ImGui::MenuItem("Use Scene DDGI Setting"))
                 m_ViewportDDGIOverride.reset();
             ImGui::Checkbox("Temporal Anti-Aliasing (TAA)", &m_EnableTAA);
+            fxTooltip("History-reprojected temporal anti-aliasing with reactive/depth rejection; supersedes FXAA at MSAA 1x.");
+            static constexpr int kMSAASampleCounts[] = { 1, 2, 4, 8 };
+            static constexpr const char* kMSAALabels[] = { "1x (Off)", "2x", "4x", "8x" };
+            int msaaIndex = 0;
+            for (int i = 0; i < 4; ++i) {
+                if (kMSAASampleCounts[i] == m_MSAASamples) msaaIndex = i;
+            }
+            if (ImGui::Combo("MSAA Samples", &msaaIndex, kMSAALabels, 4)) {
+                m_MSAASamples = kMSAASampleCounts[msaaIndex];
+            }
+            fxTooltip("Hardware multi-sample anti-aliasing [1x..8x]; values > 1x bypass single-sample screen passes.");
             ImGui::Separator();
-            ImGui::SliderInt("Hi-Z Debug Level (-1=Off)", &m_HiZVisualizationLevel, -1,
-                static_cast<int>(Axle::RHI::RHIViewTargets::MaxHiZLevels) - 1);
+            if (ImGui::SliderInt("Hi-Z Debug Level (-1=Off)", &m_HiZVisualizationLevel, -1,
+                static_cast<int>(Axle::RHI::RHIViewTargets::MaxHiZLevels) - 1)) {
+                m_HiZVisualizationLevel = std::clamp(m_HiZVisualizationLevel, -1,
+                    static_cast<int>(Axle::RHI::RHIViewTargets::MaxHiZLevels) - 1);
+            }
+            fxTooltip("Inspect conservative min-depth Hi-Z mip level in the viewport (-1 disables debug view).");
+            if (ImGui::Button("Reset Render FX Defaults")) {
+                m_EnableShadows = true;
+                m_EnableSSR = true;
+                m_EnablePlanarReflections = true;
+                m_EnableGTAO = true;
+                m_EnableBloom = true;
+                m_EnableContactShadows = true;
+                m_ViewportFogOverride.reset();
+                m_FogQuality = static_cast<int>(Axle::FroxelFogQuality::High);
+                m_FogTemporalWeight = 0.8f;
+                m_EnableAutoExposure = false;
+                m_ViewportDDGIOverride.reset();
+                m_EnableTAA = false;
+                m_EnableSubsurfaceScattering = true;
+                m_MSAASamples = 1;
+                m_HiZVisualizationLevel = -1;
+            }
+            fxTooltip("Restore standardized Editor viewport Render FX defaults.");
+            {
+                const auto policy = Axle::RenderBackendPolicy::FromDevice(Axle::RHI::RHIDevice::Get().GetCapabilities());
+                const auto fallbacks = policy.CollectFallbacks(m_LastRenderSettings);
+                if (!fallbacks.empty()) {
+                    ImGui::Separator();
+                    ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f), "Capability / Fallback Diagnostics:");
+                    for (const auto& reason : fallbacks) {
+                        ImGui::TextDisabled("  - %s", reason.c_str());
+                    }
+                }
+            }
             ImGui::EndPopup();
         }
 
@@ -2141,10 +2203,12 @@ void EditorLayer::OnImGuiRender() {
                 }
             }
             if (ImGui::BeginMenu("Rendering Features")) {
+                ImGui::MenuItem("Real-Time Shadows", nullptr, &m_EnableShadows);
                 ImGui::MenuItem("Screen-Space Reflections (SSR)", nullptr, &m_EnableSSR);
                 ImGui::MenuItem("Planar Reflections", nullptr, &m_EnablePlanarReflections);
                 ImGui::MenuItem("Ambient Occlusion (GTAO)", nullptr, &m_EnableGTAO);
                 ImGui::MenuItem("Contact Shadows", nullptr, &m_EnableContactShadows);
+                ImGui::MenuItem("Subsurface Scattering (SSS)", nullptr, &m_EnableSubsurfaceScattering);
                 ImGui::MenuItem("Physically Based Bloom", nullptr, &m_EnableBloom);
                 bool fogEnabled = IsViewportFogEnabled();
                 if (ImGui::MenuItem("Volumetric Fog", nullptr, &fogEnabled)) m_ViewportFogOverride = fogEnabled;
@@ -2156,6 +2220,13 @@ void EditorLayer::OnImGuiRender() {
                 if (m_ViewportDDGIOverride.has_value() && ImGui::MenuItem("Use Scene DDGI Setting"))
                     m_ViewportDDGIOverride.reset();
                 ImGui::MenuItem("Temporal Anti-Aliasing (TAA)", nullptr, &m_EnableTAA);
+                if (ImGui::BeginMenu("MSAA Samples")) {
+                    for (int count : { 1, 2, 4, 8 }) {
+                        const std::string label = count == 1 ? "1x (Off)" : (std::to_string(count) + "x");
+                        if (ImGui::MenuItem(label.c_str(), nullptr, m_MSAASamples == count)) m_MSAASamples = count;
+                    }
+                    ImGui::EndMenu();
+                }
                 ImGui::EndMenu();
             }
             ImGui::Separator();
@@ -3959,6 +4030,7 @@ void EditorLayer::VerifySimulationContract() {
 }
 
 void EditorLayer::ApplyRenderFXOverride(const RenderFXOverride& state) {
+    if (state.Shadows.has_value()) m_EnableShadows = *state.Shadows;
     if (state.SSR.has_value()) m_EnableSSR = *state.SSR;
     if (state.Planar.has_value()) m_EnablePlanarReflections = *state.Planar;
     if (state.GTAO.has_value()) m_EnableGTAO = *state.GTAO;
@@ -3967,6 +4039,11 @@ void EditorLayer::ApplyRenderFXOverride(const RenderFXOverride& state) {
     if (state.AutoExposure.has_value()) m_EnableAutoExposure = *state.AutoExposure;
     if (state.DDGI.has_value()) m_ViewportDDGIOverride = *state.DDGI;
     if (state.TAA.has_value()) m_EnableTAA = *state.TAA;
+    if (state.SSS.has_value()) m_EnableSubsurfaceScattering = *state.SSS;
+    if (state.MSAA.has_value()) {
+        const int s = *state.MSAA;
+        m_MSAASamples = (s == 2 || s == 4 || s == 8) ? s : 1;
+    }
     if (state.HiZLevel.has_value()) m_HiZVisualizationLevel = *state.HiZLevel;
     if (state.PinRenderFXPopup.has_value()) m_PinRenderFXPopup = *state.PinRenderFXPopup;
     if (state.FogQuality.has_value()) m_FogQuality = std::clamp(*state.FogQuality, 0, 3);

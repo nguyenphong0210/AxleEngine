@@ -98,7 +98,8 @@ public:
     Axle::RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
 
     struct RenderFXOverride {
-        std::optional<bool> SSR, Planar, GTAO, Contact, Bloom, AutoExposure, DDGI, TAA, HDRViewport, PinRenderFXPopup;
+        std::optional<bool> Shadows, SSR, Planar, GTAO, Contact, Bloom, AutoExposure, DDGI, TAA, SSS, HDRViewport, PinRenderFXPopup;
+        std::optional<int> MSAA;
         std::optional<int> FogOverride; // -1 = scene default, 0 = off, 1 = on
         std::optional<int> FogQuality;
         std::optional<float> FogTemporalWeight;
@@ -137,6 +138,7 @@ private:
     Axle::PhysicsDrawSettings m_PhysicsDrawSettings;
     bool m_ShowPhysicsDebug = false;
     // Advanced Post-Processing & Lighting Features (Group 1)
+    bool m_EnableShadows = true;
     bool m_EnableSSR = true;
     bool m_EnablePlanarReflections = true;
     bool m_EnableGTAO = true;
@@ -148,8 +150,11 @@ private:
     bool m_EnableAutoExposure = false;
     std::optional<bool> m_ViewportDDGIOverride;
     bool m_EnableTAA = false;
+    bool m_EnableSubsurfaceScattering = true;
+    int m_MSAASamples = 1;
     int m_HiZVisualizationLevel = -1;
     bool m_PinRenderFXPopup = false;
+    Axle::SceneRenderSettings m_LastRenderSettings;
     std::string m_PendingFocusWindow;
     std::optional<float> m_PendingInspectorScroll;
     bool m_F1KeyWasPressed = false;

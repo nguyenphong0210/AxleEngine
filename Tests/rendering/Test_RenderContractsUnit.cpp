@@ -5,10 +5,14 @@
 #include <Axle/RHI/RHIBarrier.hpp>
 #include <Axle/RHI/RHISampler.hpp>
 #include <Axle/RenderContracts.hpp>
+#include <Axle/RenderBackendPolicy.hpp>
+#include <Axle/Components.hpp>
 #include <Axle/RenderGraph.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
 #include <Axle/Material.hpp>
 #include <algorithm>
+#include <fstream>
+#include <sstream>
 
 namespace Axle::RenderTests {
 
@@ -362,6 +366,231 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static std::string LoadContractSource(const char* path) {
+        std::ifstream in(path);
+        std::ostringstream ss;
+        if (in.is_open()) ss << in.rdbuf();
+        return ss.str();
+    }
+
+    static bool Test_ViewTargetContractUnification() {
+        // M15-U10-03.5: Shared ViewTargetContract builder across main, preview, sub-capture, presets, and MSAA/compat paths.
+        const auto vkPolicy = RenderBackendPolicy::FromBackend(RendererBackendType::ModernRHI_Vulkan);
+        const auto glPolicy = RenderBackendPolicy::FromBackend(RendererBackendType::OpenGL_Compatibility);
+
+        SceneRenderSettings authored;
+        authored.EnableToneMapping = false;
+        authored.EnableFXAA = true;
+        authored.EnableTAA = false;
+        authored.EnableGTAO = true;
+        authored.EnableContactShadows = true;
+        authored.EnableSSR = true;
+        authored.EnablePlanarReflections = true;
+        authored.PlanarReflectionResolutionScale = 2.0f; // intentionally out of [0.25, 1.0]
+        authored.EnableBloom = true;
+        authored.EnableAutoExposure = true;
+        authored.EnableVolumetricFog = true;
+        authored.FogQuality = FroxelFogQuality::Ultra;
+        authored.EnableDDGI = true;
+        authored.EnableSubsurfaceScattering = true;
+        authored.MSAASamples = 1;
+
+        RenderVolumetricFog fog{};
+        fog.Enabled = true;
+        fog.Density = 0.05f;
+        RenderDDGIProbeGrid ddgi{};
+        ddgi.Enabled = true;
+        ddgi.GridDimensions = { 8, 4, 8 };
+
+        const auto resolvedVK = vkPolicy.ResolveSettings(authored);
+        const auto effectiveMain = ViewTargetContract::ResolveEffectiveSettings(resolvedVK, false, true, &fog);
+        RENDER_CHECK(effectiveMain.EnableToneMapping && effectiveMain.ToneMappingMode == 0,
+            "M15-U10-03.5: ResolveEffectiveSettings promotes linear HDR tone-map readiness identically for reflections/fog");
+
+        ViewTargetContract::ViewTargetPolicyInput mainInput;
+        mainInput.Width = 1920;
+        mainInput.Height = 1080;
+        mainInput.ColorFormat = RHI::RHITextureFormat::RGBA16_FLOAT;
+        mainInput.DepthFormat = RHI::RHITextureFormat::D32_FLOAT;
+        mainInput.EnableDepth = true;
+        mainInput.OwnPrimary = false;
+        mainInput.IsSubCapture = false;
+        mainInput.WantsSubsurface = true;
+        mainInput.VolumetricFog = &fog;
+        mainInput.DDGIProbeGrid = &ddgi;
+
+        const auto mainDesc = ViewTargetContract::BuildViewTargetDesc(effectiveMain, mainInput);
+        RENDER_CHECK(mainDesc.Width == 1920 && mainDesc.Height == 1080 &&
+                     mainDesc.EnableNormal && mainDesc.EnableScreenStorage && mainDesc.EnableSubsurface &&
+                     mainDesc.EnableGTAO && mainDesc.EnableHiZ && mainDesc.EnableReflectionTerms &&
+                     mainDesc.EnablePlanarReflection && Near(mainDesc.PlanarResolutionScale, 1.0f, 1e-4f) &&
+                     mainDesc.EnableBloom && mainDesc.EnableAutoExposure &&
+                     mainDesc.EnableVolumetricFog && mainDesc.FroxelQuality == 3 &&
+                     mainDesc.EnableDDGI && mainDesc.DDGIGridX == 8 && mainDesc.DDGIGridY == 4 && mainDesc.DDGIGridZ == 8 &&
+                     mainDesc.HDR && mainDesc.FXAA && mainDesc.HistoryCount == 0,
+            "M15-U10-03.5: Main view target policy derives complete coherent target descriptor");
+
+        // Sub-capture suppression (reflection probe / planar capture): no SSS, no planar recursion, no froxel, no DDGI
+        auto subInput = mainInput;
+        subInput.IsSubCapture = true;
+        const auto subDesc = ViewTargetContract::BuildViewTargetDesc(effectiveMain, subInput);
+        RENDER_CHECK(!subDesc.EnableSubsurface && !subDesc.EnablePlanarReflection &&
+                     !subDesc.EnableVolumetricFog && !subDesc.EnableDDGI &&
+                     subDesc.EnableNormal && subDesc.EnableScreenStorage,
+            "M15-U10-03.5: Sub-capture suppresses recursive planar/SSS/froxel/DDGI while keeping AO/SSR normal storage");
+
+        // TAA + MSAA 1x suppresses FXAA while enabling velocity/reactive/history
+        auto taaAuthored = authored;
+        taaAuthored.EnableTAA = true;
+        taaAuthored.EnableFXAA = true;
+        const auto taaResolved = vkPolicy.ResolveSettings(taaAuthored);
+        const auto taaDesc = ViewTargetContract::BuildViewTargetDesc(taaResolved, mainInput);
+        RENDER_CHECK(!taaDesc.FXAA && taaDesc.HistoryCount == 2 && taaDesc.EnableVelocity && taaDesc.EnableReactive,
+            "M15-U10-03.5: TAA at MSAA 1x enables history/velocity/reactive and suppresses FXAA");
+
+        // MSAA 4x suppresses single-sample passes uniformly
+        auto msaaAuthored = taaAuthored;
+        msaaAuthored.MSAASamples = 4;
+        const auto msaaDesc = ViewTargetContract::BuildViewTargetDesc(vkPolicy.ResolveSettings(msaaAuthored), mainInput);
+        RENDER_CHECK(msaaDesc.Samples == 4 && !msaaDesc.EnableSubsurface && !msaaDesc.EnableReflectionTerms &&
+                     !msaaDesc.EnableVolumetricFog && !msaaDesc.EnableDDGI &&
+                     !msaaDesc.EnableVelocity && !msaaDesc.EnableReactive,
+            "M15-U10-03.5: MSAA 4x uniformly disables all single-sample passes");
+
+        // External target validation compatibility preserves OwnPrimary & super-set aux targets
+        auto ownedVariant = mainDesc;
+        ownedVariant.OwnPrimary = true;
+        ownedVariant.HistoryCount = 2;
+        const auto expected = ViewTargetContract::DeriveExpectedViewTargetDesc(mainDesc, ownedVariant);
+        RENDER_CHECK(expected == ownedVariant,
+            "M15-U10-03.5: DeriveExpectedViewTargetDesc avoids false mismatches on OwnPrimary/history compatibility");
+
+        // Compatibility policy produces deterministic minimal descriptor without throwing
+        const auto glDesc = ViewTargetContract::BuildViewTargetDesc(glPolicy.ResolveSettings(authored), mainInput);
+        RENDER_CHECK(glDesc.Samples == 1 && !glDesc.EnableGTAO && !glDesc.EnableBloom &&
+                     !glDesc.EnableVolumetricFog && !glDesc.EnableDDGI && !glDesc.HDR,
+            "M15-U10-03.5: Compatibility policy maps cleanly through BuildViewTargetDesc");
+
+        // Source-wiring check guaranteeing zero divergence between the 3 builders
+#ifdef AXLE_RENDER_SERVICE_SOURCE_PATH
+        const std::string rsSrc = LoadContractSource(AXLE_RENDER_SERVICE_SOURCE_PATH);
+        const std::string srSrc = LoadContractSource(AXLE_SCENE_RENDERER_SOURCE_PATH);
+        const std::string vpSrc = LoadContractSource(AXLE_RHI_VIEWPORT_DESCRIPTOR_SOURCE_PATH);
+        RENDER_CHECK(!rsSrc.empty() && !srSrc.empty() && !vpSrc.empty() &&
+                     rsSrc.find("ViewTargetContract::BuildViewTargetDesc") != std::string::npos &&
+                     srSrc.find("ViewTargetContract::BuildViewTargetDesc") != std::string::npos &&
+                     vpSrc.find("ViewTargetContract::BuildViewTargetDesc") != std::string::npos &&
+                     srSrc.find("ViewTargetContract::ResolveEffectiveSettings") != std::string::npos &&
+                     srSrc.find("ViewTargetContract::DeriveExpectedViewTargetDesc") != std::string::npos,
+            "M15-U10-03.5: RenderService, RHISceneRenderer, and RHIViewportDescriptor all delegate target building to ViewTargetContract");
+#endif
+        return true;
+    }
+
+    static bool Test_AuthoringBoundsDefaultsAndUIContracts() {
+        // M15-U10-01.1..01.4: Unified bounds/clamps, standardized defaults, and authoring controls/diagnostics
+        const float nanVal = std::numeric_limits<float>::quiet_NaN();
+
+        Material mat("ClampedMaterial");
+        mat.SetAlphaCutoff(2.5f);
+        mat.SetRoughness(-0.2f);
+        mat.SetMetallic(1.7f);
+        mat.SetAO(-1.0f);
+        mat.SetNormalStrength(99.0f);
+        mat.SetDetailNormalStrength(50.0f);
+        mat.SetClearcoatStrength(-0.5f);
+        mat.SetClearcoatRoughness(nanVal);
+        mat.SetAnisotropyStrength(-4.0f);
+        mat.SetAnisotropyRotation(3.0f);
+        mat.SetRefractionStrength(5.0f);
+        mat.SetRefractionIOR(0.4f);
+        mat.SetRefractionThickness(500.0f);
+        mat.SetRefractionTint({ -1.0f, 2.0f, 0.5f });
+        mat.SetEmissionColor({ -2.0f, 3.5f, nanVal });
+        mat.SetEmissionIntensity(-10.0f);
+        mat.SetRenderQueue(99999);
+        RENDER_CHECK(Near(mat.GetAlphaCutoff(), 1.0f, 1e-5f) &&
+                     Near(mat.GetRoughness(), 0.0f, 1e-5f) &&
+                     Near(mat.GetMetallic(), 1.0f, 1e-5f) &&
+                     Near(mat.GetAO(), 0.0f, 1e-5f) &&
+                     Near(mat.GetNormalStrength(), 5.0f, 1e-5f) &&
+                     Near(mat.GetDetailNormalStrength(), 4.0f, 1e-5f) &&
+                     Near(mat.GetClearcoatStrength(), 0.0f, 1e-5f) &&
+                     Near(mat.GetClearcoatRoughness(), MaterialParameterBounds::DefaultClearcoatRoughness, 1e-5f) &&
+                     Near(mat.GetAnisotropyStrength(), -1.0f, 1e-5f) &&
+                     Near(mat.GetAnisotropyRotation(), 1.0f, 1e-5f) &&
+                     Near(mat.GetRefractionStrength(), 1.0f, 1e-5f) &&
+                     Near(mat.GetRefractionIOR(), 1.0f, 1e-5f) &&
+                     Near(mat.GetRefractionThickness(), 100.0f, 1e-5f) &&
+                     Near(mat.GetRefractionTint().x, 0.0f, 1e-5f) &&
+                     Near(mat.GetRefractionTint().y, 1.0f, 1e-5f) &&
+                     Near(mat.GetEmissionColor().r, 0.0f, 1e-5f) &&
+                     Near(mat.GetEmissionColor().g, 3.5f, 1e-5f) &&
+                     Near(mat.GetEmissionColor().b, 0.0f, 1e-5f) &&
+                     Near(mat.GetEmissionIntensity(), 0.0f, 1e-5f) &&
+                     mat.GetRenderQueue() == 5000,
+            "M15-U10-01.2: Material setters sanitize NaNs and clamp all authoring parameters cleanly");
+
+        mat.ResetToDefault();
+        RENDER_CHECK(mat.GetName() == "ClampedMaterial" &&
+                     mat.GetSurfaceType() == SurfaceType::Opaque &&
+                     Near(mat.GetAlphaCutoff(), 0.5f, 1e-5f) &&
+                     Near(mat.GetRoughness(), 0.5f, 1e-5f) &&
+                     Near(mat.GetMetallic(), 0.0f, 1e-5f) &&
+                     Near(mat.GetNormalStrength(), 1.0f, 1e-5f) &&
+                     Near(mat.GetClearcoatRoughness(), 0.04f, 1e-5f) &&
+                     Near(mat.GetRefractionIOR(), 1.5f, 1e-5f) &&
+                     mat.GetRenderQueue() == 2000,
+            "M15-U10-01.3: Material::ResetToDefault preserves identity and restores standardized defaults");
+
+        RHI::RHIMaterial rhiMat("RHIClamped");
+        rhiMat.SetClearcoatStrength(2.0f);
+        rhiMat.SetClearcoatRoughness(nanVal);
+        rhiMat.SetAnisotropyStrength(4.0f);
+        rhiMat.SetAnisotropyRotation(-2.0f);
+        rhiMat.SetNormalStrength(12.0f);
+        rhiMat.SetRoughness(0.001f);
+        RENDER_CHECK(Near(rhiMat.GetClearcoatStrength(), 1.0f, 1e-5f) &&
+                     Near(rhiMat.GetClearcoatRoughness(), 0.04f, 1e-5f) &&
+                     Near(rhiMat.GetAnisotropyStrength(), 1.0f, 1e-5f) &&
+                     Near(rhiMat.GetAnisotropyRotation(), 0.0f, 1e-5f) &&
+                     Near(rhiMat.GetNormalStrength(), 5.0f, 1e-5f) &&
+                     Near(rhiMat.GetRoughness(), 0.04f, 1e-5f),
+            "M15-U10-01.2: RHIMaterial setters enforce matching bounds and NaN fallbacks");
+
+        MaterialComponent comp;
+        comp.NormalStrength = 12.0f;
+        comp.RefractionIOR = 0.2f;
+        comp.SyncToRHI();
+        RENDER_CHECK(Near(comp.RHIMaterialAsset->GetNormalStrength(), 5.0f, 1e-5f) &&
+                     Near(comp.RHIMaterialAsset->GetDesc().RefractionIOR, 1.0f, 1e-5f),
+            "M15-U10-01.2: MaterialComponent::SyncToRHI clamps before RHI descriptor publication");
+        comp.ResetToDefault();
+        RENDER_CHECK(Near(comp.NormalStrength, 1.0f, 1e-5f) && Near(comp.RefractionIOR, 1.5f, 1e-5f),
+            "M15-U10-01.3: MaterialComponent::ResetToDefault restores standardized defaults");
+
+#ifdef AXLE_MATERIAL_INSPECTOR_CONTROLS_SOURCE_PATH
+        const std::string matUiSrc = LoadContractSource(AXLE_MATERIAL_INSPECTOR_CONTROLS_SOURCE_PATH);
+        const std::string shaderPickerSrc = LoadContractSource(AXLE_CUSTOM_SHADER_PICKER_SOURCE_PATH);
+        const std::string inspectorSrc = LoadContractSource(AXLE_ENTITY_INSPECTOR_SOURCE_PATH);
+        const std::string editorSrc = LoadContractSource(AXLE_EDITOR_LAYER_SOURCE_PATH);
+        RENDER_CHECK(!matUiSrc.empty() && !shaderPickerSrc.empty() && !inspectorSrc.empty() && !editorSrc.empty() &&
+                     matUiSrc.find("Presets & Defaults") != std::string::npos &&
+                     matUiSrc.find("Reset Default") != std::string::npos &&
+                     matUiSrc.find("MaterialParameterBounds::") != std::string::npos &&
+                     matUiSrc.find("CollectMaterialFeatureDiagnostics") != std::string::npos &&
+                     shaderPickerSrc.find("Custom HLSL shaders fall back to Standard PBR") != std::string::npos &&
+                     inspectorSrc.find("Area Light (LTC)") != std::string::npos &&
+                     inspectorSrc.find("lightPolicy") != std::string::npos &&
+                     editorSrc.find("Subsurface Scattering (SSS)") != std::string::npos &&
+                     editorSrc.find("MSAA Samples") != std::string::npos &&
+                     editorSrc.find("Reset Render FX Defaults") != std::string::npos &&
+                     editorSrc.find("Capability / Fallback Diagnostics") != std::string::npos,
+            "M15-U10-01.1..01.4: Inspector, CustomShaderPicker, EntityInspector, and RenderFX expose controls, bounds, tooltips, defaults, and diagnostics");
+#endif
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderContractsUnitTests() {
@@ -373,6 +602,8 @@ bool RunRenderContractsUnitTests() {
     if (!Axle::RenderTests::Test_RHISamplerContracts()) return false;
     if (!Axle::RenderTests::Test_RenderContractsSpecifications()) return false;
     if (!Axle::RenderTests::Test_SequentialRenderGraph()) return false;
+    if (!Axle::RenderTests::Test_ViewTargetContractUnification()) return false;
+    if (!Axle::RenderTests::Test_AuthoringBoundsDefaultsAndUIContracts()) return false;
     std::cout << "  [RenderContracts] All contracts unit tests passed.\n";
     return true;
 }

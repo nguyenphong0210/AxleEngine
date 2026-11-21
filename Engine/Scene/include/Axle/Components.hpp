@@ -204,28 +204,52 @@ namespace Axle {
             DetailMaskPath=MaterialAsset->GetDetailMaskPath();
             DetailMaskMap=MaterialAsset->GetDetailMaskMap();
             UseDetailMaskMap=MaterialAsset->IsDetailMaskMapEnabled();
-            DetailNormalStrength=MaterialAsset->GetDetailNormalStrength();
-            DetailUVScale=MaterialAsset->GetDetailUVScale();
-            DetailUVOffset=MaterialAsset->GetDetailUVOffset();
-            RefractionEnabled=MaterialAsset->GetRefractionEnabled();
-            RefractionStrength=MaterialAsset->GetRefractionStrength();
-            RefractionIOR=MaterialAsset->GetRefractionIOR();
-            RefractionThickness=MaterialAsset->GetRefractionThickness();
-            RefractionTint=MaterialAsset->GetRefractionTint();
-            ClearcoatStrength = MaterialAsset->GetClearcoatStrength();
-            ClearcoatRoughness = MaterialAsset->GetClearcoatRoughness();
-            AnisotropyStrength = MaterialAsset->GetAnisotropyStrength();
-            AnisotropyRotation = MaterialAsset->GetAnisotropyRotation();
+            DetailNormalStrength = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetDetailNormalStrength(), MaterialParameterBounds::MinDetailNormalStrength,
+                MaterialParameterBounds::MaxDetailNormalStrength, MaterialParameterBounds::DefaultDetailNormalStrength);
+            DetailUVScale = MaterialParameterBounds::SanitizeVec2(MaterialAsset->GetDetailUVScale(), glm::vec2(1.0f));
+            DetailUVOffset = MaterialParameterBounds::SanitizeVec2(MaterialAsset->GetDetailUVOffset(), glm::vec2(0.0f));
+            RefractionEnabled = MaterialAsset->GetRefractionEnabled();
+            RefractionStrength = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetRefractionStrength(), MaterialParameterBounds::MinRefractionStrength,
+                MaterialParameterBounds::MaxRefractionStrength, MaterialParameterBounds::DefaultRefractionStrength);
+            RefractionIOR = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetRefractionIOR(), MaterialParameterBounds::MinRefractionIOR,
+                MaterialParameterBounds::MaxRefractionIOR, MaterialParameterBounds::DefaultRefractionIOR);
+            RefractionThickness = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetRefractionThickness(), MaterialParameterBounds::MinRefractionThickness,
+                MaterialParameterBounds::MaxRefractionThickness, MaterialParameterBounds::DefaultRefractionThickness);
+            RefractionTint = MaterialParameterBounds::ClampVec3(
+                MaterialAsset->GetRefractionTint(), 0.0f, 1.0f, glm::vec3(1.0f));
+            ClearcoatStrength = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetClearcoatStrength(), MaterialParameterBounds::MinClearcoatStrength,
+                MaterialParameterBounds::MaxClearcoatStrength, 0.0f);
+            ClearcoatRoughness = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetClearcoatRoughness(), MaterialParameterBounds::MinClearcoatRoughness,
+                MaterialParameterBounds::MaxClearcoatRoughness, MaterialParameterBounds::DefaultClearcoatRoughness);
+            AnisotropyStrength = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetAnisotropyStrength(), MaterialParameterBounds::MinAnisotropyStrength,
+                MaterialParameterBounds::MaxAnisotropyStrength, 0.0f);
+            AnisotropyRotation = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetAnisotropyRotation(), MaterialParameterBounds::MinAnisotropyRotation,
+                MaterialParameterBounds::MaxAnisotropyRotation, 0.0f);
             SheenEnabled = MaterialAsset->GetSheenEnabled();
-            SheenColor = glm::clamp(MaterialAsset->GetSheenColor(), glm::vec3(0.0f), glm::vec3(1.0f));
-            SheenRoughness = std::clamp(MaterialAsset->GetSheenRoughness(), 0.01f, 1.0f);
+            SheenColor = MaterialParameterBounds::ClampVec3(MaterialAsset->GetSheenColor(), 0.0f, 1.0f, glm::vec3(1.0f));
+            SheenRoughness = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetSheenRoughness(), MaterialParameterBounds::MinSheenRoughness,
+                MaterialParameterBounds::MaxSheenRoughness, MaterialParameterBounds::DefaultSheenRoughness);
             SubsurfaceEnabled = MaterialAsset->GetSubsurfaceEnabled();
-            SubsurfaceColor = glm::clamp(MaterialAsset->GetSubsurfaceColor(), glm::vec3(0.0f), glm::vec3(1.0f));
-            SubsurfaceRadius = std::clamp(MaterialAsset->GetSubsurfaceRadius(), 0.0f, 16.0f);
+            SubsurfaceColor = MaterialParameterBounds::ClampVec3(
+                MaterialAsset->GetSubsurfaceColor(), 0.0f, 1.0f, glm::vec3(1.0f, 0.8f, 0.7f));
+            SubsurfaceRadius = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetSubsurfaceRadius(), MaterialParameterBounds::MinSubsurfaceRadius,
+                MaterialParameterBounds::MaxSubsurfaceRadius, MaterialParameterBounds::DefaultSubsurfaceRadius);
             AbsorptionEnabled = MaterialAsset->GetAbsorptionEnabled();
-            AbsorptionColor = glm::max(MaterialAsset->GetAbsorptionColor(), glm::vec3(0.0f));
-            Dispersion = std::clamp(MaterialAsset->GetDispersion(), 0.0f, 1.0f);
-            AlbedoColor = MaterialAsset->GetAlbedoColor();
+            AbsorptionColor = MaterialParameterBounds::ClampMinVec3(MaterialAsset->GetAbsorptionColor(), 0.0f);
+            Dispersion = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetDispersion(), MaterialParameterBounds::MinDispersion,
+                MaterialParameterBounds::MaxDispersion, 0.0f);
+            AlbedoColor = MaterialParameterBounds::SanitizeAlbedo(MaterialAsset->GetAlbedoColor());
             AlbedoPath = MaterialAsset->GetAlbedoPath();
             AlbedoMap = MaterialAsset->GetAlbedoMap();
             UseAlbedoMap = MaterialAsset->IsAlbedoMapEnabled();
@@ -233,19 +257,27 @@ namespace Axle {
             NormalPath = MaterialAsset->GetNormalPath();
             NormalMap = MaterialAsset->GetNormalMap();
             UseNormalMap = MaterialAsset->IsNormalMapEnabled();
-            NormalStrength = MaterialAsset->GetNormalStrength();
+            NormalStrength = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetNormalStrength(), MaterialParameterBounds::MinNormalStrength,
+                MaterialParameterBounds::MaxNormalStrength, MaterialParameterBounds::DefaultNormalStrength);
 
-            Roughness = MaterialAsset->GetRoughness();
+            Roughness = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetRoughness(), 0.0f, MaterialParameterBounds::MaxRoughness,
+                MaterialParameterBounds::DefaultRoughness);
             RoughnessPath = MaterialAsset->GetRoughnessPath();
             RoughnessMap = MaterialAsset->GetRoughnessMap();
             UseRoughnessMap = MaterialAsset->IsRoughnessMapEnabled();
 
-            Metallic = MaterialAsset->GetMetallic();
+            Metallic = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetMetallic(), MaterialParameterBounds::MinMetallic,
+                MaterialParameterBounds::MaxMetallic, MaterialParameterBounds::DefaultMetallic);
             MetallicPath = MaterialAsset->GetMetallicPath();
             MetallicMap = MaterialAsset->GetMetallicMap();
             UseMetallicMap = MaterialAsset->IsMetallicMapEnabled();
 
-            AOStrength = MaterialAsset->GetAO();
+            AOStrength = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetAO(), MaterialParameterBounds::MinAO,
+                MaterialParameterBounds::MaxAO, MaterialParameterBounds::DefaultAO);
             AOPath = MaterialAsset->GetAOPath();
             AOMap = MaterialAsset->GetAOMap();
             UseAOMap = MaterialAsset->IsAOMapEnabled();
@@ -254,17 +286,21 @@ namespace Axle {
             EmissiveMap = MaterialAsset->GetEmissiveMap();
             UseEmissiveMap = MaterialAsset->IsEmissiveMapEnabled();
 
-            EmissionColor = MaterialAsset->GetEmissionColor();
-            EmissionIntensity = MaterialAsset->GetEmissionIntensity();
-            UVScale = MaterialAsset->GetUVScale();
-            UVOffset = MaterialAsset->GetUVOffset();
+            EmissionColor = MaterialParameterBounds::ClampMinVec3(MaterialAsset->GetEmissionColor(), 0.0f);
+            EmissionIntensity = MaterialParameterBounds::ClampMinFinite(
+                MaterialAsset->GetEmissionIntensity(), MaterialParameterBounds::MinEmissionIntensity, 0.0f);
+            UVScale = MaterialParameterBounds::SanitizeVec2(MaterialAsset->GetUVScale(), glm::vec2(1.0f));
+            UVOffset = MaterialParameterBounds::SanitizeVec2(MaterialAsset->GetUVOffset(), glm::vec2(0.0f));
             SurfaceType = MaterialAsset->GetSurfaceType();
             CullMode = MaterialAsset->GetCullMode();
-            AlphaCutoff = MaterialAsset->GetAlphaCutoff();
+            AlphaCutoff = MaterialParameterBounds::ClampFinite(
+                MaterialAsset->GetAlphaCutoff(), MaterialParameterBounds::MinAlphaCutoff,
+                MaterialParameterBounds::MaxAlphaCutoff, MaterialParameterBounds::DefaultAlphaCutoff);
             DepthWrite = MaterialAsset->GetDepthWrite();
             EnableSpecularHighlights = MaterialAsset->GetEnableSpecularHighlights();
             EnableEnvironmentReflections = MaterialAsset->GetEnableEnvironmentReflections();
-            RenderQueue = MaterialAsset->GetRenderQueue();
+            RenderQueue = std::clamp(
+                MaterialAsset->GetRenderQueue(), MaterialParameterBounds::MinRenderQueue, MaterialParameterBounds::MaxRenderQueue);
             UseCustomShader = MaterialAsset->GetUseCustomShader();
             CustomShaderPath = MaterialAsset->GetCustomShaderPath();
             CustomProperties = MaterialAsset->GetCustomProperties();
@@ -304,24 +340,41 @@ namespace Axle {
             desc.AnisotropyFlowPath=UseAnisotropyFlowMap?AnisotropyFlowPath:"";
             desc.DetailNormalPath=UseDetailNormalMap?DetailNormalPath:"";
             desc.DetailMaskPath=UseDetailMaskMap?DetailMaskPath:"";
-            desc.DetailNormalStrength=DetailNormalStrength;
-            desc.DetailUVScale=DetailUVScale;
-            desc.DetailUVOffset=DetailUVOffset;
-            desc.RefractionEnabled=RefractionEnabled;
-            desc.RefractionStrength=RefractionStrength;
-            desc.RefractionIOR=RefractionIOR;
-            desc.RefractionThickness=RefractionThickness;
-            desc.RefractionTint=RefractionTint;
+            desc.DetailNormalStrength = MaterialParameterBounds::ClampFinite(
+                DetailNormalStrength, MaterialParameterBounds::MinDetailNormalStrength,
+                MaterialParameterBounds::MaxDetailNormalStrength, MaterialParameterBounds::DefaultDetailNormalStrength);
+            desc.DetailUVScale = MaterialParameterBounds::SanitizeVec2(DetailUVScale, glm::vec2(1.0f));
+            desc.DetailUVOffset = MaterialParameterBounds::SanitizeVec2(DetailUVOffset, glm::vec2(0.0f));
+            desc.RefractionEnabled = RefractionEnabled;
+            desc.RefractionStrength = MaterialParameterBounds::ClampFinite(
+                RefractionStrength, MaterialParameterBounds::MinRefractionStrength,
+                MaterialParameterBounds::MaxRefractionStrength, MaterialParameterBounds::DefaultRefractionStrength);
+            desc.RefractionIOR = MaterialParameterBounds::ClampFinite(
+                RefractionIOR, MaterialParameterBounds::MinRefractionIOR,
+                MaterialParameterBounds::MaxRefractionIOR, MaterialParameterBounds::DefaultRefractionIOR);
+            desc.RefractionThickness = MaterialParameterBounds::ClampFinite(
+                RefractionThickness, MaterialParameterBounds::MinRefractionThickness,
+                MaterialParameterBounds::MaxRefractionThickness, MaterialParameterBounds::DefaultRefractionThickness);
+            desc.RefractionTint = MaterialParameterBounds::ClampVec3(
+                RefractionTint, 0.0f, 1.0f, glm::vec3(1.0f));
             desc.SheenEnabled = SheenEnabled;
-            desc.SheenColor = glm::clamp(SheenColor, glm::vec3(0.0f), glm::vec3(1.0f));
-            desc.SheenRoughness = std::clamp(SheenRoughness, 0.01f, 1.0f);
+            desc.SheenColor = MaterialParameterBounds::ClampVec3(SheenColor, 0.0f, 1.0f, glm::vec3(1.0f));
+            desc.SheenRoughness = MaterialParameterBounds::ClampFinite(
+                SheenRoughness, MaterialParameterBounds::MinSheenRoughness,
+                MaterialParameterBounds::MaxSheenRoughness, MaterialParameterBounds::DefaultSheenRoughness);
             desc.SubsurfaceEnabled = SubsurfaceEnabled;
-            desc.SubsurfaceColor = glm::clamp(SubsurfaceColor, glm::vec3(0.0f), glm::vec3(1.0f));
-            desc.SubsurfaceRadius = std::clamp(SubsurfaceRadius, 0.0f, 16.0f);
+            desc.SubsurfaceColor = MaterialParameterBounds::ClampVec3(
+                SubsurfaceColor, 0.0f, 1.0f, glm::vec3(1.0f, 0.8f, 0.7f));
+            desc.SubsurfaceRadius = MaterialParameterBounds::ClampFinite(
+                SubsurfaceRadius, MaterialParameterBounds::MinSubsurfaceRadius,
+                MaterialParameterBounds::MaxSubsurfaceRadius, MaterialParameterBounds::DefaultSubsurfaceRadius);
             desc.AbsorptionEnabled = AbsorptionEnabled;
-            desc.AbsorptionColor = glm::max(AbsorptionColor, glm::vec3(0.0f));
-            desc.Dispersion = std::clamp(Dispersion, 0.0f, 1.0f);
-            desc.RenderQueue = RenderQueue;
+            desc.AbsorptionColor = MaterialParameterBounds::ClampMinVec3(AbsorptionColor, 0.0f);
+            desc.Dispersion = MaterialParameterBounds::ClampFinite(
+                Dispersion, MaterialParameterBounds::MinDispersion,
+                MaterialParameterBounds::MaxDispersion, 0.0f);
+            desc.RenderQueue = std::clamp(
+                RenderQueue, MaterialParameterBounds::MinRenderQueue, MaterialParameterBounds::MaxRenderQueue);
             desc.UseORMMap = UseORMMap;
             desc.AlbedoPath = UseAlbedoMap ? AlbedoPath : "";
             desc.NormalPath = UseNormalMap ? NormalPath : "";
@@ -418,6 +471,18 @@ namespace Axle {
             AssetPath.clear();
             RHIMaterialAsset.reset();
 
+        }
+
+        void ResetToDefault() {
+            const UUID handle = MaterialHandle;
+            const auto asset = MaterialAsset;
+            const auto path = AssetPath;
+            *this = MaterialComponent{};
+            MaterialHandle = handle;
+            MaterialAsset = asset;
+            AssetPath = path;
+            if (MaterialAsset) MaterialAsset->ResetToDefault();
+            SyncToRHI();
         }
 
         Axle::SurfaceType GetSurfaceType() const { return MaterialAsset ? MaterialAsset->GetSurfaceType() : SurfaceType; }

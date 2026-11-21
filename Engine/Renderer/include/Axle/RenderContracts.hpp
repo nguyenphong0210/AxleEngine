@@ -1111,4 +1111,45 @@ namespace Axle {
         bool VerifySpecularSplitRecombination();
     }
 
+    // =========================================================================
+    // View Target Policy Contract (M15-U10-03.5)
+    // =========================================================================
+    namespace ViewTargetContract {
+        struct ViewTargetPolicyInput {
+            uint32_t Width = 1;
+            uint32_t Height = 1;
+            RHI::RHITextureFormat ColorFormat = RHI::RHITextureFormat::RGBA8_UNORM;
+            RHI::RHITextureFormat DepthFormat = RHI::RHITextureFormat::D32_FLOAT;
+            RHI::RHITextureFormat NormalFormat = RHI::RHITextureFormat::RGBA16_FLOAT;
+            bool EnableDepth = true;
+            bool OwnPrimary = true;
+            bool RenderAuxiliary = true;
+            bool IsSubCapture = false;
+            bool WantsSubsurface = false;
+            const RenderVolumetricFog* VolumetricFog = nullptr;
+            const RenderDDGIProbeGrid* DDGIProbeGrid = nullptr;
+        };
+
+        // Shared policy normalization: linear reflection and volumetric fog paths
+        // require linear HDR radiance composition before tone mapping / gamma output.
+        SceneRenderSettings ResolveEffectiveSettings(
+            const SceneRenderSettings& resolvedSettings,
+            bool isSubCapture,
+            bool hasDepth,
+            const RenderVolumetricFog* fog);
+
+        // Canonical RHIViewTargetDesc builder shared across RenderService,
+        // RHISceneRenderer, and RHIViewportDescriptor so main, preview, sub-capture,
+        // and quality presets never diverge on required target descriptors.
+        RHI::RHIViewTargetDesc BuildViewTargetDesc(
+            const SceneRenderSettings& resolvedSettings,
+            const ViewTargetPolicyInput& input);
+
+        // Produces the expected descriptor when validating externally owned targets
+        // (for example Editor/Preview viewports or test fixtures preserving extra targets).
+        RHI::RHIViewTargetDesc DeriveExpectedViewTargetDesc(
+            const RHI::RHIViewTargetDesc& requiredDesc,
+            const RHI::RHIViewTargetDesc& currentTargetDesc);
+    }
+
 } // namespace Axle

@@ -159,6 +159,37 @@ namespace Axle::RenderTests {
                      degraded.GetDecision(BackendFeature::TimestampQueries).State == BackendFeatureState::Unavailable &&
                      !resolvedDegraded.EnableGTAO && !resolvedDegraded.EnableSSR,
                      "partial native capability loss disables only dependent passes and reports unavailable telemetry");
+
+        // M15-U10-01.4: Compatibility & MSAA > 1x capability diagnostics for view and material features
+        SceneRenderSettings msaaAuthored = authored;
+        msaaAuthored.EnableSubsurfaceScattering = true;
+        msaaAuthored.EnableTAA = true;
+        msaaAuthored.MSAASamples = 4;
+        const auto msaaFallbacks = vk.CollectFallbacks(msaaAuthored);
+        const auto hasReason = [](const std::vector<std::string>& list, const std::string& needle) {
+            return std::find(list.begin(), list.end(), needle) != list.end();
+        };
+        RENDER_CHECK(hasReason(msaaFallbacks, "subsurface_scattering_disabled:msaa_requires_single_sample") &&
+                     hasReason(msaaFallbacks, "screen_reflections_disabled:msaa_requires_single_sample") &&
+                     hasReason(msaaFallbacks, "volumetric_fog_disabled:msaa_requires_single_sample") &&
+                     hasReason(msaaFallbacks, "ddgi_disabled:msaa_requires_single_sample") &&
+                     hasReason(msaaFallbacks, "taa_motion_vectors_disabled:msaa_requires_single_sample"),
+            "M15-U10-01.4: native MSAA > 1x reports explicit diagnostics for every gated single-sample pass");
+        const auto glFallbacks = gl.CollectFallbacks(authored);
+        RENDER_CHECK(hasReason(glFallbacks, "subsurface_scattering_disabled:compatibility_backend"),
+            "M15-U10-01.4: OpenGL compatibility explicitly diagnoses subsurface scattering fallback");
+
+        const auto glMatDiags = gl.CollectMaterialFeatureDiagnostics(resolvedGL, true, true, true, true);
+        RENDER_CHECK(glMatDiags.size() == 4,
+            "M15-U10-01.4: compatibility policy diagnoses custom HLSL, refraction, SSS, and absorption/dispersion");
+        const auto msaaMatDiags = vk.CollectMaterialFeatureDiagnostics(vk.ResolveSettings(msaaAuthored), true, true, true, true);
+        RENDER_CHECK(msaaMatDiags.size() == 2,
+            "M15-U10-01.4: native MSAA > 1x diagnoses refraction and SSS while allowing custom HLSL");
+        SceneRenderSettings singleAuthored = authored;
+        singleAuthored.MSAASamples = 1;
+        singleAuthored.EnableSubsurfaceScattering = true;
+        RENDER_CHECK(vk.CollectMaterialFeatureDiagnostics(vk.ResolveSettings(singleAuthored), true, true, true, true).empty(),
+            "M15-U10-01.4: native single-sample D3D12/Vulkan emits zero compatibility warnings for supported material features");
         return true;
     }
 

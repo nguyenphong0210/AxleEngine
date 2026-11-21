@@ -6,6 +6,7 @@
 #include <Axle/Components.hpp>
 #include <Axle/CustomShaderPicker.hpp>
 #include <Axle/MaterialInspectorControls.hpp>
+#include <Axle/SceneRenderSettings.hpp>
 #include <Axle/PhysicsScene.hpp>
 #include <filesystem>
 #include <functional>
@@ -45,6 +46,10 @@ namespace Axle {
         );
 
         void SetAssetPreviewPanel(AssetPreviewPanel* panel) { m_AssetPreviewPanel = panel; }
+        void SetActiveRenderSettings(const SceneRenderSettings& settings) {
+            m_ActiveRenderSettings = settings;
+            m_HasActiveRenderSettings = true;
+        }
 
         void OnImGuiRender(bool* p_hierarchyOpen = nullptr, bool* p_propertiesOpen = nullptr);
 
@@ -137,6 +142,8 @@ namespace Axle {
         std::shared_ptr<VertexArray> m_CylinderMesh;
         std::shared_ptr<VertexArray> m_ConeMesh;
         std::shared_ptr<VertexArray> m_PlaneMesh;
+        SceneRenderSettings m_ActiveRenderSettings;
+        bool m_HasActiveRenderSettings = false;
     };
 
 }

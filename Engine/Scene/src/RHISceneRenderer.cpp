@@ -6957,90 +6957,43 @@ namespace Axle {
         }
         if (!m_Initialized || !m_Device->CanSubmit() || !colorTarget || !colorRTV || width == 0 || height == 0) return;
         const auto backendPolicy = RenderBackendPolicy::FromDevice(m_Device->GetCapabilities());
-        SceneRenderSettings settings = backendPolicy.ResolveSettings(requestedSettings);
         const bool isSubCapture = m_CaptureSession.Active || m_PlanarSession.Active;
         const auto* fog = world.VolumetricFog ? &*world.VolumetricFog : nullptr;
-        bool enableFroxelTargets = false;
-        uint8_t froxelQuality = RHIViewTargets::DefaultFroxelQualityTier;
-        FroxelFogContract::ResolveViewTargetOptions(
-            settings, isSubCapture, depthTarget != nullptr, enableFroxelTargets, froxelQuality, fog);
-        const bool linearFog = enableFroxelTargets && FroxelFogContract::RequiresLinearColor(settings, fog);
-        const bool linearReflections = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
-        if ((linearReflections || linearFog) && !settings.EnableToneMapping) {
-            // Compose scene radiance before the legacy ACES/gamma conversion.
-            settings.EnableToneMapping = true;
-            settings.ToneMappingMode = 0;
-            settings.Exposure = 1.0f;
-            settings.Gamma = 2.2f;
-        }
+        SceneRenderSettings settings = ViewTargetContract::ResolveEffectiveSettings(
+            backendPolicy.ResolveSettings(requestedSettings), isSubCapture, depthTarget != nullptr, fog);
         m_MaterialDiagnostics.clear(); m_MaterialFeedback.clear();
 
         bool useMSAA = (settings.MSAASamples > 1);
         uint8_t activeSampleCount = useMSAA ? settings.MSAASamples : 1;
-        bool useToneMap = settings.EnableToneMapping;
-        bool useFXAA = settings.EnableFXAA && !(settings.EnableTAA && activeSampleCount == 1);
         nri::Texture* sceneDepthTexture = depthTarget;
 
-        RHIViewTargetDesc targetDesc;
-        targetDesc.Width = width;
-        targetDesc.Height = height;
-        targetDesc.ColorFormat = FromNRIFormat(m_CurrentColorFormat);
-        targetDesc.DepthFormat = FromNRIFormat(m_CurrentDepthFormat);
-        targetDesc.EnableDepth = sceneDepthTexture != nullptr;
-        targetDesc.Samples = activeSampleCount;
-        targetDesc.HDR = useToneMap;
-        targetDesc.FXAA = useFXAA;
-        targetDesc.OwnPrimary = false;
-        const bool wantsSSS = !isSubCapture &&
+        ViewTargetContract::ViewTargetPolicyInput targetInput;
+        targetInput.Width = width;
+        targetInput.Height = height;
+        targetInput.ColorFormat = FromNRIFormat(m_CurrentColorFormat);
+        targetInput.DepthFormat = FromNRIFormat(m_CurrentDepthFormat);
+        targetInput.EnableDepth = sceneDepthTexture != nullptr;
+        targetInput.OwnPrimary = false;
+        targetInput.IsSubCapture = isSubCapture;
+        targetInput.WantsSubsurface = !isSubCapture &&
             Passes::SubsurfaceScatteringPass::SceneRequiresSubsurfacePass(world, settings, activeSampleCount);
-        const bool needsNormal = settings.EnableGTAO || settings.EnableContactShadows ||
-            settings.EnableSSR || settings.EnablePlanarReflections;
-        targetDesc.EnableNormal = needsNormal || wantsSSS;
-        targetDesc.EnableSubsurface = wantsSSS;
-        targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows ||
-            settings.EnableSSR);
-        targetDesc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
-        targetDesc.EnableReflectionTerms = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
-        const bool enablePlanarTargets = settings.EnablePlanarReflections && !isSubCapture;
-        targetDesc.EnablePlanarReflection = enablePlanarTargets;
-        targetDesc.PlanarResolutionScale = enablePlanarTargets
-            ? std::clamp(settings.PlanarReflectionResolutionScale,
-                         RHI::RHIViewTargets::MinPlanarResolutionScale,
-                         RHI::RHIViewTargets::MaxPlanarResolutionScale)
-            : 0.5f;
-        targetDesc.EnableBloom = settings.EnableBloom;
-        targetDesc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
-        targetDesc.EnableAutoExposure = settings.EnableAutoExposure;
-        const auto* ddgiGrid = world.DDGIProbeGrid ? &*world.DDGIProbeGrid : nullptr;
-        std::array<uint32_t, 3> ddgiDims{0u, 0u, 0u};
-        DDGIContract::ResolveViewTargetOptions(settings, isSubCapture, ddgiGrid, targetDesc.EnableDDGI, ddgiDims);
-        targetDesc.DDGIGridX = ddgiDims[0];
-        targetDesc.DDGIGridY = ddgiDims[1];
-        targetDesc.DDGIGridZ = ddgiDims[2];
-        targetDesc.EnableVolumetricFog = enableFroxelTargets;
-        targetDesc.FroxelQuality = froxelQuality;
-        if (settings.EnableTAA) {
-            targetDesc.HistoryCount = 2;
-            targetDesc.EnableVelocity = (activeSampleCount == 1);
-            targetDesc.EnableReactive = (activeSampleCount == 1);
-        }
+        targetInput.VolumetricFog = fog;
+        targetInput.DDGIProbeGrid = world.DDGIProbeGrid ? &*world.DDGIProbeGrid : nullptr;
+        const RHIViewTargetDesc targetDesc = ViewTargetContract::BuildViewTargetDesc(settings, targetInput);
+        const bool useToneMap = settings.EnableToneMapping;
+        const bool useFXAA = targetDesc.FXAA;
 
         if (!world.ErrorMessage.empty()) {
-            AXLE_CORE_ERROR("View frame acquisition failed");
+            AXLE_CORE_ERROR("View frame acquisition failed: {0}", world.ErrorMessage);
             return;
         }
         if (viewTargets) {
-            auto expected = targetDesc;
-            expected.OwnPrimary = viewTargets->GetDesc().OwnPrimary;
-            expected.HistoryCount = viewTargets->GetDesc().HistoryCount;
-            expected.EnableVelocity = viewTargets->GetDesc().EnableVelocity;
-            expected.EnableReactive = viewTargets->GetDesc().EnableReactive;
-            expected.EnableSubsurface = viewTargets->GetDesc().EnableSubsurface;
-            expected.EnableNormal = needsNormal || viewTargets->GetDesc().EnableNormal;
-            expected.EnableScreenStorage = expected.EnableScreenStorage || viewTargets->GetDesc().EnableScreenStorage;
+            const RHIViewTargetDesc expected =
+                ViewTargetContract::DeriveExpectedViewTargetDesc(targetDesc, viewTargets->GetDesc());
             if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
                 (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||
                 (viewTargets->Get(RHIViewTarget::Depth) && viewTargets->Get(RHIViewTarget::Depth)->GetNative() != depthTarget)) {
+                AXLE_CORE_ERROR("View target configuration does not match canonical ViewTargetContract policy");
                 return;
             }
             if (!isSubCapture) {
@@ -7053,6 +7006,7 @@ namespace Axle {
                 m_ImplicitViewTargets->GetDesc() != targetDesc || m_ImplicitViewColor != identity) {
                 auto candidate = std::make_shared<RHIViewTargets>();
                 if (!candidate->Configure(targetDesc, nullptr, nullptr, FroxelHistoryPolicy::AllowStaticFog)) {
+                    AXLE_CORE_ERROR("Implicit view target configuration failed");
                     return;
                 }
                 m_ImplicitViewTargets = std::move(candidate);

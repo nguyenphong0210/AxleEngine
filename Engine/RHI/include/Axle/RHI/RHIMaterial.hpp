@@ -120,13 +120,26 @@ namespace Axle::RHI {
         const std::string& GetORMPath() const { return m_Desc.ORMPath; }
         void SetORMPath(const std::string& path) { m_Desc.ORMPath = path; }
         float GetClearcoatStrength() const { return m_Desc.ClearcoatStrength; }
-        void SetClearcoatStrength(float val) { m_Desc.ClearcoatStrength = val; }
+        void SetClearcoatStrength(float val) {
+            m_Desc.ClearcoatStrength = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinClearcoatStrength, MaterialParameterBounds::MaxClearcoatStrength, 0.0f);
+        }
         float GetClearcoatRoughness() const { return m_Desc.ClearcoatRoughness; }
-        void SetClearcoatRoughness(float val) { m_Desc.ClearcoatRoughness = val; }
+        void SetClearcoatRoughness(float val) {
+            m_Desc.ClearcoatRoughness = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinClearcoatRoughness, MaterialParameterBounds::MaxClearcoatRoughness,
+                MaterialParameterBounds::DefaultClearcoatRoughness);
+        }
         float GetAnisotropyStrength() const { return m_Desc.AnisotropyStrength; }
-        void SetAnisotropyStrength(float val) { m_Desc.AnisotropyStrength = val; }
+        void SetAnisotropyStrength(float val) {
+            m_Desc.AnisotropyStrength = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinAnisotropyStrength, MaterialParameterBounds::MaxAnisotropyStrength, 0.0f);
+        }
         float GetAnisotropyRotation() const { return m_Desc.AnisotropyRotation; }
-        void SetAnisotropyRotation(float val) { m_Desc.AnisotropyRotation = val; }
+        void SetAnisotropyRotation(float val) {
+            m_Desc.AnisotropyRotation = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinAnisotropyRotation, MaterialParameterBounds::MaxAnisotropyRotation, 0.0f);
+        }
         void SetName(const std::string& name) { m_Desc.Name = name; }
 
         Axle::SurfaceType GetSurfaceType() const { return m_Desc.SurfaceType; }
@@ -140,40 +153,62 @@ namespace Axle::RHI {
         void SetCullMode(Axle::CullMode mode) { m_Desc.CullMode = mode; }
 
         float GetAlphaCutoff() const { return m_Desc.AlphaCutoff; }
-        void SetAlphaCutoff(float cutoff) { m_Desc.AlphaCutoff = std::clamp(cutoff, 0.0f, 1.0f); }
+        void SetAlphaCutoff(float cutoff) {
+            m_Desc.AlphaCutoff = MaterialParameterBounds::ClampFinite(
+                cutoff, MaterialParameterBounds::MinAlphaCutoff, MaterialParameterBounds::MaxAlphaCutoff,
+                MaterialParameterBounds::DefaultAlphaCutoff);
+        }
 
         bool GetDepthWrite() const { return m_Desc.DepthWrite; }
         void SetDepthWrite(bool depthWrite) { m_Desc.DepthWrite = depthWrite; }
 
         const glm::vec2& GetUVTiling() const { return m_Desc.UVScale; }
-        void SetUVTiling(const glm::vec2& tiling) { m_Desc.UVScale = tiling; }
+        void SetUVTiling(const glm::vec2& tiling) { m_Desc.UVScale = MaterialParameterBounds::SanitizeVec2(tiling, glm::vec2(1.0f)); }
 
         const glm::vec4& GetBaseColor() const { return m_Desc.BaseColor; }
-        void SetBaseColor(const glm::vec4& color) { m_Desc.BaseColor = color; }
+        void SetBaseColor(const glm::vec4& color) { m_Desc.BaseColor = MaterialParameterBounds::SanitizeAlbedo(color); }
 
         float GetRoughness() const { return m_Desc.Roughness; }
-        void SetRoughness(float roughness) { m_Desc.Roughness = std::clamp(roughness, 0.04f, 1.0f); }
+        void SetRoughness(float roughness) {
+            m_Desc.Roughness = MaterialParameterBounds::ClampFinite(
+                roughness, MaterialParameterBounds::MinScalarRoughness, MaterialParameterBounds::MaxRoughness,
+                MaterialParameterBounds::DefaultRoughness);
+        }
 
         float GetMetallic() const { return m_Desc.Metallic; }
-        void SetMetallic(float metallic) { m_Desc.Metallic = std::clamp(metallic, 0.0f, 1.0f); }
+        void SetMetallic(float metallic) {
+            m_Desc.Metallic = MaterialParameterBounds::ClampFinite(
+                metallic, MaterialParameterBounds::MinMetallic, MaterialParameterBounds::MaxMetallic,
+                MaterialParameterBounds::DefaultMetallic);
+        }
 
         float GetNormalStrength() const { return m_Desc.NormalStrength; }
-        void SetNormalStrength(float strength) { m_Desc.NormalStrength = strength; }
+        void SetNormalStrength(float strength) {
+            m_Desc.NormalStrength = MaterialParameterBounds::ClampFinite(
+                strength, MaterialParameterBounds::MinNormalStrength, MaterialParameterBounds::MaxNormalStrength,
+                MaterialParameterBounds::DefaultNormalStrength);
+        }
 
         float GetAO() const { return m_Desc.AO; }
-        void SetAO(float ao) { m_Desc.AO = std::clamp(ao, 0.0f, 1.0f); }
+        void SetAO(float ao) {
+            m_Desc.AO = MaterialParameterBounds::ClampFinite(
+                ao, MaterialParameterBounds::MinAO, MaterialParameterBounds::MaxAO, MaterialParameterBounds::DefaultAO);
+        }
 
         const glm::vec3& GetEmissiveColor() const { return m_Desc.EmissiveColor; }
-        void SetEmissiveColor(const glm::vec3& color) { m_Desc.EmissiveColor = color; }
+        void SetEmissiveColor(const glm::vec3& color) { m_Desc.EmissiveColor = MaterialParameterBounds::ClampMinVec3(color, 0.0f); }
 
         float GetEmissiveIntensity() const { return m_Desc.EmissiveIntensity; }
-        void SetEmissiveIntensity(float intensity) { m_Desc.EmissiveIntensity = std::max(0.0f, intensity); }
+        void SetEmissiveIntensity(float intensity) {
+            m_Desc.EmissiveIntensity = MaterialParameterBounds::ClampMinFinite(
+                intensity, MaterialParameterBounds::MinEmissionIntensity, 0.0f);
+        }
 
         const glm::vec2& GetUVScale() const { return m_Desc.UVScale; }
-        void SetUVScale(const glm::vec2& scale) { m_Desc.UVScale = scale; }
+        void SetUVScale(const glm::vec2& scale) { m_Desc.UVScale = MaterialParameterBounds::SanitizeVec2(scale, glm::vec2(1.0f)); }
 
         const glm::vec2& GetUVOffset() const { return m_Desc.UVOffset; }
-        void SetUVOffset(const glm::vec2& offset) { m_Desc.UVOffset = offset; }
+        void SetUVOffset(const glm::vec2& offset) { m_Desc.UVOffset = MaterialParameterBounds::SanitizeVec2(offset, glm::vec2(0.0f)); }
 
         RHIShadingModel GetShadingModel() const { return m_Desc.ShadingModel; }
         void SetShadingModel(RHIShadingModel model) { m_Desc.ShadingModel = model; }
@@ -181,23 +216,38 @@ namespace Axle::RHI {
         bool GetSheenEnabled() const { return m_Desc.SheenEnabled; }
         void SetSheenEnabled(bool val) { m_Desc.SheenEnabled = val; }
         const glm::vec3& GetSheenColor() const { return m_Desc.SheenColor; }
-        void SetSheenColor(const glm::vec3& val) { m_Desc.SheenColor = glm::clamp(val, glm::vec3(0.0f), glm::vec3(1.0f)); }
+        void SetSheenColor(const glm::vec3& val) {
+            m_Desc.SheenColor = MaterialParameterBounds::ClampVec3(val, 0.0f, 1.0f, glm::vec3(1.0f));
+        }
         float GetSheenRoughness() const { return m_Desc.SheenRoughness; }
-        void SetSheenRoughness(float val) { m_Desc.SheenRoughness = std::clamp(val, 0.01f, 1.0f); }
+        void SetSheenRoughness(float val) {
+            m_Desc.SheenRoughness = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinSheenRoughness, MaterialParameterBounds::MaxSheenRoughness,
+                MaterialParameterBounds::DefaultSheenRoughness);
+        }
 
         bool GetSubsurfaceEnabled() const { return m_Desc.SubsurfaceEnabled; }
         void SetSubsurfaceEnabled(bool val) { m_Desc.SubsurfaceEnabled = val; }
         const glm::vec3& GetSubsurfaceColor() const { return m_Desc.SubsurfaceColor; }
-        void SetSubsurfaceColor(const glm::vec3& val) { m_Desc.SubsurfaceColor = glm::clamp(val, glm::vec3(0.0f), glm::vec3(1.0f)); }
+        void SetSubsurfaceColor(const glm::vec3& val) {
+            m_Desc.SubsurfaceColor = MaterialParameterBounds::ClampVec3(val, 0.0f, 1.0f, glm::vec3(1.0f, 0.8f, 0.7f));
+        }
         float GetSubsurfaceRadius() const { return m_Desc.SubsurfaceRadius; }
-        void SetSubsurfaceRadius(float val) { m_Desc.SubsurfaceRadius = std::clamp(val, 0.0f, 16.0f); }
+        void SetSubsurfaceRadius(float val) {
+            m_Desc.SubsurfaceRadius = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinSubsurfaceRadius, MaterialParameterBounds::MaxSubsurfaceRadius,
+                MaterialParameterBounds::DefaultSubsurfaceRadius);
+        }
 
         bool GetAbsorptionEnabled() const { return m_Desc.AbsorptionEnabled; }
         void SetAbsorptionEnabled(bool val) { m_Desc.AbsorptionEnabled = val; }
         const glm::vec3& GetAbsorptionColor() const { return m_Desc.AbsorptionColor; }
-        void SetAbsorptionColor(const glm::vec3& val) { m_Desc.AbsorptionColor = glm::max(val, glm::vec3(0.0f)); }
+        void SetAbsorptionColor(const glm::vec3& val) { m_Desc.AbsorptionColor = MaterialParameterBounds::ClampMinVec3(val, 0.0f); }
         float GetDispersion() const { return m_Desc.Dispersion; }
-        void SetDispersion(float val) { m_Desc.Dispersion = std::clamp(val, 0.0f, 1.0f); }
+        void SetDispersion(float val) {
+            m_Desc.Dispersion = MaterialParameterBounds::ClampFinite(
+                val, MaterialParameterBounds::MinDispersion, MaterialParameterBounds::MaxDispersion, 0.0f);
+        }
 
         RHIMaterialDesc& GetDesc() { return m_Desc; }
         const RHIMaterialDesc& GetDesc() const { return m_Desc; }

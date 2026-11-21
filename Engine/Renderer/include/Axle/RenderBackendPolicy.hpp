@@ -55,6 +55,12 @@ namespace Axle {
 
         SceneRenderSettings ResolveSettings(const SceneRenderSettings& authored) const;
         std::vector<std::string> CollectFallbacks(const SceneRenderSettings& authored) const;
+        std::vector<std::string> CollectMaterialFeatureDiagnostics(
+            const SceneRenderSettings& resolved,
+            bool usesCustomShader,
+            bool usesRefraction,
+            bool usesSubsurface,
+            bool usesAbsorptionOrDispersion) const;
 
     private:
         void Set(BackendFeature feature, BackendFeatureState state, std::string reason);

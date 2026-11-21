@@ -115,7 +115,7 @@ bool RunM15PrimaryLightingReferenceUnitTests() {
     const std::string forwardSource{std::istreambuf_iterator<char>(forward), std::istreambuf_iterator<char>()};
     std::ifstream localShader(AXLE_LOCAL_SHADOW_SHADER_PATH);
     const std::string localSource{std::istreambuf_iterator<char>(localShader), std::istreambuf_iterator<char>()};
-    RENDER_CHECK(forwardSource.find("SunShadowVisibility(input.WorldPos,N,sunDir)") != std::string::npos &&
+    RENDER_CHECK(forwardSource.find("SunShadowVisibility(input.WorldPos, N, sunDir, shadowDepth)") != std::string::npos &&
                  forwardSource.find("PointShadowVisibility(p,pLight.PositionAndRadius.xyz,input.WorldPos,N,L)") != std::string::npos &&
                  forwardSource.find("LocalShadowVisibility(u_LocalShadowViews[4+s/4][s%4],input.WorldPos,N,L)") != std::string::npos,
         "directional, point and spot direct-light branches consume their matching shadow visibility");

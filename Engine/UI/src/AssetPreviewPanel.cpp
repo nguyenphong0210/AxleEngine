@@ -26,6 +26,7 @@
 #include <Axle/Entity.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/SceneHierarchyPanel.hpp>
+#include <Axle/SceneExtraction.hpp>
 #include <Axle/SceneRenderBridge.hpp>
 #include <Axle/PrimitiveMesh.hpp>
 #include <Axle/Log.hpp>
@@ -61,6 +62,10 @@ namespace Axle {
         ShutdownPreview();
     }
     void AssetPreviewPanel::ShutdownPreview() {
+        m_MatchedEnvEntities.clear();
+        m_HasMatchedSceneLights = false;
+        m_PreviewLight = {};
+        m_PreviewFillLight = {};
         if (m_PreviewScene) {
             m_PreviewScene->Clear();
             m_PreviewScene.reset();
@@ -547,10 +552,255 @@ namespace Axle {
         }
     }
 
+    void AssetPreviewPanel::SetEnvironmentMode(PreviewEnvironmentMode mode) {
+        if (m_EnvironmentMode == mode) return;
+        m_EnvironmentMode = mode;
+        m_PendingHistoryReset = true;
+        m_SceneNeedsRebuild = true;
+    }
+
+    void AssetPreviewPanel::SetMatchSceneRenderPolicy(bool enabled) {
+        if (m_MatchSceneRenderPolicy == enabled) return;
+        m_MatchSceneRenderPolicy = enabled;
+        m_PendingHistoryReset = true;
+    }
+
+    void AssetPreviewPanel::SetSceneRenderSettings(const SceneRenderSettings& settings) {
+        m_SceneRenderSettings = settings;
+        m_HasSceneRenderSettings = true;
+    }
+
+    void AssetPreviewPanel::ClearMatchedSceneLighting() {
+        if (m_PreviewScene) {
+            auto& reg = m_PreviewScene->GetRegistry();
+            for (Entity ent : m_MatchedEnvEntities) {
+                if (ent && reg.valid(static_cast<entt::entity>(ent))) {
+                    m_PreviewScene->DestroyEntity(ent);
+                }
+            }
+        }
+        m_MatchedEnvEntities.clear();
+        m_HasMatchedSceneLights = false;
+    }
+
+    void AssetPreviewPanel::SyncMatchedSceneLighting() {
+        if (!m_PreviewScene) return;
+
+        auto ensureStudioLights = [&]() {
+            if (!m_PreviewFillLight || !m_PreviewScene->GetRegistry().valid(static_cast<entt::entity>(m_PreviewFillLight))) {
+                m_PreviewFillLight = m_PreviewScene->CreateEntity("PreviewFillLight");
+                auto& flc = m_PreviewFillLight.AddComponent<DirectionalLightComponent>();
+                flc.Azimuth = 0.0f;
+                flc.Elevation = -90.0f;
+                flc.Color = glm::vec3(0.7f);
+                flc.Intensity = m_EnableSecondaryLight ? 1.0f : 0.0f;
+                flc.AmbientIntensity = 0.65f;
+                flc.CastShadows = false;
+            }
+            if (!m_PreviewLight || !m_PreviewScene->GetRegistry().valid(static_cast<entt::entity>(m_PreviewLight))) {
+                m_PreviewLight = m_PreviewScene->CreateEntity("PreviewSunLight");
+                auto& dlc = m_PreviewLight.AddComponent<DirectionalLightComponent>();
+                dlc.Azimuth = m_SunAzimuth;
+                dlc.Elevation = m_SunElevation;
+                dlc.Color = glm::vec3(1.0f);
+                dlc.Intensity = m_EnableKeyLight ? 1.0f : 0.0f;
+                dlc.AmbientIntensity = m_EnableKeyLight ? 0.65f : 0.25f;
+                dlc.CastShadows = false;
+            }
+        };
+
+        auto destroyStudioLights = [&]() {
+            auto& reg = m_PreviewScene->GetRegistry();
+            if (m_PreviewLight && reg.valid(static_cast<entt::entity>(m_PreviewLight))) {
+                m_PreviewScene->DestroyEntity(m_PreviewLight);
+            }
+            if (m_PreviewFillLight && reg.valid(static_cast<entt::entity>(m_PreviewFillLight))) {
+                m_PreviewScene->DestroyEntity(m_PreviewFillLight);
+            }
+            m_PreviewLight = {};
+            m_PreviewFillLight = {};
+        };
+
+        if (m_EnvironmentMode == PreviewEnvironmentMode::Studio) {
+            ClearMatchedSceneLighting();
+            m_EnvironmentFallbackReason.clear();
+            ensureStudioLights();
+            return;
+        }
+
+        std::vector<entt::entity> sourceEnvEntities;
+        if (m_Scene && m_Scene->CanMutate()) {
+            auto& srcReg = m_Scene->GetRegistry();
+            auto maybeAdd = [&](entt::entity id) {
+                if (std::find(sourceEnvEntities.begin(), sourceEnvEntities.end(), id) == sourceEnvEntities.end()) {
+                    sourceEnvEntities.push_back(id);
+                }
+            };
+            for (auto id : srcReg.view<DirectionalLightComponent>()) maybeAdd(id);
+            for (auto id : srcReg.view<SkyboxComponent>()) maybeAdd(id);
+            for (auto id : srcReg.view<ReflectionProbeComponent>()) maybeAdd(id);
+            for (auto id : srcReg.view<VolumetricFogComponent>()) maybeAdd(id);
+            for (auto id : srcReg.view<DDGIProbeGridComponent>()) maybeAdd(id);
+            for (auto id : srcReg.view<PointLightComponent>()) maybeAdd(id);
+            for (auto id : srcReg.view<SpotLightComponent>()) maybeAdd(id);
+            for (auto id : srcReg.view<RectLightComponent>()) maybeAdd(id);
+        }
+
+        if (sourceEnvEntities.empty()) {
+            ClearMatchedSceneLighting();
+            m_EnvironmentFallbackReason = m_Scene
+                ? "Fallback: Studio lighting (active scene has no lights or skybox)"
+                : "Fallback: Studio lighting (no active scene)";
+            ensureStudioLights();
+            return;
+        }
+
+        m_EnvironmentFallbackReason.clear();
+        destroyStudioLights();
+
+        auto& srcReg = m_Scene->GetRegistry();
+        auto& dstReg = m_PreviewScene->GetRegistry();
+
+        auto computeMatchID = [&](entt::entity srcEnt) -> uint64_t {
+            uint64_t base = srcReg.all_of<IDComponent>(srcEnt)
+                ? static_cast<uint64_t>(srcReg.get<IDComponent>(srcEnt).ID)
+                : static_cast<uint64_t>(entt::to_integral(srcEnt) + 1u);
+            return base ? base : 1ULL;
+        };
+
+        std::unordered_map<uint64_t, Entity> existingByID;
+        for (Entity prev : m_MatchedEnvEntities) {
+            if (prev && dstReg.valid(static_cast<entt::entity>(prev))) {
+                existingByID[static_cast<uint64_t>(prev.GetUUID())] = prev;
+            }
+        }
+
+        std::vector<Entity> nextMatched;
+        nextMatched.reserve(sourceEnvEntities.size());
+        for (entt::entity srcEnt : sourceEnvEntities) {
+            const uint64_t matchID = computeMatchID(srcEnt);
+            Entity dstEnt;
+            if (auto it = existingByID.find(matchID); it != existingByID.end()) {
+                dstEnt = it->second;
+                existingByID.erase(it);
+            } else {
+                const std::string tag = srcReg.all_of<TagComponent>(srcEnt)
+                    ? srcReg.get<TagComponent>(srcEnt).Tag
+                    : "MatchedEnv";
+                dstEnt = m_PreviewScene->CreateEntityWithUUID(UUID(matchID), tag);
+            }
+
+            if (dstEnt && dstEnt.HasComponent<TransformComponent>()) {
+                const glm::mat4 worldMat = m_Scene->GetWorldTransform(srcEnt);
+                const glm::vec3 axisX(worldMat[0]);
+                const glm::vec3 axisY(worldMat[1]);
+                const glm::vec3 axisZ(worldMat[2]);
+                auto safeLen = [](const glm::vec3& v) {
+                    const float len = glm::length(v);
+                    return (std::isfinite(len) && len > 1e-5f) ? len : 1.0f;
+                };
+                const glm::vec3 scale(safeLen(axisX), safeLen(axisY), safeLen(axisZ));
+                auto& dstTc = dstEnt.GetComponent<TransformComponent>();
+                dstTc.Translation = glm::vec3(worldMat[3]);
+                dstTc.Scale = scale;
+                const glm::mat3 rotMat(axisX / scale.x, axisY / scale.y, axisZ / scale.z);
+                dstTc.Rotation = glm::normalize(glm::quat_cast(rotMat));
+            }
+
+            auto syncComp = [&]<typename T>() {
+                if (srcReg.all_of<T>(srcEnt)) {
+                    dstReg.emplace_or_replace<T>(static_cast<entt::entity>(dstEnt), srcReg.get<T>(srcEnt));
+                } else {
+                    dstReg.remove<T>(static_cast<entt::entity>(dstEnt));
+                }
+            };
+            syncComp.template operator()<DirectionalLightComponent>();
+            syncComp.template operator()<SkyboxComponent>();
+            syncComp.template operator()<ReflectionProbeComponent>();
+            syncComp.template operator()<VolumetricFogComponent>();
+            syncComp.template operator()<DDGIProbeGridComponent>();
+            syncComp.template operator()<PointLightComponent>();
+            syncComp.template operator()<SpotLightComponent>();
+            syncComp.template operator()<RectLightComponent>();
+
+            nextMatched.push_back(dstEnt);
+        }
+
+        for (auto& [unusedID, staleEnt] : existingByID) {
+            if (staleEnt && dstReg.valid(static_cast<entt::entity>(staleEnt))) {
+                m_PreviewScene->DestroyEntity(staleEnt);
+            }
+        }
+        m_MatchedEnvEntities = std::move(nextMatched);
+        m_HasMatchedSceneLights = true;
+    }
+
+    SceneRenderSettings AssetPreviewPanel::BuildEffectivePreviewSettings(bool isMaterial, bool wantsSSS) const {
+        SceneRenderSettings settings = (m_MatchSceneRenderPolicy && m_HasSceneRenderSettings)
+            ? m_SceneRenderSettings
+            : SceneRenderSettings{};
+
+        if (!m_MatchSceneRenderPolicy || !m_HasSceneRenderSettings) {
+            settings.EnableToneMapping = true;
+            settings.EnableFXAA = true;
+        }
+
+        settings.Wireframe = m_WireframeMode;
+        settings.ShowPhysicsDebug = false;
+        settings.EnablePlanarReflections = false;
+        settings.EnableStudioLightLobes = false;
+
+        const bool usingMatchedScene = (m_EnvironmentMode == PreviewEnvironmentMode::MatchScene && m_HasMatchedSceneLights);
+        if (!usingMatchedScene) {
+            settings.EnableShadows = false;
+            settings.EnableSkybox = false;
+            settings.EnableVolumetricFog = false;
+            settings.EnableDDGI = false;
+            settings.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+        } else {
+            bool hasSky = false, hasFog = false, hasDDGI = false;
+            if (m_PreviewScene) {
+                const auto& reg = m_PreviewScene->GetRegistry();
+                for (auto id : reg.view<SkyboxComponent>()) {
+                    if (reg.get<SkyboxComponent>(id).Enabled) { hasSky = true; break; }
+                }
+                for (auto id : reg.view<VolumetricFogComponent>()) {
+                    if (reg.get<VolumetricFogComponent>(id).Enabled) { hasFog = true; break; }
+                }
+                for (auto id : reg.view<DDGIProbeGridComponent>()) {
+                    if (reg.get<DDGIProbeGridComponent>(id).Enabled) { hasDDGI = true; break; }
+                }
+            }
+            if (!m_MatchSceneRenderPolicy || !m_HasSceneRenderSettings) {
+                settings.EnableShadows = true;
+                settings.EnableSkybox = hasSky;
+                settings.EnableVolumetricFog = hasFog;
+                settings.EnableDDGI = false;
+            } else {
+                settings.EnableSkybox = settings.EnableSkybox && hasSky;
+                settings.EnableVolumetricFog = settings.EnableVolumetricFog && hasFog;
+                settings.EnableDDGI = settings.EnableDDGI && hasDDGI;
+            }
+            settings.ClearColor = settings.EnableSkybox
+                ? glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
+                : glm::vec4(0.06f, 0.07f, 0.09f, 1.0f);
+        }
+
+        const bool needsSingleSample = wantsSSS || (isMaterial && UsesRefractionPreview(m_ActiveMaterial));
+        settings.MSAASamples = needsSingleSample ? 1u : 4u;
+        if (!needsSingleSample && m_MatchSceneRenderPolicy && m_HasSceneRenderSettings) {
+            settings.MSAASamples = m_SceneRenderSettings.MSAASamples;
+        }
+        return settings;
+    }
+
     void AssetPreviewPanel::RebuildPreviewScene() {
         if (!m_PreviewScene) {
             m_PreviewScene = std::make_shared<Scene>();
         }
+        ClearMatchedSceneLighting();
+        m_PreviewLight = {};
+        m_PreviewFillLight = {};
         m_PreviewScene->Clear();
         // Mesh parts share one transform. Lights remain outside this hierarchy.
         m_PreviewEntity = m_PreviewScene->CreateEntity("PreviewObject");
@@ -627,6 +877,15 @@ namespace Axle {
                 part.GetComponent<TransformComponent>()=node.Transform;
                 if (node.HasMesh) part.AddComponent<MeshInstance3D>()=node.Mesh;
                 if (node.HasMaterial) part.AddComponent<MaterialComponent>()=node.Material;
+                if (node.HasDirectionalLight) part.AddComponent<DirectionalLightComponent>()=node.DirectionalLight;
+                if (node.HasSkybox) part.AddComponent<SkyboxComponent>()=node.Skybox;
+                if (node.HasReflectionProbe) part.AddComponent<ReflectionProbeComponent>()=node.ReflectionProbe;
+                if (node.HasRectLight) part.AddComponent<RectLightComponent>()=node.RectLight;
+                if (node.HasPlanarReflection) part.AddComponent<PlanarReflectionComponent>()=node.PlanarReflection;
+                if (node.HasVolumetricFog) part.AddComponent<VolumetricFogComponent>()=node.VolumetricFog;
+                if (node.HasDDGIProbeGrid) part.AddComponent<DDGIProbeGridComponent>()=node.DDGIProbeGrid;
+                if (node.HasPointLight) part.AddComponent<PointLightComponent>()=node.PointLight;
+                if (node.HasSpotLight) part.AddComponent<SpotLightComponent>()=node.SpotLight;
                 if (node.HasSkeletalMesh) part.AddComponent<SkeletalMeshComponent>()=node.SkeletalMesh;
                 if (node.HasAnimator) part.AddComponent<AnimatorComponent>()=node.Animator;
                 for (const auto& section : node.PassiveSections) m_PreviewScene->StorePassiveSection(part, section.SectionName, section.Lines);
@@ -658,26 +917,7 @@ namespace Axle {
             }
         }
 
-        // Godot-style rig: a neutral light from above/front and a dimmer light
-        // from below. Add fill first so the key is the primary directional sun.
-        m_PreviewFillLight = m_PreviewScene->CreateEntity("PreviewFillLight");
-        auto& flc = m_PreviewFillLight.AddComponent<DirectionalLightComponent>();
-        flc.Azimuth = 0.0f;
-        flc.Elevation = -90.0f;
-        flc.Color = glm::vec3(0.7f);
-        flc.Intensity = m_EnableSecondaryLight ? 1.0f : 0.0f;
-        flc.AmbientIntensity = 0.65f;
-        flc.CastShadows = false;
-
-        m_PreviewLight = m_PreviewScene->CreateEntity("PreviewSunLight");
-        auto& dlc = m_PreviewLight.AddComponent<DirectionalLightComponent>();
-        dlc.Azimuth = m_SunAzimuth;
-        dlc.Elevation = m_SunElevation;
-        dlc.Color = glm::vec3(1.0f);
-        dlc.Intensity = m_EnableKeyLight ? 1.0f : 0.0f;
-        dlc.AmbientIntensity = m_EnableKeyLight ? 0.65f : 0.25f;
-
-        dlc.CastShadows = false;
+        SyncMatchedSceneLighting();
 
         m_SceneNeedsRebuild = false;
     }
@@ -689,6 +929,10 @@ namespace Axle {
             RebuildPreviewScene();
         }
         if (!m_PreviewScene) return;
+
+        if (m_EnvironmentMode == PreviewEnvironmentMode::MatchScene) {
+            SyncMatchedSceneLighting();
+        }
 
         // Apply manual rotation even while automatic rotation is paused.
         if (m_PreviewEntity && m_PreviewEntity.HasComponent<TransformComponent>()) {
@@ -729,28 +973,29 @@ namespace Axle {
         glm::mat4 view = glm::lookAt(camPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         camera.SetViewMatrix(view, camPos);
 
-        SceneRenderSettings settings;
-        settings.EnableShadows = false;
-        settings.EnableSkybox = false;
-        settings.EnableStudioLightLobes = false;
-        settings.EnableToneMapping = true;
-        settings.EnableFXAA = true;
+        SceneRenderSettings settings = BuildEffectivePreviewSettings(isMaterial, false);
+        const uint32_t probeSampleCount = (!m_MatchSceneRenderPolicy || !m_HasSceneRenderSettings || isMaterial) ? 1u : settings.MSAASamples;
         const bool wantsSSS = m_PreviewScene &&
-            Axle::SceneRequiresSubsurfacePass(*m_PreviewScene, settings, 1u);
-        const bool needsSingleSample = wantsSSS || (isMaterial && UsesRefractionPreview(m_ActiveMaterial));
-        settings.MSAASamples = needsSingleSample ? 1u : 4u;
-        settings.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // Transparent clear for Godot checkerboard
+            Axle::SceneRequiresSubsurfacePass(*m_PreviewScene, settings, probeSampleCount);
+        settings = BuildEffectivePreviewSettings(isMaterial, wantsSSS);
+        const bool cameraCut = m_PendingHistoryReset;
+        m_PendingHistoryReset = false;
+        m_LastEffectiveSettings = settings;
 
         ViewRequest request;
         request.Kind = RenderViewKind::AssetPreview;
         request.Width = m_ViewportWidth;
         request.Height = m_ViewportHeight;
         request.Camera = camera;
+        request.CameraCut = cameraCut;
         request.Settings = settings;
         request.Name = "AssetPreview";
 
+        const auto authoredFog = m_PreviewScene ? Axle::ExtractVolumetricFog(*m_PreviewScene) : std::nullopt;
+        const auto authoredDDGI = m_PreviewScene ? Axle::ExtractDDGIProbeGrid(*m_PreviewScene) : std::nullopt;
         if (RHI::RHIDevice::Get().IsNativeReady() && m_RHIViewport && m_RHIViewport->IsValid()) {
-            if (!m_RHIViewport->SetRenderOptions(settings, nullptr, nullptr, wantsSSS)) return;
+            if (!m_RHIViewport->SetRenderOptions(settings, authoredFog ? &*authoredFog : nullptr,
+                                                 authoredDDGI ? &*authoredDDGI : nullptr, wantsSSS)) return;
             request.ColorTarget = m_RHIViewport->GetColorTexture();
             request.DepthTarget = m_RHIViewport->GetDepthTexture();
             request.ViewTargets = m_RHIViewport->GetTargets();
@@ -919,6 +1164,20 @@ namespace Axle {
                 if (ImGui::MenuItem("Cylinder")) SetPreviewMeshType(PreviewMeshType::Cylinder);
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("Lighting Environment")) {
+                if (ImGui::MenuItem("Studio Lighting", nullptr, m_EnvironmentMode == PreviewEnvironmentMode::Studio)) {
+                    SetEnvironmentMode(PreviewEnvironmentMode::Studio);
+                }
+                if (ImGui::MenuItem("Match Active Scene", nullptr, m_EnvironmentMode == PreviewEnvironmentMode::MatchScene)) {
+                    SetEnvironmentMode(PreviewEnvironmentMode::MatchScene);
+                }
+                ImGui::Separator();
+                bool matchPolicy = m_MatchSceneRenderPolicy;
+                if (ImGui::MenuItem("Match Scene/Runtime Render Policy", nullptr, &matchPolicy)) {
+                    SetMatchSceneRenderPolicy(matchPolicy);
+                }
+                ImGui::EndMenu();
+            }
             if (ImGui::MenuItem("Reset preview")) {
                 m_Pitch = isMaterial ? 0.0f : 20.0f;
                 m_Yaw = isMaterial ? 0.0f : 35.0f;
@@ -936,6 +1195,17 @@ namespace Axle {
         }
         if (ImGui::IsPopupOpen("PreviewOptions")) m_IsViewportHovered = false;
 
+        if (!m_EnvironmentFallbackReason.empty()) {
+            drawList->PushClipRect(p0, p1, true);
+            const ImVec2 msgSize = ImGui::CalcTextSize(m_EnvironmentFallbackReason.c_str());
+            const ImVec2 boxMin(p0.x + 8.0f * uiScale, p1.y - msgSize.y - 14.0f * uiScale);
+            const ImVec2 boxMax(boxMin.x + msgSize.x + 12.0f * uiScale, p1.y - 6.0f * uiScale);
+            drawList->AddRectFilled(boxMin, boxMax, IM_COL32(28, 24, 16, 215), 3.0f * uiScale);
+            drawList->AddText(ImVec2(boxMin.x + 6.0f * uiScale, boxMin.y + 4.0f * uiScale),
+                              IM_COL32(255, 200, 90, 255), m_EnvironmentFallbackReason.c_str());
+            drawList->PopClipRect();
+        }
+
         // Full-width resource type row, like the BaseMaterial3D row in the reference.
         const float footerGap = 4.0f * uiScale;
         const float footerHeight = 32.0f * uiScale;
@@ -943,6 +1213,9 @@ namespace Axle {
         ImVec2 footer1(p1.x, footer0.y + footerHeight);
         drawList->AddRectFilled(footer0, footer1, IM_COL32(56, 56, 56, 255), 3.0f * uiScale);
         std::string badgeText = isMaterial ? "BaseMaterial3D" : (m_IsAssembly ? "Assembly3D" : "MeshInstance3D");
+        if (m_EnvironmentMode == PreviewEnvironmentMode::MatchScene) {
+            badgeText += m_HasMatchedSceneLights ? " [Match Scene]" : " [Studio Fallback]";
+        }
         ImVec2 textSize = ImGui::CalcTextSize(badgeText.c_str());
         float labelWidth = textSize.x + iconSize + 6.0f * uiScale;
         float labelX = p0.x + (availW - labelWidth) * 0.5f;

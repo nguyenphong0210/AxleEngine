@@ -1,4 +1,5 @@
 #include "LocalShadowPersistence.hpp"
+#include "LightingComponentPersistence.hpp"
 #include <Axle/Path.hpp>
 #include <cwctype>
 #include <map>
@@ -242,25 +243,7 @@ namespace Axle {
 
             // DirectionalLightComponent
             if (entity.HasComponent<DirectionalLightComponent>()) {
-                auto& dlc = entity.GetComponent<DirectionalLightComponent>();
-                ss << "    DirectionalLightComponent:\n";
-                ss << "      Color: [ " << dlc.Color.r << " , " << dlc.Color.g << " , " << dlc.Color.b << " ]\n";
-                ss << "      Intensity: " << dlc.Intensity << "\n";
-                ss << "      AmbientIntensity: " << dlc.AmbientIntensity << "\n";
-                ss << "      Azimuth: " << dlc.Azimuth << "\n";
-                ss << "      Elevation: " << dlc.Elevation << "\n";
-                ss << "      CastShadows: " << (dlc.CastShadows ? "true" : "false") << "\n";
-                ss << "      ShadowOrthoSize: " << dlc.ShadowOrthoSize << "\n";
-                ss << "      ShadowBias: " << dlc.ShadowBias << "\n";
-                ss << "      ShadowSlopeBias: " << dlc.ShadowSlopeBias << "\n";
-                ss << "      ShadowNormalBias: " << dlc.ShadowNormalBias << "\n";
-                ss << "      ShadowFilterRadius: " << dlc.ShadowFilterRadius << "\n";
-                ss << "      ShadowQuality: " << dlc.ShadowQuality << "\n";
-                ss << "      CascadeSplitLambda: " << dlc.CascadeSplitLambda << "\n";
-                ss << "      MaxShadowDistance: " << dlc.MaxShadowDistance << "\n";
-                ss << "      Exposure: " << dlc.Exposure << "\n";
-                ss << "      ToneMappingMode: " << dlc.ToneMappingMode << "\n";
-                ss << "      Gamma: " << dlc.Gamma << "\n";
+                WriteDirectionalLightComponent(ss, entity.GetComponent<DirectionalLightComponent>());
             }
 
             // MaterialComponent
@@ -270,25 +253,7 @@ namespace Axle {
 
             // SkyboxComponent
             if (entity.HasComponent<SkyboxComponent>()) {
-                auto& sbc = entity.GetComponent<SkyboxComponent>();
-                ss << "    SkyboxComponent:\n";
-                ss << "      Enabled: " << (sbc.Enabled ? "true" : "false") << "\n";
-                ss << "      EnvironmentLighting: " << (sbc.EnvironmentLighting ? "true" : "false") << "\n";
-                ss << "      SkyboxType: " << (int)sbc.Type << "\n";
-                ss << "      HDRPath: " << sbc.HDRPath << "\n";
-                ss << "      Intensity: " << sbc.Intensity << "\n";
-                ss << "      Exposure: " << sbc.Exposure << "\n";
-                ss << "      EnvironmentRotation: " << sbc.EnvironmentRotation << "\n";
-                ss << "      ZenithColor: [ " << sbc.ZenithColor.r << " , " << sbc.ZenithColor.g << " , " << sbc.ZenithColor.b << " ]\n";
-                ss << "      HorizonColor: [ " << sbc.HorizonColor.r << " , " << sbc.HorizonColor.g << " , " << sbc.HorizonColor.b << " ]\n";
-                ss << "      GroundColor: [ " << sbc.GroundColor.r << " , " << sbc.GroundColor.g << " , " << sbc.GroundColor.b << " ]\n";
-                ss << "      SunSize: " << sbc.SunSize << "\n";
-                ss << "      SunGlow: " << sbc.SunGlow << "\n";
-                ss << "      Turbidity: " << sbc.Turbidity << "\n";
-                ss << "      SyncWithSun: " << (sbc.SyncWithSun ? "true" : "false") << "\n";
-                ss << "      CustomAzimuth: " << sbc.CustomAzimuth << "\n";
-                ss << "      CustomElevation: " << sbc.CustomElevation << "\n";
-                ss << "      HemisphereAmbient: " << (sbc.HemisphereAmbient ? "true" : "false") << "\n";
+                WriteSkyboxComponent(ss, entity.GetComponent<SkyboxComponent>());
             }
 
             // PointLightComponent
@@ -357,46 +322,17 @@ namespace Axle {
 
             // RectLightComponent
             if (entity.HasComponent<RectLightComponent>()) {
-                auto& rlc = entity.GetComponent<RectLightComponent>();
-                ss << "    RectLightComponent:\n";
-                ss << "      Enabled: " << (rlc.Enabled ? "true" : "false") << "\n";
-                ss << "      Shape: " << (rlc.Shape == AreaLightShape::Disk ? "Disk" : "Rectangle") << "\n";
-                ss << "      Color: [ " << rlc.Color.r << " , " << rlc.Color.g << " , " << rlc.Color.b << " ]\n";
-                ss << "      Intensity: " << rlc.Intensity << "\n";
-                ss << "      Width: " << rlc.Width << "\n";
-                ss << "      Height: " << rlc.Height << "\n";
-                ss << "      Range: " << rlc.Range << "\n";
-                ss << "      TwoSided: " << (rlc.TwoSided ? "true" : "false") << "\n";
+                WriteRectLightComponent(ss, entity.GetComponent<RectLightComponent>());
             }
 
             // VolumetricFogComponent
             if (entity.HasComponent<VolumetricFogComponent>()) {
-                auto& vfc = entity.GetComponent<VolumetricFogComponent>();
-                ss << "    VolumetricFogComponent:\n";
-                ss << "      Enabled: " << (vfc.Enabled ? "true" : "false") << "\n";
-                ss << "      Density: " << vfc.Density << "\n";
-                ss << "      HeightFalloff: " << vfc.HeightFalloff << "\n";
-                ss << "      ScatteringAsymmetry: " << vfc.ScatteringAsymmetry << "\n";
-                ss << "      Color: [ " << vfc.Color.r << " , " << vfc.Color.g << " , " << vfc.Color.b << " ]\n";
-                ss << "      MaxDistance: " << vfc.MaxDistance << "\n";
-                ss << "      Intensity: " << vfc.Intensity << "\n";
+                WriteVolumetricFogComponent(ss, entity.GetComponent<VolumetricFogComponent>());
             }
 
             // DDGIProbeGridComponent
             if (entity.HasComponent<DDGIProbeGridComponent>()) {
-                auto& ddgi = entity.GetComponent<DDGIProbeGridComponent>();
-                ss << "    DDGIProbeGridComponent:\n";
-                ss << "      Enabled: " << (ddgi.Enabled ? "true" : "false") << "\n";
-                ss << "      GridDimensions: [ " << ddgi.GridDimensions.x << " , " << ddgi.GridDimensions.y << " , " << ddgi.GridDimensions.z << " ]\n";
-                ss << "      GridSpacing: [ " << ddgi.GridSpacing.x << " , " << ddgi.GridSpacing.y << " , " << ddgi.GridSpacing.z << " ]\n";
-                ss << "      GridOrigin: [ " << ddgi.GridOrigin.x << " , " << ddgi.GridOrigin.y << " , " << ddgi.GridOrigin.z << " ]\n";
-                ss << "      EnergyMultiplier: " << ddgi.EnergyMultiplier << "\n";
-                ss << "      RaysPerProbe: " << ddgi.RaysPerProbe << "\n";
-                ss << "      UpdateFraction: " << ddgi.UpdateFraction << "\n";
-                ss << "      MaxProbesPerFrame: " << ddgi.MaxProbesPerFrame << "\n";
-                ss << "      Hysteresis: " << ddgi.Hysteresis << "\n";
-                ss << "      ViewBias: " << ddgi.ViewBias << "\n";
-                ss << "      NormalBias: " << ddgi.NormalBias << "\n";
+                WriteDDGIProbeGridComponent(ss, entity.GetComponent<DDGIProbeGridComponent>());
             }
 
             // CameraComponent
@@ -1027,44 +963,7 @@ namespace Axle {
                         if (!currentEntity.HasComponent<DirectionalLightComponent>()) {
                             currentEntity.AddComponent<DirectionalLightComponent>();
                         }
-                        auto& dlc = currentEntity.GetComponent<DirectionalLightComponent>();
-                        if (trimmed.rfind("Color:", 0) == 0) {
-                            float r = 1, g = 1, b = 1;
-                            sscanf(trimmed.c_str(), "Color: [ %f , %f , %f ]", &r, &g, &b);
-                            dlc.Color = glm::vec3(r, g, b);
-                        } else if (trimmed.rfind("Intensity:", 0) == 0) {
-                            dlc.Intensity = std::stof(Trim(trimmed.substr(10)));
-                        } else if (trimmed.rfind("AmbientIntensity:", 0) == 0) {
-                            dlc.AmbientIntensity = std::stof(Trim(trimmed.substr(17)));
-                        } else if (trimmed.rfind("Azimuth:", 0) == 0) {
-                            dlc.Azimuth = std::stof(Trim(trimmed.substr(8)));
-                        } else if (trimmed.rfind("Elevation:", 0) == 0) {
-                            dlc.Elevation = std::stof(Trim(trimmed.substr(10)));
-                        } else if (trimmed.rfind("CastShadows:", 0) == 0) {
-                            dlc.CastShadows = (Trim(trimmed.substr(12)) == "true");
-                        } else if (trimmed.rfind("ShadowOrthoSize:", 0) == 0) {
-                            dlc.ShadowOrthoSize = std::stof(Trim(trimmed.substr(16)));
-                        } else if (trimmed.rfind("ShadowBias:", 0) == 0) {
-                            dlc.ShadowBias = std::stof(Trim(trimmed.substr(11)));
-                        } else if (trimmed.rfind("ShadowSlopeBias:", 0) == 0) {
-                            dlc.ShadowSlopeBias = std::stof(Trim(trimmed.substr(16)));
-                        } else if (trimmed.rfind("ShadowNormalBias:", 0) == 0) {
-                            dlc.ShadowNormalBias = std::stof(Trim(trimmed.substr(17)));
-                        } else if (trimmed.rfind("ShadowFilterRadius:", 0) == 0) {
-                            dlc.ShadowFilterRadius = std::stof(Trim(trimmed.substr(19)));
-                        } else if (trimmed.rfind("ShadowQuality:", 0) == 0) {
-                            dlc.ShadowQuality = std::stoi(Trim(trimmed.substr(14)));
-                        } else if (trimmed.rfind("CascadeSplitLambda:", 0) == 0) {
-                            dlc.CascadeSplitLambda = std::stof(Trim(trimmed.substr(19)));
-                        } else if (trimmed.rfind("MaxShadowDistance:", 0) == 0) {
-                            dlc.MaxShadowDistance = std::stof(Trim(trimmed.substr(18)));
-                        } else if (trimmed.rfind("Exposure:", 0) == 0) {
-                            dlc.Exposure = std::stof(Trim(trimmed.substr(9)));
-                        } else if (trimmed.rfind("ToneMappingMode:", 0) == 0) {
-                            dlc.ToneMappingMode = std::stoi(Trim(trimmed.substr(16)));
-                        } else if (trimmed.rfind("Gamma:", 0) == 0) {
-                            dlc.Gamma = std::stof(Trim(trimmed.substr(6)));
-                        }
+                        ReadDirectionalLightComponentLine(trimmed, currentEntity.GetComponent<DirectionalLightComponent>());
                         break;
                     }
                     case ComponentSection::PointLight: {
@@ -1282,48 +1181,7 @@ namespace Axle {
                         if (!currentEntity.HasComponent<SkyboxComponent>()) {
                             currentEntity.AddComponent<SkyboxComponent>();
                         }
-                        auto& sbc = currentEntity.GetComponent<SkyboxComponent>();
-                        if (trimmed.rfind("Enabled:", 0) == 0) {
-                            sbc.Enabled = (Trim(trimmed.substr(8)) == "true");
-                        } else if (trimmed.rfind("EnvironmentLighting:", 0) == 0) {
-                            sbc.EnvironmentLighting = (Trim(trimmed.substr(20)) == "true");
-                        } else if (trimmed.rfind("SkyboxType:", 0) == 0) {
-                            sbc.Type = static_cast<SkyboxType>(std::stoi(Trim(trimmed.substr(11))));
-                        } else if (trimmed.rfind("HDRPath:", 0) == 0) {
-                            sbc.HDRPath = Trim(trimmed.substr(8));
-                        } else if (trimmed.rfind("Intensity:", 0) == 0) {
-                            sbc.Intensity = std::stof(Trim(trimmed.substr(10)));
-                        } else if (trimmed.rfind("Exposure:", 0) == 0) {
-                            sbc.Exposure = std::stof(Trim(trimmed.substr(9)));
-                        } else if (trimmed.rfind("EnvironmentRotation:", 0) == 0) {
-                            sbc.EnvironmentRotation = std::stof(Trim(trimmed.substr(20)));
-                        } else if (trimmed.rfind("ZenithColor:", 0) == 0) {
-                            float r = 0.18f, g = 0.42f, b = 0.78f;
-                            sscanf(trimmed.c_str(), "ZenithColor: [ %f , %f , %f ]", &r, &g, &b);
-                            sbc.ZenithColor = glm::vec3(r, g, b);
-                        } else if (trimmed.rfind("HorizonColor:", 0) == 0) {
-                            float r = 0.70f, g = 0.82f, b = 0.95f;
-                            sscanf(trimmed.c_str(), "HorizonColor: [ %f , %f , %f ]", &r, &g, &b);
-                            sbc.HorizonColor = glm::vec3(r, g, b);
-                        } else if (trimmed.rfind("GroundColor:", 0) == 0) {
-                            float r = 0.18f, g = 0.16f, b = 0.14f;
-                            sscanf(trimmed.c_str(), "GroundColor: [ %f , %f , %f ]", &r, &g, &b);
-                            sbc.GroundColor = glm::vec3(r, g, b);
-                        } else if (trimmed.rfind("SunSize:", 0) == 0) {
-                            sbc.SunSize = std::stof(Trim(trimmed.substr(8)));
-                        } else if (trimmed.rfind("SunGlow:", 0) == 0) {
-                            sbc.SunGlow = std::stof(Trim(trimmed.substr(8)));
-                        } else if (trimmed.rfind("Turbidity:", 0) == 0) {
-                            sbc.Turbidity = std::stof(Trim(trimmed.substr(10)));
-                        } else if (trimmed.rfind("SyncWithSun:", 0) == 0) {
-                            sbc.SyncWithSun = (Trim(trimmed.substr(12)) == "true");
-                        } else if (trimmed.rfind("CustomAzimuth:", 0) == 0) {
-                            sbc.CustomAzimuth = std::stof(Trim(trimmed.substr(14)));
-                        } else if (trimmed.rfind("CustomElevation:", 0) == 0) {
-                            sbc.CustomElevation = std::stof(Trim(trimmed.substr(16)));
-                        } else if (trimmed.rfind("HemisphereAmbient:", 0) == 0) {
-                            sbc.HemisphereAmbient = (Trim(trimmed.substr(18)) == "true");
-                        }
+                        ReadSkyboxComponentLine(trimmed, currentEntity.GetComponent<SkyboxComponent>());
                         break;
                     }
                     case ComponentSection::Camera: {

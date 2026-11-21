@@ -1,6 +1,10 @@
 #include "MaterialTestHarness.hpp"
 #include <Axle/Material.hpp>
 #include <Axle/Components.hpp>
+#include <Axle/Scene.hpp>
+#include <Axle/Entity.hpp>
+#include <Axle/SceneSerializer.hpp>
+#include <Axle/AssemblySerializer.hpp>
 #include <Axle/ShaderPropertyPersistence.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/MaterialCache.hpp>
@@ -370,6 +374,104 @@ namespace {
         return true;
     }
 
+    bool TestCompleteM15MaterialAssetAndCodecRoundTrip() {
+        ScopedTempDir temp;
+        const auto prevAssets = FileSystem::GetAssetDirectory();
+        struct AssetDirGuard {
+            std::filesystem::path Prev;
+            ~AssetDirGuard() { FileSystem::SetAssetDirectory(Prev); }
+        } guard{prevAssets};
+        FileSystem::SetAssetDirectory(temp.Path);
+
+        const auto matPath = temp.Path / "FullM15Material.axleasset";
+        auto mat = std::make_shared<Material>("FullM15");
+        mat->SetSurfaceType(SurfaceType::Transparent);
+        mat->SetCullMode(CullMode::None);
+        mat->SetDepthWrite(false);
+        mat->SetRenderQueue(3100);
+        mat->SetAlbedoColor({0.25f, 0.55f, 0.85f, 0.42f});
+        mat->SetMetallic(0.15f);
+        mat->SetRoughness(0.18f);
+        mat->SetAO(0.77f);
+        mat->SetClearcoatStrength(0.91f);
+        mat->SetClearcoatRoughness(0.06f);
+        mat->SetAnisotropyStrength(-0.62f);
+        mat->SetAnisotropyRotation(0.28f);
+        mat->SetSheenEnabled(true);
+        mat->SetSheenColor({0.88f, 0.34f, 0.51f});
+        mat->SetSheenRoughness(0.37f);
+        mat->SetSubsurfaceEnabled(true);
+        mat->SetSubsurfaceColor({0.95f, 0.45f, 0.35f});
+        mat->SetSubsurfaceRadius(2.75f);
+        mat->SetAbsorptionEnabled(true);
+        mat->SetAbsorptionColor({0.40f, 0.12f, 0.05f});
+        mat->SetDispersion(0.22f);
+        mat->SetRefractionEnabled(true);
+        mat->SetRefractionStrength(0.84f);
+        mat->SetRefractionIOR(1.48f);
+        mat->SetRefractionThickness(0.65f);
+        mat->SetRefractionTint({0.72f, 0.89f, 0.96f});
+        mat->SetDetailNormalStrength(1.75f);
+        mat->SetDetailUVScale({4.0f, 6.0f});
+        mat->SetDetailUVOffset({0.15f, -0.25f});
+        MAT_TEST_CHECK(mat->Save(matPath), "Save FullM15.axleasset");
+
+        RHI::RHIMaterial native;
+        MAT_TEST_CHECK(native.Load(matPath), "RHIMaterial::Load FullM15.axleasset");
+        const auto& nd = native.GetDesc();
+        MAT_TEST_CHECK(nd.SheenEnabled && nd.SubsurfaceEnabled && nd.AbsorptionEnabled && nd.RefractionEnabled, "RHIMaterial flags");
+        MAT_TEST_APPROX_EQUAL(nd.SheenColor.r, 0.88f, 1e-4f, "SheenColor R");
+        MAT_TEST_APPROX_EQUAL(nd.SheenRoughness, 0.37f, 1e-4f, "SheenRoughness");
+        MAT_TEST_APPROX_EQUAL(nd.SubsurfaceRadius, 2.75f, 1e-4f, "SubsurfaceRadius");
+        MAT_TEST_APPROX_EQUAL(nd.AbsorptionColor.r, 0.40f, 1e-4f, "AbsorptionColor R");
+        MAT_TEST_APPROX_EQUAL(nd.Dispersion, 0.22f, 1e-4f, "Dispersion");
+        MAT_TEST_APPROX_EQUAL(nd.ClearcoatStrength, 0.91f, 1e-4f, "ClearcoatStrength");
+        MAT_TEST_APPROX_EQUAL(nd.AnisotropyStrength, -0.62f, 1e-4f, "AnisotropyStrength");
+
+        const auto nativePath = temp.Path / "FullM15NativeResaved.axleasset";
+        MAT_TEST_CHECK(native.Save(nativePath), "RHIMaterial::Save FullM15NativeResaved.axleasset");
+        Material reloaded;
+        MAT_TEST_CHECK(reloaded.Load(nativePath, false), "Material::Load after RHIMaterial::Save");
+        MAT_TEST_CHECK(reloaded.GetSheenEnabled() && reloaded.GetSubsurfaceEnabled() && reloaded.GetAbsorptionEnabled(), "Round-trip advanced flags");
+        MAT_TEST_APPROX_EQUAL(reloaded.GetDispersion(), 0.22f, 1e-4f, "Round-trip Dispersion");
+        MAT_TEST_APPROX_EQUAL(reloaded.GetSubsurfaceRadius(), 2.75f, 1e-4f, "Round-trip SubsurfaceRadius");
+
+        Scene scene;
+        auto e = scene.CreateEntity("M15MatEntity");
+        auto& mc = e.AddComponent<MaterialComponent>();
+        mc.AlbedoColor = mat->GetAlbedoColor();
+        mc.SheenEnabled = true; mc.SheenColor = mat->GetSheenColor(); mc.SheenRoughness = 0.37f;
+        mc.SubsurfaceEnabled = true; mc.SubsurfaceColor = mat->GetSubsurfaceColor(); mc.SubsurfaceRadius = 2.75f;
+        mc.AbsorptionEnabled = true; mc.AbsorptionColor = mat->GetAbsorptionColor(); mc.Dispersion = 0.22f;
+        mc.ClearcoatStrength = 0.91f; mc.ClearcoatRoughness = 0.06f;
+        mc.AnisotropyStrength = -0.62f; mc.AnisotropyRotation = 0.28f;
+
+        auto dup = scene.DuplicateEntity(e);
+        MAT_TEST_CHECK(dup && dup.HasComponent<MaterialComponent>(), "RuntimeComponentCodec duplicated MaterialComponent");
+        const auto& dm = dup.GetComponent<MaterialComponent>();
+        MAT_TEST_CHECK(dm.SheenEnabled && dm.SubsurfaceEnabled && dm.AbsorptionEnabled, "Duplicate M15 flags");
+        MAT_TEST_APPROX_EQUAL(dm.Dispersion, 0.22f, 1e-4f, "Duplicate Dispersion");
+        MAT_TEST_APPROX_EQUAL(dm.AnisotropyStrength, -0.62f, 1e-4f, "Duplicate AnisotropyStrength");
+
+        const auto scenePath = temp.Path / "M15MatScene.axlescene";
+        MAT_TEST_CHECK(SceneSerializer(&scene).Serialize(scenePath), "SceneSerializer save M15 material");
+        Scene scene2;
+        MAT_TEST_CHECK(SceneSerializer(&scene2).Deserialize(scenePath), "SceneSerializer load M15 material");
+        auto view2 = scene2.GetRegistry().view<TagComponent, MaterialComponent>();
+        bool found = false;
+        for (auto id : view2) {
+            if (view2.get<TagComponent>(id).Tag == "M15MatEntity") {
+                const auto& sm = view2.get<MaterialComponent>(id);
+                MAT_TEST_CHECK(sm.SheenEnabled && sm.SubsurfaceEnabled && sm.AbsorptionEnabled, "Scene load M15 flags");
+                MAT_TEST_APPROX_EQUAL(sm.Dispersion, 0.22f, 1e-4f, "Scene load Dispersion");
+                MAT_TEST_APPROX_EQUAL(sm.SubsurfaceRadius, 2.75f, 1e-4f, "Scene load SubsurfaceRadius");
+                found = true;
+            }
+        }
+        MAT_TEST_CHECK(found, "Reloaded M15MatEntity found");
+        return true;
+    }
+
 } // namespace
 
 bool RunMaterialSerializationUnitTests() {
@@ -392,6 +494,9 @@ bool RunMaterialSerializationUnitTests() {
 
     std::cout << "  - Running TestMaterialSynchronization ...\n";
     if (!TestMaterialSynchronization()) return false;
+
+    std::cout << "  - Running TestCompleteM15MaterialAssetAndCodecRoundTrip ...\n";
+    if (!TestCompleteM15MaterialAssetAndCodecRoundTrip()) return false;
 
     return true;
 }

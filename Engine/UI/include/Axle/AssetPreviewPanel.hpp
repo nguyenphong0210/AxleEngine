@@ -2,6 +2,7 @@
 #include <Axle/Types.hpp>
 #include <Axle/AssetSerializer.hpp>
 #include <Axle/AssemblySerializer.hpp>
+#include <Axle/SceneRenderSettings.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/Framebuffer.hpp>
 #include <Axle/Scene.hpp>
@@ -26,6 +27,11 @@ namespace Axle {
         Cylinder = 2,
         Plane = 3,
         Custom = 4
+    };
+
+    enum class PreviewEnvironmentMode {
+        Studio = 0,
+        MatchScene = 1
     };
 
     struct IconTextureRegion {
@@ -57,6 +63,13 @@ namespace Axle {
         void SetSunAzimuth(float deg);
         float GetSunElevation() const { return m_SunElevation; }
         void SetSunElevation(float deg);
+        void SetEnvironmentMode(PreviewEnvironmentMode mode);
+        PreviewEnvironmentMode GetEnvironmentMode() const { return m_EnvironmentMode; }
+        void SetMatchSceneRenderPolicy(bool enabled);
+        bool GetMatchSceneRenderPolicy() const { return m_MatchSceneRenderPolicy; }
+        void SetSceneRenderSettings(const SceneRenderSettings& settings);
+        const SceneRenderSettings& GetEffectivePreviewRenderSettings() const { return m_LastEffectiveSettings; }
+        const std::string& GetEnvironmentFallbackReason() const { return m_EnvironmentFallbackReason; }
         RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
         const std::shared_ptr<Framebuffer>& GetGLFramebuffer() const { return m_Framebuffer; }
         Scene* GetPreviewScene() const { return m_PreviewScene.get(); }
@@ -79,6 +92,9 @@ namespace Axle {
         void RenderPreview(float width, float height);
         void RebuildPreviewScene();
         bool IsMaterialPreview() const;
+        void SyncMatchedSceneLighting();
+        void ClearMatchedSceneLighting();
+        SceneRenderSettings BuildEffectivePreviewSettings(bool isMaterial, bool wantsSSS) const;
         glm::quat GetPreviewRotation() const;
         float GetPreviewScale() const;
         glm::mat4 GetPreviewTransform() const;
@@ -117,6 +133,15 @@ namespace Axle {
         bool m_IsViewportHovered = false;
         float m_SunAzimuth = 45.0f;
         float m_SunElevation = 35.264f;
+        PreviewEnvironmentMode m_EnvironmentMode = PreviewEnvironmentMode::Studio;
+        bool m_MatchSceneRenderPolicy = true;
+        bool m_HasSceneRenderSettings = false;
+        SceneRenderSettings m_SceneRenderSettings{};
+        SceneRenderSettings m_LastEffectiveSettings{};
+        bool m_PendingHistoryReset = false;
+        std::string m_EnvironmentFallbackReason;
+        std::vector<Entity> m_MatchedEnvEntities;
+        bool m_HasMatchedSceneLights = false;
         std::filesystem::path m_CustomMeshPath;
         std::shared_ptr<VertexArray> m_CustomMeshVAO;
 

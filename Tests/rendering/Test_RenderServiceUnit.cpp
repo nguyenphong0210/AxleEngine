@@ -17,6 +17,9 @@
 #include <Axle/RenderParticleData.hpp>
 #include <sstream>
 #include <iostream>
+#include <fstream>
+#include <filesystem>
+#include <chrono>
 #include <vector>
 #include <atomic>
 #include <thread>
@@ -738,6 +741,153 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static std::filesystem::path MakeTempDir(const char* name) {
+        const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+        const std::filesystem::path dir =
+            std::filesystem::current_path() / "build" / "agent-runs" / "unit-tmp" /
+            (std::string(name) + "-" + std::to_string(stamp));
+        std::error_code ec;
+        std::filesystem::remove_all(dir, ec);
+        std::filesystem::create_directories(dir, ec);
+        return dir;
+    }
+
+    static void CleanupTempDir(const std::filesystem::path& dir) {
+        std::error_code ec;
+        std::filesystem::remove_all(dir, ec);
+    }
+
+    bool Test_U10_B2_CompleteSceneAssemblyAndCodecRoundTrips() {
+        const auto root = MakeTempDir("M15_U10_B2_RoundTrips");
+        Scene src;
+        auto asmRoot = src.CreateEntity("M15RigRoot");
+        asmRoot.GetComponent<TransformComponent>().Translation = {1.5f, 2.5f, -3.5f};
+
+        auto& sun = asmRoot.AddComponent<DirectionalLightComponent>();
+        sun.Color = {0.92f, 0.84f, 0.71f}; sun.Intensity = 2.4f; sun.AmbientIntensity = 0.42f;
+        sun.Azimuth = 123.0f; sun.Elevation = 38.0f; sun.CastShadows = true;
+        sun.Exposure = 1.65f; sun.ToneMappingMode = 2; sun.Gamma = 2.1f;
+
+        auto& sky = asmRoot.AddComponent<SkyboxComponent>();
+        sky.Enabled = true; sky.EnvironmentLighting = true;
+        sky.ZenithColor = {0.11f, 0.22f, 0.44f}; sky.HorizonColor = {0.62f, 0.52f, 0.41f};
+        sky.Intensity = 1.35f; sky.Exposure = 0.85f; sky.EnvironmentRotation = 45.0f;
+        sky.SyncWithSun = false; sky.CustomAzimuth = 210.0f; sky.CustomElevation = 25.0f;
+
+        auto& probe = asmRoot.AddComponent<ReflectionProbeComponent>();
+        probe.Enabled = true; probe.Shape = ProbeShape::Sphere; probe.Radius = 7.25f;
+        probe.BoxExtents = {6.0f, 4.0f, 8.0f}; probe.BoxOffset = {0.5f, 1.25f, -0.5f};
+        probe.Intensity = 1.85f; probe.ParallaxCorrected = false;
+        probe.DynamicCapture = true; probe.CaptureResolution = 256; probe.CaptureShadows = false;
+        probe.CaptureNearPlane = 0.25f; probe.CaptureFarPlane = 180.0f;
+        probe.CaptureMode = ReflectionProbeCaptureMode::Manual; probe.BlendDistance = 1.75f;
+
+        auto child = src.CreateEntity("M15RigChild");
+        child.SetParent(asmRoot, false);
+        auto& planar = child.AddComponent<PlanarReflectionComponent>();
+        planar.Enabled = true; planar.HalfExtents = {4.5f, 3.2f}; planar.ResolutionScale = 0.75f;
+        planar.ClipPlaneOffset = 0.02f; planar.EdgeFadeDistance = 0.45f; planar.MaxRoughness = 0.52f;
+        planar.Intensity = 1.4f; planar.CaptureMode = PlanarReflectionCaptureMode::Manual; planar.ClipToExtents = false;
+
+        auto& rect = child.AddComponent<RectLightComponent>();
+        rect.Enabled = true; rect.Shape = AreaLightShape::Disk; rect.Color = {0.3f, 0.7f, 0.95f};
+        rect.Intensity = 14.0f; rect.Width = 3.2f; rect.Height = 1.8f; rect.Range = 28.0f; rect.TwoSided = true;
+
+        auto& fog = child.AddComponent<VolumetricFogComponent>();
+        fog.Enabled = true; fog.Density = 0.045f; fog.HeightFalloff = 0.22f;
+        fog.ScatteringAsymmetry = 0.55f; fog.Color = {0.55f, 0.65f, 0.78f}; fog.MaxDistance = 88.0f; fog.Intensity = 1.6f;
+
+        auto& ddgi = child.AddComponent<DDGIProbeGridComponent>();
+        ddgi.Enabled = true; ddgi.GridDimensions = {10, 6, 12}; ddgi.GridSpacing = {2.5f, 1.8f, 2.2f};
+        ddgi.GridOrigin = {1.0f, -0.5f, 2.0f}; ddgi.EnergyMultiplier = 1.45f;
+        ddgi.RaysPerProbe = 96; ddgi.UpdateFraction = 0.5f; ddgi.MaxProbesPerFrame = 6;
+        ddgi.Hysteresis = 0.87f; ddgi.ViewBias = 0.22f; ddgi.NormalBias = 0.11f;
+
+        auto verifySceneParity = [](const Scene& s, const char* rootName, const char* childName) -> bool {
+            Entity r{}, c{};
+            auto view = s.GetRegistry().view<TagComponent>();
+            for (auto id : view) {
+                const auto& tag = view.get<TagComponent>(id).Tag;
+                if (tag == rootName) r = Entity{id, const_cast<Scene*>(&s)};
+                else if (tag == childName) c = Entity{id, const_cast<Scene*>(&s)};
+            }
+            if (!r || !c) return false;
+            if (!r.HasComponent<DirectionalLightComponent>() || !r.HasComponent<SkyboxComponent>() || !r.HasComponent<ReflectionProbeComponent>()) return false;
+            if (!c.HasComponent<PlanarReflectionComponent>() || !c.HasComponent<RectLightComponent>() || !c.HasComponent<VolumetricFogComponent>() || !c.HasComponent<DDGIProbeGridComponent>()) return false;
+
+            const auto& dl = r.GetComponent<DirectionalLightComponent>();
+            const auto& sb = r.GetComponent<SkyboxComponent>();
+            const auto& rp = r.GetComponent<ReflectionProbeComponent>();
+            const auto& pr = c.GetComponent<PlanarReflectionComponent>();
+            const auto& rl = c.GetComponent<RectLightComponent>();
+            const auto& vf = c.GetComponent<VolumetricFogComponent>();
+            const auto& dg = c.GetComponent<DDGIProbeGridComponent>();
+
+            return std::abs(dl.Intensity - 2.4f) < 1e-4f && dl.ToneMappingMode == 2 &&
+                   sb.EnvironmentLighting && std::abs(sb.EnvironmentRotation - 45.0f) < 1e-4f && !sb.SyncWithSun &&
+                   rp.Shape == ProbeShape::Sphere && rp.DynamicCapture && rp.CaptureResolution == 256 &&
+                   rp.CaptureMode == ReflectionProbeCaptureMode::Manual && std::abs(rp.BlendDistance - 1.75f) < 1e-4f &&
+                   std::abs(pr.ResolutionScale - 0.75f) < 1e-4f && !pr.ClipToExtents && pr.CaptureMode == PlanarReflectionCaptureMode::Manual &&
+                   rl.Shape == AreaLightShape::Disk && rl.TwoSided && std::abs(rl.Width - 3.2f) < 1e-4f &&
+                   vf.Enabled && std::abs(vf.Density - 0.045f) < 1e-4f && std::abs(vf.MaxDistance - 88.0f) < 1e-4f &&
+                   dg.GridDimensions == glm::ivec3(10, 6, 12) && dg.RaysPerProbe == 96 && dg.MaxProbesPerFrame == 6;
+        };
+
+        // 1. RuntimeComponentCodec duplication round-trip
+        auto dupRoot = src.DuplicateEntity(asmRoot);
+        RENDER_CHECK(dupRoot, "M15-U10-04: DuplicateEntity succeeds for full M15 hierarchy");
+        auto dupSun = dupRoot.GetComponent<DirectionalLightComponent>();
+        RENDER_CHECK(std::abs(dupSun.Intensity - 2.4f) < 1e-4f && dupRoot.HasComponent<ReflectionProbeComponent>() &&
+            dupRoot.GetComponent<ReflectionProbeComponent>().BlendDistance == 1.75f,
+            "M15-U10-04: RuntimeComponentCodec copies all M15 lighting/environment components");
+        auto dupChild = src.DuplicateEntity(child);
+        RENDER_CHECK(dupChild && dupChild.HasComponent<VolumetricFogComponent>() && dupChild.HasComponent<DDGIProbeGridComponent>(),
+            "M15-U10-04: RuntimeComponentCodec copies fog, area light, planar reflection, and DDGI");
+        src.DestroyEntity(dupChild);
+        src.DestroyEntity(dupRoot);
+
+        // 2. SceneSerializer round-trip (.axlescene)
+        const auto scenePath = root / "full_m15.axlescene";
+        RENDER_CHECK(SceneSerializer(&src).Serialize(scenePath), "M15-U10-04: SceneSerializer::Serialize");
+        Scene reloadedScene;
+        RENDER_CHECK(SceneSerializer(&reloadedScene).Deserialize(scenePath), "M15-U10-04: SceneSerializer::Deserialize");
+        RENDER_CHECK(verifySceneParity(reloadedScene, "M15RigRoot", "M15RigChild"),
+            "M15-U10-04: SceneSerializer preserves all M15 lighting/probe/fog/DDGI fields");
+
+        // 3. AssemblySerializer round-trip (.axle Serialize -> LoadAssemblyData -> SaveAssemblyData -> Deserialize)
+        const auto asmPath = root / "full_m15.axle";
+        RENDER_CHECK(AssemblySerializer::Serialize(asmPath, asmRoot), "M15-U10-04: AssemblySerializer::Serialize");
+        AssemblyData loadedData = AssemblySerializer::LoadAssemblyData(asmPath);
+        RENDER_CHECK(loadedData.IsValid && loadedData.RootNode.HasDirectionalLight && loadedData.RootNode.HasSkybox &&
+            loadedData.RootNode.HasReflectionProbe && loadedData.RootNode.Children.size() == 1 &&
+            loadedData.RootNode.Children[0].HasVolumetricFog && loadedData.RootNode.Children[0].HasDDGIProbeGrid &&
+            loadedData.RootNode.Children[0].HasPlanarReflection && loadedData.RootNode.Children[0].HasRectLight,
+            "M15-U10-04: AssemblyData loads all M15 lighting/environment components");
+
+        const auto asmResavedPath = root / "full_m15_resaved.axle";
+        RENDER_CHECK(AssemblySerializer::SaveAssemblyData(asmResavedPath, loadedData), "M15-U10-04: AssemblySerializer::SaveAssemblyData");
+        Scene asmTarget;
+        Entity spawned = AssemblySerializer::Deserialize(asmResavedPath, &asmTarget, nullptr, {4.0f, 0.0f, 0.0f});
+        RENDER_CHECK(bool(spawned), "M15-U10-04: AssemblySerializer::Deserialize into Scene");
+        RENDER_CHECK(verifySceneParity(asmTarget, "M15RigRoot", "M15RigChild"),
+            "M15-U10-04: Assembly round-trip preserves all M15 lighting/probe/fog/DDGI fields");
+
+        // Explicit rejection of malformed assembly leaves target Scene clean
+        const auto badAsmPath = root / "broken.axle";
+        {
+            std::ofstream out(badAsmPath);
+            out << "AxleAsset:\n  AssetType: Assembly\n  RootEntityID: 99999\nEntities:\n  - Entity: 1\n";
+        }
+        Scene guardScene;
+        auto guardBaseline = guardScene.CreateEntity("Untouched");
+        RENDER_CHECK(!AssemblySerializer::Deserialize(badAsmPath, &guardScene), "M15-U10-04: broken assembly fails explicitly");
+        RENDER_CHECK(guardScene.GetRegistry().view<TagComponent>().size() == 1 && bool(guardBaseline),
+            "M15-U10-04: failed assembly import leaves Scene untouched");
+
+        CleanupTempDir(root);
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
@@ -762,6 +912,7 @@ bool RunRenderServiceUnitTests() {
     if (!Axle::RenderTests::Test_StandaloneRuntimeContracts()) return false;
     if (!Axle::RenderTests::Test_PhysicsDebugAndOverlayContracts()) return false;
     if (!Axle::RenderTests::Test_U10_B1_ReflectionProbeServiceFacadeAndExtraDebugLines()) return false;
+    if (!Axle::RenderTests::Test_U10_B2_CompleteSceneAssemblyAndCodecRoundTrips()) return false;
     std::cout << "  [RenderService] All RenderService & ViewRequest unit tests passed.\n";
     return true;
 }

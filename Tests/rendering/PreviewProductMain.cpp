@@ -344,12 +344,131 @@ static bool Particles(const std::string& mode) {
     RHIMeshRegistry::Get().Shutdown();Require(RHIDevice::Get().Shutdown(),"particle device shutdown");return true;
 }
 
+static bool Policy(const std::string& mode) {
+    const bool native = mode != "gl";
+    const auto backend = mode == "vulkan" ? RHIType::Vulkan : RHIType::Direct3D12;
+    auto root = std::filesystem::absolute("build/agent-runs/U10-B2/preview-policy") /
+        (mode + "-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(root);
+    std::unique_ptr<Window> window;
+    if (native) {
+        RHIDeviceDesc desc;
+        desc.PreferredBackend = backend;
+        desc.Headless = true;
+        desc.AllowFallback = false;
+        desc.EnableValidation = desc.EnableNRIValidation = true;
+        Require(RHIDevice::IsGraphicsAPIValidationAvailable(backend) && RHIDevice::Get().Init(desc) &&
+                !RHIDevice::Get().IsSoftwareAdapter(), "physical API-validated preview policy backend");
+    } else {
+        WindowProps props; props.Width = 640; props.Height = 480; props.Maximized = false;
+        window = std::make_unique<Window>(props);
+        Require(RenderCommand::Init(reinterpret_cast<GLProcAddressFn>(glfwGetProcAddress)), "physical GL preview policy context");
+    }
+    {
+        ImGuiLayer ui(native ? (backend == RHIType::Vulkan ? ImGuiBackendType::Vulkan : ImGuiBackendType::Direct3D12) : ImGuiBackendType::OpenGL);
+        ui.Init(window ? window->GetNativeWindow() : nullptr);
+        ImGui::GetIO().DisplaySize = {640, 480};
+        ImGui::GetIO().DeltaTime = 1.0f / 60.0f;
+        ImageTextureCache::SetSourceResolver(LoadImageSource);
+
+        auto matPath = root / "PolicyAlbedo.axleasset";
+        Material mat("PolicyAlbedo");
+        mat.SetAlbedoColor({0.75f, 0.72f, 0.70f, 1.0f});
+        mat.SetRoughness(0.35f);
+        mat.SetMetallic(0.1f);
+        Require(mat.Save(matPath), "save PolicyAlbedo.axleasset");
+
+        Scene authored;
+        auto sun = authored.CreateEntity("WarmSun");
+        auto& dlc = sun.AddComponent<DirectionalLightComponent>();
+        dlc.Color = {1.0f, 0.45f, 0.15f};
+        dlc.Intensity = 2.5f;
+        dlc.AmbientIntensity = 0.4f;
+        dlc.CastShadows = false;
+        auto sky = authored.CreateEntity("BlueSky");
+        auto& sbc = sky.AddComponent<SkyboxComponent>();
+        sbc.Enabled = true;
+        sbc.EnvironmentLighting = true;
+        sbc.ZenithColor = {0.05f, 0.15f, 0.65f};
+        sbc.HorizonColor = {0.25f, 0.45f, 0.85f};
+
+        auto preview = std::make_unique<AssetPreviewPanel>();
+        preview->SetSceneContext(&authored, nullptr, nullptr);
+        preview->InitRHI(&ui);
+        preview->SetAsset(matPath);
+
+        auto renderPanel = [&]() {
+            ui.Begin();
+            ImGui::SetNextWindowPos({0, 0}, ImGuiCond_Always);
+            ImGui::SetNextWindowSize({320, 320}, ImGuiCond_Always);
+            ImGui::Begin("PreviewPolicy", nullptr, ImGuiWindowFlags_NoSavedSettings);
+            preview->RenderPreviewViewport();
+            ImGui::End();
+            auto pixels = native ? Axle::RenderTests::ReadTexture(*preview->GetRHIViewport()->GetColorTexture()) : ReadGL(preview->GetGLFramebuffer());
+            Finish(ui, native);
+            return pixels;
+        };
+
+        auto lumaSum = [](const std::vector<uint8_t>& px) -> uint64_t {
+            uint64_t sum = 0;
+            for (size_t i = 0; i + 3 < px.size(); i += 4) sum += px[i] + px[i + 1] + px[i + 2];
+            return sum;
+        };
+
+        SceneRenderSettings policyLow;
+        policyLow.EnableToneMapping = true;
+        policyLow.Exposure = 0.5f;
+        policyLow.ToneMappingMode = 0;
+        policyLow.EnableSkybox = true;
+        policyLow.EnableFXAA = true;
+        preview->SetMatchSceneRenderPolicy(true);
+        preview->SetSceneRenderSettings(policyLow);
+        const auto studioLow = renderPanel();
+        Require(lumaSum(studioLow) > 1000, "M15-U10-03.4: preview renders non-black sphere with low exposure");
+        Require(std::abs(preview->GetEffectivePreviewRenderSettings().Exposure - 0.5f) < 1e-4f,
+            "M15-U10-03.4: preview adopts active Runtime exposure policy");
+
+        SceneRenderSettings policyHigh = policyLow;
+        policyHigh.Exposure = 2.8f;
+        preview->SetSceneRenderSettings(policyHigh);
+        const auto studioHigh = renderPanel();
+        if (native) {
+            Require(lumaSum(studioHigh) > lumaSum(studioLow),
+                "M15-U10-03.4: editing Exposure changes AssetPreviewPanel luminance");
+        }
+
+        // Switch to MatchScene with warm sun + blue sky
+        preview->SetEnvironmentMode(PreviewEnvironmentMode::MatchScene);
+        const auto matchedPixels = renderPanel();
+        Require(preview->GetEnvironmentFallbackReason().empty(),
+            "M15-U10-03.4: active scene lighting engages MatchScene without fallback");
+        Require(matchedPixels != studioHigh,
+            "M15-U10-03.4: MatchScene applies active scene directional light and skybox");
+
+        // Explicit fallback when active scene has no lights/sky
+        Scene empty;
+        preview->SetSceneContext(&empty, nullptr, nullptr);
+        const auto fallbackPixels = renderPanel();
+        Require(!preview->GetEnvironmentFallbackReason().empty(),
+            "M15-U10-03.4: empty scene reports explicit Studio fallback reason");
+        Require(lumaSum(fallbackPixels) > 1000,
+            "M15-U10-03.4: explicit fallback keeps asset lit cleanly without blackout");
+
+        preview.reset();
+        RenderService::Get().Shutdown();
+    }
+    RHIMeshRegistry::Get().Shutdown();
+    Require(RHIDevice::Get().Shutdown(), "preview policy device shutdown");
+    std::error_code ec; std::filesystem::remove_all(root, ec);
+    return true;
+}
+
 int main(int argc,char** argv) {
     Axle::RenderTests::ConfigureFailureReporting();Log::Init();JobSystem::Init(2);bool passed=false;
     char name[]="preview", worker[]="--render-thread=worker", alias[]="--render-transient-aliasing=on";
     char* policyArgs[]{name,worker,alias};std::string policyError;
     if(!RenderService::Get().ConfigureProductArguments(3,policyArgs,policyError)) {std::cerr<<policyError<<'\n';JobSystem::Shutdown();return 1;}
-    try{passed=argc>2&&std::string(argv[2])=="particles"?Particles(argv[1]):argc>2&&std::string(argv[2])=="surfaces"?Surfaces(argv[1]):argc>2&&std::string(argv[2])=="physics"?Physics(argv[1]):Run(argc>1?argv[1]:"dx12");}catch(const std::exception& error){std::cerr<<"OPT05 preview FAIL: "<<error.what()<<'\n';}
+    try{passed=argc>2&&std::string(argv[2])=="policy"?Policy(argv[1]):argc>2&&std::string(argv[2])=="particles"?Particles(argv[1]):argc>2&&std::string(argv[2])=="surfaces"?Surfaces(argv[1]):argc>2&&std::string(argv[2])=="physics"?Physics(argv[1]):Run(argc>1?argv[1]:"dx12");}catch(const std::exception& error){std::cerr<<"OPT05 preview FAIL: "<<error.what()<<'\n';}
     RenderService::Get().Shutdown();RHIMeshRegistry::Get().Shutdown();RHIDevice::Get().Shutdown();PhysicsEngine::Shutdown();JobSystem::Shutdown();
     if(GetRHIValidationErrorCount())passed=false;std::cout<<"OPT05 preview "<<(passed?"PASS":"FAIL")<<'\n';return passed?0:1;
 }

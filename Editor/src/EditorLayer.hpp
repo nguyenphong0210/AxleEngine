@@ -112,6 +112,8 @@ public:
     bool SelectAssetByPath(const std::filesystem::path& path);
     void SetPreviewMesh(Axle::PreviewMeshType type);
     void SetPreviewSun(float azimuthDeg, float elevationDeg);
+    void SetPreviewEnvironmentMode(Axle::PreviewEnvironmentMode mode);
+    void SetPreviewMatchScenePolicy(bool enabled);
     void RequestFocusWindow(const std::string& title) { m_PendingFocusWindow = title; }
     void RequestInspectorScroll(float fraction) { m_PendingInspectorScroll = fraction; }
     void SetTelemetryVisible(bool visible) { m_ShowTelemetry = visible; }

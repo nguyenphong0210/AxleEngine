@@ -86,10 +86,20 @@ namespace Axle {
                     } else if (!current.SectionName.empty()) current.Lines.push_back(line);
                 }
                 if (!flush()) return false;
+                node.HasDirectionalLight = entity.HasComponent<DirectionalLightComponent>();
+                if (node.HasDirectionalLight) node.DirectionalLight = entity.GetComponent<DirectionalLightComponent>();
+                node.HasSkybox = entity.HasComponent<SkyboxComponent>();
+                if (node.HasSkybox) node.Skybox = entity.GetComponent<SkyboxComponent>();
+                node.HasReflectionProbe = entity.HasComponent<ReflectionProbeComponent>();
+                if (node.HasReflectionProbe) node.ReflectionProbe = entity.GetComponent<ReflectionProbeComponent>();
                 node.HasRectLight = entity.HasComponent<RectLightComponent>();
                 if (node.HasRectLight) node.RectLight = entity.GetComponent<RectLightComponent>();
                 node.HasPlanarReflection = entity.HasComponent<PlanarReflectionComponent>();
                 if (node.HasPlanarReflection) node.PlanarReflection = entity.GetComponent<PlanarReflectionComponent>();
+                node.HasVolumetricFog = entity.HasComponent<VolumetricFogComponent>();
+                if (node.HasVolumetricFog) node.VolumetricFog = entity.GetComponent<VolumetricFogComponent>();
+                node.HasDDGIProbeGrid = entity.HasComponent<DDGIProbeGridComponent>();
+                if (node.HasDDGIProbeGrid) node.DDGIProbeGrid = entity.GetComponent<DDGIProbeGridComponent>();
                 node.PassiveSections = std::move(sections); node.AuthoredUUID = entity.GetUUID();
             }
             for (auto& child : node.Children) if (!capture(child)) return false;
@@ -194,11 +204,26 @@ namespace Axle {
                     mat = node.Material;
                 }
 
+                if (node.HasDirectionalLight) {
+                    ent.AddComponent<DirectionalLightComponent>(node.DirectionalLight);
+                }
+                if (node.HasSkybox) {
+                    ent.AddComponent<SkyboxComponent>(node.Skybox);
+                }
+                if (node.HasReflectionProbe) {
+                    ent.AddComponent<ReflectionProbeComponent>(node.ReflectionProbe);
+                }
                 if (node.HasRectLight) {
                     ent.AddComponent<RectLightComponent>(node.RectLight);
                 }
                 if (node.HasPlanarReflection) {
                     ent.AddComponent<PlanarReflectionComponent>(node.PlanarReflection);
+                }
+                if (node.HasVolumetricFog) {
+                    ent.AddComponent<VolumetricFogComponent>(node.VolumetricFog);
+                }
+                if (node.HasDDGIProbeGrid) {
+                    ent.AddComponent<DDGIProbeGridComponent>(node.DDGIProbeGrid);
                 }
 
                 if (node.HasSkeletalMesh) {

@@ -445,6 +445,14 @@ private:
                 std::istringstream ss(cmd.Args);
                 float az = 45.0f, el = 35.264f;
                 if (ss >> az >> el) m_Editor->SetPreviewSun(az, el);
+            } else if (cmd.Op == "preview_env") {
+                if (cmd.Args == "match_scene" || cmd.Args == "scene") {
+                    m_Editor->SetPreviewEnvironmentMode(PreviewEnvironmentMode::MatchScene);
+                } else {
+                    m_Editor->SetPreviewEnvironmentMode(PreviewEnvironmentMode::Studio);
+                }
+            } else if (cmd.Op == "preview_policy") {
+                m_Editor->SetPreviewMatchScenePolicy(cmd.Args == "1" || cmd.Args == "true" || cmd.Args == "on");
             } else if (cmd.Op == "focus") {
                 m_Editor->RequestFocusWindow(cmd.Args);
             } else if (cmd.Op == "scroll_inspector") {

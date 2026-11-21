@@ -1536,6 +1536,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
     renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
     m_LastRenderSettings = renderSettings;
     m_SceneHierarchyPanel.SetActiveRenderSettings(renderSettings);
+    m_AssetPreviewPanel.SetSceneRenderSettings(renderSettings);
 
     Axle::ViewRequest request;
     request.Kind = Axle::RenderViewKind::Main; request.Width = m_ViewportWidth; request.Height = m_ViewportHeight;
@@ -3994,10 +3995,18 @@ void EditorLayer::ApplyProjectRenderSettingsToEditor() {
 }
 
 void EditorLayer::SyncEditorRenderSettingsToProject() {
+    const auto settings = BuildEditorProjectRenderSettings();
     if (auto activeProj = Axle::Project::GetActive()) {
-        activeProj->GetConfig().RenderSettings = BuildEditorProjectRenderSettings();
+        activeProj->GetConfig().RenderSettings = settings;
         activeProj->GetConfig().HasAuthoredRenderSettings = true;
     }
+    Axle::SceneRenderSettings previewPolicy;
+    const auto authoredFog = m_Scene ? Axle::ExtractVolumetricFog(*m_Scene) : std::nullopt;
+    const auto authoredDDGI = m_Scene ? Axle::ExtractDDGIProbeGrid(*m_Scene) : std::nullopt;
+    Axle::RenderSettingsSync::ApplyToSceneSettings(
+        settings, previewPolicy, m_ViewportFogOverride, authoredFog.has_value(),
+        m_ViewportDDGIOverride, authoredDDGI.has_value(), std::nullopt);
+    m_AssetPreviewPanel.SetSceneRenderSettings(previewPolicy);
 }
 
 void EditorLayer::ResetRenderFXDefaults() {
@@ -4424,4 +4433,12 @@ void EditorLayer::SetPreviewMesh(Axle::PreviewMeshType type) {
 void EditorLayer::SetPreviewSun(float azimuthDeg, float elevationDeg) {
     m_AssetPreviewPanel.SetSunAzimuth(azimuthDeg);
     m_AssetPreviewPanel.SetSunElevation(elevationDeg);
+}
+
+void EditorLayer::SetPreviewEnvironmentMode(Axle::PreviewEnvironmentMode mode) {
+    m_AssetPreviewPanel.SetEnvironmentMode(mode);
+}
+
+void EditorLayer::SetPreviewMatchScenePolicy(bool enabled) {
+    m_AssetPreviewPanel.SetMatchSceneRenderPolicy(enabled);
 }

@@ -186,6 +186,189 @@ public:
 class FailedPresent final : public ApplicationRenderContext {
 public: bool Present(const Window&) override{return false;}void Shutdown() override{}
 };
+#include <Axle/Project.hpp>
+#include <Axle/ProjectSerializer.hpp>
+#include <Axle/ProjectRenderSettingsSync.hpp>
+#include <Axle/SceneSerializer.hpp>
+#include <Axle/AssemblySerializer.hpp>
+#include <Axle/Material.hpp>
+#include <Axle/AssetManager.hpp>
+#include <Axle/MaterialCache.hpp>
+
+static bool RunM15Parity(const std::string& mode) {
+    char name[]="runtime", worker[]="--render-thread=worker", alias[]="--render-transient-aliasing=on";
+    char* policyArgs[]{name,worker,alias}; std::string policyError;
+    Require(RenderService::Get().ConfigureProductArguments(3,policyArgs,policyError), "Runtime parity worker policy");
+    const bool native = mode != "gl";
+    const auto backend = mode == "vulkan" ? RHIType::Vulkan : RHIType::Direct3D12;
+    const std::string backendName = mode == "vulkan" ? "Vulkan" : (mode == "gl" ? "OpenGL" : "Direct3D12");
+    const auto root = std::filesystem::absolute("build/agent-runs/U10-B2/runtime-parity") /
+        (mode + "-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    const auto assets = root / "assets";
+    std::filesystem::create_directories(assets / "materials");
+    std::filesystem::create_directories(assets / "scenes");
+    std::filesystem::create_directories(assets / "assemblies");
+
+    const auto prevAssetDir = FileSystem::GetAssetDirectory();
+    FileSystem::SetAssetDirectory(assets);
+    AssetManager::Init(assets);
+
+    const auto projPath = root / "U10B2Parity.axleproj";
+    {
+        auto project = Project::New(root);
+        Require(bool(project), "Project::New U10B2Parity");
+        auto& cfg = project->GetConfig();
+        cfg.Name = "U10B2Parity";
+        cfg.StartScene = "scenes/Parity.axlescene";
+        cfg.AssetDirectory = "assets";
+        cfg.RHIBackend = backendName;
+        cfg.HasAuthoredRenderSettings = true;
+        cfg.RenderSettings.EnableShadows = true;
+        cfg.RenderSettings.EnableSkybox = true;
+        cfg.RenderSettings.EnableBloom = true;
+        cfg.RenderSettings.EnableSSR = true;
+        cfg.RenderSettings.EnableGTAO = true;
+        cfg.RenderSettings.EnableToneMapping = true;
+        cfg.RenderSettings.ToneMappingMode = 1; // Reinhard
+        cfg.RenderSettings.Exposure = 0.75f;
+        cfg.RenderSettings.MSAASamples = 1;
+        ProjectSerializer projSerializer(project);
+        Require(projSerializer.Serialize(projPath), "Save U10B2Parity.axleproj");
+    }
+
+    const auto matPath = assets / "materials" / "M_Parity.axleasset";
+    {
+        Material mat("M_Parity");
+        mat.SetAlbedoColor({0.85f, 0.16f, 0.16f, 1.0f});
+        mat.SetMetallic(0.15f);
+        mat.SetRoughness(0.20f);
+        mat.SetClearcoatStrength(0.85f);
+        mat.SetSheenEnabled(true);
+        mat.SetSheenColor({0.95f, 0.75f, 0.25f});
+        Require(mat.Save(matPath), "Save M_Parity.axleasset");
+    }
+    AssetManager::Sync();
+
+    const auto asmPath = assets / "assemblies" / "Rig.axle";
+    {
+        Scene authorScene;
+        auto sun = authorScene.CreateEntity("ParitySun");
+        auto& dlc = sun.AddComponent<DirectionalLightComponent>();
+        dlc.Intensity = 2.4f; dlc.AmbientIntensity = 0.35f; dlc.Azimuth = 45.0f; dlc.Elevation = 40.0f;
+        auto sky = authorScene.CreateEntity("ParitySky");
+        auto& sbc = sky.AddComponent<SkyboxComponent>();
+        sbc.Enabled = true; sbc.EnvironmentLighting = true;
+        auto probe = authorScene.CreateEntity("ParityProbe");
+        auto& rpc = probe.AddComponent<ReflectionProbeComponent>();
+        rpc.Enabled = true; rpc.DynamicCapture = true; rpc.CaptureResolution = 64;
+        auto fog = authorScene.CreateEntity("ParityFog");
+        auto& vfc = fog.AddComponent<VolumetricFogComponent>();
+        vfc.Enabled = true; vfc.Density = 0.01f;
+        Require(AssemblySerializer::Serialize(asmPath, probe), "Save probe assembly");
+
+        auto sphere = authorScene.CreateEntity("HeroSphere");
+        sphere.GetComponent<TransformComponent>().Translation = {0.0f, 0.0f, 0.0f};
+        sphere.AddComponent<MeshInstance3D>().AssetPath = "builtin://sphere";
+        auto& mc = sphere.AddComponent<MaterialComponent>();
+        mc.MaterialHandle = AssetManager::GetAssetUUID(matPath);
+        mc.AssetPath = "materials/M_Parity.axleasset";
+        mc.MaterialAsset = MaterialCache::GetMaterial(matPath);
+        mc.SyncFromAsset();
+
+        auto cam = authorScene.CreateEntity("MainCamera");
+        cam.GetComponent<TransformComponent>().Translation = {0.0f, 0.0f, 3.2f};
+        cam.AddComponent<CameraComponent>().Primary = true;
+
+        Require(SceneSerializer(&authorScene).Serialize(assets / "scenes" / "Parity.axlescene"), "Save Parity.axlescene");
+    }
+
+    std::vector<uint8_t> editorReopenedPixels, runtimePixels;
+    if (native) {
+        RHIDeviceDesc desc; desc.PreferredBackend = backend; desc.Headless = true; desc.AllowFallback = false;
+        desc.EnableValidation = desc.EnableNRIValidation = true;
+        Require(RHIDevice::Get().Init(desc) && !RHIDevice::Get().IsSoftwareAdapter(), "M15 parity physical device");
+    }
+
+    // 1. Reopen saved project + scene in Editor extraction path (07.2)
+    auto reopenedProj = Project::Load(projPath);
+    Require(bool(reopenedProj), "Reload saved .axleproj");
+    const auto& reopenedCfg = reopenedProj->GetConfig();
+    Require(reopenedCfg.RenderSettings.ToneMappingMode == 1 && std::abs(reopenedCfg.RenderSettings.Exposure - 0.75f) < 1e-4f,
+        "M15-U10-07.2: saved ProjectRenderSettings persist after reload");
+
+    std::unique_ptr<Window> glWindow;
+    if (!native) {
+        WindowProps props; props.Width = 256; props.Height = 256; props.Maximized = false;
+        glWindow = std::make_unique<Window>(props);
+        Require(RenderCommand::Init(reinterpret_cast<GLProcAddressFn>(glfwGetProcAddress)), "M15 parity GL context");
+    }
+    {
+        Scene reopenedScene;
+        Require(SceneSerializer(&reopenedScene).Deserialize(assets / "scenes" / "Parity.axlescene"), "Reload saved .axlescene");
+        auto viewEnt = reopenedScene.GetPrimaryCameraEntity();
+        Require(bool(viewEnt), "Reloaded scene preserves Primary Camera");
+        PerspectiveCamera cam(45.0f, 1.0f, 0.1f, 200.0f);
+        cam.SetViewMatrix(glm::lookAt(glm::vec3(0.0f, 0.0f, 3.2f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), {0.0f, 0.0f, 3.2f});
+
+        SceneRenderSettings settings;
+        const auto authoredFog = ExtractVolumetricFog(reopenedScene);
+        const auto authoredDDGI = ExtractDDGIProbeGrid(reopenedScene);
+        RenderSettingsSync::ApplyToSceneSettings(reopenedCfg.RenderSettings, settings, std::nullopt, authoredFog.has_value(),
+            std::nullopt, authoredDDGI.has_value(), std::nullopt);
+
+        auto& svc = RenderService::Get();
+        ViewRequest req; req.Kind = RenderViewKind::Main; req.Width = 256; req.Height = 256;
+        req.Camera = cam; req.Settings = settings; req.Name = "ReopenedEditorView";
+        std::shared_ptr<Framebuffer> fbo;
+        if (!native) { fbo = Framebuffer::Create({256, 256, 1, false}); req.GLTargetFBO = fbo; }
+        auto readFrame = [&](const std::shared_ptr<Framebuffer>& srcFbo) {
+            if (native) return Axle::RenderTests::ReadTexture(*svc.GetDefaultMainColorTarget());
+            std::vector<uint8_t> out(256u * 256u * 4u);
+            srcFbo->Bind();
+            glReadPixels(0, 0, 256, 256, GL_RGBA, GL_UNSIGNED_BYTE, out.data());
+            srcFbo->Unbind();
+            return out;
+        };
+        Require(svc.RenderView(reopenedScene, req).Success, "Render reopened Editor view");
+        editorReopenedPixels = readFrame(fbo);
+
+        // 2. Render Runtime equivalent using Project::Load + RuntimeSettings Sync path (07.3)
+        auto runtimeProj = Project::Load(projPath);
+        Require(bool(runtimeProj), "Runtime load .axleproj");
+        const auto& runtimeCfg = runtimeProj->GetConfig();
+        Scene runtimeScene;
+        Require(SceneSerializer(&runtimeScene).Deserialize(assets / runtimeCfg.StartScene), "Runtime load StartScene");
+        SceneRenderSettings runtimeSettings;
+        const auto rtFog = ExtractVolumetricFog(runtimeScene);
+        const auto rtDDGI = ExtractDDGIProbeGrid(runtimeScene);
+        RenderSettingsSync::ApplyToSceneSettings(runtimeCfg.RenderSettings, runtimeSettings, std::nullopt, rtFog.has_value(),
+            std::nullopt, rtDDGI.has_value(), std::nullopt);
+        ViewRequest rtReq = req; rtReq.Settings = runtimeSettings; rtReq.Name = "RuntimeParityView";
+        Require(svc.RenderView(runtimeScene, rtReq).Success, "Render Runtime parity view");
+        runtimePixels = readFrame(fbo);
+        svc.Shutdown();
+    }
+
+    Require(!editorReopenedPixels.empty() && editorReopenedPixels.size() == runtimePixels.size(), "M15 parity frame sizes match");
+    uint64_t crimsonEnergy = 0;
+    uint32_t maxDiff = 0;
+    for (size_t i = 0; i + 3 < runtimePixels.size(); i += 4) {
+        if (runtimePixels[i] > runtimePixels[i + 1] + 20) crimsonEnergy += runtimePixels[i];
+        maxDiff = std::max(maxDiff, static_cast<uint32_t>(std::abs(int(editorReopenedPixels[i]) - int(runtimePixels[i]))));
+        maxDiff = std::max(maxDiff, static_cast<uint32_t>(std::abs(int(editorReopenedPixels[i+1]) - int(runtimePixels[i+1]))));
+        maxDiff = std::max(maxDiff, static_cast<uint32_t>(std::abs(int(editorReopenedPixels[i+2]) - int(runtimePixels[i+2]))));
+    }
+    Require(crimsonEnergy > 5000, "M15-U10-07: crimson clearcoat sphere rendered non-black in Runtime parity");
+    Require(maxDiff <= 2, "M15-U10-07.3: reopened Editor and Runtime pixels match within tolerance");
+
+    RHIMeshRegistry::Get().Shutdown();
+    if (native) Require(RHIDevice::Get().Shutdown(), "M15 parity device shutdown");
+    AssetManager::Shutdown();
+    if (!prevAssetDir.empty()) FileSystem::SetAssetDirectory(prevAssetDir);
+    std::error_code ec; std::filesystem::remove_all(root, ec);
+    return true;
+}
+
 static bool Run(const std::string& mode,bool cooked) {
     char name[]="runtime", worker[]="--render-thread=worker", alias[]="--render-transient-aliasing=on";
     char* policyArgs[]{name,worker,alias}; std::string policyError;
@@ -240,7 +423,7 @@ static bool Run(const std::string& mode,bool cooked) {
 int main(int argc,char** argv) {
     Axle::RenderTests::ConfigureFailureReporting();Log::Init();JobSystem::Init(2);
     bool passed=false;
-    try {passed=Run(argc>1?argv[1]:"dx12",argc>2&&std::string(argv[2])=="cooked");}
+    try {passed=(argc>2&&std::string(argv[2])=="m15parity")?RunM15Parity(argv[1]):Run(argc>1?argv[1]:"dx12",argc>2&&std::string(argv[2])=="cooked");}
     catch(const std::exception& error){std::cerr<<"OPT05 Runtime FAIL: "<<error.what()<<'\n';}
     RHIDevice::Get().Shutdown();JobSystem::Shutdown();std::cout<<"OPT05 Runtime "<<(passed?"PASS":"FAIL")<<'\n';return passed?0:1;
 }

@@ -1,4 +1,5 @@
 #include "LocalShadowPersistence.hpp"
+#include "LightingComponentPersistence.hpp"
 #include <Axle/Path.hpp>
 #include <Axle/AnimationSceneBinding.hpp>
 #include <Axle/AssemblySerializer.hpp>
@@ -284,6 +285,31 @@ namespace Axle {
                 WriteLocalShadows(fout,slc.Shadows);
             }
 
+            // DirectionalLightComponent
+            if (entity.HasComponent<DirectionalLightComponent>()) {
+                WriteDirectionalLightComponent(fout, entity.GetComponent<DirectionalLightComponent>());
+            }
+
+            // SkyboxComponent
+            if (entity.HasComponent<SkyboxComponent>()) {
+                WriteSkyboxComponent(fout, entity.GetComponent<SkyboxComponent>());
+            }
+
+            // ReflectionProbeComponent
+            if (entity.HasComponent<ReflectionProbeComponent>()) {
+                WriteReflectionProbeComponent(fout, entity.GetComponent<ReflectionProbeComponent>());
+            }
+
+            // VolumetricFogComponent
+            if (entity.HasComponent<VolumetricFogComponent>()) {
+                WriteVolumetricFogComponent(fout, entity.GetComponent<VolumetricFogComponent>());
+            }
+
+            // DDGIProbeGridComponent
+            if (entity.HasComponent<DDGIProbeGridComponent>()) {
+                WriteDDGIProbeGridComponent(fout, entity.GetComponent<DDGIProbeGridComponent>());
+            }
+
             // RectLightComponent
             if (entity.HasComponent<RectLightComponent>()) {
                 auto& rlc = entity.GetComponent<RectLightComponent>();
@@ -412,6 +438,16 @@ namespace Axle {
 
         bool HasCamera = false;
         CameraComponent Camera;
+        bool HasDirectionalLight = false;
+        DirectionalLightComponent DirectionalLight;
+        bool HasSkybox = false;
+        SkyboxComponent Skybox;
+        bool HasReflectionProbe = false;
+        ReflectionProbeComponent ReflectionProbe;
+        bool HasVolumetricFog = false;
+        VolumetricFogComponent VolumetricFog;
+        bool HasDDGIProbeGrid = false;
+        DDGIProbeGridComponent DDGIProbeGrid;
 
         bool HasAudioListener = false;
         AudioListenerComponent AudioListener;
@@ -460,6 +496,11 @@ namespace Axle {
         AudioSource,
         PointLight,
         SpotLight,
+        DirectionalLight,
+        Skybox,
+        ReflectionProbe,
+        VolumetricFog,
+        DDGIProbeGrid,
         RectLight,
         PlanarReflection,
         SkeletalMesh,
@@ -532,6 +573,11 @@ namespace Axle {
             // Section markers
             if (indent == 4) {
                 if (trimmed == "TagComponent:") { flushCustom(); currentSection = AsmSection::Tag; continue; }
+                if (trimmed == "DirectionalLightComponent:") { flushCustom(); currentSection = AsmSection::DirectionalLight; current.HasDirectionalLight = true; continue; }
+                if (trimmed == "SkyboxComponent:") { flushCustom(); currentSection = AsmSection::Skybox; current.HasSkybox = true; continue; }
+                if (trimmed == "ReflectionProbeComponent:") { flushCustom(); currentSection = AsmSection::ReflectionProbe; current.HasReflectionProbe = true; continue; }
+                if (trimmed == "VolumetricFogComponent:") { flushCustom(); currentSection = AsmSection::VolumetricFog; current.HasVolumetricFog = true; continue; }
+                if (trimmed == "DDGIProbeGridComponent:") { flushCustom(); currentSection = AsmSection::DDGIProbeGrid; current.HasDDGIProbeGrid = true; continue; }
                 if (trimmed == "TransformComponent:") { flushCustom(); currentSection = AsmSection::Transform; current.HasTransform = true; continue; }
                 if (trimmed == "MeshInstance3D:" || trimmed == "MeshComponent:") { flushCustom(); currentSection = AsmSection::Mesh; current.HasMesh = true; continue; }
                 if (trimmed == "CollisionShape3D:" || trimmed == "CollisionShape:") { flushCustom(); currentSection = AsmSection::CollisionShape; current.HasCollisionShape = true; continue; }
@@ -767,35 +813,27 @@ namespace Axle {
                     break;
                 }
                 case AsmSection::PlanarReflection: {
-                    if (trimmed.rfind("Enabled:", 0) == 0) {
-                        current.PlanarReflection.Enabled = (Trim(trimmed.substr(8)) == "true");
-                    } else if (trimmed.rfind("HalfExtents:", 0) == 0) {
-                        float hx = 5.0f, hy = 5.0f;
-                        sscanf(trimmed.c_str(), "HalfExtents: [ %f , %f ]", &hx, &hy);
-                        if (std::isfinite(hx) && std::isfinite(hy)) current.PlanarReflection.HalfExtents = glm::vec2(std::max(0.01f, hx), std::max(0.01f, hy));
-                    } else if (trimmed.rfind("ResolutionScale:", 0) == 0) {
-                        try { float v = std::stof(Trim(trimmed.substr(16))); if (std::isfinite(v)) current.PlanarReflection.ResolutionScale = std::clamp(v, 0.25f, 1.0f); } catch (...) {}
-                    } else if (trimmed.rfind("ClipPlaneOffset:", 0) == 0) {
-                        try { float v = std::stof(Trim(trimmed.substr(16))); if (std::isfinite(v)) current.PlanarReflection.ClipPlaneOffset = v; } catch (...) {}
-                    } else if (trimmed.rfind("EdgeFadeDistance:", 0) == 0) {
-                        try { float v = std::stof(Trim(trimmed.substr(17))); if (std::isfinite(v)) current.PlanarReflection.EdgeFadeDistance = std::max(0.0f, v); } catch (...) {}
-                    } else if (trimmed.rfind("MaxRoughness:", 0) == 0) {
-                        try { float v = std::stof(Trim(trimmed.substr(13))); if (std::isfinite(v)) current.PlanarReflection.MaxRoughness = std::clamp(v, 0.02f, 1.0f); } catch (...) {}
-                    } else if (trimmed.rfind("Intensity:", 0) == 0) {
-                        try { float v = std::stof(Trim(trimmed.substr(10))); if (std::isfinite(v)) current.PlanarReflection.Intensity = std::clamp(v, 0.0f, 10.0f); } catch (...) {}
-                    } else if (trimmed.rfind("CaptureNearPlane:", 0) == 0) {
-                        try { float v = std::stof(Trim(trimmed.substr(17))); if (std::isfinite(v)) current.PlanarReflection.CaptureNearPlane = std::max(0.01f, v); } catch (...) {}
-                    } else if (trimmed.rfind("CaptureFarPlane:", 0) == 0) {
-                        try { float v = std::stof(Trim(trimmed.substr(16))); if (std::isfinite(v)) current.PlanarReflection.CaptureFarPlane = std::max(0.1f, v); } catch (...) {}
-                    } else if (trimmed.rfind("CaptureShadows:", 0) == 0) {
-                        current.PlanarReflection.CaptureShadows = (Trim(trimmed.substr(15)) == "true");
-                    } else if (trimmed.rfind("CaptureSkybox:", 0) == 0) {
-                        current.PlanarReflection.CaptureSkybox = (Trim(trimmed.substr(14)) == "true");
-                    } else if (trimmed.rfind("ClipToExtents:", 0) == 0) {
-                        current.PlanarReflection.ClipToExtents = (Trim(trimmed.substr(14)) == "true");
-                    } else if (trimmed.rfind("CaptureMode:", 0) == 0) {
-                        current.PlanarReflection.CaptureMode = StringToPlanarReflectionCaptureMode(Trim(trimmed.substr(12)));
-                    }
+                    ReadPlanarReflectionComponentLine(trimmed, current.PlanarReflection);
+                    break;
+                }
+                case AsmSection::DirectionalLight: {
+                    ReadDirectionalLightComponentLine(trimmed, current.DirectionalLight);
+                    break;
+                }
+                case AsmSection::Skybox: {
+                    ReadSkyboxComponentLine(trimmed, current.Skybox);
+                    break;
+                }
+                case AsmSection::ReflectionProbe: {
+                    ReadReflectionProbeComponentLine(trimmed, current.ReflectionProbe);
+                    break;
+                }
+                case AsmSection::VolumetricFog: {
+                    ReadVolumetricFogComponentLine(trimmed, current.VolumetricFog);
+                    break;
+                }
+                case AsmSection::DDGIProbeGrid: {
+                    ReadDDGIProbeGridComponentLine(trimmed, current.DDGIProbeGrid);
                     break;
                 }
                 case AsmSection::SkeletalMesh: {
@@ -1065,6 +1103,22 @@ namespace Axle {
             // AudioSourceComponent
             if (raw.HasAudioSource) {
                 entity.AddComponent<AudioSourceComponent>(raw.AudioSource);
+            }
+
+            if (raw.HasDirectionalLight) {
+                entity.AddComponent<DirectionalLightComponent>(raw.DirectionalLight);
+            }
+            if (raw.HasSkybox) {
+                entity.AddComponent<SkyboxComponent>(raw.Skybox);
+            }
+            if (raw.HasReflectionProbe) {
+                entity.AddComponent<ReflectionProbeComponent>(raw.ReflectionProbe);
+            }
+            if (raw.HasVolumetricFog) {
+                entity.AddComponent<VolumetricFogComponent>(raw.VolumetricFog);
+            }
+            if (raw.HasDDGIProbeGrid) {
+                entity.AddComponent<DDGIProbeGridComponent>(raw.DDGIProbeGrid);
             }
 
             // PointLightComponent
@@ -1339,8 +1393,13 @@ namespace Axle {
             node.Material = raw.Material;
             node.HasPointLight=raw.HasPointLight;node.PointLight=raw.PointLight;
             node.HasSpotLight=raw.HasSpotLight;node.SpotLight=raw.SpotLight;
+            node.HasDirectionalLight=raw.HasDirectionalLight;node.DirectionalLight=raw.DirectionalLight;
+            node.HasSkybox=raw.HasSkybox;node.Skybox=raw.Skybox;
+            node.HasReflectionProbe=raw.HasReflectionProbe;node.ReflectionProbe=raw.ReflectionProbe;
             node.HasRectLight=raw.HasRectLight;node.RectLight=raw.RectLight;
             node.HasPlanarReflection=raw.HasPlanarReflection;node.PlanarReflection=raw.PlanarReflection;
+            node.HasVolumetricFog=raw.HasVolumetricFog;node.VolumetricFog=raw.VolumetricFog;
+            node.HasDDGIProbeGrid=raw.HasDDGIProbeGrid;node.DDGIProbeGrid=raw.DDGIProbeGrid;
             node.HasSkeletalMesh = raw.HasSkeletalMesh;
             node.SkeletalMesh = raw.SkeletalMesh;
             node.HasAnimator = raw.HasAnimator;
@@ -1445,33 +1504,25 @@ namespace Axle {
             WriteLocalShadows(out,light.Shadows);
         }
         if (node.HasRectLight) {
-            const auto& light=node.RectLight;
-            out << "    RectLightComponent:\n";
-            out << "      Enabled: " << (light.Enabled?"true":"false") << "\n";
-            out << "      Shape: " << (light.Shape == AreaLightShape::Disk ? "Disk" : "Rectangle") << "\n";
-            out << "      Color: [ " << light.Color.r << " , " << light.Color.g << " , " << light.Color.b << " ]\n";
-            out << "      Intensity: " << light.Intensity << "\n";
-            out << "      Width: " << light.Width << "\n";
-            out << "      Height: " << light.Height << "\n";
-            out << "      Range: " << light.Range << "\n";
-            out << "      TwoSided: " << (light.TwoSided?"true":"false") << "\n";
+            WriteRectLightComponent(out, node.RectLight);
         }
         if (node.HasPlanarReflection) {
-            const auto& pr = node.PlanarReflection;
-            out << "    PlanarReflectionComponent:\n";
-            out << "      Enabled: " << (pr.Enabled ? "true" : "false") << "\n";
-            out << "      HalfExtents: [ " << pr.HalfExtents.x << " , " << pr.HalfExtents.y << " ]\n";
-            out << "      ResolutionScale: " << pr.ResolutionScale << "\n";
-            out << "      ClipPlaneOffset: " << pr.ClipPlaneOffset << "\n";
-            out << "      EdgeFadeDistance: " << pr.EdgeFadeDistance << "\n";
-            out << "      MaxRoughness: " << pr.MaxRoughness << "\n";
-            out << "      Intensity: " << pr.Intensity << "\n";
-            out << "      CaptureNearPlane: " << pr.CaptureNearPlane << "\n";
-            out << "      CaptureFarPlane: " << pr.CaptureFarPlane << "\n";
-            out << "      CaptureShadows: " << (pr.CaptureShadows ? "true" : "false") << "\n";
-            out << "      CaptureSkybox: " << (pr.CaptureSkybox ? "true" : "false") << "\n";
-            out << "      ClipToExtents: " << (pr.ClipToExtents ? "true" : "false") << "\n";
-            out << "      CaptureMode: " << PlanarReflectionCaptureModeToString(pr.CaptureMode) << "\n";
+            WritePlanarReflectionComponent(out, node.PlanarReflection);
+        }
+        if (node.HasDirectionalLight) {
+            WriteDirectionalLightComponent(out, node.DirectionalLight);
+        }
+        if (node.HasSkybox) {
+            WriteSkyboxComponent(out, node.Skybox);
+        }
+        if (node.HasReflectionProbe) {
+            WriteReflectionProbeComponent(out, node.ReflectionProbe);
+        }
+        if (node.HasVolumetricFog) {
+            WriteVolumetricFogComponent(out, node.VolumetricFog);
+        }
+        if (node.HasDDGIProbeGrid) {
+            WriteDDGIProbeGridComponent(out, node.DDGIProbeGrid);
         }
 
         if (node.HasSkeletalMesh) {

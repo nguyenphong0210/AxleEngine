@@ -13,7 +13,7 @@ namespace Axle::RHI {
         SubsurfaceDiffuse, SubsurfaceControl, SubsurfaceTemp,
         SSRColor0, SSRColor1, SSRColor2, SSRColor3, PlanarColor, PlanarDepth,
         FroxelScattering, FroxelIntegrated, FroxelHistory0, FroxelHistory1,
-        TAAHistoryDepth, MotionPreviousDepth, Count
+        TAAHistoryDepth, MotionPreviousDepth, SubsurfaceCrisp, Count
     };
     struct RHIDDGIAtlasExtent {
         uint32_t ProbeCount = 0;
@@ -125,6 +125,7 @@ namespace Axle::RHI {
         }
         RHITexture* GetSubsurfaceDiffuse() const { return Get(RHIViewTarget::SubsurfaceDiffuse); }
         RHITexture* GetSubsurfaceControl() const { return Get(RHIViewTarget::SubsurfaceControl); }
+        RHITexture* GetSubsurfaceCrisp() const { return Get(RHIViewTarget::SubsurfaceCrisp); }
         RHITexture* GetSubsurfaceTemp() const { return Get(RHIViewTarget::SubsurfaceTemp); }
         RHITexture* GetPlanarColor() const { return Get(RHIViewTarget::PlanarColor); }
         RHITexture* GetPlanarDepth() const { return Get(RHIViewTarget::PlanarDepth); }

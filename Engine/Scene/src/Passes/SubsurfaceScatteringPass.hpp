@@ -15,7 +15,7 @@ namespace Axle {
 namespace Axle::Passes {
     struct SubsurfaceResources {
         RenderGraph::Resource SceneColor, Input, SceneDepth, Depth, SceneNormal;
-        RenderGraph::Resource Diffuse, Control, Temp;
+        RenderGraph::Resource Diffuse, Control, Crisp, Temp;
     };
 
     struct SubsurfaceRecordInputs {
@@ -25,7 +25,7 @@ namespace Axle::Passes {
         nri::Texture* SceneTarget;
         nri::Texture* SceneDepthTarget;
         nri::Descriptor* SceneTargetRTV;
-        nri::Format SceneTargetFormat;
+        nri::Pipeline* CompositePipeline;
         uint32_t Width, Height;
     };
 

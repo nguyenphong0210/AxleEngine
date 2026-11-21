@@ -1,4 +1,5 @@
 #include "RHIReadback.hpp"
+#include "RenderTestCommon.hpp"
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHIMesh.hpp>
@@ -13,6 +14,7 @@
 #include <Axle/SceneExtraction.hpp>
 #include <Axle/SceneSerializer.hpp>
 #include <Axle/FileSystem.hpp>
+#include <Axle/Package.hpp>
 #include <Axle/SceneRenderSettings.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/packing.hpp>
@@ -138,6 +140,12 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& /*sharedRenderer*/, const std
     } shutdownGuard{renderer};
     const char* backendTag = device.GetBackend() == RHIType::Vulkan ? "Vulkan" : "D3D12";
     std::cout << "[M15U9] Running Milestone 15 Unit 9 GPU tests (" << backendTag << ")...\n";
+    auto didCompositeSSS = [&] {
+        const auto& passes = renderer.GetDiagnostics().GetFrame().Passes;
+        return std::any_of(passes.begin(), passes.end(), [](const auto& pass) {
+            return pass.Name == "SSSBlurV" && pass.Status == DiagnosticStatus::Success;
+        });
+    };
 
     constexpr uint32_t width = 128u;
     constexpr uint32_t height = 128u;
@@ -642,6 +650,28 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& /*sharedRenderer*/, const std
         skinDesc.SubsurfaceRadius = 6.0f;
         auto skinMat = std::make_shared<RHIMaterial>(skinDesc);
 
+        // A side light puts the geometric terminator between the center columns.
+        // Sample the wrapped lobe before diffusion can hide a jump in the forward shader.
+        auto terminatorMaterial = skinDesc;
+        terminatorMaterial.BaseColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        RenderMeshInstance terminatorSphere;
+        terminatorSphere.NativeView = sphere->CaptureView();
+        terminatorSphere.Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(terminatorMaterial);
+        RenderWorld terminatorWorld;
+        terminatorWorld.Meshes = {terminatorSphere};
+        auto& sideLight = terminatorWorld.DirectionalLight.emplace();
+        sideLight.Direction = glm::vec3(1.0f, 0.0f, 0.0f);
+        sideLight.Color = glm::vec3(1.0f);
+        sideLight.AmbientIntensity = 0.0f;
+        std::vector<glm::vec4> terminatorPixels;
+        if (!renderSSSLinear(terminatorWorld, false, terminatorPixels)) return false;
+        const size_t center = static_cast<size_t>(height / 2) * width + width / 2;
+        const float shadowSide = terminatorPixels[center - 1u].r;
+        const float litSide = terminatorPixels[center].r;
+        std::cout << "  [U9 smooth terminator] shadow=" << shadowSide << " lit=" << litSide << '\n';
+        RENDER_CHECK(shadowSide > 0.05f && litSide > shadowSide && (litSide - shadowSide) < 0.03f,
+            "M15-U9-04.3: wrapped SSS stays continuous across the diffuse light terminator");
+
         RenderMeshInstance contSlab;
         contSlab.EntityID = 301;
         contSlab.NativeView = cube->CaptureView();
@@ -764,6 +794,22 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& /*sharedRenderer*/, const std
                       << maxSeamBleed << "\n";
             return false;
         }
+
+        // Adjacent objects can have identical scatter settings and still need an isolated seam.
+        auto matchingProfile = blueSSSDesc;
+        matchingProfile.SubsurfaceColor = skinDesc.SubsurfaceColor;
+        rightTouch.Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(matchingProfile);
+        sssWorld.Meshes = {leftHalf, rightTouch};
+        if (!renderSSSLinear(sssWorld, false, pxOff) || !renderSSSLinear(sssWorld, true, pxOn)) return false;
+        float matchingProfileBleed = 0.0f;
+        for (uint32_t y = 56u; y <= 71u; ++y) {
+            for (uint32_t x = isoStart; x <= isoEnd; ++x) {
+                const size_t index = static_cast<size_t>(y) * width + x;
+                matchingProfileBleed = std::max(matchingProfileBleed, std::abs(pxOn[index].r - pxOff[index].r));
+            }
+        }
+        std::cout << "  [U9 same-profile seam] deltaR=" << matchingProfileBleed << '\n';
+        RENDER_CHECK(matchingProfileBleed <= 2e-3f, "M15-U9-04.3: no diffusion across adjacent objects with matching SSS profiles");
 
         // 3. Crisp Specular Peak Preservation (Specular separated before separable H/V diffusion, then recombined)
         RHIMaterialDesc glossySSSDesc;
@@ -1063,7 +1109,53 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& /*sharedRenderer*/, const std
         sssParityWorld.Meshes[0].Material.UseCustomShader = true;
         sssParityWorld.Meshes[0].Material.CustomShaderPath = "u9d_sss_parity.hlsl";
         sssParityWorld.Meshes[0].Material.CustomProperties = sssProps;
+        auto graphFallback = sssMatDesc;
+        graphFallback.SubsurfaceEnabled = false;
+        sssParityWorld.Meshes[0].Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(graphFallback);
         if (!renderSSS(sssParityWorld, graphSSSPx) || !checkCustomDiag(402, "SSS")) return false;
+
+        const auto explicitPixels = RenderTests::ReadTexture(color);
+        RENDER_CHECK(!explicitPixels.empty(), "M15-U9-07.1: read explicit graph SSS view");
+        SceneRenderSettings graphSettings = settings;
+        graphSettings.EnableSubsurfaceScattering = false;
+        renderer.RenderWorldView(sssParityWorld, camera, &color, &depth, graphSettings);
+        const auto unscattered = RenderTests::ReadTexture(color);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && unscattered.size() == explicitPixels.size() &&
+                     unscattered != explicitPixels, "M15-U9-07.1: graph-authored diffusion changes the lit surface");
+        graphSettings.EnableSubsurfaceScattering = true;
+        renderer.RenderWorldView(sssParityWorld, camera, &color, &depth, graphSettings);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && didCompositeSSS() &&
+                     RenderTests::ReadTexture(color) == explicitPixels,
+            "M15-U9-07.1: graph-only SSS allocates implicit targets and matches the explicit SSS view");
+
+        // A cooked product can remove the loose shader after writing its package.
+        const auto packagePath = output / "u9_material_graph.axlepak";
+        const std::string packagedShader = "u9_packaged_sss.hlsl";
+        PackageWriter writer;
+        RENDER_CHECK(writer.Begin(packagePath) &&
+                     writer.AddFile(packagedShader, output / "u9d_sss_parity.hlsl") &&
+                     writer.Finish() && FileSystem::MountPackage(packagePath),
+            "M15-U9-06.6: mount generated graph from a cooked package");
+        {
+            struct UnmountGuard { ~UnmountGuard() { FileSystem::UnmountPackage(); } } unmount;
+            RENDER_CHECK(!std::filesystem::exists(output / packagedShader),
+                "M15-U9-06.6: cooked shader has no loose copy");
+            sssParityWorld.Meshes[0].Material.CustomShaderPath = packagedShader;
+            renderer.RenderWorldView(sssParityWorld, camera, &color, &depth, graphSettings);
+            RENDER_CHECK(renderer.WasLastRenderSuccessful() && didCompositeSSS() && checkCustomDiag(402, "cooked SSS") &&
+                         RenderTests::ReadTexture(color) == explicitPixels,
+                "M15-U9-06.6: package-only graph SSS matches loose shader pixels");
+        }
+
+        Scene graphScene;
+        auto entity = graphScene.CreateEntity("Graph-only SSS");
+        entity.AddComponent<MeshInstance3D>().AssetPath = "builtin://sphere";
+        auto& component = entity.AddComponent<MaterialComponent>();
+        component.UseCustomShader = true;
+        component.CustomShaderPath = "u9d_sss_parity.hlsl";
+        RENDER_CHECK(SceneRequiresSubsurfacePass(graphScene, graphSettings, 1u) &&
+                     !SceneRequiresSubsurfacePass(graphScene, graphSettings, 4u),
+            "M15-U9-06.5: preview opts in to single-sample diffusion for shader-authored SSS");
 
         float maxSSSPatchErr = 0.0f;
         for (uint32_t y = 52u; y <= 75u; ++y) {
@@ -1086,6 +1178,45 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& /*sharedRenderer*/, const std
     }
 
     // =========================================================================
+    // SDR Runtime uses the legacy forward display transform. Preserve emissive radiance in SSS.
+    {
+        RHIMaterialDesc material{};
+        material.BaseColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        material.EmissiveColor = glm::vec3(1.0f, 0.62f, 0.17f);
+        material.EmissiveIntensity = 8.0f;
+        material.SubsurfaceEnabled = true;
+        material.SubsurfaceRadius = 6.0f;
+        RenderMeshInstance emitter;
+        emitter.EntityID = 420;
+        emitter.NativeView = sphere->CaptureView();
+        emitter.Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(material);
+        RenderWorld world;
+        world.Meshes.push_back(emitter);
+        SceneRenderSettings s;
+        s.EnableSkybox = false;
+        s.EnableShadows = false;
+        s.EnableParticles = false;
+        s.EnableToneMapping = false;
+        s.EnableSubsurfaceScattering = false;
+        RHITexture bgraColor;
+        RENDER_CHECK(bgraColor.Init(RHITextureDesc::RenderTarget2D(width, height, RHITextureFormat::BGRA8_UNORM)),
+            "M15-U9-05: initialize native BGRA SDR view");
+        renderer.RenderWorldView(world, camera, &bgraColor, &depth, s);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful(), "M15-U9-05: render SDR emissive reference");
+        const auto reference = RenderTests::ReadTexture(bgraColor);
+        s.EnableSubsurfaceScattering = true;
+        renderer.RenderWorldView(world, camera, &bgraColor, &depth, s);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && didCompositeSSS(),
+            "M15-U9-05: render SDR subsurface composite with native BGRA attachments");
+        const auto composite = RenderTests::ReadTexture(bgraColor);
+        const size_t center = (static_cast<size_t>(height / 2) * width + width / 2) * 4u;
+        RENDER_CHECK(reference.size() > center + 3u && composite.size() == reference.size() && reference[center + 1] >= 250 &&
+            std::abs(int(reference[center]) - int(composite[center])) <= 1 &&
+            std::abs(int(reference[center + 1]) - int(composite[center + 1])) <= 1 &&
+            std::abs(int(reference[center + 2]) - int(composite[center + 2])) <= 1,
+            "M15-U9-05: SDR diffusion preserves crisp radiance above one before tone mapping");
+    }
+
     // Batch E (M15-U9-06.2, 06.5, 06.6): Scene Save/Reopen -> ExtractRenderWorld -> GPU Render
     // =========================================================================
     {

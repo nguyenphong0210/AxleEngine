@@ -1,0 +1,262 @@
+Scene: M15 U9 Advanced Materials
+Entities:
+  - Entity: 901
+    TagComponent:
+      Tag: Neutral Studio Sky
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+    SkyboxComponent:
+      Enabled: false
+      EnvironmentLighting: false
+  - Entity: 902
+    TagComponent:
+      Tag: Terminator Key
+    TransformComponent:
+      Translation: [0, 8, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Color: [1, 0.92, 0.86]
+      Intensity: 1.65
+      AmbientIntensity: 0.27
+      Azimuth: 67
+      Elevation: 39
+      CastShadows: true
+      ShadowQuality: 1
+      Exposure: 1.0
+      ToneMappingMode: 0
+      Gamma: 2.2
+  - Entity: 903
+    TagComponent:
+      Tag: Studio Floor
+    TransformComponent:
+      Translation: [0, -0.16, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [12, 0.27, 10]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.13, 0.17, 0.23, 1]
+      Roughness: 0.38
+      Metallic: 0
+  - Entity: 904
+    TagComponent:
+      Tag: Studio Wall
+    TransformComponent:
+      Translation: [0, 2.7, -2.2]
+      Rotation: [1, 0, 0, 0]
+      Scale: [12, 5.9, 0.2]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.095, 0.13, 0.2, 1]
+      Roughness: 0.8
+      Metallic: 0
+  - Entity: 905
+    TagComponent:
+      Tag: Plum Velvet Sheen
+    TransformComponent:
+      Translation: [-2.02, 0.86, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.86, 0.86, 0.86]
+    MeshInstance3D:
+      AssetPath: builtin://sphere
+    MaterialComponent:
+      AlbedoColor: [0.12, 0.021, 0.075, 1]
+      Roughness: 0.78
+      Metallic: 0
+      SheenEnabled: true
+      SheenColor: [1.0, 0.39, 0.69]
+      SheenRoughness: 0.32
+  - Entity: 906
+    TagComponent:
+      Tag: Copper Wax SSS
+    TransformComponent:
+      Translation: [-0.04, 0.86, 0.03]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.86, 0.86, 0.86]
+    MeshInstance3D:
+      AssetPath: builtin://sphere
+    MaterialComponent:
+      AlbedoColor: [0.64, 0.23, 0.11, 1]
+      Roughness: 0.31
+      Metallic: 0
+      SubsurfaceEnabled: true
+      SubsurfaceColor: [1.0, 0.42, 0.16]
+      SubsurfaceRadius: 9.0
+  - Entity: 907
+    TagComponent:
+      Tag: Adjacent Slate Boundary
+    TransformComponent:
+      Translation: [0.87, 0.36, 0.19]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.39, 0.72, 0.66]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.1, 0.18, 0.3, 1]
+      Roughness: 0.69
+      Metallic: 0
+  - Entity: 908
+    TagComponent:
+      Tag: Dispersive Amber Glass
+    TransformComponent:
+      Translation: [2.02, 0.86, 0.02]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.8, 0.8, 0.8]
+    MeshInstance3D:
+      AssetPath: builtin://sphere
+    MaterialComponent:
+      AssetPath: materials/U9_AmberGlass.axleasset
+  - Entity: 920
+    TagComponent:
+      Tag: Refraction Reference 1
+    TransformComponent:
+      Translation: [1.0, 0.98, -1.24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.118, 1.95, 0.12]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.78, 0.79, 0.76, 1]
+      Roughness: 0.62
+      Metallic: 0
+      EmissionColor: [0.78, 0.79, 0.76]
+      EmissionIntensity: 0.24
+  - Entity: 921
+    TagComponent:
+      Tag: Refraction Reference 2
+    TransformComponent:
+      Translation: [1.24, 0.98, -1.24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.118, 1.95, 0.12]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.03, 0.07, 0.11, 1]
+      Roughness: 0.62
+      Metallic: 0
+      EmissionColor: [0.03, 0.07, 0.11]
+      EmissionIntensity: 0.24
+  - Entity: 922
+    TagComponent:
+      Tag: Refraction Reference 3
+    TransformComponent:
+      Translation: [1.48, 0.98, -1.24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.118, 1.95, 0.12]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.78, 0.79, 0.76, 1]
+      Roughness: 0.62
+      Metallic: 0
+      EmissionColor: [0.78, 0.79, 0.76]
+      EmissionIntensity: 0.24
+  - Entity: 923
+    TagComponent:
+      Tag: Refraction Reference 4
+    TransformComponent:
+      Translation: [1.72, 0.98, -1.24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.118, 1.95, 0.12]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.03, 0.07, 0.11, 1]
+      Roughness: 0.62
+      Metallic: 0
+      EmissionColor: [0.03, 0.07, 0.11]
+      EmissionIntensity: 0.24
+  - Entity: 924
+    TagComponent:
+      Tag: Refraction Reference 5
+    TransformComponent:
+      Translation: [1.96, 0.98, -1.24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.118, 1.95, 0.12]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.78, 0.79, 0.76, 1]
+      Roughness: 0.62
+      Metallic: 0
+      EmissionColor: [0.78, 0.79, 0.76]
+      EmissionIntensity: 0.24
+  - Entity: 925
+    TagComponent:
+      Tag: Refraction Reference 6
+    TransformComponent:
+      Translation: [2.2, 0.98, -1.24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.118, 1.95, 0.12]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.03, 0.07, 0.11, 1]
+      Roughness: 0.62
+      Metallic: 0
+      EmissionColor: [0.03, 0.07, 0.11]
+      EmissionIntensity: 0.24
+  - Entity: 926
+    TagComponent:
+      Tag: Refraction Reference 7
+    TransformComponent:
+      Translation: [2.44, 0.98, -1.24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.118, 1.95, 0.12]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.78, 0.79, 0.76, 1]
+      Roughness: 0.62
+      Metallic: 0
+      EmissionColor: [0.78, 0.79, 0.76]
+      EmissionIntensity: 0.24
+  - Entity: 927
+    TagComponent:
+      Tag: Refraction Reference 8
+    TransformComponent:
+      Translation: [2.6799999999999997, 0.98, -1.24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.118, 1.95, 0.12]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.03, 0.07, 0.11, 1]
+      Roughness: 0.62
+      Metallic: 0
+      EmissionColor: [0.03, 0.07, 0.11]
+      EmissionIntensity: 0.24
+  - Entity: 928
+    TagComponent:
+      Tag: Refraction Reference 9
+    TransformComponent:
+      Translation: [2.92, 0.98, -1.24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.118, 1.95, 0.12]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.78, 0.79, 0.76, 1]
+      Roughness: 0.62
+      Metallic: 0
+      EmissionColor: [0.78, 0.79, 0.76]
+      EmissionIntensity: 0.24
+  - Entity: 929
+    TagComponent:
+      Tag: Refraction Reference 10
+    TransformComponent:
+      Translation: [3.16, 0.98, -1.24]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.118, 1.95, 0.12]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.03, 0.07, 0.11, 1]
+      Roughness: 0.62
+      Metallic: 0
+      EmissionColor: [0.03, 0.07, 0.11]
+      EmissionIntensity: 0.24

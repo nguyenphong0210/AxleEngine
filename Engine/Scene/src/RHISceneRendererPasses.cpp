@@ -62,6 +62,7 @@ namespace Axle {
         float DistanceSq = 0.0f;
         int RenderQueue = 2000;
         uint64_t BaseSurfaceGeneration = 0;
+        float SubsurfaceObjectKey = 0.0f;
         ResolvedSurface Surface;
         uint32_t DrawResourceIndex = 0;
         nri::Pipeline* PreparedPipeline = nullptr;
@@ -207,15 +208,17 @@ namespace Axle {
         const bool useReflectionMRTAtSetup = useSSR || usePlanarResolve;
         const bool wantsSSS = !captureActive && !planarActive &&
             Passes::SubsurfaceScatteringPass::SceneRequiresSubsurfacePass(world, settings, activeSampleCount);
+        auto* sssCompositePipeline = wantsSSS && m_SSSBlurHPipeline
+            ? GetOrCreateSSSPipeline(m_SSSBlurVPixelShader, sceneTargetFormat) : nullptr;
         bool useSSS = wantsSSS && sceneDepthTexture && sceneDepthDSV &&
-            m_SSSPipelineLayout.IsValid() &&
-            m_SSSBlurHPipeline && m_SSSBlurVPipelineHDR && m_SSSBlurVPipelineSDR &&
+            m_SSSPipelineLayout.IsValid() && m_SSSBlurHPipeline && sssCompositePipeline &&
             m_SSSPixelShader.IsValid() && m_ReflectionSSSPixelShader.IsValid() &&
             m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
             m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
             m_OpaqueSceneNormal && m_OpaqueSceneNormal->IsValid() &&
             viewTargets->GetSubsurfaceDiffuse() && viewTargets->GetSubsurfaceDiffuse()->IsValid() &&
             viewTargets->GetSubsurfaceControl() && viewTargets->GetSubsurfaceControl()->IsValid() &&
+            viewTargets->GetSubsurfaceCrisp() && viewTargets->GetSubsurfaceCrisp()->IsValid() &&
             viewTargets->GetSubsurfaceTemp() && viewTargets->GetSubsurfaceTemp()->IsValid();
         if (wantsSSS && !useSSS) {
             viewCtx.Diagnostics().AddFallback("sss_targets_unavailable: single-sample depth, normal, and subsurface targets required");
@@ -231,6 +234,7 @@ namespace Axle {
         const auto sssDepth = useSSS ? graph.Import("SSSDepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto sssDiffuseRes = useSSS ? graph.Import("SSSDiffuse", viewTargets->GetSubsurfaceDiffuse()->GetNative()) : output;
         const auto sssControlRes = useSSS ? graph.Import("SSSControl", viewTargets->GetSubsurfaceControl()->GetNative()) : output;
+        const auto sssCrispRes = useSSS ? graph.Import("SSSCrisp", viewTargets->GetSubsurfaceCrisp()->GetNative()) : output;
         const auto sssTempRes = useSSS ? graph.Import("SSSTemp", viewTargets->GetSubsurfaceTemp()->GetNative()) : output;
         const auto planarColorResource = usePlanarResolve ? graph.Import("PlanarColor", planarColorTex->GetNative(), true) : output;
         std::vector<Graph::Resource> ssrColorResources;
@@ -634,7 +638,8 @@ namespace Axle {
         };
 
         auto populateBuiltinMaterialResource = [&](ResolvedSurface& surface, MaterialDrawResources& resource, bool refractionReady,
-                                                   const RHIObjectPushConstants* cutoutParams = nullptr) -> bool {
+                                                   const RHIObjectPushConstants* cutoutParams = nullptr,
+                                                   float subsurfaceObjectKey = 0.0f) -> bool {
             RHIMaterialConstants materialData = surface.ToMaterialConstants();
             const float emissiveStrength =
                 glm::max(surface.EmissionColor.r, std::max(surface.EmissionColor.g, surface.EmissionColor.b)) *
@@ -648,6 +653,7 @@ namespace Axle {
                 materialData.Reserved[3] = glm::vec4(surface.BaseColor.a, surface.AlphaCutoff,
                                                      static_cast<float>(surface.Surface), 1.0f);
             }
+            materialData.Reserved[2].w = subsurfaceObjectKey;
             resource.IsReactive = (surface.Surface == SurfaceType::Transparent ||
                                    surface.Surface == SurfaceType::Additive ||
                                    emissiveStrength > 1.0f);
@@ -853,7 +859,7 @@ namespace Axle {
                 }
                 item.DrawResourceIndex = static_cast<uint32_t>(materialDrawIndex);
                 auto& resource = *m_MaterialDraws[materialDrawIndex++];
-                if (!populateBuiltinMaterialResource(item.Surface, resource, refractionReady, &item.PushConsts)) { drawFailed = true; return; }
+                if (!populateBuiltinMaterialResource(item.Surface, resource, refractionReady, &item.PushConsts, item.SubsurfaceObjectKey)) { drawFailed = true; return; }
                 item.PreparedPipeline = needed;
                 item.PipelineLease = m_Device->GetResources().AcquireNative(needed);
                 if (!item.PipelineLease.IsLive() || !graph.DeclareRead(pass, resource.Constants.GetCBV()) ||
@@ -1258,6 +1264,7 @@ namespace Axle {
             sceneQueuesPrepared = true;
             std::unordered_map<CustomProgramKey, std::string, CustomProgramKeyHash> customFingerprints;
             const glm::vec3 camPos = camera.GetPosition();
+            uint32_t nextSubsurfaceKey = 0;
             for (const auto& meshInst : world.Meshes) {
                 const auto entityID = static_cast<entt::entity>(meshInst.EntityID);
                 auto mesh = meshInst.NativeView;
@@ -1265,6 +1272,8 @@ namespace Axle {
                     glm::mat4 worldMat = meshInst.WorldTransform;
                     DrawItem item;
                     item.DiagnosticEntity = entityID;
+                    if (useSSS && nextSubsurfaceKey < (1u << 22) - 1u)
+                        item.SubsurfaceObjectKey = static_cast<float>(++nextSubsurfaceKey);
                     item.StableUUID = meshInst.StableUUID;
                     item.Mesh = mesh;
                     item.PushConsts.Model = worldMat;
@@ -1300,6 +1309,7 @@ namespace Axle {
                                 engine.View = sceneConstants.View; engine.Projection = sceneConstants.Projection;
                                 engine.CameraPosition = sceneConstants.CameraPosition;
                                 engine.SunDirection = sceneConstants.SunDirection; engine.SunColor = sceneConstants.SunColor;
+                                engine.SubsurfaceObjectKey = item.SubsurfaceObjectKey;
                                 auto resolved = ResolveShaderSurface(item.Surface, SurfaceEvaluation::CustomShader,
                                     selected.Generation->GenerationID, plan, engine, mat.CustomProperties);
                                 if (auto* surface = std::get_if<ResolvedShaderSurface>(&resolved)) {
@@ -1455,7 +1465,7 @@ namespace Axle {
             const bool reflectionMRT = useSSR || usePlanarResolve;
             const bool sssMRT = useSSS;
             auto opaqueRendering = renderingDesc;
-            nri::AttachmentDesc opaqueAttachments[5]{colorAttachment};
+            nri::AttachmentDesc opaqueAttachments[6]{colorAttachment};
             if (reflectionMRT || sssMRT) {
                 uint32_t attCount = 1;
                 if (reflectionMRT) {
@@ -1471,16 +1481,14 @@ namespace Axle {
                     ++attCount;
                 }
                 if (sssMRT) {
-                    opaqueAttachments[attCount].descriptor = viewTargets->GetSubsurfaceDiffuse()->GetRTV();
-                    opaqueAttachments[attCount].loadOp = nri::LoadOp::CLEAR;
-                    opaqueAttachments[attCount].storeOp = nri::StoreOp::STORE;
-                    opaqueAttachments[attCount].clearValue.color.f = {0.0f, 0.0f, 0.0f, 0.0f};
-                    ++attCount;
-                    opaqueAttachments[attCount].descriptor = viewTargets->GetSubsurfaceControl()->GetRTV();
-                    opaqueAttachments[attCount].loadOp = nri::LoadOp::CLEAR;
-                    opaqueAttachments[attCount].storeOp = nri::StoreOp::STORE;
-                    opaqueAttachments[attCount].clearValue.color.f = {0.0f, 0.0f, 0.0f, 0.0f};
-                    ++attCount;
+                    for (const auto* target : {viewTargets->GetSubsurfaceDiffuse(), viewTargets->GetSubsurfaceControl(),
+                                               viewTargets->GetSubsurfaceCrisp()}) {
+                        auto& attachment = opaqueAttachments[attCount++];
+                        attachment.descriptor = target->GetRTV();
+                        attachment.loadOp = nri::LoadOp::CLEAR;
+                        attachment.storeOp = nri::StoreOp::STORE;
+                        attachment.clearValue.color.f = {0.0f, 0.0f, 0.0f, 0.0f};
+                    }
                 }
                 opaqueRendering.colors = opaqueAttachments;
                 opaqueRendering.colorNum = attCount;
@@ -1539,6 +1547,7 @@ namespace Axle {
             if (useSSS) {
                 opaqueUses.push_back({sssDiffuseRes,Layout::ColorAttachment,Access::Write,Load::Clear});
                 opaqueUses.push_back({sssControlRes,Layout::ColorAttachment,Access::Write,Load::Clear});
+                opaqueUses.push_back({sssCrispRes,Layout::ColorAttachment,Access::Write,Load::Clear});
             }
             if(localAtlas)opaqueUses.push_back({localShadows,Layout::ShaderResource});
             if (shadowAtlas) opaqueUses.push_back({shadows,Layout::ShaderResource});
@@ -1629,6 +1638,8 @@ namespace Axle {
             // not export the terms needed for a correct reflection/SSS replacement.
             if (useSSR || usePlanarResolve || useSSS) for (const auto& mesh : world.Meshes) {
                 if (!mesh.Material.UseCustomShader) continue;
+                const auto& native = mesh.Material.RHIMaterialAsset;
+                if (native && native->GetDesc().SurfaceType >= SurfaceType::Transparent) continue;
                 CustomProgramKey key;
                 key.ShaderPath = mesh.Material.CustomShaderPath.empty() ? "" :
                     PathToUtf8(FileSystem::ResolveAssetPath(PathFromUtf8(mesh.Material.CustomShaderPath)).lexically_normal());
@@ -1800,7 +1811,7 @@ namespace Axle {
                 }, beginRendering, endRendering};
             if (!Passes::SubsurfaceScatteringPass::Record(*this,
                 {settings, viewTargets, projZO, sceneTargetTexture, sceneDepthTexture,
-                 sceneTargetRTV, sceneTargetFormat, width, height}, ops)) {
+                 sceneTargetRTV, sssCompositePipeline, width, height}, ops)) {
                 return fail();
             }
             return {};
@@ -1808,7 +1819,7 @@ namespace Axle {
             if (useSSS) {
                 Passes::SubsurfaceScatteringPass::Declare(graph,
                     {sceneColor, sssInput, sceneDepth, sssDepth, sceneNormal,
-                     sssDiffuseRes, sssControlRes, sssTempRes});
+                     sssDiffuseRes, sssControlRes, sssCrispRes, sssTempRes});
             }
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useSSS && (!uniform("SSSBlurH", sizeof(RHISSSConstants)) ||

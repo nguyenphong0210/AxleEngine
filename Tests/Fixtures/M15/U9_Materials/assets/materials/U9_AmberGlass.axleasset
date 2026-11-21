@@ -1,0 +1,21 @@
+# AxleFileIdentity: 1 16092100155211920201
+Material {
+    name: "U9 Amber Glass"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    surfaceType: "Transparent"
+    cullMode: "Back"
+    depthWrite: false
+    albedoColor: [0.93, 0.91, 0.80, 0.30]
+    metallic: 0
+    roughness: 0.07
+    refractionEnabled: true
+    refractionStrength: 1
+    refractionIOR: 1.52
+    refractionThickness: 0.72
+    refractionTint: [1.0, 1.0, 1.0]
+    absorptionEnabled: true
+    absorptionColor: [0.07, 0.25, 0.74]
+    dispersion: 0.42
+    renderQueue: 3000
+}

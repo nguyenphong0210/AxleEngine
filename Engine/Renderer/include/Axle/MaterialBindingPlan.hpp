@@ -44,7 +44,8 @@ namespace Axle {
         SunColor,
         BaseColor,
         LegacySurfaceParams,
-        BaseUVTransform
+        BaseUVTransform,
+        SubsurfaceObjectKey
     };
 
     struct ShaderAddress {
@@ -136,6 +137,7 @@ namespace Axle {
         glm::vec4 CameraPosition{ 0.0f };
         glm::vec4 SunDirection{ 0.0f, -1.0f, 0.0f, 1.0f };
         glm::vec4 SunColor{ 1.0f };
+        float SubsurfaceObjectKey = 0.0f;
         glm::vec4 BaseColor{ 1.0f };
         glm::vec4 BaseUVTransform{ 1.0f, 1.0f, 0.0f, 0.0f };
         glm::vec4 LegacySurfaceParams{ 0.5f, 0.0f, 1.0f, 1.0f };

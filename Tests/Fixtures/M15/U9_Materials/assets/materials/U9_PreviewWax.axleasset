@@ -1,0 +1,20 @@
+# AxleFileIdentity: 1 16092100155211920202
+Material {
+    name: "U9 Preview Wax"
+    shader: "ForwardPBR"
+    useCustomShader: false
+    surfaceType: "Opaque"
+    cullMode: "Back"
+    depthWrite: true
+    albedoColor: [0.64, 0.23, 0.11, 1]
+    roughness: 0.31
+    sheenEnabled: true
+    sheenColor: [0.72, 0.30, 0.20]
+    sheenRoughness: 0.44
+    subsurfaceEnabled: true
+    subsurfaceColor: [1.0, 0.42, 0.16]
+    subsurfaceRadius: 9.0
+    absorptionEnabled: true
+    absorptionColor: [0.07, 0.25, 0.74]
+    dispersion: 0.78
+}

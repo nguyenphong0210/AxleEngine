@@ -83,7 +83,7 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
             continue;
         }
         if((buffer.Name=="EngineObject"&&buffer.Variables.size()!=1)||
-           (buffer.Name=="EngineScene"&&buffer.Variables.size()!=5))return fail("Incomplete engine cbuffer storage: "+buffer.Name);
+           (buffer.Name=="EngineScene"&&buffer.Variables.size()!=6))return fail("Incomplete engine cbuffer storage: "+buffer.Name);
         std::set<std::string> variables;
         for(const auto& variable:buffer.Variables) {
             if(!variables.insert(variable.Name).second || variable.ScalarType!=RHIShaderScalarType::Float || variable.Elements || variable.RowMajor)
@@ -96,6 +96,7 @@ bool MaterialGraphProgram::BuildLayout(const MaterialHLSLSource& graph, const RH
                 else if(variable.Name=="u_SunDirection") {columns=4;offset=80;}
                 else if(variable.Name=="u_SunColor") {columns=4;offset=96;}
                 else if(variable.Name=="u_Projection") {rows=columns=4;offset=112;}
+                else if(variable.Name=="u_SubsurfaceObjectKey") {columns=1;offset=176;}
             } else if(buffer.Name=="MaterialParameters") {
                 for(const auto& parameter:graph.Parameters) if(parameter.Symbol==variable.Name)columns=static_cast<uint32_t>(parameter.Default.Type)+1;
                 if(variable.Offset%4 || variable.Offset%16+variable.Size>16)return fail("Parameter crosses a DX cbuffer register: "+variable.Name);

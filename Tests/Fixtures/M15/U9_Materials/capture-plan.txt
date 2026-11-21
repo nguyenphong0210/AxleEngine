@@ -1,0 +1,24 @@
+# Fixed framing for sheen, the SSS boundary, and screen-space refraction.
+camera 0 1.85 6.25 -9 0
+fx hdr=1 taa=0 autoexp=0 bloom=0 ddgi=0 fog=0 ssr=0 planar=0 gtao=0 contact=0
+wait 12
+capture_viewport materials_viewport.png
+select_entity Copper Wax SSS
+wait 6
+capture_editor boundary_editor.png
+fx ssr=1
+wait 8
+capture_viewport sss_with_ssr.png
+fx ssr=0
+select_asset materials/U9_PreviewWax.axleasset
+preview_mesh sphere
+preview_sun 122 29
+focus Asset Preview
+wait 12
+capture_editor preview_wax_editor.png
+select_asset materials/U9_AmberGlass.axleasset
+preview_mesh sphere
+wait 12
+capture_editor preview_glass_editor.png
+assert_no_errors
+quit

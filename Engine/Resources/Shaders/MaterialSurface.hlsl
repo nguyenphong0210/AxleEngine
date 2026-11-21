@@ -8,6 +8,7 @@ cbuffer EngineScene : register(b1, space0) {
     float4 u_SunDirection;
     float4 u_SunColor;
     column_major float4x4 u_Projection;
+    float u_SubsurfaceObjectKey;
 };
 
 #include "Occlusion.hlsli"
@@ -254,7 +255,9 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
     float3 sunRadiance = max(sunColor, float3(0,0,0)) * (sunIntensity * sunRadianceScale) * AxleDirectionalVisibility(AxleSunShadowVisibility(input.WorldPos, normal, light), screenVisibility.y);
     float3 diffDirect = float3(0.0, 0.0, 0.0);
     float3 specDirect = float3(0.0, 0.0, 0.0);
-    if (nl > 0.0 || hasSSS) {
+    if (hasSSS)
+        diffDirect += EvaluateDirectSubsurfaceDiffuse(normal, view, light, metallic, sssTint, sssGain) * sunRadiance;
+    if (nl > 0.0) {
         float3 sunDiff = diffuse * nl;
         float3 sunSpec = specular * nl;
         if (coat > 0.0 && nl > 0.0) {
@@ -267,15 +270,6 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
         ApplyCharlieSheenDirectSplit(sunDiff, sunSpec, normal, halfVector, nl, nv, surface.SheenColor, surface.SheenRoughness, 1.0);
         diffDirect += sunDiff * sunRadiance;
         specDirect += sunSpec * sunRadiance;
-        if (hasSSS) {
-            float wrap = 0.5;
-            float NdotL_wrap = saturate((dot(normal, light) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
-            float3 scatterDir = -(light + normal * 0.3);
-            float VdotS = max(dot(view, normalize(scatterDir)), 0.0);
-            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
-            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * sssTint * sssGain;
-            diffDirect += sssLighting * sunRadiance * (1.0 - metallic);
-        }
     }
 
     // Keep the graph path on the same Forward+ light data contract.  The
@@ -293,16 +287,18 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
         float attenuation = (window * window) / max(distanceToLight * distanceToLight, max(pointLight.Params.y, 0.0025));
         if (pointLight.Params.x > 0.1 && abs(pointLight.Params.x - 1.0) > 0.01)
             attenuation = pow(max(attenuation, 0.0), pointLight.Params.x);
+        float3 radiance = max(pointLight.ColorAndIntensity.rgb, 0.0) *
+            (pointLight.ColorAndIntensity.w * attenuation * 0.05);
+        if (hasSSS)
+            diffDirect += EvaluateDirectSubsurfaceDiffuse(normal, view, localLight, metallic, sssTint, sssGain) * radiance;
         float localNl = saturate(dot(normal, localLight));
-        if (localNl <= 0.0 && !hasSSS) continue;
+        if (localNl <= 0.0) continue;
         float3 localHalf = AxleSafeNormal(view + localLight, normal);
         float3 localF = FresnelSchlick(saturate(dot(localHalf, view)), f0);
         float3 localSpec = DistributionGGX(normal, localHalf, roughness) *
             GeometrySmith(normal, view, localLight, roughness) * localF /
             max(4.0 * nv * max(localNl, 0.001), 0.0001);
         float3 localDiffuse = (1.0 - localF) * (1.0 - metallic) * base * INV_PI;
-        float3 radiance = max(pointLight.ColorAndIntensity.rgb, 0.0) *
-            (pointLight.ColorAndIntensity.w * attenuation * 0.05);
         float3 pointDiff = localDiffuse * localNl;
         float3 pointSpec = localSpec * localNl;
         if (coat > 0.0 && localNl > 0.0) {
@@ -315,15 +311,6 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
         ApplyCharlieSheenDirectSplit(pointDiff, pointSpec, normal, localHalf, localNl, nv, surface.SheenColor, surface.SheenRoughness, 1.0);
         diffDirect += pointDiff * radiance;
         specDirect += pointSpec * radiance;
-        if (hasSSS) {
-            float wrap = 0.5;
-            float NdotL_wrap = saturate((dot(normal, localLight) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
-            float3 scatterDir = -(localLight + normal * 0.3);
-            float VdotS = max(dot(view, normalize(scatterDir)), 0.0);
-            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
-            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * sssTint * sssGain;
-            diffDirect += sssLighting * radiance * (1.0 - metallic);
-        }
     }
     [loop] for (uint s = 0u; s < min(u_LightCounts.y, 16u); ++s) {
         SpotLightData spot = u_SpotLights[s];
@@ -339,6 +326,10 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
         float ratio = distanceToLight / range;
         float window = saturate(1.0 - ratio * ratio * ratio * ratio);
         float attenuation = (window * window) / max(distanceToLight * distanceToLight, 0.0025) * cone * cone;
+        float3 radiance = max(spot.ColorAndInnerAngle.rgb, 0.0) *
+            (spot.DirectionAndIntensity.w * attenuation * 0.05);
+        if (hasSSS)
+            diffDirect += EvaluateDirectSubsurfaceDiffuse(normal, view, localLight, metallic, sssTint, sssGain) * radiance;
         float localNl = saturate(dot(normal, localLight));
         if (localNl <= 0.0) continue;
         float3 localHalf = AxleSafeNormal(view + localLight, normal);
@@ -347,8 +338,6 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
             GeometrySmith(normal, view, localLight, roughness) * localF /
             max(4.0 * nv * localNl, 0.0001);
         float3 localDiffuse = (1.0 - localF) * (1.0 - metallic) * base * INV_PI;
-        float3 radiance = max(spot.ColorAndInnerAngle.rgb, 0.0) *
-            (spot.DirectionAndIntensity.w * attenuation * 0.05);
         float3 spotDiff = localDiffuse * localNl;
         float3 spotSpec = localSpec * localNl;
         if (coat > 0.0) {
@@ -361,15 +350,6 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
         ApplyCharlieSheenDirectSplit(spotDiff, spotSpec, normal, localHalf, localNl, nv, surface.SheenColor, surface.SheenRoughness, 1.0);
         diffDirect += spotDiff * radiance;
         specDirect += spotSpec * radiance;
-        if (hasSSS) {
-            float wrap = 0.5;
-            float NdotL_wrap = saturate((dot(normal, localLight) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
-            float3 scatterDir = -(localLight + normal * 0.3);
-            float VdotS = max(dot(view, normalize(scatterDir)), 0.0);
-            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
-            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * sssTint * sssGain;
-            diffDirect += sssLighting * radiance * (1.0 - metallic);
-        }
     }
     [loop] for (uint r = 0u; r < min((uint)u_LightReserved[1].x, 2u); ++r) {
         RectLightData rLight = u_RectLights[r];
@@ -545,17 +525,13 @@ float4 PSMain(PSInput input) : SV_Target0 { return EvaluateForwardSurface(input)
 ReflectionSurfaceOutput PSReflectionMain(PSInput input) { return EvaluateReflectionSurface(input); }
 SubsurfaceSurfaceOutput PSSSSMain(PSInput input) {
     ForwardSurfaceEval eval = EvaluateForwardSurface(input);
-    float4 outColor = (eval.ControlSSS.a > 0.001)
-        ? float4(clamp(eval.CrispSpecularAndEmissive, 0.0, 65000.0), eval.Color.a)
-        : eval.Color;
-    return MakeSubsurfaceSurfaceOutput(outColor, eval.DiffuseSSS, eval.ControlSSS);
+    return MakeSubsurfaceSurfaceOutput(eval.Color, eval.DiffuseSSS, eval.ControlSSS,
+        eval.CrispSpecularAndEmissive, u_SubsurfaceObjectKey);
 }
 ReflectionSubsurfaceSurfaceOutput PSReflectionSSSMain(PSInput input) {
     ForwardSurfaceEval eval = EvaluateForwardSurface(input);
-    float4 outColor = (eval.ControlSSS.a > 0.001)
-        ? float4(clamp(eval.CrispSpecularAndEmissive, 0.0, 65000.0), eval.Color.a)
-        : eval.Color;
-    return MakeReflectionSubsurfaceSurfaceOutput(outColor, eval.Environment, eval.Response, eval.Roughness, eval.ReflectionEnabled, eval.DiffuseSSS, eval.ControlSSS);
+    return MakeReflectionSubsurfaceSurfaceOutput(eval.Color, eval.Environment, eval.Response, eval.Roughness,
+        eval.ReflectionEnabled, eval.DiffuseSSS, eval.ControlSSS, eval.CrispSpecularAndEmissive, u_SubsurfaceObjectKey);
 }
 
 // Material Graphs use this companion entry point for the screen-space normal

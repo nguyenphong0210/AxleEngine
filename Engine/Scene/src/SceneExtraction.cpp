@@ -32,7 +32,9 @@ namespace Axle {
                     ? mat.MaterialAsset->GetSubsurfaceEnabled() : mat.SubsurfaceEnabled;
                 const float sssRadius = (mat.HasAsset() && mat.MaterialAsset)
                     ? mat.MaterialAsset->GetSubsurfaceRadius() : mat.SubsurfaceRadius;
-                if (surf < SurfaceType::Transparent && sssEnabled && sssRadius > 0.0f) {
+                const bool customSurface = (mat.HasAsset() && mat.MaterialAsset)
+                    ? mat.MaterialAsset->GetUseCustomShader() : mat.UseCustomShader;
+                if (surf < SurfaceType::Transparent && (customSurface || (sssEnabled && sssRadius > 0.0f))) {
                     return true;
                 }
             } else if (mc.RHIMaterialAsset) {

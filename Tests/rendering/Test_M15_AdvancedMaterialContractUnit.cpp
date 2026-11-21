@@ -525,7 +525,8 @@ bool RunM15AdvancedMaterialContractUnitTests() {
         const std::string runtimeSrc = LoadTextFile(AXLE_RUNTIME_LAYER_SOURCE_PATH);
         RENDER_CHECK(!previewSrc.empty() && !viewportSrc.empty() && !editorSrc.empty() && !runtimeSrc.empty() &&
                      previewSrc.find("SceneRequiresSubsurfacePass") != std::string::npos &&
-                     previewSrc.find("wantsSSS ? 1u : 4u") != std::string::npos &&
+                     previewSrc.find("needsSingleSample = wantsSSS ||") != std::string::npos &&
+                     previewSrc.find("settings.MSAASamples = needsSingleSample ? 1u : 4u") != std::string::npos &&
                      viewportSrc.find("targets.EnableSubsurface = desc.EnableSubsurface") != std::string::npos &&
                      viewportSrc.find("|| desc.EnableSubsurface") != std::string::npos &&
                      editorSrc.find("SceneRequiresSubsurfacePass") != std::string::npos &&

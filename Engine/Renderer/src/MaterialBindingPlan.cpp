@@ -59,6 +59,11 @@ namespace Axle {
                 outKind = UniformKind::Float4;
                 return true;
             }
+            if (lower == "u_subsurfaceobjectkey") {
+                outUniform = EngineUniform::SubsurfaceObjectKey;
+                outKind = UniformKind::Float32;
+                return true;
+            }
             if (lower == "u_basecolor" || lower == "basecolor") {
                 outUniform = EngineUniform::BaseColor;
                 outKind = UniformKind::Float4;
@@ -185,10 +190,12 @@ namespace Axle {
                 binding.ReflectedSize = var.Size;
 
                 if (isEngine) {
+                    const uint32_t rows = engKind == UniformKind::Matrix4x4 ? 4u : 1u;
+                    const uint32_t columns = GetUniformKindSize(engKind) / (rows * sizeof(float));
                     if (var.RowMajor || var.Size != GetUniformKindSize(engKind) ||
                         (var.ScalarType != RHI::RHIShaderScalarType::Unknown &&
                             (var.ScalarType != RHI::RHIShaderScalarType::Float ||
-                             var.Rows != (engKind==UniformKind::Matrix4x4?4u:1u) || var.Columns!=4)))
+                             var.Rows != rows || var.Columns != columns)))
                         return MaterialBindingError{"EngineUniformType",cb.Name,var.Name,"Engine uniform type/layout does not match the custom interface."};
                     binding.Kind = engKind;
                     binding.Source = engUnif;
@@ -472,6 +479,9 @@ namespace Axle {
                         break;
                     case EngineUniform::SunColor:
                         std::memcpy(dest, &engineValues.SunColor, sizeof(glm::vec4));
+                        break;
+                    case EngineUniform::SubsurfaceObjectKey:
+                        std::memcpy(dest, &engineValues.SubsurfaceObjectKey, sizeof(float));
                         break;
                     case EngineUniform::BaseColor:
                         std::memcpy(dest, &engineValues.BaseColor, sizeof(glm::vec4));

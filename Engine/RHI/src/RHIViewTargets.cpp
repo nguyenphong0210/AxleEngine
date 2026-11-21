@@ -135,6 +135,7 @@ namespace Axle::RHI {
             (m_Desc.Samples != 1 || !m_Desc.EnableNormal ||
              !check2D(RHIViewTarget::SubsurfaceDiffuse, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT) ||
              !check2D(RHIViewTarget::SubsurfaceControl, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT) ||
+             !check2D(RHIViewTarget::SubsurfaceCrisp, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT) ||
              !check2D(RHIViewTarget::SubsurfaceTemp, m_Desc.Width, m_Desc.Height, RHITextureFormat::RGBA16_FLOAT))) return false;
         for (uint32_t level = 0; m_Desc.EnableReflectionTerms && level < 4; ++level) {
             const uint32_t expectedW = std::max(1u, m_Desc.Width >> (level + 1u));
@@ -312,6 +313,7 @@ namespace Axle::RHI {
         if (desc.EnableSubsurface &&
             (!create(RHIViewTarget::SubsurfaceDiffuse, RHITextureFormat::RGBA16_FLOAT, 1, false) ||
              !create(RHIViewTarget::SubsurfaceControl, RHITextureFormat::RGBA16_FLOAT, 1, false) ||
+             !create(RHIViewTarget::SubsurfaceCrisp, RHITextureFormat::RGBA16_FLOAT, 1, false) ||
              !create(RHIViewTarget::SubsurfaceTemp, RHITextureFormat::RGBA16_FLOAT, 1, false))) return false;
         if (desc.EnablePlanarReflection) {
             const uint32_t planarW = ComputePlanarTargetDimension(desc.Width, desc.PlanarResolutionScale);

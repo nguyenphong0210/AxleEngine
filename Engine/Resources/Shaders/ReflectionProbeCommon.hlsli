@@ -75,6 +75,7 @@ struct SubsurfaceSurfaceOutput {
     float4 Color : SV_Target0;
     float4 SubsurfaceDiffuse : SV_Target1;
     float4 SubsurfaceControl : SV_Target2;
+    float4 SubsurfaceCrisp : SV_Target3;
 };
 
 struct ReflectionSubsurfaceSurfaceOutput {
@@ -83,16 +84,23 @@ struct ReflectionSubsurfaceSurfaceOutput {
     float4 Response : SV_Target2;
     float4 SubsurfaceDiffuse : SV_Target3;
     float4 SubsurfaceControl : SV_Target4;
+    float4 SubsurfaceCrisp : SV_Target5;
 };
 
 SubsurfaceSurfaceOutput MakeSubsurfaceSurfaceOutput(
     float4 color,
     float3 diffuseSSS,
-    float4 controlSSS) {
+    float4 controlSSS,
+    float3 crisp,
+    float objectKey) {
+    // Two exact FP16 integer components encode a per-draw key. Keep zero
+    // reserved for draws that do not participate in diffusion.
+    uint key = uint(objectKey);
     SubsurfaceSurfaceOutput result;
     result.Color = color;
-    result.SubsurfaceDiffuse = float4(clamp(diffuseSSS, 0.0, 65000.0), controlSSS.a > 0.0 ? 1.0 : 0.0);
-    result.SubsurfaceControl = controlSSS;
+    result.SubsurfaceDiffuse = float4(clamp(diffuseSSS, 0.0, 65000.0), float(key & 2047u));
+    result.SubsurfaceControl = key != 0u ? controlSSS : 0.0;
+    result.SubsurfaceCrisp = float4(clamp(crisp, 0.0, 65000.0), float(key >> 11u));
     return result;
 }
 
@@ -103,15 +111,32 @@ ReflectionSubsurfaceSurfaceOutput MakeReflectionSubsurfaceSurfaceOutput(
     float roughness,
     float reflectionEnabled,
     float3 diffuseSSS,
-    float4 controlSSS) {
+    float4 controlSSS,
+    float3 crisp,
+    float objectKey) {
     ReflectionSurfaceOutput refl = MakeMaterialReflectionSurfaceOutput(color, environment, response, roughness, reflectionEnabled);
     ReflectionSubsurfaceSurfaceOutput result;
     result.Color = refl.Color;
     result.Environment = refl.Environment;
     result.Response = refl.Response;
-    result.SubsurfaceDiffuse = float4(clamp(diffuseSSS, 0.0, 65000.0), controlSSS.a > 0.0 ? 1.0 : 0.0);
-    result.SubsurfaceControl = controlSSS;
+    SubsurfaceSurfaceOutput sss = MakeSubsurfaceSurfaceOutput(color, diffuseSSS, controlSSS, crisp, objectKey);
+    result.SubsurfaceDiffuse = sss.SubsurfaceDiffuse;
+    result.SubsurfaceControl = sss.SubsurfaceControl;
+    result.SubsurfaceCrisp = sss.SubsurfaceCrisp;
     return result;
+}
+
+// Older authored shaders can still compile their original companion functions.
+// Only callers supplying the draw key participate in the current SSS pass.
+SubsurfaceSurfaceOutput MakeSubsurfaceSurfaceOutput(float4 color, float3 diffuseSSS, float4 controlSSS) {
+    return MakeSubsurfaceSurfaceOutput(color, diffuseSSS, controlSSS, color.rgb, 0.0);
+}
+
+ReflectionSubsurfaceSurfaceOutput MakeReflectionSubsurfaceSurfaceOutput(
+    float4 color, float3 environment, float3 response, float roughness, float reflectionEnabled,
+    float3 diffuseSSS, float4 controlSSS) {
+    return MakeReflectionSubsurfaceSurfaceOutput(color, environment, response, roughness, reflectionEnabled,
+                                                diffuseSSS, controlSSS, color.rgb, 0.0);
 }
 
 float3 SampleReflectionProbeSlot(uint slot, SamplerState envSampler, float3 dir, float lod) {

@@ -715,10 +715,10 @@ namespace Axle {
             m_SSSBlurHDescriptorSet = m_SSSDescriptorPool.AllocateDescriptorSet(m_SSSPipelineLayout, 0);
             m_SSSBlurVDescriptorSet = m_SSSDescriptorPool.AllocateDescriptorSet(m_SSSPipelineLayout, 0);
             if (!m_SSSBlurHDescriptorSet || !m_SSSBlurVDescriptorSet) return false;
-            if (!m_SSSDescriptorPool.UpdateSampler(m_SSSBlurHDescriptorSet, 5, 0, m_SSSLinearSampler.GetNative()) ||
-                !m_SSSDescriptorPool.UpdateSampler(m_SSSBlurHDescriptorSet, 6, 0, m_SSSPointSampler.GetNative()) ||
-                !m_SSSDescriptorPool.UpdateSampler(m_SSSBlurVDescriptorSet, 5, 0, m_SSSLinearSampler.GetNative()) ||
-                !m_SSSDescriptorPool.UpdateSampler(m_SSSBlurVDescriptorSet, 6, 0, m_SSSPointSampler.GetNative())) {
+            if (!m_SSSDescriptorPool.UpdateSampler(m_SSSBlurHDescriptorSet, 6, 0, m_SSSLinearSampler.GetNative()) ||
+                !m_SSSDescriptorPool.UpdateSampler(m_SSSBlurHDescriptorSet, 7, 0, m_SSSPointSampler.GetNative()) ||
+                !m_SSSDescriptorPool.UpdateSampler(m_SSSBlurVDescriptorSet, 6, 0, m_SSSLinearSampler.GetNative()) ||
+                !m_SSSDescriptorPool.UpdateSampler(m_SSSBlurVDescriptorSet, 7, 0, m_SSSPointSampler.GetNative())) {
                 return false;
             }
         }
@@ -999,8 +999,6 @@ namespace Axle {
         m_TAALinearSampler.Shutdown();
         m_TAAPointSampler.Shutdown();
         m_SSSBlurHPipeline = nullptr;
-        m_SSSBlurVPipelineSDR = nullptr;
-        m_SSSBlurVPipelineHDR = nullptr;
         m_SSSPipelineLayout.Shutdown();
         m_SSSBlurHDescriptorSet = nullptr;
         m_SSSBlurVDescriptorSet = nullptr;
@@ -1429,7 +1427,7 @@ namespace Axle {
             }
         }
         if (sssTerms) {
-            for (int i = 0; i < 2; ++i) {
+            for (int i = 0; i < 3; ++i) {
                 gfxDesc.ColorAttachments.push_back(RHIBlendAttachmentDesc::Opaque());
                 gfxDesc.ColorAttachmentFormats.push_back(nri::Format::RGBA16_SFLOAT);
             }
@@ -1589,7 +1587,7 @@ namespace Axle {
 
         gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
         gfxDesc.ColorAttachmentFormats = { colorFormat };
-        const int extraAttachments = (reflectionTerms ? 2 : 0) + (sssTerms ? 2 : 0);
+        const int extraAttachments = (reflectionTerms ? 2 : 0) + (sssTerms ? 3 : 0);
         if (extraAttachments > 0) {
             auto ignored = RHIBlendAttachmentDesc::Opaque();
             ignored.ColorWriteMask = nri::ColorWriteBits::NONE;
@@ -3970,8 +3968,8 @@ namespace Axle {
         rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDesc.shaderStages = nri::StageBits::ALL;
 
-        nri::DescriptorRangeDesc ranges[7] = {};
-        for (uint32_t t = 0; t < 5; ++t) {
+        nri::DescriptorRangeDesc ranges[8] = {};
+        for (uint32_t t = 0; t < 6; ++t) {
             ranges[t].baseRegisterIndex = t;
             ranges[t].descriptorNum = 1;
             ranges[t].descriptorType = nri::DescriptorType::TEXTURE;
@@ -3979,22 +3977,22 @@ namespace Axle {
             ranges[t].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
         }
 
-        ranges[5].baseRegisterIndex = 0;
-        ranges[5].descriptorNum = 1;
-        ranges[5].descriptorType = nri::DescriptorType::SAMPLER;
-        ranges[5].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[5].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
-
-        ranges[6].baseRegisterIndex = 1;
+        ranges[6].baseRegisterIndex = 0;
         ranges[6].descriptorNum = 1;
         ranges[6].descriptorType = nri::DescriptorType::SAMPLER;
         ranges[6].shaderStages = nri::StageBits::FRAGMENT_SHADER;
         ranges[6].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
+        ranges[7].baseRegisterIndex = 1;
+        ranges[7].descriptorNum = 1;
+        ranges[7].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[7].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[7].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
         descSet.ranges = ranges;
-        descSet.rangeNum = 7;
+        descSet.rangeNum = 8;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
@@ -4007,27 +4005,26 @@ namespace Axle {
         return m_SSSPipelineLayout.Init(layoutDesc);
     }
 
-    bool RHISceneRenderer::CreateSSSPipeline(RHIDevice& device) {
-        auto createSSSPassPipeline = [&](const RHI::RHIShaderBytecode& ps, nri::Format colorFormat) -> nri::Pipeline* {
-            RHIGraphicsPipelineDesc gfxDesc;
-            gfxDesc.Layout = &m_SSSPipelineLayout;
-            gfxDesc.Shaders = { m_SSSVertexShader, ps };
-            gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
-            gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
-            gfxDesc.Rasterizer.FrontCounterClockwise = false;
-            gfxDesc.DepthStencil.DepthTestEnable = false;
-            gfxDesc.DepthStencil.DepthWriteEnable = false;
-            gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
-            gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
-            gfxDesc.ColorAttachmentFormats = { colorFormat };
-            gfxDesc.VertexInput = RHIVertexInputDesc{};
-            return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
-        };
+    nri::Pipeline* RHISceneRenderer::GetOrCreateSSSPipeline(
+        const RHI::RHIShaderBytecode& pixelShader, nri::Format colorFormat) {
+        RHIGraphicsPipelineDesc gfxDesc;
+        gfxDesc.Layout = &m_SSSPipelineLayout;
+        gfxDesc.Shaders = { m_SSSVertexShader, pixelShader };
+        gfxDesc.Rasterizer.FillMode = nri::FillMode::SOLID;
+        gfxDesc.Rasterizer.CullMode = nri::CullMode::NONE;
+        gfxDesc.Rasterizer.FrontCounterClockwise = false;
+        gfxDesc.DepthStencil.DepthTestEnable = false;
+        gfxDesc.DepthStencil.DepthWriteEnable = false;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
+        gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
+        gfxDesc.ColorAttachmentFormats = { colorFormat };
+        gfxDesc.VertexInput = RHIVertexInputDesc{};
+        return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
+    }
 
-        m_SSSBlurHPipeline = createSSSPassPipeline(m_SSSBlurHPixelShader, nri::Format::RGBA16_SFLOAT);
-        m_SSSBlurVPipelineSDR = createSSSPassPipeline(m_SSSBlurVPixelShader, nri::Format::RGBA8_UNORM);
-        m_SSSBlurVPipelineHDR = createSSSPassPipeline(m_SSSBlurVPixelShader, nri::Format::RGBA16_SFLOAT);
-        return m_SSSBlurHPipeline != nullptr && m_SSSBlurVPipelineSDR != nullptr && m_SSSBlurVPipelineHDR != nullptr;
+    bool RHISceneRenderer::CreateSSSPipeline(RHIDevice&) {
+        m_SSSBlurHPipeline = GetOrCreateSSSPipeline(m_SSSBlurHPixelShader, nri::Format::RGBA16_SFLOAT);
+        return m_SSSBlurHPipeline != nullptr;
     }
 
     void RHISceneRenderer::SetRenderTargetFormat(RHI::RHITextureFormat colorFormat, RHI::RHITextureFormat depthFormat) {
@@ -6996,8 +6993,9 @@ namespace Axle {
         targetDesc.OwnPrimary = false;
         const bool wantsSSS = !isSubCapture &&
             Passes::SubsurfaceScatteringPass::SceneRequiresSubsurfacePass(world, settings, activeSampleCount);
-        targetDesc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows ||
-            settings.EnableSSR || settings.EnablePlanarReflections || wantsSSS);
+        const bool needsNormal = settings.EnableGTAO || settings.EnableContactShadows ||
+            settings.EnableSSR || settings.EnablePlanarReflections;
+        targetDesc.EnableNormal = needsNormal || wantsSSS;
         targetDesc.EnableSubsurface = wantsSSS;
         targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows ||
             settings.EnableSSR);
@@ -7038,7 +7036,7 @@ namespace Axle {
             expected.EnableVelocity = viewTargets->GetDesc().EnableVelocity;
             expected.EnableReactive = viewTargets->GetDesc().EnableReactive;
             expected.EnableSubsurface = viewTargets->GetDesc().EnableSubsurface;
-            expected.EnableNormal = expected.EnableNormal || viewTargets->GetDesc().EnableNormal;
+            expected.EnableNormal = needsNormal || viewTargets->GetDesc().EnableNormal;
             expected.EnableScreenStorage = expected.EnableScreenStorage || viewTargets->GetDesc().EnableScreenStorage;
             if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
                 (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||

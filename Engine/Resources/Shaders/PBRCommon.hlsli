@@ -658,6 +658,17 @@ float EvaluateAbsorptionPathLength(float thickness, float NdotV, float ior) {
     return safeThickness / max(cosThetaT, 0.20);
 }
 
+// Wrapped diffuse and backlighting extend across the conventional BRDF terminator.
+float3 EvaluateDirectSubsurfaceDiffuse(float3 N, float3 V, float3 L, float metallic,
+                                      float3 tint, float gain) {
+    const float wrap = 0.5;
+    float wrappedDiffuse = saturate((dot(N, L) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
+    float VdotScatter = saturate(dot(V, normalize(-(L + N * 0.3))));
+    float transmission = pow(VdotScatter, 4.0) * 0.5;
+    float dielectric = 1.0 - metallic;
+    return (wrappedDiffuse * dielectric + transmission) * tint * (gain * dielectric);
+}
+
 float3 EvaluateBeerLambertTransmittance(float3 absorptionSigma, float thickness, float NdotV, float ior) {
     float3 safeSigma = max(absorptionSigma, float3(0.0, 0.0, 0.0));
     float opticalDist = EvaluateAbsorptionPathLength(thickness, NdotV, ior);

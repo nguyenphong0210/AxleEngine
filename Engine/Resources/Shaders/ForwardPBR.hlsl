@@ -663,6 +663,8 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input, bool ddgiCapture = fals
     float sunWrap = 0.0;
     float NdotL_Sun_Diff = saturate((dot(N, sunDir) + sunWrap) / ((1.0 + sunWrap) * (1.0 + sunWrap)));
 
+    if (hasSSS)
+        diffLo += EvaluateDirectSubsurfaceDiffuse(N, V, sunDir, metallic, u_Subsurface.rgb, sssGain) * sunRadiance;
     if (NdotL_Sun > 0.0 || NdotL_Sun_Diff > 0.0) {
         float3 H = normalize(V + sunDir);
         // Convolve the microfacet lobe with the finite solar disk. The default
@@ -688,15 +690,6 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input, bool ddgiCapture = fals
         ApplyCharlieSheenDirectSplit(sunDiff, sunSpec, N, H, NdotL_Sun, NdotV, u_Sheen.rgb, u_Sheen.w, u_MaterialSurface.z);
         diffLo += sunDiff * sunRadiance;
         specLo += sunSpec * sunRadiance;
-        if (hasSSS) {
-            float wrap = 0.5;
-            float NdotL_wrap = saturate((dot(N, sunDir) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
-            float3 scatterDir = -(sunDir + N * 0.3);
-            float VdotS = max(dot(V, normalize(scatterDir)), 0.0);
-            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
-            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * u_Subsurface.rgb * sssGain;
-            diffLo += sssLighting * sunRadiance * (1.0 - metallic);
-        }
     }
 
     // 7. Local lights and additional directional lights (up to 16 combined)
@@ -732,6 +725,8 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input, bool ddgiCapture = fals
         float NdotL = max(dot(N, L), 0.0);
         float pWrap = 0.0;
         float NdotL_Diff = saturate((dot(N, L) + pWrap) / ((1.0 + pWrap) * (1.0 + pWrap)));
+        if (hasSSS)
+            diffLo += EvaluateDirectSubsurfaceDiffuse(N, V, L, metallic, u_Subsurface.rgb, sssGain) * radiance;
         if (NdotL <= 0.0 && NdotL_Diff <= 0.0) continue;
 
         float3 H = normalize(V + L);
@@ -753,15 +748,6 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input, bool ddgiCapture = fals
         ApplyCharlieSheenDirectSplit(pointDiff, pointSpec, N, H, NdotL, NdotV, u_Sheen.rgb, u_Sheen.w, u_MaterialSurface.z);
         diffLo += pointDiff * radiance;
         specLo += pointSpec * radiance;
-        if (hasSSS) {
-            float wrap = 0.5;
-            float NdotL_wrap = saturate((dot(N, L) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
-            float3 scatterDir = -(L + N * 0.3);
-            float VdotS = max(dot(V, normalize(scatterDir)), 0.0);
-            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
-            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * u_Subsurface.rgb * sssGain;
-            diffLo += sssLighting * radiance * (1.0 - metallic);
-        }
     }
 
     // 8. Spot Lights (up to 16 with inner/outer cone cutoff angles)
@@ -777,7 +763,6 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input, bool ddgiCapture = fals
 
         float3 L = lightVec / dist;
         float NdotL = max(dot(N, L), 0.0);
-        if (NdotL <= 0.0) continue;
 
         // Direction cone angle evaluation
         float3 spotDir = normalize(sLight.DirectionAndIntensity.xyz);
@@ -800,6 +785,9 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input, bool ddgiCapture = fals
 
         float totalAtten = distAtten * spotAtten;
         float3 radiance = sLight.ColorAndInnerAngle.rgb * (sLight.DirectionAndIntensity.w * totalAtten * LOCAL_INTENSITY_SCALE) * LocalShadowVisibility(u_LocalShadowViews[4+s/4][s%4],input.WorldPos,N,L);
+        if (hasSSS)
+            diffLo += EvaluateDirectSubsurfaceDiffuse(N, V, L, metallic, u_Subsurface.rgb, sssGain) * radiance;
+        if (NdotL <= 0.0) continue;
 
         float3 H = normalize(V + L);
         float  NDF = MaterialDistribution(N, H, tangent, bitangent, roughness, coatAnisotropy.z);
@@ -820,15 +808,6 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input, bool ddgiCapture = fals
         ApplyCharlieSheenDirectSplit(spotDiff, spotSpec, N, H, NdotL, NdotV, u_Sheen.rgb, u_Sheen.w, u_MaterialSurface.z);
         diffLo += spotDiff * radiance;
         specLo += spotSpec * radiance;
-        if (hasSSS) {
-            float wrap = 0.5;
-            float NdotL_wrap = saturate((dot(N, L) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
-            float3 scatterDir = -(L + N * 0.3);
-            float VdotS = max(dot(V, normalize(scatterDir)), 0.0);
-            float sssTransmittance = pow(VdotS, 4.0) * 0.5;
-            float3 sssLighting = (NdotL_wrap * (1.0 - metallic) + sssTransmittance) * u_Subsurface.rgb * sssGain;
-            diffLo += sssLighting * radiance * (1.0 - metallic);
-        }
     }
 
     // 8b. Rect / Disk Area Lights (Validated LTC Diffuse & Specular, M15-U5-40..45)
@@ -1069,17 +1048,13 @@ ReflectionSurfaceOutput PSReflectionMain(PSInput input) {
 }
 SubsurfaceSurfaceOutput PSSSSMain(PSInput input) {
     ForwardSurfaceEval eval = EvaluateForwardSurface(input);
-    float4 outColor = (eval.ControlSSS.a > 0.001)
-        ? float4(clamp(eval.CrispSpecularAndEmissive, 0.0, 65000.0), eval.Color.a)
-        : eval.Color;
-    return MakeSubsurfaceSurfaceOutput(outColor, eval.DiffuseSSS, eval.ControlSSS);
+    return MakeSubsurfaceSurfaceOutput(eval.Color, eval.DiffuseSSS, eval.ControlSSS,
+        eval.CrispSpecularAndEmissive, u_MaterialReserved[2].w);
 }
 ReflectionSubsurfaceSurfaceOutput PSReflectionSSSMain(PSInput input) {
     ForwardSurfaceEval eval = EvaluateForwardSurface(input);
-    float4 outColor = (eval.ControlSSS.a > 0.001)
-        ? float4(clamp(eval.CrispSpecularAndEmissive, 0.0, 65000.0), eval.Color.a)
-        : eval.Color;
-    return MakeReflectionSubsurfaceSurfaceOutput(outColor, eval.Environment, eval.Response, eval.Roughness, eval.ReflectionEnabled, eval.DiffuseSSS, eval.ControlSSS);
+    return MakeReflectionSubsurfaceSurfaceOutput(eval.Color, eval.Environment, eval.Response, eval.Roughness,
+        eval.ReflectionEnabled, eval.DiffuseSSS, eval.ControlSSS, eval.CrispSpecularAndEmissive, u_MaterialReserved[2].w);
 }
 float4 PSDDGICapture(PSInput input, bool isFrontFace : SV_IsFrontFace) : SV_Target0 {
     const bool cutout = (int)(u_SurfaceType + 0.5) == 1;

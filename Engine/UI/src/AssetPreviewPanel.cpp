@@ -40,6 +40,12 @@
 #include <functional>
 
 namespace Axle {
+    namespace {
+        bool UsesRefractionPreview(const MaterialComponent& material) {
+            return RHI::RHIDevice::Get().IsNativeReady() && material.SurfaceType == SurfaceType::Transparent &&
+                !material.UseCustomShader && material.RefractionEnabled;
+        }
+    }
 
     AssetPreviewPanel::AssetPreviewPanel() {
         if (Window::HasActiveContext()) {
@@ -511,8 +517,9 @@ namespace Axle {
     }
 
     void AssetPreviewPanel::UpdateMaterialPreview(const MaterialComponent& mat) {
+        const bool backdropChanged = UsesRefractionPreview(m_ActiveMaterial) != UsesRefractionPreview(mat);
         m_ActiveMaterial = mat;
-        if (m_PreviewEntity && m_PreviewScene && m_PreviewEntity.HasComponent<MaterialComponent>()) {
+        if (!backdropChanged && m_PreviewEntity && m_PreviewScene && m_PreviewEntity.HasComponent<MaterialComponent>()) {
             auto& comp = m_PreviewEntity.GetComponent<MaterialComponent>();
             comp = mat;
             comp.SyncToRHI();
@@ -590,6 +597,25 @@ namespace Axle {
 
             auto& matComp = m_PreviewEntity.AddComponent<MaterialComponent>(m_ActiveMaterial);
             matComp.SyncToRHI();
+            if (UsesRefractionPreview(matComp)) {
+                // ImGui's checkerboard is drawn after the viewport. Put an opaque
+                // reference in the scene so refraction can sample its edges.
+                auto addBackdrop = [&](const char* name, glm::vec3 position, glm::vec3 size, float luminance) {
+                    auto part = m_PreviewScene->CreateEntity(name);
+                    auto& transform = part.GetComponent<TransformComponent>();
+                    transform.Translation = position;
+                    transform.Scale = size;
+                    part.AddComponent<MeshInstance3D>().AssetPath = "builtin://cube";
+                    auto& material = part.AddComponent<MaterialComponent>();
+                    material.AlbedoColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+                    material.EnableSpecularHighlights = false;
+                    material.EmissionColor = glm::vec3(luminance);
+                    material.EmissionIntensity = 1.0f;
+                };
+                addBackdrop("Refraction backdrop", {0.0f, 0.0f, -4.5f}, {32.0f, 10.0f, 0.1f}, 0.14f);
+                for (int stripe = -4; stripe <= 4; ++stripe)
+                    addBackdrop("Refraction stripe", {stripe * 0.8f, 0.0f, -4.4f}, {0.36f, 10.0f, 0.04f}, 0.7f);
+            }
         } else if (m_IsAssembly) {
             auto centeredRoot=m_PreviewScene->CreateEntity("Assembly origin");
             centeredRoot.SetParent(m_PreviewEntity,false);
@@ -698,7 +724,8 @@ namespace Axle {
         }
 
         float aspect = (height > 0.0f) ? (width / height) : 1.0f;
-        PerspectiveCamera camera(isMaterial ? 20.0f : 45.0f, aspect, 0.05f, distance * 8.0f);
+        // Built-in material meshes have unit radius. Keep the whole sphere in frame at the default zoom.
+        PerspectiveCamera camera(45.0f, aspect, 0.05f, distance * 8.0f);
         glm::mat4 view = glm::lookAt(camPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         camera.SetViewMatrix(view, camPos);
 
@@ -710,7 +737,8 @@ namespace Axle {
         settings.EnableFXAA = true;
         const bool wantsSSS = m_PreviewScene &&
             Axle::SceneRequiresSubsurfacePass(*m_PreviewScene, settings, 1u);
-        settings.MSAASamples = wantsSSS ? 1u : 4u;
+        const bool needsSingleSample = wantsSSS || (isMaterial && UsesRefractionPreview(m_ActiveMaterial));
+        settings.MSAASamples = needsSingleSample ? 1u : 4u;
         settings.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // Transparent clear for Godot checkerboard
 
         ViewRequest request;

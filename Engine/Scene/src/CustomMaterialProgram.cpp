@@ -4,7 +4,6 @@
 #include <Axle/ResolvedSurface.hpp>
 #include <Axle/FileSystem.hpp>
 #include <Axle/Path.hpp>
-#include <fstream>
 #include <sstream>
 #include <algorithm>
 #include <regex>
@@ -59,7 +58,7 @@ namespace Axle {
             }
         }
         if (sssTerms) {
-            for (int i = 0; i < 2; ++i) {
+            for (int i = 0; i < 3; ++i) {
                 gfxDesc.ColorAttachments.push_back(RHIBlendAttachmentDesc::Opaque());
                 gfxDesc.ColorAttachmentFormats.push_back(nri::Format::RGBA16_SFLOAT);
             }
@@ -98,11 +97,13 @@ namespace Axle {
     std::string CustomProgramCache::ComputeFingerprint(const std::filesystem::path& shaderPath,
         const std::vector<std::filesystem::path>& observedDependencies) {
         std::error_code ec;
-        if (!std::filesystem::is_regular_file(shaderPath, ec)) {
+        const bool looseSource = std::filesystem::is_regular_file(shaderPath, ec);
+        if (!looseSource && !FileSystem::Exists(shaderPath)) {
             return "";
         }
 
-        auto dependencies=RHI::RHIShaderCompiler::ExtractIncludeDependencies(shaderPath);
+        auto dependencies = looseSource ? RHI::RHIShaderCompiler::ExtractIncludeDependencies(shaderPath)
+                                        : std::vector<std::filesystem::path>{};
         dependencies.insert(dependencies.end(),observedDependencies.begin(),observedDependencies.end());
         dependencies.push_back(shaderPath);
         std::sort(dependencies.begin(),dependencies.end());
@@ -110,12 +111,12 @@ namespace Axle {
         // Include identities and contents, so same-size edits and include removal invalidate.
         uint64_t hash = 14695981039346656037ull;
         for (const auto& dependency : dependencies) {
-            std::ifstream file(dependency,std::ios::binary);
             const auto identity=PathToUtf8(std::filesystem::absolute(dependency,ec).lexically_normal());
             for (unsigned char c : identity) { hash^=c; hash*=1099511628211ull; }
-            if (!file) { hash^=0xfe; hash*=1099511628211ull; continue; }
-            char c;
-            while(file.get(c)) { hash^=static_cast<unsigned char>(c); hash*=1099511628211ull; }
+            if (!FileSystem::Exists(dependency)) { hash^=0xfe; hash*=1099511628211ull; continue; }
+            const auto bytes = FileSystem::ReadBinaryFile(dependency);
+            if (dependency == shaderPath && bytes.empty()) return "";
+            for (auto byte : bytes) { hash^=byte; hash*=1099511628211ull; }
             hash^=0xff; hash*=1099511628211ull;
         }
         return std::to_string(hash);
@@ -205,7 +206,7 @@ namespace Axle {
         const auto resolvedNative = FileSystem::ResolveAssetPath(PathFromUtf8(key.ShaderPath));
         const auto resolvedPath = PathToUtf8(resolvedNative);
         std::error_code ec;
-        if (!std::filesystem::exists(resolvedNative, ec)) {
+        if (!FileSystem::Exists(resolvedNative)) {
             result.Success = false;
             result.Diagnostic = "Shader file does not exist: " + key.ShaderPath;
             return result;
@@ -310,6 +311,7 @@ namespace Axle {
             }
         }
         const bool hasSSSTerms = key.EntryPointPS == "PSMain" &&
+            vsDesc.Source.find("u_SubsurfaceObjectKey") != std::string::npos &&
             std::regex_search(vsDesc.Source, std::regex(R"(SubsurfaceSurfaceOutput\s+PSSSSMain\s*\()")) &&
             (!hasReflectionTerms || std::regex_search(vsDesc.Source, std::regex(R"(ReflectionSubsurfaceSurfaceOutput\s+PSReflectionSSSMain\s*\()")));
         RHI::RHIShaderCompileResult sssResult;
@@ -362,13 +364,13 @@ namespace Axle {
             return result;
         }
         auto builtPlan = std::get<MaterialBindingPlan>(planResult);
-        const bool isMaterialSurfaceContract = hasNormalPass && hasReflectionTerms && hasSSSTerms &&
+        const bool isMaterialSurfaceContract = hasNormalPass && hasReflectionTerms &&
             std::regex_search(annotatedSource + "\n" + vsDesc.Source, std::regex(R"(MaterialSurface\s+AxleEvaluateMaterial\s*\()"));
         if (isMaterialSurfaceContract) {
             builtPlan.SupportedFeatures = static_cast<uint32_t>(SurfaceFeature::Clearcoat) |
                                           static_cast<uint32_t>(SurfaceFeature::Sheen) |
-                                          static_cast<uint32_t>(SurfaceFeature::Subsurface) |
                                           static_cast<uint32_t>(SurfaceFeature::Emission);
+            if (hasSSSTerms) builtPlan.SupportedFeatures |= static_cast<uint32_t>(SurfaceFeature::Subsurface);
         }
 
         auto generation = std::make_shared<CustomReadyGeneration>();

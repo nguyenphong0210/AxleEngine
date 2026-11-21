@@ -593,6 +593,7 @@ namespace Axle {
         bool CompileSSSShaders(RHI::RHIDevice& device);
         bool CreateSSSPipelineLayout(RHI::RHIDevice& device);
         bool CreateSSSPipeline(RHI::RHIDevice& device);
+        nri::Pipeline* GetOrCreateSSSPipeline(const RHI::RHIShaderBytecode& pixelShader, nri::Format colorFormat);
         RHI::RHITexture* GetHiZTarget(uint32_t level) const {
             auto targets = m_ActiveViewTargets.lock(); return targets ? targets->GetHiZ(level) : nullptr;
         }
@@ -925,8 +926,6 @@ namespace Axle {
         // Screen-Space Separable Subsurface Scattering Resources
         RHI::RHIPipelineLayout m_SSSPipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_SSSBlurHPipeline;
-        RHI::RHIResourceRef<nri::Pipeline> m_SSSBlurVPipelineSDR;
-        RHI::RHIResourceRef<nri::Pipeline> m_SSSBlurVPipelineHDR;
         RHI::RHIShaderBytecode m_SSSVertexShader;
         RHI::RHIShaderBytecode m_SSSBlurHPixelShader;
         RHI::RHIShaderBytecode m_SSSBlurVPixelShader;

@@ -9,7 +9,7 @@ cbuffer SSSConstants : register(b0, space0) {
     float4x4 u_InvProjection;       // 64 bytes
     float4   u_ScreenSize;          // 16 bytes: (width, height, 1/width, 1/height)
     float4   u_DirectionAndProj;    // 16 bytes: (dirX, dirY, projScale, worldRadiusScale)
-    float4   u_SSSParams;           // 16 bytes: (maxRadiusUV, depthRejectScale, normalMinDot, linearHDR)
+    float4   u_SSSParams;           // 16 bytes: (maxRadiusShortSideFraction, depthRejectScale, normalMinDot, linearHDR)
     float4   u_Reserved[9];         // 144 bytes -> Total 256 bytes (CBV aligned)
 };
 
@@ -17,7 +17,8 @@ Texture2D        u_InputDiffuse     : register(t0, space1);
 Texture2D<float> u_DepthTex         : register(t1, space1);
 Texture2D        u_NormalTex        : register(t2, space1);
 Texture2D        u_ControlTex       : register(t3, space1);
-Texture2D        u_SpecularSceneTex : register(t4, space1);
+Texture2D        u_SceneColorTex    : register(t4, space1);
+Texture2D        u_CrispTex         : register(t5, space1);
 SamplerState     u_LinearSampler    : register(s0, space1);
 SamplerState     u_PointSampler     : register(s1, space1);
 
@@ -80,8 +81,8 @@ float ComputeBoundaryWeight(
     return depthWeight * normalWeight;
 }
 
-float3 EvaluateSeparableSSS(float2 uv, float4 centerControl) {
-    float3 centerDiffuse = u_InputDiffuse.SampleLevel(u_PointSampler, uv, 0.0).rgb;
+float3 EvaluateSeparableSSS(float2 uv, float4 centerControl, float4 centerSample, float centerKeyHi) {
+    float3 centerDiffuse = centerSample.rgb;
     float radiusWorld = clamp(centerControl.a, 0.0, 16.0);
     if (radiusWorld <= 0.001) {
         return centerDiffuse;
@@ -95,8 +96,12 @@ float3 EvaluateSeparableSSS(float2 uv, float4 centerControl) {
     float3 centerNormal = SafeNormalizeNormal(u_NormalTex.SampleLevel(u_PointSampler, uv, 0.0).xyz);
 
     // Project SSS world radius into UV blur footprint, bounded cleanly on screen.
-    float uvRadius = min(radiusWorld * u_DirectionAndProj.w * u_DirectionAndProj.z / max(centerDepth, 0.1), u_SSSParams.x);
-    if (uvRadius <= u_ScreenSize.w * 0.25) {
+    float projectionW = (u_Reserved[0].x > 0.5) ? max(centerDepth, 0.1) : 1.0;
+    float axisTexel = dot(u_DirectionAndProj.xy, u_ScreenSize.zw);
+    float maxRadiusPixels = u_SSSParams.x * min(u_ScreenSize.x, u_ScreenSize.y);
+    float uvRadius = min(radiusWorld * u_DirectionAndProj.w * u_DirectionAndProj.z / projectionW,
+                         maxRadiusPixels * axisTexel);
+    if (uvRadius <= axisTexel * 0.25) {
         return centerDiffuse;
     }
 
@@ -124,9 +129,12 @@ float3 EvaluateSeparableSSS(float2 uv, float4 centerControl) {
                                                 sampleDepth, sampleNormal, sampleControl);
         if (bilateral <= 1e-5) continue;
 
+        float4 sampleDiffuse = u_InputDiffuse.SampleLevel(u_PointSampler, sampleUV, 0.0);
+        float sampleKeyHi = u_CrispTex.SampleLevel(u_PointSampler, sampleUV, 0.0).a;
+        if (sampleDiffuse.a != centerSample.a || sampleKeyHi != centerKeyHi) continue;
+
         float3 tapW = (gaussW * bilateral) * scatterStrength;
-        float3 sampleDiffuse = u_InputDiffuse.SampleLevel(u_PointSampler, sampleUV, 0.0).rgb;
-        accumColor += sampleDiffuse * tapW;
+        accumColor += sampleDiffuse.rgb * tapW;
         accumWeight += tapW;
     }
 
@@ -147,23 +155,26 @@ float4 PSBlurH(VSOutput input) : SV_Target0 {
     if (centerControl.a <= 0.001) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
-    float3 blurred = EvaluateSeparableSSS(input.TexCoord, centerControl);
-    return float4(clamp(blurred, 0.0, 65000.0), centerControl.a);
+    float4 centerSample = u_InputDiffuse.SampleLevel(u_PointSampler, input.TexCoord, 0.0);
+    float centerKeyHi = u_CrispTex.SampleLevel(u_PointSampler, input.TexCoord, 0.0).a;
+    float3 blurred = EvaluateSeparableSSS(input.TexCoord, centerControl, centerSample, centerKeyHi);
+    return float4(clamp(blurred, 0.0, 65000.0), centerSample.a);
 }
 
 float4 PSBlurVComposite(VSOutput input) : SV_Target0 {
-    float4 sceneSpecOrFull = u_SpecularSceneTex.SampleLevel(u_PointSampler, input.TexCoord, 0.0);
+    float4 sceneColor = u_SceneColorTex.SampleLevel(u_PointSampler, input.TexCoord, 0.0);
     float4 centerControl = u_ControlTex.SampleLevel(u_PointSampler, input.TexCoord, 0.0);
     if (centerControl.a <= 0.001) {
         // Non-SSS opaque geometry & background sky remain completely untouched.
-        return sceneSpecOrFull;
+        return sceneColor;
     }
 
-    float3 diffusedSSS = EvaluateSeparableSSS(input.TexCoord, centerControl);
-    // Recombine diffused subsurface scatter with crisp undiffused specular, clearcoat, sheen & emissive.
-    float3 combined = clamp(sceneSpecOrFull.rgb + diffusedSSS, 0.0, 65000.0);
+    float4 centerSample = u_InputDiffuse.SampleLevel(u_PointSampler, input.TexCoord, 0.0);
+    float4 crisp = u_CrispTex.SampleLevel(u_PointSampler, input.TexCoord, 0.0);
+    float3 diffusedSSS = EvaluateSeparableSSS(input.TexCoord, centerControl, centerSample, crisp.a);
+    float3 combined = clamp(crisp.rgb + diffusedSSS, 0.0, 65000.0);
     if (u_SSSParams.w <= 0.0) {
         combined = pow(max(ToneMapACESSSS(combined), 0.0), 1.0 / 2.2);
     }
-    return float4(combined, sceneSpecOrFull.a);
+    return float4(combined, sceneColor.a);
 }

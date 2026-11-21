@@ -264,6 +264,23 @@ float3 RefractedBackground(float2 uv, float viewDepth, float4 frontFog) {
     return max(background - sampledFront.rgb, 0.0) * (frontFog.a / sampledFront.a);
 }
 
+float NearestRefractedDepth(float2 uv) {
+    uint2 size;
+    u_OpaqueSceneDepth.GetDimensions(size.x, size.y);
+    float2 footprint = uv * float2(size) - 0.5;
+    int2 first = int2(floor(footprint));
+    // Test every contributing color tap. Filtering depth can hide a foreground silhouette.
+    int2 last = first + int2(frac(footprint) > 0.0);
+    int2 limit = int2(size) - 1;
+    first = clamp(first, 0, limit);
+    last = clamp(last, 0, limit);
+    float top = min(u_OpaqueSceneDepth.Load(int3(first, 0)),
+                    u_OpaqueSceneDepth.Load(int3(last.x, first.y, 0)));
+    float bottom = min(u_OpaqueSceneDepth.Load(int3(first.x, last.y, 0)),
+                       u_OpaqueSceneDepth.Load(int3(last, 0)));
+    return min(top, bottom);
+}
+
 float3 RotateEnvironmentDirection(float3 direction) {
     float angle=u_LightReserved[0].w;
     float s=sin(angle), c=cos(angle);
@@ -1002,14 +1019,15 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
 
         float2 sampleUV = ProjectSnellRefractedUV(V, N, cauchyIOR.y, thickness, u_Refraction.x, input.WorldPos, u_ViewProjection, startClip, screenUV, halfPixel);
         // Do not pull an opaque foreground object across the glass silhouette.
-        if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler, sampleUV, 0) < input.PositionCS.z - 1e-5) sampleUV = screenUV;
+        const float foregroundDepth = input.PositionCS.z - 1e-5;
+        if (NearestRefractedDepth(sampleUV) < foregroundDepth) sampleUV = screenUV;
 
         float3 transmitted;
         if (u_Absorption.w > 0.001 && cauchyIOR.y > 1.001) {
             float2 uvR = ProjectSnellRefractedUV(V, N, cauchyIOR.x, thickness, u_Refraction.x, input.WorldPos, u_ViewProjection, startClip, screenUV, halfPixel);
             float2 uvB = ProjectSnellRefractedUV(V, N, cauchyIOR.z, thickness, u_Refraction.x, input.WorldPos, u_ViewProjection, startClip, screenUV, halfPixel);
-            if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler, uvR, 0) < input.PositionCS.z - 1e-5) uvR = sampleUV;
-            if (u_OpaqueSceneDepth.SampleLevel(u_ScreenSampler, uvB, 0) < input.PositionCS.z - 1e-5) uvB = sampleUV;
+            if (NearestRefractedDepth(uvR) < foregroundDepth) uvR = sampleUV;
+            if (NearestRefractedDepth(uvB) < foregroundDepth) uvB = sampleUV;
             transmitted = float3(
                 RefractedBackground(uvR, viewDepth, fogSample).r,
                 RefractedBackground(sampleUV, viewDepth, fogSample).g,

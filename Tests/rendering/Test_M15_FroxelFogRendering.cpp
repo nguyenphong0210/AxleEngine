@@ -2076,6 +2076,32 @@ bool RunM15FroxelFogTests(RHISceneRenderer& renderer, const std::filesystem::pat
             RENDER_CHECK(glm::length(expected.InScattering) > 0.1f &&
                          glm::length(actual - expected.InScattering) < 0.035f,
                 "M15-U6-05.1: glass tint absorbs transmitted light while foreground scatter remains untinted");
+
+            // The refracted tap from the first glass pixel next to the blocker
+            // straddles its edge. Filtered depth alone admits this foreground color.
+            glassMat->GetDesc().RefractionTint = glm::vec3(1.0f);
+            auto blockerMat = makeEmissiveMat(SurfaceType::Opaque, glm::vec4(0, 0, 0, 1), glm::vec3(0), true);
+            auto blocker = wallInst;
+            blocker.EntityID = 9507u;
+            blocker.Material.RHIMaterialAsset = blockerMat;
+            const uint32_t edgePixel = 395;
+            const float blockerDepth = 3.1f;
+            const float ndcX = 2.0f * edgePixel / kViewW - 1.0f;
+            const float edgeX = blockerDepth * ndcX / cam.GetProjectionMatrixZO()[0][0];
+            blocker.WorldTransform = glm::scale(
+                glm::translate(glm::mat4(1.0f), glm::vec3(edgeX - 2.0f, 1.5f, -blockerDepth - 0.05f)),
+                glm::vec3(4.0f, 4.0f, 0.1f));
+            glassWorld.Meshes.push_back(blocker);
+            std::vector<glm::vec4> darkBlocker, brightBlocker;
+            RENDER_CHECK(renderHDR(glassWorld, cam, baseFogSettings, darkBlocker, diag),
+                "M15-U6-05.1: dark foreground silhouette baseline renders");
+            blockerMat->GetDesc().EmissiveColor = {0.0f, 8.0f, 0.0f};
+            RENDER_CHECK(renderHDR(glassWorld, cam, baseFogSettings, brightBlocker, diag),
+                "M15-U6-05.1: bright foreground silhouette renders");
+            const size_t edge = size_t(kViewH / 2u) * kViewW + edgePixel;
+            RENDER_CHECK(brightBlocker[edge - 1u].g - darkBlocker[edge - 1u].g > 1.0f &&
+                         std::abs(brightBlocker[edge].g - darkBlocker[edge].g) < 0.01f,
+                "M15-U6-05.1: fogged glass rejects foreground radiance from a mixed bilinear footprint");
         }
 
         {

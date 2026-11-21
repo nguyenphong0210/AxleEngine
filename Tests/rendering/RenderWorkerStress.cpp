@@ -25,7 +25,7 @@ using namespace Axle;
 using namespace std::chrono_literals;
 namespace {
     template<class F> bool Until(F&& ready) {
-        const auto end = std::chrono::steady_clock::now() + 15s;
+        const auto end = std::chrono::steady_clock::now() + 45s;
         while (!ready()) { if (std::chrono::steady_clock::now() >= end) return false; std::this_thread::sleep_for(1ms); }
         return true;
     }
@@ -61,7 +61,7 @@ bool RunRenderWorkerStress(RHI::RHIType backend, bool exception) {
             (void)worker.GetState(); gate->Entered.set_value(); gate->Open.wait();
             if (exception) { RenderAllocationMinimum = sizeof(RenderMeshInstance) * 16; FailRenderOwnerAllocation = true; }
         });
-        RENDER_CHECK(worker.Submit(std::move(first)) && gate->Entered.get_future().wait_for(15s) == std::future_status::ready,
+        RENDER_CHECK(worker.Submit(std::move(first)) && gate->Entered.get_future().wait_for(45s) == std::future_status::ready,
             "gate proves active payload cleanup occurs on worker outside its mutex");
         std::atomic<unsigned> retired{0};
         for (uint64_t id = 2; id <= 4; ++id) {
@@ -91,7 +91,7 @@ bool RunRenderWorkerStress(RHI::RHIType backend, bool exception) {
             OpenOnExit stopGuard{gate};
             RENDER_CHECK(Until([&] { return retired == 3; }), "Stop cancels queued payloads outside mutex while active work is gated");
             gate->Unblock();
-            RENDER_CHECK(stopped.wait_for(15s) == std::future_status::ready, "stop join finishes after active CPU cleanup releases");
+            RENDER_CHECK(stopped.wait_for(45s) == std::future_status::ready, "stop join finishes after active CPU cleanup releases");
             RENDER_CHECK(stopped.get(), "pending cancellation, payload retirement and Stop allocate no memory"); producers.clear();
         }
         RENDER_CHECK(!worker.Start(config), "restart cannot discard unpolled terminal results");

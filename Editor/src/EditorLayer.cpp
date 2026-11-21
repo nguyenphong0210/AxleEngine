@@ -1979,6 +1979,23 @@ void EditorLayer::RenderToolbar() {
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", text);
             };
             bool fxChanged = false;
+            bool presetSelected = false;
+            static constexpr const char* kQualityPresetItems[] = { "Low", "Medium", "High", "Ultra", "Custom" };
+            int activePreset = m_QualityPreset;
+            if (ImGui::Combo("Quality Preset##FXQualityPreset", &activePreset, kQualityPresetItems, 5) && activePreset != 4) {
+                RenderFXOverride fx;
+                fx.QualityPreset = activePreset;
+                ApplyRenderFXOverride(fx);
+                fxChanged = true;
+                presetSelected = true;
+            }
+            fxTooltip("Select Low/Medium/High/Ultra render tier; individual overrides switch preset to Custom.");
+            const auto fxPolicy = Axle::RHI::RHIDevice::Get().IsNativeReady()
+                ? Axle::RenderBackendPolicy::FromDevice(Axle::RHI::RHIDevice::Get().GetCapabilities())
+                : Axle::RenderBackendPolicy::FromBackend(Axle::RendererBackendType::OpenGL_Compatibility);
+            const auto fxBudget = Axle::ComputeRenderQualityBudgetReport(m_ViewportWidth, m_ViewportHeight, m_LastRenderSettings, &fxPolicy);
+            ImGui::TextDisabled("Budget: %s", fxBudget.Summary.c_str());
+            ImGui::Separator();
             ImGui::TextDisabled("Viewport Post-Processing & Lighting (Project-Synced)");
             ImGui::Separator();
             fxChanged |= ImGui::Checkbox("Real-Time Shadows", &m_EnableShadows);
@@ -2092,11 +2109,26 @@ void EditorLayer::RenderToolbar() {
             }
             fxTooltip("Restore standardized Editor/Runtime Render FX defaults and sync to active ProjectConfig.");
             if (fxChanged) {
+                if (!presetSelected) {
+                    Axle::SceneRenderSettings candidate{};
+                    Axle::RenderSettingsSync::ApplyToSceneSettings(
+                        BuildEditorProjectRenderSettings(), candidate,
+                        m_ViewportFogOverride, true,
+                        m_ViewportDDGIOverride, IsViewportDDGIEnabled(), std::nullopt);
+                    m_QualityPreset = static_cast<int>(Axle::DetectRenderQualityPreset(candidate));
+                }
                 SyncEditorRenderSettingsToProject();
             }
             {
-                const auto policy = Axle::RenderBackendPolicy::FromDevice(Axle::RHI::RHIDevice::Get().GetCapabilities());
-                const auto fallbacks = policy.CollectFallbacks(m_LastRenderSettings);
+                const auto policy = Axle::RHI::RHIDevice::Get().IsNativeReady()
+                    ? Axle::RenderBackendPolicy::FromDevice(Axle::RHI::RHIDevice::Get().GetCapabilities())
+                    : Axle::RenderBackendPolicy::FromBackend(Axle::RendererBackendType::OpenGL_Compatibility);
+                auto fallbacks = policy.CollectFallbacks(m_LastRenderSettings);
+                for (const auto& extra : Axle::RenderService::Get().GetLastRenderResult().Fallbacks) {
+                    if (std::find(fallbacks.begin(), fallbacks.end(), extra) == fallbacks.end()) {
+                        fallbacks.push_back(extra);
+                    }
+                }
                 if (!fallbacks.empty()) {
                     ImGui::Separator();
                     ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.28f, 1.0f), "Capability / Fallback Diagnostics:");
@@ -3922,6 +3954,11 @@ Axle::ProjectRenderSettings EditorLayer::BuildEditorProjectRenderSettings() cons
     ps.EnableSubsurfaceScattering = m_EnableSubsurfaceScattering;
     ps.FogOverride = m_ViewportFogOverride.has_value() ? (*m_ViewportFogOverride ? 1 : 0) : -1;
     ps.FogQuality = m_FogQuality;
+    ps.QualityPreset = m_QualityPreset;
+    ps.GTAOSliceCount = m_GTAOSliceCount;
+    ps.GTAOStepCount = m_GTAOStepCount;
+    ps.ContactShadowSteps = m_ContactShadowSteps;
+    ps.SSRMaxSteps = m_SSRMaxSteps;
     ps.FogTemporalWeight = m_FogTemporalWeight;
     ps.DDGIOverride = m_ViewportDDGIOverride.has_value() ? (*m_ViewportDDGIOverride ? 1 : 0) : -1;
     ps.EnableToneMapping = m_EnableToneMapping;
@@ -3965,6 +4002,11 @@ void EditorLayer::ApplyProjectRenderSettingsToEditor() {
     if (ps.FogOverride < 0) m_ViewportFogOverride.reset();
     else m_ViewportFogOverride = (ps.FogOverride != 0);
     m_FogQuality = ps.FogQuality;
+    m_QualityPreset = std::clamp(ps.QualityPreset, 0, 4);
+    m_GTAOSliceCount = std::clamp(ps.GTAOSliceCount, 2, 8);
+    m_GTAOStepCount = std::clamp(ps.GTAOStepCount, 2, 8);
+    m_ContactShadowSteps = std::clamp(ps.ContactShadowSteps, 8, 32);
+    m_SSRMaxSteps = std::clamp(ps.SSRMaxSteps, 16, 96);
     m_FogTemporalWeight = ps.FogTemporalWeight;
     if (ps.DDGIOverride < 0) m_ViewportDDGIOverride.reset();
     else m_ViewportDDGIOverride = (ps.DDGIOverride != 0);
@@ -4019,6 +4061,11 @@ void EditorLayer::ResetRenderFXDefaults() {
     m_EnableSubsurfaceScattering = defaults.EnableSubsurfaceScattering;
     m_ViewportFogOverride.reset();
     m_FogQuality = defaults.FogQuality;
+    m_QualityPreset = defaults.QualityPreset;
+    m_GTAOSliceCount = defaults.GTAOSliceCount;
+    m_GTAOStepCount = defaults.GTAOStepCount;
+    m_ContactShadowSteps = defaults.ContactShadowSteps;
+    m_SSRMaxSteps = defaults.SSRMaxSteps;
     m_FogTemporalWeight = defaults.FogTemporalWeight;
     m_ViewportDDGIOverride.reset();
     m_EnableToneMapping = defaults.EnableToneMapping;
@@ -4171,6 +4218,20 @@ void EditorLayer::RenderProjectSettingsModal() {
             if (ImGui::CollapsingHeader("Render Pipeline Defaults (Editor & Runtime Parity)", ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::TextDisabled("Saved into .axleproj and applied identically by both Editor Viewport and Runtime Player.");
                 bool changed = false;
+
+                static constexpr const char* kQualityPresetItems[] = { "Low", "Medium", "High", "Ultra", "Custom" };
+                int projPreset = m_QualityPreset;
+                if (ImGui::Combo("Quality Preset##ProjQualityPreset", &projPreset, kQualityPresetItems, 5) && projPreset != 4) {
+                    RenderFXOverride fx;
+                    fx.QualityPreset = projPreset;
+                    ApplyRenderFXOverride(fx);
+                    changed = true;
+                }
+                const auto projPolicy = Axle::RHI::RHIDevice::Get().IsNativeReady()
+                    ? Axle::RenderBackendPolicy::FromDevice(Axle::RHI::RHIDevice::Get().GetCapabilities())
+                    : Axle::RenderBackendPolicy::FromBackend(Axle::RendererBackendType::OpenGL_Compatibility);
+                const auto projBudget = Axle::ComputeRenderQualityBudgetReport(m_ViewportWidth, m_ViewportHeight, m_LastRenderSettings, &projPolicy);
+                ImGui::TextDisabled("Tier Budget: %s", projBudget.Summary.c_str());
 
                 ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "Environment & Lighting");
                 changed |= ImGui::Checkbox("Shadows##ProjShadows", &m_EnableShadows);
@@ -4340,6 +4401,40 @@ void EditorLayer::VerifySimulationContract() {
 }
 
 void EditorLayer::ApplyRenderFXOverride(const RenderFXOverride& state) {
+    if (state.QualityPreset.has_value()) {
+        const auto preset = static_cast<Axle::RenderQualityPreset>(std::clamp(*state.QualityPreset, 0, 4));
+        if (preset != Axle::RenderQualityPreset::Custom) {
+            Axle::SceneRenderSettings s = m_LastRenderSettings;
+            Axle::ApplyRenderQualityPreset(s, preset, m_ViewportDDGIOverride.value_or(false));
+            m_QualityPreset = static_cast<int>(preset);
+            m_EnableShadows = s.EnableShadows;
+            m_EnableSkybox = s.EnableSkybox;
+            m_EnableGTAO = s.EnableGTAO;
+            m_GTAOSliceCount = static_cast<int>(s.GTAOSliceCount);
+            m_GTAOStepCount = static_cast<int>(s.GTAOStepCount);
+            m_EnableContactShadows = s.EnableContactShadows;
+            m_ContactShadowSteps = static_cast<int>(s.ContactShadowSteps);
+            m_EnableSSR = s.EnableSSR;
+            m_SSRMaxSteps = static_cast<int>(s.SSRMaxSteps);
+            m_EnablePlanarReflections = s.EnablePlanarReflections;
+            m_PlanarReflectionResolutionScale = s.PlanarReflectionResolutionScale;
+            m_EnableSubsurfaceScattering = s.EnableSubsurfaceScattering;
+            m_ViewportFogOverride = s.EnableVolumetricFog;
+            m_FogQuality = static_cast<int>(s.FogQuality);
+            m_FogTemporalWeight = s.FogTemporalWeight;
+            m_EnableBloom = s.EnableBloom;
+            m_EnableAutoExposure = s.EnableAutoExposure;
+            m_EnableTAA = s.EnableTAA;
+            m_EnableFXAA = s.EnableFXAA;
+            m_MSAASamples = static_cast<int>(s.MSAASamples);
+            m_ReflectionCaptureMaxProbesPerFrame = static_cast<int>(s.ReflectionCaptureMaxProbesPerFrame);
+            m_ReflectionCaptureMaxFacesPerFrame = static_cast<int>(s.ReflectionCaptureMaxFacesPerFrame);
+            m_ReflectionCaptureCacheBudgetMB = static_cast<int>(s.ReflectionCaptureCacheBudgetBytes / (1024ull * 1024ull));
+            if (preset != Axle::RenderQualityPreset::Ultra) m_ViewportDDGIOverride.reset();
+        } else {
+            m_QualityPreset = 4;
+        }
+    }
     if (state.Shadows.has_value()) m_EnableShadows = *state.Shadows;
     if (state.SSR.has_value()) m_EnableSSR = *state.SSR;
     if (state.Planar.has_value()) m_EnablePlanarReflections = *state.Planar;
@@ -4357,6 +4452,10 @@ void EditorLayer::ApplyRenderFXOverride(const RenderFXOverride& state) {
     if (state.HiZLevel.has_value()) m_HiZVisualizationLevel = *state.HiZLevel;
     if (state.PinRenderFXPopup.has_value()) m_PinRenderFXPopup = *state.PinRenderFXPopup;
     if (state.FogQuality.has_value()) m_FogQuality = std::clamp(*state.FogQuality, 0, 3);
+    if (state.GTAOSliceCount.has_value()) m_GTAOSliceCount = std::clamp(*state.GTAOSliceCount, 2, 8);
+    if (state.GTAOStepCount.has_value()) m_GTAOStepCount = std::clamp(*state.GTAOStepCount, 2, 8);
+    if (state.ContactShadowSteps.has_value()) m_ContactShadowSteps = std::clamp(*state.ContactShadowSteps, 8, 32);
+    if (state.SSRMaxSteps.has_value()) m_SSRMaxSteps = std::clamp(*state.SSRMaxSteps, 16, 96);
     if (state.FogTemporalWeight.has_value()) m_FogTemporalWeight = std::clamp(*state.FogTemporalWeight, 0.0f, 0.9f);
     if (state.FogOverride.has_value()) {
         if (*state.FogOverride < 0) m_ViewportFogOverride.reset();

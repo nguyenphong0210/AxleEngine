@@ -159,14 +159,13 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
     if (strength > 0.001 && dot(viewNormal, viewDir) > 0.0) {
         float noise = SpatialHash(pixelPos);
         float stepNoise = SpatialStepHash(pixelPos);
-        const int NUM_SLICES = 8;
-        const int NUM_STEPS = 7;
+        int numSlices = (u_Padding[1].x > 1.5) ? clamp((int)(u_Padding[1].x + 0.5), 2, 8) : 8;
+        int numSteps = (u_Padding[1].y > 1.5) ? clamp((int)(u_Padding[1].y + 0.5), 2, 8) : 7;
         float totalOcclusion = 0.0;
         float totalWeight = 0.0;
 
-        [unroll]
-        for (int slice = 0; slice < NUM_SLICES; ++slice) {
-            float phi = (float(slice) + noise) * (float(M_PI) / float(NUM_SLICES));
+        for (int slice = 0; slice < numSlices; ++slice) {
+            float phi = (float(slice) + noise) * (float(M_PI) / float(numSlices));
             float2 sliceDir = float2(cos(phi), sin(phi));
 
             // Project normal onto slice plane
@@ -190,8 +189,8 @@ void CSMain(uint3 dispatchThreadId : SV_DispatchThreadID) {
             float horizonCos2 = baseCos2;
             bool anyBlocker = false;
 
-            for (int step = 0; step < NUM_STEPS; ++step) {
-                float t = (float(step) + 0.15 + 0.85 * stepNoise) / float(NUM_STEPS);
+            for (int step = 0; step < numSteps; ++step) {
+                float t = (float(step) + 0.15 + 0.85 * stepNoise) / float(numSteps);
                 float stepDist = lerp(0.5, radiusPixels, t * t);
 
                 horizonCos1 = max(horizonCos1, SampleHorizonWeightedCos(

@@ -234,6 +234,7 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         settings.EnableShadows = false;
         settings.EnableSkybox = false;
         settings.EnableParticles = false;
+        settings.EnableSubsurfaceScattering = false;
         settings.EnableStudioLightLobes = false;
         settings.EnableToneMapping = true;
         settings.ToneMappingMode = 3; // Linear bypass after exposure so output = hdr * exp
@@ -299,6 +300,7 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         settings.EnableShadows = false;
         settings.EnableSkybox = false;
         settings.EnableParticles = false;
+        settings.EnableSubsurfaceScattering = false;
         settings.EnableStudioLightLobes = false;
         settings.EnableToneMapping = true;
         settings.ToneMappingMode = 3;
@@ -361,6 +363,7 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         settings.EnableShadows = false;
         settings.EnableSkybox = false;
         settings.EnableParticles = false;
+        settings.EnableSubsurfaceScattering = false;
         settings.EnableStudioLightLobes = false;
         settings.EnableToneMapping = true;
         settings.ToneMappingMode = 3;
@@ -485,6 +488,7 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         settings.EnableShadows = false;
         settings.EnableSkybox = false;
         settings.EnableParticles = false;
+        settings.EnableSubsurfaceScattering = false;
         settings.EnableStudioLightLobes = false;
         settings.EnableToneMapping = true;
         settings.ToneMappingMode = 3;
@@ -577,6 +581,7 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         settings.EnableShadows = false;
         settings.EnableSkybox = false;
         settings.EnableParticles = false;
+        settings.EnableSubsurfaceScattering = false;
         settings.EnableStudioLightLobes = false;
         settings.EnableAutoExposure = false;
         settings.EnableToneMapping = true;

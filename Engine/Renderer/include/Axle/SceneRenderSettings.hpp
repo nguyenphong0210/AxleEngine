@@ -11,6 +11,14 @@ namespace Axle {
         Ultra  = 3
     };
 
+    enum class RenderQualityPreset : uint8_t {
+        Low    = 0,
+        Medium = 1,
+        High   = 2,
+        Ultra  = 3,
+        Custom = 4
+    };
+
     struct SceneRenderSettings {
         bool EnableShadows = true;
         uint32_t LocalShadowResolution = 512; // One tile; bounded 4x4 atlas.
@@ -88,6 +96,13 @@ namespace Axle {
         float PlanarReflectionResolutionScale = 0.5f;
         float PlanarReflectionStrength = 1.0f;
         float PlanarReflectionMaxRoughness = 0.45f;
+
+        // Quality preset & per-tier sample budgets (M15-U10-C)
+        RenderQualityPreset QualityPreset = RenderQualityPreset::Custom;
+        uint32_t GTAOSliceCount = 8u;
+        uint32_t GTAOStepCount = 7u;
+        uint32_t ContactShadowSteps = 16u;
+        uint32_t SSRMaxSteps = 64u;
     };
 
 }

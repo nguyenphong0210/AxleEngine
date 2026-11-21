@@ -22,6 +22,7 @@ bool RunM15OcclusionSurfaceTests(RHISceneRenderer& renderer, const std::filesyst
     camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0, 0, 5), glm::vec3(0), glm::vec3(0, 1, 0)), {0, 0, 5});
     SceneRenderSettings settings;
     settings.EnableParticles = settings.EnableShadows = settings.EnableSkybox = false;
+    settings.EnableSubsurfaceScattering = false;
     settings.EnableToneMapping = settings.EnableGTAO = settings.EnableContactShadows = true;
     RenderWorld world;
     world.DirectionalLight = RenderDirectionalLight{};

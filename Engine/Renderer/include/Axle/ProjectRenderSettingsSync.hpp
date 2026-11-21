@@ -52,6 +52,11 @@ namespace Axle::RenderSettingsSync {
         constexpr uint64_t kMinBudget = 8ull * 1024ull * 1024ull;
         constexpr uint64_t kMaxBudget = 512ull * 1024ull * 1024ull;
         cfg.ReflectionCaptureCacheBudgetBytes = std::clamp(cfg.ReflectionCaptureCacheBudgetBytes, kMinBudget, kMaxBudget);
+        cfg.QualityPreset = std::clamp(cfg.QualityPreset, 0, 4);
+        cfg.GTAOSliceCount = std::clamp(cfg.GTAOSliceCount, 2, 8);
+        cfg.GTAOStepCount = std::clamp(cfg.GTAOStepCount, 2, 8);
+        cfg.ContactShadowSteps = std::clamp(cfg.ContactShadowSteps, 8, 32);
+        cfg.SSRMaxSteps = std::clamp(cfg.SSRMaxSteps, 16, 96);
     }
 
     template<typename TProjectRenderSettings>
@@ -109,6 +114,11 @@ namespace Axle::RenderSettingsSync {
         dst.ReflectionCaptureMaxProbesPerFrame = static_cast<uint32_t>(clamped.ReflectionCaptureMaxProbesPerFrame);
         dst.ReflectionCaptureMaxFacesPerFrame = static_cast<uint32_t>(clamped.ReflectionCaptureMaxFacesPerFrame);
         dst.ReflectionCaptureCacheBudgetBytes = clamped.ReflectionCaptureCacheBudgetBytes;
+        dst.QualityPreset = static_cast<RenderQualityPreset>(clamped.QualityPreset);
+        dst.GTAOSliceCount = static_cast<uint32_t>(clamped.GTAOSliceCount);
+        dst.GTAOStepCount = static_cast<uint32_t>(clamped.GTAOStepCount);
+        dst.ContactShadowSteps = static_cast<uint32_t>(clamped.ContactShadowSteps);
+        dst.SSRMaxSteps = static_cast<uint32_t>(clamped.SSRMaxSteps);
     }
 
     template<typename TProjectRenderSettings>
@@ -149,6 +159,11 @@ namespace Axle::RenderSettingsSync {
         dst.ReflectionCaptureMaxProbesPerFrame = static_cast<int>(src.ReflectionCaptureMaxProbesPerFrame);
         dst.ReflectionCaptureMaxFacesPerFrame = static_cast<int>(src.ReflectionCaptureMaxFacesPerFrame);
         dst.ReflectionCaptureCacheBudgetBytes = src.ReflectionCaptureCacheBudgetBytes;
+        dst.QualityPreset = static_cast<int>(src.QualityPreset);
+        dst.GTAOSliceCount = static_cast<int>(src.GTAOSliceCount);
+        dst.GTAOStepCount = static_cast<int>(src.GTAOStepCount);
+        dst.ContactShadowSteps = static_cast<int>(src.ContactShadowSteps);
+        dst.SSRMaxSteps = static_cast<int>(src.SSRMaxSteps);
 
         ClampProjectRenderSettings(dst);
     }

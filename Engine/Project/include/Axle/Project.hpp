@@ -47,6 +47,13 @@ namespace Axle {
         int ReflectionCaptureMaxProbesPerFrame = 2;
         int ReflectionCaptureMaxFacesPerFrame = 6;
         uint64_t ReflectionCaptureCacheBudgetBytes = 64ull * 1024ull * 1024ull;
+
+        // Quality preset & sample budgets (M15-U10-C)
+        int QualityPreset = 4; // 0=Low, 1=Medium, 2=High, 3=Ultra, 4=Custom
+        int GTAOSliceCount = 8;
+        int GTAOStepCount = 7;
+        int ContactShadowSteps = 16;
+        int SSRMaxSteps = 64;
     };
 
     struct ProjectConfig {

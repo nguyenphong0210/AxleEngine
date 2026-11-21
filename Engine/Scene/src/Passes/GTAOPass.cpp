@@ -23,11 +23,17 @@ namespace Axle::Passes {
                 projRadiusScale,
                 std::clamp(i.Settings.GTAOFalloffStart, 0.05f, 0.95f),
                 maxRadiusPx);
+            constants.Reserved[1] = glm::vec4(
+                static_cast<float>(std::clamp(i.Settings.GTAOSliceCount, 2u, 8u)),
+                static_cast<float>(std::clamp(i.Settings.GTAOStepCount, 2u, 8u)),
+                0.0f, 0.0f);
             if (i.World.DirectionalLight && i.Settings.EnableContactShadows) {
                 const auto direction = i.World.DirectionalLight->Direction;
                 const glm::vec3 sunDir = glm::dot(direction, direction) > 1e-12f ? glm::normalize(direction) : glm::vec3(0, 1, 0);
                 constants.SunDirView = glm::vec4(glm::mat3(i.Camera.GetViewMatrix()) * sunDir, 1.0f);
-                constants.ContactParams = glm::vec4(i.Settings.ContactShadowLengthPixels * 0.5f, 16.0f,
+                constants.ContactParams = glm::vec4(
+                    i.Settings.ContactShadowLengthPixels * 0.5f,
+                    static_cast<float>(std::clamp(i.Settings.ContactShadowSteps, 8u, 32u)),
                     i.Settings.ContactShadowStrength, 0.05f);
             }
             return constants;

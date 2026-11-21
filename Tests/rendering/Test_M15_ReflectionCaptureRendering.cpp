@@ -1686,6 +1686,7 @@ namespace {
         settings.EnableSkybox = false;
         settings.EnableShadows = false;
         settings.EnableParticles = false;
+        settings.EnableSubsurfaceScattering = false;
         settings.EnableStudioLightLobes = false;
         settings.EnableToneMapping = true;
 

@@ -886,6 +886,8 @@ bool Native(RHIType backend) {
     material->GetDesc().SurfaceType = Axle::SurfaceType::Opaque;
 
     // 4. M15-U3-23 Native built-in vs custom graph surface pixel parity fixture
+    const bool prevSSS = settings.EnableSubsurfaceScattering;
+    settings.EnableSubsurfaceScattering = false;
     camera.SetViewMatrix(glm::lookAtRH(glm::vec3(0, 0, 5), glm::vec3(0), glm::vec3(0, 1, 0)), glm::vec3(0, 0, 5));
     material->GetDesc().BaseColor = glm::vec4(0.8f, 0.4f, 0.2f, 1.0f);
     material->GetDesc().Roughness = 0.5f;
@@ -1036,6 +1038,7 @@ bool Native(RHIType backend) {
               << hdrDiffR << "," << hdrDiffG << "," << hdrDiffB << ")\n";
     CHECK(hdrDiffR <= 2 && hdrDiffG <= 2 && hdrDiffB <= 2);
     settings.EnableToneMapping = false;
+    settings.EnableSubsurfaceScattering = prevSSS;
 
     CHECK(device.WaitIdle());
     const auto baselineDrawCalls = renderer.GetDrawCallCount();

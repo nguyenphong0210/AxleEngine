@@ -47,9 +47,12 @@ namespace Axle {
 
     struct RenderResult {
         bool Success = false;
+        bool UsedFallback = false;
         RHI::RHICompletionToken CompletionToken;
         uint32_t DrawCallCount = 0;
         uint32_t RenderedEntityCount = 0;
         std::string ErrorMessage;
+        std::vector<std::string> Fallbacks;
+        SceneRenderSettings ResolvedSettings{};
     };
 }

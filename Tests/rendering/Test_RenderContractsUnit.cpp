@@ -7,6 +7,7 @@
 #include <Axle/RenderContracts.hpp>
 #include <Axle/ProjectRenderSettingsSync.hpp>
 #include <Axle/RenderBackendPolicy.hpp>
+#include <Axle/RenderQualityPreset.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/RenderGraph.hpp>
 #include <Axle/RHI/RHICommandBuffer.hpp>
@@ -649,6 +650,11 @@ namespace Axle::RenderTests {
             int ReflectionCaptureMaxProbesPerFrame = 99; // clamps to 8
             int ReflectionCaptureMaxFacesPerFrame = 0;   // clamps to 1
             uint64_t ReflectionCaptureCacheBudgetBytes = 1024ull * 1024ull; // clamps to 8MB
+            int QualityPreset = 4;
+            int GTAOSliceCount = 8;
+            int GTAOStepCount = 7;
+            int ContactShadowSteps = 16;
+            int SSRMaxSteps = 64;
         } mockProj;
 
         SceneRenderSettings dst;
@@ -706,6 +712,118 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_U10_C_QualityPresetsAndBudgets() {
+        // M15-U10-05.1..05.4: Low, Medium, High, Ultra presets & Custom detection
+        SceneRenderSettings low, medium, high, ultra;
+        ApplyRenderQualityPreset(low, RenderQualityPreset::Low);
+        ApplyRenderQualityPreset(medium, RenderQualityPreset::Medium);
+        ApplyRenderQualityPreset(high, RenderQualityPreset::High);
+        ApplyRenderQualityPreset(ultra, RenderQualityPreset::Ultra);
+
+        RENDER_CHECK(low.QualityPreset == RenderQualityPreset::Low &&
+                     low.EnableGTAO && low.GTAOSliceCount == 2u && low.GTAOStepCount == 3u &&
+                     !low.EnableContactShadows && !low.EnableSSR && !low.EnablePlanarReflections &&
+                     !low.EnableSubsurfaceScattering && !low.EnableBloom && !low.EnableAutoExposure &&
+                     low.EnableVolumetricFog && low.FogQuality == FroxelFogQuality::Low &&
+                     Near(low.FogTemporalWeight, 0.0f, 1e-5f) &&
+                     !low.EnableTAA && low.EnableFXAA && !low.EnableDDGI &&
+                     low.ReflectionCaptureMaxProbesPerFrame == 1u && low.ReflectionCaptureMaxFacesPerFrame == 2u &&
+                     low.ReflectionCaptureCacheBudgetBytes == 16ull * 1024ull * 1024ull,
+            "M15-U10-05.1: Low preset configures reduced AO/SSR/fog/post, no DDGI, bounded probes");
+
+        RENDER_CHECK(medium.QualityPreset == RenderQualityPreset::Medium &&
+                     medium.EnableGTAO && medium.GTAOSliceCount == 4u && medium.GTAOStepCount == 4u &&
+                     medium.EnableContactShadows && medium.ContactShadowSteps == 8u &&
+                     medium.EnableSSR && medium.SSRMaxSteps == 32u &&
+                     !medium.EnablePlanarReflections && medium.EnableSubsurfaceScattering &&
+                     medium.EnableBloom && medium.EnableAutoExposure &&
+                     medium.FogQuality == FroxelFogQuality::Medium && Near(medium.FogTemporalWeight, 0.50f, 1e-5f) &&
+                     !medium.EnableTAA && medium.EnableFXAA && !medium.EnableDDGI &&
+                     medium.ReflectionCaptureMaxProbesPerFrame == 1u && medium.ReflectionCaptureMaxFacesPerFrame == 6u &&
+                     medium.ReflectionCaptureCacheBudgetBytes == 32ull * 1024ull * 1024ull,
+            "M15-U10-05.2: Medium preset configures half-res AO, raster SSR, and reduced fog/post history");
+
+        RENDER_CHECK(high.QualityPreset == RenderQualityPreset::High &&
+                     high.EnableGTAO && high.GTAOSliceCount == 8u && high.GTAOStepCount == 7u &&
+                     high.EnableContactShadows && high.ContactShadowSteps == 16u &&
+                     high.EnableSSR && high.SSRMaxSteps == 64u &&
+                     high.EnablePlanarReflections && Near(high.PlanarReflectionResolutionScale, 0.50f, 1e-5f) &&
+                     high.EnableSubsurfaceScattering && high.FogQuality == FroxelFogQuality::High &&
+                     Near(high.FogTemporalWeight, 0.80f, 1e-5f) && high.EnableTAA && !high.EnableFXAA &&
+                     !high.EnableDDGI &&
+                     high.ReflectionCaptureMaxProbesPerFrame == 2u && high.ReflectionCaptureMaxFacesPerFrame == 12u &&
+                     high.ReflectionCaptureCacheBudgetBytes == 64ull * 1024ull * 1024ull,
+            "M15-U10-05.3: High preset configures declared raster quality, probe scheduling, and temporal AA");
+
+        SceneRenderSettings ultraDDGI;
+        ApplyRenderQualityPreset(ultraDDGI, RenderQualityPreset::Ultra, true);
+        RENDER_CHECK(ultra.QualityPreset == RenderQualityPreset::Ultra &&
+                     ultra.GTAOSliceCount == 8u && ultra.GTAOStepCount == 8u &&
+                     ultra.ContactShadowSteps == 24u && ultra.SSRMaxSteps == 96u &&
+                     ultra.EnablePlanarReflections && Near(ultra.PlanarReflectionResolutionScale, 0.75f, 1e-5f) &&
+                     ultra.FogQuality == FroxelFogQuality::Ultra && Near(ultra.FogTemporalWeight, 0.85f, 1e-5f) &&
+                     ultra.EnableTAA && !ultra.EnableDDGI && ultraDDGI.EnableDDGI &&
+                     ultra.ReflectionCaptureMaxProbesPerFrame == 4u && ultra.ReflectionCaptureMaxFacesPerFrame == 24u &&
+                     ultra.ReflectionCaptureCacheBudgetBytes == 128ull * 1024ull * 1024ull,
+            "M15-U10-05.4: Ultra preset configures ultra budgets and optional DDGI with M16 RT excluded");
+
+        RENDER_CHECK(DetectRenderQualityPreset(low) == RenderQualityPreset::Low &&
+                     DetectRenderQualityPreset(medium) == RenderQualityPreset::Medium &&
+                     DetectRenderQualityPreset(high) == RenderQualityPreset::High &&
+                     DetectRenderQualityPreset(ultra) == RenderQualityPreset::Ultra &&
+                     DetectRenderQualityPreset(ultraDDGI) == RenderQualityPreset::Ultra,
+            "M15-U10-05.1..05.4: DetectRenderQualityPreset identifies every preset including Ultra optional DDGI");
+
+        SceneRenderSettings custom = high;
+        custom.SSRMaxSteps = 48u;
+        RENDER_CHECK(DetectRenderQualityPreset(custom) == RenderQualityPreset::Custom,
+            "M15-U10-05.3: tweaking a preset-controlled budget resolves to Custom");
+
+        // M15-U10-05.5: Budget reporting across 1080p and 1440p and monotonic resource scaling
+        const auto nativePolicy = RenderBackendPolicy::FromBackend(RendererBackendType::ModernRHI_D3D12);
+        const auto bLow1080 = ComputeRenderQualityBudgetReport(1920, 1080, low, &nativePolicy);
+        const auto bMed1080 = ComputeRenderQualityBudgetReport(1920, 1080, medium, &nativePolicy);
+        const auto bHigh1080 = ComputeRenderQualityBudgetReport(1920, 1080, high, &nativePolicy);
+        const auto bUltra1080 = ComputeRenderQualityBudgetReport(1920, 1080, ultra, &nativePolicy);
+        const auto bUltraDDGI = ComputeRenderQualityBudgetReport(1920, 1080, ultraDDGI, &nativePolicy);
+        const auto bHigh1440 = ComputeRenderQualityBudgetReport(2560, 1440, high, &nativePolicy);
+        RENDER_CHECK(bLow1080.AOWidth == 960u && bLow1080.AOHeight == 540u &&
+                     bMed1080.PlanarWidth == 0u && bHigh1080.PlanarWidth == 960u && bHigh1080.PlanarHeight == 540u &&
+                     bUltra1080.PlanarWidth == 1440u && bUltra1080.PlanarHeight == 810u &&
+                     bLow1080.TotalEstimatedBudgetBytes < bMed1080.TotalEstimatedBudgetBytes &&
+                     bMed1080.TotalEstimatedBudgetBytes < bHigh1080.TotalEstimatedBudgetBytes &&
+                     bHigh1080.TotalEstimatedBudgetBytes < bUltra1080.TotalEstimatedBudgetBytes &&
+                     bUltra1080.DDGIMemoryBytes == 0ull && bUltraDDGI.DDGIMemoryBytes > 0ull &&
+                     bHigh1440.TotalEstimatedBudgetBytes > bHigh1080.TotalEstimatedBudgetBytes &&
+                     bUltra1080.RayTracingPolicy.find("M16") != std::string::npos &&
+                     !bHigh1080.Summary.empty(),
+            "M15-U10-05.5: ComputeRenderQualityBudgetReport records resolution, samples, updates, memory, and policies");
+
+        // Verify Editor/Project/Runtime sync preserves quality preset & per-tier sample budgets
+        struct MockPresetProject {
+            bool EnableShadows = true, EnableSkybox = true, EnableGTAO = true, EnableContactShadows = true;
+            bool EnableBloom = true, EnableSubsurfaceScattering = true, EnableVolumetricFog = true;
+            int FogOverride = -1, FogQuality = 2;
+            float FogTemporalWeight = 0.8f;
+            bool EnableDDGI = false; int DDGIOverride = -1;
+            bool EnableToneMapping = true; int ToneMappingMode = 0; float Exposure = 1.0f, Gamma = 2.2f, WhitePoint = 4.0f;
+            bool EnableAutoExposure = false; float AutoExposureMin = 0.1f, AutoExposureMax = 10.0f, AutoExposureSpeed = 3.0f, AutoExposureKeyValue = 0.18f;
+            bool EnableFXAA = false, EnableTAA = true; int MSAASamples = 1;
+            bool EnableSSR = true, EnablePlanarReflections = true;
+            float PlanarReflectionResolutionScale = 0.5f, PlanarReflectionStrength = 1.0f, PlanarReflectionMaxRoughness = 0.45f;
+            int ReflectionCaptureMaxProbesPerFrame = 2, ReflectionCaptureMaxFacesPerFrame = 12;
+            uint64_t ReflectionCaptureCacheBudgetBytes = 64ull * 1024ull * 1024ull;
+            int QualityPreset = 3, GTAOSliceCount = 8, GTAOStepCount = 8, ContactShadowSteps = 24, SSRMaxSteps = 96;
+        } projUltra;
+        SceneRenderSettings synced;
+        RenderSettingsSync::ApplyToSceneSettings(projUltra, synced);
+        RENDER_CHECK(synced.QualityPreset == RenderQualityPreset::Ultra &&
+                     synced.GTAOSliceCount == 8u && synced.GTAOStepCount == 8u &&
+                     synced.ContactShadowSteps == 24u && synced.SSRMaxSteps == 96u,
+            "M15-U10-05.4: RenderSettingsSync preserves quality preset and sample budgets");
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderContractsUnitTests() {
@@ -720,6 +838,7 @@ bool RunRenderContractsUnitTests() {
     if (!Axle::RenderTests::Test_ViewTargetContractUnification()) return false;
     if (!Axle::RenderTests::Test_AuthoringBoundsDefaultsAndUIContracts()) return false;
     if (!Axle::RenderTests::Test_U10_B1_ProbeUIAndSettingsParityContracts()) return false;
+    if (!Axle::RenderTests::Test_U10_C_QualityPresetsAndBudgets()) return false;
     std::cout << "  [RenderContracts] All contracts unit tests passed.\n";
     return true;
 }

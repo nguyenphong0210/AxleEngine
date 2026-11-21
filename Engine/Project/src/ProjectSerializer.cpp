@@ -92,6 +92,11 @@ namespace Axle {
         out << "    ReflectionCaptureMaxProbesPerFrame: " << rs.ReflectionCaptureMaxProbesPerFrame << "\n";
         out << "    ReflectionCaptureMaxFacesPerFrame: " << rs.ReflectionCaptureMaxFacesPerFrame << "\n";
         out << "    ReflectionCaptureCacheBudgetBytes: " << rs.ReflectionCaptureCacheBudgetBytes << "\n";
+        out << "    QualityPreset: " << rs.QualityPreset << "\n";
+        out << "    GTAOSliceCount: " << rs.GTAOSliceCount << "\n";
+        out << "    GTAOStepCount: " << rs.GTAOStepCount << "\n";
+        out << "    ContactShadowSteps: " << rs.ContactShadowSteps << "\n";
+        out << "    SSRMaxSteps: " << rs.SSRMaxSteps << "\n";
     }
 
     ProjectSerializer::ProjectSerializer(std::shared_ptr<Project> project)
@@ -236,6 +241,11 @@ namespace Axle {
                             else if (key == "ReflectionCaptureMaxProbesPerFrame") rs.ReflectionCaptureMaxProbesPerFrame = std::stoi(val);
                             else if (key == "ReflectionCaptureMaxFacesPerFrame") rs.ReflectionCaptureMaxFacesPerFrame = std::stoi(val);
                             else if (key == "ReflectionCaptureCacheBudgetBytes") rs.ReflectionCaptureCacheBudgetBytes = std::stoull(val);
+                            else if (key == "QualityPreset") rs.QualityPreset = std::stoi(val);
+                            else if (key == "GTAOSliceCount") rs.GTAOSliceCount = std::stoi(val);
+                            else if (key == "GTAOStepCount") rs.GTAOStepCount = std::stoi(val);
+                            else if (key == "ContactShadowSteps") rs.ContactShadowSteps = std::stoi(val);
+                            else if (key == "SSRMaxSteps") rs.SSRMaxSteps = std::stoi(val);
                         } catch (...) {}
                     }
                 }

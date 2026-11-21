@@ -2,6 +2,8 @@
 #include <Axle/RHI/RHICommon.hpp>
 #include <Axle/RHI/RHISwitcher.hpp>
 #include <Axle/RenderBackendPolicy.hpp>
+#include <Axle/RenderContracts.hpp>
+#include <Axle/RenderQualityPreset.hpp>
 
 namespace Axle::RenderTests {
 
@@ -190,6 +192,53 @@ namespace Axle::RenderTests {
         singleAuthored.EnableSubsurfaceScattering = true;
         RENDER_CHECK(vk.CollectMaterialFeatureDiagnostics(vk.ResolveSettings(singleAuthored), true, true, true, true).empty(),
             "M15-U10-01.4: native single-sample D3D12/Vulkan emits zero compatibility warnings for supported material features");
+
+        // M15-U10-06.1: OpenGL compatibility preserves authored preset & knobs while resolving & diagnosing fallback
+        SceneRenderSettings ultraAuthored;
+        ApplyRenderQualityPreset(ultraAuthored, RenderQualityPreset::Ultra, true);
+        const auto ultraGLResolved = gl.ResolveSettings(ultraAuthored);
+        const auto ultraGLFallbacks = gl.CollectFallbacks(ultraAuthored);
+        const auto ultraGLBudget = ComputeRenderQualityBudgetReport(1920, 1080, ultraAuthored, &gl);
+        RENDER_CHECK(ultraAuthored.EnableSSR && ultraAuthored.EnableTAA && ultraAuthored.EnableDDGI &&
+                     !ultraGLResolved.EnableSSR && !ultraGLResolved.EnableTAA && !ultraGLResolved.EnableDDGI &&
+                     !ultraGLResolved.EnableSubsurfaceScattering && !ultraGLResolved.EnableVolumetricFog &&
+                     !ultraGLResolved.EnablePlanarReflections && !ultraGLResolved.EnableGTAO &&
+                     hasReason(ultraGLFallbacks, "ssr_disabled:compute_or_storage_unavailable") &&
+                     hasReason(ultraGLFallbacks, "subsurface_scattering_disabled:compatibility_backend") &&
+                     ultraGLBudget.ReflectionCacheBudgetBytes == 0ull &&
+                     ultraGLBudget.DDGIPolicy.find("OpenGL") != std::string::npos,
+            "M15-U10-06.1: OpenGL compatibility resolves/diagnoses Ultra features while keeping authored values untouched");
+
+        // M15-U10-06.2: Unsupported MSAA sample counts & missing HDR/MSAA/Compute agree between policy, target resolution & diagnostics
+        SceneRenderSettings badMSAA = singleAuthored;
+        badMSAA.MSAASamples = 6; // unsupported non-pow2 sample count
+        badMSAA.EnableSubsurfaceScattering = true;
+        const auto sanitizedNative = vk.ResolveSettings(badMSAA);
+        const auto badMSAAFallbacks = vk.CollectFallbacks(badMSAA);
+        RENDER_CHECK(sanitizedNative.MSAASamples == 1u &&
+                     hasReason(badMSAAFallbacks, "msaa_clamped:unsupported_sample_count"),
+            "M15-U10-06.2: unsupported MSAA sample count sanitizes to 1x with explicit fallback reason");
+
+        RHI::RHIDeviceCapabilities noHDR = {};
+        noHDR.ActiveBackend = RHI::RHIType::Direct3D12;
+        noHDR.SupportsComputeShaders = true;
+        noHDR.SupportsStorageTextures = true;
+        noHDR.SupportsDescriptorSets = true;
+        noHDR.SupportsHDRFormats = false;
+        noHDR.SupportsMSAATargets = false;
+        const auto noHdrPolicy = RenderBackendPolicy::FromDevice(noHDR);
+        SceneRenderSettings noHdrAuthored = ultraAuthored;
+        noHdrAuthored.EnableToneMapping = true;
+        noHdrAuthored.MSAASamples = 4;
+        const auto noHdrResolved = noHdrPolicy.ResolveSettings(noHdrAuthored);
+        const auto noHdrFallbacks = noHdrPolicy.CollectFallbacks(noHdrAuthored);
+        RENDER_CHECK(!noHdrResolved.EnableToneMapping && !noHdrResolved.EnableBloom &&
+                     !noHdrResolved.EnableVolumetricFog && !noHdrResolved.EnableSubsurfaceScattering &&
+                     noHdrResolved.MSAASamples == 1u &&
+                     hasReason(noHdrFallbacks, "msaa_disabled:single_sample_target") &&
+                     hasReason(noHdrFallbacks, "tone_mapping_disabled:sdr_output") &&
+                     hasReason(noHdrFallbacks, "subsurface_scattering_disabled:hdr_unavailable"),
+            "M15-U10-06.2: missing HDR/MSAA capability consistently disables dependent passes and records fallback reasons");
         return true;
     }
 

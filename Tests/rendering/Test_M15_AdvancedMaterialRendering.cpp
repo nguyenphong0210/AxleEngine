@@ -195,6 +195,7 @@ bool RunM15AdvancedMaterialTests(RHISceneRenderer& /*sharedRenderer*/, const std
     settings.EnableSSR = false;
     settings.EnableVolumetricFog = false;
     settings.EnableDDGI = false;
+    settings.EnableSubsurfaceScattering = false;
     settings.EnableStudioLightLobes = false;
 
     const std::filesystem::path whiteHdrPath = output / "u9_white_furnace.hdr";

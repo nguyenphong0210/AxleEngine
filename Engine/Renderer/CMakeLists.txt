@@ -98,6 +98,7 @@ add_library(AxleRenderer STATIC
     src/PostProcessService.cpp
     src/RenderDiagnostics.cpp
     src/RenderBackendPolicy.cpp
+    src/RenderQualityPreset.cpp
     src/ViewContext.cpp
 )
 add_library(Axle::Renderer ALIAS AxleRenderer)

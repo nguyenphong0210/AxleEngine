@@ -1,4 +1,5 @@
 #include <Axle/RenderBackendPolicy.hpp>
+#include <algorithm>
 #include <utility>
 
 namespace Axle {
@@ -109,12 +110,21 @@ namespace Axle {
 
     SceneRenderSettings RenderBackendPolicy::ResolveSettings(const SceneRenderSettings& authored) const {
         SceneRenderSettings resolved = authored;
+        if (resolved.MSAASamples != 1u && resolved.MSAASamples != 2u &&
+            resolved.MSAASamples != 4u && resolved.MSAASamples != 8u) {
+            resolved.MSAASamples = 1u;
+        }
+        resolved.GTAOSliceCount = std::clamp(resolved.GTAOSliceCount, 2u, 8u);
+        resolved.GTAOStepCount = std::clamp(resolved.GTAOStepCount, 2u, 8u);
+        resolved.ContactShadowSteps = std::clamp(resolved.ContactShadowSteps, 8u, 32u);
+        resolved.SSRMaxSteps = std::clamp(resolved.SSRMaxSteps, 16u, 96u);
         if (!Supports(BackendFeature::MSAA)) resolved.MSAASamples = 1;
         if (!Supports(BackendFeature::HDRFormats)) {
             resolved.EnableToneMapping = false;
             resolved.EnableBloom = false;
             resolved.EnableAutoExposure = false;
             resolved.EnableVolumetricFog = false;
+            resolved.EnableSubsurfaceScattering = false;
         }
         if (!Supports(BackendFeature::FXAA)) resolved.EnableFXAA = false;
         if (!Supports(BackendFeature::Compute) || !Supports(BackendFeature::StorageTextures)) {
@@ -130,6 +140,7 @@ namespace Axle {
         if (m_QualityTier == BackendQualityTier::Compatibility) {
             resolved.EnableTAA = false;
             resolved.EnablePlanarReflections = false;
+            resolved.EnableSubsurfaceScattering = false;
         }
         if (resolved.EnableTAA && resolved.MSAASamples == 1 && resolved.EnableFXAA) {
             resolved.EnableFXAA = false;
@@ -140,7 +151,11 @@ namespace Axle {
     std::vector<std::string> RenderBackendPolicy::CollectFallbacks(const SceneRenderSettings& authored) const {
         const auto resolved = ResolveSettings(authored);
         std::vector<std::string> reasons;
-        if (authored.MSAASamples != resolved.MSAASamples) reasons.push_back("msaa_disabled:single_sample_target");
+        if (authored.MSAASamples != resolved.MSAASamples) {
+            reasons.push_back(Supports(BackendFeature::MSAA)
+                ? "msaa_clamped:unsupported_sample_count"
+                : "msaa_disabled:single_sample_target");
+        }
         if (authored.EnableToneMapping && !resolved.EnableToneMapping) reasons.push_back("tone_mapping_disabled:sdr_output");
         if (authored.EnableBloom && !resolved.EnableBloom) reasons.push_back("bloom_disabled:compute_or_hdr_unavailable");
         if (authored.EnableAutoExposure && !resolved.EnableAutoExposure) reasons.push_back("auto_exposure_disabled:compute_or_hdr_unavailable");
@@ -160,8 +175,10 @@ namespace Axle {
             reasons.push_back(Supports(BackendFeature::HDRFormats) ? "volumetric_fog_disabled:compute_or_storage_unavailable" :
                 "volumetric_fog_disabled:linear_hdr_unavailable");
         if (authored.EnableDDGI && !resolved.EnableDDGI) reasons.push_back("ddgi_disabled:compute_or_storage_unavailable");
-        if (m_QualityTier == BackendQualityTier::Compatibility && authored.EnableSubsurfaceScattering) {
-            reasons.push_back("subsurface_scattering_disabled:compatibility_backend");
+        if (authored.EnableSubsurfaceScattering && !resolved.EnableSubsurfaceScattering) {
+            reasons.push_back(m_QualityTier == BackendQualityTier::Compatibility
+                ? "subsurface_scattering_disabled:compatibility_backend"
+                : "subsurface_scattering_disabled:hdr_unavailable");
         }
         if (resolved.MSAASamples > 1) {
             if (resolved.EnableSubsurfaceScattering) {

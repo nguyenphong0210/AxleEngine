@@ -92,7 +92,10 @@ namespace Axle::Passes {
         constants.InvProjection = glm::inverse(i.ProjectionZO);
         constants.ScreenSize = glm::vec4(static_cast<float>(i.Width), static_cast<float>(i.Height),
             1.0f / static_cast<float>(i.Width), 1.0f / static_cast<float>(i.Height));
-        constants.SSRParams = glm::vec4(i.Settings.SSRLengthPixels, 64.0f, i.Settings.SSRStrength, 0.5f);
+        constants.SSRParams = glm::vec4(
+            i.Settings.SSRLengthPixels,
+            static_cast<float>(std::clamp(i.Settings.SSRMaxSteps, 16u, 96u)),
+            i.Settings.SSRStrength, 0.5f);
         const uint32_t maxUsefulHiZMip = std::max(1u, std::min(i.Targets->GetHiZUsefulLevelCount(), 8u)) - 1u;
         constants.SSRExtra = glm::vec4(static_cast<float>(maxUsefulHiZMip),
             SSRRaymarchContract::MaxConeRadiusPixels, 0.0f, 0.0f);

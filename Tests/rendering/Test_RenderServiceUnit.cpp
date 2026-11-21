@@ -888,6 +888,38 @@ namespace Axle::RenderTests {
         return true;
     }
 
+    static bool Test_U10_C_CapabilityFallbackAndTargetRejection() {
+        // M15-U10-06.2: invalid RHIViewTarget configuration fails explicit validation cleanly
+        RHI::RHIViewTargetDesc badSssMsaa{};
+        badSssMsaa.Width = 64;
+        badSssMsaa.Height = 64;
+        badSssMsaa.RenderAuxiliary = true;
+        badSssMsaa.EnableDepth = true;
+        badSssMsaa.EnableNormal = true;
+        badSssMsaa.Samples = 4;
+        badSssMsaa.EnableSubsurface = true; // explicitly invalid combination
+        RHI::RHIViewTargets targets;
+        RENDER_CHECK(!targets.Configure(badSssMsaa) && !targets.IsValid(),
+            "M15-U10-06.2: RHIViewTargets rejects unsupported MSAA>1 + Subsurface combination cleanly");
+
+        RHI::RHIViewTargetDesc badFogMsaa{};
+        badFogMsaa.Width = 64;
+        badFogMsaa.Height = 64;
+        badFogMsaa.RenderAuxiliary = true;
+        badFogMsaa.EnableDepth = true;
+        badFogMsaa.Samples = 4;
+        badFogMsaa.EnableVolumetricFog = true; // unsupported combination
+        RENDER_CHECK(!targets.Configure(badFogMsaa) && !targets.IsValid(),
+            "M15-U10-06.2: RHIViewTargets rejects unsupported MSAA>1 + FroxelFog combination cleanly");
+
+        RenderService service;
+        const auto& diag = service.GetLastFrameDiagnostics();
+        const auto& res = service.GetLastRenderResult();
+        RENDER_CHECK(diag.Fallbacks.empty() && !res.Success,
+            "M15-U10-06.1..06.2: uninitialized RenderService reports honest initial result & diagnostics");
+        return true;
+    }
+
 } // namespace Axle::RenderTests
 
 bool RunRenderServiceUnitTests() {
@@ -913,6 +945,7 @@ bool RunRenderServiceUnitTests() {
     if (!Axle::RenderTests::Test_PhysicsDebugAndOverlayContracts()) return false;
     if (!Axle::RenderTests::Test_U10_B1_ReflectionProbeServiceFacadeAndExtraDebugLines()) return false;
     if (!Axle::RenderTests::Test_U10_B2_CompleteSceneAssemblyAndCodecRoundTrips()) return false;
+    if (!Axle::RenderTests::Test_U10_C_CapabilityFallbackAndTargetRejection()) return false;
     std::cout << "  [RenderService] All RenderService & ViewRequest unit tests passed.\n";
     return true;
 }

@@ -6,6 +6,7 @@
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/SceneRenderer.hpp>
 #include <Axle/RenderCapabilities.hpp>
+#include <Axle/RenderQualityPreset.hpp>
 #include <Axle/RenderRollout.hpp>
 #include <Axle/RHI/RHIViewTargets.hpp>
 #include <atomic>
@@ -96,6 +97,9 @@ namespace Axle {
 
         // Capabilities and honest diagnostics
         RendererCapabilities GetActiveCapabilities() const;
+        RenderFrameDiagnostics GetLastFrameDiagnostics() const;
+        const RenderResult& GetLastRenderResult() const { return m_LastRenderResult; }
+        const RenderQualityBudgetReport& GetLastBudgetReport() const { return m_LastBudgetReport; }
 
         RHI::RHITexture* GetDefaultMainColorTarget() const;
 
@@ -116,6 +120,10 @@ namespace Axle {
         std::unique_ptr<RHISceneRenderer> m_RHIRenderer;
         std::unique_ptr<SceneRenderer> m_GLRenderer;
         std::shared_ptr<RHI::RHIViewTargets> m_DefaultMainTargets;
+        RenderResult m_LastRenderResult{};
+        RenderDiagnostics m_GLDiagnostics;
+        uint64_t m_GLFrameIndex = 0;
+        RenderQualityBudgetReport m_LastBudgetReport{};
     };
 
 }

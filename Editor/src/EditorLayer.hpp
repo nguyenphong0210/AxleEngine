@@ -98,10 +98,12 @@ public:
     Axle::RHIViewportDescriptor* GetRHIViewport() const { return m_RHIViewport.get(); }
 
     struct RenderFXOverride {
+        std::optional<int> QualityPreset;
         std::optional<bool> Shadows, Skybox, SSR, Planar, GTAO, Contact, Bloom, ToneMapping, FXAA, AutoExposure, DDGI, TAA, SSS, HDRViewport, PinRenderFXPopup;
         std::optional<int> MSAA, ToneMappingMode, ProbeMaxProbes, ProbeMaxFaces;
         std::optional<int> FogOverride; // -1 = scene default, 0 = off, 1 = on
         std::optional<int> FogQuality;
+        std::optional<int> GTAOSliceCount, GTAOStepCount, ContactShadowSteps, SSRMaxSteps;
         std::optional<float> FogTemporalWeight, Exposure, PlanarScale;
         std::optional<int> HiZLevel;
     };
@@ -154,6 +156,11 @@ private:
     bool m_EnableBloom = true;
     bool m_EnableContactShadows = true;
     std::optional<bool> m_ViewportFogOverride;
+    int m_QualityPreset = static_cast<int>(Axle::RenderQualityPreset::Custom);
+    int m_GTAOSliceCount = 8;
+    int m_GTAOStepCount = 7;
+    int m_ContactShadowSteps = 16;
+    int m_SSRMaxSteps = 64;
     int m_FogQuality = static_cast<int>(Axle::FroxelFogQuality::High);
     float m_FogTemporalWeight = 0.8f;
     bool m_EnableToneMapping = true;

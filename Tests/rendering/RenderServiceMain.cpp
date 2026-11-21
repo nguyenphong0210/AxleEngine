@@ -203,6 +203,51 @@ static bool Service(RHIType backend) {
                 "rejected scene request cannot publish stale feedback from a previous view");
             auto privateRequest = request; privateRequest.Kind = RenderViewKind::Thumbnail;
             RENDER_CHECK(!service.RenderView(world,privateRequest).Success, "private views cannot borrow shared main targets");
+
+            // M15-U10-05.1..05.5: Native D3D12/Vulkan preset execution & budget progression
+            uint64_t prevBudgetBytes = 0;
+            for (RenderQualityPreset preset : { RenderQualityPreset::Low, RenderQualityPreset::Medium,
+                                                RenderQualityPreset::High, RenderQualityPreset::Ultra }) {
+                auto presetReq = request;
+                presetReq.CameraCut = true;
+                ApplyRenderQualityPreset(presetReq.Settings, preset);
+                const auto presetRes = service.RenderView(world, presetReq);
+                const auto budget = service.GetLastBudgetReport();
+                RENDER_CHECK(presetRes.Success &&
+                             budget.ResolvedPreset == preset &&
+                             budget.TotalEstimatedBudgetBytes > prevBudgetBytes &&
+                             budget.RayTracingPolicy.find("M16") != std::string::npos,
+                    "M15-U10-05.1..05.5: native GPU executes each quality preset with monotonic budget accounting");
+                prevBudgetBytes = budget.TotalEstimatedBudgetBytes;
+            }
+
+            // M15-U10-06.2: Unsupported MSAA>1x + SSS/SSR/Fog/TAA & invalid sample count diagnostics + clean recovery
+            auto msaaConflict = request;
+            msaaConflict.CameraCut = true;
+            ApplyRenderQualityPreset(msaaConflict.Settings, RenderQualityPreset::High);
+            msaaConflict.Settings.MSAASamples = 4;
+            msaaConflict.Settings.EnableSubsurfaceScattering = true;
+            const auto msaaRes = service.RenderView(world, msaaConflict);
+            const auto hasDiag = [](const std::vector<std::string>& v, const std::string& needle) {
+                return std::find(v.begin(), v.end(), needle) != v.end();
+            };
+            RENDER_CHECK(msaaRes.Success && msaaRes.UsedFallback &&
+                         hasDiag(msaaRes.Fallbacks, "subsurface_scattering_disabled:msaa_requires_single_sample") &&
+                         hasDiag(msaaRes.Fallbacks, "screen_reflections_disabled:msaa_requires_single_sample") &&
+                         hasDiag(msaaRes.Fallbacks, "volumetric_fog_disabled:msaa_requires_single_sample") &&
+                         hasDiag(msaaRes.Fallbacks, "taa_motion_vectors_disabled:msaa_requires_single_sample") &&
+                         msaaConflict.Settings.MSAASamples == 4,
+                "M15-U10-06.2: native MSAA>1x reports explicit fallback diagnostics without mutating authored settings");
+
+            auto badSampleReq = request;
+            badSampleReq.CameraCut = true;
+            badSampleReq.Settings.MSAASamples = 6;
+            const auto badSampleRes = service.RenderView(world, badSampleReq);
+            RENDER_CHECK(badSampleRes.Success && badSampleRes.UsedFallback &&
+                         badSampleRes.ResolvedSettings.MSAASamples == 1u &&
+                         hasDiag(badSampleRes.Fallbacks, "msaa_clamped:unsupported_sample_count"),
+                "M15-U10-06.2: unsupported MSAA sample count sanitizes safely with explicit diagnostic and recovery");
+
             {
                 ScopedRHIFault fault([](std::string_view operation)->std::optional<nri::Result>{
                     if (operation == "QueueSubmit") return nri::Result::FAILURE; return {};
@@ -315,6 +360,31 @@ static bool GLService() {
         result=service.RenderView(world,request);
         RENDER_CHECK(result.Success&&result.ErrorMessage.find("VOLUMETRIC_FOG_UNSUPPORTED")==std::string::npos,
             "OpenGL only reports the froxel fallback when the effect is requested");
+
+        // M15-U10-06.1: Ultra preset & advanced material controls in OpenGL compatibility keep authored values & report full diagnostics
+        auto glUltra = request;
+        ApplyRenderQualityPreset(glUltra.Settings, RenderQualityPreset::Ultra, true);
+        RenderMeshInstance glCustomMesh;
+        glCustomMesh.MeshURI = "builtin://sphere";
+        glCustomMesh.BuiltinId = BuiltinMeshId::Sphere;
+        glCustomMesh.Material.UseCustomShader = true;
+        glCustomMesh.Material.SubsurfaceEnabled = true;
+        glCustomMesh.Material.AbsorptionEnabled = true;
+        glCustomMesh.Material.Dispersion = 0.05f;
+        RenderWorld glFeatureWorld = world;
+        glFeatureWorld.Meshes.push_back(glCustomMesh);
+        const auto glUltraRes = service.RenderView(glFeatureWorld, glUltra);
+        const auto glDiag = service.GetLastFrameDiagnostics();
+        const auto glBudget = service.GetLastBudgetReport();
+        RENDER_CHECK(glUltraRes.Success && glUltraRes.UsedFallback && !glUltraRes.Fallbacks.empty() &&
+                     !glUltraRes.ResolvedSettings.EnableSSR && !glUltraRes.ResolvedSettings.EnableTAA &&
+                     !glUltraRes.ResolvedSettings.EnableDDGI && !glUltraRes.ResolvedSettings.EnableSubsurfaceScattering &&
+                     glUltra.Settings.EnableSSR && glUltra.Settings.EnableTAA && glUltra.Settings.EnableDDGI &&
+                     !glDiag.Passes.empty() && glDiag.Passes[0].Status == DiagnosticStatus::Fallback &&
+                     glDiag.GPUValidity == DiagnosticValidity::Unavailable &&
+                     glBudget.ReflectionCacheBudgetBytes == 0ull,
+            "M15-U10-06.1: OpenGL compatibility diagnoses Ultra/material fallback cleanly while preserving authored settings");
+
         RenderService::Get().Shutdown();
     }
     return glGetError() == GL_NO_ERROR;

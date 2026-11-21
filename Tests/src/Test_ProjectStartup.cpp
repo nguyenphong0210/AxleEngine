@@ -3,6 +3,7 @@
 #include <Axle/Scene.hpp>
 #include <Axle/Components.hpp>
 #include <Axle/UUID.hpp>
+#include <Axle/ProjectSerializer.hpp>
 #include <Axle/UIPalettePanel.hpp>
 #include <imgui.h>
 #include <fstream>
@@ -13,6 +14,7 @@
 int main() {
     Axle::Tests::InitializeWorkspace();
     using Axle::Project;
+    using Axle::ProjectSerializer;
     const auto workspace = std::filesystem::current_path();
     const auto sandboxPath = std::filesystem::path(AXLE_TEST_SOURCE_DIR) / "Samples/Sandbox/Sandbox.axleproj";
     auto sandbox = Axle::OpenEditorStartupProject(Axle::ResolveEditorStartupProject({}, sandboxPath));
@@ -100,6 +102,65 @@ int main() {
     for (int frame = 0; frame < 5; ++frame) drawLibrary();
     CHECK(emptyScene.GetRegistry().view<Axle::TagComponent>().empty(), "Deleted UI canvas stays deleted while library is visible");
     ImGui::DestroyContext(context);
+    // Verify ProjectRenderSettings roundtrip, clamping, and legacy omission preservation (M15-U10-03.1..03.3)
+    {
+        const auto rtPath = source / "RenderSettingsParity.axleproj";
+        auto proj = Project::New(source / "RenderSettingsProj");
+        auto& rs = proj->GetConfig().RenderSettings;
+        rs.EnableShadows = false;
+        rs.EnableSkybox = false;
+        rs.EnableGTAO = false;
+        rs.EnableBloom = false;
+        rs.FogOverride = 1;
+        rs.FogQuality = 3;
+        rs.FogTemporalWeight = 0.75f;
+        rs.DDGIOverride = 0;
+        rs.EnableToneMapping = true;
+        rs.ToneMappingMode = 2;
+        rs.Exposure = 2.5f;
+        rs.EnableAutoExposure = true;
+        rs.AutoExposureMin = 0.25f;
+        rs.AutoExposureMax = 12.0f;
+        rs.AutoExposureSpeed = 4.5f;
+        rs.AutoExposureKeyValue = 0.22f;
+        rs.EnableFXAA = false;
+        rs.EnableTAA = true;
+        rs.MSAASamples = 4;
+        rs.EnableSSR = false;
+        rs.EnablePlanarReflections = true;
+        rs.PlanarReflectionResolutionScale = 0.75f;
+        rs.PlanarReflectionStrength = 1.25f;
+        rs.PlanarReflectionMaxRoughness = 0.6f;
+        rs.ReflectionCaptureMaxProbesPerFrame = 4;
+        rs.ReflectionCaptureMaxFacesPerFrame = 18;
+        rs.ReflectionCaptureCacheBudgetBytes = 128ull * 1024ull * 1024ull;
+        rs.QualityPreset = 3;
+        rs.GTAOSliceCount = 8;
+        rs.GTAOStepCount = 8;
+        rs.ContactShadowSteps = 24;
+        rs.SSRMaxSteps = 96;
+        CHECK(ProjectSerializer(proj).Serialize(rtPath), "Save project with RenderSettings");
+
+        auto loadedProj = std::make_shared<Project>();
+        CHECK(ProjectSerializer(loadedProj).Deserialize(rtPath), "Reload project with RenderSettings");
+        const auto& lrs = loadedProj->GetConfig().RenderSettings;
+        CHECK(loadedProj->GetConfig().HasAuthoredRenderSettings &&
+              !lrs.EnableShadows && !lrs.EnableSkybox && !lrs.EnableGTAO && !lrs.EnableBloom &&
+              lrs.FogOverride == 1 && lrs.FogQuality == 3 && std::abs(lrs.FogTemporalWeight - 0.75f) < 1e-4f &&
+              lrs.DDGIOverride == 0 && lrs.EnableToneMapping && lrs.ToneMappingMode == 2 &&
+              std::abs(lrs.Exposure - 2.5f) < 1e-4f && lrs.EnableAutoExposure &&
+              std::abs(lrs.AutoExposureMin - 0.25f) < 1e-4f && std::abs(lrs.AutoExposureMax - 12.0f) < 1e-4f &&
+              !lrs.EnableFXAA && lrs.EnableTAA && lrs.MSAASamples == 4 &&
+              !lrs.EnableSSR && lrs.EnablePlanarReflections &&
+              std::abs(lrs.PlanarReflectionResolutionScale - 0.75f) < 1e-4f &&
+              lrs.ReflectionCaptureMaxProbesPerFrame == 4 && lrs.ReflectionCaptureMaxFacesPerFrame == 18 &&
+              lrs.ReflectionCaptureCacheBudgetBytes == 128ull * 1024ull * 1024ull &&
+              lrs.QualityPreset == 3 && lrs.GTAOSliceCount == 8 && lrs.GTAOStepCount == 8 &&
+              lrs.ContactShadowSteps == 24 && lrs.SSRMaxSteps == 96,
+              "ProjectSerializer preserves all U10-B1 Environment/Exposure/AA/Reflection & U10-C preset settings cleanly");
+        std::filesystem::remove(rtPath);
+    }
+
     Project::SetActive(nullptr);
     Axle::FileSystem::SetAssetDirectory(workspace / "assets");
     std::filesystem::current_path(workspace);

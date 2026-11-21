@@ -279,6 +279,7 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path& ou
     settings.EnableShadows = false;
     settings.EnableParticles = false;
     settings.EnableToneMapping = false;
+    settings.EnableSubsurfaceScattering = false;
     settings.EnableStudioLightLobes = false;
     settings.EnableDDGI = true;
 

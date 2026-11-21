@@ -291,16 +291,38 @@ namespace Axle {
                 mesh.Material.MaterialAsset = std::move(material);
             }
         }
+        auto appendUnique = [](std::vector<std::string>& dst, const std::string& item) {
+            if (!item.empty() && std::find(dst.begin(), dst.end(), item) == dst.end()) dst.push_back(item);
+        };
+        auto finish = [&](RenderResult out) {
+            m_LastRenderResult = out;
+            return out;
+        };
+        auto collectMeshFeatures = [&](bool& customShader, bool& refraction, bool& subsurface, bool& absorption) {
+            for (const auto& mesh : prepared.Meshes) {
+                customShader |= mesh.Material.UseCustomShader;
+                subsurface |= mesh.Material.SubsurfaceEnabled;
+                absorption |= mesh.Material.AbsorptionEnabled || (mesh.Material.Dispersion > 1e-4f);
+                if (mesh.Material.RHIMaterialAsset) {
+                    const auto& desc = mesh.Material.RHIMaterialAsset->GetDesc();
+                    refraction |= desc.RefractionEnabled;
+                    subsurface |= desc.SubsurfaceEnabled;
+                    absorption |= desc.AbsorptionEnabled || (desc.Dispersion > 1e-4f);
+                }
+            }
+        };
         if (m_RHIRenderer) {
             auto& device = RHI::RHIDevice::Get();
-            if (!device.CanSubmit()) return fail("Render device cannot submit");
+            if (!device.CanSubmit()) return finish(fail("Render device cannot submit"));
+            const auto backendPolicy = RenderBackendPolicy::FromDevice(device.GetCapabilities());
+            const auto settings = backendPolicy.ResolveSettings(request.Settings);
+            m_LastBudgetReport = ComputeRenderQualityBudgetReport(request.Width, request.Height, request.Settings, &backendPolicy);
             auto targets = request.ViewTargets;
             auto* color = request.ColorTarget; auto* depth = request.DepthTarget;
             if (!color && targets && targets->IsValid()) {
                 color = targets->Get(RHI::RHIViewTarget::Color); depth = targets->Get(RHI::RHIViewTarget::Depth);
             }
             if (!color && request.Kind == RenderViewKind::Main) {
-                const auto settings = RenderBackendPolicy::FromDevice(device.GetCapabilities()).ResolveSettings(request.Settings);
                 ViewTargetContract::ViewTargetPolicyInput targetInput;
                 targetInput.Width = request.Width;
                 targetInput.Height = request.Height;
@@ -315,27 +337,37 @@ namespace Axle {
                 if (!m_DefaultMainTargets || !m_DefaultMainTargets->IsValid() || m_DefaultMainTargets->GetDesc() != desc) {
                     auto candidate = std::make_shared<RHI::RHIViewTargets>();
                     if (!candidate->Configure(desc, nullptr, nullptr, RHI::FroxelHistoryPolicy::AllowStaticFog))
-                        return fail("Default view target creation failed; previous generation retained");
+                        return finish(fail("Default view target creation failed; previous generation retained"));
                     m_DefaultMainTargets = std::move(candidate);
                 }
                 targets = m_DefaultMainTargets;
                 color = targets->Get(RHI::RHIViewTarget::Color); depth = targets->Get(RHI::RHIViewTarget::Depth);
             }
+            if (targets && !targets->Validate())
+                return finish(fail("Invalid or unsupported view target configuration"));
             if (!color || !color->IsValid() || !color->GetRTV() || color->GetHandle().Epoch != m_Epoch ||
                 color->GetWidth() != request.Width || color->GetHeight() != request.Height || color->GetDesc().SampleCount != 1)
-                return fail("Invalid, stale or mismatched view color target");
+                return finish(fail("Invalid, stale or mismatched view color target"));
             if (depth && (!depth->IsValid() || !depth->GetDSV() || depth->GetHandle().Epoch != m_Epoch ||
                 depth->GetWidth() != request.Width || depth->GetHeight() != request.Height || depth->GetDesc().SampleCount != 1))
-                return fail("Invalid, stale or mismatched view depth target");
+                return finish(fail("Invalid, stale or mismatched view depth target"));
             m_RHIRenderer->RenderWorldView(prepared, request.Camera, color, depth, request.Settings,
                                            request.PhysicsScene, targets, request.CameraCut, request.Kind,
                                            request.DeltaTime);
             if (!m_RHIRenderer->WasLastRenderSuccessful()) {
                 const auto& diagnostic=m_RHIRenderer->GetCascadedShadows().GetDiagnostic();
-                return fail(diagnostic.empty()?"View preparation, recording or submission failed":diagnostic);
+                return finish(fail(diagnostic.empty()?"View preparation, recording or submission failed":diagnostic));
             }
             result.Success = true; result.CompletionToken = m_RHIRenderer->GetLastCompletion();
             result.DrawCallCount = m_RHIRenderer->GetDrawCallCount(); result.RenderedEntityCount = m_RHIRenderer->GetRenderedEntityCount();
+            result.ResolvedSettings = settings;
+            result.Fallbacks = m_RHIRenderer->GetDiagnostics().GetFrame().Fallbacks;
+            bool customShader = false, refraction = false, subsurface = false, absorption = false;
+            collectMeshFeatures(customShader, refraction, subsurface, absorption);
+            for (const auto& md : backendPolicy.CollectMaterialFeatureDiagnostics(settings, customShader, refraction, subsurface, absorption)) {
+                appendUnique(result.Fallbacks, md);
+            }
+            result.UsedFallback = !result.Fallbacks.empty();
             if (request.Settings.Wireframe || !prepared.Skins.empty())
                 result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
             const auto& shadowDiagnostic=m_RHIRenderer->GetCascadedShadows().GetDiagnostic();
@@ -348,19 +380,34 @@ namespace Axle {
                 if(!result.ErrorMessage.empty())result.ErrorMessage+=" ";
                 result.ErrorMessage+=localDiagnostic;
             }
-            return result;
+            return finish(std::move(result));
         }
         if (request.GLTargetFBO && (request.GLTargetFBO->GetSpecification().Width != request.Width || request.GLTargetFBO->GetSpecification().Height != request.Height))
-            return fail("GL view target extent does not match request");
+            return finish(fail("GL view target extent does not match request"));
+        const auto glPolicy = RenderBackendPolicy::FromBackend(RendererBackendType::OpenGL_Compatibility);
+        const auto resolvedGL = glPolicy.ResolveSettings(request.Settings);
+        m_LastBudgetReport = ComputeRenderQualityBudgetReport(request.Width, request.Height, request.Settings, &glPolicy);
         m_GLRenderer->SetViewportSize(request.Width, request.Height);
         m_GLRenderer->RenderWorldView(prepared, request.Camera, request.GLTargetFBO, request.PhysicsScene, nullptr, request.Settings);
         result.Success = true; result.DrawCallCount = static_cast<uint32_t>(prepared.Meshes.size());
         result.RenderedEntityCount = result.DrawCallCount;
+        result.ResolvedSettings = resolvedGL;
         // GL executes on the current context; an NRI completion token has no meaning here.
+        bool customShader = false, refraction = false, subsurface = false, absorption = false;
+        collectMeshFeatures(customShader, refraction, subsurface, absorption);
+        result.Fallbacks = glPolicy.CollectFallbacks(request.Settings);
+        for (const auto& md : glPolicy.CollectMaterialFeatureDiagnostics(resolvedGL, customShader, refraction, subsurface, absorption)) {
+            appendUnique(result.Fallbacks, md);
+        }
         if (request.Settings.EnableFXAA || request.Settings.EnableToneMapping || request.Settings.MSAASamples > 1 ||
             request.Settings.EnableVolumetricFog || request.Settings.EnableDDGI ||
-            std::any_of(prepared.Meshes.begin(),prepared.Meshes.end(),[](const auto& mesh){return mesh.Material.UseCustomShader;}))
+            request.Settings.EnableGTAO || request.Settings.EnableContactShadows ||
+            request.Settings.EnableSSR || request.Settings.EnablePlanarReflections ||
+            request.Settings.EnableBloom || request.Settings.EnableAutoExposure ||
+            request.Settings.EnableTAA || request.Settings.EnableSubsurfaceScattering ||
+            customShader || refraction || subsurface || absorption) {
             result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
+        }
         if (request.Settings.EnableVolumetricFog) {
             if (!result.ErrorMessage.empty()) result.ErrorMessage += " ";
             result.ErrorMessage += "VOLUMETRIC_FOG_UNSUPPORTED: OpenGL compatibility omits 3D froxel volumetric fog; use D3D12 or Vulkan.";
@@ -372,10 +419,20 @@ namespace Axle {
         if(request.Settings.EnableShadows&&(
             std::any_of(prepared.PointLights.begin(),prepared.PointLights.end(),[](const auto& light){return light.Shadows.CastShadows&&light.Intensity>0;})||
             std::any_of(prepared.SpotLights.begin(),prepared.SpotLights.end(),[](const auto& light){return light.Shadows.CastShadows&&light.Intensity>0;}))) {
+            const std::string localDiag = "LOCAL_SHADOW_UNSUPPORTED: OpenGL compatibility lights Point/Spot without shadows; use D3D12 or Vulkan for local shadows.";
+            appendUnique(result.Fallbacks, localDiag);
             if(!result.ErrorMessage.empty())result.ErrorMessage+=" ";
-            result.ErrorMessage+="LOCAL_SHADOW_UNSUPPORTED: OpenGL compatibility lights Point/Spot without shadows; use D3D12 or Vulkan for local shadows.";
+            result.ErrorMessage += localDiag;
         }
-        return result;
+        result.UsedFallback = !result.Fallbacks.empty();
+        m_GLDiagnostics.BeginFrame(++m_GLFrameIndex, 0);
+        m_GLDiagnostics.BeginPass("CompatibilityForward");
+        m_GLDiagnostics.EndPass(result.UsedFallback ? DiagnosticStatus::Fallback : DiagnosticStatus::Success,
+                                0.0, 0.0, DiagnosticValidity::Unavailable, result.DrawCallCount, 0u, result.ErrorMessage);
+        for (const auto& f : result.Fallbacks) m_GLDiagnostics.AddFallback(f);
+        m_GLDiagnostics.SetFrameGPUTime(0.0, DiagnosticValidity::Unavailable);
+        m_GLDiagnostics.SetCounters(result.DrawCallCount, 0u);
+        return finish(std::move(result));
     }
     RenderResult RenderService::RenderView(Scene& scene, const ViewRequest& request) {
         SceneExtractionOptions options; options.CameraOverride = &request.Camera;
@@ -383,6 +440,10 @@ namespace Axle {
         auto result = RenderView(world, request);
         if (result.Success && m_RHIRenderer) m_RHIRenderer->PublishMaterialFeedback(scene, world);
         return result;
+    }
+
+    RenderFrameDiagnostics RenderService::GetLastFrameDiagnostics() const {
+        return m_RHIRenderer ? m_RHIRenderer->GetDiagnostics().GetFrame() : m_GLDiagnostics.GetFrame();
     }
 
     void RenderService::SetViewportSize(uint32_t width, uint32_t height) {

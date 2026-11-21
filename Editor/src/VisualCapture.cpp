@@ -410,6 +410,11 @@ private:
                     else if (k == "popup") fx.PinRenderFXPopup = asBool();
                     else if (k == "hiz") fx.HiZLevel = std::stoi(v);
                     else if (k == "fog_quality") fx.FogQuality = std::stoi(v);
+        else if (k == "quality_preset") {
+            RenderQualityPreset p = RenderQualityPreset::Custom;
+            if (ParseRenderQualityPreset(v, p)) fx.QualityPreset = static_cast<int>(p);
+            else fx.QualityPreset = std::clamp(std::stoi(v), 0, 4);
+        }
                     else if (k == "fog_temporal") fx.FogTemporalWeight = std::stof(v);
                     else if (k == "fog") fx.FogOverride = (v == "scene") ? -1 : (asBool() ? 1 : 0);
                     else if (k == "skybox") fx.Skybox = asBool();

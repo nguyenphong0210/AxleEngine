@@ -1,8 +1,8 @@
 ﻿# Milestone 16 — Ray Tracing Backend Architecture
 
-**Status:** Proposed; this milestone is released only by explicit user instruction.
-**Inputs:** M15 canonical material/surface contract, ViewContext, RenderPassScheduler, RenderGraph, RHIViewTargets, reflection capture policy and raster fallback chain.
-**Purpose:** add a real hardware ray-tracing backend without weakening the raster path or claiming support on devices that cannot execute it.
+**Status** — Architecture for the packages and batches in [PLAN.md](PLAN.md).
+**Inputs** — The accepted M15 U11 surface and lighting contracts, `ViewContext`, stateful `IRenderPass` scheduler, graph and transient targets, frame completion, reflection capture policy and raster fallback chain.
+**Purpose** — Add hardware ray-traced shadows and reflections to the raster renderer with capability-validated execution and raster fallback.
 
 ## 1. Product boundary
 
@@ -22,32 +22,34 @@ M16 does not own meshlet generation or clustered light culling; those remain in 
 
 ```mermaid
 flowchart TD
-    A[RenderWorld + ResolvedSurface] --> B[RT capability policy]
-    B -->|Supported| C[BLAS build/refit]
-    C --> D[TLAS build/update]
-    D --> E[RT pipeline + SBT]
-    E --> F[RT shadows]
-    E --> G[RT reflections]
-    E --> H[RT GI experimental]
-    F --> I[Spatial/temporal denoise]
-    G --> I
-    H --> I
-    I --> J[Material-energy resolve]
-    J --> K[Forward raster output]
-    B -->|Unsupported / budget exceeded| L[SSR + planar + probe + sky IBL]
-    L --> K
+    A[RenderWorld + ResolvedSurface] --> B[Capability and effect policy]
+    B -->|RT enabled| C[BLAS and TLAS build/update]
+    C --> D[Trace with RT pipeline and SBT]
+    V[Raster receiver data] --> D
+    D --> E[Shadow visibility and reconstruction]
+    D --> F[Reflection radiance and reconstruction]
+    D -.-> G[Optional RT GI]
+    E --> H[Raster direct lighting per light]
+    I[Raster shadow visibility] --> H
+    F --> J[Shared indirect specular resolve]
+    K[Planar / SSR / probe / sky IBL] --> J
+    H --> L[Final lighting and post-processing]
+    J --> L
+    G -.-> L
 ```
 
-The scheduler registers independent passes: `RayTracingASBuild`, `RayTracingShadow`, `RayTracingReflection`, optional `RayTracingGI`, `RayTracingDenoise` and `RayTracingResolve`. Each pass implements `IRenderPass`; no RT work is hidden inside the legacy callback adapter after its migration checkpoint.
+The scheduler registers `RayTracingASBuild`, `RayTracingShadow`, `RayTracingReflection`, `RayTracingDenoise`, `RayTracingResolve` and optional `RayTracingGI` as stateful `IRenderPass` instances.
+
+AS build precedes trace. Receiver inputs must be available before tracing. Filtered shadow visibility must reach the matching light before its direct lighting is evaluated. Reflections feed the shared indirect-specular resolve before post-processing. Declare each edge in the graph. Probe and planar subcaptures have explicit effect policies that prevent recursive reflection sampling.
 
 ## 3. Ownership and lifetime
 
-- `RTAccelerationStructureService` owns native BLAS/TLAS handles, scratch buffers, compaction state, build generations and deferred retirement.
-- `RTShaderTableService` owns shader libraries, hit groups, root signatures/pipeline layouts and SBT generations.
+- `RTAccelerationStructureService` owns engine RHI handles for BLAS/TLAS, scratch buffers, compaction state, build generations and deferred retirement. RHI owns the native objects and backend destruction.
+- `RTShaderTableService` owns shader libraries, hit groups, RHI pipeline layouts and SBT generations. RHI owns their backend representation.
 - `RTSceneBinding` maps immutable `RenderWorld` geometry/material identities to AS instances and descriptor indices.
 - `ViewContext` owns per-view RT history, reset reasons, output targets and completion token. It does not own global BLAS/TLAS.
-- Every AS, SBT and output lease is retained by the frame completion token until the GPU is finished.
-- Failed rebuilds keep the last-good generation and publish a diagnostic; a failed first build selects raster fallback.
+- Every submitted AS, SBT, target and transitive geometry, descriptor and material lease survives until frame completion. Build inputs and scratch also survive their consuming submission. Publish a replacement set only when its resources and bindings are valid and the consuming submission has the required build-to-read ordering.
+- Failed rebuilds can use the last-good generation if its scene, device epoch and bindings remain compatible. A first-build failure or an incompatible replacement selects raster fallback for the affected effect. Device reset rebuilds GPU resources from retained source data in the new device epoch.
 
 ## 4. Resource and graph contracts
 
@@ -59,13 +61,13 @@ RT resources must be represented by explicit RHI types rather than raw API handl
 - RenderGraph access states for AS build/read, shader binding table reads, storage output writes and denoiser reads/writes.
 - Backend policy exposes `RayTracing`, `RayTracingRefit`, `RayTracingInline`, `MaxASInstances` and budget diagnostics independently.
 
-The graph must reject a pass that reads an unbuilt AS generation, mixes generations, or writes a history target with an incompatible view/material generation.
+The graph must reject a pass that reads an unbuilt AS generation, mixes incompatible generations, or writes a history target with an incompatible view/material generation. History identity records the view, target, scene, compatible AS/material generation and device epoch. Distinguish slot rotation and compatible transform updates from a change that invalidates those identities. Routine object/camera motion uses reprojection and per-pixel rejection within a compatible history. The completion token and explicit graph dependencies protect the history across frames in flight.
 
 ## 5. Geometry and material contract
 
 M16 consumes M15's canonical `ResolvedSurface` values. The RT hit path must use the same base color, metallic, roughness, normal, F0, clearcoat, sheen, transmission and reflection flags as ForwardPBR. Unsupported custom graph fields produce a named fallback rather than silently diverging.
 
-Geometry updates are classified as static build, transform refit, vertex/index rebuild or material-only update. TLAS instance masks separate opaque, transparent, shadow-only and reflection-only geometry. Capture and RT recursion policies explicitly disable recursive planar/probe/SSR sampling.
+Geometry updates are classified as static build, transform update, same-topology deformation, topology rebuild or material-only update. TLAS consumes eligible extracted scene instances, including eligible off-screen geometry. The main-camera raster draw list is view-culled for raster. TLAS classification records opaque, cutout, blended/transmissive, two-sided and effect participation, with tested shadow and reflection masks. Capture and RT recursion policies explicitly disable recursive planar/probe/SSR sampling.
 
 ### 5.1 Coarse RT proxy contract
 
@@ -80,8 +82,10 @@ Static assets are cooked or generated into a retained proxy before BLAS build. S
 - **RT Reflections:** RT reflections with denoising and raster/probe fallback for misses.
 - **RT GI:** experimental indirect lighting, gated by leak, stability and budget tests.
 
-Unsupported hardware, invalid AS generations, shader compilation failure or budget overflow must select the strongest valid raster tier and publish a diagnostic. No authored scene data is mutated by fallback.
+Resolve shadow and reflection availability independently. Shadows supply visibility for each selected light, with the existing raster visibility for unavailable RT samples or unselected lights. Reflections preserve a valid planar contribution on authored planar receivers, then use RT for the remaining confidence, followed by SSR, local probe and sky IBL as available. Resolve the receiver's indirect specular response once. The no-RT case preserves the M15 raster resolve.
+
+Unsupported hardware, invalid AS generations, shader compilation failure or budget overflow select the applicable raster fallback and publish a diagnostic for the affected effect. Resolve the effective tier without changing authored settings. Publish the supported backends, view modes, presets and defaults with acceptance evidence.
 
 ## 7. Acceptance boundary
 
-M16 is accepted only when D3D12 and Vulkan-capable RT fixtures pass on declared hardware, raster fallback passes on non-RT/disabled paths, AS/SBT generations survive resize/device reset/scene replacement, material parity images pass deterministic comparison, and GPU timing/memory budgets are recorded. RT GI remains separately gated until its leak and temporal criteria pass.
+The [M16 acceptance matrix](PLAN.md#4-verification-and-evidence) defines the physical D3D12/Vulkan, fallback, lifetime, parity, Editor visual and performance evidence required for core acceptance at `RT-08D`. Optional RT GI has separate release and acceptance in `RT-09`.

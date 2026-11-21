@@ -17,9 +17,10 @@ namespace Axle::Passes {
         RenderGraph::Resource SceneColor, SceneDepth, Output, HDR, FXAA;
         RenderGraph::Resource BloomInput, ExposureInput, ExposureHistogram, ExposureOutput;
         RenderGraph::Resource TAAColor, TAADepth, TAAVelocity, TAAReactive, TAAHistoryRead, TAAHistoryWrite;
+        RenderGraph::Resource TAAHistoryDepth, TAAMotionPreviousDepth;
         std::array<RenderGraph::Resource, 6> Bloom;
         bool UseBloom = false, UseAutoExposure = false, UseTAA = false, UseVelocity = false, UseReactive = false;
-        bool UseToneMap = false, UseFXAA = false;
+        bool UseToneMap = false, UseFXAA = false, ResetExposure = false;
     };
 
     struct PostProcessRecordInputs {
@@ -42,6 +43,8 @@ namespace Axle::Passes {
         RHI::RHITexture* HistoryWrite;
         RHI::RHITexture* VelocityTexture;
         RHI::RHITexture* ReactiveTexture;
+        RHI::RHITexture* HistoryDepth;
+        RHI::RHITexture* MotionPreviousDepth;
         RHI::RHITexture* ExposureHistogram;
         uint32_t& DispatchCount;
     };

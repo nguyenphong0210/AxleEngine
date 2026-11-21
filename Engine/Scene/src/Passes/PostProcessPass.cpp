@@ -18,10 +18,11 @@ namespace Axle::Passes {
                 {r.ExposureHistogram, Layout::ShaderResourceStorage, Access::Write}});
             graph.AddPass("AutoExposureHistogram", {
                 {r.ExposureInput, Layout::ShaderResource},
-                {r.ExposureHistogram, Layout::ShaderResourceStorage, Access::Write}});
+                {r.ExposureHistogram, Layout::ShaderResourceStorage, Access::ReadWrite}});
             graph.AddPass("AutoExposure", {
                 {r.ExposureHistogram, Layout::ShaderResource},
-                {r.ExposureOutput, Layout::ShaderResourceStorage, Access::Write}});
+                {r.ExposureOutput, Layout::ShaderResourceStorage,
+                 r.ResetExposure ? Access::Write : Access::ReadWrite}});
         }
         if (r.UseBloom) {
             graph.AddPass("BloomCopy", {{r.SceneColor, Layout::CopySource}, {r.BloomInput, Layout::CopyDest, Access::Write}});
@@ -52,10 +53,12 @@ namespace Axle::Passes {
             std::vector<RenderGraph::Use> taaUses = {
                 {source, Layout::ShaderResource}, {r.TAADepth, Layout::ShaderResource},
                 {r.TAAHistoryRead, Layout::ShaderResource},
+                {r.TAAHistoryDepth, Layout::ShaderResource},
                 {r.TAAHistoryWrite, Layout::ColorAttachment, Access::Write, Load::Clear}
             };
             if (r.UseVelocity) {
                 taaUses.push_back({r.TAAVelocity, Layout::ShaderResource});
+                taaUses.push_back({r.TAAMotionPreviousDepth, Layout::ShaderResource});
             }
             if (r.UseReactive) {
                 taaUses.push_back({r.TAAReactive, Layout::ShaderResource});
@@ -63,7 +66,9 @@ namespace Axle::Passes {
             graph.AddPass("TAAResolve", std::move(taaUses));
             graph.AddPass("TAACopy", {
                 {r.TAAHistoryWrite, Layout::CopySource},
-                {r.UseToneMap ? r.HDR : r.SceneColor, Layout::CopyDest, Access::Write}});
+                {r.UseToneMap ? r.HDR : r.SceneColor, Layout::CopyDest, Access::Write},
+                {r.TAADepth, Layout::CopySource},
+                {r.TAAHistoryDepth, Layout::CopyDest, Access::Write}});
         }
         if (r.UseToneMap) {
             if (r.UseAutoExposure) graph.AddPass("ToneMapping", {
@@ -239,8 +244,7 @@ namespace Axle::Passes {
                         !renderer.m_BloomDescriptorPool.UpdateTexture(upsampleSet, 1, 0, source->GetSRV())) return false;
                     if (renderer.m_BloomSampler.IsValid() &&
                         !renderer.m_BloomDescriptorPool.UpdateSampler(upsampleSet, 2, 0, renderer.m_BloomSampler.GetNative())) return false;
-                    nri::Pipeline* upsamplePipeline = (destination->GetFormat() == RHI::RHITextureFormat::RGBA16_FLOAT && renderer.m_BloomUpsamplePipelineHDR)
-                        ? renderer.m_BloomUpsamplePipelineHDR : renderer.m_BloomUpsamplePipelineSDR;
+                    nri::Pipeline* upsamplePipeline = renderer.m_BloomUpsamplePipelineHDR;
                     if (!upsamplePipeline) return false;
 
                     nri::AttachmentDesc upAttachment = {};
@@ -279,8 +283,7 @@ namespace Axle::Passes {
                     if (!renderer.m_BloomDescriptorPool.UpdateSampler(renderer.m_BloomApplyDescriptorSet, 2, 0, renderer.m_BloomSampler.GetNative())) return false;
                 }
 
-                nri::Pipeline* bloomPipeline = (sceneTargetFormat == nri::Format::RGBA16_SFLOAT && renderer.m_BloomApplyPipelineHDR)
-                    ? renderer.m_BloomApplyPipelineHDR : renderer.m_BloomApplyPipelineSDR;
+                nri::Pipeline* bloomPipeline = renderer.GetOrCreateBloomApplyPipeline(sceneTargetFormat);
                 if (!bloomPipeline) return false;
 
                 nri::AttachmentDesc bloomColorAttachment = {};
@@ -333,6 +336,7 @@ namespace Axle::Passes {
                     hasVelocitySRV ? 1.0f : 0.0f,
                     hasReactiveSRV ? 1.0f : 0.0f,
                     0.02f);
+                taaConstants.Reserved[1] = glm::vec4(temporalSelection.PreviousJitter, 0.0f, 0.0f);
                 if (!passUniform().UpdateData(&taaConstants, sizeof(RHITAAConstants))) return false;
 
                 nri::Descriptor* currentSRV = (useToneMap && renderer.m_IntermediateHDRTarget) ? renderer.m_IntermediateHDRTarget->GetSRV() : renderer.m_OpaqueSceneColor->GetSRV();
@@ -347,14 +351,16 @@ namespace Axle::Passes {
                     !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 1, 0, depthSRV) ||
                     !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 2, 0, historyRead->GetSRV()) ||
                     !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 3, 0, velocitySRV) ||
-                    !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 4, 0, reactiveSRV)) return false;
+                    !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 4, 0, reactiveSRV) ||
+                    !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 5, 0, i.HistoryDepth->GetSRV()) ||
+                    !renderer.m_TAADescriptorPool.UpdateTexture(renderer.m_TAADescriptorSet, 6, 0,
+                        hasVelocitySRV ? i.MotionPreviousDepth->GetSRV() : depthSRV)) return false;
                 if (renderer.m_TAALinearSampler.IsValid() && renderer.m_TAAPointSampler.IsValid()) {
-                    if (!renderer.m_TAADescriptorPool.UpdateSampler(renderer.m_TAADescriptorSet, 5, 0, renderer.m_TAALinearSampler.GetNative())) return false;
-                    if (!renderer.m_TAADescriptorPool.UpdateSampler(renderer.m_TAADescriptorSet, 6, 0, renderer.m_TAAPointSampler.GetNative())) return false;
+                    if (!renderer.m_TAADescriptorPool.UpdateSampler(renderer.m_TAADescriptorSet, 7, 0, renderer.m_TAALinearSampler.GetNative())) return false;
+                    if (!renderer.m_TAADescriptorPool.UpdateSampler(renderer.m_TAADescriptorSet, 8, 0, renderer.m_TAAPointSampler.GetNative())) return false;
                 }
 
-                nri::Pipeline* taaPipeline = (historyWrite->GetFormat() == RHI::RHITextureFormat::RGBA16_FLOAT && renderer.m_TAAPipelineHDR)
-                    ? renderer.m_TAAPipelineHDR : renderer.m_TAAPipelineSDR;
+                nri::Pipeline* taaPipeline = renderer.GetOrCreateTAAPipeline(ToNRIFormat(historyWrite->GetFormat()));
                 if (!taaPipeline) return false;
 
                 nri::AttachmentDesc taaColorAttachment = {};
@@ -383,6 +389,7 @@ namespace Axle::Passes {
 
                 if (!beginPass("TAACopy")) return false;
                 renderer.Commands().CopyTexture(*sceneTargetTexture, nullptr, *historyWrite->GetNative(), nullptr);
+                renderer.Commands().CopyTexture(*i.HistoryDepth->GetNative(), nullptr, *renderer.m_OpaqueSceneDepth->GetNative(), nullptr);
             }
 
             // 8. Post-Processing Tone Mapping Pass

@@ -379,12 +379,12 @@ private:
                 m_Editor->OpenScene(p);
                 m_WaitFrames = 2;
                 return;
-            } else if (cmd.Op == "camera") {
+            } else if (cmd.Op == "camera" || cmd.Op == "camera_continuous") {
                 std::istringstream ss(cmd.Args);
                 float px = 0, py = 0, pz = 0, pitch = 0, yaw = 0;
                 if (!(ss >> px >> py >> pz >> pitch >> yaw))
                     throw std::runtime_error("VisualCapture: invalid camera args: " + cmd.Args);
-                m_Editor->SetCameraPose({px, py, pz}, {pitch, yaw, 0.0f});
+                m_Editor->SetCameraPose({px, py, pz}, {pitch, yaw, 0.0f}, cmd.Op == "camera");
             } else if (cmd.Op == "fx") {
                 EditorLayer::RenderFXOverride fx;
                 std::istringstream ss(cmd.Args);

@@ -179,8 +179,7 @@ namespace Axle {
         desc.DDGIGridY = ddgiDims[1];
         desc.DDGIGridZ = ddgiDims[2];
         desc.EnableNormal = desc.EnableGTAO || settings.EnableSSR || settings.EnablePlanarReflections || desc.EnableSubsurface;
-        desc.EnableScreenStorage = desc.EnableGTAO || settings.EnableSSR ||
-            settings.EnableBloom || settings.EnableAutoExposure;
+        desc.EnableScreenStorage = desc.EnableGTAO || settings.EnableSSR;
         FroxelFogContract::ResolveViewTargetOptions(
             settings, false, desc.EnableDepth, desc.EnableVolumetricFog, desc.FroxelQuality, fog);
         desc.IntermediateHDR = settings.EnableToneMapping || desc.EnableReflectionTerms ||

@@ -60,7 +60,8 @@ build/Editor/Release/AxleEditor.exe `
 | --- | --- | --- |
 | `output_dir` | `<dir>` | Change base directory (`ResolveOutput`: relative to previous `output_dir`, which starts at plan parent dir). |
 | `scene` | `<path.axlescene>` | Open scene (asset-root-relative, plan-dir-relative, or absolute path) and wait 2 frames. |
-| `camera` | `<px> <py> <pz> <pitch> <yaw>` | Move Editor camera (`SetCameraPose`, roll `0`). |
+| `camera` | `<px> <py> <pz> <pitch> <yaw>` | Move the Editor camera and notify the renderer of a camera cut. |
+| `camera_continuous` | `<px> <py> <pz> <pitch> <yaw>` | Move the Editor camera with history preserved for temporal captures. |
 | `fx` | `<k=v ...>` | Apply `RenderFXOverride` toggles/values (see table below). |
 | `play` / `pause` / `stop` | *(none)* | Control Editor PIE play/pause/stop state. |
 | `eject` | `1\|true\|0\|false` | Eject/possess game camera (`SetGameCameraEjected`). |

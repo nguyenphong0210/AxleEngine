@@ -155,7 +155,7 @@ namespace Axle::RHI {
             if (!ComputeBloomExtent(m_Desc.Width, m_Desc.Height, level, width, height)) return false;
             auto* bloomTex = GetBloom(level);
             if (!check2D(static_cast<RHIViewTarget>(static_cast<uint8_t>(RHIViewTarget::Bloom0) + level), width, height,
-                         m_Desc.HDR ? RHITextureFormat::RGBA16_FLOAT : m_Desc.ColorFormat) ||
+                         RHITextureFormat::RGBA16_FLOAT) ||
                 !bloomTex || !bloomTex->GetSRV() || !bloomTex->GetUAV() || !bloomTex->GetRTV()) return false;
         }
         if (m_Desc.EnableAutoExposure && !check2D(RHIViewTarget::Exposure, 1, 1, RHITextureFormat::RGBA16_FLOAT)) return false;
@@ -194,6 +194,12 @@ namespace Axle::RHI {
         }
         if (m_Desc.HistoryCount > 0 && !check2D(RHIViewTarget::History0, m_Desc.Width, m_Desc.Height, sceneFormat)) return false;
         if (m_Desc.HistoryCount > 1 && !check2D(RHIViewTarget::History1, m_Desc.Width, m_Desc.Height, sceneFormat)) return false;
+        if (m_Desc.HistoryCount > 1 && m_Desc.EnableDepth && m_Desc.Samples == 1 &&
+            (!check2D(RHIViewTarget::TAAHistoryDepth, m_Desc.Width, m_Desc.Height, m_Desc.DepthFormat) ||
+             !Get(RHIViewTarget::TAAHistoryDepth)->GetSRV())) return false;
+        if (m_Desc.EnableVelocity &&
+            (!check2D(RHIViewTarget::MotionPreviousDepth, m_Desc.Width, m_Desc.Height, RHITextureFormat::R32_FLOAT) ||
+             !Get(RHIViewTarget::MotionPreviousDepth)->GetSRV() || !Get(RHIViewTarget::MotionPreviousDepth)->GetRTV())) return false;
         if (m_Desc.EnableVelocity && (!check2D(RHIViewTarget::Velocity, m_Desc.Width, m_Desc.Height, RHITextureFormat::RG16_FLOAT) || !Get(RHIViewTarget::Velocity)->GetSRV() || !Get(RHIViewTarget::Velocity)->GetRTV())) return false;
         if (m_Desc.EnableReactive && (!check2D(RHIViewTarget::Reactive, m_Desc.Width, m_Desc.Height, RHITextureFormat::R8_UNORM) || !Get(RHIViewTarget::Reactive)->GetSRV() || !Get(RHIViewTarget::Reactive)->GetRTV())) return false;
         if (m_Desc.EnablePlanarReflection) {
@@ -348,13 +354,12 @@ namespace Axle::RHI {
             candidate.m_Textures[static_cast<size_t>(RHIViewTarget::GTAOResolved)] = std::move(resolvedTexture);
         }
         if (desc.EnableBloom) {
-            const auto bloomFormat = desc.HDR ? RHITextureFormat::RGBA16_FLOAT : desc.ColorFormat;
             for (uint32_t level = 0; level < 6; ++level) {
                 uint32_t bloomWidth = 0u, bloomHeight = 0u;
                 if (!ComputeBloomExtent(desc.Width, desc.Height, level, bloomWidth, bloomHeight)) return false;
                 auto texture = std::make_unique<RHITexture>();
                 auto native = RHITextureDesc::StorageTexture2D(
-                    bloomWidth, bloomHeight, bloomFormat, "ViewTarget_Bloom" + std::to_string(level));
+                    bloomWidth, bloomHeight, RHITextureFormat::RGBA16_FLOAT, "ViewTarget_Bloom" + std::to_string(level));
                 native.Usage = native.Usage | RHITextureUsage::ColorAttachment;
                 if (!texture->Init(native)) return false;
                 candidate.m_Textures[static_cast<size_t>(RHIViewTarget::Bloom0) + level] = std::move(texture);
@@ -408,7 +413,11 @@ namespace Axle::RHI {
         }
         for (uint8_t i = 0; i < desc.HistoryCount; ++i)
             if (!create(i ? RHIViewTarget::History1 : RHIViewTarget::History0, sceneColor, 1, false)) return false;
-        if (desc.EnableVelocity && !create(RHIViewTarget::Velocity, RHITextureFormat::RG16_FLOAT, 1, false)) return false;
+        if (desc.HistoryCount > 1 && desc.EnableDepth && desc.Samples == 1 &&
+            !create(RHIViewTarget::TAAHistoryDepth, desc.DepthFormat, 1, true)) return false;
+        if (desc.EnableVelocity &&
+            (!create(RHIViewTarget::Velocity, RHITextureFormat::RG16_FLOAT, 1, false) ||
+             !create(RHIViewTarget::MotionPreviousDepth, RHITextureFormat::R32_FLOAT, 1, false))) return false;
         if (desc.EnableReactive && !create(RHIViewTarget::Reactive, RHITextureFormat::R8_UNORM, 1, false)) return false;
         if (desc.EnableVolumetricFog) {
             const auto froxelExtent = ComputeFroxelGridExtent(desc.Width, desc.Height, desc.FroxelQuality);

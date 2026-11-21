@@ -687,8 +687,8 @@ namespace Axle {
             m_TAADescriptorSet = m_TAADescriptorPool.AllocateDescriptorSet(m_TAAPipelineLayout, 0);
             if (!m_TAADescriptorSet) return false;
             if (m_TAALinearSampler.IsValid() && m_TAAPointSampler.IsValid()) {
-                if (!m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 5, 0, m_TAALinearSampler.GetNative()) ||
-                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 6, 0, m_TAAPointSampler.GetNative())) return false;
+                if (!m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 7, 0, m_TAALinearSampler.GetNative()) ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 8, 0, m_TAAPointSampler.GetNative())) return false;
             }
         }
 
@@ -942,7 +942,6 @@ namespace Axle {
         m_FogSampler.Shutdown();
 
         m_BloomComputePipeline = nullptr;
-        m_BloomUpsamplePipelineSDR = nullptr;
         m_BloomUpsamplePipelineHDR = nullptr;
         m_BloomApplyPipelineSDR = nullptr;
         m_BloomApplyPipelineHDR = nullptr;
@@ -3454,13 +3453,12 @@ namespace Axle {
             return cache.GetOrCreateGraphicsPipeline(gfxDesc);
         };
 
-        m_BloomUpsamplePipelineSDR = createUpsample(nri::Format::RGBA8_UNORM);
         m_BloomUpsamplePipelineHDR = createUpsample(nri::Format::RGBA16_SFLOAT);
         m_BloomApplyPipelineSDR = GetOrCreateBloomApplyPipeline(nri::Format::RGBA8_UNORM);
         m_BloomApplyPipelineHDR = GetOrCreateBloomApplyPipeline(nri::Format::RGBA16_SFLOAT);
 
         return m_BloomComputePipeline != nullptr &&
-               m_BloomUpsamplePipelineSDR != nullptr && m_BloomUpsamplePipelineHDR != nullptr &&
+               m_BloomUpsamplePipelineHDR != nullptr &&
                m_BloomApplyPipelineSDR != nullptr && m_BloomApplyPipelineHDR != nullptr;
     }
 
@@ -3735,7 +3733,8 @@ namespace Axle {
         bgDesc.DepthStencil.DepthWriteEnable = false;
         bgDesc.DepthStencil.DepthCompareOp = nri::CompareOp::ALWAYS;
         bgDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
-        bgDesc.ColorAttachmentFormats = { nri::Format::RG16_SFLOAT };
+        bgDesc.ColorAttachments.push_back(RHIBlendAttachmentDesc::Opaque());
+        bgDesc.ColorAttachmentFormats = { nri::Format::RG16_SFLOAT, nri::Format::R32_SFLOAT };
         bgDesc.VertexInput = RHIVertexInputDesc{};
         m_VelocityBgPipeline = RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(bgDesc);
         return m_VelocityBgPipeline != nullptr &&
@@ -3752,10 +3751,11 @@ namespace Axle {
         gfxDesc.Rasterizer.FrontCounterClockwise = !reverseWinding;
         gfxDesc.DepthStencil.DepthTestEnable = true;
         gfxDesc.DepthStencil.DepthWriteEnable = false;
-        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::LESS_EQUAL;
+        gfxDesc.DepthStencil.DepthCompareOp = nri::CompareOp::EQUAL;
         gfxDesc.DepthStencil.DepthStencilFormat = depthFormat;
         gfxDesc.ColorAttachments = { RHIBlendAttachmentDesc::Opaque() };
-        gfxDesc.ColorAttachmentFormats = { nri::Format::RG16_SFLOAT };
+        gfxDesc.ColorAttachments.push_back(RHIBlendAttachmentDesc::Opaque());
+        gfxDesc.ColorAttachmentFormats = { nri::Format::RG16_SFLOAT, nri::Format::R32_SFLOAT };
         gfxDesc.SampleCount = 1;
         gfxDesc.VertexInput = VertexLayoutContract::GetCanonicalVertexInputDesc();
         return RHIPipelineCache::Get().GetOrCreateGraphicsPipeline(gfxDesc);
@@ -3842,8 +3842,8 @@ namespace Axle {
         rootDesc.descriptorType = nri::DescriptorType::CONSTANT_BUFFER;
         rootDesc.shaderStages = nri::StageBits::ALL;
 
-        nri::DescriptorRangeDesc ranges[7] = {};
-        for (uint32_t t = 0; t < 5; ++t) {
+        nri::DescriptorRangeDesc ranges[9] = {};
+        for (uint32_t t = 0; t < 7; ++t) {
             ranges[t].baseRegisterIndex = t;
             ranges[t].descriptorNum = 1;
             ranges[t].descriptorType = nri::DescriptorType::TEXTURE;
@@ -3851,22 +3851,22 @@ namespace Axle {
             ranges[t].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
         }
 
-        ranges[5].baseRegisterIndex = 0;
-        ranges[5].descriptorNum = 1;
-        ranges[5].descriptorType = nri::DescriptorType::SAMPLER;
-        ranges[5].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[5].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        ranges[7].baseRegisterIndex = 0;
+        ranges[7].descriptorNum = 1;
+        ranges[7].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[7].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[7].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
-        ranges[6].baseRegisterIndex = 1;
-        ranges[6].descriptorNum = 1;
-        ranges[6].descriptorType = nri::DescriptorType::SAMPLER;
-        ranges[6].shaderStages = nri::StageBits::FRAGMENT_SHADER;
-        ranges[6].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
+        ranges[8].baseRegisterIndex = 1;
+        ranges[8].descriptorNum = 1;
+        ranges[8].descriptorType = nri::DescriptorType::SAMPLER;
+        ranges[8].shaderStages = nri::StageBits::FRAGMENT_SHADER;
+        ranges[8].flags = nri::DescriptorRangeBits::PARTIALLY_BOUND;
 
         nri::DescriptorSetDesc descSet = {};
         descSet.registerSpace = 1;
         descSet.ranges = ranges;
-        descSet.rangeNum = 7;
+        descSet.rangeNum = 9;
 
         nri::PipelineLayoutDesc layoutDesc = {};
         layoutDesc.rootRegisterSpace = 0;
@@ -7000,7 +7000,7 @@ namespace Axle {
             settings.EnableSSR || settings.EnablePlanarReflections || wantsSSS);
         targetDesc.EnableSubsurface = wantsSSS;
         targetDesc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows ||
-            settings.EnableSSR || settings.EnableBloom || settings.EnableAutoExposure);
+            settings.EnableSSR);
         targetDesc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;
         targetDesc.EnableReflectionTerms = (settings.EnableSSR || settings.EnablePlanarReflections) && settings.MSAASamples == 1;
         const bool enablePlanarTargets = settings.EnablePlanarReflections && !isSubCapture;
@@ -7039,6 +7039,7 @@ namespace Axle {
             expected.EnableReactive = viewTargets->GetDesc().EnableReactive;
             expected.EnableSubsurface = viewTargets->GetDesc().EnableSubsurface;
             expected.EnableNormal = expected.EnableNormal || viewTargets->GetDesc().EnableNormal;
+            expected.EnableScreenStorage = expected.EnableScreenStorage || viewTargets->GetDesc().EnableScreenStorage;
             if (!viewTargets->IsValid() || viewTargets->GetDesc() != expected ||
                 (viewTargets->Get(RHIViewTarget::Color) && viewTargets->Get(RHIViewTarget::Color)->GetNative() != colorTarget) ||
                 (viewTargets->Get(RHIViewTarget::Depth) && viewTargets->Get(RHIViewTarget::Depth)->GetNative() != depthTarget)) {
@@ -7165,20 +7166,18 @@ namespace Axle {
         static const float s_Halton2[8] = { 0.5f, 0.25f, 0.75f, 0.125f, 0.625f, 0.375f, 0.875f, 0.0625f };
         static const float s_Halton3[8] = { 0.333333f, 0.666667f, 0.111111f, 0.444444f, 0.777778f, 0.222222f, 0.555556f, 0.888889f };
         const auto overlayPolicy = TAAContract::ResolveTemporalOverlayPolicy(settings);
+        const bool jitterScene = overlayPolicy.ApplySceneJitter && sceneDepthTexture && sceneDepthDSV &&
+            viewTargets->Get(RHIViewTarget::TAAHistoryDepth);
         float jitterX = 0.0f;
         float jitterY = 0.0f;
-        if (overlayPolicy.ApplySceneJitter) {
+        if (jitterScene) {
             jitterX = (s_Halton2[viewCtx.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(width) * settings.TAAJitterSpread;
             jitterY = (s_Halton3[viewCtx.GetFrameIndex() % 8] - 0.5f) / static_cast<float>(height) * settings.TAAJitterSpread;
         }
         viewCtx.SetJitter({ jitterX, jitterY });
         const glm::mat4 unjitteredProjZO = camera.GetProjectionMatrixZO();
         const glm::mat4 unjitteredViewProjZO = unjitteredProjZO * camera.GetViewMatrix();
-        glm::mat4 projZO = unjitteredProjZO;
-        if (overlayPolicy.ApplySceneJitter) {
-            projZO[2][0] += 2.0f * jitterX;
-            projZO[2][1] += 2.0f * jitterY;
-        }
+        const glm::mat4 projZO = TAAContract::ApplyProjectionJitter(unjitteredProjZO, {jitterX, jitterY});
         const glm::mat4 viewProjZO = projZO * camera.GetViewMatrix();
         if (useMSAA) sceneTargetFormat = useToneMap ? nri::Format::RGBA16_SFLOAT : m_CurrentColorFormat;
         if (useMSAA) {

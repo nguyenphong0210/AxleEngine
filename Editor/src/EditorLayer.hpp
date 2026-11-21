@@ -105,7 +105,7 @@ public:
         std::optional<int> HiZLevel;
     };
     void ApplyRenderFXOverride(const RenderFXOverride& state);
-    void SetCameraPose(const glm::vec3& position, const glm::vec3& rotationDeg);
+    void SetCameraPose(const glm::vec3& position, const glm::vec3& rotationDeg, bool cameraCut = true);
     void SetGameCameraEjected(bool eject);
     bool SelectEntityByName(const std::string& name);
     bool SelectAssetByPath(const std::filesystem::path& path);

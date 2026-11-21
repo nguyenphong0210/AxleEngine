@@ -72,23 +72,36 @@ BgVSOutput VSBackground(uint vertexID : SV_VertexID) {
     return output;
 }
 
-float2 PSBackground(BgVSOutput input) : SV_Target0 {
+struct VelocityOutput {
+    float2 Velocity : SV_Target0;
+    float PreviousDepth : SV_Target1;
+};
+
+VelocityOutput MakeVelocity(float2 velocity, float previousDepth) {
+    VelocityOutput output;
+    output.Velocity = velocity;
+    output.PreviousDepth = previousDepth;
+    return output;
+}
+
+VelocityOutput PSBackground(BgVSOutput input) {
     if (u_VelocityParams.x < 0.5) {
-        return float2(0.0, 0.0);
+        return MakeVelocity(float2(0.0, 0.0), -1.0);
     }
     float2 ndc = float2(input.TexCoord.x * 2.0 - 1.0, 1.0 - input.TexCoord.y * 2.0);
     float4 worldH = mul(u_InvCurrUnjitteredVP, float4(ndc, 1.0, 1.0));
     if (abs(worldH.w) < 1e-7) {
-        return float2(0.0, 0.0);
+        return MakeVelocity(float2(0.0, 0.0), -1.0);
     }
     float3 worldPos = worldH.xyz / worldH.w;
     float4 prevClip = mul(u_PrevUnjitteredVP, float4(worldPos, 1.0));
     if (prevClip.w <= 1e-6) {
-        return float2(0.0, 0.0);
+        return MakeVelocity(float2(0.0, 0.0), -1.0);
     }
     float2 prevUV = ComputeUVFromClip(prevClip);
     float2 velocity = input.TexCoord - prevUV;
-    return any(isnan(velocity)) || any(isinf(velocity)) ? float2(0.0, 0.0) : velocity;
+    if (!all(isfinite(velocity))) return MakeVelocity(float2(0.0, 0.0), -1.0);
+    return MakeVelocity(velocity, 1.0);
 }
 
 // -----------------------------------------------------------------------------
@@ -129,7 +142,7 @@ float SampleSurfaceAlpha(float2 texCoord) {
     return texAlpha * u_MaterialReserved[3].x;
 }
 
-float2 PSMesh(MeshVSOutput input) : SV_Target0 {
+VelocityOutput PSMesh(MeshVSOutput input) {
     int surfaceType = (int)(u_MaterialReserved[3].z + 0.5);
     if (surfaceType == 1) {
         float alpha = SampleSurfaceAlpha(input.TexCoord);
@@ -138,16 +151,16 @@ float2 PSMesh(MeshVSOutput input) : SV_Target0 {
         }
     }
 
-    if (u_VelocityParams.x < 0.5) {
-        return float2(0.0, 0.0);
-    }
-    if (input.CurrClipPos.w <= 1e-6 || input.PrevClipPos.w <= 1e-6) {
-        return float2(0.0, 0.0);
+    if (u_VelocityParams.x < 0.5 ||
+        input.CurrClipPos.w <= 1e-6 || input.PrevClipPos.w <= 1e-6) {
+        return MakeVelocity(float2(0.0, 0.0), -1.0);
     }
     float2 currUV = ComputeUVFromClip(input.CurrClipPos);
     float2 prevUV = ComputeUVFromClip(input.PrevClipPos);
     float2 velocity = currUV - prevUV;
-    return any(isnan(velocity)) || any(isinf(velocity)) ? float2(0.0, 0.0) : velocity;
+    float previousDepth = input.PrevClipPos.z / input.PrevClipPos.w;
+    if (!all(isfinite(velocity)) || !isfinite(previousDepth)) return MakeVelocity(float2(0.0, 0.0), -1.0);
+    return MakeVelocity(velocity, previousDepth);
 }
 
 // Reactive mask pass (M15-U8-14.1 / 14.2):

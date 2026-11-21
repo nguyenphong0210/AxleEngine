@@ -253,10 +253,9 @@ namespace Axle {
         }
 
         const bool useBloom = settings.EnableBloom && activeSampleCount == 1 &&
-            m_BloomComputePipeline && m_BloomUpsamplePipelineHDR && m_BloomUpsamplePipelineSDR &&
+            m_BloomComputePipeline && m_BloomUpsamplePipelineHDR &&
             m_BloomApplyPipelineHDR && m_BloomApplyPipelineSDR &&
-            m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
-            m_ScreenStorageTarget && m_ScreenStorageTarget->IsValid() && m_ScreenStorageTarget->GetUAV() != nullptr;
+            m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() && m_OpaqueSceneColor->GetSRV();
         const auto bloomInput = useBloom ? graph.Import("BloomInput", m_OpaqueSceneColor->GetNative()) : output;
         std::array<Graph::Resource, 6> bloomResources{};
         if (useBloom) {
@@ -311,15 +310,19 @@ namespace Axle {
         Passes::DDGIPlan ddgiPlan;
         const auto exposureInput = useAutoExposure ? graph.Import("ExposureInput", useToneMap ? m_IntermediateHDRTarget->GetNative() : m_OpaqueSceneColor->GetNative()) : output;
         const auto exposureHistogram = useAutoExposure ? graph.Import("ExposureHistogram", m_AutoExposureHistogram.GetNative()) : output;
-        const auto exposureOutput = useAutoExposure ? graph.Import("ExposureOutput", viewTargets->GetExposure()->GetNative()) : output;
+        const auto exposureOutput = useAutoExposure ? graph.Import("ExposureOutput", viewTargets->GetExposure()->GetNative(), !resetAutoExposure) : output;
 
         RHITexture* velocityTex = viewTargets ? viewTargets->GetVelocity() : nullptr;
+        RHITexture* motionPreviousDepth = viewTargets ? viewTargets->Get(RHIViewTarget::MotionPreviousDepth) : nullptr;
         const bool useVelocity = (settings.EnableTAA || (viewTargets && viewTargets->GetDesc().EnableVelocity)) &&
             activeSampleCount == 1 && !captureActive && !planarActive && sceneDepthTexture && sceneDepthDSV &&
             m_VelocityBgPipeline && m_VelocityMeshVertexShader.IsValid() && m_VelocityMeshPixelShader.IsValid() &&
             m_DefaultVelocityMaterialBuffer.IsValid() &&
-            velocityTex && velocityTex->IsValid() && velocityTex->GetRTV() && velocityTex->GetSRV();
+            velocityTex && velocityTex->IsValid() && velocityTex->GetRTV() && velocityTex->GetSRV() &&
+            motionPreviousDepth && motionPreviousDepth->IsValid() &&
+            motionPreviousDepth->GetRTV() && motionPreviousDepth->GetSRV();
         const auto velocityTarget = useVelocity ? graph.Import("Velocity", velocityTex->GetNative()) : output;
+        const auto motionDepth = useVelocity ? graph.Import("MotionPreviousDepth", motionPreviousDepth->GetNative()) : output;
         RHITexture* reactiveTex = viewTargets ? viewTargets->GetReactive() : nullptr;
         const bool useReactive = (settings.EnableTAA || (viewTargets && viewTargets->GetDesc().EnableReactive)) &&
             activeSampleCount == 1 && !captureActive && !planarActive && sceneDepthTexture && sceneDepthDSV &&
@@ -332,10 +335,14 @@ namespace Axle {
         RHITexture* history1 = viewTargets ? viewTargets->Get(RHIViewTarget::History1) : nullptr;
         RHITexture* historyRead = nullptr;
         RHITexture* historyWrite = nullptr;
+        RHITexture* historyDepth = viewTargets ? viewTargets->Get(RHIViewTarget::TAAHistoryDepth) : nullptr;
         const bool useTAA = settings.EnableTAA && activeSampleCount == 1 && sceneDepthTexture && sceneDepthDSV &&
             m_OpaqueSceneColor && m_OpaqueSceneColor->IsValid() &&
             m_OpaqueSceneDepth && m_OpaqueSceneDepth->IsValid() &&
-            m_TAAPipelineSDR && history0 && history0->IsValid() && history1 && history1->IsValid();
+            m_TAAPipelineSDR && history0 && history0->IsValid() && history1 && history1->IsValid() &&
+            historyDepth && historyDepth->IsValid() && historyDepth->GetSRV();
+        if (settings.EnableTAA && !useTAA)
+            viewCtx.Diagnostics().AddFallback("taa_disabled: single-sample depth and temporal targets required");
         m_TAADepthSource = sceneDepthTexture;
         auto temporalSelection = viewCtx.Temporal().Begin(useTAA ? 2 : 0, { jitterX, jitterY });
         historyRead = (temporalSelection.ReadSlot == 0) ? history0 : history1;
@@ -346,6 +353,7 @@ namespace Axle {
         const auto taaDepth = useTAA ? graph.Import("TAADepth", m_OpaqueSceneDepth->GetNative()) : sceneDepth;
         const auto taaHistoryRead = useTAA ? graph.Import("TAAHistoryRead", historyRead->GetNative(), true) : output;
         const auto taaHistoryWrite = useTAA ? graph.Import("TAAHistoryWrite", historyWrite->GetNative()) : output;
+        const auto taaHistoryDepth = useTAA ? graph.Import("TAAHistoryDepth", historyDepth->GetNative(), true) : output;
         auto attachments = [&](Load load) {
             std::vector<Graph::Use> uses{{sceneColor, Layout::ColorAttachment, Access::Write, load}};
             if (sceneDepthDSV) uses.push_back({sceneDepth, Layout::DepthStencilWrite, Access::Write, load});
@@ -565,8 +573,7 @@ namespace Axle {
 
             glm::mat4 skyboxProjZO = skyCam.GetUnclippedProjectionMatrixZO();
             if (applyJitter && settings.EnableTAA) {
-                skyboxProjZO[2][0] += 2.0f * jitterX;
-                skyboxProjZO[2][1] += 2.0f * jitterY;
+                skyboxProjZO = TAAContract::ApplyProjectionJitter(skyboxProjZO, {jitterX, jitterY});
             }
             outConstants.InvViewProjection = glm::inverse(skyboxProjZO * skyCam.GetViewMatrix());
             outConstants.CameraPosition = glm::vec4(skyCam.GetPosition(), 1.0f);
@@ -1676,9 +1683,12 @@ namespace Axle {
             velBgColorAttachment.storeOp = nri::StoreOp::STORE;
             velBgColorAttachment.clearValue.color.f = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+            nri::AttachmentDesc velBgAttachments[2]{velBgColorAttachment, velBgColorAttachment};
+            velBgAttachments[1].descriptor = motionPreviousDepth->GetRTV();
+            velBgAttachments[1].clearValue.color.f = {1.0f, 0.0f, 0.0f, 0.0f};
             nri::RenderingDesc velBgRendering = {};
-            velBgRendering.colors = &velBgColorAttachment;
-            velBgRendering.colorNum = 1;
+            velBgRendering.colors = velBgAttachments;
+            velBgRendering.colorNum = 2;
 
             // 1. Background / skybox camera-motion pass across entire target (no depth attachment bound)
             beginRendering(velBgRendering);
@@ -1700,8 +1710,8 @@ namespace Axle {
                 }
             }
             if (anyMesh) {
-                nri::AttachmentDesc velMeshColorAttachment = velBgColorAttachment;
-                velMeshColorAttachment.loadOp = nri::LoadOp::LOAD;
+                nri::AttachmentDesc velMeshAttachments[2]{velBgAttachments[0], velBgAttachments[1]};
+                for (auto& attachment : velMeshAttachments) attachment.loadOp = nri::LoadOp::LOAD;
 
                 nri::AttachmentDesc velDepthAttachment = {};
                 velDepthAttachment.descriptor = sceneDepthDSV;
@@ -1709,8 +1719,8 @@ namespace Axle {
                 velDepthAttachment.storeOp = nri::StoreOp::STORE;
 
                 nri::RenderingDesc velMeshRendering = {};
-                velMeshRendering.colors = &velMeshColorAttachment;
-                velMeshRendering.colorNum = 1;
+                velMeshRendering.colors = velMeshAttachments;
+                velMeshRendering.colorNum = 2;
                 velMeshRendering.depth = velDepthAttachment;
 
                 beginRendering(velMeshRendering);
@@ -1741,9 +1751,9 @@ namespace Axle {
                     if (temporalSelection.HistoryValid) {
                         objConsts.PrevModel = viewCtx.FindPreviousObjectTransform(
                             static_cast<uint32_t>(item.DiagnosticEntity), item.StableUUID)
-                            .value_or(item.PushConsts.Model);
+                            .value_or(glm::mat4(0.0f));
                     } else {
-                        objConsts.PrevModel = item.PushConsts.Model;
+                        objConsts.PrevModel = glm::mat4(0.0f);
                     }
                     Commands().SetRootConstants(0, &objConsts, sizeof(objConsts));
                     item.Mesh->Bind(Commands());
@@ -1757,7 +1767,8 @@ namespace Axle {
             if (useVelocity) {
                 graph.AddPass("MotionVectors", {
                     {sceneDepth, Layout::DepthStencilWrite, Access::Write, Load::Load},
-                    {velocityTarget, Layout::ColorAttachment, Access::Write, Load::Clear}});
+                    {velocityTarget, Layout::ColorAttachment, Access::Write, Load::Clear},
+                    {motionDepth, Layout::ColorAttachment, Access::Write, Load::Clear}});
             }
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (auto res = buildAndPrepareSceneQueues(); !res) return res;
@@ -2019,7 +2030,7 @@ namespace Axle {
         }
 
         const bool hasPhysicsDebug = m_PhysicsDebugRenderer && ((settings.ShowPhysicsDebug && physicsScene) || !world.DebugLines.empty());
-        const bool deferPhysicsDebugAfterTAA = useTAA && hasPhysicsDebug;
+        const bool deferPhysicsDebugOverlay = hasPhysicsDebug && (useTAA || useAutoExposure || useBloom);
         if (allowCaptureParticlesAndOverlays || useMSAA) {
         addPass("ParticlesAndResolve", [&](const RenderPassContext&) -> RenderPassResult {
             if (copyParticleDepth) {
@@ -2060,7 +2071,7 @@ namespace Axle {
             }
 
             // 6.5. Jolt Physics Debug Wireframe Pass (Colliders, wheel suspension raycasts, bounds)
-            if (!deferPhysicsDebugAfterTAA && hasPhysicsDebug) {
+            if (!deferPhysicsDebugOverlay && hasPhysicsDebug) {
                 PhysicsScene* activePhysics = physicsScene;
                 {
                     m_PhysicsDebugRenderer->Begin(camera.GetPosition(),
@@ -2130,7 +2141,7 @@ namespace Axle {
                     preparedParticles.push_back({batch,std::move(effective),std::move(texture),std::move(normal)});
                 }
             }
-            if (!deferPhysicsDebugAfterTAA && hasPhysicsDebug) {
+            if (!deferPhysicsDebugOverlay && hasPhysicsDebug) {
                 if (!graph.DeclareRead("ParticlesAndPhysics",m_PhysicsDebugRenderer->GetConstantBuffer().GetCBV()) ||
                     !graph.DeclareBuffer("ParticlesAndPhysics",m_PhysicsDebugRenderer->GetVertexBuffer().AcquireLease(),RHIAccess::VertexBuffer)) return fail();
             }
@@ -2255,14 +2266,16 @@ namespace Axle {
                  sceneTargetRTV, colorTarget, colorRTV, sceneTargetFormat, width, height,
                  jitterX, jitterY, view.DeltaTime, resetAutoExposure,
                  useBloom, useAutoExposure, useTAA, useVelocity, useReactive, useToneMap, useFXAA && !useTAA,
-                 historyRead, historyWrite, velocityTex, reactiveTex, &m_AutoExposureHistogram, dispatchCount}, postOps)) return fail();
+                 historyRead, historyWrite, velocityTex, reactiveTex, historyDepth, motionPreviousDepth,
+                 &m_AutoExposureHistogram, dispatchCount}, postOps)) return fail();
 
             return {};
         }, [&](RenderGraph& graph) {
             Passes::PostProcessPass::Declare(graph, {sceneColor, sceneDepth, output, hdr, fxaa,
                 bloomInput, exposureInput, exposureHistogram, exposureOutput,
                 taaColor, taaDepth, velocityTarget, reactiveTarget, taaHistoryRead, taaHistoryWrite,
-                bloomResources, useBloom, useAutoExposure, useTAA, useVelocity, useReactive, useToneMap, useFXAA && !useTAA});
+                taaHistoryDepth, motionDepth, bloomResources, useBloom, useAutoExposure, useTAA, useVelocity,
+                useReactive, useToneMap, useFXAA && !useTAA, resetAutoExposure});
         }, [&](const RenderPassContext&) -> RenderPassResult {
             if (useBloom) {
                 if (!uniform("BloomApply",sizeof(RHIBloomConstants))) return fail();
@@ -2284,13 +2297,15 @@ namespace Axle {
                 nri::Descriptor* taaReactSRV = (useReactive && reactiveTex && reactiveTex->IsValid())
                     ? reactiveTex->GetSRV() : RHIMaterial::GetDefaultBlackTexture()->GetSRV();
                 if (!m_TAADescriptorSet || !taaVelSRV || !taaReactSRV ||
-                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 5, 0, m_TAALinearSampler.GetNative()) ||
-                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 6, 0, m_TAAPointSampler.GetNative()) ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 7, 0, m_TAALinearSampler.GetNative()) ||
+                    !m_TAADescriptorPool.UpdateSampler(m_TAADescriptorSet, 8, 0, m_TAAPointSampler.GetNative()) ||
                     !uniform("TAAResolve",sizeof(RHITAAConstants)) ||
                     !graph.DeclareRead("TAAResolve",m_TAADescriptorSet) ||
                     !graph.DeclareRead("TAAResolve",(useToneMap && m_IntermediateHDRTarget) ? m_IntermediateHDRTarget->GetSRV() : m_OpaqueSceneColor->GetSRV()) ||
                     !graph.DeclareRead("TAAResolve",m_OpaqueSceneDepth->GetSRV()) ||
                     !graph.DeclareRead("TAAResolve",historyRead->GetSRV()) ||
+                    !graph.DeclareRead("TAAResolve",historyDepth->GetSRV()) ||
+                    (useVelocity && !graph.DeclareRead("TAAResolve",motionPreviousDepth->GetSRV())) ||
                     !graph.DeclareRead("TAAResolve",taaVelSRV) ||
                     !graph.DeclareRead("TAAResolve",taaReactSRV)) return fail();
             }
@@ -2302,7 +2317,7 @@ namespace Axle {
             return {};
         });
 
-        if (deferPhysicsDebugAfterTAA) {
+        if (deferPhysicsDebugOverlay) {
         addPass("PhysicsDebugOverlay", [&](const RenderPassContext&) -> RenderPassResult {
             if (!beginPass("PhysicsDebugOverlay")) return fail();
 

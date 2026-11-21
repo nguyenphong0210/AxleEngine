@@ -1,0 +1,24 @@
+# A fixed viewport separates bloom gain and exposure adaptation.
+camera 0 1.82 5.62 -10 0
+select_entity Amber HDR beacon
+fx hdr=0 taa=0 autoexp=0 bloom=0 ddgi=0 fog=0 ssr=0 planar=0 gtao=0 contact=0
+wait 8
+capture_viewport bloom_off.png
+fx bloom=1
+wait 6
+capture_viewport bloom_on.png
+capture_editor bloom_on_editor.png
+fx bloom=0 autoexp=1
+wait 35
+capture_viewport dark_metered.png
+camera_continuous 11 1.82 5.62 -10 0
+wait 1
+capture_viewport exposure_step_early.png
+wait 100
+capture_viewport exposure_step_settled.png
+capture_editor exposure_settled_editor.png
+fx taa=1
+wait 20
+capture_viewport diagonal_taa.png
+assert_no_errors
+quit

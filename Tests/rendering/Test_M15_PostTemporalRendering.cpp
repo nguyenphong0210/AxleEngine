@@ -1,4 +1,5 @@
 #include "RHIReadback.hpp"
+#include "RenderTestCommon.hpp"
 #include <Axle/MaterialSurfaceShader.hpp>
 #include <Axle/RHISceneRenderer.hpp>
 #include <Axle/RenderContracts.hpp>
@@ -172,7 +173,6 @@ namespace {
         desc.Samples = 1;
         desc.HDR = true;
         desc.EnableDepth = true;
-        desc.EnableScreenStorage = true;
         desc.EnableAutoExposure = true;
         desc.EnableBloom = enableBloom;
         desc.OwnPrimary = false;
@@ -525,15 +525,16 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
     // =========================================================================
     // Batch B (M15-U8-10.1..10.4): Physically-Based 6-Level Additive Bloom Tests
     // =========================================================================
-    auto makeBloomViewTargets = [](uint32_t w, uint32_t h, bool hdr, bool enableBloom = true) -> std::shared_ptr<RHIViewTargets> {
+    auto makeBloomViewTargets = [](uint32_t w, uint32_t h, bool hdr, bool enableBloom = true,
+                                   RHITextureFormat format = RHITextureFormat::RGBA8_UNORM) -> std::shared_ptr<RHIViewTargets> {
         auto targets = std::make_shared<RHIViewTargets>();
         RHIViewTargetDesc desc;
         desc.Width = w;
         desc.Height = h;
+        desc.ColorFormat = format;
         desc.Samples = 1;
         desc.HDR = hdr;
         desc.EnableDepth = true;
-        desc.EnableScreenStorage = enableBloom;
         desc.EnableAutoExposure = false;
         desc.EnableBloom = enableBloom;
         desc.OwnPrimary = false;
@@ -714,21 +715,24 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         uint32_t W = 0u;
         uint32_t H = 0u;
         bool HDR = true;
+        RHITextureFormat Format = RHITextureFormat::RGBA8_UNORM;
     };
     for (const auto& cfg : std::vector<OddBloomCase>{
-             {3u, 5u, true}, {127u, 63u, true}, {127u, 63u, false}}) {
+             {3u, 5u, true}, {127u, 63u, true}, {127u, 63u, false},
+             {127u, 63u, false, RHITextureFormat::BGRA8_UNORM}}) {
         const uint32_t w = cfg.W;
         const uint32_t h = cfg.H;
         const bool hdr = cfg.HDR;
         RHITexture col, dep;
-        if (!col.Init(RHITextureDesc::RenderTarget2D(w, h)) ||
+        if (!col.Init(RHITextureDesc::RenderTarget2D(w, h, cfg.Format)) ||
             !dep.Init(RHITextureDesc::DepthStencil2D(w, h))) return false;
-        auto targets = makeBloomViewTargets(w, h, hdr);
+        auto targets = makeBloomViewTargets(w, h, hdr, true, cfg.Format);
         if (!targets || !targets->Validate()) return false;
         for (uint32_t lvl = 0; lvl < 6u; ++lvl) {
             const auto expected = BloomContract::ComputeMipExtent(w, h, lvl);
             auto* bTex = targets->GetBloom(lvl);
-            if (!bTex || bTex->GetWidth() != expected.Width || bTex->GetHeight() != expected.Height) {
+            if (!bTex || bTex->GetFormat() != RHITextureFormat::RGBA16_FLOAT ||
+                bTex->GetWidth() != expected.Width || bTex->GetHeight() != expected.Height) {
                 std::cerr << "[M15U8] FAIL (10.3): Bloom mip extent mismatch\n";
                 return false;
             }
@@ -748,12 +752,13 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         s.EnableBloom = true;
         s.BloomThreshold = 0.25f;
         s.BloomIntensity = 1.0f;
-        s.ClearColor = {1.5f, 1.5f, 1.5f, 1.0f};
+        s.ClearColor = {1.5f, 1.5f, 1.5f, 0.375f};
         renderer.RenderWorldView(emptyWorld, cam, &col, &dep, s, nullptr, targets, true, RenderViewKind::Main, 1.0f / 60.0f);
         if (!renderer.WasLastRenderSuccessful()) return false;
 
         const auto px = RenderTests::ReadTexture(col);
-        if (px.size() != static_cast<size_t>(w) * h * 4u || px[0] < 100) {
+        if (px.size() != static_cast<size_t>(w) * h * 4u || px[0] < 100 ||
+            std::abs(static_cast<int>(px[3]) - 96) > 1) {
             std::cerr << "[M15U8] FAIL (10.3/10.4): Invalid Bloom output at " << w << "x" << h
                       << " hdr=" << hdr << " px0=" << (px.empty() ? -1 : int(px[0])) << "\n";
             return false;
@@ -1085,6 +1090,34 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
     // =========================================================================
 
     // -------------------------------------------------------------------------
+    // 10b. Preserve the FP16 peak and viewport alpha after history starts blending.
+    {
+        constexpr uint32_t W = 32, H = 32;
+        RHITexture color, depth;
+        if (!color.Init(RHITextureDesc::RenderTarget2D(W, H, RHITextureFormat::RGBA16_FLOAT)) ||
+            !depth.Init(RHITextureDesc::DepthStencil2D(W, H))) return false;
+        auto targets = makeTemporalViewTargets(W, H, false, RHITextureFormat::RGBA16_FLOAT);
+        if (!targets) return false;
+        SceneRenderSettings s;
+        s.EnableSkybox = false;
+        s.EnableShadows = false;
+        s.EnableParticles = false;
+        s.EnableTAA = true;
+        s.ClearColor = {24000.0f, 6000.0f, 18000.0f, 0.375f};
+        PerspectiveCamera camera(60.0f, 1.0f, 0.1f, 50.0f);
+        const RenderWorld empty;
+        for (uint32_t frame = 0; frame < 3; ++frame) {
+            renderer.RenderWorldView(empty, camera, &color, &depth, s, nullptr, targets, frame == 0);
+            if (!renderer.WasLastRenderSuccessful()) return false;
+        }
+        std::vector<glm::vec4> pixels;
+        RENDER_CHECK(ReadTextureRGBA16F(color, pixels) && pixels.size() == size_t(W) * H,
+            "M15-U8 HDR temporal readback");
+        const auto center = pixels[size_t(W) * (H / 2u) + W / 2u];
+        RENDER_CHECK(std::abs(center.r - 24000.0f) < 100.0f && std::abs(center.a - 0.375f) < 0.001f,
+            "M15-U8 HDR temporal resolve keeps full peak radiance and does not overwrite viewport alpha");
+    }
+
     // 11. M15-U8-15.1: Static diagonal high-contrast shimmer reduction & AA
     // -------------------------------------------------------------------------
     {
@@ -1323,6 +1356,70 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
     }
 
     // -------------------------------------------------------------------------
+    // 13b. Both colors are inside the 3x3 neighborhood range at this moving edge.
+    {
+        constexpr uint32_t W = 128, H = 128;
+        RHITexture color, depth;
+        if (!color.Init(RHITextureDesc::RenderTarget2D(W, H)) ||
+            !depth.Init(RHITextureDesc::DepthStencil2D(W, H))) return false;
+        auto targets = makeTemporalViewTargets(W, H, true);
+        if (!targets) return false;
+
+        RHIMaterialDesc material{};
+        material.BaseColor = {0.0f, 0.0f, 0.0f, 1.0f};
+        material.EmissiveColor = {0.52f, 0.52f, 0.52f};
+        material.EmissiveIntensity = 1.0f;
+        RenderMeshInstance occluder;
+        occluder.EntityID = 5311;
+        occluder.StableUUID = UUID(0x5311u);
+        occluder.NativeView = cube->CaptureView();
+        occluder.Material.RHIMaterialAsset = std::make_shared<RHIMaterial>(material);
+        occluder.WorldTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 2.0f, 0.5f));
+        RenderWorld world;
+        world.Meshes.push_back(occluder);
+
+        PerspectiveCamera camera;
+        camera.SetOrthographic(4.0f, 1.0f, 0.1f, 40.0f);
+        const glm::vec3 eye(0.0f, 0.0f, 4.5f);
+        camera.SetViewMatrix(glm::lookAtRH(eye, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), eye);
+
+        SceneRenderSettings s;
+        s.EnableSkybox = false;
+        s.EnableShadows = false;
+        s.EnableParticles = false;
+        s.EnableToneMapping = true;
+        s.ToneMappingMode = 3;
+        s.Gamma = 1.0f;
+        s.EnableTAA = true;
+        s.TAAJitterSpread = 0.0f;
+        s.ClearColor = {0.38f, 0.38f, 0.38f, 1.0f};
+        auto render = [&](bool cameraCut) {
+            renderer.RenderWorldView(world, camera, &color, &depth, s, nullptr, targets, cameraCut);
+            return renderer.WasLastRenderSuccessful() ? RenderTests::ReadTexture(color) : std::vector<uint8_t>{};
+        };
+
+        const auto occluded = render(true);
+        world.Meshes.front().WorldTransform[3].x = 0.44f;
+        const auto accumulated = render(false);
+        const auto current = render(true);
+        RENDER_CHECK(occluded.size() == size_t(W) * H * 4u && accumulated.size() == occluded.size() &&
+                     current.size() == occluded.size(), "M15-U8-15.3: temporal depth fixture readbacks");
+        const auto red = [](const std::vector<uint8_t>& image, uint32_t x) {
+            return static_cast<int>(image[(size_t(H / 2u) * W + x) * 4u]);
+        };
+        uint32_t edgeReveals = 0;
+        int maxDelta = 0;
+        for (uint32_t x = 1; x + 1u < W; ++x) {
+            if (red(occluded, x) > 125 && red(current, x) < 105 && red(current, x + 1) > 125) {
+                ++edgeReveals;
+                maxDelta = std::max(maxDelta, std::abs(red(accumulated, x) - red(current, x)));
+            }
+        }
+        std::cout << "[M15U8Depth] nearby-color reveals=" << edgeReveals << " max_rgb_delta=" << maxDelta << '\n';
+        RENDER_CHECK(edgeReveals > 0 && maxDelta <= 2,
+            "M15-U8-15.3: previous occluder depth rejects plausible-colored history at a revealed edge");
+    }
+
     // 14. M15-U8-15.4: Resize + ViewSwitch reset cleanly & no silent FXAA-on-TAA
     // -------------------------------------------------------------------------
     {
@@ -1577,7 +1674,6 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
             RHIViewTargetDesc d{};
             d.Width = W; d.Height = H;
             d.HDR = true; d.EnableDepth = true;
-            d.EnableScreenStorage = enableExp;
             d.EnableAutoExposure = enableExp;
             d.HistoryCount = enableTaa ? 2 : 0;
             d.EnableVelocity = enableTaa;
@@ -1620,6 +1716,15 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
 
         s.EnableTAA = false;
         debugRenderer.RenderWorldView(worldEmpty, cam, &colRef, &depRef, s, nullptr, expNoDbgTargets, true, RenderViewKind::Main, 1.0f / 60.0f);
+        std::vector<glm::vec4> noOverlayExposure, overlayExposure;
+        RENDER_CHECK(debugRenderer.WasLastRenderSuccessful() &&
+            ReadTextureRGBA16F(*expNoDbgTargets->GetExposure(), noOverlayExposure) && !noOverlayExposure.empty(),
+            "M15-U8-04: read reference histogram without TAA");
+        debugRenderer.RenderWorldView(worldWithDebug, cam, &colRef, &depRef, s, nullptr, expNoDbgTargets, true);
+        RENDER_CHECK(debugRenderer.WasLastRenderSuccessful() &&
+            ReadTextureRGBA16F(*expNoDbgTargets->GetExposure(), overlayExposure) && !overlayExposure.empty() &&
+            glm::length(overlayExposure.front() - noOverlayExposure.front()) < 0.001f,
+            "M15-U8-04: debug overlay never meters even with TAA disabled");
         s.EnableAutoExposure = false;
         debugRenderer.RenderWorldView(worldWithDebug, cam, &colRef, &depRef, s, nullptr, targetsRef, true, RenderViewKind::Main, 1.0f / 60.0f);
         if (!debugRenderer.WasLastRenderSuccessful()) return false;
@@ -1680,7 +1785,6 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         desc.Height = H;
         desc.HDR = true;
         desc.EnableDepth = true;
-        desc.EnableScreenStorage = true;
         desc.EnableAutoExposure = true;
         desc.EnableBloom = true;
         desc.HistoryCount = 2;
@@ -1781,6 +1885,8 @@ bool RunM15PostTemporalTests(RHISceneRenderer& renderer, const std::filesystem::
         addTexBytes(targets->Get(RHIViewTarget::History0));
         addTexBytes(targets->Get(RHIViewTarget::History1));
         addTexBytes(targets->GetVelocity());
+        addTexBytes(targets->Get(RHIViewTarget::MotionPreviousDepth));
+        addTexBytes(targets->Get(RHIViewTarget::TAAHistoryDepth));
         addTexBytes(targets->GetReactive());
 
         constexpr uint64_t kMaxPostTemporalBudgetBytes = 64ull * 1024ull * 1024ull;

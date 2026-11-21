@@ -16,6 +16,9 @@ cbuffer BloomConstants : register(b0, space0) {
 Texture2D<float4> u_InputTexture : register(t0, space1);
 Texture2D<float4> u_SceneTexture : register(t1, space1);
 SamplerState u_LinearSampler : register(s0, space1);
+#if defined(__spirv__)
+[[vk::image_format("rgba16f")]]
+#endif
 RWTexture2D<float4> u_OutputTexture : register(u0, space2);
 
 float3 SanitizeHDR(float3 color) {
@@ -105,7 +108,8 @@ void CSMain(uint3 DTid : SV_DispatchThreadID) {
     float2 srcTexelSize = u_SourceSize.zw;
     float3 result = float3(0.0, 0.0, 0.0);
     if (u_BloomParams.w < 0.5) {
-        result = Downsample13TapKaris(uv, srcTexelSize, u_BloomParams.x, u_BloomParams.z);
+        // Normalize the input octave once so additive reconstruction stays in FP16 range.
+        result = Downsample13TapKaris(uv, srcTexelSize, u_BloomParams.x, u_BloomParams.z) * (1.0 / 6.0);
     } else {
         result = Downsample13TapPlain(uv, srcTexelSize);
     }
@@ -142,11 +146,11 @@ float4 PSUpsample(VSOutput input) : SV_Target {
     return float4(SanitizeHDR(sum * (1.0 / 16.0)), 1.0);
 }
 
-// Applied once onto full-resolution scene target with single tint, single linear
-// intensity, and 1/6 pyramid octave normalization.
+// Composite the normalized pyramid with one tint and one linear intensity.
 float4 PSApply(VSOutput input) : SV_Target {
-    float3 sceneColor = SanitizeHDR(u_SceneTexture.Sample(u_LinearSampler, input.TexCoord).rgb);
+    float4 sceneSample = u_SceneTexture.Sample(u_LinearSampler, input.TexCoord);
+    float3 sceneColor = SanitizeHDR(sceneSample.rgb);
     float3 bloomColor = SanitizeHDR(u_InputTexture.Sample(u_LinearSampler, input.TexCoord).rgb);
-    float3 bloomScale = max(u_BloomTint.rgb, 0.0) * max(u_BloomParams.y, 0.0) * (1.0 / 6.0);
-    return float4(sceneColor + bloomColor * bloomScale, 1.0);
+    float3 bloomScale = max(u_BloomTint.rgb, 0.0) * max(u_BloomParams.y, 0.0);
+    return float4(SanitizeHDR(sceneColor + bloomColor * bloomScale), sceneSample.a);
 }

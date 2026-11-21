@@ -3981,11 +3981,11 @@ void EditorLayer::ApplyRenderFXOverride(const RenderFXOverride& state) {
     }
 }
 
-void EditorLayer::SetCameraPose(const glm::vec3& position, const glm::vec3& rotationDeg) {
+void EditorLayer::SetCameraPose(const glm::vec3& position, const glm::vec3& rotationDeg, bool cameraCut) {
     if (!m_CameraController) return;
     m_CameraController->SetPosition(position);
     m_CameraController->SetRotation(rotationDeg);
-    m_PendingViewCameraCut = true;
+    if (cameraCut) m_PendingViewCameraCut = true;
 }
 
 void EditorLayer::SetGameCameraEjected(bool eject) {

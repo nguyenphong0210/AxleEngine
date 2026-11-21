@@ -14,6 +14,9 @@ cbuffer AutoExposureConstants : register(b0, space0) {
 Texture2D<float4>   u_HDRTexture     : register(t0, space1);
 Texture2D<uint>     u_HistogramSRV   : register(t1, space1);
 SamplerState        u_LinearSampler  : register(s0, space1);
+#if defined(__spirv__)
+[[vk::image_format("rgba16f")]]
+#endif
 RWTexture2D<float4> u_ExposureOutput : register(u0, space2);
 RWTexture2D<uint>   u_HistogramUAV   : register(u1, space2);
 

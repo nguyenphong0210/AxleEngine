@@ -348,6 +348,24 @@ bool RunM15PostTemporalContractUnitTests() {
             "Velocity.hlsl outputs jitter-cancelled camera and per-object motion vectors");
     }
 
+    {
+        PerspectiveCamera camera(60.0f, 1.4f, 0.1f, 100.0f);
+        constexpr glm::vec2 jitter{0.003f, -0.002f};
+        for (const bool orthographic : { false, true }) {
+            if (orthographic) camera.SetOrthographic(5.0f, 1.4f, 0.1f, 100.0f);
+            const auto projection = camera.GetProjectionMatrixZO();
+            const auto jittered = TAAContract::ApplyProjectionJitter(projection, jitter);
+            for (const float distance : {1.0f, 7.0f}) {
+                const glm::vec4 p{0.3f, 0.4f, -distance, 1.0f};
+                const auto a = projection * p;
+                const auto b = jittered * p;
+                const glm::vec2 offset = glm::vec2(b) / b.w - glm::vec2(a) / a.w;
+                RENDER_CHECK(glm::length(offset + jitter * 2.0f) < 1e-6f && a.z == b.z && a.w == b.w,
+                    "M15-U8-11.3: jitter is a pure screen translation in both projection modes and at every depth");
+            }
+        }
+    }
+
     // Batch D (M15-U8-12.1..12.2, 15.1..15.4): Closest-3x3 depth dilation,
     // disocclusion/out-of-bounds rejection & no silent FXAA-on-TAA stacking.
     {
@@ -363,13 +381,16 @@ bool RunM15PostTemporalContractUnitTests() {
                      taaShader.find("closestOffset") != std::string::npos &&
                      taaShader.find("SampleHistoryCatmullRom") != std::string::npos &&
                      taaShader.find("RGBToYCoCg") != std::string::npos &&
-                     taaShader.find("disocclusionGate") != std::string::npos,
+                     taaShader.find("disocclusionGate") != std::string::npos &&
+                     taaShader.find("MatchesHistoryDepth") != std::string::npos &&
+                     taaShader.find("u_PreviousSurfaceDepth") != std::string::npos,
             "TAA.hlsl implements closest-3x3 depth dilation, RG16F velocity sampling, Catmull-Rom, YCoCg variance clip and disocclusion gate");
 
         const std::string passSource = LoadTextFile(AXLE_POST_PROCESS_PASS_SOURCE_PATH);
         RENDER_CHECK(!passSource.empty() &&
                      passSource.find("r.TAAVelocity") != std::string::npos &&
                      passSource.find("r.TAAReactive") != std::string::npos &&
+                     passSource.find("r.TAAHistoryDepth") != std::string::npos &&
                      passSource.find("r.UseFXAA && !r.UseTAA") != std::string::npos &&
                      passSource.find("i.VelocityTexture") != std::string::npos &&
                      passSource.find("i.ReactiveTexture") != std::string::npos,

@@ -12,7 +12,8 @@ namespace Axle::RHI {
         HiZ0, HiZ1, HiZ2, HiZ3, HiZ4, HiZ5, HiZ6, HiZ7, ReflectionEnvironment, ReflectionResponse,
         SubsurfaceDiffuse, SubsurfaceControl, SubsurfaceTemp,
         SSRColor0, SSRColor1, SSRColor2, SSRColor3, PlanarColor, PlanarDepth,
-        FroxelScattering, FroxelIntegrated, FroxelHistory0, FroxelHistory1, Count
+        FroxelScattering, FroxelIntegrated, FroxelHistory0, FroxelHistory1,
+        TAAHistoryDepth, MotionPreviousDepth, Count
     };
     struct RHIDDGIAtlasExtent {
         uint32_t ProbeCount = 0;

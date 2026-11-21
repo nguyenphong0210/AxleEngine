@@ -1,0 +1,230 @@
+Scene: HDR Beacon and Exposure Step
+Entities:
+  - Entity: 801
+    TagComponent:
+      Tag: Disabled Sky
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+
+    SkyboxComponent:
+      Enabled: false
+      EnvironmentLighting: false
+  - Entity: 802
+    TagComponent:
+      Tag: Neutral Directional Key
+    TransformComponent:
+      Translation: [0, 8, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      Intensity: 0.38
+      AmbientIntensity: 0.12
+      Azimuth: 180
+      Elevation: 50
+      CastShadows: true
+      ShadowQuality: 1
+      Exposure: 1.0
+      ToneMappingMode: 0
+      Gamma: 2.2
+  - Entity: 803
+    TagComponent:
+      Tag: Dark room floor
+    TransformComponent:
+      Translation: [0, -0.12, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [7, 0.2, 6.3]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.12, 0.14, 0.17, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.12, 0.14, 0.17]
+      EmissionIntensity: 0
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 804
+    TagComponent:
+      Tag: Dark room wall
+    TransformComponent:
+      Translation: [0, 2.3, -1.7]
+      Rotation: [1, 0, 0, 0]
+      Scale: [8, 4.7, 0.18]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.085, 0.105, 0.13, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.085, 0.105, 0.13]
+      EmissionIntensity: 0
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 805
+    TagComponent:
+      Tag: Amber HDR beacon
+    TransformComponent:
+      Translation: [-0.7, 1.38, -1.32]
+      Rotation: [0.988, 0, 0, 0.154]
+      Scale: [0.15, 1.22, 0.13]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.95, 0.44, 0.1, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [1.0, 0.21, 0.02]
+      EmissionIntensity: 10
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 806
+    TagComponent:
+      Tag: Matte reference sphere
+    TransformComponent:
+      Translation: [0.8, 0.63, -0.08]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.63, 0.63, 0.63]
+    MeshInstance3D:
+      AssetPath: builtin://sphere
+    MaterialComponent:
+      AlbedoColor: [0.56, 0.6, 0.63, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.56, 0.6, 0.63]
+      EmissionIntensity: 0
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 807
+    TagComponent:
+      Tag: Bright meter wall
+    TransformComponent:
+      Translation: [11, 2.3, -1.7]
+      Rotation: [1, 0, 0, 0]
+      Scale: [8.4, 4.8, 0.18]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.56, 0.57, 0.58, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.56, 0.57, 0.58]
+      EmissionIntensity: 1.3
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 808
+    TagComponent:
+      Tag: Bright room floor
+    TransformComponent:
+      Translation: [11, -0.12, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [7.5, 0.2, 6.3]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.35, 0.36, 0.37, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.35, 0.36, 0.37]
+      EmissionIntensity: 0.68
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 809
+    TagComponent:
+      Tag: White reference sphere
+    TransformComponent:
+      Translation: [11.6, 0.68, -0.08]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.68, 0.68, 0.68]
+    MeshInstance3D:
+      AssetPath: builtin://sphere
+    MaterialComponent:
+      AlbedoColor: [0.89, 0.85, 0.76, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.89, 0.85, 0.76]
+      EmissionIntensity: 0.55
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 810
+    TagComponent:
+      Tag: Fine diagonal 1
+    TransformComponent:
+      Translation: [9.35, 1.38, -1.34]
+      Rotation: [0.981, 0, 0, 0.195]
+      Scale: [0.045, 1.6, 0.11]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.11, 0.16, 0.24, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.11, 0.16, 0.24]
+      EmissionIntensity: 0
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 811
+    TagComponent:
+      Tag: Fine diagonal 2
+    TransformComponent:
+      Translation: [9.67, 1.38, -1.34]
+      Rotation: [0.981, 0, 0, 0.195]
+      Scale: [0.045, 1.6, 0.11]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.11, 0.16, 0.24, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.11, 0.16, 0.24]
+      EmissionIntensity: 0
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 812
+    TagComponent:
+      Tag: Fine diagonal 3
+    TransformComponent:
+      Translation: [9.99, 1.38, -1.34]
+      Rotation: [0.981, 0, 0, 0.195]
+      Scale: [0.045, 1.6, 0.11]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.11, 0.16, 0.24, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.11, 0.16, 0.24]
+      EmissionIntensity: 0
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 813
+    TagComponent:
+      Tag: Fine diagonal 4
+    TransformComponent:
+      Translation: [10.309999999999999, 1.38, -1.34]
+      Rotation: [0.981, 0, 0, 0.195]
+      Scale: [0.045, 1.6, 0.11]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.11, 0.16, 0.24, 1]
+      Roughness: 0.8
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.11, 0.16, 0.24]
+      EmissionIntensity: 0
+      SurfaceType: Opaque
+      DepthWrite: true

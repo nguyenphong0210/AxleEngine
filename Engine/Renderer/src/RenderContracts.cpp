@@ -3987,6 +3987,15 @@ namespace Axle {
     } // namespace MotionVectorContract
 
     namespace TAAContract {
+        glm::mat4 ApplyProjectionJitter(glm::mat4 projection, const glm::vec2& jitter) {
+            // Translate in NDC by offset times clip.w, for both perspective and orthographic cameras.
+            for (auto column = 0; column < 4; ++column) {
+                projection[column].x -= 2.0f * jitter.x * projection[column].w;
+                projection[column].y -= 2.0f * jitter.y * projection[column].w;
+            }
+            return projection;
+        }
+
         namespace {
             glm::vec3 TonemapWeight(const glm::vec3& c) {
                 const float maxC = std::max({ c.r, c.g, c.b, 0.0f });

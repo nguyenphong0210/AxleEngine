@@ -1,0 +1,7 @@
+Project:
+  SchemaVersion: 1
+  Name: M15 HDR Post and Temporal Review
+  StartScene: U8_HDRBloomTAA.axlescene
+  AssetDirectory: assets
+  RHIBackend: Direct3D12
+  Plugins:

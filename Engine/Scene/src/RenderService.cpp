@@ -282,7 +282,7 @@ namespace Axle {
                 desc.EnableNormal = (settings.EnableGTAO || settings.EnableContactShadows ||
                     settings.EnableSSR || settings.EnablePlanarReflections || wantsSSS);
                 desc.EnableSubsurface = wantsSSS;
-                desc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR || settings.EnableBloom || settings.EnableAutoExposure);
+                desc.EnableScreenStorage = (settings.EnableGTAO || settings.EnableContactShadows || settings.EnableSSR);
                 desc.EnableGTAO = settings.EnableGTAO || settings.EnableContactShadows;
                 desc.EnableBloom = settings.EnableBloom;
                 desc.EnableHiZ = settings.EnableSSR || settings.HiZVisualizationLevel >= 0;

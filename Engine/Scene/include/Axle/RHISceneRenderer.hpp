@@ -1149,7 +1149,6 @@ namespace Axle {
         RHI::RHIPipelineLayout m_BloomComputePipelineLayout;
         RHI::RHIResourceRef<nri::Pipeline> m_BloomComputePipeline;
         RHI::RHIPipelineLayout m_BloomApplyPipelineLayout;
-        RHI::RHIResourceRef<nri::Pipeline> m_BloomUpsamplePipelineSDR;
         RHI::RHIResourceRef<nri::Pipeline> m_BloomUpsamplePipelineHDR;
         RHI::RHIResourceRef<nri::Pipeline> m_BloomApplyPipelineSDR;
         RHI::RHIResourceRef<nri::Pipeline> m_BloomApplyPipelineHDR;

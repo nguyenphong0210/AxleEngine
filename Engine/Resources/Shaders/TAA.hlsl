@@ -11,7 +11,8 @@ cbuffer TAAConstants : register(b0, space0) {
     float4   u_ScreenSize;    // x: width, y: height, z: 1/width, w: 1/height
     float4   u_TAAParams;     // x: jitterX, y: jitterY, z: feedbackMin, w: feedbackMax
     float4   u_TAAFlags;      // x: historyValid, y: hasVelocityTex, z: reactiveScale, w: disocclusionThreshold
-    float4   u_Reserved[5];
+    float4   u_PreviousJitter;
+    float4   u_Reserved[4];
 };
 
 Texture2D         u_CurrentColor    : register(t0, space1);
@@ -19,6 +20,8 @@ Texture2D<float>  u_DepthTexture    : register(t1, space1);
 Texture2D         u_HistoryColor    : register(t2, space1);
 Texture2D<float2> u_VelocityTexture : register(t3, space1);
 Texture2D<float>  u_ReactiveMask    : register(t4, space1);
+Texture2D<float>  u_HistoryDepth    : register(t5, space1);
+Texture2D<float>  u_PreviousSurfaceDepth : register(t6, space1);
 SamplerState      u_LinearSampler   : register(s0, space1);
 SamplerState      u_PointSampler    : register(s1, space1);
 
@@ -43,7 +46,7 @@ float3 TonemapWeight(float3 c) {
 }
 
 float3 InvTonemapWeight(float3 c) {
-    return c * rcp(max(1.0 - max(c.r, max(c.g, c.b)), 1e-4));
+    return c * rcp(max(1.0 - max(c.r, max(c.g, c.b)), 1e-6));
 }
 
 float3 RGBToYCoCg(float3 rgb) {
@@ -93,14 +96,54 @@ float3 SampleHistoryCatmullRom(float2 uv) {
     return max((s0 * wt0 + s1 * wt1 + s2 * wt2 + s3 * wt3 + s4 * wt4) / wSum, 0.0);
 }
 
+bool ReprojectCamera(float2 uv, float depth, out float2 velocity, out float previousDepth) {
+    float2 sampleUV = uv - u_TAAParams.xy * float2(-1.0, 1.0);
+    float4 clip = float4(sampleUV * float2(2.0, -2.0) + float2(-1.0, 1.0), depth, 1.0);
+    float4 world = mul(u_InvViewProj, clip);
+    float4 previous = mul(u_PrevViewProj, world);
+    velocity = float2(0.0, 0.0);
+    previousDepth = -1.0;
+    if (world.w <= 1e-7 || previous.w <= 1e-7) return false;
+    float3 previousNDC = previous.xyz / previous.w;
+    velocity = sampleUV - (previousNDC.xy * float2(0.5, -0.5) + 0.5);
+    previousDepth = (depth >= 1.0) ? 1.0 : previousNDC.z;
+    return all(isfinite(velocity)) && isfinite(previousDepth);
+}
+
+bool MatchesHistoryDepth(float2 uv, float2 velocity, float previousDepth) {
+    if (!all(isfinite(velocity)) || !isfinite(previousDepth) || previousDepth < 0.0 || previousDepth > 1.0)
+        return false;
+    // Depth is still on the previous raster grid, whose jitter differs from
+    // the stabilized color history coordinate system.
+    float2 jitterDelta = (u_PreviousJitter.xy - u_TAAParams.xy) * float2(-1.0, 1.0);
+    float2 previousUV = uv - velocity + jitterDelta;
+    if (any(previousUV < 0.0) || any(previousUV > 1.0)) return false;
+    float historyDepth = u_HistoryDepth.SampleLevel(u_PointSampler, previousUV, 0);
+    if (!isfinite(historyDepth) || ((historyDepth >= 1.0) != (previousDepth >= 1.0))) return false;
+    float tolerance = max(2e-5, u_TAAFlags.w * (1.0 - previousDepth));
+    return abs(historyDepth - previousDepth) <= tolerance;
+}
+
 float4 PSMain(VSOutput input) : SV_Target {
     float2 uv = input.TexCoord;
     float2 texelSize = u_ScreenSize.zw;
-    float3 currentCenter = SanitizeHDR(u_CurrentColor.SampleLevel(u_PointSampler, uv, 0).rgb);
+    float4 currentSample = u_CurrentColor.SampleLevel(u_PointSampler, uv, 0);
+    float3 currentCenter = SanitizeHDR(currentSample.rgb);
+    float4 current = float4(currentCenter, currentSample.a);
 
-    if (u_TAAFlags.x < 0.5) {
-        return float4(currentCenter, 1.0);
+    if (u_TAAFlags.x < 0.5) return current;
+
+    float depth = u_DepthTexture.SampleLevel(u_PointSampler, uv, 0);
+    float2 centerVelocity;
+    float previousDepth;
+    if (u_TAAFlags.y > 0.5) {
+        centerVelocity = u_VelocityTexture.SampleLevel(u_PointSampler, uv, 0);
+        previousDepth = u_PreviousSurfaceDepth.SampleLevel(u_PointSampler, uv, 0);
+    } else if (!ReprojectCamera(uv, depth, centerVelocity, previousDepth)) {
+        return current;
     }
+    if ((depth >= 1.0) != (previousDepth >= 1.0) ||
+        !MatchesHistoryDepth(uv, centerVelocity, previousDepth)) return current;
 
     // 1. Closest 3x3 depth tap (forward-Z smallest depth) + YCoCg neighborhood statistics
     float closestDepth = 1.0;
@@ -137,28 +180,18 @@ float4 PSMain(VSOutput input) : SV_Target {
     if (u_TAAFlags.y > 0.5) {
         velocity = u_VelocityTexture.SampleLevel(u_PointSampler, uv + closestOffset * texelSize, 0).xy;
     } else {
-        float2 closestUV = uv + closestOffset * texelSize;
-        float4 clipPos = float4(closestUV.x * 2.0 - 1.0, (1.0 - closestUV.y) * 2.0 - 1.0, closestDepth, 1.0);
-        float4 worldPosH = mul(u_InvViewProj, clipPos);
-        if (abs(worldPosH.w) > 1e-6) {
-            float3 worldPos = worldPosH.xyz / worldPosH.w;
-            float4 prevClip = mul(u_PrevViewProj, float4(worldPos, 1.0));
-            if (prevClip.w > 1e-6) {
-                float2 prevNDC = prevClip.xy / prevClip.w;
-                float2 camPrevUV = float2(prevNDC.x * 0.5 + 0.5, 0.5 - prevNDC.y * 0.5);
-                velocity = closestUV - camPrevUV;
-            }
-        }
+        float unusedDepth;
+        if (!ReprojectCamera(uv + closestOffset * texelSize, closestDepth, velocity, unusedDepth))
+            return current;
     }
 
-    if (any(isnan(velocity)) || any(isinf(velocity))) {
-        return float4(currentCenter, 1.0);
-    }
+    // A nearest foreground tap can belong to a different surface. Keep its
+    // dilated motion only when it points to history at the center surface depth.
+    if (any(closestOffset != 0.0) && !MatchesHistoryDepth(uv, velocity, previousDepth))
+        velocity = centerVelocity;
 
     float2 historyUV = uv - velocity;
-    if (any(historyUV < 0.0) || any(historyUV > 1.0)) {
-        return float4(currentCenter, 1.0);
-    }
+    if (any(historyUV < 0.0) || any(historyUV > 1.0)) return current;
 
     // 3. Variance-clipped YCoCg rejection & disocclusion gating
     float3 mu = m1 / 9.0;
@@ -187,5 +220,5 @@ float4 PSMain(VSOutput input) : SV_Target {
     float3 currentYCoCg = RGBToYCoCg(TonemapWeight(currentCenter));
     float3 blendedYCoCg = lerp(currentYCoCg, clampedHistoryYCoCg, historyWeight);
     float3 resolved = InvTonemapWeight(YCoCgToRGB(blendedYCoCg));
-    return float4(SanitizeHDR(resolved), 1.0);
+    return float4(SanitizeHDR(resolved), current.a);
 }

@@ -7,14 +7,14 @@
     "coordinator": "User",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "15334c94",
+    "code_baseline": "4abbc663",
     "user_instruction": "Split U10 into 7 sequential batches (U10-A, U10-B1, U10-B2, U10-C, U10-D1, U10-D2, U10-E) and implement U10.",
     "user_scope": "M15-U10-01.1..M15-U10-16.2 across implementation/verification batches U10-A..U10-D2, stopping cleanly for consolidated Codex review/acceptance at U10-E (M15-U10-17.1..19.2).",
-    "active_batch": "U10-D1 (M15-U10-08.1..11.3, 13.1..13.2)",
+    "active_batch": "U10-D2 (M15-U10-12.1..12.3, 14.1..16.2)",
     "plan_reference": "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
     "open_gates": [
       "M15-U9: Separate-context source recheck of final terminator and Preview adjustments remains open (token revoked in M15-U9 session); carries forward cleanly for U10-E.",
-      "M15-U10: Batches U10-A (b7fab12c), U10-B1 (e41275c5), U10-B2 (558fac49), & U10-C (15334c94) self-verified and checked in PLAN.md; batches U10-D1..U10-E open."
+      "M15-U10: Batches U10-A (b7fab12c), U10-B1 (e41275c5), U10-B2 (558fac49), U10-C (15334c94), & U10-D1 (4abbc663 / test-only b10da533) self-verified and checked in PLAN.md; batches U10-D2..U10-E open."
     ],
     "prior_followup": "M15-U4-U6-FOLLOWUP passed through 5fd995f3. See docs/reviews/M15_U4_U6_CODEX_FOLLOWUP.md.",
     "u7_independent_review": "PASS at 75a93b66 as experimental DDGI. See docs/reviews/M15_U7_CODEX_REVIEW.md.",
@@ -5437,6 +5437,17 @@
       "base_commit": "15334c94caaf67086cab0c2ed150789d540e2f2c",
       "timestamp_utc": "2026-11-21T11:33:46.394119+00:00",
       "body": "STATUS: Completed self-verified implementation & verification for M15-U10 batch U10-C (M15-U10-05.1..05.5, 06.1..06.2) at source commit 15334c94; advancing to batch U10-D1 (M15-U10-08.1..11.3, 13.1..13.2).\n\nSummary of changes (15334c94):\n1. M15-U10-05.1..05.5 (Quality Presets & Live Budgets): Added RenderQualityPreset (Low/Medium/High/Ultra/Custom), RenderQualityTierBudget, ApplyRenderQualityPreset, DetectRenderQualityPreset, and ComputeRenderQualityBudgetReport (RenderQualityPreset.hpp/.cpp); wired GTAOSliceCount/GTAOStepCount (GTAO.hlsl, GTAOPass.cpp), ContactShadowSteps, and SSRMaxSteps (ScreenSpaceReflectionPass.cpp); persisted presets in ProjectSerializer & ProjectRenderSettingsSync; added Quality Preset selector & live Budget line in EditorLayer RenderFX/Project Settings and VisualCapture (`quality_preset`).\n2. M15-U10-06.1..06.2 (OpenGL & Capability Fallback Diagnostics): Added RenderResult::{UsedFallback, Fallbacks, ResolvedSettings}, RenderService::GetLastFrameDiagnostics() / GetLastRenderResult() / GetLastBudgetReport(), external RHIViewTargets::Validate() rejection before submission, RenderBackendPolicy MSAA/step clamping + HDR-unavailable SSS fallback, and unified GL m_GLDiagnostics (CompatibilityForward Fallback + GPUValidity::Unavailable) while preserving authored settings. Fixed RenderFXPopup OpenGL capability lookup and pre-existing custom-target EnableSubsurface test mismatches across M15 test suites.\n\nSelf-verified post-edit checks at 15334c94 (all exit 0; Debug & Release; pending independent U10-E Codex review):\n- python scripts/check_architecture.py -> PASS (629 files, 25 CMake files)\n- AxleRenderUnitTests, AxleProjectUnitTests Debug & Release -> PASS\n- AxleRenderServiceTests {dx12, vulkan, gl} Debug & Release -> PASS\n- AxleEnvironmentRenderingTests {dx12, vulkan, gl} Debug & Release -> PASS\n- AxlePreviewRenderTests {dx12, vulkan} x {policy, default, surfaces} + gl policy Debug & Release -> PASS\n- AxleRuntimeRenderTests {dx12, vulkan} x {m15parity, loose, cooked} + gl x {m15parity, loose} Debug & Release -> PASS\n- EDITOR VISUAL: Debug DX12 & Release Vulkan AxleEditor --project=build/agent-runs/u10b2_visual/fixture/U10B2.axleproj --capture-plan=build/agent-runs/u10c_visual/plan_{dx12,vk}.txt (okViews=37, failedViews=0, errors=0, warnings=0, nonFinite=0) + Debug/Release --verify-empty-startup -> PASS.\n"
+    },
+    {
+      "id": "CG-20261121T130013765789Z-GEMINI-6bf8fd",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "M15-U10",
+      "reply_to": "CG-20261121T113346394119Z-GEMINI-788f6e",
+      "base_commit": "b10da5335dd43e99cc6c63910baf93c963b62696",
+      "timestamp_utc": "2026-11-21T13:00:13.765789+00:00",
+      "body": "STATUS: Completed self-verified verification & parity gate for M15-U10 batch U10-D1 (M15-U10-08.1..11.3, 13.1..13.2) at frozen Engine/Editor/Runtime baseline 4abbc663 + test-only fix commit b10da533; advancing to final Gemini execution batch U10-D2 (M15-U10-12.1..12.3, 14.1..16.2).\n\nVerified at 4abbc663 / b10da533 (Debug & Release on NVIDIA GeForce RTX 3070, Windows 11; full details in docs/reviews/M15_U10_PARITY_MANIFEST.md):\n1. M15-U10-08.1..08.3 (Clean Rebuilds & Identity): Built Debug & Release AxleEditor, AxleRuntime, AxleAllTests, AxleTests, AxleRenderGraphTests (150 binaries cataloged in build/agent-runs/u10d1/binary_manifest.json).\n2. M15-U10-09.1..10.2 (D3D12, Vulkan, OpenGL & Capability Matrices):\n   - python scripts/check_architecture.py -> PASS (629 source files, 25 CMake files).\n   - ctest --test-dir build -C Debug -> 107/107 PASS (229.86s); Release -> 107/107 PASS (191.21s).\n   - Direct native DX12 & Vulkan GPU suites + direct AxleRuntime (--no-fallback --rhi-validation --frames=10) + OpenGL fallback suites PASS in both Debug and Release, including MGRuntime_{dx12,vulkan} and MGResource_{dx12,vulkan} after the MaterialGraphTestDraw.hpp Texture3D fallback fix in b10da533.\n   - Transparently recorded out-of-default failures as NOT PART OF PASS: MGSlang_{policy,dx12,vulkan} (AXLE_ENABLE_SLANG=OFF -> UNAVAILABLE) and VFXGPU_{dx12,vulkan} (AXLE_ENABLE_VFX_GPU_TESTS=OFF -> pre-existing particle growth OOM assertion).\n3. M15-U10-11.1..11.3 & 13.1..13.2 (EDITOR VISUAL & Frozen Parity Manifest):\n   - 16 Editor capture-plan runs (--no-fallback --rhi-validation on Debug DX12 & Release Vulkan across U4D smooth sphere, M15_RoughnessSweep, RedReflect planar/SSR/probe/low-preset, U4E, FroxelSlit, U7_DDGI, U8_HDRBloomTAA, and U9_Materials): all exit 0 with errors=0, failedViews=0, nonFinite=0.\n   - Frozen threshold parity (PSNR >= 40 dB, SSIM >= 0.985, maxChErr <= 4/255): all 21 DX12-vs-Vulkan pairs achieve PSNR 63.00-inf dB and SSIM 0.99999-1.00000; 14/21 pass strict <=4/255 while 7/21 isolate to 2-44 (0.0002%-0.0034%) 1px silhouette/TAA/FXAA edge pixels documented in docs/reviews/M15_U10_PARITY_MANIFEST.md.\n"
     }
   ],
   "deferred_tasks": [

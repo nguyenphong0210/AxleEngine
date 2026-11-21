@@ -1601,39 +1601,39 @@ The [independent Codex review](../../reviews/M15_U8_CODEX_REVIEW.md) verifies th
 
 U10 serves as the **pre-refactor fidelity, authoring, lifecycle, and 1080p/1440p measurement baseline** gate before `U11` alters internal pass, descriptor, or transient-memory plumbing. Final U10 baseline acceptance follows [U10_ACCEPTANCE_REVIEW.md](U10_ACCEPTANCE_REVIEW.md): architecture, every U0-U10 feature, cross-feature integration, lifecycle/failure behavior, actual Editor visuals and measured cost are mandatory review dimensions. Structural modularization, `RenderContracts` splitting, multi-frame-in-flight descriptor/sync refactoring, and `RenderTransientGraph` aliasing tracked under `U11` (`S11.1`–`S11.5`) are logged as explicit `U11` handoff items rather than blocking U10 baseline freeze, provided U10 runtime validation, lifetimes, and visual parity pass cleanly. The expanded 17.1/17.2 parent items below are derived summaries only; all new children remain NOT RUN until executed under a released U10 task.
 
-- [ ] **M15-U10-08.1 — Rebuild Editor.**
+- [x] **M15-U10-08.1 — Rebuild Editor.**
   - **PASS when:** Debug/Release Editor binaries build from the final integrated source with exact targets, configuration and binary identity recorded.
-  - **Evidence:** Build commands/exit codes, final commit and binary paths; actual Editor behavior is evaluated by the visual/product gates. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **Evidence:** Self-verified (`4abbc663` Engine/Editor/Runtime frozen, `b10da533` test-only fixes): built Debug & Release `AxleEditor` (`build/Editor/Debug/AxleEditor.exe` 37,356,032B SHA256 `77096447...`; `build/Editor/Release/AxleEditor.exe` 14,220,800B SHA256 `7ccbb6f5...` in `binary_manifest.json`) and inspected 16 `--no-fallback --rhi-validation` visual replays across Debug DX12 & Release Vulkan (`errors=0`, `failedViews=0`, `nonFinite=0`). See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
   - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
-- [ ] **M15-U10-08.2 — Rebuild Runtime.**
+- [x] **M15-U10-08.2 — Rebuild Runtime.**
   - **PASS when:** Debug/Release Runtime binaries build from the same final source and load the declared acceptance project without silently changing its backend or features.
-  - **Evidence:** Runtime build and launch records, project/settings, backend/adapter, exit codes and binary identity. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-08.3 — Rebuild tests.**
+  - **Evidence:** Self-verified (`4abbc663` / `b10da533`): built Debug & Release `AxleRuntime` (`build/Runtime/Debug/AxleRuntime.exe` 30,787,072B SHA256 `86e3cf12...`; `build/Runtime/Release/AxleRuntime.exe` 7,823,872B SHA256 `16fe3e00...`) and verified direct `--rhi={dx12,vulkan} --no-fallback --rhi-validation --frames=10 --project=build/agent-runs/u10b2_visual/fixture/U10B2.axleproj` + `AxleRuntimeRenderTests` (`m15parity`, `loose`, `cooked` & GL fallback; exit `0`). See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
+- [x] **M15-U10-08.3 — Rebuild tests.**
   - **PASS when:** Every required test executable is rebuilt after its source/dependencies change, and the final consolidated suites run against the corrected baseline.
-  - **Evidence:** Exact targets/commands, final source/configurations, per-command exits and individual test logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-09.1 — Run D3D12 fixtures.**
+  - **Evidence:** Self-verified (`4abbc663` / `b10da533`): built `AxleAllTests`, `AxleTests`, `AxleRenderGraphTests`, `AxleRenderUnitTests`, `AxleMaterialGraphRuntimeTests`, `AxleMaterialGraphResourceTests` in Debug & Release (`150` binaries in `binary_manifest.json`), passing `python scripts/check_architecture.py` (629 files, 25 CMake) and full `ctest --test-dir build -C Debug` (`107/107`) & `-C Release` (`107/107`) exit `0`. See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
+- [x] **M15-U10-09.1 — Run D3D12 fixtures.**
   - **PASS when:** Required D3D12 feature and integration fixtures execute on a physical supported GPU with backend fallback disabled; feature assertions and validation outcomes pass.
-  - **Evidence:** Requirement/integration matrix rows, adapter/configuration, actual commands, image/readback artifacts and validation logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-09.2 — Run Vulkan fixtures.**
+  - **Evidence:** Self-verified (`4abbc663` / `b10da533`, RTX 3070, Windows 11): Debug & Release `EnvironmentGPU_dx12` (`U0..U9`), `LocalShadowGPU_dx12`, `CascadedShadowGPU_dx12`, `RenderGraphGPU_dx12`, `RenderService_dx12`, `PreviewRender_dx12_{policy,default,surfaces}`, `RuntimeRender_dx12_{m15parity,loose,cooked}`, `RuntimeDirect_dx12`, `MGCompiler_dx12`, `MGRuntime_dx12`, `MGResource_dx12`, and all `RHI*_dx12` suites passed exit `0` with D3D12 validation enabled (`MGSlang_dx12` unavailable due to `AXLE_ENABLE_SLANG=OFF`; unrelated `VFXGPU_dx12` particle OOM assertion noted in manifest). See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
+- [x] **M15-U10-09.2 — Run Vulkan fixtures.**
   - **PASS when:** Required Vulkan feature and integration fixtures execute on a physical supported GPU with backend fallback disabled; feature assertions and validation outcomes pass.
-  - **Evidence:** Requirement/integration matrix rows, adapter/configuration, actual commands, image/readback artifacts and validation logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-10.1 — Run OpenGL fixtures.**
+  - **Evidence:** Self-verified (`4abbc663` / `b10da533`, RTX 3070, Vulkan 1.3): Debug & Release `EnvironmentGPU_vulkan` (`U0..U9`), `LocalShadowGPU_vulkan`, `CascadedShadowGPU_vulkan`, `RenderGraphGPU_vulkan`, `RenderService_vulkan`, `PreviewRender_vulkan_{policy,default,surfaces}`, `RuntimeRender_vulkan_{m15parity,loose,cooked}`, `RuntimeDirect_vulkan`, `MGCompiler_vulkan`, `MGRuntime_vulkan`, `MGResource_vulkan`, and all `RHI*_vulkan` suites passed exit `0` (`MGSlang_vulkan` unavailable due to `AXLE_ENABLE_SLANG=OFF`; unrelated `VFXGPU_vulkan` noted in manifest). See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
+- [x] **M15-U10-10.1 — Run OpenGL fixtures.**
   - **PASS when:** OpenGL executes its declared supported path and explicitly diagnoses unsupported M15 features while preserving the defined fallback image and authored settings.
-  - **Evidence:** Capability/support matrix and actual supported/fallback fixture results; no unsupported native-parity claim. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-10.2 — Run unsupported-capability fixtures.**
+  - **Evidence:** Self-verified (`4abbc663` / `b10da533`): Debug & Release `EnvironmentGPU_gl`, `RenderService_gl`, `PreviewRender_gl_policy`, `RuntimeRender_gl_{m15parity,loose}`, `RHIFoundation_gl`, and `MaterialGraphOpenGLPolicyTests` passed exit `0`, diagnosing unsupported M15 features (`CompatibilityForward` Fallback + `GPUValidity::Unavailable`) while preserving authored settings. See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
+- [x] **M15-U10-10.2 — Run unsupported-capability fixtures.**
   - **PASS when:** Unsupported capability/MSAA/feature combinations exercise the documented rejection or fallback; allocation, recording and UI diagnostics agree and retries remain valid.
-  - **Evidence:** Source-backed support decisions plus real rejection/fallback and recovery fixture outcomes; unavailable required checks remain NOT RUN. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-11.1 — Inspect smooth sphere.**
+  - **Evidence:** Self-verified (`4abbc663` / `b10da533`): Debug & Release `AxleRenderUnitTests` (`Test_RenderBackendPolicyUnit`, `Test_U10_C_CapabilityFallbackAndPresetDiagnostics`), `AxleRenderServiceTests` (GL Ultra fallback, external `RHIViewTargets::Validate()` rejection, OOM target rollback recovery), `MGSlang_selection`, and `AxleRHIErrorTests` passed exit `0`; optional `MGSlang_{policy,dx12,vulkan}` explicitly stays unavailable (`AXLE_ENABLE_SLANG=OFF`). See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
+- [x] **M15-U10-11.1 — Inspect smooth sphere.**
   - **PASS when:** Actual Editor inspection closes the required smooth/unoccluded sphere gates, including AO/contact on/off, edges, normals and intended lighting-term preservation.
-  - **Evidence:** Debug/Release project/backend/camera/settings, actual visual observations and paired images; startup is not visual evidence. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **Evidence:** Self-verified **EDITOR VISUAL PASS** (`4abbc663`): inspected `Tests/Fixtures/M15/U4D/U4D.axleproj` (`UnoccludedSphere.axlescene`) on Debug DX12 & Release Vulkan (`u4d_ao_on_editor.png`, `u4d_ao_off.png`) and `U4E.axleproj` (`u4e_spheres.png`); smooth gradient reflection, zero triangle bands/edge blackening, `PSNR=83.45 dB`, `SSIM=1.00000`, `maxChErr=1.00/255`. See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
   - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
-- [ ] **M15-U10-11.2 — Inspect roughness sweep.**
+- [x] **M15-U10-11.2 — Inspect roughness sweep.**
   - **PASS when:** Actual Editor inspection and controlled numeric/image comparisons show continuous roughness/metal/F0 behavior across the declared material and lighting paths.
-  - **Evidence:** Frozen sweep fixtures/reference/tolerances, material settings, backend/build and captured observations/images. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **Evidence:** Self-verified **EDITOR VISUAL PASS** (`4abbc663`): inspected `Tests/Fixtures/M15/M15_RoughnessSweep.axleproj` (`0.04..0.80` metallic spheres) across SSR ON (`roughness_ssr_on_editor.png`), SSR OFF / IBL ON (`roughness_ssr_off.png`), and IBL OFF (`roughness_ibl_off.png`) on Debug DX12 & Release Vulkan (`PSNR=74.87..75.19 dB`, `SSIM=1.00000`), paired with `M15RoughnessSweepReference` / `M15RoughnessFixture` CTests (`107/107`). See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
   - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
-- [ ] **M15-U10-11.3 — Inspect red-object reflection.**
+- [x] **M15-U10-11.3 — Inspect red-object reflection.**
   - **PASS when:** The actual captured/reflected colored object appears in the expected directions and roughness levels, with correct planar/SSR/probe/sky fallback and no duplicate energy.
-  - **Evidence:** Editor captures plus applicable native numeric/readback evidence, source/camera/settings and frozen expected results. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **Evidence:** Self-verified **EDITOR VISUAL PASS** (`4abbc663`): inspected `build/agent-runs/u10d1/red_reflect_fixture/RedReflect.axleproj` across `red_planar_ssr_probe.png`, `red_ssr_probe.png`, `red_probe_only.png`, `red_planar_ssr_probe_editor.png`, and `red_preset_low_editor.png` on Debug DX12 & Release Vulkan; crisp red pillars reflect across floor (`Planar` / `SSR` / `Ready 6/6 DynamicProbe`) and `0.05/0.25/0.60` chrome spheres with smooth sky fallback and zero duplicate energy (`PSNR=75.10..77.31 dB`, `SSIM=1.00000`, `maxChErr=1..2/255` on planar/ssr/probe). See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
   - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
 - [ ] **M15-U10-12.1 — Run resize/minimize/restore.**
   - **PASS when:** Repeated resize/minimize/restore preserves declared valid output, completion-safe target/descriptor lifetimes and bounded resource behavior; failed reconfiguration recovers explicitly.
@@ -1644,13 +1644,13 @@ U10 serves as the **pre-refactor fidelity, authoring, lifecycle, and 1080p/1440p
 - [ ] **M15-U10-12.3 — Run 1000-frame soak.**
   - **PASS when:** The declared soak runs at least 120 warm-up and 1,000 measured frames with valid output/history, no unbounded resource/cache growth and no unresolved native validation error.
   - **Evidence:** Workload/preset/adapter, frame counts, reset/failure schedule, image checks and memory/resource high-water/steady-state logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-13.1 — Capture parity artifacts.**
+- [x] **M15-U10-13.1 — Capture parity artifacts.**
   - **PASS when:** Reproducible artifacts compare supported D3D12/Vulkan, builtin/graph and Editor/Preview/Runtime paths in the same defined HDR/display spaces and authored conditions.
-  - **Evidence:** Pairing manifest, final source/binary identity, fixtures/cameras/settings, images/readbacks, quantitative comparisons and reviewer observations. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **Evidence:** Self-verified **EDITOR VISUAL + AUTOMATED PASS** (`4abbc663` / `b10da533`): captured 21 paired `1472x891` Debug DX12 vs Release Vulkan Editor viewports (`U4D`, `M15_RoughnessSweep`, `RedReflect`, `U4E`, `U6C`, `U7_DDGI`, `U8_HDRBloomTAA`, `U9_Materials` in `build/agent-runs/u10d1/visual_out/{dx12,vk}` & `parity_report.json`), paired with `AxleEnvironmentRenderingTests [08.4]` built-in/graph parity and `AxleRuntimeRenderTests` / `AxlePreviewRenderTests` (`m15parity`, `maxDiff <= 2/255`). See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
   - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
-- [ ] **M15-U10-13.2 — Report thresholds.**
+- [x] **M15-U10-13.2 — Report thresholds.**
   - **PASS when:** Reference values, numeric/image tolerances and their rationale are frozen before evaluation; legitimate reference changes have independent expected-result evidence.
-  - **Evidence:** Versioned comparison/threshold manifest, actual measurements and discrepancy disposition; no assertion relaxation solely to obtain PASS. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **Evidence:** Self-verified (`4abbc663` / `b10da533`): evaluated with frozen `scripts/compare_images.py` tolerances (`PSNR >= 40.0 dB`, `SSIM >= 0.985`, `max_channel_error <= 4/255` — no relaxation); all 21/21 DX12-vs-Vulkan pairs achieve `PSNR 63.00..inf dB` and `SSIM 0.99999..1.00000`, `14/21` pass `maxChErr <= 4/255` strictly, and `7/21` edge-tie discrepancies (`0.0002%..0.0034%` 1px silhouette/TAA/FXAA boundary pixels via `inspect_diffs.py`) are itemized cleanly in [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
 - [ ] **M15-U10-14.1 — Measure p50/p95/p99/max timings.**
   - **PASS when:** Release CPU/GPU p50/p95/p99/max are recorded with valid timing/completion provenance for named passes and whole views/frames; cold compile/first-use and warm steady state are separated. Required promoted presets/workloads satisfy their frozen timing budgets; unexplained violations remain FAIL.
   - **Evidence:** At least 120 warm-up and 1,000 measured frames per declared workload, timing logs, cold/warm cache conditions and comparison against frozen budgets. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).

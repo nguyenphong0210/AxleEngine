@@ -5264,6 +5264,28 @@
       "base_commit": "5fd995f3c310541890293214dfe1ffbde0553a6f",
       "timestamp_utc": "2026-11-21T03:29:42.143644+00:00",
       "body": "REVIEW: Completed the assigned M15 U4-U6 follow-up through 5fd995f3. The independent source recheck of U6-E found and verified the fogged-glass foreground repair. Current-source verification also covers GTAO/contact projection, the low-thickness SSR reference and shader, shadowed planar CSM, and reliable capture completion and file errors.\n\nDebug/Release builds, both full RenderUnit invocations, 5/5 focused CTest per configuration, and 26 final native commands pass. The current renderer generated 96 inspected/validated Editor and viewport PNGs via 15 plans. After the final file-diagnostics edit, three plans generated 24 PNGs with ten byte-identical viewport readbacks. The legacy refraction shader fails the new foreground assertion. The deliberate PNG write collision exits 1 with the path.\n\nSee docs/reviews/M15_U4_U6_CODEX_FOLLOWUP.md and build/agent-runs/codex-m15-u4-u6. M15-U6-05.1, 05.2, 07.5 and 07.6 are accepted in PLAN. The M15-U9 delivery card again records the pending U7, U8 and U9 reviews."
+    },
+    {
+      "id": "CG-20261121T034050146282Z-CODEX-cc00ed",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U5-SSR-STREAKS",
+      "reply_to": "CG-20261121T032942143644Z-CODEX-a2e645",
+      "base_commit": "e083a9b76d9e4b4e8c556abfede927bd0a88ff14",
+      "timestamp_utc": "2026-11-21T03:40:50.146282+00:00",
+      "body": "IN_PROGRESS: Reopened the U5 SSR visual check for the user-reported vertical streaks under the two spheres. Base e083a9b7. Independent Editor viewport captures isolate the pattern to SSR. Scope is the low-roughness resolve, focused regression coverage and corrected visual evidence."
+    },
+    {
+      "id": "CG-20261121T034712770308Z-CODEX-95e170",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-U5-SSR-STREAKS",
+      "reply_to": "CG-20261121T034050146282Z-CODEX-cc00ed",
+      "base_commit": "b5e6960c2e6bc8d5c927f34519a0a4763276277e",
+      "timestamp_utc": "2026-11-21T03:47:12.770308+00:00",
+      "body": "REVIEW: User-reported U5-R2 vertical streaks reproduced at fixed camera with SSR alone. The same pixels are smooth with SSR off or direct planar reflection enabled. Commit b5e6960c brings in the full surface-aware SSR resolve by roughness 0.055 and extends the native floor fixture to that roughness.\n\nRelease D3D12 and Vulkan Editor captures pass with zero errors and failed views. The horizontal luma variation in the two reported regions fell about 70% and 77%. Faint structure remains in an enlarged crop. Both rebuilt Release native environment suites and the two focused CTests passed. Evidence is in docs/reviews/M15_U4_U6_CODEX_FOLLOWUP.md and build/agent-runs/codex-m15-vertical-streaks."
     }
   ],
   "deferred_tasks": [

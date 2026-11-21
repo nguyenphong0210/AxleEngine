@@ -4,6 +4,8 @@ Review started at `75a63622`. The assigned scope covers the U4 GTAO/contact foll
 
 **Disposition:** The scoped U4–U6 follow-up passed. U6-E's four remaining leaves are accepted after the independent recheck and the native and Editor matrix.
 
+The user's close-up later exposed a near-mirror artifact in the planar-off capture. The [U5-R2 recheck](#u5-r2-vertical-ssr-streaks-under-the-reflected-spheres) records the correction and the remaining faint pattern.
+
 ## Findings
 
 | Finding | Severity | Correction and verification |
@@ -93,3 +95,24 @@ The D3D12 negative control used the current test binary and a scratch shader tre
 The four U6-E scorecards each record two extents, four quality tiers and six completed samples per row. At 1080p, D3D12 measured 3.75, 18.00, 30.00 and 112.50 MiB for Low through Ultra. Vulkan measured 3.75, 13.50, 30.00 and 95.625 MiB. Shared color and depth copies appear separately in each card. The timing rows are spot measurements on the RTX 3070. See each configuration/backend's `native/M15_U6E_froxel_scorecard.txt`.
 
 The earlier U6-E report records the separate standalone VFX instance-buffer fault case with fog disabled. That standalone case was outside this follow-up's native matrix. [Original U6-E review](M15_U6_E_CODEX_REVIEW.md)
+
+## U5-R2. Vertical SSR streaks under the reflected spheres
+
+The user identified visible streaks in the planar-off Editor capture on source `e083a9b7`. The original screenshot inspection missed them. Fixed-camera captures at 1472×891 reproduced the streaks with SSR alone. They disappeared with SSR disabled while GTAO and contact shadows stayed enabled. Direct planar reflection also rendered a smooth contact zone in that view.
+
+The mirror floor has roughness 0.055. The old spatial resolve ramp from 0.045 to 0.10 gave the filtered neighborhood about 9% of the blend at that roughness, so individual screen-space hits dominated near contact. In `b5e6960c`, the ramp reaches full resolve at 0.055 and retains the single-tap path at minimum roughness. The native zoomed sphere-floor test exercises both 0.055 and 0.12.
+
+The same camera and feature flags were captured again on Release D3D12 and Vulkan, with planar reflection and TAA disabled. Both backends produced finite viewport images with zero Editor errors and zero failed views. A second camera pose was also captured. Reflections remain visible and the streaks are substantially reduced. Some faint structure remains visible when inspecting the contact region at enlarged scale.
+
+The following values are mean absolute horizontal second differences of 8-bit luma, divided by two. The two rectangles use normalized viewport coordinates of x=[0.28, 0.46), y=[0.59, 0.655) and x=[0.54, 0.73), y=[0.62, 0.69).
+
+| Capture | Left contact | Right contact |
+| --- | ---: | ---: |
+| Before | 1.5116 | 1.9584 |
+| After, D3D12 | 0.4491 | 0.4480 |
+| After, Vulkan | 0.4491 | 0.4476 |
+| SSR off reference | 0.2950 | 0.1022 |
+
+The original and corrected viewport images, fixed-camera plan, per-backend logs and same-scale crop `ssr-before-after.png` are under `build/agent-runs/codex-m15-vertical-streaks`.
+
+`cmake --build build --config Release --target AxleEnvironmentRenderingTests -- /m:2 /v:minimal /p:BuildProjectReferences=false` exited 0. The rebuilt binary ran with `dx12` and `vulkan` and separate output directories. Both full runs exited 0, including the two roughness cases. At 0.055, each backend reported full SSR hit coverage and a relative horizontal difference of 0.0023 in the separate native floor fixture. The Release CTest Hi-Z and reflection capture contracts passed 2/2, and the architecture check passed.

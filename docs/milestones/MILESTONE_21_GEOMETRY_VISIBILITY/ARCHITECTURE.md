@@ -31,7 +31,7 @@ The cooker records atomic LOD replacement groups. Each group relates a set of fi
 
 Admit complete cooked geometry generations within a declared GPU memory budget. Account for vertex/index, meshlet and hierarchy data, the available fallback and temporarily overlapping generations. Track staging in its memory domain. Preflight an indexed fallback before admitting an optional product. Publish a replacement only after upload readiness. Retain the exact old generation while submissions still reference it. When an asset exceeds its allocation, use an admitted compatible generation or a budgeted discrete LOD and report why that asset took the fallback. On-demand page streaming has its own feature scope.
 
-An optional M17-produced RT proxy carries the M16 source linkage, proxy generation, vertex attributes, material/alpha mapping and triangle-budget contract. M16 can use its own proxy and continues to own proxy selection and AS lifetime. TLAS classification consumes eligible whole-scene instances, including off-camera casters and reflection hits. The view-culled raster working set is a separate consumer of the same snapshot.
+An optional M21-derived RT proxy carries the M16 source linkage, proxy generation, vertex attributes, material/alpha mapping and triangle-budget contract. M16 can use its own proxy and continues to own proxy selection and AS lifetime. TLAS classification consumes eligible whole-scene instances, including off-camera casters and reflection hits. The view-culled raster working set is a separate consumer of the same snapshot.
 
 ## 3. GPU instance data and culling
 

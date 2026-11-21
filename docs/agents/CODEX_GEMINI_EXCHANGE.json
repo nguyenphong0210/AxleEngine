@@ -5415,6 +5415,17 @@
       "base_commit": "67bb1a3c",
       "timestamp_utc": "2026-11-21T10:36:56.642040+00:00",
       "body": "Delivered the user-requested documentation for four proposed milestones after M16: M17 Animation, M18 VFX, M19 Canvas2D, M20 Cooker and Asset Linter. Geometry moves to M21, Simulation Scale to M22, the remaining Material Graph and scene tools to M23, and Performance Rollout to M24. The docs define checkpoint gates and shared handoffs, including M18 native indirect evidence and M20 packaged gameplay input to M21. The active M15-U10 task card and release remain intact. This is a documentation delivery and does not release implementation.\n\nVerified at the documentation worktree based on 67bb1a3c: 24 unique roadmap entries and 48 canonical planning files, unchanged checklist leaf sets for moved Geometry (43 leaves and 22 batches), Simulation (9 leaves), and Rollout (6 leaves), sequential IDs in the five newly authored plans, and 556 local Markdown links checked across 29 edited files with no new unresolved link. The link check flagged existing M15 U0 anchors outside this delivery. Git diff whitespace check passed for Markdown changes. Engine and GPU tests were not run for this documentation-only delivery.\n"
+    },
+    {
+      "id": "CG-20261121T104949723208Z-CODEX-883072",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "DELIVERY",
+      "task": "ROADMAP-M17-M24-DOCS",
+      "reply_to": "CG-20261121T103656642040Z-CODEX-ae6443",
+      "base_commit": "5c3e9f3a",
+      "timestamp_utc": "2026-11-21T10:49:49.723208+00:00",
+      "body": "Expanded the proposed M17 Animation architecture and execution plan at the user's request. Preserved the seven parent requirement families and decomposed them into 39 atomic leaves in 21 verifiable checkpoints. The contracts cover import/reimport and binding, per-instance tick state, 1D/2D sampling, document workflows, a native skeletal vertex/palette ABI, depth/normal/shadow/motion/picking/capture coverage, sockets, additive layers, root-motion handoff and Scene-backed foot IK. The plan defines real Editor and detached-package acceptance. Corrected one stale geometry-derived RT proxy owner reference in the M21 architecture. The docs do not activate a production task or modify the active M15-U10 task card.\n\nVerified from 5c3e9f3a: original parent requirements, ordered checkpoint dependencies, one owner for every leaf, 37 local link/anchor targets in the three touched Markdown files, and git diff --check. No Engine, GPU or Editor tests were run in this documentation-only turn.\n"
     }
   ],
   "deferred_tasks": [

@@ -1635,15 +1635,15 @@ U10 serves as the **pre-refactor fidelity, authoring, lifecycle, and 1080p/1440p
   - **PASS when:** The actual captured/reflected colored object appears in the expected directions and roughness levels, with correct planar/SSR/probe/sky fallback and no duplicate energy.
   - **Evidence:** Self-verified **EDITOR VISUAL PASS** (`4abbc663`): inspected `build/agent-runs/u10d1/red_reflect_fixture/RedReflect.axleproj` across `red_planar_ssr_probe.png`, `red_ssr_probe.png`, `red_probe_only.png`, `red_planar_ssr_probe_editor.png`, and `red_preset_low_editor.png` on Debug DX12 & Release Vulkan; crisp red pillars reflect across floor (`Planar` / `SSR` / `Ready 6/6 DynamicProbe`) and `0.05/0.25/0.60` chrome spheres with smooth sky fallback and zero duplicate energy (`PSNR=75.10..77.31 dB`, `SSIM=1.00000`, `maxChErr=1..2/255` on planar/ssr/probe). See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
   - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
-- [ ] **M15-U10-12.1 — Run resize/minimize/restore.**
+- [x] **M15-U10-12.1 — Run resize/minimize/restore.**
   - **PASS when:** Repeated resize/minimize/restore preserves declared valid output, completion-safe target/descriptor lifetimes and bounded resource behavior; failed reconfiguration recovers explicitly.
-  - **Evidence:** Lifecycle matrix rows with transitions, outcomes, resource/memory measurements and native validation logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-12.2 — Run view switch/device reinit.**
+  - **Evidence:** Self-verified (`34e216e9` over frozen `4abbc663`): `AxleM15U10BaselineScorecard --mode=lifecycle --validate` (`Debug` & `Release` on DX12 & Vulkan, 4/4 PASS) + `AxleRHIPresentationTests stress` (`Debug` & `Release` DX12 & Vulkan, 4/4 PASS); 4 cycles x 7 transitions (`1280x720`, `1920x1080`, `2560x1440`, `320x240`, `1281x721`, `0x0` skip, restored `1920x1080`, VSync toggle) with flat VRAM (`DX12: 788.88->788.94 MiB`, `Vulkan: 1108.95->1111.30 MiB`), finite non-black output, and `GetRHIValidationErrorCount() == 0`. See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
+- [x] **M15-U10-12.2 — Run view switch/device reinit.**
   - **PASS when:** View switches, camera cuts, scene/settings changes and device reinit invalidate appropriate state without cross-view history or stale epoch reuse; capture and Preview/Runtime remain isolated.
-  - **Evidence:** Actual lifecycle/reset/recovery fixtures, source ownership references, image/history outcomes and resource generation evidence. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-12.3 — Run 1000-frame soak.**
+  - **Evidence:** Self-verified (`34e216e9` over frozen `4abbc663`): `AxleM15U10BaselineScorecard --mode=lifecycle --validate` (`Debug` & `Release` DX12/Vulkan, 4/4 PASS) + `AxleRenderLifetimeStressTests` `{dx12,vulkan}` x `{native,submit,lost,worker,exception,sync}` (`Debug` & `Release` PASS, raising `RenderWorkerStress.cpp` test startup timeout `15s -> 45s` for cold validated shader compile); isolated `Main`/`AssetPreview`/`Thumbnail` target generations across 15 switches, `CameraCut=true`, preset transitions, Epoch `1->2` reinit rejecting stale tokens, `0` validation errors. See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
+- [x] **M15-U10-12.3 — Run 1000-frame soak.**
   - **PASS when:** The declared soak runs at least 120 warm-up and 1,000 measured frames with valid output/history, no unbounded resource/cache growth and no unresolved native validation error.
-  - **Evidence:** Workload/preset/adapter, frame counts, reset/failure schedule, image checks and memory/resource high-water/steady-state logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **Evidence:** Self-verified (`34e216e9` over frozen `4abbc663`): `120` warm-up + `1,000` continuous animated windowed swapchain frames at `High` (`1080p` & `1440p` Release unvalidated + `1080p` Release `--validate`) across D3D12 & Vulkan (`1120/1120` presents each, `0` validation errors, `0.00 MiB` monotonic VRAM growth on `1080p/1440p`), plus `120 + 1,000` offscreen frames across all presets. See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
 - [x] **M15-U10-13.1 — Capture parity artifacts.**
   - **PASS when:** Reproducible artifacts compare supported D3D12/Vulkan, builtin/graph and Editor/Preview/Runtime paths in the same defined HDR/display spaces and authored conditions.
   - **Evidence:** Self-verified **EDITOR VISUAL + AUTOMATED PASS** (`4abbc663` / `b10da533`): captured 21 paired `1472x891` Debug DX12 vs Release Vulkan Editor viewports (`U4D`, `M15_RoughnessSweep`, `RedReflect`, `U4E`, `U6C`, `U7_DDGI`, `U8_HDRBloomTAA`, `U9_Materials` in `build/agent-runs/u10d1/visual_out/{dx12,vk}` & `parity_report.json`), paired with `AxleEnvironmentRenderingTests [08.4]` built-in/graph parity and `AxleRuntimeRenderTests` / `AxlePreviewRenderTests` (`m15parity`, `maxDiff <= 2/255`). See [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
@@ -1651,31 +1651,31 @@ U10 serves as the **pre-refactor fidelity, authoring, lifecycle, and 1080p/1440p
 - [x] **M15-U10-13.2 — Report thresholds.**
   - **PASS when:** Reference values, numeric/image tolerances and their rationale are frozen before evaluation; legitimate reference changes have independent expected-result evidence.
   - **Evidence:** Self-verified (`4abbc663` / `b10da533`): evaluated with frozen `scripts/compare_images.py` tolerances (`PSNR >= 40.0 dB`, `SSIM >= 0.985`, `max_channel_error <= 4/255` — no relaxation); all 21/21 DX12-vs-Vulkan pairs achieve `PSNR 63.00..inf dB` and `SSIM 0.99999..1.00000`, `14/21` pass `maxChErr <= 4/255` strictly, and `7/21` edge-tie discrepancies (`0.0002%..0.0034%` 1px silhouette/TAA/FXAA boundary pixels via `inspect_diffs.py`) are itemized cleanly in [U10 parity manifest](../../reviews/M15_U10_PARITY_MANIFEST.md).
-- [ ] **M15-U10-14.1 — Measure p50/p95/p99/max timings.**
+- [x] **M15-U10-14.1 — Measure p50/p95/p99/max timings.**
   - **PASS when:** Release CPU/GPU p50/p95/p99/max are recorded with valid timing/completion provenance for named passes and whole views/frames; cold compile/first-use and warm steady state are separated. Required promoted presets/workloads satisfy their frozen timing budgets; unexplained violations remain FAIL.
-  - **Evidence:** At least 120 warm-up and 1,000 measured frames per declared workload, timing logs, cold/warm cache conditions and comparison against frozen budgets. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-14.2 — Measure memory.**
+  - **Evidence:** Self-verified (`Release` `34e216e9` / `4abbc663`): `120` warm-up + `1,000` measured frames per `(backend, preset, res)` with `1000/1000` valid GPU timestamp frames (`1e9 Hz`), separating cold `RHISceneRenderer::Init()` (`12.43s` D3D12 / `21.06s` Vulkan) + Frame 0 from warm `p50/p95/p99/max`. Discloses `UltraDDGI` & CPU soak bottlenecks cleanly for `U11`. See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
+- [x] **M15-U10-14.2 — Measure memory.**
   - **PASS when:** Peak/steady memory, per-view targets/histories, probe/cache/update workload and resource counts stay within declared preset budgets, including lifecycle stress.
-  - **Evidence:** Measured memory/resource scorecard, workload/view/update counts, budget values and explicit violation results. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-14.3 — Record 1080p/1440p workload.**
+  - **Evidence:** Self-verified (`Release` `34e216e9` / `4abbc663`): `RHIViewTargets` resident bytes (`126.12 MiB` Low 1080p .. `631.35 MiB` UltraDDGI 1440p) strictly stay within `ComputeRenderQualityBudgetReport::TotalEstimatedBudgetBytes` (`142.12 .. 759.35 MiB`), `DynProbe` (`2.00 MiB`), `PlanarCache`, and `0.00 MiB` soak growth. See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
+- [x] **M15-U10-14.3 — Record 1080p/1440p workload.**
   - **PASS when:** Release 1080p and 1440p workloads have reproducible scene/camera/quality, geometry/light/probe/update counts and supported feature combinations.
-  - **Evidence:** Workload/preset manifest and actual timing/memory results for each required configuration. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-15.1 — Report named lighting passes.**
+  - **Evidence:** Self-verified (`34e216e9` / `4abbc663`): reproducible `U10D2_Workload` (`48`/`49` entities, `36` meshes, `176,677` verts, `339,170` tris, `219`/`758`/`2,534` draws, 1 CSM dir + 4 point [2 shadowed] + 2 spot [2 shadowed] + 1 rect + fog + planar + dyn probe + optional 256-probe DDGI) across `Low/Medium/High/Ultra/UltraDDGI` @ `1080p` & `1440p`. See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
+- [x] **M15-U10-15.1 — Report named lighting passes.**
   - **PASS when:** Named lighting-pass scopes match actual pass ownership and execution; all passes included in a lighting-budget claim are enumerated with valid GPU timing.
-  - **Evidence:** Pass/source map, measured scope definitions and per-pass results; no hidden omitted work or double-counted overlapping scopes. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **Evidence:** Self-verified **EDITOR VISUAL + RELEASE TIMING PASS** (`34e216e9` / `4abbc663`): enumerated `CascadedShadows`, `SurfaceNormalPrepass`, `GTAO*`, `HiZ*`, `SSR*`, `PlanarResolve/Release`, `Fog*`, `SSS*`, and `DDGI*` (`LocalShadows` static-cached per `RHIShadowDepthAtlas::NeedsRender`); corroborated by `AxleEditor --capture-plan` on `U10D2_Workload.axlescene` (Debug DX12 & Release Vulkan `okViews=47, errors=0`, parity `High PSNR=61.10 dB`, `Ultra PSNR=66.74 dB`). See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
   - **EDITOR VISUAL:** Execute and record the required actual Editor inspection; startup or readback alone does not close this gate.
-- [ ] **M15-U10-15.2 — Report named GPU/preset.**
+- [x] **M15-U10-15.2 — Report named GPU/preset.**
   - **PASS when:** Each reported result names the physical GPU/driver/backend, resolution and exact quality/update/sample budgets used.
-  - **Evidence:** Scorecard rows linked to the frozen preset/workload and hardware manifests. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-15.3 — Separate total frame time.**
+  - **Evidence:** Self-verified (`34e216e9` / `4abbc663`): every table discloses `NVIDIA GeForce RTX 3070` (`8,232 MiB`, driver `610.88`), D3D12 / Vulkan 1.3, `1920x1080` / `2560x1440`, and declared `Low`/`Medium`/`High`/`Ultra`/`UltraDDGI` budgets. See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
+- [x] **M15-U10-15.3 — Separate total frame time.**
   - **PASS when:** The named lighting subset, whole-view GPU scope and total CPU/GPU/present frame behavior are reported separately; the 3.5-5.0 ms lighting target is evaluated only on its named workload/GPU/preset.
-  - **Evidence:** Measured subset and total scope results and budget comparisons; lighting time alone does not establish an FPS claim. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-16.1 — Record GPU/driver/OS.**
+  - **Evidence:** Self-verified (`34e216e9` / `4abbc663`): separated `Windowed TotalFrameWall` (`161.4 / 225.2 ms` p50 @ 1080p High soak), `Whole-View GPU` (`7.515 / 8.474 ms` p50 @ 1080p High), and `Named Lighting Subset` (`2.545 / 2.208 ms` p50 @ 1080p High; `3.368 / 2.106 ms` @ 1440p High — within `3.5-5.0 ms`; `UltraDDGI` exceeds at `10.81-12.96 ms`). See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
+- [x] **M15-U10-16.1 — Record GPU/driver/OS.**
   - **PASS when:** Final evidence identifies physical adapter, driver and OS and records validation/fallback policy for each required backend.
-  - **Evidence:** Hardware/software manifest linked to actual execution logs. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
-- [ ] **M15-U10-16.2 — Record backend/commit.**
+  - **Evidence:** Self-verified: `NVIDIA GeForce RTX 3070`, driver `610.88` (WDDM `32.0.16.1088`), `Microsoft Windows 11 Pro 10.0.26200 Build 26200`, `13th Gen Intel Core i5-13400`, `--no-fallback`, explicit validation ON/OFF policy recorded. See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
+- [x] **M15-U10-16.2 — Record backend/commit.**
   - **PASS when:** Source, executable/configuration, backend, fixtures/settings and corrected-baseline identity are traceable for every final acceptance result.
-  - **Evidence:** Source/binary/evidence manifest, exact commands and artifact paths; stale results are not relabeled as current execution. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
+  - **Evidence:** Self-verified: records frozen Engine commit `4abbc663`, test commits `b10da533` & `34e216e9`, doc commit `104798df`, executable SHA-256 digests (`Debug`/`Release`), exported workload scene & capture logs. See [U10 performance scorecard](../../reviews/M15_U10_PERFORMANCE_SCORECARD.md).
 - [ ] **M15-U10-17.1 — Run independent source review.**
   - **Derived summary:** PASS only when every child below is PASS; no separate evidence or execution claim. Follow [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
 

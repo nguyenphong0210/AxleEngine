@@ -1,0 +1,141 @@
+Scene: DDGI Color Bounce
+Entities:
+  - Entity: 701
+    TagComponent:
+      Tag: Matte white sphere
+    TransformComponent:
+      Translation: [0, 1.02, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+    MeshInstance3D:
+      AssetPath: builtin://sphere
+    MaterialComponent:
+      AlbedoColor: [0.64, 0.64, 0.64, 1]
+      Roughness: 1.0
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.64, 0.64, 0.64]
+      EmissionIntensity: 0
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 702
+    TagComponent:
+      Tag: Floor
+    TransformComponent:
+      Translation: [0, -0.12, -0.55]
+      Rotation: [1, 0, 0, 0]
+      Scale: [7, 0.22, 6.2]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.46, 0.46, 0.46, 1]
+      Roughness: 1.0
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.46, 0.46, 0.46]
+      EmissionIntensity: 0
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 703
+    TagComponent:
+      Tag: Back wall
+    TransformComponent:
+      Translation: [0, 1.69, -2.1]
+      Rotation: [1, 0, 0, 0]
+      Scale: [6.6, 3.4, 0.19]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.58, 0.58, 0.58, 1]
+      Roughness: 1.0
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.58, 0.58, 0.58]
+      EmissionIntensity: 0
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 704
+    TagComponent:
+      Tag: Warm emitter
+    TransformComponent:
+      Translation: [-2.45, 1.27, 0.94]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.14, 2.54, 3.2]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.42, 0.17, 0.06, 1]
+      Roughness: 1.0
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [1, 0.22, 0.025]
+      EmissionIntensity: 2.6
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 705
+    TagComponent:
+      Tag: Cool emitter
+    TransformComponent:
+      Translation: [2.45, 1.27, 0.94]
+      Rotation: [1, 0, 0, 0]
+      Scale: [0.14, 2.54, 3.2]
+    MeshInstance3D:
+      AssetPath: builtin://cube
+    MaterialComponent:
+      AlbedoColor: [0.095, 0.33, 0.38, 1]
+      Roughness: 1.0
+      Metallic: 0
+      EnableEnvironmentReflections: false
+      EmissionColor: [0.015, 0.68, 1]
+      EmissionIntensity: 2.35
+      SurfaceType: Opaque
+      DepthWrite: true
+  - Entity: 706
+    TagComponent:
+      Tag: No sky illumination
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+
+    SkyboxComponent:
+      Enabled: false
+      EnvironmentLighting: false
+  - Entity: 707
+    TagComponent:
+      Tag: Dim neutral light
+    TransformComponent:
+      Translation: [0, 7, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      Intensity: 0.09
+      AmbientIntensity: 0.024
+      Azimuth: 180
+      Elevation: 65
+      CastShadows: true
+      ShadowQuality: 1
+      Exposure: 1.0
+      ToneMappingMode: 0
+      Gamma: 2.2
+  - Entity: 708
+    TagComponent:
+      Tag: DDGI Probe Grid
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [1, 0, 0, 0]
+      Scale: [1, 1, 1]
+
+    DDGIProbeGridComponent:
+      Enabled: true
+      GridDimensions: [7, 4, 6]
+      GridSpacing: [0.73, 0.83, 0.84]
+      GridOrigin: [-2.19, 0.22, -1.57]
+      EnergyMultiplier: 1.0
+      MaxProbesPerFrame: 8
+      UpdateFraction: 0.25
+      Hysteresis: 0.85
+      ViewBias: 0.15
+      NormalBias: 0.08

@@ -191,9 +191,12 @@ bool RunM15DDGIContractUnitTests() {
 
     // 3. M15-U7-02: Dual atlas contracts, grid validation, extraction & serialization round-trip
     {
+        // The product of these three dimensions is 2^64 + 4.
+        constexpr glm::ivec3 overflowingGrid{968973220, 49477, 384773};
         RENDER_CHECK(!DDGIContract::ComputeAtlasExtent({0, 4, 4}).Valid &&
                      !DDGIContract::ComputeAtlasExtent({-2, 4, 4}).Valid &&
-                     !DDGIContract::ComputeAtlasExtent({33, 16, 32}).Valid,
+                     !DDGIContract::ComputeAtlasExtent({33, 16, 32}).Valid &&
+                     !DDGIContract::ComputeAtlasExtent(overflowingGrid).Valid,
             "M15-U7-02: invalid or oversized probe grids fail atlas extent validation");
 
         const auto rhiSmall = RHI::RHIViewTargets::ComputeDDGIAtlasExtent(4u, 2u, 4u);
@@ -317,8 +320,8 @@ bool RunM15DDGIContractUnitTests() {
 
         enabledSettings.MSAASamples = 1;
         DDGIContract::ResolveViewTargetOptions(enabledSettings, false, nullptr, enableOut, dimsOut);
-        RENDER_CHECK(enableOut && dimsOut == zeroDims,
-            "M15-U7-07.3: opt-in view without authored grid uses minimal {0,0,0}->1x1x1 placeholder target contract");
+        RENDER_CHECK(!enableOut && dimsOut == zeroDims,
+            "M15-U7-07.3: a view without an authored grid does not allocate DDGI atlases");
 
         // Backend capability gating: without Compute or StorageTextures, EnableDDGI turns off with diagnostic
         RHI::RHIDeviceCapabilities noComputeCaps;
@@ -347,7 +350,7 @@ bool RunM15DDGIContractUnitTests() {
                      sceneRendererSrc.find("DDGIContract::ResolveViewTargetOptions") != std::string::npos &&
                      renderServiceSrc.find("DDGIContract::ResolveViewTargetOptions") != std::string::npos &&
                      inspectorSrc.find("DDGIProbeGridComponent") != std::string::npos &&
-                     editorHeaderSrc.find("bool m_EnableDDGI = false;") != std::string::npos &&
+                     editorHeaderSrc.find("std::optional<bool> m_ViewportDDGIOverride") != std::string::npos &&
                      editorSrc.find("Experimental DDGI") != std::string::npos,
             "M15-U7-02 / 07.3: ViewTargets, Viewport, RenderService, RHISceneRenderer, Inspector, and Editor UI agree on DDGI contracts");
 

@@ -922,8 +922,7 @@ namespace Axle {
         uint32_t ComputeStaggeredUpdateCount(uint32_t probeCount, float updateFraction,
                                              uint32_t maxProbesPerFrame, bool resetSeed);
         float ComputeProbeMaxDistance(const glm::vec3& gridSpacing);
-        uint64_t ComputeStateHash(const RenderWorld& world, const SceneRenderSettings& settings,
-                                  uint64_t materialGeneration);
+        uint64_t ComputeStateHash(const RenderWorld& world, const SceneRenderSettings& settings);
         DDGIMemoryBudget EstimateMemoryBudget(const glm::ivec3& dims,
                                               uint32_t maxProbesPerFrame = DefaultMaxProbesPerFrame,
                                               bool queryDevice = false);

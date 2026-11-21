@@ -15,7 +15,8 @@ namespace Axle::DDGIContract {
         glm::vec4 UpdateParams{};    // x = startProbeIndex, y = updateCount, z = captureCols, w = captureFaceRes
         glm::vec4 Flags{};           // x = samplingEnabled, y = hasHistoryForMultiBounce, z = seedResetFrame, w = atlasRows
         glm::vec4 ClipParams{ 0.05f, 100.0f, 0.0f, 0.0f }; // x = captureNear, y = captureFar
-        glm::vec4 Reserved[7]{};     // Padding to 256 bytes
+        glm::vec4 CaptureShadowDepth{}; // World-space plane for sampling the main-view CSM atlas
+        glm::vec4 Reserved[6]{};     // Padding to 256 bytes
     };
     static_assert(sizeof(DDGIShaderConstants) == 256, "DDGIShaderConstants must be 256 bytes aligned!");
 

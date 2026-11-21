@@ -12,6 +12,7 @@ static const uint DDGI_DISTANCE_INTERIOR = 14u;
 static const uint DDGI_DISTANCE_BORDER = 1u;
 static const uint DDGI_DISTANCE_TILE = 16u;
 static const float DDGI_PI = 3.14159265359;
+static const float DDGI_BACKFACE_REJECT_RATIO = 0.275;
 
 cbuffer DDGIConstants : register(AXLE_DDGI_CBUFFER_REGISTER, space0) {
     float4 u_DDGIScreenSize;      // View width, height, 1/width, 1/height
@@ -23,7 +24,8 @@ cbuffer DDGIConstants : register(AXLE_DDGI_CBUFFER_REGISTER, space0) {
     float4 u_DDGIUpdateParams;    // x = startProbeIndex, y = updateCount, z = captureCols, w = captureFaceRes
     float4 u_DDGIFlags;           // x = samplingEnabled, y = hasHistoryForMultiBounce, z = seedResetFrame, w = atlasRows
     float4 u_DDGIClipParams;      // x = captureNear, y = captureFar, z = 0, w = 0
-    float4 u_DDGIReserved[7];
+    float4 u_DDGICaptureShadowDepth; // View-space depth row of the camera that populated the CSM atlas
+    float4 u_DDGIReserved[6];
 };
 
 float2 DDGISignNotZero(float2 v) {
@@ -174,7 +176,7 @@ float4 DDGISampleVolumeIrradiance(Texture2D<float4> irradAtlas, Texture2D<float4
         // Suppress uninitialized probes and probes enclosed inside backfacing solid geometry
         float validProbe = step(0.01, irradSample.a) * step(0.01, distSample.z);
         float backfaceRatio = saturate(distSample.w);
-        float airWeight = saturate(1.0 - max(0.0, backfaceRatio - 0.15) * 8.0);
+        float airWeight = saturate((DDGI_BACKFACE_REJECT_RATIO - backfaceRatio) / (DDGI_BACKFACE_REJECT_RATIO - 0.15));
 
         float3 probeToSurface = probePos - worldPos;
         float surfDist = length(probeToSurface);

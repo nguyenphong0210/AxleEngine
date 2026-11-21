@@ -124,6 +124,7 @@ private:
     void ResetSimulation();
     void RenderToolbar();
     bool IsViewportFogEnabled() const;
+    bool IsViewportDDGIEnabled() const;
     void RenderStatusBar();
     void UnlockCursor();
     void ClearRHIViewport();
@@ -145,7 +146,7 @@ private:
     int m_FogQuality = static_cast<int>(Axle::FroxelFogQuality::High);
     float m_FogTemporalWeight = 0.8f;
     bool m_EnableAutoExposure = false;
-    bool m_EnableDDGI = false;
+    std::optional<bool> m_ViewportDDGIOverride;
     bool m_EnableTAA = false;
     int m_HiZVisualizationLevel = -1;
     bool m_PinRenderFXPopup = false;

@@ -65,8 +65,10 @@ namespace Axle::RHI {
     }
 
     RHIDDGIAtlasExtent RHIViewTargets::ComputeDDGIAtlasExtent(uint32_t gridX, uint32_t gridY, uint32_t gridZ) {
+        if (!gridX || !gridY || !gridZ ||
+            gridX > MaxDDGIProbes || gridY > MaxDDGIProbes || gridZ > MaxDDGIProbes) return {};
         const uint64_t total64 = static_cast<uint64_t>(gridX) * gridY * gridZ;
-        if (!gridX || !gridY || !gridZ || total64 == 0u || total64 > MaxDDGIProbes) return {};
+        if (total64 > MaxDDGIProbes) return {};
         const uint32_t probeCount = static_cast<uint32_t>(total64);
         const uint32_t cols = std::max(1u, static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<double>(probeCount)))));
         const uint32_t rows = (probeCount + cols - 1u) / cols;

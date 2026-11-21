@@ -200,6 +200,7 @@ namespace Axle {
             settings.EnableShadows = true;
             settings.EnableSkybox = true;
             settings.EnableVolumetricFog = authoredFog && authoredFog->Enabled;
+            settings.EnableDDGI = ExtractDDGIProbeGrid(*m_Scene).has_value();
             settings.ShowPhysicsDebug = false;
 
             ViewRequest request;

@@ -7109,7 +7109,7 @@ namespace Axle {
         const auto giFrame = m_GIService.Prepare(
             world, settings, backendPolicy.Supports(BackendFeature::Compute), world.SceneRevision);
         m_LastGIFrame=giFrame;
-        if (giFrame.Status != GIFrameStatus::Disabled && giFrame.Fallback != GIFallback::None && !giFrame.Diagnostic.empty())
+        if (giFrame.Status == GIFrameStatus::Fallback && !giFrame.Diagnostic.empty())
             viewCtx.Diagnostics().AddFallback(giFrame.Diagnostic);
         auto rollback = std::unique_ptr<RHISceneRenderer, std::function<void(RHISceneRenderer*)>>(this,
             [&](auto*) {

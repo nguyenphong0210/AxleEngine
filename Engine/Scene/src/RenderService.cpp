@@ -350,12 +350,16 @@ namespace Axle {
         result.RenderedEntityCount = result.DrawCallCount;
         // GL executes on the current context; an NRI completion token has no meaning here.
         if (request.Settings.EnableFXAA || request.Settings.EnableToneMapping || request.Settings.MSAASamples > 1 ||
-            request.Settings.EnableVolumetricFog ||
+            request.Settings.EnableVolumetricFog || request.Settings.EnableDDGI ||
             std::any_of(prepared.Meshes.begin(),prepared.Meshes.end(),[](const auto& mesh){return mesh.Material.UseCustomShader;}))
             result.ErrorMessage = GetActiveCapabilities().AdvancedFeatureDiagnostic;
         if (request.Settings.EnableVolumetricFog) {
             if (!result.ErrorMessage.empty()) result.ErrorMessage += " ";
             result.ErrorMessage += "VOLUMETRIC_FOG_UNSUPPORTED: OpenGL compatibility omits 3D froxel volumetric fog; use D3D12 or Vulkan.";
+        }
+        if (request.Settings.EnableDDGI) {
+            if (!result.ErrorMessage.empty()) result.ErrorMessage += " ";
+            result.ErrorMessage += "DDGI_UNSUPPORTED: OpenGL compatibility uses ambient/environment diffuse lighting.";
         }
         if(request.Settings.EnableShadows&&(
             std::any_of(prepared.PointLights.begin(),prepared.PointLights.end(),[](const auto& light){return light.Shadows.CastShadows&&light.Intensity>0;})||

@@ -1,0 +1,17 @@
+camera 0 2.38 6.62 -11 0
+select_entity DDGI Probe Grid
+fx taa=0 autoexp=0 bloom=0 ssr=0 planar=0 gtao=0 contact=0
+wait 50
+capture_viewport authored_on_viewport.png
+capture_editor authored_on_editor.png
+fx ddgi=0
+wait 6
+capture_viewport viewport_override_off.png
+capture_editor editor_override_off.png
+fx ddgi=1
+wait 50
+capture_viewport viewport_override_on.png
+fx popup=1
+capture_editor editor_renderfx.png
+assert_no_errors
+quit

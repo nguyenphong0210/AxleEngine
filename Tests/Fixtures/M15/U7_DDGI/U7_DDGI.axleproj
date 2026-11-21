@@ -1,0 +1,7 @@
+Project:
+  SchemaVersion: 1
+  Name: M15 DDGI Visual Review
+  StartScene: U7_DDGI.axlescene
+  AssetDirectory: assets
+  RHIBackend: Direct3D12
+  Plugins:

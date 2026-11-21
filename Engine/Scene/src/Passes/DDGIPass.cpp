@@ -48,7 +48,8 @@ namespace Axle::Passes {
         RHISceneRenderer& renderer,
         ViewContext& viewCtx,
         const RenderWorld& world,
-        const SceneRenderSettings& settings,
+        const DDGIHistoryFrame& previous,
+        uint64_t stateHash,
         const GIFrame& giFrame,
         const RHI::RHISceneConstants& mainSceneConstants,
         const RHISkyboxConstants* skyboxBaseConstants,
@@ -78,13 +79,9 @@ namespace Axle::Passes {
             return false;
         }
 
-        const uint64_t stateHash = DDGIContract::ComputeStateHash(world, settings, 0ull);
-        const DDGIHistoryFrame prev = viewCtx.GetDDGIHistory();
-        const bool hasHistory = prev.Valid &&
-            prev.StateHash == stateHash &&
-            prev.ProbeCount == extent.ProbeCount;
+        const bool hasHistory = previous.Valid;
         const bool resetSeed = !hasHistory;
-        const uint32_t startCursor = resetSeed ? 0u : (prev.NextProbeCursor % extent.ProbeCount);
+        const uint32_t startCursor = resetSeed ? 0u : (previous.NextProbeCursor % extent.ProbeCount);
         const uint32_t updateCount = DDGIContract::ComputeStaggeredUpdateCount(
             extent.ProbeCount, giFrame.UpdateFraction, giFrame.MaxProbesPerFrame, resetSeed);
         if (updateCount == 0u) {
@@ -160,6 +157,11 @@ namespace Axle::Passes {
         }
         DDGIContract::DDGIShaderConstants captureConstants = cb;
         captureConstants.Flags.x = hasHistory ? 1.0f : 0.0f;
+        // Apply the authored energy gain at the receiver without amplifying the feedback loop.
+        captureConstants.Params.x = 1.0f;
+        const auto& shadowView = mainSceneConstants.View;
+        captureConstants.CaptureShadowDepth = -glm::vec4(
+            shadowView[0][2], shadowView[1][2], shadowView[2][2], shadowView[3][2]);
         if (!captureConstsCB->UpdateData(&captureConstants, sizeof(captureConstants))) {
             return false;
         }

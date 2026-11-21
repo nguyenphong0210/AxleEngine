@@ -277,7 +277,7 @@ namespace Axle {
         const bool resetAutoExposure = useAutoExposure && (!prevExposureHistory.Valid || !prevExposureHistory.AutoExposureEnabled);
         auto* ddgiIrradTex = viewTargets ? viewTargets->GetDDGI() : nullptr;
         auto* ddgiDistTex = viewTargets ? viewTargets->GetDDGIDistance() : nullptr;
-        nri::Pipeline* ddgiCapturePipeline = GetOrCreateDDGICapturePipeline();
+        nri::Pipeline* ddgiCapturePipeline = giFrame.UpdateScheduled ? GetOrCreateDDGICapturePipeline() : nullptr;
         bool useDDGI = giFrame.UpdateScheduled && activeSampleCount == 1 && !captureActive && !planarActive &&
             m_DDGISeedPipeline && m_DDGIIrradiancePipeline && m_DDGIDistancePipeline && ddgiCapturePipeline &&
             sceneDepthTexture && sceneDepthDSV && world.DDGIProbeGrid &&
@@ -294,15 +294,15 @@ namespace Axle {
             viewCtx.Diagnostics().AddFallback(m_LastGIFrame.Diagnostic);
         }
         const uint64_t ddgiStartMatGen = view.MaterialGeneration;
-        bool ddgiResetSeed = false;
+        uint64_t ddgiHash = 0;
+        DDGIHistoryFrame prevDDGI{};
         if (useDDGI) {
-            const uint64_t ddgiHash = DDGIContract::ComputeStateHash(world, settings, 0ull);
-            const DDGIHistoryFrame prevDDGI = viewCtx.GetDDGIHistory();
-            const bool historyValid = prevDDGI.Valid &&
-                prevDDGI.StateHash == ddgiHash &&
-                prevDDGI.ProbeCount == giFrame.ProbeCount;
-            ddgiResetSeed = !historyValid;
+            ddgiHash = DDGIContract::ComputeStateHash(world, settings);
+            prevDDGI = viewCtx.GetDDGIHistory();
+            if (prevDDGI.StateHash != ddgiHash || prevDDGI.ProbeCount != giFrame.ProbeCount)
+                prevDDGI = {};
         }
+        const bool ddgiResetSeed = useDDGI && !prevDDGI.Valid;
         const auto ddgiCaptureColorRes = useDDGI ? graph.Import("DDGICaptureColor", m_DDGICaptureColor.GetNative()) : output;
         const auto ddgiCaptureDepthRes = useDDGI ? graph.Import("DDGICaptureDepth", m_DDGICaptureDepth.GetNative()) : sceneDepth;
         const auto ddgiOutput = useDDGI ? graph.Import("DDGIOutput", ddgiIrradTex->GetNative(), !ddgiResetSeed) : output;
@@ -1423,7 +1423,7 @@ namespace Axle {
             const bool hasSkyDraw = computeSkyboxState(
                 camera, false, true, false, false, nri::Format::RGBA16_SFLOAT, nri::Format::D32_SFLOAT, 1,
                 skyboxBase, ddgiSkyboxPipeline);
-            if (!Passes::DDGIPass::BuildPlan(*this, viewCtx, world, settings, giFrame, sceneConstants,
+            if (!Passes::DDGIPass::BuildPlan(*this, viewCtx, world, prevDDGI, ddgiHash, giFrame, sceneConstants,
                     hasSkyDraw ? &skyboxBase : nullptr, hasSkyDraw, viewTargets.get(), std::move(ddgiDraws), ddgiPlan) ||
                 ddgiPlan.ResetSeed != ddgiResetSeed ||
                 !Passes::DDGIPass::PrepareGraphBindings(*this, graph, ddgiPlan, ddgiIrradTex, ddgiDistTex,

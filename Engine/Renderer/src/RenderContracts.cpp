@@ -5,6 +5,7 @@
 #include <Axle/ResolvedSurface.hpp>
 #include <Axle/RHI/RHIDevice.hpp>
 #include <Axle/RHI/RHIMaterial.hpp>
+#include <Axle/RHI/RHIMesh.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <bit>
 #include <cmath>
@@ -3636,8 +3637,7 @@ namespace Axle {
             return std::clamp(glm::length(safeSpacing) * 1.75f, 4.0f, 120.0f);
         }
 
-        uint64_t ComputeStateHash(const RenderWorld& world, const SceneRenderSettings& settings,
-                                  uint64_t materialGeneration) {
+        uint64_t ComputeStateHash(const RenderWorld& world, const SceneRenderSettings& settings) {
             uint64_t hash = 1469598103934665603ull;
             const auto mixBytes = [&](const void* data, size_t size) {
                 const auto* ptr = static_cast<const uint8_t*>(data);
@@ -3647,7 +3647,6 @@ namespace Axle {
                 }
             };
             const auto mixVal = [&](const auto& v) { mixBytes(&v, sizeof(v)); };
-            mixVal(materialGeneration);
             mixVal(settings.EnableShadows);
             mixVal(settings.EnableSkybox);
             if (world.DDGIProbeGrid) {
@@ -3657,49 +3656,22 @@ namespace Axle {
                 mixVal(g.GridSpacing);
                 mixVal(g.GridOrigin);
             }
-            const uint8_t hasDir = world.DirectionalLight.has_value() ? 1u : 0u;
-            mixVal(hasDir);
-            if (world.DirectionalLight) {
-                const auto& d = *world.DirectionalLight;
-                mixVal(d.Direction);
-                mixVal(d.Color);
-                mixVal(d.Intensity);
-                mixVal(d.AmbientIntensity);
-                mixVal(d.CastsShadows);
-            }
-            const size_t ptCount = world.PointLights.size();
-            mixVal(ptCount);
-            for (const auto& p : world.PointLights) {
-                mixVal(p.Position); mixVal(p.Color); mixVal(p.Intensity); mixVal(p.Radius); mixVal(p.Falloff);
-            }
-            const size_t spCount = world.SpotLights.size();
-            mixVal(spCount);
-            for (const auto& s : world.SpotLights) {
-                mixVal(s.Position); mixVal(s.Direction); mixVal(s.Color); mixVal(s.Intensity);
-                mixVal(s.Range); mixVal(s.InnerAngle); mixVal(s.OuterAngle);
-            }
-            const size_t rcCount = world.RectLights.size();
-            mixVal(rcCount);
-            for (const auto& r : world.RectLights) {
-                mixVal(r.Position); mixVal(r.Direction); mixVal(r.Up); mixVal(r.Color);
-                mixVal(r.Intensity); mixVal(r.Width); mixVal(r.Height); mixVal(r.Range); mixVal(r.TwoSided);
-            }
+            // Recapture moving geometry and changing radiance through the normal staggered
+            // updates. Reset on changes to the light set, grid or material identity.
+            mixVal(world.DirectionalLight.has_value());
+            mixVal(world.PointLights.size());
+            mixVal(world.SpotLights.size());
+            mixVal(world.RectLights.size());
             mixVal(world.Skybox.Authored);
             mixVal(world.Skybox.Enabled);
             mixVal(world.Skybox.EnvironmentLighting);
             mixVal(world.Skybox.Type);
-            mixVal(world.Skybox.Intensity);
-            mixVal(world.Skybox.Exposure);
-            mixVal(world.Skybox.EnvironmentRotation);
-            mixVal(world.Skybox.SunDirection);
-            mixVal(world.Skybox.SunColor);
-            mixVal(world.Skybox.ZenithColor);
-            mixVal(world.Skybox.HorizonColor);
-            mixVal(world.Skybox.GroundColor);
+            mixBytes(world.Skybox.HDRPath.data(), world.Skybox.HDRPath.size());
             const size_t meshCount = world.Meshes.size();
             mixVal(meshCount);
             for (const auto& m : world.Meshes) {
-                mixVal(m.WorldTransform);
+                mixVal(m.EntityID);
+                mixVal(m.StableUUID);
                 mixVal(m.CastsShadows);
                 mixVal(m.Material.AlbedoColor);
                 mixVal(m.Material.SecondaryColor);
@@ -3714,17 +3686,15 @@ namespace Axle {
                 mixBytes(m.Material.AlbedoMapPath.data(), m.Material.AlbedoMapPath.size());
                 mixBytes(m.Material.EmissiveMapPath.data(), m.Material.EmissiveMapPath.size());
                 mixBytes(m.Material.MaterialPath.data(), m.Material.MaterialPath.size());
-                if (m.Material.RHIMaterialAsset) {
-                    const auto& md = m.Material.RHIMaterialAsset->GetDesc();
-                    mixVal(md.BaseColor);
-                    mixVal(md.EmissiveColor);
-                    mixVal(md.EmissiveIntensity);
-                    mixVal(md.Roughness);
-                    mixVal(md.Metallic);
-                    mixVal(md.ShadingModel);
+                if (m.Material.RHIMaterialAsset)
+                    mixVal(MaterialResolver::ComputeGeneration(*m.Material.RHIMaterialAsset));
+                // Each extracted RenderWorld can wrap the same geometry in a fresh view.
+                if (m.NativeView) {
+                    const auto vertices = m.NativeView->GetVertexHandle();
+                    const auto indices = m.NativeView->GetIndexHandle();
+                    mixVal(vertices.Epoch); mixVal(vertices.Slot); mixVal(vertices.Generation);
+                    mixVal(indices.Epoch); mixVal(indices.Slot); mixVal(indices.Generation);
                 }
-                const auto* nativeViewPtr = m.NativeView.get();
-                mixVal(nativeViewPtr);
                 mixVal(m.MeshSourceUUID);
             }
             return hash;
@@ -3767,19 +3737,14 @@ namespace Axle {
                                       const RenderDDGIProbeGrid* authored,
                                       bool& outEnable, std::array<uint32_t, 3>& outGridDims) {
             outGridDims = {0u, 0u, 0u};
-            outEnable = settings.EnableDDGI && !isSubCapture && settings.MSAASamples == 1u;
+            outEnable = settings.EnableDDGI && !isSubCapture && settings.MSAASamples == 1u &&
+                authored && authored->Enabled && ValidateGrid(*authored);
             if (!outEnable) return;
-            if (authored) {
-                if (!authored->Enabled || !ValidateGrid(*authored)) {
-                    outEnable = false;
-                    return;
-                }
-                outGridDims = {
-                    static_cast<uint32_t>(authored->GridDimensions.x),
-                    static_cast<uint32_t>(authored->GridDimensions.y),
-                    static_cast<uint32_t>(authored->GridDimensions.z)
-                };
-            }
+            outGridDims = {
+                static_cast<uint32_t>(authored->GridDimensions.x),
+                static_cast<uint32_t>(authored->GridDimensions.y),
+                static_cast<uint32_t>(authored->GridDimensions.z)
+            };
         }
     } // namespace DDGIContract
 

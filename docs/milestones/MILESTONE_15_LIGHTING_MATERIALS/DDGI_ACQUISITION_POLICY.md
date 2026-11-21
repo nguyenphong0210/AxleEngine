@@ -6,13 +6,15 @@
 
 - **Chosen production GPU path:** **Amortized Multi-Face Tile-Atlas Raster Probe Capture (`DDGICapture`)** coupled with **Compute Octahedral Integration & Visibility Moment Filtering (`DDGIUpdate`)** on native D3D12 / Vulkan (`SM 6.0`).
 - **Rejected non-compliant path:** Reusing the main camera's screen-space `OpaqueColor`/`OpaqueDepth` buffer (`u_Scene` copy in legacy `DDGI.hlsl`) is explicitly retired. Screen pixels represent camera-facing surfaces and cannot measure world-space enclosed bounce or behind-wall occlusion independently of camera movement.
-- **Why raster probe captures fit M15:** M15 explicitly excludes hardware ray-tracing pipelines and BLAS/TLAS acceleration ownership (reserved for **M16-RT**). Amortized 6-face 90-degree probe captures execute directly against the immutable `RenderWorld` draw lists, Material Graphs, Forward+ lights, CSM/Local shadow atlases, Skybox, and prior-frame DDGI irradiance (multi-bounce feedback) with exact depth hit distances from `D32_FLOAT` inside a single `RenderGraph`-managed frame.
+- **Hardware tracing scope.** M16 owns hardware ray tracing and BLAS/TLAS acceleration structures.
+- **Raster inputs.** Each probe renders the opaque world draw list in six 90-degree views, including mesh depth, built-in material shading and emission, sky, local lights and shadows, and the previous DDGI atlas for multi-bounce. Canonical MaterialSurface shaders can receive DDGI in the main view. Capture uses the resolved built-in material properties as the proxy for custom shading.
+- **Shadow coverage.** Directional shadow detail is limited to the main view's CSM coverage. Probe faces select cascades using that view's depth. Scene hits and their radial distances come from the world-space probe faces. Local shadow lookup uses world positions.
 
 ## 2. World-Space Probe Lattice & Octahedral Atlas Packing (`M15-U7-02`)
 
 - **Probe Indexing:** Linear index `p = (iy * dims.z + iz) * dims.x + ix` maps bijectively to grid coordinate `(ix, iy, iz)` and world center `GridOrigin + vec3(ix, iy, iz) * GridSpacing`.
 - **2D Tile Layout:** Probes pack into a near-square 2D tile grid with `atlasCols = ceil(sqrt(probeCount))`, `atlasRows = ceil(probeCount / atlasCols)` (`col = p % atlasCols`, `row = p / atlasCols`). Keeping tile columns bounded prevents huge horizontal textures for wide `32x16x32` grids (`128x128` tiles fits well under `MaxDDGIAtlasDimension = 8192`).
-- **Irradiance Atlas (`RGBA16_FLOAT`, 8 B/texel):** `6x6` octahedral interior + `1 px` border gutter = **`8x8` texels/probe** (`512 B/probe`). Stores cosine-weighted diffuse irradiance (`.rgb`) and accumulated valid hit weight (`.a`).
+- **Irradiance Atlas (`RGBA16_FLOAT`, 8 B/texel):** `6x6` octahedral interior + `1 px` border gutter = **`8x8` texels/probe** (`512 B/probe`). Stores cosine-weighted diffuse irradiance (`.rgb`) and current probe validity (`.a`).
 - **Distance & Visibility Moments Atlas (`RGBA16_FLOAT`, 8 B/texel):** `14x14` octahedral interior + `1 px` border gutter = **`16x16` texels/probe** (`2048 B/probe`). Stores `(E[r], E[r^2], validWeight, backfaceRatio)` to drive Chebyshev visibility upper bounds and detect probes trapped inside closed geometry.
 
 ## 3. Memory & Staggered Update Budgets (`M15-U7-01.2`, `M15-U7-07.3`)
@@ -33,6 +35,8 @@ The reference `32x16x32` lattice (`16,384` probes) requires bounded atlas memory
 
 ## 4. Fallback, Capability & Tier Policy (`M15-U7-07.2`, `08.4`)
 
-- **Opt-in Experimental Status:** `SceneRenderSettings::EnableDDGI` defaults to `false`; `GIService::Prepare` reports `GIFrameStatus::Experimental`.
-- **No-Compute / OpenGL / MSAA / Sub-Capture / Invalid Grid / No-Valid-Probe:** Explicitly falls back to IBL/ambient diffuse (`GIFallback::IBL`) with structured diagnostic (`ddgi_disabled_or_no_grid`, `ddgi_compute_unavailable`, `ddgi_invalid_grid`, `ddgi_disabled:compute_or_storage_unavailable`) and zero authored-scene mutation.
-- **Inside-Geometry & Bias Controls:** Configurable `ViewBias` (default `0.15`), `NormalBias` (default `0.08`), `Hysteresis` (`0.90`), `UpdateFraction` (`0.25`), and `MaxProbesPerFrame` (`8`). Probes hitting backfaces (`> 25%`) are weighted down so adjacent valid air probes or IBL fallback cleanly suppress light leakage.
+- **Experimental opt-in.** A scene with an enabled `DDGIProbeGridComponent` opts in on Runtime and by default in Editor. Editor Render FX can override the viewport and can return to the scene setting. The low-level setting defaults to disabled.
+- **Capability and diffuse fallback.** Missing or invalid grids, disabled settings, unsupported compute/storage or OpenGL, MSAA, and sub-captures fall back to environment/ambient diffuse. A view without a valid, active grid allocates no DDGI atlas. A fragment with no valid neighboring probes uses the same fallback directly in the shader.
+- **Backface rejection and bias.** The validity weight starts falling above 15% backface hits and reaches zero at 27.5%. The latest backface measurement updates immediately when the probe is recaptured. Backfaces contribute zero radiance with their full angular weight. `ViewBias` defaults to `0.15` and `NormalBias` to `0.08`.
+- **Temporal policy.** Scene identity and revision, target/device generations, lattice and capture policy changes, and replaced mesh/material generations invalidate history. Camera motion, light animation and moving geometry continue the staggered cursor. `Hysteresis` controls the next radiance and distance-moment blend without reseeding. `EnergyMultiplier` scales the receiver contribution once. The capture feedback uses unit gain.
+- **Raster sample count.** Each capture uses the fixed 16x16 face size. Existing serialized `RaysPerProbe` data does not change the raster sample count.

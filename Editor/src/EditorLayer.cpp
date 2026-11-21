@@ -1531,7 +1531,7 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
         std::clamp(m_FogQuality, 0, static_cast<int>(Axle::FroxelFogQuality::Ultra)));
     renderSettings.FogTemporalWeight = std::clamp(m_FogTemporalWeight, 0.0f, 0.9f);
     renderSettings.EnableAutoExposure = m_EnableAutoExposure;
-    renderSettings.EnableDDGI = m_EnableDDGI;
+    renderSettings.EnableDDGI = m_ViewportDDGIOverride.value_or(authoredDDGI.has_value());
     renderSettings.HiZVisualizationLevel = m_HiZVisualizationLevel;
     renderSettings.ShowPhysicsDebug = m_ShowPhysicsDebug;
     renderSettings.PhysicsDrawSettings = m_PhysicsDrawSettings;
@@ -1569,6 +1569,11 @@ void EditorLayer::OnUpdate(Axle::Timestep ts) {
 bool EditorLayer::IsViewportFogEnabled() const {
     if (m_ViewportFogOverride.has_value()) return *m_ViewportFogOverride;
     return m_Scene && Axle::ExtractVolumetricFog(*m_Scene).has_value();
+}
+
+bool EditorLayer::IsViewportDDGIEnabled() const {
+    if (m_ViewportDDGIOverride.has_value()) return *m_ViewportDDGIOverride;
+    return m_Scene && Axle::ExtractDDGIProbeGrid(*m_Scene).has_value();
 }
 
 void EditorLayer::RenderToolbar() {
@@ -1930,9 +1935,12 @@ void EditorLayer::RenderToolbar() {
                 ImGui::SliderFloat("Fog Temporal Weight", &m_FogTemporalWeight, 0.0f, 0.9f, "%.2f");
             }
             ImGui::Checkbox("Auto-Exposure", &m_EnableAutoExposure);
-            ImGui::Checkbox("Experimental DDGI", &m_EnableDDGI);
+            bool ddgiEnabled = IsViewportDDGIEnabled();
+            if (ImGui::Checkbox("Experimental DDGI", &ddgiEnabled)) m_ViewportDDGIOverride = ddgiEnabled;
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Experimental staggered diffuse DDGI probe grid (falls back to IBL without an active grid or compute support).");
+                ImGui::SetTooltip("Uses the scene's enabled DDGI probe grid. This viewport can temporarily override the scene setting.");
+            if (m_ViewportDDGIOverride.has_value() && ImGui::MenuItem("Use Scene DDGI Setting"))
+                m_ViewportDDGIOverride.reset();
             ImGui::Checkbox("Temporal Anti-Aliasing (TAA)", &m_EnableTAA);
             ImGui::Separator();
             ImGui::SliderInt("Hi-Z Debug Level (-1=Off)", &m_HiZVisualizationLevel, -1,
@@ -2143,7 +2151,10 @@ void EditorLayer::OnImGuiRender() {
                 if (m_ViewportFogOverride.has_value() && ImGui::MenuItem("Use Scene Fog Setting"))
                     m_ViewportFogOverride.reset();
                 ImGui::MenuItem("Auto-Exposure", nullptr, &m_EnableAutoExposure);
-                ImGui::MenuItem("Experimental DDGI", nullptr, &m_EnableDDGI);
+                bool ddgiEnabled = IsViewportDDGIEnabled();
+                if (ImGui::MenuItem("Experimental DDGI", nullptr, &ddgiEnabled)) m_ViewportDDGIOverride = ddgiEnabled;
+                if (m_ViewportDDGIOverride.has_value() && ImGui::MenuItem("Use Scene DDGI Setting"))
+                    m_ViewportDDGIOverride.reset();
                 ImGui::MenuItem("Temporal Anti-Aliasing (TAA)", nullptr, &m_EnableTAA);
                 ImGui::EndMenu();
             }
@@ -3954,7 +3965,7 @@ void EditorLayer::ApplyRenderFXOverride(const RenderFXOverride& state) {
     if (state.Contact.has_value()) m_EnableContactShadows = *state.Contact;
     if (state.Bloom.has_value()) m_EnableBloom = *state.Bloom;
     if (state.AutoExposure.has_value()) m_EnableAutoExposure = *state.AutoExposure;
-    if (state.DDGI.has_value()) m_EnableDDGI = *state.DDGI;
+    if (state.DDGI.has_value()) m_ViewportDDGIOverride = *state.DDGI;
     if (state.TAA.has_value()) m_EnableTAA = *state.TAA;
     if (state.HiZLevel.has_value()) m_HiZVisualizationLevel = *state.HiZLevel;
     if (state.PinRenderFXPopup.has_value()) m_PinRenderFXPopup = *state.PinRenderFXPopup;

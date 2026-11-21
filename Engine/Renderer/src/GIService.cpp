@@ -14,11 +14,13 @@ namespace Axle {
         const auto& grid = *world.DDGIProbeGrid;
         const float energy = grid.EnergyMultiplier * settings.DDGIMultiplier;
         std::string reason;
-        const bool gridValid = DDGIContract::ValidateGrid(grid, &reason) && std::isfinite(energy) && energy >= 0.0f;
-        if (!gridValid || !computeSupported) {
+        const bool gridValid = DDGIContract::ValidateGrid(grid, &reason);
+        if (gridValid && (!std::isfinite(energy) || energy < 0.0f))
+            reason = "effective energy multiplier must be finite and non-negative";
+        if (!reason.empty() || !computeSupported) {
             frame.Status = GIFrameStatus::Fallback;
-            frame.Diagnostic = gridValid ? "ddgi_compute_unavailable: IBL diffuse fallback"
-                                         : ("ddgi_invalid_grid: " + reason + "; IBL diffuse fallback");
+            frame.Diagnostic = reason.empty() ? "ddgi_compute_unavailable: IBL diffuse fallback"
+                                              : ("ddgi_invalid_grid: " + reason + "; IBL diffuse fallback");
             return frame;
         }
         const auto extent = DDGIContract::ComputeAtlasExtent(grid.GridDimensions);
@@ -34,8 +36,7 @@ namespace Axle {
         frame.NormalBias = std::max(0.0f, grid.NormalBias);
         frame.Status = GIFrameStatus::Experimental;
         frame.UpdateScheduled = true;
-        // Experimental update prepares bounded atlases; diffuse feedback wiring completes in U7-B/U7-C.
-        frame.Diagnostic = "ddgi_experimental_update: irradiance/visibility unavailable; IBL diffuse fallback";
+        frame.Diagnostic = "ddgi_experimental_update_scheduled";
         return frame;
     }
 }

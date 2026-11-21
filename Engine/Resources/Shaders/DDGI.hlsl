@@ -158,11 +158,9 @@ void CSUpdateIrradiance(uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThre
                 float4 dirOmega = gs_FaceRayDist[k];
                 frontSamples += colFront.a;
                 float cosTheta = max(dot(dirOmega.xyz, normalDir), 0.0);
-                float w = cosTheta * dirOmega.w * colFront.a;
-                if (w > 0.0) {
-                    irradSum += colFront.rgb * w;
-                    cosWeightSum += w;
-                }
+                float w = cosTheta * dirOmega.w;
+                irradSum += colFront.rgb * (w * colFront.a);
+                cosWeightSum += w;
             }
         }
         GroupMemoryBarrierWithGroupSync();
@@ -173,11 +171,11 @@ void CSUpdateIrradiance(uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThre
         float3 newIrrad = (cosWeightSum > 1e-6) ? (irradSum / cosWeightSum) : float3(0.0, 0.0, 0.0);
         uint2 writeCoord = tileOrigin + localID.xy;
         float4 prev = u_IrradianceAtlas[writeCoord];
+        bool valid = frontSamples / 1536.0 > 1.0 - DDGI_BACKFACE_REJECT_RATIO;
         bool resetSeed = (u_DDGIFlags.z > 0.5) || (prev.a <= 0.001);
         float hysteresis = resetSeed ? 0.0 : clamp(u_DDGIParams.y, 0.0, 0.99);
         float3 blended = lerp(newIrrad, max(prev.rgb, float3(0.0, 0.0, 0.0)), hysteresis);
-        float validFlag = (frontSamples > 0.0) ? 1.0 : 0.0;
-        gs_IrradTile[localLinear] = float4(blended, max(prev.a, validFlag));
+        gs_IrradTile[localLinear] = valid ? float4(blended, 1.0) : float4(0.0, 0.0, 0.0, 0.0);
     } else {
         gs_IrradTile[localLinear] = float4(0.0, 0.0, 0.0, 0.0);
     }
@@ -255,13 +253,13 @@ void CSUpdateDistanceMoments(uint3 groupID : SV_GroupID, uint3 localID : SV_Grou
 
         uint2 writeCoord = tileOrigin + localID.xy;
         float4 prev = u_DistanceAtlas[writeCoord];
-        bool resetSeed = (u_DDGIFlags.z > 0.5) || (prev.z <= 0.001);
+        bool resetSeed = (u_DDGIFlags.z > 0.5) || (prev.z <= 0.001) || prev.w >= DDGI_BACKFACE_REJECT_RATIO;
         float hysteresis = resetSeed ? 0.0 : clamp(u_DDGIParams.y, 0.0, 0.99);
 
         float mean = lerp(newMean, prev.x, hysteresis);
         float meanSq = lerp(newMeanSq, prev.y, hysteresis);
-        float backOut = lerp(backfaceRatio, prev.w, hysteresis);
-        gs_DistTile[localLinear] = float4(mean, meanSq, 1.0, backOut);
+        // Geometric validity must reflect the current capture even when moments blend.
+        gs_DistTile[localLinear] = float4(mean, meanSq, 1.0, backfaceRatio);
     } else {
         gs_DistTile[localLinear] = float4(0.0, 0.0, 0.0, 0.0);
     }

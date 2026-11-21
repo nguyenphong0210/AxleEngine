@@ -265,6 +265,8 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path& ou
                               glm::scale(glm::mat4(1.0f), glm::vec3(1.2f, 1.2f, 1.2f));
     trapCube.Material.RHIMaterialAsset = MakeSolidMat(glm::vec3(0.15f, 0.15f, 0.15f));
     world.Meshes.push_back(trapCube);
+    RenderPointLight movingLight{};
+    world.PointLights.push_back(movingLight);
 
     // Camera looks FAR AWAY from the emissive red wall & trap cube (negative Z empty void)
     // to verify DDGI probe captures world geometry independently of main camera frustum!
@@ -342,12 +344,17 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path& ou
         return false;
     }
 
-    // Frames 1..4: Move main camera arbitrarily; verify round-robin cursor [8, 16, 24, 0]
+    // Frames 1..4: Move the camera, an occluder and a light without editing topology.
     PerspectiveCamera camOther(60.0f, 1.0f, 0.1f, 200.0f);
     camOther.SetViewMatrix(glm::lookAtRH(glm::vec3(30.0f, 10.0f, 30.0f), glm::vec3(3.0f, 2.0f, 3.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
                            glm::vec3(30.0f, 10.0f, 30.0f));
     const uint32_t expectedCursors[4] = { 8u, 16u, 24u, 0u };
+    const glm::mat4 originalTrapTransform = world.Meshes[1].WorldTransform;
     for (uint32_t step = 0; step < 4u; ++step) {
+        world.Meshes[1].WorldTransform[3].x = enclosedProbePos.x - 0.67f * static_cast<float>(step);
+        world.PointLights[0].Position.x = static_cast<float>(step);
+        world.Skybox.SunDirection.x = static_cast<float>(step) * 0.1f;
+        for (auto& mesh : world.Meshes) mesh.NativeView = cube->CaptureView();
         if (!renderView(camOther)) {
             std::cerr << "[M15DDGI] FAIL: Staggered rotation render step " << step << " failed\n";
             return false;
@@ -360,8 +367,9 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path& ou
         }
     }
 
-    std::vector<glm::vec4> irradSteady;
-    if (!ReadTextureRGBA16F(*targets->GetDDGI(), irradSteady)) {
+    std::vector<glm::vec4> irradSteady, distSteady;
+    if (!ReadTextureRGBA16F(*targets->GetDDGI(), irradSteady) ||
+        !ReadTextureRGBA16F(*targets->GetDDGIDistance(), distSteady)) {
         return false;
     }
     const auto p8Seeded = AnalyzeTile(irradSteady, extent.IrradianceWidth, 8u, extent.AtlasCols,
@@ -370,6 +378,14 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path& ou
         std::cerr << "[M15DDGI] FAIL: Staggered rotation did not warm probe 8 cleanly\n";
         return false;
     }
+
+    const auto p0NowEnclosed = AnalyzeTile(irradSteady, extent.IrradianceWidth, 0u, extent.AtlasCols,
+        DDGIContract::IrradianceInterior, DDGIContract::IrradianceTileSize);
+    const auto p0NowEnclosedDist = AnalyzeDistanceTile(distSteady, extent.DistanceWidth, 0u, extent.AtlasCols);
+    RENDER_CHECK(p0NowEnclosed.MaxAlpha == 0.0f && p0NowEnclosed.MeanIrrad == glm::vec3(0.0f) &&
+                 p0NowEnclosedDist.MeanBackfaceRatio > 0.7f,
+        "M15-U7-04.1/05.2: moving geometry preserves the staggered cursor and immediately rejects newly trapped probes");
+    world.Meshes[1].WorldTransform = originalTrapTransform;
 
     // Scene edit invalidation test: replace red emissive wall with bright GREEN wall -> must reset cursor to 0, clear old red [8..31], and capture GREEN on [0..7]!
     world.Meshes[0].Material.RHIMaterialAsset = MakeSolidMat(glm::vec3(0.05f, 0.9f, 0.05f), glm::vec3(0.04f, 1.0f, 0.04f), 8.0f);
@@ -392,6 +408,38 @@ bool RunM15DDGITests(RHISceneRenderer& renderer, const std::filesystem::path& ou
         !(p8Cleared.MaxAlpha == 0.0f)) {
         std::cerr << "[M15DDGI] FAIL: Scene revision invalidation left stale red bounce or failed reset\n";
         return false;
+    }
+
+    {
+        RenderWorld cutoutWorld = world;
+        RHIMaterialDesc cutout{};
+        cutout.SurfaceType = SurfaceType::Cutout;
+        cutout.BaseColor.a = 0.25f;
+        cutout.AlphaCutoff = 0.20f;
+        const auto cutoutMaterial = std::make_shared<RHIMaterial>(cutout);
+        cutoutWorld.Meshes[1].Material.RHIMaterialAsset = cutoutMaterial;
+        cutoutWorld.SceneRevision = 201;
+        renderer.RenderWorldView(cutoutWorld, camOther, &color, &depth, settings, nullptr, targets);
+        std::vector<glm::vec4> closedCutoutDistance;
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle() &&
+                     ReadTextureRGBA16F(*targets->GetDDGIDistance(), closedCutoutDistance) &&
+                     AnalyzeDistanceTile(closedCutoutDistance, extent.DistanceWidth, enclosedProbeIdx,
+                         extent.AtlasCols).MeanBackfaceRatio > 0.7f,
+            "M15-U7-04.1: surviving cutout backfaces enclose a probe");
+        cutoutMaterial->SetAlphaCutoff(0.5f);
+        renderer.RenderWorldView(cutoutWorld, camOther, &color, &depth, settings, nullptr, targets);
+        std::vector<glm::vec4> cutoutIrradiance, cutoutDistance;
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && device.WaitIdle() &&
+                     ReadTextureRGBA16F(*targets->GetDDGI(), cutoutIrradiance) &&
+                     ReadTextureRGBA16F(*targets->GetDDGIDistance(), cutoutDistance),
+            "M15-U7-04.1: read cutout visibility from inside an alpha-clipped mesh");
+        const auto cutoutTile = AnalyzeTile(cutoutIrradiance, extent.IrradianceWidth, enclosedProbeIdx,
+            extent.AtlasCols, DDGIContract::IrradianceInterior, DDGIContract::IrradianceTileSize);
+        const auto cutoutDistanceTile = AnalyzeDistanceTile(
+            cutoutDistance, extent.DistanceWidth, enclosedProbeIdx, extent.AtlasCols);
+        RENDER_CHECK(renderer.GetGIFrame().ProbeCursor == 0u && cutoutTile.MinAlpha > 0.5f &&
+                     cutoutDistanceTile.MeanBackfaceRatio < 0.25f,
+            "M15-U7-04.1/07.1: live cutoff edits reseed DDGI and clipped backfaces do not enclose a probe");
     }
 
     // U7-C Live Forward Diffuse GI & Fallback Check (M15-U7-06 / 07.2):

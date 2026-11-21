@@ -18,6 +18,7 @@ namespace Axle {
     class RHISceneRenderer;
     class ViewContext;
     struct RHISkyboxConstants;
+    struct DDGIHistoryFrame;
     namespace RHI {
         class RHIMeshView;
         class RHITexture;
@@ -74,7 +75,8 @@ namespace Axle::Passes {
             RHISceneRenderer& renderer,
             ViewContext& viewCtx,
             const RenderWorld& world,
-            const SceneRenderSettings& settings,
+            const DDGIHistoryFrame& previous,
+            uint64_t stateHash,
             const GIFrame& giFrame,
             const RHI::RHISceneConstants& mainSceneConstants,
             const RHISkyboxConstants* skyboxBaseConstants,

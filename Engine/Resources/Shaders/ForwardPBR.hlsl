@@ -214,10 +214,9 @@ float CascadeVisibility(uint cascade,float3 world,float3 normal,float3 sun) {
     }
     return visibility/25;
 }
-float SunShadowVisibility(float3 world,float3 normal,float3 sun) {
+float SunShadowVisibility(float3 world,float3 normal,float3 sun,float depth) {
     uint count=(uint)u_CascadeAtlas.x;
     if(count==0) return 1;
-    float depth=-mul(u_View,float4(world,1)).z;
     if(depth<u_CascadeAtlas.w || depth>u_CascadeSplits[count-1]) return 1;
     uint cascade=0;
     [unroll] for(uint c=0;c<3;++c) if(c+1<count && depth>u_CascadeSplits[c]) cascade=c+1;
@@ -478,7 +477,7 @@ ForwardSurfaceEval MakeForwardSurfaceEval(
     return result;
 }
 
-ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
+ForwardSurfaceEval EvaluateForwardSurface(PSInput input, bool ddgiCapture = false) {
     // 1. Unpack Shading Controls from Object Push Constants
     float tileScale = max(0.01, u_Params.x);
     int shadingMode = (int)u_Params.y;
@@ -653,7 +652,10 @@ ForwardSurfaceEval EvaluateForwardSurface(PSInput input) {
 
     float sunIntensity = hasMultiLightSun ? max(u_SunLight.DirectionAndIlluminance.w,0.0) * DIRECT_LUX_TO_RADIANCE : max(u_SunDirection.w,0.0);
     float3 sunColor = hasMultiLightSun ? u_SunLight.ColorAndAmbient.rgb : u_SunColor.rgb;
-    float3 sunRadiance = sunColor * sunIntensity * AxleDirectionalVisibility(SunShadowVisibility(input.WorldPos,N,sunDir), screenVisibility.y);
+    float shadowDepth = ddgiCapture ? dot(u_DDGICaptureShadowDepth, float4(input.WorldPos, 1.0))
+                                    : -mul(u_View, float4(input.WorldPos, 1.0)).z;
+    float3 sunRadiance = sunColor * sunIntensity *
+        AxleDirectionalVisibility(SunShadowVisibility(input.WorldPos, N, sunDir, shadowDepth), screenVisibility.y);
 
     float NdotL_Sun = max(dot(N, sunDir), 0.0);
     // Photographic Studio Softbox Diffuse Wrap (Area Light Approximation)
@@ -1080,5 +1082,9 @@ ReflectionSubsurfaceSurfaceOutput PSReflectionSSSMain(PSInput input) {
     return MakeReflectionSubsurfaceSurfaceOutput(outColor, eval.Environment, eval.Response, eval.Roughness, eval.ReflectionEnabled, eval.DiffuseSSS, eval.ControlSSS);
 }
 float4 PSDDGICapture(PSInput input, bool isFrontFace : SV_IsFrontFace) : SV_Target0 {
-    return isFrontFace ? float4(EvaluateForwardSurface(input).Color.rgb, 1.0) : float4(0.0, 0.0, 0.0, 0.0);
+    const bool cutout = (int)(u_SurfaceType + 0.5) == 1;
+    if (!isFrontFace && !cutout) return 0.0;
+    // Cutout discard must run for both sides before a fragment can write probe depth.
+    const float3 radiance = EvaluateForwardSurface(input, true).Color.rgb;
+    return isFrontFace ? float4(radiance, 1.0) : 0.0;
 }

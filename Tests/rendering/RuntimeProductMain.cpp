@@ -38,6 +38,24 @@ static std::filesystem::path Fixture(const std::string& mode,bool cooked) {
     scene.CreateEntity("Authored disabled sky").AddComponent<SkyboxComponent>().Enabled=false;
     auto& fog=scene.CreateEntity("Authored froxel fog").AddComponent<VolumetricFogComponent>();
     fog.Enabled=true;fog.Density=0.16f;fog.Intensity=1.0f;fog.HeightFalloff=0.0f;fog.MaxDistance=40.0f;
+    auto receiver=scene.CreateEntity("DDGI matte receiver");
+    receiver.GetComponent<TransformComponent>().Translation={-1.1f,-0.35f,-0.05f};
+    receiver.GetComponent<TransformComponent>().Scale={0.55f,0.7f,0.12f};
+    receiver.AddComponent<MeshInstance3D>().AssetPath="builtin://cube";
+    auto& receiverMaterial=receiver.AddComponent<MaterialComponent>();
+    receiverMaterial.AlbedoColor={0.6f,0.6f,0.6f,1.0f};receiverMaterial.Roughness=1.0f;
+
+    auto emitter=scene.CreateEntity("Offscreen DDGI emitter");
+    emitter.GetComponent<TransformComponent>().Translation={-2.8f,0.2f,0.75f};
+    emitter.GetComponent<TransformComponent>().Scale={0.15f,3.0f,2.0f};
+    emitter.AddComponent<MeshInstance3D>().AssetPath="builtin://cube";
+    auto& emitterMaterial=emitter.AddComponent<MaterialComponent>();
+    emitterMaterial.EmissionColor={0.0f,0.0f,1.0f};emitterMaterial.EmissionIntensity=4.0f;
+
+    auto& grid=scene.CreateEntity("Authored DDGI").AddComponent<DDGIProbeGridComponent>();
+    grid.GridDimensions={3,2,2};grid.GridOrigin={-2.0f,-0.8f,-0.4f};grid.GridSpacing={1.0f,1.4f,1.6f};
+    grid.MaxProbesPerFrame=12;
+
     auto& particles=scene.CreateEntity("Authored effect").AddComponent<ParticleEmitterComponent>();
     auto config=ParticleEmitterConfig::CreateNeutral();config.EmissionRate=0;config.LightingEnabled=false;config.SoftnessDistance=0;
     config.StartColor={0,1,0,1};config.StartSize=config.EndSize={0.45f,0.45f};
@@ -96,9 +114,10 @@ public:
     uint32_t Frames=0,Clicks=0;
     bool Native=false;
     uint8_t FoggedCenterRed=0;
+    uint8_t DDGIReceiverBlue=0;
     explicit VerifyFrame(std::shared_ptr<RuntimeLayer> player,std::filesystem::path output):Player(std::move(player)),Output(std::move(output)){}
     void OnAttach() override {
-        const auto scene=Player->GetScene();Require(scene&&scene->GetRegistry().view<MeshInstance3D>().size()==1,"actual startup scene loaded");
+        const auto scene=Player->GetScene();Require(scene&&scene->GetRegistry().view<MeshInstance3D>().size()==3,"actual startup scene loaded");
         scene->GetUIDataContext().RegisterAction("Probe.Click",[this]{++Clicks;});
         auto emitters=scene->GetRegistry().view<ParticleEmitterComponent>();Require(emitters.size()==1,"authored effect loaded");
         auto& effect=emitters.get<ParticleEmitterComponent>(*emitters.begin());Require(effect.EmitterStacks.size()==1,"one authored emitter retained");
@@ -143,7 +162,19 @@ public:
         if(Frames==1||Frames==3) {std::ofstream image(Output/("frame"+std::to_string(Frames)+".rgba"),std::ios::binary);image.write(reinterpret_cast<const char*>(pixels.data()),pixels.size());Require(bool(image),"Runtime capture");}
         if(Frames==2)Require(Clicks==1,"Runtime UI input before resize");
         if(Frames==4)Require(Clicks==2,"Runtime UI input maps physical pixels through DPI after resize");
-        if(Frames==5)Require(!Player->IsPaused(),"Runtime resumes through its actual input/simulation path");
+        const auto receiverBlue=at(width/4,height*3/5)+2;
+        if(Frames==4) {
+            DDGIReceiverBlue=pixels[receiverBlue];
+            auto grids=Player->GetScene()->GetRegistry().view<DDGIProbeGridComponent>();
+            Require(grids.size()==1&&grids.get<DDGIProbeGridComponent>(*grids.begin()).Enabled,"authored grid loaded at Runtime");
+            grids.get<DDGIProbeGridComponent>(*grids.begin()).Enabled=false;
+        }
+        if(Frames==5) {
+            Require(!Player->IsPaused(),"Runtime resumes through its actual input/simulation path");
+            std::cout<<"U7_RUNTIME_DDGI_BLUE enabled="<<unsigned(DDGIReceiverBlue)<<" disabled="<<unsigned(pixels[receiverBlue])<<'\n';
+            if(Native) Require(DDGIReceiverBlue>pixels[receiverBlue]+8,"Runtime authored DDGI lights a receiver and disables live");
+            else Require(DDGIReceiverBlue==pixels[receiverBlue],"OpenGL keeps diffuse fallback with and without authored DDGI");
+        }
     }
 };
 class PhysicsService final : public IApplicationService {

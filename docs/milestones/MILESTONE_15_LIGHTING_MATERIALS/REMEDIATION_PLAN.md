@@ -219,11 +219,17 @@ does not close deferred visuals. This is a future acceptance specification, not 
 U10 or U11 implementation release or a second progress checklist.
 
 **Post-P12 completion (`U11 / S11.1–S11.5`, Phase 45.19):** Following P12/U10
-baseline closure, `U11` performs `RenderContracts` runtime/oracle separation,
-stateful `IRenderPass` ownership migration (`friend class` removal), per-frame
-descriptor ring allocation paired with multi-frame-in-flight sync, and cached
-`RenderTransientGraph` aliasing, closed by post-refactor A/B scorecard and
-parity/soak verification before M16.
+baseline closure, `U11` executes a zero-debt architectural refactor: splitting
+`RenderContracts` runtime/oracle code, unifying built-in `ForwardPBR` and graph
+`MaterialSurface` onto one shared HLSL lighting kernel, removing per-frame
+`Material` snapshot cloning and byte-by-byte shader hashing, extracting both
+core (`Shadow`/`GeometrySurface`/`ForwardOpaque`/`Transparent`) and secondary
+pass modules into stateful `IRenderPass` owners (deleting all `friend class`
+declarations and `RecordFramePasses` lambdas, adding camera culling + PSO/material
+sorting), moving to per-frame descriptor ring allocation paired with
+multi-frame-in-flight sync (`WaitIdle` removal), and wiring cached
+`RenderTransientGraph` aliasing to cut full-res `CopyTexture` chains — closed by
+post-refactor A/B scorecard and parity/soak verification before M16.
 
 **Depends on:** All packages in the declared M15 delivery; report P6B separately.
 

@@ -230,7 +230,7 @@ sequenceDiagram
     Draw->>GPU: root constants + material CB + descriptor set
 ```
 
-There are four material representations in the current path: serialized `Material`, component-local mirrors, snapshot `RenderMaterialData`, and GPU-facing `RHIMaterial`. This gives the editor and renderer clear responsibilities, but synchronization is duplicated and must remain a tracked invariant. The custom Material Graph path is a second shader route: `MaterialSurfaceShader`/`MaterialGraphHLSL` emits a surface function, while built-in materials use `ForwardPBR.hlsl` directly.
+There are four material representations in the current path: serialized `Material`, component-local mirrors, snapshot `RenderMaterialData`, and GPU-facing `RHIMaterial`. This gives the editor and renderer clear responsibilities, but currently clones `Material` snapshots per entity per frame and routes built-in (`ForwardPBR.hlsl`) and graph (`MaterialSurface.hlsl`) lighting through separate duplicated shader loops. Under `U11` (`S11.1`), snapshot extraction switches to revision/generation-tracked immutable handles (zero per-frame cloning for unchanged materials) and both built-in and Material Graph surface evaluators share one canonical HLSL lighting kernel (`SurfaceLightingCommon.hlsli`) so feature behavior cannot diverge.
 
 ### Frame pass and resource flow
 
@@ -298,7 +298,12 @@ To eliminate the monolithic callback adapter debt in `RHISceneRendererPasses.cpp
 
 U3-09.1–10.2 implementation checkpoint: the first pass contracts and graph declarations are under `Engine/Scene/src/Passes`, where the scene renderer currently owns their resources. GTAO and Hi-Z recording has moved there, but the existing scheduler adapter still invokes it. The `Engine/Renderer` paths and direct `IRenderPass` scheduler registration above remain the target for the later pass extraction/orchestration steps, not a claim about the current tree.
 
-**U11 completion boundary (Phase 45.19):** Once `U10` closes feature fidelity and freezes the pre-refactor 1080p/1440p baseline, `U11` moves remaining pass-owned shaders, pipeline layouts, PSOs and descriptors into stateful `IRenderPass` owners (removing the 9 `friend class` declarations from `RHISceneRenderer.hpp` and dissolving `RecordFramePasses` lambdas), splits `RenderContracts` runtime ABI/policy from test-only CPU math oracles, moves to per-frame-in-flight linear/ring descriptor allocation paired with multi-frame-in-flight synchronization, and migrates short-lived intermediate targets to cached `RenderTransientGraph` aliasing to cut redundant full-resolution `CopyTexture` passes.
+**U11 completion boundary (Phase 45.19 — Zero-Debt Refactor):** Once `U10` closes feature fidelity and freezes the pre-refactor 1080p/1440p baseline, `U11` eliminates remaining M15 structural and CPU/GPU pipeline debt prior to M16:
+- Splits `RenderContracts` runtime ABI/policy cleanly from test-only CPU math oracles;
+- Unifies built-in `ForwardPBR.hlsl` and graph `MaterialSurface.hlsl` onto one shared HLSL lighting kernel (`SurfaceLightingCommon.hlsli`) and replaces per-frame `Material` snapshot cloning, whole-`RenderWorld` redundant copies and byte-by-byte shader hashing with revision-tracked handles and mtime/revision-cached custom programs;
+- Extracts both secondary `Passes::*` and core scene subsystems (`ShadowPass`, `GeometrySurfacePass`, `ForwardOpaquePass`, `TransparentAndRefractionPass`, `SkyboxAndResolvePass`, `SceneDrawListBuilder`, `CustomProgramCache`) into stateful `IRenderPass`/service modules (removing the 9 `friend class` declarations from `RHISceneRenderer.hpp`, dissolving `RecordFramePasses` lambdas, adding camera frustum culling + PSO/material sort + instancing readiness, and respecting `architecture_rules.json` module layering);
+- Moves to per-frame-in-flight linear/ring descriptor allocation paired with multi-frame-in-flight synchronization (`device.WaitIdle()` removal from `RHISwapChain::BeginFrame()`, `N >= 2` frame contexts);
+- Migrates short-lived intermediate targets onto cached `RenderTransientGraph` aliasing (`UAV`/HDR/depth/storage support) to eliminate redundant full-resolution `CopyTexture` passes.
 
 To prevent scope creep and maintain milestone focus, technical responsibilities are split as follows:
 

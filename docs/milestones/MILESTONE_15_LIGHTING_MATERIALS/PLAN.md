@@ -1518,18 +1518,19 @@ The [independent Codex review](../../reviews/M15_U8_CODEX_REVIEW.md) verifies th
 
 ### U10 / S10.1–S10.4 — Editor and authoring integration
 
-- [ ] **M15-U10-01.1 — Add material controls.**
+- [x] **M15-U10-01.1 — Add material controls.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-- [ ] **M15-U10-01.2 — Add clamps/tooltips.**
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`b7fab12c`): material & lighting Inspector controls (`MaterialInspectorControls.cpp`, `EntityInspector.cpp`, `EditorLayer.cpp`) + `AxleRenderUnitTests` Debug/Release (`Test_AuthoringBoundsDefaultsAndUIContracts`) exit 0; Debug DX12 & Release Vulkan `AxleEditor --capture-plan` (`build/agent-runs/u10a_visual/plan.txt`, `plan_vk.txt`) pass (`okViews=17 failedViews=0 errors=0 nonFinite=0`).
+- [x] **M15-U10-01.2 — Add clamps/tooltips.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-01.3 — Add defaults.**
+  - **Evidence:** Self-verified automated PASS (`b7fab12c`): `MaterialParameterBounds` (`RHIMaterialConstants.hpp`), `RHIMaterial`, `Material`, `MaterialComponent`, `MaterialInspectorControls`, `CustomShaderPicker`, `EntityInspector`, and `EditorLayer` clamps & tooltips verified in Debug/Release `AxleRenderUnitTests` (`Test_AuthoringBoundsDefaultsAndUIContracts`) exit 0 & `u10a_visual` Editor captures.
+- [x] **M15-U10-01.3 — Add defaults.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-01.4 — Add capability diagnostics.**
+  - **Evidence:** Self-verified automated PASS (`b7fab12c`): `Material::ResetToDefault()`, `MaterialComponent::ResetToDefault()`, `Presets & Defaults` UI, `EntityInspector` per-component `"Reset"`, and `Reset Render FX Defaults` verified in Debug/Release `AxleRenderUnitTests` (`Test_AuthoringBoundsDefaultsAndUIContracts`) & `u10a_visual` captures exit 0.
+- [x] **M15-U10-01.4 — Add capability diagnostics.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated PASS (`b7fab12c`): `RenderBackendPolicy::CollectFallbacks` (OpenGL compat & MSAA > 1x single-sample feature disables), `CollectMaterialFeatureDiagnostics`, `CustomShaderPicker` compat/RHI warnings, and `EditorLayer` `Capability / Fallback Diagnostics` verified in Debug/Release `AxleRenderUnitTests` (`Test_RenderBackendPolicyUnit`), `AxleRenderServiceTests` (6/6 across `{dx12,vulkan,gl}`), and `u10a_visual` (`RenderFXPopup` `msaa=4` warnings) exit 0.
 - [ ] **M15-U10-02.1 — Add probe placement/shape.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
@@ -1551,9 +1552,9 @@ The [independent Codex review](../../reviews/M15_U8_CODEX_REVIEW.md) verifies th
 - [ ] **M15-U10-03.4 — Match Preview/Runtime policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen and matches Runtime/Preview.
-- [ ] **M15-U10-03.5 — Unify shared `RHIViewTargetDesc` builder.**
+- [x] **M15-U10-03.5 — Unify shared `RHIViewTargetDesc` builder.**
   - **PASS when:** `RenderService` and `RHISceneRenderer` compute `RHIViewTargetDesc` through one shared policy helper so Preview, Runtime, Main and preset paths never drift on expected descriptors or trigger false mismatches/reallocations when adding or toggling view targets.
-  - **Evidence:** unit/contract parity checks across `RenderService` and `RHISceneRenderer` (main, preview, sub-capture and preset combinations) plus clean D3D12/Vulkan target configuration.
+  - **Evidence:** Self-verified automated PASS (`b7fab12c`): `ViewTargetContract` (`RenderContracts.hpp`/`.cpp`) unified across `RenderService`, `RHISceneRenderer`, and `RHIViewportDescriptor`; verified by Debug/Release `AxleRenderUnitTests` (`Test_ViewTargetContractUnification`, DDGI/FroxelFog/ReflectionCapture contract suites), `AxleRHIResourceViewTests` (12/12 `{dx12,vulkan}` x `{default,targets,storage}`), `AxlePreviewRenderTests` (8/8), `AxleRenderServiceTests` (6/6), `AxleEditor --verify-empty-startup` (4/4), and `check_architecture.py PASS`.
 - [ ] **M15-U10-04 — Complete scene/assembly/runtime codec round trips.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.

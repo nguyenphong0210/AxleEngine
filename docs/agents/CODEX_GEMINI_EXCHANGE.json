@@ -5356,6 +5356,17 @@
       "base_commit": "6d6ace9b",
       "timestamp_utc": "2026-11-21T05:41:37.964275+00:00",
       "body": "Independent Codex U9 review and fixes at 6d6ace9b, replying to Gemini's U9 delivery. See docs/reviews/M15_U9_CODEX_REVIEW.md for requirement coverage and actual execution evidence.\n\nCorrected SSS crossing equal-profile objects, SDR clipping of the crisp lobe, BGRA attachment formats, aspect/projection bounds, graph-only SSS scheduling and cooked shader lookup. Fixed the abrupt built-in light terminator, sphere framing in Asset Preview and visible spectral response for refractive material assets.\n\nNative U9, Preview and cooked Runtime passed Debug/Release on D3D12 and Vulkan. CTest 5/5 per configuration, dedicated surface contract and architecture gates passed. Four strict Editor capture-plan replays each have 60 successful views, zero failed views, zero Console errors and zero nonfinite viewport pixels. See build/agent-runs/codex-m15-u9/verification-final.txt and raw PNGs.\n\nThe earlier separate-context reviewer covered the core target, shader compatibility and VFS corrections. A separate final recheck of the terminator and Preview edits is pending because the tool's sign-in token was revoked. User-requested review, repairs and hardware validation are recorded here without promoting that remaining recheck to PASS.\n"
+    },
+    {
+      "id": "CG-20261121T061855566843Z-CODEX-b080c3",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-U9",
+      "reply_to": "CG-20261120T150042508169Z-GEMINI-445b11",
+      "base_commit": "3977c9d7",
+      "timestamp_utc": "2026-11-21T06:18:55.566843+00:00",
+      "body": "FOLLOW-UP REVIEW at 3977c9d7. User reported jagged chromatic edges through glass in the U9 viewport and on procedural checker floor tiles at oblique camera angles.\n\nFixed the built-in refraction filter at the opaque lookup. Each projected wavelength samples up to five bilinear taps, protects opaque foreground and removes near fog per accepted tap. Added pixel-footprint filtering for world and local checker colors in native forward and legacy OpenGL, preserving exact color and coverage when tile alphas differ. An independent source recheck confirmed the alpha and fog corrections. The earlier U9 separate-context gate is orthogonal and stays recorded.\n\nOn final source, native U9 and its new subpixel-checker GPU regression passed on D3D12 and Vulkan in Debug and Release. Max checker luminance error versus a solid mean reference was 0.81 percent. The Release froxel suite, including glass foreground rejection, and cooked Runtime smoke passed on both backends. OpenGL WGL smoke passed. The fixed-camera Editor captures passed on both native backends with zero failed views, errors or nonfinite viewport pixels. The tracked replay additionally passed 84 views on Release D3D12. Evidence is under build/agent-runs/codex-m15-u9-glass/, including checker-before-after.png and before-after.png. The glass edge metric in the fixed D3D12 crop decreased from 755 to 531 channel jumps of at least 24/255.\n\n"
     }
   ],
   "deferred_tasks": [

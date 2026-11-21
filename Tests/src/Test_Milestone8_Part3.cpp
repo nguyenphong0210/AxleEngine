@@ -4629,14 +4629,40 @@ bool RunTest_Step84_TripleBackendSwitchingAndVisualParity() {
         assert(deser2.Deserialize(tempProjPath));
         assert(projLoaded2->GetConfig().RHIBackend == "Direct3D12");
 
-        // Test 3: Update to OpenGL and re-serialize
+        // Test 3: Update to OpenGL and re-serialize + U10-B1 RenderSettings persistence
         projLoaded2->GetConfig().RHIBackend = "OpenGL";
+        auto& rs = projLoaded2->GetConfig().RenderSettings;
+        rs.EnableShadows = false;
+        rs.EnableSkybox = false;
+        rs.EnableToneMapping = true;
+        rs.ToneMappingMode = 2;
+        rs.Exposure = 2.25f;
+        rs.EnableAutoExposure = true;
+        rs.AutoExposureMin = 0.2f;
+        rs.AutoExposureMax = 12.0f;
+        rs.EnableFXAA = false;
+        rs.EnableTAA = true;
+        rs.MSAASamples = 4;
+        rs.EnableSSR = false;
+        rs.EnablePlanarReflections = true;
+        rs.PlanarReflectionResolutionScale = 0.75f;
+        rs.ReflectionCaptureMaxProbesPerFrame = 4;
+        rs.ReflectionCaptureMaxFacesPerFrame = 18;
+        rs.ReflectionCaptureCacheBudgetBytes = 128ull * 1024ull * 1024ull;
         assert(deser2.Serialize(tempProjPath));
 
         auto projLoaded3 = Project::New();
         ProjectSerializer deser3(projLoaded3);
         assert(deser3.Deserialize(tempProjPath));
         assert(projLoaded3->GetConfig().RHIBackend == "OpenGL");
+        const auto& lrs = projLoaded3->GetConfig().RenderSettings;
+        assert(projLoaded3->GetConfig().HasAuthoredRenderSettings);
+        assert(!lrs.EnableShadows && !lrs.EnableSkybox && lrs.EnableToneMapping && lrs.ToneMappingMode == 2);
+        assert(std::abs(lrs.Exposure - 2.25f) < 1e-4f && lrs.EnableAutoExposure && !lrs.EnableFXAA && lrs.EnableTAA);
+        assert(lrs.MSAASamples == 4 && !lrs.EnableSSR && lrs.EnablePlanarReflections);
+        assert(std::abs(lrs.PlanarReflectionResolutionScale - 0.75f) < 1e-4f);
+        assert(lrs.ReflectionCaptureMaxProbesPerFrame == 4 && lrs.ReflectionCaptureMaxFacesPerFrame == 18);
+        assert(lrs.ReflectionCaptureCacheBudgetBytes == 128ull * 1024ull * 1024ull);
 
         std::filesystem::remove(tempProjPath);
         std::cout << "  -> Serialized RHIBackend ('Vulkan', 'Direct3D12', 'OpenGL') to .axleproj." << std::endl;

@@ -1,95 +1,117 @@
-# Milestone 17 - Scalable Geometry and Virtual Geometry Architecture
+# Milestone 17 — Scalable Geometry and Virtual Geometry Architecture
 
-## 1. Target and scope
+**Status** — Proposed architecture for the checkpoints in [PLAN.md](PLAN.md).
+**Inputs** — Accepted M15 U11-E renderer contracts and M16 core at RT-08D.
 
-Milestone 17 adds a scalable geometry path without removing the Forward raster path. It combines:
+## 1. Ownership and reference routes
 
-- Tier 1 offline meshoptimizer LODs for skinned/deforming assets, transparency and legacy hardware.
-- Tier 2 meshlet/cluster data, GPU instance streaming and Hi-Z culling for dense opaque scenes.
-- An opaque Visibility Buffer plus compute material resolve.
-- Clustered Forward+ lighting shared by opaque resolve and transparent raster.
-- Capability gates that route missing mesh shaders, bindless descriptors or visibility support to indexed indirect or legacy Forward rendering.
+| Owner | Contract |
+|---|---|
+| Asset import and cooker | Derived static and skeletal LODs, flat meshlets, cluster hierarchy, cache provenance and validated packaged payloads. |
+| Renderer | Immutable RenderWorld consumers, frame-owned instance/material streams, view-local culling and lighting, visibility raster/resolve and effective route policy. |
+| RHI | Native feature/limit discovery, compiled shader layouts, indexed indirect and Task/Mesh commands, barriers, descriptor generations and completion ownership. |
+| M15 | Shared surface/lighting evaluation, view and capture policies, raster reflection chain, pass scheduling, frame lifetime and transient resources. |
+| M16 | Backend-neutral feature matrix, RT acceleration structures and shader tables, proxy eligibility, receiver inputs, shadow visibility, reflection radiance and coverage policy. |
 
-M16 owns RT acceleration structures and secondary lighting. M17 consumes a bounded RT proxy identity when RT is enabled; it does not build AS or own RT shader tables.
+CPU indexed Forward is the geometry reference. Fixed-slot ForwardPBR with the same material, light set and selected LOD is the shading reference. Flat indexed meshlets are the first visibility route. The hierarchy adds selectable cluster cuts to that route. Task/Mesh consumes the same selected cut and produces the same identities.
 
-Supporting references: POST_OPT10_PROGRAM_PLAN.md and POST_OPT10_FEASIBILITY.md in the archive.
+## 2. Cooked geometry and LOD selection
 
----
+Import and package cooking call the same derived-geometry builder. Key generated data by canonical source identity, revision or content, cook profile, schema and meshoptimizer version. Keep derived data under the existing generated-cache and package conventions. Store authored settings in the existing authored asset where applicable and load runtime payloads through the usual mesh binary or skeletal codec. Validate section bounds, counts, indices and material mapping before publishing the product. A valid base product provides LOD0 when optional sections are absent or incompatible. Mounted packages use the same decode path and remain read-only.
 
-## 2. Architecture and pipeline
+LOD ratios of 100/50/25/10 percent are cook targets. Preserve attribute discontinuities and material boundaries, and retain the last valid level if geometry or attribute error prevents further simplification. Record actual counts, bounds, error and reason. Skeletal LODs preserve source material slots and joint/weight contracts and use conservative bounds for supported deformation.
 
-The frame path is:
+Evaluate projected coverage per view against conservative bounds. Use history with hysteresis, a stable transition seed and consistent coverage for participating raster passes. Reset on incompatible view, geometry or device generations and camera cuts. Define how blended surfaces transition while preserving depth sorting and opacity. Shadow depth selection uses light-space coverage and caster silhouette error independently of camera selection, including casters outside the main frustum.
 
-    Raw mesh -> asset cooker -> LODs, meshlets, cluster DAG and optional RT proxy
-    RenderWorld snapshot -> GPUInstanceUpload -> GPU culling/Hi-Z
-    RenderWorld lights -> ClusterLightCulling
-    GPU culling -> VisibilityBufferPass -> VisBufferResolvePass -> opaque HDR
-    ClusterLightCulling -> VisBufferResolvePass and Transparent Forward+ -> post process
+Flat meshlets retain stable identity within a geometry generation, source triangle and material correspondence, bounds, normal cones and seam metadata. The default profile caps meshlets at 64 vertices and 126 triangles. The indexed representation maps the same triangles to the same identities. The later cluster DAG preserves locked shared boundary loops and monotonically conservative geometric error. Cluster selection produces a complete compatible cut, with one representation for each covered region and an indexed representation of that cut. Invalid metadata, incompatible cuts or exceeded budgets select a valid coarser or discrete-LOD representation before drawing.
 
-The modern branch uses task/mesh rasterization when supported. The baseline branch uses indexed indirect rasterization. Both branches produce the same visibility identity.
+An optional M17-produced RT proxy carries the M16 source linkage, proxy generation, vertex attributes, material/alpha mapping and triangle-budget contract. M16 can use its own proxy and continues to own proxy selection and AS lifetime. TLAS classification consumes eligible whole-scene instances, including off-camera casters and reflection hits. The view-culled raster working set is a separate consumer of the same snapshot.
 
-The current RenderPassScheduler can host these as explicit ordered passes with named RenderGraph dependencies. Async overlap and true topological scheduling remain a separate graph upgrade and are not assumed by this milestone.
+## 3. GPU instance data and culling
 
-### 2.1 Tier 1: offline LOD
+`GPUInstanceData` is a packed renderer record derived from immutable `RenderWorld`. It holds stable instance identity and generation, current and previous transforms, conservative bounds, geometry and material references, meshlet/LOD ranges and flags. Keep the C++ and shader layouts explicitly tested. Frame-owned upload slices and draw metadata retain the exact geometry, material and descriptor generations until completion. State carried between views or frames is keyed by its compatible identity. Publish replacements only after their inputs are valid.
 
-The cooker uses meshopt_simplify to produce documented LOD0..LOD3 chains, screen-size hysteresis and shadow-caster LODs. The same cooker may emit a bounded RT proxy for M16, but M16 must remain runnable when that future M17 artifact is absent.
+Emit indexed indirect commands by compatible geometry binding, index type and pipeline. Define how draw metadata and instance indices identify the packed record for nonzero index, vertex and instance bases on each backend. Test bounded fixed-range commands and GPU draw count where available. Establish capacity from a conservative upper bound before recording or select a complete bounded route on the GPU before consumption. Use asynchronous diagnostic readback for telemetry. Missing, unsupported or over-capacity work selects the complete applicable fallback for that scope.
 
-### 2.2 GPU instance and culling contract
+Use frustum bounds first. Apply meshlet normal-cone rejection only when the transform and material provide a conservative cone. Disable it for unsupported cases such as two-sided surfaces or unproven transformed bounds.
 
-GPUInstanceData is a renderer-owned, packed, generation-checked record derived from RenderWorld. It contains stable instance identity, transform/previous transform, bounds, meshlet and fallback-LOD ranges, material-table index and visibility flags. The upload ring and indirect argument buffers are frame-owned and retained until completion.
+For the engine's forward depth convention of near 0 and far 1, the occlusion pyramid stores the farthest relevant depth over each represented footprint. Its reduction uses `max()` or an equivalent conservative representation with empty/uncertain coverage treated as potentially visible. Reuse the M15 Hi-Z allocation and odd-edge handling where compatible. Preserve the separate nearest-depth `min()` semantics used by SSR.
 
-Culling emits deterministic indexed indirect arguments first. Task/mesh shader dispatch is an optional path that must produce the same visibility identity and fallback image.
+1. Use compatible previous view depth to defer candidates that may be occluded. Record first-phase depth from conservative eligible occluders. Grids and history are view-local, including same-size views.
+2. Build the current occlusion pyramid and retest deferred work before final coverage. Draw recovered candidates in the same frame. Near-plane intersections, invalid history and unproven occlusion retain candidates. Camera cuts, resize, incompatible scene/geometry changes and device epochs invalidate history. Compare against an occlusion-disabled reference with the same geometry and camera.
 
-### 2.3 Meshlet and cluster data
+## 4. Coverage, clustered shading and RT integration
 
-meshopt_buildMeshlets produces bounded clusters (at most 64 vertices and 126 triangles in the default profile), tight bounds/cones and a stable cluster identity. Cluster DAG transitions use locked boundary loops and automated crack tests. Scene and asset limits must reject identity overflow rather than truncate IDs.
+### 4.1 Pass dependencies
 
-### 2.4 Visibility Buffer and resolve
+The ordered scheduler hosts stateful passes with explicit graph edges. Each arrow represents a resource or ordering dependency. Route-specific producers contribute to the same view contract.
 
-VisibilityBufferPass covers opaque geometry that has a stable cluster/triangle/primitive identity. The format, depth convention, multi-draw partitioning, alpha-test boundary and overflow behavior are frozen before shader work.
+```mermaid
+flowchart TD
+    W[RenderWorld]
+    W --> U[Instance upload and geometry selection]
+    U --> C[Frustum, cone and two-phase occlusion]
+    C --> V[Indexed or Task/Mesh visibility coverage]
+    W --> F[Forward fallback coverage]
+    V --> R[Receiver inputs and final opaque ownership]
+    F --> R
+    W --> L[ClusterLightCulling]
+    W --> A[M16 RT scene binding and AS]
+    R --> T[M16 RT trace and filtering]
+    A --> T
+    R --> S[Visibility Resolve and Forward opaque shading]
+    L --> S
+    T -->|Per-light shadow visibility| S
+    T -->|Reflection radiance and coverage| I[Shared indirect specular resolve]
+    S --> I
+    I --> O[Opaque scene color and depth for transparency]
+    O --> P[Transparent Forward+]
+    L --> P
+    P --> X[Post-processing]
+```
 
-VisBufferResolvePass is a dedicated scheduler pass. It reads visibility, material tables, cluster light data and optional RT secondary outputs, reconstructs barycentrics/derivatives and writes the opaque HDR target. It is independent from the legacy Forward material callback so that graph lifetime, readback and fallback behavior can be tested separately.
+When RT is active, produce the required receiver depth, normal, material terms and motion before their individual consumers. Each effect declares its inputs from effective settings, including when TAA, SSR or planar reflections are off. Use M16's visibility for the matching light before direct shading. Pass reflection radiance and coverage to the shared indirect-specular resolve and apply the receiver response once. Keep M16's coverage diagnostics and raster fallback for incomplete RT effects. Camera-frustum light lists are valid for raster receivers, while off-screen reflection hits use the M16 hit-lighting policy. Preview, planar and probe captures follow their declared view and recursion policies.
 
-Bindless resolve uses typed texture/sampler tables only on a validated descriptor-indexing tier. Each table entry has a generation/default-resource policy. Fixed-slot ForwardPBR remains the fallback for OpenGL 4.5, unsupported descriptor tiers and incompatible custom graphs.
+### 4.2 Visibility identity and resolve
 
-### 2.5 Clustered Forward+ contract
+Freeze the integer attachment and depth formats, background sentinel, instance/cluster/primitive encoding, partitioning, sample count, maximum capacities and overflow route before implementing the shaders. Visibility entries refer to frame-retained instance and geometry tables. A multi-draw partition or repeated asset instance must still decode to one unambiguous primitive. Treat integer overflow and invalid generation lookups as explicit fallback conditions.
 
-ClusterLightCulling builds a view-frustum grid with frozen tile dimensions, logarithmic/exponential z slicing, light bounds and index-list capacity. It emits deterministic cluster offsets/indices plus overflow counters. Directional, point, spot and rect lights are classified explicitly.
+Start with supported opaque, single-sample views. Route cutout, blended and incompatible graph/view combinations to their applicable Forward path. In mixed views, arbitrate final opaque pixel ownership with a shared depth rule and a coverage marker or an equivalent graph-validated mechanism. A nearer Forward surface suppresses any older visible ID at that pixel. Preserve sky/background, picking and the normal/motion/depth data expected downstream.
 
-VisBufferResolvePass and transparent Forward+ consume the same grid. Overflow selects a bounded deterministic fallback and publishes a diagnostic; it never silently drops an arbitrary subset of lights.
+`VisBufferResolvePass` reconstructs perspective-correct barycentrics, position, material attributes and texture gradients. Derivative reconstruction uses data from the same primitive, including at silhouettes, UV seams and tile boundaries. It consumes the shared surface and lighting evaluation and writes scene-linear HDR. Inspect native attribute and image evidence for clipped triangles, oblique/minified normal-mapped surfaces and mixed coverage before adding specialized variants.
 
-### 2.6 Material divergence policy
+Use typed texture/sampler tables on a validated descriptor-indexing tier. Define table index domains, generation checks, defaults and retirement for transitive resources. Validate DXIL and SPIR-V reflection and nonuniform access. Supported generated Material Graphs can emit dynamically indexed bindings under the same contract. Their compatible fixed-slot Forward programs provide the fallback and the material parity reference. Select effective routes per view and material without changing authored settings.
 
-The first resolve implementation uses tile/material bins and a bounded set of built-in PBR shader families. Waves with a common material key use a fast path; mixed waves use scalar table fetches or a generic graph path. Global sorting and large permutation growth are opt-in experiments after the tile path has parity and timing evidence.
+### 4.3 Clustered Forward+
 
-### 2.7 Capability and fallback policy
+Build the grid from the view frustum and frozen tile dimensions, logarithmic depth slices, clip range and projection conventions. Reuse equivalent M15 froxel projection math and allocate the cluster grid with its own identity and budgets. Use conservative light bounds and stable light identities from `RenderWorld`. Classify directional, point, spot and rect lights explicitly. Keep global light handling and shadow-map allocation distinct from local cluster list capacity.
 
-- Mesh/task shader unavailable: GPU-culled indexed indirect draws.
-- Descriptor indexing/unbounded arrays unavailable: fixed-slot material bindings.
-- Visibility resolve unavailable or unsupported material: ForwardPBR raster.
-- OpenGL 4.5: existing Forward path is the final safe tier.
-- RT unavailable: M16 policy resolves SSR, planar reflection, local probes and sky IBL.
+`ClusterLightCulling` emits deterministic offsets and indices and publishes overflow counters. Define a total and per-cluster budget with a documented deterministic fallback, such as a bounded view list selected by a stable policy. Report the effective limit and reason. Opaque Forward, Visibility Resolve and transparent Forward+ read one compatible grid generation per view and evaluate the same light once. Transparent shading selects its cluster with the fragment's own depth.
 
-All fallbacks use the same RenderWorld/material contract and do not mutate authored scene data.
+Begin with the generic material resolve as the reference. Add measured tile/material bins and a capped set of built-in PBR shader families. Same-material waves can use a common-key fast path. Mixed waves, unsupported features and bin overflow use the generic path. Promotion requires both output parity and a measured cost improvement under the published workload.
 
----
+## 5. Effective renderer routes
 
-## 3. RenderGraph and lifetime constraints
+| Condition | Effective route |
+|---|---|
+| Task/Mesh and visibility supported | Mesh rasterization of the selected cluster cut and shared visibility resolve. |
+| Task/Mesh unavailable, visibility supported | Indexed indirect visibility with the same cut and ID contract. |
+| Meshlet product unavailable, indirect supported | GPU-culled indexed discrete LODs with compatible Forward shading. |
+| Visibility format, resolve, descriptor tier, sample count or material unsupported | Compatible fixed-slot Forward shading. Use indexed indirect and clustered lighting independently where eligible. |
+| GPU culling or indirect unavailable | CPU indexed Forward with the applicable LOD and lighting policy. |
+| OpenGL 4.5 compatibility | Existing Forward raster with supported autoLOD and effective-feature diagnostics. |
+| RT unavailable or coverage insufficient | M16's effect-specific raster shadows or planar/SSR/probe/sky reflection policy. |
 
-Visibility, cluster, material-table and indirect buffers are graph-declared resources. Future RT secondary targets are declared by M16 and read by resolve only after their generation is complete. The graph must validate resource generation, pass dependencies, overflow/readback buffers and per-view history invalidation.
+Preflight selects routes with complete resource and capability inputs. Resolve bounded overflow at the declared scope. If an unexpected recording failure prevents a complete result, use the frame transaction to discard invalid work and select the recoverable route. Preserve authored settings and report effective backend, route and fallback reason.
 
-The present graph is sequential and whole-texture oriented. A later graph revision may add buffer/AS/SBT resource kinds, queue ownership and transient aliasing, but those features must not be inferred from the RFC alone.
+## 6. Graph resources and completion
 
----
+Declare the physical usages, lifetime and generation for instance uploads, candidate and command buffers, indirect count, depth pyramids, visibility attachments, cluster lists, material tables and diagnostics/readbacks. Prepare declares access before recording. Validate producer/consumer order, buffer and texture usage, compatible view identity and descriptor transitive resources. Record and verify storage-to-indirect and storage-to-shader barriers on the native backends.
 
-## 4. Technology and constraints
+Frame completion owns in-flight slices, descriptors and all referenced resource generations. Imported history and published products remain usable while their exact generation is retained. Keep per-view history and resize/reset behavior explicit. Use M15 transient allocation for eligible frame-local resources and M16 graph states for RT producers. The M17 baseline uses explicit ordered scheduling, with acceptance independent of new async queues or a general graph scheduler.
 
-1. Task/Mesh Shaders require a declared D3D12/Vulkan capability and a new RHI command/pipeline seam; indexed indirect is the baseline.
-2. DXIL and SPIR-V shader reflection must agree for visibility IDs, descriptor indexing and material tables.
-3. Visibility derivative reconstruction, alpha-tested geometry and transparent materials require dedicated parity fixtures.
-4. Dense-scene benchmarks must report instance/triangle counts, resolution, GPU, visibility bandwidth, resolve time and cluster overflow.
-5. OpenGL 4.5 and other fallback backends remain supported throughout the milestone.
+## 7. Acceptance
 
-## 5. Acceptance boundary
+Use the [batch and final evidence matrix](PLAN.md#4-verification-and-evidence) for native and product testing. Verify semantic parity at identical LOD or cluster cut, then measure quality bounds separately for LOD transitions, overflow and proxy approximation. Archive backend-specific GPU arguments and IDs, cluster/overflow readbacks, deterministic images and motion sequences, effective routes, resource lifetime and dense-scene scorecards.
 
-M17 closes only when GPU instance identity, visibility reconstruction, bindless/fixed-slot parity, clustered overflow policy, mesh/indexed fallback parity and deterministic image/readback evidence pass. RT proxy consumption is validated jointly with M16 but M17 does not own AS lifetime.
+Historical context is available in the [hybrid rendering RFC review](../../reviews/M16_M17_HYBRID_RENDERING_RFC_REVIEW.md), [post-OPT-10 program plan](../../archive/design/deferred/POST_OPT10_PROGRAM_PLAN.md) and [feasibility review](../../archive/design/deferred/POST_OPT10_FEASIBILITY.md).

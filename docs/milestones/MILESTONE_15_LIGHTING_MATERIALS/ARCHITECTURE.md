@@ -22,7 +22,8 @@ M15 Lighting and Material Fidelity
       ├─ U7 Experimental DDGI
       ├─ U8 Post and temporal
       ├─ U9 Advanced materials
-      └─ U10 Authoring and acceptance
+      ├─ U10 Authoring and pre-refactor baseline acceptance
+      └─ U11 Architecture refactor, frame pipelining and transient aliasing
           └─ each Unit contains independently buildable/checkable SubUnits
               └─ high-risk SubUnits contain focused WorkItems with their own evidence
 ```
@@ -297,6 +298,8 @@ To eliminate the monolithic callback adapter debt in `RHISceneRendererPasses.cpp
 
 U3-09.1–10.2 implementation checkpoint: the first pass contracts and graph declarations are under `Engine/Scene/src/Passes`, where the scene renderer currently owns their resources. GTAO and Hi-Z recording has moved there, but the existing scheduler adapter still invokes it. The `Engine/Renderer` paths and direct `IRenderPass` scheduler registration above remain the target for the later pass extraction/orchestration steps, not a claim about the current tree.
 
+**U11 completion boundary (Phase 45.19):** Once `U10` closes feature fidelity and freezes the pre-refactor 1080p/1440p baseline, `U11` moves remaining pass-owned shaders, pipeline layouts, PSOs and descriptors into stateful `IRenderPass` owners (removing the 9 `friend class` declarations from `RHISceneRenderer.hpp` and dissolving `RecordFramePasses` lambdas), splits `RenderContracts` runtime ABI/policy from test-only CPU math oracles, moves to per-frame-in-flight linear/ring descriptor allocation paired with multi-frame-in-flight synchronization, and migrates short-lived intermediate targets to cached `RenderTransientGraph` aliasing to cut redundant full-resolution `CopyTexture` passes.
+
 To prevent scope creep and maintain milestone focus, technical responsibilities are split as follows:
 
 - **Modular IRenderPass Extraction**: 100% owned by M15 through progressive pass replacement.
@@ -466,14 +469,16 @@ No tier enables a feature whose data/fallback contract is incomplete.
 
 Every checkpoint supplies exact commit/source/configuration, Debug/Release builds, physical D3D12/Vulkan results, applicable OpenGL/fallback results, validation logs, deterministic images/readbacks, failure/lifetime behavior, hardware/driver/resolution measurements and known limitations.
 
-M15 is accepted only when [PLAN.md](PLAN.md) U10/S10.5 is complete. Experimental DDGI may be separately deferred; RT is excluded from M15 acceptance and tracked by M16.
+U10/S10.5 closes M15 feature fidelity, authoring and the pre-refactor 1080p/1440p
+baseline, while full M15 acceptance requires both `U0-U10` and `U11/S11.5` (Phase
+45.19 architecture, pipelining, transient aliasing and post-refactor A/B verification)
+to pass. Experimental DDGI may be separately deferred; RT is excluded from M15
+acceptance and tracked by M16.
 
-The final review is a consolidated audit of the actual integrated architecture,
-every U0-U10 feature and their interactions. Use the
-[U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md) for required source/caller
-traces, requirement/evidence and integration matrices, lifecycle/failure tests,
-actual Editor observations, and cold/warm performance and memory scorecards.
-Package acceptance and architecture-script PASS remain evidence inputs; full
-closure requires the expanded PLAN U10-17.1/17.2 child gates and all other mandatory
-final gates on the corrected baseline. This specification does not release work
-or claim review execution. PLAN remains the only checkbox/status authority.
+Use the [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md) for the consolidated
+feature, integration, lifecycle, Editor visual and cold/warm baseline audit prior
+to U11, followed by U11's A/B performance/VRAM scorecard, parity, 1,000-frame soak
+and independent source review/recheck gates in [PLAN.md](PLAN.md). Package
+acceptance and architecture-script PASS remain evidence inputs; full closure requires
+all mandatory final gates on the corrected baseline. This specification does not
+release work or claim review execution. PLAN remains the only checkbox/status authority.

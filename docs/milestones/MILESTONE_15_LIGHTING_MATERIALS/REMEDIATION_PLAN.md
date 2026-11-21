@@ -205,17 +205,25 @@ Bloom/exposure sourcing, transparency/fog interaction and motion/jitter conventi
 
 **Exit:** A colored indirect bounce illuminates a region without direct light; a separating wall suppresses leakage within frozen tolerance. Results follow world probes rather than the current camera image. Grid origin/spacing/energy/update settings have tested effects. Probe memory/update count stay bounded; disabled or unavailable DDGI returns to valid IBL/ambient behavior. Record experimental status independently of core acceptance, without claiming full M15 completion while promised GI work remains absent.
 
-### P12 - Integrate Editor quality controls and perform final acceptance (U10/S10.5, Phase 45.18)
+### P12 - Integrate Editor quality controls and perform U10 baseline acceptance (U10/S10.5, Phase 45.18)
 
 **Consolidated acceptance procedure:** [U10_ACCEPTANCE_REVIEW.md](U10_ACCEPTANCE_REVIEW.md).
 PLAN U10-17.1/17.2 now expands the independent review and correction closure into
 atomic child gates. Audit architecture, each U0-U10 requirement, minimum feature
 interactions, failure/lifecycle behavior and actual visual/performance evidence.
 Maintain a complete requirement-to-source-to-evidence matrix and findings register;
-repair, separately recheck and reverify the final integrated baseline before
-promotion. Earlier automated-only acceptance does not close deferred visuals.
-This is a future acceptance specification, not a U10 implementation release or a
-second progress checklist.
+repair, separately recheck and reverify the U10 baseline (including the shared
+`RHIViewTargetDesc` policy builder in `U10-03.5`) before freezing the pre-refactor
+baseline and entering `U11` (`Phase 45.19`). Earlier automated-only acceptance
+does not close deferred visuals. This is a future acceptance specification, not a
+U10 or U11 implementation release or a second progress checklist.
+
+**Post-P12 completion (`U11 / S11.1–S11.5`, Phase 45.19):** Following P12/U10
+baseline closure, `U11` performs `RenderContracts` runtime/oracle separation,
+stateful `IRenderPass` ownership migration (`friend class` removal), per-frame
+descriptor ring allocation paired with multi-frame-in-flight sync, and cached
+`RenderTransientGraph` aliasing, closed by post-refactor A/B scorecard and
+parity/soak verification before M16.
 
 **Depends on:** All packages in the declared M15 delivery; report P6B separately.
 
@@ -248,7 +256,7 @@ User-visible checkpoints:
 2. **Raster reflections:** P4-P6 show nearby geometry and correct material response, with documented SSR/capture limitations.
 3. **Stable material rendering:** P7/P8/P10 complete area lighting, temporal/post and authored material behavior.
 4. **Remaining M15 scope:** P9/P11 complete fog and experimental GI to their declared contract.
-5. **Acceptance:** P12 records supported quality tiers, measured costs, actual review and all open gates. P6B has its own exact-mirror acceptance result.
+5. **Acceptance:** P12 (`U10`) records supported quality tiers, measured pre-refactor baseline costs, actual review and all U0-U10 gates; `U11` (`Phase 45.19`) closes the architectural refactor, pipelining, transient aliasing and A/B parity/soak verification prior to M16. P6B has its own exact-mirror acceptance result.
 
 For each completed checkpoint, record the problem, final behavior, affected callers, exact builds/tests/configurations/exit codes and artifact paths. Keep one coherent behavior and meaningful verification per local commit; do not push. Package self-checks precede the consolidated final review. Never mark another agent's review as performed, invent a result or replace a required runtime check with an architecture script.
 

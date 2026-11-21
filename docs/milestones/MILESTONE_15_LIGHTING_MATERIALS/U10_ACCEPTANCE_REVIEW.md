@@ -1,13 +1,19 @@
-# M15 U10 consolidated acceptance review
+# M15 U10 consolidated baseline acceptance review
 
 Updated 2026-11-18 following the user's request for a final architecture and
-feature-by-feature review. This is a future acceptance specification, not an
-execution report or a release of U10 implementation. It does not change another
-active package's assignment or claim that any review/check has run.
+feature-by-feature review, and scoped 2026-11-21 to pair cleanly with the
+post-U10 `M15-U11` architecture/pipelining refactor unit. This is a future
+acceptance specification, not an execution report or a release of U10 or U11
+implementation. It does not change another active package's assignment or claim
+that any review/check has run.
 
 [PLAN.md](PLAN.md) Section 4 remains the only atomic checkbox authority.
-This guide defines the procedure and evidence for U10/S10.5, especially
-`M15-U10-17.1.1..17.1.8` and `M15-U10-17.2.1..17.2.4`.
+This guide defines the procedure and evidence for U10/S10.5 (pre-refactor
+baseline acceptance, `M15-U10-17.1.1..17.1.8` and `M15-U10-17.2.1..17.2.4`).
+After U10 freezes the feature, visual, and 1080p/1440p measurement baseline,
+[PLAN.md](PLAN.md) `U11` closes the remaining structural refactor, pipelining,
+and transient aliasing work plus post-refactor parity/soak verification prior
+to full M15 milestone closure.
 [ARCHITECTURE.md](ARCHITECTURE.md) supplies the technical contracts; the
 [shared protocol](../../agents/WORKING_PROTOCOL.md) supplies roles, repair
 authority, source ownership and independent correction rechecks.
@@ -64,8 +70,8 @@ final required runtime gates still execute on the integrated corrected baseline.
 | Concern | PASS condition and evidence |
 | --- | --- |
 | Layer boundaries | ECS/authoring is extracted into immutable `RenderWorld` data; command recording does not read live ECS/UI state. RHI remains independent of Scene/Editor ownership. Trace actual production callers and the build/dependency graph. |
-| Pass and service responsibility | Audit M15's progressive `IRenderPass` extraction against the architecture contract. Feature algorithms have dedicated owners; renderer orchestration, services and product UI do not contain competing implementations. Record remaining monolithic adapters or duplicated policy as findings. |
-| Resource generations and submission | Allocation/reconfiguration/publication is transactional; descriptors bound to a submission remain immutable; leases/completion retain all referenced resources; failure selects valid last-good data or an explicit fallback. Inspect creation, recording, completion and destruction callers. |
+| Pass and service responsibility | Audit M15's progressive `IRenderPass` extraction against the architecture contract. Feature algorithms have dedicated owners; renderer orchestration, services and product UI do not contain competing implementations. Record remaining monolithic adapters or duplicated policy as findings. *(Scoped refactor debt explicitly assigned to `U11` — remaining `friend class`/adapter state in `RHISceneRenderer`, lambda closures in `RecordFramePasses`, and `RenderContracts` test-oracle separation — is logged and tracked for `U11` rather than blocking the `U10` pre-refactor baseline freeze, provided behavior and validation pass.)* |
+| Resource generations and submission | Allocation/reconfiguration/publication is transactional; descriptors bound to a submission remain immutable; leases/completion retain all referenced resources; failure selects valid last-good data or an explicit fallback. Inspect creation, recording, completion and destruction callers. *(Migration from queue-drain/in-place descriptor updates and committed `RHIViewTargets` slots to per-frame descriptor rings, multi-frame-in-flight sync, and cached `RenderTransientGraph` aliasing is tracked in `U11`; U10 verifies that current conservative lifetimes pass clean validation without leaks or races.)* |
 | RenderGraph declarations | Every actual texture/buffer read/write, subresource and copy/resolve dependency is declared, including companion material outputs, Hi-Z/color mips, histories and captures. Verify state/barrier behavior through native execution, not source tokens alone. |
 | View isolation and invalidation | Main view, Editor/Preview, reflection captures and planar captures own the appropriate targets, exposure, jitter/history and reset state. No recursive capture, cross-view history contamination, stale device epoch or cache generation reuse. |
 | Shared feature policy | Allocation, pass configuration/declaration/recording, capability checks, MSAA/resolves and quality settings use a consistent resolved policy. Supported combinations execute; unsupported ones produce the documented diagnostic/fallback. |
@@ -176,16 +182,21 @@ and verification; DISPUTED with independently checked counter-evidence; or OPEN
 with affected gates and owner. Separate-context rechecks identify what was inspected;
 they do not inherit another agent's execution claims.
 
-Full M15 acceptance requires every mandatory atomic leaf and required visual,
-integration, stability and measurement gate to PASS on the final integrated source.
-Missing mandatory behavior blocks closure regardless of finding severity. No
-unresolved P1/P2 blocker or required NOT RUN/BLOCKED check can be hidden by a
-summary PASS. Other nonblocking findings and expressly permitted optional deferrals
-remain named with their impact and disposition.
+U10 acceptance closes the **pre-refactor fidelity, authoring, and baseline
+performance gate** when every mandatory U0-U10 atomic leaf and required visual,
+integration, stability and measurement gate is PASS on the integrated U0-U9
+baseline source (with `M15-U10-03.5` unifying `RHIViewTargetDesc` across
+`RenderService` and `RHISceneRenderer`). Remaining modularization, pipelining,
+and transient-aliasing refactors explicitly scoped to `U11` are tracked as open
+U11 handoff items rather than blocking the U10 baseline freeze, provided all
+U10 runtime validation, lifetime, and parity checks pass.
+Full M15 milestone closure additionally requires `M15-U11` (`S11.1–S11.5`) to
+complete and pass its post-refactor A/B scorecard, visual parity, 1,000-frame
+soak, and independent review/recheck gates in [PLAN.md](PLAN.md).
 
 Promote only verified supported features/presets. Keep failed, incomplete or
 deferred features out of defaults as required by `M15-U10-19.2`. Attach final source
 and evidence to every completed leaf; update derived summaries only from children.
 Earlier automated-only acceptance remains scoped until its required visual gates
-are closed. The final report explicitly distinguishes full acceptance, partial
-acceptance and an unaccepted milestone.
+are closed. The final report explicitly distinguishes U10 pre-refactor baseline
+acceptance, full M15 post-U11 acceptance, and an unaccepted milestone.

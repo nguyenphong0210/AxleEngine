@@ -54,11 +54,11 @@ M15 follows the repository hierarchy exactly:
 ```text
 Milestone 15 — Lighting and Material Fidelity
   └─ Phase 45 — Lighting and Material Fidelity delivery
-      └─ Unit U0..U10 — architectural ownership and release boundary
+      └─ Unit U0..U11 — architectural ownership and release boundary
           └─ SubUnit Sx.y — one independently buildable/checkable implementation package
 ```
 
-The detailed execution sections below use `P0..P13` plus the separately gated `P6B` as historical package labels. In the canonical hierarchy they are **SubUnits**, not additional Milestones or Phases. Each SubUnit maps to one Unit and must leave the tree buildable.
+The detailed execution sections below use `P0..P12` plus the separately gated `P6B` as historical package labels. In the canonical hierarchy they are **SubUnits**, not additional Milestones or Phases. Each SubUnit maps to one Unit and must leave the tree buildable.
 
 | Milestone | Phase | Unit | SubUnits in this plan | Scope |
 |---|---|---|---|---|
@@ -72,16 +72,17 @@ The detailed execution sections below use `P0..P13` plus the separately gated `P
 | M15 | 45.13 | U7 Experimental GI | S7.1–S7.4 (`P11`) | DDGI acquisition, atlases, visibility and feedback |
 | M15 | 45.14–45.15 | U8 Post and Temporal | S8.1–S8.6 (`P8`) | Exposure, bloom and TAA |
 | M15 | 45.16 | U9 Advanced Materials | S9.1–S9.5 (`P10`) | Sheen, absorption, dispersion, SSS and graph parity |
-| M15 | 45.18 | U10 Authoring and Rollout | S10.1–S10.5 (`P12`) | Editor, presets, evidence and final acceptance |
-Phase 45.17 is the final performance/quality gate inside U10; it is not a separate implementation Unit. Ray tracing is removed from M15 scope and is planned as M16-RT.
+| M15 | 45.18 | U10 Authoring and Pre-Refactor Baseline | S10.1–S10.5 (`P12`) | Editor authoring, presets, shared `RHIViewTargetDesc` policy, baseline scorecard and feature acceptance |
+| M15 | 45.19 | U11 Architecture & Frame Pipelining Refactor | S11.1–S11.5 | Stateful `IRenderPass` extraction, `RenderContracts` split, per-frame descriptor ring & multi-frame-in-flight, `RenderTransientGraph` aliasing & final M15 closure |
+Phase 45.17 is the final performance/quality gate inside U10; it is not a separate implementation Unit. Phase 45.19 (`U11`) is strictly the post-U10 architecture, pipelining, and transient-memory refactor before M16; the historical RT checklist previously referred to as `U11/P13` remains retired from M15 and homed in M16-RT.
 
-M16-RT owns BLAS/TLAS, RT pipelines, RT reflections/shadows, denoising and optional RT GI. M15 only supplies the material, view, capture and raster fallback contracts that M16 consumes.
+M16-RT owns BLAS/TLAS, RT pipelines, RT reflections/shadows, denoising and optional RT GI. M15 supplies both the lighting/material contracts (closed at U10) and the decoupled pass/pipelining/transient baseline (closed at U11) that M16 consumes.
 
-Package aliases in this table follow the recovery plan: P8 is post/temporal, P9 is atmosphere, P10 is advanced materials, P11 is experimental DDGI, and P12 is authoring/final acceptance. P6B remains a separately gated raster extension; P13 is retired from M15 and re-homed in M16-RT.
+Package aliases in this table follow the recovery plan: P8 is post/temporal, P9 is atmosphere, P10 is advanced materials, P11 is experimental DDGI, and P12 is authoring/pre-refactor baseline acceptance. P6B remains a separately gated raster extension; P13 is retired from M15 and re-homed in M16-RT.
 
 ### Unit closure rule
 
-A Unit closes only when all its SubUnits pass, its dependency Units are accepted, and its Unit exit evidence is recorded. A Phase closes only when every Unit mapped to that Phase passes. M15 closes only when all required Phases and the final U10 gate pass.
+A Unit closes only when all its SubUnits pass, its dependency Units are accepted, and its Unit exit evidence is recorded. A Phase closes only when every Unit mapped to that Phase passes. M15 closes only when all required U0–U11 Units pass (with U10 freezing the feature/baseline gate before U11 runs, and U11 closing the final architecture/pipelining/parity gate).
 
 ### Canonical checklist policy
 
@@ -98,7 +99,7 @@ To prevent scope creep, M15 owns raster lighting/material fidelity, M16 owns ray
 
 | Architectural Item | Target Milestone | Allocation and Execution Contract |
 |---|---|---|
-| **1. Modular `IRenderPass` Extraction** | **M15 (100% Progressive)** | Replace the monolithic lambda adapters in `RHISceneRendererPasses.cpp` by creating dedicated pass classes under `Engine/Renderer/include/Axle/Passes/` and `src/Passes/` as each M15 feature package is delivered. |
+| **1. Modular `IRenderPass` Extraction** | **M15 (Progressive → U11 Closure)** | Replace the monolithic lambda adapters in `RHISceneRendererPasses.cpp` and `9 friend class` declarations in `RHISceneRenderer.hpp` by migrating pass shaders, layouts, PSOs and descriptors into stateful `IRenderPass` classes (`U11 / S11.2`). |
 | **2. Hi-Z Depth Pyramid** | **M15 (100% Core)** | Delivered in U5/S5.1 (P4) with full compute downsampling and odd-dimension handling for SSR; reusable by M17 for GPU-driven occlusion culling. |
 | **3. Denoising Strategy** | **M15 (Pass-Local) / M16 (Unified)** | M15 uses pass-local spatial/temporal filters: Bilateral reconstruction for GTAO (P3), Roughness cone-filtering for SSR (P6), and Variance-clipped TAA (P8). A unified spatiotemporal denoiser (SVGF) is deferred to M16 (RT backend). |
 | **4. Clustered / Tiled Light Culling** | **M17 (100% Deferred)** | Formally deferred to Milestone 17 (Scalable Geometry and Visibility). M15 retains Forward+ lighting with a bounded active light capacity managed by `LightingService`. |
@@ -107,11 +108,13 @@ To prevent scope creep, M15 owns raster lighting/material fidelity, M16 owns ray
 ### Dependency order
 
 ```text
-U0 -> U1/U2 -> U3 -> U4 -> U5 -> U6/U7 -> U8 -> U9 -> U10; M16-RT depends on M15 U3/U5/U7, and M17 depends on M15 contracts.
+U0 -> U1/U2 -> U3 -> U4 -> U5 -> U6/U7 -> U8 -> U9 -> U10 (authoring & pre-refactor baseline) -> U11 (architecture, pipelining & transient aliasing refactor + final closure); M16-RT depends on M15 U3/U5/U7/U10/U11, and M17 depends on M15 contracts.
 
 Within U5: `S5.1 Hi-Z -> S5.2 Dynamic Capture -> S5.3 Prefilter -> S5.4 Invalidation/Scheduling -> S5.5 Multi-Probe -> S5.6 SSR -> S5.7 LTC -> S5.8 Planar Reflection`. The existing `P4/P5A–P5D/P6/P7` names are implementation aliases for these SubUnits.
 
 Within U6: `S6.1 Froxel Resources & Tiers -> S6.2 Media/Shadow Injection, Integration & Temporal Froxels -> S6.3 Edge Policies, Transparency/Depth, Fallbacks & Cost` (`P9`). Because U8 (TAA/object motion vectors) follows U6 in the milestone order above, U6 temporal reprojection uses `ViewContext` previous/current camera matrices and target/history resets (`S3.4`) without introducing a hidden U8 dependency.
+
+Within U11: `U11-A (Contracts split, S11.1) -> U11-B (Stateful IRenderPass & friend removal, S11.2) -> U11-C (Per-frame descriptor ring & multi-frame-in-flight sync, S11.3) -> U11-D (Cached RenderTransientGraph aliasing, copy removal & post-refactor A/B parity/soak closure, S11.4–S11.5)`.
 ```
 
 P5A–P5D may reuse authored-probe work, but none may silently depend on unfinished P6. Planar reflection is a required M15 raster contract; RT off-screen reflection is an M16 requirement.
@@ -171,6 +174,17 @@ To keep advanced material shading models, transmittance optics, screen-space sub
 | **U9-C** | `M15-U9-04.1` → `04.3`, `05`, `08.3` | `3244aa34` | Separable screen-space SSS (`SSS.hlsl`, `SubsurfaceScatteringPass`), depth & normal/material boundary rejection, specular/emissive split & recombination. | Consolidated U9 review |
 | **U9-D** | `M15-U9-07.1`, `07.2`, `08.4` | `dbdf828d` | 13-pin `PBRMasterOutput` lowering, `MaterialSurface.hlsl` Sheen/SSS split parity, `MaterialBindingPlan::SupportedFeatures`, explicit unsupported diagnostics & built-in/graph parity fixtures. | Consolidated U9 review |
 | **U9-E** | `M15-U9-06.1` → `06.6` | `7568cd5e` | Shared bounds/clamps across `Material`, `MaterialComponent`, `MaterialComponentCodec`, `RHIMaterial`, `ResolvedSurface`, `SceneExtraction`; Inspector UI (`Sheen`, `Subsurface Scattering`, `Absorption & Dispersion`); Preview & Editor single-sample SSS viewport wiring; Runtime persistence & GPU regression. | Consolidated U9 review |
+
+#### U11 Execution Batches (U11-A through U11-D)
+
+After **U10** freezes authoring, quality presets, visual/parity validation, and the 1080p/1440p pre-refactor measurement baseline, **U11** (`S11.1`–`S11.5`, Phase `45.19`) executes the M15 architectural cleanup, frame pipelining, and transient-memory optimization across four sequential risk-ordered checkpoints:
+
+| Batch | SubUnit & Atomic Leaves | Scope Focus | Review Boundary |
+|---|---|---|---|
+| **U11-A** | `S11.1`: `M15-U11-01.1`, `01.2` | `RenderContracts` split: retain slim runtime ABI, constants, and policy resolution in `Engine/Renderer` while isolating test-only CPU math oracles into a dedicated test support library; audit dependency graph and compile-time reduction (`U10-03.5` unifies `RHIViewTargetDesc` upfront). | Consolidated U11 review |
+| **U11-B** | `S11.2`: `M15-U11-02.1` → `02.3` | Stateful `IRenderPass` ownership extraction: move pass shaders, pipeline layouts, PSOs, and descriptors out of `RHISceneRenderer` into `Passes::*`; remove the 9 `friend class` declarations from `RHISceneRenderer.hpp`; dissolve `RecordFramePasses` lambda adapters and remove per-frame pool re-init. | Consolidated U11 review |
+| **U11-C** | `S11.3`: `M15-U11-03.1` → `03.3` | Multi-frame-in-flight sync & per-frame descriptor allocation: replace in-place descriptor mutation with frame-token ring/linear arenas, remove unconditional `device.WaitIdle()` in `RHISwapChain::BeginFrame()`, generalize `RHIFrameContext`/`ViewContext` to `N >= 2` in-flight frames, and prove clean resize/capture/device validation on D3D12 & Vulkan. | Mid-unit or U11 lifetime check + U11 review |
+| **U11-D** | `S11.4`–`S11.5`: `M15-U11-04.1` → `05.3` | Cached `RenderTransientGraph` aliasing & post-refactor A/B closure: add `UAV`/HDR/depth/storage support and plan/allocation caching by `RHIViewTargetDesc`, migrate short-lived intermediate targets (`Bloom*`, `SSRColor*`, `ScreenStorage`, `SubsurfaceTemp`, `OpaqueColor/Depth`) to cut full-res `CopyTexture` chains, verify D3D12/Vulkan parity + 1,000-frame soak + 1080p/1440p A/B deltas vs U10 baseline. | Consolidated U11 review + M16 handoff |
 
 **Editor visual policy (user steering 2026-11-17):** During automated batch delivery, Editor visual gates stayed open for a consolidated capture session. Mark an Editor visual gate PASS after inspecting the required Debug and Release Editor screenshots. The [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records current evidence.
 
@@ -1520,6 +1534,9 @@ The [independent Codex review](../../reviews/M15_U8_CODEX_REVIEW.md) verifies th
 - [ ] **M15-U10-03.4 — Match Preview/Runtime policy.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen and matches Runtime/Preview.
+- [ ] **M15-U10-03.5 — Unify shared `RHIViewTargetDesc` builder.**
+  - **PASS when:** `RenderService` and `RHISceneRenderer` compute `RHIViewTargetDesc` through one shared policy helper so Preview, Runtime, Main and preset paths never drift on expected descriptors or trigger false mismatches/reallocations when adding or toggling view targets.
+  - **Evidence:** unit/contract parity checks across `RenderService` and `RHISceneRenderer` (main, preview, sub-capture and preset combinations) plus clean D3D12/Vulkan target configuration.
 - [ ] **M15-U10-04 — Complete scene/assembly/runtime codec round trips.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** record source commit, configuration, exact command, exit code and artifact/readback path; unavailable hardware or fixtures stay NOT RUN/BLOCKED.
@@ -1556,13 +1573,9 @@ The [independent Codex review](../../reviews/M15_U8_CODEX_REVIEW.md) verifies th
 
 **Exit:** every accepted runtime feature is authorable and survives save/reload.
 
-### M16 handoff — Ray Tracing Backend
+### U10 / S10.5 — Pre-refactor baseline acceptance and rollout
 
-M15 does not contain a ray-tracing Unit. The former U11/P13 checklist is moved to [Milestone 16 Ray Tracing Backend](../MILESTONE_16_RAY_TRACING/PLAN.md). M15 is complete for this boundary when its raster contracts are explicit: `ResolvedSurface`, `ViewContext`, capture targets, reflection confidence/energy policy, denoising history invalidation and raster fallback. M16 must consume those contracts without introducing a second material interpretation.
-
-### U10 / S10.5 — Final acceptance and rollout
-
-Final acceptance follows [U10_ACCEPTANCE_REVIEW.md](U10_ACCEPTANCE_REVIEW.md): architecture, every feature, cross-feature integration, lifecycle/failure behavior, actual Editor visuals and measured cost are mandatory review dimensions. The expanded 17.1/17.2 parent items below are derived summaries only; all new children remain NOT RUN until executed under a released U10 task.
+U10 serves as the **pre-refactor fidelity, authoring, lifecycle, and 1080p/1440p measurement baseline** gate before `U11` alters internal pass, descriptor, or transient-memory plumbing. Final U10 baseline acceptance follows [U10_ACCEPTANCE_REVIEW.md](U10_ACCEPTANCE_REVIEW.md): architecture, every U0-U10 feature, cross-feature integration, lifecycle/failure behavior, actual Editor visuals and measured cost are mandatory review dimensions. Structural modularization, `RenderContracts` splitting, multi-frame-in-flight descriptor/sync refactoring, and `RenderTransientGraph` aliasing tracked under `U11` (`S11.1`–`S11.5`) are logged as explicit `U11` handoff items rather than blocking U10 baseline freeze, provided U10 runtime validation, lifetimes, and visual parity pass cleanly. The expanded 17.1/17.2 parent items below are derived summaries only; all new children remain NOT RUN until executed under a released U10 task.
 
 - [ ] **M15-U10-08.1 — Rebuild Editor.**
   - **PASS when:** Debug/Release Editor binaries build from the final integrated source with exact targets, configuration and binary identity recorded.
@@ -1647,12 +1660,12 @@ Final acceptance follows [U10_ACCEPTANCE_REVIEW.md](U10_ACCEPTANCE_REVIEW.md): a
   - **Evidence:** Source/support manifest; every U0-U10 leaf has an owner and planned evidence path.
 
 - [ ] **M15-U10-17.1.2 — Audit layer boundaries and pass/service ownership.**
-  - **PASS when:** Production dataflow respects Scene/Renderer/RHI/UI boundaries and the M15 progressive pass-extraction contract; duplicated algorithms/policies and remaining monolithic feature adapters receive findings.
+  - **PASS when:** Production dataflow respects Scene/Renderer/RHI/UI boundaries and the M15 progressive pass-extraction contract; duplicated algorithms/policies and remaining monolithic feature adapters receive findings (with `U11`-scoped pass ownership, `friend class` removal and `RenderContracts` splitting logged cleanly to `M15-U11` rather than blocking the `U10` pre-refactor baseline freeze).
   - **Evidence:** Actual module/pass/caller map and source audit, supplemented by architecture checks; see acceptance procedure Section 3.
 
 - [ ] **M15-U10-17.1.3 — Audit GPU resource, graph, view and threading contracts.**
-  - **PASS when:** Generation publication, completion/descriptor lifetime, graph dependencies, view/history isolation, owner-thread boundaries, cache invalidation and failure/retry paths satisfy their contracts.
-  - **Evidence:** Source-to-contract audit plus native lifecycle/failure evidence and validation logs; unresolved violations are findings.
+  - **PASS when:** Generation publication, completion/descriptor lifetime, graph dependencies, view/history isolation, owner-thread boundaries, cache invalidation and failure/retry paths satisfy their contracts under U10's current lifetime model (while multi-frame-in-flight `WaitIdle` removal, descriptor-ring allocation and `RenderTransientGraph` aliasing remain explicitly scoped to `M15-U11`).
+  - **Evidence:** Source-to-contract audit plus native lifecycle/failure evidence and validation logs; unresolved correctness or lifetime violations remain findings.
 
 - [ ] **M15-U10-17.1.4 — Audit material, radiometric and feature-policy consistency.**
   - **PASS when:** Supported fields, spaces/units, reflection/AO energy, exposure/tonemapping, capability/MSAA policy and allocation/declaration/recording agree across builtin/graph and product views.
@@ -1704,20 +1717,90 @@ Final acceptance follows [U10_ACCEPTANCE_REVIEW.md](U10_ACCEPTANCE_REVIEW.md): a
   - **PASS when:** Failed, incomplete or deferred features remain out of defaults with explicit diagnostics/limits; mandatory missing behavior or required unrun checks keep full M15 acceptance open.
   - **Evidence:** Final findings/gate register, supported-default manifest and tested disable/fallback behavior. See [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md).
 
-**M15 final acceptance:** every mandatory atomic leaf and required visual, integration, stability and measurement gate is PASS on the corrected integrated source. No missing mandatory behavior, unresolved P1/P2 blocker or required NOT RUN/BLOCKED check remains. Separately permitted optional deferrals and other nonblocking findings are explicit, and only verified supported features are promoted.
+**U10 baseline exit:** every mandatory U0-U10 atomic leaf and required pre-refactor visual, integration, stability and measurement gate is PASS on the U10 integrated baseline source (including shared `RHIViewTargetDesc` unification in `M15-U10-03.5`), with architectural refactoring debt cleanly handed off to `U11` below. No missing mandatory feature, unresolved P1/P2 correctness blocker or required NOT RUN/BLOCKED check remains.
+
+### U11 / S11.1–S11.5 — Architecture refactor, frame pipelining and transient aliasing (Phase 45.19)
+
+**Depends on:** U0–U10 baseline acceptance (`U10` frozen 1080p/1440p scorecard and visual parity references). Note: this post-U10 Unit is strictly the M15 internal architecture, pipelining and memory refactor; the historical ray-tracing checklist (`P13`) remains in [Milestone 16 Ray Tracing Backend](../MILESTONE_16_RAY_TRACING/PLAN.md).
+
+#### S11.1 (Batch U11-A) — Contracts split and compile-dependency hygiene
+
+- [ ] **M15-U11-01.1 — Split runtime RenderContracts from CPU math oracles.**
+  - **PASS when:** `RenderContracts` inside `Engine/Renderer` retains only compact runtime ABI, constant/slot layouts, and runtime policy resolution, while test-only CPU reference math oracles are moved into a dedicated test support library/target without changing `AxleRenderer` runtime behavior.
+  - **Evidence:** CMake target/dependency diff, runtime vs test caller audit, build logs and unchanged `AxleRenderUnitTests` / contract test pass results.
+- [ ] **M15-U11-01.2 — Audit reduced compile dependencies and runtime parity.**
+  - **PASS when:** runtime headers/sources in `Engine/Scene`, `Engine/UI` and `Runtime` no longer pull test oracle code through `<Axle/RenderContracts.hpp>`, `check_architecture.py` passes cleanly, and all M15 contract unit suites pass in Debug and Release.
+  - **Evidence:** dependency check logs, `check_architecture.py` exit 0 and Debug/Release test results.
+
+#### S11.2 (Batch U11-B) — Stateful `IRenderPass` ownership and facade cleanup
+
+- [ ] **M15-U11-02.1 — Migrate `Passes::*` to pass-owned shaders, layouts, PSOs and descriptors.**
+  - **PASS when:** `GTAOPass`, `HiZGenerationPass`, `ScreenSpaceReflectionPass`, `PlanarReflectionPass`, `SubsurfaceScatteringPass`, `FroxelFogPass`, `DDGIPass`, `PostProcessPass` and `ReflectionCapturePass` own their shaders, pipeline layouts, PSOs and descriptor sets directly as stateful `IRenderPass` modules, removing per-frame descriptor-pool re-initialization (such as `m_TAADescriptorPool.Init` per frame).
+  - **Evidence:** pass ownership source map, per-pass initialization/shutdown/resize tests and zero descriptor/pipeline leaks on Debug/Release D3D12 and Vulkan.
+- [ ] **M15-U11-02.2 — Remove `friend class` declarations and dissolve `RecordFramePasses` lambda adapters.**
+  - **PASS when:** all 9 `friend class` declarations in `RHISceneRenderer.hpp` are deleted, `RecordFramePasses` callback closures in `RHISceneRendererPasses.cpp` are replaced by scheduler-driven `IRenderPass` lifecycle calls (`Configure`, `Declare`, `Prepare`, `Record`) with no per-frame heap-closure allocation churn.
+  - **Evidence:** `RHISceneRenderer.hpp` / `RHISceneRendererPasses.cpp` source inspection, `check_architecture.py` exit 0 and Debug/Release native suite pass.
+- [ ] **M15-U11-02.3 — Verify pass isolation and cross-backend visual parity.**
+  - **PASS when:** Main, Editor/Preview, reflection probe capture and planar capture views preserve identical outputs and isolation guarantees after pass extraction across D3D12, Vulkan and OpenGL fallback.
+  - **Evidence:** Debug/Release native GPU parity suites and Editor/Preview/Runtime visual comparisons matching U10 baseline tolerances.
+
+#### S11.3 (Batch U11-C) — Multi-frame-in-flight synchronization and per-frame descriptor allocation
+
+- [ ] **M15-U11-03.1 — Implement per-frame-in-flight linear/ring descriptor allocation.**
+  - **PASS when:** dynamic per-view/pass/material descriptor updates allocate from frame-token-indexed linear/ring descriptor arenas (`N >= 2` frames in flight) so subsequent frame recording never mutates descriptor sets still referenced by in-flight GPU work and eliminates mid-frame whole-pool resets.
+  - **Evidence:** RHI/Scene descriptor ring tests verifying distinct per-frame allocations and zero validation errors under concurrent frame recording.
+- [ ] **M15-U11-03.2 — Enable multi-frame-in-flight overlap and remove unconditional frame `WaitIdle` stalls.**
+  - **PASS when:** unconditional `device.WaitIdle()` is removed from `RHISwapChain::BeginFrame()`, `RHIFrameContext` / `ViewContext` support `N >= 2` overlapping frames in flight gated by completion tokens/fences, and unnecessary CPU `WaitForDeviceToken` barriers (where submission leases preserve ordering/lifetime) are eliminated.
+  - **Evidence:** CPU/GPU timeline trace proving overlapping frames in flight without premature CPU drains, plus multi-frame capture/view sync verification.
+- [ ] **M15-U11-03.3 — Verify in-flight lifetime, resize/capture interleaving and validation cleanliness.**
+  - **PASS when:** D3D12 Debug Layer and Vulkan Validation Layers remain clean across rapid resize/minimize/restore, device reinit, dynamic/planar capture interleaving and live material/shader reloads under multi-frame-in-flight execution.
+  - **Evidence:** Debug/Release lifecycle stress test logs and clean validation output on physical D3D12 and Vulkan hardware.
+
+#### S11.4 (Batch U11-D) — Cached `RenderTransientGraph` aliasing and copy-chain elimination
+
+- [ ] **M15-U11-04.1 — Extend `RenderTransientFrame` and `RHITransientResources` for HDR, storage and depth aliasing.**
+  - **PASS when:** `RHITransientView` exposes `UAV` bindings, `RenderTransientFrame::AliasClassSupported` safely supports validated HDR (`RGBA16_FLOAT`), compute-storage and depth/stencil lifetimes with proven native alias barriers, and compiled graph plans + placed allocations are cached per `RHIViewTargetDesc` generation (never re-allocating native textures on steady frames).
+  - **Evidence:** `RHITransientResources` / `RenderTransientFrame` unit + native alias-barrier parity tests across D3D12 and Vulkan.
+- [ ] **M15-U11-04.2 — Move eligible intermediate targets onto `RenderTransientGraph` and eliminate redundant `CopyTexture` passes.**
+  - **PASS when:** short-lived intermediate targets (`Bloom*`, `SSRColor*`, `ScreenStorage`, `SubsurfaceTemp`, `OpaqueColor/Depth` and eligible post intermediates) migrate off the fixed 51-slot committed `RHIViewTarget` table into cached transient/ping-pong targets, removing redundant full-resolution `CopyTexture` passes across SSS/SSR/Planar/Fog/Post.
+  - **Evidence:** target inventory diff vs U10 baseline, graph declaration audit and measurable reduction in per-frame full-res `CopyTexture` work (including resolving the Vulkan `fog_copy` / `fog_apply` copy overhead).
+- [ ] **M15-U11-04.3 — Verify transient aliasing barriers, odd/resize lifetimes and memory savings.**
+  - **PASS when:** odd view dimensions, viewport resize, toggle combinations and device-epoch changes cleanly re-compile/retire transient generations with zero validation warnings and verified peak VRAM reduction over U10.
+  - **Evidence:** D3D12/Vulkan validation logs, resize/toggle test outputs and committed+transient VRAM comparison vs U10.
+
+#### S11.5 (Batch U11-D Closure) — Post-refactor A/B scorecard, parity and final M15 closure
+
+- [ ] **M15-U11-05.1 — Measure post-refactor 1080p/1440p A/B timing and VRAM delta against U10 baseline.**
+  - **PASS when:** Release 1080p and 1440p workloads (`>= 120` warm-up + `>= 1,000` measured frames) are re-run on physical D3D12 and Vulkan hardware and report explicit U10-vs-U11 deltas for CPU frame/wait time, GPU pass/frame p50/p95/p99/max and peak VRAM.
+  - **Evidence:** reproducible A/B scorecard linked to final commit, adapter/driver, presets and raw timing/memory logs.
+- [ ] **M15-U11-05.2 — Re-verify M15 parity, Editor visuals and 1,000-frame stability soak.**
+  - **PASS when:** Debug/Release Editor, Runtime and test suites rebuild and pass; cross-backend/capture visual parity meets frozen thresholds (`PSNR >= 40 dB`, `SSIM >= 0.985`, channel error `<= 4/255`), OpenGL fallback preserves declared behavior, and the 1,000-frame soak completes without leaks or validation errors.
+  - **EDITOR VISUAL:** build Debug/Release Editor, launch `--rhi=dx12 --strict-rhi` and `--rhi=vulkan --strict-rhi`, capture consolidated M15 visual plans (`M15_RoughnessSweep`, `U4`, `U5`, `U6`, `U7`, `U8`, `U9`) and inspect parity vs U10 references.
+  - **Evidence:** rebuild logs, CTest/suite logs, consolidated Editor screenshots (`Error 0`, `nonFinite=0`), parity metrics and soak telemetry.
+- [ ] **M15-U11-05.3 — Complete U11 independent source review, correction recheck and M15-to-M16 closure sign-off.**
+  - **PASS when:** separate-context independent review and any correction rechecks pass across `S11.1`–`S11.5`, all `U0`–`U11` mandatory requirements and gates reconcile cleanly, and M15 contracts are signed off for M16 consumption.
+  - **Evidence:** U11 review report, finding/recheck log and final M15 closure disposition.
+
+### M16 handoff — Ray Tracing Backend
+
+M15 does not contain a ray-tracing Unit. The former U11/P13 checklist is moved to [Milestone 16 Ray Tracing Backend](../MILESTONE_16_RAY_TRACING/PLAN.md). M15 is complete for this boundary when both its raster contracts (U0–U10: `ResolvedSurface`, `ViewContext`, capture targets, reflection confidence/energy policy, denoising history invalidation and raster fallback) and its U11 decoupled stateful `IRenderPass`, multi-frame-in-flight descriptor/sync and transient-resource baseline are closed. M16 must consume those contracts without introducing a second material interpretation.
+
+**M15 final acceptance:** every mandatory U0–U11 atomic leaf and required U10 baseline + U11 post-refactor visual, integration, stability and measurement gate is PASS on the final integrated source. No missing mandatory behavior, unresolved P1/P2 blocker or required NOT RUN/BLOCKED check remains. Separately permitted optional deferrals and other nonblocking findings are explicit, and only verified supported features are promoted.
 
 ## 5. M15 completion rule
 
-M15 is accepted only when all required U0-U10 atomic items are PASS, optional
+M15 is accepted only when all required U0-U11 atomic items are PASS (closing U10 pre-refactor authoring/baseline acceptance followed by U11 architecture, pipelining, transient aliasing and post-refactor A/B parity closure), optional
 P6B/DDGI items are PASS or explicitly DEFERRED, and the final acceptance
 items record Debug/Release builds, native backend evidence, Editor visual review,
 parity artifacts, soak/performance measurements and an independent review. A
 compile, non-empty image or parent heading never substitutes for an item PASS.
-The [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md) defines the required
+The [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md) defines the baseline
 architecture audit, complete requirement/evidence matrix, minimum integration and
 lifecycle scenarios, actual visual review, cold/warm performance evidence and
-correction closure. Required deferred visual gates remain open until executed;
-opt-in status alone is not permission to omit required implementation. This
-documentation update does not release U10 work or change an active earlier task.
+correction closure, which U11 extends with A/B performance/VRAM deltas and
+post-refactor regression sign-off. Required deferred visual gates remain open
+until executed; opt-in status alone is not permission to omit required
+implementation. This documentation update does not release U10 or U11 work or
+change an active earlier task.
 
-**Status:** HOLD — this checklist is the execution contract; no M15 implementation is released by this document.
+**Status:** HOLD — this checklist is the execution contract; no M15 U10/U11 implementation is released by this document.

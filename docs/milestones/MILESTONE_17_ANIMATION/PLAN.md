@@ -1,17 +1,17 @@
 # Milestone 17 — Skeletal Animation Studio and Runtime Plan
 
 **Status** — Proposed. Release an explicit checkpoint or range after M16 core acceptance (`RT-08D`).
-**Phase 46** — Asset/evaluator foundation and native rendering (46.1), Studio and gameplay runtime (46.2), product acceptance (46.3).
+**Phase 46** — Asset/evaluator foundation and native rendering (46.1), Studio, gameplay runtime and retargeting (46.2), product acceptance (46.3).
 **Architecture** — [Asset, evaluator, Scene, render and Studio contracts](ARCHITECTURE.md).
 **Handoffs** — [M20 packaging](../MILESTONE_20_COOKER/PLAN.md), [M21 skeletal LOD](../MILESTONE_21_GEOMETRY_VISIBILITY/PLAN.md), [M22 animation URO](../MILESTONE_22_SIMULATION_SCALE/PLAN.md).
 
 ## 1. Product outcome and baseline
 
-A developer can import a skinned FBX or glTF character, edit a clip and controller, assign them in a scene or assembly, preview the result and run the saved character in a detached packaged Runtime. Two actors sharing a rig and compiled controller can have different poses, parameter values and attachments in the same frame. The visible pose determines depth, shadow, motion and entity picking. The reference character locomotes over a step while a masked upper-body reload emits a gameplay event and keeps a prop aligned with the hand socket. The fixture also demonstrates 1D/2D blending, sync markers, additive layers, foot IK and opt-in root motion.
+A developer can import a skinned FBX or glTF character or standalone motion, edit a clip and controller, assign them in a scene or assembly, preview the result and run the saved character in a detached packaged Runtime. Two actors sharing a rig and compiled controller can have different poses, parameter values and attachments in the same frame. The visible pose determines depth, shadow, motion and entity picking. The reference character locomotes over a step while a masked upper-body reload emits a gameplay event and keeps a prop aligned with the hand socket. The fixture also demonstrates 1D/2D blending, sync markers, additive layers, foot IK and opt-in root motion. A second, differently proportioned rig reuses a source action through a baked target-native clip.
 
 The source baseline includes CPU importer and asset validation, a controller evaluator, transactional document classes, render extraction and OpenGL skinning. D3D12 and Vulkan currently report skeletal rendering as unsupported. The historical [Phase 40 plan](../../archive/design/deferred/ANIMATION_PHASE_40_COMPLETION_PLAN.md) and [foundation corrections](../../archive/design/reports/ANIMATION_FOUNDATION_FINAL_CORRECTIONS.md) identify relevant existing fixtures and source. Reproduce the CPU baseline and record the accepted M15/M16 renderer topology before assigning current status.
 
-The seven parent requirements `M17-01` through `M17-07` cover the full product. Each numbered child has one execution owner. M17 proves early and final export through the existing package path and publishes dependency edges to M20. M21 owns derived geometry LOD and meshlets. M22 owns significance-based pose cadence and bone LOD. The [architecture scope](ARCHITECTURE.md#scope-after-m17) describes later animation extensions.
+The parent requirements `M17-01` through `M17-08` cover the full product. Each numbered child has one execution owner. M17 proves early and final export through the existing package path and publishes dependency edges to M20, including the authoring dependencies of a retargeted clip. M21 owns derived geometry LOD and meshlets. M22 owns significance-based pose cadence and bone LOD. The [architecture scope](ARCHITECTURE.md#scope-after-m17) describes later animation extensions.
 
 ## 2. Execution order
 
@@ -23,6 +23,7 @@ Each numbered checkpoint is a separate implementation, verification and commit b
 | **M17-A1.2** | A1.1 | 01.3, 01.4 | Production FBX/glTF import and reimport with staged publication and rollback. |
 | **M17-A1.3** | A1.2 | 01.5, 01.6 | Shared Scene/assembly binding, clone/rebind semantics and dependency edges. |
 | **M17-A1.4** | A1.3 | 01.7, 04.6 | Device-free Animation boundary, shared basic motion program, isolated playback state and fixed-tick pose publication. |
+| **M17-A1.5** | A1.2, A1.4 | 01.8 | Independent motion import and reimport through the project pipeline. |
 | **M17-A2.1** | A1.4 | 02.1, 02.2 | Native vertex layout/upload, immutable draw packet and deformed bounds. |
 | **M17-A2.2** | A2.1 | 02.3, 02.4 | Frame-owned palette, shader math and first real two-actor DX12/Vulkan draw. |
 | **M17-A3.1** | A2.2 | 02.5, 02.6 | Main and Preview geometry, materials, depth/normals and shadow passes. |
@@ -41,11 +42,13 @@ Each numbered checkpoint is a separate implementation, verification and commit b
 | **M17-B3.4** | B3.3 | 05.6 | Gameplay marker authoring and fixed-tick event delivery. |
 | **M17-B4.1** | B3.3, B2.1 | 06.1, 06.2 | Root motion extraction and tick-tagged consumption by the movement owner. |
 | **M17-B4.2** | B4.1, B3.1, B3.4 | 06.3, 06.4 | Scene-backed two-bone IK and final pose, attachment and event ordering. |
-| **M17-C1.1** | A3.3, A4.1, B4.2 | 07.1, 07.2 | Reopened gameplay fixture and detached package with source inputs unavailable. |
+| **M17-B5.1** | A1.5, B4.2 | 08.1, 08.2 | Cross-rig profile schema, validated joint transfer and deterministic CPU bake. |
+| **M17-B5.2** | B5.1 | 08.3, 08.4 | Retarget authoring, source/target Preview, safe rebake and target-native clip assignment. |
+| **M17-C1.1** | A3.3, A4.1, B5.2 | 07.1, 07.2 | Reopened gameplay and retarget fixtures with a source-free detached package. |
 | **M17-C1.2** | C1.1 | 07.3, 07.4 | Integrated CPU, native GPU, interactive Editor, Runtime and measurement results. |
 | **M17-C1.3** | C1.2 | 07.5 | Independent requirement audit, fixes and final rechecks. |
 
-Phase 46.1 owns A1–A4, Phase 46.2 owns B1–B4, and Phase 46.3 owns C1. A2.2 demonstrates the first native two-actor draw. A3.1 joins the draw to the main scene and Preview. A4.1 proves that the same path reaches a detached package before Studio expansion.
+Phase 46.1 owns A1–A4, Phase 46.2 owns B1–B5, and Phase 46.3 owns C1. A2.2 demonstrates the first native two-actor draw. A3.1 joins the draw to the main scene and Preview. A4.1 proves that the same path reaches a detached package before Studio expansion. B5 is the last feature unit and delivers retargeted clips for C1 acceptance.
 
 ## 3. Atomic checklist
 
@@ -58,6 +61,7 @@ Phase 46.1 owns A1–A4, Phase 46.2 owns B1–B4, and Phase 46.3 owns C1. A2.2 d
 - [ ] **M17-01.5 · Share binding across real callers.** Use the same mesh/controller and material/parameter overrides in Scene, direct assembly instantiation and assembly editor. Test shared and detached assets, a declared inline fallback, a valid mesh with bad controller and a missing mesh. Verify diagnostic context includes the owning reference.
 - [ ] **M17-01.6 · Isolate instances and enumerate dependencies.** Duplicate an actor and create an Edit-to-Play copy. Verify independent active states, clocks and triggers and explicit reset on stop/rebind. Enumerate typed owner-to-target edges for geometry, rig, clips/controller and materials. Resolve an authored binding using its native geometry with raw FBX/glTF unavailable.
 - [ ] **M17-01.7 · Establish the CPU module and Scene publication boundary.** Build and run the evaluation path without Renderer, RHI, Scene, physics or Editor dependencies in the Animation library. Move OpenGL geometry ownership to the render boundary and keep the existing compatibility route. Observe one committed pose per executed tick, two isolated actors, stale job result rejection and a binding swap that retains the last ready pose and resources until the new generation commits.
+- [ ] **M17-01.8 · Import and reimport motion independently.** Import animation-only FBX and glTF through the Editor by choosing a take and compatible rig without creating a mesh. Publish a source rig when the input provides a complete valid reference hierarchy. Diagnose missing or ambiguous joint mapping or reference transforms. Save and reopen a native clip, resample it in the shared evaluator and verify stable identity and rollback on failed reimport.
 
 ### M17-02 · Native skinning and pass integration
 
@@ -108,12 +112,19 @@ Phase 46.1 owns A1–A4, Phase 46.2 owns B1–B4, and Phase 46.3 owns C1. A2.2 d
 
 ### M17-07 · Packaging, product and final review
 
-- [ ] **M17-07.1 · Produce the reference scene and assembly.** Save, reopen and instantiate the reference character with controller, socket prop, additive motion and IK. Replay locomotion with its masked reload and gameplay event, plus an opt-in root motion segment. Compare authored definitions, runtime binding, attachment pose and fixed-tick trace.
-- [ ] **M17-07.2 · Export and run without source inputs.** Cook approved asset versions with existing export. Trace required dependencies through mounted VFS and run detached Runtime with strict native backend. Test missing-required and optional fallback outcomes with disposable copies. Hand M20 the edge list and reproducible packaged fixture.
+- [ ] **M17-07.1 · Produce the reference scene and assembly.** Save, reopen and instantiate the reference character with controller, socket prop, additive motion and IK. Replay locomotion with its masked reload and gameplay event, plus an opt-in root motion segment. Replay the baked action on the second rig and confirm its target pose and markers. Compare authored definitions, runtime binding, attachment pose and fixed-tick trace.
+- [ ] **M17-07.2 · Export and run without source inputs.** Cook approved asset versions with existing export. Trace required dependencies through mounted VFS and run detached Runtime with strict native backend. Run the retargeted actor using the baked target clip with the source rig, source clip, retarget profile and raw FBX/glTF absent. Test missing-required and optional fallback outcomes with disposable copies. Hand M20 the edge list and reproducible packaged fixture.
 - [ ] **M17-07.3 · Verify the integrated matrix.** Execute CPU, native GPU, product, interactive UI and OpenGL gates in Section 4. Include Play/Stop, project and scene changes, reimport/failed reload, resize and supported feature-off paths.
 - [ ] **M17-07.4 · Measure and hand off.** Record evaluation and palette cost, bytes, allocation, throughput and native raster cost at the frozen fixture scales. Provide M21 the mesh/pose/bound/coverage/picking reference and M22 the tick and pose invariants. Publish the tested support and fallback matrix.
 - [ ] **M17-07.5 · Close on independent evidence.** Map every requirement to production entry point and verified result on final source, distinguish self-verification and independent evidence, resolve blocking findings and recheck fixes under the [shared protocol](../../agents/WORKING_PROTOCOL.md). Record unavailable checks as `NOT RUN` and keep their gates open.
 - [ ] **M17-07.6 · Prove detached Runtime early.** Export the native two-actor scene with a minimal compiled controller and native rig, clip and geometry products. Mount and run it outside the source checkout with FBX/glTF unavailable. Inspect animation from the strict DX12 and Vulkan routes. Save this fixture for regression during Studio and gameplay work.
+
+### M17-08 · Cross-rig offline retargeting
+
+- [ ] **M17-08.1 · Author and validate a reusable profile.** Persist source and target rig identities/signatures, explicit stable joint mappings, reference poses, chain roles and root translation policy. Reopen the profile, validate unequal proportions and different joint axes, and diagnose changed rigs, duplicate targets, missing required joints and unsupported topology.
+- [ ] **M17-08.2 · Transfer and bake poses on the target rig.** Compare a neutral pose and animated orientations on two dissimilar rigs. Verify preserved target offsets/scales, optional unmapped joints, in-place and scaled root locomotion, mandatory sample boundaries, terminal samples and marker data. Reject unsupported transforms or invalid inputs according to the [retarget contract](ARCHITECTURE.md#24-offline-retargeting).
+- [ ] **M17-08.3 · Preview, publish and rebake in the Editor.** Choose source clip and target rig, edit/reuse the profile, compare isolated previews and publish an independent target clip. Verify read-back, stable output UUID on rebake and preservation of the last ready result on invalid, stale or failed operations. Preserve source asset bytes.
+- [ ] **M17-08.4 · Bind the baked clip and classify dependencies.** Assign the target clip to a real controller/action, save and reopen the target character, and verify pose, root policy and event timing through the production evaluator. Enumerate target Runtime dependencies separately from profile, source and rebake provenance. Hand the fixture to C1 for detached native verification.
 
 ## 4. Verification and evidence
 
@@ -125,6 +136,7 @@ Phase 46.1 owns A1–A4, Phase 46.2 owns B1–B4, and Phase 46.3 owns C1. A2.2 d
 | Real sources and malformed inputs | Reuse the [FBX/glTF fixtures](../../../Tests/Fixtures/Animation) for basis, helper, signed scale, supported interpolation, precision and rejected data. Add a minimal Editor import/reimport source with transitive buffers and multiple material submeshes. |
 | Native two-actor scene | Shared mesh with independently posed actors, textures, occlusion, shadows and planar/probe coverage. Capture deformed silhouette, depth/normals, ID and motion. Choose numeric comparison points away from ambiguous edge pixels. |
 | Reference character and action | 1D/2D control and marker trace, masked reload over locomotion, one gameplay occurrence, socket prop, obstructed root locomotion and a foot on a step. Save the project and replay in Preview, Editor Play, loose Runtime and detached packaged Runtime. Preview exposes the effects as local diagnostics for authoring. |
+| Retarget pair | Source and target rigs with differing proportions, reference poses and joint axes. Compare expected mapped orientations, unchanged target offsets, root travel and marker timing. Reuse a profile across source clips and replay a baked action from the detached package. |
 | Stress and failure variants | Workloads of 1, 32 and 128 actors, a 128-joint fixture and a 129-joint rejection. Include overlapping frames, stale results, failed upload/read, rig replacement and device resets. Publish measured budgets and thresholds before final candidate scoring. |
 
 ### 4.2 Execution matrix
@@ -134,7 +146,7 @@ Phase 46.1 owns A1–A4, Phase 46.2 owns B1–B4, and Phase 46.3 owns C1. A2.2 d
 | CPU | Build/run `AxleAnimationUnitTests` in Debug and Release, including the failure probe. Rebuild applicable Scene/shared phase, serialization and product targets. Use actual production calls and always-active assertions. |
 | Native physical GPU | D3D12 and Vulkan in Debug and Release with strict backend and validation. Register a selectable skeletal suite by A2.2 for layout, native deformation, render passes and resource lifetime. Archive adapter/driver, effective routes, pixel/readback artifacts and error counters. Setup-only, fallback backend or empty view cannot pass. |
 | Product and compatibility | Editor scene and Preview, Play/Stop, Runtime loose and detached packaged on both native backends. Record supported OpenGL color/shadow behavior separately. Launch packaged Runtime outside the checkout with only published artifacts. Prove an animated render and verify the raw source inputs are absent. |
-| Interactive Editor | Exercise import, Content Browser/Inspector, clips, controller, layers, actions and markers, bone selection, focus, save/reopen, error/discard and resize. Use the [Editor visual capture procedure](../../agents/EDITOR_VISUAL_CAPTURE.md) and record actual interactions and output. |
+| Interactive Editor | Exercise import, Content Browser/Inspector, clips, controller, layers, actions and markers, retarget profile editing and bake, bone selection, focus, save/reopen, error/discard and resize. Use the [Editor visual capture procedure](../../agents/EDITOR_VISUAL_CAPTURE.md) and record actual interactions and output. |
 | Comparison policy | Compare IDs, dependency edges and discrete outcomes exactly. For meter-scale analytic fixtures, start with position error ≤ 0.0001 m, unit-normal angular error ≤ 0.1°, normalized blend weight sum error ≤ 0.00001 and interior motion error ≤ 0.25 output pixels. Record and freeze any fixture-specific tolerance change before candidate scoring. Compare images in a declared space at the same LOD0, pose, camera, light, exposure, target format, AA and warmup. Check silhouette and alpha coverage separately. |
 | Lifetime and scale | Verify bounded descriptor, palette and mesh-generation use over repeated Preview close/reload, overlapping frames and at least 1,000 integrated stress frames per native backend. Record workload/counters, CPU/GPU timing percentiles and cold upload/compile versus steady state. |
 

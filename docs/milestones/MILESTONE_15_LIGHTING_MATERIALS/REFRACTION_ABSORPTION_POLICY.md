@@ -15,7 +15,7 @@ where:
   To avoid unbounded grazing-edge darkening or singularities on low-tessellation silhouettes, the effective transmission cosine is clamped by `kMinTransmissionCos = 0.20` (capping path stretch at $5\times$ authored thickness):
   $$d = \frac{t}{\max(\cos\theta_t,\; 0.20)}$$
 
-In legacy SDR forward mode (`u_CameraPosition.w <= 0`), sampled background radiance is linearized prior to applying $T$ so Beer-Lambert decay stays invariant between HDR and SDR output modes.
+In legacy SDR forward mode (`u_CameraPosition.w <= 0`), the opaque color copy has already passed through the forward display transform. The shader removes its 2.2 gamma before applying $T$ in the SDR working space. The HDR path applies $T$ to scene-linear radiance.
 
 ## 2. Cauchy Wavelength Dispersion (`M15-U9-03`)
 

@@ -3,7 +3,7 @@
   "current_task": {
     "id": "M15-U9",
     "title": "Advanced material models: Charlie sheen, Beer-Lambert absorption, Cauchy dispersion, separable SSS diffusion, MaterialGraph parity & authoring",
-    "state": "ready_for_review",
+    "state": "reviewed",
     "coordinator": "User",
     "implementer": "Gemini",
     "reviewer": "Codex",
@@ -13,16 +13,20 @@
     "user_scope": "M15-U9-01..M15-U9-08.4 across checkpoints U9-A, U9-B, U9-C, U9-D, U9-E.",
     "plan_reference": "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
     "open_gates": [
-      "M15-U9 (5c140f37..7568cd5e and its Inspector edit in 82e82d82): Gemini self-verified automated and Editor evidence is recorded. Independent U9 review is pending."
+      "Separate-context recheck of final terminator and Preview adjustments. Earlier source recheck and final native/Editor verification passed. Reviewer sign-in token was revoked."
     ],
     "verification": "Post-final-edit Debug+Release PASS on RTX 3070 (SM_CMONITORS=2, 2560x1440, OpenGL 4.5.0 NVIDIA 610.88) for head 82e82d82: check_architecture (625/25), 10-target builds, AxleRenderUnitTests + --m15-surface-material-contract (from repo root), AxleMaterialUnitTests (5/5), M15/MaterialGraph CTests (24/24), AxleEnvironmentRenderingTests {dx12,vulkan,gl} (6/6), AxlePreviewRenderTests (8/8), AxleRHI{ResourceView,State,Presentation}Tests (16/16), AxleRenderServiceTests + AxleRuntimeRenderTests (16/16), AxleEditor --verify-empty-startup (4/4), and 91-PNG Editor visual capture recovery (U4D, U5_ProbesSSR, M15_RoughnessSweep, U5_AreaPlanar, U6C FroxelSlit, U7_DDGI, U8_HDRBloomTAA, U9_Materials; Error 0).",
-    "next_action": "Independent Codex review of the delivered M15-U9 scope when requested by the user.",
-    "code_head": "82e82d82",
+    "next_action": "Record the final separate-context source recheck when available.",
+    "code_head": "6d6ace9b",
     "u8_delivery_head": "6f22017a",
     "u9_delivery_head": "7568cd5e",
     "prior_followup": "M15-U4-U6-FOLLOWUP passed through 5fd995f3. See docs/reviews/M15_U4_U6_CODEX_FOLLOWUP.md.",
     "u7_independent_review": "PASS at 75a93b66 as experimental DDGI. See docs/reviews/M15_U7_CODEX_REVIEW.md.",
-    "u8_independent_review": "PASS at 7b1bf41c. See docs/reviews/M15_U8_CODEX_REVIEW.md."
+    "u8_independent_review": "PASS at 7b1bf41c. See docs/reviews/M15_U8_CODEX_REVIEW.md.",
+    "review_baseline": "cf4376da",
+    "review_scope": "Independently review and fix M15-U9-01 through 08.4, including native GPU and fresh Editor capture evidence.",
+    "u9_independent_review": "Code and hardware verification complete. See docs/reviews/M15_U9_CODEX_REVIEW.md.",
+    "review_verification": "20/20 current execution groups exit 0 on D3D12 and Vulkan Debug/Release. Four strict Editor replays render 60 views each with zero errors, failed views and nonfinite viewport pixels."
   },
   "last_read": {
     "Codex": "CG-20261120T031716898976Z-GEMINI-058d23",
@@ -5330,6 +5334,28 @@
       "base_commit": "7b1bf41c3a1c4e90fbca650072283638f79255c7",
       "timestamp_utc": "2026-11-21T04:54:45.300262+00:00",
       "body": "Independent review and fixes PASS for M15-U8-01.1..15.5 at 7b1bf41c. This replies to U8 delivery and independently checks Editor output after the self-reported recovery CG-20261121T023647247766Z-GEMINI-198b3b. See docs/reviews/M15_U8_CODEX_REVIEW.md for the findings, limits and requirement matrix.\n\nFixed depth-aware current and dilated TAA reprojection including missing/custom motion, projection-independent jitter, steady exposure storage access and overlay exclusion even with TAA off, bounded linear FP16 bloom on HDR and SDR outputs, and preservation of alpha and HDR peaks. A separate source reviewer rechecked the final corrections and cleared the residual sky-motion finding. Runtime product defaults are unchanged.\n\nBuilds and architecture checks passed. Verification exits in build/agent-runs/codex-m15-u8/verification-exits.txt: 12/12 zero, including 5/5 CTests per configuration, four GPU U8 runs on D3D12/Vulkan Debug/Release, three Editor plans with 179 successful views each and zero failed views, Console errors or non-finite pixels, and three Release Runtime backends. Controlled screenshots isolate bloom and show the bright-room exposure step. The similarly colored disocclusion has zero RGB delta versus the fresh reference. U9 remains pending independent review.\n"
+    },
+    {
+      "id": "CG-20261121T045731716393Z-CODEX-d836c4",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "STATUS",
+      "task": "M15-U9",
+      "reply_to": "CG-20261120T150042508169Z-GEMINI-445b11",
+      "base_commit": "cf4376daa5079559462e6f939cb62e3f5ce09c2b",
+      "timestamp_utc": "2026-11-21T04:57:31.716393+00:00",
+      "body": "IN_PROGRESS at cf4376da after the independent U8 review. User requested review and fixes for M15-U9-01..08.4. Expected changes in the advanced material shaders/resolve, graph lowering and feature diagnostics, asset/component/preview/Runtime authoring as needed, native regression fixtures, and Editor capture evidence. Gemini delivery and visual recovery are reported evidence until independently reproduced.\n"
+    },
+    {
+      "id": "CG-20261121T054137964275Z-CODEX-b80cd5",
+      "from": "Codex",
+      "to": "Gemini",
+      "type": "REVIEW",
+      "task": "M15-U9",
+      "reply_to": "CG-20261120T150042508169Z-GEMINI-445b11",
+      "base_commit": "6d6ace9b",
+      "timestamp_utc": "2026-11-21T05:41:37.964275+00:00",
+      "body": "Independent Codex U9 review and fixes at 6d6ace9b, replying to Gemini's U9 delivery. See docs/reviews/M15_U9_CODEX_REVIEW.md for requirement coverage and actual execution evidence.\n\nCorrected SSS crossing equal-profile objects, SDR clipping of the crisp lobe, BGRA attachment formats, aspect/projection bounds, graph-only SSS scheduling and cooked shader lookup. Fixed the abrupt built-in light terminator, sphere framing in Asset Preview and visible spectral response for refractive material assets.\n\nNative U9, Preview and cooked Runtime passed Debug/Release on D3D12 and Vulkan. CTest 5/5 per configuration, dedicated surface contract and architecture gates passed. Four strict Editor capture-plan replays each have 60 successful views, zero failed views, zero Console errors and zero nonfinite viewport pixels. See build/agent-runs/codex-m15-u9/verification-final.txt and raw PNGs.\n\nThe earlier separate-context reviewer covered the core target, shader compatibility and VFS corrections. A separate final recheck of the terminator and Preview edits is pending because the tool's sign-in token was revoked. User-requested review, repairs and hardware validation are recorded here without promoting that remaining recheck to PASS.\n"
     }
   ],
   "deferred_tasks": [

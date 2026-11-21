@@ -4,7 +4,7 @@
 **Current source reference:** `114438ba` for U4-E (`80e9837a` U4-D, `9028e8d7` U4-C, `020c32ed` U4-A/B, `baaf36d2` U3, `c6245e2e` S1.3); `19ac2a1` remains the historical M14 handoff baseline. This reference and the batch schedule below do not mark any unchecked leaf PASS or release later packages until explicitly assigned in the live exchange.
 **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
 **Detailed implementation notes:** [REMEDIATION_PLAN.md](REMEDIATION_PLAN.md)
-**Final acceptance procedure:** [U10 architecture and feature review](U10_ACCEPTANCE_REVIEW.md)
+**Acceptance procedure:** [U10 architecture and feature review](U10_ACCEPTANCE_REVIEW.md) and the [U12 product exit](#u12-material-graph-studio)
 **M14 prerequisite review:** [M14 U9 final acceptance](../../reviews/M14_U9_FINAL_ACCEPTANCE_REVIEW.md)
 **Documentation review:** [M15 documentation review](../../reviews/M15_DOCUMENTATION_REVIEW.md)
 
@@ -20,7 +20,7 @@ This plan replaces the previous optimistic checklist. A checkbox is ticked only 
 
 ## 1. Goal and acceptance vocabulary
 
-M15 delivers a physically based forward material and lighting system with smooth shading, correct material data, direct/HDR lighting, shadows, occlusion, reflections, post-processing, authoring, documented fallbacks and reproducible evidence.
+M15 delivers physically based forward materials and lighting with smooth shading, direct/HDR lighting, shadows, occlusion, reflections and post-processing. Material Graph Studio lets artists create, preview and ship native graph assets with the required raster surface features, documented fallbacks and reproducible evidence.
 
 Use these states in reports:
 
@@ -54,7 +54,7 @@ M15 follows the repository hierarchy exactly:
 ```text
 Milestone 15 — Lighting and Material Fidelity
   └─ Phase 45 — Lighting and Material Fidelity delivery
-      └─ Unit U0..U11 — architectural ownership and release boundary
+      └─ Unit U0..U12 — architectural ownership and release boundary
           └─ SubUnit Sx.y — one independently buildable/checkable implementation package
 ```
 
@@ -73,16 +73,17 @@ The detailed execution sections below use `P0..P12` plus the separately gated `P
 | M15 | 45.14–45.15 | U8 Post and Temporal | S8.1–S8.6 (`P8`) | Exposure, bloom and TAA |
 | M15 | 45.16 | U9 Advanced Materials | S9.1–S9.5 (`P10`) | Sheen, absorption, dispersion, SSS and graph parity |
 | M15 | 45.18 | U10 Authoring and Pre-Refactor Baseline | S10.1–S10.5 (`P12`) | Editor authoring, presets, shared `RHIViewTargetDesc` policy, baseline scorecard and feature acceptance |
-| M15 | 45.19 | U11 Architecture & Frame Pipelining Refactor | S11.1–S11.5 | Unified shader lighting kernel, revision-cached material flow, `RenderContracts` split, full core + secondary stateful `IRenderPass` extraction (+ culling/PSO sort), per-frame descriptor ring & multi-frame-in-flight, cached `RenderTransientGraph` aliasing & zero-debt M15 closure |
+| M15 | 45.19 | U11 Architecture & Frame Pipelining Refactor | S11.1–S11.5 | Unified shader lighting kernel, revision-cached material flow, `RenderContracts` split, full core + secondary stateful `IRenderPass` extraction (+ culling/PSO sort), per-frame descriptor ring & multi-frame-in-flight, cached `RenderTransientGraph` aliasing and renderer baseline acceptance |
+| M15 | 45.20 | U12 Material Graph Studio | S12.1–S12.5 | Graph authoring, preview and diagnostics, advanced raster surface parity, packaged Runtime and final M15 acceptance |
 Phase 45.17 is the final performance/quality gate inside U10; it is not a separate implementation Unit. Phase 45.19 (`U11`) is strictly the post-U10 architecture, pipelining, and transient-memory refactor before M16; the historical RT checklist previously referred to as `U11/P13` remains retired from M15 and homed in M16-RT.
 
-M16-RT owns BLAS/TLAS, RT pipelines, RT reflections/shadows, denoising and optional RT GI. M15 supplies both the lighting/material contracts (closed at U10) and the decoupled pass/pipelining/transient baseline (closed at U11) that M16 consumes.
+M16-RT owns BLAS/TLAS, RT pipelines, RT reflections/shadows, denoising and optional RT GI. M15 supplies the U10 lighting/material evidence, the U11 pass/pipelining/transient baseline and the U12 authored raster material fixtures.
 
 Package aliases in this table follow the recovery plan: P8 is post/temporal, P9 is atmosphere, P10 is advanced materials, P11 is experimental DDGI, and P12 is authoring/pre-refactor baseline acceptance. P6B remains a separately gated raster extension; P13 is retired from M15 and re-homed in M16-RT.
 
 ### Unit closure rule
 
-A Unit closes only when all its SubUnits pass, its dependency Units are accepted, and its Unit exit evidence is recorded. A Phase closes only when every Unit mapped to that Phase passes. M15 closes only when all required U0–U11 Units pass (with U10 freezing the feature/baseline gate before U11 runs, and U11 closing the final architecture/pipelining/parity gate).
+A Unit closes when all its SubUnits pass, its dependency Units are accepted, and its exit evidence is recorded. A Phase closes when every Unit mapped to that Phase passes. U10 freezes the pre-refactor baseline, U11 accepts the renderer refactor, and U12 closes Material Graph Studio and the integrated U0–U12 milestone.
 
 ### Canonical checklist policy
 
@@ -108,7 +109,9 @@ To prevent scope creep, M15 owns raster lighting/material fidelity, M16 owns ray
 ### Dependency order
 
 ```text
-U0 -> U1/U2 -> U3 -> U4 -> U5 -> U6/U7 -> U8 -> U9 -> U10 (authoring & pre-refactor baseline) -> U11 (zero-debt architecture, pipelining & transient aliasing refactor + final closure); M16-RT depends on M15 U3/U5/U7/U10/U11, and M21 depends on M15 contracts.
+U0 -> U1/U2 -> U3 -> U4 -> U5 -> U6/U7 -> U8 -> U9 -> U10 (pre-refactor baseline)
+   -> U11 (renderer refactor and parity) -> U12 (Material Graph Studio and raster parity)
+   -> M16-RT
 
 Within U5: `S5.1 Hi-Z -> S5.2 Dynamic Capture -> S5.3 Prefilter -> S5.4 Invalidation/Scheduling -> S5.5 Multi-Probe -> S5.6 SSR -> S5.7 LTC -> S5.8 Planar Reflection`. The existing `P4/P5A–P5D/P6/P7` names are implementation aliases for these SubUnits.
 
@@ -199,7 +202,17 @@ After **U10** freezes authoring, quality presets, visual/parity validation, and 
 | **U11-B** | `S11.2`: `M15-U11-02.1` → `02.4` | Full stateful `IRenderPass` decomposition (secondary + core) & culling/sorting: move shaders/layouts/PSOs/descriptors out of `RHISceneRenderer` into all secondary `Passes::*` and extracted core modules (`ShadowPass`, `GeometrySurfacePass`, `ForwardOpaquePass`, `TransparentAndRefractionPass`, `SkyboxAndResolvePass`, `SceneDrawListBuilder`, `CustomProgramCache`), delete all 9 `friend class` declarations, dissolve `RecordFramePasses` lambdas, add main-view camera frustum culling + PSO/material sort + instancing readiness. | Mid-unit parity check or U11 review |
 | **U11-C** | `S11.3`: `M15-U11-03.1` → `03.3` | Multi-frame-in-flight sync & per-frame descriptor allocation: replace in-place descriptor mutation with frame-token ring/linear arenas, remove unconditional `device.WaitIdle()` in `RHISwapChain::BeginFrame()`, generalize `RHIFrameContext`/`ViewContext` to `N >= 2` in-flight frames, and prove clean resize/capture/device validation on D3D12 & Vulkan. | Mid-unit lifetime check + U11 review |
 | **U11-D** | `S11.4`: `M15-U11-04.1` → `04.3` | Cached `RenderTransientGraph` aliasing & copy-chain elimination: add `UAV`/HDR/depth/storage support and plan/allocation caching by `RHIViewTargetDesc`, migrate short-lived intermediate targets (`Bloom*`, `SSRColor*`, `ScreenStorage`, `SubsurfaceTemp`, `OpaqueColor/Depth`) to cut full-res `CopyTexture` chains and resolve Vulkan copy overhead. | Consolidated U11 review |
-| **U11-E** | `S11.5`: `M15-U11-05.1` → `05.3` | Post-refactor A/B scorecard, parity/soak & zero-debt M15-to-M16 closure: verify CPU/GPU 1080p/1440p A/B deltas vs U10 baseline, re-verify consolidated Editor visuals + cross-backend parity + 1,000-frame soak, audit zero-debt invariants, and sign off M15 for M16/M21. | Consolidated U11 review + M16 handoff |
+| **U11-E** | `S11.5`: `M15-U11-05.1` → `05.3` | Verify CPU/GPU 1080p/1440p A/B deltas vs U10 baseline, consolidated Editor visuals, cross-backend parity, the 1,000-frame soak and architectural invariants. Accept the renderer contracts used by U12, M16 and M21. | Consolidated U11 review and U12 baseline |
+
+#### U12 Execution Batches (U12-A through U12-E)
+
+| Batch | SubUnit and atomic leaves | Delivery gate |
+|---|---|---|
+| **U12-A** | `S12.1`: `M15-U12-01.1` → `01.3` | Reproduce the graph baseline. Deliver the document, typed transactions and native asset round-trip through production APIs. |
+| **U12-B** | `S12.2`: `M15-U12-02.1` → `02.3` | Create or open graphs from Content Browser. Verify real palette-to-canvas drag, node move, pin wiring, parameter edits and reopen. |
+| **U12-C** | `S12.3`: `M15-U12-03.1` → `03.3` | Deliver revision-aware live Preview, node diagnostics, and valid asset publication to Scene with safe in-flight lifetime. |
+| **U12-D** | `S12.4`: `M15-U12-04.1` → `04.4` | Verify Clearcoat, Anisotropy, Sheen, SSS and refractive glass through generated raster programs on both native backends. |
+| **U12-E** | `S12.5`: `M15-U12-05.1` → `05.3` | Verify Studio-authored fixtures through Editor and detached Runtime, regress U11 and close consolidated review. |
 
 **Editor visual policy (user steering 2026-11-17):** During automated batch delivery, Editor visual gates stayed open for a consolidated capture session. Mark an Editor visual gate PASS after inspecting the required Debug and Release Editor screenshots. The [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records current evidence.
 
@@ -1809,19 +1822,52 @@ U10 serves as the **pre-refactor fidelity, authoring, lifecycle, and 1080p/1440p
   - **PASS when:** Debug/Release Editor, Runtime and test suites rebuild and pass; cross-backend/capture visual parity meets frozen thresholds (`PSNR >= 40 dB`, `SSIM >= 0.985`, channel error `<= 4/255`), OpenGL fallback preserves declared behavior, and the 1,000-frame soak completes without leaks or validation errors.
   - **EDITOR VISUAL:** build Debug/Release Editor, launch `--rhi=dx12 --strict-rhi` and `--rhi=vulkan --strict-rhi`, capture consolidated M15 visual plans (`M15_RoughnessSweep`, `U4`, `U5`, `U6`, `U7`, `U8`, `U9`) and inspect parity vs U10 references.
   - **Evidence:** rebuild logs, CTest/suite logs, consolidated Editor screenshots (`Error 0`, `nonFinite=0`), parity metrics and soak telemetry.
-- [ ] **M15-U11-05.3 — Complete U11 independent source review, correction recheck and zero-debt M15-to-M16 closure sign-off.**
-  - **PASS when:** separate-context independent review and any correction rechecks pass across `S11.1`–`S11.5`, confirming zero `friend class`/lambda adapters in `RHISceneRenderer`, unified HLSL lighting evaluation, zero per-frame material snapshot cloning or byte-by-byte shader hashing, multi-frame-in-flight overlap, transient aliasing, and signed-off M15 contracts for M16/M21 consumption.
-  - **Evidence:** U11 review report, finding/recheck log and final M15 closure disposition.
+- [ ] **M15-U11-05.3 — Complete U11 independent source review, correction recheck and renderer baseline sign-off.**
+  - **PASS when:** separate-context independent review and any correction rechecks pass across `S11.1`–`S11.5`, confirming zero `friend class`/lambda adapters in `RHISceneRenderer`, unified HLSL lighting evaluation, zero per-frame material snapshot cloning or byte-by-byte shader hashing, multi-frame-in-flight overlap, transient aliasing, and signed-off renderer contracts for U12/M16/M21.
+  - **Evidence:** U11 review report, finding/recheck log and accepted renderer baseline.
+
+### U12 Material Graph Studio
+
+**Entry:** accepted U11-E source and evidence. U12 owns former `M23-01` and the raster material scope of `M23-02`. It uses the Editor's Dear ImGui layer, the native material graph format and the accepted raster Preview/render services. M19 Canvas2D, M16 ray tracing and M21 visibility/bindless are independent of U12's raster authoring gates. [Architecture](ARCHITECTURE.md#u12-material-graph-studio) · [Unreal capability gaps](ARCHITECTURE.md#15-material-studio-gaps-against-unreal-engine).
+
+#### S12.1 (U12-A) — Graph document and asset workflow
+
+- [ ] **M15-U12-01.1 — Record the starting graph and raster matrix.** Rebuild the graph asset, compiler, resource, runtime and native preview suites on the U11-E source. Record registered nodes/pins, supported generated surface variants and missing routes. Trace native graph create/load/save, current custom shaders and renderer binding.
+- [ ] **M15-U12-01.2 — Use transactional typed graph edits.** Reuse `MaterialGraphDocument`, registry, IR and validation. Verify valid and invalid connections, cycle rejection, deletion/restoration of connected nodes, no-op edits, one undo step per drag, redo branches and independent working documents.
+- [ ] **M15-U12-01.3 — Preserve identity, layout and textual interchange.** Save atomically as native `.axleasset`. Verify UUID preservation on save, new UUID on Save As, valid text/visual round-trip, layout-only edits preserving shader identity, and dirty/file guards on reload, failed save, close or project switch.
+
+#### S12.2 (U12-B) — Interactive canvas and authoring
+
+- [ ] **M15-U12-02.1 — Deliver the actual pointer workflow.** Create and open a graph from Content Browser. Search the palette, drag a node onto the canvas, move nodes, pan/zoom, select multiple nodes and drag a wire between typed pins. Verify mismatched pins and illegal cycles leave the graph intact. Verify disconnect, replace and undo/redo through the interactive Editor.
+- [ ] **M15-U12-02.2 — Author parameters and resource references.** Edit node fields, typed defaults, exposed parameter names/IDs and supported surface settings. Assign textures with explicit color space and sampler. Verify rename preserves references, validation points to the field, and reopening restores the working values and layout.
+- [ ] **M15-U12-02.3 — Verify graph assignment and independent overrides.** Assign a saved graph to a real material slot in Scene. Verify two consumers of one asset with independent supported parameter overrides and reset-to-default. Round-trip the production binding, validate incompatible overrides and verify parameter-only updates preserve shader identity wherever the existing binding contract allows.
+
+#### S12.3 (U12-C) — Live Preview, compilation and publication
+
+- [ ] **M15-U12-03.1 — Compile and publish revisions safely.** Compile immutable snapshots asynchronously through the existing DXC pipeline and applicable Slang route. Keep pointer interactions responsive during compilation. Distinguish pending, active and failed revisions. Verify stale job completion, device/target change, switch/close during compile and valid → invalid → valid edits. Failed candidates retain the last compatible ready Preview. Retire device generations after the last referencing submission.
+- [ ] **M15-U12-03.2 — Surface stage and node diagnostics.** Show validation, lowering, resource, shader and route failures with revision and node/pin when attributable. Navigate to the source node and verify unattributed backend failures still identify the stage. Exercise invalid wiring and missing resources and confirm recovery when corrected.
+- [ ] **M15-U12-03.3 — Use the production material route in Preview and Scene.** Preview a sphere, plane or reference mesh with an appropriate environment and opaque background for glass. Verify Preview does not change the scene-bound asset while editing. Publish validated changes through the saved asset/apply path. Capture expected pixels from Preview and Scene on D3D12 and Vulkan with matched inputs.
+
+#### S12.4 (U12-D) — Advanced raster graph parity
+
+- [ ] **M15-U12-04.1 — Wire Clearcoat and Anisotropy through the graph.** Extend node schema, lowering, bindings, canonical surface data and shader evaluation while preserving existing graph asset behavior. Compare a coated roughness sweep and oriented brushed metal to built-in raster materials under matched direct light and IBL. Vary authored strengths and anisotropy orientation and verify visible response and neutral defaults on both backends.
+- [ ] **M15-U12-04.2 — Preserve and expose Sheen and SSS.** Keep the existing U9 surface contracts through the final shared lighting path. Author cloth and subsurface fixtures in Studio. Compare supported sheen and SSS responses to built-in references, including SSS at a material/depth boundary and the corresponding Preview, forward and auxiliary variants.
+- [ ] **M15-U12-04.3 — Deliver generated transparent refractive glass.** Author opacity, refraction controls, IOR, thickness, absorption and Cauchy dispersion on the compatible graph output. Bind the existing opaque scene color/depth snapshots through the shared pass contract. Compare depth rejection, screen edges, plain refraction, tinted absorption, chromatic split and neutral cases against the built-in raster path on D3D12 and Vulkan. Verify unavailable compatible scene input/MSAA fallbacks, and opaque/cutout diagnostics for optical fields.
+- [ ] **M15-U12-04.4 — Validate the graph support matrix and real pass routing.** Declare supported surface class, feature, blend, view and backend combinations. Exercise the applicable normal, reflection, SSS and transparency paths with real graph programs and resource generations. Cross-check binding flags against observable output. A declared fallback includes its reason and effective route. OpenGL keeps its declared compatibility behavior and reports unsupported graph routes.
+
+#### S12.5 (U12-E) — Studio product and final M15 acceptance
+
+- [ ] **M15-U12-05.1 — Ship the authored reference set.** Build coated paint, brushed metal, sheen cloth, SSS and glass fixtures from Studio using real textures, graph connections and a visible opaque refraction reference. Save/reopen, assign in Scene, export and run loose and detached Runtime with the current exporter. Record resolved UUIDs, parameters, selected variants, and dependency closure. Exercise a missing referenced asset in a negative package fixture.
+- [ ] **M15-U12-05.2 — Verify native output, Editor workflow and regression.** Rebuild Editor, Runtime and relevant graph/render/build targets in Debug/Release. Verify physical D3D12 and Vulkan with validation and fallback disabled for native runs. Inspect actual Editor captures of node drag/wiring, real Preview, last-good/error recovery and Scene authoring. Record equivalent rendered samples and freeze tolerance/reference inputs before scoring. Recheck U11 affected parity/lifetime paths and compare steady-state cost to the U11-E baseline with Studio closed.
+- [ ] **M15-U12-05.3 — Complete consolidated review and handoff.** Record each U12 leaf, production caller, build/backend identity, actual command results, visual/numeric evidence, findings and disposition in `docs/reviews/`. Close required repairs and rechecks. Deliver the authored raster fixture set and per-backend support matrix to M16, and make the same native assets available to M20, M21 and M23.
 
 ### M16 handoff — Ray Tracing Backend
 
-M15 does not contain a ray-tracing Unit. The former U11/P13 checklist is moved to [Milestone 16 Ray Tracing Backend](../MILESTONE_16_RAY_TRACING/PLAN.md). M15 is complete for this boundary when both its raster contracts (U0–U10: `ResolvedSurface`, `ViewContext`, capture targets, reflection confidence/energy policy, denoising history invalidation and raster fallback) and its U11 zero-debt stateful `IRenderPass`, unified shader lighting kernel, revision-cached material extraction, culling/PSO sort, multi-frame-in-flight descriptor/sync and transient-resource baseline are closed. M16 must consume those contracts without introducing a second material interpretation, while M21 adds GPU-driven indirect culling, Meshlets/Visibility Buffer and Clustered Light Culling cleanly atop these modular passes.
-
-**M15 final acceptance:** every mandatory U0–U11 atomic leaf and required U10 baseline + U11 post-refactor visual, integration, stability and measurement gate is PASS on the final integrated source. No missing mandatory behavior, unresolved P1/P2 blocker or required NOT RUN/BLOCKED check remains. Separately permitted optional deferrals and other nonblocking findings are explicit, and only verified supported features are promoted.
+The former U11/P13 ray-tracing checklist lives in [M16](../MILESTONE_16_RAY_TRACING/PLAN.md). Its input is the accepted M15 source with U10 reference evidence, U11 pass and resource contracts, and the U12 Studio-authored material fixtures and raster support matrix. M16 uses those assets for ray-tracing material parity and fallback. M21 uses the accepted raster graph for its fixed-slot reference when validating generated bindless/visibility routes.
 
 ## 5. M15 completion rule
 
-M15 is accepted only when all required U0-U11 atomic items are PASS (closing U10 pre-refactor authoring/baseline acceptance followed by U11 architecture, pipelining, transient aliasing and post-refactor A/B parity closure), optional
+M15 is accepted only when all required U0–U12 atomic items are PASS (U10 pre-refactor baseline, U11 renderer refactor and A/B parity, and U12 Studio, raster parity and product evidence), optional
 P6B/DDGI items are PASS or explicitly DEFERRED, and the final acceptance
 items record Debug/Release builds, native backend evidence, Editor visual review,
 parity artifacts, soak/performance measurements and an independent review. A
@@ -1830,9 +1876,6 @@ The [U10 acceptance procedure](U10_ACCEPTANCE_REVIEW.md) defines the baseline
 architecture audit, complete requirement/evidence matrix, minimum integration and
 lifecycle scenarios, actual visual review, cold/warm performance evidence and
 correction closure, which U11 extends with A/B performance/VRAM deltas and
-post-refactor regression sign-off. Required deferred visual gates remain open
-until executed; opt-in status alone is not permission to omit required
-implementation. This documentation update does not release U10 or U11 work or
-change an active earlier task.
+post-refactor regression sign-off. U12 adds the final Studio-authored product, parity and review gates. Required deferred visual gates stay open until executed. Record unresolved P1/P2 findings and required NOT RUN/BLOCKED checks as open acceptance work.
 
-**Status:** HOLD — this checklist is the execution contract; no M15 U10/U11 implementation is released by this document.
+**Status:** HOLD — use the live exchange for the released implementation boundary and source acceptance.

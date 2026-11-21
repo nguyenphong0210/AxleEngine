@@ -30,7 +30,7 @@ The root [ROADMAP.md](../../ROADMAP.md) is the master index and single source of
 | Former M18 Simulation Scale, `C15-01..09` in Phase 47 | M22 Simulation Scale, `C22-01..09` in Phase 51 |
 | Former M19 Phase 48.1 Animation | M17 Animation (`M17-01..07`) |
 | Former M19 Phase 48.2 VFX | M18 VFX (`M18-01..09`) |
-| Former M19 Phase 48.3 Material Graph and scene tools | M23 Material Graph and Scene Tools (`M23-01..06`) |
+| Former M19 Phase 48.3 Material Graph and scene tools | [M15 U12](MILESTONE_15_LIGHTING_MATERIALS/PLAN.md#u12-material-graph-studio) owns Studio and raster advanced surfaces (former `M23-01..02`). M23 owns scene integration (`M23-03..06`). |
 | Former M19 Phase 48.4 Cooker and linter | M20 Cooker and Linter (`M20-01..07`) |
 | Former M20 Performance Rollout, `C20-01..06` | M24 Performance and Rollout, `C24-01..06` |
 

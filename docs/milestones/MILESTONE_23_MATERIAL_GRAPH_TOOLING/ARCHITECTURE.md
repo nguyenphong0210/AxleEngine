@@ -2,9 +2,9 @@
 
 ## 1. Graph authoring and shared runtime
 
-The Editor owns the working document, graph layout and input interactions. Valid semantic edits go through typed transactions and existing parser/IR validation. Keep stable IDs for nodes and parameters, check connection types and cycles, and attach diagnostics to the authored node/field. Persist semantic graph data through the native asset format and keep UI layout separate from shader semantics and cache keys. Install only valid complete graph generations. An asynchronous compile consumes a frozen revision; late completions cannot overwrite a newer generation. Retain the last usable graph and preview on invalid candidates. Save atomically and pass the canonical saved asset through M20 dependency enumeration.
+Reuse [M15 U12's Studio and graph publication contracts](../MILESTONE_15_LIGHTING_MATERIALS/ARCHITECTURE.md#u12-material-graph-studio) for authoring, diagnostics, preview, native persistence and raster advanced surface nodes. Integrate scene features through the same transaction and asset interfaces. Resolve canonical saved assets and their scene dependencies through M20.
 
-The shared graph compiler provides reflected backend artifacts for Preview, scene and Runtime. Reuse M15 material/surface evaluation and M21 route policy. Establish transparent/refractive variants before exposing advanced pins as enabled features. Use a matching Forward route when the validated graph or its resources exceed the visibility path's contract. Keep declared unsupported features visible with actionable diagnostics. Preview uses isolated state and targets with the shared render service.
+Use the shared compiler and M15 material/surface evaluation across Preview, Scene and Runtime. Verify accepted opaque and refractive graphs with the applicable M21 route policy. Use a matching Forward route when a graph or its resources exceed the visibility path's contract. Surface unsupported combinations in Studio with the effective route.
 
 ## 2. Scene tools
 

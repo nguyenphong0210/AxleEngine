@@ -1,19 +1,19 @@
 ﻿# Milestone 16 — Ray Tracing Backend Plan
 
 **Status** — Execution plan. Implementation starts at the explicitly released package or batch boundary.
-**Baseline** — The accepted M15 U11-E source and evidence, including raster lighting/material fidelity, planar and reflection capture, stateful `IRenderPass`, unified surface lighting, frame completion and transient resources.
+**Baseline** — Accepted M15 source through U12, including the U11-E renderer evidence and U12 Studio-authored raster material fixtures and support matrix.
 **Supporting architecture** — [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 M16 adds a capability-safe hardware ray-tracing backend. Every RT feature has a raster fallback and a separate evidence gate. The milestone does not claim support merely because a GPU reports an RT capability bit.
 
 ## 1. Entry gate and execution order
 
-Record the accepted [M15 U11-E source, support matrix and post-refactor scorecard](../MILESTONE_15_LIGHTING_MATERIALS/PLAN.md#m16-handoff--ray-tracing-backend) before the first M16 implementation checkpoint. Reuse the M15 reference scenes and evidence tools where applicable. M16 adds hardware shadows and reflections to the raster renderer. M21 geometry/visibility work and optional `RT-09` have separate release boundaries.
+Record the [accepted M15 handoff](../MILESTONE_15_LIGHTING_MATERIALS/PLAN.md#m16-handoff--ray-tracing-backend) before the first M16 implementation checkpoint. Reuse its renderer evidence, reference scenes, raster support matrix and Studio-authored graphs. M16 adds hardware shadows and reflections to the raster renderer. M21 geometry/visibility work and optional `RT-09` have separate release boundaries.
 
 Package IDs identify feature scope. Batch IDs identify buildable deliveries with a primary owner for each atomic requirement. The batch order brings shader compilation and history forward where another package needs them.
 
 ```text
-M15 U11-E accepted
+M15 U11-E renderer baseline -> M15 U12-E product acceptance
   -> RT-01A -> RT-01B -> RT-03A -> RT-01C
   -> RT-02A -> RT-02B -> RT-02C -> RT-02D
   -> RT-03B -> RT-03C
@@ -177,7 +177,7 @@ This is the single status-bearing checklist. Each item closes on its stated resu
 - [ ] **M16-RT-07.2 — Match normal, clearcoat, sheen and transmission policy.**
   - **PASS when** fixtures verify normal map/two-sided behavior, clearcoat and sheen response, and the declared transmission participation or fallback. Compare canonical inputs and evaluated terms to the raster reference where applicable.
 - [ ] **M16-RT-07.3 — Match custom Material Graph support or publish explicit unsupported fields.**
-  - **PASS when** supported graph programs and bindings use the shared contract, unsupported graph fields or programs have specific diagnostics and correct per-effect fallback, and representative cooked assets produce the same effective decisions in Runtime.
+  - **PASS when** supported graph programs and bindings use the shared contract, unsupported graph fields or programs have specific diagnostics and correct per-effect fallback, and representative cooked assets produce the same effective decisions in Runtime. Use graphs authored in M15 U12 as the raster references for the applicable supported and fallback cases.
 - [ ] **M16-RT-07.4 — Validate deterministic RT/raster material comparisons within documented tolerance.**
   - **PASS when** the frozen fixture matrix covers every supported material class and the declared fallback cases on D3D12 and Vulkan. Readback and image tolerances, sample/seed policy and expected visibility differences are documented before scoring.
 

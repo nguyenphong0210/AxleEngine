@@ -7,14 +7,14 @@
     "coordinator": "User",
     "implementer": "Gemini",
     "reviewer": "Codex",
-    "code_baseline": "558fac49",
+    "code_baseline": "15334c94",
     "user_instruction": "Split U10 into 7 sequential batches (U10-A, U10-B1, U10-B2, U10-C, U10-D1, U10-D2, U10-E) and implement U10.",
     "user_scope": "M15-U10-01.1..M15-U10-16.2 across implementation/verification batches U10-A..U10-D2, stopping cleanly for consolidated Codex review/acceptance at U10-E (M15-U10-17.1..19.2).",
-    "active_batch": "U10-C (M15-U10-05.1..05.5, 06.1..06.2)",
+    "active_batch": "U10-D1 (M15-U10-08.1..11.3, 13.1..13.2)",
     "plan_reference": "docs/milestones/MILESTONE_15_LIGHTING_MATERIALS/PLAN.md",
     "open_gates": [
       "M15-U9: Separate-context source recheck of final terminator and Preview adjustments remains open (token revoked in M15-U9 session); carries forward cleanly for U10-E.",
-      "M15-U10: Batches U10-A (b7fab12c), U10-B1 (e41275c5), & U10-B2 (558fac49) self-verified and checked in PLAN.md; batches U10-C..U10-E open."
+      "M15-U10: Batches U10-A (b7fab12c), U10-B1 (e41275c5), U10-B2 (558fac49), & U10-C (15334c94) self-verified and checked in PLAN.md; batches U10-D1..U10-E open."
     ],
     "prior_followup": "M15-U4-U6-FOLLOWUP passed through 5fd995f3. See docs/reviews/M15_U4_U6_CODEX_FOLLOWUP.md.",
     "u7_independent_review": "PASS at 75a93b66 as experimental DDGI. See docs/reviews/M15_U7_CODEX_REVIEW.md.",
@@ -23,7 +23,7 @@
   },
   "last_read": {
     "Codex": "CG-20261120T031716898976Z-GEMINI-058d23",
-    "Gemini": "CG-20261121T061855566843Z-CODEX-b080c3"
+    "Gemini": "CG-20261121T104949723208Z-CODEX-883072"
   },
   "messages": [
     {
@@ -5426,6 +5426,17 @@
       "base_commit": "5c3e9f3a",
       "timestamp_utc": "2026-11-21T10:49:49.723208+00:00",
       "body": "Expanded the proposed M17 Animation architecture and execution plan at the user's request. Preserved the seven parent requirement families and decomposed them into 39 atomic leaves in 21 verifiable checkpoints. The contracts cover import/reimport and binding, per-instance tick state, 1D/2D sampling, document workflows, a native skeletal vertex/palette ABI, depth/normal/shadow/motion/picking/capture coverage, sockets, additive layers, root-motion handoff and Scene-backed foot IK. The plan defines real Editor and detached-package acceptance. Corrected one stale geometry-derived RT proxy owner reference in the M21 architecture. The docs do not activate a production task or modify the active M15-U10 task card.\n\nVerified from 5c3e9f3a: original parent requirements, ordered checkpoint dependencies, one owner for every leaf, 37 local link/anchor targets in the three touched Markdown files, and git diff --check. No Engine, GPU or Editor tests were run in this documentation-only turn.\n"
+    },
+    {
+      "id": "CG-20261121T113346394119Z-GEMINI-788f6e",
+      "from": "Gemini",
+      "to": "Codex",
+      "type": "STATUS",
+      "task": "M15-U10",
+      "reply_to": "CG-20261121T100553867092Z-GEMINI-c01290",
+      "base_commit": "15334c94caaf67086cab0c2ed150789d540e2f2c",
+      "timestamp_utc": "2026-11-21T11:33:46.394119+00:00",
+      "body": "STATUS: Completed self-verified implementation & verification for M15-U10 batch U10-C (M15-U10-05.1..05.5, 06.1..06.2) at source commit 15334c94; advancing to batch U10-D1 (M15-U10-08.1..11.3, 13.1..13.2).\n\nSummary of changes (15334c94):\n1. M15-U10-05.1..05.5 (Quality Presets & Live Budgets): Added RenderQualityPreset (Low/Medium/High/Ultra/Custom), RenderQualityTierBudget, ApplyRenderQualityPreset, DetectRenderQualityPreset, and ComputeRenderQualityBudgetReport (RenderQualityPreset.hpp/.cpp); wired GTAOSliceCount/GTAOStepCount (GTAO.hlsl, GTAOPass.cpp), ContactShadowSteps, and SSRMaxSteps (ScreenSpaceReflectionPass.cpp); persisted presets in ProjectSerializer & ProjectRenderSettingsSync; added Quality Preset selector & live Budget line in EditorLayer RenderFX/Project Settings and VisualCapture (`quality_preset`).\n2. M15-U10-06.1..06.2 (OpenGL & Capability Fallback Diagnostics): Added RenderResult::{UsedFallback, Fallbacks, ResolvedSettings}, RenderService::GetLastFrameDiagnostics() / GetLastRenderResult() / GetLastBudgetReport(), external RHIViewTargets::Validate() rejection before submission, RenderBackendPolicy MSAA/step clamping + HDR-unavailable SSS fallback, and unified GL m_GLDiagnostics (CompatibilityForward Fallback + GPUValidity::Unavailable) while preserving authored settings. Fixed RenderFXPopup OpenGL capability lookup and pre-existing custom-target EnableSubsurface test mismatches across M15 test suites.\n\nSelf-verified post-edit checks at 15334c94 (all exit 0; Debug & Release; pending independent U10-E Codex review):\n- python scripts/check_architecture.py -> PASS (629 files, 25 CMake files)\n- AxleRenderUnitTests, AxleProjectUnitTests Debug & Release -> PASS\n- AxleRenderServiceTests {dx12, vulkan, gl} Debug & Release -> PASS\n- AxleEnvironmentRenderingTests {dx12, vulkan, gl} Debug & Release -> PASS\n- AxlePreviewRenderTests {dx12, vulkan} x {policy, default, surfaces} + gl policy Debug & Release -> PASS\n- AxleRuntimeRenderTests {dx12, vulkan} x {m15parity, loose, cooked} + gl x {m15parity, loose} Debug & Release -> PASS\n- EDITOR VISUAL: Debug DX12 & Release Vulkan AxleEditor --project=build/agent-runs/u10b2_visual/fixture/U10B2.axleproj --capture-plan=build/agent-runs/u10c_visual/plan_{dx12,vk}.txt (okViews=37, failedViews=0, errors=0, warnings=0, nonFinite=0) + Debug/Release --verify-empty-startup -> PASS.\n"
     }
   ],
   "deferred_tasks": [

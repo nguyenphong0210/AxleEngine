@@ -1562,27 +1562,27 @@ The [independent Codex review](../../reviews/M15_U8_CODEX_REVIEW.md) verifies th
 - [x] **M15-U10-04 — Complete scene/assembly/runtime codec round trips.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
   - **Evidence:** Self-verified automated PASS (`558fac49`): extracted shared YAML codec `Engine/Scene/src/LightingComponentPersistence.hpp` across `SceneSerializer` and `AssemblySerializer`, extended `AssemblyNode` / `AssemblyEditorPanel` / `AssetPreviewPanel` with `DirectionalLight`, `Skybox`, `ReflectionProbe`, `VolumetricFog`, and `DDGIProbeGrid`, and verified `TestCompleteM15MaterialAssetAndCodecRoundTrip` (`AxleMaterialUnitTests` 5/5 Debug/Release, exit 0), `Test_U10_B2_CompleteSceneAssemblyAndCodecRoundTrips` (`AxleRenderUnitTests` Debug/Release, exit 0, including malformed `.axle` rejection leaving `Scene` untouched), `AxleAssetUnitTests` (15/15 Debug/Release, exit 0), and `AxleRenderServiceTests` `{dx12,vulkan,gl}` Debug/Release (exit 0).
-- [ ] **M15-U10-05.1 — Add Low preset.**
+- [x] **M15-U10-05.1 — Add Low preset.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-05.2 — Add Medium preset.**
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`15334c94`): `RenderQualityPreset::Low` (`RenderQualityPreset.hpp`/`.cpp`) configures 2x3 GTAO (`u_Padding[1].xy` in `GTAO.hlsl`), Contact=off, SSR=off, Planar=off, SSS=off, Fog=`Low` (`80x45x32`, `temp=0`), Bloom=off, AE=off, FXAA, Probes=`1p/2f/16MB`. Verified in Debug/Release `AxleRenderUnitTests`, `AxleProjectUnitTests` (`.axleproj` preset persistence), `AxleRenderServiceTests` (6/6), `AxleRuntimeRenderTests` (10/10), `AxlePreviewRenderTests` (7/7), and `u10c_visual` Debug DX12 & Release Vulkan `preset_low.png` (`errors=0 nonFinite=0`).
+- [x] **M15-U10-05.2 — Add Medium preset.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-05.3 — Add High preset.**
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`15334c94`): `RenderQualityPreset::Medium` configures 4x4 GTAO, Contact=`8` steps, SSR=`32` steps, Planar=off, SSS=on, Fog=`Medium` (`128x72x48`, `temp=0.50`), Bloom+AE+FXAA, Probes=`1p/6f/32MB`. Verified across Debug/Release C++ suites and `u10c_visual` Debug DX12 & Release Vulkan `preset_medium.png` (`errors=0 nonFinite=0`).
+- [x] **M15-U10-05.3 — Add High preset.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-05.4 — Add Ultra preset.**
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`15334c94`): `RenderQualityPreset::High` configures 8x7 GTAO, Contact=`16` steps, SSR=`64` steps, Planar=on (`0.50`), SSS=on, Fog=`High` (`160x90x64`, `temp=0.80`), Bloom+AE+TAA, Probes=`2p/12f/64MB`. Verified across Debug/Release C++ suites and `u10c_visual` Debug DX12 & Release Vulkan `preset_high.png` (`errors=0 nonFinite=0`).
+- [x] **M15-U10-05.4 — Add Ultra preset.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-05.5 — Record budgets.**
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`15334c94`): `RenderQualityPreset::Ultra` configures 8x8 GTAO, Contact=`24` steps, SSR=`96` steps, Planar=on (`0.75`), SSS=on, Fog=`Ultra` (`240x135x96`, `temp=0.85`), Bloom+AE+TAA, Probes=`4p/24f/128MB`, optional DDGI supported, M16 RT excluded. Verified across Debug/Release C++ suites and `u10c_visual` Debug DX12 & Release Vulkan `preset_ultra.png` (`errors=0 nonFinite=0`).
+- [x] **M15-U10-05.5 — Record budgets.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-06.1 — Diagnose OpenGL fallback.**
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`15334c94`): `ComputeRenderQualityBudgetReport` (`RenderQualityPreset.cpp`) computes live view-target, Hi-Z mip, bloom, froxel, planar, DDGI, and probe cache byte budgets (`RenderQualityBudgetReport` surfaced via `RenderService::GetLastBudgetReport()` & `EditorLayer` `RenderFX` / `Project Settings` `Budget:` line). Verified in Debug/Release `AxleRenderUnitTests` (`Test_U10_C_QualityPresetsAndBudgets`) and `u10c_visual` captures (`96.8 MiB` Low -> `195.4 MiB` Medium -> `276.1 MiB` High -> `378.4 MiB` Ultra at `1472x891`).
+- [x] **M15-U10-06.1 — Diagnose OpenGL fallback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
-- [ ] **M15-U10-06.2 — Diagnose unsupported capability fallback.**
+  - **Evidence:** Self-verified automated PASS (`15334c94`): `RenderService::RenderView` (`RenderService.cpp`) populates `RenderResult::UsedFallback`, `Fallbacks`, `ResolvedSettings`, `m_GLDiagnostics` (`CompatibilityForward` `DiagnosticStatus::Fallback` with `GPUValidity::Unavailable`), and GL `RenderQualityBudgetReport` (`ReflectionCacheBudgetBytes=0`) while preserving authored `SceneRenderSettings`; fixed `RenderFXPopup` GL capability query. Verified in Debug/Release `AxleRenderServiceTests gl`, `AxleEnvironmentRenderingTests gl`, `AxlePreviewRenderTests gl policy`, `AxleRuntimeRenderTests gl {m15parity,loose}`, and `AxleRenderUnitTests`.
+- [x] **M15-U10-06.2 — Diagnose unsupported capability fallback.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED.
+  - **Evidence:** Self-verified automated + **EDITOR VISUAL PASS** (`15334c94`): `RenderBackendPolicy` clamps invalid MSAA/step counts and records HDR-unavailable / single-sample fallback reasons; `RenderService` validates external `RHIViewTargets::Validate()` before submission (`Test_U10_C_CapabilityFallbackAndTargetRejection`) without corrupting last-good targets; `EditorLayer` `Capability / Fallback Diagnostics` displays live reasons. Verified across Debug/Release `AxleRenderUnitTests` (`Test_U10_C_CapabilityFallbackAndPresetDiagnostics`), `AxleRenderServiceTests` (6/6), and `u10c_visual` `msaa4_fallback_editor.png` (DX12 & Vulkan).
 - [x] **M15-U10-07.1 — Test Editor create/edit.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the edited value is visible, persists after reopen and matches Runtime/Preview.

@@ -67,6 +67,8 @@ All `91` PNGs and logs are archived under `build/agent-runs/m15_visual_recovery/
 
 ## 4. Remaining Independent Codex Gates (Unchanged Policy)
 
+The later [independent U4–U6 follow-up](M15_U4_U6_CODEX_FOLLOWUP.md) records the results for the scoped U4–U6 and capture-tool checks listed here.
+
 Automated & Editor visual blockers are cleared on the live RTX 3070 display/GPU; **no independent Codex acceptance is claimed for Codex-pending items:**
 1. **`M15-U4-GTAO-HALO-FIX`** (`e4b977fe`..`d4a07cd7`) independent Codex review.
 2. **`M15-U6-E`** separate-context Codex recheck on `232298f5` (`M15-U6-05.1, 05.2, 07.5, 07.6` kept `[ ]` in `PLAN.md`).

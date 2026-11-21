@@ -43,7 +43,7 @@ build/Editor/Release/AxleEditor.exe `
 - `--rhi=<backend>` (or `-rhi=`, `--backend=`): `dx12`/`d3d12`, `vulkan`/`vk`, `gl`/`opengl`, or `auto`.
 - `--no-fallback` (or `--strict-rhi`): fail instead of silently falling back to another RHI backend.
 - `--rhi-validation` (or `--gpu-validation`): enable native D3D12/Vulkan validation layers.
-- `--capture-plan=<plan_file>`: attach `VisualCaptureLayer` and exit automatically once the plan finishes (or fail with non-zero exit if an assertion/load throws).
+- `--capture-plan=<plan_file>`: attach `VisualCaptureLayer` and exit automatically once the plan finishes. A failed load, assertion, capture or early close returns a nonzero exit code.
 
 ---
 

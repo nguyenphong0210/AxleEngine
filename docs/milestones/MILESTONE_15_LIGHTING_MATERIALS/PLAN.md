@@ -1,6 +1,6 @@
 # Milestone 15 — Lighting and Material Fidelity
 
-**Status:** `HOLD for full M15 acceptance. U0, U1, U2, U3, and automated U4 (U4-A through U4-E) are accepted after independent Codex reviews; U4-06.5 and U4-E interactive Editor visual gates are explicitly deferred to a consolidated visual verification pass while U5 is prioritized next.`
+**Status:** HOLD for full M15 acceptance. U0 through U3 are accepted. The [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records the corrected source, Editor captures and native evidence.
 **Current source reference:** `114438ba` for U4-E (`80e9837a` U4-D, `9028e8d7` U4-C, `020c32ed` U4-A/B, `baaf36d2` U3, `c6245e2e` S1.3); `19ac2a1` remains the historical M14 handoff baseline. This reference and the batch schedule below do not mark any unchecked leaf PASS or release later packages until explicitly assigned in the live exchange.
 **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
 **Detailed implementation notes:** [REMEDIATION_PLAN.md](REMEDIATION_PLAN.md)
@@ -172,7 +172,7 @@ To keep advanced material shading models, transmittance optics, screen-space sub
 | **U9-D** | `M15-U9-07.1`, `07.2`, `08.4` | `dbdf828d` | 13-pin `PBRMasterOutput` lowering, `MaterialSurface.hlsl` Sheen/SSS split parity, `MaterialBindingPlan::SupportedFeatures`, explicit unsupported diagnostics & built-in/graph parity fixtures. | Consolidated U9 review |
 | **U9-E** | `M15-U9-06.1` → `06.6` | `7568cd5e` | Shared bounds/clamps across `Material`, `MaterialComponent`, `MaterialComponentCodec`, `RHIMaterial`, `ResolvedSurface`, `SceneExtraction`; Inspector UI (`Sheen`, `Subsurface Scattering`, `Absorption & Dispersion`); Preview & Editor single-sample SSS viewport wiring; Runtime persistence & GPU regression. | Consolidated U9 review |
 
-**Deferred Editor visual policy (user steering 2026-11-17):** Open `EDITOR VISUAL` gates (`M15-U4-06.5`, `U4-E`, `U5-03`, and new U5 visual gates) remain explicitly marked `NOT RUN` / open during automated batch delivery and will be verified in a consolidated Editor capture session. Do not mark any `EDITOR VISUAL` item `PASS` or close its parent acceptance claim until the required Debug/Release Editor screenshots are attached and inspected.
+**Editor visual policy (user steering 2026-11-17):** During automated batch delivery, Editor visual gates stayed open for a consolidated capture session. Mark an Editor visual gate PASS after inspecting the required Debug and Release Editor screenshots. The [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records current evidence.
 
 ## 4. Canonical atomic execution and acceptance checklist
 
@@ -666,11 +666,13 @@ the item is visible.
 - [x] **M15-U4-07.2 - Test animated/deformed mesh.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** The deformed-mesh branch is verified via real published vertex generations moving in front of a rear receiver. Native current-depth reconstruction and normals match analytic geometry, genuine receiver AO reaches about 0.284, and 1218 disocclusion events match fresh-target HDR/AO/contact without stale data. CPU projection validation/round-trip checks replace the previously ignored projection parameter. Skeletal palette execution is not claimed. Debug/Release D3D12/Vulkan pass. [Independent U4-E review](../../reviews/M15_U4_BATCH_5_CODEX_REVIEW.md).
-  - **Editor evidence:** Debug/Release Vulkan Editor loads the dedicated `Tests/Fixtures/M15/U4E/U4E.axleproj` scene (3 entities, 5 UI frames). Interactive visual capture remains NOT RUN: current capture attempt fails `CreateForMonitor` with `0x80070057`. Startup and native PPMs do not substitute for interactive visual inspection; the U4-D visual gate also remains open.
+  - **EDITOR VISUAL PASS:** Debug D3D12, Release D3D12 and Release Vulkan captures show continuous shading on the mirrored and positively scaled normal-mapped spheres with GTAO/contact on and off. The native deformation fixture measures live current-depth and normal updates. See the [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md).
 
-**Exit:** occlusion is stable and finite; unoccluded specular/emission is preserved; no new faceting/halos.
+**Exit:** Native validation, shallow-floor contact visibility and U4D/U4E Editor captures passed. The unoccluded mirror viewport matches bit-for-bit with GTAO toggled. See the [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md).
 
 ### U5 / S5.1 — Hi-Z depth pyramid
+
+The [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records the current Hi-Z and SSR tests, probe and LTC Editor captures, and the shadowed planar ON/OFF comparison.
 
 > **Execution schedule note (2026-11-17):** See [U5 Execution Batches](#u5-execution-batches-u5-a-through-u5-i) for the `U5-A`..`U5-I` breakdown. Historical resource items `M15-U5-01`..`U5-04.2` predate this breakdown (`M15-U5-03` still requires its deferred `EDITOR VISUAL` fixture verification). Implementation resumes at `U5-A` (`M15-U5-05.1` → `M15-U5-07.2`) when released.
 
@@ -714,7 +716,7 @@ the item is visible.
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Evidence:** Defined `ComputeUsefulHiZLevelCount` (`floor(log2(max(w, h))) + 1` clamped to `[1, MaxHiZLevels(16)]`, `0` on `0` extent) and `ComputeAllocatedHiZLevelCount` (`max(MinSSRHiZLevels(8), useful)`) in `RHIViewTargets` and `Axle::HiZContract`, expanding `RHIViewTargets` and `RHISceneRenderer` to 16 `R32_FLOAT` levels while preserving SSR's 8 static `u_HiZ0..u_HiZ7` bindings (`1x1 -> 1/8`, `3x5 -> 3/8`, `127x63 -> 7/8`, `1919x1079 -> 11/11`, `1440p/4K -> 12/12`). [Independent U5-A review](../../reviews/M15_U5_A_CODEX_REVIEW.md).
 - [x] **M15-U5-07.1 — Add per-level visualization.**
-  - **Codex corrections:** attachment-format PSOs prepared before recording (BGRA8/RGBA32 native coverage), explicit compute/storage capability fallback, full Editor level range 0..15, and actual opaque-depth-to-HiZ0 verification. Visualization remains a scene depth-tone mode subject to subsequent fog/postprocessing; raw Hi-Z values are unchanged. Interactive capture remains user-deferred.
+  - **Codex corrections:** attachment-format PSOs prepared before recording (BGRA8/RGBA32 native coverage), explicit compute/storage capability fallback, full Editor level range 0..15, and actual opaque-depth-to-HiZ0 verification. Visualization remains a scene depth-tone mode subject to subsequent fog/postprocessing; raw Hi-Z values are unchanged. Editor captures compare levels 0 and 3 in the [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md).
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Automated PASS:** Implemented `VisualizeVSMain`/`VisualizePSMain` in `HiZ.hlsl`, `HiZGenerationPass::DeclareVisualization`/`RecordVisualization`, `SceneRenderSettings::HiZVisualizationLevel` (`-1` off, reflected in `HashViewFeaturePolicy`), target-builder parity across `RHISceneRenderer`/`RenderService`/`RHIViewportDescriptor`, `RenderFXPopup` UI control, and explicit fallbacks (`hiz_visualization_unavailable`, `hiz_visualization_clamped_or_tail`). Debug/Release D3D12/Vulkan native tests verify level 0 geometry vs sky (`0.360784` vs `0`), coarse level spreading (`vis0 != vis3 != vis6`), uniform 1x1 level 6 (`0.372549`), clamped level 99 matching level 6 with explicit fallback, finite HDR path, and exact scene recovery when disabled (`recoveredColor == normalColor`, 0 validation errors). [Independent U5-A review](../../reviews/M15_U5_A_CODEX_REVIEW.md).
   - **EDITOR VISUAL — PASS:** Verified in `U5_ProbesSSR` (`Debug` DX12, `Release` DX12, `Release` Vulkan via `AxleEditor --capture-plan --no-fallback --rhi-validation`, Console `Error 0`, `nonFinite=0`). Hi-Z Level `0` vs Level `3` coarsens properly (`meanAbsDiff=1.59, maxAbsDiff=186, changedPct=1.57%`) and restores cleanly on `-1`. See [Visual & Windowed Recovery](../../reviews/M15_VISUAL_AND_WINDOWED_RECOVERY.md).
@@ -729,7 +731,7 @@ the item is visible.
 #### S5.2 — Dynamic six-face capture
 
 - [x] **M15-U5-08.1 — Allocate capture color targets.**
-  - **Codex review corrections:** whole-operation reentry guard; capture input stamps invalidate material/light/mesh/clip/shadow changes at unchanged transform revisions; deterministic-only failure caching and automatic transient retry; exact valid clip planes and safe anonymous keys; generation-based capture-feedback suppression including retained aliases; main environment publication restoration. Native automatic recapture, environment, feedback and failure-recovery assertions pass in Debug/Release on DX12/Vulkan. Interactive visuals stay user-deferred. [Independent report](../../reviews/M15_U5_B_CODEX_REVIEW.md).
+  - **Codex review corrections:** whole-operation reentry guard; capture input stamps invalidate material/light/mesh/clip/shadow changes at unchanged transform revisions; deterministic-only failure caching and automatic transient retry; exact valid clip planes and safe anonymous keys; generation-based capture-feedback suppression including retained aliases; main environment publication restoration. Native automatic recapture, environment, feedback and failure-recovery assertions pass in Debug/Release on DX12/Vulkan. [Independent report](../../reviews/M15_U5_B_CODEX_REVIEW.md). The [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records the subsequent probe-scene captures.
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **Automated Status:** Automated PASS (independently verified by Codex against delivery `f49ff61b` after corrections) — `Passes::ReflectionCaptureTargets` allocates single-sample linear HDR `RGBA16_FLOAT` `FaceColor` and `OrientedColor` targets plus immutable `RGBA16_FLOAT` candidate `Cubemap` transactionally via `RHITextureDesc`; `ReflectionCaptureContract::ValidateCapturePolicy` rejects MSAA (`SampleCount != 1`) and non-HDR color formats (`M15ReflectionCaptureContract` CPU & native Debug/Release D3D12/Vulkan pass, `0` validation errors).
   - **EDITOR VISUAL:** PASS — verified in `U5_ProbesSSR` (plus `U5_AreaPlanar` for shadowed capture; `Debug` DX12, `Release` DX12, `Release` Vulkan via `AxleEditor --capture-plan`, Console `Error 0`, `nonFinite=0`). Mirror & satin spheres reflect glowing Red/Blue reference walls & checkered floor; Play + Free-Fly Eject & probe capture run cleanly. See [Visual & Windowed Recovery](../../reviews/M15_VISUAL_AND_WINDOWED_RECOVERY.md).
@@ -831,7 +833,7 @@ Codex verification limit: native headless DX12/Vulkan filtering and storage-view
 **Automated acceptance (2026-11-17):** U5-D delivery `fb699f21` accepted after
 independent Codex repairs and Debug/Release verification on D3D12 and Vulkan.
 See [findings, final executed matrix and acceptance limits](../../reviews/M15_U5_D_CODEX_REVIEW.md).
-Interactive U5-21.3, U5-21.4 and U5-26.1 Editor visual gates remain NOT RUN/deferred.
+The [independent follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records the dynamic-probe and Play/Eject captures alongside the native invalidation and reuse tests.
 
 **Scheduling boundary:** partial jobs restart on tracked input changes; at two
 faces per render they need three compatible renders. Continuous motion can leave
@@ -898,7 +900,7 @@ It does not measure driver overhead, shared scratch or externally held generatio
 repairs and separate-context source rechecks. Final Debug/Release builds and
 28/28 commands pass, including native DX12/Vulkan and strict Editor startup with
 the real three-entity fixture. [Full findings, costs and limits](../../reviews/M15_U5_E_CODEX_REVIEW.md).
-Interactive U5-27.2/28/29/30.1/31.5 visuals remain NOT RUN/user-deferred.
+The [independent follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records Editor evidence for the box and sphere probe scene and SSR fallback.
 
 The four-slot view selection is bounded and conservative; exact influence is
 evaluated per pixel. SSR replaces exported forward specular in linear HDR before
@@ -1053,7 +1055,7 @@ Codex review covers the delivery named **U5-F** (`21a3e25e`, U5-32.1..39.6), inc
 
 ### U5 / S5.7 — LTC rectangular and disk area lights
 
-> **Independent Codex review:** U5-G / historical batch row U5-H (S5.7, all 15 requirements 40..45.3) is accepted for automated scope after repairs. Interactive Editor 43, 44.4 and 45.1 stay open/user-deferred. See [Codex review](../../reviews/M15_U5_G_CODEX_REVIEW.md). No S5.8 release is implied.
+> **Independent Codex review:** U5-G / historical batch row U5-H (S5.7, requirements 40..45.3) passed its [original automated review](../../reviews/M15_U5_G_CODEX_REVIEW.md). The [independent follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records the later LTC Inspector and roughness captures.
 
 - [x] **M15-U5-40 — Add validated LTC transform/amplitude tables or reproducible generation.**
   - **PASS when:** the requirement is implemented exactly as written, its dedicated source/runtime fixture passes, and failure/fallback behavior is explicit.
@@ -1105,7 +1107,7 @@ Codex review covers the delivery named **U5-F** (`21a3e25e`, U5-32.1..39.6), inc
   - **Evidence:** **Automated PASS after independent Codex review and repairs.** Independent dense emitter quadrature validates actual diffuse and specular response on CPU and GPU; raw-fit oracle uses neutral compensation LUT. Final Debug/Release verification and limits: [Codex review](../../reviews/M15_U5_G_CODEX_REVIEW.md).
 
 **Exit:** shape/roughness-correct, finite highlights without duplicate emitter energy.
-  - **Automated status:** Independently reviewed and repaired by Codex; all 15 requirements accounted for and final Debug/Release verification 34/34 PASS across CPU, native DX12/Vulkan, actual Assembly Editor preview/save and strict Editor startup. Interactive Editor gates 43, 44.4 and 45.1 remain open/user-deferred. See [Codex U5-G review](../../reviews/M15_U5_G_CODEX_REVIEW.md).
+  - **Verification:** The [original U5-G review](../../reviews/M15_U5_G_CODEX_REVIEW.md) passed 34/34 Debug/Release CPU, native, Assembly Editor and startup commands. The [independent follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records Inspector and roughness capture evidence.
 
 ### U5 / S5.8 — Planar reflection
 
@@ -1159,7 +1161,7 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 - [x] **M15-U6-02.2 — Inject light/shadow visibility.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - **EDITOR VISUAL:** build Debug/Release Editor, open the applicable fixture and capture the result. Expected: the declared behavior matches the frozen reference without invalid output.
-  - Native D3D12 and Vulkan tests verify directional and local lighting with the real atlases and the unshadowed fallback. Debug and Release D3D12 Editor captures show the bounded shaft and Console `Error 0`. [U6-C evidence](../../reviews/M15_U6_C_REVIEW.md)
+  - Native D3D12 and Vulkan tests verify directional and local lighting with the real atlases and the unshadowed fallback. Debug and Release D3D12 Editor captures show the bounded shaft and Console `Error 0`. [U6-C evidence](../../reviews/M15_U6_C_REVIEW.md) See the [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) for the independent current-source slit ON/OFF captures.
 - [x] **M15-U6-03.1 — Integrate scattering/extinction.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - Native 3D integration and linear composition pass homogeneous, partial-slice, stratified boundary and distant opaque depth fixtures. [U6-B review](../../reviews/M15_U6_B_REVIEW.md)
@@ -1175,12 +1177,12 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 - [x] **M15-U6-04.3 — Add invalidation.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - Native and ViewContext tests cover first-frame, cut, view generation, scene, device epoch, feature settings and failed-frame invalidation. [U6-D verification](../../reviews/M15_U6_D_VERIFICATION.md) [Independent Codex review](../../reviews/M15_U6_D_CODEX_REVIEW.md)
-- [ ] **M15-U6-05.1 — Define transparent/depth interaction.**
+- [x] **M15-U6-05.1 — Define transparent/depth interaction.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED. *(Updated with active monitor: windowed D3D12/Vulkan/OpenGL 4.5 WGL rechecks (`AxleEnvironmentRenderingTests gl`, `AxleRenderServiceTests gl`, `AxleRHIPresentationTests`, `AxleRuntimeRenderTests` loose/cooked/gl, Debug & Release) and `U6C FroxelSlit` Editor visual capture (`Error 0`) PASS per [Visual & Windowed Recovery](../../reviews/M15_VISUAL_AND_WINDOWED_RECOVERY.md); `- [ ]` kept open pending Codex's separate-context recheck on `232298f5` per [Codex U6-E review](../../reviews/M15_U6_E_CODEX_REVIEW.md).)*
-- [ ] **M15-U6-05.2 — Define no-light behavior.**
+  - **Independent PASS:** Native Debug/Release D3D12 and Vulkan pass analytic mesh, graph, refraction and particle composition checks. The separate-context recheck found an edge leak repaired in `05b1e453`. The added foreground-silhouette assertion fails with the old Forward PBR shader and passes with the repaired shader. See the [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md).
+- [x] **M15-U6-05.2 — Define no-light behavior.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED. *(Updated with active monitor: windowed D3D12/Vulkan/OpenGL 4.5 WGL rechecks (`AxleEnvironmentRenderingTests gl`, `AxleRenderServiceTests gl`, `AxleRHIPresentationTests`, `AxleRuntimeRenderTests` loose/cooked/gl, Debug & Release) and `U6C FroxelSlit` Editor visual capture (`Error 0`) PASS per [Visual & Windowed Recovery](../../reviews/M15_VISUAL_AND_WINDOWED_RECOVERY.md); `- [ ]` kept open pending Codex's separate-context recheck on `232298f5` per [Codex U6-E review](../../reviews/M15_U6_E_CODEX_REVIEW.md).)*
+  - **Independent PASS:** Native Debug/Release D3D12 and Vulkan verify zero unlit scattering with positive extinction, point-only scattering, and authored fog parity. Runtime loose and cooked modes measure center red at 213 with fog and 231 with it disabled. Debug/Release OpenGL verifies the supported fallback. See the [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md).
 - [x] **M15-U6-05.3 — Define zero-density behavior.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - Fog-off and zero-density or zero-intensity HDR readbacks match at every pixel and alpha. The native service also verifies byte-for-byte SDR identity at zero intensity. [U6-B review](../../reviews/M15_U6_B_REVIEW.md)
@@ -1199,14 +1201,14 @@ Planar reflection is the deterministic raster path for a selected reflective pla
 - [x] **M15-U6-07.4 — Test resize.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
   - Resizing a live view target and changing the fog quality tier both seed a fresh volume before reuse. [U6-D verification](../../reviews/M15_U6_D_VERIFICATION.md) [Independent Codex review](../../reviews/M15_U6_D_CODEX_REVIEW.md)
-- [ ] **M15-U6-07.5 — Measure memory.**
+- [x] **M15-U6-07.5 — Measure memory.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - Initial U6-A scorecards cover all four tiers on native D3D12 and Vulkan. Final integrated VRAM reconciliation is part of U6-E. [U6-A review](../../reviews/M15_U6_A_REVIEW.md) *(Updated with active monitor: windowed D3D12/Vulkan/OpenGL 4.5 WGL rechecks (`AxleEnvironmentRenderingTests gl`, `AxleRenderServiceTests gl`, `AxleRHIPresentationTests`, `AxleRuntimeRenderTests` loose/cooked/gl, Debug & Release) and `U6C FroxelSlit` Editor visual capture (`Error 0`) PASS per [Visual & Windowed Recovery](../../reviews/M15_VISUAL_AND_WINDOWED_RECOVERY.md); `- [ ]` kept open pending Codex's separate-context recheck on `232298f5` per [Codex U6-E review](../../reviews/M15_U6_E_CODEX_REVIEW.md).)*
-- [ ] **M15-U6-07.6 — Measure cost.**
+  - **Independent PASS:** The four current native scorecards pass actual four-volume allocation budgets at 1080p and 1440p. They record the shared color and depth allocations separately. See the [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md).
+- [x] **M15-U6-07.6 — Measure cost.**
   - **PASS when:** the behavior is implemented independently, its dedicated fixture/assertion passes, and failure/fallback is explicit.
-  - **Evidence:** record source commit, exact build/configuration, command/exit code and artifact/readback path; unavailable prerequisites stay NOT RUN/BLOCKED. *(Updated with active monitor: windowed D3D12/Vulkan/OpenGL 4.5 WGL rechecks (`AxleEnvironmentRenderingTests gl`, `AxleRenderServiceTests gl`, `AxleRHIPresentationTests`, `AxleRuntimeRenderTests` loose/cooked/gl, Debug & Release) and `U6C FroxelSlit` Editor visual capture (`Error 0`) PASS per [Visual & Windowed Recovery](../../reviews/M15_VISUAL_AND_WINDOWED_RECOVERY.md); `- [ ]` kept open pending Codex's separate-context recheck on `232298f5` per [Codex U6-E review](../../reviews/M15_U6_E_CODEX_REVIEW.md).)*
+  - **Independent PASS:** The four current native scorecards capture six warmed completion-token-matched samples for each quality tier and extent. Debug/Release service and Runtime pass the D3D12/Vulkan and OpenGL paths. See the [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md).
 
-**Exit:** fog respects blockers/lights, zero density preserves the image, trails are bounded, cost is reported *(windowed D3D12/Vulkan/OpenGL 4.5 WGL matrix & `U6C FroxelSlit` Editor visual PASS in [Visual & Windowed Recovery](../../reviews/M15_VISUAL_AND_WINDOWED_RECOVERY.md); `M15-U6-05.1/05.2/07.5/07.6` kept `[ ]` pending Codex separate-context recheck on `232298f5`)*.
+**Exit:** The required U6-E recheck, Debug/Release native matrix and Editor slit captures passed. The [independent U4–U6 follow-up](../../reviews/M15_U4_U6_CODEX_FOLLOWUP.md) records the foreground refraction repair, no-light assertions, allocation sizes and pass timings.
 
 ### U7 / S7.1–S7.4 — Experimental DDGI
 

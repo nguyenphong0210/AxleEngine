@@ -1,5 +1,7 @@
 # M15 U6-E Codex review and corrections
 
+The [U4–U6 follow-up](M15_U4_U6_CODEX_FOLLOWUP.md) completed the separate-context recheck, repaired the foreground refraction edge and verified the current native and Editor evidence. The checks below describe the original U6-E review.
+
 The user assigned the independent review and repairs for the four released U6-E leaves. Review started at `60eae855` and covered the delivered changes from `e17212da` through `ba13d1da`. The correction commit is `232298f5`. The Gemini delivery in the exchange is historical, implementer-reported evidence. The test results below were executed by Codex.
 
 The corrected source passed the scoped tests. Formal acceptance remains open. Three requests for the protocol's separate-context correction recheck stopped at agent authentication before source inspection. That recheck is **NOT RUN**.

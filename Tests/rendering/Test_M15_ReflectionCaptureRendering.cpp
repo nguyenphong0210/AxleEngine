@@ -3635,6 +3635,25 @@ bool RunM15ReflectionCaptureTests(RHISceneRenderer& renderer, const std::filesys
                      statusAfterRed.has_value() && statusAfterRed->ActiveGenerationID > firstGenId,
             "M15-U5-46.7: invalidated reflector updates capture to red beacon");
 
+        // 3b. Shadowed directional light + CaptureShadows=true must preserve CSM frustum on oblique planar projection
+        RenderWorld shadowedWorld = buildResolveWorld({6.0f, 0.0f, 0.0f}, {0.0f, 1.5f, -7.0f}, 0.04f, PlanarReflectionCaptureMode::Automatic);
+        shadowedWorld.SceneRevision = 953;
+        shadowedWorld.PlanarReflectors.front().CaptureShadows = true;
+        RenderDirectionalLight sun{};
+        sun.Direction = glm::normalize(glm::vec3(0.4f, -0.8f, -0.45f));
+        sun.Color = {1.0f, 0.97f, 0.92f};
+        sun.Intensity = 2.0f;
+        sun.CastsShadows = true;
+        sun.MaxShadowDistance = 60.0f;
+        shadowedWorld.DirectionalLight = sun;
+        SceneRenderSettings shadowedSettings = baseSettings;
+        shadowedSettings.EnableShadows = true;
+        renderer.ClearPlanarReflectionCaptures();
+        renderer.RenderWorldView(shadowedWorld, cam, &colorOut, &depthOut, shadowedSettings);
+        const auto shadowedStatus = renderer.GetPlanarReflectionStatus(reflRef);
+        RENDER_CHECK(renderer.WasLastRenderSuccessful() && shadowedStatus.has_value() && shadowedStatus->ActiveGenerationID > 0u,
+            "M15-U5-46.8: planar capture with directional CSM shadows succeeds via unclipped ZO projection");
+
         // 4. Manual Capture Mode lifecycle (Idle -> Requested Ready -> Stale on edit -> Recaptured)
         renderer.ClearPlanarReflectionCaptures();
         RenderWorld manualWorld = buildResolveWorld({0.0f, 6.0f, 0.0f}, {0.0f, 1.5f, -7.0f}, 0.04f, PlanarReflectionCaptureMode::Manual);

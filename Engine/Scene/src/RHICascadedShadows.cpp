@@ -20,7 +20,7 @@ bool RHICascadedShadows::Prepare(const RenderWorld& world,const PerspectiveCamer
     config.CascadeCount=settings.ShadowCascadeCount;config.Resolution=light.ShadowQuality==0?1024:light.ShadowQuality==2?4096:2048;
     config.NearClip=camera.GetNearClip();config.FarClip=camera.GetFarClip();config.MaxDistance=std::min(light.MaxShadowDistance,config.FarClip);config.SplitLambda=light.CascadeSplitLambda;
     config.DepthBias=light.ShadowBias;config.SlopeBias=light.ShadowSlopeBias;config.NormalBias=light.ShadowNormalBias;
-    if(!std::isfinite(light.MaxShadowDistance)||!std::isfinite(light.ShadowFilterRadius)||light.ShadowFilterRadius<0||!m_CPU.Configure(config,&m_Diagnostic)||!m_CPU.Update(camera.GetViewMatrix(),camera.GetProjectionMatrixZO(),light.Direction,&m_Diagnostic)) {
+    if(!std::isfinite(light.MaxShadowDistance)||!std::isfinite(light.ShadowFilterRadius)||light.ShadowFilterRadius<0||!m_CPU.Configure(config,&m_Diagnostic)||!m_CPU.Update(camera.GetViewMatrix(),camera.GetUnclippedProjectionMatrixZO(),light.Direction,&m_Diagnostic)) {
         if(m_Diagnostic.empty())m_Diagnostic="CSM_INVALID_SETTINGS: shadow distance/filter must be finite and non-negative.";return false;
     }
     const auto size=config.Resolution*2;

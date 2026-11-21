@@ -25,6 +25,8 @@ Evaluate projected coverage per view against conservative bounds. Use history wi
 
 Flat meshlets retain stable identity within a geometry generation, source triangle and material correspondence, bounds, normal cones and seam metadata. The default profile caps meshlets at 64 vertices and 126 triangles. The indexed representation maps the same triangles to the same identities. The later cluster DAG preserves locked shared boundary loops and monotonically conservative geometric error.
 
+The cooker records atomic LOD replacement groups. Each group relates a set of finer clusters to a complete coarser representation of the same region, with compatible external seams and shared conservative bounds and error. A selected cut covers each region exactly once. The runtime applies a group's LOD decision to all of its members.
+
 Admit complete cooked geometry generations within a declared GPU memory budget. Account for vertex/index, meshlet and hierarchy data, the available fallback and temporarily overlapping generations. Track staging in its memory domain. Preflight an indexed fallback before admitting an optional product. Publish a replacement only after upload readiness. Retain the exact old generation while submissions still reference it. When an asset exceeds its allocation, use an admitted compatible generation or a budgeted discrete LOD and report why that asset took the fallback. On-demand page streaming has its own feature scope.
 
 An optional M17-produced RT proxy carries the M16 source linkage, proxy generation, vertex attributes, material/alpha mapping and triangle-budget contract. M16 can use its own proxy and continues to own proxy selection and AS lifetime. TLAS classification consumes eligible whole-scene instances, including off-camera casters and reflection hits. The view-culled raster working set is a separate consumer of the same snapshot.
@@ -35,30 +37,39 @@ An optional M17-produced RT proxy carries the M16 source linkage, proxy generati
 
 Emit indexed indirect commands by compatible geometry binding, index type and pipeline. Define how draw metadata and instance indices identify the packed record for nonzero index, vertex and instance bases on each backend. Test bounded fixed-range commands and GPU draw count where available. Establish capacity from a conservative upper bound before recording or select a complete bounded route on the GPU before consumption. Use asynchronous diagnostic readback for telemetry. Missing, unsupported or over-capacity work selects the complete applicable fallback for that scope.
 
+Measure CPU submission, binding changes and indirect batches on both repeated geometry and many distinct meshes. Use those results to decide whether compatible meshes need shared geometry storage to meet the submission budget.
+
 Use frustum bounds first. Apply meshlet normal-cone rejection only when the transform and material provide a conservative cone. Disable it for unsupported cases such as two-sided surfaces or unproven transformed bounds.
 
-Traverse the admitted cluster DAG on the GPU per view against a projected error bound. Use a CPU reference for deterministic cut and limit fixtures. The GPU publishes one complete compatible cluster cut consumed by indexed and Task/Mesh rasterization. Bound traversal and output by view and frame. Invalid metadata or exhausted work selects a valid coarser cut or a discrete LOD for the affected scope before raster reads the result. Expose selected cluster counts, effective routes and fallback reasons for fixture and Editor diagnosis.
+Traverse the admitted cluster DAG on the GPU per view against a projected error bound. Use a CPU reference for deterministic cut and limit fixtures. The GPU publishes one complete compatible cluster cut consumed by indexed and Task/Mesh rasterization. Bound traversal and output by view and frame. Reserve room for a complete group replacement before publishing it. When bounds prevent a replacement, retain its complete coarser representation if that yields a legal cut. Otherwise switch the instance to an available complete discrete LOD before raster consumes the cut. Expose selected cluster counts, effective routes and fallback reasons for fixture and Editor diagnosis.
 
 For the engine's forward depth convention of near 0 and far 1, the occlusion pyramid stores the farthest relevant depth over each represented footprint. Its reduction uses `max()` or an equivalent conservative representation with empty/uncertain coverage treated as potentially visible. Reuse the M15 Hi-Z allocation and odd-edge handling where compatible. Preserve the separate nearest-depth `min()` semantics used by SSR.
 
 1. Use compatible previous view depth to defer candidates that may be occluded. Record first-phase depth from eligible occluders with current projection, clipping and coverage that remains valid for final rasterization. If an occluder changes LOD or route and invalidates that coverage, retest affected work or keep it visible. Grids and history are view-local, including same-size views.
-2. Build the current occlusion pyramid and retest deferred work before final coverage. Draw recovered candidates in the same frame. Near-plane intersections, invalid history and unproven occlusion retain candidates. Camera cuts, resize, incompatible scene/geometry changes and device epochs invalidate history. Compare against an occlusion-disabled reference with the same geometry and camera.
+2. Build the current occlusion pyramid and retest deferred work before final coverage. Draw recovered candidates in the same frame. Near-plane intersections, invalid history and unproven occlusion retain candidates. Publish completed conservative history for the next frame. Reuse the early pyramid only when it remains conservative against final coverage. Camera cuts, resize, incompatible scene/geometry changes and device epochs invalidate history. Compare against an occlusion-disabled reference with the same geometry and camera.
 
 ## 4. Coverage, clustered shading and RT integration
 
 ### 4.1 Pass dependencies
 
-The ordered scheduler hosts stateful passes with explicit graph edges. Each arrow represents a resource or ordering dependency. Route-specific producers contribute to the same view contract.
+The ordered scheduler hosts stateful passes with explicit graph edges. Each arrow represents a resource or ordering dependency on the applicable route. The previous occlusion pyramid supplies history for the first split. The current pyramid uses depth from the same view and frame, and the second raster phase completes coverage before surface preparation. Forward fallback contributes its applicable coverage under the same final depth and ownership rule.
 
 ```mermaid
 flowchart TD
     W[RenderWorld]
     W --> U[Instance upload and geometry admission]
-    U --> C[GPU cluster selection and culling]
-    C --> V[Indexed or Task/Mesh visibility coverage]
+    H[Compatible previous view Hi-Z] --> C[Select cluster cut and split visible and deferred work]
+    U --> C
+    C --> D[Phase one raster and current depth]
+    D --> Z[Build conservative current Hi-Z]
+    C --> Q[Retest deferred candidates]
+    Z --> Q
+    D --> V[Phase two raster and final opaque ownership]
+    Q --> V
     W --> F[Forward fallback coverage]
-    V --> R[Receiver inputs and final opaque ownership]
-    F --> R
+    F --> V
+    V --> N[Publish conservative history for the next frame]
+    V --> R[Prepare required surface and temporal inputs]
     W --> L[ClusterLightCulling]
     W --> A[M16 RT scene binding and AS]
     R --> T[M16 RT trace and filtering]
@@ -74,7 +85,11 @@ flowchart TD
     P --> X[Post-processing]
 ```
 
-When RT is active, produce the required receiver depth, normal, material terms and motion before their individual consumers. Each effect declares its inputs from effective settings, including when TAA, SSR or planar reflections are off. Use M16's visibility for the matching light before direct shading. Pass reflection radiance and coverage to the shared indirect-specular resolve and apply the receiver response once. Keep M16's coverage diagnostics and raster fallback for incomplete RT effects. Camera-frustum light lists are valid for raster receivers, while off-screen reflection hits use the M16 hit-lighting policy. Preview, planar and probe captures follow their declared view and recursion policies.
+Surface preparation derives receiver depth, normal, material terms and motion from final opaque ownership before the relevant RT consumers run. Declare the producers and required fields from effective settings, including when TAA, SSR or planar reflections are off. Both material routes use the M15 surface definition. Retain prepared fields shared by tracing and shading as view-local inputs so resolve can reuse them. Views that only need the fields during shading can prepare them inside resolve. Measure preparation and retained-target bandwidth with RT On and Off.
+
+Track previous-surface correspondence separately from per-frame visibility IDs. A cluster cut or route change may alter topology or coverage even if the instance transform stays fixed. Publish motion for valid matches, and mark or downweight history at affected samples when correspondence is uncertain. TAA and M16 temporal filters use that validity while preserving history for unaffected samples.
+
+Use M16's visibility for the matching light before direct shading. Pass reflection radiance and coverage to the shared indirect-specular resolve and apply the receiver response once. Keep M16's coverage diagnostics and raster fallback for incomplete RT effects. Camera-frustum light lists are valid for raster receivers, while off-screen reflection hits use the M16 hit-lighting policy. Preview, planar and probe captures follow their declared view and recursion policies.
 
 ### 4.2 Visibility identity and resolve
 
